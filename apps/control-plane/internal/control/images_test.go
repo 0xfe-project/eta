@@ -7,12 +7,7 @@ import (
 	"testing"
 
 	"github.com/akarachen/axp/apps/control-plane/internal/bundles"
-	"github.com/akarachen/axp/apps/control-plane/internal/container"
 )
-
-type tags struct{ container.Driver }
-
-func (tags) ImageTag(hash string) string { return "agent:" + hash }
 
 func builtin(t *testing.T, name string) bundles.Bundle {
 	t.Helper()
@@ -30,7 +25,7 @@ func builtin(t *testing.T, name string) bundles.Bundle {
 }
 
 func TestAnImageIsItsBundlesAndPlugins(t *testing.T) {
-	c := &Controller{Driver: tags{}, PluginsDir: "../../../../plugins"}
+	c := &Controller{PluginsDir: "../../../../plugins"}
 	custom := bundles.Bundle{Name: "python", Script: "apt-get install -y python3", Plugins: []string{"memory"}}
 	chosen := []bundles.Bundle{builtin(t, "grok"), custom}
 	img, err := c.plan("sha256:a", "runtime:dev", chosen)

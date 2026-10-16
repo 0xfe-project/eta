@@ -1,9 +1,10 @@
 // Package bundlesvc runs bundles' services (docs/architecture/bundles.md#服务):
-// for each bundle that has one, a BundleService object in the bundles'
-// namespace, and under it what the bundle's manifests say plus a Secret of
-// what AXP gives the service. The controller reconciles them every few
-// seconds; deleting a BundleService deletes what it owns, except volumes
-// and the database.
+// for each bundle that has one, its jobspec as the Nomad job bundle-<name>
+// in AXP's namespace (next to AXP's own jobs, which no bundle's name can
+// take), with what AXP gives the service in its environment. The
+// controller reconciles them every few seconds and records how each is in
+// the table bundle_service; a bundle that goes takes its job with it, but
+// not its volumes or its database.
 package bundlesvc
 
 import (
@@ -22,50 +23,32 @@ import (
 
 	"github.com/akarachen/axp/apps/control-plane/internal/auth"
 	"github.com/akarachen/axp/apps/control-plane/internal/bundles"
+	"github.com/akarachen/axp/apps/control-plane/internal/container"
+	"github.com/akarachen/axp/packages/service-go/pg"
+	"github.com/hashicorp/nomad/api"
 	"github.com/jackc/pgx/v5/pgxpool"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/utils/ptr"
 )
 
 const (
-	group       = "axp.dev"
-	bundleLabel = "axp.dev/bundle"
-	// On pod templates: a new revision (manifests, configuration, what AXP
-	// gives) rolls the service.
-	revisionAnnotation = "axp.dev/revision"
-	manager            = "axp-controller"
+	// On jobs: which bundle's, and the revision (jobspec, images and
+	// environment) it was registered from.
+	bundleMeta   = "axp.bundle"
+	revisionMeta = "axp.revision"
 )
-
-// Resource is the BundleService custom resource (deploy/k3s/infra/crd.yaml).
-var Resource = schema.GroupVersionResource{Group: group, Version: "v1alpha1", Resource: "bundleservices"}
-
-var resources = map[string]schema.GroupVersionResource{
-	"ConfigMap":             {Version: "v1", Resource: "configmaps"},
-	"CronJob":               {Group: "batch", Version: "v1", Resource: "cronjobs"},
-	"Deployment":            {Group: "apps", Version: "v1", Resource: "deployments"},
-	"Job":                   {Group: "batch", Version: "v1", Resource: "jobs"},
-	"PersistentVolumeClaim": {Version: "v1", Resource: "persistentvolumeclaims"},
-	"Secret":                {Version: "v1", Resource: "secrets"},
-	"Service":               {Version: "v1", Resource: "services"},
-	"ServiceAccount":        {Version: "v1", Resource: "serviceaccounts"},
-	"StatefulSet":           {Group: "apps", Version: "v1", Resource: "statefulsets"},
-}
 
 // Status is a service's state as the controller last saw it.
 type Status = bundles.ServiceStatus
 
 // Reconciler keeps the bundles' services as the catalog says.
 type Reconciler struct {
-	Client    dynamic.Interface
+	Client    *api.Client
 	Namespace string
 	Bundles   *bundles.Catalog
 	DB        *pgxpool.Pool
-	// The control plane's database, whose server bundles' databases are on.
+	// The control plane's database, whose server bundles' databases are on,
+	// and the host as services reach it (their database's address).
 	DatabaseURL string
+	Host        string
 	Secret      []byte
 	// Where the service reaches AXP (the runtime gateway); where users
 	// reach AXP (empty when they reach it only at the browser's address).
@@ -73,9 +56,9 @@ type Reconciler struct {
 	// The control plane's own DSN (empty: nothing is sent), whose project
 	// services report to through the runtime gateway's /sentry.
 	SentryDSN string
-	// AXP's own images (named axp-*) come from Registry, at ImageTag.
-	Registry, ImageTag string
-	HTTP               *http.Client
+	// The tag of AXP's own images (named axp-*), in Docker.
+	ImageTag string
+	HTTP     *http.Client
 }
 
 // Run reconciles until ctx ends.
@@ -110,28 +93,44 @@ func (r *Reconciler) Sync(ctx context.Context) error {
 			errs = append(errs, r.sync(ctx, b, configs[b.Name]))
 		}
 	}
-	list, err := r.Client.Resource(Resource).Namespace(r.Namespace).List(ctx, metav1.ListOptions{})
+	q := r.query(ctx)
+	q.Params = map[string]string{"meta": "true"}
+	jobs, _, err := r.Client.Jobs().List(q)
 	if err != nil {
 		return errors.Join(append(errs, err)...)
 	}
-	for _, item := range list.Items {
-		if !desired[item.GetName()] {
-			slog.InfoContext(ctx, "Removing a bundle's service", "bundle", item.GetName())
-			errs = append(errs, ignoreNotFound(r.Client.Resource(Resource).Namespace(r.Namespace).Delete(ctx, item.GetName(), metav1.DeleteOptions{})))
+	for _, job := range jobs {
+		if name := job.Meta[bundleMeta]; name != "" && !desired[name] && !job.Stop {
+			slog.InfoContext(ctx, "Removing a bundle's service", "bundle", name)
+			_, _, err := r.Client.Jobs().Deregister(job.ID, true, r.write(ctx))
+			errs = append(errs, err)
 		}
 	}
-	return errors.Join(errs...)
+	names := make([]string, 0, len(desired))
+	for name := range desired {
+		names = append(names, name)
+	}
+	_, err = r.DB.Exec(ctx, "DELETE FROM bundle_service WHERE NOT (bundle = ANY($1))", names)
+	return errors.Join(append(errs, err)...)
 }
 
-// sync applies one bundle's service and records how it is.
+func (r *Reconciler) query(ctx context.Context) *api.QueryOptions {
+	return (&api.QueryOptions{Namespace: r.Namespace}).WithContext(ctx)
+}
+
+func (r *Reconciler) write(ctx context.Context) *api.WriteOptions {
+	return (&api.WriteOptions{Namespace: r.Namespace}).WithContext(ctx)
+}
+
+// sync registers one bundle's job when its revision changed, and records
+// how it is.
 func (r *Reconciler) sync(ctx context.Context, b bundles.Bundle, config map[string]string) error {
-	s := b.Service
 	env, err := r.environment(ctx, b, config)
 	if err != nil {
 		return err
 	}
 	h := sha256.New()
-	fmt.Fprintf(h, "%s\n%s:%s\n", s.Manifests, r.Registry, r.ImageTag)
+	fmt.Fprintf(h, "%s\n%s\n", b.Service.Jobspec, r.ImageTag)
 	keys := make([]string, 0, len(env))
 	for k := range env {
 		keys = append(keys, k)
@@ -141,28 +140,166 @@ func (r *Reconciler) sync(ctx context.Context, b bundles.Bundle, config map[stri
 		fmt.Fprintf(h, "%s=%s\n", k, env[k])
 	}
 	revision := hex.EncodeToString(h.Sum(nil))[:16]
-	owner, err := r.apply(ctx, Resource, &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": group + "/v1alpha1", "kind": "BundleService",
-		"metadata": map[string]any{"name": b.Name},
-		"spec": map[string]any{
-			"revision": revision, "protocol": s.Protocol, "uses": toAny(s.Uses), "database": s.Database, "manifests": s.Manifests,
-		},
-	}})
+	last, err := pg.One[Status](ctx, r.DB, "SELECT state, message, version, revision FROM bundle_service WHERE bundle = $1", b.Name)
 	if err != nil {
 		return err
 	}
-	status, err := r.applyObjects(ctx, b, owner, env, revision)
+	job, _, err := r.Client.Jobs().Info(jobID(b.Name), r.query(ctx))
+	if err != nil && !container.NotFound(err) {
+		return err
+	}
+	var status Status
+	if job == nil || job.Meta[revisionMeta] != revision || *job.Stop {
+		status, err = r.register(ctx, b, env, revision)
+	} else {
+		status, err = r.observe(ctx, b, job, last, revision)
+	}
 	if err != nil {
 		status = Status{State: "error", Message: err.Error()}
 	}
 	status.Revision = revision
-	return r.record(ctx, owner, status)
+	return r.record(ctx, b.Name, last, status)
 }
 
-// environment is what AXP gives the service, in the Secret axp-<bundle>:
-// where AXP is, where to report errors and logs, a secret of its own, its
-// token when it uses AXP, its database, and the bundle's configuration once
-// complete.
+// register parses the bundle's jobspec, makes it the bundle's, and runs it.
+func (r *Reconciler) register(ctx context.Context, b bundles.Bundle, env map[string]string, revision string) (Status, error) {
+	job, err := r.Client.Jobs().ParseHCLOpts(&api.JobsParseRequest{JobHCL: b.Service.Jobspec, Canonicalize: true})
+	if err != nil {
+		return Status{}, fmt.Errorf("the jobspec: %w", err)
+	}
+	if err := r.prepare(job, b.Name, env, revision); err != nil {
+		return Status{}, err
+	}
+	for _, tg := range job.TaskGroups {
+		for _, v := range tg.Volumes {
+			if v.Type == "host" {
+				if err := container.EnsureVolume(ctx, r.Client, r.Namespace, v.Source); err != nil {
+					return Status{}, err
+				}
+			}
+		}
+	}
+	slog.InfoContext(ctx, "Running a bundle's service", "bundle", b.Name, "revision", revision)
+	if _, _, err := r.Client.Jobs().Register(job, r.write(ctx)); err != nil {
+		return Status{}, err
+	}
+	return Status{State: "deploying", Message: "scheduling"}, nil
+}
+
+func jobID(bundle string) string { return "bundle-" + bundle }
+
+// prepare makes the parsed job the bundle's: its ID and namespace, its
+// revision, AXP's images (axp-<name>, without a tag) at this deployment's,
+// and what AXP gives it in every task's environment. The job must have a
+// service named after the bundle (Nomad's service discovery), which the
+// gateways route to.
+func (r *Reconciler) prepare(job *api.Job, name string, env map[string]string, revision string) error {
+	if job.Type != nil && *job.Type != api.JobTypeService {
+		return fmt.Errorf("the job is a %s job, not a service job", *job.Type)
+	}
+	id := jobID(name)
+	job.ID, job.Name, job.Namespace = &id, &id, &r.Namespace
+	job.Type = new(api.JobTypeService)
+	if job.Meta == nil {
+		job.Meta = map[string]string{}
+	}
+	job.Meta[bundleMeta], job.Meta[revisionMeta] = name, revision
+	found := false
+	for _, tg := range job.TaskGroups {
+		services := tg.Services
+		for _, task := range tg.Tasks {
+			services = append(services, task.Services...)
+			if image, _ := task.Config["image"].(string); strings.HasPrefix(image, "axp-") && !strings.ContainsAny(image, ":/") {
+				task.Config["image"] = image + ":" + r.ImageTag
+			}
+			if task.Env == nil {
+				task.Env = map[string]string{}
+			}
+			for k, v := range env {
+				task.Env[k] = v
+			}
+		}
+		for _, s := range services {
+			if s.Name == name && s.Provider == "nomad" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		return fmt.Errorf("no service named %q with provider nomad", name)
+	}
+	return nil
+}
+
+// observe is how the registered job is: deploying until its deployment
+// succeeded, then what it speaks (asked once a revision).
+func (r *Reconciler) observe(ctx context.Context, b bundles.Bundle, job *api.Job, last *Status, revision string) (Status, error) {
+	deployment, _, err := r.Client.Jobs().LatestDeployment(*job.ID, r.query(ctx))
+	if err != nil {
+		return Status{}, err
+	}
+	if deployment == nil || deployment.JobVersion != *job.Version {
+		return Status{State: "deploying", Message: "scheduling"}, nil
+	}
+	switch deployment.Status {
+	case api.DeploymentStatusSuccessful:
+	case api.DeploymentStatusFailed, api.DeploymentStatusCancelled:
+		return Status{State: "error", Message: deployment.StatusDescription}, nil
+	default:
+		return Status{State: "deploying", Message: deployment.StatusDescription}, nil
+	}
+	if last != nil && last.Revision == revision && (last.State == "ready" || last.State == "incompatible") {
+		return *last, nil
+	}
+	return r.discover(ctx, b)
+}
+
+// discover asks the ready service what it speaks, when the bundle says
+// what it should, at the address Nomad registered for it.
+func (r *Reconciler) discover(ctx context.Context, b bundles.Bundle) (Status, error) {
+	if b.Service.Protocol == "" {
+		return Status{State: "ready"}, nil
+	}
+	registrations, _, err := r.Client.Services().Get(b.Name, r.query(ctx))
+	if err != nil {
+		return Status{}, err
+	}
+	if len(registrations) == 0 {
+		return Status{State: "deploying", Message: "the service is not registered yet"}, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	url := fmt.Sprintf("http://%s:%d/.well-known/axp-service", registrations[0].Address, registrations[0].Port)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return Status{}, err
+	}
+	client := r.HTTP
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return Status{State: "deploying", Message: err.Error()}, nil
+	}
+	defer resp.Body.Close()
+	var info struct {
+		Protocol string `json:"protocol"`
+		Version  string `json:"version"`
+	}
+	if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&info) != nil {
+		return Status{State: "incompatible", Message: "no /.well-known/axp-service"}, nil
+	}
+	if info.Protocol != b.Service.Protocol {
+		return Status{State: "incompatible", Version: info.Version,
+			Message: fmt.Sprintf("speaks %s, the bundle needs %s", info.Protocol, b.Service.Protocol)}, nil
+	}
+	return Status{State: "ready", Version: info.Version}, nil
+}
+
+// environment is what AXP gives the service: where AXP is, where to report
+// errors and logs, a secret of its own, its token when it uses AXP, its
+// database, and the bundle's configuration once complete.
 func (r *Reconciler) environment(ctx context.Context, b bundles.Bundle, config map[string]string) (map[string]string, error) {
 	env := map[string]string{
 		"AXP_GATEWAY_URL":   r.GatewayURL,
@@ -189,260 +326,24 @@ func (r *Reconciler) environment(ctx context.Context, b bundles.Bundle, config m
 	return env, nil
 }
 
-func (r *Reconciler) applyObjects(ctx context.Context, b bundles.Bundle, owner *unstructured.Unstructured, env map[string]string, revision string) (Status, error) {
-	objects, err := b.Service.Objects()
-	if err != nil {
-		return Status{}, err
-	}
-	data := map[string]any{}
-	for k, v := range env {
-		data[k] = v
-	}
-	secret := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "v1", "kind": "Secret", "metadata": map[string]any{"name": "axp-" + b.Name}, "stringData": data,
-	}}
-	objects = append(objects, secret)
-	ref := metav1.OwnerReference{
-		APIVersion: owner.GetAPIVersion(), Kind: owner.GetKind(), Name: owner.GetName(), UID: owner.GetUID(),
-		BlockOwnerDeletion: ptr.To(true),
-	}
-	applied := map[string]bool{}
-	var ready []*unstructured.Unstructured
-	for _, obj := range objects {
-		labels := obj.GetLabels()
-		if labels == nil {
-			labels = map[string]string{}
-		}
-		labels[bundleLabel] = b.Name
-		obj.SetLabels(labels)
-		// Volumes keep their data when the service goes (bundles.md#服务).
-		if obj.GetKind() != "PersistentVolumeClaim" {
-			obj.SetOwnerReferences([]metav1.OwnerReference{ref})
-		}
-		if err := r.prepare(obj, revision); err != nil {
-			return Status{}, err
-		}
-		out, err := r.apply(ctx, resources[obj.GetKind()], obj)
-		if err != nil {
-			return Status{}, fmt.Errorf("%s %s: %w", obj.GetKind(), obj.GetName(), err)
-		}
-		applied[obj.GetKind()+"/"+obj.GetName()] = true
-		if obj.GetKind() == "Deployment" || obj.GetKind() == "StatefulSet" {
-			ready = append(ready, out)
-		}
-	}
-	if err := r.prune(ctx, b.Name, applied); err != nil {
-		return Status{}, err
-	}
-	for _, obj := range ready {
-		if msg := notReady(obj); msg != "" {
-			return Status{State: "applying", Message: msg}, nil
-		}
-	}
-	// What it speaks is asked once a revision is ready.
-	if last := statusOf(owner); last.Revision == revision && (last.State == "ready" || last.State == "incompatible") {
-		return last, nil
-	}
-	return r.discover(ctx, b, objects)
-}
-
-// prepare points AXP's images (axp-<name>, without a registry) at this
-// deployment's, and stamps pod templates with the revision.
-func (r *Reconciler) prepare(obj *unstructured.Unstructured, revision string) error {
-	path := map[string][]string{
-		"Deployment": {"spec", "template"}, "StatefulSet": {"spec", "template"},
-		"Job": {"spec", "template"}, "CronJob": {"spec", "jobTemplate", "spec", "template"},
-	}[obj.GetKind()]
-	if path == nil {
-		return nil
-	}
-	template, ok, err := unstructured.NestedMap(obj.Object, path...)
-	if err != nil || !ok {
-		return err
-	}
-	annotations, _, _ := unstructured.NestedStringMap(template, "metadata", "annotations")
-	if annotations == nil {
-		annotations = map[string]string{}
-	}
-	annotations[revisionAnnotation] = revision
-	if err := unstructured.SetNestedStringMap(template, annotations, "metadata", "annotations"); err != nil {
-		return err
-	}
-	for _, field := range []string{"initContainers", "containers"} {
-		containers, _, _ := unstructured.NestedSlice(template, "spec", field)
-		for _, c := range containers {
-			container, ok := c.(map[string]any)
-			if !ok {
-				continue
-			}
-			if image, _ := container["image"].(string); strings.HasPrefix(image, "axp-") && !strings.ContainsAny(image, ":/") {
-				container["image"] = r.Registry + "/" + image + ":" + r.ImageTag
-			}
-		}
-		if containers != nil {
-			if err := unstructured.SetNestedSlice(template, containers, "spec", field); err != nil {
-				return err
-			}
-		}
-	}
-	return unstructured.SetNestedMap(obj.Object, template, path...)
-}
-
-func (r *Reconciler) apply(ctx context.Context, gvr schema.GroupVersionResource, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
-	return r.Client.Resource(gvr).Namespace(r.Namespace).Apply(ctx, obj.GetName(), obj, metav1.ApplyOptions{FieldManager: manager, Force: true})
-}
-
-// prune deletes the bundle's objects its manifests no longer have; volumes
-// stay.
-func (r *Reconciler) prune(ctx context.Context, bundle string, applied map[string]bool) error {
-	for kind, gvr := range resources {
-		if kind == "PersistentVolumeClaim" {
-			continue
-		}
-		list, err := r.Client.Resource(gvr).Namespace(r.Namespace).List(ctx, metav1.ListOptions{LabelSelector: bundleLabel + "=" + bundle})
-		if err != nil {
-			return err
-		}
-		for _, item := range list.Items {
-			if !applied[kind+"/"+item.GetName()] {
-				if err := ignoreNotFound(r.Client.Resource(gvr).Namespace(r.Namespace).Delete(ctx, item.GetName(), metav1.DeleteOptions{})); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return nil
-}
-
-// notReady says why a Deployment or StatefulSet is not ready yet, or "".
-func notReady(obj *unstructured.Unstructured) string {
-	generation, _, _ := unstructured.NestedInt64(obj.Object, "status", "observedGeneration")
-	want, found, _ := unstructured.NestedInt64(obj.Object, "spec", "replicas")
-	if !found {
-		want = 1
-	}
-	updated, _, _ := unstructured.NestedInt64(obj.Object, "status", "updatedReplicas")
-	ready, _, _ := unstructured.NestedInt64(obj.Object, "status", "readyReplicas")
-	if generation < obj.GetGeneration() || updated < want || ready < want {
-		return fmt.Sprintf("%s %s: %d/%d ready", obj.GetKind(), obj.GetName(), ready, want)
-	}
-	return ""
-}
-
-// discover asks a ready service what it speaks, when the bundle says what
-// it should.
-func (r *Reconciler) discover(ctx context.Context, b bundles.Bundle, objects []*unstructured.Unstructured) (Status, error) {
-	if b.Service.Protocol == "" {
-		return Status{State: "ready"}, nil
-	}
-	port := servicePort(objects, b.Name)
-	if port == 0 {
-		return Status{}, fmt.Errorf("no Service %q with a port named http", b.Name)
-	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	url := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d/.well-known/axp-service", b.Name, r.Namespace, port)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return Status{}, err
-	}
-	client := r.HTTP
-	if client == nil {
-		client = http.DefaultClient
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return Status{State: "applying", Message: err.Error()}, nil
-	}
-	defer resp.Body.Close()
-	var info struct {
-		Protocol string `json:"protocol"`
-		Version  string `json:"version"`
-	}
-	if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&info) != nil {
-		return Status{State: "incompatible", Message: "no /.well-known/axp-service"}, nil
-	}
-	if info.Protocol != b.Service.Protocol {
-		return Status{State: "incompatible", Version: info.Version,
-			Message: fmt.Sprintf("speaks %s, the bundle needs %s", info.Protocol, b.Service.Protocol)}, nil
-	}
-	return Status{State: "ready", Version: info.Version}, nil
-}
-
-func servicePort(objects []*unstructured.Unstructured, name string) int64 {
-	for _, obj := range objects {
-		if obj.GetKind() != "Service" || obj.GetName() != name {
-			continue
-		}
-		ports, _, _ := unstructured.NestedSlice(obj.Object, "spec", "ports")
-		for _, p := range ports {
-			if port, ok := p.(map[string]any); ok && port["name"] == "http" {
-				// Numbers decode from YAML as float64 or int64.
-				switch n := port["port"].(type) {
-				case int64:
-					return n
-				case float64:
-					return int64(n)
-				}
-			}
-		}
-	}
-	return 0
-}
-
 // record writes the status when it changed.
-func (r *Reconciler) record(ctx context.Context, owner *unstructured.Unstructured, s Status) error {
-	if statusOf(owner) == s {
+func (r *Reconciler) record(ctx context.Context, bundle string, last *Status, s Status) error {
+	if last != nil && *last == s {
 		return nil
 	}
-	next := map[string]any{"state": s.State, "message": s.Message, "version": s.Version, "revision": s.Revision}
-	if s.State != "applying" {
-		slog.InfoContext(ctx, "A bundle's service changed state", "bundle", owner.GetName(), "state", s.State, "message", s.Message)
+	if s.State != "deploying" {
+		slog.InfoContext(ctx, "A bundle's service changed state", "bundle", bundle, "state", s.State, "message", s.Message)
 	}
-	owner.Object["status"] = next
-	_, err := r.Client.Resource(Resource).Namespace(r.Namespace).UpdateStatus(ctx, owner, metav1.UpdateOptions{FieldManager: manager})
+	_, err := r.DB.Exec(ctx, `INSERT INTO bundle_service (bundle, state, message, version, revision, updated_at) VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (bundle) DO UPDATE SET state = $2, message = $3, version = $4, revision = $5, updated_at = $6`,
+		bundle, s.State, s.Message, s.Version, s.Revision, pg.Now())
 	return err
 }
 
-// Statuses is every bundle's service's status, by bundle.
-func Statuses(ctx context.Context, client dynamic.Interface, namespace string) (map[string]Status, error) {
-	list, err := client.Resource(Resource).Namespace(namespace).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	out := map[string]Status{}
-	for _, item := range list.Items {
-		out[item.GetName()] = statusOf(&item)
-	}
-	return out, nil
-}
-
-func statusOf(obj *unstructured.Unstructured) Status {
-	status, ok, _ := unstructured.NestedStringMap(obj.Object, "status")
-	if !ok || status["state"] == "" {
-		return Status{State: "applying"}
-	}
-	return Status{State: status["state"], Message: status["message"], Version: status["version"], Revision: status["revision"]}
-}
-
-func toAny(s []string) []any {
-	out := []any{}
-	for _, v := range s {
-		out = append(out, v)
-	}
-	return out
-}
-
-func ignoreNotFound(err error) error {
-	if apierrors.IsNotFound(err) {
-		return nil
-	}
-	return err
-}
-
-// gatewayDSN is dsn (http://key@rustrak:8080/1) at the runtime gateway, which
-// passes only Sentry's envelopes on (http://key@runtime-gateway:8090/sentry/1):
-// services reach nothing else of AXP's, and hold no credentials that could.
+// gatewayDSN is dsn (http://key@127.0.0.1:24080/1) at the runtime gateway,
+// which passes only Sentry's envelopes on
+// (http://key@172.26.64.1:24090/sentry/1): services reach nothing else of
+// AXP's, and hold no credentials that could.
 func gatewayDSN(dsn, gateway string) string {
 	d, err := url.Parse(dsn)
 	g, gerr := url.Parse(gateway)

@@ -377,8 +377,8 @@ export type BundleDraft = Pick<
   Bundle,
   "name" | "description" | "script" | "plugins"
 > & {
-  // The service's Kubernetes objects; empty for none.
-  manifests: string;
+  // The service's Nomad job (HCL); empty for none.
+  jobspec: string;
   usesModels: boolean;
   database: boolean;
 };
@@ -388,7 +388,7 @@ export const bundleDraft = (bundle: Bundle): BundleDraft => ({
   description: bundle.description,
   script: bundle.script,
   plugins: bundle.plugins,
-  manifests: bundle.service?.manifests ?? "",
+  jobspec: bundle.service?.jobspec ?? "",
   usesModels: bundle.service?.uses?.includes("llm") ?? false,
   database: bundle.service?.database ?? false,
 });
@@ -405,7 +405,7 @@ export function useUpdateBundle() {
             script: draft.script,
             plugins: draft.plugins,
             service: {
-              manifests: draft.manifests,
+              jobspec: draft.jobspec,
               uses: draft.usesModels ? ["llm"] : [],
               database: draft.database,
             },

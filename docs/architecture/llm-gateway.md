@@ -12,9 +12,9 @@ LLM 网关是控制面的模块（`apps/control-plane/internal/llm`），运行�
 
 | 路径               | listener             | 调用方                                                                            | 鉴权                                                        |
 | ------------------ | -------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `/api/llm/v1/*`    | 公共（`:8000`）      | 浏览器（经 `gateway`）                                                            | 与公共 API 相同：只有公开网关连得到（见[网关](gateway.md)） |
-| `/v1/*`            | 内部（`:8001`）      | runtime 中的 Codex 和环境包的服务（经 `runtime-gateway`）、routine worker（直连） | 调用方给出的 `X-AXP-Agent-Id`                               |
-| `/llm/v1/models`   | 内部（`:8001`）      | controller、routine worker（`llm.Remote`）                                        | 无：只读目录                                                |
+| `/api/llm/v1/*`    | 公共（`24000`）      | 浏览器（经 `gateway`）                                                            | 与公共 API 相同：只有公开网关连得到（见[网关](gateway.md)） |
+| `/v1/*`            | 内部（`24001`）      | runtime 中的 Codex 和环境包的服务（经 `runtime-gateway`）、routine worker（直连） | 调用方给出的 `X-AXP-Agent-Id`                               |
+| `/llm/v1/models`   | 内部（`24001`）      | controller、routine worker（`llm.Remote`）                                        | 无：只读目录                                                |
 | `/v0/management/*` | 不在任何 listener 上 | 仅进程内调用（`cpa.Proxy.Management()`）                                          | 每次启动随机生成的管理密钥                                  |
 
 提供 API 的进程直接调用模块读目录（聊天的模型校验、发送前检查、定时任务的模型校验），不经 HTTP。CPA 负责 token 刷新、按模型名在账号间轮换、协议转换。凭据只存在模块的状态目录（`AXP_LLM_STATE_DIR`，默认工作目录下的 `var/llm-gateway`：开发时是 `apps/control-plane/var/llm-gateway`，生产是 `api` 上的卷 `llm`）；runtime 只拿到 runtime 网关的地址和自己的实例令牌。
@@ -25,7 +25,7 @@ runtime 用 `<实例 ID>.<令牌>`（control-plane 签发，换代即失效）�
 
 ### Bundle 服务
 
-环境包的服务（[环境包](bundles.md#服务)）在 `bundle.json` 的 `uses` 里声明 `llm` 后，用 AXP 发给它的令牌（Secret `axp-<name>` 的 `AXP_BUNDLE_TOKEN`）经 `runtime-gateway` 调用 `/v1`：`forward_auth`（`/internal/v1/runtime-auth?use=llm`）校验令牌，它在 `X-AXP-Agent-Id` 里写明这次请求是替哪个智能体做的，用量记在那个智能体名下，网关另带上 `X-AXP-Bundle`。令牌碰不到插件路由、`/forge`、`/attachments`，也连不到 internal listener（NetworkPolicy，见[网关](gateway.md)）；在集群里本身不是身份。记忆服务的抽取就走这条路。
+环境包的服务（[环境包](bundles.md#服务)）在 `bundle.json` 的 `uses` 里声明 `llm` 后，用 AXP 发给它的令牌（环境变量 `AXP_BUNDLE_TOKEN`）经 `runtime-gateway` 调用 `/v1`：`forward_auth`（`/internal/v1/runtime-auth?use=llm`）校验令牌，它在 `X-AXP-Agent-Id` 里写明这次请求是替哪个智能体做的，用量记在那个智能体名下，网关另带上 `X-AXP-Bundle`。令牌碰不到插件路由、`/forge`、`/attachments`。记忆服务的抽取就走这条路。
 
 ### 与 CPA 的边界
 
@@ -71,7 +71,7 @@ Connector 只负责“凭据怎么进来”；连接列表、启停、删除统�
 
 ### 服务直连
 
-控制面自己的其他进程（routine worker）直接调用 internal listener 的 `/v1`（`AXP_LLM_GATEWAY_URL`，生产 `http://api.axp.svc.cluster.local:8001`），不带 key，自己在 `X-AXP-Agent-Id` 里写明用量记在谁名下：internal listener 只有 AXP 自己的命名空间连得到，智能体和环境包的服务只能经 runtime 网关，而 runtime 网关总会改写这个头。[定时任务](routines.md)的 worker 用 ADK 的 `openaimodel`（Chat Completions）调用 `/v1`，以 `routine-<id>` 记账；Codex 和 Grok 两类模型的多轮工具调用都经它验证过（[#57](https://github.com/AkaraChen/axp/issues/57)）。
+控制面自己的其他进程（routine worker）直接调用 internal listener 的 `/v1`（`AXP_LLM_GATEWAY_URL`，生产 `http://127.0.0.1:24001`），不带 key，自己在 `X-AXP-Agent-Id` 里写明用量记在谁名下：智能体和环境包的服务应经 runtime 网关，而 runtime 网关总会改写这个头。[定时任务](routines.md)的 worker 用 ADK 的 `openaimodel`（Chat Completions）调用 `/v1`，以 `routine-<id>` 记账；Codex 和 Grok 两类模型的多轮工具调用都经它验证过（[#57](https://github.com/AkaraChen/axp/issues/57)）。
 
 ### 用量
 

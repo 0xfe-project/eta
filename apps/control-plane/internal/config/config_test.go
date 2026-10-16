@@ -8,15 +8,19 @@ func TestDefaultsFollowTheEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Dev || c.NATSURL != "nats://nats.axp.svc.cluster.local:4222" || c.RuntimeImage != "10.43.100.1:5000/axp-agent-runtime:production" || c.APIAddr != ":8000" {
+	if c.Dev || c.NATSURL != "nats://127.0.0.1:24222" || c.RuntimeImage != "axp-agent-runtime:production" || c.APIAddr != "127.0.0.1:24000" {
 		t.Fatalf("production defaults: %+v", c)
+	}
+	if at, _ := c.AtAllocHost(c.NATSURL); at != "nats://172.26.64.1:24222" {
+		t.Fatalf("at the bridge's gateway: %s", at)
 	}
 	t.Setenv("AXP_DEV", "true")
 	t.Setenv("AXP_NATS_URL", "nats://elsewhere:4222")
+	t.Setenv("AXP_SECRET_KEY", "k")
 	if c, err = Load(); err != nil {
 		t.Fatal(err)
 	}
-	if !c.Dev || c.NATSURL != "nats://elsewhere:4222" || c.RuntimeImage != "10.43.100.11:5000/axp-agent-runtime:dev" || c.SecretKey != "k" {
-		t.Fatalf("development defaults with an override: %+v", c)
+	if !c.Dev || c.NATSURL != "nats://elsewhere:4222" || c.RuntimeImage != "axp-agent-runtime:dev" || c.SecretKey != "k" {
+		t.Fatalf("development defaults: %+v", c)
 	}
 }

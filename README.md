@@ -6,15 +6,15 @@ Monorepo：Bun workspaces 管理 Web 和 agent runtime，uv 管理 Python 项目
 apps/
   gateway/         Caddy：浏览器的入口网关，以及智能体和环境包服务的 runtime 网关
   control-plane/   Go：产品 API 与内部 API（同一进程两个 listener，内嵌 CLIProxyAPI 提供模型连接、目录与
-                   OpenAI 兼容接口）、controller、routine worker；在 k3s 里构建并运行每个智能体的 Pod 和环境包的服务；
+                   OpenAI 兼容接口）、controller、routine worker；用本机 Docker 构建镜像，在 Nomad 上运行每个智能体的容器和环境包的服务；
                    含代码托管（用户自己的 GitHub App，agent 的 git、gh 凭据与 open_pull_request）和定时任务
                    （每次运行是 worker 里的 ADK agent；自己的数据库，计划在 NATS）
   web/             Vite + React + React Compiler + TypeScript
-  agent-runtime/   每个 Agent 一个常驻 Pod 的运行时（Node，直接驱动 Codex app-server）
+  agent-runtime/   每个 Agent 一个常驻容器的运行时（Node，直接驱动 Codex app-server）
   remote/          Go：远程电脑上的 axp（daemon 与给智能体用的 CLI）
   agenvo/          固定的 agenvo 提交，从源码构建中继（内置环境包 agenvo 的服务）和 connector
-bundles/           内置环境包（不是核心代码）：每个一个目录（bundle.json、setup 脚本），有的带集群里的服务
-                   （service/：Kubernetes 清单，memory 的还有它的 Python 代码，mem0 + pgvector）
+bundles/           内置环境包（不是核心代码）：每个一个目录（bundle.json、setup 脚本），有的带一个服务
+                   （service/：Nomad 的 jobspec，memory 的还有它的 Python 代码，mem0 + pgvector）
 plugins/           环境包带来的插件（MCP、skill、hook），聊天智能体和定时任务都用
 packages/
   plugins-go/      插件标准：读取插件，编译到聊天智能体（Codex），加载进定时任务（ADK）
@@ -26,7 +26,7 @@ packages/
 
 ## 环境与初始化
 
-需要 Node.js 24、Bun 1.3.14、uv 和 Go（各 `go.mod` 统一要求 1.26.9，较旧的 go 会自动下载对应工具链）。Python 项目使用 3.13，uv 会按 `.python-version` 自动获取。还需要 Docker（开发网关和测试数据库）和本机的 k3s（见 [deploy/README.md](deploy/README.md#一台机器装好-k3s)）。
+需要 Node.js 24、Bun 1.3.14、uv 和 Go（各 `go.mod` 统一要求 1.26.9，较旧的 go 会自动下载对应工具链）。Python 项目使用 3.13，uv 会按 `.python-version` 自动获取。还需要 Docker 和本机的 Nomad（见 [deploy/README.md](deploy/README.md#一台机器装好-nomad)）。
 
 runtime 镜像里的 hook 规则引擎 [akhook](https://github.com/aghub-app/akhook) 以 submodule 放在 `vendor/akhook`，构建镜像时如果还没拉取会自动初始化；也可以直接 `git clone --recurse-submodules`。
 
@@ -41,11 +41,11 @@ bun run dev
 
 模型来自控制面内嵌的模型网关：在设置的“模型服务”中用设备码绑定 Codex（ChatGPT）或 Grok（xAI）账号，每个服务可以绑定多个账号并自动轮换。账号登录失效、额度用尽等状态会显示在那里；智能体的模型不可用时不能发送消息，绑定或重新登录后自动恢复。详见 [LLM 网关](docs/architecture/llm-gateway.md)。
 
-`bun run dev` 在本机启动网关、控制面（公共与内部 API、controller、routine worker）和 Web；需要 Kubernetes 的部分跑在本机的 k3s 里（安装见 [deploy/README.md](deploy/README.md#一台机器装好-k3s)），与生产相同：所有实例共享的基础设施在命名空间 `axp-dev`（数据库、NATS、S3、日志、镜像仓库和 BuildKit），智能体的 Pod 在 `dev-<库名>-agents`，环境包的服务（记忆、中继）在 `dev-<库名>-bundles`。controller 用每个 Agent 的环境包构建它的镜像，为它运行一个常驻 Pod（状态在它自己的卷上），Pod 里的 Codex 把所有模型请求经 runtime 网关发给控制面，不持有任何账号凭据。runtime 的基础镜像和环境包服务的镜像在每次启动时重建（没有变化时约 1 秒），每个 checkout 一个标签，worktree 之间互不覆盖。
+`bun run dev` 在本机启动控制面（公共与内部 API、controller、routine worker）和 Web；其余跑在本机的 Nomad 上（安装见 [deploy/README.md](deploy/README.md#一台机器装好-nomad)），与生产相同：所有实例共享的基础设施在命名空间 `axp-dev`（数据库、NATS、S3、日志），网关和环境包的服务（记忆、中继）在 `dev-<库名>`，智能体的容器在 `dev-<库名>-agents`。controller 用每个 Agent 的环境包构建它的镜像，为它运行一个常驻容器（状态在它自己的卷上），容器里的 Codex 把所有模型请求经 runtime 网关发给控制面，不持有任何账号凭据。runtime 的基础镜像和环境包服务的镜像在每次启动时用本机 Docker 重建（没有变化时约 1 秒），每个 checkout 一个标签，worktree 之间互不覆盖。
 
 智能体要选一个可用的模型才能对话：首次使用在“模型服务”中绑定账号（开发凭据保存在 `apps/control-plane/var/llm-gateway`）。
 
-`bun run dev` 每个实例占用十个连续端口：网关 `P`（浏览器打开的地址）、控制面的 API `P+1` 与内部 API `P+2`（同一进程）、Web `P+3`、runtime 网关 `P+5`（监听节点在 Pod 网络上的地址 `10.42.0.1`，其余都只监听 loopback）、AXP 的 HTTPS 地址 `P+8`（自签证书，远程电脑和中继用，见[任务与远程电脑](docs/architecture/tasks.md)），其余空着，默认 `P=3000`。被占用时（其他 checkout、worktree 或 agent 已在运行）自动顺延到下一个空闲端口块（3010、3020……），并用文件锁避免并行启动抢到同一端口，因此可以同时运行任意多个实例。用 `bun run dev --port 4000`（或 `AXP_DEV_PORT=4000`）指定端口，被占用或是生产端口（24180）时直接报错。新的 worktree 首次运行会自动安装依赖并执行 migrations。
+`bun run dev` 每个实例占用十个连续端口：网关 `P`（浏览器打开的地址）、控制面的 API `P+1` 与内部 API `P+2`（同一进程）、Web `P+3`、runtime 网关 `P+5`（监听所有地址，容器从 bridge 网络的网关 `172.26.64.1` 连它，其余都只监听 loopback）、AXP 的 HTTPS 地址 `P+8`（自签证书，远程电脑和中继用，见[任务与远程电脑](docs/architecture/tasks.md)），其余空着，默认 `P=3000`。被占用时（其他 checkout、worktree 或 agent 已在运行）自动顺延到下一个空闲端口块（3010、3020……），并用文件锁避免并行启动抢到同一端口，因此可以同时运行任意多个实例。用 `bun run dev --port 4000`（或 `AXP_DEV_PORT=4000`）指定端口，被占用或是生产端口（24180）时直接报错。新的 worktree 首次运行会自动安装依赖并执行 migrations。
 
 `setup` 安装 JS/Python/Go 依赖。锁文件（`bun.lock`、两个 `uv.lock`、`go.sum`）应一起提交。
 
@@ -57,9 +57,9 @@ bun run dev
 - API 健康检查：http://localhost:3000/api/health
 - 公共 OpenAPI 文档：http://localhost:3000/api/docs
 - 内部 API 文档：http://127.0.0.1:3002/internal/docs
-- runtime 的入口（AXP 的服务与 OpenAI 兼容接口）：http://10.42.0.1:3005
+- runtime 的入口（AXP 的服务与 OpenAI 兼容接口）：http://172.26.64.1:3005
 
-浏览器只访问网关，runtime 和环境包的服务只访问 runtime 网关（`apps/gateway`，Caddy 配置），开发和生产使用同一套路由：`/api/bundles/<name>/` → 环境包的服务，`/api/` → control-plane，其余 → Web。服务之间没有共享密钥，信任边界由网络划定（生产是 NetworkPolicy），runtime 网关替所有服务认证调用方。详见[网关](docs/architecture/gateway.md)。
+浏览器只访问网关，runtime 和环境包的服务只访问 runtime 网关（`apps/gateway`，Caddy 配置），开发和生产使用同一套路由：`/api/bundles/<name>/` → 环境包的服务，`/api/` → control-plane，其余 → Web。服务之间没有共享密钥，runtime 网关替所有服务认证调用方。详见[网关](docs/architecture/gateway.md)。
 
 Web 已配置 Query、nuqs、Phosphor Icons、表单校验、通知、Markdown 和 Tailwind，使用方式见 [Web 开发说明](apps/web/README.md)。
 
@@ -68,9 +68,9 @@ Web 已配置 Query、nuqs、Phosphor Icons、表单校验、通知、Markdown �
 | 根目录命令                   | 用途                                                                         |
 | ---------------------------- | ---------------------------------------------------------------------------- |
 | `bun run dev`                | 启动开发环境，任一进程退出时关闭所有进程                                     |
-| `bun run deploy`             | 把工作区部署到本机的 k3s（见 `deploy/README.md`）                            |
+| `bun run deploy`             | 把工作区部署到本机的 Nomad（见 `deploy/README.md`）                          |
 | `bun run dev:control-plane`  | 单独启动控制面的公共 API 与内部 API（同一进程）                              |
-| `bun run dev:controller`     | 单独启动 runtime controller（需要 k3s）                                      |
+| `bun run dev:controller`     | 单独启动 runtime controller（需要 Nomad 和 Docker）                          |
 | `bun run dev:routine-worker` | 单独启动定时任务的 worker                                                    |
 | `bun run dev:web`            | 单独启动 Web                                                                 |
 | `bun run db:migrate`         | 执行数据库迁移                                                               |
@@ -90,7 +90,7 @@ TanStack 的 `src/routeTree.gen.ts` 由 `dev` 或 `build` 自动生成；控制�
 - Go：`out/<平台>/` 下的静态二进制，交叉编译。
 - Python：`out/<平台>/site-packages`，只用目标平台的 wheel 安装锁定的依赖。
 
-目标平台写在任务名里（`build:linux-amd64`、`build:linux-arm64`），在哪台机器上构建都得到同一份缓存。Dockerfile 只复制这些产物，产物逐字节不变时 Docker 复用对应的层。镜像构建需要 `docker buildx`。
+目标平台写在任务名里（`build:linux-amd64`、`build:linux-arm64`），在哪台机器上构建都得到同一份缓存。Dockerfile 只复制这些产物，产物逐字节不变时 Docker 复用对应的层。镜像用本机的 `docker buildx` 构建，留在本机的 Docker 里（Nomad 从那里运行它们），没有镜像仓库。
 
 ## 格式化、lint 与提交检查
 
@@ -108,9 +108,9 @@ Turbo 用 Vercel Remote Cache（`turbo.json` 的 `remoteCache.teamId`），本�
 
 ## 日志
 
-日志、错误和 trace 都由各进程直接用 Sentry 的 SDK 发到自建的 [Rustrak](https://github.com/rustrak/rustrak)（兼容 Sentry 协议；GPL-3.0，只以官方镜像独立运行，`deploy/k3s/infra/rustrak.yaml`）。Go 用 `log/slog` 和 `sentry-go`（`packages/telemetry-go`），Python 用标准库 `logging` 和 `sentry-sdk`（`bundles/memory/service/axp_memory/telemetry.py`），Web 服务端用 `@sentry/bun`（`apps/web/src/server/telemetry.ts`），浏览器用 `@sentry/react`（`apps/web/src/lib/report.ts`）。控制面内嵌的 CLIProxyAPI 的 logrus 记录也经 slog 走同一条路（`library=cliproxy`）。
+日志、错误和 trace 都由各进程直接用 Sentry 的 SDK 发到自建的 [Rustrak](https://github.com/rustrak/rustrak)（兼容 Sentry 协议；GPL-3.0，只以官方镜像独立运行，`deploy/nomad/infra.nomad.hcl`）。Go 用 `log/slog` 和 `sentry-go`（`packages/telemetry-go`），Python 用标准库 `logging` 和 `sentry-sdk`（`bundles/memory/service/axp_memory/telemetry.py`），Web 服务端用 `@sentry/bun`（`apps/web/src/server/telemetry.ts`），浏览器用 `@sentry/react`（`apps/web/src/lib/report.ts`）。控制面内嵌的 CLIProxyAPI 的 logrus 记录也经 slog 走同一条路（`library=cliproxy`）。
 
-- 每条日志（`INFO` 及以上）在 stderr 输出一行可读格式 `15:04:05.000 INFO  消息 key=value`（UTC），供 `kubectl logs` 看；同时是一条 Sentry 日志。
+- 每条日志（`INFO` 及以上）在 stderr 输出一行可读格式 `15:04:05.000 INFO  消息 key=value`（UTC），供 `nomad alloc logs` 看；同时是一条 Sentry 日志。
 - `ERROR` 记录是 Sentry 事件，按消息聚合成 issue；未捕获的异常和 panic 也是。HTTP 请求各是一个 transaction（健康检查除外）。
 - 浏览器报未捕获的错误、未处理的 rejection 和 React 的渲染错误。生产构建给每个文件和它的 source map 加上 debug id（`sentry sourcemap inject`），部署时把 source map 上传到 Rustrak，压缩后的堆栈就能还原到源码行。
 - 浏览器和环境包的服务经网关的 `/sentry` 发送（只转发 envelope），DSN 只有公钥，不持有凭据。
@@ -122,12 +122,12 @@ agent runtime 只把自己的日志写到 stdout。Codex 原生的 OpenTelemetry
 
 ## 数据库与存储
 
-数据库是 PostgreSQL，由 `DATABASE_URL` 指定。开发默认连开发基础设施里的 `postgres.axp-dev`（库 `axp`；换一个库名也就换了一组 `dev-<库名>-*` 命名空间），生产连命名空间 `axp` 里的。测试连本机共享的 `axp-dev-postgres` 容器（`127.0.0.1:15432`，`scripts/test-postgres.sh` 启动它，控制面测试会自动调用）。
+数据库是 PostgreSQL，由 `DATABASE_URL` 指定。开发默认连开发基础设施里的 `127.0.0.1:24433`（库 `axp`；换一个库名也就换了一组 `dev-<库名>*` 命名空间），生产连 `127.0.0.1:24432`。测试连本机共享的 `axp-dev-postgres` 容器（`127.0.0.1:15432`，`scripts/test-postgres.sh` 启动它，控制面测试会自动调用）。
 
-每个 Agent 的全部状态（工作区和 Codex 会话）在它自己的卷上（PVC `agent-<id>`），只挂进它自己的 Pod；Pod 重建时卷还在，runtime 从卷上恢复 thread。详见 [对话与运行时](docs/architecture/chat-runtime.md)。
+每个 Agent 的全部状态（工作区和 Codex 会话）在它自己的卷上（Nomad 的 host volume `agent-<id>`），只挂进它自己的容器；容器重建时卷还在，runtime 从卷上恢复 thread。详见 [对话与运行时](docs/architecture/chat-runtime.md)。
 
 ## 生产部署
 
-k3s 的清单和部署脚本都在 [`deploy/`](deploy/README.md)。在装好 k3s 的 Linux 机器上克隆仓库后执行 `deploy/k3s/deploy.sh`（或 `bun run deploy`），即可把工作区部署到这台机器。
+Nomad 的 jobspec 和部署脚本都在 [`deploy/`](deploy/README.md)。在装好 Nomad 和 Docker 的 Linux 机器上克隆仓库后执行 `deploy/nomad/deploy.sh`（或 `bun run deploy`），即可把工作区部署到这台机器。
 
 配置参考：[Vite + React](https://vite.dev/guide/)、[TanStack Router](https://tanstack.com/router/latest/docs/framework/react/installation/with-vite)、[huma](https://huma.rocks)、[Codex app-server](https://github.com/openai/codex/tree/main/codex-rs/app-server)。

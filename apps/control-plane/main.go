@@ -3,12 +3,12 @@
 // keeps routines and is the LLM gateway (llm). One binary, one role per process:
 //
 //	axp-control-plane serve       both APIs, each on its own listener, and the models (CLIProxyAPI):
-//	                              the browser's (AXP_API_ADDR, default :8000) under /api,
+//	                              the browser's (AXP_API_ADDR, default 127.0.0.1:24000) under /api,
 //	                              /api/forge, /api/routines, /api/llm, /remote, /share and /preview;
-//	                              runtimes' (AXP_INTERNAL_ADDR, default :8001) under /internal,
+//	                              runtimes' (AXP_INTERNAL_ADDR, default 127.0.0.1:24001) under /internal,
 //	                              /forge, /routines, /tasks, /groups, /agenvo, /artifacts, /attachments,
 //	                              /v1 (the LLM gateway's OpenAI-compatible API) and /llm
-//	axp-control-plane controller  builds and runs agents' runtimes (Kubernetes) and delivers their work
+//	axp-control-plane controller  builds and runs agents' runtimes (Nomad) and delivers their work
 //	axp-control-plane routine-worker
 //	                              runs routines when they fire and revises their briefs
 //	axp-control-plane migrate     applies both databases' migrations (the control plane's, routines')
@@ -57,10 +57,9 @@ import (
 	"github.com/akarachen/axp/packages/service-go/httpapi"
 	"github.com/akarachen/axp/packages/service-go/pg"
 	"github.com/danielgtaylor/huma/v2"
+	nomadapi "github.com/hashicorp/nomad/api"
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/sync/errgroup"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
 )
 
 func main() {
@@ -178,8 +177,8 @@ func connect(ctx context.Context, serving bool) (*services, error) {
 		}
 		return pull.HeadSHA, nil
 	}}
-	// The relay is the agenvo bundle's service, in the bundles' namespace.
-	relayURL, relayBase := "http://agenvo."+cfg.Namespace+"-bundles.svc.cluster.local", ""
+	// The relay is the agenvo bundle's service, behind the browser's gateway.
+	relayURL, relayBase := cfg.PublicGatewayURL, ""
 	if cfg.PublicURL != "" {
 		relayBase = strings.TrimRight(cfg.PublicURL, "/") + "/remote/relay"
 	}
@@ -257,13 +256,6 @@ func handlers(deps *api.Deps, code *forge.Server, routines *routineapi.Deps, mod
 // and Codex retries a model stream cut short, so stopping does not wait for
 // them.
 func serve(ctx context.Context, s *services) error {
-	if kube, err := container.KubeConfig(); err == nil {
-		if objects, err := dynamic.NewForConfig(kube); err == nil {
-			s.deps.ServiceStatuses = func(ctx context.Context) (map[string]bundles.ServiceStatus, error) {
-				return bundlesvc.Statuses(ctx, objects, s.cfg.Namespace+"-bundles")
-			}
-		}
-	}
 	public, internal := handlers(s.deps, s.forge, s.routines, s.llm)
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return s.llm.Run(ctx) })
@@ -322,26 +314,20 @@ func runController(ctx context.Context, s *services, interval time.Duration) err
 	// The step in progress always finishes, even after SIGTERM: it may be
 	// starting a container or delivering a command.
 	work := context.WithoutCancel(ctx)
-	kube, err := container.KubeConfig()
-	if err != nil {
-		return err
-	}
-	client, err := kubernetes.NewForConfig(kube)
-	if err != nil {
-		return err
-	}
-	objects, err := dynamic.NewForConfig(kube)
+	// Nomad, at NOMAD_ADDR (the local agent by default).
+	nomad, err := nomadapi.NewClient(nomadapi.DefaultConfig())
 	if err != nil {
 		return err
 	}
 	services := &bundlesvc.Reconciler{
-		Client: objects, Namespace: s.cfg.Namespace + "-bundles", Bundles: s.deps.Chat.Bundles, DB: s.deps.DB,
-		DatabaseURL: s.cfg.DatabaseURL, Secret: []byte(s.cfg.SecretKey), GatewayURL: s.cfg.RuntimeGatewayURL,
-		SentryDSN: s.cfg.SentryDSN, PublicURL: s.cfg.PublicURL, Registry: s.cfg.Registry, ImageTag: s.cfg.ImageTag,
+		Client: nomad, Namespace: s.cfg.Namespace, Bundles: s.deps.Chat.Bundles, DB: s.deps.DB,
+		DatabaseURL: s.cfg.DatabaseURL, Host: s.cfg.AllocHost, Secret: []byte(s.cfg.SecretKey), GatewayURL: s.cfg.RuntimeGatewayURL,
+		SentryDSN: s.cfg.SentryDSN, PublicURL: s.cfg.PublicURL, ImageTag: s.cfg.ImageTag,
 	}
-	driver := &container.Kubernetes{
-		Client: client, Namespace: s.cfg.Namespace + "-agents",
-		Registry: s.cfg.Registry, BuildKit: s.cfg.BuildKit, BaseImage: s.cfg.RuntimeImage,
+	driver := &container.Nomad{Client: nomad, Namespace: s.cfg.Namespace + "-agents", BaseImage: s.cfg.RuntimeImage}
+	runtimeNATS, err := s.cfg.AtAllocHost(s.cfg.NATSURL)
+	if err != nil {
+		return err
 	}
 	events, err := control.ConnectEvents(s.cfg.NATSURL)
 	if err != nil {
@@ -360,7 +346,7 @@ func runController(ctx context.Context, s *services, interval time.Duration) err
 	controller := &control.Controller{
 		DB: s.deps.DB, Chat: s.deps.Chat, Bundles: s.deps.Chat.Bundles, Driver: driver, Models: s.models,
 		Secret: []byte(s.cfg.SecretKey), PluginsDir: s.cfg.PluginsDir,
-		RuntimeGatewayURL: s.cfg.RuntimeGatewayURL, NATSURL: s.cfg.NATSURL, Wake: wake,
+		RuntimeGatewayURL: s.cfg.RuntimeGatewayURL, NATSURL: runtimeNATS, Wake: wake,
 	}
 	// Remote agents' runs, on their own loop: relay calls take seconds. It
 	// runs only while this controller holds the lock (one runner watches

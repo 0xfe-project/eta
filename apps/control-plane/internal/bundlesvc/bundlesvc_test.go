@@ -3,94 +3,67 @@ package bundlesvc
 import (
 	"testing"
 
-	"github.com/akarachen/axp/apps/control-plane/internal/bundles"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"github.com/hashicorp/nomad/api"
 )
 
-func parse(t *testing.T, manifests string) []*unstructured.Unstructured {
-	t.Helper()
-	objects, err := (&bundles.Service{Manifests: manifests}).Objects()
-	if err != nil {
+func memoryJob() *api.Job {
+	task := api.NewTask("memory", "docker")
+	task.Config = map[string]any{"image": "axp-memory"}
+	task.Env = map[string]string{"OWN": "1", "AXP_VERSION": "theirs"}
+	other := api.NewTask("other", "docker")
+	other.Config = map[string]any{"image": "example.com/axp-x:1"}
+	group := api.NewTaskGroup("memory", 1)
+	group.Services = []*api.Service{{Name: "memory", Provider: "nomad", PortLabel: "8320", AddressMode: "alloc"}}
+	group.Tasks = []*api.Task{task, other}
+	job := api.NewServiceJob("whatever", "whatever", "", 50)
+	job.TaskGroups = []*api.TaskGroup{group}
+	return job
+}
+
+func TestPrepareMakesTheJobTheBundles(t *testing.T) {
+	r := &Reconciler{Namespace: "axp", ImageTag: "abc"}
+	job := memoryJob()
+	if err := r.prepare(job, "memory", map[string]string{"AXP_VERSION": "abc", "DATABASE_URL": "postgres://x"}, "rev1"); err != nil {
 		t.Fatal(err)
 	}
-	return objects
-}
-
-const service = `
-apiVersion: apps/v1
-kind: Deployment
-metadata: { name: memory }
-spec:
-  template:
-    spec:
-      initContainers: [{ name: init, image: busybox:1.37 }]
-      containers: [{ name: memory, image: axp-memory }, { name: other, image: example.com/axp-x:1 }]
----
-apiVersion: v1
-kind: Service
-metadata: { name: memory }
-spec:
-  ports: [{ name: http, port: 80, targetPort: 8320 }]
-`
-
-func TestPrepareStampsTemplatesAndPointsAtAXPImages(t *testing.T) {
-	r := &Reconciler{Registry: "10.43.100.1:5000", ImageTag: "abc"}
-	objects := parse(t, service)
-	for _, obj := range objects {
-		if err := r.prepare(obj, "rev1"); err != nil {
-			t.Fatal(err)
-		}
+	if *job.ID != "bundle-memory" || *job.Namespace != "axp" || job.Meta[bundleMeta] != "memory" || job.Meta[revisionMeta] != "rev1" {
+		t.Fatalf("job %+v", job)
 	}
-	template, _, _ := unstructured.NestedMap(objects[0].Object, "spec", "template")
-	if rev, _, _ := unstructured.NestedString(template, "metadata", "annotations", revisionAnnotation); rev != "rev1" {
-		t.Fatalf("revision %q", rev)
-	}
-	containers, _, _ := unstructured.NestedSlice(template, "spec", "containers")
-	if got := containers[0].(map[string]any)["image"]; got != "10.43.100.1:5000/axp-memory:abc" {
+	tasks := job.TaskGroups[0].Tasks
+	if got := tasks[0].Config["image"]; got != "axp-memory:abc" {
 		t.Fatalf("AXP's image %v", got)
 	}
-	if got := containers[1].(map[string]any)["image"]; got != "example.com/axp-x:1" {
+	if got := tasks[1].Config["image"]; got != "example.com/axp-x:1" {
 		t.Fatalf("another registry's image %v", got)
 	}
-	inits, _, _ := unstructured.NestedSlice(template, "spec", "initContainers")
-	if got := inits[0].(map[string]any)["image"]; got != "busybox:1.37" {
-		t.Fatalf("init container's image %v", got)
-	}
-	if port := servicePort(objects, "memory"); port != 80 {
-		t.Fatalf("port %d", port)
+	// AXP's values win; the job's own stay.
+	if tasks[0].Env["AXP_VERSION"] != "abc" || tasks[0].Env["OWN"] != "1" || tasks[1].Env["DATABASE_URL"] != "postgres://x" {
+		t.Fatalf("env %v %v", tasks[0].Env, tasks[1].Env)
 	}
 }
 
-func TestOnlyAllowedObjects(t *testing.T) {
-	for _, manifests := range []string{
-		"apiVersion: rbac.authorization.k8s.io/v1\nkind: ClusterRole\nmetadata: { name: x }\n",
-		"apiVersion: v1\nkind: ConfigMap\nmetadata: { name: x, namespace: kube-system }\n",
-		"apiVersion: v1\nkind: ConfigMap\nmetadata: {}\n",
-	} {
-		if _, err := (&bundles.Service{Manifests: manifests}).Objects(); err == nil {
-			t.Errorf("accepted %q", manifests)
-		}
+func TestOnlyServiceJobsWithTheBundlesService(t *testing.T) {
+	r := &Reconciler{Namespace: "axp", ImageTag: "abc"}
+	batch := memoryJob()
+	batch.Type = new(api.JobTypeBatch)
+	if err := r.prepare(batch, "memory", nil, "rev1"); err == nil {
+		t.Error("accepted a batch job")
 	}
-}
-
-func TestNotReadyUntilRolledOut(t *testing.T) {
-	obj := &unstructured.Unstructured{Object: map[string]any{
-		"kind": "Deployment", "metadata": map[string]any{"name": "m", "generation": int64(2)},
-		"spec":   map[string]any{"replicas": int64(1)},
-		"status": map[string]any{"observedGeneration": int64(1), "updatedReplicas": int64(1), "readyReplicas": int64(1)},
-	}}
-	if notReady(obj) == "" {
-		t.Fatal("ready before observing its generation")
+	unnamed := memoryJob()
+	unnamed.TaskGroups[0].Services[0].Name = "other"
+	if err := r.prepare(unnamed, "memory", nil, "rev1"); err == nil {
+		t.Error("accepted a job without the bundle's service")
 	}
-	_ = unstructured.SetNestedField(obj.Object, int64(2), "status", "observedGeneration")
-	if msg := notReady(obj); msg != "" {
-		t.Fatal(msg)
+	consul := memoryJob()
+	consul.TaskGroups[0].Services[0].Provider = "consul"
+	if err := r.prepare(consul, "memory", nil, "rev1"); err == nil {
+		t.Error("accepted a Consul service")
 	}
 }
 
 func TestServicesReportThroughTheRuntimeGateway(t *testing.T) {
-	got := gatewayDSN("http://abc@rustrak.axp.svc.cluster.local:8080/1", "http://runtime-gateway.axp.svc.cluster.local:8090")
-	if want := "http://abc@runtime-gateway.axp.svc.cluster.local:8090/sentry/1"; got != want {
+	got := gatewayDSN("http://abc@127.0.0.1:24080/1", "http://172.26.64.1:24090")
+	if want := "http://abc@172.26.64.1:24090/sentry/1"; got != want {
 		t.Fatalf("gatewayDSN = %q, want %q", got, want)
 	}
 	if got := gatewayDSN("", "http://runtime-gateway:8090"); got != "" {

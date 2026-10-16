@@ -11,7 +11,7 @@ runtime 容器
                                            ▼
 runtime 网关 /bundles/memory/* → /memory/*  forward_auth → X-AXP-Agent-Id、X-AXP-Group-Id
                                            ▼
-memory-service（Service memory，命名空间 <ns>-bundles）
+memory-service（Nomad job memory，命名空间 <ns>）
   MemoryProvider → Mem0Provider（mem0 作为库）
     抽取：智能体自己的模型，带环境包的令牌经 runtime 网关的 /v1（chat completions）
     向量：fastembed，CPU 推理
@@ -62,6 +62,6 @@ memory-service 只认 runtime 网关设置的 `X-AXP-Agent-Id`，并把它作为
 
 ## 运行
 
-开发和生产一样：controller 按 `bundles/memory/service/memory.yaml` 把它部署到 `<ns>-bundles`，镜像 `axp-memory` 由 `bundles/memory/service/Dockerfile` 从 Turbo 的产物打包（`scripts/build/image.sh memory`）。库 `axp_bundle_memory` 由 AXP 在 PostgreSQL（`pgvector/pgvector:pg17-trixie`）上创建并装好 `vector` 扩展，连接串在 Secret `axp-memory`；mem0 首次启动时创建 `memories` 表。它在 `/.well-known/axp-service` 报告协议 `axp.memory/1`。
+开发和生产一样：controller 按 `bundles/memory/service/job.nomad.hcl` 把它作为 job `memory` 运行在 AXP 的命名空间里，镜像 `axp-memory` 由 `bundles/memory/service/Dockerfile` 从 Turbo 的产物打包（`scripts/build/image.sh memory`）。库 `axp_bundle_memory` 由 AXP 在 PostgreSQL（`pgvector/pgvector:pg17-trixie`）上创建并装好 `vector` 扩展，连接串在环境变量 `DATABASE_URL`；mem0 首次启动时创建 `memories` 表。它在 `/.well-known/axp-service` 报告协议 `axp.memory/1`。
 
 PostgreSQL 镜像是 `postgres:17` 加 pgvector，同为 Debian trixie，因此原有数据目录的排序规则不变（bookworm 版的 `pgvector/pgvector:pg17` 会导致 collation 版本不匹配）。mem0 的遥测已关闭；它的变更历史写在容器内的 SQLite，不保留。

@@ -1,5 +1,6 @@
-# AXP's gateways (Caddy). Two sites, each a Deployment in production
-# (deploy/k3s/app/gateways.yaml):
+# AXP's gateways (Caddy): one process serving two sites, the task gateway
+# of the job axp in production (deploy/nomad/axp.nomad.hcl) and the job
+# gateway in development (scripts/dev-gateway.nomad.hcl):
 #
 #   public.caddy   the browser's single same-origin entry
 #   runtime.caddy  agent runtimes' and bundles' services' only route to the
@@ -7,13 +8,10 @@
 #                  and the models) and to bundles' services; it
 #                  authenticates each caller once for them
 #
-# Upstreams trust the network instead of a shared secret (NetworkPolicy,
-# deploy/k3s): only the public gateway reaches web and the control plane's
-# public listener, only the runtime gateway the control plane's internal
-# listener for runtimes and services, which reach nothing else of AXP's but
-# NATS. AXP_GATEWAY_SITES picks the sites to
-# serve; every address defaults to production's and scripts/dev.sh
-# overrides them.
+# AXP's processes listen on the host's network: the browser's gateway on
+# loopback (the host's Caddy proxies to it), the runtime gateway where
+# Nomad's bridge network reaches it. Every address defaults to production's
+# and scripts/dev.sh overrides them; development adds its HTTPS site.
 {
 	admin off
 	auto_https off
@@ -30,20 +28,25 @@
 	}
 }
 
-# The bundle's service named in the first argument (a path segment): the
-# Service <name> (port 80) in the bundles' namespace, found through the
-# cluster's DNS (development's gateway runs outside the cluster).
+# Bundles' services, found through Nomad's service discovery: the gateway's
+# task renders bundles.caddy from the services in AXP's namespace (the
+# template in its job) and Caddy reloads it (SIGUSR1) when they change. It
+# maps the bundle named by the route's `bundle` matcher to its address
+# ({bundle_upstream}) and names the agenvo relay's ({vars.relay_upstream}).
+# A glob, so the configuration also loads before it is rendered (and in
+# `bun run lint`): then no bundle has an address.
+(bundles) {
+	import /local/bundles*.caddy
+}
+
 (bundle_service) {
-	reverse_proxy {args[0]}.{$AXP_BUNDLES_NAMESPACE:axp-bundles}.svc.cluster.local:80 {
+	reverse_proxy {bundle_upstream} {
 		flush_interval -1
-		transport http {
-			resolvers {$AXP_CLUSTER_DNS:10.43.0.10}
-		}
 	}
 }
 
 # Sentry's envelopes (errors, logs, transactions) for the project in the
-# path, at Rustrak (deploy/k3s/infra/rustrak.yaml), from the browser and
+# path, at Rustrak (deploy/nomad/infra.nomad.hcl), from the browser and
 # bundles' services: their DSN is a gateway's /sentry. Nothing else of
 # Rustrak's (its dashboard, its API) is reachable through a gateway.
 (sentry) {
@@ -51,7 +54,7 @@
 	handle @sentry {
 		log_skip
 		uri strip_prefix /sentry
-		reverse_proxy {$AXP_UPSTREAM_SENTRY:rustrak:8080}
+		reverse_proxy {$AXP_UPSTREAM_SENTRY:127.0.0.1:24080}
 	}
 }
 
@@ -68,4 +71,4 @@
 	}
 }
 
-import {$AXP_GATEWAY_SITES:*.caddy}
+import *.caddy

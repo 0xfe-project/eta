@@ -12,7 +12,7 @@
     "descriptionLabel": "Notes",
     "scriptLabel": "Script",
     "serviceLabel": "Service",
-    "manifestsPlaceholder": "# Optional: Kubernetes objects running in the cluster, accessed by agents at /bundles/{{bundleName}}/\n# Requires a Service named {{serviceName}} with a port named http",
+    "jobspecPlaceholder": "# Optional: a Nomad job (HCL) run alongside AXP, which agents reach at /bundles/{{bundleName}}/\n# It needs a service named {{bundleName}} (provider nomad, address_mode alloc)",
     "callableModels": "Callable models",
     "separateDatabase": "Separate database",
     "pluginsLabel": "Plugins"

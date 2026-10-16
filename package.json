@@ -17,7 +17,7 @@
     "dev:controller": "go -C apps/control-plane run . controller",
     "dev:routine-worker": "go -C apps/control-plane run . routine-worker",
     "dev:web": "bun run --cwd apps/web dev",
-    "deploy": "bash deploy/k3s/deploy.sh",
+    "deploy": "bash deploy/nomad/deploy.sh",
     "build": "turbo run build build:linux-amd64 build:linux-arm64",
     "image:linux-amd64": "bash scripts/build/image.sh app linux amd64",
     "image:linux-arm64": "bash scripts/build/image.sh app linux arm64",

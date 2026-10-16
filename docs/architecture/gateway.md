@@ -1,20 +1,20 @@
 # 网关
 
-本文说明 [#3](https://github.com/akarachen/axp/issues/3) 的实现。`apps/gateway` 只有 [Caddy](https://caddyserver.com) 配置：两个站点，生产中各是一个 Deployment（`deploy/k3s/app/gateways.yaml`），开发时由同一个 Caddy 进程提供。
+本文说明 [#3](https://github.com/akarachen/axp/issues/3) 的实现。`apps/gateway` 只有 [Caddy](https://caddyserver.com) 配置：两个站点，生产中各是 job `axp` 的一个 task（`deploy/nomad/axp.nomad.hcl`），开发时由同一个 Caddy 进程提供（`scripts/dev-gateway.nomad.hcl`）。环境包的服务按 Nomad 的服务发现路由：网关的 task 用 template 把命名空间里的服务渲染成一张名字到地址的表（`bundles.caddy`），服务变了就给 Caddy 发 SIGUSR1 热重载。
 
 | 站点            | 调用方                         | 生产                                                         | 开发地址                      |
 | --------------- | ------------------------------ | ------------------------------------------------------------ | ----------------------------- |
-| `public.caddy`  | 浏览器                         | `gateway`，节点网络上的 `127.0.0.1:24180`（宿主 Caddy 反代） | `127.0.0.1:P`（HTTPS：`P+8`） |
-| `runtime.caddy` | 智能体的 runtime、环境包的服务 | `runtime-gateway`，Service `runtime-gateway:8090`            | `10.42.0.1:P+5`               |
+| `public.caddy`  | 浏览器                         | `gateway`，宿主网络上的 `127.0.0.1:24180`（宿主 Caddy 反代） | `127.0.0.1:P`（HTTPS：`P+8`） |
+| `runtime.caddy` | 智能体的 runtime、环境包的服务 | 宿主网络上的 `0.0.0.0:24090`，容器从 `172.26.64.1` 连        | `172.26.64.1:P+5`             |
 
-## 信任边界由网络划定
+## 信任边界
 
-服务之间不共享密钥，各服务也不校验调用方，因为能连到它的只有该连的调用方（NetworkPolicy，`deploy/k3s`）：
+服务之间不共享密钥，各服务也不校验调用方。k3s 时期由 NetworkPolicy 保证只有该连的调用方连得到；换到 Nomad 后没有网络策略，bridge 网络上的容器连得到宿主网络上的所有端口（见 `deploy/README.md`），这是一笔明知的债，应由内部 listener 和基础设施改为凭密钥认证来还。现在仍然成立的是：
 
-- AXP 自己的命名空间（生产 `axp`）只接受本命名空间里的连接。智能体（`<ns>-agents`）和环境包的服务（`<ns>-bundles`）只连得到 `runtime-gateway` 和 NATS（runtime 把事件发到这里，见[命令与事件](queue.md)），环境包的服务另外连得到自己的数据库。开发时 AXP 的进程跑在宿主上，只监听 loopback，Pod 连不到；`runtime-gateway` 监听节点在 Pod 网络上的地址。
-- 浏览器只能经 `gateway`，runtime 和环境包的服务只能经 `runtime-gateway`；`runtime-gateway` 只加载 runtime 站点。
-- 控制面的路由按 listener 分开：信任 `X-AXP-Agent-Id` 的路由（`/internal`、`/forge`、`/routines/mcp`、模型的 `/v1` 等）只在内部 listener（`:8001`）上，`gateway` 只转发到公共 listener（`:8000`），所以浏览器那一侧到不了它们（`apps/control-plane/main_test.go` 检查两个 listener 各自的路由）。
-- controller 经各 runtime 的控制接口交付工作，那个接口只认 controller 持有的按智能体派生的令牌，所以同一命名空间里的 runtime 之间连得到端口，也调不动对方。智能体的 Pod 不挂 Kubernetes 的令牌。
+- 智能体（`<ns>-agents`）和环境包的服务（`<ns>`）该连的只有 `runtime-gateway` 和 NATS（runtime 把事件发到这里，见[命令与事件](queue.md)），环境包的服务另外连自己的数据库。AXP 的进程监听 loopback，`runtime-gateway` 监听所有地址。
+- 浏览器只经浏览器站点，runtime 和环境包的服务只经 runtime 站点；两个站点在同一个 Caddy 进程里，各自监听自己的地址。
+- 控制面的路由按 listener 分开：信任 `X-AXP-Agent-Id` 的路由（`/internal`、`/forge`、`/routines/mcp`、模型的 `/v1` 等）只在内部 listener（`127.0.0.1:24001`）上，浏览器站点只转发到公共 listener（`127.0.0.1:24000`），所以浏览器那一侧到不了它们（`apps/control-plane/main_test.go` 检查两个 listener 各自的路由）。
+- controller 经各 runtime 的控制接口交付工作，那个接口只认 controller 持有的按智能体派生的令牌，所以 runtime 之间连得到端口，也调不动对方。智能体的 job 不带 Nomad 的工作负载身份。
 
 生产的鉴权在更外层（Cloudflare Access）；网关不做 CORS（同源）和限流，但拒绝跨站请求（见下）。Access 放行的只有 `/remote/`（远程电脑，每个接口自己鉴权：安装码或电脑的令牌，见[任务与远程电脑](tasks.md)）和 Artifact 的 `/share/artifacts/`、`/preview/artifacts/`（分享令牌或短时预览能力，见 [Artifact](artifacts.md#路由矩阵)）。
 
@@ -48,7 +48,7 @@
   | 路由                                                  | 上游                       | 需要                   |
   | ----------------------------------------------------- | -------------------------- | ---------------------- |
   | `/v1/*`（模型请求）                                   | 内部 API（嵌入的模型网关） | —（服务：`uses: llm`） |
-  | `/bundles/<name>/*`（环境包的服务，改成 `/<name>/*`） | Service `<name>`           | 载入了环境包 `<name>`  |
+  | `/bundles/<name>/*`（环境包的服务，改成 `/<name>/*`） | 环境包 `<name>` 的服务     | 载入了环境包 `<name>`  |
   | `/tasks/*`（MCP，见[任务](tasks.md)）                 | 内部 API                   | 插件 `tasks`           |
   | `/routines/*`（MCP，见[定时任务](routines.md)）       | 内部 API                   | 插件 `routines`        |
   | `/artifacts/*`（上传，见 [Artifact](artifacts.md)）   | 内部 API                   | 插件 `artifacts`       |
@@ -57,9 +57,9 @@
 
   `/forge/credentials` 每个 runtime 启动时都会取（git 和 gh 用），不属于插件。
 - `/sentry/api/<项目>/envelope/` 不鉴权，转给 Rustrak：环境包服务的 `SENTRY_DSN` 指向这里（控制面从自己的 DSN 推出，只有公钥）。Rustrak 的其他接口和界面不经任何网关。
-- 环境包的服务用自己的令牌（`bundle.<名字>.<HMAC>`，在 Secret `axp-<名字>` 里）调用，只能用它在 `bundle.json` 的 `uses` 里声明的：`llm`（`/v1`，这时它在 `X-AXP-Agent-Id` 里说明用量记在哪个智能体名下）和其他环境包的服务（这时它的身份是 `bundle-<名字>`）。它碰不到插件路由和 `/forge`。网关另外带上 `X-AXP-Bundle`，并删掉调用方发来的 `X-AXP-Group-Id`、`X-AXP-Bundle`。
-- 后面的服务只读这些头，自己不持有任何凭据。新增一个给智能体用的服务就是写一个带服务的环境包（[环境包](bundles.md#服务)），网关不用改：`/bundles/<name>/` 和 `/api/bundles/<name>/` 用路径里的名字找集群里的 Service。
+- 环境包的服务用自己的令牌（`bundle.<名字>.<HMAC>`，在它的环境变量 `AXP_BUNDLE_TOKEN` 里）调用，只能用它在 `bundle.json` 的 `uses` 里声明的：`llm`（`/v1`，这时它在 `X-AXP-Agent-Id` 里说明用量记在哪个智能体名下）和其他环境包的服务（这时它的身份是 `bundle-<名字>`）。它碰不到插件路由和 `/forge`。网关另外带上 `X-AXP-Bundle`，并删掉调用方发来的 `X-AXP-Group-Id`、`X-AXP-Bundle`。
+- 后面的服务只读这些头，自己不持有任何凭据。新增一个给智能体用的服务就是写一个带服务的环境包（[环境包](bundles.md#服务)），网关不用改：`/bundles/<name>/` 和 `/api/bundles/<name>/` 用路径里的名字在 Nomad 的服务发现里找它。
 
 ## 配置与检查
 
-所有地址都有生产默认值（命名空间 `axp` 里的 Service），`scripts/dev.sh` 用环境变量覆盖：`AXP_GATEWAY_BIND`/`PORT`、`AXP_RUNTIME_GATEWAY_BIND`/`PORT`、`AXP_UPSTREAM_{WEB,API,SENTRY,INTERNAL}`（`API` 和 `INTERNAL` 是控制面同一进程的两个 listener，生产为 `api:8000` 与 `api:8001`）、`AXP_BUNDLES_NAMESPACE`（环境包服务所在的命名空间）和 `AXP_CLUSTER_DNS`（找它们用的集群 DNS）；`AXP_GATEWAY_SITES` 选择加载的站点（默认全部）。Caddy 的版本在 `deploy/Dockerfile`、`scripts/dev.sh` 和 `apps/gateway/package.json` 中保持一致。`bun run lint` 用这个版本检查格式（`caddy fmt`）并校验配置（`caddy validate`）。
+所有地址都有生产默认值（宿主 loopback 上的固定端口），开发的网关 job（`scripts/dev-gateway.nomad.hcl`）用环境变量覆盖：`AXP_GATEWAY_BIND`/`PORT`、`AXP_RUNTIME_GATEWAY_BIND`/`PORT`、`AXP_UPSTREAM_{WEB,API,SENTRY,INTERNAL}`（`API` 和 `INTERNAL` 是控制面同一进程的两个 listener，生产为 `127.0.0.1:24000` 与 `127.0.0.1:24001`）。Caddyfile 加载同目录下所有 `*.caddy`，开发时多一个 HTTPS 站点；环境包服务的路由表在 `/local/bundles.caddy`，由网关 task 的 template 渲染，还没渲染时（以及 lint 时）没有任何环境包的地址。Caddy 的版本在 `deploy/Dockerfile`、`scripts/dev.sh` 和 `apps/gateway/package.json` 中保持一致。`bun run lint` 用这个版本检查格式（`caddy fmt`）并校验配置（`caddy validate`）。

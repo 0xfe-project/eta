@@ -12,7 +12,7 @@
     "descriptionLabel": "说明",
     "scriptLabel": "脚本",
     "serviceLabel": "服务",
-    "manifestsPlaceholder": "# 可选：在集群里运行的 Kubernetes 对象，载入它的智能体经 /bundles/{{bundleName}}/ 访问\n# 需要一个名为 {{serviceName}}、端口名 http 的 Service",
+    "jobspecPlaceholder": "# 可选：和 AXP 一起运行的 Nomad job（HCL），载入它的智能体经 /bundles/{{bundleName}}/ 访问\n# 需要一个名为 {{bundleName}} 的 service（provider nomad，address_mode alloc）",
     "callableModels": "可调用模型",
     "separateDatabase": "独立数据库",
     "pluginsLabel": "插件"

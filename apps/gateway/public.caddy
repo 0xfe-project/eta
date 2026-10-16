@@ -5,9 +5,10 @@
 # pages to the control plane's public listener, everything else to web. The
 # control plane's internal listener is never an upstream here.
 # Paths are otherwise not rewritten and the browser's Host is kept.
-http://:{$AXP_GATEWAY_PORT:8080} {
-	bind {$AXP_GATEWAY_BIND:0.0.0.0}
+http://:{$AXP_GATEWAY_PORT:24180} {
+	bind {$AXP_GATEWAY_BIND:127.0.0.1}
 	import access_log
+	import bundles
 
 	# Nothing a client sends under X-AXP-* reaches a service.
 	request_header -X-AXP-*
@@ -43,13 +44,13 @@ http://:{$AXP_GATEWAY_PORT:8080} {
 		respond "ok"
 	}
 	# Bundles' services, for the user (docs/architecture/bundles.md#服务):
-	# /api/bundles/<name>/x is /api/<name>/x at the Service <name> in the
-	# bundles' namespace. A service tells the user's requests (/api/<name>)
-	# from agents' (/<name>, through the runtime gateway) by path.
-	@bundle path_regexp ^/api/bundles/[a-z0-9][a-z0-9-]*/
+	# /api/bundles/<name>/x is /api/<name>/x at the bundle's service. A
+	# service tells the user's requests (/api/<name>) from agents' (/<name>,
+	# through the runtime gateway) by path.
+	@bundle path_regexp bundle ^/api/bundles/([a-z0-9][a-z0-9-]*)/
 	handle @bundle {
 		uri replace /api/bundles/ /api/ 1
-		import bundle_service {http.request.uri.path.1}
+		import bundle_service
 	}
 	# The browser's error reports (lib/report.ts).
 	import sentry
@@ -58,33 +59,30 @@ http://:{$AXP_GATEWAY_PORT:8080} {
 	# authenticates devices itself. Cloudflare's client address goes on as
 	# X-Forwarded-For (the relay trusts one hop) for its rate limits.
 	handle /remote/relay/* {
-		reverse_proxy agenvo.{$AXP_BUNDLES_NAMESPACE:axp-bundles}.svc.cluster.local:80 {
-			transport http {
-				resolvers {$AXP_CLUSTER_DNS:10.43.0.10}
-			}
+		reverse_proxy {vars.relay_upstream} {
 			header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
 		}
 	}
 	# Remote computers' install script, downloads and API: the one path the
 	# edge's access control lets through; each endpoint authenticates itself.
 	handle /remote/* {
-		reverse_proxy {$AXP_UPSTREAM_API:api:8000}
+		reverse_proxy {$AXP_UPSTREAM_API:127.0.0.1:24000}
 	}
 	# Artifacts' public pages (a share's token) and private previews (an
 	# expiring capability): with /remote, the only paths the edge's access
 	# control lets through. The control plane serves nothing else there.
 	handle /share/artifacts/* {
-		reverse_proxy {$AXP_UPSTREAM_API:api:8000}
+		reverse_proxy {$AXP_UPSTREAM_API:127.0.0.1:24000}
 	}
 	handle /preview/artifacts/* {
-		reverse_proxy {$AXP_UPSTREAM_API:api:8000}
+		reverse_proxy {$AXP_UPSTREAM_API:127.0.0.1:24000}
 	}
 	# Includes code hosting (/api/forge: connecting the GitHub App, and
 	# GitHub's redirect back), routines (/api/routines) and the models'
 	# accounts and catalog (/api/llm).
 	handle /api/* {
 		# Chat streams (SSE) pass through as they are written.
-		reverse_proxy {$AXP_UPSTREAM_API:api:8000} {
+		reverse_proxy {$AXP_UPSTREAM_API:127.0.0.1:24000} {
 			flush_interval -1
 		}
 	}
@@ -92,7 +90,7 @@ http://:{$AXP_GATEWAY_PORT:8080} {
 	# Vite module is one).
 	handle {
 		log_skip
-		reverse_proxy {$AXP_UPSTREAM_WEB:web:3000}
+		reverse_proxy {$AXP_UPSTREAM_WEB:127.0.0.1:24003}
 	}
 
 	import errors

@@ -1,4 +1,4 @@
-# Production image for AXP's own Deployments (deploy/k3s/app: gateway,
+# Production image for AXP's own tasks (deploy/nomad/axp.nomad.hcl: gateway,
 # runtime-gateway, web, api, controller, routine-worker); they differ only in
 # their command. Build context is the repository root. Agents' images are
 # built by the controller on apps/agent-runtime's, bundles' services from
@@ -31,8 +31,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=oven/bun:1.3.14 /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=caddy:2.11.7-alpine /usr/bin/caddy /usr/local/bin/caddy
-# The controller builds agents' images with the cluster's BuildKit daemon.
-COPY --from=moby/buildkit:v0.34.0 /usr/bin/buildctl /usr/local/bin/buildctl
+# The controller builds agents' images with this machine's Docker (its socket).
+COPY --from=docker:29-cli /usr/local/bin/docker /usr/local/bin/docker
 # Least to most frequently changing.
 COPY --from=routine-plugins /opt/axp/bin/ /usr/local/bin/
 COPY apps/control-plane/out/${TARGETOS}-${TARGETARCH}/axp-control-plane /usr/local/bin/
@@ -50,5 +50,4 @@ COPY apps/agenvo/out/dist/ /app/apps/agenvo/out/dist/
 # The control plane finds them at ../../bundles and ../../plugins.
 WORKDIR /app/apps/control-plane
 
-EXPOSE 3000 8000 8001 8080 8090
 CMD ["bun", "/app/apps/web/server.js"]

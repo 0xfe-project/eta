@@ -57,7 +57,7 @@ func (c *Controller) plan(baseID, baseRef string, chosen []bundles.Bundle) (imag
 		}
 		fmt.Fprintf(h, "plugin %s %s\n", p, sum)
 	}
-	return image{Tag: c.Driver.ImageTag(hex.EncodeToString(h.Sum(nil))[:24]), bundles: chosen, plugins: plugins}, nil
+	return image{Tag: container.ImageTag(hex.EncodeToString(h.Sum(nil))[:24]), bundles: chosen, plugins: plugins}, nil
 }
 
 func (c *Controller) dockerfile(baseRef string, chosen []bundles.Bundle) string {
@@ -91,7 +91,7 @@ func (c *Controller) treeHash(dir string) (string, error) {
 			return err
 		}
 		if entry.IsDir() {
-			// A bundle's service runs in the cluster, not in agents' images.
+			// A bundle's service runs as a job of its own, not in agents' images.
 			if path == filepath.Join(dir, serviceDir) {
 				return fs.SkipDir
 			}
@@ -248,7 +248,7 @@ func keep(images map[string]string, building string) []string {
 	return out
 }
 
-var _ container.Driver = (*container.Kubernetes)(nil)
+var _ container.Driver = (*container.Nomad)(nil)
 
 // withoutService is a built-in bundle's files without its service/ (which
 // may hold the service's source and data).

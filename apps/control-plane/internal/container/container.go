@@ -1,45 +1,30 @@
-// Package container runs agents' runtimes on Kubernetes: one long-lived
-// Pod per agent, from an image built for it, with its state on a volume
-// (PVC) of its own, all in the agents' namespace. Images are built by
-// BuildKit and kept in the cluster's registry, which the node pulls from.
+// Package container runs agents' runtimes on Nomad: one job per agent in
+// the agents' namespace, from an image built for it, with its state on a
+// host volume of its own. Images are built with this machine's Docker,
+// which the Nomad client runs containers from, so there is no registry.
 // Only the controller drives this.
 package container
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
-	"os/exec"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/utils/ptr"
+	"github.com/hashicorp/nomad/api"
 )
 
 const (
-	agentLabel       = "axp.dev/agent"
-	configAnnotation = "axp.dev/config"
-	memory           = "2Gi"
-	cpus             = "1"
-	stopSeconds      = 10
+	configMeta  = "axp.config"
+	stopSeconds = 10
 	// The runtime's control API (apps/agent-runtime/src/server.ts).
 	controlPort = 8080
 	// The volume's mount point, the runtime's AXP_HOME.
 	home = "/agent"
-	// An image build may download a lot (a bundle's script installs tools).
-	buildTimeout = 30 * time.Minute
-	// A failed build keeps this much of its output.
-	buildOutput = 4000
 )
 
 // Spec is an agent's runtime.
@@ -77,8 +62,6 @@ type Driver interface {
 	// Base is the digest of the image agents' images are built on, and its
 	// name.
 	Base(ctx context.Context) (id, ref string, err error)
-	// ImageTag is the agent image with this content hash.
-	ImageTag(hash string) string
 	HasImage(ctx context.Context, tag string) (bool, error)
 	// Build builds dir (with its Dockerfile) as tag; a failure returns the
 	// end of the build's output.
@@ -87,37 +70,66 @@ type Driver interface {
 	Prune(ctx context.Context, keep []string) error
 }
 
-// Kubernetes runs agents as Pods in Namespace and builds their images with
-// the BuildKit daemon at BuildKit (buildctl's --addr) into Registry.
-type Kubernetes struct {
-	Client    kubernetes.Interface
+// Nomad runs agents as jobs in Namespace, on this machine's Docker.
+type Nomad struct {
+	Client    *api.Client
 	Namespace string
-	Registry  string
-	BuildKit  string
-	// The runtime image agents' images are built on, in Registry.
+	// The runtime image agents' images are built on, in Docker.
 	BaseImage string
-	HTTP      *http.Client
+
+	// Running allocations' addresses, which do not change.
+	addresses map[string]string
 }
 
-func podName(agentID string) string { return "agent-" + agentID }
+func jobID(agentID string) string { return "agent-" + agentID }
 
-func (k *Kubernetes) List(ctx context.Context) ([]Runtime, error) {
-	pods, err := k.Client.CoreV1().Pods(k.Namespace).List(ctx, metav1.ListOptions{LabelSelector: agentLabel})
+func (n *Nomad) query(ctx context.Context) *api.QueryOptions {
+	return (&api.QueryOptions{Namespace: n.Namespace}).WithContext(ctx)
+}
+
+func (n *Nomad) write(ctx context.Context) *api.WriteOptions {
+	return (&api.WriteOptions{Namespace: n.Namespace}).WithContext(ctx)
+}
+
+func (n *Nomad) List(ctx context.Context) ([]Runtime, error) {
+	q := n.query(ctx)
+	q.Prefix = "agent-"
+	q.Params = map[string]string{"meta": "true"}
+	jobs, _, err := n.Client.Jobs().List(q)
 	if err != nil {
 		return nil, err
 	}
+	allocs, _, err := n.Client.Allocations().List(n.query(ctx))
+	if err != nil {
+		return nil, err
+	}
+	// The allocation whose runtime runs, by job.
+	running := map[string]string{}
+	for _, a := range allocs {
+		if task := a.TaskStates["runtime"]; a.DesiredStatus == api.AllocDesiredStatusRun && task != nil && task.State == "running" {
+			running[a.JobID] = a.ID
+		}
+	}
+	for id := range n.addresses {
+		if !slices.Contains(slices.Collect(maps.Values(running)), id) {
+			delete(n.addresses, id)
+		}
+	}
 	var out []Runtime
-	for _, pod := range pods.Items {
-		// A Pod that ended (evicted) or is going is as good as none: the
-		// next Run replaces it.
-		if pod.DeletionTimestamp != nil || pod.Status.Phase == corev1.PodFailed || pod.Status.Phase == corev1.PodSucceeded {
+	for _, job := range jobs {
+		// A job that is stopping is as good as none: the next Run replaces it.
+		if job.Stop || job.Status == "dead" {
 			continue
 		}
-		r := Runtime{AgentID: pod.Labels[agentLabel], Config: pod.Annotations[configAnnotation], State: Starting}
-		for _, s := range pod.Status.ContainerStatuses {
-			if s.State.Running != nil && pod.Status.PodIP != "" {
+		r := Runtime{AgentID: strings.TrimPrefix(job.ID, "agent-"), Config: job.Meta[configMeta], State: Starting}
+		if alloc := running[job.ID]; alloc != "" {
+			address, err := n.address(ctx, alloc)
+			if err != nil {
+				return nil, err
+			}
+			if address != "" {
 				r.State = Running
-				r.URL = fmt.Sprintf("http://%s:%d", pod.Status.PodIP, controlPort)
+				r.URL = fmt.Sprintf("http://%s:%d", address, controlPort)
 			}
 		}
 		out = append(out, r)
@@ -125,157 +137,168 @@ func (k *Kubernetes) List(ctx context.Context) ([]Runtime, error) {
 	return out, nil
 }
 
-func (k *Kubernetes) Run(ctx context.Context, spec Spec) error {
-	if err := k.Remove(ctx, spec.AgentID); err != nil {
+// address is the allocation's address on the bridge network.
+func (n *Nomad) address(ctx context.Context, allocID string) (string, error) {
+	if address, ok := n.addresses[allocID]; ok {
+		return address, nil
+	}
+	alloc, _, err := n.Client.Allocations().Info(allocID, n.query(ctx))
+	if err != nil {
+		return "", err
+	}
+	if alloc.NetworkStatus == nil || alloc.NetworkStatus.Address == "" {
+		return "", nil
+	}
+	if n.addresses == nil {
+		n.addresses = map[string]string{}
+	}
+	n.addresses[allocID] = alloc.NetworkStatus.Address
+	return alloc.NetworkStatus.Address, nil
+}
+
+func (n *Nomad) Run(ctx context.Context, spec Spec) error {
+	if err := n.Remove(ctx, spec.AgentID); err != nil {
 		return err
 	}
-	name := podName(spec.AgentID)
-	labels := map[string]string{agentLabel: spec.AgentID}
-	_, err := k.Client.CoreV1().PersistentVolumeClaims(k.Namespace).Create(ctx, &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Labels: labels},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			// deploy/k3s/infra/storage.yaml: kept when the claim goes.
-			StorageClassName: ptr.To("axp"),
-			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-			Resources: corev1.VolumeResourceRequirements{
-				Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
-			},
-		},
-	}, metav1.CreateOptions{})
-	if err != nil && !apierrors.IsAlreadyExists(err) {
+	if err := EnsureVolume(ctx, n.Client, n.Namespace, jobID(spec.AgentID)); err != nil {
 		return err
 	}
-	env := make([]corev1.EnvVar, 0, len(spec.Env))
-	for k, v := range spec.Env {
-		env = append(env, corev1.EnvVar{Name: k, Value: v})
-	}
-	sort.Slice(env, func(i, j int) bool { return env[i].Name < env[j].Name })
-	limits := corev1.ResourceList{corev1.ResourceMemory: resource.MustParse(memory), corev1.ResourceCPU: resource.MustParse(cpus)}
-	_, err = k.Client.CoreV1().Pods(k.Namespace).Create(ctx, &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Labels: labels, Annotations: map[string]string{configAnnotation: spec.Config}},
-		Spec: corev1.PodSpec{
-			// The runtime exits when it cannot go on; the kubelet starts it
-			// again, waiting longer each time it fails.
-			RestartPolicy: corev1.RestartPolicyAlways,
-			// Agents run code: no Kubernetes credentials, no other services'
-			// addresses.
-			AutomountServiceAccountToken:  ptr.To(false),
-			EnableServiceLinks:            ptr.To(false),
-			TerminationGracePeriodSeconds: ptr.To[int64](stopSeconds),
-			Containers: []corev1.Container{{
-				Name:            "runtime",
-				Image:           spec.Image,
-				ImagePullPolicy: corev1.PullIfNotPresent,
-				Env:             env,
-				Resources:       corev1.ResourceRequirements{Limits: limits},
-				VolumeMounts:    []corev1.VolumeMount{{Name: "home", MountPath: home}},
-			}},
-			Volumes: []corev1.Volume{{Name: "home", VolumeSource: corev1.VolumeSource{
-				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: name},
-			}}},
-		},
-	}, metav1.CreateOptions{})
+	_, _, err := n.Client.Jobs().Register(n.job(spec), n.write(ctx))
 	return err
 }
 
-// Remove deletes the agent's Pod and waits until it is gone, giving the
-// runtime time to send its last events.
-func (k *Kubernetes) Remove(ctx context.Context, agentID string) error {
-	pods := k.Client.CoreV1().Pods(k.Namespace)
-	err := pods.Delete(ctx, podName(agentID), metav1.DeleteOptions{GracePeriodSeconds: ptr.To[int64](stopSeconds)})
-	if apierrors.IsNotFound(err) {
-		return nil
+// job is the agent's Nomad job: one Docker task on the bridge network (the
+// controller reaches its control API at its address), its volume at
+// /agent. The runtime exits when it cannot go on; Nomad starts it again,
+// waiting longer each time it fails. The memory limit is above what it
+// reserves.
+func (n *Nomad) job(spec Spec) *api.Job {
+	id := jobID(spec.AgentID)
+	task := api.NewTask("runtime", "docker")
+	task.Config = map[string]any{"image": spec.Image, "force_pull": false}
+	task.Env = spec.Env
+	task.Resources = &api.Resources{CPU: new(100), MemoryMB: new(256), MemoryMaxMB: new(2048)}
+	task.KillTimeout = new(stopSeconds * time.Second)
+	task.VolumeMounts = []*api.VolumeMount{{Volume: new("home"), Destination: new(home)}}
+	group := api.NewTaskGroup("runtime", 1)
+	group.Networks = []*api.NetworkResource{{Mode: "bridge"}}
+	group.Volumes = map[string]*api.VolumeRequest{"home": {Type: "host", Source: id}}
+	group.RestartPolicy = &api.RestartPolicy{Attempts: new(10), Interval: new(10 * time.Minute), Delay: new(5 * time.Second), Mode: new("delay")}
+	group.Tasks = []*api.Task{task}
+	job := api.NewServiceJob(id, id, "", 50)
+	job.Namespace = new(n.Namespace)
+	job.Meta = map[string]string{configMeta: spec.Config}
+	job.TaskGroups = []*api.TaskGroup{group}
+	return job
+}
+
+// Remove stops and purges the agent's job and waits until its allocation
+// ended, giving the runtime time to send its last events.
+func (n *Nomad) Remove(ctx context.Context, agentID string) error {
+	id := jobID(agentID)
+	allocs, _, err := n.Client.Jobs().Allocations(id, false, n.query(ctx))
+	if err != nil && !NotFound(err) {
+		return err
 	}
-	if err != nil {
+	if _, _, err := n.Client.Jobs().Deregister(id, true, n.write(ctx)); err != nil && !NotFound(err) {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, (stopSeconds+30)*time.Second)
 	defer cancel()
-	for {
-		if _, err := pods.Get(ctx, podName(agentID), metav1.GetOptions{}); apierrors.IsNotFound(err) {
-			return nil
-		} else if ctx.Err() != nil {
-			return fmt.Errorf("the runtime of agent %s did not stop: %w", agentID, ctx.Err())
+	for _, a := range allocs {
+		for {
+			alloc, _, err := n.Client.Allocations().Info(a.ID, n.query(ctx))
+			if NotFound(err) || (err == nil && terminal(alloc.ClientStatus)) {
+				break
+			}
+			if ctx.Err() != nil {
+				return fmt.Errorf("the runtime of agent %s did not stop: %w", agentID, ctx.Err())
+			}
+			select {
+			case <-ctx.Done():
+			case <-time.After(500 * time.Millisecond):
+			}
 		}
-		select {
-		case <-ctx.Done():
-		case <-time.After(500 * time.Millisecond):
-		}
-	}
-}
-
-func (k *Kubernetes) Base(ctx context.Context) (string, string, error) {
-	digest, err := k.digest(ctx, k.BaseImage)
-	if err == nil && digest == "" {
-		err = errors.New("not in the registry")
-	}
-	if err != nil {
-		return "", "", fmt.Errorf("the runtime image %s: %w", k.BaseImage, err)
-	}
-	return digest, k.BaseImage, nil
-}
-
-func (k *Kubernetes) ImageTag(hash string) string { return k.Registry + "/axp-agent:" + hash }
-
-func (k *Kubernetes) HasImage(ctx context.Context, tag string) (bool, error) {
-	digest, err := k.digest(ctx, tag)
-	return digest != "", err
-}
-
-func (k *Kubernetes) Build(ctx context.Context, dir, tag string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, buildTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "buildctl", "--addr", k.BuildKit, "build", "--progress=plain",
-		"--frontend", "dockerfile.v0", "--local", "context="+dir, "--local", "dockerfile="+dir,
-		"--output", "type=image,name="+tag+",push=true,registry.insecure=true")
-	var output bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &output, &output
-	if err := cmd.Run(); err != nil {
-		tail := output.String()
-		if r := []rune(tail); len(r) > buildOutput {
-			tail = "…" + string(r[len(r)-buildOutput:])
-		}
-		return strings.TrimSpace(tail), err
-	}
-	return "", nil
-}
-
-// Prune deletes the agent images in the registry that keep does not name;
-// the registry frees their layers when it collects garbage (deploy/k3s).
-// Nodes drop images no Pod uses by themselves.
-func (k *Kubernetes) Prune(ctx context.Context, keep []string) error {
-	tags, err := k.tags(ctx, "axp-agent")
-	if err != nil {
-		return err
-	}
-	kept := map[string]bool{}
-	for _, tag := range keep {
-		if digest, err := k.digest(ctx, tag); err == nil && digest != "" {
-			kept[digest] = true
-		}
-	}
-	for _, tag := range tags {
-		digest, err := k.digest(ctx, k.ImageTag(tag))
-		if err != nil {
-			return err
-		}
-		if digest == "" || kept[digest] {
-			continue
-		}
-		if err := k.registry(ctx, http.MethodDelete, "/v2/axp-agent/manifests/"+digest, nil); err != nil {
-			return err
-		}
-		kept[digest] = true // deleted, with every tag on it
 	}
 	return nil
 }
 
-// KubeConfig is the cluster this runs in, or else the one KUBECONFIG (or
-// ~/.kube/config) names, as in development.
-func KubeConfig() (*rest.Config, error) {
-	if c, err := rest.InClusterConfig(); err == nil {
-		return c, nil
+func terminal(clientStatus string) bool {
+	switch clientStatus {
+	case api.AllocClientStatusComplete, api.AllocClientStatusFailed, api.AllocClientStatusLost, api.AllocClientStatusUnknown:
+		return true
 	}
-	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		clientcmd.NewDefaultClientConfigLoadingRules(), &clientcmd.ConfigOverrides{}).ClientConfig()
+	return false
+}
+
+// NotFound reports whether Nomad answered 404.
+func NotFound(err error) bool {
+	var unexpected api.UnexpectedResponseError
+	return errors.As(err, &unexpected) && unexpected.StatusCode() == http.StatusNotFound
+}
+
+func (n *Nomad) Base(ctx context.Context) (string, string, error) {
+	id, err := imageID(ctx, n.BaseImage)
+	if err == nil && id == "" {
+		err = fmt.Errorf("the runtime image %s is not in Docker", n.BaseImage)
+	}
+	return id, n.BaseImage, err
+}
+
+func (n *Nomad) HasImage(ctx context.Context, tag string) (bool, error) {
+	id, err := imageID(ctx, tag)
+	return id != "", err
+}
+
+func (n *Nomad) Build(ctx context.Context, dir, tag string) (string, error) {
+	return build(ctx, dir, tag)
+}
+
+func (n *Nomad) Prune(ctx context.Context, keep []string) error {
+	return prune(ctx, keep)
+}
+
+// EnsureVolume makes sure the namespace has a host volume of this name
+// (one directory on this machine, writable by whatever user the container
+// runs as, kept when what used it goes), and waits until it is ready.
+func EnsureVolume(ctx context.Context, client *api.Client, namespace, name string) error {
+	q := (&api.QueryOptions{Namespace: namespace}).WithContext(ctx)
+	list, _, err := client.HostVolumes().List(&api.HostVolumeListRequest{}, q)
+	if err != nil {
+		return err
+	}
+	id := ""
+	for _, v := range list {
+		if v.Name == name {
+			id = v.ID
+		}
+	}
+	if id == "" {
+		created, _, err := client.HostVolumes().Create(&api.HostVolumeCreateRequest{Volume: &api.HostVolume{
+			Namespace: namespace, Name: name, PluginID: "mkdir", Parameters: map[string]string{"mode": "0777"},
+			RequestedCapabilities: []*api.HostVolumeCapability{{
+				AttachmentMode: api.HostVolumeAttachmentModeFilesystem, AccessMode: api.HostVolumeAccessModeSingleNodeWriter,
+			}},
+		}}, (&api.WriteOptions{Namespace: namespace}).WithContext(ctx))
+		if err != nil {
+			return fmt.Errorf("creating the volume %s: %w", name, err)
+		}
+		id = created.Volume.ID
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	for {
+		volume, _, err := client.HostVolumes().Get(id, q)
+		if err != nil {
+			return err
+		}
+		if volume.State == api.HostVolumeStateReady {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("the volume %s is not ready: %w", name, ctx.Err())
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
 }

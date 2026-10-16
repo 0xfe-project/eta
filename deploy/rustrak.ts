@@ -1,10 +1,10 @@
-// Usage: bun deploy/k3s/rustrak.ts dsn|token
+// Usage: bun deploy/rustrak.ts dsn|token
 //
-// Signs in to Rustrak (deploy/k3s/infra/rustrak.yaml) at RUSTRAK_URL as its
+// Signs in to Rustrak (deploy/nomad/infra.nomad.hcl) at RUSTRAK_URL as its
 // administrator, RUSTRAK_SUPERUSER (email:password), and prints the DSN of
 // its project `axp`, created when missing, or a new API token (what
 // deploy.sh uploads the web's source maps with). scripts/dev.sh and
-// deploy/k3s/deploy.sh run it; the values they keep never enter the
+// deploy/nomad/deploy.sh run it; the values they keep never enter the
 // repository.
 import process from "node:process";
 
@@ -13,7 +13,7 @@ const url = process.env.RUSTRAK_URL;
 const superuser = process.env.RUSTRAK_SUPERUSER ?? "";
 if (!url || !superuser.includes(":") || (what !== "dsn" && what !== "token")) {
   console.error(
-    "usage: RUSTRAK_URL=… RUSTRAK_SUPERUSER=email:password bun deploy/k3s/rustrak.ts dsn|token",
+    "usage: RUSTRAK_URL=… RUSTRAK_SUPERUSER=email:password bun deploy/rustrak.ts dsn|token",
   );
   process.exit(2);
 }
@@ -53,7 +53,7 @@ async function main() {
   };
   if (what === "token") {
     const { token } = await api<{ token: string }>("/api/tokens", {
-      description: "AXP source maps (deploy/k3s/deploy.sh)",
+      description: "AXP source maps (deploy/nomad/deploy.sh)",
     });
     return token;
   }

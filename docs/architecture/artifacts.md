@@ -93,7 +93,7 @@ AXP 自己没有登录，浏览器 API 靠边缘的 Cloudflare Access，原先�
 
 | 环境 | 服务                                                                                                                                                                         |
 | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 开发 | 开发基础设施（`deploy/k3s/dev`）里的 `s3`（SeaweedFS `mini`），控制面的开发默认值指向它                                                                                      |
+| 开发 | 开发基础设施（`deploy/nomad/infra.nomad.hcl`，命名空间 `axp-dev`）里的 `s3`（SeaweedFS `mini`），控制面的开发默认值指向它                                                    |
 | 生产 | 默认是命名空间 `axp` 里的 `s3`（SeaweedFS，卷 `objects`，`s3.axp.svc:8333`）；设了 `AXP_S3_ENDPOINT` 时改用外部 S3。见 [deploy/README.md](../../deploy/README.md#存储与备份) |
 
 SeaweedFS 在同一个容器里还提供不鉴权的 filer、master、volume 等接口，所以网络策略只让 AXP 自己的命名空间连它：智能体和环境包的服务连不到。

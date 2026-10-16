@@ -181,8 +181,6 @@ func (f *fakeDriver) Base(context.Context) (string, string, error) {
 	return f.base, "axp-agent-runtime:test", nil
 }
 
-func (f *fakeDriver) ImageTag(hash string) string { return "axp-test-agent:" + hash }
-
 func (f *fakeDriver) HasImage(_ context.Context, tag string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

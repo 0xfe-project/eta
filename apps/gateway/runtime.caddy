@@ -9,7 +9,7 @@
 
 # Proxies to the upstream in the first argument as the runtime's agent.
 (as_agent) {
-	forward_auth {$AXP_UPSTREAM_INTERNAL:api:8001} {
+	forward_auth {$AXP_UPSTREAM_INTERNAL:127.0.0.1:24001} {
 		uri /internal/v1/runtime-auth
 		copy_headers X-AXP-Agent-Id X-AXP-Group-Id
 	}
@@ -21,7 +21,7 @@
 
 # As as_agent, for an agent with the plugin in the second argument.
 (as_agent_with) {
-	forward_auth {$AXP_UPSTREAM_INTERNAL:api:8001} {
+	forward_auth {$AXP_UPSTREAM_INTERNAL:127.0.0.1:24001} {
 		uri /internal/v1/runtime-auth?plugin={args[1]}
 		copy_headers X-AXP-Agent-Id X-AXP-Group-Id
 	}
@@ -31,9 +31,10 @@
 	}
 }
 
-http://:{$AXP_RUNTIME_GATEWAY_PORT:8090} {
+http://:{$AXP_RUNTIME_GATEWAY_PORT:24090} {
 	bind {$AXP_RUNTIME_GATEWAY_BIND:0.0.0.0}
 	import access_log
+	import bundles
 
 	# Only the internal API says these; X-AXP-Agent-Id is always replaced
 	# with its answer (a bundle's service says which agent a model request
@@ -44,63 +45,63 @@ http://:{$AXP_RUNTIME_GATEWAY_PORT:8090} {
 	# The models' OpenAI-compatible API, on the internal listener: Codex's
 	# model provider, and bundles' services that use llm.
 	handle /v1/* {
-		forward_auth {$AXP_UPSTREAM_INTERNAL:api:8001} {
+		forward_auth {$AXP_UPSTREAM_INTERNAL:127.0.0.1:24001} {
 			uri /internal/v1/runtime-auth?use=llm
 			copy_headers X-AXP-Agent-Id X-AXP-Bundle
 		}
-		reverse_proxy {$AXP_UPSTREAM_INTERNAL:api:8001} {
+		reverse_proxy {$AXP_UPSTREAM_INTERNAL:127.0.0.1:24001} {
 			header_up -Authorization
 			flush_interval -1
 		}
 	}
 	# Bundles' services (docs/architecture/bundles.md#服务): /bundles/<name>/x
-	# is /<name>/x at the Service <name>, for agents that load the bundle
+	# is /<name>/x at the bundle's service, for agents that load the bundle
 	# and services that use it.
-	@bundle path_regexp ^/bundles/[a-z0-9][a-z0-9-]*/
+	@bundle path_regexp bundle ^/bundles/([a-z0-9][a-z0-9-]*)/
 	handle @bundle {
 		uri strip_prefix /bundles
-		forward_auth {$AXP_UPSTREAM_INTERNAL:api:8001} {
-			uri /internal/v1/runtime-auth?bundle={http.request.uri.path.0}
+		forward_auth {$AXP_UPSTREAM_INTERNAL:127.0.0.1:24001} {
+			uri /internal/v1/runtime-auth?bundle={re.bundle.1}
 			copy_headers X-AXP-Agent-Id X-AXP-Group-Id X-AXP-Bundle
 		}
 		request_header -Authorization
-		import bundle_service {http.request.uri.path.0}
+		import bundle_service
 	}
 	# Bundles' services' error reports and logs (internal/bundlesvc); like
 	# the browser's, with the DSN's public key and nothing to authenticate.
 	import sentry
 	handle /groups/* {
-		import as_agent_with {$AXP_UPSTREAM_INTERNAL:api:8001} groups
+		import as_agent_with {$AXP_UPSTREAM_INTERNAL:127.0.0.1:24001} groups
 	}
 	# The task board: the tasks plugin's MCP server, in the internal API.
 	handle /tasks/* {
-		import as_agent_with {$AXP_UPSTREAM_INTERNAL:api:8001} tasks
+		import as_agent_with {$AXP_UPSTREAM_INTERNAL:127.0.0.1:24001} tasks
 	}
 	# Remote runtimes' native methods: the agenvo plugin's MCP server, the
 	# relay's tools forwarded with the control plane's grant.
 	handle /agenvo/* {
-		import as_agent_with {$AXP_UPSTREAM_INTERNAL:api:8001} agenvo
+		import as_agent_with {$AXP_UPSTREAM_INTERNAL:127.0.0.1:24001} agenvo
 	}
 	# Artifacts: the artifacts plugin's upload, in the internal API.
 	handle /artifacts/* {
-		import as_agent_with {$AXP_UPSTREAM_INTERNAL:api:8001} artifacts
+		import as_agent_with {$AXP_UPSTREAM_INTERNAL:127.0.0.1:24001} artifacts
 	}
 	# The files the user attached to messages to this agent, which the
 	# runtime fetches before handing a turn to Codex.
 	handle /attachments/* {
-		import as_agent {$AXP_UPSTREAM_INTERNAL:api:8001}
+		import as_agent {$AXP_UPSTREAM_INTERNAL:127.0.0.1:24001}
 	}
 	# Routines: the routines plugin's MCP server, in the internal API.
 	handle /routines/* {
-		import as_agent_with {$AXP_UPSTREAM_INTERNAL:api:8001} routines
+		import as_agent_with {$AXP_UPSTREAM_INTERNAL:127.0.0.1:24001} routines
 	}
 	# Code hosting: the github plugin's MCP server (open_pull_request)...
 	handle /forge/mcp* {
-		import as_agent_with {$AXP_UPSTREAM_INTERNAL:api:8001} github
+		import as_agent_with {$AXP_UPSTREAM_INTERNAL:127.0.0.1:24001} github
 	}
 	# ...and git's and gh's GitHub credentials, which every runtime fetches.
 	handle /forge/* {
-		import as_agent {$AXP_UPSTREAM_INTERNAL:api:8001}
+		import as_agent {$AXP_UPSTREAM_INTERNAL:127.0.0.1:24001}
 	}
 	respond 404
 

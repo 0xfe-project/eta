@@ -6,9 +6,7 @@
 package api
 
 import (
-	"context"
 	"github.com/akarachen/axp/apps/control-plane/internal/artifacts"
-	"github.com/akarachen/axp/apps/control-plane/internal/bundles"
 	"github.com/akarachen/axp/apps/control-plane/internal/chat"
 	"github.com/akarachen/axp/apps/control-plane/internal/github"
 	"github.com/akarachen/axp/apps/control-plane/internal/tasks"
@@ -33,8 +31,6 @@ type Deps struct {
 	RemoteDist string
 	// Dev serves the internal API's docs.
 	Dev bool
-	// How bundles' services are (internal/bundlesvc); none without a cluster.
-	ServiceStatuses func(ctx context.Context) (map[string]bundles.ServiceStatus, error)
 }
 
 // Public is the browser's API under /api, remote computers' under

@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"strings"
 
@@ -58,7 +57,7 @@ type BundleUpdateIn struct {
 	Script      *string   `json:"script,omitempty" nullable:"true" maxLength:"100000"`
 	Plugins     *[]string `json:"plugins,omitempty" nullable:"true" maxItems:"50"`
 	// Empty manifests remove the service.
-	Service *bundles.Service `json:"service,omitempty" doc:"Its service; empty manifests remove it."`
+	Service *bundles.Service `json:"service,omitempty" doc:"Its service; an empty jobspec removes it."`
 }
 
 type BundleConfigIn struct {
@@ -160,15 +159,13 @@ func registerChat(api huma.API, d *Deps) {
 			if err != nil {
 				return nil, err
 			}
-			if d.ServiceStatuses != nil {
-				statuses, err := d.ServiceStatuses(ctx)
-				if err != nil {
-					slog.WarnContext(ctx, "Cannot read bundles' services", "error", err)
-				}
-				for i, b := range all {
-					if status, ok := statuses[b.Name]; ok && b.Service != nil {
-						all[i].ServiceStatus = &status
-					}
+			statuses, err := bundles.ServiceStatuses(ctx, d.DB)
+			if err != nil {
+				return nil, err
+			}
+			for i, b := range all {
+				if status, ok := statuses[b.Name]; ok && b.Service != nil {
+					all[i].ServiceStatus = &status
 				}
 			}
 			return &httpapi.Body[[]bundles.Bundle]{Body: all}, nil

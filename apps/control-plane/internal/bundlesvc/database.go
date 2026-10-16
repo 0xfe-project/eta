@@ -11,7 +11,8 @@ import (
 
 // database makes sure the bundle has its database and role on the control
 // plane's server, named after the control plane's database and the bundle
-// (axp_bundle_memory), with pgvector, and returns its URL.
+// (axp_bundle_memory), with pgvector, and returns its URL as the service
+// reaches it (the server is on the host's network).
 func (r *Reconciler) database(ctx context.Context, bundle string) (string, error) {
 	admin, err := url.Parse(r.DatabaseURL)
 	if err != nil {
@@ -56,5 +57,10 @@ func (r *Reconciler) database(ctx context.Context, bundle string) (string, error
 		return "", err
 	}
 	own.User = url.UserPassword(name, password)
+	if port := own.Port(); port != "" {
+		own.Host = r.Host + ":" + port
+	} else {
+		own.Host = r.Host
+	}
 	return own.String(), nil
 }

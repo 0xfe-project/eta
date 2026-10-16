@@ -1,6 +1,6 @@
 // Package control operates agents' runtimes (docs/architecture/chat-runtime.md).
-// Every agent has one long-lived Pod, built from its bundles, with its
-// state on its own volume. The controller keeps that Pod in step with
+// Every agent has one long-lived container, built from its bundles, with
+// its state on its own volume. The controller keeps that container in step with
 // the agent, delivers the agent's waiting commands to its runtime's control
 // API one at a time, stops what the user stopped, and imports what the
 // runtimes report (events.go).
@@ -8,8 +8,8 @@
 // Only the controller calls runtimes' control API (with a token derived per
 // agent). It runs alone (an advisory lock), in one goroutine: a
 // tick reconciles every agent, a wake-up (the API's NOTIFY, an imported
-// event, a finished build) delivers one agent's work at once. Kubernetes and
-// runtime calls happen outside database transactions; every write locks the
+// event, a finished build) delivers one agent's work at once. Nomad, Docker
+// and runtime calls happen outside database transactions; every write locks the
 // conversation row first, like the API, so the controller and request
 // handlers never deadlock.
 package control

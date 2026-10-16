@@ -39,9 +39,9 @@ type Bundle struct {
 	// What the user sets for it (config.go); built-in bundles only.
 	Config map[string]any `json:"config,omitempty" doc:"What the user sets for it, a JSON Schema of string properties: environment variables of the agents that load it."`
 	config *ConfigSchema
-	// What it runs in the cluster, if anything (service.go).
+	// What it runs besides agents' images, if anything (service.go).
 	Service *Service `json:"service,omitempty"`
-	// How its service is, when it has one and the cluster is reachable.
+	// How its service is, when it has one.
 	ServiceStatus *ServiceStatus `json:"service_status,omitempty"`
 	// A built-in bundle's directory.
 	Dir string `json:"-"`
@@ -202,7 +202,7 @@ type Input struct {
 	Description *string
 	Script      *string
 	Plugins     *[]string
-	// A service whose manifests are empty removes it.
+	// A service whose jobspec is empty removes it.
 	Service *Service
 }
 
@@ -215,12 +215,12 @@ func (c *Catalog) check(in Input) error {
 			return err
 		}
 	}
-	return checkService(in.Service)
+	return nil
 }
 
 // service is what to store of in: nothing for none.
 func (in Input) service() *Service {
-	if in.Service == nil || in.Service.Manifests == "" {
+	if in.Service == nil || in.Service.Jobspec == "" {
 		return nil
 	}
 	return in.Service

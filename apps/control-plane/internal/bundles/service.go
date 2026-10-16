@@ -1,27 +1,21 @@
 package bundles
 
 import (
-	"bytes"
+	"context"
 	"errors"
-	"fmt"
-	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
-	"sort"
 
-	"github.com/akarachen/axp/packages/service-go/apierr"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
+	"github.com/akarachen/axp/packages/service-go/pg"
 )
 
-// Service is what a bundle runs besides agents' images: Kubernetes objects
-// in the bundles' namespace, shared by every agent that loads it
-// (docs/architecture/bundles.md#服务). The controller applies them.
+// Service is what a bundle runs besides agents' images: a Nomad job in
+// AXP's namespace, shared by every agent that loads it
+// (docs/architecture/bundles.md#服务). The controller runs it.
 type Service struct {
-	// The objects, as YAML documents. A built-in bundle's are the files in
-	// its service/ directory.
-	Manifests string `json:"manifests" maxLength:"200000" doc:"Its Kubernetes objects, as YAML documents: a Service named after the bundle (port named http) and what serves it."`
+	// The job, as HCL. A built-in bundle's is service/job.nomad.hcl.
+	Jobspec string `json:"jobspec" maxLength:"200000" doc:"Its Nomad job (HCL): a service job with a service named after the bundle (provider nomad), which agents reach through the runtime gateway."`
 	// What the service speaks, checked against its /.well-known/axp-service.
 	Protocol string `json:"protocol,omitempty" maxLength:"100" doc:"What it speaks (name/major version), checked against its /.well-known/axp-service."`
 	// What it may call through the runtime gateway with its token: llm (the
@@ -31,10 +25,13 @@ type Service struct {
 	Database bool `json:"database,omitempty" doc:"Give it a PostgreSQL database of its own (DATABASE_URL)."`
 }
 
+// JobspecFile is a built-in bundle's job, in its service/ directory.
+const JobspecFile = "job.nomad.hcl"
+
 // ServiceStatus is a service's state as the controller last saw it
-// (internal/bundlesvc).
+// (internal/bundlesvc), in the table bundle_service.
 type ServiceStatus struct {
-	State   string `json:"state" enum:"applying,ready,incompatible,error" doc:"applying (not ready yet), ready, incompatible (speaks another protocol) or error."`
+	State   string `json:"state" enum:"deploying,ready,incompatible,error" doc:"deploying (not ready yet), ready, incompatible (speaks another protocol) or error."`
 	Message string `json:"message,omitempty"`
 	// What the service reports at /.well-known/axp-service.
 	Version string `json:"version,omitempty"`
@@ -42,67 +39,28 @@ type ServiceStatus struct {
 	Revision string `json:"-"`
 }
 
-// Kinds a service may have, all in the bundles' namespace.
-var Kinds = []string{
-	"ConfigMap", "CronJob", "Deployment", "Job", "PersistentVolumeClaim", "Secret", "Service", "ServiceAccount", "StatefulSet",
-}
-
-// Objects parses the manifests, refusing kinds outside Kinds and objects
-// that name another namespace.
-func (s *Service) Objects() ([]*unstructured.Unstructured, error) {
-	decoder := utilyaml.NewYAMLOrJSONDecoder(bytes.NewReader([]byte(s.Manifests)), 4096)
-	var out []*unstructured.Unstructured
-	for {
-		var obj map[string]any
-		if err := decoder.Decode(&obj); errors.Is(err, io.EOF) {
-			break
-		} else if err != nil {
-			return nil, err
-		}
-		if len(obj) == 0 {
-			continue
-		}
-		u := &unstructured.Unstructured{Object: obj}
-		switch {
-		case !slices.Contains(Kinds, u.GetKind()):
-			return nil, fmt.Errorf("%s %q: kind not allowed (only %v)", u.GetKind(), u.GetName(), Kinds)
-		case u.GetName() == "":
-			return nil, fmt.Errorf("a %s without a name", u.GetKind())
-		case u.GetNamespace() != "":
-			return nil, fmt.Errorf("%s %q: names a namespace", u.GetKind(), u.GetName())
-		}
-		out = append(out, u)
+// ServiceStatuses is every bundle's service's status, by bundle.
+func ServiceStatuses(ctx context.Context, db pg.DB) (map[string]ServiceStatus, error) {
+	rows, err := pg.All[struct {
+		Bundle string `db:"bundle"`
+		ServiceStatus
+	}](ctx, db, "SELECT bundle, state, message, version, revision FROM bundle_service")
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]ServiceStatus{}
+	for _, r := range rows {
+		out[r.Bundle] = r.ServiceStatus
 	}
 	return out, nil
 }
 
-func checkService(s *Service) error {
-	if s == nil {
-		return nil
-	}
-	if _, err := s.Objects(); err != nil {
-		return apierr.New(422, "INVALID_SERVICE", "服务的清单无效："+err.Error())
-	}
-	return nil
-}
-
-// readService reads a built-in bundle's service/ directory.
+// readService reads a built-in bundle's service/job.nomad.hcl.
 func readService(s *Service, dir string) error {
-	files, err := filepath.Glob(filepath.Join(dir, "service", "*.yaml"))
-	if err != nil {
-		return err
+	data, err := os.ReadFile(filepath.Join(dir, "service", JobspecFile))
+	if errors.Is(err, fs.ErrNotExist) {
+		return errors.New("no service/" + JobspecFile)
 	}
-	sort.Strings(files)
-	var all bytes.Buffer
-	for _, file := range files {
-		data, err := os.ReadFile(file)
-		if err != nil {
-			return err
-		}
-		all.WriteString("---\n")
-		all.Write(data)
-	}
-	s.Manifests = all.String()
-	_, err = s.Objects()
+	s.Jobspec = string(data)
 	return err
 }

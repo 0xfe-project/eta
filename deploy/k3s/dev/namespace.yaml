@@ -1,5 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: axp-dev
-  labels: { axp.dev/role: platform }
