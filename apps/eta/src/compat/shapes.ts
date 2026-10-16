@@ -98,6 +98,7 @@ export interface AxpSnapshot {
 }
 
 const STATUS: Record<MessageRecord["status"], AxpMessage["status"]> = {
+  queued: "queued",
   working: "responding",
   done: "completed",
   failed: "failed",

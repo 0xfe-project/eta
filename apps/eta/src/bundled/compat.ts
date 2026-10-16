@@ -3,6 +3,7 @@
  *
  *   GET    /api/v1/chat                       the snapshot (groups, agents, active replies, cursor)
  *   GET    /api/v1/chat/stream?cursor=…       one SSE stream of product events
+ *   POST   /api/v1/chat/messages              send a message: a row, and joined by mode
  *   POST   /api/v1/chat/messages/{id}/stop    stop the run behind a reply (P2.6)
  *   GET    /api/v1/agents                     the agents
  *   POST   /api/v1/agents                     {name, description, model?, bundles?}
@@ -68,6 +69,31 @@ const asNames = (value: unknown): string[] | undefined =>
   Array.isArray(value) && value.every((name) => typeof name === "string")
     ? (value as string[])
     : undefined;
+
+/**
+ * The text of a send.
+ *
+ * `undefined` means "there was text you did not write", `null` means "a part this build cannot
+ * carry yet" — the difference matters, because one is a bad request and the other is honest.
+ */
+function textOfParts(parts: unknown): string | undefined | null {
+  if (!Array.isArray(parts)) return undefined;
+  const text: string[] = [];
+  for (const part of parts) {
+    if (typeof part !== "object" || part === null) return undefined;
+    const type = (part as { type?: unknown }).type;
+    if (type === "text") {
+      const body = (part as { text?: unknown }).text;
+      if (typeof body !== "string") return undefined;
+      text.push(body);
+      continue;
+    }
+    // Attachments: the web uploads to `/attachments` and sends the id back. There is no attachment
+    // store here yet, and a message that quietly dropped a file would be worse than a refusal.
+    return null;
+  }
+  return text.join("");
+}
 
 export const compatPlugin = {
   name: "compat",
@@ -227,6 +253,67 @@ export const compatPlugin = {
             next_cursor:
               older.length > items.length ? String(items[0]!.seq) : null,
           });
+        },
+      ),
+    );
+
+    plugin.effect(() =>
+      plugin.routes.register(
+        "POST",
+        "/api/v1/chat/messages",
+        async (request) => {
+          const body = await readJson(request);
+          const groupId = asString(body.group_id);
+          if (groupId === undefined) {
+            return errorResponse(
+              400,
+              "NO_GROUP",
+              "a message needs a group_id",
+              crypto.randomUUID(),
+            );
+          }
+          const text = textOfParts(body.parts);
+          if (text === null) {
+            return errorResponse(
+              501,
+              "NOT_IMPLEMENTED",
+              "attachments are not carried yet; send text only",
+              crypto.randomUUID(),
+            );
+          }
+          if (text === undefined || text.length === 0) {
+            return errorResponse(
+              400,
+              "NO_TEXT",
+              "a message needs text",
+              crypto.randomUUID(),
+            );
+          }
+          const sent = await runner.send({
+            groupId,
+            text,
+            mentions: asNames(body.mentions) ?? [],
+            mode: body.mode === "steer" ? "steer" : "queue",
+            ...(asString(body.id) === undefined
+              ? {}
+              : { id: asString(body.id)! }),
+          });
+          if (sent === undefined) {
+            return errorResponse(
+              404,
+              "NO_SUCH_GROUP",
+              `no group ${groupId}`,
+              crypto.randomUUID(),
+            );
+          }
+          // The product's answer: the message, and the replies that are already on their way.
+          return Response.json(
+            {
+              message: toMessage(sent.message),
+              replies: sent.replies.map(toMessage),
+            },
+            { status: 201 },
+          );
         },
       ),
     );

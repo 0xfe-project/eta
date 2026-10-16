@@ -1,9 +1,15 @@
-import type { AgentMessage } from "@eta/core";
+import type { AgentMessage, Kernel } from "@eta/core";
 import type { ManagedSession, SessionManager } from "@eta/server";
 import type { AgentStore } from "../agents/store";
 import type { EventHub } from "../http/events";
 import type { TimelineProjector } from "./projection";
-import type { GroupRecord, GroupStore, MessageRecord } from "./store";
+import type {
+  GroupRecord,
+  GroupStore,
+  MessageRecord,
+  PostedMessage,
+  WakeRecord,
+} from "./store";
 /**
  * Turning a wake into a run (REFACTOR.md §9, P2.2 and P2.3).
  *
@@ -86,6 +92,8 @@ export class WakeRunner {
   readonly #hub: EventHub | undefined;
   readonly #cwd: string;
   readonly #warn: (message: string) => void;
+  /** Background deliveries, chained so a group's answers keep the order they were woken in. */
+  #pending: Promise<unknown> = Promise.resolve();
 
   constructor(options: WakeRunnerOptions) {
     this.#groups = options.groups;
@@ -105,15 +113,8 @@ export class WakeRunner {
     groupId: string,
     messageId?: string,
   ): Promise<DeliveredReply[]> {
-    const queued = this.#groups
-      .wakes(groupId)
-      .filter((wake) => wake.state === "queued")
-      .filter(
-        (wake) => messageId === undefined || wake.messageId === messageId,
-      );
-
     const replies: DeliveredReply[] = [];
-    for (const wake of queued) {
+    for (const wake of this.#queuedWakes(groupId, messageId)) {
       const reply = await this.#deliverOne(
         groupId,
         wake.agentId,
@@ -122,6 +123,162 @@ export class WakeRunner {
       if (reply !== undefined) replies.push(reply);
     }
     return replies;
+  }
+
+  /**
+   * Deliver a message's wakes without waiting for the answers (P2.6).
+   *
+   * The product's send answers with the reply rows it started and the web follows the rest over the
+   * stream, so the rows exist by the time this returns and the runs happen after it. Runs are
+   * chained rather than started side by side: a group's timeline should read in the order its
+   * agents were woken.
+   */
+  async start(groupId: string, messageId?: string): Promise<MessageRecord[]> {
+    const group = this.#groups.get(groupId);
+    if (group === undefined) return [];
+    const started: MessageRecord[] = [];
+    for (const wake of this.#queuedWakes(groupId, messageId)) {
+      const message = this.#groups.message(wake.messageId);
+      if (message === undefined) continue;
+      let prepared: {
+        managed: ManagedSession;
+        replyMessageId: string | undefined;
+      };
+      try {
+        prepared = await this.#prepare(
+          group.group,
+          groupId,
+          wake.agentId,
+          message,
+          "queued",
+        );
+      } catch (error) {
+        // The same answer the blocking path gives a delivery that cannot start: the failure is
+        // this agent's reply, said out loud rather than a 500 on the whole send.
+        const reason = error instanceof Error ? error.message : String(error);
+        this.#warn(
+          `[eta] agent ${wake.agentId} could not answer in group ${groupId}: ${reason}`,
+        );
+        this.#hub?.publish("group.reply", {
+          groupId,
+          agentId: wake.agentId,
+          messageId: wake.messageId,
+          status: "failed",
+          text: reason,
+        });
+        continue;
+      }
+      const row =
+        prepared.replyMessageId === undefined
+          ? undefined
+          : this.#groups.message(prepared.replyMessageId);
+      if (row !== undefined) started.push(row);
+      this.#chain(() =>
+        this.#execute(group.group, groupId, wake.agentId, message, prepared),
+      );
+    }
+    return started;
+  }
+
+  /**
+   * The product's send (P2.6): a message, and what the agents it names should do with it.
+   *
+   * `mode` is how it joins a conversation that is already running — `steer` changes the turn in
+   * flight, `queue` waits for it to end. Both are the kernel's inbox: a steer lands at the next
+   * boundary, a follow-up when the run would otherwise stop. An agent that is not answering has
+   * nothing to join, so either mode is just "answer this next".
+   *
+   * A message that joins a running turn cancels the wake it recorded: the words are already in
+   * that run, and a second run would answer them twice.
+   */
+  async send(input: {
+    groupId: string;
+    text: string;
+    mentions: readonly string[];
+    mode: "queue" | "steer";
+    id?: string | undefined;
+  }): Promise<
+    | (PostedMessage & {
+        group: GroupRecord & { seq: number };
+        replies: MessageRecord[];
+        joined: string[];
+      })
+    | undefined
+  > {
+    // A send to a group that is not there is a 404, not a thrown error: checked here because the
+    // projector would have to throw to say the same thing.
+    if (this.#groups.get(input.groupId) === undefined) return undefined;
+    const posted =
+      this.#projector === undefined
+        ? this.#groups.postUserMessage(input.groupId, {
+            text: input.text,
+            mentions: input.mentions,
+            ...(input.id === undefined ? {} : { id: input.id }),
+          })
+        : this.#projector.userMessage({
+            groupId: input.groupId,
+            text: input.text,
+            mentions: input.mentions,
+            ...(input.id === undefined ? {} : { id: input.id }),
+          });
+    if (posted === undefined) return undefined;
+
+    const joined: string[] = [];
+    for (const agentId of posted.woke) {
+      const kernel = await this.#answeringKernel(input.groupId, agentId);
+      if (kernel === undefined) continue;
+      const words = {
+        role: "user" as const,
+        timestamp: Date.now(),
+        content: [{ type: "text" as const, text: input.text }],
+      };
+      if (input.mode === "steer") kernel.steer(words);
+      else kernel.followUp(words);
+      this.#groups.markWake(
+        input.groupId,
+        agentId,
+        posted.message.id,
+        "cancelled",
+      );
+      joined.push(agentId);
+    }
+
+    const replies = await this.start(input.groupId, posted.message.id);
+    const group = this.#groups.summary(input.groupId);
+    if (group === undefined) return undefined;
+    return { ...posted, group, replies, joined };
+  }
+
+  /** The kernel of the session that is answering for this agent, if one is. */
+  async #answeringKernel(
+    groupId: string,
+    agentId: string,
+  ): Promise<Kernel | undefined> {
+    const sessionId = this.#groups
+      .participantsOf(groupId)
+      .find((participant) => participant.agentId === agentId)?.sessionId;
+    if (sessionId === undefined) return undefined;
+    const managed = await this.#sessions.session(sessionId);
+    if (managed === undefined || !managed.session.runner.running)
+      return undefined;
+    return managed.session.kernel;
+  }
+
+  #chain(job: () => Promise<unknown>): void {
+    this.#pending = this.#pending.then(job).catch((error: unknown) => {
+      this.#warn(
+        `[eta] a background delivery failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
+  }
+
+  #queuedWakes(groupId: string, messageId?: string): WakeRecord[] {
+    return this.#groups
+      .wakes(groupId)
+      .filter((wake) => wake.state === "queued")
+      .filter(
+        (wake) => messageId === undefined || wake.messageId === messageId,
+      );
   }
 
   /**
@@ -197,19 +354,57 @@ export class WakeRunner {
     agentId: string,
     message: MessageRecord,
   ): Promise<DeliveredReply> {
-    const messageId = message.id;
+    const prepared = await this.#prepare(
+      group,
+      groupId,
+      agentId,
+      message,
+      "working",
+    );
+    return await this.#execute(group, groupId, agentId, message, prepared);
+  }
+
+  /**
+   * Everything that has to be true before a run starts: the session exists, the wake is taken, and
+   * the reply has its place in the timeline.
+   *
+   * Split from the run itself because the product's send answers with the reply rows *before* the
+   * runs happen (P2.6): those rows are written here, as `queued`, and each run turns its own row
+   * into a working one when it actually begins.
+   */
+  async #prepare(
+    group: GroupRecord,
+    groupId: string,
+    agentId: string,
+    message: MessageRecord,
+    status: "queued" | "working",
+  ): Promise<{ managed: ManagedSession; replyMessageId: string | undefined }> {
     // The session first: a delivery that cannot even open one leaves no half-written reply in
     // the timeline for a reader to wonder about.
     const managed = await this.#ensureSession(group, groupId, agentId);
     // Taken before the run, not after: a crash mid-turn must not deliver the same wake twice.
-    this.#groups.markWake(groupId, agentId, messageId, "taken");
-
+    this.#groups.markWake(groupId, agentId, message.id, "taken");
     const projected = this.#projector?.replyStarted({
       groupId,
       agentId,
-      replyToMessageId: messageId,
+      replyToMessageId: message.id,
+      status,
     });
-    const replyMessageId = projected?.message.id;
+    return { managed, replyMessageId: projected?.message.id };
+  }
+
+  async #execute(
+    group: GroupRecord,
+    groupId: string,
+    agentId: string,
+    message: MessageRecord,
+    prepared: { managed: ManagedSession; replyMessageId: string | undefined },
+  ): Promise<DeliveredReply> {
+    const messageId = message.id;
+    const { managed, replyMessageId } = prepared;
+    if (replyMessageId !== undefined) {
+      this.#projector?.replyWorking({ groupId, messageId: replyMessageId });
+    }
 
     try {
       managed.session.kernel.inject({

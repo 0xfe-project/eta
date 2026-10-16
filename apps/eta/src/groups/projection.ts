@@ -50,6 +50,8 @@ export class TimelineProjector {
     groupId: string;
     text: string;
     mentions?: readonly string[] | undefined;
+    /** The caller's own id, when it has one: posting the same id twice is one message. */
+    id?: string | undefined;
   }): PostedMessage & { group: GroupRecord & { seq: number } } {
     const posted = this.#groups.postUserMessage(input.groupId, input);
     if (posted === undefined)
@@ -70,16 +72,23 @@ export class TimelineProjector {
     return group;
   }
 
-  /** An agent started answering: take a place in the timeline and say so. */
+  /**
+   * An agent is going to answer: take a place in the timeline and say so.
+   *
+   * `queued` is the product's send path (P2.6): the row is written before the run starts so the
+   * send can answer with it, and the run turns it into a working one when it actually begins.
+   */
   replyStarted(input: {
     groupId: string;
     agentId: string;
     replyToMessageId: string;
+    status?: "queued" | "working" | undefined;
   }): ProjectedReply {
     const message = this.#groups.startReply(
       input.groupId,
       input.agentId,
       input.replyToMessageId,
+      input.status ?? "working",
     );
     const group = this.#summary(input.groupId);
     // The seq moved, so the sidebar hears about it as well as the conversation.
@@ -100,6 +109,17 @@ export class TimelineProjector {
     messageId: string;
   }): MessageRecord | undefined {
     const message = this.#groups.markStopping(input.messageId);
+    if (message === undefined) return undefined;
+    this.#hub?.publish("message.updated", { group_id: input.groupId, message });
+    return message;
+  }
+
+  /** The run behind a queued reply has begun: `queued` becomes `working`. */
+  replyWorking(input: {
+    groupId: string;
+    messageId: string;
+  }): MessageRecord | undefined {
+    const message = this.#groups.markWorking(input.messageId);
     if (message === undefined) return undefined;
     this.#hub?.publish("message.updated", { group_id: input.groupId, message });
     return message;

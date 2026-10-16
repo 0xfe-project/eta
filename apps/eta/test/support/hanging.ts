@@ -9,6 +9,7 @@
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { KernelModels } from "@eta/core";
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { fakeModels } from "@eta/core/testing";
 
 export interface HangingModels {
@@ -106,4 +107,50 @@ export function hangingModels(_unused?: AssistantMessage): HangingModels {
       scripted.completeSimple(model, context, options),
   };
   return { models, requested, signals };
+}
+
+/**
+ * A model layer that answers the script, but only after a delay.
+ *
+ * Steering needs a run that is *in flight* while the test talks to it, and a scripted model answers
+ * before the caller can do anything. The delay is that window; `requested` says when a turn has
+ * actually begun, so the test never has to guess with a timer of its own.
+ *
+ * The stream is pumped rather than returned late: `streamSimple` has to hand back pi-ai's stream
+ * object synchronously, so the waiting happens inside it.
+ */
+export function delayedModels(
+  answers: AssistantMessage[],
+  delayMs = 150,
+): { models: KernelModels; requested: () => Promise<void> } {
+  const scripted = fakeModels(answers);
+  let resolveTurn!: () => void;
+  let turn = new Promise<void>((resolve) => {
+    resolveTurn = resolve;
+  });
+  const arm = (): void => {
+    turn = new Promise<void>((resolve) => {
+      resolveTurn = resolve;
+    });
+  };
+  return {
+    requested: () => turn,
+    models: {
+      getModel: (provider, id) => scripted.getModel(provider, id),
+      streamSimple: (model, context, options) => {
+        resolveTurn();
+        const out = createAssistantMessageEventStream();
+        void (async () => {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          arm();
+          const inner = scripted.streamSimple(model, context, options);
+          for await (const event of inner) out.push(event);
+          out.end(await inner.result());
+        })();
+        return out;
+      },
+      completeSimple: async (model, context, options) =>
+        scripted.completeSimple(model, context, options),
+    },
+  };
 }

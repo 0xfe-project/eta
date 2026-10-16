@@ -65,6 +65,7 @@ export interface MessageRecord {
 
 /** Every state a timeline row can be in. A user's own message is written straight to `done`. */
 export type ReplyStatus =
+  | "queued"
   | "working"
   | "done"
   | "failed"
@@ -72,6 +73,7 @@ export type ReplyStatus =
   | "stopped";
 
 const REPLY_STATUSES: readonly string[] = [
+  "queued",
   "working",
   "done",
   "failed",
@@ -117,6 +119,14 @@ export interface PostMessageInput {
   text: string;
   agentId?: string | undefined;
   mentions?: readonly string[] | undefined;
+  /**
+   * The id to write this message under, when the caller has one.
+   *
+   * The product API is handed the client's own id, and posting the same id twice is one message: a
+   * retry after a dropped connection finds the row already there instead of writing a second one.
+   * Without it the id is ours to make up.
+   */
+  id?: string | undefined;
   /** The user message this branch descends from; required for an agent's message. */
   rootMessageId?: string | undefined;
 }
@@ -376,11 +386,13 @@ export class GroupStore {
   /** A message from the user: with no mentions it wakes nobody, and that is the rule, not a bug. */
   postUserMessage(
     id: string,
-    input: { text: string; mentions?: readonly string[] },
+    input: { text: string; mentions?: readonly string[]; id?: string },
   ): PostedMessage | undefined {
     return this.#post(id, {
       text: input.text,
       ...(input.mentions === undefined ? {} : { mentions: input.mentions }),
+      // The caller's own id travels through: it is what makes a retried post one message.
+      ...(input.id === undefined ? {} : { id: input.id }),
     });
   }
 
@@ -429,6 +441,7 @@ export class GroupStore {
     groupId: string,
     agentId: string,
     replyToMessageId: string,
+    status: "queued" | "working" = "working",
   ): MessageRecord {
     const parent = this.messages(groupId).find(
       (message) => message.id === replyToMessageId,
@@ -439,13 +452,14 @@ export class GroupStore {
       .query(
         `INSERT INTO group_message
            (id, group_id, seq, kind, author_kind, author_agent_id, text, status, revision, mentions, root_message_id, created_at)
-         VALUES (?, ?, ?, 'assistant', 'agent', ?, '', 'working', 1, '[]', ?, ?)`,
+         VALUES (?, ?, ?, 'assistant', 'agent', ?, '', ?, 1, '[]', ?, ?)`,
       )
       .run(
         id,
         groupId,
         seq,
         agentId,
+        status,
         parent?.rootMessageId ?? parent?.id ?? null,
         new Date().toISOString(),
       );
@@ -482,6 +496,21 @@ export class GroupStore {
     const changed = this.#handle
       .query(
         "UPDATE group_message SET status = 'stopping', revision = revision + 1 WHERE id = ? AND status = 'working'",
+      )
+      .run(messageId);
+    return changed.changes === 0 ? undefined : this.message(messageId);
+  }
+
+  /**
+   * A reply whose run is about to start: `queued` becomes `working`.
+   *
+   * One write per reply, and only when there is something to say — a row written `working` (the
+   * blocking path writes it that way) does not change, so nothing is published twice.
+   */
+  markWorking(messageId: string): MessageRecord | undefined {
+    const changed = this.#handle
+      .query(
+        "UPDATE group_message SET status = 'working', revision = revision + 1 WHERE id = ? AND status = 'queued'",
       )
       .run(messageId);
     return changed.changes === 0 ? undefined : this.message(messageId);
@@ -581,7 +610,22 @@ export class GroupStore {
     const authoredByAgent = input.agentId !== undefined;
 
     const now = new Date().toISOString();
-    const messageId = crypto.randomUUID();
+    const messageId = input.id ?? crypto.randomUUID();
+    // The caller's own id, seen again: this is the message it already wrote, so nothing is written
+    // and what it woke is what it still woke.
+    const existing = this.#handle
+      .query("SELECT * FROM group_message WHERE id = ?")
+      .get(messageId) as MessageRow | null;
+    if (existing !== null) {
+      const seen = messageOf(existing);
+      return {
+        message: seen,
+        woke: this.wakes(seen.groupId)
+          .filter((wake) => wake.messageId === messageId)
+          .map((wake) => wake.agentId),
+        capped: false,
+      };
+    }
     let message: MessageRecord | undefined;
     let reminder: MessageRecord | undefined;
     let woke: string[] = [];
