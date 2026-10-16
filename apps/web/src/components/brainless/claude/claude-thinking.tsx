@@ -116,7 +116,7 @@ export function ClaudeThinking({
         {prefersReduced ? "✳" : GLYPHS[glyph]}
       </span>
       <span className="cw-verb">{verb}…</span>
-      <span style={{ color: DIM }}>
+      <span className="tabular-nums" style={{ color: DIM }}>
         ({secs}s{tokens} · {t("thinking.interruptHint")})
       </span>
     </div>

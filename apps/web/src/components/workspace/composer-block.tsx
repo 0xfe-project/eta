@@ -136,13 +136,16 @@ function FileBlock({
   const failure = upload?.error;
   const uploading = !attachment && !failure;
   return (
-    <span className={CHIP}>
+    <span
+      className={`${CHIP} motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-90`}
+    >
       <AttachmentLink
         attachment={attachment}
         name={part.name}
         contentType={part.contentType}
         size={part.size}
         thumbnail={local}
+        className={uploading ? "motion-safe:animate-upload-pulse" : undefined}
       />
       {uploading ? (
         <span role="status">{translateText("common:states.uploading")}</span>
@@ -205,12 +208,14 @@ function AttachmentLink({
   contentType,
   size,
   thumbnail,
+  className = "",
 }: {
   attachment?: Attachment;
   name: string;
   contentType: string;
   size: number;
   thumbnail?: string;
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const image = isImage(contentType);
@@ -227,7 +232,9 @@ function AttachmentLink({
   );
   if (!attachment && !src)
     return (
-      <span className="inline-flex min-w-0 items-center gap-[0.5ch]">
+      <span
+        className={`inline-flex min-w-0 items-center gap-[0.5ch] ${className}`}
+      >
         {label}
       </span>
     );
@@ -237,7 +244,7 @@ function AttachmentLink({
         href={attachmentURL(attachment.id)}
         target="_blank"
         rel="noopener noreferrer"
-        className={`inline-flex items-center gap-[0.5ch] ${LINK}`}
+        className={`inline-flex items-center gap-[0.5ch] ${LINK} ${className}`}
       >
         {label}
       </a>
@@ -246,7 +253,7 @@ function AttachmentLink({
     <>
       <button
         type="button"
-        className={`inline-flex items-center gap-[0.5ch] ${LINK}`}
+        className={`inline-flex items-center gap-[0.5ch] ${LINK} ${className}`}
         onClick={() => setOpen(true)}
       >
         {label}

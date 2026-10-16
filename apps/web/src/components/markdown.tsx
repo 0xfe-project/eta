@@ -1,6 +1,16 @@
-import type { Components, ExtraProps, PluginConfig } from "streamdown";
+import type { ComponentProps } from "react";
+import type {
+  AnimateOptions,
+  Components,
+  ExtraProps,
+  PluginConfig,
+} from "streamdown";
+import { CheckIcon } from "@phosphor-icons/react/Check";
+import { CopyIcon } from "@phosphor-icons/react/Copy";
 import { cjk } from "@streamdown/cjk";
-import { createElement, memo } from "react";
+import { createElement, memo, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { defaultRehypePlugins, Streamdown } from "streamdown";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +24,48 @@ function plain(tag: string) {
   return ({ node: _, ...props }: Record<string, unknown> & ExtraProps) =>
     createElement(tag, props);
 }
+/** A code block with a button that copies its text. */
+function CodeBlock({ node: _, ...props }: ComponentProps<"pre"> & ExtraProps) {
+  const { t: translateText } = useTranslation("common");
+  const ref = useRef<HTMLPreElement>(null);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const id = setTimeout(setCopied, 2500, false);
+    return () => clearTimeout(id);
+  }, [copied]);
+  const label = copied
+    ? translateText("feedback.copied")
+    : translateText("actions.copy");
+  return (
+    <div className="group/code relative">
+      <pre ref={ref} {...props} />
+      <button
+        type="button"
+        aria-label={label}
+        title={label}
+        className="absolute top-1 right-1 inline-flex size-6 items-center justify-center bg-muted text-muted-foreground opacity-0 outline-none group-hover/code:opacity-100 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-ring pointer-coarse:opacity-100"
+        onClick={async () => {
+          // No clipboard at all outside a secure context.
+          try {
+            await navigator.clipboard.writeText(ref.current?.textContent ?? "");
+            setCopied(true);
+          } catch {
+            toast.error(translateText("errors.clipboardBlocked"));
+          }
+        }}
+      >
+        {copied ? (
+          // Holds for a beat, then fades as the copy icon comes back.
+          <CheckIcon aria-hidden="true" className="animate-copied-check" />
+        ) : (
+          <CopyIcon aria-hidden="true" />
+        )}
+      </button>
+    </div>
+  );
+}
+
 const components: Components = {
   ...Object.fromEntries(
     [
@@ -30,7 +82,6 @@ const components: Components = {
       "li",
       "ol",
       "p",
-      "pre",
       "section",
       "strong",
       "sub",
@@ -44,6 +95,7 @@ const components: Components = {
       "ul",
     ].map((tag) => [tag, plain(tag)]),
   ),
+  pre: CodeBlock,
   // Links leave the app: a new tab, and no opener or referrer.
   // A link still being written has no destination yet.
   a: ({ node: _, href, ...props }) => (
@@ -56,14 +108,23 @@ const components: Components = {
   ),
 };
 const linkSafety = { enabled: false };
+// Text being written comes in character by character, each one fading in out
+// of a blur (sd-grapheme in styles.css).
+const animated: AnimateOptions = {
+  animation: "grapheme",
+  sep: "char",
+  duration: 90,
+  easing: "cubic-bezier(.215, .61, .355, 1)",
+  stagger: 30,
+};
 // Without rehype-raw, raw HTML shows as text instead of elements; sanitize
 // still drops unsafe URLs.
 const rehypePlugins = [defaultRehypePlugins.sanitize];
 
 /**
  * Markdown from agents and people; raw HTML is not rendered. `streaming` is for
- * text still being written: it closes unfinished syntax at the end and only
- * reparses the last block as it grows.
+ * text still being written: it closes unfinished syntax at the end, only
+ * reparses the last block as it grows, and fades new characters in.
  */
 export const Markdown = memo(
   ({
@@ -80,6 +141,8 @@ export const Markdown = memo(
         // space-y-3 replaces Streamdown's space-y-4, to match `.markdown`.
         className={cn("markdown space-y-3", className)}
         mode={streaming ? "streaming" : "static"}
+        animated={streaming ? animated : false}
+        isAnimating={streaming}
         plugins={plugins}
         components={components}
         controls={false}

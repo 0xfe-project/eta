@@ -101,6 +101,10 @@ const activityText = {
     return translate("common:status.failed");
   },
 };
+// A new block of the transcript fades in, rising a little. The user's own
+// message does as it is sent; its copy from the server replaces it in place.
+const ENTER =
+  "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1";
 // Replies holding the agent's runtime; queued ones wait behind them.
 const EXECUTING = new Set<ChatMessage["status"]>([
   "responding",
@@ -403,11 +407,11 @@ const Turn = memo(
           .filter((block): block is Reply => block.type !== "attachment")
           .map((block) =>
             block.type === "text" ? (
-              <ClaudeMessage key={block.id}>
+              <ClaudeMessage key={block.id} className={ENTER}>
                 <Markdown streaming={streaming}>{block.text}</Markdown>
               </ClaudeMessage>
             ) : (
-              <div key={block.id} className="space-y-1">
+              <div key={block.id} className={`space-y-1 ${ENTER}`}>
                 <ToolActivity block={block} />
                 {block.ref && block.status === "completed" ? (
                   <ActivityRefCard value={block.ref} className="ml-[2ch]" />
@@ -930,7 +934,7 @@ export function ChatPanel({
             ))}
             {outgoing.map((item) => (
               <div key={item.id} className="space-y-3 pt-1">
-                <ClaudeMessage role="user">
+                <ClaudeMessage role="user" className={ENTER}>
                   <UserParts parts={item.parts} />
                 </ClaudeMessage>
                 {item.failure ? (
