@@ -56,10 +56,10 @@ export interface HarnessTool<
    * Models send what they send; the tool absorbs it or says why it cannot.
    */
   prepareArguments?: ((args: unknown) => unknown) | undefined;
-  execute: (
+  execute(
     args: Static<TParameters>,
     run: ToolRun<TContext>,
-  ) => Promise<ToolResult<TDetails>> | ToolResult<TDetails>;
+  ): Promise<ToolResult<TDetails>> | ToolResult<TDetails>;
 }
 
 /** Build a harness tool. */

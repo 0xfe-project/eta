@@ -66,3 +66,7 @@ export {
   sessionSubagentRunner,
   SubagentFailed,
 } from "./subagent";
+export type {
+  MountedPlugin,
+  PluginPanelDescriptor,
+} from "@eta/client-contracts";

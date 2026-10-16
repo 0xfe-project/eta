@@ -393,7 +393,7 @@ async function journalFirstLine(
   try {
     const buffer = new Uint8Array(65_536);
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    const at = buffer.subarray(0, bytesRead).indexOf(0x0a);
+    const at = buffer.subarray(0, bytesRead).indexOf(0x0A);
     const line = new TextDecoder().decode(
       buffer.subarray(0, at === -1 ? bytesRead : at),
     );

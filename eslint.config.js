@@ -46,6 +46,7 @@ export default antfu(
     // harness/src/subagent-plan.ts) when that code is next touched.
     files: ["packages/eta-*/**"],
     rules: {
+      "ts/method-signature-style": "off",
       "ts/no-use-before-define": "off",
       "antfu/no-top-level-await": "off",
       "node/prefer-global/process": "off",

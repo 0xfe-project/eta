@@ -21,7 +21,7 @@ import { AbortRequested, cancellationOf } from "./effect-gate";
 export interface KernelTool<TArgs = unknown, TResult = unknown> {
   name: string;
   description?: string;
-  execute: (args: TArgs, call: ToolCallInfo) => TResult | Promise<TResult>;
+  execute(args: TArgs, call: ToolCallInfo): TResult | Promise<TResult>;
 }
 
 /** What the runner knows about a call when it asks the middleware chain. */
