@@ -105,8 +105,11 @@ describe("Markdown", () => {
     expect(root.firstElementChild!.classList).toContain("markdown");
     expect(root.querySelectorAll("table td")).toHaveLength(2);
     expect(root.querySelector("pre > code")!.textContent).toBe("x\n");
-    // No toolbars, wrappers or Streamdown classes of its own.
-    expect(root.querySelector("button")).toBeNull();
+    // No toolbars or Streamdown classes of its own, only a copy button.
+    expect(root.querySelectorAll("button")).toHaveLength(1);
+    expect(root.querySelector("pre + button")!.getAttribute("aria-label")).toBe(
+      "复制",
+    );
     expect(
       root.querySelector("[class*=streamdown], [data-streamdown]"),
     ).toBeNull();
@@ -115,9 +118,24 @@ describe("Markdown", () => {
   it("renders the same finished text in either mode", () => {
     const source =
       "# 标题\n\n见 https://example.com/a，然后\n\n**加粗**中文\n\n- x\n- y";
-    // Streaming renders block by block, without newlines between them.
-    const html = (root: HTMLElement) => root.innerHTML.replaceAll(">\n<", "><");
-    expect(html(render(source, true))).toBe(html(render(source)));
+    // Streaming renders block by block, without newlines between them, and
+    // wraps each character in a span that fades it in.
+    const html = (root: HTMLElement) => {
+      for (const span of root.querySelectorAll("[data-sd-animate]"))
+        span.replaceWith(...span.childNodes);
+      for (const el of root.querySelectorAll("[data-sd-animated]")) {
+        el.removeAttribute("data-sd-animated");
+        if (el.hasAttribute("data-sd-animate-marker")) {
+          el.removeAttribute("data-sd-animate-marker");
+          el.removeAttribute("style");
+        }
+      }
+      root.normalize();
+      return root.innerHTML.replaceAll(">\n<", "><");
+    };
+    const streamed = render(source, true);
+    expect(streamed.querySelector("[data-sd-animate]")!.textContent).toBe("标");
+    expect(html(streamed)).toBe(html(render(source)));
     expect(render(source, true).querySelector("strong")!.textContent).toBe(
       "加粗",
     );

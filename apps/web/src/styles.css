@@ -44,6 +44,12 @@
   .markdown h3 {
     @apply font-semibold;
   }
+  .markdown :is(h1, h2, h3, h4, h5, h6) {
+    text-wrap: balance;
+  }
+  .markdown :is(p, li, blockquote) {
+    text-wrap: pretty;
+  }
   .markdown h1 {
     @apply text-xl;
   }
@@ -90,6 +96,9 @@
   --ease-in-out: linear;
   --animate-in: enter 60ms linear;
   --animate-out: exit 60ms linear;
+  --animate-skeleton-sweep: skeleton-sweep 1.6s linear infinite;
+  --animate-upload-pulse: upload-pulse 1.6s linear infinite;
+  --animate-copied-check: copied-check 2.5s linear both;
   --spacing: 0.225rem;
   --font-heading: var(--font-sans);
   --font-sans:
@@ -234,4 +243,56 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Animates `translate`, which -translate-x-full sets to keep it out of view
+   when it doesn't run. */
+@keyframes skeleton-sweep {
+  from {
+    translate: -100%;
+  }
+  to {
+    translate: 100%;
+  }
+}
+
+@keyframes upload-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes copied-check {
+  88% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Streamdown's animate plugin wraps each new character of streamed text in a
+   span and sets these variables on it (markdown.tsx). */
+@keyframes sd-grapheme {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+  }
+}
+
+[data-sd-animate] {
+  animation: var(--sd-animation) var(--sd-duration) var(--sd-easing)
+    var(--sd-delay, 0ms) both;
+}
+
+/* A list item's marker can't blur or fade, only change colour. */
+@keyframes sd-marker-in {
+  from {
+    color: transparent;
+  }
+}
+
+[data-sd-animate-marker]::marker {
+  animation: sd-marker-in var(--sd-marker-duration, 90ms)
+    var(--sd-marker-easing, linear) var(--sd-marker-delay, 0ms) both;
 }

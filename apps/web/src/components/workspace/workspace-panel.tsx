@@ -81,7 +81,7 @@ export function WorkspacePanel({
       value={view}
       onValueChange={(value) => onViewChange(value as WorkspaceView)}
       className={cn(
-        "relative z-10 min-h-0 min-w-0 gap-0 overflow-hidden border border-border/70 bg-background shadow-[0_2px_4px_-2px_rgb(0_0_0/0.06),0_12px_32px_-8px_rgb(0_0_0/0.12)] dark:shadow-[0_2px_4px_-2px_rgb(0_0_0/0.2),0_12px_32px_-8px_rgb(0_0_0/0.4)]",
+        "@container/panel relative z-10 min-h-0 min-w-0 gap-0 overflow-hidden border border-border/70 bg-background shadow-[0_2px_4px_-2px_rgb(0_0_0/0.06),0_12px_32px_-8px_rgb(0_0_0/0.12)] dark:shadow-[0_2px_4px_-2px_rgb(0_0_0/0.2),0_12px_32px_-8px_rgb(0_0_0/0.4)]",
         className,
       )}
     >
@@ -108,13 +108,18 @@ export function WorkspacePanel({
           aria-label={translateText("accessibility.workspaceTabs")}
           className="gap-1"
         >
-          {tabs.map(({ value, label }) => (
+          {tabs.map(({ value, icon: Icon, label }) => (
             <TabsTrigger
               key={value}
               value={value}
-              className="px-2 text-xs sm:px-3"
+              title={label}
+              className="group/tab px-2 text-xs sm:px-3"
             >
-              {label}
+              <Icon aria-hidden="true" />
+              {/* A narrow panel keeps only the open tab's name. */}
+              <span className="@max-[30rem]/panel:group-data-[state=inactive]/tab:sr-only">
+                {label}
+              </span>
               {value === "inbox" && pending ? (
                 <span className="tabular-nums">{pending}</span>
               ) : null}

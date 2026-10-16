@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 // What a place shows before and instead of its content, the same everywhere:
-// - Loading: grey bars in the shape of what is coming, faded in after a beat
-//   so a fast load never flashes them.
+// - Loading: grey bars in the shape of what is coming, a light sweeping
+//   across them, faded in after a beat so a fast load never flashes them.
 // - Empty: what goes here and how to start, centred in the space.
 // - LoadError: laid out the same, saying what failed, with a retry.
 
@@ -14,7 +14,10 @@ function Skeleton({ className }: { className?: string }) {
   return (
     <div
       aria-hidden="true"
-      className={cn("h-3 bg-muted motion-safe:animate-pulse", className)}
+      className={cn(
+        "relative h-3 overflow-hidden bg-muted after:absolute after:inset-0 after:-translate-x-full after:bg-linear-to-r after:from-transparent after:via-foreground/[0.06] after:to-transparent motion-safe:after:animate-skeleton-sweep",
+        className,
+      )}
     />
   );
 }
