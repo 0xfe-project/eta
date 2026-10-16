@@ -427,6 +427,16 @@ export function parseProviderModelCatalog(
 
 const CATALOG = parseProviderModelCatalog(rawCatalog);
 
+/**
+ * The parsed catalog: which kinds exist, how they authenticate, what they publish.
+ *
+ * Read by the management surface (P1.4), which answers "which accounts can I have" from the same
+ * data the runtime builds providers from — one description of a provider, not two.
+ */
+export function providerCatalog(): ReadonlyMap<string, ProviderCatalogEntry> {
+  return CATALOG;
+}
+
 /** pi-ai's own factories, for the live half of a model's capabilities. */
 const PI_PROVIDERS: Readonly<Record<string, Provider<Api>>> = {
   "openai-codex": openaiCodexProvider(),

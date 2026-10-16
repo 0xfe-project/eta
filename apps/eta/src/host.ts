@@ -12,12 +12,14 @@ import type { ProviderBuildFailure } from "./providers/runtime";
  * P0.7), because cordis dispatches a tree's events tree-wide: two kernels under one root would
  * hear each other's events.
  */
+import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import process from "node:process";
 import { createLocalEnvironment } from "@eta/execution-node";
 import { FileSessionStore, PluginManager, SessionManager } from "@eta/server";
 import { Context } from "cordis";
 import { AgentStore } from "./agents/store";
+import { adminPlugin } from "./bundled/admin";
 import { agentsPlugin } from "./bundled/agents";
 import { compatPlugin } from "./bundled/compat";
 import { groupsPlugin } from "./bundled/groups";
@@ -40,6 +42,7 @@ import { EventHub } from "./http/events";
 import { IdempotencyStore, withIdempotency } from "./http/idempotency";
 import { AskBridge } from "./interactions/bridge";
 import { InteractionStore } from "./interactions/store";
+import { providerCatalog } from "./providers/catalog";
 import { buildModels } from "./providers/runtime";
 import { RouteRegistry, RouteService } from "./routes";
 import { recordingModels, subjectOf } from "./usage/recorder";
@@ -116,6 +119,11 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   // (P0.6). A provider that cannot be built is a warning and a line in /host, not a dead host —
   // the ones that work still work.
   const providers = configuredProviders(config);
+  // When these connections were last changed: the config file is where they live, so its mtime is
+  // the closest thing to "added at" that exists — and it is a fact, not a guess.
+  const configWrittenAt = await stat(configPath)
+    .then((info) => info.mtime.toISOString())
+    .catch(() => new Date().toISOString());
   const credentials = new CodexCredentialStore(codexAuthPath(configPath));
   const { models: built, failed } = await buildModels(providers, {
     credentials,
@@ -234,6 +242,16 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     ctx.plugin(sessionsPlugin, { sessions, hub }),
     ctx.plugin(agentsPlugin, { agents, groups, hub, models }),
     ctx.plugin(usagePlugin, { usage }),
+    // The management surface a settings page reads (P1.4): derived, never stored.
+    ctx.plugin(adminPlugin, {
+      providers,
+      catalog: providerCatalog(),
+      failures: failed,
+      signedIn: async () =>
+        (await credentials.list()).map((entry) => entry.providerId),
+      usage,
+      createdAt: configWrittenAt,
+    }),
     ctx.plugin(groupsPlugin, { groups, runner, projector }),
     // The product API the existing web speaks (P2.4): AXP's shapes over our rows.
     ctx.plugin(compatPlugin, {

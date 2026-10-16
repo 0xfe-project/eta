@@ -26,6 +26,11 @@ export interface RecordingOptions {
  * until then a session counts under its own id, which is still an honest answer to "who spent
  * this".
  */
+/** The text of whatever was thrown, for a row that says why. */
+function reasonOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /**
  * A settled, empty assistant message that says the request failed.
  *
@@ -67,6 +72,7 @@ export function recordingModels(
   const record = (
     message: AssistantMessage | undefined,
     failed: boolean,
+    error?: string | undefined,
   ): void => {
     options.store.record({
       subject: options.subject,
@@ -75,6 +81,8 @@ export function recordingModels(
       failed,
       at: new Date(),
       ...(message === undefined ? {} : { usage: message.usage }),
+      // The provider's own words, so a settings page can tell a rate limit from a bad key.
+      ...(error === undefined ? {} : { error }),
     });
   };
 
@@ -129,7 +137,7 @@ export function recordingModels(
               model,
               new Error("the provider ended without a result"),
             );
-            record(undefined, true);
+            record(undefined, true, failure.errorMessage);
             out.push({ type: "error", reason: "error", error: failure });
             return;
           }
@@ -140,7 +148,7 @@ export function recordingModels(
           // has to be told how it ended: an error *event* settles the stream, while `end(undefined)`
           // leaves pi-ai's result pending forever, which is a run that never ends. The kernel reads
           // this as a cancellation when its own signal fired, and as a failure when it did not.
-          record(undefined, true);
+          record(undefined, true, reasonOf(error));
           out.push({
             type: "error",
             // pi-ai tells the two apart for us, and the kernel makes the same distinction: a

@@ -23,6 +23,8 @@ export interface UsageEntry {
       }
     | undefined;
   failed?: boolean | undefined;
+  /** Why it failed, when it did: the provider's own words. */
+  error?: string | undefined;
   /** The moment of the generation; only its hour is kept. */
   at?: Date | undefined;
 }
@@ -141,11 +143,12 @@ export class UsageStore {
     this.#handle
       .query(
         `INSERT INTO usage_hourly
-           (subject, provider, model, hour, requests, failed, input, output, cache_read, cache_write, reasoning, total)
-         VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+           (subject, provider, model, hour, requests, failed, input, output, cache_read, cache_write, reasoning, total, error)
+         VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (subject, provider, model, hour) DO UPDATE SET
            requests = requests + 1,
            failed = failed + excluded.failed,
+           error = COALESCE(excluded.error, error),
            input = input + excluded.input,
            output = output + excluded.output,
            cache_read = cache_read + excluded.cache_read,
@@ -165,7 +168,45 @@ export class UsageStore {
         usage?.cacheWrite ?? 0,
         usage?.reasoning ?? 0,
         usage?.totalTokens ?? 0,
+        entry.error ?? null,
       );
+  }
+
+  /**
+   * The newest hour each provider was used, and whether it worked.
+   *
+   * What a settings page needs to say why a connection is not healthy right now: the last thing
+   * that happened to it, rather than a count over a window. Newest first, and only rows that
+   * carry a failure reason are interesting — a success is the answer "it works".
+   */
+  lastPerProvider(): {
+    provider: string;
+    model: string;
+    hour: string;
+    failed: boolean;
+    error?: string | undefined;
+  }[] {
+    const rows = this.#handle
+      .query(
+        `SELECT provider, model, hour, failed, error
+           FROM usage_hourly
+          WHERE hour = (SELECT MAX(hour) FROM usage_hourly AS newer WHERE newer.provider = usage_hourly.provider)
+          ORDER BY hour DESC`,
+      )
+      .all() as {
+      provider: string;
+      model: string;
+      hour: string;
+      failed: number;
+      error: string | null;
+    }[];
+    return rows.map((row) => ({
+      provider: row.provider,
+      model: row.model,
+      hour: row.hour,
+      failed: row.failed > 0,
+      ...(row.error === null ? {} : { error: row.error }),
+    }));
   }
 
   /** Drop what is older than the retention. Returns how many rows went. */

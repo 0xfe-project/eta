@@ -70,6 +70,7 @@ describe("the migrations on disk", () => {
       "http/0001-idempotency",
       "interactions/0001-interactions",
       "usage/0001-usage",
+      "usage/0002-usage-error",
     ]);
     expect(migrations[0]?.sql).toContain("CREATE TABLE agents");
   });
@@ -86,6 +87,7 @@ describe("the migrations on disk", () => {
       "http/0001-idempotency",
       "interactions/0001-interactions",
       "usage/0001-usage",
+      "usage/0002-usage-error",
     ]);
     expect(tables(db)).toEqual([
       "agents",
@@ -98,11 +100,11 @@ describe("the migrations on disk", () => {
       "interaction",
       "usage_hourly",
     ]);
-    expect(schemaVersion(db)).toBe("usage/0001-usage");
+    expect(schemaVersion(db)).toBe("usage/0002-usage-error");
 
     // The second run: the same list, nothing applied.
     expect(applyMigrations(db, migrations)).toEqual([]);
-    expect(schemaVersion(db)).toBe("usage/0001-usage");
+    expect(schemaVersion(db)).toBe("usage/0002-usage-error");
     db.close();
   });
 
@@ -143,6 +145,7 @@ describe("the host's database", () => {
       "http/0001-idempotency",
       "interactions/0001-interactions",
       "usage/0001-usage",
+      "usage/0002-usage-error",
     ]);
     expect(tables(host.db.handle)).toContain("agents");
 
@@ -153,7 +156,7 @@ describe("the host's database", () => {
       schema: string;
     };
     expect(body.dbPath).toBe(databasePath(dataDir));
-    expect(body.schema).toBe("usage/0001-usage");
+    expect(body.schema).toBe("usage/0002-usage-error");
   });
 
   it("applies nothing on a second start, and says so", async () => {
@@ -172,6 +175,6 @@ describe("the host's database", () => {
     });
     hosts.push(second);
     expect(second.db.applied).toEqual([]);
-    expect(second.db.schema()).toBe("usage/0001-usage");
+    expect(second.db.schema()).toBe("usage/0002-usage-error");
   });
 });
