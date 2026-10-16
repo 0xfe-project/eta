@@ -35,6 +35,12 @@ export default {
       // Generated from the pinned Codex's app-server schema.
       ignore: ["src/protocol/**"],
     },
+    "packages/eta-core": {
+      // types/events.ts ends in a compile-time lock (_VocabularyMatches): its consumer is
+      // the compiler, not an import, so knip would flag it forever. The rest of that file is
+      // type declarations for the kernel's event vocabulary.
+      ignore: ["src/types/events.ts"],
+    },
     "apps/web": {
       // routeTree.gen.ts is gitignored, which knip skips, so the file routes
       // are entries themselves. public/sw.js is registered by URL in

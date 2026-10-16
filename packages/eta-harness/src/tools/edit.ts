@@ -21,7 +21,6 @@ import type { Static } from "typebox";
 import type { ExecutionToolContext } from "./context";
 import type { Edit } from "./edit-diff";
 import type { HarnessTool, ToolResult } from "./tool";
-import { getOrThrow } from "@eta/execution";
 import { Type } from "typebox";
 import {
   applyEditsToNormalizedContent,
@@ -203,4 +202,3 @@ export function createEditTool<
 }
 
 /** Re-exported so a host can inspect what an edit produced without importing the algorithm. */
-export { getOrThrow };

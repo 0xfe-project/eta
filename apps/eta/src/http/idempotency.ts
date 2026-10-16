@@ -79,7 +79,7 @@ export class IdempotencyStore {
 }
 
 /** The client's name for this request: its own id, sent so a retry is recognisable. */
-export function idempotencyKeyOf(request: Request): string | undefined {
+function idempotencyKeyOf(request: Request): string | undefined {
   const key = request.headers.get("idempotency-key");
   return key === null || key.length === 0 ? undefined : key;
 }

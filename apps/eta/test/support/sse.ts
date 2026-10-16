@@ -14,7 +14,6 @@ export interface SseFrame {
   event: string;
   /** The `data:` payload, parsed. */
   data: unknown;
-  raw: string;
 }
 
 export interface SseReader {
@@ -46,7 +45,7 @@ export function sseReader(response: Response): SseReader {
     } catch {
       parsed = data;
     }
-    return { id: Number(id), event, data: parsed, raw: block };
+    return { id: Number(id), event, data: parsed };
   };
 
   return {

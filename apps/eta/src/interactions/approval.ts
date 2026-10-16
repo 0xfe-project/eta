@@ -17,8 +17,8 @@ import type { AskPayload } from "@eta/core/session";
 import type { AskRegistry } from "@eta/harness";
 import type { SessionMeta } from "@eta/server";
 
-export const ALLOW = "allow";
-export const DENY = "deny";
+const ALLOW = "allow";
+const DENY = "deny";
 
 export interface ApprovalOptions {
   /** The tool names that need an answer first. Empty means nothing asks. */

@@ -140,8 +140,6 @@ export interface SessionManagerOptions {
   warn?: ((message: string) => void) | undefined;
 }
 
-export type { SessionEnvironment } from "@eta/plugin-sdk";
-
 /** Where a session's memory is, and how an extraction reaches a model. */
 export interface SessionMemoryWiring {
   home?: string | undefined;

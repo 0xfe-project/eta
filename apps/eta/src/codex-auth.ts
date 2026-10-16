@@ -73,7 +73,7 @@ export type CodexLoginRunner = (interaction: {
  * Kept behind a function so the module can be imported (and the state machine tested) without
  * pulling in a provider's network stack.
  */
-export const CODEX_PROVIDER_ID = "openai-codex";
+const CODEX_PROVIDER_ID = "openai-codex";
 
 /**
  * The default runner: pi-ai's own OAuth login, through a `Models` collection holding only the

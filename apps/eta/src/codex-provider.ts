@@ -9,7 +9,6 @@
 import type { Api, Model, Provider } from "@earendil-works/pi-ai";
 import type { EtaModelConfig } from "./providers/config-types";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
-import { providerModelCatalog } from "./providers/catalog";
 
 /** The provider, restricted to the models the config lists (or all of them when it lists none). */
 export function codexRuntimeProvider(
@@ -26,9 +25,3 @@ export function codexRuntimeProvider(
 }
 
 /** The models a codex login serves, from the checked-in catalog. */
-export function codexCatalog(): EtaModelConfig[] {
-  return providerModelCatalog({
-    kind: "openai-codex",
-    baseUrl: "https://chatgpt.com/backend-api",
-  });
-}

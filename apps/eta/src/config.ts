@@ -10,7 +10,7 @@ import { readFile } from "node:fs/promises";
 
 export type { EtaConfig, EtaProviderConfig };
 
-export const EMPTY_CONFIG: EtaConfig = {};
+const EMPTY_CONFIG: EtaConfig = {};
 
 /** The providers the config lists, in the order it lists them. */
 export function configuredProviders(config: EtaConfig): EtaProviderConfig[] {
@@ -18,7 +18,7 @@ export function configuredProviders(config: EtaConfig): EtaProviderConfig[] {
 }
 
 /** How many tools may be on the approval list: a settings file, not a program. */
-export const MAX_APPROVAL_TOOLS = 64;
+const MAX_APPROVAL_TOOLS = 64;
 
 /**
  * The tool names that ask before running, as the config lists them.

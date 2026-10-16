@@ -23,8 +23,6 @@ import type {
 import ignore from "ignore";
 import { parse } from "yaml";
 
-export { formatSkillInvocation } from "./prompt-blocks";
-
 /** A procedure loaded from a `SKILL.md`, or supplied by an application. */
 export interface Skill {
   /** Stable name used for lookup and model-visible listings. */

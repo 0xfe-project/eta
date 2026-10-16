@@ -208,7 +208,7 @@ export interface CompactionEvents {
   };
 }
 
-export interface RetryEvents {
+interface RetryEvents {
   /** A retryable failure scheduled another attempt, with the backoff that follows. */
   "retry:scheduled": {
     runId: string;
@@ -232,7 +232,7 @@ export interface RetryEvents {
   };
 }
 
-export interface BtwEvents {
+interface BtwEvents {
   /** A side thread was opened; its kind decides whether it inherits the run's context. */
   "btw:opened": { threadId: string; kind: "contextual" | "tangent" };
   /** A question went out to the side model. */
@@ -273,7 +273,7 @@ export interface StorageEvents {
   "storage:error": { op: string; error: string };
 }
 
-export interface QueueEvents {
+interface QueueEvents {
   /** The inbox changed; the runner reports what is left after taking its share. */
   "queue:update": { queues: { entryId: string; kind: string }[] };
 }

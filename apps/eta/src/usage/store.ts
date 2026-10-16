@@ -40,12 +40,12 @@ export interface UsageTotals {
   total: number;
 }
 
-export interface UsageWindow extends UsageTotals {
+interface UsageWindow extends UsageTotals {
   /** The window in hours: 5, 24, 168. */
   hours: number;
 }
 
-export interface UsageModelBreakdown extends UsageTotals {
+interface UsageModelBreakdown extends UsageTotals {
   provider: string;
   model: string;
 }
@@ -57,10 +57,10 @@ export interface UsageSubject {
 }
 
 /** How long the table is kept; AXP's number, kept because it is a sensible one. */
-export const RETENTION_DAYS = 30;
+const RETENTION_DAYS = 30;
 
 /** The windows a settings page asks for, in hours. */
-export const WINDOWS = [5, 24, 168] as const;
+const WINDOWS = [5, 24, 168] as const;
 
 const hourOf = (at: Date): string => at.toISOString().slice(0, 13);
 

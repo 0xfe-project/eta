@@ -64,7 +64,7 @@ export interface MessageRecord {
 }
 
 /** Every state a timeline row can be in. A user's own message is written straight to `done`. */
-export type ReplyStatus =
+type ReplyStatus =
   | "queued"
   | "working"
   | "waiting_for_input"

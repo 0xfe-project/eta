@@ -152,7 +152,7 @@ export function fallbackPersona(
 }
 
 /** Why a card was chosen, so the host can say when the model did not decide. */
-export type PersonaPickSource = "model" | "preferred" | "fallback";
+type PersonaPickSource = "model" | "preferred" | "fallback";
 
 export interface PersonaPick {
   id: string;
@@ -160,9 +160,9 @@ export interface PersonaPick {
 }
 
 /** Room for a thinking model to think and still reach the id. */
-export const AUTOPICK_MAX_TOKENS = 1_024;
+const AUTOPICK_MAX_TOKENS = 1_024;
 
-export const PICKER_SYSTEM_PROMPT =
+const PICKER_SYSTEM_PROMPT =
   "You choose the persona card for a chat that is about to start. Reply with exactly one id from the list and nothing else: no quotes, no punctuation, no sentence.";
 
 function escapeForLiteral(text: string): string {

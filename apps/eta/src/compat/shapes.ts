@@ -171,7 +171,7 @@ export function toMessage(message: MessageRecord): AxpMessage {
   };
 }
 
-export function toParticipant(
+function toParticipant(
   participant: ParticipantRecord,
   name: string,
 ): AxpParticipant {

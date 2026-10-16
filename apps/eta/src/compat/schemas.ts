@@ -64,7 +64,7 @@ export const messageSchema = z.object({
   created_at: z.string(),
 });
 
-export const participantSchema = z.object({
+const participantSchema = z.object({
   agent_id: z.string(),
   member: z.boolean(),
   name: z.string(),
@@ -105,7 +105,7 @@ export const agentSchema = z.object({
   revision: z.number().int(),
 });
 
-export const interactionOptionSchema = z.object({
+const interactionOptionSchema = z.object({
   value: z.string(),
   label: z.string(),
 });

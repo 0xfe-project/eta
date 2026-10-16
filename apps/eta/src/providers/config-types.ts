@@ -9,11 +9,7 @@
  * hand-edited config file safe to read — both worth testing without a file at all.
  */
 
-import type {
-  ProviderHeaders,
-  ProviderKind,
-  ProviderSummary,
-} from "@eta/client-contracts";
+import type { ProviderHeaders, ProviderKind } from "@eta/client-contracts";
 import type { ThinkingLevel } from "@eta/core";
 
 export const MODEL_THINKING_LEVELS = [
@@ -130,10 +126,10 @@ export interface EtaConfig {
 }
 
 /** RFC 7230 token: the only names worth accepting from a settings form. */
-export const HEADER_NAME_PATTERN = /^[!#$%&'*+.^\w`|~-]+$/;
-export const MAX_PROVIDER_HEADERS = 32;
-export const MAX_HEADER_NAME_LENGTH = 128;
-export const MAX_HEADER_VALUE_LENGTH = 8192;
+const HEADER_NAME_PATTERN = /^[!#$%&'*+.^\w`|~-]+$/;
+const MAX_PROVIDER_HEADERS = 32;
+const MAX_HEADER_NAME_LENGTH = 128;
+const MAX_HEADER_VALUE_LENGTH = 8192;
 
 /**
  * Read-path sanitising for a config file that may have been hand-edited: unusable entries are
@@ -170,33 +166,11 @@ export function sanitizeProviderHeaders(
 }
 
 /** Provider overrides applied over transport defaults, case-insensitively; `null` removes a header. */
-export function applyProviderHeaders(
-  base: Record<string, string>,
-  headers?: ProviderHeaders,
-): Record<string, string> {
-  const out: Record<string, string> = { ...base };
-  for (const [rawName, value] of Object.entries(headers ?? {})) {
-    const name = rawName.trim();
-    if (!HEADER_NAME_PATTERN.test(name)) continue;
-    for (const existing of Object.keys(out)) {
-      if (existing.toLowerCase() === name.toLowerCase()) delete out[existing];
-    }
-    if (value !== null) out[name] = value;
-  }
-  return out;
-}
-
 export function effectiveModel(model: EtaModelConfig): EtaModelConfig {
   return { ...model, ...model.overrides };
 }
 
 /** Undefined means the provider did not publish input capabilities. */
-export function modelSupportsVision(
-  model: ModelCapabilities,
-): boolean | undefined {
-  return model.input === undefined ? undefined : model.input.includes("image");
-}
-
 /**
  * The thinking levels a model declares.
  *
@@ -214,26 +188,6 @@ export function modelThinkingLevels(input: EtaModelConfig): ThinkingLevel[] {
   const off = model.thinkingMode === "both";
   return [...(off ? (["off"] as const) : []), ...efforts];
 }
-
-export function modelDefaultThinking(input: EtaModelConfig): ThinkingLevel {
-  const model = effectiveModel(input);
-  const levels = modelThinkingLevels(model);
-  if (
-    model.defaultThinking !== undefined &&
-    levels.includes(model.defaultThinking)
-  )
-    return model.defaultThinking;
-  if (
-    model.providerDefaultEffort !== undefined &&
-    levels.includes(model.providerDefaultEffort)
-  ) {
-    return model.providerDefaultEffort;
-  }
-  // "off" is the harness's no-parameter setting. The provider adapter only translates it to an
-  // explicit disable when the model actually offers an off switch.
-  return "off";
-}
-
 /** `provider:modelId`, else the first configured model. */
 export function configDefaultModel(
   config: EtaConfig,
@@ -254,19 +208,3 @@ export function configDefaultModel(
 }
 
 /** One provider, as a client sees it: the key becomes `hasApiKey`, the headers stay. */
-export function providerSummary(provider: EtaProviderConfig): ProviderSummary {
-  const headers = sanitizeProviderHeaders(provider.headers);
-  return {
-    id: provider.id,
-    ...(provider.name === undefined ? {} : { name: provider.name }),
-    kind: provider.kind ?? "openai-compatible",
-    baseUrl: provider.baseUrl,
-    hasApiKey:
-      typeof provider.apiKey === "string" && provider.apiKey.length > 0,
-    ...(headers === undefined ? {} : { headers }),
-    models: provider.models.map(effectiveModel),
-    ...(provider.lastRefreshedAt === undefined
-      ? {}
-      : { lastRefreshedAt: provider.lastRefreshedAt }),
-  };
-}

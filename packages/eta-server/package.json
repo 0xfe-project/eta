@@ -15,11 +15,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "0.85.1",
     "@eta/client-contracts": "*",
-    "@eta/client-wire-proto": "*",
     "@eta/core": "*",
-    "@eta/execution-node": "*",
     "@eta/harness": "*",
     "@eta/plugin-sdk": "*",
     "@eta/storage-jsonl": "*",

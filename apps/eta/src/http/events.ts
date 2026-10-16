@@ -32,7 +32,7 @@ export interface EventHubOptions {
  * it" and no frame is written — the seq is still consumed, so a client resuming from the id of
  * the last frame it *saw* loses nothing.
  */
-export interface EventTranslation {
+interface EventTranslation {
   name: string;
   data: unknown;
 }
@@ -41,13 +41,13 @@ export type EventTranslator = (
   event: ProductEvent,
 ) => EventTranslation | undefined;
 
-export type Cursor =
+type Cursor =
   | { kind: "none" }
   | { kind: "cursor"; value: number }
   | { kind: "invalid"; raw: string };
 
 /** `Last-Event-ID` if the caller sent one, otherwise `?cursor=`; a bad value is not ignored. */
-export function parseCursor(request: Request): Cursor {
+function parseCursor(request: Request): Cursor {
   const raw =
     request.headers.get("last-event-id") ??
     new URL(request.url).searchParams.get("cursor");

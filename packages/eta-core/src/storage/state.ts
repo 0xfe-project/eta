@@ -27,7 +27,7 @@ function physicalKey(namespace: string, key: string): string {
 }
 
 /** Code-point comparison: stable for keys that mix numbers and letters. */
-export function compareKeys(left: string, right: string): number {
+function compareKeys(left: string, right: string): number {
   const leftCodePoints = Array.from(
     left,
     (character) => character.codePointAt(0)!,

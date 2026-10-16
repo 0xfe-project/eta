@@ -19,7 +19,7 @@ export interface RoutesApi {
   routes: () => { method: string; pattern: string }[];
 }
 
-export type PluginDisposer = () => void | Promise<void>;
+type PluginDisposer = () => void | Promise<void>;
 
 export interface PluginContext {
   routes: RoutesApi;

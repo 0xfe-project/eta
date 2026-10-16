@@ -38,15 +38,8 @@ export interface DiscoveryResult {
 }
 
 /** Whether this provider's models come from its own endpoint. */
-export function discoversModels(reference: ProviderReference): boolean {
-  const definition = providerDefinitionForKind(reference.kind);
-  return definition?.discovery.adapter === "openai-models";
-}
-
 /** Whether a discovered model has to declare a context window to be usable. */
-export function discoveryRequiresContextWindow(
-  reference: ProviderReference,
-): boolean {
+function discoveryRequiresContextWindow(reference: ProviderReference): boolean {
   return (
     providerDefinitionForKind(reference.kind)?.discovery
       .requireContextWindow === true

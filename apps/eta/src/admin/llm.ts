@@ -35,7 +35,7 @@ export interface AdminConnector {
   hint?: string | undefined;
 }
 
-export interface AdminReason {
+interface AdminReason {
   code: string;
   message: string;
 }
@@ -90,7 +90,7 @@ export interface AdminAgentUsage {
   accounts: (AdminCounts & { name: string })[];
 }
 
-export interface AdminCounts {
+interface AdminCounts {
   requests: number;
   failed: number;
   input_tokens: number;
@@ -121,19 +121,12 @@ export interface AdminInput {
 }
 
 /** Whether a provider's own words say it is asking us to slow down. */
-export function isRateLimit(message: string | undefined): boolean {
+function isRateLimit(message: string | undefined): boolean {
   if (message === undefined) return false;
   return /429|rate.?limit|too many requests|quota exceeded/i.test(message);
 }
 
 /** Whether the provider is telling us the credential is the problem. */
-export function isAuthFailure(message: string | undefined): boolean {
-  if (message === undefined) return false;
-  return /401|403|unauthorized|forbidden|invalid.?api.?key|authentication/i.test(
-    message,
-  );
-}
-
 /** The kinds an account can be of. */
 export function connectorsOf(
   catalog: ReadonlyMap<string, ProviderCatalogEntry>,
@@ -287,7 +280,7 @@ export function modelsOf(input: AdminInput): AdminModel[] {
  * does not poll each provider for the quota it has left. The route exists because the page asks for
  * it, and an empty list renders as "nothing to show" rather than an error.
  */
-export function usageOf(_input: AdminInput): AdminUsage[] {
+export function usageOf(): AdminUsage[] {
   return [];
 }
 

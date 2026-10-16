@@ -75,7 +75,7 @@ export const adminPlugin = {
 
     plugin.effect(() =>
       plugin.routes.register("GET", "/api/llm/v1/usage", async () =>
-        Response.json(usageOf(await input())),
+        Response.json(usageOf()),
       ),
     );
 
@@ -101,7 +101,7 @@ export const adminPlugin = {
         return Response.json({
           connections: connectionsOf(fresh),
           models: modelsOf(fresh),
-          usage: usageOf(fresh),
+          usage: usageOf(),
         });
       }),
     );

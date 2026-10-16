@@ -278,7 +278,7 @@ function parseRuntime(
 }
 
 /** Parse the checked-in catalog. Exported so a test can feed it something broken. */
-export function parseProviderModelCatalog(
+function parseProviderModelCatalog(
   value: unknown,
 ): Map<string, ProviderCatalogEntry> {
   const root = object(value, "root");
@@ -493,9 +493,7 @@ function fromPiModel(model: Model<Api>): EtaModelConfig {
  * the catalog lists — that is what stops a manually injected model id from becoming an alias for
  * something the provider will reject at request time.
  */
-export function providerModelCatalog(
-  provider: ProviderReference,
-): EtaModelConfig[] {
+function providerModelCatalog(provider: ProviderReference): EtaModelConfig[] {
   const id = catalogId(provider);
   if (id === undefined) return [];
   const entry = CATALOG.get(id);
@@ -516,16 +514,14 @@ export function providerModelCatalog(
   }));
 }
 
-export function providerModelDefinition(
+function providerModelDefinition(
   provider: ProviderReference,
   modelId: string,
 ): EtaModelConfig | undefined {
   return providerModelCatalog(provider).find((model) => model.id === modelId);
 }
 
-export function providerCatalogRestrictsModels(
-  provider: ProviderReference,
-): boolean {
+function providerCatalogRestrictsModels(provider: ProviderReference): boolean {
   if (isCustomKind(provider.kind)) return false;
   return (
     providerDefinitionForKind(provider.kind)?.restrictToListedModels === true
@@ -548,8 +544,3 @@ export function resolveConfiguredModels(
 }
 
 /** The catalog itself, for the providers that publish one (a settings page renders it). */
-export function catalogModelsFor(
-  provider: ProviderReference,
-): EtaModelConfig[] {
-  return providerModelCatalog(provider);
-}

@@ -23,7 +23,7 @@ export interface Migration {
   sql: string;
 }
 
-export const MIGRATION_TABLE = "eta_migrations";
+const MIGRATION_TABLE = "eta_migrations";
 
 const DEFAULT_ROOT = fileURLToPath(new URL("./migrations/", import.meta.url));
 

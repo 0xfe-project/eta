@@ -202,7 +202,7 @@ export async function buildModels(
 }
 
 /** One provider, built. Throws with the reason when the kind has no runtime. */
-export async function buildProvider(
+async function buildProvider(
   provider: EtaProviderConfig,
   options: { fetch?: typeof fetch } = {},
 ): Promise<Provider<Api>> {

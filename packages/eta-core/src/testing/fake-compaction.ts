@@ -12,7 +12,7 @@
  */
 import type { CompactionDriver, CompactionHost } from "../kernel/compaction";
 
-export type CompactionSignal = "threshold" | "overflow" | "manual";
+type CompactionSignal = "threshold" | "overflow" | "manual";
 
 export interface FakeCompactionOptions {
   /** What the replacement context says. */

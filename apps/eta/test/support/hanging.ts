@@ -86,7 +86,7 @@ export function breakingModels(message: string): {
   };
 }
 
-export function hangingModels(_unused?: AssistantMessage): HangingModels {
+export function hangingModels(): HangingModels {
   const scripted = fakeModels([]);
   const signals: (AbortSignal | undefined)[] = [];
   let resolveRequested!: () => void;
