@@ -64,8 +64,8 @@ describe("the migrations on disk", () => {
     const migrations = await loadMigrations();
     expect(migrations.map((migration) => migration.id)).toEqual([
       "agents/0001-agents",
+      "groups/0001-groups",
       "http/0001-idempotency",
-
       "usage/0001-usage",
     ]);
     expect(migrations[0]?.sql).toContain("CREATE TABLE agents");
@@ -77,13 +77,17 @@ describe("the migrations on disk", () => {
 
     expect(applyMigrations(db, migrations)).toEqual([
       "agents/0001-agents",
+      "groups/0001-groups",
       "http/0001-idempotency",
-
       "usage/0001-usage",
     ]);
     expect(tables(db)).toEqual([
       "agents",
+      "chat_group",
       "eta_migrations",
+      "group_message",
+      "group_participant",
+      "group_wake",
       "http_idempotency",
       "usage_hourly",
     ]);
@@ -126,8 +130,8 @@ describe("the host's database", () => {
     expect((await stat(host.db.path)).isFile()).toBe(true);
     expect(host.db.applied).toEqual([
       "agents/0001-agents",
+      "groups/0001-groups",
       "http/0001-idempotency",
-
       "usage/0001-usage",
     ]);
     expect(tables(host.db.handle)).toContain("agents");

@@ -19,6 +19,7 @@ import { FileSessionStore, PluginManager, SessionManager } from "@eta/server";
 import { Context } from "cordis";
 import { AgentStore } from "./agents/store";
 import { agentsPlugin } from "./bundled/agents";
+import { groupsPlugin } from "./bundled/groups";
 import { hostPlugin } from "./bundled/host";
 import { sessionsPlugin } from "./bundled/sessions";
 import { usagePlugin } from "./bundled/usage";
@@ -31,6 +32,7 @@ import {
   schemaVersion,
 } from "./db/migrations";
 import { DbService } from "./db/service";
+import { GroupStore } from "./groups/store";
 import { EventHub } from "./http/events";
 import { IdempotencyStore, withIdempotency } from "./http/idempotency";
 import { buildModels } from "./providers/runtime";
@@ -74,6 +76,8 @@ export interface Host {
   agents: AgentStore;
   /** Who spent what: every generation is counted as it happens. */
   usage: UsageStore;
+  /** Groups: who is in them, what was said, and what woke whom. */
+  groups: GroupStore;
   /** Providers that could not be built, with the reason. The rest are in `models`. */
   providerFailures: readonly ProviderBuildFailure[];
   port: number;
@@ -161,6 +165,7 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   );
   const hub = new EventHub();
   const agents = new AgentStore(handle);
+  const groups = new GroupStore(handle);
   const status: HostStatus = {
     pid: process.pid,
     dataDir: options.dataDir,
@@ -185,8 +190,9 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   const fibers = [
     ctx.plugin(hostPlugin, { status }),
     ctx.plugin(sessionsPlugin, { sessions, hub }),
-    ctx.plugin(agentsPlugin, { agents, models }),
+    ctx.plugin(agentsPlugin, { agents, groups, models }),
     ctx.plugin(usagePlugin, { usage }),
+    ctx.plugin(groupsPlugin, { groups }),
   ];
 
   const manager = new PluginManager({
@@ -221,6 +227,7 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     sessions,
     store,
     agents,
+    groups,
     usage,
     port: server.port ?? 0,
     config,

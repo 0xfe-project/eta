@@ -18,12 +18,15 @@
 import type { KernelModels } from "@eta/core";
 import type { Context } from "cordis";
 import type { AgentStore } from "../agents/store";
+import type { GroupStore } from "../groups/store";
 import type { PluginContext } from "../plugin-api";
 import { formatModelId, parseModelId } from "@eta/server";
 import { errorResponse } from "../routes";
 
 export interface AgentsPluginConfig {
   agents: AgentStore;
+  /** The one product rule that ties the two together: an agent has a private group. */
+  groups: GroupStore;
   /** The model layer, for checking that a named model is one this host can actually reach. */
   models: KernelModels | undefined;
 }
@@ -52,7 +55,7 @@ export const agentsPlugin = {
   inject: ["routes"],
   apply(ctx: Context, config: AgentsPluginConfig): void {
     const plugin = ctx as unknown as PluginContext;
-    const { agents, models } = config;
+    const { agents, groups, models } = config;
 
     const notFound = (id: string): Response =>
       errorResponse(
@@ -112,6 +115,9 @@ export const agentsPlugin = {
             ? {}
             : { plugins: asPlugins(body.plugins)! }),
         });
+        // The agent's private group, made in the same breath: a conversation belongs to
+        // something, and an agent nobody can open a conversation with is a row nobody reaches.
+        groups.ensurePrivateGroup(agent.id, agent.name);
         return Response.json({ agent }, { status: 201 });
       }),
     );
@@ -161,9 +167,11 @@ export const agentsPlugin = {
         // A hard delete today. AXP *hid* agents because tasks and messages pointed at them;
         // nothing points at one yet, so there is nothing to keep the row for — when P3 gives an
         // agent references, this becomes a hide, and that is a decision to make then.
-        return agents.remove(id)
-          ? new Response(null, { status: 204 })
-          : notFound(id);
+        // The private group first: deleting the agent cascades its participant rows away, and
+        // the group would then be an empty room nobody can find.
+        groups.removePrivateGroupsOf(id);
+        if (!agents.remove(id)) return notFound(id);
+        return new Response(null, { status: 204 });
       }),
     );
   },
