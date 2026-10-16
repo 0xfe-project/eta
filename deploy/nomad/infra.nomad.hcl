@@ -75,6 +75,11 @@ job "infra" {
         destination = "/var/lib/postgresql/data"
       }
       kill_timeout = "30s"
+      # No Nomad log collection (a logmon and a docker_logger process per
+      # task): docker logs reads the output.
+      logs {
+        disabled = true
+      }
       resources {
         cpu        = 500
         memory     = 512
@@ -106,6 +111,11 @@ job "infra" {
       volume_mount {
         volume      = "data"
         destination = "/data"
+      }
+      # No Nomad log collection (a logmon and a docker_logger process per
+      # task): docker logs reads the output.
+      logs {
+        disabled = true
       }
       resources {
         cpu        = 200
@@ -142,6 +152,11 @@ job "infra" {
       volume_mount {
         volume      = "data"
         destination = "/data"
+      }
+      # No Nomad log collection (a logmon and a docker_logger process per
+      # task): docker logs reads the output.
+      logs {
+        disabled = true
       }
       resources {
         cpu        = 200
@@ -187,6 +202,11 @@ job "infra" {
       volume_mount {
         volume      = "data"
         destination = "/data"
+      }
+      # No Nomad log collection (a logmon and a docker_logger process per
+      # task): docker logs reads the output.
+      logs {
+        disabled = true
       }
       resources {
         cpu        = 200

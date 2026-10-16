@@ -38,6 +38,11 @@ job "backup" {
         volume      = "backups"
         destination = "/backups"
       }
+      # No Nomad log collection (a logmon and a docker_logger process per
+      # task): docker logs reads the output.
+      logs {
+        disabled = true
+      }
       resources {
         cpu    = 200
         memory = 256

@@ -110,7 +110,7 @@ Turbo 用 Vercel Remote Cache（`turbo.json` 的 `remoteCache.teamId`），本�
 
 日志、错误和 trace 都由各进程直接用 Sentry 的 SDK 发到自建的 [Rustrak](https://github.com/rustrak/rustrak)（兼容 Sentry 协议；GPL-3.0，只以官方镜像独立运行，`deploy/nomad/infra.nomad.hcl`）。Go 用 `log/slog` 和 `sentry-go`（`packages/telemetry-go`），Python 用标准库 `logging` 和 `sentry-sdk`（`bundles/memory/service/axp_memory/telemetry.py`），Web 服务端用 `@sentry/bun`（`apps/web/src/server/telemetry.ts`），浏览器用 `@sentry/react`（`apps/web/src/lib/report.ts`）。控制面内嵌的 CLIProxyAPI 的 logrus 记录也经 slog 走同一条路（`library=cliproxy`）。
 
-- 每条日志（`INFO` 及以上）在 stderr 输出一行可读格式 `15:04:05.000 INFO  消息 key=value`（UTC），供 `nomad alloc logs` 看；同时是一条 Sentry 日志。
+- 每条日志（`INFO` 及以上）在 stderr 输出一行可读格式 `15:04:05.000 INFO  消息 key=value`（UTC），供 `docker logs` 看；同时是一条 Sentry 日志。
 - `ERROR` 记录是 Sentry 事件，按消息聚合成 issue；未捕获的异常和 panic 也是。HTTP 请求各是一个 transaction（健康检查除外）。
 - 浏览器报未捕获的错误、未处理的 rejection 和 React 的渲染错误。生产构建给每个文件和它的 source map 加上 debug id（`sentry sourcemap inject`），部署时把 source map 上传到 Rustrak，压缩后的堆栈就能还原到源码行。
 - 浏览器和环境包的服务经网关的 `/sentry` 发送（只转发 envelope），DSN 只有公钥，不持有凭据。

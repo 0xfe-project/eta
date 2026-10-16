@@ -84,6 +84,7 @@ RUN axp-plugins chat /opt/axp/plugins /etc/codex /opt/axp/plugins
 - **AXP 给它的**放进每个 task 的环境变量（jobspec 自己写的同名变量会被覆盖）：`AXP_GATEWAY_URL`（runtime 网关）、配置了 Sentry 时的 `SENTRY_DSN`（控制面的项目，经 runtime 网关的 `/sentry`，只有公钥）、`AXP_PUBLIC_URL`、`AXP_VERSION`、`AXP_BUNDLE_SECRET`（它自己的密钥，控制面也能派生）、声明了 `uses` 时的 `AXP_BUNDLE_TOKEN`、`database: true` 时的 `DATABASE_URL`（AXP 在自己的 PostgreSQL 上建的库 `<主库>_bundle_<name>` 和同名账号，带 pgvector，地址是容器看到的宿主 `172.26.64.1`），以及环境包配置（`config`）完整时的值。
 - **令牌**只能用 `uses` 里声明的：`llm`（模型的 `/v1`）和其他环境包的服务（按名字）。它碰不到插件路由、GitHub 凭据和管理接口。
 - **镜像**：名字是 `axp-<x>`、没有仓库和标签的镜像是 AXP 自己构建的，换成本机 Docker 里本次部署的版本；其他镜像原样使用（Nomad 会拉取）。
+- **日志**：controller 关掉每个 task 的 Nomad 日志收集（`logs { disabled = true }`，见 `deploy/README.md`），输出用 `docker logs` 看，错误和日志发到 Rustrak（`SENTRY_DSN`）。
 - **卷**：jobspec 里 `type = "host"` 的 `volume`，controller 先在命名空间里创建同名的 host volume（`mkdir` 插件，任何用户可写），再运行 job。
 - **共享**：每个 AXP 只有一份，所有载入它的智能体共用，服务自己按智能体隔离数据。
 - **发现**：`protocol` 写了时，服务就绪后 controller 读一次它的 `/.well-known/axp-service`（`{"protocol", "version"}`），协议不同就是 `incompatible`。

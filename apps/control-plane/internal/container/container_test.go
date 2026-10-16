@@ -21,8 +21,20 @@ func TestAnAgentsJob(t *testing.T) {
 		t.Fatalf("group %+v", group)
 	}
 	task := group.Tasks[0]
-	if task.Config["image"] != "axp-agent:1" || task.Env["A"] != "1" || *task.VolumeMounts[0].Destination != home {
+	if task.Config["image"] != "axp-agent:1" || task.Env["A"] != "1" || *task.VolumeMounts[0].Destination != home || !*task.LogConfig.Disabled {
 		t.Fatalf("task %+v", task)
+	}
+}
+
+// The shape is what agents' jobs have in common, not their spec.
+func TestTheShapeIsTheJobWithoutItsSpec(t *testing.T) {
+	n := &Nomad{Namespace: "test-agents"}
+	job := n.job(Spec{AgentID: "a1", Image: "axp-agent:1", Config: "c1"})
+	if job.Meta[shapeMeta] == "" || job.Meta[shapeMeta] != n.job(Spec{AgentID: "a2", Image: "axp-agent:2", Config: "c2"}).Meta[shapeMeta] {
+		t.Fatalf("shape %v", job.Meta)
+	}
+	if other := (&Nomad{Namespace: "elsewhere"}).shape(); other == n.shape() {
+		t.Fatal("another shape has the same digest")
 	}
 }
 

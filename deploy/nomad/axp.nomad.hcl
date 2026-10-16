@@ -72,6 +72,11 @@ job "axp" {
         change_mode   = "signal"
         change_signal = "SIGUSR1"
       }
+      # No Nomad log collection (a logmon and a docker_logger process per
+      # task): docker logs reads the output.
+      logs {
+        disabled = true
+      }
       resources {
         cpu    = 100
         memory = 128
@@ -99,6 +104,11 @@ job "axp" {
         data        = local.env
         destination = "secrets/axp.env"
         env         = true
+      }
+      # No Nomad log collection (a logmon and a docker_logger process per
+      # task): docker logs reads the output.
+      logs {
+        disabled = true
       }
       resources {
         cpu    = 100
@@ -156,6 +166,11 @@ job "axp" {
         destination = "/app/var/llm"
       }
       kill_timeout = "5s"
+      # No Nomad log collection (a logmon and a docker_logger process per
+      # task): docker logs reads the output.
+      logs {
+        disabled = true
+      }
       resources {
         cpu        = 500
         memory     = 512
@@ -186,6 +201,11 @@ job "axp" {
         env         = true
       }
       kill_timeout = "30s"
+      # No Nomad log collection (a logmon and a docker_logger process per
+      # task): docker logs reads the output.
+      logs {
+        disabled = true
+      }
       resources {
         cpu        = 200
         memory     = 256
@@ -217,6 +237,11 @@ job "axp" {
         env         = true
       }
       kill_timeout = "30s"
+      # No Nomad log collection (a logmon and a docker_logger process per
+      # task): docker logs reads the output.
+      logs {
+        disabled = true
+      }
       resources {
         cpu        = 200
         memory     = 256

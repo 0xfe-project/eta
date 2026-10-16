@@ -53,7 +53,7 @@ sudo systemctl enable --now nomad
 ```sh
 deploy/nomad/deploy.sh                  # 部署工作区（bun run deploy 同此）
 deploy/nomad/deploy.sh --version <tag>  # 回到本机已有的版本（回滚），不构建也不迁移
-nomad alloc logs -namespace axp -job axp -task api -f   # 日志，也在 Rustrak
+docker logs -f $(docker ps -qf name=^api-)  # 日志（容器名是 <task>-<alloc ID>），也在 Rustrak
 ```
 
 一次部署做的事：
@@ -101,6 +101,8 @@ Nomad 自己的界面在 `http://127.0.0.1:4646/ui`。
 - Artifact 也可以放外部 S3：在 `production.env` 设 `AXP_S3_ENDPOINT`、`AXP_S3_BUCKET`、`AXP_S3_REGION` 和 `AXP_S3_ACCESS_KEY_ID`/`AXP_S3_SECRET_ACCESS_KEY`；已有的对象不会自动搬。
 
 ## 日志
+
+Nomad 不收集任何 task 的日志（每个 job 的 task 都写了 `logs { disabled = true }`，智能体和环境包服务的 job 由 controller 设置）：收集日志要给每个 task 配一个 `logmon` 和一个 `docker_logger` 进程，各约 13 MB。容器的输出留在 Docker 的 json-file 里（每个容器最多 2 个 2 MB 的文件），用 `docker logs` 看；`nomad alloc logs` 返回 404。
 
 各进程用 Sentry 的 SDK 发到 Rustrak 的项目 `axp`，标签 `service`（`web`、`control-plane`、`memory-service`）和 `command`（控制面的 `serve`、`controller`、`routine-worker`、`migrate`）区分来源，release 是部署的版本（`AXP_VERSION`）。浏览器和环境包服务经网关的 `/sentry` 发送。Codex 自己的 OpenTelemetry 导出关掉了，智能体的 prompt trace 不再收集。
 

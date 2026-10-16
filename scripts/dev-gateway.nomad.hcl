@@ -75,6 +75,11 @@ job "gateway" {
         change_mode   = "signal"
         change_signal = "SIGUSR1"
       }
+      # No Nomad log collection (a logmon and a docker_logger process per
+      # task): docker logs reads the output.
+      logs {
+        disabled = true
+      }
       resources {
         cpu    = 100
         memory = 128

@@ -40,6 +40,9 @@ func TestPrepareMakesTheJobTheBundles(t *testing.T) {
 	if tasks[0].Env["AXP_VERSION"] != "abc" || tasks[0].Env["OWN"] != "1" || tasks[1].Env["DATABASE_URL"] != "postgres://x" {
 		t.Fatalf("env %v %v", tasks[0].Env, tasks[1].Env)
 	}
+	if !*tasks[0].LogConfig.Disabled || !*tasks[1].LogConfig.Disabled {
+		t.Fatal("Nomad collects the service's logs")
+	}
 }
 
 func TestOnlyServiceJobsWithTheBundlesService(t *testing.T) {

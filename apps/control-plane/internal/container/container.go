@@ -7,6 +7,9 @@ package container
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -19,7 +22,11 @@ import (
 )
 
 const (
-	configMeta  = "axp.config"
+	configMeta = "axp.config"
+	// The job's shape (job.go, without the spec): a job of another shape
+	// counts as another configuration, so changing how agents run replaces
+	// their jobs between turns.
+	shapeMeta   = "axp.shape"
 	stopSeconds = 10
 	// The runtime's control API (apps/agent-runtime/src/server.ts).
 	controlPort = 8080
@@ -115,6 +122,7 @@ func (n *Nomad) List(ctx context.Context) ([]Runtime, error) {
 			delete(n.addresses, id)
 		}
 	}
+	shape := n.shape()
 	var out []Runtime
 	for _, job := range jobs {
 		// A job that is stopping is as good as none: the next Run replaces it.
@@ -122,6 +130,9 @@ func (n *Nomad) List(ctx context.Context) ([]Runtime, error) {
 			continue
 		}
 		r := Runtime{AgentID: strings.TrimPrefix(job.ID, "agent-"), Config: job.Meta[configMeta], State: Starting}
+		if job.Meta[shapeMeta] != shape {
+			r.Config = ""
+		}
 		if alloc := running[job.ID]; alloc != "" {
 			address, err := n.address(ctx, alloc)
 			if err != nil {
@@ -173,6 +184,19 @@ func (n *Nomad) Run(ctx context.Context, spec Spec) error {
 // waiting longer each time it fails. The memory limit is above what it
 // reserves.
 func (n *Nomad) job(spec Spec) *api.Job {
+	job := n.shaped(spec)
+	job.Meta = map[string]string{configMeta: spec.Config, shapeMeta: n.shape()}
+	return job
+}
+
+// shape is a digest of an agent's job without its spec.
+func (n *Nomad) shape() string {
+	data, _ := json.Marshal(n.shaped(Spec{}))
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:8])
+}
+
+func (n *Nomad) shaped(spec Spec) *api.Job {
 	id := jobID(spec.AgentID)
 	task := api.NewTask("runtime", "docker")
 	task.Config = map[string]any{"image": spec.Image, "force_pull": false}
@@ -180,6 +204,9 @@ func (n *Nomad) job(spec Spec) *api.Job {
 	task.Resources = &api.Resources{CPU: new(100), MemoryMB: new(256), MemoryMaxMB: new(2048)}
 	task.KillTimeout = new(stopSeconds * time.Second)
 	task.VolumeMounts = []*api.VolumeMount{{Volume: new("home"), Destination: new(home)}}
+	// No Nomad log collection (a logmon and a docker_logger process per
+	// task): docker logs reads the runtime's output.
+	task.LogConfig = &api.LogConfig{Disabled: new(true)}
 	group := api.NewTaskGroup("runtime", 1)
 	group.Networks = []*api.NetworkResource{{Mode: "bridge"}}
 	group.Volumes = map[string]*api.VolumeRequest{"home": {Type: "host", Source: id}}
@@ -187,7 +214,6 @@ func (n *Nomad) job(spec Spec) *api.Job {
 	group.Tasks = []*api.Task{task}
 	job := api.NewServiceJob(id, id, "", 50)
 	job.Namespace = new(n.Namespace)
-	job.Meta = map[string]string{configMeta: spec.Config}
 	job.TaskGroups = []*api.TaskGroup{group}
 	return job
 }

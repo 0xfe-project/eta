@@ -190,7 +190,9 @@ func jobID(bundle string) string { return "bundle-" + bundle }
 
 // prepare makes the parsed job the bundle's: its ID and namespace, its
 // revision, AXP's images (axp-<name>, without a tag) at this deployment's,
-// and what AXP gives it in every task's environment. The job must have a
+// what AXP gives it in every task's environment, and no Nomad log
+// collection (a logmon and a docker_logger process per task; docker logs
+// reads the output). The job must have a
 // service named after the bundle (Nomad's service discovery), which the
 // gateways route to.
 func (r *Reconciler) prepare(job *api.Job, name string, env map[string]string, revision string) error {
@@ -215,6 +217,10 @@ func (r *Reconciler) prepare(job *api.Job, name string, env map[string]string, r
 			if task.Env == nil {
 				task.Env = map[string]string{}
 			}
+			if task.LogConfig == nil {
+				task.LogConfig = &api.LogConfig{}
+			}
+			task.LogConfig.Disabled = new(true)
 			for k, v := range env {
 				task.Env[k] = v
 			}
