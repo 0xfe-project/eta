@@ -48,6 +48,26 @@ import { parseModelId } from "./model-id";
 import { resolvePersona } from "./personas";
 import { sessionSubagentRunner } from "./subagent";
 
+/**
+ * Put tools on an open session, and make sure the model is offered them.
+ *
+ * The harness pins `activeToolNames` to the tools it installed, and a pinned set is what the runner
+ * offers the model — so a tool registered afterwards exists in the service and reaches nobody. Only
+ * the names that are missing are added: a session's config is restored from its journal, so a
+ * second open already names them, and appending again would be a duplicate.
+ */
+export function registerSessionTools(
+  session: OpenSession,
+  tools: readonly KernelTool[],
+): void {
+  for (const tool of tools) session.kernel.tools.register(tool);
+  const active = session.kernel.config.read("activeToolNames");
+  const added = tools.map((tool) => tool.name).filter((name) => !active.includes(name));
+  if (added.length > 0 && active.length > 0) {
+    session.kernel.config.update({ activeToolNames: [...active, ...added] });
+  }
+}
+
 /** A session the manager has open. */
 export interface ManagedSession {
   meta: SessionMeta;
@@ -484,21 +504,7 @@ export class SessionManager {
     for (const middleware of this.toolMiddleware?.({ meta, session }) ?? []) {
       session.kernel.tools.use(middleware);
     }
-    const extra = this.sessionTools?.({ meta, session }) ?? [];
-    for (const tool of extra) session.kernel.tools.register(tool);
-    // The harness pins `activeToolNames` to the tools it installed, and a pinned set is what the
-    // runner offers the model — so a host's own tools have to be added to the pin, or they exist in
-    // the service and reach nobody. (An unpinned session, the bare harness, needs nothing.)
-    //
-    // Only the names that are missing: a session's config is restored from its journal, so on the
-    // second open it already names these tools, and appending them again would be a duplicate.
-    const active = session.kernel.config.read("activeToolNames");
-    const added = extra
-      .map((tool) => tool.name)
-      .filter((name) => !active.includes(name));
-    if (added.length > 0 && active.length > 0) {
-      session.kernel.config.update({ activeToolNames: [...active, ...added] });
-    }
+    registerSessionTools(session, this.sessionTools?.({ meta, session }) ?? []);
     const managed: ManagedSession = { meta, session };
     this.open.set(meta.id, managed);
     return managed;

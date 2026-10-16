@@ -22,6 +22,7 @@ export {
   SessionManager,
   type SessionManagerOptions,
   type SessionMemoryWiring,
+  registerSessionTools,
 } from "./manager";
 export { MemorySessionStore, type SessionStorageFactory } from "./memory-store";
 export {
