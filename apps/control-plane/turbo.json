@@ -8,6 +8,8 @@
         "!$TURBO_ROOT$/packages/*-go/.turbo/**",
         "!$TURBO_ROOT$/packages/*-go/out/**",
         "!$TURBO_ROOT$/packages/*-go/node_modules/**",
+        "!$TURBO_ROOT$/packages/*-go/**/*_test.go",
+        "!$TURBO_ROOT$/packages/*-go/**/*.md",
         "$TURBO_ROOT$/scripts/build/go.sh",
         "go.mod",
         "go.sum",
@@ -22,6 +24,8 @@
         "!$TURBO_ROOT$/packages/*-go/.turbo/**",
         "!$TURBO_ROOT$/packages/*-go/out/**",
         "!$TURBO_ROOT$/packages/*-go/node_modules/**",
+        "!$TURBO_ROOT$/packages/*-go/**/*_test.go",
+        "!$TURBO_ROOT$/packages/*-go/**/*.md",
         "$TURBO_ROOT$/scripts/build/go.sh",
         "go.mod",
         "go.sum",
@@ -38,20 +42,31 @@
         "!$TURBO_ROOT$/packages/*-go/.turbo/**",
         "!$TURBO_ROOT$/packages/*-go/out/**",
         "!$TURBO_ROOT$/packages/*-go/node_modules/**",
+        "!$TURBO_ROOT$/packages/*-go/**/*_test.go",
+        "!$TURBO_ROOT$/packages/*-go/**/*.md",
         "go.mod",
         "go.sum",
         "**/*.go",
-        "!**/*_test.go"
+        "!**/*_test.go",
+        "!internal/bundlesvc/**",
+        "!internal/container/**",
+        "!internal/forge/**",
+        "!internal/config/**",
+        "!internal/store/**",
+        "!internal/routines/migrations/**"
       ],
       "outputs": ["out/openapi.json", "out/routines.openapi.json"]
     },
     "lint": {
       "inputs": [
         "$TURBO_DEFAULT$",
+        "!**/*.md",
         "$TURBO_ROOT$/packages/*-go/**",
         "!$TURBO_ROOT$/packages/*-go/.turbo/**",
         "!$TURBO_ROOT$/packages/*-go/out/**",
-        "!$TURBO_ROOT$/packages/*-go/node_modules/**"
+        "!$TURBO_ROOT$/packages/*-go/node_modules/**",
+        "!$TURBO_ROOT$/packages/*-go/**/*_test.go",
+        "!$TURBO_ROOT$/packages/*-go/**/*.md"
       ]
     },
     // Tests run against development's PostgreSQL, each binary in a database
@@ -60,10 +75,14 @@
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",
+        "!**/*.md",
+        "$TURBO_ROOT$/scripts/test-postgres.sh",
         "$TURBO_ROOT$/packages/*-go/**",
         "!$TURBO_ROOT$/packages/*-go/.turbo/**",
         "!$TURBO_ROOT$/packages/*-go/out/**",
         "!$TURBO_ROOT$/packages/*-go/node_modules/**",
+        "!$TURBO_ROOT$/packages/*-go/**/*_test.go",
+        "!$TURBO_ROOT$/packages/*-go/**/*.md",
         // The bundles and plugins agents' images are built from.
         "$TURBO_ROOT$/bundles/*/bundle.json",
         "$TURBO_ROOT$/bundles/*/service/*.nomad.hcl",

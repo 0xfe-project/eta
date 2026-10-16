@@ -4,10 +4,6 @@
   "tasks": {
     "build": {
       "inputs": [
-        "$TURBO_ROOT$/packages/*-go/**",
-        "!$TURBO_ROOT$/packages/*-go/.turbo/**",
-        "!$TURBO_ROOT$/packages/*-go/out/**",
-        "!$TURBO_ROOT$/packages/*-go/node_modules/**",
         "$TURBO_ROOT$/scripts/build/remote.sh",
         "go.mod",
         "**/*.go",
@@ -17,22 +13,10 @@
       "outputs": ["out/**"]
     },
     "lint": {
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/packages/*-go/**",
-        "!$TURBO_ROOT$/packages/*-go/.turbo/**",
-        "!$TURBO_ROOT$/packages/*-go/out/**",
-        "!$TURBO_ROOT$/packages/*-go/node_modules/**"
-      ]
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"]
     },
     "test": {
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/packages/*-go/**",
-        "!$TURBO_ROOT$/packages/*-go/.turbo/**",
-        "!$TURBO_ROOT$/packages/*-go/out/**",
-        "!$TURBO_ROOT$/packages/*-go/node_modules/**"
-      ]
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"]
     }
   }
 }

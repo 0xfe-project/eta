@@ -39,9 +39,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { formatLocale, listSeparator, translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
+  FLOW_API_KEY,
   GROK_CONNECTOR,
   NEEDS_ACTION,
   USABLE,
@@ -54,6 +56,7 @@ import {
   useRefreshLlmStatus,
   useSetConnectionEnabled,
   useStartLogin,
+  useSubmitApiKey,
   useUsage,
 } from "@/queries/llm";
 import { connectionStateLabels, untilText } from "./connection-state";
@@ -158,16 +161,104 @@ function ConnectionState({ connection }: { connection: Connection }) {
   );
 }
 
-/** Device-code login: show the code, open the provider page, wait. */
-function LoginDialog({
-  connector,
-  open,
-  onOpenChange,
-}: {
+interface LoginDialogProps {
   connector: Connector;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}) {
+}
+
+/** Links an account the way the connector takes one. */
+function LoginDialog(props: LoginDialogProps) {
+  return props.connector.flow === FLOW_API_KEY ? (
+    <ApiKeyDialog {...props} />
+  ) : (
+    <DeviceLoginDialog {...props} />
+  );
+}
+
+/** API key: the service checks it with the provider before keeping it. */
+function ApiKeyDialog({ connector, open, onOpenChange }: LoginDialogProps) {
+  const { t: translateText } = useTranslation(["providers", "common"] as const);
+  const submit = useSubmitApiKey();
+  const [apiKey, setApiKey] = useState("");
+  const inputId = `api-key-${connector.id}`;
+  const key = apiKey.trim();
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[calc(100%-2rem)] gap-3 sm:max-w-md">
+        <form
+          className="contents"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!key || submit.isPending) return;
+            submit.mutate(
+              { connector: connector.id, apiKey: key },
+              {
+                onSuccess: () => {
+                  toast.success(
+                    translateText("apiKey.added", {
+                      providerName: connector.display_name,
+                    }),
+                  );
+                  onOpenChange(false);
+                },
+              },
+            );
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>
+              {translateText("apiKey.title", {
+                providerName: connector.display_name,
+              })}
+            </DialogTitle>
+            <DialogDescription>
+              {connector.hint ?? translateText("apiKey.instructions")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1">
+            <label htmlFor={inputId} className="text-xs font-medium">
+              {translateText("apiKey.label")}
+            </label>
+            <Input
+              id={inputId}
+              type="password"
+              value={apiKey}
+              required
+              autoComplete="off"
+              spellCheck={false}
+              aria-invalid={submit.isError || undefined}
+              onChange={(event) => {
+                setApiKey(event.target.value);
+                if (submit.isError) submit.reset();
+              }}
+            />
+          </div>
+          {submit.error ? (
+            <p role="alert" className="text-sm text-destructive">
+              {submit.error.message}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button type="submit" disabled={!key || submit.isPending}>
+              {submit.isPending
+                ? translateText("apiKey.checking")
+                : translateText("apiKey.submit")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Device-code login: show the code, open the provider page, wait. */
+function DeviceLoginDialog({
+  connector,
+  open,
+  onOpenChange,
+}: LoginDialogProps) {
   const { t: translateText } = useTranslation([
     "providers",
     "common",
@@ -325,6 +416,10 @@ function ConnectionRow({
   const onError = (error: Error) => toast.error(error.message);
   const disabled = connection.state === "disabled";
   const plan = usage?.plan || connection.plan;
+  const relogin =
+    connector.flow === FLOW_API_KEY
+      ? translateText("actions.reenterKey")
+      : translateText("actions.signInAgain");
 
   return (
     <li className="flex flex-col gap-2 px-3 py-2.5">
@@ -342,7 +437,7 @@ function ConnectionRow({
         </span>
         {NEEDS_ACTION.has(connection.state) ? (
           <Button size="sm" variant="outline" onClick={onRelogin}>
-            {translateText("actions.signInAgain")}
+            {relogin}
           </Button>
         ) : null}
         <DropdownMenu>
@@ -358,9 +453,7 @@ function ConnectionRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-36">
-            <DropdownMenuItem onSelect={onRelogin}>
-              {translateText("actions.signInAgain")}
-            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={onRelogin}>{relogin}</DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() =>
                 setEnabled.mutate(
@@ -579,7 +672,9 @@ export function ConnectorSection({
           onClick={() => setLogin((n) => n + 1)}
         >
           <PlusIcon aria-hidden="true" data-icon="inline-start" />
-          {translateText("actions.linkAccount")}
+          {connector.flow === FLOW_API_KEY
+            ? translateText("actions.addKey")
+            : translateText("actions.linkAccount")}
         </Button>
       </div>
       {description ? (

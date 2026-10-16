@@ -27,6 +27,7 @@ type Module struct {
 	service *gateway.Service
 	proxy   *cpa.Proxy
 	book    *usage.Book
+	gemini  *connectors.Gemini
 	logger  *slog.Logger
 }
 
@@ -50,10 +51,12 @@ func Open(stateDir string, logger *slog.Logger) (*Module, error) {
 		return nil, err
 	}
 	mgmt := proxy.Management()
+	gemini := &connectors.Gemini{Management: mgmt, ManagementURL: cpa.ManagementURL, Keys: cpa.OpenProviders(stateDir)}
 	service := gateway.NewService(gateway.Config{
 		Connectors: []gateway.Connector{
 			&connectors.Codex{Management: mgmt, ManagementURL: cpa.ManagementURL, Logger: logger},
 			&connectors.XAI{Management: mgmt, ManagementURL: cpa.ManagementURL},
+			gemini,
 		},
 		Auths:         proxy.Auths,
 		Registry:      cliproxy.GlobalModelRegistry(),
@@ -62,7 +65,7 @@ func Open(stateDir string, logger *slog.Logger) (*Module, error) {
 		CatalogPath:   filepath.Join(stateDir, "models.json"),
 	})
 	logger.Info("LLM gateway opened", "state_dir", stateDir)
-	return &Module{service: service, proxy: proxy, book: book, logger: logger}, nil
+	return &Module{service: service, proxy: proxy, book: book, gemini: gemini, logger: logger}, nil
 }
 
 // Run runs CPA until ctx ends, then writes the usage book. Upstream

@@ -80,7 +80,7 @@ func normalize(a *coreauth.Auth, connector string, now time.Time) Connection {
 	}
 
 	switch {
-	case a.Disabled || a.Status == coreauth.StatusDisabled:
+	case disabled(a):
 		c.State = StateDisabled
 	case loginRejected(a, now):
 		c.State = StateNeedsLogin
@@ -105,6 +105,20 @@ func normalize(a *coreauth.Auth, connector string, now time.Time) Connection {
 		c.Error = &ConnectionError{"UPSTREAM_UNSTABLE", transientMessage(status)}
 	}
 	return c
+}
+
+// disabled reports a credential that serves nothing: disabled, or a config
+// API key that excludes every model (how CPA disables those).
+func disabled(a *coreauth.Auth) bool {
+	if a.Disabled || a.Status == coreauth.StatusDisabled {
+		return true
+	}
+	for _, m := range strings.Split(a.Attributes["excluded_models"], ",") {
+		if strings.TrimSpace(m) == "*" {
+			return true
+		}
+	}
+	return false
 }
 
 // modelCooldown is when CPA will route a model again, zero when it does now.
@@ -175,14 +189,15 @@ const (
 )
 
 // modelStatus is what one account can do for model now, given the
-// account's own state. name is the provider's display name.
-func modelStatus(a *coreauth.Auth, conn Connection, model, name string, now time.Time) (string, *ConnectionError, *time.Time) {
+// account's own state. name is the provider's display name; apiKey is
+// whether its credentials are API keys.
+func modelStatus(a *coreauth.Auth, conn Connection, model, name string, apiKey bool, now time.Time) (string, *ConnectionError, *time.Time) {
 	switch conn.State {
 	case StateActive:
 	case StateDegraded:
 		return ModelDegraded, conn.Error, conn.RetryAt
 	default:
-		return ModelUnavailable, connectionReason(name, conn), conn.RetryAt
+		return ModelUnavailable, connectionReason(name, apiKey, conn), conn.RetryAt
 	}
 	ms := a.ModelStates[model]
 	if ms == nil {
@@ -210,9 +225,12 @@ func modelStatus(a *coreauth.Auth, conn Connection, model, name string, now time
 
 // connectionReason explains a model that is unavailable because of the
 // account serving it.
-func connectionReason(name string, c Connection) *ConnectionError {
+func connectionReason(name string, apiKey bool, c Connection) *ConnectionError {
 	switch c.State {
 	case StateNeedsLogin:
+		if apiKey {
+			return &ConnectionError{"AUTH_EXPIRED", name + " 的 API key 无效，请重新填写。"}
+		}
 		return &ConnectionError{"AUTH_EXPIRED", name + " 账号登录已失效，请重新登录。"}
 	case StateRateLimited:
 		return &ConnectionError{"RATE_LIMITED", name + " 账号额度已用尽，恢复后可继续使用。"}
@@ -242,6 +260,10 @@ func looksLikeAuthFailure(msg string) bool {
 func label(a *coreauth.Auth) string {
 	if email, _ := a.Metadata["email"].(string); email != "" {
 		return email
+	}
+	// An API key: its last four characters, as providers show keys.
+	if key := a.Attributes["api_key"]; len(key) >= 8 {
+		return "…" + key[len(key)-4:]
 	}
 	if a.Label != "" {
 		return a.Label

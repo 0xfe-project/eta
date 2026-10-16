@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 )
 
 // Login flows a connector can run.
@@ -55,15 +57,28 @@ type LoginSession struct {
 	Error     string    `json:"error,omitempty"`
 }
 
-// Connector is one way of bringing credentials into the core auth manager.
-// Codex and xAI OAuth are the first implementations; a raw API key
-// connector registers an auth the same way.
+// Connector is one way of bringing credentials into the core auth manager:
+// Codex and xAI log in with OAuth, Google AI Studio takes an API key.
 type Connector interface {
 	Info() ConnectorInfo
 	StartLogin(ctx context.Context, in LoginInput) (*LoginSession, error)
 	PollLogin(ctx context.Context, id string) (*LoginSession, error)
 	SubmitLogin(ctx context.Context, id string, in LoginInput) error
 	CancelLogin(ctx context.Context, id string) error
+}
+
+// Remover is implemented by connectors whose credentials CPA synthesizes
+// from its config rather than reads from an auth file: DELETE /auth-files
+// cannot remove those.
+type Remover interface {
+	Remove(ctx context.Context, a *coreauth.Auth) error
+}
+
+// Disabler is implemented by connectors that keep a credential's disabled
+// state themselves, because CPA keeps it in the config it regenerates on
+// every start. The service records it there before applying it through CPA.
+type Disabler interface {
+	SetDisabled(ctx context.Context, a *coreauth.Auth, disabled bool) error
 }
 
 // ErrNotFound is returned for unknown connectors, connections or logins.

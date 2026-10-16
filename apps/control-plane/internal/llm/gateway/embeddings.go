@@ -72,7 +72,7 @@ func (s *Service) EmbeddingModels() []EmbeddingModel {
 		m := EmbeddingModel{ID: em.ID, DisplayName: em.DisplayName, Status: ModelUnavailable,
 			Reason: &ConnectionError{"NO_CONNECTION", "尚未绑定 " + name + " 账号。"}}
 		for _, a := range auths {
-			state, reason, retryAt := modelStatus(a, normalize(a, EmbeddingProvider, now), em.ID, name, now)
+			state, reason, retryAt := modelStatus(a, normalize(a, EmbeddingProvider, now), em.ID, name, true, now)
 			if modelRank(state) > modelRank(m.Status) || m.Reason != nil && m.Reason.Code == "NO_CONNECTION" {
 				m.Status, m.Reason, m.RetryAt = state, reason, retryAt
 			}
@@ -96,7 +96,7 @@ func (s *Service) embedCandidates(model string) []*coreauth.Auth {
 		if !strings.EqualFold(a.Provider, EmbeddingProvider) || a.Attributes["api_key"] == "" {
 			continue
 		}
-		state, _, _ := modelStatus(a, normalize(a, EmbeddingProvider, now), model, "", now)
+		state, _, _ := modelStatus(a, normalize(a, EmbeddingProvider, now), model, "", true, now)
 		if state == ModelUnavailable {
 			continue
 		}

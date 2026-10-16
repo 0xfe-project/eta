@@ -10,7 +10,9 @@
   "actions": {
     "openSettings": "Go to model services",
     "signInAgain": "Sign in again",
-    "linkAccount": "Link account"
+    "linkAccount": "Link account",
+    "reenterKey": "Re-enter key",
+    "addKey": "Add API key"
   },
   "title": "Model services",
   "recovery": {
@@ -41,6 +43,14 @@
     "waitingWithExpiry": "Awaiting authorization… Expires in {{minutes}}:{{seconds}}",
     "loadingCode": "Getting verification code…",
     "openAuthorization": "Open authorization page"
+  },
+  "apiKey": {
+    "title": "Add {{providerName}} API key",
+    "instructions": "Enter an API key. It is checked with the provider before it is saved.",
+    "label": "API key",
+    "submit": "Check and save",
+    "checking": "Checking…",
+    "added": "Added {{providerName}} API key"
   },
   "remove": {
     "confirmTitle": "Remove {{accountName}}?",
