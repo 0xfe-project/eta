@@ -1,6 +1,6 @@
 # Only the prebuilt artifacts, the bundles and plugins agents are built
 # from, the gateway configuration and what remote computers download are
-# sent to BuildKit.
+# sent to Docker.
 *
 !apps/control-plane/out/
 !packages/plugins-go/out/
@@ -9,9 +9,10 @@
 !apps/web/out/
 !bundles/
 !plugins/
-# Bundles' services run from images of their own; only their manifests.
+# Bundles' services run from images of their own; only their jobspecs
+# (bundles.JobspecFile).
 bundles/*/service/*
-!bundles/*/service/*.yaml
+!bundles/*/service/job.nomad.hcl
 !apps/remote/out/dist/
 !apps/agenvo/out/dist/
 **/__pycache__
