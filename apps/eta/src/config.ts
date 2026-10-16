@@ -17,6 +17,30 @@ export function configuredProviders(config: EtaConfig): EtaProviderConfig[] {
   return config.providers ?? [];
 }
 
+/** How many tools may be on the approval list: a settings file, not a program. */
+export const MAX_APPROVAL_TOOLS = 64;
+
+/**
+ * The tool names that ask before running, as the config lists them.
+ *
+ * Sanitised on the read path like the headers are: one unusable entry is dropped rather than making
+ * the whole file unreadable, names are trimmed and deduplicated, and a list that is not a list of
+ * strings is no list at all.
+ */
+export function approvalTools(config: EtaConfig): string[] {
+  const raw = config.approvals?.tools;
+  if (!Array.isArray(raw)) return [];
+  const tools: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "string") continue;
+    const name = entry.trim();
+    if (name.length === 0 || tools.includes(name)) continue;
+    tools.push(name);
+    if (tools.length >= MAX_APPROVAL_TOOLS) break;
+  }
+  return tools;
+}
+
 export async function readConfig(
   path: string,
   warn: (message: string) => void,

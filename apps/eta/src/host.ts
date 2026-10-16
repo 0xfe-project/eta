@@ -27,7 +27,7 @@ import { hostPlugin } from "./bundled/host";
 import { sessionsPlugin } from "./bundled/sessions";
 import { usagePlugin } from "./bundled/usage";
 import { codexAuthPath, CodexCredentialStore } from "./codex-auth";
-import { configuredProviders, readConfig } from "./config";
+import { approvalTools, configuredProviders, readConfig } from "./config";
 import { databasePath, openDatabase } from "./db/database";
 import {
   applyMigrations,
@@ -40,6 +40,7 @@ import { WakeRunner } from "./groups/runner";
 import { GroupStore } from "./groups/store";
 import { EventHub } from "./http/events";
 import { IdempotencyStore, withIdempotency } from "./http/idempotency";
+import { approvalMiddleware } from "./interactions/approval";
 import { AskBridge } from "./interactions/bridge";
 import { InteractionStore } from "./interactions/store";
 import { providerCatalog } from "./providers/catalog";
@@ -119,6 +120,7 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   // (P0.6). A provider that cannot be built is a warning and a line in /host, not a dead host —
   // the ones that work still work.
   const providers = configuredProviders(config);
+  const approvals = approvalTools(config);
   // When these connections were last changed: the config file is where they live, so its mtime is
   // the closest thing to "added at" that exists — and it is a fact, not a guess.
   const configWrittenAt = await stat(configPath)
@@ -185,6 +187,16 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     // confirmation cards are.
     askObserve: (meta) => (action, payload) =>
       bridgeRef.current?.observe(meta, action, payload),
+    // Tools the config lists ask before they run: the same card, raised by a rule rather than by
+    // the model. Read per session, so a policy change reaches the next session.
+    toolMiddleware: ({ meta, session }) => {
+      const middleware = approvalMiddleware({
+        tools: approvals,
+        ask: session.ask,
+        meta,
+      });
+      return middleware === undefined ? [] : [middleware];
+    },
     warn,
   });
 

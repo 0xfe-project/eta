@@ -112,6 +112,13 @@ export interface EtaProviderConfig {
 }
 
 export interface EtaConfig {
+  /**
+   * Tools that ask the user before they run (P2.6 — 审批 = ask).
+   *
+   * Configuration rather than a fact about a tool: the same `bash` is one user's whole point and
+   * another user's thing to approve every time.
+   */
+  approvals?: { tools?: string[] } | undefined;
   network?: {
     mode: "system" | "manual" | "direct";
     proxyUrl?: string;

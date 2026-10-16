@@ -24,6 +24,7 @@ import type {
   CompactionSummarizer,
   KernelModels,
   PersonaCard,
+  ToolMiddleware,
 } from "@eta/core";
 import type {
   ExecutionEnv,
@@ -117,6 +118,17 @@ export interface SessionManagerOptions {
     | ((meta: SessionMeta) => SessionMemoryWiring | undefined)
     | undefined;
   /**
+   * Middleware on a session's tool calls, read once when it opens.
+   *
+   * What a host wants on this seam is policy — "this tool asks before it runs" — and a session's
+   * tools come into being here, so the policy arrives with them. Read per open rather than per
+   * call, like the settings: a policy should not change under a run that is already going. The
+   * middleware is installed on the session's own kernel, so it is disposed with the session.
+   */
+  toolMiddleware?:
+    | ((input: { meta: SessionMeta; session: OpenSession }) => ToolMiddleware[])
+    | undefined;
+  /**
    * How a session's questions are surfaced — told when one is asked, answered, canceled or expired.
    *
    * Read per session like the other `…For` options, because the answer is the session's own: who
@@ -181,6 +193,7 @@ export class SessionManager {
   private readonly skillsFor: SessionManagerOptions["skillsFor"];
   private readonly memoryFor: SessionManagerOptions["memoryFor"];
   private readonly askObserve: SessionManagerOptions["askObserve"];
+  private readonly toolMiddleware: SessionManagerOptions["toolMiddleware"];
   private readonly subagents: SessionManagerOptions["subagents"];
   private readonly warn: (message: string) => void;
   private readonly open = new Map<string, ManagedSession>();
@@ -198,6 +211,7 @@ export class SessionManager {
     this.skillsFor = options.skillsFor;
     this.memoryFor = options.memoryFor;
     this.askObserve = options.askObserve;
+    this.toolMiddleware = options.toolMiddleware;
     this.warn = options.warn ?? (() => undefined);
   }
 
@@ -456,6 +470,9 @@ export class SessionManager {
     // decides that, and leaving it off would make "prompt a session nobody attached yet"
     // (a subagent's own run, a session from the store) quietly do nothing.
     session.pump.start();
+    for (const middleware of this.toolMiddleware?.({ meta, session }) ?? []) {
+      session.kernel.tools.use(middleware);
+    }
     const managed: ManagedSession = { meta, session };
     this.open.set(meta.id, managed);
     return managed;
