@@ -21,6 +21,7 @@ import { AgentStore } from "./agents/store";
 import { agentsPlugin } from "./bundled/agents";
 import { hostPlugin } from "./bundled/host";
 import { sessionsPlugin } from "./bundled/sessions";
+import { usagePlugin } from "./bundled/usage";
 import { codexAuthPath, CodexCredentialStore } from "./codex-auth";
 import { configuredProviders, readConfig } from "./config";
 import { databasePath, openDatabase } from "./db/database";
@@ -34,6 +35,8 @@ import { EventHub } from "./http/events";
 import { IdempotencyStore, withIdempotency } from "./http/idempotency";
 import { buildModels } from "./providers/runtime";
 import { RouteRegistry, RouteService } from "./routes";
+import { recordingModels, subjectOf } from "./usage/recorder";
+import { UsageStore } from "./usage/store";
 
 export interface HostOptions {
   /** Where sessions, plugins and the database live: one directory. */
@@ -69,6 +72,8 @@ export interface Host {
   store: FileSessionStore;
   /** What a conversation belongs to. An agent is a configuration, not a conversation. */
   agents: AgentStore;
+  /** Who spent what: every generation is counted as it happens. */
+  usage: UsageStore;
   /** Providers that could not be built, with the reason. The rest are in `models`. */
   providerFailures: readonly ProviderBuildFailure[];
   port: number;
@@ -112,6 +117,13 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   // Idempotency sits in front of every POST that carries a key: a retry gets the first answer
   // instead of a second effect (P0.5).
   const idempotency = new IdempotencyStore(handle);
+  // Usage, counted as it happens (P1.3). The table is kept for 30 days; pruning on the way up
+  // keeps it from growing forever without a scheduler of its own.
+  const usage = new UsageStore(handle);
+  const pruned = usage.prune();
+  if (pruned > 0)
+    warn(`[eta] dropped ${pruned} usage row(s) older than the retention`);
+
   // Sessions: jsonl journals and a meta file each, under the data directory (P0.7). The
   // manager decides nothing about models — it asks, per session — so which provider a session
   // uses stays the application's decision.
@@ -121,10 +133,14 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   });
   const sessions = new SessionManager({
     store,
-    modelsFor: () => {
+    modelsFor: (meta) => {
       if (models === undefined)
         throw new Error("no model providers are configured");
-      return models;
+      // One wrapper per session, so the row knows which subject asked (P1.3).
+      return recordingModels(models, {
+        store: usage,
+        subject: subjectOf(meta),
+      });
     },
     // A new session starts on the config's default model. Read once at startup, so changing the
     // file needs a restart — settings, and the per-session choice, are P1's and P2's business.
@@ -170,6 +186,7 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     ctx.plugin(hostPlugin, { status }),
     ctx.plugin(sessionsPlugin, { sessions, hub }),
     ctx.plugin(agentsPlugin, { agents, models }),
+    ctx.plugin(usagePlugin, { usage }),
   ];
 
   const manager = new PluginManager({
@@ -204,6 +221,7 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     sessions,
     store,
     agents,
+    usage,
     port: server.port ?? 0,
     config,
     mounted: () => manager.mounted(),
