@@ -31,8 +31,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=oven/bun:1.3.14 /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=caddy:2.11.7-alpine /usr/bin/caddy /usr/local/bin/caddy
-# The controller builds agents' images with this machine's Docker (its socket).
+# The controller builds agents' images with this machine's Docker (its socket),
+# with BuildKit: their Dockerfiles cache downloads (RUN --mount).
 COPY --from=docker:29-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker:29-cli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
 # Least to most frequently changing.
 COPY --from=routine-plugins /opt/axp/bin/ /usr/local/bin/
 COPY apps/control-plane/out/${TARGETOS}-${TARGETARCH}/axp-control-plane /usr/local/bin/
