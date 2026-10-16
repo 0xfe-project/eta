@@ -1,4 +1,9 @@
 import type {
+  AxpArtifact,
+  AxpArtifactShare,
+  AxpArtifactVersion,
+} from "../artifacts/shapes";
+import type {
   AxpAssigneeOption,
   AxpTask,
   AxpTaskActivity,
@@ -220,6 +225,39 @@ export const taskUpdateSchema = z.object({
 
 export const commentInSchema = z.object({ body: z.string() });
 
+export const artifactShareSchema = z.object({
+  url: z.string(),
+  created_at: z.string(),
+});
+
+export const artifactVersionSchema = z.object({
+  number: z.number().int(),
+  files: z.number().int(),
+  bytes: z.number().int(),
+  size: z.number().int(),
+  created_at: z.string(),
+  preview_url: z.string(),
+  share: artifactShareSchema.optional(),
+});
+
+export const artifactSchema = z.object({
+  group_id: z.string().nullable(),
+  id: z.string(),
+  title: z.string(),
+  agent_id: z.string().nullable(),
+  agent_name: z.string().nullable(),
+  computer_name: z.string().nullable(),
+  task_id: z.string().nullable(),
+  task_number: z.number().int().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  versions: z.array(artifactVersionSchema),
+});
+
+export const artifactListSchema = z.object({
+  artifacts: z.array(artifactSchema),
+});
+
 export const snapshotSchema = z.object({
   groups: z.array(groupSchema),
   agents: z.array(agentSchema),
@@ -303,6 +341,9 @@ agrees<z.infer<typeof agentSchema>, AxpAgent>(true);
 agrees<z.infer<typeof interactionOptionSchema>, AxpInteractionOption>(true);
 agrees<z.infer<typeof interactionSchema>, AxpInteraction>(true);
 agrees<z.infer<typeof snapshotSchema>, AxpSnapshot>(true);
+agrees<z.infer<typeof artifactShareSchema>, AxpArtifactShare>(true);
+agrees<z.infer<typeof artifactVersionSchema>, AxpArtifactVersion>(true);
+agrees<z.infer<typeof artifactSchema>, AxpArtifact>(true);
 agrees<z.infer<typeof taskActorSchema>, AxpTaskActor>(true);
 agrees<z.infer<typeof taskActivitySchema>, AxpTaskActivity>(true);
 agrees<z.infer<typeof taskAssigneeSchema>, AxpTaskAssignee>(true);

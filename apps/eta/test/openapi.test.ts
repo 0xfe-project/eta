@@ -55,16 +55,23 @@ describe("the product document", () => {
     const host = await start();
     const served = host.routes
       .routes()
-      .filter((route) => route.pattern.startsWith("/api/v1"))
       .map(
         (route) =>
           `${route.method.toLowerCase()} ${asDocumentPath(route.pattern)}`,
-      )
-      .sort();
+      );
     const documented = PRODUCT_ROUTES.map(
       (route) => `${route.method.toLowerCase()} ${route.path}`,
-    ).sort();
-    expect(documented).toEqual(served);
+    );
+    // Both directions, because both failures are real: an /api/v1 route nobody documented is one a
+    // generated client cannot call, and a documented route nobody answers is one it calls in vain.
+    // (The product's surface is not only `/api/v1` — an upload posts to `/artifacts/v1/upload` —
+    // so the first check is the /api/v1 half and the second covers the whole document.)
+    expect(served.filter((route) => route.includes(" /api/v1")).sort()).toEqual(
+      documented.filter((route) => route.includes(" /api/v1")).sort(),
+    );
+    for (const route of documented) {
+      expect(served, route).toContain(route);
+    }
   });
 
   it("names its shapes, and every reference resolves", async () => {

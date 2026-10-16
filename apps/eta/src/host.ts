@@ -19,8 +19,11 @@ import { createLocalEnvironment } from "@eta/execution-node";
 import { FileSessionStore, PluginManager, SessionManager } from "@eta/server";
 import { Context } from "cordis";
 import { AgentStore } from "./agents/store";
+import { ArtifactService } from "./artifacts/service";
+import { artifactTools } from "./artifacts/tools";
 import { adminPlugin } from "./bundled/admin";
 import { agentsPlugin } from "./bundled/agents";
+import { artifactsPlugin } from "./bundled/artifacts";
 import { compatPlugin } from "./bundled/compat";
 import { groupsPlugin } from "./bundled/groups";
 import { hostPlugin } from "./bundled/host";
@@ -160,12 +163,35 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   const groups = new GroupStore(handle);
   const interactions = new InteractionStore(handle);
   const tasks = new TaskStore(handle);
+  // Artifacts: the rows here, the bytes under the data directory (P3.2).
+  const artifacts = new ArtifactService({
+    handle,
+    objectsRoot: join(options.dataDir, "artifacts"),
+    secretPath: join(options.dataDir, "artifact-preview.key"),
+  });
   // Wakes become runs here (P2.2): one session per (agent × group), found by the participant row
   // and remembered in the session's own meta. The projector also closes a reply's questions when it
   // ends, so a card never outlives the run that asked it.
   const projector = new TimelineProjector({ groups, hub, interactions });
   // The task board's cards (P3.1): a draft in a group becomes one, and it follows the task after.
-  const cards = new TaskCards({ groups, tasks, projector });
+  const cards = new TaskCards({
+    groups,
+    tasks,
+    projector,
+    // The card lists what was published for the task (P3.2).
+    artifactsOf: (taskId) =>
+      artifacts.list({ taskId }).flatMap((artifact) =>
+        artifacts
+          .versions(artifact.id)
+          .filter((version) => version.status === "published")
+          .slice(0, 1)
+          .map((version) => ({
+            artifact_id: artifact.id,
+            title: artifact.title,
+            version: version.number,
+          })),
+      ),
+  });
   // The bridge needs the manager and the manager needs the bridge's observer (a session's questions
   // are surfaced through it). One of the two has to be late, and it is the observer: it is only
   // called once a session exists, which is after this file has finished assembling.
@@ -203,13 +229,22 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
       bridgeRef.current?.observe(meta, action, payload),
     // The task board's tools (P3.1): what an agent in a group can do with the board. Read per
     // session, because a draft belongs to the group that session is in.
-    sessionTools: ({ meta }) =>
-      taskTools({
+    sessionTools: ({ meta }) => [
+      ...taskTools({
         tasks,
         cards,
         meta,
         agentName: (agentId) => agents.get(agentId)?.name,
       }),
+      // Publishing a site is a session tool too (P3.2): the agent that built it is the one that
+      // can show it to the user.
+      ...artifactTools({
+        artifacts,
+        tasks,
+        meta,
+        onPublished: (taskId) => cards.sync(taskId),
+      }),
+    ],
     // Tools the config lists ask before they run: the same card, raised by a rule rather than by
     // the model. Read per session, so a policy change reaches the next session.
     toolMiddleware: ({ meta, session }) => {
@@ -290,6 +325,8 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     // The task board (P3.1): the local half — the board, its timeline, and the cards a group's
     // draft becomes.
     ctx.plugin(tasksPlugin, { tasks, cards, groups, agents }),
+    // Artifacts (P3.2): publish a site, preview it privately, share a version publicly.
+    ctx.plugin(artifactsPlugin, { artifacts, agents, tasks }),
     // The product API the existing web speaks (P2.4): AXP's shapes over our rows.
     ctx.plugin(compatPlugin, {
       agents,

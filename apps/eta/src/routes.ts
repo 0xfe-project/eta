@@ -28,14 +28,22 @@ interface Route {
 const segmentsOf = (path: string): string[] =>
   path.split("/").filter((part) => part.length > 0);
 
-/** `undefined` when the path does not fit the pattern; otherwise the path's parameters. */
+/**
+ * `undefined` when the path does not fit the pattern; otherwise the path's parameters.
+ *
+ * A trailing `*name` captures everything left, slashes and all. It exists for one kind of route:
+ * serving a static site's files, where the paths are the site's own (`assets/app.js`) and a page's
+ * relative URLs have to resolve.
+ */
 function matchPattern(
   pattern: string[],
   actual: string[],
 ): Record<string, string> | undefined {
-  if (pattern.length !== actual.length) return undefined;
+  const splat = pattern.at(-1)?.startsWith("*") === true;
+  const fixed = splat ? pattern.length - 1 : pattern.length;
+  if (splat ? actual.length < fixed : actual.length !== fixed) return undefined;
   const params: Record<string, string> = {};
-  for (let index = 0; index < pattern.length; index += 1) {
+  for (let index = 0; index < fixed; index += 1) {
     const expected = pattern[index] ?? "";
     const seen = actual[index] ?? "";
     if (expected.startsWith(":")) {
@@ -43,6 +51,13 @@ function matchPattern(
       continue;
     }
     if (expected !== seen) return undefined;
+  }
+  if (splat) {
+    const rest = actual.slice(fixed).join("/");
+    params[(pattern.at(-1) ?? "*").slice(1)] = rest
+      .split("/")
+      .map((part) => decodeURIComponent(part))
+      .join("/");
   }
   return params;
 }

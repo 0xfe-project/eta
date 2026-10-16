@@ -21,6 +21,10 @@ import {
   agentSchema,
   agentUpdatedSchema,
   answerSchema,
+  artifactListSchema,
+  artifactSchema,
+  artifactShareSchema,
+  artifactVersionSchema,
   assigneeOptionSchema,
   blockSchema,
   commentInSchema,
@@ -63,6 +67,10 @@ const CATALOG = {
   Answer: answerSchema,
   AgentList: agentListSchema,
   AgentUpdated: agentUpdatedSchema,
+  Artifact: artifactSchema,
+  ArtifactList: artifactListSchema,
+  ArtifactShare: artifactShareSchema,
+  ArtifactVersion: artifactVersionSchema,
   AssigneeOption: assigneeOptionSchema,
   CommentIn: commentInSchema,
   Error: errorSchema,
@@ -92,14 +100,16 @@ const CATALOG = {
 type ShapeName = keyof typeof CATALOG;
 
 export interface ProductRoute {
-  method: "GET" | "POST" | "PATCH" | "DELETE";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   summary: string;
   /** Query parameters, as name → description. */
   query?: Record<string, string>;
-  body?: ShapeName;
-  /** The answer, and the status it comes with. */
-  response?: { status: number; shape: ShapeName };
+  body?: ShapeName | { binary: string };
+  /** The answer, and the status it comes with; `binary` is a file rather than JSON. */
+  response?:
+    | { status: number; shape: ShapeName }
+    | { status: number; binary: string };
   /** A stream, which is not JSON and is described as such. */
   stream?: boolean;
   /** For a stream: the events it carries, in the product's names. */
@@ -178,6 +188,57 @@ export const PRODUCT_ROUTES: readonly ProductRoute[] = [
       before: "The seq to page back from; the newest page when absent.",
     },
     response: { status: 200, shape: "MessagePage" },
+  },
+  {
+    method: "GET",
+    path: "/api/v1/artifacts",
+    summary: "Static sites that have been published.",
+    query: { group_id: "Only this group's.", task_id: "Only this task's." },
+    response: { status: 200, shape: "ArtifactList" },
+  },
+  {
+    method: "GET",
+    path: "/api/v1/artifacts/{artifact_id}",
+    summary:
+      "One artifact with its versions, their preview addresses and their shares.",
+    response: { status: 200, shape: "Artifact" },
+  },
+  {
+    method: "DELETE",
+    path: "/api/v1/artifacts/{artifact_id}",
+    summary: "Remove an artifact and its bytes.",
+  },
+  {
+    method: "PUT",
+    path: "/api/v1/artifacts/{artifact_id}/versions/{number}/share",
+    summary:
+      "Share a version publicly. A revoked link is never un-revoked; this mints a new one.",
+    response: { status: 200, shape: "ArtifactShare" },
+  },
+  {
+    method: "DELETE",
+    path: "/api/v1/artifacts/{artifact_id}/versions/{number}/share",
+    summary: "Revoke a version's public link.",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/artifacts/{artifact_id}/versions/{number}/archive",
+    summary: "Download a version's package.",
+    response: { status: 200, binary: "application/zip" },
+  },
+  {
+    method: "POST",
+    path: "/artifacts/v1/upload",
+    summary: "Publish a ZIP: a new artifact, or a new version of one.",
+    query: {
+      title: "What it is called.",
+      task: "The task it belongs to, when it is for one.",
+      group: "The group it came from.",
+      artifact: "Add a version to this artifact instead of creating one.",
+      agent: "The publishing agent; the tool sends its own.",
+    },
+    body: { binary: "application/zip" },
+    response: { status: 201, shape: "Artifact" },
   },
   {
     method: "GET",
@@ -291,14 +352,25 @@ export function productDocument(
         }
       : route.response === undefined
         ? { "204": { description: "Done." } }
-        : {
-            [String(route.response.status)]: {
-              description: "OK",
-              content: {
-                "application/json": { schema: ref(route.response.shape) },
+        : "binary" in route.response
+          ? {
+              [String(route.response.status)]: {
+                description: "The file itself.",
+                content: {
+                  [route.response.binary]: {
+                    schema: { type: "string", format: "binary" },
+                  },
+                },
               },
-            },
-          };
+            }
+          : {
+              [String(route.response.status)]: {
+                description: "OK",
+                content: {
+                  "application/json": { schema: ref(route.response.shape) },
+                },
+              },
+            };
     // Every route can refuse, and how it refuses is part of the contract.
     answer["4XX"] = {
       description: "Refused.",
@@ -324,7 +396,14 @@ export function productDocument(
         : {
             requestBody: {
               required: true,
-              content: { "application/json": { schema: ref(route.body) } },
+              content:
+                typeof route.body === "string"
+                  ? { "application/json": { schema: ref(route.body) } }
+                  : {
+                      [route.body.binary]: {
+                        schema: { type: "string", format: "binary" },
+                      },
+                    },
             },
           }),
       responses: answer,

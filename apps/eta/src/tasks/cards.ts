@@ -35,12 +35,23 @@ export interface TaskCardsOptions {
   groups: GroupStore;
   tasks: TaskStore;
   projector: TimelineProjector;
+  /**
+   * The artifacts published for a task (P3.2), for the card to list.
+   *
+   * A callback rather than a store: the artifacts module already knows how to answer this, and this
+   * one only needs the answer.
+   */
+  artifactsOf?:
+    | ((
+        taskId: string,
+      ) => { artifact_id: string; title: string; version: number }[])
+    | undefined;
 }
 
 /** What a card carries: the task's facts, in the product's field names. */
 function cardData(
   task: TaskRecord | undefined,
-  counts: { comments: number; summary: string },
+  counts: { comments: number; summary: string; artifacts: unknown[] },
 ): Record<string, unknown> {
   if (task === undefined) return {};
   return {
@@ -52,8 +63,9 @@ function cardData(
     assignee: task.assignee,
     comments: counts.comments,
     summary: counts.summary,
+    // Remote runs deliver pull requests (P4); artifacts are here already.
     deliverables: [],
-    artifacts: [],
+    artifacts: counts.artifacts,
   };
 }
 
@@ -61,11 +73,17 @@ export class TaskCards {
   readonly #groups: GroupStore;
   readonly #tasks: TaskStore;
   readonly #projector: TimelineProjector;
+  readonly #artifactsOf:
+    | ((
+        taskId: string,
+      ) => { artifact_id: string; title: string; version: number }[])
+    | undefined;
 
   constructor(options: TaskCardsOptions) {
     this.#groups = options.groups;
     this.#tasks = options.tasks;
     this.#projector = options.projector;
+    this.#artifactsOf = options.artifactsOf;
   }
 
   /**
@@ -153,6 +171,7 @@ export class TaskCards {
       data: cardData(task, {
         comments: 0,
         summary: "",
+        artifacts: [],
       }),
     });
     if (card !== undefined) {
@@ -172,6 +191,7 @@ export class TaskCards {
     const counts = {
       comments: this.#tasks.comments(taskId),
       summary: this.#tasks.summary(taskId),
+      artifacts: this.#artifactsOf?.(taskId) ?? [],
     };
     const updated: MessageRecord[] = [];
     for (const card of this.#cardsOf(taskId)) {
