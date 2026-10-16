@@ -4,11 +4,11 @@ version = "0.1.0"
 description = "Agents' long-term memory behind the runtime gateway."
 requires-python = ">=3.13,<3.14"
 dependencies = [
-  "axp-telemetry",
   "fastembed>=0.7",
   "mcp>=1.20,<2",
   "mem0ai>=2,<3",
   "psycopg[binary,pool]>=3.2,<4",
+  "sentry-sdk>=2.72,<3",
   "uvicorn>=0.35",
 ]
 
@@ -21,9 +21,6 @@ dev = [
 
 [tool.uv]
 package = false
-
-[tool.uv.sources]
-axp-telemetry = { path = "../../../packages/telemetry-py", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

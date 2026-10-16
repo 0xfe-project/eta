@@ -9,16 +9,16 @@ calls that with.
 
 import os
 
-import axp_telemetry
 import uvicorn
 
+from . import telemetry
 from .app import create_app
 from .mem0_provider import Mem0Provider
 
 
 def main() -> None:
     # Health checks and the web's polling are most requests and say nothing.
-    axp_telemetry.setup(
+    telemetry.setup(
         "memory-service",
         quiet=("/up", "/.well-known/axp-service", "/api/memory/v1/agents/*/memories"),
     )
@@ -28,7 +28,7 @@ def main() -> None:
         token=os.environ["AXP_BUNDLE_TOKEN"],
     )
     uvicorn.run(create_app(provider), host="0.0.0.0", port=8320, log_config=None)
-    axp_telemetry.shutdown()
+    telemetry.shutdown()
 
 
 if __name__ == "__main__":

@@ -110,7 +110,7 @@ runtime 只有一个执行槽，打开或恢复 thread 时也占用它。压缩�
 
 `boot_id` 是 runtime 每次启动生成的。prompt 和 steer 必须带上 controller 记下的那一次（`409 wrong_boot`）：kubelet 重启了 runtime 而它还没报告时，发给它的命令退回等待，不会在新的启动里被当成旧的。
 
-启动参数（环境变量，`control.spec`）：`AXP_AGENT_ID`、`AXP_AGENT_KEY`（访问 AXP 服务的 key，`<agent>.<HMAC(agent:<agent>)>`）、`AXP_CONTROL_TOKEN`、`AXP_GATEWAY_URL`、`AXP_NATS_URL`、模型服务 `AXP_LLM_BASE_URL`（runtime 网关的 `/v1`，即 LLM 网关）、`AXP_LLM_API_KEY`（智能体的 key）、`AXP_MODEL`、`AXP_MODEL_CONTEXT_WINDOW`、`AXP_INSTRUCTIONS`（名称和指令，作为 Codex 的 developer instructions）、`AXP_CONFIG_VERSION`，以及 OpenTelemetry 的端点和资源属性。容器里没有任何模型服务商的凭据。
+启动参数（环境变量，`control.spec`）：`AXP_AGENT_ID`、`AXP_AGENT_KEY`（访问 AXP 服务的 key，`<agent>.<HMAC(agent:<agent>)>`）、`AXP_CONTROL_TOKEN`、`AXP_GATEWAY_URL`、`AXP_NATS_URL`、模型服务 `AXP_LLM_BASE_URL`（runtime 网关的 `/v1`，即 LLM 网关）、`AXP_LLM_API_KEY`（智能体的 key）、`AXP_MODEL`、`AXP_MODEL_CONTEXT_WINDOW`、`AXP_INSTRUCTIONS`（名称和指令，作为 Codex 的 developer instructions）、`AXP_CONFIG_VERSION`。Codex 自己的 OpenTelemetry 导出显式关闭（`otel.*exporter = "none"`），智能体的 prompt trace 不收集。容器里没有任何模型服务商的凭据。
 
 Codex 的静态配置是 `danger-full-access` 沙箱、`on-request` 审批：容器是隔离边界，命令和文件改动仍经产品请用户确认；akhook 的规则检查每条命令和每个文件修改（见[工具调用规则与用户确认](agent-hooks.md)）。
 

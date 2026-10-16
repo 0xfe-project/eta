@@ -16,10 +16,9 @@ spec:
           command: [bun, /app/apps/web/server.js]
           envFrom: [{ configMapRef: { name: axp } }]
           env:
-            - { name: OTEL_SERVICE_NAME, value: web }
-            - name: OTEL_EXPORTER_OTLP_HEADERS
+            - name: SENTRY_DSN
               valueFrom: {
-                secretKeyRef: { name: axp, key: OTEL_EXPORTER_OTLP_HEADERS },
+                secretKeyRef: { name: axp, key: SENTRY_DSN, optional: true },
               }
           ports: [{ containerPort: 3000 }]
           readinessProbe:

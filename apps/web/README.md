@@ -1,6 +1,6 @@
 # Web
 
-Vite + React + React Compiler。开发命令在仓库根目录执行 `bun run dev`。生产是静态 SPA，由 Bun 提供 `index.html` 回退、`GET /version` 和 `POST /telemetry/logs`。
+Vite + React + React Compiler。开发命令在仓库根目录执行 `bun run dev`。生产是静态 SPA，由 Bun 提供 `index.html` 回退（带上浏览器 Sentry SDK 的设置）和 `GET /version`。
 
 ## 已配置的库
 

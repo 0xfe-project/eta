@@ -8,8 +8,9 @@ export default {
   // System tools the Turbo scripts call.
   ignoreBinaries: ["go", "gofmt", "uv"],
   // Run by path: scripts/dev.sh runs concurrently, the forge service's Go
-  // tests run emulate (their emulated GitHub).
-  ignoreDependencies: ["concurrently", "emulate"],
+  // tests run emulate (their emulated GitHub), apps/web/sentry.sh runs
+  // Sentry's CLI.
+  ignoreDependencies: ["concurrently", "emulate", "sentry"],
   // CSS files are part of the module graph: their @imports reference
   // packages (fonts, tw-animate-css, shadcn) and other stylesheets.
   compilers: {
@@ -19,9 +20,14 @@ export default {
         .join("\n"),
   },
   workspaces: {
-    // Plugins' scripts run in agents' images.
+    // Plugins' scripts run in agents' images; scripts/dev.sh and
+    // deploy/k3s/deploy.sh run rustrak.ts by path.
     ".": {
-      entry: ["plugins/*/hooks/*.mjs", "plugins/*/server.mjs"],
+      entry: [
+        "plugins/*/hooks/*.mjs",
+        "plugins/*/server.mjs",
+        "deploy/k3s/rustrak.ts",
+      ],
     },
     "apps/agent-runtime": {
       // The runtime is bundled from main.ts.

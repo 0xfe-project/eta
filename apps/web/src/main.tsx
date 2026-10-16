@@ -13,7 +13,7 @@ import {
   readLanguagePreference,
   resolveLanguage,
 } from "@/lib/i18n";
-import { installErrorReporting } from "@/lib/report";
+import { installErrorReporting, reportReactError } from "@/lib/report";
 import { watchForUpdates } from "@/lib/update";
 import { useOutbox } from "@/queries/outbox";
 import { getRouter } from "./router";
@@ -43,7 +43,11 @@ async function start() {
   if (!root) throw new Error("missing #root");
 
   startTransition(() => {
-    createRoot(root).render(
+    createRoot(root, {
+      onUncaughtError: reportReactError,
+      onCaughtError: reportReactError,
+      onRecoverableError: reportReactError,
+    }).render(
       <StrictMode>
         <QueryClientProvider client={router.options.context.queryClient}>
           <RouterProvider router={router} />

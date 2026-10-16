@@ -1,0 +1,57 @@
+# Errors, logs and traces: Rustrak, a server for Sentry's protocol (GPL-3.0;
+# its official image, run as it is). AXP's processes send to it with Sentry's
+# SDKs, to the DSN of its project `axp`; the browser and bundles' services
+# through a gateway's /sentry, which passes on only envelopes. Its dashboard
+# wants an origin of its own and is behind no gateway (deploy/README.md).
+# PUBLIC_URL is the address in its DSNs (development's overlay sets the one
+# the host reaches); the Secret `infra` holds the session key and the first
+# administrator (email:password).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rustrak
+spec:
+  storageClassName: axp
+  accessModes: [ReadWriteOnce]
+  resources: { requests: { storage: 20Gi } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rustrak
+spec:
+  # SQLite: one writer.
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: rustrak } }
+  template:
+    metadata: { labels: { app: rustrak } }
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: rustrak
+          image: rustrak/rustrak-server:v0.16.4
+          env:
+            - { name: PUBLIC_URL, value: http://rustrak:8080 }
+            - name: SESSION_SECRET_KEY
+              valueFrom: {
+                secretKeyRef: { name: infra, key: RUSTRAK_SESSION_SECRET_KEY },
+              }
+            - name: CREATE_SUPERUSER
+              valueFrom: {
+                secretKeyRef: { name: infra, key: RUSTRAK_SUPERUSER },
+              }
+            # No anonymous usage reports to the project.
+            - { name: RUSTRAK_TELEMETRY, value: "off" }
+          ports: [{ containerPort: 8080 }]
+          readinessProbe:
+            httpGet: { path: /health/ready, port: 8080 }
+          volumeMounts: [{ name: data, mountPath: /data }]
+      volumes: [{ name: data, persistentVolumeClaim: { claimName: rustrak } }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rustrak
+spec:
+  selector: { app: rustrak }
+  ports: [{ port: 8080 }]

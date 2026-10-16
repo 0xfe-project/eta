@@ -1,8 +1,8 @@
 # What AXP runs on, the same in production (namespace axp) and development
-# (axp-dev): PostgreSQL, NATS, the S3 for artifacts, logs (OpenObserve and
-# the collector runtimes export to), and the registry and BuildKit daemon
-# agents' images are built with. The overlay sets the namespace, the
-# registry's and BuildKit's fixed addresses, and the Secret `infra`.
+# (axp-dev): PostgreSQL, NATS, the S3 for artifacts, Rustrak (errors, logs
+# and traces), and the registry and BuildKit daemon agents' images are built
+# with. The overlay sets the namespace, the registry's and BuildKit's fixed
+# addresses and the Secret `infra`.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
@@ -11,12 +11,10 @@ resources:
   - postgres.yaml
   - nats.yaml
   - s3.yaml
-  - observe.yaml
+  - rustrak.yaml
   - images.yaml
   - policies.yaml
 configMapGenerator:
-  - name: otel-collector
-    files: [config.yaml=otel-collector.yaml]
   - name: buildkitd
     files: [buildkitd.toml]
 patches:

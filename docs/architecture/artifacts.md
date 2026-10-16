@@ -67,7 +67,7 @@ AXP 自己没有登录，浏览器 API 靠边缘的 Cloudflare Access，原先�
 - `Origin: null` 的请求一律 403（覆盖不发 Fetch Metadata 的旧浏览器里的沙箱页面）。
 - `axp` CLI、curl 这类非浏览器客户端不发这两个头，不受影响；它们本来也不靠 Cookie。
 
-这条规则在网关一处生效，覆盖控制面、llm、memory、forge、routines 和 OpenObserve 的全部接口。
+这条规则在网关一处生效，覆盖控制面、llm、memory、forge、routines 的全部接口和 `/sentry`。
 
 ## 路由矩阵
 

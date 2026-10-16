@@ -1,7 +1,6 @@
 import type { Icon } from "@phosphor-icons/react";
 import type { SettingsSection } from "./workspace-store";
 import { ArchiveIcon } from "@phosphor-icons/react/Archive";
-import { ChartLineIcon } from "@phosphor-icons/react/ChartLine";
 import { DesktopIcon } from "@phosphor-icons/react/Desktop";
 import { LinkIcon } from "@phosphor-icons/react/Link";
 import { PackageIcon } from "@phosphor-icons/react/Package";
@@ -66,13 +65,6 @@ export const settingsSections: {
       return translate("settings:sections.appearance");
     },
     icon: PaletteIcon,
-  },
-  {
-    value: "logs",
-    get label() {
-      return translate("settings:sections.logs");
-    },
-    icon: ChartLineIcon,
   },
 ];
 

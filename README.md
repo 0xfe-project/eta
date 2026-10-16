@@ -19,7 +19,7 @@ plugins/           环境包带来的插件（MCP、skill、hook），聊天智�
 packages/
   plugins-go/      插件标准：读取插件，编译到聊天智能体（Codex），加载进定时任务（ADK）
   service-go/      Go 服务框架：配置、数据库与迁移、HTTP API、错误、幂等、命令
-  telemetry-go/    Go 服务共用的日志与 OpenTelemetry
+  telemetry-go/    Go 服务共用的日志与错误追踪（Sentry SDK）
 ```
 
 设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [控制面](docs/architecture/control-plane.md)、[聊天与运行时架构](docs/architecture/chat-runtime.md)、[统一入口网关](docs/architecture/gateway.md)、[LLM 网关](docs/architecture/llm-gateway.md)、[记忆](docs/architecture/memory.md)、[代码托管（GitHub）](docs/architecture/forge.md) 、[工具调用规则](docs/architecture/agent-hooks.md)、[环境包](docs/architecture/bundles.md)、[任务与远程电脑](docs/architecture/tasks.md)、[定时任务](docs/architecture/routines.md)、[插件](docs/architecture/plugins.md)、[Artifact](docs/architecture/artifacts.md)、[OOMOL](docs/architecture/oomol.md) 与 [Go 服务框架](docs/architecture/service-framework.md)；新增服务时按[清单](docs/architecture/services.md)核对。
@@ -108,18 +108,17 @@ Turbo 用 Vercel Remote Cache（`turbo.json` 的 `remoteCache.teamId`），本�
 
 ## 日志
 
-三种语言的服务都走 OpenTelemetry：Go 用 `log/slog`（`packages/telemetry-go`），Python 用标准库 `logging`（`packages/telemetry-py`），Web 服务端用 LogTape（`apps/web/src/server/telemetry.ts`）。控制面内嵌的 CLIProxyAPI 会自己打印到 stdout，这些行也被逐行转成日志（`library=cliproxy`）。每条日志同时：
+日志、错误和 trace 都由各进程直接用 Sentry 的 SDK 发到自建的 [Rustrak](https://github.com/rustrak/rustrak)（兼容 Sentry 协议；GPL-3.0，只以官方镜像独立运行，`deploy/k3s/infra/rustrak.yaml`）。Go 用 `log/slog` 和 `sentry-go`（`packages/telemetry-go`），Python 用标准库 `logging` 和 `sentry-sdk`（`bundles/memory/service/axp_memory/telemetry.py`），Web 服务端用 `@sentry/bun`（`apps/web/src/server/telemetry.ts`），浏览器用 `@sentry/react`（`apps/web/src/lib/report.ts`）。控制面内嵌的 CLIProxyAPI 的 logrus 记录也经 slog 走同一条路（`library=cliproxy`）。
 
-- 在 stderr 输出一行可读格式 `15:04:05.000 INFO  消息 key=value`（UTC，`INFO` 及以上）；
-- 通过 OTLP 发往 [OpenObserve](https://openobserve.ai)。
+- 每条日志（`INFO` 及以上）在 stderr 输出一行可读格式 `15:04:05.000 INFO  消息 key=value`（UTC），供 `kubectl logs` 看；同时是一条 Sentry 日志。
+- `ERROR` 记录是 Sentry 事件，按消息聚合成 issue；未捕获的异常和 panic 也是。HTTP 请求各是一个 transaction（健康检查除外）。
+- 浏览器报未捕获的错误、未处理的 rejection 和 React 的渲染错误。生产构建给每个文件和它的 source map 加上 debug id（`sentry sourcemap inject`），部署时把 source map 上传到 Rustrak，压缩后的堆栈就能还原到源码行。
+- 浏览器和环境包的服务经网关的 `/sentry` 发送（只转发 envelope），DSN 只有公钥，不持有凭据。
+- 没有 `SENTRY_DSN` 时什么都不发送；`SENTRY_ENVIRONMENT` 是环境，release 是部署的版本（`AXP_VERSION`）。
 
-`bun run dev` 用开发基础设施里共享的 OpenObserve（经网关在 `/observe/` 打开，账号见启动输出），所有实例的日志都发到这里，`axp.dev.port` 区分不同实例。生产见 `deploy/README.md`。
+`bun run dev` 用开发基础设施里共享的 Rustrak，启动输出里有它的地址、账号和给本机用的 DSN；所有实例都发到项目 `axp`，环境 `development-<端口>` 区分不同实例。生产见 `deploy/README.md`。
 
-agent runtime 和环境包的服务运行代码、不持有凭据，它们把 OTLP 发给集群里的 OpenTelemetry Collector（`deploy/k3s/infra/otel-collector.yaml`），由 Collector 带上凭据转发；controller 给每个 runtime 附上 `axp.agent.id` 等资源属性。runtime 自己的日志和 Codex 原生的 OpenTelemetry（日志事件含 prompt、trace、指标）都走这条路。
-
-浏览器端通过 `POST /telemetry/logs` 上报（`apps/web/src/lib/report.ts`）：未捕获的错误和未处理的 Promise rejection 自动上报，其他内容调用 `reportLog()`；每分钟最多 30 条，服务端以 `web.browser` 记录。
-
-导出地址与资源属性使用 OpenTelemetry 的标准环境变量（`OTEL_SERVICE_NAME`、`OTEL_RESOURCE_ATTRIBUTES`、`OTEL_EXPORTER_OTLP_*`），由 `bun run dev` 和部署配置设定。
+agent runtime 只把自己的日志写到 stdout。Codex 原生的 OpenTelemetry 导出（日志事件含 prompt、trace、指标）是关掉的：Codex 不会说 Sentry 协议，也不再有 Collector，所以智能体的 prompt trace 不再收集。
 
 ## 数据库与存储
 

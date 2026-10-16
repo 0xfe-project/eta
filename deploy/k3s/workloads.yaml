@@ -2,7 +2,7 @@
 # AXP: NAMESPACE-agents and NAMESPACE-bundles (deploy.sh: axp; scripts/dev.sh:
 # dev-<database>). They take connections only from AXP's own namespaces
 # (and the node, where development's processes run), and reach of AXP's
-# only the runtime gateway, NATS and the collector (deploy/k3s/infra). The
+# only the runtime gateway and NATS (deploy/k3s/infra). The
 # controller manages agents' Pods and volumes and bundles' services there,
 # and the API reads how those are; neither can touch anything else (in
 # development both run on the host as the cluster's administrator).

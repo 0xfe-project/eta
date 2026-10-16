@@ -337,7 +337,7 @@ func runController(ctx context.Context, s *services, interval time.Duration) err
 	services := &bundlesvc.Reconciler{
 		Client: objects, Namespace: s.cfg.Namespace + "-bundles", Bundles: s.deps.Chat.Bundles, DB: s.deps.DB,
 		DatabaseURL: s.cfg.DatabaseURL, Secret: []byte(s.cfg.SecretKey), GatewayURL: s.cfg.RuntimeGatewayURL,
-		OTLPURL: s.cfg.RuntimeOTLPURL, PublicURL: s.cfg.PublicURL, Registry: s.cfg.Registry, ImageTag: s.cfg.ImageTag,
+		SentryDSN: s.cfg.SentryDSN, PublicURL: s.cfg.PublicURL, Registry: s.cfg.Registry, ImageTag: s.cfg.ImageTag,
 	}
 	driver := &container.Kubernetes{
 		Client: client, Namespace: s.cfg.Namespace + "-agents",
@@ -360,7 +360,7 @@ func runController(ctx context.Context, s *services, interval time.Duration) err
 	controller := &control.Controller{
 		DB: s.deps.DB, Chat: s.deps.Chat, Bundles: s.deps.Chat.Bundles, Driver: driver, Models: s.models,
 		Secret: []byte(s.cfg.SecretKey), PluginsDir: s.cfg.PluginsDir,
-		RuntimeGatewayURL: s.cfg.RuntimeGatewayURL, NATSURL: s.cfg.NATSURL, OTLPURL: s.cfg.RuntimeOTLPURL, Wake: wake,
+		RuntimeGatewayURL: s.cfg.RuntimeGatewayURL, NATSURL: s.cfg.NATSURL, Wake: wake,
 	}
 	// Remote agents' runs, on their own loop: relay calls take seconds. It
 	// runs only while this controller holds the lock (one runner watches

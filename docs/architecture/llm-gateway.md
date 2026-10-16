@@ -33,7 +33,7 @@ runtime 用 `<实例 ID>.<令牌>`（control-plane 签发，换代即失效）�
 
 - 监听：SDK 的 `Service.Run` 一定会自己 `net.Listen`，无法关闭，所以让它监听 `127.0.0.1:0`（随机端口，没有任何路由指向它）。CPA 的 gin 引擎由 `RouterConfigurator` 交出来，作为 `http.Handler` 挂到控制面自己的 internal listener 的 `/v1/` 下；客户端断开即取消请求上下文（CPA 随之取消上游请求），流式响应逐段写到 net/http 的 `ResponseWriter`（背压就是 TCP 背压，不经缓冲）。CPA 的 `OnAfterStart` 之后（凭据已加载、路由已注册完）才算就绪：之前 `/v1` 返回 503，`serve` 也要等它就绪才打开两个 listener，所以 readiness 通过时模型目录已可读。
 - 全局状态：CPA 的 logrus、模型注册表、访问提供者、用量插件、gin 模式都是进程级的，所以只有 `serve` 打开模块，controller 和 routine worker 不加载 CPA。
-- 日志：CPA 用 logrus。模块把 logrus 的输出丢弃，改用 hook 把每条记录（级别、字段）交给 slog（`library=cliproxy`），走控制面同一套 OpenTelemetry；不再接管整个进程的 stdout。CPA 启动和重载配置时各有一行 `fmt.Printf` 写到 stdout，只进容器日志。
+- 日志：CPA 用 logrus。模块把 logrus 的输出丢弃，改用 hook 把每条记录（级别、字段）交给 slog（`library=cliproxy`），走控制面同一套 Sentry 日志和错误追踪；不再接管整个进程的 stdout。CPA 启动和重载配置时各有一行 `fmt.Printf` 写到 stdout，只进容器日志。
 - 管理 API：`config.yaml` 在每次启动时生成，管理密钥是每次启动随机生成的 `secret-key`（不放进环境变量，否则会被这个进程启动的命令继承），`allow-remote: false`；`cpa.Proxy.Management()` 在进程内直接调用 gin 引擎，不经过网络。
 - 停机与故障：`serve` 的 SIGTERM 同时结束两个 listener 和 CPA（CPA 停 watcher、自动刷新，账本退出时写盘）。CPA 启动失败会让 `serve` 整体退出重启；上游的任何失败只体现在单个请求和账号/模型的状态上，不影响 readiness。
 

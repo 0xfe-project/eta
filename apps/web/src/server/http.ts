@@ -1,5 +1,4 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { receiveBrowserLogs } from "./browser-logs.ts";
 
 /** App-owned HTTP routes that are not static files or the SPA shell. */
 export async function handleWebApi(
@@ -12,9 +11,6 @@ export async function handleWebApi(
     return new Response(buildId, {
       headers: { "Cache-Control": "no-store" },
     });
-  }
-  if (pathname === "/telemetry/logs" && request.method === "POST") {
-    return receiveBrowserLogs(request);
   }
   return null;
 }

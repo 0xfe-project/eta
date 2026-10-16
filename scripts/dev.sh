@@ -146,7 +146,11 @@ export AXP_PUBLIC_URL="https://localhost:$AXP_PUBLIC_PORT"
 # --- Kubernetes ---------------------------------------------------------------
 # The shared infrastructure, then this database's namespaces.
 kubectl apply -k deploy/k3s/dev >/dev/null
-kubectl -n axp-dev rollout status deploy/postgres deploy/registry deploy/buildkitd deploy/nats --timeout=5m >/dev/null
+kubectl -n axp-dev rollout status deploy/postgres deploy/registry deploy/buildkitd deploy/nats deploy/rustrak --timeout=5m >/dev/null
+# Rustrak replaced OpenObserve and the OpenTelemetry Collector (#141).
+kubectl -n axp-dev delete deploy/openobserve svc/openobserve deploy/otel-collector svc/otel-collector \
+  --ignore-not-found >/dev/null
+kubectl -n axp-dev get configmap -o name | sed -n '/^configmap\/otel-collector-/p' | xargs -r kubectl -n axp-dev delete >/dev/null
 database="${DATABASE_URL:-postgres://axp:axp@postgres.axp-dev.svc.cluster.local:5432/axp}"
 database="${database##*/}"
 database="${database%%\?*}"
@@ -191,14 +195,17 @@ if [[ ! -f "$tls_dir/cert.pem" ]]; then
 fi
 chmod 644 "$tls_dir/key.pem"
 
-# --- Logs -------------------------------------------------------------------------
-# Development's OpenObserve (dev-only credentials, deploy/k3s/dev), proxied
-# by the gateway at /observe.
-observe="$(kubectl -n axp-dev get svc openobserve -o jsonpath='{.spec.clusterIP}'):5080"
-export AXP_UPSTREAM_OBSERVE="$observe"
-export OTEL_EXPORTER_OTLP_ENDPOINT="http://$observe/observe/api/default"
-export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic%20$(printf '%s' root@axp.local:Axp-dev-observe-1 | base64 -w0)"
-export OTEL_RESOURCE_ATTRIBUTES="deployment.environment.name=development,axp.dev.port=$web_port"
+# --- Errors, logs and traces ---------------------------------------------------------
+# Development's Rustrak (dev-only credentials, deploy/k3s/dev), at a fixed
+# address on this machine; every instance sends to its project axp, each as
+# an environment of its own. The browser and bundles' services send through
+# the gateways' /sentry.
+rustrak=10.43.100.13:8080
+rustrak_admin=admin@axp.local:axp-dev-rustrak
+export AXP_UPSTREAM_SENTRY="$rustrak"
+SENTRY_DSN="$(RUSTRAK_URL="http://$rustrak" RUSTRAK_SUPERUSER="$rustrak_admin" bun deploy/k3s/rustrak.ts dsn)" ||
+  fail "cannot get the DSN from Rustrak at http://$rustrak."
+export SENTRY_DSN SENTRY_ENVIRONMENT="development-$web_port"
 exec 9>&-
 
 cat <<EOF
@@ -206,7 +213,8 @@ AXP dev in $ROOT_DIR
   Web:      http://localhost:$AXP_GATEWAY_PORT
   API:      http://localhost:$AXP_GATEWAY_PORT/api/health
   Internal: http://127.0.0.1:$AXP_INTERNAL_PORT/internal/docs
-  Logs:     http://localhost:$AXP_GATEWAY_PORT/observe/ (root@axp.local / Axp-dev-observe-1)
+  Rustrak:  http://$rustrak (${rustrak_admin%%:*} / ${rustrak_admin#*:}), environment $SENTRY_ENVIRONMENT
+  DSN:      $SENTRY_DSN (this machine's)
   Public:   $AXP_PUBLIC_URL (remote computers trust $tls_dir/cert.pem)
   Cluster:  kubectl get pods,bundleservices -n $AXP_NAMESPACE-agents -n $AXP_BUNDLES_NAMESPACE
 EOF
@@ -221,7 +229,7 @@ cp -r apps/gateway var/gateway
 cp scripts/dev-https.caddy var/gateway/
 gateway_env=""
 for name in AXP_GATEWAY_BIND AXP_GATEWAY_PORT AXP_RUNTIME_GATEWAY_BIND AXP_RUNTIME_GATEWAY_PORT AXP_PUBLIC_PORT \
-  AXP_UPSTREAM_WEB AXP_UPSTREAM_API AXP_UPSTREAM_INTERNAL AXP_UPSTREAM_OBSERVE AXP_BUNDLES_NAMESPACE; do
+  AXP_UPSTREAM_WEB AXP_UPSTREAM_API AXP_UPSTREAM_INTERNAL AXP_UPSTREAM_SENTRY AXP_BUNDLES_NAMESPACE; do
   gateway_env+=" -e $name"
 done
 
@@ -230,7 +238,7 @@ exec node node_modules/concurrently/dist/bin/concurrently.js --kill-others \
   --names gateway,control-plane,controller,routine-worker,web \
   --prefix-colors gray,blue,cyan,yellow,green \
   "docker run --rm --name $gateway --network host$gateway_env -v $ROOT_DIR/var/gateway:/etc/axp-gateway:ro -v $tls_dir:/etc/axp-tls:ro caddy:2.11.7-alpine caddy run --config /etc/axp-gateway/Caddyfile" \
-  "OTEL_SERVICE_NAME=control-plane bun run dev:control-plane" \
-  "OTEL_SERVICE_NAME=control-plane-controller PATH=$(dirname "$(bash scripts/build/buildctl.sh)"):\$PATH bun run dev:controller" \
-  "OTEL_SERVICE_NAME=control-plane-routine-worker bun run dev:routine-worker" \
+  "bun run dev:control-plane" \
+  "PATH=$(dirname "$(bash scripts/build/buildctl.sh)"):\$PATH bun run dev:controller" \
+  "bun run dev:routine-worker" \
   "bun run dev:web"

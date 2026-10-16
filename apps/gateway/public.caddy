@@ -1,5 +1,5 @@
 # The browser's entry: by longest prefix, /api/bundles/<name> to that
-# bundle's service (as /api/<name>), /observe to OpenObserve, /remote/relay
+# bundle's service (as /api/<name>), /sentry to Rustrak, /remote/relay
 # to the agenvo relay (the agenvo bundle's service), /api (with /api/forge,
 # /api/routines and /api/llm), /remote and artifacts' /share and /preview
 # pages to the control plane's public listener, everything else to web. The
@@ -51,11 +51,8 @@ http://:{$AXP_GATEWAY_PORT:8080} {
 		uri replace /api/bundles/ /api/ 1
 		import bundle_service {http.request.uri.path.1}
 	}
-	# OpenObserve's UI and API, served under /observe (ZO_BASE_URI).
-	handle /observe/* {
-		log_skip
-		reverse_proxy {$AXP_UPSTREAM_OBSERVE:openobserve:5080}
-	}
+	# The browser's error reports (lib/report.ts).
+	import sentry
 	# The agenvo relay, at its base URL (AXP_PUBLIC_URL/remote/relay): remote
 	# computers' connectors pair and connect (WebSocket) here; it
 	# authenticates devices itself. Cloudflare's client address goes on as

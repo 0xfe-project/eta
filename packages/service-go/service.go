@@ -48,7 +48,7 @@ type Command struct {
 
 // Main runs the command its first argument names and exits: 0 when it
 // returns nil, 1 when it fails, 2 for an unknown command. name is the
-// service's, for telemetry (OTEL_SERVICE_NAME overrides it).
+// service's, for telemetry.
 func Main(name string, commands ...Command) {
 	command, args, ok := pick(commands, os.Args[1:])
 	if !ok {
@@ -64,12 +64,12 @@ func Main(name string, commands ...Command) {
 		}
 		return
 	}
-	logger, shutdown, err := telemetry.Setup(context.Background(), name)
+	logger, shutdown, err := telemetry.Setup(context.Background(), name, command.Name)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "telemetry:", err)
 		os.Exit(1)
 	}
-	err = command.Run(ctx, args)
+	err = run(ctx, command, args)
 	if err != nil {
 		logger.Error(name+" stopped", "command", command.Name, "error", err)
 	}
@@ -81,6 +81,12 @@ func Main(name string, commands ...Command) {
 	if err != nil {
 		os.Exit(1)
 	}
+}
+
+// run runs command, reporting a panic before it ends the process.
+func run(ctx context.Context, command Command, args []string) error {
+	defer telemetry.Recover()
+	return command.Run(ctx, args)
 }
 
 func pick(commands []Command, args []string) (Command, []string, bool) {

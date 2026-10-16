@@ -87,3 +87,13 @@ func TestNotReadyUntilRolledOut(t *testing.T) {
 		t.Fatal(msg)
 	}
 }
+
+func TestServicesReportThroughTheRuntimeGateway(t *testing.T) {
+	got := gatewayDSN("http://abc@rustrak.axp.svc.cluster.local:8080/1", "http://runtime-gateway.axp.svc.cluster.local:8090")
+	if want := "http://abc@runtime-gateway.axp.svc.cluster.local:8090/sentry/1"; got != want {
+		t.Fatalf("gatewayDSN = %q, want %q", got, want)
+	}
+	if got := gatewayDSN("", "http://runtime-gateway:8090"); got != "" {
+		t.Fatalf("without a DSN, got %q", got)
+	}
+}
