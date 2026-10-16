@@ -1,3 +1,4 @@
+import type { EventHub } from "../http/events";
 /**
  * The timeline projection (REFACTOR.md §9, P2.3).
  *
@@ -18,7 +19,7 @@
  * The user's own message is projected too, which is not a detail: the browser that sent it adds it
  * locally, but every *other* browser watching the group only learns about it from this event.
  */
-import type { EventHub } from "../http/events";
+import type { InteractionRecord } from "../interactions/store";
 import type {
   GroupRecord,
   GroupStore,
@@ -29,6 +30,15 @@ import type {
 export interface TimelineProjectorOptions {
   groups: GroupStore;
   hub?: EventHub | undefined;
+  /**
+   * Questions that were still waiting when a reply ended (P2.6).
+   *
+   * A reply ending is the one moment that settles it: a run that is over cannot be waiting for an
+   * answer, so a card left pending belongs to a question nobody will ever read.
+   */
+  interactions?:
+    | { expireForReply: (messageId: string) => InteractionRecord[] }
+    | undefined;
 }
 
 export interface ProjectedReply {
@@ -39,10 +49,14 @@ export interface ProjectedReply {
 export class TimelineProjector {
   readonly #groups: GroupStore;
   readonly #hub: EventHub | undefined;
+  readonly #interactions:
+    | { expireForReply: (messageId: string) => InteractionRecord[] }
+    | undefined;
 
   constructor(options: TimelineProjectorOptions) {
     this.#groups = options.groups;
     this.#hub = options.hub;
+    this.#interactions = options.interactions;
   }
 
   /** The user speaks: a row in the timeline, and every watcher hears about it. */
@@ -114,6 +128,22 @@ export class TimelineProjector {
     return message;
   }
 
+  /**
+   * The agent asked and is parked until it is answered (P2.6).
+   *
+   * The row says `waiting_for_input`, which is the product's own word for it: the reply did not
+   * end, it stopped to listen.
+   */
+  replyWaiting(input: {
+    groupId: string;
+    messageId: string;
+  }): MessageRecord | undefined {
+    const message = this.#groups.markWaiting(input.messageId);
+    if (message === undefined) return undefined;
+    this.#hub?.publish("message.updated", { group_id: input.groupId, message });
+    return message;
+  }
+
   /** The run behind a queued reply has begun: `queued` becomes `working`. */
   replyWorking(input: {
     groupId: string;
@@ -142,6 +172,9 @@ export class TimelineProjector {
     const group = this.#summary(input.groupId);
     // No `group.updated`: the seq did not move, and a sidebar has nothing new to say.
     this.#hub?.publish("message.updated", { group_id: input.groupId, message });
+    for (const expired of this.#interactions?.expireForReply(messageId) ?? []) {
+      this.#hub?.publish("interaction.updated", { interaction: expired });
+    }
     return { message, group };
   }
 

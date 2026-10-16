@@ -292,7 +292,11 @@ export class WakeRunner {
   async stop(replyMessageId: string): Promise<MessageRecord | undefined> {
     const reply = this.#groups.message(replyMessageId);
     if (reply === undefined) return undefined;
-    if (reply.status !== "working") return reply;
+    // A reply that is waiting for an answer is a run in flight like any other: stopping it is
+    // exactly what a user who does not want to answer does. Anything already finished is not.
+    if (reply.status !== "working" && reply.status !== "waiting_for_input") {
+      return reply;
+    }
 
     const stopping = this.#projector?.replyStopping({
       groupId: reply.groupId,

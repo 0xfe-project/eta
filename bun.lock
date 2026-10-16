@@ -50,6 +50,7 @@
         "@eta/client-contracts": "*",
         "@eta/core": "*",
         "@eta/execution-node": "*",
+        "@eta/harness": "*",
         "@eta/server": "*",
         "cordis": "4.0.0-rc.10",
       },

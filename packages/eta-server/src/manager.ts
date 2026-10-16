@@ -34,6 +34,7 @@ import type {
   SessionMemoryOptions,
   SubagentManager,
 } from "@eta/harness";
+import type { AskObserver } from "@eta/harness";
 import type { SessionEnvironment } from "@eta/plugin-sdk";
 import type { Settings } from "./settings";
 import type { SessionListing, SessionMeta, SessionStore } from "./store";
@@ -115,6 +116,14 @@ export interface SessionManagerOptions {
   memoryFor?:
     | ((meta: SessionMeta) => SessionMemoryWiring | undefined)
     | undefined;
+  /**
+   * How a session's questions are surfaced — told when one is asked, answered, canceled or expired.
+   *
+   * Read per session like the other `…For` options, because the answer is the session's own: who
+   * asked, in which group, and which reply the question belongs to. Absent means nobody is told,
+   * which is what a headless embedding wants.
+   */
+  askObserve?: ((meta: SessionMeta) => AskObserver | undefined) | undefined;
   /** Called when a session cannot be opened; the list keeps its row either way. */
   warn?: ((message: string) => void) | undefined;
 }
@@ -171,6 +180,7 @@ export class SessionManager {
   private readonly personasFor: SessionManagerOptions["personasFor"];
   private readonly skillsFor: SessionManagerOptions["skillsFor"];
   private readonly memoryFor: SessionManagerOptions["memoryFor"];
+  private readonly askObserve: SessionManagerOptions["askObserve"];
   private readonly subagents: SessionManagerOptions["subagents"];
   private readonly warn: (message: string) => void;
   private readonly open = new Map<string, ManagedSession>();
@@ -187,6 +197,7 @@ export class SessionManager {
     this.personasFor = options.personasFor;
     this.skillsFor = options.skillsFor;
     this.memoryFor = options.memoryFor;
+    this.askObserve = options.askObserve;
     this.warn = options.warn ?? (() => undefined);
   }
 
@@ -353,6 +364,9 @@ export class SessionManager {
             ...(poolSize === undefined ? {} : { poolSize }),
           };
     const environment = this.envFor?.(meta);
+    // Read once per open, like the settings: who is told about this session's questions is the
+    // session's own answer, and it must not change under it while it runs.
+    const observe = this.askObserve?.(meta);
     const wiring = this.memoryFor?.(meta);
     const skills = await this.skillsFor?.(meta);
     const memory: SessionMemoryOptions | undefined =
@@ -411,6 +425,8 @@ export class SessionManager {
       // wire (`sessions.answer`), and without a registry the model's own ask tool is
       // not installed at all.
       ask: true,
+      // The host's window on those questions, when it wants one.
+      ...(observe === undefined ? {} : { askObserve: observe }),
       // No shared root: each session is its own cordis scope, so its bus,
       // journaling, usage and goals cannot hear another session's events.
       kernel: { warn: this.warn },

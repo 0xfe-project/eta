@@ -38,6 +38,8 @@ import { WakeRunner } from "./groups/runner";
 import { GroupStore } from "./groups/store";
 import { EventHub } from "./http/events";
 import { IdempotencyStore, withIdempotency } from "./http/idempotency";
+import { AskBridge } from "./interactions/bridge";
+import { InteractionStore } from "./interactions/store";
 import { buildModels } from "./providers/runtime";
 import { RouteRegistry, RouteService } from "./routes";
 import { recordingModels, subjectOf } from "./usage/recorder";
@@ -133,6 +135,18 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   if (pruned > 0)
     warn(`[eta] dropped ${pruned} usage row(s) older than the retention`);
 
+  // The stores and the event hub first: the session manager down the page needs to be told where
+  // a session's questions go, and its observer needs them (P2.6). Only the manager itself is
+  // circular — a session's observer is only ever called once a session exists, which is after
+  // this file has finished assembling — so the bridge is the one piece that is late.
+  const hub = new EventHub(
+    options.hubCapacity === undefined ? {} : { capacity: options.hubCapacity },
+  );
+  const agents = new AgentStore(handle);
+  const groups = new GroupStore(handle);
+  const interactions = new InteractionStore(handle);
+  const bridgeRef: { current?: AskBridge } = {};
+
   // Sessions: jsonl journals and a meta file each, under the data directory (P0.7). The
   // manager decides nothing about models — it asks, per session — so which provider a session
   // uses stays the application's decision.
@@ -159,6 +173,10 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
       const env = createLocalEnvironment(meta.cwd);
       return env === undefined ? undefined : { env };
     },
+    // A session's questions become interaction rows (P2.6), which is what the product's
+    // confirmation cards are.
+    askObserve: (meta) => (action, payload) =>
+      bridgeRef.current?.observe(meta, action, payload),
     warn,
   });
 
@@ -168,14 +186,10 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
       withIdempotency(idempotency, request, run),
     ),
   );
-  const hub = new EventHub(
-    options.hubCapacity === undefined ? {} : { capacity: options.hubCapacity },
-  );
-  const agents = new AgentStore(handle);
-  const groups = new GroupStore(handle);
   // Wakes become runs here (P2.2): one session per (agent × group), found by the participant
-  // row and remembered in the session's own meta.
-  const projector = new TimelineProjector({ groups, hub });
+  // row and remembered in the session's own meta. The projector also closes a reply's questions
+  // when it ends, so a card never outlives the run that asked it.
+  const projector = new TimelineProjector({ groups, hub, interactions });
   const runner = new WakeRunner({
     groups,
     sessions,
@@ -184,6 +198,16 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     hub,
     warn,
   });
+  const bridge = new AskBridge({
+    interactions,
+    groups,
+    sessions,
+    projector,
+    hub,
+  });
+  // The manager was handed a closure that reads this; by the time a session opens, it is set.
+  bridgeRef.current = bridge;
+
   const status: HostStatus = {
     pid: process.pid,
     dataDir: options.dataDir,
@@ -212,7 +236,15 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     ctx.plugin(usagePlugin, { usage }),
     ctx.plugin(groupsPlugin, { groups, runner, projector }),
     // The product API the existing web speaks (P2.4): AXP's shapes over our rows.
-    ctx.plugin(compatPlugin, { agents, groups, hub, models, runner }),
+    ctx.plugin(compatPlugin, {
+      agents,
+      ask: bridge,
+      groups,
+      hub,
+      interactions,
+      models,
+      runner,
+    }),
   ];
 
   const manager = new PluginManager({

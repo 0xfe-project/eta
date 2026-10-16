@@ -19,6 +19,7 @@ import type {
   MessageRecord,
   ParticipantRecord,
 } from "../groups/store";
+import type { InteractionRecord } from "../interactions/store";
 
 export interface AxpBlock {
   type: "text";
@@ -86,13 +87,40 @@ export interface AxpAgent {
   revision: number;
 }
 
+export interface AxpInteractionOption {
+  value: string;
+  label: string;
+}
+
+/**
+ * A confirmation card, as the web reads it.
+ *
+ * `kind` is always `choice`: a question with options is the only shape the ask channel has, and one
+ * asked without options is a choice with none.
+ */
+export interface AxpInteraction {
+  group_id: string;
+  id: string;
+  agent_id: string;
+  message_id: string;
+  kind: "choice";
+  prompt: string;
+  options: AxpInteractionOption[];
+  status: "pending" | "resolved" | "expired";
+  revision: number;
+  /** The option the user chose; null until it is answered. */
+  answer: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AxpSnapshot {
   groups: AxpGroup[];
   agents: AxpAgent[];
   /** The replies that are running right now, which the web shows as "working". */
   active_replies: AxpMessage[];
-  /** Ask cards; empty until P2.6 gives sessions an ask channel. */
-  interactions: unknown[];
+  /** The confirmation cards still waiting for an answer (P2.6). */
+  interactions: AxpInteraction[];
   /** Where the stream resumes from: the hub's own sequence, as a string. */
   event_cursor: string;
 }
@@ -100,6 +128,7 @@ export interface AxpSnapshot {
 const STATUS: Record<MessageRecord["status"], AxpMessage["status"]> = {
   queued: "queued",
   working: "responding",
+  waiting_for_input: "waiting_for_input",
   done: "completed",
   failed: "failed",
   // AXP spells these two the same way we do, which is where the words came from.
@@ -182,6 +211,26 @@ export function toGroup(input: {
     participants: input.participants.map((participant) =>
       toParticipant(participant, input.agentName(participant.agentId)),
     ),
+  };
+}
+
+export function toInteraction(interaction: InteractionRecord): AxpInteraction {
+  return {
+    group_id: interaction.groupId,
+    id: interaction.id,
+    agent_id: interaction.agentId,
+    message_id: interaction.messageId,
+    kind: interaction.kind,
+    prompt: interaction.prompt,
+    options: interaction.options.map((option) => ({
+      value: option.value,
+      label: option.label,
+    })),
+    status: interaction.status,
+    revision: interaction.revision,
+    answer: interaction.answer ?? null,
+    created_at: interaction.createdAt,
+    updated_at: interaction.updatedAt,
   };
 }
 

@@ -68,6 +68,7 @@ describe("the migrations on disk", () => {
 
       "groups/0002-reply-status",
       "http/0001-idempotency",
+      "interactions/0001-interactions",
       "usage/0001-usage",
     ]);
     expect(migrations[0]?.sql).toContain("CREATE TABLE agents");
@@ -83,6 +84,7 @@ describe("the migrations on disk", () => {
 
       "groups/0002-reply-status",
       "http/0001-idempotency",
+      "interactions/0001-interactions",
       "usage/0001-usage",
     ]);
     expect(tables(db)).toEqual([
@@ -93,6 +95,7 @@ describe("the migrations on disk", () => {
       "group_participant",
       "group_wake",
       "http_idempotency",
+      "interaction",
       "usage_hourly",
     ]);
     expect(schemaVersion(db)).toBe("usage/0001-usage");
@@ -138,6 +141,7 @@ describe("the host's database", () => {
 
       "groups/0002-reply-status",
       "http/0001-idempotency",
+      "interactions/0001-interactions",
       "usage/0001-usage",
     ]);
     expect(tables(host.db.handle)).toContain("agents");

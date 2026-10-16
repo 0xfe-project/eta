@@ -49,6 +49,7 @@ import type { GoalEntry } from "@eta/core/session";
 import type { StorageService } from "@eta/core/storage";
 import type { ExecutionEnv } from "@eta/execution";
 import type { TSchema } from "typebox";
+import type { AskObserver } from "./ask";
 import type { MemoryExtractionOutcome, MemoryFile, MemoryFs } from "./memory";
 import type {
   EtaPromptSection,
@@ -168,6 +169,14 @@ export interface OpenSessionOptions {
   ask?: boolean | AskRegistry | undefined;
   /** How long `ask_user` waits for a human. Defaults to no timeout. */
   askTimeoutMs?: number | undefined;
+  /**
+   * Told when a question is asked, answered, canceled or expired.
+   *
+   * The host's window onto the ask channel: a session's questions are its own, and what a surface
+   * (a product API, a log) needs is to hear about them as they happen. Only used when the session
+   * owns its registry — a caller that passes its own registry sets its own observer.
+   */
+  askObserve?: AskObserver | undefined;
   /**
    * How a subagent runs. Given one, the session gets a pool of its own — `Agent`,
    * `get_subagent_result`, `steer_subagent` — whose bus is the session's own bus, so a
@@ -369,6 +378,9 @@ export async function openSession(
           onAnswer: (payload) => {
             void journaling.recordAnswer(payload);
           },
+          ...(options.askObserve === undefined
+            ? {}
+            : { observe: options.askObserve }),
         })
       : options.ask === undefined || options.ask === false
         ? undefined

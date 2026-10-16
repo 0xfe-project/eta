@@ -67,6 +67,7 @@ export interface MessageRecord {
 export type ReplyStatus =
   | "queued"
   | "working"
+  | "waiting_for_input"
   | "done"
   | "failed"
   | "stopping"
@@ -75,6 +76,7 @@ export type ReplyStatus =
 const REPLY_STATUSES: readonly string[] = [
   "queued",
   "working",
+  "waiting_for_input",
   "done",
   "failed",
   "stopping",
@@ -495,25 +497,52 @@ export class GroupStore {
   markStopping(messageId: string): MessageRecord | undefined {
     const changed = this.#handle
       .query(
-        "UPDATE group_message SET status = 'stopping', revision = revision + 1 WHERE id = ? AND status = 'working'",
+        `UPDATE group_message SET status = 'stopping', revision = revision + 1
+          WHERE id = ? AND status IN ('working', 'waiting_for_input')`,
       )
       .run(messageId);
     return changed.changes === 0 ? undefined : this.message(messageId);
   }
 
   /**
-   * A reply whose run is about to start: `queued` becomes `working`.
+   * A reply whose run is about to start, or is starting again after a question was answered:
+   * `queued` and `waiting_for_input` both become `working`.
    *
-   * One write per reply, and only when there is something to say — a row written `working` (the
-   * blocking path writes it that way) does not change, so nothing is published twice.
+   * One write per reply, and only when there is something to say — a row that is already working
+   * (the blocking path writes it that way) does not change, so nothing is published twice.
    */
   markWorking(messageId: string): MessageRecord | undefined {
     const changed = this.#handle
       .query(
-        "UPDATE group_message SET status = 'working', revision = revision + 1 WHERE id = ? AND status = 'queued'",
+        `UPDATE group_message SET status = 'working', revision = revision + 1
+          WHERE id = ? AND status IN ('queued', 'waiting_for_input')`,
       )
       .run(messageId);
     return changed.changes === 0 ? undefined : this.message(messageId);
+  }
+
+  /** The agent asked a question and is parked until it is answered (P2.6). */
+  markWaiting(messageId: string): MessageRecord | undefined {
+    const changed = this.#handle
+      .query(
+        `UPDATE group_message SET status = 'waiting_for_input', revision = revision + 1
+          WHERE id = ? AND status IN ('queued', 'working')`,
+      )
+      .run(messageId);
+    return changed.changes === 0 ? undefined : this.message(messageId);
+  }
+
+  /** The reply an agent has going in a group: the one a question belongs to. */
+  openReply(groupId: string, agentId: string): MessageRecord | undefined {
+    const row = this.#handle
+      .query(
+        `SELECT * FROM group_message
+          WHERE group_id = ? AND author_agent_id = ?
+            AND status IN ('queued', 'working', 'waiting_for_input')
+          ORDER BY seq DESC LIMIT 1`,
+      )
+      .get(groupId, agentId) as MessageRow | null;
+    return row === null ? undefined : messageOf(row);
   }
 
   /** One row by id, wherever it is. */

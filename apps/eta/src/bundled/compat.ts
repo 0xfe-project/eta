@@ -5,6 +5,8 @@
  *   GET    /api/v1/chat/stream?cursor=…       one SSE stream of product events
  *   POST   /api/v1/chat/messages              send a message: a row, and joined by mode
  *   POST   /api/v1/chat/messages/{id}/stop    stop the run behind a reply (P2.6)
+ *   GET    /api/v1/chat/interactions           the confirmation cards (P2.6)
+ *   POST   /api/v1/chat/interactions/{id}/answer  the user's choice, back into the run
  *   GET    /api/v1/agents                     the agents
  *   POST   /api/v1/agents                     {name, description, model?, bundles?}
  *   PATCH  /api/v1/agents/{id}
@@ -26,10 +28,14 @@ import type { AxpGroup, AxpMessage, AxpSnapshot } from "../compat/shapes";
 import type { WakeRunner } from "../groups/runner";
 import type { GroupStore, MessageRecord } from "../groups/store";
 import type { EventHub, EventTranslator } from "../http/events";
+import type {
+  InteractionRecord,
+  InteractionStore,
+} from "../interactions/store";
 import type { PluginContext } from "../plugin-api";
 import { publishAgentDeleted, publishAgentUpdated } from "../agents/events";
 import { modelRejection } from "../agents/model-check";
-import { toAgent, toGroup, toMessage } from "../compat/shapes";
+import { toAgent, toGroup, toInteraction, toMessage } from "../compat/shapes";
 import { errorResponse } from "../routes";
 
 /**
@@ -49,6 +55,15 @@ export interface CompatPluginConfig {
   models: KernelModels | undefined;
   /** Stopping a reply is a run's business, so this layer asks the runner that owns it. */
   runner: WakeRunner;
+  /** The confirmation cards, for reading. */
+  interactions: InteractionStore;
+  /** The bridge, for answering one: the half that reaches the run that is waiting. */
+  ask: {
+    answer: (
+      id: string,
+      value: string,
+    ) => Promise<InteractionRecord | undefined>;
+  };
 }
 
 const readJson = async (request: Request): Promise<Record<string, unknown>> => {
@@ -100,7 +115,7 @@ export const compatPlugin = {
   inject: ["routes"],
   apply(ctx: Context, config: CompatPluginConfig): void {
     const plugin = ctx as unknown as PluginContext;
-    const { agents, groups, hub, models, runner } = config;
+    const { agents, ask, groups, hub, interactions, models, runner } = config;
 
     /** One group in the product's shape. */
     const groupShape = (groupId: string): AxpGroup | undefined => {
@@ -175,6 +190,15 @@ export const compatPlugin = {
             ? undefined
             : { name: "agent.updated", data: { agent: toAgent(agent) } };
         }
+        case "interaction.updated":
+          return {
+            name: "interaction.updated",
+            data: {
+              interaction: toInteraction(
+                (event.data as { interaction: InteractionRecord }).interaction,
+              ),
+            },
+          };
         case "agent.deleted":
           return {
             name: "agent.deleted",
@@ -202,9 +226,8 @@ export const compatPlugin = {
           groups: allGroups(),
           agents: agents.list().map(toAgent),
           active_replies: activeReplies(),
-          // Ask cards arrive with P2.6's ask channel; the field exists so the client's
-          // shape is complete.
-          interactions: [],
+          // The cards still waiting: questions the user has not answered yet.
+          interactions: interactions.pending().map(toInteraction),
           // The hub's own sequence: what a client hands back to resume its stream.
           event_cursor: String(hub.sequence),
         };
@@ -321,6 +344,38 @@ export const compatPlugin = {
     plugin.effect(() =>
       plugin.routes.register(
         "POST",
+        "/api/v1/chat/interactions/:interaction_id/answer",
+        async (request, params) => {
+          const id = params.interaction_id ?? "";
+          const body = await readJson(request);
+          const value = asString(body.value);
+          if (value === undefined) {
+            return errorResponse(
+              400,
+              "NO_VALUE",
+              "an answer needs a value",
+              crypto.randomUUID(),
+            );
+          }
+          const answered = await ask.answer(id, value);
+          if (answered === undefined) {
+            return errorResponse(
+              404,
+              "NO_SUCH_INTERACTION",
+              `no interaction ${id}`,
+              crypto.randomUUID(),
+            );
+          }
+          // Answering twice is not an error and not a second answer: the card comes back as it
+          // stands, which is what a client retrying after a dropped connection needs.
+          return Response.json(toInteraction(answered));
+        },
+      ),
+    );
+
+    plugin.effect(() =>
+      plugin.routes.register(
+        "POST",
         "/api/v1/chat/messages/:message_id/stop",
         async (_request, params) => {
           const id = params.message_id ?? "";
@@ -341,12 +396,22 @@ export const compatPlugin = {
     );
 
     plugin.effect(() =>
-      plugin.routes.register("GET", "/api/v1/chat/interactions", () =>
-        // Ask cards are a session's ask channel, which is P2.6. The route exists now because
-        // the web's history page queries it: an empty list is true, a 404 would be a lie
-        // about what exists.
-        Response.json({ interactions: [] }),
-      ),
+      plugin.routes.register("GET", "/api/v1/chat/interactions", (request) => {
+        const raw = new URL(request.url).searchParams.get("limit");
+        const limit = raw === null || raw.trim() === "" ? 100 : Number(raw);
+        if (!Number.isFinite(limit) || limit <= 0) {
+          return errorResponse(
+            400,
+            "BAD_LIMIT",
+            `limit=${raw} is not a count`,
+            crypto.randomUUID(),
+          );
+        }
+        // Newest first, answered or not: the web's history page reads them like notifications.
+        return Response.json({
+          interactions: interactions.list(limit).map(toInteraction),
+        });
+      }),
     );
 
     plugin.effect(() =>
