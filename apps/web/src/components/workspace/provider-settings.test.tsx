@@ -81,6 +81,10 @@ async function render() {
 }
 
 const settle = () => act(() => new Promise((r) => setTimeout(r, 20)));
+// Settles until done, however slow the machine (CI): at most two seconds.
+async function settleUntil(done: () => boolean) {
+  for (let i = 0; i < 100 && !done(); i++) await settle();
+}
 const refreshButton = () =>
   [...document.querySelectorAll("button")].find((b) =>
     /刷新状态|检查中/.test(b.textContent ?? ""),
@@ -112,7 +116,7 @@ describe("refreshing model status", () => {
     await act(async () => refreshButton().click());
 
     response.resolve(Response.json(after));
-    await settle();
+    await settleUntil(() => !refreshButton().disabled);
     expect(requests).toEqual(["POST /api/llm/v1/refresh"]);
     expect(refreshButton().disabled).toBe(false);
     expect(status()).toMatch(/^已于 .+ 重新检查，账号均可连接$/);
