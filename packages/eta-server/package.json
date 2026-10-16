@@ -1,0 +1,34 @@
+{
+  "name": "@eta/server",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The eta server host: many sessions in one process, each one a harness session behind a store (host half only; the HTTP/SSE face and the plugins live in this repository).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "bun --bun vitest --run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "0.85.1",
+    "@eta/client-contracts": "*",
+    "@eta/client-wire-proto": "*",
+    "@eta/core": "*",
+    "@eta/execution-node": "*",
+    "@eta/harness": "*",
+    "@eta/plugin-sdk": "*",
+    "@eta/storage-jsonl": "*",
+    "cordis": "4.0.0-rc.10"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.19",
+    "bun-types": "1.4.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}

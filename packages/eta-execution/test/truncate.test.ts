@@ -11,7 +11,7 @@ function encodedTail(content: string, maxBytes: number): string {
   const bytes = encoder.encode(content);
   if (bytes.length <= maxBytes) return content;
   let start = bytes.length - maxBytes;
-  while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) start++;
+  while (start < bytes.length && (bytes[start] & 0xC0) === 0x80) start++;
   return new TextDecoder().decode(bytes.subarray(start));
 }
 

@@ -60,7 +60,7 @@ const HEADER = "# eta memory (untrusted)";
 
 /** Path hash without a crypto import: the harness stays runtime-agnostic here. */
 function shortHash(value: string): string {
-  let h = 0x811c9dc5;
+  let h = 0x811C9DC5;
   for (let i = 0; i < value.length; i++) {
     h ^= value.charCodeAt(i);
     h = Math.imul(h, 0x01000193);

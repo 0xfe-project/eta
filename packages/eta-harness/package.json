@@ -20,10 +20,10 @@
     "@earendil-works/pi-ai": "0.85.1",
     "@eta/core": "*",
     "@eta/execution": "*",
-    "cordis": "^4.0.0-rc.10",
+    "cordis": "4.0.0-rc.10",
     "diff": "^9.0.0",
-    "ignore": "^7.0.10",
-    "typebox": "^1.3.34",
+    "ignore": "7.0.10",
+    "typebox": "1.3.34",
     "yaml": "^2.9.1"
   },
   "devDependencies": {

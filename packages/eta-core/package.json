@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.85.1",
-    "cordis": "^4.0.0-rc.10"
+    "cordis": "4.0.0-rc.10"
   },
   "devDependencies": {
     "@types/node": "22.19.19",

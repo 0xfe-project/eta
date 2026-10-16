@@ -55,7 +55,7 @@ function tinyBmp(): Uint8Array {
   const bytes = new Uint8Array(58);
   const view = new DataView(bytes.buffer);
   bytes[0] = 0x42;
-  bytes[1] = 0x4d;
+  bytes[1] = 0x4D;
   view.setUint32(2, bytes.length, true);
   view.setUint32(10, 54, true);
   view.setUint32(14, 40, true);
@@ -76,7 +76,7 @@ describe("image detection", () => {
     expect(detectSupportedImageMimeType(tinyPng())).toBe("image/png");
     expect(
       detectSupportedImageMimeType(
-        Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00]),
+        Uint8Array.from([0xFF, 0xD8, 0xFF, 0xE0, 0x00]),
       ),
     ).toBe("image/jpeg");
     expect(detectSupportedImageMimeType(asciiBytes("GIF89a", [0, 0]))).toBe(
@@ -106,7 +106,7 @@ describe("image detection", () => {
     // A JPEG variant no provider takes.
     expect(
       detectSupportedImageMimeType(
-        Uint8Array.from([0xff, 0xd8, 0xff, 0xf7, 0x00]),
+        Uint8Array.from([0xFF, 0xD8, 0xFF, 0xF7, 0x00]),
       ),
     ).toBeUndefined();
     // A PNG whose first chunk is not IHDR, or which is animated, is refused.

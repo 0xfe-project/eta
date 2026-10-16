@@ -185,7 +185,7 @@ function trimToLastUtf8Bytes(text: string, maxBytes: number): string {
   const bytes = textEncoder.encode(text);
   if (bytes.length <= maxBytes) return text;
   let start = bytes.length - maxBytes;
-  while (start < bytes.length && ((bytes[start] ?? 0) & 0xc0) === 0x80)
+  while (start < bytes.length && ((bytes[start] ?? 0) & 0xC0) === 0x80)
     start += 1;
   return textDecoder.decode(bytes.subarray(start));
 }
@@ -194,7 +194,7 @@ function trimToFirstUtf8Bytes(text: string, maxBytes: number): string {
   const bytes = textEncoder.encode(text);
   if (bytes.length <= maxBytes) return text;
   let end = maxBytes;
-  while (end > 0 && ((bytes[end] ?? 0) & 0xc0) === 0x80) end -= 1;
+  while (end > 0 && ((bytes[end] ?? 0) & 0xC0) === 0x80) end -= 1;
   return textDecoder.decode(bytes.subarray(0, end));
 }
 
