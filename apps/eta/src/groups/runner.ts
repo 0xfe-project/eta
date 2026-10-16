@@ -2,9 +2,10 @@ import type { AgentMessage } from "@eta/core";
 import type { ManagedSession, SessionManager } from "@eta/server";
 import type { AgentStore } from "../agents/store";
 import type { EventHub } from "../http/events";
+import type { TimelineProjector } from "./projection";
 import type { GroupRecord, GroupStore, MessageRecord } from "./store";
 /**
- * Turning a wake into a run (REFACTOR.md §9, P2.2).
+ * Turning a wake into a run (REFACTOR.md §9, P2.2 and P2.3).
  *
  * P2.1 decides *that* an agent should look at a group's message and records it as a row. This is
  * what takes that row: it makes sure the agent has a session for this group, says the message in
@@ -18,6 +19,9 @@ import type { GroupRecord, GroupStore, MessageRecord } from "./store";
  *
  * The agent's own model is what its group sessions run on — that is what the model field on an
  * agent is for (P0.8); a session with no agent (a side thread) keeps the config default.
+ *
+ * The answer is projected into the group's timeline (P2.3) as it happens: a row that says
+ * "working" takes its place before the run, and that same row gets the text when the run ends.
  */
 import process from "node:process";
 
@@ -25,6 +29,8 @@ export interface WakeRunnerOptions {
   groups: GroupStore;
   sessions: SessionManager;
   agents: AgentStore;
+  /** Where the answer goes, and how a browser hears about it. */
+  projector?: TimelineProjector | undefined;
   hub?: EventHub | undefined;
   /** Where a group session's tools run. Defaults to this process's directory. */
   cwd?: string | undefined;
@@ -36,6 +42,8 @@ export interface DeliveredReply {
   /** Absent when the delivery failed before a session could be opened. */
   sessionId?: string | undefined;
   messageId: string;
+  /** The timeline row that holds this answer, when one was projected. */
+  replyMessageId?: string | undefined;
   status: "completed" | "failed" | "aborted";
   /** What the agent last said (P2.3 projects it), or why this delivery failed. */
   text: string;
@@ -65,6 +73,7 @@ export class WakeRunner {
   readonly #groups: GroupStore;
   readonly #sessions: SessionManager;
   readonly #agents: AgentStore;
+  readonly #projector: TimelineProjector | undefined;
   readonly #hub: EventHub | undefined;
   readonly #cwd: string;
   readonly #warn: (message: string) => void;
@@ -73,6 +82,7 @@ export class WakeRunner {
     this.#groups = options.groups;
     this.#sessions = options.sessions;
     this.#agents = options.agents;
+    this.#projector = options.projector;
     this.#hub = options.hub;
     this.#cwd = options.cwd ?? process.cwd();
     this.#warn = options.warn ?? (() => undefined);
@@ -117,13 +127,13 @@ export class WakeRunner {
       .find((candidate) => candidate.id === messageId);
     if (message === undefined) return undefined;
 
-    // A delivery that cannot happen — no providers configured, no environment, a session that
-    // will not open — is this agent's reply failing, not the message failing: the message landed
-    // in the timeline, which is the durable half, and saying why beats a 500 that hides which
-    // agent could not answer.
     try {
       return await this.#run(group.group, groupId, agentId, message);
     } catch (error) {
+      // Nothing could be opened or started — no providers configured, no environment, a
+      // session that will not come up. That is this agent's reply failing, not the message's:
+      // the message landed in the timeline, which is the durable half, and saying why beats a
+      // 500 that hides which agent could not answer.
       const reason = error instanceof Error ? error.message : String(error);
       this.#warn(
         `[eta] agent ${agentId} could not answer in group ${groupId}: ${reason}`,
@@ -146,39 +156,90 @@ export class WakeRunner {
     message: MessageRecord,
   ): Promise<DeliveredReply> {
     const messageId = message.id;
+    // The session first: a delivery that cannot even open one leaves no half-written reply in
+    // the timeline for a reader to wonder about.
     const managed = await this.#ensureSession(group, groupId, agentId);
     // Taken before the run, not after: a crash mid-turn must not deliver the same wake twice.
     this.#groups.markWake(groupId, agentId, messageId, "taken");
 
-    managed.session.kernel.inject({
-      role: "user",
-      timestamp: Date.now(),
-      content: [
-        { type: "text", text: this.#promptFor(group, groupId, message) },
-      ],
-    });
-    const result = await managed.session.runner.run();
-    const transcript = managed.session.journaling.transcript();
-    let last: AgentMessage | undefined;
-    for (const entry of transcript)
-      if (entry.role === "assistant") last = entry;
-    const text = last === undefined ? "" : textOf(last);
-
-    this.#hub?.publish("group.reply", {
+    const projected = this.#projector?.replyStarted({
       groupId,
       agentId,
-      sessionId: managed.meta.id,
-      messageId,
-      status: result.status,
-      text,
+      replyToMessageId: messageId,
     });
-    return {
-      agentId,
-      sessionId: managed.meta.id,
-      messageId,
-      status: result.status,
-      text,
-    };
+    const replyMessageId = projected?.message.id;
+
+    try {
+      managed.session.kernel.inject({
+        role: "user",
+        timestamp: Date.now(),
+        content: [
+          { type: "text", text: this.#promptFor(group, groupId, message) },
+        ],
+      });
+      const result = await managed.session.runner.run();
+      const text = this.#lastAssistantText(managed);
+      if (replyMessageId !== undefined) {
+        this.#projector?.replyFinished(replyMessageId, {
+          groupId,
+          text,
+          status: "done",
+        });
+      }
+      this.#hub?.publish("group.reply", {
+        groupId,
+        agentId,
+        sessionId: managed.meta.id,
+        messageId,
+        replyMessageId,
+        status: result.status,
+        text,
+      });
+      return {
+        agentId,
+        sessionId: managed.meta.id,
+        messageId,
+        ...(replyMessageId === undefined ? {} : { replyMessageId }),
+        status: result.status,
+        text,
+      };
+    } catch (error) {
+      // The run itself failed. The reply row is already in the timeline: it becomes the place
+      // where the failure is written, rather than a row that says "working" forever.
+      const reason = error instanceof Error ? error.message : String(error);
+      if (replyMessageId !== undefined) {
+        this.#projector?.replyFinished(replyMessageId, {
+          groupId,
+          text: reason,
+          status: "failed",
+        });
+      }
+      this.#hub?.publish("group.reply", {
+        groupId,
+        agentId,
+        sessionId: managed.meta.id,
+        messageId,
+        replyMessageId,
+        status: "failed",
+        text: reason,
+      });
+      return {
+        agentId,
+        sessionId: managed.meta.id,
+        messageId,
+        ...(replyMessageId === undefined ? {} : { replyMessageId }),
+        status: "failed",
+        text: reason,
+      };
+    }
+  }
+
+  #lastAssistantText(managed: ManagedSession): string {
+    let last: AgentMessage | undefined;
+    for (const entry of managed.session.journaling.transcript()) {
+      if (entry.role === "assistant") last = entry;
+    }
+    return last === undefined ? "" : textOf(last);
   }
 
   /** What the agent is told: who is speaking, and in which group. */

@@ -32,6 +32,7 @@ import {
   schemaVersion,
 } from "./db/migrations";
 import { DbService } from "./db/service";
+import { TimelineProjector } from "./groups/projection";
 import { WakeRunner } from "./groups/runner";
 import { GroupStore } from "./groups/store";
 import { EventHub } from "./http/events";
@@ -169,7 +170,15 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   const groups = new GroupStore(handle);
   // Wakes become runs here (P2.2): one session per (agent × group), found by the participant
   // row and remembered in the session's own meta.
-  const runner = new WakeRunner({ groups, sessions, agents, hub, warn });
+  const projector = new TimelineProjector({ groups, hub });
+  const runner = new WakeRunner({
+    groups,
+    sessions,
+    agents,
+    projector,
+    hub,
+    warn,
+  });
   const status: HostStatus = {
     pid: process.pid,
     dataDir: options.dataDir,

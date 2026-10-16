@@ -65,6 +65,8 @@ describe("the migrations on disk", () => {
     expect(migrations.map((migration) => migration.id)).toEqual([
       "agents/0001-agents",
       "groups/0001-groups",
+
+      "groups/0002-reply-status",
       "http/0001-idempotency",
       "usage/0001-usage",
     ]);
@@ -78,6 +80,8 @@ describe("the migrations on disk", () => {
     expect(applyMigrations(db, migrations)).toEqual([
       "agents/0001-agents",
       "groups/0001-groups",
+
+      "groups/0002-reply-status",
       "http/0001-idempotency",
       "usage/0001-usage",
     ]);
@@ -131,6 +135,8 @@ describe("the host's database", () => {
     expect(host.db.applied).toEqual([
       "agents/0001-agents",
       "groups/0001-groups",
+
+      "groups/0002-reply-status",
       "http/0001-idempotency",
       "usage/0001-usage",
     ]);

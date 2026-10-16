@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { assembleHost } from "../src/host";
 import { EventHub } from "../src/http/events";
+import { sseReader } from "./support/sse";
 
 const roots: string[] = [];
 const hosts: Host[] = [];
@@ -41,50 +42,6 @@ async function start(): Promise<Host> {
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * A reader over an SSE body.
- *
- * It remembers the read it started, because a timed-out read is still a read: asking again would
- * start a second one, and whichever resolved first would steal the frame.
- */
-function sseReader(response: Response) {
-  const reader = response.body!.getReader();
-  const decoder = new TextDecoder();
-  const queue: string[] = [];
-  let buffer = "";
-  let inflight: ReturnType<typeof reader.read> | undefined;
-
-  return {
-    /** The next frame (`id:`/`event:`/`data:` block), or `undefined` on timeout or end. */
-    async next(timeoutMs = 1_000): Promise<string | undefined> {
-      const deadline = Date.now() + timeoutMs;
-      while (queue.length === 0) {
-        const remaining = deadline - Date.now();
-        if (remaining <= 0) return undefined;
-        inflight ??= reader.read();
-        const chunk = await Promise.race([
-          inflight,
-          sleep(remaining).then(() => null),
-        ]);
-        if (chunk === null) return undefined;
-        inflight = undefined;
-        if (chunk.done) return undefined;
-        buffer += decoder.decode(chunk.value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-        for (const part of parts) {
-          // `: keep-alive` and other comments are not events.
-          if (part.trim().length > 0 && !part.startsWith(":")) queue.push(part);
-        }
-      }
-      return queue.shift();
-    },
-    async cancel(): Promise<void> {
-      await reader.cancel().catch(() => undefined);
-    },
-  };
-}
 
 describe("idempotency keys", () => {
   it("runs a POST once, and replays the first answer for the same key", async () => {
@@ -163,9 +120,9 @@ describe("the event stream", () => {
     const second = await reader.next();
     await reader.cancel();
 
-    expect(first).toContain("id: 2");
-    expect(first).toContain("event: b");
-    expect(second).toContain("id: 3");
+    expect(first?.id).toBe(2);
+    expect(first?.event).toBe("b");
+    expect(second?.id).toBe(3);
   });
 
   it("does not replay at a client that sent no cursor, and follows it live", async () => {
@@ -179,8 +136,8 @@ describe("the event stream", () => {
     hub.publish("live", { n: 2 });
     const frame = await reader.next();
     await reader.cancel();
-    expect(frame).toContain("id: 2");
-    expect(frame).toContain("event: live");
+    expect(frame?.id).toBe(2);
+    expect(frame?.event).toBe("live");
   });
 
   it("resumes from Last-Event-ID without repeating the event it names", async () => {
@@ -198,8 +155,8 @@ describe("the event stream", () => {
     const frame = await reader.next();
     await reader.cancel();
 
-    expect(frame).toContain("id: 3");
-    expect(frame).toContain("event: c");
+    expect(frame?.id).toBe(3);
+    expect(frame?.event).toBe("c");
   });
 
   it("says CURSOR_EXPIRED rather than leaving a silent gap", async () => {
