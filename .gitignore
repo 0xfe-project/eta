@@ -27,3 +27,7 @@ out/
 
 # Turborepo
 .turbo
+
+# eta —— 本地专属,不入库
+.eta/
+/REFACTOR.md
