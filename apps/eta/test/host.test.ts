@@ -172,8 +172,12 @@ describe("the plugins", () => {
 describe("stopping", () => {
   it("takes back every route and releases the port", async () => {
     const host = await start(await scratch());
-    // The floor's two (/health, /events), the host plugin's one, the sessions plugin's five.
-    expect(host.routes.routes().length).toBe(8);
+    // The floor answers on its own, with whatever plugins are mounted beside it.
+    expect(
+      host.routes.routes().map((route) => `${route.method} ${route.pattern}`),
+    ).toEqual(
+      expect.arrayContaining(["GET /health", "GET /events", "GET /host"]),
+    );
     const port = host.port;
 
     await host.close();

@@ -17,6 +17,8 @@ import process from "node:process";
 import { createLocalEnvironment } from "@eta/execution-node";
 import { FileSessionStore, PluginManager, SessionManager } from "@eta/server";
 import { Context } from "cordis";
+import { AgentStore } from "./agents/store";
+import { agentsPlugin } from "./bundled/agents";
 import { hostPlugin } from "./bundled/host";
 import { sessionsPlugin } from "./bundled/sessions";
 import { codexAuthPath, CodexCredentialStore } from "./codex-auth";
@@ -65,6 +67,8 @@ export interface Host {
   /** The sessions this process holds open, and the store they come from. */
   sessions: SessionManager;
   store: FileSessionStore;
+  /** What a conversation belongs to. An agent is a configuration, not a conversation. */
+  agents: AgentStore;
   /** Providers that could not be built, with the reason. The rest are in `models`. */
   providerFailures: readonly ProviderBuildFailure[];
   port: number;
@@ -140,6 +144,7 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     ),
   );
   const hub = new EventHub();
+  const agents = new AgentStore(handle);
   const status: HostStatus = {
     pid: process.pid,
     dataDir: options.dataDir,
@@ -164,6 +169,7 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   const fibers = [
     ctx.plugin(hostPlugin, { status }),
     ctx.plugin(sessionsPlugin, { sessions, hub }),
+    ctx.plugin(agentsPlugin, { agents, models }),
   ];
 
   const manager = new PluginManager({
@@ -197,6 +203,7 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     providerFailures: failed,
     sessions,
     store,
+    agents,
     port: server.port ?? 0,
     config,
     mounted: () => manager.mounted(),
