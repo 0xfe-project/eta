@@ -57,6 +57,7 @@ import {
   useUsage,
 } from "@/queries/llm";
 import { connectionStateLabels, untilText } from "./connection-state";
+import { MemoryEmbeddingSettings } from "./memory-embedding-settings";
 import { useAgents } from "./use-agents";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -621,8 +622,9 @@ export function ConnectorSection({
 }
 
 /**
- * Settings → 模型服务: accounts per provider and their state. Grok's account
- * also powers the grok plugin, whose card under 连接 shows the same accounts.
+ * Settings → 模型服务: accounts per provider and their state, and the model
+ * that embeds memories. Grok's account also powers the grok plugin, whose
+ * card under 连接 shows the same accounts.
  */
 export function ProviderSettings() {
   const { t: translateText } = useTranslation([
@@ -684,6 +686,7 @@ export function ProviderSettings() {
           }
         />
       ))}
+      <MemoryEmbeddingSettings />
     </div>
   );
 }

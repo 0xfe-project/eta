@@ -69,6 +69,12 @@ async function render() {
   queryClient.setQueryData(["llm", "connections"], [connection()]);
   queryClient.setQueryData(["llm", "models"], before);
   queryClient.setQueryData(["llm", "usage"], []);
+  queryClient.setQueryData(["llm", "embedding-models"], []);
+  queryClient.setQueryData(["memory-embedding"], {
+    space: { model: "local", dims: 768 },
+    memories: 0,
+    rebuild: null,
+  });
   const container = document.createElement("div");
   document.body.append(container);
   await act(async () =>

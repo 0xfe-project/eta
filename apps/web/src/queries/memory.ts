@@ -119,3 +119,67 @@ export function useForget(agentId: string) {
       queryClient.invalidateQueries({ queryKey: keys.agent(agentId) }),
   });
 }
+
+// The vector space memories are embedded in, and the rebuild into another.
+
+const ACTIVE_REBUILD = new Set(["running", "paused"]);
+
+const embeddingSchema = z.object({
+  /** "local", or "gateway:<embedding model>". */
+  space: z.object({ model: z.string(), dims: z.number() }),
+  /** How many memories the current space holds. */
+  memories: z.number(),
+  rebuild: z
+    .object({
+      model: z.string(),
+      dims: z.number(),
+      status: z.enum(["running", "paused", "done", "failed", "cancelled"]),
+      done: z.number(),
+      total: z.number(),
+      error: z.string().nullable(),
+      started_at: z.string(),
+      finished_at: z.string().nullable(),
+    })
+    .nullable(),
+});
+
+export type MemoryEmbedding = z.infer<typeof embeddingSchema>;
+
+export const LOCAL_EMBEDDER = "local";
+export const gatewayEmbedder = (model: string) => `gateway:${model}`;
+
+const embeddingKey = ["memory-embedding"] as const;
+
+export function isRebuilding(embedding: MemoryEmbedding | undefined) {
+  return ACTIVE_REBUILD.has(embedding?.rebuild?.status ?? "");
+}
+
+export function useMemoryEmbedding() {
+  return useQuery({
+    queryKey: embeddingKey,
+    queryFn: async ({ signal }) =>
+      embeddingSchema.parse(await memoryApi.get("/embedding", signal)),
+    // Progress, while a rebuild runs.
+    refetchInterval: (query) =>
+      isRebuilding(query.state.data) ? 5_000 : false,
+  });
+}
+
+export function useSetMemoryEmbedding() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (model: string) =>
+      embeddingSchema.parse(
+        await memoryApi.put("/embedding", { model, dims: 768 }),
+      ),
+    onSuccess: (embedding) => queryClient.setQueryData(embeddingKey, embedding),
+  });
+}
+
+export function useCancelEmbeddingRebuild() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => memoryApi.delete("/embedding/rebuild"),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: embeddingKey }),
+  });
+}

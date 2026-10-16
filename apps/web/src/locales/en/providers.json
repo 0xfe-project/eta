@@ -66,5 +66,24 @@
   },
   "grok": {
     "sharedAccountHelp": "The grok plugin also uses this account for images, videos and search. See"
+  },
+  "embedding": {
+    "title": "Memory embedding",
+    "local": "Local (jina-embeddings-v2-base-zh)",
+    "loadFailed": "Couldn't load memory embedding: {{message}}",
+    "unavailableModel": "{{name}} ({{reason}})",
+    "linkGemini": "link a Google AI Studio account first",
+    "progress": "Switching to {{name}}: {{done}}/{{total}}",
+    "progressLabel": "Rebuild progress",
+    "cancelRebuild": "Cancel switch",
+    "paused": "Switch paused, retrying shortly: {{error}}",
+    "failed": "Couldn't switch to {{name}}: {{error}}",
+    "confirmTitle": "Switch to {{name}}?",
+    "confirmDescription": "All {{count}} memories will be re-embedded with the new model. Recall and saving keep working meanwhile.",
+    "confirmDescription_one": "The {{count}} memory will be re-embedded with the new model. Recall and saving keep working meanwhile.",
+    "confirmDescription_other": "All {{count}} memories will be re-embedded with the new model. Recall and saving keep working meanwhile.",
+    "quotaNotice": " This uses your Google AI Studio quota.",
+    "replacesRebuild": " The switch in progress will be cancelled.",
+    "confirm": "Switch"
   }
 }

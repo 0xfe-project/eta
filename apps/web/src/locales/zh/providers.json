@@ -66,5 +66,24 @@
   },
   "grok": {
     "sharedAccountHelp": "同一账号也供 grok 插件生成图片、视频和搜索，见"
+  },
+  "embedding": {
+    "title": "记忆 embedding",
+    "local": "本地（jina-embeddings-v2-base-zh）",
+    "loadFailed": "无法加载记忆 embedding：{{message}}",
+    "unavailableModel": "{{name}}（{{reason}}）",
+    "linkGemini": "请先绑定 Google AI Studio 账号",
+    "progress": "正在切换到 {{name}}：{{done}}/{{total}}",
+    "progressLabel": "重建进度",
+    "cancelRebuild": "取消切换",
+    "paused": "切换已暂停，稍后自动重试：{{error}}",
+    "failed": "切换到 {{name}} 失败：{{error}}",
+    "confirmTitle": "切换到 {{name}}？",
+    "confirmDescription": "会用新模型重算全部 {{count}} 条记忆，期间召回和保存照常可用。",
+    "confirmDescription_one": "会用新模型重算全部 {{count}} 条记忆，期间召回和保存照常可用。",
+    "confirmDescription_other": "会用新模型重算全部 {{count}} 条记忆，期间召回和保存照常可用。",
+    "quotaNotice": "这会消耗 Google AI Studio 的配额。",
+    "replacesRebuild": "进行中的切换会被取消。",
+    "confirm": "切换"
   }
 }

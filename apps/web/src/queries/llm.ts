@@ -97,6 +97,12 @@ const agentUsageSchema = z.object({
   accounts: z.array(countsSchema.extend({ name: z.string() })),
 });
 
+/** What memory may embed with, through the gateway's /v1/embeddings. */
+const embeddingModelSchema = modelSchema.omit({
+  connector: true,
+  context_window: true,
+});
+
 export type Connector = z.infer<typeof connectorSchema>;
 export type Connection = z.infer<typeof connectionSchema>;
 export type Model = z.infer<typeof modelSchema>;
@@ -106,6 +112,7 @@ const keys = {
   connectors: ["llm", "connectors"] as const,
   connections: ["llm", "connections"] as const,
   models: ["llm", "models"] as const,
+  embeddingModels: ["llm", "embedding-models"] as const,
   usage: ["llm", "usage"] as const,
   agentUsage: ["llm", "usage", "agents"] as const,
   login: (id: string) => ["llm", "login", id] as const,
@@ -138,6 +145,17 @@ export function useModels() {
     queryKey: keys.models,
     queryFn: async ({ signal }) =>
       z.array(modelSchema).parse(await llmApi.get("/models", signal)),
+    refetchInterval: POLL_MS,
+  });
+}
+
+export function useEmbeddingModels() {
+  return useQuery({
+    queryKey: keys.embeddingModels,
+    queryFn: async ({ signal }) =>
+      z
+        .array(embeddingModelSchema)
+        .parse(await llmApi.get("/embedding-models", signal)),
     refetchInterval: POLL_MS,
   });
 }

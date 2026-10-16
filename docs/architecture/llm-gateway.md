@@ -14,6 +14,7 @@ LLM 网关是控制面的模块（`apps/control-plane/internal/llm`），运行�
 | ------------------ | -------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------- |
 | `/api/llm/v1/*`    | 公共（`24000`）      | 浏览器（经 `gateway`）                                                            | 与公共 API 相同：只有公开网关连得到（见[网关](gateway.md)） |
 | `/v1/*`            | 内部（`24001`）      | runtime 中的 Codex 和环境包的服务（经 `runtime-gateway`）、routine worker（直连） | 调用方给出的 `X-AXP-Agent-Id`                               |
+| `/v1/embeddings`   | 内部（`24001`）      | 记忆服务（经 `runtime-gateway`），见下面的 Embedding                              | 调用方给出的 `X-AXP-Agent-Id`                               |
 | `/llm/v1/models`   | 内部（`24001`）      | controller、routine worker（`llm.Remote`）                                        | 无：只读目录                                                |
 | `/v0/management/*` | 不在任何 listener 上 | 仅进程内调用（`cpa.Proxy.Management()`）                                          | 每次启动随机生成的管理密钥                                  |
 
@@ -73,6 +74,14 @@ Connector 只负责“凭据怎么进来”；连接列表、启停、删除统�
 
 控制面自己的其他进程（routine worker）直接调用 internal listener 的 `/v1`（`AXP_LLM_GATEWAY_URL`，生产 `http://127.0.0.1:24001`），不带 key，自己在 `X-AXP-Agent-Id` 里写明用量记在谁名下：智能体和环境包的服务应经 runtime 网关，而 runtime 网关总会改写这个头。[定时任务](routines.md)的 worker 用 ADK 的 `openaimodel`（Chat Completions）调用 `/v1`，以 `routine-<id>` 记账；Codex 和 Grok 两类模型的多轮工具调用都经它验证过（[#57](https://github.com/AkaraChen/axp/issues/57)）。
 
+### Embedding
+
+CPA 没有 `/v1/embeddings`，网关自己实现（`gateway/embeddings.go`，[#273](https://github.com/0xfe-project/eta/issues/273)），挂在 internal listener 的 `POST /v1/embeddings`，比 CPA 的 `/v1/` 更具体所以优先。对外是 OpenAI 的格式：请求 `{"model", "input": string | string[], "dimensions"?, "encoding_format"?: "float"}`，响应 `{"object": "list", "data": [{"object": "embedding", "index", "embedding"}], "model", "usage": {"prompt_tokens", "total_tokens"}}`，`index` 与 `input` 顺序一致；只支持 `float`，`dimensions` 在 128 到 3072 之间，其他返回 400。错误是 OpenAI 的 `{"error": {"message", "type", "code"}}`。
+
+上游是 Google AI Studio 的 API key（CPA 的 `gemini` 凭据，见 #272），走 Google 原生的 `models/<model>:batchEmbedContents`（每批最多 100 条，`dimensions` 映射为 `outputDimensionality`），不走 Google 的 OpenAI 兼容端点：文档没说那里的 `dimensions` 是否生效，而维度是记忆向量表的硬约束。模型只有 `gemini-embedding-001` 和 `gemini-embedding-2-preview`。网关按 CPA 的状态挑一个启用、未冷却的账号（健康的优先，再按创建时间），401/403 和 429 经 `MarkResult` 记到账号上并换下一个账号；都不行时没有账号返回 503 `no_account`，被限流返回 429，上游故障返回 502，请求本身的 400/404 原样返回 400。每次上游请求都记进用量（主体是 `X-AXP-Agent-Id`，账号、模型、token；Google 不返回 token 数时按每 4 字节一个估算）。
+
+`GET /api/llm/v1/embedding-models` 列出这两个模型和状态，由 Google AI Studio 账号派生，规则与对话模型的目录相同；没有账号时 `unavailable`，原因 `NO_CONNECTION`。
+
 ### 用量
 
 账号的订阅窗口（`GET /api/llm/v1/usage`）只说明一个账号用了多少，不说明是谁用的。网关另外按“谁”记账（#101）：每个 `/v1` 请求的主体就是上面的 `X-AXP-Agent-Id`——聊天智能体的 id（记忆抽取经 memory-service 调用时也带这个智能体的 id，所以算在它头上）或 `routine-<id>`。CLIProxyAPI 对每个上游请求都把一条用量记录交给注册的用量插件（`sdk/cliproxy/usage`，与它自己的 `usage-statistics-enabled` 开关无关，配置里仍然关着它）；网关的插件（`gateway/usage`）按小时累计（主体、账号、模型）的请求数、失败数和 token，存在状态目录的 `usage.json`，每分钟和退出时写一次，保留 30 天。
@@ -89,5 +98,6 @@ Connector 只负责“凭据怎么进来”；连接列表、启停、删除统�
 ## 前端
 
 - 设置 → “模型服务”：按 Connector 列出账号、状态和错误，提供重新登录、停用/启用、移除；设备码弹窗显示验证码、授权链接和倒计时，每 2 秒轮询。账号需要处理时，设置按钮和菜单显示红点。“刷新状态”按钮（模型服务和连接里都有）调用 `POST /refresh`，显示检查中、结果和失败；失败时保留原来的状态。
+- 设置 → “模型服务”的“记忆 embedding”：见[记忆](memory.md#embedding-模型)。
 - 账号和模型目录每 30 秒刷新一次；发送收到 `MODEL_*` 错误时立即刷新。手动刷新开始和返回时都取消进行中的轮询，避免旧结果覆盖新结果。
 - 智能体编辑器有模型下拉框（按服务分组，`unavailable` 的模型禁用，`degraded` 标注“暂时故障”），新建时默认选上次用过的模型。模型未设置或 `unavailable` 时，聊天输入框禁用并给出“选择模型”“前往模型服务”“更换模型”入口；`degraded` 只提示，不禁用；模型目录读取失败时不据旧数据禁用，交给服务端判断。

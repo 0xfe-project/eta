@@ -68,6 +68,15 @@ function client(base: string) {
         }),
       );
     },
+    async put(path: string, body: unknown) {
+      return parse(
+        await fetch(`${base}${path}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+    },
     async delete(path: string) {
       const response = await fetch(`${base}${path}`, { method: "DELETE" });
       if (!response.ok) await parse(response);
