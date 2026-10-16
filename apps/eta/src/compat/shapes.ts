@@ -153,7 +153,8 @@ export function toMessage(message: MessageRecord): AxpMessage {
     group_id: message.groupId,
     seq: message.seq,
     kind: KIND[message.kind] ?? "message",
-    data: {},
+    // The card a client renders lives here (a draft's title and description, a card's task facts).
+    data: message.data,
     id: message.id,
     agent_id: message.authorAgentId ?? "",
     role,

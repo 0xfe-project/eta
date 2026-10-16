@@ -23,6 +23,7 @@
 import type {
   CompactionSummarizer,
   KernelModels,
+  KernelTool,
   PersonaCard,
   ToolMiddleware,
 } from "@eta/core";
@@ -129,6 +130,16 @@ export interface SessionManagerOptions {
     | ((input: { meta: SessionMeta; session: OpenSession }) => ToolMiddleware[])
     | undefined;
   /**
+   * Tools a session gets beyond the harness's own, read once when it opens.
+   *
+   * The other half of the same seam: the host knows what this app has that the harness does not —
+   * a task board, a memory, a remote — and registers those as tools the model can call. Read per
+   * open, so a session's toolset is fixed for its life rather than changing under a run.
+   */
+  sessionTools?:
+    | ((input: { meta: SessionMeta; session: OpenSession }) => KernelTool[])
+    | undefined;
+  /**
    * How a session's questions are surfaced — told when one is asked, answered, canceled or expired.
    *
    * Read per session like the other `…For` options, because the answer is the session's own: who
@@ -192,6 +203,7 @@ export class SessionManager {
   private readonly memoryFor: SessionManagerOptions["memoryFor"];
   private readonly askObserve: SessionManagerOptions["askObserve"];
   private readonly toolMiddleware: SessionManagerOptions["toolMiddleware"];
+  private readonly sessionTools: SessionManagerOptions["sessionTools"];
   private readonly subagents: SessionManagerOptions["subagents"];
   private readonly warn: (message: string) => void;
   private readonly open = new Map<string, ManagedSession>();
@@ -210,6 +222,7 @@ export class SessionManager {
     this.memoryFor = options.memoryFor;
     this.askObserve = options.askObserve;
     this.toolMiddleware = options.toolMiddleware;
+    this.sessionTools = options.sessionTools;
     this.warn = options.warn ?? (() => undefined);
   }
 
@@ -470,6 +483,21 @@ export class SessionManager {
     session.pump.start();
     for (const middleware of this.toolMiddleware?.({ meta, session }) ?? []) {
       session.kernel.tools.use(middleware);
+    }
+    const extra = this.sessionTools?.({ meta, session }) ?? [];
+    for (const tool of extra) session.kernel.tools.register(tool);
+    // The harness pins `activeToolNames` to the tools it installed, and a pinned set is what the
+    // runner offers the model — so a host's own tools have to be added to the pin, or they exist in
+    // the service and reach nobody. (An unpinned session, the bare harness, needs nothing.)
+    //
+    // Only the names that are missing: a session's config is restored from its journal, so on the
+    // second open it already names these tools, and appending them again would be a duplicate.
+    const active = session.kernel.config.read("activeToolNames");
+    const added = extra
+      .map((tool) => tool.name)
+      .filter((name) => !active.includes(name));
+    if (added.length > 0 && active.length > 0) {
+      session.kernel.config.update({ activeToolNames: [...active, ...added] });
     }
     const managed: ManagedSession = { meta, session };
     this.open.set(meta.id, managed);

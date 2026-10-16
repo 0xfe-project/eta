@@ -1,4 +1,14 @@
 import type {
+  AxpAssigneeOption,
+  AxpTask,
+  AxpTaskActivity,
+  AxpTaskActor,
+  AxpTaskAssignee,
+  AxpTaskCreator,
+  AxpTaskDetail,
+  AxpTaskList,
+} from "../tasks/shapes";
+import type {
   AxpAgent,
   AxpBlock,
   AxpGroup,
@@ -125,6 +135,91 @@ export const interactionSchema = z.object({
   updated_at: z.string(),
 });
 
+export const taskActorSchema = z.object({
+  kind: z.enum(["user", "agent", "remote", "system"]),
+  agent_id: z.string().nullable(),
+  agent_name: z.string().nullable(),
+});
+
+export const taskActivitySchema = z.object({
+  id: z.string(),
+  kind: z.string(),
+  actor: taskActorSchema,
+  run_id: z.string().nullable(),
+  body: z.string().nullable(),
+  data: z.record(z.string(), z.unknown()),
+  created_at: z.string(),
+});
+
+export const taskAssigneeSchema = z.object({
+  kind: z.enum(["none", "user", "remote"]),
+  computer_id: z.string().nullable(),
+  computer_name: z.string().nullable(),
+  runtime: z.string().nullable(),
+  provider: z.string().nullable(),
+});
+
+export const taskCreatorSchema = z.object({
+  kind: z.enum(["user", "agent"]),
+  agent_id: z.string().nullable(),
+  agent_name: z.string().nullable(),
+});
+
+export const taskSchema = z.object({
+  group_id: z.string().nullable(),
+  id: z.string(),
+  number: z.number().int(),
+  title: z.string(),
+  status: z.string(),
+  assignee: taskAssigneeSchema,
+  created_by: taskCreatorSchema,
+  run_status: z.string().nullable(),
+  comments: z.number().int(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const taskDetailSchema = taskSchema.extend({
+  description: z.string(),
+  activity: z.array(taskActivitySchema),
+  runs: z.array(z.unknown()),
+  assists: z.array(z.unknown()),
+  loops: z.array(z.unknown()),
+});
+
+export const assigneeOptionSchema = z.object({
+  computer_id: z.string(),
+  computer_name: z.string(),
+  runtime: z.string(),
+  provider: z.string(),
+  online: z.boolean(),
+});
+
+export const taskListSchema = z.object({
+  tasks: z.array(taskSchema),
+  assignees: z.array(assigneeOptionSchema),
+});
+
+/** What a request may say when creating a task. */
+export const taskInSchema = z.object({
+  group_id: z.string().optional(),
+  title: z.string(),
+  description: z.string().optional(),
+  status: z.string().optional(),
+  assignee: z.object({ kind: z.enum(["none", "user", "remote"]) }).optional(),
+});
+
+/** A partial update: only the fields given change. */
+export const taskUpdateSchema = z.object({
+  group_id: z.string().optional(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  status: z.string().optional(),
+  assignee: z.object({ kind: z.enum(["none", "user", "remote"]) }).optional(),
+});
+
+export const commentInSchema = z.object({ body: z.string() });
+
 export const snapshotSchema = z.object({
   groups: z.array(groupSchema),
   agents: z.array(agentSchema),
@@ -208,3 +303,11 @@ agrees<z.infer<typeof agentSchema>, AxpAgent>(true);
 agrees<z.infer<typeof interactionOptionSchema>, AxpInteractionOption>(true);
 agrees<z.infer<typeof interactionSchema>, AxpInteraction>(true);
 agrees<z.infer<typeof snapshotSchema>, AxpSnapshot>(true);
+agrees<z.infer<typeof taskActorSchema>, AxpTaskActor>(true);
+agrees<z.infer<typeof taskActivitySchema>, AxpTaskActivity>(true);
+agrees<z.infer<typeof taskAssigneeSchema>, AxpTaskAssignee>(true);
+agrees<z.infer<typeof taskCreatorSchema>, AxpTaskCreator>(true);
+agrees<z.infer<typeof taskSchema>, AxpTask>(true);
+agrees<z.infer<typeof taskDetailSchema>, AxpTaskDetail>(true);
+agrees<z.infer<typeof assigneeOptionSchema>, AxpAssigneeOption>(true);
+agrees<z.infer<typeof taskListSchema>, AxpTaskList>(true);

@@ -67,8 +67,10 @@ describe("the migrations on disk", () => {
       "groups/0001-groups",
 
       "groups/0002-reply-status",
+      "groups/0003-message-data",
       "http/0001-idempotency",
       "interactions/0001-interactions",
+      "tasks/0001-tasks",
       "usage/0001-usage",
       "usage/0002-usage-error",
     ]);
@@ -84,8 +86,10 @@ describe("the migrations on disk", () => {
       "groups/0001-groups",
 
       "groups/0002-reply-status",
+      "groups/0003-message-data",
       "http/0001-idempotency",
       "interactions/0001-interactions",
+      "tasks/0001-tasks",
       "usage/0001-usage",
       "usage/0002-usage-error",
     ]);
@@ -98,6 +102,8 @@ describe("the migrations on disk", () => {
       "group_wake",
       "http_idempotency",
       "interaction",
+      "task",
+      "task_activity",
       "usage_hourly",
     ]);
     expect(schemaVersion(db)).toBe("usage/0002-usage-error");
@@ -142,8 +148,10 @@ describe("the host's database", () => {
       "groups/0001-groups",
 
       "groups/0002-reply-status",
+      "groups/0003-message-data",
       "http/0001-idempotency",
       "interactions/0001-interactions",
+      "tasks/0001-tasks",
       "usage/0001-usage",
       "usage/0002-usage-error",
     ]);

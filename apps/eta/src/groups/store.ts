@@ -61,6 +61,13 @@ export interface MessageRecord {
   mentions: string[];
   rootMessageId?: string | undefined;
   createdAt: string;
+  /**
+   * What this message carries beyond its text, by kind (P3.1).
+   *
+   * A `task_draft` holds the proposal, the `task_card` it becomes holds the task's facts. Empty
+   * for an ordinary message: the field is the product's shape, not a place to stash things.
+   */
+  data: Record<string, unknown>;
 }
 
 /** Every state a timeline row can be in. A user's own message is written straight to `done`. */
@@ -163,6 +170,7 @@ interface MessageRow {
   mentions: string;
   root_message_id: string | null;
   created_at: string;
+  data: string;
 }
 
 const groupOf = (row: GroupRow): GroupRecord => ({
@@ -195,6 +203,21 @@ function mentionsOf(raw: string): string[] {
   }
 }
 
+/** A row's payload; a row written before the column existed reads as empty, not as a crash. */
+const parseData = (value: string | null): Record<string, unknown> => {
+  if (value === null || value.length === 0) return {};
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+};
+
 const messageOf = (row: MessageRow): MessageRecord => ({
   id: row.id,
   groupId: row.group_id,
@@ -217,6 +240,7 @@ const messageOf = (row: MessageRow): MessageRecord => ({
     ? {}
     : { rootMessageId: row.root_message_id }),
   createdAt: row.created_at,
+  data: parseData(row.data),
 });
 
 export class GroupStore {
@@ -725,6 +749,77 @@ export class GroupStore {
       capped,
       ...(reminder === undefined ? {} : { reminder }),
     };
+  }
+
+  /**
+   * Append a message of a given kind with a payload (P3.1).
+   *
+   * The path a task card takes: `task_draft` when a proposal lands, `task_card` when it is
+   * confirmed, and again on every sync — the row keeps its id and place in the timeline, only its
+   * kind and data change.
+   */
+  append(input: {
+    groupId: string;
+    kind: string;
+    text?: string;
+    data?: Record<string, unknown>;
+    authorKind?: "user" | "agent" | "system";
+    authorAgentId?: string;
+    rootMessageId?: string;
+    /** The row to rewrite instead of appending; it keeps its id, seq and revision grows. */
+    replace?: string;
+  }): MessageRecord | undefined {
+    const now = new Date().toISOString();
+    if (input.replace !== undefined) {
+      const changed = this.#handle
+        .query(
+          `UPDATE group_message
+              SET kind = ?, text = ?, data = ?, revision = revision + 1
+            WHERE id = ? AND group_id = ?`,
+        )
+        .run(
+          input.kind,
+          input.text ?? "",
+          JSON.stringify(input.data ?? {}),
+          input.replace,
+          input.groupId,
+        );
+      return changed.changes === 0 ? undefined : this.message(input.replace);
+    }
+    const id = crypto.randomUUID();
+    const seq = this.#nextSeq(input.groupId);
+    this.#handle
+      .query(
+        `INSERT INTO group_message
+           (id, group_id, seq, kind, author_kind, author_agent_id, text, mentions, root_message_id, created_at, data)
+         VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?)`,
+      )
+      .run(
+        id,
+        input.groupId,
+        seq,
+        input.kind,
+        input.authorKind ?? "system",
+        input.authorAgentId ?? null,
+        input.text ?? "",
+        input.rootMessageId ?? null,
+        now,
+        JSON.stringify(input.data ?? {}),
+      );
+    return this.message(id);
+  }
+
+  /** Rewrite a message's payload in place, keeping its kind and its place in the timeline. */
+  setData(
+    messageId: string,
+    data: Record<string, unknown>,
+  ): MessageRecord | undefined {
+    const changed = this.#handle
+      .query(
+        "UPDATE group_message SET data = ?, revision = revision + 1 WHERE id = ?",
+      )
+      .run(JSON.stringify(data), messageId);
+    return changed.changes === 0 ? undefined : this.message(messageId);
   }
 
   #writeSystem(groupId: string, text: string, now: string): MessageRecord {

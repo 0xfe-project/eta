@@ -25,6 +25,7 @@ import { compatPlugin } from "./bundled/compat";
 import { groupsPlugin } from "./bundled/groups";
 import { hostPlugin } from "./bundled/host";
 import { sessionsPlugin } from "./bundled/sessions";
+import { tasksPlugin } from "./bundled/tasks";
 import { usagePlugin } from "./bundled/usage";
 import { codexAuthPath, CodexCredentialStore } from "./codex-auth";
 import { approvalTools, configuredProviders, readConfig } from "./config";
@@ -46,6 +47,9 @@ import { InteractionStore } from "./interactions/store";
 import { providerCatalog } from "./providers/catalog";
 import { buildModels } from "./providers/runtime";
 import { RouteRegistry, RouteService } from "./routes";
+import { TaskCards } from "./tasks/cards";
+import { TaskStore } from "./tasks/store";
+import { taskTools } from "./tasks/tools";
 import { recordingModels, subjectOf } from "./usage/recorder";
 import { UsageStore } from "./usage/store";
 
@@ -155,6 +159,16 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   const agents = new AgentStore(handle);
   const groups = new GroupStore(handle);
   const interactions = new InteractionStore(handle);
+  const tasks = new TaskStore(handle);
+  // Wakes become runs here (P2.2): one session per (agent × group), found by the participant row
+  // and remembered in the session's own meta. The projector also closes a reply's questions when it
+  // ends, so a card never outlives the run that asked it.
+  const projector = new TimelineProjector({ groups, hub, interactions });
+  // The task board's cards (P3.1): a draft in a group becomes one, and it follows the task after.
+  const cards = new TaskCards({ groups, tasks, projector });
+  // The bridge needs the manager and the manager needs the bridge's observer (a session's questions
+  // are surfaced through it). One of the two has to be late, and it is the observer: it is only
+  // called once a session exists, which is after this file has finished assembling.
   const bridgeRef: { current?: AskBridge } = {};
 
   // Sessions: jsonl journals and a meta file each, under the data directory (P0.7). The
@@ -187,6 +201,15 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     // confirmation cards are.
     askObserve: (meta) => (action, payload) =>
       bridgeRef.current?.observe(meta, action, payload),
+    // The task board's tools (P3.1): what an agent in a group can do with the board. Read per
+    // session, because a draft belongs to the group that session is in.
+    sessionTools: ({ meta }) =>
+      taskTools({
+        tasks,
+        cards,
+        meta,
+        agentName: (agentId) => agents.get(agentId)?.name,
+      }),
     // Tools the config lists ask before they run: the same card, raised by a rule rather than by
     // the model. Read per session, so a policy change reaches the next session.
     toolMiddleware: ({ meta, session }) => {
@@ -209,7 +232,6 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   // Wakes become runs here (P2.2): one session per (agent × group), found by the participant
   // row and remembered in the session's own meta. The projector also closes a reply's questions
   // when it ends, so a card never outlives the run that asked it.
-  const projector = new TimelineProjector({ groups, hub, interactions });
   const runner = new WakeRunner({
     groups,
     sessions,
@@ -265,6 +287,9 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
       createdAt: configWrittenAt,
     }),
     ctx.plugin(groupsPlugin, { groups, runner, projector }),
+    // The task board (P3.1): the local half — the board, its timeline, and the cards a group's
+    // draft becomes.
+    ctx.plugin(tasksPlugin, { tasks, cards, groups, agents }),
     // The product API the existing web speaks (P2.4): AXP's shapes over our rows.
     ctx.plugin(compatPlugin, {
       agents,

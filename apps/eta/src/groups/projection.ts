@@ -79,6 +79,25 @@ export class TimelineProjector {
     return { ...posted, group };
   }
 
+  /**
+   * A message that is not a reply: a task card, a draft, a notice (P3.1).
+   *
+   * The write already happened; this is the half that tells the clients. A card that only grew its
+   * data does not move the seq, so the group is announced only when the timeline did.
+   */
+  notice(input: { groupId: string; message: MessageRecord }): void {
+    this.#hub?.publish("message.updated", {
+      group_id: input.groupId,
+      message: input.message,
+    });
+    const group = this.#summary(input.groupId);
+    // A card that only grew its data did not move the timeline, and a sidebar told otherwise would
+    // reorder itself for nothing.
+    if (input.message.seq >= group.seq) {
+      this.#hub?.publish("group.updated", { group });
+    }
+  }
+
   /** The group itself changed — created, renamed, a member joined or left. */
   groupChanged(groupId: string): GroupRecord & { seq: number } {
     const group = this.#summary(groupId);
