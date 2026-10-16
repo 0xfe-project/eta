@@ -8,7 +8,7 @@
  * It also sees what the journal cannot: a generation that failed never produced a usage row, and
  * "which provision is failing" is a question this table is supposed to answer.
  */
-import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessage, Model } from "@earendil-works/pi-ai";
 import type { KernelModels } from "@eta/core";
 import type { UsageStore } from "./store";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
@@ -26,6 +26,33 @@ export interface RecordingOptions {
  * until then a session counts under its own id, which is still an honest answer to "who spent
  * this".
  */
+/**
+ * A settled, empty assistant message that says the request failed.
+ *
+ * The kernel reads a generation by its settled message, so a failure that arrives as a throw has to
+ * be turned into one of these rather than into a stream that simply ends.
+ */
+function failedMessage(model: Model<Api>, error: unknown): AssistantMessage {
+  return {
+    role: "assistant",
+    content: [],
+    api: model.api,
+    provider: model.provider,
+    model: model.id,
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: "error",
+    errorMessage: error instanceof Error ? error.message : String(error),
+    timestamp: Date.now(),
+  };
+}
+
 export function subjectOf(meta: { id: string; agentId?: unknown }): string {
   const agentId = meta.agentId;
   return typeof agentId === "string" && agentId.length > 0
@@ -94,13 +121,34 @@ export function recordingModels(
             if (event.type === "done") record(event.message, false);
             if (event.type === "error") record(event.error, true);
           }
-          out.end(await source.result());
+          const settled = await source.result();
+          if (settled === undefined) {
+            // A provider that closes without producing a message. Ending the stream here would
+            // leave the kernel waiting for a result that never comes.
+            const failure = failedMessage(
+              model,
+              new Error("the provider ended without a result"),
+            );
+            record(undefined, true);
+            out.push({ type: "error", reason: "error", error: failure });
+            return;
+          }
+          out.end(settled);
         } catch (error) {
-          // A provider that throws before it produces a message: the generation still happened,
-          // and the kernel still gets an ended stream (which is how it reports the failure).
+          // A provider that throws before it produces a message — a network failure, or the abort
+          // cancelling its read. The generation still happened and is still counted, and the kernel
+          // has to be told how it ended: an error *event* settles the stream, while `end(undefined)`
+          // leaves pi-ai's result pending forever, which is a run that never ends. The kernel reads
+          // this as a cancellation when its own signal fired, and as a failure when it did not.
           record(undefined, true);
-          out.end(undefined);
-          void error;
+          out.push({
+            type: "error",
+            // pi-ai tells the two apart for us, and the kernel makes the same distinction: a
+            // provider that stopped because this run's signal fired did not fail.
+            reason:
+              streamOptions?.signal?.aborted === true ? "aborted" : "error",
+            error: failedMessage(model, error),
+          });
         }
       })();
       return out;

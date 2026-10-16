@@ -3,6 +3,7 @@
  *
  *   GET    /api/v1/chat                       the snapshot (groups, agents, active replies, cursor)
  *   GET    /api/v1/chat/stream?cursor=…       one SSE stream of product events
+ *   POST   /api/v1/chat/messages/{id}/stop    stop the run behind a reply (P2.6)
  *   GET    /api/v1/agents                     the agents
  *   POST   /api/v1/agents                     {name, description, model?, bundles?}
  *   PATCH  /api/v1/agents/{id}
@@ -21,6 +22,7 @@ import type { KernelModels } from "@eta/core";
 import type { Context } from "cordis";
 import type { AgentStore } from "../agents/store";
 import type { AxpGroup, AxpMessage, AxpSnapshot } from "../compat/shapes";
+import type { WakeRunner } from "../groups/runner";
 import type { GroupStore, MessageRecord } from "../groups/store";
 import type { EventHub, EventTranslator } from "../http/events";
 import type { PluginContext } from "../plugin-api";
@@ -44,6 +46,8 @@ export interface CompatPluginConfig {
   hub: EventHub;
   /** For the model check on write, exactly as the internal route does it. */
   models: KernelModels | undefined;
+  /** Stopping a reply is a run's business, so this layer asks the runner that owns it. */
+  runner: WakeRunner;
 }
 
 const readJson = async (request: Request): Promise<Record<string, unknown>> => {
@@ -70,7 +74,7 @@ export const compatPlugin = {
   inject: ["routes"],
   apply(ctx: Context, config: CompatPluginConfig): void {
     const plugin = ctx as unknown as PluginContext;
-    const { agents, groups, hub, models } = config;
+    const { agents, groups, hub, models, runner } = config;
 
     /** One group in the product's shape. */
     const groupShape = (groupId: string): AxpGroup | undefined => {
@@ -223,6 +227,28 @@ export const compatPlugin = {
             next_cursor:
               older.length > items.length ? String(items[0]!.seq) : null,
           });
+        },
+      ),
+    );
+
+    plugin.effect(() =>
+      plugin.routes.register(
+        "POST",
+        "/api/v1/chat/messages/:message_id/stop",
+        async (_request, params) => {
+          const id = params.message_id ?? "";
+          const stopped = await runner.stop(id);
+          if (stopped === undefined) {
+            return errorResponse(
+              404,
+              "NO_SUCH_MESSAGE",
+              `no message ${id}`,
+              crypto.randomUUID(),
+            );
+          }
+          // `stopping` while the run winds down, `stopped` once it has: the run writes the second
+          // state itself, and a client hears about it as a `message.updated` frame.
+          return Response.json(toMessage(stopped));
         },
       ),
     );

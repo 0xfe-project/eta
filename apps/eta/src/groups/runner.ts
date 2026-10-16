@@ -22,6 +22,10 @@ import type { GroupRecord, GroupStore, MessageRecord } from "./store";
  *
  * The answer is projected into the group's timeline (P2.3) as it happens: a row that says
  * "working" takes its place before the run, and that same row gets the text when the run ends.
+ *
+ * A run can also be stopped (P2.6), and that takes two writes: the row says `stopping` as soon as
+ * the stop is heard, and `stopped` when the run actually gives up. `stop` below is the whole of
+ * it — find the row, mark it, abort the session it belongs to, and let the run finish the job.
  */
 import process from "node:process";
 
@@ -44,7 +48,12 @@ export interface DeliveredReply {
   messageId: string;
   /** The timeline row that holds this answer, when one was projected. */
   replyMessageId?: string | undefined;
-  status: "completed" | "failed" | "aborted";
+  /**
+   * How the reply ended, in the timeline's words rather than the kernel's: a run the kernel
+   * reports as `aborted` is a row that is `stopped`, and one it reports as `completed` is `done`.
+   * Translating here is what keeps one vocabulary from the row outward.
+   */
+  status: "done" | "failed" | "stopped";
   /** What the agent last said (P2.3 projects it), or why this delivery failed. */
   text: string;
 }
@@ -115,6 +124,39 @@ export class WakeRunner {
     return replies;
   }
 
+  /**
+   * Stop the run behind a reply row (P2.6).
+   *
+   * Returns the row as a client should now read it: `stopping` when there was a run to stop, and
+   * the row unchanged when there was not — a reply that already ended, or one this host never
+   * projected. Stopping is idempotent on purpose: a client may click twice, and the second click
+   * must not look like a second change.
+   */
+  async stop(replyMessageId: string): Promise<MessageRecord | undefined> {
+    const reply = this.#groups.message(replyMessageId);
+    if (reply === undefined) return undefined;
+    if (reply.status !== "working") return reply;
+
+    const stopping = this.#projector?.replyStopping({
+      groupId: reply.groupId,
+      messageId: replyMessageId,
+    });
+    // The session is the one the participant row points at, which is the same mapping a delivery
+    // uses — so a stop can only ever reach the conversation this reply came out of.
+    const sessionId =
+      reply.authorAgentId === undefined
+        ? undefined
+        : this.#groups
+            .participantsOf(reply.groupId)
+            .find((participant) => participant.agentId === reply.authorAgentId)
+            ?.sessionId;
+    if (sessionId !== undefined) {
+      const managed = await this.#sessions.session(sessionId);
+      managed?.session.runner.abort();
+    }
+    return stopping ?? this.#groups.message(replyMessageId) ?? reply;
+  }
+
   async #deliverOne(
     groupId: string,
     agentId: string,
@@ -179,11 +221,16 @@ export class WakeRunner {
       });
       const result = await managed.session.runner.run();
       const text = this.#lastAssistantText(managed);
+      // An aborted run is a stopped reply: not a failure, and not a finished one either. The text
+      // is whatever the transcript holds — for a turn that was stopped mid-generation that is
+      // usually empty, because the kernel does not journal a partial (a partial is not history).
+      const ended: "done" | "stopped" =
+        result.status === "aborted" ? "stopped" : "done";
       if (replyMessageId !== undefined) {
         this.#projector?.replyFinished(replyMessageId, {
           groupId,
           text,
-          status: "done",
+          status: ended,
         });
       }
       this.#hub?.publish("group.reply", {
@@ -200,7 +247,7 @@ export class WakeRunner {
         sessionId: managed.meta.id,
         messageId,
         ...(replyMessageId === undefined ? {} : { replyMessageId }),
-        status: result.status,
+        status: ended,
         text,
       };
     } catch (error) {

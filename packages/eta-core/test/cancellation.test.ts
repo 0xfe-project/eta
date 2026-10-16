@@ -175,6 +175,31 @@ describe("a provider cancelled by this run", () => {
     void kernel.dispose();
   });
 
+  it("ends as aborted when the provider settles the message as aborted", async () => {
+    // What a real provider does when its request is cancelled: pi-ai normalises
+    // the cancelled response to `stopReason: "aborted"` and settles the stream
+    // — nothing is thrown. A run that read that as a finished turn would
+    // report `completed` for work that never happened.
+    const { models, requested } = cancellableModels(
+      () =>
+        assistantMessage({
+          stopReason: "aborted",
+          content: [],
+        }),
+      "settle",
+    );
+    const { kernel, runner, runEnds } = setup(models);
+    kernel.inject(userMsg("go"));
+    const run = runner.run();
+    await requested;
+    runner.abort();
+    const result = await run;
+    expect(result.status).toBe("aborted");
+    expect(result.error).toBeUndefined();
+    expect(runEnds).toEqual([{ status: "aborted" }]);
+    void kernel.dispose();
+  });
+
   it("still honours an AbortError", async () => {
     const { models, requested } = cancellableModels(() =>
       Object.assign(new Error("The operation was aborted"), {

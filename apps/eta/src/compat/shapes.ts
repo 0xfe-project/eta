@@ -101,6 +101,9 @@ const STATUS: Record<MessageRecord["status"], AxpMessage["status"]> = {
   working: "responding",
   done: "completed",
   failed: "failed",
+  // AXP spells these two the same way we do, which is where the words came from.
+  stopping: "stopping",
+  stopped: "stopped",
 };
 
 const KIND: Record<string, AxpMessage["kind"]> = {

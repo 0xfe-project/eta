@@ -88,10 +88,31 @@ export class TimelineProjector {
     return { message, group };
   }
 
-  /** The answer is written (or could not be): update the row in place and publish it. */
+  /**
+   * A stop was asked for: the row says so while the run winds down (P2.6).
+   *
+   * The run ends a moment later and writes the same row as `stopped`. This phase exists because a
+   * client should be able to show that the stop was heard, and because an abort takes as long as
+   * the effect it interrupts.
+   */
+  replyStopping(input: {
+    groupId: string;
+    messageId: string;
+  }): MessageRecord | undefined {
+    const message = this.#groups.markStopping(input.messageId);
+    if (message === undefined) return undefined;
+    this.#hub?.publish("message.updated", { group_id: input.groupId, message });
+    return message;
+  }
+
+  /** The answer is written (or could not be, or was stopped): update the row and publish it. */
   replyFinished(
     messageId: string,
-    input: { groupId: string; text: string; status: "done" | "failed" },
+    input: {
+      groupId: string;
+      text: string;
+      status: "done" | "failed" | "stopped";
+    },
   ): ProjectedReply | undefined {
     const message = this.#groups.finishReply(messageId, {
       text: input.text,

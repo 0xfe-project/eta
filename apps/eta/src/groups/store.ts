@@ -49,8 +49,12 @@ export interface MessageRecord {
   authorKind: "user" | "agent" | "system";
   authorAgentId?: string | undefined;
   text: string;
-  /** `working` while an agent is answering, `done` once it is written, `failed` when it could not. */
-  status: "working" | "done" | "failed";
+  /**
+   * `working` while an agent is answering, `done` once it is written, `failed` when it could not.
+   * `stopping` is a run that has been asked to stop and is winding down, `stopped` one that did
+   * (P2.6): the partial text is kept, because that is what the agent had managed to say.
+   */
+  status: ReplyStatus;
   /** Grows when the same message changes, so a client can tell "newer" from "a second one". */
   revision: number;
   /** The agents this message wakes. */
@@ -58,6 +62,31 @@ export interface MessageRecord {
   rootMessageId?: string | undefined;
   createdAt: string;
 }
+
+/** Every state a timeline row can be in. A user's own message is written straight to `done`. */
+export type ReplyStatus =
+  | "working"
+  | "done"
+  | "failed"
+  | "stopping"
+  | "stopped";
+
+const REPLY_STATUSES: readonly string[] = [
+  "working",
+  "done",
+  "failed",
+  "stopping",
+  "stopped",
+] satisfies readonly ReplyStatus[];
+
+/**
+ * What a row's `status` column says, as one of the states above.
+ *
+ * A value this build does not know belongs to a row written by a newer one; reading it as `done`
+ * is the safe reading, since it is certainly not work in progress.
+ */
+const statusOf = (value: string): ReplyStatus =>
+  REPLY_STATUSES.includes(value) ? (value as ReplyStatus) : "done";
 
 export interface WakeRecord {
   groupId: string;
@@ -169,12 +198,7 @@ const messageOf = (row: MessageRow): MessageRecord => ({
     ? {}
     : { authorAgentId: row.author_agent_id }),
   text: row.text,
-  status:
-    row.status === "working"
-      ? "working"
-      : row.status === "failed"
-        ? "failed"
-        : "done",
+  status: statusOf(row.status),
   revision: row.revision,
   mentions: mentionsOf(row.mentions),
   ...(row.root_message_id === null
@@ -434,7 +458,7 @@ export class GroupStore {
   /** The reply is written: text in, status set, revision up. The seq does not move. */
   finishReply(
     messageId: string,
-    input: { text: string; status: "done" | "failed" },
+    input: { text: string; status: "done" | "failed" | "stopped" },
   ): MessageRecord | undefined {
     const result = this.#handle
       .query(
@@ -442,6 +466,29 @@ export class GroupStore {
       )
       .run(input.text, input.status, messageId);
     if (result.changes === 0) return undefined;
+    const row = this.#handle
+      .query("SELECT * FROM group_message WHERE id = ?")
+      .get(messageId) as MessageRow | null;
+    return row === null ? undefined : messageOf(row);
+  }
+
+  /**
+   * A stop was asked for: the row says so while the run winds down.
+   *
+   * Only a run that is still working changes, and only once — a client may click stop twice, and
+   * the second click must not count as another change to the row.
+   */
+  markStopping(messageId: string): MessageRecord | undefined {
+    const changed = this.#handle
+      .query(
+        "UPDATE group_message SET status = 'stopping', revision = revision + 1 WHERE id = ? AND status = 'working'",
+      )
+      .run(messageId);
+    return changed.changes === 0 ? undefined : this.message(messageId);
+  }
+
+  /** One row by id, wherever it is. */
+  message(messageId: string): MessageRecord | undefined {
     const row = this.#handle
       .query("SELECT * FROM group_message WHERE id = ?")
       .get(messageId) as MessageRow | null;

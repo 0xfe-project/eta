@@ -449,11 +449,23 @@ export class Runner {
         // Every turn the loop takes counts, including one that ends the run.
         this.kernel.noteTurn();
         if (assistant === undefined) break;
-        if (assistant.stopReason === "error") {
-          // A provider that reports this run's cancellation as an error stopped
-          // because it was asked to: that is the abort, not a failure.
+        if (
+          assistant.stopReason === "error" ||
+          assistant.stopReason === "aborted"
+        ) {
+          // A provider that reports this run's cancellation as an error, or
+          // that settles the message as `aborted` (which is what pi-ai
+          // normalises a cancelled request to), stopped because it was asked
+          // to: that is the abort, not a failure.
           const cancelled = cancellationOf(gate.signal);
           if (cancelled !== undefined) throw cancelled;
+          // Nobody asked and the provider still says the work was aborted:
+          // the work stopped where it was, which is what `aborted` reports.
+          // Reading it as `completed` would invent an answer.
+          if (assistant.stopReason === "aborted") {
+            status = "aborted";
+            break;
+          }
           error = assistant.errorMessage ?? "provider error";
           break;
         }

@@ -18,6 +18,7 @@ import { applyMigrations, loadMigrations } from "../src/db/migrations";
 import { assembleHost } from "../src/host";
 import { subjectOf } from "../src/usage/recorder";
 import { UsageStore } from "../src/usage/store";
+import { breakingModels } from "./support/hanging";
 
 const roots: string[] = [];
 const hosts: Host[] = [];
@@ -150,6 +151,50 @@ describe("counting a generation", () => {
       (window) => window.hours === 5,
     );
     expect(fiveHours).toMatchObject({ requests: 2, failed: 1 });
+  });
+});
+
+describe("a provider that breaks mid-stream", () => {
+  /**
+   * The trap this pins down: the usage proxy sits between the kernel and the provider, and pi-ai's
+   * `end(undefined)` never settles its `result()`. A proxy that answers a mid-stream throw by
+   * ending the stream therefore leaves the kernel waiting forever — a run that never ends, no
+   * failure and no answer. Handing the failure on as an error event is what ends it.
+   */
+  it("ends the run as a failure and counts it, instead of hanging", async () => {
+    const breaking = breakingModels("connection reset");
+    const host = await assembleHost({
+      dataDir: await scratch(),
+      port: 0,
+      warn: () => undefined,
+      models: breaking.models,
+    });
+    hosts.push(host);
+
+    const created = (await (
+      await fetch(`http://127.0.0.1:${host.port}/sessions`, {
+        method: "POST",
+        body: "{}",
+      })
+    ).json()) as { meta: { id: string } };
+    const response = await fetch(
+      `http://127.0.0.1:${host.port}/sessions/${created.meta.id}/prompt`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: "hello" }),
+      },
+    );
+    // Answered, not hung: a failure the caller can see.
+    expect(response.status).toBeGreaterThanOrEqual(400);
+
+    const body = (await (
+      await fetch(`http://127.0.0.1:${host.port}/usage/agents`)
+    ).json()) as { agents: Subject[] };
+    const fiveHours = body.agents[0]?.windows.find(
+      (window) => window.hours === 5,
+    );
+    expect(fiveHours).toMatchObject({ requests: 1, failed: 1 });
   });
 });
 

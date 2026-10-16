@@ -212,7 +212,7 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     ctx.plugin(usagePlugin, { usage }),
     ctx.plugin(groupsPlugin, { groups, runner, projector }),
     // The product API the existing web speaks (P2.4): AXP's shapes over our rows.
-    ctx.plugin(compatPlugin, { agents, groups, hub, models }),
+    ctx.plugin(compatPlugin, { agents, groups, hub, models, runner }),
   ];
 
   const manager = new PluginManager({
