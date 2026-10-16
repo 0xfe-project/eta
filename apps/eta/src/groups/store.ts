@@ -22,6 +22,8 @@ export interface GroupRecord {
   goal: string;
   decided: string;
   private: boolean;
+  /** How far the user has read; the sidebar's unread is the distance past it. */
+  readSeq: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -146,6 +148,7 @@ interface GroupRow {
   goal: string;
   decided: string;
   private: number;
+  read_seq: number;
   created_at: string;
   updated_at: string;
 }
@@ -179,6 +182,7 @@ const groupOf = (row: GroupRow): GroupRecord => ({
   goal: row.goal,
   decided: row.decided,
   private: row.private === 1,
+  readSeq: row.read_seq,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -587,6 +591,23 @@ export class GroupStore {
       )
       .get(id) as { seq: number };
     return { ...group.group, seq: row.seq };
+  }
+
+  /**
+   * How far the user has read this group, moved forward to `seq`.
+   *
+   * Never past the group's last message (a client that guesses far ahead does not make future
+   * messages read), and never backward (re-opening an old group does not make messages unread).
+   */
+  markRead(groupId: string, seq: number): GroupRecord | undefined {
+    const changed = this.#handle
+      .query(
+        `UPDATE chat_group
+            SET read_seq = MAX(read_seq, MIN(?, (SELECT COALESCE(MAX(seq), 0) FROM group_message WHERE group_id = chat_group.id)))
+          WHERE id = ?`,
+      )
+      .run(seq, groupId);
+    return changed.changes === 0 ? undefined : this.get(groupId)?.group;
   }
 
   /** Mark a wake's state. Taking one is a write before the run, never after (P2.2). */

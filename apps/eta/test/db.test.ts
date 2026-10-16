@@ -69,6 +69,7 @@ describe("the migrations on disk", () => {
 
       "groups/0002-reply-status",
       "groups/0003-message-data",
+      "groups/0004-group-read",
       "http/0001-idempotency",
       "interactions/0001-interactions",
       "routines/0001-routines",
@@ -90,6 +91,7 @@ describe("the migrations on disk", () => {
 
       "groups/0002-reply-status",
       "groups/0003-message-data",
+      "groups/0004-group-read",
       "http/0001-idempotency",
       "interactions/0001-interactions",
       "routines/0001-routines",
@@ -161,6 +163,7 @@ describe("the host's database", () => {
 
       "groups/0002-reply-status",
       "groups/0003-message-data",
+      "groups/0004-group-read",
       "http/0001-idempotency",
       "interactions/0001-interactions",
       "routines/0001-routines",

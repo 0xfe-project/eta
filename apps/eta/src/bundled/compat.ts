@@ -292,6 +292,159 @@ export const compatPlugin = {
 
     plugin.effect(() =>
       plugin.routes.register(
+        "PUT",
+        "/api/v1/groups/:group_id/members/:agent_id",
+        async (request, params) => {
+          const groupId = params.group_id ?? "";
+          const agentId = params.agent_id ?? "";
+          const body = await readJson(request);
+          const member = body.member === true;
+          const found = groups.get(groupId);
+          if (found === undefined) {
+            return errorResponse(
+              404,
+              "NO_SUCH_GROUP",
+              `no group ${groupId}`,
+              crypto.randomUUID(),
+            );
+          }
+          if (found.group.private) {
+            return errorResponse(
+              409,
+              "DIRECT_GROUP",
+              "私聊成员不能修改，请新建群。",
+              crypto.randomUUID(),
+            );
+          }
+          if (agents.get(agentId) === undefined) {
+            return errorResponse(
+              404,
+              "NO_SUCH_AGENT",
+              `no agent ${agentId}`,
+              crypto.randomUUID(),
+            );
+          }
+          if (!member) {
+            // A group keeps at least one member: an empty group is a conversation with nobody to
+            // talk to.
+            const remaining = found.participants.filter(
+              (participant) => participant.agentId !== agentId,
+            );
+            if (remaining.length === 0) {
+              return errorResponse(
+                409,
+                "LAST_MEMBER",
+                "群里至少保留一个智能体。",
+                crypto.randomUUID(),
+              );
+            }
+            // Stop what the leaving member was saying, so nothing replies into a group it is no
+            // longer in.
+            for (const message of groups.messages(groupId)) {
+              if (
+                message.authorAgentId === agentId &&
+                (message.status === "working" ||
+                  message.status === "waiting_for_input")
+              ) {
+                await runner.stop(message.id);
+              }
+            }
+            groups.removeParticipant(groupId, agentId);
+          } else {
+            groups.addParticipant(groupId, agentId);
+          }
+          // A line in the timeline: who joined, who left. A group whose membership changed silently
+          // is a group whose history lies about who was there.
+          const name = agents.get(agentId)?.name ?? agentId;
+          groups.append({
+            groupId,
+            kind: "system",
+            text: member ? `${name}加入了群` : `${name}离开了群`,
+          });
+          const group = groupShape(groupId);
+          return group === undefined
+            ? errorResponse(
+                404,
+                "NO_SUCH_GROUP",
+                `no group ${groupId}`,
+                crypto.randomUUID(),
+              )
+            : Response.json(group);
+        },
+      ),
+    );
+
+    plugin.effect(() =>
+      plugin.routes.register(
+        "POST",
+        "/api/v1/groups/:group_id/read",
+        async (request, params) => {
+          const groupId = params.group_id ?? "";
+          const body = await readJson(request);
+          const seq = Number(body.seq);
+          if (!Number.isFinite(seq) || seq < 0) {
+            return errorResponse(
+              422,
+              "VALIDATION_ERROR",
+              "seq must be a number ≥ 0",
+              crypto.randomUUID(),
+            );
+          }
+          const read = groups.markRead(groupId, Math.trunc(seq));
+          if (read === undefined) {
+            return errorResponse(
+              404,
+              "NO_SUCH_GROUP",
+              `no group ${groupId}`,
+              crypto.randomUUID(),
+            );
+          }
+          const group = groupShape(groupId);
+          return group === undefined
+            ? errorResponse(
+                404,
+                "NO_SUCH_GROUP",
+                `no group ${groupId}`,
+                crypto.randomUUID(),
+              )
+            : Response.json(group);
+        },
+      ),
+    );
+
+    plugin.effect(() =>
+      plugin.routes.register(
+        "POST",
+        "/api/v1/groups/:group_id/stop",
+        async (_request, params) => {
+          const groupId = params.group_id ?? "";
+          if (groups.get(groupId) === undefined) {
+            return errorResponse(
+              404,
+              "NO_SUCH_GROUP",
+              `no group ${groupId}`,
+              crypto.randomUUID(),
+            );
+          }
+          // Everything this group is saying, stopped: a group-wide "quiet" rather than hunting reply
+          // buttons one at a time.
+          for (const message of groups.messages(groupId)) {
+            if (
+              message.authorKind === "agent" &&
+              (message.status === "working" ||
+                message.status === "waiting_for_input" ||
+                message.status === "stopping")
+            ) {
+              await runner.stop(message.id);
+            }
+          }
+          return new Response(null, { status: 204 });
+        },
+      ),
+    );
+
+    plugin.effect(() =>
+      plugin.routes.register(
         "POST",
         "/api/v1/chat/messages",
         async (request) => {

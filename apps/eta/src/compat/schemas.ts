@@ -258,6 +258,9 @@ export const artifactListSchema = z.object({
   artifacts: z.array(artifactSchema),
 });
 
+export const memberInSchema = z.object({ member: z.boolean() });
+export const readInSchema = z.object({ seq: z.number().int().min(0) });
+
 export const snapshotSchema = z.object({
   groups: z.array(groupSchema),
   agents: z.array(agentSchema),

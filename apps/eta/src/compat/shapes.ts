@@ -201,9 +201,10 @@ export function toGroup(input: {
     goal: input.group.goal,
     decided: input.group.decided,
     archived: false,
-    read_seq: input.seq,
+    // How far the user has read, and how far the timeline went past it: what a badge counts.
+    read_seq: input.group.readSeq,
     last_seq: input.seq,
-    unread: 0,
+    unread: Math.max(0, input.seq - input.group.readSeq),
     preview: input.preview,
     // The group changed whenever its timeline did, which is what a client can tell.
     revision: input.seq,
