@@ -71,8 +71,19 @@ function withRequestId(response: Response, requestId: string): Response {
   });
 }
 
+/** One route's work, wrapped by whatever middleware the floor puts in front of it. */
+export type HandlerWrapper = (
+  request: Request,
+  run: () => Promise<Response>,
+) => Promise<Response>;
+
 export class RouteRegistry {
   readonly #routes: Route[] = [];
+  readonly #wrap: HandlerWrapper | undefined;
+
+  constructor(wrap?: HandlerWrapper) {
+    this.#wrap = wrap;
+  }
 
   /** Register a handler. The returned function takes the route back out again. */
   register(method: string, pattern: string, handler: RouteHandler): () => void {
@@ -109,8 +120,13 @@ export class RouteRegistry {
       if (route.method !== request.method) continue;
       const params = matchPattern(route.segments, actual);
       if (params === undefined) continue;
+      const run = async (): Promise<Response> => route.handler(request, params);
       try {
-        return withRequestId(await route.handler(request, params), requestId);
+        const response =
+          this.#wrap === undefined
+            ? await run()
+            : await this.#wrap(request, run);
+        return withRequestId(response, requestId);
       } catch (error) {
         return errorResponse(500, "INTERNAL", String(error), requestId);
       }

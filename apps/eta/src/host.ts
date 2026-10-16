@@ -23,7 +23,9 @@ import {
   schemaVersion,
 } from "./db/migrations";
 import { DbService } from "./db/service";
-import { RouteService } from "./routes";
+import { EventHub } from "./http/events";
+import { IdempotencyStore, withIdempotency } from "./http/idempotency";
+import { RouteRegistry, RouteService } from "./routes";
 
 export interface HostOptions {
   /** Where sessions, plugins and the database live: one directory. */
@@ -45,6 +47,8 @@ export interface Host {
   ctx: Context;
   routes: RouteService;
   db: DbService;
+  /** Where modules publish what a client follows; `/events` is this hub's. */
+  hub: EventHub;
   port: number;
   config: EtaConfig;
   mounted: () => MountedPlugin[];
@@ -70,7 +74,16 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   }
   const db = new DbService(ctx, { path: dbPath, handle, applied });
 
-  const routes = new RouteService(ctx);
+  // Idempotency sits in front of every POST that carries a key: a retry gets the first answer
+  // instead of a second effect (P0.5).
+  const idempotency = new IdempotencyStore(handle);
+  const routes = new RouteService(
+    ctx,
+    new RouteRegistry((request, run) =>
+      withIdempotency(idempotency, request, run),
+    ),
+  );
+  const hub = new EventHub();
   const status: HostStatus = {
     pid: process.pid,
     dataDir: options.dataDir,
@@ -80,8 +93,10 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     mounted: [],
   };
 
-  // The floor's own route: with no plugins mounted at all, the host still answers.
+  // The floor's own routes: with no plugins mounted at all, the host still answers, and there is
+  // still somewhere for a client to listen.
   routes.register("GET", "/health", () => Response.json({ ok: true }));
+  routes.register("GET", "/events", (request) => hub.handle(request));
 
   // The bundled plugins. Everything else that answers a request is one of these or a user
   // plugin; the floor knows no feature name of its own.
@@ -113,6 +128,7 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     ctx,
     routes,
     db,
+    hub,
     port: server.port ?? 0,
     config,
     mounted: () => manager.mounted(),

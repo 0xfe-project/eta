@@ -170,8 +170,8 @@ describe("the plugins", () => {
 describe("stopping", () => {
   it("takes back every route and releases the port", async () => {
     const host = await start(await scratch());
-    // One from the floor, one from the bundled host plugin.
-    expect(host.routes.routes().length).toBe(2);
+    // Two from the floor (/health, /events), one from the bundled host plugin (/host).
+    expect(host.routes.routes().length).toBe(3);
     const port = host.port;
 
     await host.close();

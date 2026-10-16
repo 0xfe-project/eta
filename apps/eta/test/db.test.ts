@@ -64,6 +64,7 @@ describe("the migrations on disk", () => {
     const migrations = await loadMigrations();
     expect(migrations.map((migration) => migration.id)).toEqual([
       "agents/0001-agents",
+      "http/0001-idempotency",
     ]);
     expect(migrations[0]?.sql).toContain("CREATE TABLE agents");
   });
@@ -72,13 +73,20 @@ describe("the migrations on disk", () => {
     const db = await openDatabase(databasePath(await scratch()));
     const migrations = await loadMigrations();
 
-    expect(applyMigrations(db, migrations)).toEqual(["agents/0001-agents"]);
-    expect(tables(db)).toEqual(["agents", "eta_migrations"]);
-    expect(schemaVersion(db)).toBe("agents/0001-agents");
+    expect(applyMigrations(db, migrations)).toEqual([
+      "agents/0001-agents",
+      "http/0001-idempotency",
+    ]);
+    expect(tables(db)).toEqual([
+      "agents",
+      "eta_migrations",
+      "http_idempotency",
+    ]);
+    expect(schemaVersion(db)).toBe("http/0001-idempotency");
 
     // The second run: the same list, nothing applied.
     expect(applyMigrations(db, migrations)).toEqual([]);
-    expect(schemaVersion(db)).toBe("agents/0001-agents");
+    expect(schemaVersion(db)).toBe("http/0001-idempotency");
     db.close();
   });
 
@@ -111,7 +119,10 @@ describe("the host's database", () => {
 
     expect(host.db.path).toBe(databasePath(dataDir));
     expect((await stat(host.db.path)).isFile()).toBe(true);
-    expect(host.db.applied).toEqual(["agents/0001-agents"]);
+    expect(host.db.applied).toEqual([
+      "agents/0001-agents",
+      "http/0001-idempotency",
+    ]);
     expect(tables(host.db.handle)).toContain("agents");
 
     const body = (await (
@@ -121,7 +132,7 @@ describe("the host's database", () => {
       schema: string;
     };
     expect(body.dbPath).toBe(databasePath(dataDir));
-    expect(body.schema).toBe("agents/0001-agents");
+    expect(body.schema).toBe("http/0001-idempotency");
   });
 
   it("applies nothing on a second start, and says so", async () => {
@@ -140,6 +151,6 @@ describe("the host's database", () => {
     });
     hosts.push(second);
     expect(second.db.applied).toEqual([]);
-    expect(second.db.schema()).toBe("agents/0001-agents");
+    expect(second.db.schema()).toBe("http/0001-idempotency");
   });
 });

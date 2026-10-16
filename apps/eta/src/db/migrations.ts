@@ -92,8 +92,10 @@ export function schemaVersion(db: Database): string | undefined {
   db.exec(
     `CREATE TABLE IF NOT EXISTS ${MIGRATION_TABLE} (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)`,
   );
-  const rows = db
-    .query(`SELECT id FROM ${MIGRATION_TABLE} ORDER BY applied_at, id`)
-    .all() as { id: string }[];
-  return rows.at(-1)?.id;
+  // Ordered by rowid, not by timestamp: two migrations applied in the same run share a
+  // millisecond, and "the last one that ran" is the order they ran in, not their names.
+  const row = db
+    .query(`SELECT id FROM ${MIGRATION_TABLE} ORDER BY rowid DESC LIMIT 1`)
+    .get() as { id: string } | null;
+  return row?.id;
 }
