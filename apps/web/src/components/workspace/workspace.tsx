@@ -435,7 +435,7 @@ export function Workspace({
               // Between md and lg the panel is a drawer over the chat; from lg up it is a column
               // of its own, sized by the gutter beside it.
               drawerOpen
-                ? "md:max-lg:fixed md:max-lg:inset-y-0 md:max-lg:right-0 md:max-lg:z-50 md:max-lg:flex md:max-lg:w-[min(28rem,calc(100vw-3rem))] md:max-lg:border-y-0 md:max-lg:border-r-0 md:max-lg:animate-in md:max-lg:duration-200 md:max-lg:slide-in-from-right"
+                ? "md:max-lg:fixed md:max-lg:inset-y-0 md:max-lg:right-0 md:max-lg:z-50 md:max-lg:flex md:max-lg:w-[min(28rem,calc(100vw-3rem))] md:max-lg:border-y-0 md:max-lg:border-r-0"
                 : "md:max-lg:hidden",
               collapsed ? "hidden" : "hidden shrink-0 lg:flex",
             )}

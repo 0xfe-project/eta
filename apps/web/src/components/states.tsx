@@ -45,7 +45,8 @@ export function Loading({
     <div
       role="status"
       className={cn(
-        "motion-safe:animate-in motion-safe:fill-mode-backwards motion-safe:fade-in motion-safe:delay-300",
+        // No fade-in: the bars either are there or they are not. A skeleton that arrives gently is
+        // a skeleton that made you wait for the animation on top of the load.
         className,
       )}
     >
