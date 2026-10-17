@@ -3,13 +3,11 @@ import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { SquaresFourIcon } from "@phosphor-icons/react/SquaresFour";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Empty, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
-import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { AgentEditor } from "./agent-editor";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
@@ -18,29 +16,19 @@ import { SettingsDialog } from "./settings-dialog";
 import { SidebarPane } from "./sidebar-pane";
 import { FolderTree } from "./sidebar-tree";
 import { useAgents, useOpenAgent } from "./use-agents";
-import { useAttention } from "./use-attention";
 import { useWorkspaceStore } from "./workspace-store";
 
 // Shared navigation: the full-window sidebar on wide screens and four
 // bottom tabs on mobile. Conversation lists are the mobile home screen.
 
-/**
- * The one global entry.
- *
- * Everything else in this product belongs somewhere: a conversation, a folder, a member. Tasks,
- * routines and pending questions are facts about a group, so they are shown where that group is
- * (the right panel, the top of the chat) rather than as four destinations that each answer "and
- * which group?". What is left is a single place that looks across all of them — 总览.
- */
-const sections = [
-  {
-    to: "/workspace",
-    get label() {
-      return translate("navigation:sections.overview");
-    },
-    icon: SquaresFourIcon,
-  },
-] as const;
+// No global entry. The workspace's pages used to be sidebar destinations, each of which then
+// asked "but which group?" — the question the conversation you are in has already answered,
+// which is why they are the panel's tabs now. The sidebar is only the conversations.
+const sections: {
+  to: string;
+  label: string;
+  icon: (props: { className?: string }) => React.ReactNode;
+}[] = [];
 
 /**
  * What 总览 holds for the user: everything waiting on them, wherever it is.
@@ -48,9 +36,8 @@ const sections = [
  * One number, because there is one entry. The breakdown lives inside the overview (which knows
  * which group each item belongs to), and the group-scoped counts live on the groups themselves.
  */
-function useBadges(): Partial<Record<(typeof sections)[number]["to"], number>> {
-  const { total } = useAttention();
-  return { "/workspace": total };
+function useBadges(): Record<string, number> {
+  return {};
 }
 
 const item =
@@ -90,26 +77,28 @@ export function Sidebar({ width }: { width?: number } = {}) {
           eta.
         </Link>
       </div>
-      <nav
-        aria-label={translateText("accessibility.sections")}
-        className="grid gap-px px-2"
-      >
-        {sections.map(({ to, label, icon: Icon }) => (
-          <Link
-            key={to}
-            to={to}
-            className={item}
-            activeOptions={{ exact: false, includeSearch: false }}
-            activeProps={{
-              className: "bg-sidebar-accent font-medium text-foreground",
-            }}
-          >
-            <Icon aria-hidden="true" className="size-4" />
-            {label}
-            <Badge count={badges[to]} />
-          </Link>
-        ))}
-      </nav>
+      {sections.length > 0 ? (
+        <nav
+          aria-label={translateText("accessibility.sections")}
+          className="grid gap-px px-2"
+        >
+          {sections.map(({ to, label, icon: Icon }) => (
+            <Link
+              key={to}
+              to={to}
+              className={item}
+              activeOptions={{ exact: false, includeSearch: false }}
+              activeProps={{
+                className: "bg-sidebar-accent font-medium text-foreground",
+              }}
+            >
+              <Icon aria-hidden="true" className="size-4" />
+              {label}
+              <Badge count={badges[to]} />
+            </Link>
+          ))}
+        </nav>
+      ) : null}
       {/* Starting a conversation lives next to finding one: both are about the list. */}
       <div className="flex items-center gap-1 px-2 pb-1">
         <label className="min-w-0 flex-1">
@@ -267,12 +256,7 @@ export function BottomNav() {
       to: "/workspace/more",
       label: translateText("sections.more"),
       icon: DotsThreeIcon,
-      also: [
-        "/workspace",
-        "/workspace/routines",
-        "/workspace/memory",
-        "/workspace/inbox",
-      ],
+      also: ["/workspace/routines", "/workspace/memory", "/workspace/inbox"],
     },
   ] as const;
   return (

@@ -249,10 +249,10 @@ export function PendingList() {
        */}
       <div className="mb-2 border-b pb-2">
         <h2 className="text-sm font-semibold">
-          {translateText("attention.allGroups")}
+          {String(translateText("attention.allGroups"))}
         </h2>
         <p className="text-xs text-muted-foreground">
-          {translateText("attention.allGroupsHint")}
+          {String(translateText("attention.allGroupsHint"))}
         </p>
       </div>
       {failed.length ? (

@@ -111,7 +111,6 @@ const linkedViewParser = parseAsStringLiteral([
   "context",
   "members",
   "artifacts",
-  "overview",
   "tasks",
   "routines",
   "inbox",
