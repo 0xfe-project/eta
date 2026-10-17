@@ -81,13 +81,6 @@ export function draftText(draft: Draft) {
   return draft.map((p) => (p.type === "file" ? "" : p.text)).join("");
 }
 
-/** The draft as one plain string, when it holds no blocks. */
-export function onlyText(draft: Draft): string | null {
-  return draft.every((p) => p.type === "text")
-    ? draft.map((p) => p.text).join("")
-    : null;
-}
-
 export function isBlank(draft: Draft) {
   return !draft.some((p) => p.type === "file") && !draftText(draft).trim();
 }

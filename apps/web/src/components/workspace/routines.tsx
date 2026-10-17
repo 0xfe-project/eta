@@ -191,7 +191,10 @@ export function RoutineList({
   // "which groups have something on a clock, and what". A flat list made you open each one to find
   // out whose it is.
   const sections = useMemo(() => {
-    const byGroup = new Map<string, { name: string; items: Routine[] }>();
+    const byGroup = new Map<
+      string,
+      { name: string; items: RoutineSummary[] }
+    >();
     for (const routine of data ?? []) {
       const id = routine.group_id ?? "";
       const name =

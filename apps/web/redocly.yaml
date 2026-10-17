@@ -1,20 +1,22 @@
-# The OpenAPI documents the web client's types come from (`bun run
-# generate`, after the control plane's `openapi` task, which writes both:
-# its public API and routines'). Adding one: an entry here, its document in
-# that task, and a client in src/lib/api.ts.
+# The OpenAPI document the web client's types come from (`bun run generate`):
+# the host writes it from the code that answers the routes (`bun run --cwd
+# apps/eta openapi`), so the client can never drift from the server.
 apis:
-  # The new host's own document (P2.5): written by `bun run --cwd apps/eta openapi`, so the web's
-  # client types come from the code that answers the routes. The control-plane entry below is the
-  # old stack's, still read while its routes are ported over — the web calls both.
   eta:
     root: ../eta/out/openapi.json
     x-openapi-ts:
       output: ./src/api/eta.gen.ts
-  control-plane:
-    root: ../control-plane/out/openapi.json
+  # The compat layer's contract, frozen: these shapes are what the host's compat plugin
+  # serves on /api/v1 (and the routines plugin on /api/routines/v1), but the host's own
+  # document does not describe all of them yet (REFACTOR.md P2.5's boundary). The two
+  # snapshots below come from the old stack's exporter, kept verbatim as the wire
+  # contract the web still compiles against; each shape moves to eta.gen as its route's
+  # description is ported, and these files shrink until they are gone.
+  compat:
+    root: ./openapi/compat.json
     x-openapi-ts:
       output: ./src/api/control-plane.gen.ts
   routines:
-    root: ../control-plane/out/routines.openapi.json
+    root: ./openapi/routines.json
     x-openapi-ts:
       output: ./src/api/routines.gen.ts

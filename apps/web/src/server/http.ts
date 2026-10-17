@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 /** App-owned HTTP routes that are not static files or the SPA shell. */
-export function ownsWebApi(pathname: string): boolean {
+function ownsWebApi(pathname: string): boolean {
   return pathname === "/up" || pathname === "/version";
 }
 

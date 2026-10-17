@@ -1,8 +1,0 @@
-# Shared by every Python project in the repository. Formatting runs through
-# dprint (dprint.json); this file configures `ruff check`.
-target-version = "py313"
-line-length = 88
-src = ["bundles/memory/service"]
-
-[lint]
-select = ["E", "F", "I", "PT"]

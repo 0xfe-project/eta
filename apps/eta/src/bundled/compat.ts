@@ -952,8 +952,20 @@ export const compatPlugin = {
             if (cards.some((card) => card.id === id)) continue;
             try {
               const text = await readFile(join(directory, entry), "utf8");
-              const heading = /^#\s+(.+)$/m.exec(text)?.[1]?.trim();
-              const summary = /^(?:>|-)\s*(.+)$/m.exec(text)?.[1]?.trim() ?? "";
+              // Line-wise reads, not one multiline regex: a heading is the first line that
+              // starts with "# ", a summary the first line after it that quotes or lists.
+              const lines = text.split("\n");
+              const heading = lines
+                .find((line) => line.startsWith("# "))
+                ?.slice(2)
+                .trim();
+              const summary =
+                lines
+                  .find(
+                    (line) => line.startsWith("> ") || line.startsWith("- "),
+                  )
+                  ?.slice(2)
+                  .trim() ?? "";
               cards.push({
                 id,
                 name: heading ?? id,

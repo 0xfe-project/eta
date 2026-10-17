@@ -10,8 +10,8 @@
  * Pure, so the arithmetic can be checked without a scroll container.
  */
 
-export const RAIL_ANCHORS = 6;
-export const RAIL_WINDOW = 3;
+const RAIL_ANCHORS = 6;
+const RAIL_WINDOW = 3;
 
 export interface RailRow {
   /** The index this row stands for; absent for a `⋯` row. */

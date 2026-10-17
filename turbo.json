@@ -1,10 +1,6 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "agentGuidance": false,
-  // Vercel Remote Cache, shared by every checkout (worktrees included) and CI:
-  // a commit's pre-commit run uploads, so CI mostly replays. Each machine
-  // authenticates itself (`turbo login`; CI exchanges its OIDC token).
-  "remoteCache": { "teamId": "team_m0cGPvm66wsuOjDpnCrXUDPz" },
   "tasks": {
     "build": {
       "outputs": ["dist/**", "out/**"]
@@ -18,51 +14,6 @@
     },
     "test": {
       "outputs": []
-    },
-    // Per-platform artifacts that images copy. The target platform is part of
-    // the task name, so the cache key and output directory never depend on the
-    // host that builds them. Packages narrow the inputs in their turbo.json.
-    "build:linux-amd64": {
-      "outputs": ["out/linux-amd64/**"]
-    },
-    "build:linux-arm64": {
-      "outputs": ["out/linux-arm64/**"]
-    },
-    // Images from those artifacts, built by the cluster's BuildKit and pushed
-    // as AXP_IMAGE (scripts/build/image.sh). BuildKit's cache already skips
-    // unchanged work, so they always run.
-    "image:linux-amd64": {
-      "dependsOn": ["build:linux-amd64"],
-      "cache": false,
-      "passThroughEnv": ["AXP_IMAGE", "AXP_BUILDKIT"]
-    },
-    "image:linux-arm64": {
-      "dependsOn": ["build:linux-arm64"],
-      "cache": false,
-      "passThroughEnv": ["AXP_IMAGE", "AXP_BUILDKIT"]
-    },
-    // The production app image (deploy/Dockerfile) copies these artifacts.
-    "//#image:linux-amd64": {
-      "dependsOn": [
-        "@axp/web#build",
-        "@axp/control-plane#build:linux-amd64",
-        "@axp/plugins-go#build:linux-amd64",
-        "@axp/remote#build",
-        "@axp/agenvo#build"
-      ],
-      "cache": false,
-      "passThroughEnv": ["AXP_IMAGE", "AXP_BUILDKIT"]
-    },
-    "//#image:linux-arm64": {
-      "dependsOn": [
-        "@axp/web#build",
-        "@axp/control-plane#build:linux-arm64",
-        "@axp/plugins-go#build:linux-arm64",
-        "@axp/remote#build",
-        "@axp/agenvo#build"
-      ],
-      "cache": false,
-      "passThroughEnv": ["AXP_IMAGE", "AXP_BUILDKIT"]
     },
     // Knip reads the whole repository, so it always runs.
     "//#knip": {

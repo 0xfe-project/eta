@@ -1,3 +1,0 @@
-# Only the built relay is sent to BuildKit.
-*
-!out/relay/

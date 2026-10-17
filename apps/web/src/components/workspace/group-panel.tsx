@@ -143,20 +143,18 @@ export function GroupPanel({ group }: { group: Group | undefined }) {
           </p>
         ) : (
           <ul className="space-y-1">
-            {groupArtifacts.map(
-              (artifact: { id: string; title: string; version: number }) => (
-                <li key={artifact.id}>
-                  <ActivityRefCard
-                    value={{
-                      kind: "artifact",
-                      id: artifact.id,
-                      title: artifact.title,
-                      number: artifact.version,
-                    }}
-                  />
-                </li>
-              ),
-            )}
+            {groupArtifacts.map((artifact) => (
+              <li key={artifact.id}>
+                <ActivityRefCard
+                  value={{
+                    kind: "artifact",
+                    id: artifact.id,
+                    title: artifact.title,
+                    number: artifact.versions.at(-1)?.number ?? 0,
+                  }}
+                />
+              </li>
+            ))}
           </ul>
         )}
       </section>

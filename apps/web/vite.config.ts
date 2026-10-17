@@ -8,7 +8,6 @@ import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
 import { webApiMiddleware } from "./src/server/http.ts";
-import { browserSentryMeta } from "./src/server/sentry-meta.ts";
 
 // Long-lived vendor chunks for the browser, so the entry stays small and
 // dependency upgrades do not invalidate app code (and vice versa).
@@ -79,15 +78,7 @@ export default defineConfig(({ mode }) => {
       react(),
       babel({ presets: [reactCompilerPreset()] }),
       {
-        // The browser's Sentry settings, which the Bun server adds in
-        // production (server.js).
-        name: "axp-sentry-meta",
-        apply: "serve",
-        transformIndexHtml: (html) =>
-          html.replace("</head>", `${browserSentryMeta()}</head>`),
-      },
-      {
-        name: "axp-web-api",
+        name: "eta-web-api",
         generateBundle() {
           this.emitFile({ type: "asset", fileName: "BUILD", source: build });
         },
@@ -105,10 +96,7 @@ export default defineConfig(({ mode }) => {
     ],
     build: {
       // Public, so React Grab (圈选元素, lib/element-picker.ts) can map the
-      // production bundle back to source files and component names. The
-      // build then gives each file and its map a debug id (sentry sourcemap
-      // inject), so Rustrak maps errors' stacks with the maps
-      // deploy/k3s/deploy.sh uploads.
+      // production bundle back to source files and component names.
       sourcemap: true,
       rolldownOptions: {
         output: {

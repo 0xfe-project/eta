@@ -105,6 +105,7 @@ function Chat({ agentStatus = "idle" }: { agentStatus?: "idle" | "starting" }) {
           name: "研究员",
           description: "",
           model: "model",
+          persona: "",
           bundles: [],
           build_error: null,
           revision: 1,
@@ -134,6 +135,7 @@ function Chat({ agentStatus = "idle" }: { agentStatus?: "idle" | "starting" }) {
       onStopAll={() => {}}
       onStop={() => {}}
       onAnswer={() => {}}
+      onGoal={async () => {}}
     />
   );
 }

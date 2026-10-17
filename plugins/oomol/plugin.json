@@ -1,6 +1,0 @@
-{
-  "name": "oomol",
-  "version": "1.0.0",
-  "description": "OOMOL 的 oo CLI 和它自带的 skill；凭据来自 oomol 环境包的配置（OO_API_KEY、OO_TEAM_NAME）。",
-  "targets": ["chat"]
-}

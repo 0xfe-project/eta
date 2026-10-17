@@ -7,6 +7,7 @@ import type {
   Group,
   Interaction,
   SendMode,
+  TextBlock,
 } from "@/queries/chat";
 import type { Outgoing } from "@/queries/outbox";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
@@ -550,8 +551,8 @@ const Turn = memo(
     // Only a reply at work still grows; the rest render as finished text.
     const streaming = ACTIVE_STATUSES.has(message.status);
     const saidText = message.blocks
-      .filter((block: { type: string }) => block.type === "text")
-      .map((block: { text?: string }) => block.text ?? "")
+      .filter((block): block is TextBlock => block.type === "text")
+      .map((block) => block.text)
       .join("\n\n");
     return (
       <div className="message assistant">
@@ -577,7 +578,7 @@ const Turn = memo(
               // What it worked through: folded, with its size on the line, because it is context
               // for reading the answer critically rather than a second answer.
               <ThinkingBlock
-                key={block.id ?? "thinking"}
+                key="thinking"
                 text={block.text}
                 {...(block.chars === undefined ? {} : { chars: block.chars })}
               />
@@ -880,8 +881,8 @@ export function ChatPanel({
         .map((message) => ({
           id: message.id,
           text: message.blocks
-            .filter((block: { type: string }) => block.type === "text")
-            .map((block: { text?: string }) => block.text ?? "")
+            .filter((block): block is TextBlock => block.type === "text")
+            .map((block) => block.text)
             .join(" "),
         })),
     [messages],
@@ -893,8 +894,8 @@ export function ChatPanel({
         .map((message) => ({
           id: message.id,
           text: message.blocks
-            .filter((block: { type: string }) => block.type === "text")
-            .map((block: { text?: string }) => block.text ?? "")
+            .filter((block): block is TextBlock => block.type === "text")
+            .map((block) => block.text)
             .join(" "),
         })),
     [messages],

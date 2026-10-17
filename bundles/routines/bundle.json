@@ -1,5 +1,0 @@
-{
-  "name": "routines",
-  "description": "定时任务：查看、新建和修改定时任务及其报告。",
-  "plugins": ["routines"]
-}

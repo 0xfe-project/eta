@@ -212,7 +212,11 @@ function AgentLibrary() {
                   </span>
                   <AgentStatusDot status={agent.status as never} />
                   <span className="sr-only">
-                    {agentStatusLabels[agent.status]}
+                    {
+                      agentStatusLabels[
+                        agent.status as keyof typeof agentStatusLabels
+                      ]
+                    }
                   </span>
                 </button>
               </li>

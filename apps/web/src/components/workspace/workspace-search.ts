@@ -24,10 +24,6 @@ export const sectionPaths = {
   inbox: "/workspace/inbox",
 } as const satisfies Partial<Record<WorkspaceView, string>>;
 
-export const hasPage = (
-  view: WorkspaceView,
-): view is keyof typeof sectionPaths => view in sectionPaths;
-
 /**
  * Where a section opens from the current mode: its page in the full-window
  * workspace, or its tab of the side panel beside the chat, which keeps the

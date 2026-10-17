@@ -356,8 +356,6 @@ function GroupRow({
   );
 }
 
-export type { Group };
-
 /**
  * Renaming in place: the title becomes a field, Enter or losing focus commits, Escape gives up.
  *

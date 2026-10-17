@@ -29,6 +29,6 @@ export function useOpenGroup() {
   const navigate = useNavigate();
   return (group: string) => {
     useWorkspaceStore.getState().setMobilePanel("chat");
-    void navigate({ to: "/", search: { group, view: "members" } });
+    void navigate({ to: "/", search: { group, view: "context" } });
   };
 }

@@ -362,7 +362,7 @@ export function InstructionsField({
  * the id is the card's name) and answers `""` for "the project's default", which is a card too,
  * so the field lists it as the first choice rather than as "none".
  */
-export function PersonaSelect({
+function PersonaSelect({
   value,
   onChange,
   invalid,

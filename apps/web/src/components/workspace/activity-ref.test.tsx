@@ -90,6 +90,7 @@ async function mount(blocks: Block[], { path = "/" } = {}) {
       onStopAll={() => {}}
       onStop={() => {}}
       onAnswer={() => {}}
+      onGoal={async () => {}}
     />
   );
   const router = createRouter({

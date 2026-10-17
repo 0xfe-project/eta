@@ -1,9 +1,0 @@
-# Production (deploy/k3s/deploy.sh): the infrastructure and AXP in the
-# namespace axp. Agents run in axp-agents, bundles' services in axp-bundles
-# (deploy/k3s/workloads.yaml with NAMESPACE=axp).
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-namespace: axp
-resources:
-  - infra
-  - ../app

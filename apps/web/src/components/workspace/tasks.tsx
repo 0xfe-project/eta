@@ -333,7 +333,7 @@ function TaskList() {
               </button>
               {isOpen(value) ? (
                 <ul>
-                  {group.map((task: { id: string }) => (
+                  {group.map((task) => (
                     <TaskRow key={task.id} task={task} />
                   ))}
                 </ul>

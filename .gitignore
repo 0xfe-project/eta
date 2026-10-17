@@ -14,7 +14,7 @@ dist/
 .DS_Store
 apps/web/src/routeTree.gen.ts
 # Generated from the control plane's OpenAPI document (@axp/web#generate).
-apps/web/src/api/*.gen.ts
+apps/web/src/api/eta.gen.ts
 # The app-server protocol, generated from the pinned Codex (bun run generate).
 apps/agent-runtime/src/protocol/
 var/

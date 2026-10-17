@@ -131,6 +131,7 @@ function Chat() {
       onStopAll={() => {}}
       onStop={() => {}}
       onAnswer={() => {}}
+      onGoal={async () => {}}
     />
   );
 }

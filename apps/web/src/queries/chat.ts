@@ -15,6 +15,7 @@ import type {
   MessageUpdated,
   Sent,
   TextBlock,
+  ThinkingBlock,
 } from "@/api/control-plane.gen";
 import {
   infiniteQueryOptions,
@@ -26,7 +27,7 @@ import {
 } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
 import { create } from "zustand";
-import { controlPlane, unwrap } from "@/lib/api";
+import { ApiError, controlPlane, fallbackMessage, unwrap } from "@/lib/api";
 
 // The control plane's chat API; every type comes from its OpenAPI document.
 
@@ -38,7 +39,8 @@ export type AgentDraft = Pick<Agent, "name" | "description"> & {
   bundles?: string[];
 };
 export type ChatMessage = Message;
-export type Block = TextBlock | AttachmentBlock | ActivityBlock;
+export type { TextBlock } from "@/api/control-plane.gen";
+export type Block = TextBlock | ThinkingBlock | AttachmentBlock | ActivityBlock;
 /**
  * The snapshot plus `messages`: every message seen since it was taken (over
  * SSE or from our own writes), starting with the active replies. History

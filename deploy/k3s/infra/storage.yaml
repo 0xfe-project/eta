@@ -1,9 +1,0 @@
-# Volumes outlive what claimed them: deleting a claim (an agent, a bundle's
-# service, a reinstall) never deletes its data.
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: axp
-provisioner: rancher.io/local-path
-reclaimPolicy: Retain
-volumeBindingMode: WaitForFirstConsumer

@@ -1,3 +1,4 @@
+import type { Interaction } from "@/queries/chat";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -29,12 +30,17 @@ const agents = [
   { id: "a2", name: "装配检查" },
 ];
 
-const interaction = (id: string, agentId: string, status = "pending") => ({
+const interaction = (
+  id: string,
+  agentId: string,
+  status: Interaction["status"] = "pending",
+) => ({
   id,
   agent_id: agentId,
   group_id: "g1",
   message_id: "m1",
   kind: "choice" as const,
+  answer: null,
   prompt: "跑一下 pwd",
   options: [
     { value: "allow", label: "允许" },

@@ -605,7 +605,7 @@ export function GroupMembers() {
                   <div className="min-w-0 flex-1">
                     <MemberStats sessionId={p.session_id ?? undefined} />
                   </div>
-                  {p.session_id === undefined ? null : (
+                  {typeof p.session_id !== "string" ? null : (
                     <>
                       <MemberRing sessionId={p.session_id}>
                         <foreignObject x="9" y="9" width="26" height="26">

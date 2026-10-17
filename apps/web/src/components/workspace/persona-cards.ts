@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-export interface PersonaOption {
+interface PersonaOption {
   id: string;
   name: string;
   description: string;

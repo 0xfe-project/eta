@@ -17,7 +17,7 @@ export type ThemeChoice = "system" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
 
 /** Where the choice is kept. Also read by the inline script in index.html. */
-export const THEME_STORAGE_KEY = "theme";
+const THEME_STORAGE_KEY = "theme";
 
 const listeners = new Set<() => void>();
 const darkQuery = () =>

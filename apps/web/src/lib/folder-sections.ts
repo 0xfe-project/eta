@@ -27,7 +27,7 @@ export interface FolderSection {
 }
 
 /** The name a folder is shown by, unique among `paths`. */
-export function folderLabels(paths: readonly string[]): Map<string, string> {
+function folderLabels(paths: readonly string[]): Map<string, string> {
   const labels = new Map<string, string>();
   const segments = paths.map((path) => path.split("/").filter(Boolean));
   const width = new Map<string, number>();

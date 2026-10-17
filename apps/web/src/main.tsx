@@ -13,7 +13,6 @@ import {
   readLanguagePreference,
   resolveLanguage,
 } from "@/lib/i18n";
-import { installErrorReporting, reportReactError } from "@/lib/report";
 import { applyTheme, readTheme, watchSystemTheme } from "@/lib/theme";
 import { watchForUpdates } from "@/lib/update";
 import { useOutbox } from "@/queries/outbox";
@@ -21,7 +20,6 @@ import { getRouter } from "./router";
 import "@/styles.css";
 
 async function start() {
-  installErrorReporting();
   watchForUpdates();
 
   // Makes the app installable from the browser's own install UI.
@@ -49,11 +47,7 @@ async function start() {
   if (!root) throw new Error("missing #root");
 
   startTransition(() => {
-    createRoot(root, {
-      onUncaughtError: reportReactError,
-      onCaughtError: reportReactError,
-      onRecoverableError: reportReactError,
-    }).render(
+    createRoot(root).render(
       <StrictMode>
         <QueryClientProvider client={router.options.context.queryClient}>
           <RouterProvider router={router} />
