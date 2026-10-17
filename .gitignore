@@ -13,20 +13,12 @@ dist/
 .ruff_cache/
 .DS_Store
 apps/web/src/routeTree.gen.ts
-# Generated from the control plane's OpenAPI document (@axp/web#generate).
+# Generated from the host's OpenAPI document (@eta/web#generate).
 apps/web/src/api/eta.gen.ts
-# The app-server protocol, generated from the pinned Codex (bun run generate).
-apps/agent-runtime/src/protocol/
 var/
 out/
 .turbo/
 .claude/settings.local.json
-# Bare `go build` output in the Go app directories; real builds go to out/.
-/apps/control-plane/control-plane
-/apps/remote/remote
-
-# Turborepo
-.turbo
 
 # eta —— 本地专属,不入库
 .eta/
