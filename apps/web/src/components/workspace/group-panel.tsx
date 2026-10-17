@@ -93,6 +93,15 @@ export function GroupPanel({
   const { data: routines } = useRoutines();
   const { data: artifacts } = useArtifacts();
   const [editing, setEditing] = useState(false);
+  const [focused, setFocused] = useState<string | null>(null);
+  const focusMember = (agentId: string) => {
+    setFocused((current) => (current === agentId ? null : agentId));
+    // The block comes to you; the column does not reorder itself to prove it moved.
+    document
+      .getElementById(`member-${agentId}`)
+      ?.scrollIntoView({ block: "nearest" });
+    onFocusMember?.(agentId);
+  };
   if (group === undefined) return null;
   const members = (group.participants as Participant[]).filter((p) => p.member);
   const active = new Set(
@@ -183,6 +192,7 @@ export function GroupPanel({
           {members.map((member) => (
             <MemberBlock
               key={member.agent_id}
+              focused={focused === member.agent_id}
               member={member}
               name={
                 agents.find(
@@ -206,7 +216,7 @@ export function GroupPanel({
               }
               removable={group.kind === "group" && members.length > 1}
               groupId={group.id}
-              onFocus={() => onFocusMember?.(member.agent_id)}
+              onFocus={() => focusMember(member.agent_id)}
             />
           ))}
         </ul>
@@ -341,6 +351,7 @@ function MemberBlock({
   answering,
   tasks,
   removable,
+  focused,
   groupId,
   onFocus,
 }: {
@@ -351,6 +362,8 @@ function MemberBlock({
   tasks: number;
   /** A group keeps at least one member, and a direct chat is not a group you edit. */
   removable: boolean;
+  /** This is the member the chat is narrowed to. */
+  focused: boolean;
   groupId: string;
   onFocus: () => void;
 }) {
@@ -394,7 +407,15 @@ function MemberBlock({
 
   const [confirming, setConfirming] = useState(false);
   return (
-    <li className="border border-border px-2 py-1.5">
+    <li
+      id={`member-${member.agent_id}`}
+      className={cn(
+        "border px-2 py-1.5",
+        // Focused is a frame around the block, not a different block: the numbers stay where they
+        // were, so comparing two members does not mean re-learning the layout.
+        focused ? "border-foreground" : "border-border",
+      )}
+    >
       <div className="flex min-w-0 items-center gap-1.5">
         <button
           type="button"

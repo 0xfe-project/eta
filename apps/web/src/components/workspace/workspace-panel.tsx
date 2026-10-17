@@ -60,6 +60,7 @@ export function WorkspacePanel({
   style,
   onClose,
   onCollapse,
+  onFocusMember,
 }: {
   view: WorkspaceView;
   onViewChange: (view: WorkspaceView) => void;
@@ -70,6 +71,8 @@ export function WorkspacePanel({
   onClose?: () => void;
   /** Folds it away from lg up. */
   onCollapse?: () => void;
+  /** Pressing a member narrows the chat to it. */
+  onFocusMember?: (agentId: string) => void;
 }) {
   const { t: translateText } = useTranslation([
     "navigation",
@@ -158,7 +161,9 @@ export function WorkspacePanel({
         {tabs.map(({ value }) => (
           <TabsContent key={value} value={value} className="mt-0">
             {/* A group's panel is one column of blocks, not a tab per half of it. */}
-            {value === "members" ? <GroupPanel group={group} /> : null}
+            {value === "members" ? (
+              <GroupPanel group={group} onFocusMember={onFocusMember} />
+            ) : null}
             {value === "artifacts" ? <GroupArtifacts /> : null}
             {value === "overview" ? <Overview /> : null}
             {value === "tasks" ? <Tasks /> : null}

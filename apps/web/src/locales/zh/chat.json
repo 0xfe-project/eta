@@ -226,5 +226,8 @@
   },
   "panel": {
     "sessionJson": "会话 json · {{size}}"
+  },
+  "focus": {
+    "only": "只看 {{name}}"
   }
 }

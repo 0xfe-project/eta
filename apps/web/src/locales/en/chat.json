@@ -226,5 +226,8 @@
   },
   "panel": {
     "sessionJson": "session json · {{size}}"
+  },
+  "focus": {
+    "only": "Only {{name}}"
   }
 }

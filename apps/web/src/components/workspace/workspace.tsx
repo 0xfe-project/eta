@@ -3,7 +3,7 @@ import type { WorkspaceView } from "./types";
 import type { Draft } from "@/lib/composer";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { draftText, EMPTY_DRAFT, partsText } from "@/lib/composer";
@@ -113,6 +113,10 @@ export function Workspace({
   const compact = useCompact();
   const stopReply = useStopReply();
   const setGoal = useSetGoal();
+  // Narrowing the chat to one member: a frame around its block in the panel, and only that
+  // member's replies (plus what was said to it) in the middle.
+  const [focusAgent, setFocusAgent] = useState<string | null>(null);
+  useEffect(() => setFocusAgent(null), [group?.id]);
   // Which session a goal set from the composer lands on: the member being talked to, or the first
   // one that has a conversation. A group has one goal per member; the composer speaks for the one
   // you are addressing.
@@ -277,7 +281,27 @@ export function Workspace({
               // Not a blocker: the group works without a folder, it just works somewhere nobody
               // chose. The way out sits next to the sentence.
               notice={<UnboundFolderNotice group={group} />}
-              messages={history.messages}
+              messages={
+                focusAgent === null
+                  ? history.messages
+                  : history.messages.filter(
+                      (message: { agent_id?: string | null; role: string }) =>
+                        message.role === "user" ||
+                        message.agent_id === focusAgent,
+                    )
+              }
+              focus={
+                focusAgent === null
+                  ? undefined
+                  : {
+                      name:
+                        members.find(
+                          (member: { agent_id: string }) =>
+                            member.agent_id === focusAgent,
+                        )?.name ?? focusAgent,
+                      onClear: () => setFocusAgent(null),
+                    }
+              }
               loading={!chat.data || history.loading}
               hasOlder={history.hasOlder}
               loadingOlder={history.loadingOlder}
@@ -402,6 +426,9 @@ export function Workspace({
             onViewChange={onViewChange}
             onClose={() => setMobilePanel("chat")}
             onCollapse={collapse}
+            onFocusMember={(agentId) =>
+              setFocusAgent((current) => (current === agentId ? null : agentId))
+            }
             style={collapsed ? undefined : { width: panel.width }}
             className={cn(
               // Between md and lg the panel is a drawer over the chat; from lg up it is a column

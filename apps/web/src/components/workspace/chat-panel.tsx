@@ -683,6 +683,7 @@ export function ChatPanel({
   onDiscard,
   onResend,
   onGoal,
+  focus,
 }: {
   groupId: string | undefined;
   groupName: string | undefined;
@@ -727,6 +728,8 @@ export function ChatPanel({
   onDiscard: (id: string) => void;
   /** Send a failed reply's message again, as a new message. */
   onResend: (parts: OutgoingPart[], agentId?: string) => void;
+  /** Narrowed to one member: its name, and the way back out. */
+  focus?: { name: string; onClear: () => void } | undefined;
   /** The goal of this conversation, moved from the composer's `/goal`. */
   onGoal: (
     action: "set" | "pause" | "resume" | "clear",
@@ -1069,6 +1072,20 @@ export function ChatPanel({
         ) : null}
         {/* The rail is inside the scroll container so it can stick to the top of what you see;
             it takes a lane on the right and the transcript keeps clear of it. */}
+        {focus === undefined ? null : (
+          <div className="mx-[1ch] mb-1 flex items-center gap-2 border border-border px-2 py-0.5 text-xs">
+            <span className="min-w-0 flex-1 truncate">
+              {translateText("chat:focus.only", { name: focus.name })}
+            </span>
+            <button
+              type="button"
+              className="shrink-0 text-muted-foreground hover:text-foreground"
+              onClick={focus.onClear}
+            >
+              {translateText("common:actions.close")}
+            </button>
+          </div>
+        )}
         <div className="relative flex min-h-0 px-[1ch]">
           <div className="min-w-0 flex-1">
             <div
