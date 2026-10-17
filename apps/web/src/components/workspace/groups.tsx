@@ -572,9 +572,11 @@ export function GroupMembers() {
                   chat narrows to it. The menu beside it is the other thing a member has. */}
               <button
                 type="button"
-                // Focus, and stay focused: pressing the same card twice is not "never mind" —
-                // the way out is the chip above the transcript.
-                onClick={() => setFocusedAgent(p.agent_id)}
+                // Press to focus, press again to let go. The frame is the whole state: white
+                // border = narrowed to this member, and the same press takes it back.
+                onClick={() =>
+                  setFocusedAgent(focused === p.agent_id ? null : p.agent_id)
+                }
                 title={translateText("groups.members.focus", { name: p.name })}
                 className="min-w-0 flex-1 text-left text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >

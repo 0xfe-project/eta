@@ -770,7 +770,6 @@ export function ChatPanel({
   onDiscard,
   onResend,
   onGoal,
-  focus,
   onReload,
 }: {
   groupId: string | undefined;
@@ -816,8 +815,6 @@ export function ChatPanel({
   onResend: (parts: OutgoingPart[], agentId?: string) => void;
   /** Ask for the conversation again, when reading it failed. */
   onReload?: () => void;
-  /** Narrowed to one member: its name, and the way back out. */
-  focus?: { name: string; onClear: () => void } | undefined;
   /** The goal of this conversation, moved from the composer's `/goal`. */
   onGoal: (
     action: "set" | "pause" | "resume" | "clear",
@@ -1185,20 +1182,6 @@ export function ChatPanel({
             agents={agents}
             onAnswer={onAnswer}
           />
-          {focus === undefined ? null : (
-            <div className="mx-[1ch] mb-1 flex items-center gap-2 border border-border px-2 py-0.5 text-xs">
-              <span className="min-w-0 flex-1 truncate">
-                {translateText("chat:focus.only", { name: focus.name })}
-              </span>
-              <button
-                type="button"
-                className="shrink-0 text-muted-foreground hover:text-foreground"
-                onClick={focus.onClear}
-              >
-                {translateText("common:actions.close")}
-              </button>
-            </div>
-          )}
           <div className="mx-auto max-w-[860px]">
             <div className="min-w-0">
               <div

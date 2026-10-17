@@ -38,6 +38,7 @@ export function FolderTree({ query = "" }: { query?: string }) {
   const { groups, current } = useGroups();
   const open = useOpenGroup();
   const setFocusedAgent = useWorkspaceStore((state) => state.setFocusedAgent);
+  const focusedAgentId = useWorkspaceStore((state) => state.focusedAgentId);
   const { data } = useQuery(chatQueryOptions());
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
@@ -104,10 +105,9 @@ export function FolderTree({ query = "" }: { query?: string }) {
                 // A member listed under a group is a member *of that group*: pressing it narrows
                 // the conversation to it, the same action as its card in the panel. Opening a
                 // separate private chat is what the agent library is for.
-                // Pressing an already-focused member keeps it focused: the way out is the chip
-                // above the transcript, so a second press never means "never mind".
+                // Press to focus, press again to let go — the same toggle as the panel's card.
                 onOpenAgent={(agentId) => {
-                  setFocusedAgent(agentId);
+                  setFocusedAgent(focusedAgentId === agentId ? null : agentId);
                   open(group.id);
                 }}
               />

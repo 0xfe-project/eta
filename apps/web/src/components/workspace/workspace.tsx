@@ -279,18 +279,6 @@ export function Workspace({
                         message.agent_id === focusAgent,
                     )
               }
-              focus={
-                focusAgent === null
-                  ? undefined
-                  : {
-                      name:
-                        members.find(
-                          (member: { agent_id: string }) =>
-                            member.agent_id === focusAgent,
-                        )?.name ?? focusAgent,
-                      onClear: () => setFocusedAgent(null),
-                    }
-              }
               loading={!chat.data || history.loading}
               hasOlder={history.hasOlder}
               loadingOlder={history.loadingOlder}
