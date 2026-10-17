@@ -111,6 +111,10 @@ describe("a session, described to a panel", () => {
     expect([...tools.active, ...tools.blocked].sort()).toEqual(
       [...tools.tools].sort(),
     );
+    // Nothing was asked and nothing was refused in this conversation: zeros, and they mean "none",
+    // not "not measured".
+    expect(tools.asked).toBe(0);
+    expect(tools.refused).toBe(0);
   });
 
   it("adds up what the conversation spent, from its own messages", async () => {

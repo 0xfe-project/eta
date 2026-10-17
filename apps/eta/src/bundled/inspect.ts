@@ -1,4 +1,5 @@
 import type { SessionManager } from "@eta/server";
+import type { InteractionStore } from "../interactions/store";
 import type { Context } from "cordis";
 import type { PluginContext } from "../plugin-api";
 import { errorResponse } from "../routes";
@@ -23,6 +24,8 @@ import { errorResponse } from "../routes";
  */
 export interface InspectPluginConfig {
   sessions: SessionManager;
+  /** The questions this session has asked, so the tool list can say how often a tool was stopped. */
+  interactions: InteractionStore;
 }
 
 export const inspectPlugin = {
@@ -30,7 +33,7 @@ export const inspectPlugin = {
   inject: ["routes"],
   apply(ctx: Context, config: InspectPluginConfig): void {
     const plugin = ctx as unknown as PluginContext;
-    const { sessions } = config;
+    const { sessions, interactions } = config;
 
     const missing = (id: string) =>
       errorResponse(
@@ -75,6 +78,15 @@ export const inspectPlugin = {
           const managed = await sessions.session(id);
           if (managed === undefined) return missing(id);
           const inspect = managed.session.kernel.inspect();
+          // A tool that had to ask before it ran, and was refused, is a fact about the run rather
+          // than about the tool: the count comes from the cards the session raised, not from a
+          // counter nobody keeps.
+          const asked = interactions.ofSession(id);
+          const refused = asked.filter(
+            (card) =>
+              card.status === "resolved" &&
+              (card.answer === "deny" || card.answer === "denied"),
+          ).length;
           // `tools` is what the kernel holds; `active` is what the model is offered. They differ
           // when a tool was registered after the session pinned its list, and the difference is
           // the kind of thing a panel exists to make visible.
@@ -83,6 +95,8 @@ export const inspectPlugin = {
             tools: inspect.tools,
             active,
             blocked: inspect.tools.filter((name) => !active.includes(name)),
+            asked: asked.length,
+            refused,
           });
         },
       ),

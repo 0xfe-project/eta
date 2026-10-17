@@ -205,6 +205,17 @@ export class InteractionStore {
     ).map(toRecord);
   }
 
+  /** The cards of one session — what the panel counts beside the tools a run was stopped on. */
+  ofSession(sessionId: string): InteractionRecord[] {
+    return (
+      this.#handle
+        .query(
+          "SELECT * FROM interaction WHERE session_id = ? ORDER BY created_at DESC",
+        )
+        .all(sessionId) as Row[]
+    ).map(toRecord);
+  }
+
   /** Every card there has been, newest first, whatever became of it. */
   list(limit: number): InteractionRecord[] {
     return (

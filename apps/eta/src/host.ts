@@ -384,7 +384,7 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     ctx.plugin(hostPlugin, { status }),
     ctx.plugin(sessionsPlugin, { sessions, hub }),
     // What a session is made of (P7): its prompt, its tools, what it has spent. Reads, all three.
-    ctx.plugin(inspectPlugin, { sessions }),
+    ctx.plugin(inspectPlugin, { sessions, interactions }),
     ctx.plugin(agentsPlugin, { agents, groups, hub, models }),
     ctx.plugin(usagePlugin, { usage }),
     // The management surface a settings page reads (P1.4): derived, never stored.
