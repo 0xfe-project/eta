@@ -386,7 +386,7 @@ export function Workspace({
           {drawerOpen ? (
             <div
               aria-hidden="true"
-              className="fixed inset-0 z-40 hidden bg-black/30 animate-in fade-in-0 md:max-lg:block"
+              className="fixed inset-0 z-40 hidden bg-black/30 md:max-lg:block"
               onClick={() => setMobilePanel("chat")}
             />
           ) : null}

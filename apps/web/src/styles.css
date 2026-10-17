@@ -173,8 +173,10 @@
    * the last 4px settle in 60ms — enough to say which way it came from, short enough that the
    * click lands before the animation does. Leaving is 80ms and does fade (BR1-WEB, menus).
    */
-  --animate-in: br1-enter 60ms var(--ease-out);
-  --animate-out: br1-exit 80ms var(--ease-in);
+  /* No enter or exit animation anywhere: a menu is there when you press, gone when you let go.
+     The 4px settle this used to have was a second thing to wait for. */
+  --animate-in: none;
+  --animate-out: none;
   --animate-skeleton-sweep: skeleton-sweep 1.6s linear infinite;
   --animate-upload-pulse: upload-pulse 1.6s linear infinite;
   --animate-copied-check: copied-check 2.5s linear both;

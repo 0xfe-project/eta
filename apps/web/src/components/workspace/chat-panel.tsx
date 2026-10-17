@@ -153,8 +153,9 @@ const activityText = {
 };
 // A new block of the transcript fades in, rising a little. The user's own
 // message does as it is sent; its copy from the server replaces it in place.
-const ENTER =
-  "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1";
+// Nothing. A message that slides up and fades in is a message you wait to read; eta-old's
+// transcript puts the row where it belongs and moves on.
+const ENTER = "";
 // Replies holding the agent's runtime; queued ones wait behind them.
 const EXECUTING = new Set<ChatMessage["status"]>([
   "responding",

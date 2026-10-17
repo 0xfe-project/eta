@@ -136,9 +136,7 @@ function FileBlock({
   const failure = upload?.error;
   const uploading = !attachment && !failure;
   return (
-    <span
-      className={`${CHIP} motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-90`}
-    >
+    <span className={CHIP}>
       <AttachmentLink
         attachment={attachment}
         name={part.name}
