@@ -45,9 +45,12 @@ import { useGroupActions } from "@/queries/groups";
 import { useTasks, useUpdateTask } from "@/queries/tasks";
 import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar, AgentStatus } from "./agent-identity";
+import { InspectButton } from "./inspect-button";
+import { MemberRing } from "./member-ring";
 import { MemberStats } from "./member-stats";
 import { useReturnFocus } from "./return-focus";
 import { when } from "./routine-format";
+import { TokenRate } from "./token-rate";
 import { useAgents } from "./use-agents";
 import { useGroups, useOpenGroup } from "./use-groups";
 import { useWorkspaceStore } from "./workspace-store";
@@ -596,8 +599,29 @@ export function GroupMembers() {
                     )}
                   </span>
                 </span>
-                {/* The member's own session: what it has spent here, what it is chasing. */}
-                <MemberStats sessionId={p.session_id ?? undefined} />
+                {/* The member's own session, as the panel's one gauge: the ring (in/out) with
+                    the avatar in the middle, the rate it is speaking at, and what it is chasing. */}
+                <div className="flex items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <MemberStats sessionId={p.session_id ?? undefined} />
+                  </div>
+                  {p.session_id === undefined ? null : (
+                    <>
+                      <MemberRing sessionId={p.session_id}>
+                        <foreignObject x="9" y="9" width="26" height="26">
+                          <AgentAvatar
+                            agent={{ id: p.agent_id }}
+                            className="size-[26px]"
+                          />
+                        </foreignObject>
+                      </MemberRing>
+                      <div className="flex shrink-0 flex-col items-end gap-0.5">
+                        <TokenRate sessionId={p.session_id} />
+                        <InspectButton sessionId={p.session_id} />
+                      </div>
+                    </>
+                  )}
+                </div>
               </button>
               {(agent || removable) && (
                 <DropdownMenu>

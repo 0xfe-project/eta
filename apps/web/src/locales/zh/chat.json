@@ -246,7 +246,10 @@
     "newActivity": "新活动"
   },
   "panel": {
-    "sessionJson": "会话 json · {{size}}"
+    "sessionJson": "会话 json · {{size}}",
+    "inspect": "Inspect",
+    "prompt": "系统提示",
+    "tools": "工具"
   },
   "focus": {
     "only": "只看 {{name}}"

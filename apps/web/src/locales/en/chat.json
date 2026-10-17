@@ -246,7 +246,10 @@
     "newActivity": "New activity"
   },
   "panel": {
-    "sessionJson": "session json · {{size}}"
+    "sessionJson": "session json · {{size}}",
+    "inspect": "Inspect",
+    "prompt": "System prompt",
+    "tools": "Tools"
   },
   "focus": {
     "only": "Only {{name}}"
