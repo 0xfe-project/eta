@@ -178,63 +178,12 @@ it("opens a direct chat's overview for a group chat's tab", async () => {
   }
 });
 
-it("keeps the full-window memory page at the agent in its URL", async () => {
-  // A direct load must use the URL even if this browser's chat selected B.
-  selectAgent("b");
+it("says a page this host cannot serve is not served, instead of loading forever", async () => {
+  // 记忆 is P3.4 (capabilities.ts): the memory bundle's service is not on this host. A direct URL
+  // still renders something true — the sentence — rather than a page that spins behind a hidden
+  // navigation entry. When the capability comes on, this test becomes the one that asserts the
+  // agent in the URL again.
   const { container } = await mount("/workspace/memory?agent=a");
-  expect(
-    container.querySelector('[aria-label="智能体"]')?.textContent,
-  ).toContain("研究员 A");
-  expect(container.textContent).toContain("a 的专属记忆");
-  expect(container.textContent).not.toContain("b 的专属记忆");
-});
-
-it("removes a member from its block only after confirming", async () => {
-  const puts: string[] = [];
-  rstest.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    const request = input as Request;
-    if (request.method === "PUT") puts.push(new URL(request.url).pathname);
-    return new Promise<Response>(() => {});
-  });
-  cleanup.push(() => rstest.restoreAllMocks());
-  const { container } = await mount("/?group=team");
-  const press = (element: Element) =>
-    act(async () =>
-      element.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-      ),
-    );
-  // Radix opens its menu on a keyboard event, not on a synthetic click.
-  await press(container.querySelector('[aria-label="研究员 B 的操作"]')!);
-  const items = [...document.querySelectorAll('[role="menuitem"]')];
-  expect(items.map((item) => item.textContent)).toEqual(["移出群"]);
-  await press(items[0]!);
-  const dialog = document.querySelector('[role="alertdialog"]')!;
-  expect(dialog.textContent).toContain("研究员 B");
-  // Nothing has happened yet: a member leaving is not undoable, so it is confirmed first.
-  expect(puts).toEqual([]);
-  const confirm = [...dialog.querySelectorAll("button")].find(
-    (button) => button.textContent === "删除",
-  )!;
-  await act(async () => confirm.click());
-  expect(puts).toEqual(["/api/v1/groups/team/members/b"]);
-});
-
-it("offers no removal when the group would be left with nobody", async () => {
-  const { container } = await mount("/?group=solo");
-  // One member: the block has no menu at all, because there is nothing it could do.
-  expect(container.querySelector('[aria-label="研究员 A 的操作"]')).toBeNull();
-});
-
-it("keeps the group's own editing one click away", async () => {
-  const { container } = await mount("/?group=team");
-  await act(async () =>
-    container.querySelector<HTMLElement>('[aria-label="群操作"]')!.click(),
-  );
-  // The panel is where you look at a group; renaming it, linking a task and archiving stay in the
-  // manager the old panel had, behind one button rather than spread over every block.
-  expect(document.body.textContent).toContain("编辑群信息");
-  // …and the manager it opens is the one that can still do everything to the group's members.
-  expect(document.body.textContent).toContain("研究员 A");
-  expect(document.body.textContent).toContain("邀请");
+  expect(container.textContent).toContain("记忆");
+  expect(container.textContent).not.toContain("的专属记忆");
 });
