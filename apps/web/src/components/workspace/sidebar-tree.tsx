@@ -236,6 +236,7 @@ function GroupRow({
               />
             </button>
           ) : null}
+          <MemberStack members={members} />
           {draft === null ? (
             <button
               type="button"
@@ -442,5 +443,40 @@ function RowMenu({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/**
+ * Who is in this conversation, as a stack.
+ *
+ * Three avatars and a count: enough to recognise the room at a glance, and `+2` is the honest way
+ * to say there are more rather than a fourth face that is not really the fourth. A one-member
+ * conversation gets its single avatar, which is the same thing with nothing to overlap.
+ */
+function MemberStack({ members }: { members: Participant[] }) {
+  const shown = members.slice(0, 3);
+  const rest = members.length - shown.length;
+  if (members.length === 0) return null;
+  return (
+    <span className="flex shrink-0 items-center" aria-hidden="true">
+      <span className="flex -space-x-1.5">
+        {shown.map((member) => (
+          <span
+            key={member.agent_id}
+            className="size-5 overflow-hidden border border-background bg-background"
+          >
+            <AgentAvatar
+              agent={{ id: member.agent_id }}
+              className="size-full"
+            />
+          </span>
+        ))}
+      </span>
+      {rest > 0 ? (
+        <span className="ml-1 shrink-0 font-mono text-[10px] text-muted-foreground tabular-nums">
+          +{rest}
+        </span>
+      ) : null}
+    </span>
   );
 }
