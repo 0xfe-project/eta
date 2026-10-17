@@ -1,10 +1,13 @@
 import type { Group, GroupChanges } from "@/api/control-plane.gen";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { useWorkspaceStore } from "@/components/workspace/workspace-store";
 import { ApiError, controlPlane, unwrap } from "@/lib/api";
 import { chatQueryOptions } from "./chat";
 
 export function useGroupActions() {
   const client = useQueryClient();
+  const navigate = useNavigate();
   const onSuccess = (group: Group) => {
     client.setQueryData(chatQueryOptions().queryKey, (s) =>
       s
@@ -79,6 +82,18 @@ export function useGroupActions() {
         client.setQueryData(chatQueryOptions().queryKey, (s) =>
           s ? { ...s, groups: s.groups.filter((g) => g.id !== id) } : s,
         );
+        client.removeQueries({ queryKey: ["chat", "messages", id] });
+        // The deleted conversation may be the one open: the URL still points at a group that no
+        // longer exists, and `?group=` beats the store's selectedGroupId — the tree stops
+        // listing it while the middle column keeps showing its corpse.
+        const open = useWorkspaceStore.getState().workspace.selectedGroupId;
+        if (open === id) {
+          useWorkspaceStore.setState((state) => ({
+            workspace: { ...state.workspace, selectedGroupId: undefined },
+            focusedAgentId: null,
+          }));
+          void navigate({ to: "/", search: {} });
+        }
       },
     }),
     member: useMutation({
