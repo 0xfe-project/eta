@@ -116,6 +116,8 @@ interface Snapshot {
     name: string;
     kind: string;
     goal: string;
+    /** The directory this conversation works in; "" when nobody has set one. */
+    cwd: string;
     last_seq: number;
     preview: string;
     revision: number;
@@ -192,9 +194,27 @@ describe("the snapshot", () => {
 
     const own = snapshot.groups.find((entry) => entry.id === group);
     expect(own?.kind).toBe("group");
+    // A group made without a folder says so rather than borrowing one: the sidebar groups by
+    // this value and the interface marks those groups "unbound", so "" has to survive the trip.
+    expect(own?.cwd).toBe("");
     expect(own?.participants).toEqual([
       { agent_id: agent.id, member: true, name: "reviewer", status: "idle" },
     ]);
+    // The same snapshot carries a folder when the group has one.
+    const bound = (await (
+      await send(host, "POST", "/groups", {
+        name: "app",
+        cwd: "/tmp/app",
+        agentIds: [agent.id],
+      })
+    ).json()) as { group: { id: string } };
+    const withCwd = (await (
+      await send(host, "GET", "/api/v1/chat")
+    ).json()) as Snapshot;
+    expect(
+      withCwd.groups.find((entry) => entry.id === bound.group.id)?.cwd,
+    ).toBe("/tmp/app");
+
     // The timeline advanced, and the sidebar has a preview to show.
     expect(own?.last_seq).toBe(2);
     expect(own?.preview).toBe("the answer");
