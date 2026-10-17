@@ -11,7 +11,7 @@ import type { Host } from "../src/host";
  * in that group, and the session that does exist belongs to the agent that was named — under that
  * agent's own model, and counted under that agent's name in the usage ledger.
  */
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
@@ -170,6 +170,47 @@ const sessionOf = async (
     (participant) => participant.agentId === agentId,
   )?.sessionId;
 };
+
+describe("memory follows the group's directory", () => {
+  it("reads the project's notes from the group's folder, not from wherever the host started", async () => {
+    const dataDir = await scratch();
+    const project = await scratch();
+    const models = fakeModels([answer("read them")]);
+    const host = await assembleHost({
+      dataDir,
+      port: 0,
+      warn: () => undefined,
+      models,
+    });
+    hosts.push(host);
+
+    // A note kept by this project, in the place the harness looks for it.
+    await mkdir(join(project, ".eta"), { recursive: true });
+    await writeFile(
+      join(project, ".eta", "MEMORY.md"),
+      "# eta memory (untrusted)\n\n## decision\n\n- [notes#1] the build runs from the project root\n",
+      "utf8",
+    );
+
+    const agent = await newAgent(host, "builder");
+    const created = (await (
+      await send(host, "POST", "/groups", {
+        name: "app",
+        cwd: project,
+        agentIds: [agent],
+      })
+    ).json()) as { group: { id: string } };
+    await say(host, created.group.id, {
+      text: "what do we know",
+      mentions: [agent],
+    });
+
+    // What the model was actually told: the project's note, and the file it came from.
+    const system = models.calls.at(-1)?.context.systemPrompt ?? "";
+    expect(system).toContain("untrusted notes collected earlier");
+    expect(system).toContain("the build runs from the project root");
+  });
+});
 
 describe("the directory a group's sessions run in", () => {
   it("is the group's own, and the host's only when the group has none", async () => {

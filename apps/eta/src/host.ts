@@ -13,6 +13,7 @@ import type { ProviderBuildFailure } from "./providers/runtime";
  * hear each other's events.
  */
 import { stat } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { createLocalEnvironment } from "@eta/execution-node";
@@ -85,6 +86,8 @@ export interface HostOptions {
   webDir?: string | undefined;
   /** What `/version` says; the deployment's build number. */
   version?: string | undefined;
+  /** The user's home, for labelling project notes. Defaults to the OS's answer. */
+  homeDir?: string | undefined;
   warn?: (message: string) => void;
 }
 
@@ -234,6 +237,14 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
       const env = createLocalEnvironment(meta.cwd);
       return env === undefined ? undefined : { env };
     },
+    // Memory: the project's `.eta/MEMORY.md`, read from the session's own directory — which for a
+    // session in a group is the group's directory (P2.3). Without this wiring a session has no
+    // memory at all: the harness takes it as an explicit answer, not a default.
+    memoryFor: () => ({
+      home: options.homeDir ?? homedir(),
+      // Extraction at the end of a run needs a model call; P3.4 owns the policy of when to spend
+      // one. Reading and the write target are what the interface shows, so those come first.
+    }),
     // A session's questions become interaction rows (P2.6), which is what the product's
     // confirmation cards are.
     askObserve: (meta) => (action, payload) =>
