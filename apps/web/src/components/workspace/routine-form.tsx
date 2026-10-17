@@ -2,6 +2,7 @@ import type { HourlySchedule } from "@/api/routines.gen";
 
 import type { Routine, Schedule } from "@/queries/routines";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -11,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { listSeparator, translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { chatQueryOptions } from "@/queries/chat";
 import { useModels } from "@/queries/llm";
 import { useSaveRoutine } from "@/queries/routines";
 import { ModelSelect } from "./agent-fields";
@@ -234,6 +236,15 @@ export function RoutineForm({
   const noModels =
     models !== undefined && !models.some((item) => item.available);
   const save = useSaveRoutine();
+  // The group a new routine belongs to: the one you have open. Read from the cached snapshot so
+  // this form works the same in the panel, the full-window page and a test.
+  const client = useQueryClient();
+  const chat = client.getQueryData(chatQueryOptions().queryKey) as
+    | { groups?: { id: string; name: string }[] }
+    | undefined;
+  const selectedGroupId = useWorkspaceStore((s) => s.workspace.selectedGroupId);
+  const group =
+    chat?.groups?.find((candidate) => candidate.id === selectedGroupId) ?? null;
   const [name, setName] = useState(routine?.name ?? "");
   const [brief, setBrief] = useState(routine?.briefs[0]?.text ?? "");
   const [model, setModel] = useState(routine?.model ?? "");
@@ -262,6 +273,11 @@ export function RoutineForm({
               model,
               schedule,
               timezone,
+              // The group whose folder and members it runs with. Omitted when there is none open:
+              // "no group" is a state the overview shows, not something to guess at.
+              ...(routine === null && group !== null
+                ? { group_id: group.id }
+                : {}),
             },
           },
           {
