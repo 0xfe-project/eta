@@ -27,6 +27,7 @@ import { agentsPlugin } from "./bundled/agents";
 import { artifactsPlugin } from "./bundled/artifacts";
 import { compatPlugin } from "./bundled/compat";
 import { groupsPlugin } from "./bundled/groups";
+import { filesPlugin } from "./bundled/files";
 import { hostPlugin } from "./bundled/host";
 import { inspectPlugin } from "./bundled/inspect";
 import { routinesPlugin } from "./bundled/routines";
@@ -385,6 +386,8 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     ctx.plugin(sessionsPlugin, { sessions, hub }),
     // What a session is made of (P7): its prompt, its tools, what it has spent. Reads, all three.
     ctx.plugin(inspectPlugin, { sessions, interactions }),
+    // The project's files, for the composer's @ completion (P9).
+    ctx.plugin(filesPlugin, { groups }),
     ctx.plugin(agentsPlugin, { agents, groups, hub, models }),
     ctx.plugin(usagePlugin, { usage }),
     // The management surface a settings page reads (P1.4): derived, never stored.

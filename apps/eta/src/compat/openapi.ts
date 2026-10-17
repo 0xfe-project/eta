@@ -238,6 +238,17 @@ export const PRODUCT_ROUTES: readonly ProductRoute[] = [
   },
   {
     method: "GET",
+    path: "/api/v1/files",
+    summary:
+      "Files of a group's project, for the composer's @ completion. Paths are relative to its folder.",
+    query: {
+      group_id: "Which group's project.",
+      q: "Only paths containing this, case-insensitively.",
+      limit: "How many (default 200, max 2000).",
+    },
+  },
+  {
+    method: "GET",
     path: "/api/v1/artifacts",
     summary: "Static sites that have been published.",
     query: { group_id: "Only this group's.", task_id: "Only this task's." },
