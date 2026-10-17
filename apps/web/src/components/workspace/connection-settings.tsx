@@ -79,7 +79,7 @@ function ConnectionCard({
     <button
       type="button"
       onClick={onOpen}
-      className="group flex items-start gap-3 border bg-card p-3 text-left transition-colors duration-[60ms] ease-linear outline-none hover:bg-muted/40 focus-visible:ring-1 focus-visible:ring-ring"
+      className="group flex items-start gap-3 border bg-card p-3 text-left duration-[60ms] ease-linear outline-none hover:bg-muted/40 focus-visible:ring-1 focus-visible:ring-ring"
     >
       <span className="flex size-8 shrink-0 items-center justify-center bg-muted">
         <Icon aria-hidden="true" className="size-4" />

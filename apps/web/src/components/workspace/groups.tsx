@@ -320,7 +320,7 @@ export function GroupList({ compact = false }: { compact?: boolean }) {
               onClick={() => open(g.id)}
               title={g.name}
               className={cn(
-                "flex w-full items-center gap-2 px-2 text-left outline-none transition-colors duration-[60ms] hover:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-ring",
+                "flex w-full items-center gap-2 px-2 text-left outline-none duration-[60ms] hover:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-ring",
                 compact ? "h-9" : "min-h-18 py-3",
                 current?.id === g.id && compact && "bg-sidebar-accent",
               )}
@@ -397,7 +397,7 @@ export function ArchivedGroups() {
                   setSettings((state) => ({ ...state, open: false }));
                   open(g.id);
                 }}
-                className="flex min-w-0 flex-1 items-center gap-2 self-stretch px-2 text-left outline-none transition-colors duration-[60ms] hover:bg-accent focus-visible:ring-1 focus-visible:ring-ring"
+                className="flex min-w-0 flex-1 items-center gap-2 self-stretch px-2 text-left outline-none duration-[60ms] hover:bg-accent focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <GroupAvatars group={g} />
                 <span className="min-w-0 flex-1">

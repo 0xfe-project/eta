@@ -142,7 +142,7 @@ function CreateForm({
             <label
               key={value}
               className={cn(
-                "flex cursor-pointer flex-col gap-0.5 border p-3 transition-colors hover:bg-muted/50 has-focus-visible:ring-1 has-focus-visible:ring-ring",
+                "flex cursor-pointer flex-col gap-0.5 border p-3 hover:bg-muted/50 has-focus-visible:ring-1 has-focus-visible:ring-ring",
                 owner === value && "border-foreground bg-muted/50",
               )}
             >

@@ -212,7 +212,7 @@ function ListView({
                   <li
                     key={task.id}
                     className={cn(
-                      "flex h-10 items-center gap-1 border-b px-2 transition-colors duration-[60ms] ease-linear hover:bg-muted/40 sm:px-4",
+                      "flex h-10 items-center gap-1 border-b px-2 duration-[60ms] ease-linear hover:bg-muted/40 sm:px-4",
                       task.id === selected && "bg-muted hover:bg-muted",
                     )}
                   >
@@ -267,7 +267,7 @@ function Card({ task }: { task: Task }) {
           e.dataTransfer.effectAllowed = "move";
         }}
         onClick={() => void setNav({ task: task.id })}
-        className="block w-full space-y-1.5 border bg-card p-2.5 text-left transition-colors duration-[60ms] ease-linear outline-none hover:border-foreground/30 focus-visible:ring-1 focus-visible:ring-ring active:cursor-grabbing"
+        className="block w-full space-y-1.5 border bg-card p-2.5 text-left duration-[60ms] ease-linear outline-none hover:border-foreground/30 focus-visible:ring-1 focus-visible:ring-ring active:cursor-grabbing"
       >
         <span className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
           #{task.number}
@@ -334,7 +334,7 @@ function BoardView({
                 );
             }}
             className={cn(
-              "flex w-72 shrink-0 flex-col bg-muted/50 outline-offset-[-1px] transition-colors duration-[60ms] ease-linear",
+              "flex w-72 shrink-0 flex-col bg-muted/50 outline-offset-[-1px] duration-[60ms] ease-linear",
               over === status && "bg-muted outline outline-foreground/30",
             )}
           >

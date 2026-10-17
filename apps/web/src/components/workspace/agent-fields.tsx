@@ -118,7 +118,7 @@ function BundleList({
             {/* A card per bundle, as in choosing where GitHub's App lives. */}
             <Label
               className={cn(
-                "flex-1 cursor-pointer items-start gap-2.5 border p-3 leading-snug transition-colors duration-[60ms] ease-linear hover:bg-muted/50 has-focus-visible:ring-1 has-focus-visible:ring-ring",
+                "flex-1 cursor-pointer items-start gap-2.5 border p-3 leading-snug duration-[60ms] ease-linear hover:bg-muted/50 has-focus-visible:ring-1 has-focus-visible:ring-ring",
                 on && "border-foreground bg-muted/50",
               )}
             >

@@ -106,7 +106,7 @@ function Segmented<T extends string>({
           {options.map((option) => (
             <label
               key={option.value}
-              className="relative cursor-pointer px-3 py-1.5 text-center text-sm text-muted-foreground transition-colors has-checked:text-foreground has-focus-visible:outline-2 has-focus-visible:outline-ring"
+              className="relative cursor-pointer px-3 py-1.5 text-center text-sm text-muted-foreground has-checked:text-foreground has-focus-visible:outline-2 has-focus-visible:outline-ring"
             >
               <input
                 type="radio"

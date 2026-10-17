@@ -75,7 +75,7 @@ function useBadges(): Partial<Record<(typeof sections)[number]["to"], number>> {
 }
 
 const item =
-  "flex h-8 items-center gap-2 px-2 text-sm text-muted-foreground transition-colors duration-[60ms] ease-linear outline-none hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none";
+  "flex h-8 items-center gap-2 px-2 text-sm text-muted-foreground duration-[60ms] ease-linear outline-none hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none";
 
 function Badge({ count }: { count: number | undefined }) {
   return count ? (

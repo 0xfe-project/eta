@@ -31,7 +31,7 @@ export function Stepper({
             <span
               aria-hidden="true"
               className={cn(
-                "h-0.5 w-full bg-border transition-colors duration-[60ms] ease-linear",
+                "h-0.5 w-full bg-border duration-[60ms] ease-linear",
                 (done || current) && "bg-foreground",
               )}
             />

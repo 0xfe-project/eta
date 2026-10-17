@@ -150,7 +150,7 @@ export function Confirmation({ interaction }: { interaction: Interaction }) {
 }
 
 const linkRow =
-  "flex items-center gap-3 px-3 py-2.5 transition-colors duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60 motion-reduce:transition-none";
+  "flex items-center gap-3 px-3 py-2.5 duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60 motion-reduce:transition-none";
 
 /** A task or routine's row: what it is and why it waits, then a caret. */
 function LinkRowBody({

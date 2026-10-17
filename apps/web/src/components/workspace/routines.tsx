@@ -221,7 +221,7 @@ export function RoutineList({
                 }
                 aria-current={routine.id === selected ? "true" : undefined}
                 className={cn(
-                  "grid w-full grid-cols-[1fr_auto_5.5rem] items-center gap-4 px-2 py-2 text-left transition-colors duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60 aria-[current]:bg-muted",
+                  "grid w-full grid-cols-[1fr_auto_5.5rem] items-center gap-4 px-2 py-2 text-left duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60 aria-[current]:bg-muted",
                   !routine.enabled && "text-muted-foreground",
                 )}
               >

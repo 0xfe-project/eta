@@ -20,7 +20,7 @@ import { useHoverMenu } from "./use-hover-menu";
 
 // The avatar, with the name on a label overlapping its foot.
 const label =
-  "relative -mt-2.5 flex max-w-48 items-center gap-1 border bg-background px-2.5 py-0.5 text-sm font-medium shadow-sm transition-colors duration-[60ms] ease-linear group-hover:bg-muted group-focus-visible:ring-1 group-focus-visible:ring-ring group-data-[state=open]:bg-muted motion-reduce:transition-none";
+  "relative -mt-2.5 flex max-w-48 items-center gap-1 border bg-background px-2.5 py-0.5 text-sm font-medium shadow-sm duration-[60ms] ease-linear group-hover:bg-muted group-focus-visible:ring-1 group-focus-visible:ring-ring group-data-[state=open]:bg-muted motion-reduce:transition-none";
 
 /**
  * Switches the chat to an agent's direct chat, or keeps the group open. Only

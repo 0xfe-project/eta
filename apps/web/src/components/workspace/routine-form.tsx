@@ -139,7 +139,7 @@ function ScheduleFields({
                   if (days.length) onChange({ ...schedule, days });
                 }}
                 className={cn(
-                  "-ml-px size-8 border text-xs transition-colors duration-[60ms] first:ml-0",
+                  "-ml-px size-8 border text-xs duration-[60ms] first:ml-0",
                   on
                     ? "relative z-10 border-foreground bg-foreground text-background"
                     : "text-muted-foreground hover:bg-muted",

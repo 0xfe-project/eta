@@ -198,7 +198,7 @@ function TaskRow({ task }: { task: Task }) {
       <button
         type="button"
         onClick={() => void setNav({ task: task.id })}
-        className="flex w-full items-start gap-2.5 px-2 py-2 text-left transition-colors duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60"
+        className="flex w-full items-start gap-2.5 px-2 py-2 text-left duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60"
       >
         <StatusIcon status={task.status} className="mt-0.5" />
         <span className="min-w-0 flex-1 space-y-0.5">
