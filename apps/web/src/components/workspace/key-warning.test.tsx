@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { ClaudeHeader } from "@/components/brainless/claude/claude-header";
+import { Markdown } from "@/components/markdown";
 import { GroupNotice } from "./group-notice";
 import { PendingStrip } from "./pending-strip";
 
@@ -251,5 +252,53 @@ describe("页面上常驻的浮层", () => {
     // router is replaced the way the other component tests replace it.
     const { BottomNav } = await import("./app-shell");
     expect(await warningsFrom(<BottomNav />)).toEqual([]);
+  });
+});
+
+describe("markdown 的结构元素（表格、列表、代码块、流式半截语法）", () => {
+  it("流式写入时的表格（半截的语法）", async () => {
+    const found: string[] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => {
+      const text = args.map(String).join(" | ");
+      if (text.includes('unique "key"')) found.push(text.slice(0, 240));
+      else original(...args);
+    };
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    // What streaming actually looks like: growing text, re-rendered per chunk.
+    const full = "| a | b |\n| --- | --- |\n| 1 | 2 |\n| 3 | 4 |\n";
+    for (let end = 1; end <= full.length; end += 7) {
+      await act(async () =>
+        root.render(<Markdown streaming>{full.slice(0, end)}</Markdown>),
+      );
+    }
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    console.error = original;
+    cleanup.push(() => {
+      root.unmount();
+      container.remove();
+    });
+    expect(found).toEqual([]);
+  });
+
+  it("表格", async () => {
+    const found = await warningsFrom(
+      "| 共享渠道 | 实际状态 |\n| --- | --- |\n| a | b |\n| c | d |\n",
+    );
+    expect(found).toEqual([]);
+  });
+
+  it("多行列表和嵌套", async () => {
+    expect(await warningsFrom("- a\n- b\n  - c\n  - d\n- e\n")).toEqual([]);
+  });
+
+  it("有序列表 + 代码块 + 引用", async () => {
+    expect(
+      await warningsFrom("1. a\n2. b\n\n```ts\nconst x = 1;\n```\n\n> 引用\n"),
+    ).toEqual([]);
   });
 });
