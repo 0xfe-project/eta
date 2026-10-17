@@ -1,6 +1,5 @@
 import type { WorkspaceState } from "./workspace-store";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
-import { useTheme } from "@/components/use-theme";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageSettings } from "@/components/language-settings";
@@ -13,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { useTheme } from "@/components/use-theme";
 import { elementPickerDefault, setElementPicker } from "@/lib/element-picker";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";

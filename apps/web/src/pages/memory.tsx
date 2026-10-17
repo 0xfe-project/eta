@@ -1,8 +1,8 @@
-import { capabilities } from "@/lib/capabilities";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/workspace/app-shell";
 import { useMemoryAgent } from "@/components/workspace/memory-nav";
 import { MemoryView } from "@/components/workspace/memory-view";
+import { capabilities } from "@/lib/capabilities";
 
 export function MemoryPage() {
   const { t: translateText } = useTranslation([

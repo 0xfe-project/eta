@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { capabilities } from "@/lib/capabilities";
 import { BellIcon } from "@phosphor-icons/react/Bell";
 import { BrainIcon } from "@phosphor-icons/react/Brain";
 import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
@@ -11,6 +10,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { Empty, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
+import { capabilities } from "@/lib/capabilities";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useTasks } from "@/queries/tasks";

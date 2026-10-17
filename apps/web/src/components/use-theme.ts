@@ -1,5 +1,5 @@
-import { useSyncExternalStore } from "react";
 import type { ResolvedTheme, ThemeChoice } from "@/lib/theme";
+import { useSyncExternalStore } from "react";
 import { readTheme, resolveTheme, setTheme, subscribeTheme } from "@/lib/theme";
 
 /**
