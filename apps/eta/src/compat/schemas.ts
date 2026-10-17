@@ -259,6 +259,27 @@ export const artifactListSchema = z.object({
   artifacts: z.array(artifactSchema),
 });
 
+/**
+ * A new group, as the web's dialog sends it.
+ *
+ * `cwd` is optional and stays that way: the store decides what "not said" means (an unbound
+ * group), so the schema must be able to express the absence rather than forcing an empty string.
+ */
+export const groupInSchema = z.object({
+  name: z.string(),
+  members: z.array(z.string()).optional(),
+  goal: z.string().optional(),
+  cwd: z.string().optional(),
+});
+
+/** Changing one: every field optional, and what is left out is left alone. */
+export const groupChangesSchema = z.object({
+  name: z.string().optional(),
+  goal: z.string().optional(),
+  decided: z.string().optional(),
+  cwd: z.string().optional(),
+});
+
 export const memberInSchema = z.object({ member: z.boolean() });
 export const readInSchema = z.object({ seq: z.number().int().min(0) });
 

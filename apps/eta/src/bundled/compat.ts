@@ -2,10 +2,16 @@
  * The product API: AXP's shapes over our data (REFACTOR.md §9, P2.4).
  *
  *   GET    /api/v1/openapi.json               this surface's own contract (P2.5)
+ *   POST   /api/v1/groups                     create a group (cwd included)
+ *   PATCH  /api/v1/groups/{id}                rename, goal, folder
  *   GET    /api/v1/chat                       the snapshot (groups, agents, active replies, cursor)
+ *   POST   /api/v1/groups                     create a group (cwd included)
+ *   PATCH  /api/v1/groups/{id}                rename, goal, folder
  *   GET    /api/v1/chat/stream?cursor=…       one SSE stream of product events
  *   POST   /api/v1/chat/messages              send a message: a row, and joined by mode
  *   POST   /api/v1/chat/messages/{id}/stop    stop the run behind a reply (P2.6)
+ *   POST   /api/v1/groups                     create a group (cwd included)
+ *   PATCH  /api/v1/groups/{id}                rename, goal, folder
  *   GET    /api/v1/chat/interactions           the confirmation cards (P2.6)
  *   POST   /api/v1/chat/interactions/{id}/answer  the user's choice, back into the run
  *   GET    /api/v1/agents                     the agents
@@ -81,6 +87,11 @@ const readJson = async (request: Request): Promise<Record<string, unknown>> => {
 
 const asString = (value: unknown): string | undefined =>
   typeof value === "string" && value.length > 0 ? value : undefined;
+
+const asStrings = (value: unknown): string[] | undefined =>
+  Array.isArray(value) && value.every((item) => typeof item === "string")
+    ? (value as string[])
+    : undefined;
 
 const asNames = (value: unknown): string[] | undefined =>
   Array.isArray(value) && value.every((name) => typeof name === "string")
@@ -286,6 +297,97 @@ export const compatPlugin = {
             next_cursor:
               older.length > items.length ? String(items[0]!.seq) : null,
           });
+        },
+      ),
+    );
+
+    // Creating and renaming a group. The web's dialog has always called these two, and the host
+    // answered neither: a group could only be made through the legacy `/groups` surface, which is
+    // not what a browser speaks. Same body, same shape back as the snapshot's groups.
+    plugin.effect(() =>
+      plugin.routes.register("POST", "/api/v1/groups", async (request) => {
+        const body = await readJson(request);
+        const name = asString(body.name);
+        if (name === undefined || name.trim().length === 0) {
+          return errorResponse(
+            400,
+            "NO_NAME",
+            "群需要一个名字。",
+            crypto.randomUUID(),
+          );
+        }
+        const members =
+          asStrings(body.members) ?? asStrings(body.agentIds) ?? [];
+        for (const agentId of members) {
+          if (agents.get(agentId) === undefined) {
+            return errorResponse(
+              404,
+              "NO_SUCH_AGENT",
+              `no agent ${agentId}`,
+              crypto.randomUUID(),
+            );
+          }
+        }
+        const goal = asString(body.goal);
+        // Omitted, not empty: a group with no folder says so, and the store is the one place that
+        // decides what "not said" means.
+        const cwd = asString(body.cwd);
+        const created = groups.create({
+          name: name.trim(),
+          ...(goal === undefined ? {} : { goal }),
+          ...(cwd === undefined ? {} : { cwd }),
+          agentIds: members,
+        });
+        // The sidebar in every open tab learns about it the same way it learns about a new
+        // message: an event on the hub, not a response only this caller sees.
+        hub.publish("group.updated", { group: created.group });
+        const group = groupShape(created.group.id);
+        return group === undefined
+          ? errorResponse(
+              500,
+              "NO_GROUP",
+              "群刚建好就找不到了。",
+              crypto.randomUUID(),
+            )
+          : Response.json(group, { status: 201 });
+      }),
+    );
+
+    plugin.effect(() =>
+      plugin.routes.register(
+        "PATCH",
+        "/api/v1/groups/:group_id",
+        async (request, params) => {
+          const id = params.group_id ?? "";
+          if (groups.get(id) === undefined) {
+            return errorResponse(
+              404,
+              "NO_SUCH_GROUP",
+              `no group ${id}`,
+              crypto.randomUUID(),
+            );
+          }
+          const body = await readJson(request);
+          const name = asString(body.name);
+          const goal = asString(body.goal);
+          const decided = asString(body.decided);
+          const cwd = asString(body.cwd);
+          groups.update(id, {
+            ...(name === undefined ? {} : { name }),
+            ...(goal === undefined ? {} : { goal }),
+            ...(decided === undefined ? {} : { decided }),
+            ...(cwd === undefined ? {} : { cwd }),
+          });
+          hub.publish("group.updated", { group: groups.get(id)!.group });
+          const group = groupShape(id);
+          return group === undefined
+            ? errorResponse(
+                404,
+                "NO_SUCH_GROUP",
+                `no group ${id}`,
+                crypto.randomUUID(),
+              )
+            : Response.json(group);
         },
       ),
     );

@@ -200,6 +200,44 @@ describe("the snapshot", () => {
     expect(own?.participants).toEqual([
       { agent_id: agent.id, member: true, name: "reviewer", status: "idle" },
     ]);
+    // The web's dialog creates and renames groups through the product API; both routes exist and
+    // the folder travels with them.
+    const made = await send(host, "POST", "/api/v1/groups", {
+      name: "  app  ",
+      members: [agent.id],
+      cwd: "/tmp/app",
+    });
+    expect(made.status).toBe(201);
+    const madeGroup = (await made.json()) as {
+      id: string;
+      name: string;
+      cwd: string;
+      participants: { agent_id: string }[];
+    };
+    expect(madeGroup.name).toBe("app");
+    expect(madeGroup.cwd).toBe("/tmp/app");
+    expect(madeGroup.participants.map((p) => p.agent_id)).toEqual([agent.id]);
+
+    const retargeted = await send(
+      host,
+      "PATCH",
+      `/api/v1/groups/${madeGroup.id}`,
+      { cwd: "/tmp/moved" },
+    );
+    expect(retargeted.status).toBe(200);
+    expect(((await retargeted.json()) as { cwd: string }).cwd).toBe(
+      "/tmp/moved",
+    );
+
+    // A body with no folder creates a group with no folder; nothing is inferred.
+    const bare = (await (
+      await send(host, "POST", "/api/v1/groups", {
+        name: "bare",
+        members: [agent.id],
+      })
+    ).json()) as { cwd: string };
+    expect(bare.cwd).toBe("");
+
     // The same snapshot carries a folder when the group has one.
     const bound = (await (
       await send(host, "POST", "/groups", {
