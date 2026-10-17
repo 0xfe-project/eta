@@ -75,6 +75,54 @@ afterEach(async () => {
 
 const agent = (id: string, name: string) => ({ id, name, status: "idle" });
 
+async function typeInto(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value",
+  )?.set;
+  await act(async () => {
+    setter?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+describe("左栏的搜索框", () => {
+  it("filters the tree by conversation name or folder", async () => {
+    state.agents = [];
+    state.groups = [
+      {
+        id: "g1",
+        name: "装配",
+        kind: "group",
+        cwd: "/Users/me/Desktop/eta",
+        archived: false,
+        participants: [],
+        unread: 0,
+        updated_at: "2026-10-17T00:00:00Z",
+        last_message_at: "2026-10-17T00:00:00Z",
+      },
+      {
+        id: "g2",
+        name: "装修",
+        kind: "group",
+        cwd: "/Users/me/work/house",
+        archived: false,
+        participants: [],
+        unread: 0,
+        updated_at: "2026-10-16T00:00:00Z",
+        last_message_at: "2026-10-16T00:00:00Z",
+      },
+    ];
+    const container = await render(<Sidebar />);
+    expect(container.textContent).toContain("装修");
+
+    // A folder name is as good a way to find a conversation as its own name.
+    await typeInto(container.querySelector("input")!, "desktop");
+    expect(container.textContent).toContain("装配");
+    expect(container.textContent).not.toContain("装修");
+  });
+});
+
 describe("智能体库", () => {
   it("lists only the agents with no conversation to reach them by", async () => {
     state.agents = [agent("a1", "乐子人"), agent("a2", "装配检查")];

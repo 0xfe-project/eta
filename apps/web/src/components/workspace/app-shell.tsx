@@ -7,6 +7,7 @@ import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Empty, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -93,9 +94,11 @@ export function Sidebar({ width }: { width?: number } = {}) {
   const { t: translateText } = useTranslation([
     "navigation",
     "agents",
+    "chat",
     "common",
   ] as const);
   const badges = useBadges();
+  const [query, setQuery] = useState("");
   return (
     <aside
       // Sized by the divider (sidebar-pane.tsx) once the user has dragged it; the default is what
@@ -138,7 +141,20 @@ export function Sidebar({ width }: { width?: number } = {}) {
             </Link>
           ))}
       </nav>
-      <FolderTree />
+      <label className="px-2 pb-1">
+        <span className="sr-only">
+          {translateText("chat:groups.search.placeholder")}
+        </span>
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={translateText("chat:groups.search.placeholder")}
+          spellCheck={false}
+          autoComplete="off"
+          className="h-7 w-full min-w-0 border border-border bg-transparent px-2 text-xs outline-none placeholder:text-faint focus:border-border-strong"
+        />
+      </label>
+      <FolderTree query={query} />
       <AgentLibrary />
     </aside>
   );
