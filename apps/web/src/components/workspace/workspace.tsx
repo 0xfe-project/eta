@@ -1,13 +1,11 @@
 import type { WorkspaceView } from "./types";
 
 import type { Draft } from "@/lib/composer";
-import { SidebarSimpleIcon } from "@phosphor-icons/react/SidebarSimple";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { draftText, EMPTY_DRAFT, partsText } from "@/lib/composer";
 import { listSeparator } from "@/lib/i18n";
 import { mentionedMembers } from "@/lib/mentions";
@@ -34,6 +32,7 @@ import { BottomNav } from "./app-shell";
 import { ChatPanel, ComposerNotice } from "./chat-panel";
 import { UnboundFolderNotice } from "./folder-notice";
 import { GroupList } from "./groups";
+import { usePaneWidth } from "./pane";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { SidebarPane } from "./sidebar-pane";
 import { useAgents } from "./use-agents";
@@ -66,6 +65,15 @@ export function Workspace({
     (s) => s.workspace.panelCollapsed ?? false,
   );
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
+  // The right column's width, kept per screen like the left one's: 320 is where the member blocks'
+  // numbers stop colliding, 720 is where the chat would stop being the thing you read.
+  const panel = usePaneWidth({
+    storageKey: "eta.panel.width",
+    min: 320,
+    max: 720,
+    fallback: 400,
+    edge: "right",
+  });
   const collapse = () => {
     setMobilePanel("chat");
     setWorkspace((workspace) => ({ ...workspace, panelCollapsed: true }));
@@ -238,19 +246,6 @@ export function Workspace({
               mobilePanel === "workspace" && "hidden md:flex",
             )}
           >
-            <Button
-              size="icon"
-              variant="outline"
-              aria-label={translateText("actions.openWorkspace")}
-              title={translateText("sections.workspace")}
-              className={cn(
-                "absolute top-3 right-3 z-10 hidden bg-background shadow-sm",
-                collapsed ? "md:inline-flex" : "md:max-lg:inline-flex",
-              )}
-              onClick={showPanel}
-            >
-              <SidebarSimpleIcon aria-hidden="true" className="-scale-x-100" />
-            </Button>
             <ChatHeader
               group={group}
               onInfo={showInfo}
@@ -376,18 +371,28 @@ export function Workspace({
               onClick={() => setMobilePanel("chat")}
             />
           ) : null}
-          {/* The gutter belongs to the panel's left edge: drag it to size the chat by sizing the
-              panel, the same line the header rule runs into. */}
+          {/* The second gutter: drag it and the chat gives up width to the panel. Same line,
+              same band across the top — that is what makes the header read as one object. */}
+          {!collapsed ? (
+            <div
+              aria-label={translateText("accessibility.resizePanel")}
+              className="pane-divider hidden lg:block"
+              {...panel.dividerProps}
+            />
+          ) : null}
           <WorkspacePanel
             view={view}
             onViewChange={onViewChange}
             onClose={() => setMobilePanel("chat")}
             onCollapse={collapse}
+            style={collapsed ? undefined : { width: panel.width }}
             className={cn(
+              // Between md and lg the panel is a drawer over the chat; from lg up it is a column
+              // of its own, sized by the gutter beside it.
               drawerOpen
-                ? "md:max-lg:fixed md:max-lg:inset-y-0 md:max-lg:right-0 md:max-lg:z-50 md:max-lg:w-[min(28rem,calc(100vw-3rem))] md:max-lg:border-y-0 md:max-lg:border-r-0 md:max-lg:animate-in md:max-lg:duration-200 md:max-lg:slide-in-from-right"
-                : "hidden lg:flex",
-              collapsed && "lg:hidden",
+                ? "md:max-lg:fixed md:max-lg:inset-y-0 md:max-lg:right-0 md:max-lg:z-50 md:max-lg:flex md:max-lg:w-[min(28rem,calc(100vw-3rem))] md:max-lg:border-y-0 md:max-lg:border-r-0 md:max-lg:animate-in md:max-lg:duration-200 md:max-lg:slide-in-from-right"
+                : "md:max-lg:hidden",
+              collapsed ? "hidden" : "hidden shrink-0 lg:flex",
             )}
           />
         </main>

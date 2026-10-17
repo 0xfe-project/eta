@@ -13,7 +13,8 @@
   "accessibility": {
     "sections": "分区",
     "workspaceTabs": "工作区标签",
-    "skipToContent": "跳转到内容"
+    "skipToContent": "跳转到内容",
+    "resizePanel": "调整右栏宽度"
   },
   "actions": {
     "openFullWindow": "在全窗口中打开",

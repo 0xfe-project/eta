@@ -55,12 +55,15 @@ export function WorkspacePanel({
   view: linked,
   onViewChange,
   className,
+  style,
   onClose,
   onCollapse,
 }: {
   view: WorkspaceView;
   onViewChange: (view: WorkspaceView) => void;
   className?: string;
+  /** The width the gutter settled on; the panel's own axis is vertical. */
+  style?: React.CSSProperties;
   /** Closes the drawer it is between md and lg. */
   onClose?: () => void;
   /** Folds it away from lg up. */
@@ -80,6 +83,7 @@ export function WorkspacePanel({
       id="workspace-panel"
       value={view}
       onValueChange={(value) => onViewChange(value as WorkspaceView)}
+      style={style}
       className={cn(
         // The third column: flush with the window, its own field, its own band on top. No border
         // and no shadow — the gutter beside it is the separation, and a card here would make the
