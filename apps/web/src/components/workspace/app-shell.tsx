@@ -19,9 +19,9 @@ import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { FolderTree } from "./sidebar-tree";
-import { useGroups } from "./use-groups";
 import { useAgents, useOpenAgent } from "./use-agents";
 import { useAttention } from "./use-attention";
+import { useGroups } from "./use-groups";
 
 // Shared navigation: the full-window sidebar on wide screens and four
 // bottom tabs on mobile. Conversation lists are the mobile home screen.
@@ -95,8 +95,6 @@ export function Sidebar() {
     "common",
   ] as const);
   const badges = useBadges();
-  const { agents, loaded, error, openEditor } = useAgents();
-  const openAgent = useOpenAgent();
   return (
     <aside className="hidden w-48 shrink-0 flex-col overflow-y-auto border-r bg-sidebar md:flex lg:w-56">
       <div className="flex h-12 shrink-0 items-center justify-between pr-2 pl-4">
