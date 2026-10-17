@@ -92,6 +92,7 @@ export const groupSchema = z.object({
   kind: z.enum(["group", "direct"]),
   goal: z.string(),
   decided: z.string(),
+  cwd: z.string(),
   archived: z.boolean(),
   read_seq: z.number().int(),
   last_seq: z.number().int(),

@@ -61,7 +61,7 @@ interface Agent {
 }
 
 interface Group {
-  group: { id: string; name: string; private: boolean };
+  group: { id: string; name: string; private: boolean; cwd: string };
   participants: { agentId: string; sessionId?: string }[];
 }
 
@@ -101,6 +101,43 @@ const post = async (host: Host, id: string, body: unknown): Promise<Posted> => {
 };
 
 describe("groups and members", () => {
+  it("records the directory a group works in, and can be given one later", async () => {
+    const host = await start();
+    const agent = await newAgent(host, "builder");
+
+    const response = await send(host, "POST", "/groups", {
+      name: "app",
+      cwd: "/tmp/app",
+      agentIds: [agent],
+    });
+    expect(response.status).toBe(201);
+    const created = (await response.json()) as Group;
+    expect(created.group.cwd).toBe("/tmp/app");
+
+    // A folder can change; the change is a fact about the group, not a new group.
+    const patched = await send(host, "PATCH", `/groups/${created.group.id}`, {
+      cwd: "/tmp/elsewhere",
+    });
+    expect(patched.status).toBe(200);
+    expect(((await patched.json()) as Group).group.cwd).toBe("/tmp/elsewhere");
+
+    // Omitting it leaves it alone: a PATCH that says nothing about the folder is not a request
+    // to clear it.
+    const renamed = await send(host, "PATCH", `/groups/${created.group.id}`, {
+      name: "app2",
+    });
+    expect(((await renamed.json()) as Group).group.cwd).toBe("/tmp/elsewhere");
+
+    // A group made without a folder says so, rather than borrowing one.
+    const bare = (await (
+      await send(host, "POST", "/groups", {
+        name: "unbound",
+        agentIds: [agent],
+      })
+    ).json()) as Group;
+    expect(bare.group.cwd).toBe("");
+  });
+
   it("creates a group, invites and removes members", async () => {
     const host = await start();
     const first = await newAgent(host, "reviewer");

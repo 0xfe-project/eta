@@ -2,9 +2,9 @@
  * The groups plugin: groups, their members and their timeline over HTTP (REFACTOR.md §9, P2.1).
  *
  *   GET    /groups                              every group, with its members
- *   POST   /groups            {name, goal?, agentIds?}
+ *   POST   /groups            {name, goal?, cwd?, agentIds?}
  *   GET    /groups/:id
- *   PATCH  /groups/:id        {name?, goal?, decided?}
+ *   PATCH  /groups/:id        {name?, goal?, decided?, cwd?}
  *   POST   /groups/:id/participants  {agentId}
  *   DELETE /groups/:id/participants/:agentId
  *   GET    /groups/:id/messages?since=<seq>     the timeline, oldest first
@@ -91,6 +91,9 @@ export const groupsPlugin = {
           ...(asString(body.goal) === undefined
             ? {}
             : { goal: asString(body.goal)! }),
+          ...(asString(body.cwd) === undefined
+            ? {}
+            : { cwd: asString(body.cwd)! }),
           agentIds,
         });
         // A new group has to reach every open sidebar, not just the browser that made it.
@@ -125,6 +128,11 @@ export const groupsPlugin = {
             ...(asString(body.decided) === undefined
               ? {}
               : { decided: asString(body.decided)! }),
+            // A folder can be set later (that is the point of allowing ""), but an empty string
+            // is not how you say "clear it": PATCH leaves out what it does not mention.
+            ...(asString(body.cwd) === undefined
+              ? {}
+              : { cwd: asString(body.cwd)! }),
           });
           if (updated === undefined) return notFound(id);
           projector.groupChanged(id);

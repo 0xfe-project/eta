@@ -21,6 +21,12 @@ export interface GroupRecord {
   name: string;
   goal: string;
   decided: string;
+  /**
+   * The directory this group works in: where its members' sessions run, where the project's notes
+   * are read and written, where what it produces belongs. `""` when nobody has said — a group
+   * created before the column existed, or one made without a folder in mind. Never guessed here.
+   */
+  cwd: string;
   private: boolean;
   /** How far the user has read; the sidebar's unread is the distance past it. */
   readSeq: number;
@@ -122,6 +128,8 @@ export interface PostedMessage {
 export interface CreateGroupInput {
   name: string;
   goal?: string | undefined;
+  /** The directory the group works in; omitted means "not set yet", not "wherever we are". */
+  cwd?: string | undefined;
   agentIds?: readonly string[] | undefined;
   private?: boolean | undefined;
 }
@@ -147,6 +155,7 @@ interface GroupRow {
   name: string;
   goal: string;
   decided: string;
+  cwd: string;
   private: number;
   read_seq: number;
   created_at: string;
@@ -181,6 +190,7 @@ const groupOf = (row: GroupRow): GroupRecord => ({
   name: row.name,
   goal: row.goal,
   decided: row.decided,
+  cwd: row.cwd,
   private: row.private === 1,
   readSeq: row.read_seq,
   createdAt: row.created_at,
@@ -260,13 +270,15 @@ export class GroupStore {
     this.#handle.transaction(() => {
       this.#handle
         .query(
-          `INSERT INTO chat_group (id, name, goal, decided, private, created_at, updated_at)
-					 VALUES (?, ?, ?, '', ?, ?, ?)`,
+          `INSERT INTO chat_group (id, name, goal, decided, cwd, private, created_at, updated_at)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           id,
           input.name,
           input.goal ?? "",
+          "",
+          input.cwd ?? "",
           input.private === true ? 1 : 0,
           now,
           now,
@@ -348,18 +360,24 @@ export class GroupStore {
 
   update(
     id: string,
-    patch: { name?: string; goal?: string; decided?: string },
+    patch: {
+      name?: string;
+      goal?: string;
+      decided?: string;
+      cwd?: string;
+    },
   ): GroupWithParticipants | undefined {
     const current = this.get(id);
     if (current === undefined) return undefined;
     this.#handle
       .query(
-        "UPDATE chat_group SET name = ?, goal = ?, decided = ?, updated_at = ? WHERE id = ?",
+        "UPDATE chat_group SET name = ?, goal = ?, decided = ?, cwd = ?, updated_at = ? WHERE id = ?",
       )
       .run(
         patch.name ?? current.group.name,
         patch.goal ?? current.group.goal,
         patch.decided ?? current.group.decided,
+        patch.cwd ?? current.group.cwd,
         new Date().toISOString(),
         id,
       );

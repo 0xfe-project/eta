@@ -63,6 +63,8 @@ export interface AxpGroup {
   kind: "group" | "direct";
   goal: string;
   decided: string;
+  /** The directory this conversation works in; `""` when nobody has set one. */
+  cwd: string;
   archived: boolean;
   read_seq: number;
   last_seq: number;
@@ -200,6 +202,7 @@ export function toGroup(input: {
     kind: input.group.private ? "direct" : "group",
     goal: input.group.goal,
     decided: input.group.decided,
+    cwd: input.group.cwd,
     archived: false,
     // How far the user has read, and how far the timeline went past it: what a badge counts.
     read_seq: input.group.readSeq,
