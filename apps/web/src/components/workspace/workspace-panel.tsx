@@ -1,7 +1,5 @@
 import type { WorkspaceView } from "./types";
-import { ArrowsOutIcon } from "@phosphor-icons/react/ArrowsOut";
 import { XIcon } from "@phosphor-icons/react/X";
-import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,41 +8,11 @@ import { GroupPanel } from "./group-panel";
 import { GroupArtifacts } from "./groups";
 import { Inbox } from "./inbox";
 import { RefreshButton } from "./refresh-button";
-import { useRoutineNav } from "./routine-nav";
 import { Routines } from "./routines";
-import { SettingsButton } from "./settings-dialog";
-import { useTaskNav } from "./task-nav";
 import { Tasks } from "./tasks";
 import { useAttention } from "./use-attention";
 import { useGroups } from "./use-groups";
-import { hasPage, sectionPaths, usePanelViews } from "./workspace-search";
-
-/** Opens the full window at the side panel's current data context. */
-function FullWindowButton({ view }: { view: WorkspaceView }) {
-  const { t: translateText } = useTranslation([
-    "navigation",
-    "common",
-  ] as const);
-  const [{ task }] = useTaskNav();
-  const [routineNav] = useRoutineNav();
-  const search = Object.fromEntries(
-    Object.entries(
-      view === "tasks" ? { task } : view === "routines" ? routineNav : {},
-    ).filter(([, value]) => value !== null),
-  );
-  return (
-    <Button variant="ghost" size="icon" asChild>
-      <Link
-        to={hasPage(view) ? sectionPaths[view] : "/workspace"}
-        search={hasPage(view) ? search : {}}
-        aria-label={translateText("actions.openFullWindow")}
-        title={translateText("actions.openFullWindow")}
-      >
-        <ArrowsOutIcon aria-hidden="true" />
-      </Link>
-    </Button>
-  );
-}
+import { usePanelViews } from "./workspace-search";
 
 /**
  * The home page's side panel. A group chat's holds the group (成员 and
@@ -120,9 +88,6 @@ export function WorkspacePanel({
           ))}
         </TabsList>
         <div className="flex justify-self-end">
-          {/* Phones keep theirs in the panel switcher above. */}
-          <SettingsButton className="hidden md:inline-flex" />
-          <FullWindowButton view={view} />
           {onClose ? (
             <Button
               variant="ghost"

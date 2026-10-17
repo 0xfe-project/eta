@@ -67,7 +67,8 @@
     "expandFullText": "展开全文",
     "reply": "回复",
     "change": "修改",
-    "yes": "是"
+    "yes": "是",
+    "settings": "设置"
   },
   "status": {
     "created": "已创建",

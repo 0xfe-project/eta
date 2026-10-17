@@ -14,11 +14,12 @@ import { cn } from "@/lib/utils";
 import { AgentEditor } from "./agent-editor";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
-import { SettingsButton, SettingsDialog } from "./settings-dialog";
+import { SettingsDialog } from "./settings-dialog";
 import { SidebarPane } from "./sidebar-pane";
 import { FolderTree } from "./sidebar-tree";
 import { useAgents, useOpenAgent } from "./use-agents";
 import { useAttention } from "./use-attention";
+import { useWorkspaceStore } from "./workspace-store";
 
 // Shared navigation: the full-window sidebar on wide screens and four
 // bottom tabs on mobile. Conversation lists are the mobile home screen.
@@ -84,11 +85,10 @@ export function Sidebar({ width }: { width?: number } = {}) {
     >
       {/* The left end of the one header band (styles.css, `.band`): same height, same field,
           same rule under it as the chat column and the panel. */}
-      <div className="band justify-between pr-2 pl-4">
-        <Link to="/workspace" className="text-lg font-semibold tracking-tight">
-          axp.
+      <div className="band pr-2 pl-4">
+        <Link to="/" className="text-lg font-semibold tracking-tight">
+          eta.
         </Link>
-        <SettingsButton />
       </div>
       <nav
         aria-label={translateText("accessibility.sections")}
@@ -125,20 +125,27 @@ export function Sidebar({ width }: { width?: number } = {}) {
             className="h-7 w-full min-w-0 border border-border bg-transparent px-2 text-xs outline-none placeholder:text-faint focus:border-border-strong"
           />
         </label>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label={translateText("chat:new.title")}
-          title={translateText("chat:new.title")}
-          asChild
-        >
-          <Link to="/new">
-            <PlusIcon aria-hidden="true" />
-          </Link>
-        </Button>
       </div>
       <FolderTree query={query} />
       <AgentLibrary />
+      {/*
+       * eta-old's settings entry: the sidebar's last row, the word 设置, a line above it. The
+       * panel and the header both used to carry gear icons — three doors into one room, two of
+       * them pointing at a different place than the third.
+       */}
+      <div className="mt-auto shrink-0 border-t border-border px-2 pt-2 pb-3">
+        <button
+          type="button"
+          onClick={() =>
+            useWorkspaceStore
+              .getState()
+              .setSettings((state) => ({ ...state, open: true }))
+          }
+          className="flex w-full items-center px-2 py-1.5 text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+        >
+          {String(translateText("common:actions.settings"))}
+        </button>
+      </div>
     </aside>
   );
 }
@@ -162,7 +169,7 @@ function AgentLibrary() {
   return (
     <section
       aria-labelledby="sidebar-agents"
-      className="mt-2 flex min-h-0 shrink-0 flex-col px-2 pb-2"
+      className="mt-2 flex min-h-0 shrink-0 flex-col border-t border-border px-2 pt-3 pb-2"
     >
       <div className="flex h-7 items-center justify-between pl-2">
         <h2

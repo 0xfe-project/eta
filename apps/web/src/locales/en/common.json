@@ -67,7 +67,8 @@
     "expandFullText": "Expand full text",
     "reply": "Reply",
     "change": "Change",
-    "yes": "Yes"
+    "yes": "Yes",
+    "settings": "Settings"
   },
   "status": {
     "created": "Created",

@@ -88,11 +88,12 @@ async function mount(path = "/?group=team&view=memory") {
         path: "/",
         validateSearch: validateWorkspaceSearch,
         component: function Home() {
-          const [view, setView] = useWorkspaceView();
+          const [linked, setLinked] = useWorkspaceView();
+          const view = linked === "overview" ? "context" : linked;
           return (
             <WorkspacePanel
               view={view}
-              onViewChange={(value) => void setView(value)}
+              onViewChange={(value) => void setLinked(value)}
             />
           );
         },
