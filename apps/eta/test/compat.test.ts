@@ -126,6 +126,7 @@ interface Snapshot {
       member: boolean;
       name: string;
       status: string;
+      session_id: string | null;
     }[];
   }[];
   agents: {
@@ -200,7 +201,14 @@ describe("the snapshot", () => {
     // this value and the interface marks those groups "unbound", so "" has to survive the trip.
     expect(own?.cwd).toBe("");
     expect(own?.participants).toEqual([
-      { agent_id: agent.id, member: true, name: "reviewer", status: "idle" },
+      {
+        agent_id: agent.id,
+        member: true,
+        name: "reviewer",
+        status: "idle",
+        // The member's side of the conversation: the panel reads that session's numbers.
+        session_id: expect.any(String),
+      },
     ]);
     // The web's dialog creates and renames groups through the product API; both routes exist and
     // the folder travels with them.

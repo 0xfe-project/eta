@@ -55,6 +55,8 @@ export interface AxpParticipant {
   member: boolean;
   name: string;
   status: string;
+  /** This member's session in this group; `null` until it has been woken once. */
+  session_id: string | null;
 }
 
 export interface AxpGroup {
@@ -187,6 +189,10 @@ function toParticipant(
     member: true,
     name,
     status: "idle",
+    // Where this member's side of the conversation lives. The panel reads that session's prompt,
+    // tools and usage through it; a member who has never been woken has none yet, and `null` says
+    // so instead of a made-up id.
+    session_id: participant.sessionId ?? null,
   };
 }
 

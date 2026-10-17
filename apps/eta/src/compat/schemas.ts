@@ -84,6 +84,8 @@ const participantSchema = z.object({
   member: z.boolean(),
   name: z.string(),
   status: z.string(),
+  /** The member's session in this group; `null` until it has been woken once. */
+  session_id: z.string().nullable(),
 });
 
 export const groupSchema = z.object({
