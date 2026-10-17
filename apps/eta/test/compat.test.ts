@@ -118,6 +118,7 @@ interface Snapshot {
     goal: string;
     /** The directory this conversation works in; "" when nobody has set one. */
     cwd: string;
+    archived: boolean;
     last_seq: number;
     preview: string;
     revision: number;
@@ -282,6 +283,33 @@ describe("the snapshot", () => {
       })
     ).json()) as { cwd: string };
     expect(bare.cwd).toBe("");
+
+    // Archiving is a real flag on the group: the timeline and its work stay, and the sidebar is
+    // the thing that stops listing it.
+    const archived = await send(
+      host,
+      "PATCH",
+      `/api/v1/groups/${madeGroup.id}`,
+      {
+        archived: true,
+      },
+    );
+    expect(archived.status).toBe(200);
+    expect(((await archived.json()) as { archived: boolean }).archived).toBe(
+      true,
+    );
+    const afterArchive = (await (
+      await send(host, "GET", "/api/v1/chat")
+    ).json()) as Snapshot;
+    expect(
+      afterArchive.groups.find((entry) => entry.id === madeGroup.id)?.archived,
+    ).toBe(true);
+    const unarchived = (await (
+      await send(host, "PATCH", `/api/v1/groups/${madeGroup.id}`, {
+        archived: false,
+      })
+    ).json()) as { archived: boolean };
+    expect(unarchived.archived).toBe(false);
 
     // The same snapshot carries a folder when the group has one.
     const bound = (await (

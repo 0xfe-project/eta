@@ -286,6 +286,7 @@ export const groupChangesSchema = z.object({
   goal: z.string().optional(),
   decided: z.string().optional(),
   cwd: z.string().optional(),
+  archived: z.boolean().optional(),
 });
 
 /**

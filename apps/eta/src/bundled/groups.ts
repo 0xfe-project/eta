@@ -133,6 +133,9 @@ export const groupsPlugin = {
             ...(asString(body.cwd) === undefined
               ? {}
               : { cwd: asString(body.cwd)! }),
+            ...(typeof body.archived === "boolean"
+              ? { archived: body.archived }
+              : {}),
           });
           if (updated === undefined) return notFound(id);
           projector.groupChanged(id);

@@ -225,7 +225,7 @@ export function toGroup(input: {
     goal: input.group.goal,
     decided: input.group.decided,
     cwd: input.group.cwd,
-    archived: false,
+    archived: input.group.archived,
     // How far the user has read, and how far the timeline went past it: what a badge counts.
     read_seq: input.group.readSeq,
     last_seq: input.seq,

@@ -21,6 +21,8 @@ export interface GroupRecord {
   name: string;
   goal: string;
   decided: string;
+  /** Put out of the sidebar's way without being deleted; reversible with the same flag. */
+  archived: boolean;
   /**
    * The directory this group works in: where its members' sessions run, where the project's notes
    * are read and written, where what it produces belongs. `""` when nobody has said — a group
@@ -158,6 +160,7 @@ interface GroupRow {
   goal: string;
   decided: string;
   cwd: string;
+  archived: number;
   private: number;
   read_seq: number;
   created_at: string;
@@ -194,6 +197,7 @@ const groupOf = (row: GroupRow): GroupRecord => ({
   goal: row.goal,
   decided: row.decided,
   cwd: row.cwd,
+  archived: row.archived === 1,
   private: row.private === 1,
   readSeq: row.read_seq,
   createdAt: row.created_at,
@@ -387,19 +391,21 @@ export class GroupStore {
       goal?: string;
       decided?: string;
       cwd?: string;
+      archived?: boolean;
     },
   ): GroupWithParticipants | undefined {
     const current = this.get(id);
     if (current === undefined) return undefined;
     this.#handle
       .query(
-        "UPDATE chat_group SET name = ?, goal = ?, decided = ?, cwd = ?, updated_at = ? WHERE id = ?",
+        "UPDATE chat_group SET name = ?, goal = ?, decided = ?, cwd = ?, archived = ?, updated_at = ? WHERE id = ?",
       )
       .run(
         patch.name ?? current.group.name,
         patch.goal ?? current.group.goal,
         patch.decided ?? current.group.decided,
         patch.cwd ?? current.group.cwd,
+        (patch.archived ?? current.group.archived) ? 1 : 0,
         new Date().toISOString(),
         id,
       );

@@ -384,6 +384,11 @@ export const compatPlugin = {
             ...(goal === undefined ? {} : { goal }),
             ...(decided === undefined ? {} : { decided }),
             ...(cwd === undefined ? {} : { cwd }),
+            // Archiving is a flag on the group, not a delete: the timeline, its tasks and its
+            // artifacts stay, and unarchiving is the same call with `false`.
+            ...(typeof body.archived === "boolean"
+              ? { archived: body.archived }
+              : {}),
           });
           hub.publish("group.updated", { group: groups.get(id)!.group });
           const group = groupShape(id);
