@@ -110,12 +110,6 @@ async function connected(host: Host, count: number): Promise<void> {
   expect(host.hub.subscriberCount).toBe(count);
 }
 
-interface Block {
-  type: string;
-  text: string;
-  chars?: number;
-}
-
 interface Snapshot {
   groups: {
     id: string;
