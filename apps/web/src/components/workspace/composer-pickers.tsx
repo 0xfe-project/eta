@@ -30,7 +30,7 @@ interface Live {
 
 const sessionKey = (id: string | undefined) => ["session-model", id] as const;
 
-export function useSessionModel(sessionId: string | undefined) {
+function useSessionModel(sessionId: string | undefined) {
   return useQuery({
     queryKey: sessionKey(sessionId),
     enabled: sessionId !== undefined,
