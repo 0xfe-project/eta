@@ -800,7 +800,7 @@ export const compatPlugin = {
       plugin.routes.register(
         "POST",
         "/api/v1/agents/:agent_id/direct",
-        (_request, params) => {
+        async (request, params) => {
           const id = params.agent_id ?? "";
           const agent = agents.get(id);
           if (agent === undefined) {
@@ -811,7 +811,17 @@ export const compatPlugin = {
               crypto.randomUUID(),
             );
           }
+          const body = await readJson(request).catch(
+            () => ({}) as Record<string, unknown>,
+          );
+          const cwd = asString(body.cwd);
           const created = groups.ensurePrivateGroup(agent.id, agent.name);
+          // A conversation opened from inside a folder belongs to that folder. Only fills a
+          // gap: a direct chat that already has a folder keeps it, because the caller's idea of
+          // where it works is not more recent than the one it was told.
+          if (cwd !== undefined && created.group.cwd.length === 0) {
+            groups.update(created.group.id, { cwd });
+          }
           hub.publish("group.updated", { group: created.group });
           const group = groupShape(created.group.id);
           return group === undefined

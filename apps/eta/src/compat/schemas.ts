@@ -280,6 +280,13 @@ export const groupChangesSchema = z.object({
   cwd: z.string().optional(),
 });
 
+/**
+ * Opening the conversation an agent has for itself. The folder is optional and only fills a gap:
+ * a direct chat opened from inside a folder belongs to that folder, and one that already has a
+ * folder keeps it.
+ */
+export const directInSchema = z.object({ cwd: z.string().optional() });
+
 export const memberInSchema = z.object({ member: z.boolean() });
 export const readInSchema = z.object({ seq: z.number().int().min(0) });
 

@@ -29,6 +29,7 @@ import {
   blockSchema,
   commentInSchema,
   errorSchema,
+  directInSchema,
   groupChangesSchema,
   groupInSchema,
   groupSchema,
@@ -85,6 +86,7 @@ const CATALOG = {
   Interaction: interactionSchema,
   InteractionList: interactionListSchema,
   InteractionUpdated: interactionUpdatedSchema,
+  DirectIn: directInSchema,
   GroupIn: groupInSchema,
   GroupChanges: groupChangesSchema,
   MemberIn: memberInSchema,
@@ -371,7 +373,9 @@ export const PRODUCT_ROUTES: readonly ProductRoute[] = [
   {
     method: "POST",
     path: "/api/v1/agents/{agent_id}/direct",
-    summary: "The conversation this agent has for itself, created if needed.",
+    summary:
+      "The conversation this agent has for itself, created if needed; a folder given here fills one it lacks.",
+    body: "DirectIn",
     response: { status: 200, shape: "Group" },
   },
   {
