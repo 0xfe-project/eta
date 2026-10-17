@@ -57,7 +57,13 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
   const sendingRef = useRef(false);
   const form = useForm<AgentForm>({
     resolver: zodResolver(agentFormSchema),
-    defaultValues: { name: "", description: "", model: "", bundles: null },
+    defaultValues: {
+      name: "",
+      description: "",
+      model: "",
+      bundles: null,
+      persona: "",
+    },
   });
   const model = form.watch("model");
   // New agents start with the last used model, or the first usable one.

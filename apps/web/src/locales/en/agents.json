@@ -89,5 +89,9 @@
   "library": {
     "title": "Agents",
     "allReachable": "Every agent has a conversation."
+  },
+  "persona": {
+    "default": "Project default",
+    "label": "Persona"
   }
 }

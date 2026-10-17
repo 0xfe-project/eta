@@ -132,6 +132,7 @@ describe("editing an agent in tabs", () => {
       id: "a1",
       name: "代码审查",
       description: "只看 PR",
+      persona: "",
       model: "m1",
     });
   });

@@ -251,6 +251,12 @@ export const PRODUCT_ROUTES: readonly ProductRoute[] = [
   },
   {
     method: "GET",
+    path: "/api/v1/personas",
+    summary:
+      "Persona cards a project offers its agents: `.eta/personas/*.md` of every group's folder. An agent wears one by name (PUT /agents/{id}/persona); the first line of the file is its display name, a following blockquote or list line its description.",
+  },
+  {
+    method: "GET",
     path: "/api/v1/files",
     summary:
       "Files of a group's project, for the composer's @ completion. Paths are relative to its folder.",

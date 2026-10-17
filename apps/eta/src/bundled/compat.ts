@@ -925,6 +925,50 @@ export const compatPlugin = {
       ),
     );
 
+    // The personas a project offers: cards from the group's own directory, plus the host-wide
+    // ones. The picker lists them; the agent points at a card by its name.
+    plugin.effect(() =>
+      plugin.routes.register("GET", "/api/v1/personas", async (_request) => {
+        const { readdir, readFile } = await import("node:fs/promises");
+        const { join } = await import("node:path");
+        const cards: {
+          id: string;
+          name: string;
+          description: string;
+          custom: boolean;
+        }[] = [];
+        for (const { group } of groups.list()) {
+          if (group.cwd.length === 0) continue;
+          const directory = join(group.cwd, ".eta", "personas");
+          let entries: string[] = [];
+          try {
+            entries = await readdir(directory);
+          } catch {
+            continue;
+          }
+          for (const entry of entries) {
+            if (!entry.endsWith(".md")) continue;
+            const id = entry.slice(0, -3);
+            if (cards.some((card) => card.id === id)) continue;
+            try {
+              const text = await readFile(join(directory, entry), "utf8");
+              const heading = /^#\s+(.+)$/m.exec(text)?.[1]?.trim();
+              const summary = /^(?:>|-)\s*(.+)$/m.exec(text)?.[1]?.trim() ?? "";
+              cards.push({
+                id,
+                name: heading ?? id,
+                description: summary.slice(0, 120),
+                custom: false,
+              });
+            } catch {
+              // A card that cannot be read is not a card; the list is not a health check.
+            }
+          }
+        }
+        return Response.json({ personas: cards });
+      }),
+    );
+
     // Which persona card an agent wears. Its own route rather than a PATCH field: a persona is
     // chosen from the cards a project offers (which is a list, with names and descriptions), and
     // the two operations are different enough that one wire shape would describe neither.

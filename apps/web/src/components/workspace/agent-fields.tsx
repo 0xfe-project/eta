@@ -13,7 +13,9 @@ import { translateBundleDescription } from "@/lib/i18n-metadata";
 import { cn } from "@/lib/utils";
 import { useConnectors } from "@/queries/llm";
 import { DESCRIPTION_MAX } from "./agent-form";
+import { usePersonas } from "./persona-cards";
 import { Select, SelectGroup, SelectOption } from "./select-field";
+import { useWorkspaceStore } from "./workspace-store";
 
 type Form = UseFormReturn<AgentForm>;
 
@@ -348,6 +350,81 @@ export function InstructionsField({
       >
         {error?.message ?? translateText("fields.instructionsHelp")}
       </p>
+    </div>
+  );
+}
+
+/**
+ * Which persona card an agent wears.
+ *
+ * An agent's instructions say what it does; its persona says how it sounds while doing it — the
+ * two were never the same field. The host keeps the card (`GET/PUT /api/v1/agents/{id}/persona`,
+ * the id is the card's name) and answers `""` for "the project's default", which is a card too,
+ * so the field lists it as the first choice rather than as "none".
+ */
+export function PersonaSelect({
+  value,
+  onChange,
+  invalid,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  invalid?: boolean;
+}) {
+  const { t: translateText } = useTranslation([
+    "agents",
+    "chat",
+    "common",
+  ] as const);
+  const { data: cards } = usePersonas();
+  const agentId = useWorkspaceStore((s) => s.agentEditor.agentId);
+  return (
+    <Select
+      className="w-full"
+      aria-invalid={invalid}
+      value={value}
+      onValueChange={(next) => {
+        onChange(next);
+        // An existing agent saves immediately: the card is what the *next* run reads, and a
+        // save button on a single dropdown is a save button nobody pressed.
+        if (agentId !== null)
+          fetch(`/api/v1/agents/${agentId}/persona`, {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ persona: next }),
+          }).catch(() => undefined);
+      }}
+    >
+      <SelectOption value="">
+        {translateText("agents:persona.default")}
+      </SelectOption>
+      {(cards ?? []).map((card) => (
+        <SelectOption key={card.id} value={card.id}>
+          {card.name}
+          <span className="ml-1 text-muted-foreground">
+            · {card.description}
+          </span>
+        </SelectOption>
+      ))}
+    </Select>
+  );
+}
+
+/** The persona row in the editor form: label + PersonaSelect wired to react-hook-form. */
+export function PersonaField({ form }: { form: Form }) {
+  const { t: translateText } = useTranslation(["agents", "common"] as const);
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="agent-persona">
+        {translateText("agents:persona.label")}
+      </Label>
+      <PersonaSelect
+        value={form.watch("persona")}
+        onChange={(next) =>
+          form.setValue("persona", next, { shouldDirty: true })
+        }
+        invalid={Boolean(form.formState.errors.persona)}
+      />
     </div>
   );
 }

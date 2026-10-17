@@ -89,5 +89,9 @@
   "library": {
     "title": "智能体库",
     "allReachable": "每个智能体都已经有对话了。"
+  },
+  "persona": {
+    "default": "项目默认",
+    "label": "人格"
   }
 }
