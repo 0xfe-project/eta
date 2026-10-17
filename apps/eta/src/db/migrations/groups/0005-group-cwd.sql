@@ -1,0 +1,13 @@
+-- The directory a group works in (FRONTEND_REFACTOR.md §4, P2.1).
+--
+-- A group is not only a conversation: it is the place where its members' sessions run, where the
+-- project's notes are read from and where the work it produces belongs. Without this column the
+-- three drifted apart — a member's session inherited the host process's cwd (wherever the user
+-- happened to start it), memory resolved against that, and the interface had no honest answer to
+-- "which folder am I talking about".
+--
+-- Empty is a real state, not a missing default: a group created before this column existed has no
+-- directory, and guessing one (the process cwd, the data dir, the user's home) would put that
+-- group's memory and work somewhere nobody chose. The interface says「未绑定目录」and offers to set
+-- it; the store never fills it in on its own.
+ALTER TABLE chat_group ADD COLUMN cwd TEXT NOT NULL DEFAULT '';
