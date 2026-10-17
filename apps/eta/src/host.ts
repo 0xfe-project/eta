@@ -399,6 +399,7 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
         (await credentials.list()).map((entry) => entry.providerId),
       usage,
       createdAt: configWrittenAt,
+      configPath,
     }),
     ctx.plugin(groupsPlugin, { groups, runner, projector }),
     // The task board (P3.1): the local half — the board, its timeline, and the cards a group's

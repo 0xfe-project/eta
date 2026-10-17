@@ -25,7 +25,27 @@ import {
   modelsOf,
   usageOf,
 } from "../admin/llm";
+import {
+  applyProviderPatch,
+  ProviderEditError,
+  providerView,
+  readConfigFile,
+  withoutProvider,
+  withProvider,
+  writeConfig,
+} from "../admin/providers";
 import { errorResponse } from "../routes";
+
+const readJson = async (request: Request): Promise<Record<string, unknown>> => {
+  try {
+    const body = (await request.json()) as unknown;
+    return typeof body === "object" && body !== null && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+};
 
 export interface AdminPluginConfig {
   providers: readonly EtaProviderConfig[];
@@ -37,6 +57,8 @@ export interface AdminPluginConfig {
   usage: Pick<UsageStore, "bySubject" | "lastPerProvider">;
   /** When the config was last written: when these connections were last changed. */
   createdAt: string;
+  /** Where `config.json` is, for the editor. */
+  configPath: string;
 }
 
 export const adminPlugin = {
@@ -70,6 +92,88 @@ export const adminPlugin = {
     plugin.effect(() =>
       plugin.routes.register("GET", "/api/llm/v1/models", async () =>
         Response.json(modelsOf(await input())),
+      ),
+    );
+
+    // The providers themselves, for the editor: what is configured, minus the keys.
+    plugin.effect(() =>
+      plugin.routes.register("GET", "/api/llm/v1/providers", async () =>
+        Response.json({
+          providers:
+            (await readConfigFile(config.configPath)).providers?.map(
+              providerView,
+            ) ?? [],
+        }),
+      ),
+    );
+
+    // Editing one. Every change is a patch on the file as it is *now*, not on what this process
+    // started with: a person may have edited it in their editor since.
+    plugin.effect(() =>
+      plugin.routes.register(
+        "PUT",
+        "/api/llm/v1/providers/:provider_id",
+        async (request, params) => {
+          const id = params.provider_id ?? "";
+          if (id.length === 0) {
+            return errorResponse(
+              400,
+              "NO_ID",
+              "a provider needs an id",
+              crypto.randomUUID(),
+            );
+          }
+          const body = await readJson(request);
+          try {
+            const current = await readConfigFile(config.configPath);
+            const existing = (current.providers ?? []).find(
+              (provider) => provider.id === id,
+            );
+            const next = applyProviderPatch(existing, body, id);
+            const updated = withProvider(current, next);
+            await writeConfig(config.configPath, updated);
+            return Response.json({
+              provider: providerView(next),
+              // Said out loud rather than implied: this process built its models at startup and
+              // hands them to sessions, so the new one is on disk and not in use yet.
+              restart_required: true,
+            });
+          } catch (error) {
+            if (error instanceof ProviderEditError) {
+              return errorResponse(
+                400,
+                error.code,
+                error.message,
+                crypto.randomUUID(),
+              );
+            }
+            throw error;
+          }
+        },
+      ),
+    );
+
+    plugin.effect(() =>
+      plugin.routes.register(
+        "DELETE",
+        "/api/llm/v1/providers/:provider_id",
+        async (_request, params) => {
+          const id = params.provider_id ?? "";
+          const current = await readConfigFile(config.configPath);
+          const existed = (current.providers ?? []).some(
+            (provider) => provider.id === id,
+          );
+          if (!existed) {
+            return errorResponse(
+              404,
+              "NO_SUCH_PROVIDER",
+              `no provider ${id}`,
+              crypto.randomUUID(),
+            );
+          }
+          await writeConfig(config.configPath, withoutProvider(current, id));
+          return Response.json({ removed: id, restart_required: true });
+        },
       ),
     );
 

@@ -159,7 +159,8 @@ const wait = async (host: Host, routineId: string): Promise<Run[]> => {
 
 describe("a routine belongs to a group", () => {
   it("keeps the group it was made in, and says so in the list", async () => {
-    const host = await start();
+    // No model calls in this test: it is about where a routine is filed, not what it runs.
+    const host = await start(fakeModels([]));
     const group = (await (
       await send(host, "POST", "/groups", { name: "app" })
     ).json()) as { group: { id: string } };
