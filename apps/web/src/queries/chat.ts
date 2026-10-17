@@ -468,6 +468,77 @@ export function useCompact() {
   });
 }
 
+export interface GoalState {
+  objective: string;
+  status: "active" | "paused" | "achieved";
+  rounds: number;
+}
+
+/**
+ * The goal of one session.
+ *
+ * The kernel has had the whole machine all along (active / paused / achieved, an anti-spin limit,
+ * a continuation cap); these two calls are the way in. Read and written per session, because a
+ * goal belongs to one conversation — a group with three members has three possible goals, and
+ * each is about what *that* member is chasing.
+ */
+export function useGoal(sessionId: string | undefined) {
+  return useQuery({
+    queryKey: ["goal", sessionId],
+    enabled: sessionId !== undefined,
+    staleTime: 5_000,
+    queryFn: async (): Promise<GoalState | null> => {
+      if (sessionId === undefined) return null;
+      const response = await fetch(
+        `/sessions/${encodeURIComponent(sessionId)}/goal`,
+      );
+      if (!response.ok) return null;
+      const body = (await response.json()) as { goal: GoalState | null };
+      return body.goal;
+    },
+  });
+}
+
+export function useSetGoal() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      sessionId: string | undefined;
+      action: "set" | "pause" | "resume" | "clear";
+      objective?: string;
+    }): Promise<GoalState | null> => {
+      if (input.sessionId === undefined) return null;
+      const response = await fetch(
+        `/sessions/${encodeURIComponent(input.sessionId)}/goal`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: input.action,
+            ...(input.objective === undefined
+              ? {}
+              : { objective: input.objective }),
+          }),
+        },
+      );
+      const body = (await response.json().catch(() => null)) as {
+        goal?: GoalState | null;
+        error?: { message?: string };
+      } | null;
+      if (!response.ok)
+        throw new ApiError(
+          response.status,
+          "GOAL_FAILED",
+          body?.error?.message ?? fallbackMessage(),
+        );
+      return body?.goal ?? null;
+    },
+    onSuccess: (_goal, input) => {
+      void client.invalidateQueries({ queryKey: ["goal", input.sessionId] });
+    },
+  });
+}
+
 export function useStopReply() {
   const queryClient = useQueryClient();
   return useMutation({

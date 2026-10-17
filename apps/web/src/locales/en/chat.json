@@ -121,7 +121,11 @@
   "commands": {
     "stopAllDescription": "Stop all replies in the group",
     "compactDescription": "Compact context",
-    "compactRequiresMention": "@mention the agent whose context you want to compact first."
+    "compactRequiresMention": "@mention the agent whose context you want to compact first.",
+    "goalDescription": "Set what this conversation is trying to achieve",
+    "themeDescription": "Switch light and dark",
+    "settingsDescription": "Open settings",
+    "newDescription": "Start a new conversation"
   },
   "sendModes": {
     "afterReply": "Send after the current reply",

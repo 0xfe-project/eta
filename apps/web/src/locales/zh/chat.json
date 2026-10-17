@@ -121,7 +121,11 @@
   "commands": {
     "stopAllDescription": "停止群内全部回复",
     "compactDescription": "压缩上下文",
-    "compactRequiresMention": "先 @ 要压缩上下文的智能体。"
+    "compactRequiresMention": "先 @ 要压缩上下文的智能体。",
+    "goalDescription": "设定这段对话要达成什么",
+    "themeDescription": "切换明暗",
+    "settingsDescription": "打开设置",
+    "newDescription": "开一个新对话"
   },
   "sendModes": {
     "afterReply": "当前回复结束后发送",

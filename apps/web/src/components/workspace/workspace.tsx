@@ -16,6 +16,7 @@ import {
   useCompact,
   useGroupMessages,
   usePendingInteractions,
+  useSetGoal,
   useStopReply,
   useStreamLost,
 } from "@/queries/chat";
@@ -92,7 +93,7 @@ export function Workspace({
     useOutbox.getState().setDraft(draftKey, next);
   const allOutgoing = useOutbox((s) => s.outgoing);
   const arrived = useMemo(
-    () => new Set(history.messages.map((m) => m.id)),
+    () => new Set<string>(history.messages.map((m: { id: string }) => m.id)),
     [history.messages],
   );
   useOutboxDelivery(arrived);
@@ -111,6 +112,13 @@ export function Workspace({
     .filter((a) => a && !a.model);
   const compact = useCompact();
   const stopReply = useStopReply();
+  const setGoal = useSetGoal();
+  // Which session a goal set from the composer lands on: the member being talked to, or the first
+  // one that has a conversation. A group has one goal per member; the composer speaks for the one
+  // you are addressing.
+  const goalSessionId: string | undefined =
+    (members.find((p: { session_id?: string | null }) => p.session_id)
+      ?.session_id as string | undefined) ?? undefined;
   const answer = useAnswerInteraction();
   const actions = useGroupActions();
   const onError = (error: Error) => toast.error(error.message);
@@ -289,6 +297,15 @@ export function Workspace({
                   compact.mutate({ groupId: group.id, mentions }, { onError });
                 else outbox.send(group.id, parts, "queue", mentions);
               }}
+              onGoal={(action, objective) =>
+                // Through the route, like the panel's own buttons: one writer for a goal means the
+                // two can never show different ones.
+                setGoal.mutateAsync({
+                  sessionId: goalSessionId,
+                  action,
+                  ...(objective === undefined ? {} : { objective }),
+                })
+              }
               error={
                 (chat.error ?? history.error)
                   ? translateText("chat:errors.loadConversation", {

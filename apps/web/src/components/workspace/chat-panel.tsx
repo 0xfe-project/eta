@@ -10,6 +10,7 @@ import type {
 } from "@/queries/chat";
 import type { Outgoing } from "@/queries/outbox";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import {
   memo,
   useEffect,
@@ -45,6 +46,7 @@ import {
 import { buildMenu, mentionAt } from "@/lib/composer-menu";
 import { listSeparator, translate } from "@/lib/i18n";
 import { mentionedMembers, mentionLabel } from "@/lib/mentions";
+import { readTheme, setTheme } from "@/lib/theme";
 import { ACTIVE_STATUSES } from "@/queries/chat";
 import { useOutbox } from "@/queries/outbox";
 import { AgentAvatar } from "./agent-identity";
@@ -52,10 +54,19 @@ import { AttachmentChip, PastedText } from "./composer-block";
 import { ComposerEditor } from "./composer-editor";
 import { GroupNotice } from "./group-notice";
 import { TaskMessage } from "./task-message";
+import { useWorkspaceStore } from "./workspace-store";
 
 type Activity = Extract<Block, { type: "activity" }>;
 type Reply = Exclude<Block, { type: "attachment" }>;
-type SlashName = "/stop" | "/queue" | "/steer" | "/compact";
+type SlashName =
+  | "/stop"
+  | "/queue"
+  | "/steer"
+  | "/compact"
+  | "/goal"
+  | "/theme"
+  | "/settings"
+  | "/new";
 interface SlashCommand {
   name: SlashName | `@${string}`;
   description: string;
@@ -87,6 +98,33 @@ const SLASH_COMMANDS: SlashCommand[] = [
     name: "/compact",
     get description() {
       return translate("chat:commands.compactDescription");
+    },
+  },
+  // Commands that carry a payload. `takesText` is what makes `/goal ship it` complete to
+  // `/goal ` and wait for the rest, instead of firing the moment it is picked.
+  {
+    name: "/goal",
+    get description() {
+      return translate("chat:commands.goalDescription");
+    },
+    takesText: true,
+  },
+  {
+    name: "/theme",
+    get description() {
+      return translate("chat:commands.themeDescription");
+    },
+  },
+  {
+    name: "/settings",
+    get description() {
+      return translate("chat:commands.settingsDescription");
+    },
+  },
+  {
+    name: "/new",
+    get description() {
+      return translate("chat:commands.newDescription");
     },
   },
 ];
@@ -598,6 +636,7 @@ export function ChatPanel({
   onEdit,
   onDiscard,
   onResend,
+  onGoal,
 }: {
   groupId: string | undefined;
   groupName: string | undefined;
@@ -642,6 +681,11 @@ export function ChatPanel({
   onDiscard: (id: string) => void;
   /** Send a failed reply's message again, as a new message. */
   onResend: (parts: OutgoingPart[], agentId?: string) => void;
+  /** The goal of this conversation, moved from the composer's `/goal`. */
+  onGoal: (
+    action: "set" | "pause" | "resume" | "clear",
+    objective?: string,
+  ) => Promise<unknown>;
 }) {
   const { t: translateText } = useTranslation([
     "chat",
@@ -686,6 +730,10 @@ export function ChatPanel({
     onLoadOlder,
   });
 
+  const navigate = useNavigate();
+  // Composition state the keydown handler needs but the DOM only reports to other listeners.
+  const ime = useRef({ composing: false, endedAt: 0 });
+  const setSettings = useWorkspaceStore((state) => state.setSettings);
   const listId = useId();
   const [menuIndex, setMenuIndex] = useState(0);
   const [menuDismissed, setMenuDismissed] = useState(false);
@@ -759,12 +807,26 @@ export function ChatPanel({
   const menuOpen = matches.length > 0;
   const menuActive = Math.min(menuIndex, matches.length - 1);
 
-  function run(name: SlashCommand["name"], parts: OutgoingPart[]) {
+  function run(name: SlashCommand["name"], parts: OutgoingPart[], args = "") {
     if (name === "/stop") {
       onStopAll();
       setDraft([]);
     } else if (name === "/compact") {
       onCompact();
+    } else if (name === "/goal") {
+      // A goal set from the composer is the same goal the right panel shows: it goes through the
+      // same route, so the two cannot disagree.
+      if (args.trim().length > 0) void onGoal("set", args.trim());
+      setDraft([]);
+    } else if (name === "/theme") {
+      setTheme(readTheme() === "dark" ? "light" : "dark");
+      setDraft([]);
+    } else if (name === "/settings") {
+      setSettings((state) => ({ ...state, open: true }));
+      setDraft([]);
+    } else if (name === "/new") {
+      void navigate({ to: "/", search: { view: "members" } });
+      setDraft([]);
     } else if (parts.length) {
       onSend(parts, name === "/steer" ? "steer" : "queue");
     }
@@ -796,9 +858,15 @@ export function ChatPanel({
     const command = SLASH_COMMANDS.find((c) => c.name === name);
     if (command) {
       const rest = afterCommand(parts, name);
+      const args = rest
+        .filter((part) => part.type === "text")
+        .map((part) => ("text" in part ? part.text : ""))
+        .join(" ")
+        .trim();
       run(
         command.name,
         rest.some((p) => p.type !== "text" || p.text.trim()) ? rest : [],
+        args,
       );
     } else onSend(parts, "queue");
     // Sending jumps back to the live end, as in a terminal.
@@ -814,9 +882,38 @@ export function ChatPanel({
     },
     onFiles,
     disabled: Boolean(blocked),
+    onCompositionStart: () => {
+      ime.current.composing = true;
+    },
+    onCompositionEnd: () => {
+      ime.current.composing = false;
+      ime.current.endedAt = performance.now();
+    },
     onKeyDown: (event: KeyboardEvent) => {
-      // Safari ends a composition with a keydown that no longer says so.
-      if (event.isComposing || event.keyCode === 229) return;
+      /*
+       * Is this Enter the input method finishing a word rather than the person sending?
+       *
+       * Three engines, three orders, all three answered (eta-old measured this in a real browser,
+       * not from the spec): Chrome flags the key with `isComposing`; WebKit says nothing but the
+       * legacy `keyCode: 229`; macOS Pinyin typed as ASCII commits on Enter and closes the
+       * composition *before* delivering the key, so the keydown looks completely ordinary. The
+       * window after `compositionend` covers that third case — long enough to swallow the Enter
+       * that committed the text, short enough not to eat a deliberate second press.
+       */
+      const imeOwned =
+        event.isComposing ||
+        event.keyCode === 229 ||
+        ime.current.composing ||
+        performance.now() - ime.current.endedAt < 120;
+      if (imeOwned) return;
+      // ⌘/Ctrl+Enter means "send", whatever the menu is offering: steering a running turn must not
+      // depend on whether a completion menu happens to be open.
+      const forceSend = (event.metaKey || event.ctrlKey) && !event.shiftKey;
+      if (forceSend && event.key === "Enter") {
+        event.preventDefault();
+        send();
+        return;
+      }
       if (menuOpen) {
         const step = { ArrowDown: 1, ArrowUp: -1 }[event.key];
         if (step) {

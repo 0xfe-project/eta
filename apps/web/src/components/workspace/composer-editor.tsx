@@ -103,6 +103,9 @@ function DraftPlugin({
   value: Draft;
   onChange: (draft: Draft) => void;
   onKeyDown: (event: KeyboardEvent) => void;
+  /** The input method's own events: the keydown handler needs to know a composition happened. */
+  onCompositionStart?: () => void;
+  onCompositionEnd?: () => void;
   disabled: boolean;
 }) {
   const [editor] = useLexicalComposerContext();
@@ -150,6 +153,8 @@ export function ComposerEditor({
   value,
   onChange,
   onKeyDown,
+  onCompositionStart,
+  onCompositionEnd,
   onFiles,
   placeholder,
   disabled = false,
@@ -160,6 +165,9 @@ export function ComposerEditor({
   value: Draft;
   onChange: (draft: Draft) => void;
   onKeyDown: (event: KeyboardEvent) => void;
+  /** The input method's own events: the keydown handler needs to know a composition happened. */
+  onCompositionStart?: () => void;
+  onCompositionEnd?: () => void;
   /** Start uploading pasted files; their blocks. */
   onFiles: (files: File[]) => FilePart[];
   placeholder: string;
@@ -200,6 +208,8 @@ export function ComposerEditor({
                   {placeholder}
                 </div>
               }
+              onCompositionStart={onCompositionStart}
+              onCompositionEnd={onCompositionEnd}
               className={cn(
                 "term-input max-h-[40vh] min-h-[1lh] overflow-y-auto whitespace-pre-wrap break-words outline-none",
                 className,
