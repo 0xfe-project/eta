@@ -31,7 +31,12 @@
 import type { KernelModels } from "@eta/core";
 import type { Context } from "cordis";
 import type { AgentStore } from "../agents/store";
-import type { AxpGroup, AxpMessage, AxpSnapshot } from "../compat/shapes";
+import type {
+  AxpAgent,
+  AxpGroup,
+  AxpMessage,
+  AxpSnapshot,
+} from "../compat/shapes";
 import type { WakeRunner } from "../groups/runner";
 import type { GroupStore, MessageRecord } from "../groups/store";
 import type { EventHub, EventTranslator } from "../http/events";
@@ -165,6 +170,36 @@ export const compatPlugin = {
           (b.last_message_at ?? "").localeCompare(a.last_message_at ?? ""),
         );
 
+    /** The agents, with the status the timeline gives them right now. */
+    const agentsWithStatus = (): AxpAgent[] => {
+      const running = new Map<string, MessageRecord["status"]>();
+      for (const { group } of groups.list()) {
+        for (const message of groups.messages(group.id)) {
+          const agentId = message.authorAgentId;
+          if (
+            message.authorKind !== "agent" ||
+            agentId === undefined ||
+            agentId === null ||
+            !["queued", "working", "waiting_for_input", "stopping"].includes(
+              message.status,
+            )
+          ) {
+            continue;
+          }
+          // Queued is the earlier state; do not let a later row's "queued" overwrite "working".
+          if (message.status !== "queued" || !running.has(agentId)) {
+            running.set(agentId, message.status);
+          }
+        }
+      }
+      return agents.list().map((agent) => {
+        const state = running.get(agent.id);
+        return state === undefined
+          ? toAgent(agent)
+          : toAgent(agent, state === "queued" ? "starting" : "working");
+      });
+    };
+
     /** The replies that are running now, across every group. */
     const activeReplies = (): AxpMessage[] => {
       const replies: AxpMessage[] = [];
@@ -252,7 +287,11 @@ export const compatPlugin = {
       plugin.routes.register("GET", "/api/v1/chat", () => {
         const snapshot: AxpSnapshot = {
           groups: allGroups(),
-          agents: agents.list().map(toAgent),
+          // An agent's status is what it is *doing*, derived from the timeline: an answer on the
+          // way makes it working, one queued behind another makes it starting. It used to be
+          // hardcoded idle with a comment about editing — true when the row was written, false as
+          // a claim about the sidebar an hour later.
+          agents: agentsWithStatus(),
           active_replies: activeReplies(),
           // The cards still waiting: questions the user has not answered yet.
           interactions: interactions.pending().map(toInteraction),
@@ -733,7 +772,7 @@ export const compatPlugin = {
 
     plugin.effect(() =>
       plugin.routes.register("GET", "/api/v1/agents", () =>
-        Response.json({ agents: agents.list().map(toAgent) }),
+        Response.json({ agents: agentsWithStatus() }),
       ),
     );
 

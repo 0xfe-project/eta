@@ -261,7 +261,11 @@ export function toInteraction(interaction: InteractionRecord): AxpInteraction {
   };
 }
 
-export function toAgent(agent: AgentRecord): AxpAgent {
+export function toAgent(
+  agent: AgentRecord,
+  /** What the timeline says the agent is doing right now, when the caller knows. */
+  status: AxpAgent["status"] = "idle",
+): AxpAgent {
   return {
     id: agent.id,
     name: agent.name,
@@ -269,8 +273,9 @@ export function toAgent(agent: AgentRecord): AxpAgent {
     model: agent.model ?? null,
     bundles: agent.plugins,
     persona: agent.persona,
-    // Nothing is being prepared or built here: a session is opened when it is first woken.
-    status: "idle",
+    // Derived, not stored: an agent row is a configuration, and "working" is a fact about its
+    // replies. `toAgent` defaults to idle for callers that have no timeline to read.
+    status,
     build_error: null,
     revision: 1,
   };

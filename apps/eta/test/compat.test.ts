@@ -335,6 +335,58 @@ describe("the snapshot", () => {
       (await send(host, "DELETE", `/api/v1/groups/${doomed.id}`)).status,
     ).toBe(404);
 
+    // An agent answering is working in the snapshot, not idle: the sidebar and the member list
+    // read this one field to say who is busy, and a hardcoded idle was a lie from the moment
+    // the first reply started. A reply row placed by the store is the same fact the run
+    // writes, without depending on a model answering.
+    const busyAgent = (await (
+      await send(host, "POST", "/api/v1/agents", { name: "busy" })
+    ).json()) as { id: string };
+    const busyGroup = (await (
+      await send(host, "POST", "/groups", {
+        name: "busy-group",
+        agentIds: [busyAgent.id],
+      })
+    ).json()) as { group: { id: string } };
+    const busy = (await (
+      await send(host, "POST", `/groups/${busyGroup.group.id}/messages`, {
+        text: "开始干活",
+        mentions: [busyAgent.id],
+      })
+    ).json()) as { replies: { replyMessageId?: string }[] };
+    const busyReply = host.groups.startReply(
+      busyGroup.group.id,
+      busyAgent.id,
+      busy.replies[0]?.replyMessageId ?? "",
+      "queued",
+    );
+    host.groups.markWorking(busyReply.id);
+    const whileBusy = (await (
+      await send(host, "GET", "/api/v1/chat")
+    ).json()) as { agents: { id: string; status: string }[] };
+    expect(
+      whileBusy.agents.find((entry) => entry.id === busyAgent.id)?.status,
+    ).toBe("working");
+    // And a queued one reads as starting.
+    // A queued reply: the second message arrives while the first is still working, and its
+    // row is placed "queued" by the wake router.
+    const queuedReply = host.groups.startReply(
+      busyGroup.group.id,
+      busyAgent.id,
+      busy.replies[0]?.replyMessageId ?? "",
+      "queued",
+    );
+    expect(queuedReply.status).toBe("queued");
+    // Close both rows so the active_replies assertion below sees the reply it placed itself.
+    host.groups.finishReply(busyReply.id, {
+      text: "done",
+      status: "done",
+    });
+    host.groups.finishReply(queuedReply.id, {
+      text: "done",
+      status: "done",
+    });
+
     // The same snapshot carries a folder when the group has one.
     const bound = (await (
       await send(host, "POST", "/groups", {
