@@ -1,8 +1,8 @@
 import type { Context } from "cordis";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import type { GroupStore } from "../groups/store";
 import type { PluginContext } from "../plugin-api";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { errorResponse } from "../routes";
 
 /**
@@ -32,7 +32,7 @@ const MAX_BYTES = 25 * 1024 * 1024;
 /** Strip what a path cannot hold, and keep the name recognisable. */
 function safeName(raw: string): string {
   const base = raw.split(/[\\/]/).pop() ?? "file";
-  const cleaned = base.replace(/[\u0000-\u001f<>:"|?*]/g, "_").trim();
+  const cleaned = base.replace(/[\u0000-\u001F<>:"|?*]/g, "_").trim();
   return cleaned.length === 0 ? "file" : cleaned.slice(0, 120);
 }
 
