@@ -814,14 +814,13 @@ export const compatPlugin = {
           const body = await readJson(request).catch(
             () => ({}) as Record<string, unknown>,
           );
-          const cwd = asString(body.cwd);
-          const created = groups.ensurePrivateGroup(agent.id, agent.name);
-          // A conversation opened from inside a folder belongs to that folder. Only fills a
-          // gap: a direct chat that already has a folder keeps it, because the caller's idea of
-          // where it works is not more recent than the one it was told.
-          if (cwd !== undefined && created.group.cwd.length === 0) {
-            groups.update(created.group.id, { cwd });
-          }
+          // One conversation per (agent, folder): the same agent about two projects is two
+          // conversations, because the folder decides where its work happens.
+          const created = groups.ensurePrivateGroup(
+            agent.id,
+            agent.name,
+            asString(body.cwd),
+          );
           hub.publish("group.updated", { group: created.group });
           const group = groupShape(created.group.id);
           return group === undefined

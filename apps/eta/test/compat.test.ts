@@ -241,20 +241,28 @@ describe("the snapshot", () => {
     expect(again.id).toBe(first.id);
     expect(again.cwd).toBe("");
 
-    // Opened from inside a folder, the direct chat belongs to that folder — and only once: a
-    // later call from somewhere else does not move an existing conversation.
+    // A conversation belongs to a (agent, folder) pair. The same folder finds the same one;
+    // a different folder is a different conversation, because that is where the work happens.
     const inFolder = (await (
       await send(host, "POST", `/api/v1/agents/${agent.id}/direct`, {
         cwd: "/tmp/app",
       })
     ).json()) as { id: string; cwd: string };
     expect(inFolder.cwd).toBe("/tmp/app");
+    const againInFolder = (await (
+      await send(host, "POST", `/api/v1/agents/${agent.id}/direct`, {
+        cwd: "/tmp/app",
+      })
+    ).json()) as { id: string };
+    expect(againInFolder.id).toBe(inFolder.id);
+
     const elsewhere = (await (
       await send(host, "POST", `/api/v1/agents/${agent.id}/direct`, {
         cwd: "/tmp/other",
       })
-    ).json()) as { cwd: string };
-    expect(elsewhere.cwd).toBe("/tmp/app");
+    ).json()) as { id: string; cwd: string };
+    expect(elsewhere.cwd).toBe("/tmp/other");
+    expect(elsewhere.id).not.toBe(inFolder.id);
 
     // A body with no folder creates a group with no folder; nothing is inferred.
     const bare = (await (

@@ -299,22 +299,40 @@ export class GroupStore {
   }
 
   /**
-   * The private group an agent gets for itself. Idempotent: an agent has one, and asking twice
-   * is how the code says "make sure it exists" rather than "make another".
+   * The conversation an agent has alone with the user, in one folder.
+   *
+   * An agent is not limited to one of these: the same agent talked to about two projects is two
+   * conversations, because the folder is where its members work, where the notes come from and
+   * what the work is about. So the pair is (agent, folder) — asking twice about the same folder
+   * finds the same conversation, asking about a different one makes a new one.
+   *
+   * Without a folder the pair is (agent, "") — a conversation that has not been placed yet, which
+   * is a real state and the one the notice in the composer offers to fix.
    */
-  ensurePrivateGroup(agentId: string, name: string): GroupWithParticipants {
+  ensurePrivateGroup(
+    agentId: string,
+    name: string,
+    cwd?: string | undefined,
+  ): GroupWithParticipants {
+    const wanted = cwd ?? "";
     const existing = this.#handle
       .query(
         `SELECT g.* FROM chat_group g
 				   JOIN group_participant p ON p.group_id = g.id
-				  WHERE g.private = 1 AND p.agent_id = ?`,
+				  WHERE g.private = 1 AND p.agent_id = ? AND g.cwd = ?
+				  ORDER BY g.updated_at DESC`,
       )
-      .get(agentId) as GroupRow | null;
+      .get(agentId, wanted) as GroupRow | null;
     if (existing !== null) {
       const found = this.get(existing.id);
       if (found !== undefined) return found;
     }
-    return this.create({ name, agentIds: [agentId], private: true });
+    return this.create({
+      name,
+      agentIds: [agentId],
+      private: true,
+      ...(wanted.length === 0 ? {} : { cwd: wanted }),
+    });
   }
 
   /** Forget an agent's private group — what deleting the agent means for it. */
