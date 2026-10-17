@@ -18,7 +18,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { chatQueryOptions } from "@/queries/chat";
 import { Markdown } from "@/components/markdown";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -33,6 +32,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { listSeparator, translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { chatQueryOptions } from "@/queries/chat";
 import {
   useDeleteRoutine,
   useMarkRoutineSeen,
@@ -46,8 +46,8 @@ import {
 import { RoutineForm } from "./routine-form";
 import { describeSchedule, when } from "./routine-format";
 import { useRoutineNav } from "./routine-nav";
-import { useWorkspaceStore } from "./workspace-store";
 import { UsageLine } from "./usage-line";
+import { useWorkspaceStore } from "./workspace-store";
 
 const runStatusLabels: Record<RunStatus, string> = {
   get running() {
