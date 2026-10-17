@@ -135,9 +135,26 @@ async function newGroup(
   name: string,
   agentIds: string[],
 ): Promise<string> {
-  const response = await send(host, "POST", "/groups", { name, agentIds });
+  const response = await send(host, "POST", "/groups", {
+    name,
+    agentIds,
+  });
   return ((await response.json()) as { group: { id: string } }).group.id;
 }
+
+const cwdOf = async (
+  host: Host,
+  sessionId: string,
+): Promise<string | undefined> => {
+  const body = (await (await send(host, "GET", "/sessions")).json()) as {
+    sessions: {
+      ok: boolean;
+      id: string;
+      meta?: { cwd: string };
+    }[];
+  };
+  return body.sessions.find((session) => session.id === sessionId)?.meta?.cwd;
+};
 
 const sessionOf = async (
   host: Host,
@@ -153,6 +170,40 @@ const sessionOf = async (
     (participant) => participant.agentId === agentId,
   )?.sessionId;
 };
+
+describe("the directory a group's sessions run in", () => {
+  it("is the group's own, and the host's only when the group has none", async () => {
+    const dataDir = await scratch();
+    const project = await scratch();
+    const host = await start(dataDir, ["bound", "unbound"]);
+    const agent = await newAgent(host, "builder");
+
+    const bound = (await (
+      await send(host, "POST", "/groups", {
+        name: "app",
+        cwd: project,
+        agentIds: [agent],
+      })
+    ).json()) as { group: { id: string } };
+
+    const said = await say(host, bound.group.id, {
+      text: "where are we",
+      mentions: [agent],
+    });
+    const sessionId = said.replies[0]?.sessionId as string;
+    expect(await cwdOf(host, sessionId)).toBe(project);
+
+    // A group nobody bound keeps working, in the host's directory: the fallback is real, and it
+    // is what every session did before groups had a folder of their own.
+    const unbound = await newGroup(host, "loose", [agent]);
+    const loose = await say(host, unbound, {
+      text: "and here",
+      mentions: [agent],
+    });
+    const looseId = loose.replies[0]?.sessionId as string;
+    expect(await cwdOf(host, looseId)).toBe(process.cwd());
+  });
+});
 
 describe("one session per (agent × group)", () => {
   it("reuses the agent's session for its next message in the same group", async () => {

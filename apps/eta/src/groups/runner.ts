@@ -43,7 +43,11 @@ export interface WakeRunnerOptions {
   /** Where the answer goes, and how a browser hears about it. */
   projector?: TimelineProjector | undefined;
   hub?: EventHub | undefined;
-  /** Where a group session's tools run. Defaults to this process's directory. */
+  /**
+   * Where a group session's tools run *when the group has no directory of its own*. Defaults to
+   * this process's directory. A group that does have one (it is almost always the case once the
+   * user has said which project this is) wins: see `#cwdFor`.
+   */
   cwd?: string | undefined;
   warn?: ((message: string) => void) | undefined;
 }
@@ -495,7 +499,7 @@ export class WakeRunner {
 
     const agent = this.#agents.get(agentId);
     const created = await this.#sessions.create({
-      cwd: this.#cwd,
+      cwd: this.#cwdFor(group),
       title: agent === undefined ? group.name : `${group.name} · ${agent.name}`,
       agentId,
       groupId,
@@ -503,5 +507,18 @@ export class WakeRunner {
     });
     this.#groups.setSession(groupId, agentId, created.meta.id);
     return created;
+  }
+
+  /**
+   * The directory a group's sessions run in.
+   *
+   * The group's own, when it has one: this is the whole point of binding a group to a folder —
+   * its members read that project's notes, run its commands, and what they produce lands there.
+   * A group nobody has bound yet falls back to the host's directory, which is what every session
+   * did before the column existed; the interface marks those groups so the fallback is visible
+   * rather than silently right.
+   */
+  #cwdFor(group: GroupRecord): string {
+    return group.cwd.length > 0 ? group.cwd : this.#cwd;
   }
 }
