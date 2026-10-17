@@ -91,6 +91,8 @@
     "restartRequired": "已保存。重启宿主后生效。",
     "configured": "已配置的 provider",
     "empty": "还没有 provider。加一个，宿主才有东西可跑。",
-    "modelCount": "{{count}} 个模型"
+    "modelCount": "{{count}} 个模型",
+    "unsaved": "这个表单有还没保存的改动。",
+    "discard": "放弃改动"
   }
 }

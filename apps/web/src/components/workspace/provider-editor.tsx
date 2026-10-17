@@ -132,6 +132,43 @@ export function ProviderEditor({
     })),
   );
   const [saved, setSaved] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
+
+  // What the form started as. A dirty form is one the person would lose by closing it, so closing
+  // asks first — the rule the whole settings dialog follows, applied to the one form here that can
+  // hold an unsubmitted key.
+  const initial = {
+    name: provider?.name ?? "",
+    kind: provider?.kind ?? KINDS[0]!,
+    baseUrl: provider?.baseUrl ?? "",
+    headers: JSON.stringify(provider?.headers ?? {}),
+    models: JSON.stringify(provider?.models ?? []),
+  };
+  const dirty =
+    key.length > 0 ||
+    clearKey ||
+    name !== initial.name ||
+    kind !== initial.kind ||
+    baseUrl !== initial.baseUrl ||
+    JSON.stringify(
+      Object.fromEntries(headers.map((row) => [row.name, row.value])),
+    ) !== initial.headers ||
+    JSON.stringify(
+      models.map((model) => [
+        model.id,
+        model.name,
+        model.contextWindow,
+        model.vision,
+      ]),
+    ) !==
+      JSON.stringify(
+        (provider?.models ?? []).map((model) => [
+          model.id,
+          model.name ?? "",
+          model.context_window === null ? "" : String(model.context_window),
+          model.input.includes("image"),
+        ]),
+      );
 
   const save = useMutation({
     mutationFn: async (patch: ProviderPatch) => {
@@ -160,7 +197,16 @@ export function ProviderEditor({
   });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && dirty && !saved) {
+          setDiscarding(true);
+          return;
+        }
+        onOpenChange(next);
+      }}
+    >
       <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-mono">
@@ -400,6 +446,33 @@ export function ProviderEditor({
             </p>
           ) : null}
         </div>
+        {discarding ? (
+          <div
+            role="alertdialog"
+            aria-label={translateText("editor.unsaved")}
+            className="flex flex-wrap items-center gap-2 border border-state-warning px-2 py-1.5 text-xs"
+          >
+            <span className="min-w-0 flex-1">
+              {translateText("editor.unsaved")}
+            </span>
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => setDiscarding(false)}
+            >
+              {translateText("common:actions.cancel")}
+            </Button>
+            <Button
+              size="xs"
+              onClick={() => {
+                setDiscarding(false);
+                onOpenChange(false);
+              }}
+            >
+              {translateText("editor.discard")}
+            </Button>
+          </div>
+        ) : null}
         <DialogFooter>
           <Button
             onClick={() =>

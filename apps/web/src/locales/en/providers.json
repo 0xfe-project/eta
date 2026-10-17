@@ -91,6 +91,8 @@
     "restartRequired": "Saved. Restart the host for it to take effect.",
     "configured": "Configured providers",
     "empty": "No providers yet. Add one to give the host something to run.",
-    "modelCount": "{{count}} models"
+    "modelCount": "{{count}} models",
+    "unsaved": "This form has changes that would be lost.",
+    "discard": "Discard them"
   }
 }

@@ -109,3 +109,41 @@ describe("provider 编辑表单", () => {
     expect((bodies[0] as { apiKey?: unknown }).apiKey).toBeNull();
   });
 });
+
+describe("改了一半就走", () => {
+  it("先问，不直接丢掉", async () => {
+    const closed: boolean[] = [];
+    await render(
+      <ProviderEditor
+        provider={provider}
+        open
+        onOpenChange={(open) => closed.push(open)}
+      />,
+    );
+    const name = document.querySelector<HTMLInputElement>("#provider-name")!;
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    await act(async () => {
+      setter?.call(name, "改了个名字");
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    // The dialog's own close path: Escape / the X both land here.
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    await act(async () => {
+      dialog.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+    const alert = document.querySelector('[role="alertdialog"]');
+    expect(alert?.textContent).toContain("还没保存");
+    expect(closed).toEqual([]);
+
+    const discard = [...alert!.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("放弃"),
+    )!;
+    await act(async () => discard.click());
+    expect(closed).toEqual([false]);
+  });
+});
