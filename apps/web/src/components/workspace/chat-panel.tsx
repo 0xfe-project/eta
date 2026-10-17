@@ -909,7 +909,7 @@ export function ChatPanel({
       setSettings((state) => ({ ...state, open: true }));
       setDraft([]);
     } else if (name === "/new") {
-      void navigate({ to: "/", search: { view: "members" } });
+      void navigate({ to: "/new" });
       setDraft([]);
     } else if (parts.length) {
       onSend(parts, name === "/steer" ? "steer" : "queue");

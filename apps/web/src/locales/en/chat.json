@@ -238,5 +238,13 @@
   "pending": {
     "title": "Waiting for you",
     "more": "and {{count}} more waiting"
+  },
+  "new": {
+    "title": "New conversation",
+    "hint": "Pick an agent and a folder. The conversation appears under that folder in the sidebar.",
+    "folder": "Folder",
+    "folderHint": "Where the agent works: commands run here, project notes are read here.",
+    "agent": "Agent",
+    "start": "Start"
   }
 }

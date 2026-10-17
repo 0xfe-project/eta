@@ -110,19 +110,33 @@ export function Sidebar({ width }: { width?: number } = {}) {
           </Link>
         ))}
       </nav>
-      <label className="px-2 pb-1">
-        <span className="sr-only">
-          {translateText("chat:groups.search.placeholder")}
-        </span>
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={translateText("chat:groups.search.placeholder")}
-          spellCheck={false}
-          autoComplete="off"
-          className="h-7 w-full min-w-0 border border-border bg-transparent px-2 text-xs outline-none placeholder:text-faint focus:border-border-strong"
-        />
-      </label>
+      {/* Starting a conversation lives next to finding one: both are about the list. */}
+      <div className="flex items-center gap-1 px-2 pb-1">
+        <label className="min-w-0 flex-1">
+          <span className="sr-only">
+            {translateText("chat:groups.search.placeholder")}
+          </span>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={translateText("chat:groups.search.placeholder")}
+            spellCheck={false}
+            autoComplete="off"
+            className="h-7 w-full min-w-0 border border-border bg-transparent px-2 text-xs outline-none placeholder:text-faint focus:border-border-strong"
+          />
+        </label>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label={translateText("chat:new.title")}
+          title={translateText("chat:new.title")}
+          asChild
+        >
+          <Link to="/new">
+            <PlusIcon aria-hidden="true" />
+          </Link>
+        </Button>
+      </div>
       <FolderTree query={query} />
       <AgentLibrary />
     </aside>
