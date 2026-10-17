@@ -18,6 +18,11 @@ export interface AgentRecord {
   instructions: string;
   /** Plugin names this agent loads. The plugin surface itself is P3's. */
   plugins: string[];
+  /**
+   * The persona card this agent wears, by name. `""` means "the project's default", which is a
+   * different statement from "no persona at all".
+   */
+  persona: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -27,6 +32,7 @@ export interface AgentInput {
   model?: string | undefined;
   instructions?: string | undefined;
   plugins?: readonly string[] | undefined;
+  persona?: string | undefined;
 }
 
 export type AgentPatch = Partial<AgentInput>;
@@ -37,6 +43,7 @@ interface Row {
   model: string | null;
   instructions: string;
   plugins: string;
+  persona: string;
   created_at: string;
   updated_at: string;
 }
@@ -47,6 +54,7 @@ const toRecord = (row: Row): AgentRecord => ({
   ...(row.model === null ? {} : { model: row.model }),
   instructions: row.instructions,
   plugins: parsePlugins(row.plugins),
+  persona: row.persona,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -88,8 +96,8 @@ export class AgentStore {
     const now = new Date().toISOString();
     this.#handle
       .query(
-        `INSERT INTO agents (id, name, model, instructions, plugins, created_at, updated_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO agents (id, name, model, instructions, plugins, persona, created_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -97,6 +105,7 @@ export class AgentStore {
         input.model ?? null,
         input.instructions ?? "",
         JSON.stringify(input.plugins ?? []),
+        input.persona ?? "",
         now,
         now,
       );
@@ -118,17 +127,19 @@ export class AgentStore {
         ? {}
         : { instructions: patch.instructions }),
       ...(patch.plugins === undefined ? {} : { plugins: [...patch.plugins] }),
+      ...(patch.persona === undefined ? {} : { persona: patch.persona }),
       updatedAt: new Date().toISOString(),
     };
     this.#handle
       .query(
-        "UPDATE agents SET name = ?, model = ?, instructions = ?, plugins = ?, updated_at = ? WHERE id = ?",
+        "UPDATE agents SET name = ?, model = ?, instructions = ?, plugins = ?, persona = ?, updated_at = ? WHERE id = ?",
       )
       .run(
         next.name,
         next.model ?? null,
         next.instructions,
         JSON.stringify(next.plugins),
+        next.persona,
         next.updatedAt,
         id,
       );

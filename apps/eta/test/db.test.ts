@@ -64,6 +64,7 @@ describe("the migrations on disk", () => {
     const migrations = await loadMigrations();
     expect(migrations.map((migration) => migration.id)).toEqual([
       "agents/0001-agents",
+      "agents/0002-agent-persona",
       "artifacts/0001-artifacts",
       "groups/0001-groups",
 
@@ -87,6 +88,7 @@ describe("the migrations on disk", () => {
 
     expect(applyMigrations(db, migrations)).toEqual([
       "agents/0001-agents",
+      "agents/0002-agent-persona",
       "artifacts/0001-artifacts",
       "groups/0001-groups",
 
@@ -160,6 +162,7 @@ describe("the host's database", () => {
     expect((await stat(host.db.path)).isFile()).toBe(true);
     expect(host.db.applied).toEqual([
       "agents/0001-agents",
+      "agents/0002-agent-persona",
       "artifacts/0001-artifacts",
       "groups/0001-groups",
 

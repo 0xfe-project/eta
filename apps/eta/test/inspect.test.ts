@@ -103,6 +103,8 @@ describe("a session, described to a panel", () => {
       tools: string[];
       active: string[];
       blocked: string[];
+      asked: number;
+      refused: number;
     };
     expect(tools.tools.length).toBeGreaterThan(0);
     // What the session pinned is what the model sees; anything else is registered but unreachable,

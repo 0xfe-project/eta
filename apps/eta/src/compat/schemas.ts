@@ -110,6 +110,7 @@ export const agentSchema = z.object({
   description: z.string(),
   model: z.string().nullable(),
   bundles: z.array(z.string()),
+  persona: z.string(),
   status: z.enum([
     "idle",
     "starting",
@@ -286,6 +287,13 @@ export const groupChangesSchema = z.object({
  * folder keeps it.
  */
 export const directInSchema = z.object({ cwd: z.string().optional() });
+
+/**
+ * The persona card an agent wears. `""` is not "none": the harness reads it as "the project's
+ * default", which is a card too, and one the caller can change by renaming a card rather than by
+ * editing every agent.
+ */
+export const personaInSchema = z.object({ persona: z.string() });
 
 export const memberInSchema = z.object({ member: z.boolean() });
 export const readInSchema = z.object({ seq: z.number().int().min(0) });

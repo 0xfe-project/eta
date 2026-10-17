@@ -29,6 +29,7 @@ import {
   blockSchema,
   commentInSchema,
   directInSchema,
+  personaInSchema,
   errorSchema,
   groupChangesSchema,
   groupInSchema,
@@ -87,6 +88,7 @@ const CATALOG = {
   InteractionList: interactionListSchema,
   InteractionUpdated: interactionUpdatedSchema,
   DirectIn: directInSchema,
+  PersonaIn: personaInSchema,
   GroupIn: groupInSchema,
   GroupChanges: groupChangesSchema,
   MemberIn: memberInSchema,
@@ -377,6 +379,18 @@ export const PRODUCT_ROUTES: readonly ProductRoute[] = [
       "The conversation this agent has for itself, created if needed; a folder given here fills one it lacks.",
     body: "DirectIn",
     response: { status: 200, shape: "Group" },
+  },
+  {
+    method: "GET",
+    path: "/api/v1/agents/{agent_id}/persona",
+    summary:
+      "Which persona card this agent wears; empty means the project's default.",
+  },
+  {
+    method: "PUT",
+    path: "/api/v1/agents/{agent_id}/persona",
+    summary: "Set the persona card a run will start with.",
+    body: "PersonaIn",
   },
   {
     method: "POST",

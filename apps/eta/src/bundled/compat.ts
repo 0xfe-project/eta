@@ -756,6 +756,13 @@ export const compatPlugin = {
             ...(asNames(body.bundles) === undefined
               ? {}
               : { plugins: asNames(body.bundles)! }),
+            // `null` means "back to the project's default", `""` is that default's name — the
+            // same statement, so both are accepted and neither is guessed.
+            ...(body.persona === null
+              ? { persona: "" }
+              : typeof body.persona === "string"
+                ? { persona: body.persona }
+                : {}),
           });
           if (record === undefined) {
             return errorResponse(
@@ -831,6 +838,69 @@ export const compatPlugin = {
                 crypto.randomUUID(),
               )
             : Response.json(group);
+        },
+      ),
+    );
+
+    // Which persona card an agent wears. Its own route rather than a PATCH field: a persona is
+    // chosen from the cards a project offers (which is a list, with names and descriptions), and
+    // the two operations are different enough that one wire shape would describe neither.
+    plugin.effect(() =>
+      plugin.routes.register(
+        "GET",
+        "/api/v1/agents/:agent_id/persona",
+        (_request, params) => {
+          const id = params.agent_id ?? "";
+          const agent = agents.get(id);
+          if (agent === undefined) {
+            return errorResponse(
+              404,
+              "NO_SUCH_AGENT",
+              `no agent ${id}`,
+              crypto.randomUUID(),
+            );
+          }
+          return Response.json({
+            persona: agent.persona,
+            // "" means the project's default; the interface says so in words instead of showing
+            // an empty name.
+            uses_project_default: agent.persona.length === 0,
+          });
+        },
+      ),
+    );
+
+    plugin.effect(() =>
+      plugin.routes.register(
+        "PUT",
+        "/api/v1/agents/:agent_id/persona",
+        async (request, params) => {
+          const id = params.agent_id ?? "";
+          if (agents.get(id) === undefined) {
+            return errorResponse(
+              404,
+              "NO_SUCH_AGENT",
+              `no agent ${id}`,
+              crypto.randomUUID(),
+            );
+          }
+          const body = await readJson(request);
+          const persona = typeof body.persona === "string" ? body.persona : "";
+          const record = agents.update(id, { persona });
+          if (record === undefined) {
+            return errorResponse(
+              404,
+              "NO_SUCH_AGENT",
+              `no agent ${id}`,
+              crypto.randomUUID(),
+            );
+          }
+          publishAgentUpdated(hub, record);
+          // Runs already going keep the persona they started with; the next one reads this.
+          return Response.json({
+            persona: record.persona,
+            uses_project_default: record.persona.length === 0,
+          });
         },
       ),
     );

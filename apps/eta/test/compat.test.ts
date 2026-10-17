@@ -165,6 +165,8 @@ describe("the snapshot", () => {
       description: "Review diffs.",
       model: null,
       bundles: ["git"],
+      // No card chosen: the project's default persona, said as an empty name rather than "none".
+      persona: "",
       status: "idle",
       build_error: null,
       revision: 1,
@@ -314,6 +316,40 @@ describe("the snapshot", () => {
     expect(
       during.active_replies.map((reply) => [reply.role, reply.status]),
     ).toEqual([["assistant", "responding"]]);
+  });
+
+  it("lets an agent be given a persona card, and taken back to the default", async () => {
+    const host = await start();
+    const created = (await (
+      await send(host, "POST", "/api/v1/agents", { name: "reviewer" })
+    ).json()) as { id: string; persona: string };
+    expect(created.persona).toBe("");
+
+    const given = await send(
+      host,
+      "PUT",
+      `/api/v1/agents/${created.id}/persona`,
+      { persona: "critic" },
+    );
+    expect(given.status).toBe(200);
+    expect(await given.json()).toEqual({
+      persona: "critic",
+      uses_project_default: false,
+    });
+
+    const read = (await (
+      await send(host, "GET", `/api/v1/agents/${created.id}/persona`)
+    ).json()) as { persona: string; uses_project_default: boolean };
+    expect(read).toEqual({ persona: "critic", uses_project_default: false });
+
+    // Back to the default is a real state, not an error: "" is what the harness reads as "use
+    // whichever card the project's default names".
+    const cleared = (await (
+      await send(host, "PUT", `/api/v1/agents/${created.id}/persona`, {
+        persona: "",
+      })
+    ).json()) as { persona: string; uses_project_default: boolean };
+    expect(cleared).toEqual({ persona: "", uses_project_default: true });
   });
 
   it("answers the routes the web's editor calls, and the one it cannot", async () => {

@@ -84,6 +84,8 @@ export interface AxpAgent {
   model: string | null;
   /** The bundles it is built from; ours are plugin names (P3 owns what they mean). */
   bundles: string[];
+  /** The persona card this agent wears, by name; "" means the project's default. */
+  persona: string;
   status: "idle" | "starting" | "working" | "waiting_for_input" | "unavailable";
   build_error: string | null;
   revision: number;
@@ -246,6 +248,7 @@ export function toAgent(agent: AgentRecord): AxpAgent {
     description: agent.instructions,
     model: agent.model ?? null,
     bundles: agent.plugins,
+    persona: agent.persona,
     // Nothing is being prepared or built here: a session is opened when it is first woken.
     status: "idle",
     build_error: null,
