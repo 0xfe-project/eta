@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -27,8 +27,10 @@ export function NewSessionPage() {
   const navigate = useNavigate();
   const { agents, loaded } = useAgents();
   const { direct } = useGroupActions();
+  // The sidebar's per-folder "+" hands the folder over in the URL.
+  const search = useSearch({ strict: false }) as { cwd?: string };
   const [agentId, setAgentId] = useState<string | undefined>(undefined);
-  const [cwd, setCwd] = useState("");
+  const [cwd, setCwd] = useState(search.cwd ?? "");
   const [failed, setFailed] = useState("");
 
   const start = () => {
@@ -44,7 +46,7 @@ export function NewSessionPage() {
         onSuccess: (group) =>
           void navigate({
             to: "/",
-            search: { group: group.id, view: "members" },
+            search: { group: group.id, view: "context" },
           }),
         onError: (error: Error) => setFailed(error.message),
       },

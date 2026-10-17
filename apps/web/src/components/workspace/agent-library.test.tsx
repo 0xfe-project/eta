@@ -35,6 +35,8 @@ rstest.mock("@/queries/tasks", () => ({
 rstest.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children?: React.ReactNode }) => <a>{children}</a>,
   useRouterState: () => ({ location: { pathname: "/" } }),
+  // The folder header's "+" navigates to /new with a cwd.
+  useNavigate: () => () => undefined,
 }));
 
 (

@@ -60,7 +60,8 @@
       "invite": "Invite",
       "editInfo": "Edit group info",
       "archive": "Archive",
-      "viewInfo": "View group info"
+      "viewInfo": "View group info",
+      "rename": "Rename"
     },
     "createDescription": "Choose a few agents to discuss something together.",
     "fields": {
@@ -119,6 +120,10 @@
     },
     "empty": {
       "title": "No conversations yet."
+    },
+    "delete": {
+      "title": "Delete this conversation",
+      "description": "{{name}} and its timeline are deleted. What each agent said stays in its own transcript."
     }
   },
   "confirmations": {

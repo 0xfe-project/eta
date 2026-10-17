@@ -1,6 +1,6 @@
 import type { Group, GroupChanges } from "@/api/control-plane.gen";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { controlPlane, unwrap } from "@/lib/api";
+import { ApiError, controlPlane, unwrap } from "@/lib/api";
 import { chatQueryOptions } from "./chat";
 
 export function useGroupActions() {
@@ -56,6 +56,30 @@ export function useGroupActions() {
           }),
         ),
       onSuccess,
+    }),
+    /** Deleting a conversation: the timeline goes, the agents' own transcripts stay. */
+    remove: useMutation({
+      mutationFn: async (id: string) => {
+        const response = await fetch(
+          `/api/v1/groups/${encodeURIComponent(id)}`,
+          { method: "DELETE" },
+        );
+        if (!response.ok && response.status !== 204) {
+          const body = (await response.json().catch(() => null)) as {
+            error?: { message?: string };
+          } | null;
+          throw new ApiError(
+            response.status,
+            "DELETE_FAILED",
+            body?.error?.message ?? "删除失败",
+          );
+        }
+      },
+      onSuccess: (_result, id) => {
+        client.setQueryData(chatQueryOptions().queryKey, (s) =>
+          s ? { ...s, groups: s.groups.filter((g) => g.id !== id) } : s,
+        );
+      },
     }),
     member: useMutation({
       mutationFn: ({

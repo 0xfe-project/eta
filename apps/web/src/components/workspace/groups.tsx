@@ -542,7 +542,9 @@ export function GroupMembers() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <ul className="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-1">
+      {/* One member per row: a member carries three lines (name, status, its session's numbers),
+          and auto-fill columns turn that into two cramped columns in a 320px panel. */}
+      <ul className="grid grid-cols-1 gap-1">
         {members.map((p) => {
           const agent = agents.find((a) => a.id === p.agent_id);
           const active = chat?.messages.find(

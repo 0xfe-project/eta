@@ -12,6 +12,8 @@ const state = rstest.hoisted(() => ({
 
 rstest.mock("@tanstack/react-router", () => ({
   useNavigate: () => state.navigate,
+  // The folder can arrive in the URL (the sidebar's per-folder "+").
+  useSearch: () => ({}),
 }));
 rstest.mock("@/components/workspace/use-agents", () => ({
   useAgents: () => ({ agents: state.agents, loaded: true }),

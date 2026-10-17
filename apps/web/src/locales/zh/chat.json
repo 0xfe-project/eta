@@ -60,7 +60,8 @@
       "invite": "邀请",
       "editInfo": "编辑群信息",
       "archive": "归档",
-      "viewInfo": "查看群信息"
+      "viewInfo": "查看群信息",
+      "rename": "改名"
     },
     "createDescription": "选几位智能体，一起讨论一件事。",
     "fields": {
@@ -119,6 +120,10 @@
     },
     "empty": {
       "title": "还没有对话。"
+    },
+    "delete": {
+      "title": "删除这个对话",
+      "description": "「{{name}}」和它的时间线会被删除。每个智能体说过的话仍留在它自己的会话里。"
     }
   },
   "confirmations": {
