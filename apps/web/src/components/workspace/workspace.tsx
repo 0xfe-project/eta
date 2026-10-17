@@ -30,7 +30,7 @@ import {
   useOutboxActions,
   useOutboxDelivery,
 } from "@/queries/outbox";
-import { AgentBar, AgentTitle } from "./agent-bar";
+import { ChatHeader } from "./agent-bar";
 import { AgentEditor } from "./agent-editor";
 import { BottomNav } from "./app-shell";
 import { ChatPanel, ComposerNotice } from "./chat-panel";
@@ -227,7 +227,12 @@ export function Workspace({
           >
             <ArrowLeftIcon />
           </Button>
-          <AgentTitle group={group} onInfo={showInfo} />
+          {/* The phone's header: back, the name, and the way to what it is — no avatar row, no
+              folder chip. Those are what the right panel and the chat are for, and neither
+              belongs in 44 pixels. */}
+          <h1 className="min-w-0 flex-1 truncate text-sm font-medium">
+            {group?.name ?? translateText("sections.chat")}
+          </h1>
           <Button
             size="icon"
             variant="ghost"
@@ -269,118 +274,129 @@ export function Workspace({
             >
               <SidebarSimpleIcon aria-hidden="true" className="-scale-x-100" />
             </Button>
-            <ChatPanel
-              groupId={group?.id}
-              groupName={group?.name}
-              group={group}
-              agents={agents}
-              groups={groups}
-              activeReplies={chat.data?.messages ?? []}
-              model={
-                members.length === 1
-                  ? (agents.find((a) => a.id === members[0].agent_id)?.model ??
-                    undefined)
-                  : members.map((p) => p.name).join(" · ")
-              }
-              blocked={blocked}
-              // Not a blocker: the group works without a folder, it just works somewhere nobody
-              // chose. The way out sits next to the sentence.
-              notice={<UnboundFolderNotice group={group} />}
-              messages={history.messages}
-              loading={!chat.data || history.loading}
-              hasOlder={history.hasOlder}
-              loadingOlder={history.loadingOlder}
-              onLoadOlder={history.loadOlder}
-              interactions={waiting}
-              head={<AgentBar group={group} onInfo={showInfo} />}
-              connectionLost={connectionLost}
-              outgoing={outgoing}
-              onRetry={outbox.retry}
-              onEdit={outbox.edit}
-              onDiscard={outbox.discard}
-              onResend={(parts, agentId) => {
-                if (!group) return;
-                const mentions = agentId
-                  ? [agentId]
-                  : targets(partsText(parts));
-                if (partsText(parts) === "/compact" && parts.length === 1)
-                  compact.mutate({ groupId: group.id, mentions }, { onError });
-                else outbox.send(group.id, parts, "queue", mentions);
-              }}
-              error={
-                (chat.error ?? history.error)
-                  ? translateText("chat:errors.loadConversation", {
-                      message: (chat.error ?? history.error)?.message,
-                    })
-                  : undefined
-              }
-              draft={draft}
-              onDraftChange={setDraft}
-              onFiles={(files) =>
-                (group ? files : []).map((file) => {
-                  const id = crypto.randomUUID();
-                  void upload(group!.id, id, file);
-                  return {
-                    type: "file" as const,
-                    id,
-                    name:
-                      file.name || translateText("chat:attachments.pastedFile"),
-                    contentType: file.type || "application/octet-stream",
-                    size: file.size,
-                  };
-                })
-              }
-              onSend={(parts, mode) => {
-                if (!group) return openEditor();
-                const mentions = targets(partsText(parts));
-                if (mode === "steer") {
-                  for (const id of mentions) {
-                    const active = chat.data?.messages.find(
-                      (m) =>
-                        m.agent_id === id &&
-                        [
-                          "responding",
-                          "waiting_for_input",
-                          "stopping",
-                        ].includes(m.status),
+            <div className="flex min-h-0 min-w-0 flex-col">
+              <ChatHeader
+                group={group}
+                onInfo={showInfo}
+                workspaceOpen={!collapsed}
+                onOpenWorkspace={showPanel}
+              />
+              <ChatPanel
+                groupId={group?.id}
+                groupName={group?.name}
+                group={group}
+                agents={agents}
+                groups={groups}
+                activeReplies={chat.data?.messages ?? []}
+                model={
+                  members.length === 1
+                    ? (agents.find((a) => a.id === members[0].agent_id)
+                        ?.model ?? undefined)
+                    : members.map((p) => p.name).join(" · ")
+                }
+                blocked={blocked}
+                // Not a blocker: the group works without a folder, it just works somewhere nobody
+                // chose. The way out sits next to the sentence.
+                notice={<UnboundFolderNotice group={group} />}
+                messages={history.messages}
+                loading={!chat.data || history.loading}
+                hasOlder={history.hasOlder}
+                loadingOlder={history.loadingOlder}
+                onLoadOlder={history.loadOlder}
+                interactions={waiting}
+                connectionLost={connectionLost}
+                outgoing={outgoing}
+                onRetry={outbox.retry}
+                onEdit={outbox.edit}
+                onDiscard={outbox.discard}
+                onResend={(parts, agentId) => {
+                  if (!group) return;
+                  const mentions = agentId
+                    ? [agentId]
+                    : targets(partsText(parts));
+                  if (partsText(parts) === "/compact" && parts.length === 1)
+                    compact.mutate(
+                      { groupId: group.id, mentions },
+                      { onError },
                     );
-                    if (active && active.group_id !== group.id) {
-                      const name = agents.find((a) => a.id === id)?.name;
-                      const elsewhere = groups.find(
-                        (g) => g.id === active.group_id,
-                      )?.name;
-                      toast.info(
-                        translateText("chat:notices.messageQueuedElsewhere", {
-                          agentName: name,
-                          groupName: elsewhere,
-                        }),
+                  else outbox.send(group.id, parts, "queue", mentions);
+                }}
+                error={
+                  (chat.error ?? history.error)
+                    ? translateText("chat:errors.loadConversation", {
+                        message: (chat.error ?? history.error)?.message,
+                      })
+                    : undefined
+                }
+                draft={draft}
+                onDraftChange={setDraft}
+                onFiles={(files) =>
+                  (group ? files : []).map((file) => {
+                    const id = crypto.randomUUID();
+                    void upload(group!.id, id, file);
+                    return {
+                      type: "file" as const,
+                      id,
+                      name:
+                        file.name ||
+                        translateText("chat:attachments.pastedFile"),
+                      contentType: file.type || "application/octet-stream",
+                      size: file.size,
+                    };
+                  })
+                }
+                onSend={(parts, mode) => {
+                  if (!group) return openEditor();
+                  const mentions = targets(partsText(parts));
+                  if (mode === "steer") {
+                    for (const id of mentions) {
+                      const active = chat.data?.messages.find(
+                        (m) =>
+                          m.agent_id === id &&
+                          [
+                            "responding",
+                            "waiting_for_input",
+                            "stopping",
+                          ].includes(m.status),
                       );
+                      if (active && active.group_id !== group.id) {
+                        const name = agents.find((a) => a.id === id)?.name;
+                        const elsewhere = groups.find(
+                          (g) => g.id === active.group_id,
+                        )?.name;
+                        toast.info(
+                          translateText("chat:notices.messageQueuedElsewhere", {
+                            agentName: name,
+                            groupName: elsewhere,
+                          }),
+                        );
+                      }
                     }
                   }
-                }
-                outbox.send(group.id, parts, mode, mentions);
-                setDraft([]);
-              }}
-              onCompact={() => {
-                if (!group) return;
-                if (!selectedTargets.length)
-                  return toast.error(
-                    translateText("chat:commands.compactRequiresMention"),
+                  outbox.send(group.id, parts, mode, mentions);
+                  setDraft([]);
+                }}
+                onCompact={() => {
+                  if (!group) return;
+                  if (!selectedTargets.length)
+                    return toast.error(
+                      translateText("chat:commands.compactRequiresMention"),
+                    );
+                  compact.mutate(
+                    { groupId: group.id, mentions: selectedTargets },
+                    { onError },
                   );
-                compact.mutate(
-                  { groupId: group.id, mentions: selectedTargets },
-                  { onError },
-                );
-                setDraft([]);
-              }}
-              onStop={(id) => stopReply.mutate(id, { onError })}
-              onStopAll={() => {
-                if (group) actions.stop.mutate(group.id, { onError });
-              }}
-              onAnswer={(id, value) =>
-                answer.mutate({ id, value }, { onError })
-              }
-            />
+                  setDraft([]);
+                }}
+                onStop={(id) => stopReply.mutate(id, { onError })}
+                onStopAll={() => {
+                  if (group) actions.stop.mutate(group.id, { onError });
+                }}
+                onAnswer={(id, value) =>
+                  answer.mutate({ id, value }, { onError })
+                }
+              />
+            </div>
           </div>
           {drawerOpen ? (
             <div
