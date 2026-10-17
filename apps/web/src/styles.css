@@ -541,6 +541,21 @@
     justify-content: flex-end;
   }
 
+  /* Copy, on the message it copies: invisible until the message is hovered, because a row of
+   * buttons nobody is pressing is a row of noise. Copied keeps it up for its beat. */
+  .message:hover .message-copy-btn,
+  .message-copy-btn[data-copied="true"] {
+    opacity: 1;
+  }
+  .message-copy-btn {
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    color: var(--muted-foreground);
+    background: transparent;
+    opacity: 0;
+    cursor: pointer;
+  }
+
   .system-message {
     align-self: center;
     margin: 8px auto 16px;

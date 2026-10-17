@@ -459,17 +459,15 @@ function MemberStack({ members }: { members: Participant[] }) {
   if (members.length === 0) return null;
   return (
     <span className="flex shrink-0 items-center" aria-hidden="true">
+      {/* No box behind them: a blob avatar is a filled shape with transparent surroundings, so a
+       * wrapper is a dark frame in a dark theme — the frame is the bug, not the overlap. */}
       <span className="flex -space-x-1.5">
         {shown.map((member) => (
-          <span
+          <AgentAvatar
             key={member.agent_id}
-            className="size-5 overflow-hidden border border-background bg-background"
-          >
-            <AgentAvatar
-              agent={{ id: member.agent_id }}
-              className="size-full"
-            />
-          </span>
+            agent={{ id: member.agent_id }}
+            className="size-5"
+          />
         ))}
       </span>
       {rest > 0 ? (

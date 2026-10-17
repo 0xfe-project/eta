@@ -64,6 +64,7 @@ import { TranscriptRail } from "./transcript-rail";
 import { AskBlock } from "./transcript/ask-block";
 import { Message, SystemMessage } from "./transcript/message";
 import { SlashMenu } from "./transcript/slash-menu";
+import { ThinkingBlock } from "./transcript/thinking-block";
 import { ToolCard, ToolCardBlock } from "./transcript/tool-card";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -548,6 +549,10 @@ const Turn = memo(
       );
     // Only a reply at work still grows; the rest render as finished text.
     const streaming = ACTIVE_STATUSES.has(message.status);
+    const saidText = message.blocks
+      .filter((block: { type: string }) => block.type === "text")
+      .map((block: { text?: string }) => block.text ?? "")
+      .join("\n\n");
     return (
       <div className="message assistant">
         {author === undefined ? null : (
@@ -569,18 +574,13 @@ const Turn = memo(
           .filter((block): block is Reply => block.type !== "attachment")
           .map((block) =>
             block.type === "thinking" ? (
-              // Folded by default, with its size on the line: what it worked through is context
-              // for reading the answer critically, not a second answer competing with it.
-              <details key={block.id ?? "thinking"} className={ENTER}>
-                <summary className="cursor-pointer font-mono text-[11px] text-muted-foreground outline-none">
-                  {translate("chat:thinking.fold", {
-                    count: block.chars ?? block.text.length,
-                  })}
-                </summary>
-                <div className="mt-1 border-l border-border pl-2 text-muted-foreground whitespace-pre-wrap">
-                  {block.text}
-                </div>
-              </details>
+              // What it worked through: folded, with its size on the line, because it is context
+              // for reading the answer critically rather than a second answer.
+              <ThinkingBlock
+                key={block.id ?? "thinking"}
+                text={block.text}
+                {...(block.chars === undefined ? {} : { chars: block.chars })}
+              />
             ) : block.type === "text" ? (
               <div key={block.id} className="message-content">
                 <Markdown streaming={streaming}>{block.text}</Markdown>
@@ -608,6 +608,10 @@ const Turn = memo(
             onAnswer={(id, value) => actions.current.onAnswer(id, value)}
           />
         ))}
+        <div className="message-footer">
+          <time dateTime={message.created_at}>{when(message.created_at)}</time>
+          <CopyMessage text={saidText} />
+        </div>
         <ReplyState
           message={message}
           asking={pending.length > 0}
@@ -997,7 +1001,7 @@ export function ChatPanel({
       setSettings((state) => ({ ...state, open: true }));
       setDraft([]);
     } else if (name === "/new") {
-      void navigate({ to: "/new" });
+      void navigate({ to: "/new", search: { cwd: group?.cwd ?? "" } });
       setDraft([]);
     } else if (parts.length) {
       onSend(parts, name === "/steer" ? "steer" : "queue");
@@ -1431,5 +1435,38 @@ export function ChatPanel({
         </div>
       </footer>
     </section>
+  );
+}
+
+/**
+ * Copy what the agent said, from under the message.
+ *
+ * The whole point of the footer is that it is out of the way until you want it: the button is
+ * 10px mono in the same dim line as the time, and it says "copied" for a beat rather than
+ * throwing a toast for a click you already know you made.
+ */
+function CopyMessage({ text }: { text: string }) {
+  const { t: translateText } = useTranslation(["chat", "common"] as const);
+  const [copied, setCopied] = useState(false);
+  if (text.trim().length === 0) return null;
+  return (
+    <button
+      type="button"
+      className="message-copy-btn font-mono text-[10px] uppercase tracking-[0.1em]"
+      data-copied={copied}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+          setTimeout(setCopied, 1200, false);
+        } catch {
+          /* no clipboard outside a secure context */
+        }
+      }}
+    >
+      {copied
+        ? translateText("common:feedback.copied")
+        : translateText("common:actions.copy")}
+    </button>
   );
 }
