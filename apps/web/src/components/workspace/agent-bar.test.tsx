@@ -1,5 +1,6 @@
 import type { Group } from "@/queries/chat";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { ChatHeader } from "./agent-bar";
@@ -54,10 +55,18 @@ rstest.mock("./use-agents", () => ({
 
 const cleanup: (() => void)[] = [];
 async function render(node: React.ReactNode) {
+  // The header carries the settings button, which reads a query.
+  const client = new QueryClient({
+    defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+  });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-  await act(async () => root.render(node));
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={client}>{node}</QueryClientProvider>,
+    ),
+  );
   cleanup.push(() => {
     root.unmount();
     container.remove();
@@ -96,6 +105,11 @@ describe("header 里的名称切换", () => {
     expect(container.textContent).toContain("发布讨论");
     // The folder is the second thing the header answers, and it is in the same row.
     expect(container.textContent).toContain("eta");
+    // The last control is settings: it belongs to the app, not to this group, so it is always
+    // the rightmost thing in the row.
+    const controls = [...container.querySelectorAll("header button")];
+    const last = controls.at(-1)!;
+    expect(last.getAttribute("title")).toBe("设置");
     // Members are navigation: pressing one opens that agent alone.
     const avatars = [...container.querySelectorAll("button")].filter((b) =>
       b.getAttribute("title")?.includes("单独"),

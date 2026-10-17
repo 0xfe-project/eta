@@ -16,6 +16,7 @@ import {
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
 import { CwdChip } from "./cwd-chip";
+import { SettingsButton } from "./settings-dialog";
 import { useAgents, useOpenAgent } from "./use-agents";
 import { useGroups, useOpenGroup } from "./use-groups";
 import { useHoverMenu } from "./use-hover-menu";
@@ -199,6 +200,8 @@ export function ChatHeader({
       >
         <InfoIcon aria-hidden="true" />
       </Button>
+      {/* The header's last control, on every page: settings belong to the app, not to a group. */}
+      <SettingsButton />
     </header>
   );
 }
