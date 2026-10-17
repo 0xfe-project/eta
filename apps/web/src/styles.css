@@ -36,6 +36,39 @@
 }
 
 @layer components {
+  /*
+   * The divider between two panes you can drag (BR1-WEB, draggable sidebar divider).
+   *
+   * At rest it is 1px of border: a divider, not a control. Under the pointer it becomes 2px of
+   * foreground instantly — it announces itself without ceremony — and the cursor turns into
+   * `col-resize`. The visual is 1px; the hit target is 6px, centered on it. That difference is
+   * deliberate: a 1px line is a miserable thing to grab, and a 6px line is a heavy divider.
+   *
+   * `touch-action: none` is what lets a finger drag it instead of scrolling the page, and
+   * `data-dragging` keeps the 2px look while the drag is in progress (the pointer is often
+   * not over the 1px line while the pane follows it).
+   */
+  .pane-divider {
+    position: relative;
+    flex: none;
+    width: 1px;
+    background: var(--border);
+    touch-action: none;
+  }
+  .pane-divider::after {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    left: -3px;
+    width: 6px;
+  }
+  .pane-divider:hover,
+  .pane-divider[data-dragging="true"] {
+    width: 2px;
+    background: var(--foreground);
+    cursor: col-resize;
+  }
+
   .markdown {
     @apply space-y-3 break-words text-sm leading-7;
   }
@@ -94,6 +127,8 @@
   --ease-in: ease-in;
   --ease-out: ease-out;
   --ease-in-out: ease-in-out;
+  /* The one spring in the system: a pane snapping to a breakpoint on release. */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   /*
    * Menus and dialogs: no fade-in, no scale. They arrive at full opacity where they belong and
    * the last 4px settle in 60ms — enough to say which way it came from, short enough that the
