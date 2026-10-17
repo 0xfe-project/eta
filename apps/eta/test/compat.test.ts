@@ -229,6 +229,17 @@ describe("the snapshot", () => {
       "/tmp/moved",
     );
 
+    // The conversation an agent has for itself: the sidebar's member rows and its agent library
+    // both open this, and pressing twice must not make a second one.
+    const first = (await (
+      await send(host, "POST", `/api/v1/agents/${agent.id}/direct`)
+    ).json()) as { id: string; kind: string };
+    expect(first.kind).toBe("direct");
+    const again = (await (
+      await send(host, "POST", `/api/v1/agents/${agent.id}/direct`)
+    ).json()) as { id: string };
+    expect(again.id).toBe(first.id);
+
     // A body with no folder creates a group with no folder; nothing is inferred.
     const bare = (await (
       await send(host, "POST", "/api/v1/groups", {

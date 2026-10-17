@@ -370,6 +370,12 @@ export const PRODUCT_ROUTES: readonly ProductRoute[] = [
   },
   {
     method: "POST",
+    path: "/api/v1/agents/{agent_id}/direct",
+    summary: "The conversation this agent has for itself, created if needed.",
+    response: { status: 200, shape: "Group" },
+  },
+  {
+    method: "POST",
     path: "/api/v1/agents/{agent_id}/restart",
     summary:
       "Restart an agent's containers. Nothing here runs in one, so this answers 501.",

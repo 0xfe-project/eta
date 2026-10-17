@@ -791,6 +791,41 @@ export const compatPlugin = {
       ),
     );
 
+    // The conversation an agent has for itself, made on demand.
+    //
+    // The sidebar's member rows and its agent library both mean "talk to this one alone", and a
+    // direct chat is where that happens. Idempotent: asking twice is how a caller says "make sure
+    // it is there", which is what a button does every time it is pressed.
+    plugin.effect(() =>
+      plugin.routes.register(
+        "POST",
+        "/api/v1/agents/:agent_id/direct",
+        (_request, params) => {
+          const id = params.agent_id ?? "";
+          const agent = agents.get(id);
+          if (agent === undefined) {
+            return errorResponse(
+              404,
+              "NO_SUCH_AGENT",
+              `no agent ${id}`,
+              crypto.randomUUID(),
+            );
+          }
+          const created = groups.ensurePrivateGroup(agent.id, agent.name);
+          hub.publish("group.updated", { group: created.group });
+          const group = groupShape(created.group.id);
+          return group === undefined
+            ? errorResponse(
+                500,
+                "NO_GROUP",
+                "私聊刚建好就找不到了。",
+                crypto.randomUUID(),
+              )
+            : Response.json(group);
+        },
+      ),
+    );
+
     plugin.effect(() =>
       plugin.routes.register(
         "POST",
