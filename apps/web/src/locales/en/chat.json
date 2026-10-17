@@ -88,7 +88,9 @@
     },
     "header": {
       "cwdBound": "Working in {{path}}",
-      "cwdUnbound": "no folder"
+      "cwdUnbound": "no folder",
+      "unboundNotice": "This group has no folder yet — its agents run in the host's directory and project notes are read from there.",
+      "bindFolder": "Set folder"
     }
   },
   "confirmations": {

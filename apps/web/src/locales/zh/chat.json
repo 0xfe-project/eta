@@ -88,7 +88,9 @@
     },
     "header": {
       "cwdBound": "工作目录 {{path}}",
-      "cwdUnbound": "未绑定目录"
+      "cwdUnbound": "未绑定目录",
+      "unboundNotice": "这个群还没绑目录：成员跑在宿主启动的目录里，项目笔记也从那里读。",
+      "bindFolder": "绑定目录"
     }
   },
   "confirmations": {

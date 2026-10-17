@@ -34,6 +34,7 @@ import { AgentBar, AgentTitle } from "./agent-bar";
 import { AgentEditor } from "./agent-editor";
 import { BottomNav, Sidebar } from "./app-shell";
 import { ChatPanel, ComposerNotice } from "./chat-panel";
+import { UnboundFolderNotice } from "./folder-notice";
 import { GroupList } from "./groups";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { useAgents } from "./use-agents";
@@ -281,6 +282,9 @@ export function Workspace({
                   : members.map((p) => p.name).join(" · ")
               }
               blocked={blocked}
+              // Not a blocker: the group works without a folder, it just works somewhere nobody
+              // chose. The way out sits next to the sentence.
+              notice={<UnboundFolderNotice group={group} />}
               messages={history.messages}
               loading={!chat.data || history.loading}
               hasOlder={history.hasOlder}
