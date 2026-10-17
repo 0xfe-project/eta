@@ -93,7 +93,10 @@
   },
   "scope": {
     "mine": "我的",
-    "label": "指派范围"
+    "label": "指派范围",
+    "group": "{{name}}",
+    "all": "所有群",
+    "emptyGroup": "这个群还没有任务"
   },
   "actions": {
     "createWithStatusLabel": "新建{{status}}任务",

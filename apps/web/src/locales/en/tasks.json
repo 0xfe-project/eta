@@ -93,7 +93,10 @@
   },
   "scope": {
     "mine": "Mine",
-    "label": "Assignee scope"
+    "label": "Assignee scope",
+    "group": "{{name}}",
+    "all": "All groups",
+    "emptyGroup": "No tasks in this group yet"
   },
   "actions": {
     "createWithStatusLabel": "New task: {{status}}",

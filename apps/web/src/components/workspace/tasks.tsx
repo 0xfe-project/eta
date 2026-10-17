@@ -237,6 +237,16 @@ function TaskList() {
   ] as const);
   const [, setNav] = useTaskNav();
   const { data, error, refetch } = useTasks();
+  const { current: group } = useGroups();
+  // A task is work in a group; the board opens on that group rather than on everything at once.
+  // "All groups" is still one click away — it is the exception, not the view you land on.
+  const [scope, setScope] = useState<"group" | "all">("group");
+  const tasks =
+    scope === "group" && group !== undefined
+      ? (data?.tasks.filter(
+          (task: { group_id?: string | null }) => task.group_id === group.id,
+        ) ?? [])
+      : (data?.tasks ?? []);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const isOpen = (status: TaskStatus) => open[status] ?? !folded.has(status);
   return (
@@ -255,6 +265,28 @@ function TaskList() {
           <PlusIcon aria-hidden="true" />
         </Button>
       </div>
+      {group === undefined ? null : (
+        <div className="flex items-center gap-1 text-[11px]">
+          {(["group", "all"] as const).map((choice) => (
+            <button
+              key={choice}
+              type="button"
+              aria-pressed={scope === choice}
+              onClick={() => setScope(choice)}
+              className={cn(
+                "border px-1.5 py-0.5 font-mono",
+                scope === choice
+                  ? "border-foreground text-foreground"
+                  : "border-border text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {choice === "group"
+                ? translateText("scope.group", { name: group.name })
+                : translateText("scope.all")}
+            </button>
+          ))}
+        </div>
+      )}
       {error && !data ? (
         <LoadError
           what={translateText("navigation:sections.tasks")}
@@ -263,7 +295,7 @@ function TaskList() {
         />
       ) : !data ? (
         <Loading />
-      ) : data.tasks.length === 0 ? (
+      ) : tasks.length === 0 ? (
         <Empty
           icon={ListChecksIcon}
           title={translateText("empty.title")}
@@ -278,7 +310,9 @@ function TaskList() {
         </Empty>
       ) : (
         statuses.map(({ value, label }) => {
-          const group = data.tasks.filter((t) => t.status === value);
+          const group = tasks.filter(
+            (task: { status: string }) => task.status === value,
+          );
           if (!group.length) return null;
           return (
             <section key={value} aria-label={label} className="-mx-2">
@@ -299,7 +333,7 @@ function TaskList() {
               </button>
               {isOpen(value) ? (
                 <ul>
-                  {group.map((task) => (
+                  {group.map((task: { id: string }) => (
                     <TaskRow key={task.id} task={task} />
                   ))}
                 </ul>
