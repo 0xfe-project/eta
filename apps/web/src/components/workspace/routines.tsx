@@ -14,9 +14,11 @@ import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlayIcon } from "@phosphor-icons/react/Play";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { chatQueryOptions } from "@/queries/chat";
 import { Markdown } from "@/components/markdown";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -44,8 +46,8 @@ import {
 import { RoutineForm } from "./routine-form";
 import { describeSchedule, when } from "./routine-format";
 import { useRoutineNav } from "./routine-nav";
+import { useWorkspaceStore } from "./workspace-store";
 import { UsageLine } from "./usage-line";
-import { useGroups } from "./use-groups";
 
 const runStatusLabels: Record<RunStatus, string> = {
   get running() {
@@ -174,7 +176,12 @@ export function RoutineList({
   ] as const);
   const [, setNav] = useRoutineNav();
   const { data, error, refetch } = useRoutines();
-  const { current: group, groups: allGroups } = useGroups();
+  // No nuqs here: this list is also rendered by tests and by the full-window page, and the group
+  // list plus the remembered selection are enough to know which section goes first.
+  const { data: chat } = useQuery(chatQueryOptions());
+  const selectedGroupId = useWorkspaceStore((s) => s.workspace.selectedGroupId);
+  const allGroups = chat?.groups ?? [];
+  const group = allGroups.find((candidate) => candidate.id === selectedGroupId);
   // Grouped by the conversation that owns them, because that is the question the overview answers:
   // "which groups have something on a clock, and what". A flat list made you open each one to find
   // out whose it is.
