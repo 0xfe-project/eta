@@ -1,8 +1,6 @@
 import type { WorkspaceView } from "./types";
 
 import type { Draft } from "@/lib/composer";
-import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
-import { InfoIcon } from "@phosphor-icons/react/Info";
 import { SidebarSimpleIcon } from "@phosphor-icons/react/SidebarSimple";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -30,7 +28,7 @@ import {
   useOutboxActions,
   useOutboxDelivery,
 } from "@/queries/outbox";
-import { ChatHeader } from "./agent-bar";
+import { ChatHeader, MobileChatHeader } from "./agent-bar";
 import { AgentEditor } from "./agent-editor";
 import { BottomNav } from "./app-shell";
 import { ChatPanel, ComposerNotice } from "./chat-panel";
@@ -210,42 +208,25 @@ export function Workspace({
           groupId ? "flex" : "hidden",
         )}
       >
-        <header className="flex h-11 shrink-0 items-center gap-2 pb-2 md:hidden">
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label={
-              mobilePanel === "workspace"
-                ? translateText("actions.backToChat")
-                : translateText("actions.backToConversations")
-            }
-            onClick={() =>
-              mobilePanel === "workspace"
-                ? setMobilePanel("chat")
-                : void navigate({ to: "/", search: {} })
-            }
-          >
-            <ArrowLeftIcon />
-          </Button>
-          {/* The phone's header: back, the name, and the way to what it is — no avatar row, no
-              folder chip. Those are what the right panel and the chat are for, and neither
-              belongs in 44 pixels. */}
-          <h1 className="min-w-0 flex-1 truncate text-sm font-medium">
-            {group?.name ?? translateText("sections.chat")}
-          </h1>
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label={
-              direct
-                ? translateText("agents:settings.title")
-                : translateText("chat:groups.info")
-            }
-            onClick={showInfo}
-          >
-            <InfoIcon />
-          </Button>
-        </header>
+        <MobileChatHeader
+          name={group?.name ?? translateText("sections.chat")}
+          onBack={() =>
+            mobilePanel === "workspace"
+              ? setMobilePanel("chat")
+              : void navigate({ to: "/", search: {} })
+          }
+          backLabel={
+            mobilePanel === "workspace"
+              ? translateText("actions.backToChat")
+              : translateText("actions.backToConversations")
+          }
+          onInfo={showInfo}
+          infoLabel={
+            direct
+              ? translateText("agents:settings.title")
+              : translateText("chat:groups.info")
+          }
+        />
         <main
           id="main"
           className={cn(

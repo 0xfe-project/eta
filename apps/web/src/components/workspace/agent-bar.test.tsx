@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { ChatHeader } from "./agent-bar";
+import { ChatHeader, MobileChatHeader } from "./agent-bar";
 
 const opened: string[] = [];
 const direct = (id: string, agent: string, name: string) =>
@@ -90,6 +90,26 @@ afterEach(async () => {
   opened.length = 0;
   openAgentCalls.length = 0;
   await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
+});
+
+describe("手机上的 header", () => {
+  it("is three controls: back, the name, and the way to what it is", async () => {
+    const container = await render(
+      <MobileChatHeader
+        name="发布讨论"
+        onBack={() => {}}
+        backLabel="返回对话列表"
+        onInfo={() => {}}
+        infoLabel="群信息"
+      />,
+    );
+    const controls = [...container.querySelectorAll("button")];
+    expect(controls).toHaveLength(2);
+    expect(container.querySelector("h1")!.textContent).toBe("发布讨论");
+    // No avatar row and no folder chip: those belong to the panel and the chat.
+    expect(container.querySelectorAll("img")).toHaveLength(0);
+    expect(container.textContent).not.toContain("未绑定目录");
+  });
 });
 
 describe("header 里的名称切换", () => {

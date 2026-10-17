@@ -1,4 +1,5 @@
 import type { Group } from "@/queries/chat";
+import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { CheckIcon } from "@phosphor-icons/react/Check";
 import { InfoIcon } from "@phosphor-icons/react/Info";
@@ -202,6 +203,49 @@ export function ChatHeader({
       </Button>
       {/* The header's last control, on every page: settings belong to the app, not to a group. */}
       <SettingsButton />
+    </header>
+  );
+}
+
+/**
+ * The phone's header: three things, and the row is 44 pixels tall.
+ *
+ * Back (to the list, or to the chat when the panel is showing), the name, and the way to what
+ * this conversation is. No avatar row and no folder chip: on a phone those belong in the panel
+ * and in the chat itself, and squeezing them in here would cost the name the room it needs.
+ */
+export function MobileChatHeader({
+  name,
+  onBack,
+  backLabel,
+  onInfo,
+  infoLabel,
+}: {
+  name: string;
+  onBack: () => void;
+  backLabel: string;
+  onInfo: () => void;
+  infoLabel: string;
+}) {
+  return (
+    <header className="flex h-11 shrink-0 items-center gap-2 md:hidden">
+      <Button
+        size="icon"
+        variant="ghost"
+        aria-label={backLabel}
+        onClick={onBack}
+      >
+        <ArrowLeftIcon aria-hidden="true" />
+      </Button>
+      <h1 className="min-w-0 flex-1 truncate text-sm font-medium">{name}</h1>
+      <Button
+        size="icon"
+        variant="ghost"
+        aria-label={infoLabel}
+        onClick={onInfo}
+      >
+        <InfoIcon aria-hidden="true" />
+      </Button>
     </header>
   );
 }
