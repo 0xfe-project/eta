@@ -116,6 +116,9 @@ describe("refreshing model status", () => {
     await render();
 
     await act(async () => refreshButton().click());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
     expect(refreshButton().disabled).toBe(true);
     expect(refreshButton().textContent).toContain("检查中");
     expect(status()).toBe("正在检查…");

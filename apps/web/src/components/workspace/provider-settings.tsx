@@ -457,8 +457,11 @@ export function RefreshStatus({ className }: { className?: string }) {
     "connections",
   ] as const);
   const refresh = useRefreshLlmStatus();
-  // Another settings page may be checking: one round at a time.
-  const busy = useIsMutating({ mutationKey: ["llm", "refresh"] }) > 0;
+  // Two sources, and both matter: this button's own request (`isPending`, which flips with the
+  // render it belongs to), and any other settings page checking at the same time — one round at a
+  // time, whichever one started it.
+  const elsewhere = useIsMutating({ mutationKey: ["llm", "refresh"] }) > 0;
+  const busy = refresh.isPending || elsewhere;
   const result = refresh.data;
   const failedChecks = result?.connections.filter(
     (connection) => connection.check_error,
