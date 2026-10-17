@@ -14,7 +14,7 @@ import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlayIcon } from "@phosphor-icons/react/Play";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -178,7 +178,12 @@ export function RoutineList({
   const { data, error, refetch } = useRoutines();
   // No nuqs here: this list is also rendered by tests and by the full-window page, and the group
   // list plus the remembered selection are enough to know which section goes first.
-  const { data: chat } = useQuery(chatQueryOptions());
+  // Names come from the snapshot already on screen: a list of routines should not be the thing
+  // that goes and asks for the sidebar's data.
+  const client = useQueryClient();
+  const chat = client.getQueryData(chatQueryOptions().queryKey) as
+    | { groups?: { id: string; name: string }[] }
+    | undefined;
   const selectedGroupId = useWorkspaceStore((s) => s.workspace.selectedGroupId);
   const allGroups = chat?.groups ?? [];
   const group = allGroups.find((candidate) => candidate.id === selectedGroupId);
