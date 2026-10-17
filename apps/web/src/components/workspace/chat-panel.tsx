@@ -9,6 +9,7 @@ import type {
   SendMode,
 } from "@/queries/chat";
 import type { Outgoing } from "@/queries/outbox";
+import { useQuery } from "@tanstack/react-query";
 import {
   memo,
   useEffect,
@@ -39,9 +40,9 @@ import {
   MAX_ATTACHMENTS,
   MAX_MESSAGE_CHARS,
   messageParts,
-  onlyText,
   plainDraft,
 } from "@/lib/composer";
+import { buildMenu, mentionAt } from "@/lib/composer-menu";
 import { listSeparator, translate } from "@/lib/i18n";
 import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { ACTIVE_STATUSES } from "@/queries/chat";
@@ -688,17 +689,26 @@ export function ChatPanel({
   const listId = useId();
   const [menuIndex, setMenuIndex] = useState(0);
   const [menuDismissed, setMenuDismissed] = useState(false);
-  // The menu offers commands while the draft is a bare `/name`.
-  const plain = onlyText(draft);
   const members = group?.participants.filter((p) => p.member) ?? [];
-  const mentionQuery = /(?:^|[\s，。！？、,:;!?])@([^@\n]*)$/.exec(
-    draftText(draft),
-  );
-  const mentioned = mentionedMembers(draftText(draft), members);
-  const query =
-    plain !== null && /^\/\S*$/.test(plain)
-      ? plain.slice(1).toLowerCase()
-      : null;
+  const text = draftText(draft);
+  // The project's files, fetched the first time the `@` menu opens: a completion list nobody is
+  // looking at is a directory walk nobody asked for.
+  const atOpen = mentionAt(text) !== null;
+  const projectFiles = useQuery({
+    queryKey: ["files", groupId],
+    enabled: atOpen && groupId !== undefined,
+    staleTime: 30_000,
+    queryFn: async (): Promise<string[]> => {
+      if (groupId === undefined) return [];
+      const response = await fetch(
+        `/api/v1/files?group_id=${encodeURIComponent(groupId)}`,
+      );
+      if (!response.ok) return [];
+      const body = (await response.json()) as { files?: string[] };
+      return body.files ?? [];
+    },
+  });
+  const mentioned = mentionedMembers(text, members);
   // Why the draft cannot go yet: its files' uploads, or the limits.
   const uploads = useOutbox((s) => s.uploads);
   const files = draft.filter((part) => part.type === "file");
@@ -714,31 +724,38 @@ export function ChatPanel({
           })
         : undefined;
   const uploading = files.some((f) => !uploads[f.id]?.attachment);
+  // One menu, two sources (lib/composer-menu.ts): `@` offers the group's members first and the
+  // project's files after them, `/` offers commands.
+  const menu = buildMenu({
+    text,
+    members: members.map((member: { agent_id: string; name: string }) => ({
+      id: member.agent_id,
+      name: mentionLabel(member, members),
+      busy:
+        agents.find((agent) => agent.id === member.agent_id)?.status ===
+        "working",
+    })),
+    files: projectFiles.data ?? [],
+    commands: SLASH_COMMANDS,
+    dismissed: menuDismissed || blocked !== undefined,
+  });
   const matches: SlashCommand[] =
-    menuDismissed || blocked
+    menu === null
       ? []
-      : mentionQuery
-        ? [
-            {
-              name: translateText("mentions.everyoneCommand") as `@${string}`,
-              description: translateText("mentions.notifyEveryone"),
-            },
-            ...members.map((p) => ({
-              name: `@${mentionLabel(p, members)}` as const,
-              description:
-                agents.find((a) => a.id === p.agent_id)?.status === "working"
-                  ? translateText("mentions.busyHint")
-                  : translateText("mentions.replyHint"),
-            })),
-          ].filter((c) =>
-            c.name
-              .slice(1)
-              .toLowerCase()
-              .startsWith(mentionQuery[1].toLowerCase()),
-          )
-        : query === null
-          ? []
-          : SLASH_COMMANDS.filter((c) => c.name.slice(1).startsWith(query));
+      : menu.items.map(
+          (item): SlashCommand =>
+            item.kind === "command"
+              ? { name: item.value as SlashName, description: item.description }
+              : {
+                  name: item.value.trim() as `@${string}`,
+                  description:
+                    item.kind === "file"
+                      ? translateText("composer.fileHint")
+                      : item.hint
+                        ? translateText("mentions.busyHint")
+                        : translateText("mentions.replyHint"),
+                },
+        );
   const menuOpen = matches.length > 0;
   const menuActive = Math.min(menuIndex, matches.length - 1);
 

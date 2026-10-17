@@ -24,7 +24,8 @@
     "placeholder": "Message {{agentName}}…",
     "createAgentFirst": "Create an agent first",
     "noAgentSelected": "No agent selected",
-    "waitForUploads": "Wait for attachments to finish uploading before sending."
+    "waitForUploads": "Wait for attachments to finish uploading before sending.",
+    "fileHint": "file"
   },
   "tools": {
     "expandHint": "(click to expand)"

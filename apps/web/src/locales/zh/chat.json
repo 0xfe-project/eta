@@ -24,7 +24,8 @@
     "placeholder": "发消息给 {{agentName}}…",
     "createAgentFirst": "先创建智能体",
     "noAgentSelected": "未选择智能体",
-    "waitForUploads": "附件上传中，完成后才能发送。"
+    "waitForUploads": "附件上传中，完成后才能发送。",
+    "fileHint": "文件"
   },
   "tools": {
     "expandHint": "（点击展开）"
