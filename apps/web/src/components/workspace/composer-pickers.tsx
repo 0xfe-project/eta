@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
@@ -70,6 +71,18 @@ function usePatchModel(sessionId: string | undefined) {
 const CHIP =
   "inline-flex h-7 min-w-0 items-center gap-1 border border-border px-2 font-mono text-[11px] text-muted-foreground outline-none hover:border-border-strong focus-visible:ring-1 focus-visible:ring-ring";
 
+async function fetchModels() {
+  const response = await fetch("/api/llm/v1/models");
+  return response.ok
+    ? ((await response.json()) as {
+        id: string;
+        connector: string;
+        display_name: string;
+        available: boolean;
+      }[])
+    : [];
+}
+
 export function ModelChip({ sessionId }: { sessionId: string | undefined }) {
   const { t: translateText } = useTranslation(["chat", "common"] as const);
   const { data: live } = useSessionModel(sessionId);
@@ -77,17 +90,48 @@ export function ModelChip({ sessionId }: { sessionId: string | undefined }) {
   const { data: models } = useQuery({
     queryKey: ["llm", "models"],
     staleTime: 60_000,
+    queryFn: fetchModels,
+  });
+  // Which service each group is: the connection list knows the labels (a provider's own
+  // name first, the preset's name otherwise), so the menu can say "公司账号" instead of
+  // "openai-compatible".
+  const { data: connections } = useQuery({
+    queryKey: ["llm", "connections"],
+    staleTime: 60_000,
     queryFn: async () => {
-      const response = await fetch("/api/llm/v1/models");
+      const response = await fetch("/api/llm/v1/connections");
       return response.ok
         ? ((await response.json()) as {
             id: string;
-            display_name: string;
-            available: boolean;
+            connector: string;
+            label: string;
           }[])
         : [];
     },
   });
+  // eta-old groups models under their provider (one optgroup per provider); a flat list
+  // answers "which model" but never "from where", and the same model name can come from
+  // two places at once.
+  const groups: {
+    connector: string;
+    label: string;
+    models: ReturnType<typeof fetchModels> extends Promise<infer T> ? T : never;
+  }[] = [];
+  for (const model of models ?? []) {
+    let group = groups.find((entry) => entry.connector === model.connector);
+    if (!group) {
+      group = {
+        connector: model.connector,
+        label:
+          (connections ?? []).find(
+            (connection) => connection.connector === model.connector,
+          )?.label ?? model.connector,
+        models: [],
+      };
+      groups.push(group);
+    }
+    group.models.push(model);
+  }
   if (sessionId === undefined) return null;
   const current = live?.model ?? "";
   const pending = patch.isPending ? patch.variables?.model : undefined;
@@ -111,17 +155,26 @@ export function ModelChip({ sessionId }: { sessionId: string | undefined }) {
         <DropdownMenuLabel>
           {translateText("chat:composer.model")}
         </DropdownMenuLabel>
-        {(models ?? []).map((model) => (
-          <DropdownMenuItem
-            key={model.id}
-            disabled={!model.available}
-            onSelect={() => patch.mutate({ model: model.id })}
-          >
-            <span className="min-w-0 flex-1 truncate">
-              {model.display_name}
-            </span>
-            <span className="font-mono text-[10px] text-faint">{model.id}</span>
-          </DropdownMenuItem>
+        {groups.map((group) => (
+          <DropdownMenuGroup key={group.connector}>
+            <DropdownMenuLabel className="text-[10px] tracking-[0.12em] text-faint uppercase">
+              {group.label}
+            </DropdownMenuLabel>
+            {group.models.map((model) => (
+              <DropdownMenuItem
+                key={model.id}
+                disabled={!model.available}
+                onSelect={() => patch.mutate({ model: model.id })}
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  {model.display_name}
+                </span>
+                <span className="font-mono text-[10px] text-faint">
+                  {model.id}
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
