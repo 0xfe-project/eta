@@ -204,7 +204,7 @@ export function Workspace({
       </div>
       <div
         className={cn(
-          "min-h-0 min-w-0 flex-1 flex-col p-2 md:flex md:p-3",
+          "min-h-0 min-w-0 flex-1 flex-col",
           groupId ? "flex" : "hidden",
         )}
       >
@@ -227,19 +227,15 @@ export function Workspace({
               : translateText("chat:groups.info")
           }
         />
-        <main
-          id="main"
-          className={cn(
-            "isolate grid min-h-0 flex-1 gap-3",
-            !collapsed && "lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]",
-          )}
-        >
+        <main id="main" className="isolate flex min-h-0 flex-1">
           {/* The chat alone stops at the content width; the panel beside it
               keeps its own. */}
           <div
             className={cn(
-              "relative mx-auto min-h-0 w-full max-w-content min-w-0 md:px-3",
-              mobilePanel === "workspace" && "hidden md:block",
+              // Flush with the gutters: no padding, no card, no gap. The column *is* the band
+              // down the middle — one object from the header rule to the bottom of the window.
+              "relative flex min-h-0 w-full min-w-0 flex-col",
+              mobilePanel === "workspace" && "hidden md:flex",
             )}
           >
             <Button
@@ -255,129 +251,123 @@ export function Workspace({
             >
               <SidebarSimpleIcon aria-hidden="true" className="-scale-x-100" />
             </Button>
-            <div className="flex min-h-0 min-w-0 flex-col">
-              <ChatHeader
-                group={group}
-                onInfo={showInfo}
-                workspaceOpen={!collapsed}
-                onOpenWorkspace={showPanel}
-              />
-              <ChatPanel
-                groupId={group?.id}
-                groupName={group?.name}
-                group={group}
-                agents={agents}
-                groups={groups}
-                activeReplies={chat.data?.messages ?? []}
-                model={
-                  members.length === 1
-                    ? (agents.find((a) => a.id === members[0].agent_id)
-                        ?.model ?? undefined)
-                    : members.map((p) => p.name).join(" · ")
-                }
-                blocked={blocked}
-                // Not a blocker: the group works without a folder, it just works somewhere nobody
-                // chose. The way out sits next to the sentence.
-                notice={<UnboundFolderNotice group={group} />}
-                messages={history.messages}
-                loading={!chat.data || history.loading}
-                hasOlder={history.hasOlder}
-                loadingOlder={history.loadingOlder}
-                onLoadOlder={history.loadOlder}
-                interactions={waiting}
-                connectionLost={connectionLost}
-                outgoing={outgoing}
-                onRetry={outbox.retry}
-                onEdit={outbox.edit}
-                onDiscard={outbox.discard}
-                onResend={(parts, agentId) => {
-                  if (!group) return;
-                  const mentions = agentId
-                    ? [agentId]
-                    : targets(partsText(parts));
-                  if (partsText(parts) === "/compact" && parts.length === 1)
-                    compact.mutate(
-                      { groupId: group.id, mentions },
-                      { onError },
+            <ChatHeader
+              group={group}
+              onInfo={showInfo}
+              workspaceOpen={!collapsed}
+              onOpenWorkspace={showPanel}
+            />
+            <ChatPanel
+              groupId={group?.id}
+              groupName={group?.name}
+              group={group}
+              agents={agents}
+              groups={groups}
+              activeReplies={chat.data?.messages ?? []}
+              model={
+                members.length === 1
+                  ? (agents.find((a) => a.id === members[0].agent_id)?.model ??
+                    undefined)
+                  : members.map((p) => p.name).join(" · ")
+              }
+              blocked={blocked}
+              // Not a blocker: the group works without a folder, it just works somewhere nobody
+              // chose. The way out sits next to the sentence.
+              notice={<UnboundFolderNotice group={group} />}
+              messages={history.messages}
+              loading={!chat.data || history.loading}
+              hasOlder={history.hasOlder}
+              loadingOlder={history.loadingOlder}
+              onLoadOlder={history.loadOlder}
+              interactions={waiting}
+              connectionLost={connectionLost}
+              outgoing={outgoing}
+              onRetry={outbox.retry}
+              onEdit={outbox.edit}
+              onDiscard={outbox.discard}
+              onResend={(parts, agentId) => {
+                if (!group) return;
+                const mentions = agentId
+                  ? [agentId]
+                  : targets(partsText(parts));
+                if (partsText(parts) === "/compact" && parts.length === 1)
+                  compact.mutate({ groupId: group.id, mentions }, { onError });
+                else outbox.send(group.id, parts, "queue", mentions);
+              }}
+              error={
+                (chat.error ?? history.error)
+                  ? translateText("chat:errors.loadConversation", {
+                      message: (chat.error ?? history.error)?.message,
+                    })
+                  : undefined
+              }
+              draft={draft}
+              onDraftChange={setDraft}
+              onFiles={(files) =>
+                (group ? files : []).map((file) => {
+                  const id = crypto.randomUUID();
+                  void upload(group!.id, id, file);
+                  return {
+                    type: "file" as const,
+                    id,
+                    name:
+                      file.name || translateText("chat:attachments.pastedFile"),
+                    contentType: file.type || "application/octet-stream",
+                    size: file.size,
+                  };
+                })
+              }
+              onSend={(parts, mode) => {
+                if (!group) return openEditor();
+                const mentions = targets(partsText(parts));
+                if (mode === "steer") {
+                  for (const id of mentions) {
+                    const active = chat.data?.messages.find(
+                      (m) =>
+                        m.agent_id === id &&
+                        [
+                          "responding",
+                          "waiting_for_input",
+                          "stopping",
+                        ].includes(m.status),
                     );
-                  else outbox.send(group.id, parts, "queue", mentions);
-                }}
-                error={
-                  (chat.error ?? history.error)
-                    ? translateText("chat:errors.loadConversation", {
-                        message: (chat.error ?? history.error)?.message,
-                      })
-                    : undefined
-                }
-                draft={draft}
-                onDraftChange={setDraft}
-                onFiles={(files) =>
-                  (group ? files : []).map((file) => {
-                    const id = crypto.randomUUID();
-                    void upload(group!.id, id, file);
-                    return {
-                      type: "file" as const,
-                      id,
-                      name:
-                        file.name ||
-                        translateText("chat:attachments.pastedFile"),
-                      contentType: file.type || "application/octet-stream",
-                      size: file.size,
-                    };
-                  })
-                }
-                onSend={(parts, mode) => {
-                  if (!group) return openEditor();
-                  const mentions = targets(partsText(parts));
-                  if (mode === "steer") {
-                    for (const id of mentions) {
-                      const active = chat.data?.messages.find(
-                        (m) =>
-                          m.agent_id === id &&
-                          [
-                            "responding",
-                            "waiting_for_input",
-                            "stopping",
-                          ].includes(m.status),
+                    if (active && active.group_id !== group.id) {
+                      const name = agents.find((a) => a.id === id)?.name;
+                      const elsewhere = groups.find(
+                        (g) => g.id === active.group_id,
+                      )?.name;
+                      toast.info(
+                        translateText("chat:notices.messageQueuedElsewhere", {
+                          agentName: name,
+                          groupName: elsewhere,
+                        }),
                       );
-                      if (active && active.group_id !== group.id) {
-                        const name = agents.find((a) => a.id === id)?.name;
-                        const elsewhere = groups.find(
-                          (g) => g.id === active.group_id,
-                        )?.name;
-                        toast.info(
-                          translateText("chat:notices.messageQueuedElsewhere", {
-                            agentName: name,
-                            groupName: elsewhere,
-                          }),
-                        );
-                      }
                     }
                   }
-                  outbox.send(group.id, parts, mode, mentions);
-                  setDraft([]);
-                }}
-                onCompact={() => {
-                  if (!group) return;
-                  if (!selectedTargets.length)
-                    return toast.error(
-                      translateText("chat:commands.compactRequiresMention"),
-                    );
-                  compact.mutate(
-                    { groupId: group.id, mentions: selectedTargets },
-                    { onError },
-                  );
-                  setDraft([]);
-                }}
-                onStop={(id) => stopReply.mutate(id, { onError })}
-                onStopAll={() => {
-                  if (group) actions.stop.mutate(group.id, { onError });
-                }}
-                onAnswer={(id, value) =>
-                  answer.mutate({ id, value }, { onError })
                 }
-              />
-            </div>
+                outbox.send(group.id, parts, mode, mentions);
+                setDraft([]);
+              }}
+              onCompact={() => {
+                if (!group) return;
+                if (!selectedTargets.length)
+                  return toast.error(
+                    translateText("chat:commands.compactRequiresMention"),
+                  );
+                compact.mutate(
+                  { groupId: group.id, mentions: selectedTargets },
+                  { onError },
+                );
+                setDraft([]);
+              }}
+              onStop={(id) => stopReply.mutate(id, { onError })}
+              onStopAll={() => {
+                if (group) actions.stop.mutate(group.id, { onError });
+              }}
+              onAnswer={(id, value) =>
+                answer.mutate({ id, value }, { onError })
+              }
+            />
           </div>
           {drawerOpen ? (
             <div
@@ -386,6 +376,8 @@ export function Workspace({
               onClick={() => setMobilePanel("chat")}
             />
           ) : null}
+          {/* The gutter belongs to the panel's left edge: drag it to size the chat by sizing the
+              panel, the same line the header rule runs into. */}
           <WorkspacePanel
             view={view}
             onViewChange={onViewChange}

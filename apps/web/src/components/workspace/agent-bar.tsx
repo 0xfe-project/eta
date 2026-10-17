@@ -147,7 +147,7 @@ export function ChatHeader({
   const openAgent = useOpenAgent();
   const members = group?.participants.filter((p) => p.member) ?? [];
   return (
-    <header className="flex h-11 shrink-0 items-center gap-2 border-b px-2">
+    <header className="band gap-2 px-2">
       <h1 className="flex min-w-0 items-center text-sm font-medium">
         {group ? (
           <AgentSwitch group={group} onInfo={onInfo}>

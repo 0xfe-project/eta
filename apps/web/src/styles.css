@@ -52,8 +52,27 @@
     position: relative;
     flex: none;
     width: 1px;
-    background: var(--border);
     touch-action: none;
+    /*
+     * A gutter has to draw the same three things a column does, at the same offsets: the header
+     * band, the 1px rule under it, and the content field below. Painting it with one colour was
+     * not enough — each column draws its own rule inside its own box, so a gutter that wore the
+     * band but drew no rule left a 4px hole in the line under the headers, and a broken rule
+     * reads as a broken band however well the fills line up.
+     */
+    background-image:
+      linear-gradient(
+        to bottom,
+        transparent 0 calc(var(--header-band) - 1px),
+        var(--border) calc(var(--header-band) - 1px) var(--header-band),
+        transparent var(--header-band)
+      ),
+      linear-gradient(
+        to bottom,
+        var(--surface) 0 var(--header-band),
+        transparent var(--header-band)
+      );
+    background-color: var(--background);
   }
   .pane-divider::after {
     content: "";
@@ -67,6 +86,21 @@
     width: 2px;
     background: var(--foreground);
     cursor: col-resize;
+  }
+
+  /*
+   * The one header band every column wears: same height, same field, same rule underneath.
+   * Without it three headers at three heights read as three separate bars, and the window stops
+   * looking like one object.
+   */
+  .band {
+    display: flex;
+    height: var(--header-band);
+    flex: none;
+    align-items: center;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
   }
 
   .markdown {
@@ -151,6 +185,8 @@
   --shadow-xl: 8px 8px 0 0 var(--shadow-ink);
   --shadow-2xl: 12px 12px 0 0 var(--shadow-ink);
   --spacing: 0.225rem;
+  /* One header height for every column, so the rule under it is one line across the window. */
+  --header-band: 40px;
   --font-heading: var(--font-sans);
   --font-sans:
     var(--user-font-sans, "Geist Variable"), ui-sans-serif, system-ui,
@@ -197,6 +233,7 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
+  --color-surface: var(--surface);
   --radius-xs: 0px;
   --radius-full: 0px;
   --radius-sm: 0px;
@@ -225,6 +262,9 @@
    */
   --background: oklch(0.98 0 0);
   --foreground: oklch(0.1 0 0);
+  /* The rails' own field: one step away from the page, so the columns read as structure
+     rather than as three copies of the page. */
+  --surface: oklch(0.94 0 0);
   --card: oklch(0.98 0 0);
   --card-foreground: oklch(0.1 0 0);
   --popover: oklch(0.98 0 0);
@@ -281,6 +321,7 @@
      rise in lightness and lose chroma so they stay legible on a dark page. */
   --shadow-ink: oklch(0 0 0 / 80%);
   --background: oklch(0.1 0 0);
+  --surface: oklch(0.14 0 0);
   --foreground: oklch(0.98 0 0);
   --card: oklch(0.14 0 0);
   --card-foreground: oklch(0.98 0 0);

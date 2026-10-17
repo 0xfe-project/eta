@@ -78,11 +78,13 @@ export function Sidebar({ width }: { width?: number } = {}) {
       // a first visit gets.
       style={width === undefined ? undefined : { width }}
       className={cn(
-        "hidden shrink-0 flex-col overflow-y-auto border-r bg-sidebar md:flex",
+        "hidden shrink-0 flex-col overflow-y-auto border-r bg-surface md:flex",
         width === undefined && "w-48 lg:w-56",
       )}
     >
-      <div className="flex h-12 shrink-0 items-center justify-between pr-2 pl-4">
+      {/* The left end of the one header band (styles.css, `.band`): same height, same field,
+          same rule under it as the chat column and the panel. */}
+      <div className="band justify-between pr-2 pl-4">
         <Link to="/workspace" className="text-lg font-semibold tracking-tight">
           axp.
         </Link>

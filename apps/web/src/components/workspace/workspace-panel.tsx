@@ -81,11 +81,14 @@ export function WorkspacePanel({
       value={view}
       onValueChange={(value) => onViewChange(value as WorkspaceView)}
       className={cn(
-        "@container/panel relative z-10 min-h-0 min-w-0 gap-0 overflow-hidden border border-border/70 bg-background shadow-md",
+        // The third column: flush with the window, its own field, its own band on top. No border
+        // and no shadow — the gutter beside it is the separation, and a card here would make the
+        // panel look like something floating over the chat rather than the window's right third.
+        "@container/panel relative z-10 min-h-0 min-w-0 gap-0 overflow-hidden border-l bg-surface",
         className,
       )}
     >
-      <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 pt-3">
+      <div className="band grid grid-cols-[1fr_auto_1fr] gap-2 px-3">
         <div className="flex justify-self-start">
           {onCollapse ? (
             <Button
