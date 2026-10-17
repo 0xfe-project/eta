@@ -113,6 +113,82 @@ export const inspectPlugin = {
       ),
     );
 
+    // What a conversation is running on, and how hard it is thinking.
+    //
+    // Two properties of the session's own configuration, read live every turn by the runner: a
+    // patch here is a patch the next turn picks up, which is why the panel can show "asked for X,
+    // running Y" and be telling the truth while a turn is in flight.
+    plugin.effect(() =>
+      plugin.routes.register(
+        "GET",
+        "/sessions/:id/model",
+        async (_request, params) => {
+          const id = params.id ?? "";
+          const managed = await sessions.session(id);
+          if (managed === undefined) return missing(id);
+          const config = managed.session.config;
+          return Response.json({
+            model:
+              config.model === undefined
+                ? null
+                : `${config.model.provider}:${config.model.modelId}`,
+            thinking_level: config.thinkingLevel ?? "off",
+          });
+        },
+      ),
+    );
+
+    plugin.effect(() =>
+      plugin.routes.register(
+        "PATCH",
+        "/sessions/:id/model",
+        async (request, params) => {
+          const id = params.id ?? "";
+          const managed = await sessions.session(id);
+          if (managed === undefined) return missing(id);
+          const body = await readJson(request);
+          const patch: Record<string, unknown> = {};
+          const model = typeof body.model === "string" ? body.model : undefined;
+          if (model !== undefined) {
+            const at = model.indexOf(":");
+            if (at <= 0 || at === model.length - 1) {
+              return errorResponse(
+                400,
+                "BAD_MODEL",
+                `not a model id (provider:model): ${model}`,
+                crypto.randomUUID(),
+              );
+            }
+            patch.model = {
+              provider: model.slice(0, at),
+              modelId: model.slice(at + 1),
+            };
+          }
+          if (typeof body.thinking_level === "string")
+            patch.thinkingLevel = body.thinking_level;
+          try {
+            managed.session.kernel.config.update(patch);
+          } catch (error) {
+            // Validation lives in the kernel; this surface only reports what it said.
+            return errorResponse(
+              400,
+              "BAD_CONFIG",
+              error instanceof Error ? error.message : "invalid configuration",
+              crypto.randomUUID(),
+            );
+          }
+          const config = managed.session.config;
+          return Response.json({
+            model:
+              config.model === undefined
+                ? null
+                : `${config.model.provider}:${config.model.modelId}`,
+            thinking_level: config.thinkingLevel ?? "off",
+          });
+        },
+      ),
+    );
+
     // The goal a conversation is chasing.
     //
     // The kernel already has the whole machine — active / paused / achieved, an anti-spin limit,

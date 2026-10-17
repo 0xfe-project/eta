@@ -179,6 +179,40 @@ describe("a session, described to a panel", () => {
     expect(empty.status).toBe(400);
   });
 
+  it("reads and moves the model and thinking level a turn will use", async () => {
+    const host = await start(await scratch());
+    const id = await openSession(host);
+
+    const before = (await (
+      await fetch(url(host, `/sessions/${id}/model`))
+    ).json()) as { model: string | null; thinking_level: string };
+    expect(before.model).toContain(":");
+    expect(before.thinking_level).toBeTruthy();
+
+    const patched = await fetch(url(host, `/sessions/${id}/model`), {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "local:m2", thinking_level: "high" }),
+    });
+    expect(patched.status).toBe(200);
+    expect(await patched.json()).toEqual({
+      model: "local:m2",
+      thinking_level: "high",
+    });
+
+    // A model id that is not `provider:model` is refused rather than half-applied.
+    const bad = await fetch(url(host, `/sessions/${id}/model`), {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "nonsense" }),
+    });
+    expect(bad.status).toBe(400);
+    const after = (await (
+      await fetch(url(host, `/sessions/${id}/model`))
+    ).json()) as { model: string };
+    expect(after.model).toBe("local:m2");
+  });
+
   it("says a session is not open rather than reporting zeros", async () => {
     const host = await start(await scratch());
     for (const path of ["prompt", "tools", "usage"]) {
