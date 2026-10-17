@@ -1,12 +1,26 @@
-import type { Attachment } from "@/api/control-plane.gen";
+import type { Attachment as WireAttachment } from "@/api/control-plane.gen";
 import { translate } from "@/lib/i18n";
+
+/**
+ * An uploaded file, with the one thing the host added: where it landed in the project.
+ *
+ * The path is what makes an attachment mean something — the message references it, and the agent
+ * opens it the way it opens any other file. The web's generated types still come from the old
+ * control plane's document, which has no such field, so it is added here rather than faked.
+ */
+export interface Attachment extends WireAttachment {
+  id: string;
+  name: string;
+  content_type: string;
+  size: number;
+  /** Where it landed, relative to the group's folder. */
+  path?: string | null;
+}
 
 // What the chat composer holds: text the user typed, with blocks among it
 // where they pasted long text or files. Blocks are the composer's own: a
 // long paste goes out as the text it stands for, a file as an attachment
 // uploaded the moment it was pasted.
-
-export type { Attachment };
 
 /**
  * A paste longer than this (in characters, counted as Unicode code points,
@@ -95,6 +109,11 @@ export function messageParts(
     }
     const attachment = uploaded(part.id);
     if (!attachment) return undefined;
+    // A file is a file in the project: the message carries the reference, and the text beside it
+    // says the same thing, so what the agent reads and what the person sees agree.
+    if (typeof attachment.path === "string" && attachment.path.length > 0) {
+      parts.push({ type: "text", text: `@${attachment.path}` });
+    }
     parts.push({ type: "attachment", attachment });
   }
   return parts;

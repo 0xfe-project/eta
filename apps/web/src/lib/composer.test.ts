@@ -85,3 +85,45 @@ describe("a draft as a message", () => {
     expect(attachments[file.id]).toEqual(csv);
   });
 });
+
+describe("a file becomes a reference", () => {
+  it("says where it is, so the agent can open it", () => {
+    const withPath: Attachment = {
+      ...csv,
+      path: ".eta/uploads/20261017-data.csv",
+    };
+    const parts = messageParts(
+      [
+        {
+          type: "file",
+          id: "a1",
+          name: "data.csv",
+          contentType: "text/csv",
+          size: 8,
+        },
+      ],
+      () => withPath,
+    );
+    expect(parts?.[0]).toEqual({
+      type: "text",
+      text: "@.eta/uploads/20261017-data.csv",
+    });
+    expect(parts?.[1]?.type).toBe("attachment");
+  });
+
+  it("an upload with no path adds nothing to the text", () => {
+    const parts = messageParts(
+      [
+        {
+          type: "file",
+          id: "a1",
+          name: "data.csv",
+          contentType: "text/csv",
+          size: 8,
+        },
+      ],
+      () => csv,
+    );
+    expect(parts).toEqual([{ type: "attachment", attachment: csv }]);
+  });
+});
