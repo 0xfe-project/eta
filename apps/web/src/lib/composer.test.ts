@@ -127,3 +127,29 @@ describe("a file becomes a reference", () => {
     expect(parts).toEqual([{ type: "attachment", attachment: csv }]);
   });
 });
+
+describe("a long paste is a file too", () => {
+  it("carries the path when the paste was written into the project", () => {
+    const stored: Attachment = {
+      ...csv,
+      name: "pasted.txt",
+      path: ".eta/uploads/20261017-pasted.txt",
+    };
+    const parts = messageParts(
+      [{ type: "paste", id: "p1", text: "很多行" }],
+      (id) => (id === "p1" ? stored : undefined),
+    );
+    expect(parts).toEqual([
+      { type: "text", text: "@.eta/uploads/20261017-pasted.txt" },
+      { type: "text", text: "很多行" },
+    ]);
+  });
+
+  it("and is just text when the write did not happen", () => {
+    const parts = messageParts(
+      [{ type: "paste", id: "p1", text: "很多行" }],
+      () => undefined,
+    );
+    expect(parts).toEqual([{ type: "text", text: "很多行" }]);
+  });
+});

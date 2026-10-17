@@ -9,7 +9,7 @@ import type {
   SendMode,
 } from "@/queries/chat";
 import type { Outgoing } from "@/queries/outbox";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
   memo,
@@ -41,6 +41,7 @@ import {
   MAX_ATTACHMENTS,
   MAX_MESSAGE_CHARS,
   messageParts,
+  pasteFileName,
   plainDraft,
 } from "@/lib/composer";
 import { buildMenu, mentionAt } from "@/lib/composer-menu";
@@ -51,7 +52,7 @@ import { readTheme, setTheme } from "@/lib/theme";
 import { summarizeArgs } from "@/lib/tool-summary";
 import { cn } from "@/lib/utils";
 import { ACTIVE_STATUSES } from "@/queries/chat";
-import { useOutbox } from "@/queries/outbox";
+import { upload, useOutbox } from "@/queries/outbox";
 import { AgentAvatar } from "./agent-identity";
 import { AttachmentChip, PastedText } from "./composer-block";
 import { ComposerEditor } from "./composer-editor";
@@ -826,6 +827,7 @@ export function ChatPanel({
   // The project's files, fetched the first time the `@` menu opens: a completion list nobody is
   // looking at is a directory walk nobody asked for.
   const atOpen = mentionAt(text) !== null;
+  const queryClient = useQueryClient();
   const projectFiles = useQuery({
     queryKey: ["files", groupId],
     enabled: atOpen && groupId !== undefined,
@@ -965,6 +967,19 @@ export function ChatPanel({
       setMenuDismissed(false);
     },
     onFiles,
+    onPaste: (id: string, pasted: string) => {
+      if (groupId === undefined) return;
+      void upload(
+        groupId,
+        id,
+        new File([pasted], pasteFileName(), {
+          type: "text/plain;charset=utf-8",
+        }),
+      ).then(() => {
+        // The file list the `@` menu reads is now out of date: a file just appeared in the project.
+        void queryClient.invalidateQueries({ queryKey: ["files", groupId] });
+      });
+    },
     disabled: Boolean(blocked),
     onCompositionStart: () => {
       ime.current.composing = true;

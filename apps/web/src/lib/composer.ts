@@ -104,6 +104,12 @@ export function messageParts(
   const parts: OutgoingPart[] = [];
   for (const part of draft) {
     if (part.type !== "file") {
+      // A long paste was also written into the project, so the message can carry its path as well
+      // as its text: the block the person sees, the file the agent can open.
+      const stored = part.type === "paste" ? uploaded(part.id) : undefined;
+      if (typeof stored?.path === "string" && stored.path.length > 0) {
+        parts.push({ type: "text", text: `@${stored.path}` });
+      }
       if (part.text) parts.push({ type: "text", text: part.text });
       continue;
     }
