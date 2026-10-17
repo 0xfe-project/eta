@@ -1,4 +1,4 @@
-import { afterEach, expect, it, rstest } from "@rstest/core";
+import { afterEach, expect, it } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   createMemoryHistory,
@@ -124,12 +124,6 @@ async function mount(path = "/?group=team&view=memory") {
   });
   return { container, router };
 }
-
-const selectAgent = (id: string) =>
-  useWorkspaceStore.getState().setWorkspace((workspace) => ({
-    ...workspace,
-    selectedAgentId: id,
-  }));
 
 const tabs = (container: HTMLElement) =>
   [...container.querySelectorAll('[aria-label="工作区标签"] [role="tab"]')].map(
