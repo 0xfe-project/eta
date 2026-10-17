@@ -1,6 +1,6 @@
 import type { SessionManager } from "@eta/server";
-import type { InteractionStore } from "../interactions/store";
 import type { Context } from "cordis";
+import type { InteractionStore } from "../interactions/store";
 import type { PluginContext } from "../plugin-api";
 import { errorResponse } from "../routes";
 
