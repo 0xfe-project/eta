@@ -221,6 +221,7 @@
   "rail": {
     "replies": "Agent replies",
     "prompts": "Your messages",
-    "skipped": "{{count}} skipped"
+    "skipped": "{{count}} skipped",
+    "newActivity": "New activity"
   }
 }

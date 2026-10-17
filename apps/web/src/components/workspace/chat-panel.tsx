@@ -266,19 +266,27 @@ function useTranscriptScroll({
   const contentRef = useRef<HTMLDivElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
+  // Whether the view is glued to the live end. Both a ref (for the resize observer, which must not
+  // re-subscribe) and state (for the button that offers to go back).
+  const [pinned, setPinned] = useState(true);
   // scrollHeight - scrollTop as of the last layout, to restore after a prepend.
   const fromBottomRef = useRef(0);
 
   function remember() {
     const el = scrollRef.current;
     if (!el) return;
-    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 32;
+    // 32px: close enough that the last line is still readable, far enough that a stray wheel tick
+    // does not count as leaving.
+    const glued = el.scrollHeight - el.scrollTop - el.clientHeight < 32;
+    atBottomRef.current = glued;
+    if (glued !== pinned) setPinned(glued);
     fromBottomRef.current = el.scrollHeight - el.scrollTop;
   }
   function toBottom() {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
     atBottomRef.current = true;
+    setPinned(true);
   }
 
   // A new agent's transcript opens at its end.
@@ -322,6 +330,7 @@ function useTranscriptScroll({
     topRef,
     onScroll: remember,
     toBottom,
+    pinned,
     /** Jump to one message by id: the rail's whole job. */
     jumpTo: (id: string) => {
       const el = scrollRef.current?.querySelector<HTMLElement>(
@@ -1167,6 +1176,28 @@ export function ChatPanel({
             />
           </div>
         </div>
+        {/* Off the live end: say there is more, and who is adding it. Following resumes the
+            moment you scroll back down, or here. */}
+        {transcript.pinned ? null : (
+          <button
+            type="button"
+            onClick={() => transcript.toBottom()}
+            className="sticky bottom-2 z-10 mx-auto flex items-center gap-1 border border-border-strong bg-background px-2 py-1 text-xs shadow-md"
+          >
+            ↓ {translateText("chat:rail.newActivity")}
+            {activeReplies.length > 0
+              ? ` · ${members
+                  .filter((member: { agent_id: string }) =>
+                    activeReplies.some(
+                      (reply: { agent_id?: string | null }) =>
+                        reply.agent_id === member.agent_id,
+                    ),
+                  )
+                  .map((member: { name: string }) => member.name)
+                  .join("、")}`
+              : ""}
+          </button>
+        )}
       </div>
       <form
         ref={formRef}

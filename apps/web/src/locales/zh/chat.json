@@ -221,6 +221,7 @@
   "rail": {
     "replies": "智能体的回复",
     "prompts": "你发的消息",
-    "skipped": "跳过 {{count}} 条"
+    "skipped": "跳过 {{count}} 条",
+    "newActivity": "新活动"
   }
 }
