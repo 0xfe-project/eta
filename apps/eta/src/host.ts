@@ -28,6 +28,7 @@ import { artifactsPlugin } from "./bundled/artifacts";
 import { compatPlugin } from "./bundled/compat";
 import { groupsPlugin } from "./bundled/groups";
 import { hostPlugin } from "./bundled/host";
+import { inspectPlugin } from "./bundled/inspect";
 import { routinesPlugin } from "./bundled/routines";
 import { sessionsPlugin } from "./bundled/sessions";
 import { tasksPlugin } from "./bundled/tasks";
@@ -382,6 +383,8 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   const fibers = [
     ctx.plugin(hostPlugin, { status }),
     ctx.plugin(sessionsPlugin, { sessions, hub }),
+    // What a session is made of (P7): its prompt, its tools, what it has spent. Reads, all three.
+    ctx.plugin(inspectPlugin, { sessions }),
     ctx.plugin(agentsPlugin, { agents, groups, hub, models }),
     ctx.plugin(usagePlugin, { usage }),
     // The management surface a settings page reads (P1.4): derived, never stored.
