@@ -223,5 +223,8 @@
     "prompts": "你发的消息",
     "skipped": "跳过 {{count}} 条",
     "newActivity": "新活动"
+  },
+  "panel": {
+    "sessionJson": "会话 json · {{size}}"
   }
 }

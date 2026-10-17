@@ -223,5 +223,8 @@
     "prompts": "Your messages",
     "skipped": "{{count}} skipped",
     "newActivity": "New activity"
+  },
+  "panel": {
+    "sessionJson": "session json · {{size}}"
   }
 }

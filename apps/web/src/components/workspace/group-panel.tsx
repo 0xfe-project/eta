@@ -481,7 +481,9 @@ function MemberBlock({
         <p className="mt-1 text-[10px] text-faint">
           {translateText("chat:groups.members.noSession")}
         </p>
-      ) : null}
+      ) : (
+        <LongContent sessionId={sessionId} />
+      )}
       {goal !== undefined && goal !== null ? (
         <div className="mt-1 flex items-center gap-1 text-[10px]">
           <span
@@ -550,5 +552,66 @@ function MemberBlock({
         </AlertDialogContent>
       </AlertDialog>
     </li>
+  );
+}
+
+/**
+ * The three long things, as numbers until you ask for the text.
+ *
+ * A system prompt is thousands of characters and a tool list is a list; neither belongs open in a
+ * panel whose job is to be scanned. What fits on a line is the fact that makes them worth opening:
+ * how much of the prompt a provider can cache against how much is rewritten every generation, how
+ * many tools the model is actually offered, whether the conversation has been compacted.
+ *
+ * They open **in place** — a `<details>`, not a modal. The panel does not move, the block does not
+ * jump, and closing it puts you back exactly where you were reading.
+ */
+function LongContent({ sessionId }: { sessionId: string }) {
+  const { t: translateText } = useTranslation(["chat"] as const);
+  const { data: prompt } = useQuery({
+    queryKey: ["session-prompt", sessionId],
+    staleTime: 30_000,
+    queryFn: async () => {
+      const response = await fetch(`/sessions/${sessionId}/prompt`);
+      return response.ok
+        ? ((await response.json()) as {
+            sections: {
+              name: string;
+              stable: boolean;
+              chars: number;
+              text: string;
+            }[];
+            stable_chars: number;
+            adaptive_chars: number;
+            blocks: number;
+          })
+        : null;
+    },
+  });
+  return (
+    <details className="mt-1 text-[10px] text-muted-foreground [&_summary]:outline-none">
+      <summary className="cursor-pointer font-mono tabular-nums">
+        {prompt === undefined || prompt === null
+          ? "prompt · —"
+          : `stable ${tokens(prompt.stable_chars)} / adaptive ${tokens(prompt.adaptive_chars)} · ${prompt.blocks} blocks`}
+      </summary>
+      <ul className="mt-1 space-y-0.5">
+        {(prompt?.sections ?? []).map((section) => (
+          <li key={section.name} className="flex gap-2">
+            <span className="min-w-0 flex-1 truncate font-mono">
+              {section.name}
+            </span>
+            <span className="shrink-0 font-mono tabular-nums text-faint">
+              {section.stable ? "stable" : "adaptive"} · {tokens(section.chars)}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-1 text-faint">
+        {translateText("chat:panel.sessionJson", {
+          size: tokens(JSON.stringify(prompt ?? {}).length),
+        })}
+      </p>
+    </details>
   );
 }
