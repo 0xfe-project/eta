@@ -59,5 +59,8 @@
     "revisionFailed": "没能据此修订要求",
     "revising": "修订要求中…",
     "briefUpdated": "要求已更新为 v{{version}}"
+  },
+  "scope": {
+    "noGroup": "没有群"
   }
 }

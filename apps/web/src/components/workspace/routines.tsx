@@ -14,7 +14,7 @@ import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlayIcon } from "@phosphor-icons/react/Play";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Markdown } from "@/components/markdown";
@@ -45,6 +45,7 @@ import { RoutineForm } from "./routine-form";
 import { describeSchedule, when } from "./routine-format";
 import { useRoutineNav } from "./routine-nav";
 import { UsageLine } from "./usage-line";
+import { useGroups } from "./use-groups";
 
 const runStatusLabels: Record<RunStatus, string> = {
   get running() {
@@ -173,6 +174,28 @@ export function RoutineList({
   ] as const);
   const [, setNav] = useRoutineNav();
   const { data, error, refetch } = useRoutines();
+  const { current: group, groups: allGroups } = useGroups();
+  // Grouped by the conversation that owns them, because that is the question the overview answers:
+  // "which groups have something on a clock, and what". A flat list made you open each one to find
+  // out whose it is.
+  const sections = useMemo(() => {
+    const byGroup = new Map<string, { name: string; items: Routine[] }>();
+    for (const routine of data ?? []) {
+      const id = routine.group_id ?? "";
+      const name =
+        id.length === 0
+          ? translateText("scope.noGroup")
+          : (allGroups.find((candidate) => candidate.id === id)?.name ?? id);
+      const bucket = byGroup.get(id);
+      if (bucket === undefined) byGroup.set(id, { name, items: [routine] });
+      else bucket.items.push(routine);
+    }
+    return [...byGroup.entries()]
+      .sort(([left], [right]) =>
+        left === (group?.id ?? "") ? -1 : right === (group?.id ?? "") ? 1 : 0,
+      )
+      .map(([id, bucket]) => ({ id, ...bucket }));
+  }, [data, allGroups, group, translateText]);
   return (
     <div className="space-y-2">
       <div
@@ -211,38 +234,55 @@ export function RoutineList({
           {translateText("empty.description")}
         </Empty>
       ) : (
-        <ul aria-label={translateText("title")} className="-mx-2">
-          {data.map((routine) => (
-            <li key={routine.id}>
-              <button
-                type="button"
-                onClick={() =>
-                  void setNav({ routine: routine.id, run: null, edit: null })
-                }
-                aria-current={routine.id === selected ? "true" : undefined}
-                className={cn(
-                  "grid w-full grid-cols-[1fr_auto_5.5rem] items-center gap-4 px-2 py-2 text-left duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60 aria-[current]:bg-muted",
-                  !routine.enabled && "text-muted-foreground",
-                )}
-              >
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium">
-                    {routine.name}
-                  </span>
-                  <span className="block text-xs text-muted-foreground tabular-nums">
-                    {describeSchedule(routine.schedule)}
-                  </span>
-                </span>
-                <span className={routine.enabled ? undefined : "opacity-40"}>
-                  <History runs={routine.runs} length={bare ? 7 : 14} />
-                </span>
-                <span className="text-right text-xs text-muted-foreground tabular-nums">
-                  <NextRun routine={routine} />
-                </span>
-              </button>
-            </li>
+        <div aria-label={translateText("title")} className="-mx-2">
+          {sections.map((section) => (
+            <section key={section.id || "none"}>
+              <h3 className="px-2 pt-2 font-mono text-[10px] tracking-[0.12em] text-faint uppercase">
+                {section.name}
+              </h3>
+              <ul>
+                {section.items.map((routine) => (
+                  <li key={routine.id}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void setNav({
+                          routine: routine.id,
+                          run: null,
+                          edit: null,
+                        })
+                      }
+                      aria-current={
+                        routine.id === selected ? "true" : undefined
+                      }
+                      className={cn(
+                        "grid w-full grid-cols-[1fr_auto_5.5rem] items-center gap-4 px-2 py-2 text-left duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60 aria-[current]:bg-muted",
+                        !routine.enabled && "text-muted-foreground",
+                      )}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">
+                          {routine.name}
+                        </span>
+                        <span className="block text-xs text-muted-foreground tabular-nums">
+                          {describeSchedule(routine.schedule)}
+                        </span>
+                      </span>
+                      <span
+                        className={routine.enabled ? undefined : "opacity-40"}
+                      >
+                        <History runs={routine.runs} length={bare ? 7 : 14} />
+                      </span>
+                      <span className="text-right text-xs text-muted-foreground tabular-nums">
+                        <NextRun routine={routine} />
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );

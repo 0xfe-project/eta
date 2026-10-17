@@ -59,5 +59,8 @@
     "revisionFailed": "Could not revise the brief from this feedback",
     "revising": "Revising brief…",
     "briefUpdated": "Brief updated to v{{version}}"
+  },
+  "scope": {
+    "noGroup": "No group"
   }
 }
