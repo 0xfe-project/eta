@@ -46,6 +46,7 @@ import {
 import { buildMenu, mentionAt } from "@/lib/composer-menu";
 import { listSeparator, translate } from "@/lib/i18n";
 import { mentionedMembers, mentionLabel } from "@/lib/mentions";
+import { firstVisible } from "@/lib/rail";
 import { readTheme, setTheme } from "@/lib/theme";
 import { ACTIVE_STATUSES } from "@/queries/chat";
 import { useOutbox } from "@/queries/outbox";
@@ -54,6 +55,7 @@ import { AttachmentChip, PastedText } from "./composer-block";
 import { ComposerEditor } from "./composer-editor";
 import { GroupNotice } from "./group-notice";
 import { TaskMessage } from "./task-message";
+import { TranscriptRail } from "./transcript-rail";
 import { useWorkspaceStore } from "./workspace-store";
 
 type Activity = Extract<Block, { type: "activity" }>;
@@ -314,7 +316,32 @@ function useTranscriptScroll({
     return () => observer.disconnect();
   }, [hasOlder, loadingOlder, onLoadOlder]);
 
-  return { scrollRef, contentRef, topRef, onScroll: remember, toBottom };
+  return {
+    scrollRef,
+    contentRef,
+    topRef,
+    onScroll: remember,
+    toBottom,
+    /** Jump to one message by id: the rail's whole job. */
+    jumpTo: (id: string) => {
+      const el = scrollRef.current?.querySelector<HTMLElement>(
+        `[data-mid="${CSS.escape(id)}"]`,
+      );
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    },
+    /** The first message visible, so the rail can light where you are reading. */
+    active: () => {
+      const scroller = scrollRef.current;
+      if (scroller === null) return undefined;
+      const top = scroller.getBoundingClientRect().top;
+      const rows = [...scroller.querySelectorAll<HTMLElement>("[data-mid]")];
+      const offsets = rows.map((row) => ({
+        id: row.dataset.mid ?? "",
+        top: row.getBoundingClientRect().top - top,
+      }));
+      return firstVisible(offsets);
+    },
+  };
 }
 
 const NO_INTERACTIONS: Interaction[] = [];
@@ -736,6 +763,35 @@ export function ChatPanel({
   });
 
   const navigate = useNavigate();
+  const [activeId, setActiveId] = useState<string | undefined>(undefined);
+  // What the rail numbers: the agent's replies (squares) and your own messages (circles). A
+  // conversation with one of each has nothing to jump between, and the rail draws nothing.
+  const railReplies = useMemo(
+    () =>
+      messages
+        .filter((message) => message.role === "assistant")
+        .map((message) => ({
+          id: message.id,
+          text: message.blocks
+            .filter((block: { type: string }) => block.type === "text")
+            .map((block: { text?: string }) => block.text ?? "")
+            .join(" "),
+        })),
+    [messages],
+  );
+  const railPrompts = useMemo(
+    () =>
+      messages
+        .filter((message) => message.role === "user")
+        .map((message) => ({
+          id: message.id,
+          text: message.blocks
+            .filter((block: { type: string }) => block.type === "text")
+            .map((block: { text?: string }) => block.text ?? "")
+            .join(" "),
+        })),
+    [messages],
+  );
   // Composition state the keydown handler needs but the DOM only reports to other listeners.
   const ime = useRef({ composing: false, endedAt: 0 });
   const setSettings = useWorkspaceStore((state) => state.setSettings);
@@ -983,7 +1039,11 @@ export function ChatPanel({
     >
       <div
         ref={transcript.scrollRef}
-        onScroll={transcript.onScroll}
+        onScroll={() => {
+          transcript.onScroll();
+          // Cheap enough: one pass over the rows that are actually in the DOM.
+          setActiveId(transcript.active());
+        }}
         className="min-h-0 flex-1 overflow-y-auto"
       >
         {/* Floats over the transcript, which scrolls on beneath it and stays
@@ -993,94 +1053,118 @@ export function ChatPanel({
             {head}
           </div>
         ) : null}
-        <div
-          ref={transcript.contentRef}
-          className="space-y-3 pt-2 font-mono text-[13px] leading-[1.6] text-[var(--terminal-claude-foreground)]"
-        >
-          {/* Stays put while a page loads, so nothing shifts until it lands. */}
-          {hasOlder ? (
+        {/* The rail is inside the scroll container so it can stick to the top of what you see;
+            it takes a lane on the right and the transcript keeps clear of it. */}
+        <div className="relative flex min-h-0 px-[1ch]">
+          <div className="min-w-0 flex-1">
             <div
-              ref={transcript.topRef}
-              className="text-[var(--terminal-muted)]"
+              ref={transcript.contentRef}
+              className="space-y-3 pt-2 font-mono text-[13px] leading-[1.6] text-[var(--terminal-claude-foreground)]"
             >
-              {translateText("history.loadEarlier")}
-            </div>
-          ) : (
-            <ClaudeHeader
-              user="Eric"
-              version=""
-              model={model}
-              org="AXP"
-              cwd={groupName ?? "workspace"}
-              tips={[]}
-              whatsNew={[]}
-            />
-          )}
-          {error ? <Warning>{error}</Warning> : null}
-          {connectionLost && !error ? (
-            <Warning>{translateText("connection.reconnecting")}</Warning>
-          ) : null}
-          {loading && !error && !messages.length ? (
-            <div role="status" className="text-[var(--terminal-muted)]">
-              {translateText("history.loading")}
-            </div>
-          ) : null}
-          {/* Off-screen turns skip rendering; `auto` remembers their size. */}
-          <div
-            className="space-y-3 pt-1 *:[contain-intrinsic-size:auto_120px] *:[content-visibility:auto]"
-            role="log"
-            aria-label={translateText("accessibility.messages")}
-            aria-live="polite"
-          >
-            {messages.map((message) => (
-              <Turn
-                key={message.id}
-                message={message}
-                author={
-                  group?.kind === "group" ||
-                  (group?.participants.length ?? 0) > 1 ||
-                  message.kind === "mention"
-                    ? (agents.find((a) => a.id === message.agent_id)?.name ??
-                      group?.participants.find(
-                        (p) => p.agent_id === message.agent_id,
-                      )?.name)
-                    : undefined
-                }
-                pending={pendingByMessage.get(message.id) ?? NO_INTERACTIONS}
-                {...lines.get(message.id)}
-                actions={actionsRef}
-              />
-            ))}
-            {outgoing.map((item) => (
-              <div key={item.id} className="space-y-3 pt-1">
-                <ClaudeMessage role="user" className={ENTER}>
-                  <UserParts parts={item.parts} />
-                </ClaudeMessage>
-                {item.failure ? (
-                  <ComposerNotice
-                    message={item.failure}
-                    actions={[
-                      {
-                        label: translateText("common:actions.retry"),
-                        onClick: () => onRetry(item),
-                      },
-                      {
-                        label: translateText("common:actions.edit"),
-                        onClick: () => onEdit(item),
-                      },
-                      {
-                        label: translateText("common:actions.discard"),
-                        onClick: () => onDiscard(item.id),
-                      },
-                    ]}
-                  />
-                ) : (
-                  <div role="status" className="text-[var(--terminal-muted)]">
-                    {translateText("common:states.sending")}
+              {/* Stays put while a page loads, so nothing shifts until it lands. */}
+              {hasOlder ? (
+                <div
+                  ref={transcript.topRef}
+                  className="text-[var(--terminal-muted)]"
+                >
+                  {translateText("history.loadEarlier")}
+                </div>
+              ) : (
+                <ClaudeHeader
+                  user="Eric"
+                  version=""
+                  model={model}
+                  org="AXP"
+                  cwd={groupName ?? "workspace"}
+                  tips={[]}
+                  whatsNew={[]}
+                />
+              )}
+              {error ? <Warning>{error}</Warning> : null}
+              {connectionLost && !error ? (
+                <Warning>{translateText("connection.reconnecting")}</Warning>
+              ) : null}
+              {loading && !error && !messages.length ? (
+                <div role="status" className="text-[var(--terminal-muted)]">
+                  {translateText("history.loading")}
+                </div>
+              ) : null}
+              {/* Off-screen turns skip rendering; `auto` remembers their size. */}
+              <div
+                className="space-y-3 pt-1 *:[contain-intrinsic-size:auto_120px] *:[content-visibility:auto]"
+                role="log"
+                aria-label={translateText("accessibility.messages")}
+                aria-live="polite"
+              >
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    id={`msg-${message.id}`}
+                    data-mid={message.id}
+                  >
+                    <Turn
+                      key={message.id}
+                      message={message}
+                      author={
+                        group?.kind === "group" ||
+                        (group?.participants.length ?? 0) > 1 ||
+                        message.kind === "mention"
+                          ? (agents.find((a) => a.id === message.agent_id)
+                              ?.name ??
+                            group?.participants.find(
+                              (p) => p.agent_id === message.agent_id,
+                            )?.name)
+                          : undefined
+                      }
+                      pending={
+                        pendingByMessage.get(message.id) ?? NO_INTERACTIONS
+                      }
+                      {...lines.get(message.id)}
+                      actions={actionsRef}
+                    />
                   </div>
-                )}
+                ))}
+                {outgoing.map((item) => (
+                  <div key={item.id} className="space-y-3 pt-1">
+                    <ClaudeMessage role="user" className={ENTER}>
+                      <UserParts parts={item.parts} />
+                    </ClaudeMessage>
+                    {item.failure ? (
+                      <ComposerNotice
+                        message={item.failure}
+                        actions={[
+                          {
+                            label: translateText("common:actions.retry"),
+                            onClick: () => onRetry(item),
+                          },
+                          {
+                            label: translateText("common:actions.edit"),
+                            onClick: () => onEdit(item),
+                          },
+                          {
+                            label: translateText("common:actions.discard"),
+                            onClick: () => onDiscard(item.id),
+                          },
+                        ]}
+                      />
+                    ) : (
+                      <div
+                        role="status"
+                        className="text-[var(--terminal-muted)]"
+                      >
+                        {translateText("common:states.sending")}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+            <TranscriptRail
+              replies={railReplies}
+              prompts={railPrompts}
+              activeId={activeId}
+              onJump={transcript.jumpTo}
+            />
           </div>
         </div>
       </div>
