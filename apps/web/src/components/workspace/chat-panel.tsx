@@ -29,7 +29,6 @@ import { ClaudeSlashMenu } from "@/components/brainless/claude/claude-slash-menu
 import { ClaudeThinking } from "@/components/brainless/claude/claude-thinking";
 import { ClaudeToolCall } from "@/components/brainless/claude/claude-tool-call";
 import { Markdown } from "@/components/markdown";
-import { Button } from "@/components/ui/button";
 import { ActivityOperationCards } from "@/components/workspace/activity-operation";
 import { ActivityRefCard } from "@/components/workspace/activity-ref";
 import {
@@ -49,6 +48,7 @@ import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { firstVisible } from "@/lib/rail";
 import { readTheme, setTheme } from "@/lib/theme";
 import { summarizeArgs } from "@/lib/tool-summary";
+import { cn } from "@/lib/utils";
 import { ACTIVE_STATUSES } from "@/queries/chat";
 import { useOutbox } from "@/queries/outbox";
 import { AgentAvatar } from "./agent-identity";
@@ -1252,14 +1252,25 @@ export function ChatPanel({
             <ThinkingChip sessionId={members[0].session_id ?? undefined} />
           </div>
         ) : null}
+        {/* The member picker, where a single-chat composer would carry the model chip: in a group
+            the question the input answers first is "who", not "which model". 所有人 is a real
+            choice here, not a convenience — it is how everyone gets woken at once. */}
         {members.length > 1 && (
           <div className="flex flex-wrap items-center gap-1 px-1 pb-1 text-xs text-muted-foreground">
+            <button
+              type="button"
+              onClick={() =>
+                setDraft([...draft, { type: "text", text: " @所有人 " }])
+              }
+              className="border border-border px-1.5 py-0.5 font-mono text-[11px] hover:border-border-strong"
+              title={translateText("mentions.notifyEveryone")}
+            >
+              @{translateText("mentions.everyoneCommand")}
+            </button>
             {members.map((p) => (
-              <Button
+              <button
                 key={p.agent_id}
                 type="button"
-                size="xs"
-                variant="ghost"
                 disabled={mentioned.includes(p.agent_id)}
                 onClick={() =>
                   setDraft([
@@ -1267,11 +1278,17 @@ export function ChatPanel({
                     { type: "text", text: ` @${mentionLabel(p, members)} ` },
                   ])
                 }
+                className={cn(
+                  "border px-1.5 py-0.5 font-mono text-[11px]",
+                  mentioned.includes(p.agent_id)
+                    ? "border-border text-faint"
+                    : "border-border text-foreground hover:border-border-strong",
+                )}
               >
                 @{mentionLabel(p, members)}
-              </Button>
+              </button>
             ))}
-            <span>
+            <span className="min-w-0 flex-1 truncate">
               {mentioned.length
                 ? translateText("mentions.notifyTargets", {
                     names: mentioned
