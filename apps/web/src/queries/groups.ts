@@ -21,8 +21,13 @@ export function useGroupActions() {
   };
   return {
     create: useMutation({
-      mutationFn: (body: { name: string; members: string[]; goal?: string }) =>
-        unwrap(controlPlane.POST("/api/v1/groups", { body })),
+      mutationFn: (body: {
+        name: string;
+        members: string[];
+        goal?: string;
+        /** The folder the group works in; left out means "not bound yet". */
+        cwd?: string;
+      }) => unwrap(controlPlane.POST("/api/v1/groups", { body })),
       onSuccess,
     }),
     update: useMutation({

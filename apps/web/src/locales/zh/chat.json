@@ -56,7 +56,10 @@
       "optionalGoal": "目标（可选）",
       "goalHelp": "记录当前目标和已经达成的决定。",
       "goal": "目标",
-      "decisions": "已决定"
+      "decisions": "已决定",
+      "cwd": "工作目录（可选）",
+      "cwdPlaceholder": "/path/to/project",
+      "cwdHelp": "这个群在哪儿干活：成员在这里跑，项目笔记从这里读，产出的东西也归这里。留空就是还没绑目录。"
     },
     "members": {
       "title": "成员",

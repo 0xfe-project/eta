@@ -56,7 +56,10 @@
       "optionalGoal": "Goal (optional)",
       "goalHelp": "Record the current goal and decisions made so far.",
       "goal": "Goal",
-      "decisions": "Decisions"
+      "decisions": "Decisions",
+      "cwd": "Folder (optional)",
+      "cwdPlaceholder": "/path/to/project",
+      "cwdHelp": "Where this group works: its members run here, the project's notes are read here, and what it produces belongs here. Leave it empty and the group is unbound."
     },
     "members": {
       "title": "Members",

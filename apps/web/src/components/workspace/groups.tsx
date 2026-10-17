@@ -106,6 +106,9 @@ export function CreateGroup({
   const setOpen = onOpenChange ?? setUncontrolled;
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
+  // Where the group works. A text field for now: the folder picker is the desktop's job, and a
+  // typed path is honest about what will be used.
+  const [cwd, setCwd] = useState("");
   const [chosen, setChosen] = useState<string[]>(members);
   const { agents } = useAgents();
   const { create } = useGroupActions();
@@ -149,7 +152,14 @@ export function CreateGroup({
             if (sendingRef.current) return;
             sendingRef.current = true;
             create.mutate(
-              { name: name.trim(), goal, members: chosen },
+              {
+                name: name.trim(),
+                goal,
+                members: chosen,
+                // Omitted when empty: "no folder" is a state the store keeps, not an empty path
+                // pretending to be one.
+                ...(cwd.trim().length === 0 ? {} : { cwd: cwd.trim() }),
+              },
               {
                 onSettled: () => {
                   sendingRef.current = false;
@@ -159,6 +169,7 @@ export function CreateGroup({
                   setOpen(false);
                   setName("");
                   setGoal("");
+                  setCwd("");
                   openGroup(g.id);
                 },
               },
@@ -174,6 +185,19 @@ export function CreateGroup({
               maxLength={100}
               required
             />
+          </label>
+          <label className="grid gap-2 text-sm">
+            {translateText("groups.fields.cwd")}
+            <Input
+              value={cwd}
+              onChange={(e) => setCwd(e.target.value)}
+              placeholder={translateText("groups.fields.cwdPlaceholder")}
+              spellCheck={false}
+              className="font-mono"
+            />
+            <span className="text-xs text-muted-foreground">
+              {translateText("groups.fields.cwdHelp")}
+            </span>
           </label>
           <label className="grid gap-2 text-sm">
             {translateText("groups.fields.optionalGoal")}
