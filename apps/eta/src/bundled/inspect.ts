@@ -1,5 +1,5 @@
-import type { Context } from "cordis";
 import type { SessionManager } from "@eta/server";
+import type { Context } from "cordis";
 import type { PluginContext } from "../plugin-api";
 import { errorResponse } from "../routes";
 
