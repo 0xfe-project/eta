@@ -44,11 +44,11 @@ import {
   plainDraft,
 } from "@/lib/composer";
 import { buildMenu, mentionAt } from "@/lib/composer-menu";
-import { summarizeArgs } from "@/lib/tool-summary";
 import { listSeparator, translate } from "@/lib/i18n";
 import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { firstVisible } from "@/lib/rail";
 import { readTheme, setTheme } from "@/lib/theme";
+import { summarizeArgs } from "@/lib/tool-summary";
 import { ACTIVE_STATUSES } from "@/queries/chat";
 import { useOutbox } from "@/queries/outbox";
 import { AgentAvatar } from "./agent-identity";
