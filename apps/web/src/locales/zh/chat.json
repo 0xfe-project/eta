@@ -25,7 +25,11 @@
     "createAgentFirst": "先创建智能体",
     "noAgentSelected": "未选择智能体",
     "waitForUploads": "附件上传中，完成后才能发送。",
-    "fileHint": "文件"
+    "fileHint": "文件",
+    "model": "模型",
+    "modelHint": "下一回合跑的模型",
+    "thinking": "思考档",
+    "thinkingHint": "回答之前想多深"
   },
   "tools": {
     "expandHint": "（点击展开）"

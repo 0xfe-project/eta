@@ -25,7 +25,11 @@
     "createAgentFirst": "Create an agent first",
     "noAgentSelected": "No agent selected",
     "waitForUploads": "Wait for attachments to finish uploading before sending.",
-    "fileHint": "file"
+    "fileHint": "file",
+    "model": "Model",
+    "modelHint": "The model the next turn runs on",
+    "thinking": "Thinking level",
+    "thinkingHint": "How hard it thinks before answering"
   },
   "tools": {
     "expandHint": "(click to expand)"

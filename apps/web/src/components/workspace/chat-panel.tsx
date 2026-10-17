@@ -54,6 +54,7 @@ import { useOutbox } from "@/queries/outbox";
 import { AgentAvatar } from "./agent-identity";
 import { AttachmentChip, PastedText } from "./composer-block";
 import { ComposerEditor } from "./composer-editor";
+import { ModelChip, ThinkingChip } from "./composer-pickers";
 import { GroupNotice } from "./group-notice";
 import { TaskMessage } from "./task-message";
 import { TranscriptRail } from "./transcript-rail";
@@ -1241,6 +1242,14 @@ export function ChatPanel({
             className="px-[1ch] pb-[0.5lh] text-[var(--terminal-muted)]"
           >
             {translateText("composer.waitForUploads")}
+          </div>
+        ) : null}
+        {/* One agent: the two chips that describe what it will run on. Several: those chips have
+            no single answer, and the member picker below takes their place. */}
+        {members.length === 1 && members[0] !== undefined ? (
+          <div className="flex flex-wrap items-center gap-1 px-1 pb-1">
+            <ModelChip sessionId={members[0].session_id ?? undefined} />
+            <ThinkingChip sessionId={members[0].session_id ?? undefined} />
           </div>
         ) : null}
         {members.length > 1 && (
