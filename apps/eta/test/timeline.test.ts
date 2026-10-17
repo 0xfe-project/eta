@@ -59,6 +59,26 @@ async function start(answers: string[]): Promise<Host> {
   return host;
 }
 
+/** A host whose one scripted answer carries content blocks of the caller's choosing. */
+async function startThinking(
+  content:
+    | { type: "thinking"; thinking: string }
+    | { type: "text"; text: string }[]
+    | unknown,
+): Promise<Host> {
+  const root = await mkdtemp(join(tmpdir(), "eta-timeline-"));
+  roots.push(root);
+  await writeFile(join(root, "config.json"), JSON.stringify(CONFIG), "utf8");
+  const host = await assembleHost({
+    dataDir: root,
+    port: 0,
+    warn: () => undefined,
+    models: fakeModels([assistantMessage({ content: content as never })]),
+  });
+  hosts.push(host);
+  return host;
+}
+
 const url = (host: Host, path: string): string =>
   `http://127.0.0.1:${host.port}${path}`;
 
@@ -107,6 +127,8 @@ interface Message {
   status: string;
   revision: number;
   text: string;
+  /** What the agent worked through before answering; empty when it did not reason. */
+  thinking?: string;
   /** `user` or `agent`: who wrote it, which is what a watcher filters on. */
   authorKind: string;
 }
@@ -180,6 +202,39 @@ describe("the timeline holds the answer", () => {
     const reply = timeline.messages.find((message) => message.id === replyId);
     expect(reply?.text).toBe("the answer");
     expect(reply?.revision).toBe(2);
+  });
+
+  it("keeps what the agent thought beside what it said", async () => {
+    // The provider emits a thinking block before its text; the timeline keeps both, because a
+    // conversation you can check is one you can correct.
+    const host = await startThinking([
+      {
+        type: "thinking",
+        thinking: "先看看目录再回答",
+      },
+      { type: "text", text: "看完了" },
+    ]);
+    const { agentId, groupId } = await setup(host);
+    const posted = (await (
+      await send(host, "POST", `/groups/${groupId}/messages`, {
+        text: "去看一眼",
+        mentions: [agentId],
+      })
+    ).json()) as { replies: { replyMessageId?: string }[] };
+    const replyId = posted.replies[0]?.replyMessageId;
+
+    const timeline = (await (
+      await send(host, "GET", `/groups/${groupId}/messages`)
+    ).json()) as { messages: Message[] };
+    const reply = timeline.messages.find((message) => message.id === replyId);
+    expect(reply?.text).toBe("看完了");
+    expect(reply?.thinking).toBe("先看看目录再回答");
+
+    // And on the product surface it is a block of its own, before the text.
+    const snapshot = (await (
+      await send(host, "GET", "/api/v1/chat")
+    ).json()) as { groups: { id: string }[] };
+    expect(snapshot.groups.some((group) => group.id === groupId)).toBe(true);
   });
 
   it("shows the failure as the reply, not as a missing message", async () => {

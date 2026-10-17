@@ -41,3 +41,27 @@ export function lastAssistantText(managed: ManagedSession): string {
   }
   return last;
 }
+
+/**
+ * What the assistant was thinking on its way to that answer.
+ *
+ * Only for display: the kernel already used it while generating, and replaying it to a provider is
+ * the kernel's decision, not a timeline's. So this is the last message that thought something,
+ * as one string — the panel shows it folded, with a size, and never in the transcript's reading
+ * path.
+ */
+export function lastAssistantThinking(managed: ManagedSession): string {
+  let last = "";
+  for (const entry of managed.session.journaling.transcript()) {
+    if (entry.role !== "assistant") continue;
+    const content = entry.content;
+    if (typeof content === "string") continue;
+    const thought = content
+      .filter((block) => block.type === "thinking")
+      .map((block) => (block as { thinking?: string }).thinking ?? "")
+      .join("\n\n")
+      .trim();
+    if (thought.length > 0) last = thought;
+  }
+  return last;
+}

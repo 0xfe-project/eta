@@ -50,10 +50,15 @@ const agrees = <A, B>(_: Agrees<A, B>): void => {
   void _;
 };
 
-export const blockSchema = z.object({
-  type: z.literal("text"),
-  text: z.string(),
-});
+export const blockSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("text"), text: z.string() }),
+  // What the agent worked through; the interface folds it beside the answer.
+  z.object({
+    type: z.literal("thinking"),
+    text: z.string(),
+    chars: z.number(),
+  }),
+]);
 
 export const messageSchema = z.object({
   group_id: z.string(),

@@ -63,6 +63,8 @@ export interface MessageRecord {
    * (P2.6): the partial text is kept, because that is what the agent had managed to say.
    */
   status: ReplyStatus;
+  /** What the agent thought before answering; empty for providers that do not reason. */
+  thinking: string;
   /** Grows when the same message changes, so a client can tell "newer" from "a second one". */
   revision: number;
   /** The agents this message wakes. */
@@ -172,6 +174,7 @@ interface ParticipantRow {
 interface MessageRow {
   id: string;
   group_id: string;
+  thinking: string;
   seq: number;
   kind: string;
   author_kind: string;
@@ -248,6 +251,7 @@ const messageOf = (row: MessageRow): MessageRecord => ({
     : { authorAgentId: row.author_agent_id }),
   text: row.text,
   status: statusOf(row.status),
+  thinking: row.thinking ?? "",
   revision: row.revision,
   mentions: mentionsOf(row.mentions),
   ...(row.root_message_id === null
@@ -538,13 +542,18 @@ export class GroupStore {
   /** The reply is written: text in, status set, revision up. The seq does not move. */
   finishReply(
     messageId: string,
-    input: { text: string; status: "done" | "failed" | "stopped" },
+    input: {
+      text: string;
+      status: "done" | "failed" | "stopped";
+      /** What it thought on the way; omitted for a failure, which has nothing to show. */
+      thinking?: string | undefined;
+    },
   ): MessageRecord | undefined {
     const result = this.#handle
       .query(
-        "UPDATE group_message SET text = ?, status = ?, revision = revision + 1 WHERE id = ?",
+        "UPDATE group_message SET text = ?, thinking = ?, status = ?, revision = revision + 1 WHERE id = ?",
       )
-      .run(input.text, input.status, messageId);
+      .run(input.text, input.thinking ?? "", input.status, messageId);
     if (result.changes === 0) return undefined;
     const row = this.#handle
       .query("SELECT * FROM group_message WHERE id = ?")

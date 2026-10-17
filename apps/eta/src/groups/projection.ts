@@ -181,11 +181,13 @@ export class TimelineProjector {
       groupId: string;
       text: string;
       status: "done" | "failed" | "stopped";
+      thinking?: string | undefined;
     },
   ): ProjectedReply | undefined {
     const message = this.#groups.finishReply(messageId, {
       text: input.text,
       status: input.status,
+      ...(input.thinking === undefined ? {} : { thinking: input.thinking }),
     });
     if (message === undefined) return undefined;
     const group = this.#summary(input.groupId);

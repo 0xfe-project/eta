@@ -21,10 +21,10 @@ import type {
 } from "../groups/store";
 import type { InteractionRecord } from "../interactions/store";
 
-export interface AxpBlock {
-  type: "text";
-  text: string;
-}
+export type AxpBlock =
+  | { type: "text"; text: string }
+  /** What the agent worked through before answering. Folded in the interface, not read out. */
+  | { type: "thinking"; text: string; chars: number };
 
 export interface AxpMessage {
   group_id: string;
@@ -170,8 +170,22 @@ export function toMessage(message: MessageRecord): AxpMessage {
     reply_to_id: role === "user" ? null : (message.rootMessageId ?? null),
     status: STATUS[message.status],
     revision: message.revision,
-    blocks:
-      message.text.length === 0 ? [] : [{ type: "text", text: message.text }],
+    blocks: [
+      // Thinking first, because that is the order it happened in and the order a reader expects:
+      // what it worked through, then what it concluded.
+      ...(typeof message.thinking === "string" && message.thinking.length > 0
+        ? [
+            {
+              type: "thinking" as const,
+              text: message.thinking,
+              chars: message.thinking.length,
+            },
+          ]
+        : []),
+      ...(message.text.length === 0
+        ? []
+        : [{ type: "text" as const, text: message.text }]),
+    ],
     // A failed reply carries its reason where the web expects to find it.
     failure: message.status === "failed" ? { message: message.text } : null,
     created_at: message.createdAt,

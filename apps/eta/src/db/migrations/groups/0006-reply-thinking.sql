@@ -1,0 +1,11 @@
+-- What the agent thought before it answered (FRONTEND_REFACTOR.md §6, P8.5).
+--
+-- A model that reasons emits a thinking block before its text; the kernel journals it with the
+-- message, and until now the projection dropped it — the timeline could only say what was said,
+-- not what it was working through. A conversation you can read both halves of is one you can
+-- trust, or correct.
+--
+-- Empty for providers that do not reason, and for every reply recorded before this column existed.
+-- Kept beside `text` rather than as a second message row: it belongs to this answer, arrives with
+-- it, and was produced in the same turn.
+ALTER TABLE group_message ADD COLUMN thinking TEXT NOT NULL DEFAULT '';

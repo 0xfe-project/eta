@@ -34,7 +34,10 @@ import type {
  * it — find the row, mark it, abort the session it belongs to, and let the run finish the job.
  */
 import process from "node:process";
-import { lastAssistantText } from "../sessions/transcript";
+import {
+  lastAssistantText,
+  lastAssistantThinking,
+} from "../sessions/transcript";
 
 export interface WakeRunnerOptions {
   groups: GroupStore;
@@ -415,6 +418,9 @@ export class WakeRunner {
           groupId,
           text,
           status: ended,
+          // What it worked through on the way to that answer. Folded in the interface, because
+          // it is context rather than the answer.
+          thinking: lastAssistantThinking(managed),
         });
       }
       this.#hub?.publish("group.reply", {
