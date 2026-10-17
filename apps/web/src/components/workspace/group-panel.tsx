@@ -193,6 +193,7 @@ export function GroupPanel({
             <MemberBlock
               key={member.agent_id}
               focused={focused === member.agent_id}
+              dense={members.length > 6}
               member={member}
               name={
                 agents.find(
@@ -352,6 +353,7 @@ function MemberBlock({
   tasks,
   removable,
   focused,
+  dense,
   groupId,
   onFocus,
 }: {
@@ -364,6 +366,8 @@ function MemberBlock({
   removable: boolean;
   /** This is the member the chat is narrowed to. */
   focused: boolean;
+  /** More than six members: two lines each, the rest folded into the block. */
+  dense: boolean;
   groupId: string;
   onFocus: () => void;
 }) {
@@ -454,7 +458,12 @@ function MemberBlock({
           </DropdownMenu>
         ) : null}
       </div>
-      <dl className="mt-1 grid grid-cols-2 gap-x-2 font-mono text-[10px] text-muted-foreground tabular-nums">
+      <dl
+        className={cn(
+          "mt-1 grid grid-cols-2 gap-x-2 font-mono text-[10px] text-muted-foreground tabular-nums",
+          dense && "hidden",
+        )}
+      >
         <div className="col-span-2 flex min-w-0 gap-1">
           <dt className="sr-only">model</dt>
           <dd className="truncate" title={model ?? undefined}>
@@ -498,11 +507,41 @@ function MemberBlock({
           <dd>{usage?.turns ?? "—"}</dd>
         </div>
       </dl>
+      {dense ? (
+        <p className="mt-0.5 flex gap-2 font-mono text-[10px] text-muted-foreground tabular-nums">
+          <span className="min-w-0 flex-1 truncate" title={model ?? undefined}>
+            {model ?? usage?.model ?? "—"}
+          </span>
+          <span>
+            in{" "}
+            {usage === undefined || usage === null ? "—" : tokens(usage.input)}
+          </span>
+          <span>
+            out{" "}
+            {usage === undefined || usage === null ? "—" : tokens(usage.output)}
+          </span>
+        </p>
+      ) : null}
+      {dense ? (
+        <p className="mt-0.5 flex gap-2 font-mono text-[10px] text-muted-foreground tabular-nums">
+          <span className="min-w-0 flex-1 truncate" title={model ?? undefined}>
+            {model ?? usage?.model ?? "—"}
+          </span>
+          <span>
+            in{" "}
+            {usage === undefined || usage === null ? "—" : tokens(usage.input)}
+          </span>
+          <span>
+            out{" "}
+            {usage === undefined || usage === null ? "—" : tokens(usage.output)}
+          </span>
+        </p>
+      ) : null}
       {sessionId === undefined ? (
         <p className="mt-1 text-[10px] text-faint">
           {translateText("chat:groups.members.noSession")}
         </p>
-      ) : (
+      ) : dense ? null : (
         <LongContent sessionId={sessionId} />
       )}
       {goal !== undefined && goal !== null ? (
