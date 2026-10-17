@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { ClaudeHeader } from "@/components/brainless/claude/claude-header";
 import { Markdown } from "@/components/markdown";
 import { GroupNotice } from "./group-notice";
 import { PendingStrip } from "./pending-strip";
@@ -74,22 +73,6 @@ async function warningsFrom(node: React.ReactNode): Promise<string[]> {
 }
 
 describe("列表的 key", () => {
-  it("横幅的 tips / whatsNew 即使为空也不抱怨", async () => {
-    expect(
-      await warningsFrom(
-        <ClaudeHeader
-          user="me"
-          version="1"
-          model="m"
-          org="o"
-          cwd="/p"
-          tips={[]}
-          whatsNew={[]}
-        />,
-      ),
-    ).toEqual([]);
-  });
-
   it("系统消息一行一个，没有 key 就会在这里被抓到", async () => {
     const message = {
       id: "m1",

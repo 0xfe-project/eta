@@ -218,7 +218,7 @@ export function ComposerEditor({
                 <div
                   aria-hidden
                   className={cn(
-                    "pointer-events-none absolute inset-0 select-none overflow-hidden text-ellipsis whitespace-nowrap text-[var(--terminal-muted)]",
+                    "pointer-events-none absolute inset-0 select-none overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground",
                     className,
                   )}
                 >

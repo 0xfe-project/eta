@@ -170,7 +170,7 @@ export function TaskMessage({ message }: { message: ChatMessage }) {
             ) : (
               <a
                 key={d.url}
-                className="mt-1 block text-[var(--terminal-link)] hover:underline"
+                className="mt-1 block text-[var(--state-info)] hover:underline"
                 href={d.url}
                 target="_blank"
                 rel="noreferrer"

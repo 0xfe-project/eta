@@ -32,10 +32,13 @@
     "thinkingHint": "回答之前想多深",
     "sendHint": "Enter 发送 · Shift+Enter 换行 · ⌘Enter 插话",
     "workingHint": "有人在说话 · ⌘Enter 现在就插一句",
-    "stopLabel": "停止"
+    "stopLabel": "停止",
+    "commandsLabel": "命令",
+    "noMatches": "没有匹配的"
   },
   "tools": {
-    "expandHint": "（点击展开）"
+    "arguments": "参数",
+    "result": "结果"
   },
   "agentSwitcher": {
     "currentDirectChat": "正在与 {{agentName}} 私聊（{{status}}），切换智能体",
@@ -251,5 +254,6 @@
     "folderHint": "agent 在这儿干活：命令在这里跑，项目笔记从这里读。",
     "agent": "智能体",
     "start": "开始"
-  }
+  },
+  "chat": {}
 }

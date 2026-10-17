@@ -265,12 +265,6 @@ export function Workspace({
               agents={agents}
               groups={groups}
               activeReplies={chat.data?.messages ?? []}
-              model={
-                members.length === 1
-                  ? (agents.find((a) => a.id === members[0].agent_id)?.model ??
-                    undefined)
-                  : members.map((p) => p.name).join(" · ")
-              }
               blocked={blocked}
               // Not a blocker: the group works without a folder, it just works somewhere nobody
               // chose. The way out sits next to the sentence.

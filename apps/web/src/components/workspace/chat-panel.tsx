@@ -22,13 +22,6 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { ClaudeHeader } from "@/components/brainless/claude/claude-header";
-import { ClaudeMessage } from "@/components/brainless/claude/claude-message";
-import { ClaudePermission } from "@/components/brainless/claude/claude-permission";
-import { ClaudePrompt } from "@/components/brainless/claude/claude-prompt";
-import { ClaudeSlashMenu } from "@/components/brainless/claude/claude-slash-menu";
-import { ClaudeThinking } from "@/components/brainless/claude/claude-thinking";
-import { ClaudeToolCall } from "@/components/brainless/claude/claude-tool-call";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
 import {
@@ -68,6 +61,10 @@ import { PendingStrip } from "./pending-strip";
 import { when } from "./routine-format";
 import { TaskMessage } from "./task-message";
 import { TranscriptRail } from "./transcript-rail";
+import { AskBlock } from "./transcript/ask-block";
+import { Message, SystemMessage } from "./transcript/message";
+import { SlashMenu } from "./transcript/slash-menu";
+import { ToolCard, ToolCardBlock } from "./transcript/tool-card";
 import { useWorkspaceStore } from "./workspace-store";
 
 type Activity = Extract<Block, { type: "activity" }>;
@@ -265,25 +262,29 @@ function MemberPicker({
 }
 
 function ToolActivity({ block }: { block: Activity }) {
-  // The arguments are a JSON object; the row shows what the call is *doing*, which is the first
+  // The arguments are a JSON object; the header shows what the call is *doing*, which is the first
   // thing worth quoting out of it (lib/tool-summary.ts).
   const summary = summarizeArgs(block.input);
   return (
-    <ClaudeToolCall
+    <ToolCard
       tool={block.name || block.label}
-      arg={summary.length > 0 ? summary : undefined}
-      result={activityText[block.status]}
-      label={block.status}
-      status={
-        block.status === "running"
-          ? "pending"
-          : block.status === "completed"
-            ? "success"
-            : "error"
-      }
+      summary={summary.length > 0 ? summary : undefined}
+      status={block.status}
+      statusLabel={activityText[block.status]}
     >
-      {block.output}
-    </ClaudeToolCall>
+      {block.input === undefined || block.input === null ? null : (
+        <ToolCardBlock label={translate("chat:tools.arguments")}>
+          {typeof block.input === "string"
+            ? block.input
+            : JSON.stringify(block.input, null, 2)}
+        </ToolCardBlock>
+      )}
+      {block.output === undefined ? null : (
+        <ToolCardBlock label={translate("chat:tools.result")}>
+          {String(block.output)}
+        </ToolCardBlock>
+      )}
+    </ToolCard>
   );
 }
 
@@ -303,7 +304,7 @@ export function ComposerNotice({
           key={action.label}
           type="button"
           onClick={action.onClick}
-          className="underline underline-offset-2 outline-none hover:text-[var(--terminal-foreground)] focus-visible:ring-1 focus-visible:ring-ring"
+          className="underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
         >
           {action.label}
         </button>
@@ -315,7 +316,7 @@ export function ComposerNotice({
 /** The blocks' warning line (`⚠ …`). */
 function Warning({ children }: { children: React.ReactNode }) {
   return (
-    <div role="alert" className="text-[var(--terminal-warning)]">
+    <div role="alert" className="text-state-warning">
       <span aria-hidden>⚠ </span>
       {children}
     </div>
@@ -533,7 +534,7 @@ const Turn = memo(
     if (message.kind === "system") return <GroupNotice message={message} />;
     if (message.role === "user")
       return (
-        <ClaudeMessage
+        <Message
           role="user"
           footer={
             <time dateTime={message.created_at}>
@@ -542,7 +543,7 @@ const Turn = memo(
           }
         >
           <UserParts parts={userParts(message)} />
-        </ClaudeMessage>
+        </Message>
       );
     // Only a reply at work still grows; the rest render as finished text.
     const streaming = ACTIVE_STATUSES.has(message.status);
@@ -570,12 +571,12 @@ const Turn = memo(
               // Folded by default, with its size on the line: what it worked through is context
               // for reading the answer critically, not a second answer competing with it.
               <details key={block.id ?? "thinking"} className={ENTER}>
-                <summary className="cursor-pointer font-mono text-[11px] text-[var(--terminal-muted)] outline-none">
+                <summary className="cursor-pointer font-mono text-[11px] text-muted-foreground outline-none">
                   {translate("chat:thinking.fold", {
                     count: block.chars ?? block.text.length,
                   })}
                 </summary>
-                <div className="mt-1 border-l border-border pl-2 text-[var(--terminal-muted)] whitespace-pre-wrap">
+                <div className="mt-1 border-l border-border pl-2 text-muted-foreground whitespace-pre-wrap">
                   {block.text}
                 </div>
               </details>
@@ -599,18 +600,11 @@ const Turn = memo(
             ),
           )}
         {pending.map((interaction) => (
-          <ClaudePermission
-            title={translate("chat:confirmations.required")}
-            question={translate("chat:confirmations.continueQuestion")}
+          <AskBlock
             key={interaction.id}
-            command={interaction.prompt}
-            options={interaction.options.map((option) => option.label)}
-            onChoose={(index) =>
-              actions.current.onAnswer(
-                interaction.id,
-                interaction.options[index].value,
-              )
-            }
+            interaction={interaction}
+            who={author}
+            onAnswer={(id, value) => actions.current.onAnswer(id, value)}
           />
         ))}
         <ReplyState
@@ -657,10 +651,12 @@ function ReplyState({
       return (
         <div className="flex items-center gap-3">
           {asking ? null : (
-            <ClaudeThinking
-              verbs={[translateText("agents:status.working")]}
-              showTokens={false}
-            />
+            <span
+              role="status"
+              className="font-mono text-[11px] text-muted-foreground"
+            >
+              {translateText("agents:status.working")}…
+            </span>
           )}
           <button
             type="button"
@@ -673,21 +669,25 @@ function ReplyState({
       );
     case "stopping":
       return (
-        <ClaudeThinking
-          verbs={[translateText("reply.stopping")]}
-          showTokens={false}
-        />
+        <span
+          role="status"
+          className="font-mono text-[11px] text-muted-foreground"
+        >
+          {translateText("reply.stopping")}…
+        </span>
       );
     case "queued": {
       if (line.starting)
         return (
-          <ClaudeThinking
-            verbs={[translateText("reply.startingAgent")]}
-            showTokens={false}
-          />
+          <span
+            role="status"
+            className="font-mono text-[11px] text-muted-foreground"
+          >
+            {translateText("reply.startingAgent")}…
+          </span>
         );
       return (
-        <div className="flex flex-wrap items-baseline gap-x-3 text-[var(--terminal-muted)]">
+        <div className="flex flex-wrap items-baseline gap-x-3 text-muted-foreground">
           <span>
             {line.elsewhere
               ? translateText("reply.waitingElsewhere", {
@@ -702,7 +702,7 @@ function ReplyState({
           <button
             type="button"
             onClick={onStop}
-            className="underline underline-offset-2 outline-none hover:text-[var(--terminal-foreground)] focus-visible:ring-1 focus-visible:ring-ring"
+            className="underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
           >
             {translateText("actions.withdraw")}
           </button>
@@ -758,7 +758,6 @@ export function ChatPanel({
   head,
   error,
   connectionLost,
-  model: modelLabel,
   blocked,
   notice,
   group,
@@ -800,8 +799,6 @@ export function ChatPanel({
   error?: string;
   /** The live updates dropped; what shows may be out of date. */
   connectionLost?: boolean;
-  /** The agent's model, shown where the session blocks show one. */
-  model?: string;
   /** Why the composer is disabled, with the way out. */
   blocked?: React.ReactNode;
   /** A warning above the composer that leaves it usable. */
@@ -941,7 +938,14 @@ export function ChatPanel({
             maxCharacters: MAX_MESSAGE_CHARS,
           })
         : undefined;
-  const uploading = files.some((f) => !uploads[f.id]?.attachment);
+  // Still on its way, not *failed*: a file whose upload errored has no attachment either, and
+  // calling that "waiting for uploads" hides the sentence that says what went wrong.
+  const uploading = files.some(
+    (file) =>
+      uploads[file.id] === undefined ||
+      (uploads[file.id]?.attachment === undefined &&
+        uploads[file.id]?.error === undefined),
+  );
   // One menu, two sources (lib/composer-menu.ts): `@` offers the group's members first and the
   // project's files after them, `/` offers commands.
   const menu = buildMenu({
@@ -1135,240 +1139,232 @@ export function ChatPanel({
       "aria-activedescendant": menuOpen ? `${listId}-${menuActive}` : undefined,
     } satisfies React.HTMLAttributes<HTMLDivElement>,
   };
-  const promptProps = {
-    renderInput: (input: { className: string; style: React.CSSProperties }) => (
-      // A new agent's composer starts from its own draft.
-      <ComposerEditor key={groupId} {...editorProps} {...input} />
-    ),
-  };
   const slashMenu = menuOpen ? (
-    <ClaudeSlashMenu
+    <SlashMenu
       id={listId}
-      commands={matches}
+      rows={matches}
       active={menuActive}
-      onActiveChange={setMenuIndex}
-      onChoose={(command) => choose(command as SlashCommand)}
+      onHover={setMenuIndex}
+      onChoose={(row) => choose(row as SlashCommand)}
     />
   ) : null;
-  const model =
-    modelLabel ?? groupName ?? translateText("composer.noAgentSelected");
 
   return (
     <section
       aria-label={translateText("navigation:sections.chat")}
-      data-session-theme="claude"
-      className="relative isolate flex h-full min-h-0 flex-col bg-[var(--terminal-background)]"
+      className="relative isolate flex h-full min-h-0 flex-col bg-background"
     >
-      <div
-        ref={transcript.scrollRef}
-        onScroll={() => {
-          transcript.onScroll();
-          // Cheap enough: one pass over the rows that are actually in the DOM.
-          setActiveId(transcript.active());
-        }}
-        className="min-h-0 flex-1 overflow-y-auto"
-      >
-        {/* Floats over the transcript, which scrolls on beneath it and stays
+      {/* eta-old's timeline: a scroller that keeps clear of the rail on its right, and the rail
+          pinned to the *viewport* rather than to the content — which is the whole difference
+          between a column of numbers down the side and a column of numbers in the middle of the
+          text. */}
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={transcript.scrollRef}
+          onScroll={() => {
+            transcript.onScroll();
+            // Cheap enough: one pass over the rows that are actually in the DOM.
+            setActiveId(transcript.active());
+          }}
+          className="no-scrollbar h-full overflow-y-auto py-4 pr-14 pl-6"
+        >
+          {/* Floats over the transcript, which scrolls on beneath it and stays
             clickable around it; only the buttons catch. */}
-        {head ? (
-          <div className="pointer-events-none sticky top-0 z-10 [&_button]:pointer-events-auto">
-            {head}
-          </div>
-        ) : null}
-        {/* The rail is inside the scroll container so it can stick to the top of what you see;
+          {head ? (
+            <div className="pointer-events-none sticky top-0 z-10 [&_button]:pointer-events-auto">
+              {head}
+            </div>
+          ) : null}
+          {/* The rail is inside the scroll container so it can stick to the top of what you see;
             it takes a lane on the right and the transcript keeps clear of it. */}
-        {/* Everything a run is standing still on, in one line each, wherever you are in the
+          {/* Everything a run is standing still on, in one line each, wherever you are in the
             transcript. The cards inside the turns stay: they are the same questions in their own
             place. */}
-        <PendingStrip
-          interactions={interactions}
-          agents={agents}
-          onAnswer={onAnswer}
-        />
-        {focus === undefined ? null : (
-          <div className="mx-[1ch] mb-1 flex items-center gap-2 border border-border px-2 py-0.5 text-xs">
-            <span className="min-w-0 flex-1 truncate">
-              {translateText("chat:focus.only", { name: focus.name })}
-            </span>
-            <button
-              type="button"
-              className="shrink-0 text-muted-foreground hover:text-foreground"
-              onClick={focus.onClear}
-            >
-              {translateText("common:actions.close")}
-            </button>
-          </div>
-        )}
-        <div className="relative flex min-h-0 px-[1ch]">
-          <div className="min-w-0 flex-1">
-            <div
-              ref={transcript.contentRef}
-              className="space-y-3 pt-2 font-mono text-[13px] leading-[1.6] text-[var(--terminal-claude-foreground)]"
-            >
-              {/* Stays put while a page loads, so nothing shifts until it lands. */}
-              {hasOlder ? (
-                <div
-                  ref={transcript.topRef}
-                  className="text-[var(--terminal-muted)]"
-                >
-                  {translateText("history.loadEarlier")}
-                </div>
-              ) : (
-                <ClaudeHeader
-                  user="Eric"
-                  version=""
-                  model={model}
-                  org="AXP"
-                  cwd={groupName ?? "workspace"}
-                  tips={[]}
-                  whatsNew={[]}
-                />
-              )}
-              {/*
-               * The four states a conversation can be in, in one place and in the same words as
-               * the rest of the app: it failed (and can be asked again), the live updates dropped
-               * (and it reconnects itself), it is still being read, or there is nothing here yet.
-               * They live above the transcript rather than inside it so they do not scroll away
-               * with the thing they describe.
-               */}
-              {error !== undefined ? (
-                <div className="border border-state-error px-2 py-1 text-xs">
-                  <div role="alert" className="text-state-error">
-                    {error}
-                  </div>
-                  {onReload === undefined ? null : (
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      className="mt-1"
-                      onClick={onReload}
-                    >
-                      {translateText("common:actions.retry")}
-                    </Button>
-                  )}
-                </div>
-              ) : null}
-              {connectionLost && error === undefined ? (
-                <p
-                  role="status"
-                  className="border border-state-warning px-2 py-1 text-xs text-state-warning"
-                >
-                  {translateText("connection.reconnecting")}
-                </p>
-              ) : null}
-              {loading && error === undefined && !messages.length ? (
-                <p
-                  role="status"
-                  className="px-1 py-2 text-xs text-[var(--terminal-muted)]"
-                >
-                  {translateText("history.loading")}
-                </p>
-              ) : null}
-              {!loading && !error && messages.length === 0 ? (
-                <p className="px-1 py-2 text-xs text-muted-foreground">
-                  {translateText("history.empty")}
-                </p>
-              ) : null}
-              {/* Off-screen turns skip rendering; `auto` remembers their size. */}
-              <div
-                className="space-y-3 pt-1 *:[contain-intrinsic-size:auto_120px] *:[content-visibility:auto]"
-                role="log"
-                aria-label={translateText("accessibility.messages")}
-                aria-live="polite"
+          <PendingStrip
+            interactions={interactions}
+            agents={agents}
+            onAnswer={onAnswer}
+          />
+          {focus === undefined ? null : (
+            <div className="mx-[1ch] mb-1 flex items-center gap-2 border border-border px-2 py-0.5 text-xs">
+              <span className="min-w-0 flex-1 truncate">
+                {translateText("chat:focus.only", { name: focus.name })}
+              </span>
+              <button
+                type="button"
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+                onClick={focus.onClear}
               >
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    id={`msg-${message.id}`}
-                    data-mid={message.id}
-                  >
-                    <Turn
-                      key={message.id}
-                      message={message}
-                      author={
-                        group?.kind === "group" ||
-                        (group?.participants.length ?? 0) > 1 ||
-                        message.kind === "mention"
-                          ? (agents.find((a) => a.id === message.agent_id)
-                              ?.name ??
-                            group?.participants.find(
-                              (p) => p.agent_id === message.agent_id,
-                            )?.name)
-                          : undefined
-                      }
-                      pending={
-                        pendingByMessage.get(message.id) ?? NO_INTERACTIONS
-                      }
-                      {...lines.get(message.id)}
-                      actions={actionsRef}
-                    />
+                {translateText("common:actions.close")}
+              </button>
+            </div>
+          )}
+          <div className="mx-auto max-w-[860px]">
+            <div className="min-w-0">
+              <div
+                ref={transcript.contentRef}
+                className="font-sans text-sm leading-[1.65] text-foreground"
+              >
+                {/* No welcome banner: eta-old's transcript starts with the first message. The only
+                  thing above it is the way back to earlier pages, and it appears when they exist. */}
+                {hasOlder ? (
+                  <div ref={transcript.topRef}>
+                    <SystemMessage>
+                      {translateText("history.loadEarlier")}
+                    </SystemMessage>
                   </div>
-                ))}
-                {outgoing.map((item) => (
-                  <div key={item.id} className="space-y-3 pt-1">
-                    <ClaudeMessage role="user" className={ENTER}>
-                      <UserParts parts={item.parts} />
-                    </ClaudeMessage>
-                    {item.failure ? (
-                      <ComposerNotice
-                        message={item.failure}
-                        actions={[
-                          {
-                            label: translateText("common:actions.retry"),
-                            onClick: () => onRetry(item),
-                          },
-                          {
-                            label: translateText("common:actions.edit"),
-                            onClick: () => onEdit(item),
-                          },
-                          {
-                            label: translateText("common:actions.discard"),
-                            onClick: () => onDiscard(item.id),
-                          },
-                        ]}
-                      />
-                    ) : (
-                      <div
-                        role="status"
-                        className="text-[var(--terminal-muted)]"
+                ) : null}
+                {/*
+                 * The four states a conversation can be in, in one place and in the same words as
+                 * the rest of the app: it failed (and can be asked again), the live updates dropped
+                 * (and it reconnects itself), it is still being read, or there is nothing here yet.
+                 * They live above the transcript rather than inside it so they do not scroll away
+                 * with the thing they describe.
+                 */}
+                {error !== undefined ? (
+                  <div className="border border-state-error px-2 py-1 text-xs">
+                    <div role="alert" className="text-state-error">
+                      {error}
+                    </div>
+                    {onReload === undefined ? null : (
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        className="mt-1"
+                        onClick={onReload}
                       >
-                        {translateText("common:states.sending")}
-                      </div>
+                        {translateText("common:actions.retry")}
+                      </Button>
                     )}
                   </div>
-                ))}
+                ) : null}
+                {connectionLost && error === undefined ? (
+                  <p
+                    role="status"
+                    className="border border-state-warning px-2 py-1 text-xs text-state-warning"
+                  >
+                    {translateText("connection.reconnecting")}
+                  </p>
+                ) : null}
+                {loading && error === undefined && !messages.length ? (
+                  <p
+                    role="status"
+                    className="px-1 py-2 text-xs text-muted-foreground"
+                  >
+                    {translateText("history.loading")}
+                  </p>
+                ) : null}
+                {!loading && !error && messages.length === 0 ? (
+                  <p className="px-1 py-2 text-xs text-muted-foreground">
+                    {translateText("history.empty")}
+                  </p>
+                ) : null}
+                {/* Off-screen turns skip rendering; `auto` remembers their size. */}
+                <div
+                  className="space-y-3 pt-1 *:[contain-intrinsic-size:auto_120px] *:[content-visibility:auto]"
+                  role="log"
+                  aria-label={translateText("accessibility.messages")}
+                  aria-live="polite"
+                >
+                  {messages.map((message) => (
+                    <div
+                      key={message.id}
+                      id={`msg-${message.id}`}
+                      data-mid={message.id}
+                    >
+                      <Turn
+                        key={message.id}
+                        message={message}
+                        author={
+                          group?.kind === "group" ||
+                          (group?.participants.length ?? 0) > 1 ||
+                          message.kind === "mention"
+                            ? (agents.find((a) => a.id === message.agent_id)
+                                ?.name ??
+                              group?.participants.find(
+                                (p) => p.agent_id === message.agent_id,
+                              )?.name)
+                            : undefined
+                        }
+                        pending={
+                          pendingByMessage.get(message.id) ?? NO_INTERACTIONS
+                        }
+                        {...lines.get(message.id)}
+                        actions={actionsRef}
+                      />
+                    </div>
+                  ))}
+                  {outgoing.map((item) => (
+                    <div key={item.id} className="space-y-3 pt-1">
+                      <Message role="user" className={ENTER}>
+                        <UserParts parts={item.parts} />
+                      </Message>
+                      {item.failure ? (
+                        <ComposerNotice
+                          message={item.failure}
+                          actions={[
+                            {
+                              label: translateText("common:actions.retry"),
+                              onClick: () => onRetry(item),
+                            },
+                            {
+                              label: translateText("common:actions.edit"),
+                              onClick: () => onEdit(item),
+                            },
+                            {
+                              label: translateText("common:actions.discard"),
+                              onClick: () => onDiscard(item.id),
+                            },
+                          ]}
+                        />
+                      ) : (
+                        <div role="status" className="text-muted-foreground">
+                          {translateText("common:states.sending")}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
+              <TranscriptRail
+                replies={railReplies}
+                prompts={railPrompts}
+                activeId={activeId}
+                onJump={transcript.jumpTo}
+              />
             </div>
-            <TranscriptRail
-              replies={railReplies}
-              prompts={railPrompts}
-              activeId={activeId}
-              onJump={transcript.jumpTo}
-            />
           </div>
-        </div>
-        {/* Off the live end: say there is more, and who is adding it. Following resumes the
+          {/* Off the live end: say there is more, and who is adding it. Following resumes the
             moment you scroll back down, or here. */}
-        {transcript.pinned ? null : (
-          <button
-            type="button"
-            onClick={() => transcript.toBottom()}
-            className="sticky bottom-2 z-10 mx-auto flex items-center gap-1 border border-border-strong bg-background px-2 py-1 text-xs shadow-md"
-          >
-            ↓ {translateText("chat:rail.newActivity")}
-            {activeReplies.length > 0
-              ? ` · ${members
-                  .filter((member: { agent_id: string }) =>
-                    activeReplies.some(
-                      (reply: { agent_id?: string | null }) =>
-                        reply.agent_id === member.agent_id,
-                    ),
-                  )
-                  .map((member: { name: string }) => member.name)
-                  .join("、")}`
-              : ""}
-          </button>
-        )}
+          {transcript.pinned ? null : (
+            <button
+              type="button"
+              onClick={() => transcript.toBottom()}
+              className="sticky bottom-2 z-10 mx-auto flex items-center gap-1 border border-border-strong bg-background px-2 py-1 text-xs shadow-md"
+            >
+              ↓ {translateText("chat:rail.newActivity")}
+              {activeReplies.length > 0
+                ? ` · ${members
+                    .filter((member: { agent_id: string }) =>
+                      activeReplies.some(
+                        (reply: { agent_id?: string | null }) =>
+                          reply.agent_id === member.agent_id,
+                      ),
+                    )
+                    .map((member: { name: string }) => member.name)
+                    .join("、")}`
+                : ""}
+            </button>
+          )}
+        </div>
+        <div className="absolute top-16 right-1">
+          <TranscriptRail
+            replies={railReplies}
+            prompts={railPrompts}
+            activeId={activeId}
+            onJump={transcript.jumpTo}
+          />
+        </div>
       </div>
       {/*
        * The composer, copied from eta-old rather than improvised: `.input-area` → `.input-outer`
@@ -1404,7 +1400,13 @@ export function ChatPanel({
           >
             <fieldset disabled={Boolean(blocked)} className="contents">
               {slashMenu}
-              <ClaudePrompt {...promptProps} mode="manual" effort={false} />
+              {/* eta-old's editor: the box is the border, the textarea is nothing but the text
+                  area. No `❯`, no mode line, no second and third frame around it. */}
+              <ComposerEditor
+                key={groupId}
+                className="composer-editor"
+                {...editorProps}
+              />
               <div className="composer-toolbar">
                 <div className="composer-controls flex min-w-0 items-center gap-2">
                   {members.length === 1 && members[0] !== undefined ? (
