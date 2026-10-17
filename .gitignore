@@ -30,4 +30,4 @@ out/
 
 # eta —— 本地专属,不入库
 .eta/
-/REFACTOR.md
+*REFACTOR*.md

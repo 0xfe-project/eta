@@ -27,6 +27,37 @@ function vendorGroups() {
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 
+// The prefixes the host answers itself (apps/eta/src/http/static.ts, HOST_PREFIXES), minus the
+// two that belong to whichever process is serving the *page*. In development the SPA runs on vite
+// and the API lives in the host process, so the API's prefixes have to cross over; leaving one out
+// would answer a real API call with the SPA shell.
+//
+// `/up` and `/version` are not on the list on purpose. They answer "is this page alive" and "which
+// build of this page am I", so the server that serves the page answers them — vite here, the host
+// in production, and both give a build id the tab can compare with its own (src/lib/update.ts).
+// Forwarding them would hand the browser the host's id in one deployment and the bundle's in
+// another, which is how every tab ends up claiming an update is waiting.
+const HOST_PREFIXES = [
+  "/api",
+  "/events",
+  "/artifacts",
+  "/preview",
+  "/share",
+  "/remote",
+  "/sessions",
+  "/agents",
+  "/groups",
+  "/usage",
+  "/health",
+  "/host",
+];
+
+function hostProxy(target: string) {
+  return Object.fromEntries(
+    HOST_PREFIXES.map((prefix) => [prefix, { target, changeOrigin: false }]),
+  );
+}
+
 // One per build, shared by the browser bundle and GET /version.
 // The config is evaluated once per environment, so it is kept in the process.
 const build = (process.env.AXP_WEB_BUILD ||= Date.now().toString(36));
@@ -95,10 +126,15 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
+      // Loopback by name, so the address vite prints is the address that answers.
+      host: env.AXP_WEB_HOST || "127.0.0.1",
       port: Number(env.AXP_WEB_PORT || 3000),
       strictPort: true,
-      // /api is served through the edge gateway (apps/gateway), which is the
-      // address to open in development as well.
+      // Development is two processes: this one owns the page and its HMR, the host owns the
+      // API and its data. The page talks to /api on its own origin, so the prefixes are
+      // forwarded rather than configured — a same-origin request stays same-origin, and
+      // nothing in the SPA needs to know a second port exists.
+      proxy: hostProxy(env.AXP_API_ORIGIN || "http://127.0.0.1:8787"),
     },
     preview: {
       port: Number(env.AXP_WEB_PORT || 3000),

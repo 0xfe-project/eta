@@ -1,6 +1,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 /** App-owned HTTP routes that are not static files or the SPA shell. */
+export function ownsWebApi(pathname: string): boolean {
+  return pathname === "/up" || pathname === "/version";
+}
+
 export async function handleWebApi(
   request: Request,
   buildId: string,
@@ -57,6 +61,14 @@ export function webApiMiddleware(buildId: () => string) {
     res: ServerResponse,
     next: (error?: unknown) => void,
   ) => {
+    // Paths this does not answer are left untouched — including their bodies. Draining a
+    // request it will not answer would hand the next middleware an empty stream, and the
+    // thing after it (the dev proxy) would forward headers with no body under them.
+    const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
+    if (!ownsWebApi(pathname)) {
+      next();
+      return;
+    }
     void (async () => {
       try {
         const response = await handleWebApi(
