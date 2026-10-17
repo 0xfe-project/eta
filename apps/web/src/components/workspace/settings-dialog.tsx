@@ -109,36 +109,54 @@ function AppearanceSettings() {
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const { theme, setTheme } = useTheme();
   return (
-    <div className="space-y-3">
-      <h2 className="text-sm font-semibold">
-        {translateText("sections.appearance")}
-      </h2>
-      <LanguageSettings />
-      <Segmented
-        label={translateText("appearance.colorMode")}
-        name="color-mode"
-        options={colorModes}
-        value={theme as (typeof colorModes)[number]["value"]}
-        onChange={setTheme}
-      />
-      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-        <div className="min-w-0 text-sm">
-          <label htmlFor="react-grab" className="font-medium">
-            {translateText("appearance.elementPicker")}
-          </label>
-          <p id="react-grab-hint" className="text-muted-foreground">
-            {translateText("appearance.elementPickerHint")}
-          </p>
+    <div>
+      <div className="settings-heading">
+        <h2>{translateText("sections.appearance")}</h2>
+        <p>{translateText("appearance.description")}</p>
+      </div>
+      {/* Rows, not cards: a label on the left, its control on the right, one decision per line. */}
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div>{translateText("appearance.colorMode")}</div>
+          <p>{translateText("appearance.colorModeHint")}</p>
         </div>
-        <Switch
-          id="react-grab"
-          aria-describedby="react-grab-hint"
-          checked={workspace.reactGrab ?? elementPickerDefault()}
-          onCheckedChange={(reactGrab) => {
-            setWorkspace((state) => ({ ...state, reactGrab }));
-            void setElementPicker(reactGrab);
-          }}
-        />
+        <div className="settings-control settings-inline">
+          {colorModes.map((choice) => (
+            <button
+              key={choice.value}
+              type="button"
+              aria-pressed={theme === choice.value}
+              onClick={() => setTheme(choice.value)}
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div>{translateText("appearance.language")}</div>
+        </div>
+        <div className="settings-control">
+          <LanguageSettings />
+        </div>
+      </div>
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div>{translateText("appearance.elementPicker")}</div>
+          <p>{translateText("appearance.elementPickerHint")}</p>
+        </div>
+        <div className="settings-control">
+          <Switch
+            id="react-grab"
+            aria-label={translateText("appearance.elementPicker")}
+            checked={workspace.reactGrab ?? elementPickerDefault()}
+            onCheckedChange={(reactGrab) => {
+              setWorkspace((state) => ({ ...state, reactGrab }));
+              void setElementPicker(reactGrab);
+            }}
+          />
+        </div>
       </div>
     </div>
   );
@@ -209,7 +227,8 @@ export function SettingsDialog() {
             {translateText("title")}
           </DialogTitle>
         </DialogHeader>
-        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        {/* eta-old's settings: a 196px rail of sections and a column of rows beside it. */}
+        <div className="settings-layout">
           <SettingsNav
             label={translateText("accessibility.sections")}
             sections={settingsSections.map((section) => ({
@@ -222,7 +241,7 @@ export function SettingsDialog() {
               setSettings((state) => ({ ...state, section }))
             }
           />
-          <section className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4">
+          <section className="settings-content">
             {settings.section === "agents" ? (
               <AgentSettings />
             ) : settings.section === "bundles" ? (

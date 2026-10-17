@@ -946,3 +946,128 @@
     text-overflow: ellipsis;
   }
 }
+
+@layer components {
+  /* ---- settings, ported from eta-old's settings.css (numbers included) ----
+   * A 196px rail of sections with a 2px current marker, and a content column of rows that are a
+   * label on the left and its control on the right, separated by 1px lines. No cards, no groups of
+   * boxes: a settings page is a list of decisions. */
+
+  .settings-layout {
+    display: grid;
+    grid-template-columns: 196px minmax(0, 1fr);
+    min-height: 0;
+    flex: 1;
+  }
+  .settings-layout nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    padding: 10px 8px;
+  }
+  .settings-layout nav button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-left: 2px solid transparent;
+    padding: 7px 10px;
+    text-align: left;
+    font-size: 12px;
+    color: var(--muted-foreground);
+  }
+  .settings-layout nav button:hover {
+    background: var(--overlay);
+    color: var(--foreground);
+  }
+  .settings-layout nav button[aria-current="page"] {
+    border-left-color: var(--foreground);
+    background: var(--overlay-hover);
+    color: var(--foreground);
+  }
+
+  .settings-content {
+    min-width: 0;
+    overflow-y: auto;
+    padding: 16px 20px;
+  }
+  .settings-heading {
+    margin-bottom: 12px;
+  }
+  .settings-heading h2 {
+    margin: 0 0 4px;
+    font-size: 16px;
+    font-weight: 500;
+  }
+  .settings-heading p,
+  .settings-hint {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--muted-foreground);
+  }
+  .settings-hint {
+    margin: 10px 0 0;
+  }
+  .settings-section-label {
+    margin: 16px 0 2px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 0;
+    font-size: 13px;
+  }
+  .settings-row-label {
+    display: flex;
+    flex-direction: column;
+    align-self: stretch;
+    justify-content: center;
+    gap: 4px;
+    min-height: 26px;
+    line-height: 18px;
+  }
+  .settings-row-label p {
+    margin: 0;
+    font-size: 11px;
+    line-height: 18px;
+    color: var(--muted-foreground);
+  }
+  .settings-control {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    max-width: 55%;
+  }
+  .settings-control button,
+  .settings-row select,
+  .settings-row input:not([type="checkbox"]) {
+    max-width: 100%;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    padding: 5px 8px;
+    font-size: 12px;
+    color: var(--foreground);
+  }
+  /* The chosen one is marked by the marker, not by colour: a settings row is a decision, and a
+     filled button in a row of three says "pressed" rather than "selected". */
+  .settings-control button[aria-pressed="true"] {
+    border-color: var(--foreground);
+    color: var(--foreground);
+  }
+  .settings-inline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+}
