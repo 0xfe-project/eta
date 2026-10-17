@@ -22,6 +22,7 @@ export function ClaudeToolCall({
   tool,
   arg,
   result,
+  label,
   status = "success",
   defaultOpen = false,
   className,
@@ -30,6 +31,8 @@ export function ClaudeToolCall({
   tool: string;
   arg?: string;
   result: string;
+  /** The state in a word, for the badge: running / failed / done. */
+  label?: string;
   status?: Status;
   defaultOpen?: boolean;
   className?: string;
@@ -72,6 +75,17 @@ export function ClaudeToolCall({
                 <span className="text-[var(--terminal-muted)]">)</span>
               </>
             ) : null}
+            {label === undefined ? null : (
+              <span
+                className="ml-2 border px-1 text-[10px] uppercase"
+                style={{
+                  color: STATUS_COLOR[status],
+                  borderColor: STATUS_COLOR[status],
+                }}
+              >
+                {label}
+              </span>
+            )}
           </span>
         </span>
         <span className="flex min-w-0 items-baseline gap-2 text-[var(--terminal-muted)]">

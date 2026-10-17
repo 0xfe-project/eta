@@ -44,6 +44,7 @@ import {
   plainDraft,
 } from "@/lib/composer";
 import { buildMenu, mentionAt } from "@/lib/composer-menu";
+import { summarizeArgs } from "@/lib/tool-summary";
 import { listSeparator, translate } from "@/lib/i18n";
 import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { firstVisible } from "@/lib/rail";
@@ -191,11 +192,15 @@ function UserParts({ parts }: { parts: OutgoingPart[] }) {
 }
 
 function ToolActivity({ block }: { block: Activity }) {
+  // The arguments are a JSON object; the row shows what the call is *doing*, which is the first
+  // thing worth quoting out of it (lib/tool-summary.ts).
+  const summary = summarizeArgs(block.input);
   return (
     <ClaudeToolCall
       tool={block.name || block.label}
-      arg={block.input || undefined}
+      arg={summary.length > 0 ? summary : undefined}
       result={activityText[block.status]}
+      label={block.status}
       status={
         block.status === "running"
           ? "pending"
