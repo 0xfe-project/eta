@@ -59,7 +59,6 @@ describe("@ 的补全", () => {
   });
 
   it("选中之后只在原位替换那段，别处一个字不动", () => {
-    const text = "看看 @src/app/m 这个";
     const state = mentionAt("看看 @src/app/m");
     expect(state).not.toBeNull();
     const replaced = applyItem(
