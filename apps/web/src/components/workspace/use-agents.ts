@@ -41,11 +41,14 @@ export function useOpenAgent() {
   const { select } = useAgents();
   const openGroup = useOpenGroup();
   const { direct } = useGroupActions();
-  return (agentId: string) => {
+  return (agentId: string, cwd?: string) => {
     select(agentId);
-    direct.mutate(agentId, {
-      onSuccess: (group) => openGroup(group.id),
-      onError: (error: Error) => toast.error(error.message),
-    });
+    direct.mutate(
+      { agentId, ...(cwd === undefined || cwd.length === 0 ? {} : { cwd }) },
+      {
+        onSuccess: (group) => openGroup(group.id),
+        onError: (error: Error) => toast.error(error.message),
+      },
+    );
   };
 }

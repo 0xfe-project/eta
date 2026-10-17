@@ -48,10 +48,11 @@ export function useGroupActions() {
      * same conversation instead of making a second one.
      */
     direct: useMutation({
-      mutationFn: (agentId: string) =>
+      mutationFn: (input: { agentId: string; cwd?: string }) =>
         unwrap<Group>(
           controlPlane.POST("/api/v1/agents/{agent_id}/direct", {
-            params: { path: { agent_id: agentId } },
+            params: { path: { agent_id: input.agentId } },
+            body: input.cwd === undefined ? {} : { cwd: input.cwd },
           }),
         ),
       onSuccess,

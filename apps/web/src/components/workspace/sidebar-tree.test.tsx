@@ -131,7 +131,9 @@ describe("侧边栏的树", () => {
         .dispatchEvent(new MouseEvent("click", { bubbles: true })),
     );
     await act(async () => button(container, "乐子人")!.click());
-    expect(navigation.openAgent).toHaveBeenCalledWith("a1");
+    // The folder the member was listed under travels with it: a direct chat opened here belongs
+    // to that project, not to nowhere.
+    expect(navigation.openAgent).toHaveBeenCalledWith("a1", "/p");
   });
 
   it("marks who is answering and how much is unread", async () => {

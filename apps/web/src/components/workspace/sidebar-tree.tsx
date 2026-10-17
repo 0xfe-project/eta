@@ -101,7 +101,7 @@ export function FolderTree({ query = "" }: { query?: string }) {
                   }))
                 }
                 onOpen={() => open(group.id)}
-                onOpenAgent={openAgent}
+                onOpenAgent={(agentId) => openAgent(agentId, section.path)}
               />
             ))}
           </ul>
