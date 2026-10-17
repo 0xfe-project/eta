@@ -17,8 +17,6 @@ const workspaceSchema = z.object({
   // The task page as last left: rows or a board, and whose tasks.
   taskLayout: z.enum(["list", "board"]).optional(),
   taskScope: z.enum(["all", "user", "remote"]).optional(),
-  // The chat's side panel folded away on wide screens.
-  panelCollapsed: z.boolean().optional(),
   // 圈选元素 (lib/element-picker.ts); unset follows the build.
   reactGrab: z.boolean().optional(),
 });
@@ -103,7 +101,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       showPanel: () =>
         set((s) => ({
           mobilePanel: "workspace",
-          workspace: { ...s.workspace, panelCollapsed: false },
+          workspace: s.workspace,
         })),
       setSettings: (update) =>
         set((s) => ({ settings: apply(update, s.settings) })),

@@ -61,11 +61,9 @@ export function Workspace({
   const mobilePanel = useWorkspaceStore((s) => s.mobilePanel);
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
   const showPanel = useWorkspaceStore((s) => s.showPanel);
-  // Wide screens can fold the panel away; remembered in this browser.
-  const collapsed = useWorkspaceStore(
-    (s) => s.workspace.panelCollapsed ?? false,
-  );
-  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
+  // No folding on wide screens: eta-old's right column is always there from `lg` up, and a panel
+  // you have to remember to open is a panel that stays closed. Below `lg` it is a drawer, which is
+  // where a fold is the only way to fit.
   // The right column's width, kept per screen like the left one's: 320 is where the member blocks'
   // numbers stop colliding, 720 is where the chat would stop being the thing you read.
   const panel = usePaneWidth({
@@ -75,10 +73,6 @@ export function Workspace({
     fallback: 400,
     edge: "right",
   });
-  const collapse = () => {
-    setMobilePanel("chat");
-    setWorkspace((workspace) => ({ ...workspace, panelCollapsed: true }));
-  };
   const navigate = useNavigate();
   useShowLinkedView();
   const chat = useQuery(chatQueryOptions());
@@ -261,7 +255,7 @@ export function Workspace({
             <ChatHeader
               group={group}
               onInfo={showInfo}
-              workspaceOpen={!collapsed}
+              workspaceOpen
               onOpenWorkspace={showPanel}
             />
             <ChatPanel
@@ -415,29 +409,26 @@ export function Workspace({
           ) : null}
           {/* The second gutter: drag it and the chat gives up width to the panel. Same line,
               same band across the top — that is what makes the header read as one object. */}
-          {!collapsed ? (
-            <div
-              aria-label={translateText("accessibility.resizePanel")}
-              className="pane-divider hidden lg:block"
-              {...panel.dividerProps}
-            />
-          ) : null}
+          <div
+            aria-label={translateText("accessibility.resizePanel")}
+            className="pane-divider hidden lg:block"
+            {...panel.dividerProps}
+          />
           <WorkspacePanel
             view={view}
             onViewChange={onViewChange}
             onClose={() => setMobilePanel("chat")}
-            onCollapse={collapse}
             onFocusMember={(agentId) =>
               setFocusAgent((current) => (current === agentId ? null : agentId))
             }
-            style={collapsed ? undefined : { width: panel.width }}
+            style={{ width: panel.width }}
             className={cn(
               // Between md and lg the panel is a drawer over the chat; from lg up it is a column
               // of its own, sized by the gutter beside it.
               drawerOpen
                 ? "md:max-lg:fixed md:max-lg:inset-y-0 md:max-lg:right-0 md:max-lg:z-50 md:max-lg:flex md:max-lg:w-[min(28rem,calc(100vw-3rem))] md:max-lg:border-y-0 md:max-lg:border-r-0"
                 : "md:max-lg:hidden",
-              collapsed ? "hidden" : "hidden shrink-0 lg:flex",
+              "hidden shrink-0 lg:flex",
             )}
           />
         </main>

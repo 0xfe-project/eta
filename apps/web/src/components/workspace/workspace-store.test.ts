@@ -22,7 +22,7 @@ describe("workspace store persistence", () => {
   });
 
   it("ignores saved data that does not validate", async () => {
-    localStorage.setItem(key, JSON.stringify({ panelCollapsed: 5 }));
+    localStorage.setItem(key, JSON.stringify({ selectedGroupId: 5 }));
     await useWorkspaceStore.persist.rehydrate();
     expect(useWorkspaceStore.getState().workspace).toEqual({});
   });
@@ -34,15 +34,17 @@ describe("workspace store persistence", () => {
     expect(useWorkspaceStore.getState().workspace).toMatchObject(page);
   });
 
-  it("remembers a folded side panel until something shows it", async () => {
-    localStorage.setItem(key, JSON.stringify({ panelCollapsed: true }));
+  it("has no folded panel to remember: the wide layout always shows it", async () => {
+    // et-old's right column is always there from `lg` up; the drawer is a phone thing, and
+    // `mobilePanel` is all it needs.
+    localStorage.setItem(
+      key,
+      JSON.stringify({ ...saved, panelCollapsed: true }),
+    );
     await useWorkspaceStore.persist.rehydrate();
-    expect(useWorkspaceStore.getState().workspace.panelCollapsed).toBe(true);
+    expect(useWorkspaceStore.getState().workspace).toEqual(saved);
     useWorkspaceStore.getState().showPanel();
     expect(useWorkspaceStore.getState().mobilePanel).toBe("workspace");
-    expect(JSON.parse(localStorage.getItem(key)!)).toEqual({
-      panelCollapsed: false,
-    });
   });
 
   it("saves the bare workspace object, not other UI state", () => {

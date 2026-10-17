@@ -1,6 +1,5 @@
 import type { WorkspaceView } from "./types";
 import { ArrowsOutIcon } from "@phosphor-icons/react/ArrowsOut";
-import { SidebarSimpleIcon } from "@phosphor-icons/react/SidebarSimple";
 import { XIcon } from "@phosphor-icons/react/X";
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
@@ -59,7 +58,6 @@ export function WorkspacePanel({
   className,
   style,
   onClose,
-  onCollapse,
   onFocusMember,
 }: {
   view: WorkspaceView;
@@ -69,8 +67,6 @@ export function WorkspacePanel({
   style?: React.CSSProperties;
   /** Closes the drawer it is between md and lg. */
   onClose?: () => void;
-  /** Folds it away from lg up. */
-  onCollapse?: () => void;
   /** Pressing a member narrows the chat to it. */
   onFocusMember?: (agentId: string) => void;
 }) {
@@ -100,18 +96,6 @@ export function WorkspacePanel({
     >
       <div className="band grid grid-cols-[1fr_auto_1fr] gap-2 px-3">
         <div className="flex justify-self-start">
-          {onCollapse ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={translateText("actions.collapseWorkspace")}
-              title={translateText("common:actions.collapse")}
-              className="hidden lg:inline-flex"
-              onClick={onCollapse}
-            >
-              <SidebarSimpleIcon aria-hidden="true" className="-scale-x-100" />
-            </Button>
-          ) : null}
           {view === "tasks" || view === "routines" ? (
             <RefreshButton resource={view} />
           ) : null}

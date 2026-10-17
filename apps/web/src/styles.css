@@ -721,3 +721,171 @@
     flex: 1 1 0;
   }
 }
+
+@layer components {
+  /* ---- thinking, tool cards, asks: the three things a turn can contain besides text ----
+   * Ported from graphite.css with the token names translated. The point of all three is the same:
+   * they are folded, their header says what they are in 10–11px uppercase mono, and the body is
+   * the only place that scrolls. */
+
+  .thinking-block {
+    border: 1px solid var(--border);
+    margin-bottom: 16px;
+    background: var(--overlay);
+  }
+  .thinking-block-header {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+    cursor: pointer;
+  }
+  .thinking-block-header::-webkit-details-marker,
+  .tool-card-head::-webkit-details-marker {
+    display: none;
+  }
+  .thinking-block-chevron {
+    font-size: 8px;
+  }
+  details[open] > .thinking-block-header .thinking-block-chevron,
+  details[open] > .tool-card-head .thinking-block-chevron {
+    transform: rotate(90deg);
+  }
+  .thinking-block-content {
+    margin: 0;
+    padding: 8px 10px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    color: var(--muted-foreground);
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  .tool-card {
+    border: 1px solid var(--border);
+    margin-bottom: 12px;
+    background: var(--background);
+  }
+  .tool-card-head {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 10px;
+    background: var(--overlay);
+    cursor: pointer;
+  }
+  .tool-card-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+  .tool-card-status {
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 0 6px;
+    border: 1px solid var(--border);
+    color: var(--muted-foreground);
+  }
+  .tool-card-status.running {
+    background: var(--foreground);
+    color: var(--background);
+    border-color: var(--foreground);
+  }
+  .tool-card-status.failed {
+    color: var(--state-error);
+    border-color: var(--state-error);
+  }
+  .tool-card-block {
+    margin: 0;
+    padding: 6px 10px;
+  }
+  .tool-card-block + .tool-card-block {
+    border-top: 1px solid var(--border);
+  }
+  .tool-card-block-label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin-bottom: 2px;
+  }
+  .tool-card-block-content {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--foreground);
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  /* An ask: the run is standing still on an answer. One line for the question, its options as
+     bordered controls under it — the same grammar as the composer's toolbar. */
+  .ask-block {
+    border: 1px solid var(--state-warning);
+    margin-bottom: 12px;
+  }
+  .ask-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 4px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--overlay);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--state-warning);
+  }
+  .ask-body {
+    padding: 8px 10px;
+    font-size: 14px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+  }
+  .ask-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 10px 10px;
+  }
+  .ask-option {
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--border-strong);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--foreground);
+    background: transparent;
+    cursor: pointer;
+  }
+  .ask-option:hover {
+    background: var(--overlay-hover);
+  }
+}
