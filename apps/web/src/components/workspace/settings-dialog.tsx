@@ -45,64 +45,6 @@ const colorModes = [
     },
   },
 ] as const;
-/** A row of mutually exclusive choices with a sliding selection. */
-function Segmented<T extends string>({
-  label,
-  name,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  name: string;
-  options: readonly { value: T; label: string }[];
-  value: T;
-  onChange: (value: T) => void;
-}) {
-  const index = options.findIndex((option) => option.value === value);
-  return (
-    <fieldset className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-      <legend className="sr-only">{label}</legend>
-      <span aria-hidden="true" className="text-sm font-medium">
-        {label}
-      </span>
-      <div className="w-fit max-w-full bg-muted p-1">
-        <div
-          className="relative isolate grid"
-          style={{ gridTemplateColumns: `repeat(${options.length}, 1fr)` }}
-        >
-          {index >= 0 ? (
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 left-0 border border-transparent bg-background shadow-xs transition-transform motion-reduce:transition-none dark:border-input dark:bg-input/30"
-              style={{
-                width: `${100 / options.length}%`,
-                transform: `translateX(${index * 100}%)`,
-              }}
-            />
-          ) : null}
-          {options.map((option) => (
-            <label
-              key={option.value}
-              className="relative cursor-pointer px-3 py-1.5 text-center text-sm text-muted-foreground has-checked:text-foreground has-focus-visible:outline-2 has-focus-visible:outline-ring"
-            >
-              <input
-                type="radio"
-                name={name}
-                value={option.value}
-                checked={value === option.value}
-                onChange={() => onChange(option.value)}
-                className="sr-only"
-              />
-              {option.label}
-            </label>
-          ))}
-        </div>
-      </div>
-    </fieldset>
-  );
-}
-
 function AppearanceSettings() {
   const { t: translateText } = useTranslation(["settings", "common"] as const);
   const workspace = useWorkspaceStore((s) => s.workspace);
