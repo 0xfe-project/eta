@@ -29,6 +29,7 @@ import { ClaudeSlashMenu } from "@/components/brainless/claude/claude-slash-menu
 import { ClaudeThinking } from "@/components/brainless/claude/claude-thinking";
 import { ClaudeToolCall } from "@/components/brainless/claude/claude-tool-call";
 import { Markdown } from "@/components/markdown";
+import { Button } from "@/components/ui/button";
 import { ActivityOperationCards } from "@/components/workspace/activity-operation";
 import { ActivityRefCard } from "@/components/workspace/activity-ref";
 import {
@@ -686,6 +687,7 @@ export function ChatPanel({
   onResend,
   onGoal,
   focus,
+  onReload,
 }: {
   groupId: string | undefined;
   groupName: string | undefined;
@@ -730,6 +732,8 @@ export function ChatPanel({
   onDiscard: (id: string) => void;
   /** Send a failed reply's message again, as a new message. */
   onResend: (parts: OutgoingPart[], agentId?: string) => void;
+  /** Ask for the conversation again, when reading it failed. */
+  onReload?: () => void;
   /** Narrowed to one member: its name, and the way back out. */
   focus?: { name: string; onClear: () => void } | undefined;
   /** The goal of this conversation, moved from the composer's `/goal`. */
@@ -1121,14 +1125,50 @@ export function ChatPanel({
                   whatsNew={[]}
                 />
               )}
-              {error ? <Warning>{error}</Warning> : null}
-              {connectionLost && !error ? (
-                <Warning>{translateText("connection.reconnecting")}</Warning>
-              ) : null}
-              {loading && !error && !messages.length ? (
-                <div role="status" className="text-[var(--terminal-muted)]">
-                  {translateText("history.loading")}
+              {/*
+               * The four states a conversation can be in, in one place and in the same words as
+               * the rest of the app: it failed (and can be asked again), the live updates dropped
+               * (and it reconnects itself), it is still being read, or there is nothing here yet.
+               * They live above the transcript rather than inside it so they do not scroll away
+               * with the thing they describe.
+               */}
+              {error !== undefined ? (
+                <div className="border border-state-error px-2 py-1 text-xs">
+                  <div role="alert" className="text-state-error">
+                    {error}
+                  </div>
+                  {onReload === undefined ? null : (
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      className="mt-1"
+                      onClick={onReload}
+                    >
+                      {translateText("common:actions.retry")}
+                    </Button>
+                  )}
                 </div>
+              ) : null}
+              {connectionLost && error === undefined ? (
+                <p
+                  role="status"
+                  className="border border-state-warning px-2 py-1 text-xs text-state-warning"
+                >
+                  {translateText("connection.reconnecting")}
+                </p>
+              ) : null}
+              {loading && error === undefined && !messages.length ? (
+                <p
+                  role="status"
+                  className="px-1 py-2 text-xs text-[var(--terminal-muted)]"
+                >
+                  {translateText("history.loading")}
+                </p>
+              ) : null}
+              {!loading && !error && messages.length === 0 ? (
+                <p className="px-1 py-2 text-xs text-muted-foreground">
+                  {translateText("history.empty")}
+                </p>
               ) : null}
               {/* Off-screen turns skip rendering; `auto` remembers their size. */}
               <div

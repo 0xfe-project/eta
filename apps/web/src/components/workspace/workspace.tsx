@@ -321,6 +321,7 @@ export function Workspace({
                   compact.mutate({ groupId: group.id, mentions }, { onError });
                 else outbox.send(group.id, parts, "queue", mentions);
               }}
+              onReload={() => history.loadOlder()}
               onGoal={(action, objective) =>
                 // Through the route, like the panel's own buttons: one writer for a goal means the
                 // two can never show different ones.

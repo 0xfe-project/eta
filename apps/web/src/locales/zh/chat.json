@@ -170,7 +170,8 @@
     "loading": "正在读取对话…",
     "recentChats": "最近对话",
     "noMessages": "还没有消息",
-    "noConversations": "还没有对话"
+    "noConversations": "还没有对话",
+    "empty": "这里还没说过话。说一句就开始。"
   },
   "connection": {
     "reconnecting": "连接中断，正在重连…显示的状态可能不是最新的。"
