@@ -17,8 +17,8 @@ import { useTasks } from "@/queries/tasks";
 import { AgentEditor } from "./agent-editor";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
-import { GroupList } from "./groups";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
+import { FolderTree } from "./sidebar-tree";
 import { useAgents, useOpenAgent } from "./use-agents";
 import { useAttention } from "./use-attention";
 
@@ -128,7 +128,7 @@ export function Sidebar() {
             </Link>
           ))}
       </nav>
-      <GroupList compact />
+      <FolderTree />
       <section
         aria-labelledby="sidebar-agents"
         className="mt-5 flex min-h-0 flex-col px-2"

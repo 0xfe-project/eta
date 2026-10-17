@@ -40,6 +40,22 @@ export function useGroupActions() {
         ),
       onSuccess,
     }),
+    /**
+     * The conversation an agent has for itself, created if it does not exist yet.
+     *
+     * Both the sidebar's member rows and its agent library mean "talk to this one alone"; the
+     * host answers with the direct chat, idempotently, so pressing the button again opens the
+     * same conversation instead of making a second one.
+     */
+    direct: useMutation({
+      mutationFn: (agentId: string) =>
+        unwrap<Group>(
+          controlPlane.POST("/api/v1/agents/{agent_id}/direct", {
+            params: { path: { agent_id: agentId } },
+          }),
+        ),
+      onSuccess,
+    }),
     member: useMutation({
       mutationFn: ({
         groupId,

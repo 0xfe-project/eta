@@ -70,7 +70,10 @@
       "inviteTitle": "Invite agents",
       "inviteDescription": "Members can read the group chat and reply when @mentioned.",
       "count_one": "{{count}} member",
-      "count_other": "{{count}} members"
+      "count_other": "{{count}} members",
+      "collapse": "Collapse members",
+      "expand": "Show members",
+      "talkAlone": "Talk to {{name}} alone"
     },
     "title": "Groups",
     "archived": {
@@ -91,6 +94,13 @@
       "cwdUnbound": "no folder",
       "unboundNotice": "This group has no folder yet — its agents run in the host's directory and project notes are read from there.",
       "bindFolder": "Set folder"
+    },
+    "search": {
+      "empty": "Nothing matches that search.",
+      "placeholder": "Search conversations or folders"
+    },
+    "empty": {
+      "title": "No conversations yet."
     }
   },
   "confirmations": {

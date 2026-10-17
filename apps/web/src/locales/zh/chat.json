@@ -70,7 +70,10 @@
       "inviteTitle": "邀请智能体",
       "inviteDescription": "加入后可以查看群聊，并在被 @ 时回复。",
       "count_one": "{{count}} 位成员",
-      "count_other": "{{count}} 位成员"
+      "count_other": "{{count}} 位成员",
+      "collapse": "收起成员",
+      "expand": "展开成员",
+      "talkAlone": "单独和 {{name}} 说"
     },
     "title": "群",
     "archived": {
@@ -91,6 +94,13 @@
       "cwdUnbound": "未绑定目录",
       "unboundNotice": "这个群还没绑目录：成员跑在宿主启动的目录里，项目笔记也从那里读。",
       "bindFolder": "绑定目录"
+    },
+    "search": {
+      "empty": "没有匹配的对话。",
+      "placeholder": "搜索对话或目录"
+    },
+    "empty": {
+      "title": "还没有对话。"
     }
   },
   "confirmations": {
