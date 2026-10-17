@@ -19,6 +19,7 @@ import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { FolderTree } from "./sidebar-tree";
+import { useGroups } from "./use-groups";
 import { useAgents, useOpenAgent } from "./use-agents";
 import { useAttention } from "./use-attention";
 
@@ -70,7 +71,9 @@ const sections = [
 function useBadges(): Partial<Record<(typeof sections)[number]["to"], number>> {
   const { total } = useAttention();
   const { data } = useTasks();
-  const review = data?.tasks.filter((t) => t.status === "in_review").length;
+  const review = data?.tasks.filter(
+    (task: { status: string }) => task.status === "in_review",
+  ).length;
   return { "/workspace/tasks": review, "/workspace/inbox": total };
 }
 
@@ -129,69 +132,110 @@ export function Sidebar() {
           ))}
       </nav>
       <FolderTree />
-      <section
-        aria-labelledby="sidebar-agents"
-        className="mt-5 flex min-h-0 flex-col px-2"
-      >
-        <div className="flex h-7 items-center justify-between pl-2">
-          <h2
-            id="sidebar-agents"
-            className="text-xs font-medium text-muted-foreground"
-          >
-            {translateText("common:entities.agents")}
-          </h2>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={translateText("agents:actions.create")}
-            title={translateText("agents:actions.create")}
-            onClick={() => openEditor()}
-          >
-            <PlusIcon aria-hidden="true" />
-          </Button>
-        </div>
-        {error && !loaded ? (
-          <p className="px-2 text-xs text-muted-foreground">
-            {translateText("agents:errors.loadFailed")}
-          </p>
-        ) : !loaded ? (
-          <Loading rows={2} />
-        ) : agents.length ? null : (
-          <Empty
-            title={translateText("agents:empty.title")}
-            className="px-3 py-4"
-            action={
-              <Button size="xs" variant="outline" onClick={() => openEditor()}>
-                {translateText("agents:actions.create")}
-              </Button>
-            }
-          />
-        )}
-        <ul className="grid min-h-0 grid-cols-1 gap-px overflow-y-auto">
-          {agents.map((agent) => (
-            <li key={agent.id}>
-              <button
-                type="button"
-                onClick={() => openAgent(agent.id)}
-                title={translateText("agents:actions.chatWith", {
-                  name: agent.name,
-                })}
-                className={cn(item, "w-full")}
-              >
-                <AgentAvatar agent={agent} className="size-5" />
-                <span className="min-w-0 flex-1 truncate text-left">
-                  {agent.name}
-                </span>
-                <AgentStatusDot status={agent.status} />
-                <span className="sr-only">
-                  {agentStatusLabels[agent.status]}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <AgentLibrary />
     </aside>
+  );
+}
+
+/**
+ * The agents you cannot reach from the tree yet.
+ *
+ * A conversation is the thing this sidebar lists, and an agent with a direct chat already has a
+ * row there — under its folder, next to the groups. Listing it again here would be the same
+ * agent twice, which is how a list starts lying about how much there is.
+ *
+ * So this is not "all agents": it is the ones with no conversation anywhere, i.e. the ones that
+ * would otherwise be unreachable. Pressing one opens its chat, which puts it in the tree and out
+ * of this list — the list emptying as you work through it is the point.
+ */
+function AgentLibrary() {
+  const { t: translateText } = useTranslation(["agents", "common"] as const);
+  const { agents, loaded, error, openEditor } = useAgents();
+  const { groups } = useGroups();
+  const openAgent = useOpenAgent();
+  const reachable = new Set(
+    groups
+      .filter((group) => group.kind === "direct" && !group.archived)
+      .map(
+        (group) =>
+          group.participants.find(
+            (participant: { member: boolean }) => participant.member,
+          )?.agent_id,
+      ),
+  );
+  const library = agents.filter(
+    (agent: { id: string }) => !reachable.has(agent.id),
+  );
+  return (
+    <section
+      aria-labelledby="sidebar-agents"
+      className="mt-2 flex min-h-0 shrink-0 flex-col px-2 pb-2"
+    >
+      <div className="flex h-7 items-center justify-between pl-2">
+        <h2
+          id="sidebar-agents"
+          className="font-mono text-[10px] tracking-[0.12em] text-faint uppercase"
+        >
+          {translateText("agents:library.title")}
+        </h2>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label={translateText("agents:actions.create")}
+          title={translateText("agents:actions.create")}
+          onClick={() => openEditor()}
+        >
+          <PlusIcon aria-hidden="true" />
+        </Button>
+      </div>
+      {error && !loaded ? (
+        <p className="px-2 text-xs text-muted-foreground">
+          {translateText("agents:errors.loadFailed")}
+        </p>
+      ) : !loaded ? (
+        <Loading rows={1} />
+      ) : agents.length === 0 ? (
+        <Empty
+          title={translateText("agents:empty.title")}
+          className="px-3 py-3"
+          action={
+            <Button size="xs" variant="outline" onClick={() => openEditor()}>
+              {translateText("agents:actions.create")}
+            </Button>
+          }
+        />
+      ) : library.length === 0 ? (
+        <p className="px-2 pb-1 text-xs text-muted-foreground">
+          {translateText("agents:library.allReachable")}
+        </p>
+      ) : (
+        <ul className="grid min-h-0 grid-cols-1 gap-px overflow-y-auto">
+          {library.map(
+            (agent: { id: string; name: string; status: string }) => (
+              <li key={agent.id}>
+                <button
+                  type="button"
+                  onClick={() => openAgent(agent.id)}
+                  title={translateText("agents:actions.chatWith", {
+                    name: agent.name,
+                  })}
+                  className={cn(item, "w-full")}
+                >
+                  <AgentAvatar agent={agent} className="size-5" />
+                  <span className="min-w-0 flex-1 truncate text-left">
+                    {agent.name}
+                  </span>
+                  <AgentStatusDot status={agent.status as never} />
+                  <span className="sr-only">
+                    {agentStatusLabels[agent.status]}
+                  </span>
+                </button>
+              </li>
+            ),
+          )}
+        </ul>
+      )}
+    </section>
   );
 }
 

@@ -85,5 +85,9 @@
     "summary": "Model usage: {{usage}}",
     "tokensAndRequests_one": "{{tokens}} tokens ({{count}} request in 7 days)",
     "tokensAndRequests_other": "{{tokens}} tokens ({{count}} requests in 7 days)"
+  },
+  "library": {
+    "title": "Agents",
+    "allReachable": "Every agent has a conversation."
   }
 }
