@@ -56,6 +56,7 @@ import { AttachmentChip, PastedText } from "./composer-block";
 import { ComposerEditor } from "./composer-editor";
 import { ModelChip, ThinkingChip } from "./composer-pickers";
 import { GroupNotice } from "./group-notice";
+import { PendingStrip } from "./pending-strip";
 import { TaskMessage } from "./task-message";
 import { TranscriptRail } from "./transcript-rail";
 import { useWorkspaceStore } from "./workspace-store";
@@ -1073,6 +1074,14 @@ export function ChatPanel({
         ) : null}
         {/* The rail is inside the scroll container so it can stick to the top of what you see;
             it takes a lane on the right and the transcript keeps clear of it. */}
+        {/* Everything a run is standing still on, in one line each, wherever you are in the
+            transcript. The cards inside the turns stay: they are the same questions in their own
+            place. */}
+        <PendingStrip
+          interactions={interactions}
+          agents={agents}
+          onAnswer={onAnswer}
+        />
         {focus === undefined ? null : (
           <div className="mx-[1ch] mb-1 flex items-center gap-2 border border-border px-2 py-0.5 text-xs">
             <span className="min-w-0 flex-1 truncate">

@@ -233,5 +233,9 @@
   },
   "focus": {
     "only": "只看 {{name}}"
+  },
+  "pending": {
+    "title": "等你处理",
+    "more": "还有 {{count}} 条在等你"
   }
 }

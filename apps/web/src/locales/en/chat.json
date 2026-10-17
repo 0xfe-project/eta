@@ -233,5 +233,9 @@
   },
   "focus": {
     "only": "Only {{name}}"
+  },
+  "pending": {
+    "title": "Waiting for you",
+    "more": "and {{count}} more waiting"
   }
 }
