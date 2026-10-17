@@ -74,7 +74,11 @@
       "count_other": "{{count}} members",
       "collapse": "Collapse members",
       "expand": "Show members",
-      "talkAlone": "Talk to {{name}} alone"
+      "talkAlone": "Talk to {{name}} alone",
+      "focus": "Focus {{name}}",
+      "noSession": "no conversation with it in this group yet",
+      "remove": "Remove from group",
+      "removeDescription": "{{name}} leaves this conversation. What it said stays; what it would have said next does not happen."
     },
     "title": "Groups",
     "archived": {

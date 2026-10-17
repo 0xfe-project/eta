@@ -7,7 +7,8 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { GroupArtifacts, GroupMembers } from "./groups";
+import { GroupPanel } from "./group-panel";
+import { GroupArtifacts } from "./groups";
 import { Inbox } from "./inbox";
 import { Overview } from "./overview";
 import { RefreshButton } from "./refresh-button";
@@ -17,6 +18,7 @@ import { SettingsButton } from "./settings-dialog";
 import { useTaskNav } from "./task-nav";
 import { Tasks } from "./tasks";
 import { useAttention } from "./use-attention";
+import { useGroups } from "./use-groups";
 import { hasPage, sectionPaths, usePanelViews } from "./workspace-search";
 
 /** Opens the full window at the side panel's current data context. */
@@ -74,6 +76,7 @@ export function WorkspacePanel({
     "common",
   ] as const);
   const pending = useAttention().total;
+  const { current: group } = useGroups();
   const tabs = usePanelViews();
   const view = tabs.some((tab) => tab.value === linked)
     ? linked
@@ -151,10 +154,11 @@ export function WorkspacePanel({
           ) : null}
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      <div className="min-h-0 flex-1 overflow-y-auto p-0">
         {tabs.map(({ value }) => (
-          <TabsContent key={value} value={value}>
-            {value === "members" ? <GroupMembers /> : null}
+          <TabsContent key={value} value={value} className="mt-0">
+            {/* A group's panel is one column of blocks, not a tab per half of it. */}
+            {value === "members" ? <GroupPanel group={group} /> : null}
             {value === "artifacts" ? <GroupArtifacts /> : null}
             {value === "overview" ? <Overview /> : null}
             {value === "tasks" ? <Tasks /> : null}

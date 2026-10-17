@@ -74,7 +74,11 @@
       "count_other": "{{count}} 位成员",
       "collapse": "收起成员",
       "expand": "展开成员",
-      "talkAlone": "单独和 {{name}} 说"
+      "talkAlone": "单独和 {{name}} 说",
+      "focus": "聚焦 {{name}}",
+      "noSession": "在这个群里还没和它说过话",
+      "remove": "移出群",
+      "removeDescription": "{{name}} 离开这个对话。它说过的话留着，它本来要说的下一句不会发生。"
     },
     "title": "群",
     "archived": {
