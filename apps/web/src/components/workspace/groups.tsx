@@ -480,6 +480,8 @@ export function GroupMembers() {
   const [linkTask, setLinkTask] = useState(false);
   const [invite, setInvite] = useState(false);
   const [removing, setRemoving] = useState<Group["participants"][number]>();
+  const focused = useWorkspaceStore((state) => state.focusedAgentId);
+  const setFocusedAgent = useWorkspaceStore((state) => state.setFocusedAgent);
   if (!group) return null;
   const members = group.participants.filter((p) => p.member);
   const linked = board?.tasks.filter((t) => t.group_id === group.id) ?? [];
@@ -558,10 +560,24 @@ export function GroupMembers() {
           return (
             <li
               key={p.agent_id}
-              className="flex min-h-12 min-w-0 items-center gap-2"
+              className={cn(
+                "flex min-w-0 items-start gap-2 border px-2 py-1.5",
+                // Focused is a frame around the card, not a different card: the numbers stay where
+                // they were, so comparing two members does not mean re-learning the layout.
+                focused === p.agent_id ? "border-foreground" : "border-border",
+              )}
             >
               <AgentAvatar agent={{ id: p.agent_id }} />
-              <div className="min-w-0 flex-1 text-sm">
+              {/* Pressing the member is the same action as pressing its card anywhere else: the
+                  chat narrows to it. The menu beside it is the other thing a member has. */}
+              <button
+                type="button"
+                // Focus, and stay focused: pressing the same card twice is not "never mind" —
+                // the way out is the chip above the transcript.
+                onClick={() => setFocusedAgent(p.agent_id)}
+                title={translateText("groups.members.focus", { name: p.name })}
+                className="min-w-0 flex-1 text-left text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
                 <span className="block truncate" title={p.name}>
                   {p.name}{" "}
                   <span className="text-xs text-muted-foreground">
@@ -578,7 +594,7 @@ export function GroupMembers() {
                 </span>
                 {/* The member's own session: what it has spent here, what it is chasing. */}
                 <MemberStats sessionId={p.session_id ?? undefined} />
-              </div>
+              </button>
               {(agent || removable) && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

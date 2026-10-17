@@ -7,8 +7,8 @@ import { folderSections, matchesQuery } from "@/lib/folder-sections";
 import { cn } from "@/lib/utils";
 import { chatQueryOptions } from "@/queries/chat";
 import { AgentAvatar } from "./agent-identity";
-import { useOpenAgent } from "./use-agents";
 import { useGroups, useOpenGroup } from "./use-groups";
+import { useWorkspaceStore } from "./workspace-store";
 
 /**
  * The sidebar tree: folders, the conversations in them, and who is in each one.
@@ -37,7 +37,7 @@ export function FolderTree({ query = "" }: { query?: string }) {
   const { t: translateText } = useTranslation(["chat", "navigation"] as const);
   const { groups, current } = useGroups();
   const open = useOpenGroup();
-  const openAgent = useOpenAgent();
+  const setFocusedAgent = useWorkspaceStore((state) => state.setFocusedAgent);
   const { data } = useQuery(chatQueryOptions());
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
@@ -101,7 +101,15 @@ export function FolderTree({ query = "" }: { query?: string }) {
                   }))
                 }
                 onOpen={() => open(group.id)}
-                onOpenAgent={(agentId) => openAgent(agentId, section.path)}
+                // A member listed under a group is a member *of that group*: pressing it narrows
+                // the conversation to it, the same action as its card in the panel. Opening a
+                // separate private chat is what the agent library is for.
+                // Pressing an already-focused member keeps it focused: the way out is the chip
+                // above the transcript, so a second press never means "never mind".
+                onOpenAgent={(agentId) => {
+                  setFocusedAgent(agentId);
+                  open(group.id);
+                }}
               />
             ))}
           </ul>

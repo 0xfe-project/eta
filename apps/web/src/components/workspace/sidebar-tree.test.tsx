@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { FolderTree } from "./sidebar-tree";
+import { useWorkspaceStore } from "./workspace-store";
 
 const data = rstest.hoisted(() => ({
   groups: [] as unknown[],
@@ -120,7 +121,7 @@ describe("侧边栏的树", () => {
     expect(navigation.open).toHaveBeenCalledWith("g1");
   });
 
-  it("shows members when expanded, and a member row opens that agent alone", async () => {
+  it("shows members when expanded, and a member row focuses that agent in the group", async () => {
     data.groups = [group("g1", "装配", "/p")];
     const container = await render(<FolderTree />);
     expect(button(container, "乐子人")).toBeUndefined();
@@ -131,9 +132,11 @@ describe("侧边栏的树", () => {
         .dispatchEvent(new MouseEvent("click", { bubbles: true })),
     );
     await act(async () => button(container, "乐子人")!.click());
-    // The folder the member was listed under travels with it: a direct chat opened here belongs
-    // to that project, not to nowhere.
-    expect(navigation.openAgent).toHaveBeenCalledWith("a1", "/p");
+    // A member listed under a group is a member of that group: pressing it narrows the
+    // conversation to it (and opens the group if it was not open), rather than starting a
+    // separate private chat — that is the agent library's job.
+    expect(navigation.open).toHaveBeenCalledWith("g1");
+    expect(useWorkspaceStore.getState().focusedAgentId).toBe("a1");
   });
 
   it("marks who is answering and how much is unread", async () => {

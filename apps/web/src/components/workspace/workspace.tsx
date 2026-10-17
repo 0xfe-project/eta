@@ -3,7 +3,7 @@ import type { WorkspaceView } from "./types";
 import type { Draft } from "@/lib/composer";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { draftText, EMPTY_DRAFT, partsText } from "@/lib/composer";
@@ -107,10 +107,11 @@ export function Workspace({
   const compact = useCompact();
   const stopReply = useStopReply();
   const setGoal = useSetGoal();
-  // Narrowing the chat to one member: a frame around its block in the panel, and only that
-  // member's replies (plus what was said to it) in the middle.
-  const [focusAgent, setFocusAgent] = useState<string | null>(null);
-  useEffect(() => setFocusAgent(null), [group?.id]);
+  // Narrowing the chat to one member: the state lives in the store, because the sidebar's member
+  // rows and the panel's member cards are the same action. It resets when the conversation does.
+  const focusAgent = useWorkspaceStore((s) => s.focusedAgentId);
+  const setFocusedAgent = useWorkspaceStore((s) => s.setFocusedAgent);
+  useEffect(() => setFocusedAgent(null), [group?.id, setFocusedAgent]);
   // Which session a goal set from the composer lands on: the member being talked to, or the first
   // one that has a conversation. A group has one goal per member; the composer speaks for the one
   // you are addressing.
@@ -141,7 +142,7 @@ export function Workspace({
         {
           label: translateText("chat:groups.actions.viewInfo"),
           onClick: () => {
-            onViewChange("members");
+            onViewChange("context");
             showPanel();
           },
         },
@@ -176,7 +177,7 @@ export function Workspace({
   const direct = group?.kind === "direct" ? members[0] : undefined;
   const showInfo = () => {
     if (direct) return openEditor(direct.agent_id);
-    onViewChange("members");
+    onViewChange("context");
     showPanel();
   };
   // Between md and lg the panel is a drawer over the chat, open while
@@ -287,7 +288,7 @@ export function Workspace({
                           (member: { agent_id: string }) =>
                             member.agent_id === focusAgent,
                         )?.name ?? focusAgent,
-                      onClear: () => setFocusAgent(null),
+                      onClear: () => setFocusedAgent(null),
                     }
               }
               loading={!chat.data || history.loading}
