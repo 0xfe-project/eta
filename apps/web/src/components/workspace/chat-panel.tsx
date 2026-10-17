@@ -490,7 +490,20 @@ const Turn = memo(
         {message.blocks
           .filter((block): block is Reply => block.type !== "attachment")
           .map((block) =>
-            block.type === "text" ? (
+            block.type === "thinking" ? (
+              // Folded by default, with its size on the line: what it worked through is context
+              // for reading the answer critically, not a second answer competing with it.
+              <details key={block.id ?? "thinking"} className={ENTER}>
+                <summary className="cursor-pointer font-mono text-[11px] text-[var(--terminal-muted)] outline-none">
+                  {translate("chat:thinking.fold", {
+                    count: block.chars ?? block.text.length,
+                  })}
+                </summary>
+                <div className="mt-1 border-l border-border pl-2 text-[var(--terminal-muted)] whitespace-pre-wrap">
+                  {block.text}
+                </div>
+              </details>
+            ) : block.type === "text" ? (
               <ClaudeMessage
                 key={block.id}
                 className={ENTER}

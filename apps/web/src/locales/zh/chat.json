@@ -214,7 +214,8 @@
       "percolating": "琢磨中",
       "noodling": "推敲中",
       "conjuring": "构思中"
-    }
+    },
+    "fold": "想的过程 · {{count}} 字"
   },
   "diff": {
     "addedLabel": "新增：",

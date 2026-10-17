@@ -158,6 +158,7 @@ describe("chat 页里成排出现的东西", () => {
               },
             ]
           : [
+              { id: `${id}-th`, type: "thinking", text: "先看看", chars: 3 },
               { id: `${id}-t`, type: "text", text: "好" },
               {
                 id: `${id}-k`,

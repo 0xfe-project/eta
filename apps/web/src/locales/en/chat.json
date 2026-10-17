@@ -214,7 +214,8 @@
       "percolating": "Percolating",
       "noodling": "Noodling",
       "conjuring": "Conjuring"
-    }
+    },
+    "fold": "thought · {{count}} chars"
   },
   "diff": {
     "addedLabel": "added: ",
