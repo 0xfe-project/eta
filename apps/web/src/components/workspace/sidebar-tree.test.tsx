@@ -146,6 +146,28 @@ describe("侧边栏的树", () => {
     expect(container.textContent).toContain("●");
   });
 
+  it("a conversation that belongs to nobody sits under its folder, not in a group", async () => {
+    // What /new makes: one agent, one folder, no group around it.
+    data.groups = [
+      group("g1", "乐子人", "/Users/me/Desktop/eta", { kind: "direct" }),
+    ];
+    const container = await render(<FolderTree />);
+    const headings = [...container.querySelectorAll("h3")].map(
+      (heading) => heading.textContent,
+    );
+    expect(headings).toEqual(["eta"]);
+    expect(container.textContent).toContain("乐子人");
+    // A direct chat has no members to show: its name *is* the agent.
+    expect(container.querySelector('[aria-label="展开成员"]')).toBeNull();
+  });
+
+  it("one with no folder goes in the unbound section rather than being hidden", async () => {
+    data.groups = [group("g1", "乐子人", "", { kind: "direct" })];
+    const container = await render(<FolderTree />);
+    expect(container.textContent).toContain("未绑定目录");
+    expect(container.textContent).toContain("乐子人");
+  });
+
   it("falls back to a sentence when a search matches nothing", async () => {
     data.groups = [group("g1", "装配", "/p")];
     const container = await render(<FolderTree query="没有这个" />);
