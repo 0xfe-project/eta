@@ -116,8 +116,15 @@ function textOfParts(parts: unknown): string | undefined | null {
       text.push(body);
       continue;
     }
-    // Attachments: the web uploads to `/attachments` and sends the id back. There is no attachment
-    // store here yet, and a message that quietly dropped a file would be worse than a refusal.
+    if (type === "attachment") {
+      // An attachment is a file in the project, and the agent reaches it the way it reaches any
+      // other file: by path. The web uploads it and sends `path` back, so a message with a file in
+      // it is still a message with text — one the agent can open.
+      const path = (part as { path?: unknown }).path;
+      if (typeof path !== "string" || path.length === 0) return null;
+      text.push(`@${path}`);
+      continue;
+    }
     return null;
   }
   return text.join("");

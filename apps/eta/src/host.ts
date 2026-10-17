@@ -25,6 +25,7 @@ import { artifactTools } from "./artifacts/tools";
 import { adminPlugin } from "./bundled/admin";
 import { agentsPlugin } from "./bundled/agents";
 import { artifactsPlugin } from "./bundled/artifacts";
+import { attachmentsPlugin } from "./bundled/attachments";
 import { compatPlugin } from "./bundled/compat";
 import { filesPlugin } from "./bundled/files";
 import { groupsPlugin } from "./bundled/groups";
@@ -388,6 +389,8 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     ctx.plugin(inspectPlugin, { sessions, interactions }),
     // The project's files, for the composer's @ completion (P9).
     ctx.plugin(filesPlugin, { groups }),
+    // Files attached to a message: stored in the group's project, referenced by path (P9).
+    ctx.plugin(attachmentsPlugin, { groups }),
     ctx.plugin(agentsPlugin, { agents, groups, hub, models }),
     ctx.plugin(usagePlugin, { usage }),
     // The management surface a settings page reads (P1.4): derived, never stored.

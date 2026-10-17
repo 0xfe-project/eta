@@ -237,6 +237,13 @@ export const PRODUCT_ROUTES: readonly ProductRoute[] = [
     response: { status: 200, shape: "MessagePage" },
   },
   {
+    method: "POST",
+    path: "/api/v1/groups/{group_id}/attachments",
+    summary:
+      "Attach a file to a message. Stored inside the group's project; the message references it by path.",
+    query: { name: "The file's name." },
+  },
+  {
     method: "GET",
     path: "/api/v1/files",
     summary:
