@@ -1,20 +1,16 @@
 import type { ReactNode } from "react";
-import { BellIcon } from "@phosphor-icons/react/Bell";
-import { BrainIcon } from "@phosphor-icons/react/Brain";
 import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
-import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
+import { SquaresFourIcon } from "@phosphor-icons/react/SquaresFour";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Empty, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
-import { capabilities } from "@/lib/capabilities";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { useTasks } from "@/queries/tasks";
 import { AgentEditor } from "./agent-editor";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
@@ -28,55 +24,33 @@ import { useGroups } from "./use-groups";
 // Shared navigation: the full-window sidebar on wide screens and four
 // bottom tabs on mobile. Conversation lists are the mobile home screen.
 
+/**
+ * The one global entry.
+ *
+ * Everything else in this product belongs somewhere: a conversation, a folder, a member. Tasks,
+ * routines and pending questions are facts about a group, so they are shown where that group is
+ * (the right panel, the top of the chat) rather than as four destinations that each answer "and
+ * which group?". What is left is a single place that looks across all of them — 总览.
+ */
 const sections = [
   {
-    to: "/",
+    to: "/workspace",
     get label() {
-      return translate("navigation:sections.chat");
+      return translate("navigation:sections.overview");
     },
-    icon: ChatsCircleIcon,
-  },
-  {
-    to: "/workspace/inbox",
-    get label() {
-      return translate("navigation:sections.pending");
-    },
-    icon: BellIcon,
-  },
-  {
-    to: "/workspace/tasks",
-    get label() {
-      return translate("navigation:sections.tasks");
-    },
-    icon: ListChecksIcon,
-  },
-  {
-    to: "/workspace/routines",
-    get label() {
-      return translate("navigation:sections.routines");
-    },
-    icon: ClockIcon,
-  },
-  {
-    to: "/workspace/memory",
-    get label() {
-      return translate("navigation:sections.memory");
-    },
-    icon: BrainIcon,
+    icon: SquaresFourIcon,
   },
 ] as const;
 
 /**
- * What each section holds for the user: everything waiting for them, and
- * tasks to accept.
+ * What 总览 holds for the user: everything waiting on them, wherever it is.
+ *
+ * One number, because there is one entry. The breakdown lives inside the overview (which knows
+ * which group each item belongs to), and the group-scoped counts live on the groups themselves.
  */
 function useBadges(): Partial<Record<(typeof sections)[number]["to"], number>> {
   const { total } = useAttention();
-  const { data } = useTasks();
-  const review = data?.tasks.filter(
-    (task: { status: string }) => task.status === "in_review",
-  ).length;
-  return { "/workspace/tasks": review, "/workspace/inbox": total };
+  return { "/workspace": total };
 }
 
 const item =
@@ -119,27 +93,21 @@ export function Sidebar({ width }: { width?: number } = {}) {
         aria-label={translateText("accessibility.sections")}
         className="grid gap-px px-2"
       >
-        {sections
-          .filter(
-            ({ to }) =>
-              // Hidden until its API is on this host (capabilities.ts says which phase).
-              !(to === "/workspace/memory" && !capabilities.memory),
-          )
-          .map(({ to, label, icon: Icon }) => (
-            <Link
-              key={to}
-              to={to}
-              className={item}
-              activeOptions={{ exact: to === "/", includeSearch: false }}
-              activeProps={{
-                className: "bg-sidebar-accent font-medium text-foreground",
-              }}
-            >
-              <Icon aria-hidden="true" className="size-4" />
-              {label}
-              <Badge count={badges[to]} />
-            </Link>
-          ))}
+        {sections.map(({ to, label, icon: Icon }) => (
+          <Link
+            key={to}
+            to={to}
+            className={item}
+            activeOptions={{ exact: false, includeSearch: false }}
+            activeProps={{
+              className: "bg-sidebar-accent font-medium text-foreground",
+            }}
+          >
+            <Icon aria-hidden="true" className="size-4" />
+            {label}
+            <Badge count={badges[to]} />
+          </Link>
+        ))}
       </nav>
       <label className="px-2 pb-1">
         <span className="sr-only">
@@ -274,15 +242,32 @@ export function BottomNav() {
   ] as const);
   const badges = useBadges();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // Three tabs, written out instead of picked from `sections` by index: the sidebar's list is
+  // about looking across everything, the phone's is about the three things a thumb reaches for.
+  // Indexing one list for both is how a tab silently starts leading somewhere else.
   const tabs = [
-    { ...sections[0], also: [] },
-    { ...sections[2], also: [] },
-    { ...sections[1], also: [] },
+    {
+      to: "/",
+      label: translateText("sections.chat"),
+      icon: ChatsCircleIcon,
+      also: [] as string[],
+    },
+    {
+      to: "/workspace/tasks",
+      label: translateText("sections.tasks"),
+      icon: ListChecksIcon,
+      also: [] as string[],
+    },
     {
       to: "/workspace/more",
       label: translateText("sections.more"),
       icon: DotsThreeIcon,
-      also: ["/workspace", "/workspace/routines", "/workspace/memory"],
+      also: [
+        "/workspace",
+        "/workspace/routines",
+        "/workspace/memory",
+        "/workspace/inbox",
+      ],
     },
   ] as const;
   return (

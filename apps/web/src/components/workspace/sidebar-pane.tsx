@@ -36,7 +36,7 @@ function rememberedWidth(): number {
 
 export function SidebarPane() {
   const [width, setWidth] = useState(rememberedWidth);
-  const drag = useRef<{ startX: number; startWidth: number } | undefined>(
+  const dragRef = useRef<{ startX: number; startWidth: number } | undefined>(
     undefined,
   );
   const [dragging, setDragging] = useState(false);
@@ -52,7 +52,7 @@ export function SidebarPane() {
 
   useEffect(() => {
     const stop = () => {
-      drag.current = undefined;
+      dragRef.current = undefined;
       setDragging(false);
     };
     window.addEventListener("pointerup", stop);
@@ -78,20 +78,20 @@ export function SidebarPane() {
         onPointerDown={(event) => {
           if (event.button !== 0) return;
           event.currentTarget.setPointerCapture(event.pointerId);
-          drag.current = { startX: event.clientX, startWidth: width };
+          dragRef.current = { startX: event.clientX, startWidth: width };
           setDragging(true);
         }}
         onPointerMove={(event) => {
-          const current = drag.current;
+          const current = dragRef.current;
           if (current === undefined) return;
           setWidth(
             clamp(current.startWidth + (event.clientX - current.startX)),
           );
         }}
         onPointerUp={(event) => {
-          if (drag.current === undefined) return;
+          if (dragRef.current === undefined) return;
           event.currentTarget.releasePointerCapture(event.pointerId);
-          drag.current = undefined;
+          dragRef.current = undefined;
           setDragging(false);
           remember(width);
         }}
