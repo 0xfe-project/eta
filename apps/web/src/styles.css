@@ -2,7 +2,6 @@
 @import "tw-animate-css";
 @import "blobatar/motion.css";
 @import "shadcn/tailwind.css";
-@import "./components/brainless/theme.css";
 
 @custom-variant dark (&:is(.dark *));
 
