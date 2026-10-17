@@ -99,6 +99,17 @@
   --animate-skeleton-sweep: skeleton-sweep 1.6s linear infinite;
   --animate-upload-pulse: upload-pulse 1.6s linear infinite;
   --animate-copied-check: copied-check 2.5s linear both;
+  /*
+   * Shadows are offsets, not haze (BR1): a solid block of ink displaced by 2–12px, no blur,
+   * no spread. `shadow-md` is the menu/dialog one — 4px, the number BR1 names.
+   */
+  --shadow-2xs: 1px 1px 0 0 var(--shadow-ink);
+  --shadow-xs: 2px 2px 0 0 var(--shadow-ink);
+  --shadow-sm: 2px 2px 0 0 var(--shadow-ink);
+  --shadow-md: 4px 4px 0 0 var(--shadow-ink);
+  --shadow-lg: 6px 6px 0 0 var(--shadow-ink);
+  --shadow-xl: 8px 8px 0 0 var(--shadow-ink);
+  --shadow-2xl: 12px 12px 0 0 var(--shadow-ink);
   --spacing: 0.225rem;
   --font-heading: var(--font-sans);
   --font-sans:
@@ -178,6 +189,12 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0px;
+  /*
+   * The ink a hard shadow is made of. On a light page it is the foreground itself; on a dark
+   * page a black block still reads against the elevated surface it is cast on (and a light
+   * one would read as a glow, which is a different idea).
+   */
+  --shadow-ink: oklch(0.14 0 0 / 85%);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -189,6 +206,7 @@
 }
 
 .dark {
+  --shadow-ink: oklch(0 0 0 / 80%);
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
