@@ -167,6 +167,9 @@ export const routinesPlugin = {
           try {
             const routine = routines.create({
               name,
+              ...(asString(body.group_id) === undefined
+                ? {}
+                : { groupId: asString(body.group_id)! }),
               model,
               brief,
               schedule: body.schedule,
@@ -214,6 +217,9 @@ export const routinesPlugin = {
               ...(asString(body.name) === undefined
                 ? {}
                 : { name: asString(body.name)! }),
+              ...(asString(body.group_id) === undefined
+                ? {}
+                : { groupId: asString(body.group_id)! }),
               ...(asString(body.brief) === undefined
                 ? {}
                 : { brief: asString(body.brief)! }),

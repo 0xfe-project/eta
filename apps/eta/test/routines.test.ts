@@ -157,6 +157,43 @@ const wait = async (host: Host, routineId: string): Promise<Run[]> => {
   }
 };
 
+describe("a routine belongs to a group", () => {
+  it("keeps the group it was made in, and says so in the list", async () => {
+    const host = await start();
+    const group = (await (
+      await send(host, "POST", "/groups", { name: "app" })
+    ).json()) as { group: { id: string } };
+    const created = await send(host, "POST", "/api/routines/v1/routines", {
+      name: "日报",
+      brief: "整理三条",
+      model: "local:m1",
+      timezone: "Asia/Shanghai",
+      schedule: { kind: "daily", time: "09:00" },
+      group_id: group.group.id,
+    });
+    expect(created.status).toBe(201);
+
+    const list = (await (
+      await send(host, "GET", "/api/routines/v1/routines")
+    ).json()) as { routines: { id: string; group_id: string | null }[] };
+    expect(list.routines[0]?.group_id).toBe(group.group.id);
+
+    // One made without a group says null — it is the all-groups case, not a guess.
+    const loose = await send(host, "POST", "/api/routines/v1/routines", {
+      name: "无主",
+      brief: "随便",
+      model: "local:m1",
+      timezone: "Asia/Shanghai",
+      schedule: { kind: "daily", time: "10:00" },
+    });
+    expect(loose.status).toBe(201);
+    const after = (await (
+      await send(host, "GET", "/api/routines/v1/routines")
+    ).json()) as { routines: { name: string; group_id: string | null }[] };
+    expect(after.routines.find((r) => r.name === "无主")?.group_id).toBeNull();
+  });
+});
+
 describe("the board", () => {
   it("creates a routine with its first brief, and versions follow", async () => {
     const host = await start(scripted([]));

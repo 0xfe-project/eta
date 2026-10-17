@@ -18,6 +18,11 @@ export type RunStatus = "running" | "sent" | "nothing_new" | "failed";
 export interface RoutineRecord {
   id: string;
   name: string;
+  /**
+   * The group this routine belongs to: where it runs, with whom, and about what. Absent for one
+   * made before groups owned routines, and for one made from the all-groups page.
+   */
+  groupId?: string | undefined;
   model: string;
   schedule: Schedule;
   timezone: string;
@@ -58,6 +63,7 @@ export interface FeedbackRecord {
 
 export interface CreateRoutineInput {
   name: string;
+  groupId?: string | undefined;
   model: string;
   brief: string;
   schedule: unknown;
@@ -67,6 +73,7 @@ export interface CreateRoutineInput {
 interface RoutineRow {
   id: string;
   name: string;
+  group_id: string | null;
   model: string;
   schedule: string;
   timezone: string;
@@ -112,6 +119,7 @@ const statusOf = (value: string): RunStatus =>
 const toRoutine = (row: RoutineRow): RoutineRecord => ({
   id: row.id,
   name: row.name,
+  ...(row.group_id === null ? {} : { groupId: row.group_id }),
   model: row.model,
   schedule: validateSchedule(JSON.parse(row.schedule)),
   timezone: row.timezone,
@@ -164,12 +172,13 @@ export class RoutineStore {
     this.#handle.transaction(() => {
       this.#handle
         .query(
-          `INSERT INTO routine (id, name, model, schedule, timezone, enabled, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+          `INSERT INTO routine (id, name, group_id, model, schedule, timezone, enabled, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
         )
         .run(
           id,
           input.name,
+          input.groupId ?? null,
           input.model,
           JSON.stringify(schedule),
           input.timezone,
@@ -217,6 +226,7 @@ export class RoutineStore {
     id: string,
     input: {
       name?: string | undefined;
+      groupId?: string | undefined;
       model?: string | undefined;
       schedule?: unknown | undefined;
       timezone?: string | undefined;
@@ -235,11 +245,12 @@ export class RoutineStore {
       this.#handle
         .query(
           `UPDATE routine
-              SET name = ?, model = ?, schedule = ?, timezone = ?, enabled = ?, updated_at = ?
+              SET name = ?, group_id = ?, model = ?, schedule = ?, timezone = ?, enabled = ?, updated_at = ?
             WHERE id = ?`,
         )
         .run(
           input.name ?? before.name,
+          input.groupId ?? before.groupId ?? null,
           input.model ?? before.model,
           JSON.stringify(schedule),
           input.timezone ?? before.timezone,

@@ -59,6 +59,8 @@ interface AxpHandoff {
 export interface AxpRoutineSummary {
   id: string;
   name: string;
+  /** The group whose folder and members it runs with; null when it belongs to no group. */
+  group_id: string | null;
   model: string;
   schedule: Schedule;
   timezone: string;
@@ -74,6 +76,8 @@ export interface AxpRoutineSummary {
 export interface AxpRoutine {
   id: string;
   name: string;
+  /** The group whose folder and members it runs with; null when it belongs to no group. */
+  group_id: string | null;
   model: string;
   schedule: Schedule;
   timezone: string;
@@ -162,6 +166,7 @@ export function toRoutineSummary(
   return {
     id: routine.id,
     name: routine.name,
+    group_id: routine.groupId ?? null,
     model: routine.model,
     schedule: routine.schedule,
     timezone: routine.timezone,
@@ -186,6 +191,7 @@ export function toRoutine(
   return {
     id: routine.id,
     name: routine.name,
+    group_id: routine.groupId ?? null,
     model: routine.model,
     schedule: routine.schedule,
     timezone: routine.timezone,

@@ -1,0 +1,11 @@
+-- Which group a routine belongs to (FRONTEND_REFACTOR.md §5.2, P10).
+--
+-- A routine is work done on a schedule, and work belongs to a project: it runs in that group's
+-- folder, with that group's members, and its reports are about that group's business. Without this
+-- column the overview could not answer "which groups have something on a clock" — every row was
+-- equally unowned.
+--
+-- Nullable on purpose: a routine made before this existed has no group, and so does one made from
+-- the all-groups page. That is a real state (the overview shows those under 「没有群」), not a
+-- value to guess.
+ALTER TABLE routine ADD COLUMN group_id TEXT REFERENCES chat_group (id) ON DELETE SET NULL;
