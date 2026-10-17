@@ -1326,12 +1326,6 @@ export function ChatPanel({
                   ))}
                 </div>
               </div>
-              <TranscriptRail
-                replies={railReplies}
-                prompts={railPrompts}
-                activeId={activeId}
-                onJump={transcript.jumpTo}
-              />
             </div>
           </div>
           {/* Off the live end: say there is more, and who is adding it. Following resumes the

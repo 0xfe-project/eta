@@ -3,7 +3,6 @@ import type { WorkspaceView } from "./types";
 import { BellIcon } from "@phosphor-icons/react/Bell";
 import { BrowsersIcon } from "@phosphor-icons/react/Browsers";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
-import { GaugeIcon } from "@phosphor-icons/react/Gauge";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { UsersThreeIcon } from "@phosphor-icons/react/UsersThree";
 import { useLocation } from "@tanstack/react-router";
@@ -16,7 +15,6 @@ import {
 } from "nuqs";
 import { useEffect, useRef } from "react";
 import { translate } from "@/lib/i18n";
-import { useGroups } from "./use-groups";
 import { useWorkspaceStore } from "./workspace-store";
 
 /** The side panel's tabs that have a page in the full-window workspace. */
@@ -53,24 +51,21 @@ export function useSectionLink() {
         } as const);
 }
 
-// A group chat's panel is about the group; any other chat's (a direct
-// chat, or none yet) is the workspace's.
-const groupViews = [
+/*
+ * One set of tabs, on every conversation.
+ *
+ * The workspace's pages used to be four destinations in the sidebar, each of which then asked
+ * "but which group?" — the question the conversation you are in has already answered. So they
+ * moved here: tasks, routines and what is waiting belong to *this* group, and the panel beside it
+ * says so. 概览 stays the one global page, because "across every group" is not a fact about this
+ * one.
+ */
+const panelViews = [
   {
-    value: "members",
+    value: "context",
     icon: UsersThreeIcon,
     get label() {
-      return translate("chat:groups.members.title");
-    },
-  },
-  { value: "artifacts", icon: BrowsersIcon, label: "Artifacts" },
-] as const;
-const workspaceViews = [
-  {
-    value: "overview",
-    icon: GaugeIcon,
-    get label() {
-      return translate("navigation:sections.overview");
+      return translate("navigation:sections.context");
     },
   },
   {
@@ -94,18 +89,26 @@ const workspaceViews = [
       return translate("navigation:sections.pending");
     },
   },
+  {
+    value: "artifacts",
+    icon: BrowsersIcon,
+    get label() {
+      return translate("navigation:sections.artifacts");
+    },
+  },
 ] as const;
 
-/** The side panel's tabs beside the current chat. */
+/** The side panel's tabs beside the current chat: the same five, every conversation. */
 export function usePanelViews(): readonly {
   value: WorkspaceView;
   icon: Icon;
   label: string;
 }[] {
-  return useGroups().current?.kind === "group" ? groupViews : workspaceViews;
+  return panelViews;
 }
 
 const linkedViewParser = parseAsStringLiteral([
+  "context",
   "members",
   "artifacts",
   "overview",
@@ -116,10 +119,15 @@ const linkedViewParser = parseAsStringLiteral([
 // Any other view (such as the old "group") opens the first tab rather than
 // failing the route.
 const viewParser = createParser({
-  parse: (value) => linkedViewParser.parse(value) ?? "members",
+  // `members` and `artifacts` are old links: `members` became `context`, and `artifacts` is a tab
+  // that still exists. Anything else opens the first tab.
+  parse: (value) => {
+    const parsed = linkedViewParser.parse(value);
+    return parsed === "members" ? "context" : (parsed ?? "context");
+  },
   serialize: linkedViewParser.serialize,
 })
-  .withDefault("members")
+  .withDefault("context")
   .withOptions({ history: "push" });
 export const validateWorkspaceSearch = createStandardSchemaV1(
   // The routines tab's place: a routine, one of its runs, or its editor;
@@ -158,7 +166,7 @@ export function useShowLinkedView() {
   const showPanel = useWorkspaceStore((s) => s.showPanel);
   const seenRef = useRef(place);
   useEffect(() => {
-    if (linked && linked !== "members") {
+    if (linked !== null) {
       if (place !== seenRef.current) showPanel();
       else setMobilePanel("workspace");
     }

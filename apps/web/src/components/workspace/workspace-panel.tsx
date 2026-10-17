@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils";
 import { GroupPanel } from "./group-panel";
 import { GroupArtifacts } from "./groups";
 import { Inbox } from "./inbox";
-import { Overview } from "./overview";
 import { RefreshButton } from "./refresh-button";
 import { useRoutineNav } from "./routine-nav";
 import { Routines } from "./routines";
@@ -58,7 +57,6 @@ export function WorkspacePanel({
   className,
   style,
   onClose,
-  onFocusMember,
 }: {
   view: WorkspaceView;
   onViewChange: (view: WorkspaceView) => void;
@@ -67,8 +65,6 @@ export function WorkspacePanel({
   style?: React.CSSProperties;
   /** Closes the drawer it is between md and lg. */
   onClose?: () => void;
-  /** Pressing a member narrows the chat to it. */
-  onFocusMember?: (agentId: string) => void;
 }) {
   const { t: translateText } = useTranslation([
     "navigation",
@@ -145,11 +141,8 @@ export function WorkspacePanel({
         {tabs.map(({ value }) => (
           <TabsContent key={value} value={value} className="mt-0">
             {/* A group's panel is one column of blocks, not a tab per half of it. */}
-            {value === "members" ? (
-              <GroupPanel group={group} onFocusMember={onFocusMember} />
-            ) : null}
+            {value === "context" ? <GroupPanel group={group} /> : null}
             {value === "artifacts" ? <GroupArtifacts /> : null}
-            {value === "overview" ? <Overview /> : null}
             {value === "tasks" ? <Tasks /> : null}
             {value === "routines" ? <Routines /> : null}
             {value === "inbox" ? <Inbox /> : null}

@@ -45,6 +45,7 @@ import { useGroupActions } from "@/queries/groups";
 import { useTasks, useUpdateTask } from "@/queries/tasks";
 import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar, AgentStatus } from "./agent-identity";
+import { MemberStats } from "./member-stats";
 import { useReturnFocus } from "./return-focus";
 import { when } from "./routine-format";
 import { useAgents } from "./use-agents";
@@ -562,19 +563,21 @@ export function GroupMembers() {
               <AgentAvatar agent={{ id: p.agent_id }} />
               <div className="min-w-0 flex-1 text-sm">
                 <span className="block truncate" title={p.name}>
-                  {p.name}
+                  {p.name}{" "}
+                  <span className="text-xs text-muted-foreground">
+                    {elsewhere ? (
+                      translateText("groups.members.replyingElsewhere", {
+                        groupName: elsewhere,
+                      })
+                    ) : agent ? (
+                      <AgentStatus status={agent.status} />
+                    ) : (
+                      translateText("common:status.deleted")
+                    )}
+                  </span>
                 </span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {elsewhere ? (
-                    translateText("groups.members.replyingElsewhere", {
-                      groupName: elsewhere,
-                    })
-                  ) : agent ? (
-                    <AgentStatus status={agent.status} />
-                  ) : (
-                    translateText("common:status.deleted")
-                  )}
-                </span>
+                {/* The member's own session: what it has spent here, what it is chasing. */}
+                <MemberStats sessionId={p.session_id ?? undefined} />
               </div>
               {(agent || removable) && (
                 <DropdownMenu>

@@ -130,54 +130,24 @@ const tabs = (container: HTMLElement) =>
     (tab) => [tab.textContent, tab.getAttribute("aria-selected")],
   );
 
-it("gives a group chat 成员 and Artifacts, falling back to 成员", async () => {
-  // memory was never a tab; group, overview, tasks, routines and inbox were
-  // a group chat's before.
-  for (const view of ["memory", "group", "overview", "tasks", "routines"]) {
-    const { container } = await mount(`/?group=team&view=${view}`);
-    expect(tabs(container)).toEqual([
-      ["成员", "true"],
-      ["Artifacts", "false"],
-    ]);
-  }
-  const { container } = await mount("/?group=team&view=artifacts");
-  expect(tabs(container)[1]).toEqual(["Artifacts", "true"]);
-  expect(container.textContent).toContain("还没有 Artifacts");
-});
-
-it("leaves memory out of a direct chat's side panel", async () => {
-  const { container } = await mount("/?group=dm&view=memory");
-  expect(tabs(container)).toEqual([
-    ["概览", "true"],
-    ["任务", "false"],
-    ["定时", "false"],
-    ["待处理", "false"],
+it("gives every conversation the same five tabs", async () => {
+  // Tasks, routines and pending used to be four sidebar destinations that each asked "but which
+  // group?". They belong to the conversation you are in, so they are here — on every one of them,
+  // group or direct — and 概览 stays the single global page.
+  const { container } = await mount("/?group=team");
+  expect(tabs(container).map(([label]) => label)).toEqual([
+    "上下文",
+    "任务",
+    "定时",
+    "待处理",
+    "产物",
   ]);
-  expect(container.textContent).not.toContain("的专属记忆");
-  expect(
-    container
-      .querySelector('a[aria-label="在全窗口中打开"]')
-      ?.getAttribute("href"),
-  ).toBe("/workspace");
 });
 
-it("opens a direct chat's overview for a group chat's tab", async () => {
-  for (const view of ["group", "members", "artifacts"]) {
-    const { container } = await mount(`/?group=dm&view=${view}`);
-    expect(tabs(container)[0]).toEqual(["概览", "true"]);
+it("opens 上下文 when a link asks for the tab a group used to call 成员", async () => {
+  // Old links: `?view=members` is `context` now, and anything unknown opens the first tab.
+  for (const view of ["members", "group"]) {
+    const { container } = await mount(`/?group=team&view=${view}`);
+    expect(tabs(container)[0]).toEqual(["上下文", "true"]);
   }
-  for (const id of ["solo", "team"]) {
-    const { container } = await mount(`/?group=${id}`);
-    expect(tabs(container)[0]).toEqual(["成员", "true"]);
-  }
-});
-
-it("says a page this host cannot serve is not served, instead of loading forever", async () => {
-  // 记忆 is P3.4 (capabilities.ts): the memory bundle's service is not on this host. A direct URL
-  // still renders something true — the sentence — rather than a page that spins behind a hidden
-  // navigation entry. When the capability comes on, this test becomes the one that asserts the
-  // agent in the URL again.
-  const { container } = await mount("/workspace/memory?agent=a");
-  expect(container.textContent).toContain("记忆");
-  expect(container.textContent).not.toContain("的专属记忆");
 });

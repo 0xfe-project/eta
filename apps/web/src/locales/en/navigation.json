@@ -8,7 +8,9 @@
     "more": "More",
     "overview": "Overview",
     "capabilities": "Features",
-    "workspace": "Workspace"
+    "workspace": "Workspace",
+    "context": "Context",
+    "artifacts": "Artifacts"
   },
   "accessibility": {
     "sections": "Sections",

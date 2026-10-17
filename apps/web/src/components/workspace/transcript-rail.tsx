@@ -85,7 +85,9 @@ export function TranscriptRail({
   );
 
   return (
-    <div className="sticky top-16 flex shrink-0 flex-row items-start gap-1 self-start">
+    // The slot that holds this is already positioned (chat-panel puts it at the top-right of the
+    // scroller's viewport); `sticky` here would be sticky inside nothing.
+    <div className="flex flex-row items-start gap-1">
       {replyRows.length > 0
         ? lane(replies, replyRows, "square", translateText("rail.replies"))
         : null}

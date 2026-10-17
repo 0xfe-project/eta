@@ -38,7 +38,8 @@
   },
   "tools": {
     "arguments": "参数",
-    "result": "结果"
+    "result": "结果",
+    "refused": "被拦"
   },
   "agentSwitcher": {
     "currentDirectChat": "正在与 {{agentName}} 私聊（{{status}}），切换智能体",
@@ -88,7 +89,9 @@
       "focus": "聚焦 {{name}}",
       "noSession": "在这个群里还没和它说过话",
       "remove": "移出群",
-      "removeDescription": "{{name}} 离开这个对话。它说过的话留着，它本来要说的下一句不会发生。"
+      "removeDescription": "{{name}} 离开这个对话。它说过的话留着，它本来要说的下一句不会发生。",
+      "turns": "{{count}} 回合",
+      "refused": "被拦"
     },
     "title": "群",
     "archived": {

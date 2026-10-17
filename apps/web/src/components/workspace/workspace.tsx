@@ -412,9 +412,6 @@ export function Workspace({
             view={view}
             onViewChange={onViewChange}
             onClose={() => setMobilePanel("chat")}
-            onFocusMember={(agentId) =>
-              setFocusAgent((current) => (current === agentId ? null : agentId))
-            }
             style={{ width: panel.width }}
             className={cn(
               // Between md and lg the panel is a drawer over the chat; from lg up it is a column
