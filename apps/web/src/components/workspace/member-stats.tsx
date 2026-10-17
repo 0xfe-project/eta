@@ -15,7 +15,10 @@ export function MemberStats({ sessionId }: { sessionId: string | undefined }) {
   const { data: usage } = useQuery({
     queryKey: ["session-usage", sessionId],
     enabled: sessionId !== undefined,
-    staleTime: 10_000,
+    // Fast on purpose: the token counter and token/s are the panel's proof that work is
+    // happening right now. A number that moves only every half minute reads as a stall.
+    staleTime: 300,
+    refetchInterval: 300,
     queryFn: async () => {
       const response = await fetch(`/sessions/${sessionId}/usage`);
       if (!response.ok) return null;
@@ -32,7 +35,8 @@ export function MemberStats({ sessionId }: { sessionId: string | undefined }) {
   const { data: tools } = useQuery({
     queryKey: ["session-tools", sessionId],
     enabled: sessionId !== undefined,
-    staleTime: 30_000,
+    staleTime: 300,
+    refetchInterval: 300,
     queryFn: async () => {
       const response = await fetch(`/sessions/${sessionId}/tools`);
       if (!response.ok) return null;
