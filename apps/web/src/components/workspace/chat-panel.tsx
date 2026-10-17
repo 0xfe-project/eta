@@ -427,7 +427,7 @@ const Turn = memo(
     const streaming = ACTIVE_STATUSES.has(message.status);
     return (
       <div className="space-y-3 pt-1">
-        {author && (
+        {author === undefined ? null : (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <AgentAvatar agent={{ id: message.agent_id }} className="size-4" />
             <span>
@@ -446,7 +446,12 @@ const Turn = memo(
           .filter((block): block is Reply => block.type !== "attachment")
           .map((block) =>
             block.type === "text" ? (
-              <ClaudeMessage key={block.id} className={ENTER}>
+              <ClaudeMessage
+                key={block.id}
+                className={ENTER}
+                // In a group the question "which of them is this" is real; in a single-agent
+                // conversation it has one answer and a name would be noise.
+              >
                 <Markdown streaming={streaming}>{block.text}</Markdown>
               </ClaudeMessage>
             ) : (
