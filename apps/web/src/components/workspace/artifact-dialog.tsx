@@ -21,7 +21,7 @@ import { archiveURL, useArtifact, useShareArtifact } from "@/queries/artifacts";
 /**
  * An artifact's page in a dialog: large on a desktop, nearly the whole
  * screen on a phone. The site runs in a sandboxed frame (an opaque origin:
- * no cookies, storage or AXP API), loaded from its version's preview
+ * no cookies, storage or eta API), loaded from its version's preview
  * address, which works without cookies; the same policy holds when it is
  * opened in a new window.
  */

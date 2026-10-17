@@ -59,12 +59,12 @@ function hostProxy(target: string) {
 
 // One per build, shared by the browser bundle and GET /version.
 // The config is evaluated once per environment, so it is kept in the process.
-const build = (process.env.AXP_WEB_BUILD ||= Date.now().toString(36));
+const build = (process.env.ETA_WEB_BUILD ||= Date.now().toString(36));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   return {
-    define: { __AXP_BUILD__: JSON.stringify(build) },
+    define: { __ETA_BUILD__: JSON.stringify(build) },
     resolve: {
       alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
     },
@@ -115,8 +115,8 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       // Loopback by name, so the address vite prints is the address that answers.
-      host: env.AXP_WEB_HOST || "127.0.0.1",
-      port: Number(env.AXP_WEB_PORT || 3000),
+      host: env.ETA_WEB_HOST || "127.0.0.1",
+      port: Number(env.ETA_WEB_PORT || 3000),
       strictPort: true,
       // Development is two processes: this one owns the page and its HMR, the host owns the
       // API and its data. The page talks to /api on its own origin, so the prefixes are
@@ -125,7 +125,7 @@ export default defineConfig(({ mode }) => {
       proxy: hostProxy(env.AXP_API_ORIGIN || "http://127.0.0.1:8787"),
     },
     preview: {
-      port: Number(env.AXP_WEB_PORT || 3000),
+      port: Number(env.ETA_WEB_PORT || 3000),
       strictPort: true,
     },
   };

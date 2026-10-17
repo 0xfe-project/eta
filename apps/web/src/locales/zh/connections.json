@@ -36,7 +36,7 @@
       "git": "在你授权的仓库里 clone、提交和推送分支",
       "gh": "用 gh 处理 PR、Issue、Release 和 CI"
     },
-    "introduction": "AXP 会在你的 GitHub 上创建一个专属 App，智能体以它的身份工作：",
+    "introduction": "Eta 会在你的 GitHub 上创建一个专属 App，智能体以它的身份工作：",
     "fields": {
       "ownerLabel": "创建在",
       "personalAccount": "我的个人账号",
@@ -46,7 +46,7 @@
       "organizationName": "组织名称",
       "organizationPlaceholder": "例如 acme",
       "appName": "App 名称",
-      "appNamePlaceholder": "留空则自动生成，例如 AXP 3f2a",
+      "appNamePlaceholder": "留空则自动生成，例如 Eta 3f2a",
       "appNameHint": "在 GitHub 上不能重名"
     },
     "createApp": {
@@ -78,7 +78,7 @@
       "open": "前往 GitHub 授权"
     },
     "oauth": {
-      "legacyAppHelp": "这个 App 创建得早，AXP 没有保存它的 client secret。请在 ",
+      "legacyAppHelp": "这个 App 创建得早，Eta 没有保存它的 client secret。请在 ",
       "callbackPrefix": " 里把 Callback URL 设为 ",
       "appSettings": "App 设置",
       "clientSecretHelp": "，生成一个新的 client secret，然后填在这里：",
@@ -87,7 +87,7 @@
     },
     "disconnect": {
       "confirmTitle": "断开 GitHub？",
-      "confirmDescription": "AXP 会删除保存的 App 凭据，智能体将无法再访问私有仓库，也不能推送和 打开 PR。GitHub 上的 App {{appName}} 不会被删除。",
+      "confirmDescription": "Eta 会删除保存的 App 凭据，智能体将无法再访问私有仓库，也不能推送和 打开 PR。GitHub 上的 App {{appName}} 不会被删除。",
       "success": "已断开 GitHub",
       "deleteApp": "去 GitHub 删除 App"
     },
@@ -122,10 +122,10 @@
     "savedReady": "已保存，载入它的智能体空闲时会重启",
     "savedIncomplete": "已保存，还有必填项未填",
     "secretPlaceholder": "已设置，留空不替换",
-    "encryptionHelp": "这些值加密保存在 AXP，作为环境变量交给载入“{{bundleName}}”环境包的智能体。",
+    "encryptionHelp": "这些值加密保存在 Eta，作为环境变量交给载入“{{bundleName}}”环境包的智能体。",
     "clear": "清除配置",
     "clearConfirmTitle": "清除 {{bundleName}} 的配置？",
-    "clearConfirmDescription": "AXP 会删除保存的值。载入这个环境包的智能体空闲时重启，之后不再有它的插件。",
+    "clearConfirmDescription": "Eta 会删除保存的值。载入这个环境包的智能体空闲时重启，之后不再有它的插件。",
     "cleared": "已清除配置"
   },
   "title": "连接",

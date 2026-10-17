@@ -5,7 +5,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { translate } from "@/lib/i18n";
 
-export const storageKey = "axp.workspace.v1";
+export const storageKey = "eta.workspace.v1";
 
 // Local UI state only; everything else lives in the control plane. Zod
 // drops fields this schema does not have.

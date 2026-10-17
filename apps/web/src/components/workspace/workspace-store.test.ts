@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "@rstest/core";
 import { useWorkspaceStore } from "./workspace-store";
 
-const key = "axp.workspace.v1";
+const key = "eta.workspace.v1";
 const saved = { lastModel: "m1" };
 
 describe("workspace store persistence", () => {

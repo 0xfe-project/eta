@@ -112,7 +112,7 @@ export function useUnauthorizeGitHub() {
   });
 }
 
-/** The client ID and secret of an App created before AXP kept them. */
+/** The client ID and secret of an App created before eta kept them. */
 export function useSetGitHubOAuthClient() {
   const queryClient = useQueryClient();
   return useMutation({

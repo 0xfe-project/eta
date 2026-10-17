@@ -50,7 +50,7 @@ export async function setElementPicker(enabled: boolean) {
  */
 function lineNumbers(getStack: typeof import("react-grab").getStack): Plugin {
   return {
-    name: "axp-line-numbers",
+    name: "eta-line-numbers",
     hooks: {
       transformCopyContent: async (content, elements) => {
         const frames = (await Promise.all(elements.map(getStack))).flat();

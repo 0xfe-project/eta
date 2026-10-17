@@ -17,7 +17,7 @@ import { actionClass, frameClass, muted } from "./activity-card";
 /**
  * A workspace or worktree an agenvo script made or opened on a remote
  * computer (its block's operations, read from the native calls it made):
- * what, where, and what became of it. AXP has no page for it, so the card
+ * what, where, and what became of it. eta has no page for it, so the card
  * opens nothing; it unfolds to show every field whole. The tool line above
  * keeps the script and its output.
  */

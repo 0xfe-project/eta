@@ -170,7 +170,7 @@ describe("activity ref cards", () => {
           kind: "pull_request",
           number: 7,
           title: "Add cards",
-          url: "https://github.com/akarachen/axp/pull/7",
+          url: "https://github.com/akarachen/eta/pull/7",
         },
       }),
     ]);
@@ -181,16 +181,16 @@ describe("activity ref cards", () => {
         text: "日报",
       },
       {
-        href: "https://github.com/akarachen/axp/pull/7",
+        href: "https://github.com/akarachen/eta/pull/7",
         label: "打开 PR #7 Add cards",
-        text: "#7 Add cards · akarachen/axp",
+        text: "#7 Add cards · akarachen/eta",
       },
     ]);
   });
 
   it("offers to file an issue draft on GitHub, as no issue yet", async () => {
     const url =
-      "https://github.com/akarachen/axp/issues/new?body=%E5%9D%8F%E4%BA%86&title=%E5%8D%A1%E7%89%87%E9%94%99%E4%BD%8D";
+      "https://github.com/akarachen/eta/issues/new?body=%E5%9D%8F%E4%BA%86&title=%E5%8D%A1%E7%89%87%E9%94%99%E4%BD%8D";
     const { container } = await mount([
       activity({
         status: "completed",
@@ -201,8 +201,8 @@ describe("activity ref cards", () => {
     expect(cards(container)).toEqual([
       {
         href: url,
-        label: "去 GitHub 创建 issue：卡片错位（akarachen/axp）",
-        text: "卡片错位 · akarachen/axp去 GitHub 创建",
+        label: "去 GitHub 创建 issue：卡片错位（akarachen/eta）",
+        text: "卡片错位 · akarachen/eta去 GitHub 创建",
       },
     ]);
     const link = container.querySelector('[role="log"] a')!;
@@ -226,7 +226,7 @@ describe("activity ref cards", () => {
           kind: "issue_draft",
           title: "长",
           body: "很长的正文",
-          url: "https://github.com/akarachen/axp/issues/new?title=%E9%95%BF",
+          url: "https://github.com/akarachen/eta/issues/new?title=%E9%95%BF",
         },
       }),
     ]);
@@ -312,8 +312,8 @@ const worktree: ActivityOperation = {
   computer: "办公室 Mac",
   id: "wks_1",
   name: "修复登录",
-  project: "axp",
-  path: "/home/u/.paseo/worktrees/axp/feat-x",
+  project: "eta",
+  path: "/home/u/.paseo/worktrees/eta/feat-x",
   branch: "feat/x",
   base: "main",
 };
@@ -346,7 +346,7 @@ describe("activity operation cards", () => {
     ]);
     const card = container.querySelector('[role="log"] li > button')!;
     expect(card.textContent).toBe(
-      "创建 worktree 修复登录已创建办公室 Mac · Paseo · axp · feat/x ← main/home/u/.paseo/worktrees/axp/feat-x",
+      "创建 worktree 修复登录已创建办公室 Mac · Paseo · eta · feat/x ← main/home/u/.paseo/worktrees/eta/feat-x",
     );
     // It links nowhere, and the script's line still expands on its own.
     expect(container.querySelector('[role="log"] a')).toBeNull();

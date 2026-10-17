@@ -5,7 +5,7 @@ import { useLiveChat, usePendingInteractions } from "@/queries/chat";
 function usePendingTitle() {
   const pending = usePendingInteractions().length;
   useEffect(() => {
-    document.title = pending ? `(${pending}) AXP` : "AXP";
+    document.title = pending ? `(${pending}) eta` : "eta";
   }, [pending]);
 }
 

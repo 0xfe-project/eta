@@ -13,7 +13,7 @@
   },
   "pairing": {
     "fingerprintChanged": "{{name}} 的指纹变了",
-    "multipleRequests": "{{name}} 收到 {{count}} 个配对请求：只批准与电脑上 axp setup 输出一致的那个",
+    "multipleRequests": "{{name}} 收到 {{count}} 个配对请求：只批准与电脑上 eta setup 输出一致的那个",
     "requestTitle": "{{name}} 请求配对",
     "approved": "已批准 {{name}}",
     "verifyFingerprint": "核对指纹与那台电脑终端里打印的一致，再批准。",
@@ -21,8 +21,8 @@
     "commandFingerprintHelp": "命令运行后，那台电脑的终端会打印一个指纹，与这里显示的一致再批准。",
     "label": "配对",
     "approveTarget": "批准{{target}}",
-    "multipleRequests_one": "{{name}} 收到 {{count}} 个配对请求：只批准与电脑上 axp setup 输出一致的那个",
-    "multipleRequests_other": "{{name}} 收到 {{count}} 个配对请求：只批准与电脑上 axp setup 输出一致的那个"
+    "multipleRequests_one": "{{name}} 收到 {{count}} 个配对请求：只批准与电脑上 eta setup 输出一致的那个",
+    "multipleRequests_other": "{{name}} 收到 {{count}} 个配对请求：只批准与电脑上 eta setup 输出一致的那个"
   },
   "install": {
     "copyCommand": "复制安装命令",
@@ -33,7 +33,7 @@
     "generateCommand": "生成安装命令",
     "commandExpiry": "命令只能用一次，{{time}} 前有效。",
     "commandExpiryDefault": "命令只能用一次，24 小时内有效。",
-    "requirements": "需要 Node.js 24.13+，以及正在运行的 Paseo daemon 或 Herdr。它会安装 agenvo connector 和 axp 命令，并注册为开机启动的服务。{{expiryHint}}",
+    "requirements": "需要 Node.js 24.13+，以及正在运行的 Paseo daemon 或 Herdr。它会安装 agenvo connector 和 eta 命令，并注册为开机启动的服务。{{expiryHint}}",
     "waitingForCommand": "等待那台电脑运行命令…"
   },
   "actions": {
@@ -43,12 +43,12 @@
     "openSettings": "打开远程电脑设置"
   },
   "update": {
-    "description": "把这台电脑上的 axp 和 agenvo connector 更新到 AXP 当前提供的版本{{versionSuffix}}，并连到 AXP 当前的中继地址。",
-    "commandHelp": "它会下载新的 axp，安装新的 connector，把 connector 改到当前的中继地址并重启它们的服务，不需要重新配对。Paseo 和 Herdr 里正在运行的智能体不会被停止。命令只能用一次，24 小时内有效；运行后这台电脑原来的令牌失效。",
+    "description": "把这台电脑上的 eta 和 agenvo connector 更新到 Eta 当前提供的版本{{versionSuffix}}，并连到 Eta 当前的中继地址。",
+    "commandHelp": "它会下载新的 eta，安装新的 connector，把 connector 改到当前的中继地址并重启它们的服务，不需要重新配对。Paseo 和 Herdr 里正在运行的智能体不会被停止。命令只能用一次，24 小时内有效；运行后这台电脑原来的令牌失效。",
     "verify": "确认已更新",
     "allOnline": "已更新，所有运行时都在线。",
     "waitingForReconnect": "等待那台电脑重新连上。若出现“等待批准”（connector 有变化），核对指纹与终端里打印的一致后批准。",
-    "versionMismatch": "有电脑的 agenvo connector 与 AXP 提供的版本{{version}} 不一致：点那台电脑上的“更新”，按提示在那台电脑上运行命令。"
+    "versionMismatch": "有电脑的 agenvo connector 与 Eta 提供的版本{{version}} 不一致：点那台电脑上的“更新”，按提示在那台电脑上运行命令。"
   },
   "fields": {
     "nameLabel": "电脑名称",

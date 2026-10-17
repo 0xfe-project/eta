@@ -411,7 +411,7 @@ describe("sending blocks", () => {
 describe("saved group drafts", () => {
   it("fail uploads a reload cut off", async () => {
     localStorage.setItem(
-      "axp.groups.v1",
+      "eta.groups.v1",
       JSON.stringify({
         drafts: {
           [AGENT]: [

@@ -5,7 +5,7 @@ import { useOutbox } from "./outbox";
 // asserted is the storage, not the store: it has to be on its way to localStorage the moment the
 // draft changes, and it has to come back when the store hydrates.
 
-const KEY = "axp.groups.v1";
+const KEY = "eta.groups.v1";
 
 function saved(): { drafts: Record<string, unknown> } {
   return JSON.parse(localStorage.getItem(KEY) ?? "{}") as {

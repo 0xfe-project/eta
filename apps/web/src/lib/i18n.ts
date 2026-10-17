@@ -7,9 +7,9 @@ import { namespaces, resources } from "@/locales/resources";
 
 export type Language = "en" | "zh";
 export type LanguagePreference = Language | "system";
-export const languageStorageKey = "axp.language.v1";
+export const languageStorageKey = "eta.language.v1";
 const preferenceSchema = z.enum(["en", "zh", "system"]);
-const preferenceEvent = "axp:language-preference";
+const preferenceEvent = "eta:language-preference";
 let volatilePreference: LanguagePreference | undefined;
 
 // Inline resources initialize synchronously. The shared instance starts in

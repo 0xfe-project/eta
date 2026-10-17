@@ -759,7 +759,7 @@ export interface components {
             action: "create_workspace" | "create_worktree" | "open_worktree" | "add_project";
             base?: string;
             branch?: string;
-            /** @description The AXP computer's name. */
+            /** @description The Eta computer's name. */
             computer?: string;
             /** @description Why it failed or is unknown, as the runtime said. */
             error?: string;
@@ -840,7 +840,7 @@ export interface components {
             fingerprint: string;
         };
         Artifact: {
-            /** @description The AXP agent that publishes it, in its chat. */
+            /** @description The Eta agent that publishes it, in its chat. */
             agent_id: string | null;
             agent_name: string | null;
             /** @description The remote computer whose agent publishes it. */
@@ -864,7 +864,7 @@ export interface components {
         ArtifactShare: {
             /** Format: date-time */
             created_at: string;
-            /** @description The public page's path on AXP's address. */
+            /** @description The public page's path on Eta's address. */
             url: string;
         };
         ArtifactVersion: {
@@ -935,7 +935,7 @@ export interface components {
             type: "attachment";
         };
         Bundle: {
-            /** @description Part of AXP, read only. */
+            /** @description Part of Eta, read only. */
             builtin: boolean;
             /** @description What the user sets for it, a JSON Schema of string properties: environment variables of the agents that load it. */
             config?: {
@@ -1222,7 +1222,7 @@ export interface components {
         Place: {
             /** @description What the new branch starts from; the repository's current branch when empty. Paseo looks it up among the refs already in that computer's repository (the local branch, then origin/<base>) without fetching; origin/<base> names only the remote one. */
             base?: string | null;
-            /** @description The new worktree's branch; axp/<number>-<title> when empty. */
+            /** @description The new worktree's branch; eta/<number>-<title> when empty. */
             branch?: string | null;
             /** @description For a new worktree: Paseo's project id, or the Herdr workspace whose repository to branch off. */
             from?: string | null;
@@ -1280,7 +1280,7 @@ export interface components {
             database?: boolean;
             /** @description Its Kubernetes objects, as YAML documents: a Service named after the bundle (port named http) and what serves it. */
             manifests: string;
-            /** @description What it speaks (name/major version), checked against its /.well-known/axp-service. */
+            /** @description What it speaks (name/major version), checked against its /.well-known/eta-service. */
             protocol?: string;
             /** @description What it may call through the runtime gateway with its token: llm, or other bundles by name. */
             uses?: string[];

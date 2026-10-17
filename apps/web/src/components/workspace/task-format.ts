@@ -161,7 +161,7 @@ export function ago(iso: string) {
   return `${date.getMonth() + 1}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-/** "新 worktree（web，axp/12-fix）" or "工作区 web". */
+/** "新 worktree（web，eta/12-fix）" or "工作区 web". */
 export function placeLabel(place: Place | null | undefined) {
   if (!place) return null;
   if (place.kind === "worktree")

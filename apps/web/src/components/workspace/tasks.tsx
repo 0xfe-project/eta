@@ -861,7 +861,7 @@ function actorName(a: TaskActivity) {
     case "remote":
       return remoteLabel(a.data as Parameters<typeof remoteLabel>[0]);
   }
-  return "AXP";
+  return "eta";
 }
 
 /** The agent a request is for, by the name it goes by. */

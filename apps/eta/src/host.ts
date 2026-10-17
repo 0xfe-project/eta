@@ -314,7 +314,7 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   // because both the routes below (`/version`) and the fallback at the bottom need it.
   const web = new StaticWeb(options.webDir);
   // The page's build id, read once: `BUILD` is written next to the bundle by the web build
-  // (apps/web/vite.config.ts), and a tab compares it with its own `__AXP_BUILD__` to notice
+  // (apps/web/vite.config.ts), and a tab compares it with its own `__ETA_BUILD__` to notice
   // that the API it is talking to has outgrown the code it loaded.
   const webBuild = await web.buildId();
 

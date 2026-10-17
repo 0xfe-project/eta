@@ -311,7 +311,7 @@ describe("请 Agent 协助", () => {
     const timeline =
       c.querySelector('ol[aria-label="时间线"]')!.textContent ?? "";
     expect(timeline).toContain(
-      "AXP 请 工作站 · Paseo · Codex 协助（审查第 2 轮）",
+      "eta 请 工作站 · Paseo · Codex 协助（审查第 2 轮）",
     );
     expect(timeline).toContain("等待中：等主执行者这一轮完成并交付。");
     expect(timeline).toContain("要求修改 · 第 1/3 轮 · 提交 0123456");

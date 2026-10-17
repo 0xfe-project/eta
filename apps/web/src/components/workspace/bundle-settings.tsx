@@ -33,7 +33,7 @@ import {
 
 // Bundles are what agents are built from: a script run into the agent's
 // image and the plugins it adds, and a service some run in the cluster
-// (docs/architecture/bundles.md#服务). AXP's own are read only; the user's
+// (the services' own manifests). eta's own are read only; the user's
 // are edited here, and every agent that loads one is rebuilt.
 
 const serviceStates: Record<string, string> = {

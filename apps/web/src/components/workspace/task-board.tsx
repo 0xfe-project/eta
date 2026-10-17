@@ -252,7 +252,7 @@ function ListView({
 
 // --- board --------------------------------------------------------------------------
 
-const dragType = "application/x-axp-task";
+const dragType = "application/x-eta-task";
 
 function Card({ task }: { task: Task }) {
   useTranslation(["tasks", "common", "navigation"] as const);
