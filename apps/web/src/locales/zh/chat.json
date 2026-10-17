@@ -85,6 +85,10 @@
       "help": "任务只关联一个群，重新关联会替换之前的群。",
       "unlink": "解除关联",
       "linkLabel": "关联 #{{number}} {{title}}"
+    },
+    "header": {
+      "cwdBound": "工作目录 {{path}}",
+      "cwdUnbound": "未绑定目录"
     }
   },
   "confirmations": {

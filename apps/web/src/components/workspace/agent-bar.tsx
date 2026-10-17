@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
+import { CwdChip } from "./cwd-chip";
 import { useAgents } from "./use-agents";
 import { useGroups, useOpenGroup } from "./use-groups";
 import { useHoverMenu } from "./use-hover-menu";
@@ -129,7 +130,7 @@ export function AgentBar({
   onInfo: () => void;
 }) {
   return (
-    <div className="hidden shrink-0 justify-center px-3 pt-3 pb-2 md:flex">
+    <div className="hidden shrink-0 flex-col items-center gap-1 px-3 pt-3 pb-2 md:flex">
       {group && (
         <AgentSwitch group={group} onInfo={onInfo}>
           {(open) => (
@@ -162,6 +163,9 @@ export function AgentBar({
           )}
         </AgentSwitch>
       )}
+      {/* Which folder this conversation works in: the header answers "what am I looking at" and
+          this is half of that answer. */}
+      <CwdChip group={group} />
     </div>
   );
 }

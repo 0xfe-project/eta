@@ -85,6 +85,10 @@
       "help": "Each task belongs to one group. Linking it replaces its previous group.",
       "unlink": "Unlink",
       "linkLabel": "Link #{{number}} {{title}}"
+    },
+    "header": {
+      "cwdBound": "Working in {{path}}",
+      "cwdUnbound": "no folder"
     }
   },
   "confirmations": {
