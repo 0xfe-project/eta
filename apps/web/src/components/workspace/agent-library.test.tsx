@@ -124,7 +124,7 @@ describe("左栏的搜索框", () => {
 });
 
 describe("智能体库", () => {
-  it("lists only the agents with no conversation to reach them by", async () => {
+  it("lists every agent, whether or not it already has a conversation", async () => {
     state.agents = [agent("a1", "乐子人"), agent("a2", "装配检查")];
     state.groups = [
       {
@@ -142,19 +142,21 @@ describe("智能体库", () => {
     const library = container.querySelector(
       '[aria-labelledby="sidebar-agents"]',
     )!;
+    // Both, every time: an agent is a durable actor, not a conversation that gets used up.
+    // 乐子人 already has a private chat in the tree — it stays here anyway, because this list
+    // answers "who exists", not "who have I not talked to yet".
     expect(library.textContent).toContain("装配检查");
-    // 乐子人 already has a row in the tree; a second one here would be the same agent twice.
-    expect(library.textContent).not.toContain("乐子人");
+    expect(library.textContent).toContain("乐子人");
   });
 
-  it("says so when every agent is reachable", async () => {
+  it("keeps offering an agent after its conversation is open", async () => {
     state.agents = [agent("a1", "乐子人")];
     state.groups = [
       {
         id: "g1",
         name: "乐子人",
         kind: "direct",
-        cwd: "",
+        cwd: "/p",
         archived: false,
         participants: [
           { agent_id: "a1", name: "乐子人", member: true, status: "idle" },
@@ -162,7 +164,16 @@ describe("智能体库", () => {
       },
     ];
     const container = await render(<Sidebar />);
-    expect(container.textContent).toContain("每个智能体都已经有对话了");
+    const library = container.querySelector(
+      '[aria-labelledby="sidebar-agents"]',
+    )!;
+    const row = [...library.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("乐子人"),
+    )!;
+    await act(async () => row.click());
+    // Pressing it again is the same conversation, not a second one and not a shorter list.
+    expect(state.openAgent).toHaveBeenCalledWith("a1");
+    expect(library.textContent).toContain("乐子人");
   });
 
   it("opens a chat when a library agent is pressed", async () => {

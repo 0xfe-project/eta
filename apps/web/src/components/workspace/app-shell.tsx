@@ -19,7 +19,6 @@ import { SidebarPane } from "./sidebar-pane";
 import { FolderTree } from "./sidebar-tree";
 import { useAgents, useOpenAgent } from "./use-agents";
 import { useAttention } from "./use-attention";
-import { useGroups } from "./use-groups";
 
 // Shared navigation: the full-window sidebar on wide screens and four
 // bottom tabs on mobile. Conversation lists are the mobile home screen.
@@ -142,21 +141,8 @@ export function Sidebar({ width }: { width?: number } = {}) {
 function AgentLibrary() {
   const { t: translateText } = useTranslation(["agents", "common"] as const);
   const { agents, loaded, error, openEditor } = useAgents();
-  const { groups } = useGroups();
   const openAgent = useOpenAgent();
-  const reachable = new Set(
-    groups
-      .filter((group) => group.kind === "direct" && !group.archived)
-      .map(
-        (group) =>
-          group.participants.find(
-            (participant: { member: boolean }) => participant.member,
-          )?.agent_id,
-      ),
-  );
-  const library = agents.filter(
-    (agent: { id: string }) => !reachable.has(agent.id),
-  );
+  const library = agents;
   return (
     <section
       aria-labelledby="sidebar-agents"
@@ -195,10 +181,6 @@ function AgentLibrary() {
             </Button>
           }
         />
-      ) : library.length === 0 ? (
-        <p className="px-2 pb-1 text-xs text-muted-foreground">
-          {translateText("agents:library.allReachable")}
-        </p>
       ) : (
         <ul className="grid min-h-0 grid-cols-1 gap-px overflow-y-auto">
           {library.map(
