@@ -109,6 +109,18 @@ export class StaticWeb {
     });
   }
 
+  /**
+   * The id of the build in this directory, as the web build wrote it (`BUILD`, next to
+   * `index.html`). `undefined` when this host serves no page — a headless host has no bundle
+   * version to report, and answering one anyway would be a claim about something absent.
+   */
+  async buildId(): Promise<string | undefined> {
+    const file = await this.#file("BUILD");
+    if (file === undefined) return undefined;
+    const id = new TextDecoder().decode(file.bytes).trim();
+    return id.length === 0 ? undefined : id;
+  }
+
   /** A file from the bundle, refusing anything that tries to leave it. */
   async #file(
     relative: string,

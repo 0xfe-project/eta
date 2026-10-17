@@ -296,8 +296,17 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   // The manager was handed a closure that reads this; by the time a session opens, it is set.
   bridgeRef.current = bridge;
 
+  // The page this host serves, if any: the files and the build id they belong to. Read once, here,
+  // because both the routes below (`/version`) and the fallback at the bottom need it.
+  const web = new StaticWeb(options.webDir);
+  // The page's build id, read once: `BUILD` is written next to the bundle by the web build
+  // (apps/web/vite.config.ts), and a tab compares it with its own `__AXP_BUILD__` to notice
+  // that the API it is talking to has outgrown the code it loaded.
+  const webBuild = await web.buildId();
+
   const status: HostStatus = {
     pid: process.pid,
+    version: options.version ?? "0.0.0",
     dataDir: options.dataDir,
     dbPath,
     schema: schemaVersion(handle),
@@ -320,12 +329,22 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
     "/up",
     () => new Response("ok", { headers: { "content-type": "text/plain" } }),
   );
+  // `/version` is the *page's* build id as plain text, the same answer the vite dev server and
+  // the old gateway give, because the one reader is the page itself (src/lib/update.ts); a JSON
+  // shape here would never equal a bundle's id and every tab would claim an update is waiting.
+  // The process's own identity — pid, uptime, version — is `/host`, which is where it belongs.
   routes.register("GET", "/version", () =>
-    Response.json({
-      version: options.version ?? "0.0.0",
-      startedAt: status.startedAt,
-      pid: process.pid,
-    }),
+    webBuild === undefined
+      ? new Response("no page bundle to version", {
+          status: 404,
+          headers: { "content-type": "text/plain" },
+        })
+      : new Response(webBuild, {
+          headers: {
+            "content-type": "text/plain; charset=utf-8",
+            "cache-control": "no-store",
+          },
+        }),
   );
   // The plugin surface's empty lists (P3.6 fills them): the web's agent editor reads these to know
   // what a bundle is, and an empty answer is the truth today — a 404 would look like a failure.
@@ -413,7 +432,6 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
   if (options.watchIntervalMs !== undefined && options.watchIntervalMs > 0)
     manager.watch(ctx);
 
-  const web = new StaticWeb(options.webDir);
   const server = Bun.serve({
     port: options.port ?? 0,
     hostname: options.hostname ?? "127.0.0.1",

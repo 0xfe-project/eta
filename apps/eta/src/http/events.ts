@@ -23,7 +23,14 @@ export interface ProductEvent {
 export interface EventHubOptions {
   /** How many events stay replayable for a reconnecting client. */
   capacity?: number;
-  /** A comment line this often keeps an idle stream from being closed by a proxy. */
+  /**
+   * A comment line this often keeps an idle stream alive.
+   *
+   * The number is not decoration: the server has an idle timeout, and a stream that says
+   * nothing for longer than it is a stream that gets cut — the client then reconnects, replays,
+   * and does the whole thing again, forever, for a feed nobody was speaking on. Bun's HTTP idle
+   * timeout is 10s, so anything at or above that turns every quiet stream into a reconnect loop.
+   */
   heartbeatMs?: number;
 }
 
@@ -66,7 +73,8 @@ export class EventHub {
 
   constructor(options: EventHubOptions = {}) {
     this.#capacity = options.capacity ?? 512;
-    this.#heartbeatMs = options.heartbeatMs ?? 15_000;
+    // Under Bun's 10s HTTP idle timeout, with room for a slow write on top of it.
+    this.#heartbeatMs = options.heartbeatMs ?? 5_000;
   }
 
   /** Publish one event. The seq it returns is what a client resumes from. */

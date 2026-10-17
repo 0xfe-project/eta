@@ -28,11 +28,12 @@ const CONFIG = { providers: [], defaultModel: "" };
 const url = (host: Host, path: string): string =>
   `http://127.0.0.1:${host.port}${path}`;
 
-/** A bundle that looks like a built SPA: an index, an asset, a nested asset. */
+/** A bundle that looks like a built SPA: an index, an asset, a nested asset, a build id. */
 async function bundle(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "eta-web-"));
   roots.push(root);
   await mkdir(join(root, "assets"), { recursive: true });
+  await writeFile(join(root, "BUILD"), "build-1\n", "utf8");
   await writeFile(
     join(root, "index.html"),
     '<!doctype html><html><body><div id="root"></div><script src="/assets/app.js"></script></body></html>',
@@ -127,12 +128,23 @@ describe("one process, the app and the API", () => {
     expect(up.status).toBe(200);
     expect(await up.text()).toBe("ok");
 
-    const version = (await (await fetch(url(host, "/version"))).json()) as {
+    // The page's build id, not the process's: a tab compares this with the id its own bundle
+    // was built with (apps/web/src/lib/update.ts), so anything else reads as "an update is
+    // waiting" on every tab forever.
+    const version = await fetch(url(host, "/version"));
+    expect(version.status).toBe(200);
+    expect(version.headers.get("cache-control")).toBe("no-store");
+    expect(await version.text()).toBe("build-1");
+
+    // The process's own identity lives at /host, where a caller asks "which process is this".
+    const identity = (await (await fetch(url(host, "/host"))).json()) as {
+      pid: number;
       version: string;
       startedAt: number;
     };
-    expect(version.version).toBe("0.0.0");
-    expect(version.startedAt).toBeGreaterThan(0);
+    expect(identity.pid).toBe(process.pid);
+    expect(identity.version).toBe("0.0.0");
+    expect(identity.startedAt).toBeGreaterThan(0);
 
     // The bundle/plugin manager is P3.6; until then the honest answer is an empty list, which
     // the agent editor reads as "nothing to choose".

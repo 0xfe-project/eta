@@ -11,6 +11,8 @@ import type { PluginContext } from "../plugin-api";
 
 export interface HostStatus {
   pid: number;
+  /** The host process's own version (`--version` / package), not the page bundle's. */
+  version: string;
   dataDir: string;
   /** Where the database file is, so a caller can find it without guessing. */
   dbPath: string;
