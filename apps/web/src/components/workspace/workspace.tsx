@@ -32,11 +32,12 @@ import {
 } from "@/queries/outbox";
 import { AgentBar, AgentTitle } from "./agent-bar";
 import { AgentEditor } from "./agent-editor";
-import { BottomNav, Sidebar } from "./app-shell";
+import { BottomNav } from "./app-shell";
 import { ChatPanel, ComposerNotice } from "./chat-panel";
 import { UnboundFolderNotice } from "./folder-notice";
 import { GroupList } from "./groups";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
+import { SidebarPane } from "./sidebar-pane";
 import { useAgents } from "./use-agents";
 import { useGroups } from "./use-groups";
 import { WorkspacePanel } from "./workspace-panel";
@@ -187,7 +188,7 @@ export function Workspace({
   }, [drawerOpen, setMobilePanel]);
   return (
     <div className="flex h-dvh min-h-0 bg-background">
-      <Sidebar />
+      <SidebarPane />
       <div
         className={cn(
           "min-h-0 min-w-0 flex-1 flex-col md:hidden",

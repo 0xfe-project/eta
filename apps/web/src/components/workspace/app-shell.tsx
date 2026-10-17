@@ -18,6 +18,7 @@ import { AgentEditor } from "./agent-editor";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
+import { SidebarPane } from "./sidebar-pane";
 import { FolderTree } from "./sidebar-tree";
 import { useAgents, useOpenAgent } from "./use-agents";
 import { useAttention } from "./use-attention";
@@ -88,7 +89,7 @@ function Badge({ count }: { count: number | undefined }) {
   ) : null;
 }
 
-export function Sidebar() {
+export function Sidebar({ width }: { width?: number } = {}) {
   const { t: translateText } = useTranslation([
     "navigation",
     "agents",
@@ -96,7 +97,15 @@ export function Sidebar() {
   ] as const);
   const badges = useBadges();
   return (
-    <aside className="hidden w-48 shrink-0 flex-col overflow-y-auto border-r bg-sidebar md:flex lg:w-56">
+    <aside
+      // Sized by the divider (sidebar-pane.tsx) once the user has dragged it; the default is what
+      // a first visit gets.
+      style={width === undefined ? undefined : { width }}
+      className={cn(
+        "hidden shrink-0 flex-col overflow-y-auto border-r bg-sidebar md:flex",
+        width === undefined && "w-48 lg:w-56",
+      )}
+    >
       <div className="flex h-12 shrink-0 items-center justify-between pr-2 pl-4">
         <Link to="/workspace" className="text-lg font-semibold tracking-tight">
           axp.
@@ -312,7 +321,7 @@ export function PageHeader({
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-dvh min-h-0 bg-background">
-      <Sidebar />
+      <SidebarPane />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {children}
         <BottomNav />
