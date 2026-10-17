@@ -28,6 +28,17 @@ export interface InspectPluginConfig {
   interactions: InteractionStore;
 }
 
+const readJson = async (request: Request): Promise<Record<string, unknown>> => {
+  try {
+    const body = (await request.json()) as unknown;
+    return typeof body === "object" && body !== null && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+};
+
 export const inspectPlugin = {
   name: "inspect",
   inject: ["routes"],
@@ -97,6 +108,86 @@ export const inspectPlugin = {
             blocked: inspect.tools.filter((name) => !active.includes(name)),
             asked: asked.length,
             refused,
+          });
+        },
+      ),
+    );
+
+    // The goal a conversation is chasing.
+    //
+    // The kernel already has the whole machine — active / paused / achieved, an anti-spin limit,
+    // a continuation cap — and until now nothing could reach it, so `/goal` had no equivalent
+    // here. These two routes are the reach: read it, and move it.
+    plugin.effect(() =>
+      plugin.routes.register(
+        "GET",
+        "/sessions/:id/goal",
+        async (_request, params) => {
+          const id = params.id ?? "";
+          const managed = await sessions.session(id);
+          if (managed === undefined) return missing(id);
+          const goal = managed.session.kernel.goal.current;
+          return Response.json({
+            goal:
+              goal === undefined
+                ? null
+                : {
+                    objective: goal.objective,
+                    status: goal.status,
+                    rounds: goal.roundCount,
+                  },
+          });
+        },
+      ),
+    );
+
+    plugin.effect(() =>
+      plugin.routes.register(
+        "POST",
+        "/sessions/:id/goal",
+        async (request, params) => {
+          const id = params.id ?? "";
+          const managed = await sessions.session(id);
+          if (managed === undefined) return missing(id);
+          const body = await readJson(request);
+          const action = typeof body.action === "string" ? body.action : "";
+          const goal = managed.session.kernel.goal;
+          if (action === "set") {
+            const objective =
+              typeof body.objective === "string" ? body.objective.trim() : "";
+            if (objective.length === 0) {
+              return errorResponse(
+                400,
+                "NO_OBJECTIVE",
+                "a goal needs something to aim at",
+                crypto.randomUUID(),
+              );
+            }
+            goal.set(objective);
+          } else if (action === "pause") {
+            goal.pause();
+          } else if (action === "resume") {
+            goal.resume();
+          } else if (action === "clear") {
+            goal.clear();
+          } else {
+            return errorResponse(
+              400,
+              "UNKNOWN_ACTION",
+              `not a goal action: ${action}`,
+              crypto.randomUUID(),
+            );
+          }
+          const next = goal.current;
+          return Response.json({
+            goal:
+              next === undefined
+                ? null
+                : {
+                    objective: next.objective,
+                    status: next.status,
+                    rounds: next.roundCount,
+                  },
           });
         },
       ),

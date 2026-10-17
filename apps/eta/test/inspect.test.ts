@@ -142,6 +142,43 @@ describe("a session, described to a panel", () => {
     expect(usage.model).toContain(":");
   });
 
+  it("reads and moves the goal a conversation is chasing", async () => {
+    const host = await start(await scratch());
+    const id = await openSession(host);
+
+    // Nothing set: null, not an empty objective.
+    expect(
+      await (await fetch(url(host, `/sessions/${id}/goal`))).json(),
+    ).toEqual({ goal: null });
+
+    const set = await post(host, `/sessions/${id}/goal`, {
+      action: "set",
+      objective: "ship P7",
+    });
+    expect(await set.json()).toEqual({
+      goal: { objective: "ship P7", status: "active", rounds: 0 },
+    });
+
+    const paused = (await (
+      await post(host, `/sessions/${id}/goal`, { action: "pause" })
+    ).json()) as { goal: { status: string } };
+    expect(paused.goal.status).toBe("paused");
+
+    const resumed = (await (
+      await post(host, `/sessions/${id}/goal`, { action: "resume" })
+    ).json()) as { goal: { status: string } };
+    expect(resumed.goal.status).toBe("active");
+
+    const cleared = await post(host, `/sessions/${id}/goal`, {
+      action: "clear",
+    });
+    expect(await cleared.json()).toEqual({ goal: null });
+
+    // A goal with nothing to aim at is refused rather than stored empty.
+    const empty = await post(host, `/sessions/${id}/goal`, { action: "set" });
+    expect(empty.status).toBe(400);
+  });
+
   it("says a session is not open rather than reporting zeros", async () => {
     const host = await start(await scratch());
     for (const path of ["prompt", "tools", "usage"]) {
