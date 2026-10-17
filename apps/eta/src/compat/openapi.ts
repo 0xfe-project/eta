@@ -209,6 +209,12 @@ export const PRODUCT_ROUTES: readonly ProductRoute[] = [
     response: { status: 200, shape: "Group" },
   },
   {
+    method: "DELETE",
+    path: "/api/v1/groups/{group_id}",
+    summary:
+      "Delete a conversation. Its timeline goes; each member's own transcript stays.",
+  },
+  {
     method: "PUT",
     path: "/api/v1/groups/{group_id}/members/{agent_id}",
     summary: "Invite or remove a member.",

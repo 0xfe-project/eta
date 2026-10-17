@@ -311,6 +311,30 @@ describe("the snapshot", () => {
     ).json()) as { archived: boolean };
     expect(unarchived.archived).toBe(false);
 
+    // Deleting a conversation takes its timeline with it and leaves the agents' own transcripts
+    // alone — the room is not the work.
+    const doomed = (await (
+      await send(host, "POST", "/api/v1/groups", {
+        name: "doomed",
+        members: [agent.id],
+      })
+    ).json()) as { id: string };
+    await send(host, "POST", `/api/v1/groups/${doomed.id}/messages`, {
+      text: "最后一句话",
+      mentions: [agent.id],
+    });
+    const deleted = await send(host, "DELETE", `/api/v1/groups/${doomed.id}`);
+    expect(deleted.status).toBe(204);
+    const afterDelete = (await (
+      await send(host, "GET", "/api/v1/chat")
+    ).json()) as Snapshot;
+    expect(afterDelete.groups.some((entry) => entry.id === doomed.id)).toBe(
+      false,
+    );
+    expect(
+      (await send(host, "DELETE", `/api/v1/groups/${doomed.id}`)).status,
+    ).toBe(404);
+
     // The same snapshot carries a folder when the group has one.
     const bound = (await (
       await send(host, "POST", "/groups", {

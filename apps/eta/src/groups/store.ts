@@ -343,6 +343,21 @@ export class GroupStore {
     });
   }
 
+  /**
+   * Delete a conversation.
+   *
+   * Its timeline, participants and wakes go with it (the foreign keys cascade). What stays is each
+   * member's session journal: a transcript is that agent's history of the work, and deleting the
+   * room it was said in is not a reason to destroy what was said. Those journals stay readable per
+   * agent, unreachable from this group.
+   */
+  remove(id: string): boolean {
+    const result = this.#handle
+      .query("DELETE FROM chat_group WHERE id = ?")
+      .run(id);
+    return result.changes > 0;
+  }
+
   /** Forget an agent's private group — what deleting the agent means for it. */
   removePrivateGroupsOf(agentId: string): number {
     const result = this.#handle

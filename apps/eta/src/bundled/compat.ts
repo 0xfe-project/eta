@@ -404,6 +404,38 @@ export const compatPlugin = {
       ),
     );
 
+    // Deleting a conversation. Its timeline goes with it; each member's transcript does not — that
+    // is the agent's history of the work, and losing the room is not losing what was said in it.
+    plugin.effect(() =>
+      plugin.routes.register(
+        "DELETE",
+        "/api/v1/groups/:group_id",
+        async (_request, params) => {
+          const id = params.group_id ?? "";
+          if (groups.get(id) === undefined) {
+            return errorResponse(
+              404,
+              "NO_SUCH_GROUP",
+              `no group ${id}`,
+              crypto.randomUUID(),
+            );
+          }
+          // Stop whatever is being said first: a run writing into a deleted group would recreate
+          // rows under an id nobody can see.
+          for (const message of groups.messages(id)) {
+            if (
+              message.status === "working" ||
+              message.status === "waiting_for_input"
+            ) {
+              await runner.stop(message.id);
+            }
+          }
+          groups.remove(id);
+          return new Response(null, { status: 204 });
+        },
+      ),
+    );
+
     plugin.effect(() =>
       plugin.routes.register(
         "PUT",
