@@ -1025,7 +1025,14 @@ export function ChatPanel({
     else run(command.name, []);
   }
   function send() {
-    if (blocked || hold || uploading || isBlank(draft)) return;
+    if (blocked !== undefined || hold !== undefined || uploading) return;
+    // The button says STOP while a reply runs and the box is empty: eta-old's rule, and the
+    // promise has to be kept or the button lies. Saying something with text in it still sends —
+    // ⌘/Ctrl+Enter steers into the running turn instead.
+    if (isBlank(draft)) {
+      if (active !== undefined) onStop(active.id);
+      return;
+    }
     const parts = messageParts(draft, (id) => uploads[id]?.attachment);
     if (!parts) return;
     const first = parts[0]?.type === "text" ? parts[0].text : "";

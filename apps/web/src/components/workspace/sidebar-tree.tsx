@@ -130,7 +130,7 @@ export function FolderTree({ query = "" }: { query?: string }) {
               onClick={() =>
                 void navigate({ to: "/new", search: { cwd: section.path } })
               }
-              className="shrink-0 px-1 text-xs leading-none text-faint hover:text-foreground"
+              className="shrink-0 border border-border px-1 text-xs leading-none text-muted-foreground hover:border-border-strong hover:text-foreground"
             >
               +
             </button>
