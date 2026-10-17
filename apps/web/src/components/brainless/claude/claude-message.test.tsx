@@ -29,11 +29,12 @@ describe("谁说的话", () => {
     const container = await render(
       <ClaudeMessage role="user">look at this</ClaudeMessage>,
     );
+    // Class names are eta-old's: `.message.user` right-aligns, `.message-content` is the box that
+    // carries the 72% width and the background (graphite.css, ported into styles.css).
     const row = container.firstElementChild!;
-    expect(row.className).toContain("justify-end");
-    const bubble = row.firstElementChild!;
-    expect(bubble.className).toContain("max-w-[80%]");
-    expect(bubble.className).toContain("bg-[var(--terminal-surface)]");
+    expect(row.className).toContain("message");
+    expect(row.className).toContain("user");
+    expect(row.firstElementChild!.className).toContain("message-content");
   });
 
   it("智能体说的话在左边，没有底色", async () => {
@@ -41,15 +42,18 @@ describe("谁说的话", () => {
       <ClaudeMessage>here is the answer</ClaudeMessage>,
     );
     expect(container.firstElementChild!.className).not.toContain("justify-end");
-    expect(container.innerHTML).not.toContain("terminal-surface");
+    expect(container.firstElementChild!.className).toContain("assistant");
+    expect(container.firstElementChild!.className).not.toContain("user");
   });
 
-  it("群里有多个说话人时才署名", async () => {
-    const named = await render(
-      <ClaudeMessage author="乐子人">在</ClaudeMessage>,
+  it("脚下那行小字是可选的", async () => {
+    const withFooter = await render(
+      <ClaudeMessage footer="18:34">在</ClaudeMessage>,
     );
-    expect(named.textContent).toContain("乐子人");
+    expect(withFooter.querySelector(".message-footer")?.textContent).toBe(
+      "18:34",
+    );
     const plain = await render(<ClaudeMessage>在</ClaudeMessage>);
-    expect(plain.textContent).toBe("在");
+    expect(plain.querySelector(".message-footer")).toBeNull();
   });
 });

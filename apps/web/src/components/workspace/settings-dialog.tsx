@@ -1,4 +1,3 @@
-import type { WorkspaceState } from "./workspace-store";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,7 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useTheme } from "@/components/use-theme";
 import { elementPickerDefault, setElementPicker } from "@/lib/element-picker";
@@ -47,26 +45,6 @@ const colorModes = [
     },
   },
 ] as const;
-const fontFields = [
-  {
-    key: "fontSans",
-    get label() {
-      return translate("settings:appearance.interfaceFont");
-    },
-    placeholder: "Geist",
-  },
-  {
-    key: "fontMono",
-    get label() {
-      return translate("settings:appearance.monospaceFont");
-    },
-    placeholder: "Geist Mono",
-  },
-] as const satisfies {
-  key: keyof WorkspaceState;
-  label: string;
-  placeholder: string;
-}[];
 /** A row of mutually exclusive choices with a sliding selection. */
 function Segmented<T extends string>({
   label,
@@ -143,29 +121,6 @@ function AppearanceSettings() {
         value={theme as (typeof colorModes)[number]["value"]}
         onChange={setTheme}
       />
-      {fontFields.map(({ key, label, placeholder }) => (
-        <div
-          key={key}
-          className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_16rem] md:items-center"
-        >
-          <label htmlFor={key} className="text-sm font-medium">
-            {label}
-          </label>
-          <Input
-            id={key}
-            value={workspace[key] ?? ""}
-            placeholder={placeholder}
-            maxLength={200}
-            spellCheck={false}
-            onChange={(e) =>
-              setWorkspace((state) => ({
-                ...state,
-                [key]: e.target.value || undefined,
-              }))
-            }
-          />
-        </div>
-      ))}
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
         <div className="min-w-0 text-sm">
           <label htmlFor="react-grab" className="font-medium">

@@ -20,6 +20,19 @@
       href="/manifest.webmanifest"
       crossorigin="use-credentials"
     />
+    <style>
+      /* Document-relative on purpose: the page is served from the vite root in a tab and from a
+         directory in a packaged build, and both resolve this to the copy sitting next to
+         index.html. One face for the whole app — interface and message text alike — and no
+         setting that replaces it: the terminal chrome below is the only thing in mono. */
+      @font-face {
+        font-family: "Eta Sans";
+        src: url("AKRDWGSCNFM-Regular.woff2") format("woff2");
+        font-weight: normal;
+        font-style: normal;
+        font-display: swap;
+      }
+    </style>
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <script>

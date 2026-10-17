@@ -13,17 +13,16 @@ describe("workspace store persistence", () => {
   it("drops fields it does not keep and preserves the rest", async () => {
     localStorage.setItem(
       key,
-      JSON.stringify({ ...saved, sessionTheme: "codex", fontSans: "Arial" }),
+      JSON.stringify({ ...saved, sessionTheme: "codex", unknownField: 1 }),
     );
     await useWorkspaceStore.persist.rehydrate();
     expect(useWorkspaceStore.getState().workspace).toEqual({
       ...saved,
-      fontSans: "Arial",
     });
   });
 
   it("ignores saved data that does not validate", async () => {
-    localStorage.setItem(key, JSON.stringify({ fontSans: 5 }));
+    localStorage.setItem(key, JSON.stringify({ panelCollapsed: 5 }));
     await useWorkspaceStore.persist.rehydrate();
     expect(useWorkspaceStore.getState().workspace).toEqual({});
   });

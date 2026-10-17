@@ -12,9 +12,6 @@ export const storageKey = "axp.workspace.v1";
 const workspaceSchema = z.object({
   selectedGroupId: z.string().max(64).optional(),
   selectedAgentId: z.string().max(64).optional(),
-  // CSS font-family lists for UI and code text; unset uses Geist.
-  fontSans: z.string().max(200).optional(),
-  fontMono: z.string().max(200).optional(),
   // Preselected model for new agents.
   lastModel: z.string().max(100).optional(),
   // The task page as last left: rows or a board, and whose tasks.

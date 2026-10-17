@@ -188,10 +188,15 @@
   /* One header height for every column, so the rule under it is one line across the window. */
   --header-band: 40px;
   --font-heading: var(--font-sans);
+  /* The app ships one face (public/AKRDWGSCNFM-Regular.woff2, declared in index.html) and uses it
+     for everything it says: interface, message text, everything. There is deliberately no setting
+     that swaps it — the previous build let a person type a font name into settings, and the result
+     was two people looking at two different products while reporting the same bug. */
   --font-sans:
-    var(--user-font-sans, "Geist Variable"), ui-sans-serif, system-ui,
-    sans-serif;
-  --font-mono: var(--user-font-mono, "Geist Mono Variable"), ui-monospace,
+    "Eta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
+    "PingFang SC", sans-serif;
+  /* Mono is chrome only: times, system rows, tool-card heads, rail numbers, chips, hints, code. */
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas,
     monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -466,4 +471,244 @@
 [data-sd-animate-marker]::marker {
   animation: sd-marker-in var(--sd-marker-duration, 90ms)
     var(--sd-marker-easing, linear) var(--sd-marker-delay, 0ms) both;
+}
+
+/* ==========================================================================
+ * Ported from eta-old (`packages/eta-client/src/styles/graphite.css`).
+ *
+ * Not "inspired by": the numbers, paddings and class names are its. The two
+ * surfaces this app is read on — the transcript and the composer — were
+ * improvised here once and came out worse than the thing they replaced, so they
+ * are now a copy that can be compared line by line. Token names are the only
+ * translation (--fg → --foreground, --fg-faint → --faint, --bg-solid →
+ * --background, --border-hover → --border-strong).
+ * ========================================================================== */
+
+@layer components {
+  /* ---- transcript ---- */
+
+  .message {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 16px;
+  }
+  .message.user {
+    align-items: flex-end;
+  }
+  .message .message-content {
+    max-width: 72%;
+    padding: 8px 12px;
+    font-size: 14px;
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+  }
+  .message.assistant .message-content {
+    max-width: 100%;
+    padding: 0 2px;
+  }
+  .message.user .message-content {
+    background: var(--background);
+    color: var(--primary);
+    /* What you typed is what you said: the text arrives with its line breaks and is shown as
+       plain text, so the one thing the CSS owes the author is to keep them. */
+    white-space: pre-wrap;
+  }
+  .message.user .message-content a {
+    color: inherit;
+  }
+  .message-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+  .message.user .message-footer {
+    justify-content: flex-end;
+  }
+
+  .system-message {
+    align-self: center;
+    margin: 8px auto 16px;
+    padding: 2px 10px;
+    border: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--faint);
+    text-align: center;
+    max-width: 90%;
+  }
+
+  /*
+   * A task draft: what the agent proposes, and the two sections a person scans before deciding.
+   *
+   * BR1 rather than the markdown defaults it used to inherit: the label is 10px uppercase mono, the
+   * title is 14px sans on the same line, and `目标` / `已决定` are labels rather than headings —
+   * hierarchy by weight and case, not by spending a line of 18px type on each word. The frame is
+   * 1px solid; the dashed border it had before was decoration, and the only dashed border in this
+   * app is the one that means "not bound yet".
+   */
+  .draft-card {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    font-family: var(--font-sans);
+  }
+  .draft-card .markdown {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--foreground);
+  }
+  .draft-card .markdown > * + * {
+    margin-top: 10px;
+  }
+  .draft-card .markdown h2 {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+  .draft-card .markdown h2 + p {
+    margin-top: 2px;
+  }
+  .draft-card .markdown p {
+    margin: 0;
+  }
+
+  /* ---- composer ---- */
+
+  .input-area {
+    flex: 0 0 auto;
+    padding: 6px 16px 14px;
+  }
+  .input-outer {
+    position: relative;
+    width: 100%;
+    max-width: 860px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+  }
+  .composer-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--background);
+  }
+  .composer-card:focus-within {
+    border-color: var(--primary);
+  }
+  .composer-card.drag-over {
+    border-color: var(--primary);
+    background: var(--overlay);
+  }
+  .composer-editor {
+    width: 100%;
+    resize: none;
+    background: transparent;
+    padding: 10px 12px;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 44px;
+    max-height: 200px;
+    color: var(--foreground);
+  }
+  .composer-editor::placeholder {
+    color: var(--faint);
+  }
+  .composer-editor:focus-visible {
+    outline: none;
+  }
+  .composer-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 8px;
+    border-top: 1px solid var(--border);
+  }
+  .composer-toolbar-hints {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--faint);
+  }
+
+  /* Composer controls share one height; menus live in a fixed portal above them. */
+  .composer-control {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 28px;
+    min-height: 28px;
+    padding: 0 8px;
+    border: 1px solid var(--border-strong);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--foreground);
+    background: transparent;
+    cursor: pointer;
+  }
+  .composer-control:hover {
+    background: var(--overlay-hover);
+  }
+  .composer-control:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .composer-control svg {
+    flex-shrink: 0;
+  }
+  .composer-control-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .composer-control-icon {
+    width: 28px;
+    flex-shrink: 0;
+    padding: 0;
+  }
+  .composer-model-container {
+    display: inline-flex;
+    min-width: 0;
+    max-width: 220px;
+  }
+  .composer-model-control {
+    min-width: 0;
+    max-width: 100%;
+    flex-shrink: 1;
+  }
+  .composer-thinking-control {
+    min-width: 0;
+    max-width: 180px;
+    flex-shrink: 1;
+    text-transform: uppercase;
+  }
+  .composer-submit-control {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+  .composer-submit-control:hover {
+    background: transparent;
+    color: var(--foreground);
+  }
+  .composer-controls {
+    flex: 1;
+  }
+  .composer-controls .composer-toolbar-hints {
+    flex: 1 1 0;
+  }
 }

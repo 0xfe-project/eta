@@ -9,6 +9,7 @@ import type {
   SendMode,
 } from "@/queries/chat";
 import type { Outgoing } from "@/queries/outbox";
+import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -30,6 +31,12 @@ import { ClaudeThinking } from "@/components/brainless/claude/claude-thinking";
 import { ClaudeToolCall } from "@/components/brainless/claude/claude-tool-call";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ActivityOperationCards } from "@/components/workspace/activity-operation";
 import { ActivityRefCard } from "@/components/workspace/activity-ref";
 import {
@@ -45,12 +52,11 @@ import {
   plainDraft,
 } from "@/lib/composer";
 import { buildMenu, mentionAt } from "@/lib/composer-menu";
-import { listSeparator, translate } from "@/lib/i18n";
+import { translate } from "@/lib/i18n";
 import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { firstVisible } from "@/lib/rail";
 import { readTheme, setTheme } from "@/lib/theme";
 import { summarizeArgs } from "@/lib/tool-summary";
-import { cn } from "@/lib/utils";
 import { ACTIVE_STATUSES } from "@/queries/chat";
 import { upload, useOutbox } from "@/queries/outbox";
 import { AgentAvatar } from "./agent-identity";
@@ -59,6 +65,7 @@ import { ComposerEditor } from "./composer-editor";
 import { ModelChip, ThinkingChip } from "./composer-pickers";
 import { GroupNotice } from "./group-notice";
 import { PendingStrip } from "./pending-strip";
+import { when } from "./routine-format";
 import { TaskMessage } from "./task-message";
 import { TranscriptRail } from "./transcript-rail";
 import { useWorkspaceStore } from "./workspace-store";
@@ -192,6 +199,68 @@ function UserParts({ parts }: { parts: OutgoingPart[] }) {
         ),
       )}
     </span>
+  );
+}
+
+/**
+ * Who a message is for, as a composer control.
+ *
+ * In a group the model chip has no single answer — the members can be on different models — so the
+ * control in that slot picks the *people* instead. 所有人 comes first because it is a real choice,
+ * not a convenience.
+ */
+function MemberPicker({
+  members,
+  mentioned,
+  onPick,
+}: {
+  members: readonly { agent_id: string; name: string }[];
+  mentioned: readonly string[];
+  onPick: (label: string) => void;
+}) {
+  const { t: translateText } = useTranslation(["chat"] as const);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          data-testid="composer-members"
+          className="composer-control"
+          title={translateText("mentions.notifyTargets", {
+            names: members
+              .filter((member) => mentioned.includes(member.agent_id))
+              .map((member) => member.name)
+              .join("、"),
+          })}
+        >
+          <span className="composer-control-label">
+            {translateText("mentions.pickTargets")}
+          </span>
+          <CaretDownIcon aria-hidden="true" className="size-3" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-48">
+        <DropdownMenuItem
+          onSelect={() => onPick(translateText("mentions.everyoneCommand"))}
+        >
+          <span className="font-mono">
+            @{translateText("mentions.everyoneCommand")}
+          </span>
+        </DropdownMenuItem>
+        {members.map((member) => (
+          <DropdownMenuItem
+            key={member.agent_id}
+            disabled={mentioned.includes(member.agent_id)}
+            onSelect={() => onPick(member.name)}
+          >
+            <span className="min-w-0 flex-1 truncate">{member.name}</span>
+            {mentioned.includes(member.agent_id) ? (
+              <span aria-hidden="true">✓</span>
+            ) : null}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -464,14 +533,21 @@ const Turn = memo(
     if (message.kind === "system") return <GroupNotice message={message} />;
     if (message.role === "user")
       return (
-        <ClaudeMessage role="user">
+        <ClaudeMessage
+          role="user"
+          footer={
+            <time dateTime={message.created_at}>
+              {when(message.created_at)}
+            </time>
+          }
+        >
           <UserParts parts={userParts(message)} />
         </ClaudeMessage>
       );
     // Only a reply at work still grows; the rest render as finished text.
     const streaming = ACTIVE_STATUSES.has(message.status);
     return (
-      <div className="space-y-3 pt-1">
+      <div className="message assistant">
         {author === undefined ? null : (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <AgentAvatar agent={{ id: message.agent_id }} className="size-4" />
@@ -504,14 +580,9 @@ const Turn = memo(
                 </div>
               </details>
             ) : block.type === "text" ? (
-              <ClaudeMessage
-                key={block.id}
-                className={ENTER}
-                // In a group the question "which of them is this" is real; in a single-agent
-                // conversation it has one answer and a name would be noise.
-              >
+              <div key={block.id} className="message-content">
                 <Markdown streaming={streaming}>{block.text}</Markdown>
-              </ClaudeMessage>
+              </div>
             ) : (
               <div key={block.id} className={`space-y-1 ${ENTER}`}>
                 <ToolActivity block={block} />
@@ -1299,89 +1370,86 @@ export function ChatPanel({
           </button>
         )}
       </div>
-      <form
-        ref={formRef}
-        className="shrink-0 pt-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          send();
-        }}
-      >
-        {blocked || notice ? (
-          <div className="px-[1ch] pb-[1lh]">{blocked ?? notice}</div>
-        ) : hold ? (
-          <div className="px-[1ch] pb-[0.5lh]">
-            <Warning>{hold}</Warning>
-          </div>
-        ) : uploading ? (
-          <div
-            role="status"
-            className="px-[1ch] pb-[0.5lh] text-[var(--terminal-muted)]"
+      {/*
+       * The composer, copied from eta-old rather than improvised: `.input-area` → `.input-outer`
+       * → `.composer-card` (which is the bordered box, and turns its border on when something
+       * inside has focus) → the editor → `.composer-toolbar` with the controls on the left, the
+       * hint in the middle and send on the right. The class names are its class names, and the
+       * CSS behind them was ported with them, because the previous version was invented here and
+       * came out worse than the thing it replaced.
+       */}
+      <footer className="input-area">
+        <div className="input-outer">
+          {/*
+           * In priority order, and each one is a different sentence: why the box cannot be used
+           * (blocked), why this draft cannot go (hold — a failed upload, too many files), a
+           * warning that leaves it usable (notice). Only the first that applies is shown.
+           */}
+          {blocked !== undefined ? (
+            <div className="border-b px-3 py-1.5 text-xs">{blocked}</div>
+          ) : hold !== undefined || uploading ? (
+            <div className="border-b px-3 py-1.5 text-xs text-muted-foreground">
+              {uploading ? translateText("composer.waitForUploads") : hold}
+            </div>
+          ) : notice === undefined ? null : (
+            <div className="border-b px-3 py-1.5 text-xs">{notice}</div>
+          )}
+          <form
+            ref={formRef}
+            className="composer-card"
+            onSubmit={(event) => {
+              event.preventDefault();
+              send();
+            }}
           >
-            {translateText("composer.waitForUploads")}
-          </div>
-        ) : null}
-        {/* One agent: the two chips that describe what it will run on. Several: those chips have
-            no single answer, and the member picker below takes their place. */}
-        {members.length === 1 && members[0] !== undefined ? (
-          <div className="flex flex-wrap items-center gap-1 px-1 pb-1">
-            <ModelChip sessionId={members[0].session_id ?? undefined} />
-            <ThinkingChip sessionId={members[0].session_id ?? undefined} />
-          </div>
-        ) : null}
-        {/* The member picker, where a single-chat composer would carry the model chip: in a group
-            the question the input answers first is "who", not "which model". 所有人 is a real
-            choice here, not a convenience — it is how everyone gets woken at once. */}
-        {members.length > 1 && (
-          <div className="flex flex-wrap items-center gap-1 px-1 pb-1 text-xs text-muted-foreground">
-            <button
-              type="button"
-              onClick={() =>
-                setDraft([...draft, { type: "text", text: " @所有人 " }])
-              }
-              className="border border-border px-1.5 py-0.5 font-mono text-[11px] hover:border-border-strong"
-              title={translateText("mentions.notifyEveryone")}
-            >
-              @{translateText("mentions.everyoneCommand")}
-            </button>
-            {members.map((p) => (
-              <button
-                key={p.agent_id}
-                type="button"
-                disabled={mentioned.includes(p.agent_id)}
-                onClick={() =>
-                  setDraft([
-                    ...draft,
-                    { type: "text", text: ` @${mentionLabel(p, members)} ` },
-                  ])
-                }
-                className={cn(
-                  "border px-1.5 py-0.5 font-mono text-[11px]",
-                  mentioned.includes(p.agent_id)
-                    ? "border-border text-faint"
-                    : "border-border text-foreground hover:border-border-strong",
-                )}
-              >
-                @{mentionLabel(p, members)}
-              </button>
-            ))}
-            <span className="min-w-0 flex-1 truncate">
-              {mentioned.length
-                ? translateText("mentions.notifyTargets", {
-                    names: mentioned
-                      .map((id) => members.find((p) => p.agent_id === id)?.name)
-                      .join(listSeparator()),
-                  })
-                : translateText("mentions.noTargetsHint")}
-            </span>
-          </div>
-        )}
-        {/* A disabled fieldset disables the session's own input. */}
-        <fieldset disabled={Boolean(blocked)} className="contents">
-          {slashMenu}
-          <ClaudePrompt {...promptProps} mode="manual" effort={false} />
-        </fieldset>
-      </form>
+            <fieldset disabled={Boolean(blocked)} className="contents">
+              {slashMenu}
+              <ClaudePrompt {...promptProps} mode="manual" effort={false} />
+              <div className="composer-toolbar">
+                <div className="composer-controls flex min-w-0 items-center gap-2">
+                  {members.length === 1 && members[0] !== undefined ? (
+                    <>
+                      <ModelChip
+                        sessionId={members[0].session_id ?? undefined}
+                      />
+                      <ThinkingChip
+                        sessionId={members[0].session_id ?? undefined}
+                      />
+                    </>
+                  ) : (
+                    <MemberPicker
+                      members={members}
+                      mentioned={mentioned}
+                      onPick={(label) =>
+                        setDraft([
+                          ...draft,
+                          { type: "text", text: ` @${label} ` },
+                        ])
+                      }
+                    />
+                  )}
+                  <span className="composer-toolbar-hints min-w-0 truncate">
+                    {active === undefined
+                      ? translateText("composer.sendHint")
+                      : translateText("composer.workingHint")}
+                  </span>
+                </div>
+                <Button
+                  type="submit"
+                  className="composer-control composer-submit-control"
+                  disabled={
+                    blocked !== undefined || hold !== undefined || uploading
+                  }
+                >
+                  {isBlank(draft) && active !== undefined
+                    ? translateText("composer.stopLabel")
+                    : translateText("common:actions.send")}
+                </Button>
+              </div>
+            </fieldset>
+          </form>
+        </div>
+      </footer>
     </section>
   );
 }

@@ -29,7 +29,10 @@
     "model": "Model",
     "modelHint": "The model the next turn runs on",
     "thinking": "Thinking level",
-    "thinkingHint": "How hard it thinks before answering"
+    "thinkingHint": "How hard it thinks before answering",
+    "sendHint": "Enter to send · Shift+Enter for a new line · ⌘Enter to steer",
+    "workingHint": "a reply is running · ⌘Enter to say something now",
+    "stopLabel": "STOP"
   },
   "tools": {
     "expandHint": "(click to expand)"
@@ -163,7 +166,8 @@
     "replyHint": "Ask for a reply",
     "notifyTargets": "Will notify {{names}}",
     "noTargetsHint": "Messages without @mentions are only saved to the group",
-    "everyoneLabel": "Everyone"
+    "everyoneLabel": "Everyone",
+    "pickTargets": "@ who"
   },
   "history": {
     "loadEarlier": "Load earlier messages…",
