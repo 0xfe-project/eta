@@ -14,6 +14,7 @@ import {
   resolveLanguage,
 } from "@/lib/i18n";
 import { installErrorReporting, reportReactError } from "@/lib/report";
+import { applyTheme, readTheme, watchSystemTheme } from "@/lib/theme";
 import { watchForUpdates } from "@/lib/update";
 import { useOutbox } from "@/queries/outbox";
 import { getRouter } from "./router";
@@ -37,6 +38,11 @@ async function start() {
   ]);
   void i18n.changeLanguage(resolveLanguage(readLanguagePreference()));
   applyDocumentLanguage();
+  // index.html painted the mode before the bundle; this is what keeps it true afterwards
+  // (a changed choice in another tab, or the system flipping while the tab is open).
+  applyTheme(readTheme());
+  window.addEventListener("storage", () => applyTheme(readTheme()));
+  watchSystemTheme();
 
   const router = getRouter();
   const root = document.getElementById("root");

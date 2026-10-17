@@ -22,6 +22,25 @@
     />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <script>
+      // The color mode, before the first frame. This has to be a real script in the document:
+      // React builds the tree on the client, and a script a component renders never runs. Without
+      // it, a dark-mode reader sees white until the bundle loads and React commits. Kept in step
+      // with apps/web/src/lib/theme.ts — same key, same class, same resolution.
+      (function () {
+        try {
+          var choice = localStorage.getItem("theme") || "system";
+          var dark =
+            choice === "dark" ||
+            (choice === "system" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", dark);
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        } catch (error) {
+          // Storage denied: the app applies the system value again when it mounts.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

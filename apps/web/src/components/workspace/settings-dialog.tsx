@@ -1,6 +1,6 @@
 import type { WorkspaceState } from "./workspace-store";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/components/use-theme";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageSettings } from "@/components/language-settings";
@@ -129,7 +129,7 @@ function AppearanceSettings() {
   const { t: translateText } = useTranslation(["settings", "common"] as const);
   const workspace = useWorkspaceStore((s) => s.workspace);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
-  const { theme = "system", setTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   return (
     <div className="space-y-3">
       <h2 className="text-sm font-semibold">
