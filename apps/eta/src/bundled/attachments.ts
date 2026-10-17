@@ -32,7 +32,14 @@ const MAX_BYTES = 25 * 1024 * 1024;
 /** Strip what a path cannot hold, and keep the name recognisable. */
 function safeName(raw: string): string {
   const base = raw.split(/[\\/]/).pop() ?? "file";
-  const cleaned = base.replace(/[\u0000-\u001F<>:"|?*]/g, "_").trim();
+  const cleaned = [...base]
+    .map((character) =>
+      character.codePointAt(0)! < 0x20 || '<>:"|?*'.includes(character)
+        ? "_"
+        : character,
+    )
+    .join("")
+    .trim();
   return cleaned.length === 0 ? "file" : cleaned.slice(0, 120);
 }
 
