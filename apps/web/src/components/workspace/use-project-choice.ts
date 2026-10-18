@@ -1,16 +1,23 @@
-import type { ProjectView } from "@eta/client-contracts";
-import { useCreateProject, useProjects } from "@/queries/projects";
+import type { MachineView, ProjectView } from "@eta/client-contracts";
+import { useCreateProject, useMachines, useProjects } from "@/queries/projects";
 
 /**
  * Where a conversation works: one of the projects, or a path to add as one.
  *
  * `projectId` undefined means "the first project"; `""` means "add a path", which is also all there
- * is to choose from while there are no projects. A path is added on the primary machine, and adding
- * one that is already a project is the same as choosing it.
+ * is to choose from while there are no projects. A path is added on `machineId` (undefined means
+ * the primary), and adding one that is already a project is the same as choosing it.
  */
 export interface ProjectChoice {
   projectId: string | undefined;
   path: string;
+  machineId?: string;
+}
+
+/** The machines a path can be added on: the primary and the online ones that are let in. */
+export function useUsableMachines(): MachineView[] {
+  const { machines } = useMachines();
+  return machines.filter((machine) => machine.status === "online");
 }
 
 /** The projects a conversation can be started in: not an agent's own workspace, not put away. */
@@ -50,6 +57,9 @@ export function useResolveProject() {
       (
         await create.mutateAsync({
           path: choice.path.trim(),
+          ...(choice.machineId === undefined
+            ? {}
+            : { machineId: choice.machineId }),
           ...(stewardId === null ? {} : { stewardId }),
         })
       ).project,

@@ -18,9 +18,9 @@ import { useNeedsAttention } from "@/queries/providers";
 import { AgentSettings } from "./agent-settings";
 import { ApprovalSettings } from "./approval-settings";
 import { BundleSettings } from "./bundle-settings";
-import { ComputerSettings } from "./computer-settings";
 import { ConnectionSettings } from "./connection-settings";
 import { ArchivedGroups } from "./groups";
+import { MachineSettings } from "./machine-settings";
 import { ProviderSettings } from "./provider-settings";
 import { AttentionDot, SettingsNav } from "./settings-nav";
 import { settingsSections, useSettingsAttention } from "./settings-sections";
@@ -195,8 +195,8 @@ export function SettingsDialog() {
               <ApprovalSettings />
             ) : settings.section === "connections" ? (
               <ConnectionSettings />
-            ) : settings.section === "computers" ? (
-              <ComputerSettings />
+            ) : settings.section === "machines" ? (
+              <MachineSettings />
             ) : settings.section === "archived" ? (
               <ArchivedGroups />
             ) : (

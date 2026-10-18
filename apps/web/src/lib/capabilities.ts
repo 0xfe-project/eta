@@ -12,6 +12,4 @@ export const capabilities = {
   bundles: false,
   // P4.4: forge — the GitHub connection wizard (/api/forge/v1). Grok is P1.1, also not here.
   connections: false,
-  // P4: remote computers (/api/v1/computers).
-  computers: false,
 } as const;

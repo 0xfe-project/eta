@@ -3,8 +3,8 @@ import enArtifacts from "./en/artifacts.json";
 import enBundles from "./en/bundles.json";
 import enChat from "./en/chat.json";
 import enCommon from "./en/common.json";
-import enComputers from "./en/computers.json";
 import enConnections from "./en/connections.json";
+import enMachines from "./en/machines.json";
 import enMemory from "./en/memory.json";
 import enNavigation from "./en/navigation.json";
 import enOverview from "./en/overview.json";
@@ -18,8 +18,8 @@ import zhArtifacts from "./zh/artifacts.json";
 import zhBundles from "./zh/bundles.json";
 import zhChat from "./zh/chat.json";
 import zhCommon from "./zh/common.json";
-import zhComputers from "./zh/computers.json";
 import zhConnections from "./zh/connections.json";
+import zhMachines from "./zh/machines.json";
 import zhMemory from "./zh/memory.json";
 import zhNavigation from "./zh/navigation.json";
 import zhOverview from "./zh/overview.json";
@@ -35,7 +35,7 @@ export const en = {
   artifacts: enArtifacts,
   bundles: enBundles,
   chat: enChat,
-  computers: enComputers,
+  machines: enMachines,
   connections: enConnections,
   memory: enMemory,
   navigation: enNavigation,
@@ -53,7 +53,7 @@ export const zh = {
   artifacts: zhArtifacts,
   bundles: zhBundles,
   chat: zhChat,
-  computers: zhComputers,
+  machines: zhMachines,
   connections: zhConnections,
   memory: zhMemory,
   navigation: zhNavigation,
@@ -73,7 +73,7 @@ export const namespaces = [
   "artifacts",
   "bundles",
   "chat",
-  "computers",
+  "machines",
   "connections",
   "memory",
   "navigation",

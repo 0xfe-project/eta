@@ -1,0 +1,54 @@
+{
+  "title": "Machines",
+  "status": {
+    "online": "Online",
+    "offline": "Offline",
+    "pending": "Awaiting approval",
+    "revoked": "Revoked"
+  },
+  "kinds": {
+    "primary": "Primary",
+    "daemon": "Daemon",
+    "ssh": "SSH"
+  },
+  "lastSeen": "Last seen {{time}}",
+  "actions": {
+    "add": "Add machine",
+    "rename": "Rename",
+    "revoke": "Revoke"
+  },
+  "fields": {
+    "nameLabel": "Machine name",
+    "namePlaceholder": "e.g. Mac mini at home"
+  },
+  "install": {
+    "title": "Connect a machine",
+    "permissionsNotice": "Agents run on that machine with full permissions. Only connect machines meant for work.",
+    "chooseName": "Name it",
+    "generateCommand": "Generate command",
+    "runCommand": "Run in that machine's terminal",
+    "copyCommand": "Copy install command",
+    "commandExpiry": "The command works once and is valid until {{time}}.",
+    "waitingForCommand": "Waiting for the machine to run the command…"
+  },
+  "approval": {
+    "title": "Check the fingerprint, approve",
+    "help": "After the command runs, that machine's terminal prints a fingerprint. Paste it here; it is approved only if it matches.",
+    "request": "{{name}} wants to connect: paste the fingerprint its terminal printed.",
+    "label": "Fingerprint of {{name}}",
+    "placeholder": "Paste the fingerprint from the terminal",
+    "approved": "Approved {{name}}"
+  },
+  "rename": {
+    "title": "Rename {{name}}"
+  },
+  "revoke": {
+    "confirmTitle": "Revoke {{name}}?",
+    "confirmDescription": "It can no longer connect. Sessions already running on it are not stopped. To connect it again, add it anew.",
+    "success": "Revoked {{name}}"
+  },
+  "empty": {
+    "title": "No other machines yet",
+    "description": "Once connected, projects and conversations can work on it."
+  }
+}
