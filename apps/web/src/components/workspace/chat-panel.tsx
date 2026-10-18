@@ -240,6 +240,12 @@ function MemberPicker({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-48">
+        {/*
+         * `everyoneCommand` is the word *after* the @ ("所有人", "everyone"), not a mention with
+         * its own @: the menu writes the @ and so does the insert, and a label that carried one
+         * read "@@所有人" and inserted a mention the parser does not match (an @ is not
+         * whitespace), so the item looked right and woke nobody.
+         */}
         <DropdownMenuItem
           onSelect={() => onPick(translateText("mentions.everyoneCommand"))}
         >

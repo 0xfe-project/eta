@@ -171,7 +171,7 @@
     "resend": "Resend"
   },
   "mentions": {
-    "everyoneCommand": "@everyone",
+    "everyoneCommand": "everyone",
     "notifyEveryone": "Notify all group members",
     "busyHint": "Busy · Message will be queued",
     "replyHint": "Ask for a reply",

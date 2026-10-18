@@ -171,7 +171,7 @@
     "resend": "重新发送"
   },
   "mentions": {
-    "everyoneCommand": "@所有人",
+    "everyoneCommand": "所有人",
     "notifyEveryone": "唤醒所有群成员",
     "busyHint": "忙碌 · 消息会排队",
     "replyHint": "请他回复",
