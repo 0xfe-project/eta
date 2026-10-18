@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useRoutine, useRoutines } from "@/queries/routines";
 import { PageHeader } from "./app-shell";
-import { RefreshButton } from "./refresh-button";
 import { RoutineForm } from "./routine-form";
 import { useRoutineNav } from "./routine-nav";
 import {
@@ -28,13 +27,8 @@ export function RoutineBoard() {
   ] as const);
   const [nav, setNav] = useRoutineNav();
   const editing = nav.edit && nav.edit !== "new" ? nav.edit : null;
-  const {
-    data: routine,
-    isPending,
-    error,
-    refetch,
-  } = useRoutine(nav.routine ?? editing);
-  const { data: routines } = useRoutines();
+  const { routine, missing, error } = useRoutine(nav.routine ?? editing);
+  const { routines } = useRoutines();
   const open = Boolean(nav.edit || nav.routine);
   const run = routine?.runs.find((r) => r.id === nav.run);
 
@@ -54,12 +48,8 @@ export function RoutineBoard() {
     ) : routine ? (
       <RoutineDetail routine={routine} listed />
     ) : open ? (
-      <RoutineMissing
-        isPending={isPending}
-        error={error}
-        onRetry={() => void refetch()}
-      />
-    ) : routines?.length ? (
+      <RoutineMissing missing={missing} error={error} />
+    ) : routines.length ? (
       // With none yet, the list says how to start.
       <Empty icon={ClockIcon} title={translateText("empty.selectTitle")}>
         {translateText("empty.selectDescription")}
@@ -69,7 +59,6 @@ export function RoutineBoard() {
   return (
     <>
       <PageHeader title={translateText("navigation:sections.routines")}>
-        <RefreshButton resource="routines" />
         <Button
           size="sm"
           onClick={() => void setNav({ edit: "new", routine: null, run: null })}

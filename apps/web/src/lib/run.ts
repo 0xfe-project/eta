@@ -14,6 +14,8 @@ export type RunBlock =
       name: string;
       input: unknown;
       output?: string | undefined;
+      /** What the tool left for the page beyond its text (`publish_artifact` names its artifact). */
+      details?: unknown;
       status: "running" | "completed" | "failed";
     };
 
@@ -92,6 +94,7 @@ export function runBlocks(
       const call = tools.get(row.message.toolCallId);
       if (call !== undefined) {
         call.output = resultText(row.message);
+        call.details = row.message.details;
         call.status = row.message.isError ? "failed" : "completed";
       }
     }

@@ -27,6 +27,7 @@
   "models": {
     "loading": "正在加载模型…",
     "select": "选择模型",
+    "default": "默认模型",
     "deletedOption": "{{modelName}}（已不存在）",
     "noneAvailable": "暂无可用模型。",
     "noneSelected": "未选择模型",

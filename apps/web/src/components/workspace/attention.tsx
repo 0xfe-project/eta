@@ -194,17 +194,17 @@ export function PendingList() {
   // Only their state: the items come from usePendingInteractions and
   // useAttention.
   const sources = [
-    { what: translateText("navigation:sections.tasks"), query: useTasks() },
+    { what: translateText("navigation:sections.tasks"), ...useTasks() },
     {
       what: translateText("navigation:sections.routines"),
-      query: useRoutines(),
+      ...useRoutines(),
     },
   ];
   const confirmations = useQuestions();
   const { tasks, routines } = useAttention();
   const sectionLink = useSectionLink();
-  const failed = sources.filter(({ query }) => query.error);
-  const loading = sources.some(({ query }) => query.isPending);
+  const failed = sources.filter(({ error }) => error);
+  const loading = sources.some(({ loaded, error }) => !loaded && !error);
   const total = confirmations.length + tasks.length + routines.length;
 
   if (loading && !total) return <Loading rows={3} />;
@@ -227,8 +227,7 @@ export function PendingList() {
       {failed.length ? (
         <LoadError
           what={failed.map(({ what }) => what).join(listSeparator())}
-          error={failed[0].query.error!}
-          onRetry={() => failed.forEach(({ query }) => void query.refetch())}
+          error={failed[0].error!}
           className="py-6"
         />
       ) : null}

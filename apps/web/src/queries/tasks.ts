@@ -1,403 +1,106 @@
 import type {
-  AssigneeInput,
-  AssigneeOption,
-  AssistInput,
-  Computer,
-  ComputerRuntime,
-  Computers,
-  LogEntry,
-  Place,
-  Places,
-  Task,
-  TaskActivity,
-  TaskAssist,
-  TaskDetail,
-  TaskIn,
-  TaskLoop,
-  TaskRun,
-  TaskUpdateIn,
-} from "@/api/control-plane.gen";
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+  BoardTaskDetail,
+  BoardTaskStatus,
+  BoardTaskView,
+  TaskActivityView,
+  TaskArgs,
+  TaskResults,
+} from "@eta/client-contracts";
 import { useMemo } from "react";
-import { controlPlane, unwrap } from "@/lib/api";
+import { rememberRows } from "@/queries/conversations";
+import { useListTarget, useTarget, useWireMutation } from "@/queries/wire";
 
-// The task board and the remote computers that work on it
-// (/api/v1/tasks, /api/v1/computers; apps/control-plane internal/tasks).
+// The task board on the wire: the `tasks` target (one eager `list` of every task) and one
+// `tasks.<id>` target per task (its `task` and its `activity`). Nothing polls: a comment, an
+// agent's status change or a published artifact arrives as state.
 
-export type {
-  AssigneeInput,
-  AssigneeOption,
-  Computer,
-  ComputerRuntime,
-  LogEntry,
-  Place,
-  Places,
-  Task,
-  TaskActivity,
-  TaskAssist,
-  TaskDetail,
-  TaskLoop,
-  TaskRun,
-};
-export type TaskStatus = Task["status"];
-export type RunStatus = TaskRun["status"];
-export type TaskInput = TaskIn;
+export type Task = BoardTaskView;
+export type TaskStatus = BoardTaskStatus;
+export type TaskActivity = TaskActivityView;
+/** A task with its history, as its own page needs it. */
+export type TaskDetail = BoardTaskDetail & { activity: TaskActivityView[] };
 
-const keys = {
-  tasks: ["tasks"] as const,
-  task: (id: string) => ["tasks", id] as const,
-  log: (task: string, run: string) => ["tasks", task, "log", run] as const,
-  computers: ["computers"] as const,
-  places: (computer: string, runtime: string) =>
-    ["computers", computer, runtime, "places"] as const,
-};
-
-const activeRun = (status: string | null | undefined) =>
-  status === "queued" || status === "starting" || status === "running";
-
+/** Every task, most recently moved first (the order the host keeps). */
 export function useTasks() {
-  return useQuery({
-    queryKey: keys.tasks,
-    queryFn: async ({ signal }) =>
-      unwrap(controlPlane.GET("/api/v1/tasks", { signal })),
-    // Remote agents comment and change status on their own.
-    refetchInterval: (query) =>
-      query.state.data?.tasks.some((t) => activeRun(t.run_status))
-        ? 3000
-        : 15_000,
-  });
-}
-
-export function useTask(id: string | null) {
-  return useQuery({
-    queryKey: keys.task(id ?? ""),
-    queryFn: async ({ signal }) =>
-      unwrap(
-        controlPlane.GET("/api/v1/tasks/{task_id}", {
-          params: { path: { task_id: id! } },
-          signal,
-        }),
-      ),
-    enabled: Boolean(id),
-    refetchInterval: (query) =>
-      query.state.data?.runs.some((r) => activeRun(r.status)) ? 2000 : 10_000,
-  });
+  const { items, loaded, error } = useListTarget<BoardTaskView>("tasks");
+  return { tasks: items, loaded, error };
 }
 
 /**
- * A run's transcript, read from the remote agent while it is open: the latest
- * page, then older ones on demand, oldest first.
+ * One task. `missing` is a task the board does not have (deleted, or never was): the list is eager,
+ * so its absence is known as soon as the board has arrived, without waiting on a target that will
+ * never answer.
  */
-export function useRunLog(task: string, run: string, live: boolean) {
-  const log = useInfiniteQuery({
-    queryKey: keys.log(task, run),
-    queryFn: async ({ pageParam, signal }) =>
-      unwrap(
-        controlPlane.GET("/api/v1/tasks/{task_id}/runs/{run_id}/log", {
-          params: {
-            path: { task_id: task, run_id: run },
-            query: pageParam ? { before: pageParam } : {},
-          },
-          signal,
-        }),
-      ),
-    initialPageParam: "",
-    getNextPageParam: (page) => page.older || undefined,
-    refetchInterval: live ? 3000 : false,
-    retry: false,
-  });
-  const pages = log.data?.pages;
-  const entries = useMemo(
-    () => [...(pages ?? [])].reverse().flatMap((page) => page.entries),
-    [pages],
+export function useTask(id: string | null) {
+  const { tasks, loaded, error } = useTasks();
+  const state = useTarget(id === null ? undefined : `tasks.${id}`);
+  const detail = state?.sections.task as BoardTaskDetail | undefined;
+  const activity = state?.sections.activity as TaskActivityView[] | undefined;
+  const task = useMemo<TaskDetail | undefined>(
+    () =>
+      detail === undefined || activity === undefined
+        ? undefined
+        : { ...detail, activity },
+    [detail, activity],
   );
   return {
-    entries,
-    error: log.error,
-    isPending: log.isPending,
-    hasOlder: log.hasNextPage,
-    loadingOlder: log.isFetchingNextPage,
-    loadOlder: log.fetchNextPage,
+    task,
+    missing:
+      id !== null &&
+      task === undefined &&
+      loaded &&
+      !tasks.some((item) => item.id === id),
+    error,
   };
 }
 
-function useTaskMutation<T>(call: (input: T) => Promise<TaskDetail>) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: call,
-    onSuccess: (task) => queryClient.setQueryData(keys.task(task.id), task),
-    // Not awaited: the answer, or the failure, is news before the board
-    // has caught up with it.
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: keys.tasks });
-    },
-  });
-}
-
 export function useCreateTask() {
-  return useTaskMutation((input: TaskInput) =>
-    unwrap(controlPlane.POST("/api/v1/tasks", { body: input })),
+  return useWireMutation<TaskArgs["create"], TaskResults["create"]>(
+    "tasks",
+    "create",
   );
 }
 
 export function useUpdateTask() {
-  return useTaskMutation(
-    ({ id, changes }: { id: string; changes: TaskUpdateIn }) =>
-      unwrap(
-        controlPlane.PATCH("/api/v1/tasks/{task_id}", {
-          params: { path: { task_id: id } },
-          body: changes,
-        }),
-      ),
+  return useWireMutation<TaskArgs["update"], TaskResults["update"]>(
+    "tasks",
+    "update",
   );
 }
 
-/** `key` is the comment's Idempotency-Key: every try of one comment shares it. */
 export function useCommentTask() {
-  return useTaskMutation(
-    ({
-      id,
-      body,
-      key,
-      groupId,
-    }: {
-      id: string;
-      body: string;
-      key: string;
-      groupId?: string;
-    }) =>
-      unwrap(
-        controlPlane.POST("/api/v1/tasks/{task_id}/comments", {
-          params: {
-            path: { task_id: id },
-            header: { "Idempotency-Key": key },
-          },
-          body: { body, group_id: groupId },
-        }),
-      ),
-  );
-}
-
-/**
- * 请 Agent 协助: another agent on the task's computer does one piece of work
- * on it, beside its assignee. `key` is the Idempotency-Key: a retry of one
- * request is never a second assist.
- */
-export function useAssistTask() {
-  return useTaskMutation(
-    ({ id, input, key }: { id: string; input: AssistInput; key: string }) =>
-      unwrap(
-        controlPlane.POST("/api/v1/tasks/{task_id}/assists", {
-          params: {
-            path: { task_id: id },
-            header: { "Idempotency-Key": key },
-          },
-          body: input,
-        }),
-      ),
-  );
-}
-
-/** Cancels a request for assistance, or stops its run. */
-export function useCancelAssist() {
-  return useTaskMutation(({ id, assist }: { id: string; assist: string }) =>
-    unwrap(
-      controlPlane.POST("/api/v1/tasks/{task_id}/assists/{item_id}/cancel", {
-        params: { path: { task_id: id, item_id: assist } },
-      }),
-    ),
-  );
-}
-
-export function useStopLoop() {
-  return useTaskMutation(({ id, loop }: { id: string; loop: string }) =>
-    unwrap(
-      controlPlane.POST("/api/v1/tasks/{task_id}/loops/{item_id}/stop", {
-        params: { path: { task_id: id, item_id: loop } },
-      }),
-    ),
-  );
-}
-
-/** Carries on a paused review loop; only the user may raise its budget. */
-export function useResumeLoop() {
-  return useTaskMutation(
-    ({
-      id,
-      loop,
-      maxRounds,
-    }: {
-      id: string;
-      loop: string;
-      maxRounds: number;
-    }) =>
-      unwrap(
-        controlPlane.POST("/api/v1/tasks/{task_id}/loops/{item_id}/resume", {
-          params: { path: { task_id: id, item_id: loop } },
-          body: { max_rounds: maxRounds },
-        }),
-      ),
-  );
-}
-
-export function useInterruptRun() {
-  return useTaskMutation(({ id, run }: { id: string; run: string }) =>
-    unwrap(
-      controlPlane.POST("/api/v1/tasks/{task_id}/runs/{run_id}/interrupt", {
-        params: { path: { task_id: id, run_id: run } },
-      }),
-    ),
+  return useWireMutation<TaskArgs["comment"], TaskResults["comment"]>(
+    "tasks",
+    "comment",
   );
 }
 
 export function useDeleteTask() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      unwrap(
-        controlPlane.DELETE("/api/v1/tasks/{task_id}", {
-          params: { path: { task_id: id } },
-        }),
-      ),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.tasks }),
-  });
-}
-
-// --- computers ---------------------------------------------------------------------
-
-/** Where on a computer's runtime an agent can work, read from it now. */
-export function usePlaces(computer: string | null, runtime: string | null) {
-  return useQuery({
-    queryKey: keys.places(computer ?? "", runtime ?? ""),
-    queryFn: async ({ signal }): Promise<Places> =>
-      unwrap(
-        controlPlane.GET(
-          "/api/v1/computers/{computer_id}/runtimes/{kind}/places",
-          {
-            params: {
-              path: {
-                computer_id: computer!,
-                kind: runtime as "paseo" | "herdr",
-              },
-            },
-            signal,
-          },
-        ),
-      ),
-    enabled: Boolean(computer && runtime),
-    retry: false,
-    staleTime: 10_000,
-  });
-}
-
-export function useComputers() {
-  return useQuery({
-    queryKey: keys.computers,
-    queryFn: async ({ signal }): Promise<Computers> =>
-      unwrap(controlPlane.GET("/api/v1/computers", { signal })),
-    // Pairings and connections change on the computers' side.
-    refetchInterval: 4000,
-  });
-}
-
-function useComputerMutation<T, R>(call: (input: T) => Promise<R>) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: call,
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: keys.computers });
-      void queryClient.invalidateQueries({ queryKey: keys.tasks });
-    },
-  });
-}
-
-export function useAddComputer() {
-  return useComputerMutation((name: string) =>
-    unwrap(controlPlane.POST("/api/v1/computers", { body: { name } })),
+  return useWireMutation<TaskArgs["delete"], TaskResults["delete"]>(
+    "tasks",
+    "delete",
   );
 }
 
-export function useRenewInstall() {
-  return useComputerMutation((id: string) =>
-    unwrap(
-      controlPlane.POST("/api/v1/computers/{computer_id}/install", {
-        params: { path: { computer_id: id } },
-      }),
-    ),
+/** Link a task to a conversation, or (null) unlink it. */
+export function useLinkTask() {
+  return useWireMutation<TaskArgs["link"], TaskResults["link"]>(
+    "tasks",
+    "link",
   );
 }
 
-/** Approves the pairing whose fingerprint the user compared, only that one. */
-export function useApproveRuntime() {
-  return useComputerMutation(
-    ({
-      id,
-      kind,
-      fingerprint,
-    }: {
-      id: string;
-      kind: ComputerRuntime["kind"];
-      fingerprint: string;
-    }) =>
-      unwrap(
-        controlPlane.POST(
-          "/api/v1/computers/{computer_id}/runtimes/{kind}/approve",
-          {
-            params: { path: { computer_id: id, kind } },
-            body: { fingerprint },
-          },
-        ),
-      ),
-  );
-}
-
-/** How many runs the computer works on at once; the next dispatch reads it. */
-export function useSetComputerLimit() {
-  return useComputerMutation(
-    ({ id, maxActiveRuns }: { id: string; maxActiveRuns: number }) =>
-      unwrap(
-        controlPlane.PUT("/api/v1/computers/{computer_id}/limit", {
-          params: { path: { computer_id: id } },
-          body: { max_active_runs: maxActiveRuns },
-        }),
-      ),
-  );
-}
-
-export function useDeleteComputer() {
-  return useComputerMutation((id: string) =>
-    unwrap(
-      controlPlane.DELETE("/api/v1/computers/{computer_id}", {
-        params: { path: { computer_id: id } },
-      }),
-    ),
-  );
-}
-
+/**
+ * Turn an agent's draft row into a task. The row becomes the task's card; the reply carries it, so
+ * the timeline shows the card before the next push.
+ */
 export function useConfirmTaskDraft() {
-  return useTaskMutation(
-    ({
-      groupId,
-      messageId,
-      input,
-    }: {
-      groupId: string;
-      messageId: string;
-      input: TaskInput;
-    }) =>
-      unwrap(
-        controlPlane.POST(
-          "/api/v1/groups/{group_id}/drafts/{message_id}/confirm",
-          {
-            params: { path: { group_id: groupId, message_id: messageId } },
-            body: input,
-          },
-        ),
-      ),
+  return useWireMutation<TaskArgs["confirmDraft"], TaskResults["confirmDraft"]>(
+    "tasks",
+    "confirmDraft",
+    {
+      onSuccess: (result, args) =>
+        rememberRows(args.conversationId, [result.message]),
+    },
   );
 }

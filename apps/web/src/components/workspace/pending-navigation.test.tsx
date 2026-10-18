@@ -9,6 +9,13 @@ import {
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { setWire } from "@/lib/wire";
+import {
+  productHost,
+  routineInfo,
+  routineSections,
+  taskDetail,
+} from "@/test-product";
 import { PendingList } from "./attention";
 import { useShowLinkedView } from "./workspace-search";
 import { useWorkspaceStore } from "./workspace-store";
@@ -21,45 +28,24 @@ import { useWorkspaceStore } from "./workspace-store";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 async function mount(ui: () => React.ReactNode, path: string) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { staleTime: Infinity } },
-  });
-  client.setQueryData(["chat"], { agents: [], interactions: [] });
-  client.setQueryData(["tasks"], {
-    assignees: [],
+  const client = new QueryClient();
+  productHost({
     tasks: [
       {
-        id: "t1",
-        number: 1,
-        title: "任务1",
-        status: "in_review",
-        assignee: { kind: "remote" },
-        comments: 0,
-        run_status: null,
-        updated_at: "2026-10-09T09:00:00Z",
+        task: taskDetail({
+          id: "t1",
+          number: 1,
+          title: "任务1",
+          status: "in_review",
+        }),
       },
+    ],
+    routines: [
+      routineSections(
+        routineInfo({ id: "r1", name: "日报", unseenReports: 1 }),
+      ),
     ],
   });
-  client.setQueryData(
-    ["routines"],
-    [
-      {
-        id: "r1",
-        name: "日报",
-        model: "m",
-        schedule: { kind: "daily", time: "08:00" },
-        timezone: "UTC",
-        enabled: true,
-        next_run_at: null,
-        runs: [],
-        assists: [],
-        loops: [],
-        revising: false,
-        unseen_reports: 1,
-        unseen_failures: 0,
-      },
-    ],
-  );
   const history = createMemoryHistory({ initialEntries: [path] });
   const router = createRouter({
     routeTree: createRootRoute({
@@ -94,6 +80,7 @@ describe("pending navigation", () => {
   });
   afterEach(() => {
     document.body.innerHTML = "";
+    setWire(undefined);
   });
 
   it("opens tasks and routines in the side panel beside the chat", async () => {

@@ -37,9 +37,6 @@ rstest.mock("./use-groups", () => ({
 rstest.mock("./use-attention", () => ({
   useAttention: () => ({ total: 0 }),
 }));
-rstest.mock("@/queries/tasks", () => ({
-  useTasks: () => ({ data: { tasks: [] } }),
-}));
 // The sidebar links through the router; this test is about the list, so the link is a plain one.
 rstest.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children?: React.ReactNode }) => <a>{children}</a>,

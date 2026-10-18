@@ -23,5 +23,6 @@
   "empty": {
     "title": "还没有 Artifacts",
     "description": "智能体在这个群里发布的页面会出现在这里。"
-  }
+  },
+  "gone": "这个 Artifact 已不存在"
 }

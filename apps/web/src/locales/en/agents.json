@@ -27,6 +27,7 @@
   "models": {
     "loading": "Loading models…",
     "select": "Select model",
+    "default": "Default model",
     "deletedOption": "{{modelName}} (no longer exists)",
     "noneAvailable": "No models available.",
     "noneSelected": "No model selected",

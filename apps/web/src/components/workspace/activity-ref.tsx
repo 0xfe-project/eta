@@ -1,4 +1,3 @@
-import type { ActivityRef } from "@/api/control-plane.gen";
 import type { TaskStatus } from "@/queries/tasks";
 import { AppWindowIcon } from "@phosphor-icons/react/AppWindow";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
@@ -59,6 +58,22 @@ const kinds = {
     },
   },
 } satisfies Record<ActivityRef["kind"], unknown>;
+
+/** A thing a tool call made or touched, as its card names it. */
+export interface ActivityRef {
+  kind: "task" | "routine" | "pull_request" | "issue_draft" | "artifact";
+  title: string;
+  /** The task's, routine's or artifact's id. */
+  id?: string;
+  /** The task's or pull request's number, or the artifact's version. */
+  number?: number;
+  /** The task's status as the tool left it. */
+  status?: string;
+  /** The pull request, or GitHub's new-issue page prefilled with the draft. */
+  url?: string;
+  /** A draft's body, when its URL is too long to carry it. */
+  body?: string;
+}
 
 const iconClass = cn("size-3.5 shrink-0", muted);
 

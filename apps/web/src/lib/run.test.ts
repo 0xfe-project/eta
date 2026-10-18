@@ -83,6 +83,38 @@ describe("the run in flight", () => {
     expect(failed).toMatchObject([{ type: "tool", status: "failed" }]);
   });
 
+  it("keeps what a tool result carries beyond its text", () => {
+    const blocks = runBlocks(
+      [
+        user("go"),
+        assistant(2, [
+          {
+            type: "toolCall",
+            id: "p1",
+            name: "publish_artifact",
+            arguments: {},
+          },
+        ]),
+        row({
+          role: "toolResult",
+          toolCallId: "p1",
+          toolName: "publish_artifact",
+          content: [{ type: "text", text: "published" }],
+          details: { artifactId: "a1", title: "报告", version: 2, files: 3 },
+          isError: false,
+          timestamp: 3,
+        }),
+      ],
+      undefined,
+    );
+    expect(blocks).toMatchObject([
+      {
+        type: "tool",
+        details: { artifactId: "a1", title: "报告", version: 2, files: 3 },
+      },
+    ]);
+  });
+
   it("ends with the message being streamed, until the transcript has committed it", () => {
     const rows = [user("go"), assistant(2, [{ type: "text", text: "one" }])];
     const growing = streaming(3, [{ type: "text", text: "two so" }]);
