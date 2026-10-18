@@ -2,8 +2,7 @@ import { toast } from "sonner";
 import { translate } from "@/lib/i18n";
 
 // A tab opened before a deploy keeps running the code it loaded, which the
-// API may have outgrown: an agent editor from before environment bundles
-// still sent `plugins`, which the API then refused. Whenever the tab is in
+// wire contract may have outgrown. Whenever the tab is in
 // view, compare its build with the server's and offer a reload once they
 // differ.
 const CHECK_EVERY = 5 * 60_000;

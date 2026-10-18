@@ -17,8 +17,6 @@ import { cn } from "@/lib/utils";
 import { useNeedsAttention } from "@/queries/providers";
 import { AgentSettings } from "./agent-settings";
 import { ApprovalSettings } from "./approval-settings";
-import { BundleSettings } from "./bundle-settings";
-import { ConnectionSettings } from "./connection-settings";
 import { ArchivedGroups } from "./groups";
 import { MachineSettings } from "./machine-settings";
 import { ProviderSettings } from "./provider-settings";
@@ -132,8 +130,8 @@ export function SettingsButton({ className }: { className?: string }) {
 }
 
 /**
- * `?settings=<section>` opens settings there, once: how GitHub's redirects
- * and old links reach 连接. The parameter is dropped from the address.
+ * `?settings=<section>` opens settings there, once: how links into a
+ * settings section work. The parameter is dropped from the address.
  */
 function useSettingsLink() {
   const setSettings = useWorkspaceStore((s) => s.setSettings);
@@ -187,14 +185,10 @@ export function SettingsDialog() {
           <section className="settings-content">
             {settings.section === "agents" ? (
               <AgentSettings />
-            ) : settings.section === "bundles" ? (
-              <BundleSettings />
             ) : settings.section === "providers" ? (
               <ProviderSettings />
             ) : settings.section === "approvals" ? (
               <ApprovalSettings />
-            ) : settings.section === "connections" ? (
-              <ConnectionSettings />
             ) : settings.section === "machines" ? (
               <MachineSettings />
             ) : settings.section === "archived" ? (
