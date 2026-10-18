@@ -300,70 +300,59 @@
 
 :root {
   /*
-   * BR1's scale (BR1-WEB.md, tokens): nine steps of neutral grey at hue 0 and no chroma,
-   * with named roles on top. Colour in this product is a signal, so the greys carry all the
-   * structure and the only saturated values are the four states.
-   *
-   *   gray-0 .98   gray-1 .94   gray-2 .86   gray-3 .72   gray-4 .56
-   *   gray-5 .40   gray-6 .28   gray-7 .20   gray-8 .14   gray-9 .10
-   *
-   * The names are shadcn's (`background`, `foreground`, …) because every component already
-   * speaks them; the values are BR1's.
+   * Light mode keeps the palette the product had before the rewrite: a white page, near-white
+   * rails, and greys only where something needs to be told apart. The tokens added later
+   * (surface, overlay, faint, border-strong, the four states, the shadow ink) are derived from
+   * that palette rather than from BR1's darker scale, which read as a large grey field.
    */
-  --background: oklch(0.98 0 0);
-  --foreground: oklch(0.1 0 0);
-  /* The rails' own field: one step away from the page, so the columns read as structure
-     rather than as three copies of the page. */
-  --surface: oklch(0.94 0 0);
-  --card: oklch(0.98 0 0);
-  --card-foreground: oklch(0.1 0 0);
-  --popover: oklch(0.98 0 0);
-  --popover-foreground: oklch(0.1 0 0);
-  --primary: oklch(0.1 0 0);
-  --primary-foreground: oklch(0.98 0 0);
-  --secondary: oklch(0.94 0 0);
-  --secondary-foreground: oklch(0.1 0 0);
-  --muted: oklch(0.94 0 0);
-  /* BR1's `--color-muted`: the step that reads as secondary text, not as a surface. */
-  --muted-foreground: oklch(0.56 0 0);
-  --accent: oklch(0.94 0 0);
-  --accent-foreground: oklch(0.1 0 0);
-  --destructive: oklch(0.55 0.22 25);
-  --success: oklch(0.52 0.18 150);
-  --border: oklch(0.14 0 0 / 12%);
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  /* The rails' own field: a step off the page, so the columns read as structure. */
+  --surface: oklch(0.985 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --success: oklch(0.527 0.154 150.069);
+  --border: oklch(0.922 0 0);
   /* The border that has to be seen: menu frames, inputs, dividers you can grab. */
-  --border-strong: oklch(0.14 0 0 / 30%);
-  /* Wash for hovered rows and pressed states; one step darker than the page. */
-  --overlay: oklch(0.14 0 0 / 6%);
-  --overlay-hover: oklch(0.14 0 0 / 12%);
+  --border-strong: oklch(0.85 0 0);
+  /* Wash for hovered rows and pressed states. */
+  --overlay: oklch(0.145 0 0 / 3%);
+  --overlay-hover: oklch(0.145 0 0 / 6%);
   /* Text that is there but not asking to be read: timestamps, counts, "—". */
-  --faint: oklch(0.14 0 0 / 40%);
-  --state-error: oklch(0.55 0.22 25);
+  --faint: oklch(0.708 0 0);
+  --state-error: oklch(0.577 0.245 27.325);
   --state-warning: oklch(0.62 0.18 75);
-  --state-success: oklch(0.52 0.18 150);
+  --state-success: oklch(0.527 0.154 150.069);
   --state-info: oklch(0.52 0.18 240);
-  --input: oklch(0.14 0 0 / 30%);
-  --ring: oklch(0.4 0 0);
-  --chart-1: oklch(0.86 0 0);
-  --chart-2: oklch(0.56 0 0);
-  --chart-3: oklch(0.4 0 0);
-  --chart-4: oklch(0.28 0 0);
-  --chart-5: oklch(0.2 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
   --radius: 0px;
-  /*
-   * The ink a hard shadow is made of. On a light page it is the foreground itself; on a dark
-   * page a black block still reads against the elevated surface it is cast on (and a light
-   * one would read as a glow, which is a different idea).
-   */
-  --shadow-ink: oklch(0.14 0 0 / 85%);
-  --sidebar: oklch(0.94 0 0);
-  --sidebar-foreground: oklch(0.1 0 0);
-  --sidebar-primary: oklch(0.1 0 0);
-  --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.86 0 0);
-  --sidebar-accent-foreground: oklch(0.1 0 0);
-  --sidebar-border: oklch(0.14 0 0 / 12%);
-  --sidebar-ring: oklch(0.4 0 0);
+  /* The ink a hard shadow is made of. */
+  --shadow-ink: oklch(0.145 0 0 / 85%);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
 }
 
 .dark {
