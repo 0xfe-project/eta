@@ -11,9 +11,11 @@ import type { KernelModels } from "@eta/core";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { DaemonLink, DaemonNode } from "@eta/daemon";
 import { describe, expect, it } from "vitest";
-import { until } from "./support/client";
+import { connect, until } from "./support/client";
 import { machineView } from "./support/daemon";
+import { testHost } from "./support/host";
 import { call, gate, HANG, say, scriptedModels } from "./support/models";
 import { remoteWorld, sessionOf } from "./support/remote";
 
@@ -408,6 +410,81 @@ describe("watching and driving a remote session from the browser", () => {
     await until(() =>
       r.traffic.in.some((text) => text.includes("after the drop")),
     );
+  });
+});
+
+describe("restarts", () => {
+  it("a daemon that restarts finds its sessions again from their journals", async () => {
+    const { models, requests } = scriptedModels((request) =>
+      say(`answer ${request.index}`),
+    );
+    const r = await remoteWorld({ models });
+    const { group } = await r.agents("Ada");
+    const first = await r.send(group.id, "remember the number 7");
+    await r.settled(group.id, first.replies[0]!.id);
+    const session = sessionOf(r, group.id)!;
+
+    // The daemon process goes away entirely, and a new one starts on the same directory.
+    await r.daemon.stop();
+    await until(
+      () => machineView(r.client, r.daemon.machineId)?.status === "offline",
+    );
+    const node = new DaemonNode({
+      dataDir: r.daemon.dataDir,
+      version: "test",
+      warn: () => undefined,
+    });
+    await node.start();
+    const link = new DaemonLink({
+      identity: r.daemon.identity,
+      server: node,
+      backoff: { minMs: 20, maxMs: 100 },
+    });
+    link.start();
+    try {
+      await until(
+        () => machineView(r.client, r.daemon.machineId)?.status === "online",
+      );
+      const second = await r.send(group.id, "what number?");
+      await r.settled(group.id, second.replies[0]!.id);
+      // The same session, with its history: it was read back from the daemon's own journal.
+      expect(sessionOf(r, group.id)).toBe(session);
+      expect(requests[1]!.transcript.join("\n")).toContain(
+        "remember the number 7",
+      );
+    } finally {
+      await link.stop();
+      await node.close();
+    }
+  });
+
+  it("a restarted host still knows which sessions are on which machine", async () => {
+    const { models } = scriptedModels(() => say("ok"));
+    const r = await remoteWorld({ models });
+    const { group } = await r.agents("Ada");
+    const first = await r.send(group.id, "hi");
+    await r.settled(group.id, first.replies[0]!.id);
+    const session = sessionOf(r, group.id)!;
+    await r.daemon.link.stop();
+    await r.host.close();
+
+    // A new host on the same data directory: nothing is kept in memory between the two.
+    const host = await testHost({ dataDir: r.host.dataDir, models });
+    const client = await connect(`ws://127.0.0.1:${host.port}/ws`);
+    await client.hello();
+    // The session is the machine's, so the answer is about the machine, not "no such session".
+    await expect(client.call("sessions", "abort", { session })).rejects.toThrow(
+      /offline/,
+    );
+    // And the browser can already watch it: the target is on the wire.
+    client.subscribe(`sessions.${session}`);
+    await until(() =>
+      client.frames.some(
+        (frame) =>
+          frame.type === "state" && frame.target === `sessions.${session}`,
+      ),
+    );
+    client.close();
   });
 });
 

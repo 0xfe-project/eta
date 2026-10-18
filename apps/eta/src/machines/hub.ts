@@ -304,15 +304,18 @@ export class MachineHub {
       return new Response("too many bad codes; try again later", {
         status: 429,
       });
-    const length = Number(request.headers.get("content-length") ?? "0");
-    if (length > MAX_ENROLL_BODY)
-      return new Response("too big", { status: 413 });
+    // Read at most what an enrol request can be, whatever the headers claim.
     let body: Record<string, unknown>;
     try {
-      body = (await request.json()) as Record<string, unknown>;
+      const raw = await request.text();
+      if (raw.length > MAX_ENROLL_BODY)
+        return new Response("too big", { status: 413 });
+      body = JSON.parse(raw) as Record<string, unknown>;
     } catch {
       return new Response("bad request", { status: 400 });
     }
+    if (typeof body !== "object" || body === null || Array.isArray(body))
+      return new Response("bad request", { status: 400 });
     const text = (key: string): string | undefined =>
       typeof body[key] === "string" && (body[key] as string).length <= 512
         ? (body[key] as string)
