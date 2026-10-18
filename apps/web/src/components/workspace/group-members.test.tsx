@@ -35,10 +35,6 @@ rstest.mock("./use-agents", () => ({
     openEditor: () => {},
   }),
 }));
-rstest.mock("@/queries/tasks", () => ({
-  useTasks: () => ({ data: { tasks: [] } }),
-  useUpdateTask: () => ({ mutate: () => {}, isPending: false }),
-}));
 
 let host: ReturnType<typeof productHost>;
 beforeEach(() => {

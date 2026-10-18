@@ -29,23 +29,18 @@ export function GroupPanel({
     "routines",
     "tasks",
   ] as const);
-  const { data: board } = useTasks();
-  const { data: routines } = useRoutines();
-  const { data: artifacts } = useArtifacts();
+  const { tasks: board } = useTasks();
+  const { routines } = useRoutines();
+  const { artifacts } = useArtifacts();
   const { info } = useConversation(group?.id);
   if (group === undefined) return null;
-  const tasks =
-    board?.tasks.filter(
-      (task: { group_id?: string | null }) => task.group_id === group.id,
-    ) ?? [];
-  const groupRoutines = (routines ?? []).filter(
-    (routine: { group_id?: string | null }) => routine.group_id === group.id,
+  const tasks = board.filter((task) => task.conversationId === group.id);
+  const groupRoutines = routines.filter(
+    (routine) => routine.conversationId === group.id,
   );
-  const groupArtifacts =
-    artifacts?.artifacts.filter(
-      (artifact: { group_id?: string | null }) =>
-        artifact.group_id === group.id,
-    ) ?? [];
+  const groupArtifacts = artifacts.filter(
+    (artifact) => artifact.conversationId === group.id,
+  );
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
@@ -75,28 +70,19 @@ export function GroupPanel({
           </p>
         ) : (
           <ul className="space-y-1">
-            {tasks
-              .slice(0, 5)
-              .map(
-                (task: {
-                  id: string;
-                  number: number;
-                  title: string;
-                  status: string;
-                }) => (
-                  <li key={task.id}>
-                    <ActivityRefCard
-                      value={{
-                        kind: "task",
-                        id: task.id,
-                        number: task.number,
-                        title: task.title,
-                        status: task.status,
-                      }}
-                    />
-                  </li>
-                ),
-              )}
+            {tasks.slice(0, 5).map((task) => (
+              <li key={task.id}>
+                <ActivityRefCard
+                  value={{
+                    kind: "task",
+                    id: task.id,
+                    number: task.number,
+                    title: task.title,
+                    status: task.status,
+                  }}
+                />
+              </li>
+            ))}
           </ul>
         )}
       </section>
@@ -112,28 +98,19 @@ export function GroupPanel({
           </p>
         ) : (
           <ul className="space-y-1">
-            {groupRoutines.map(
-              (routine: {
-                id: string;
-                name: string;
-                next_run_at?: string | null;
-              }) => (
-                <li
-                  key={routine.id}
-                  className="flex min-w-0 items-baseline gap-2"
-                >
-                  <span className="min-w-0 flex-1 truncate text-xs">
-                    {routine.name}
-                  </span>
-                  <span className="shrink-0 font-mono text-[10px] text-faint tabular-nums">
-                    {routine.next_run_at === undefined ||
-                    routine.next_run_at === null
-                      ? "—"
-                      : when(routine.next_run_at)}
-                  </span>
-                </li>
-              ),
-            )}
+            {groupRoutines.map((routine) => (
+              <li
+                key={routine.id}
+                className="flex min-w-0 items-baseline gap-2"
+              >
+                <span className="min-w-0 flex-1 truncate text-xs">
+                  {routine.name}
+                </span>
+                <span className="shrink-0 font-mono text-[10px] text-faint tabular-nums">
+                  {routine.nextRunAt === null ? "—" : when(routine.nextRunAt)}
+                </span>
+              </li>
+            ))}
           </ul>
         )}
       </section>
@@ -156,7 +133,7 @@ export function GroupPanel({
                     kind: "artifact",
                     id: artifact.id,
                     title: artifact.title,
-                    number: artifact.versions.at(-1)?.number ?? 0,
+                    number: artifact.versions[0]?.number ?? 0,
                   }}
                 />
               </li>

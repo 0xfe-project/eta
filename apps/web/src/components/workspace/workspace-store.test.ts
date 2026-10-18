@@ -28,10 +28,22 @@ describe("workspace store persistence", () => {
   });
 
   it("remembers how the task page was left", async () => {
-    const page = { taskLayout: "board", taskScope: "remote" };
+    const page = { taskLayout: "board", taskScope: "user" };
     localStorage.setItem(key, JSON.stringify({ ...saved, ...page }));
     await useWorkspaceStore.persist.rehydrate();
     expect(useWorkspaceStore.getState().workspace).toMatchObject(page);
+  });
+
+  it("reads a task scope that no longer exists as unset", async () => {
+    localStorage.setItem(
+      key,
+      JSON.stringify({ ...saved, taskLayout: "board", taskScope: "remote" }),
+    );
+    await useWorkspaceStore.persist.rehydrate();
+    expect(useWorkspaceStore.getState().workspace).toEqual({
+      ...saved,
+      taskLayout: "board",
+    });
   });
 
   it("has no folded panel to remember: the wide layout always shows it", async () => {

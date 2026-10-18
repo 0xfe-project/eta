@@ -28,15 +28,16 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useAgentList } from "@/queries/agents";
 import {
   useDeleteTask,
   useTask,
   useTasks,
   useUpdateTask,
 } from "@/queries/tasks";
+import { wireErrorMessage } from "@/queries/wire";
 import { PageHeader } from "./app-shell";
 import { BackToTop } from "./back-to-top";
-import { RefreshButton } from "./refresh-button";
 import { when } from "./routine-format";
 import {
   ago,
@@ -53,7 +54,6 @@ import {
   Description,
   EditableTitle,
   Question,
-  RunState,
   TaskForm,
   TaskMissing,
   TaskProperties,
@@ -65,7 +65,7 @@ import { useWorkspaceStore } from "./workspace-store";
 // or as a board to drag them across, or one open task in their place. The
 // task lays itself out by its own width (container queries), not the window's.
 
-const showError = (error: Error) => toast.error(error.message);
+const showError = (error: Error) => toast.error(wireErrorMessage(error));
 
 /** The board reads left to right the way work moves. */
 const flow: TaskStatus[] = [
@@ -89,12 +89,6 @@ const scopes = [
     value: "user",
     get label() {
       return translate("tasks:scope.mine");
-    },
-  },
-  {
-    value: "remote",
-    get label() {
-      return translate("common:entities.agents");
     },
   },
 ] as const;
@@ -127,7 +121,7 @@ function StatusMenu({ task }: { task: Task }) {
             disabled={s.value === task.status}
             onSelect={() =>
               update.mutate(
-                { id: task.id, changes: { status: s.value } },
+                { taskId: task.id, status: s.value },
                 { onError: showError },
               )
             }
@@ -229,14 +223,13 @@ function ListView({
                       </span>
                       <span className="truncate text-sm">{task.title}</span>
                       <span className="flex items-center gap-3 text-xs text-muted-foreground tabular-nums">
-                        <RunState task={task} />
                         <Comments count={task.comments} />
                       </span>
                       <span className="hidden truncate text-xs text-muted-foreground @lg:block">
                         {assigneeLabel(task.assignee)}
                       </span>
                       <span className="hidden text-right text-xs text-muted-foreground tabular-nums @lg:block">
-                        {ago(task.updated_at)}
+                        {ago(task.updatedAt)}
                       </span>
                     </button>
                   </li>
@@ -272,14 +265,13 @@ function Card({ task }: { task: Task }) {
         <span className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
           #{task.number}
           <span className="ml-auto flex items-center gap-2">
-            <RunState task={task} />
             <Comments count={task.comments} />
           </span>
         </span>
         <span className="line-clamp-3 text-sm">{task.title}</span>
         <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground tabular-nums">
           <span className="truncate">{assigneeLabel(task.assignee)}</span>
-          <span className="shrink-0">{ago(task.updated_at)}</span>
+          <span className="shrink-0">{ago(task.updatedAt)}</span>
         </span>
       </button>
     </li>
@@ -328,10 +320,7 @@ function BoardView({
               const id = e.dataTransfer.getData(dragType);
               const task = tasks.find((t) => t.id === id);
               if (task && task.status !== status)
-                update.mutate(
-                  { id, changes: { status } },
-                  { onError: showError },
-                );
+                update.mutate({ taskId: id, status }, { onError: showError });
             }}
             className={cn(
               "flex w-72 shrink-0 flex-col bg-muted/50 outline-offset-[-1px] duration-[60ms] ease-linear",
@@ -378,7 +367,8 @@ function TaskPage({ id }: { id: string }) {
     "navigation",
   ] as const);
   const [, setNav] = useTaskNav();
-  const { data: task, isPending, error, refetch } = useTask(id);
+  const { task, missing, error } = useTask(id);
+  const { agents } = useAgentList();
   const remove = useDeleteTask();
   const back = () => void setNav({ task: null });
   const crumbs = (
@@ -399,25 +389,18 @@ function TaskPage({ id }: { id: string }) {
   if (!task)
     return (
       <>
-        <PageHeader title={crumbs}>
-          <RefreshButton resource="tasks" />
-        </PageHeader>
+        <PageHeader title={crumbs} />
         <main
           id="main"
           className="mx-auto w-full max-w-content px-4 py-6 sm:px-8"
         >
-          <TaskMissing
-            isPending={isPending}
-            error={error}
-            onRetry={() => void refetch()}
-          />
+          <TaskMissing missing={missing} error={error} />
         </main>
       </>
     );
   return (
     <>
       <PageHeader title={crumbs}>
-        <RefreshButton resource="tasks" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -432,7 +415,10 @@ function TaskPage({ id }: { id: string }) {
             <DropdownMenuItem
               variant="destructive"
               onSelect={() =>
-                remove.mutate(task.id, { onSuccess: back, onError: showError })
+                remove.mutate(
+                  { taskId: task.id },
+                  { onSuccess: back, onError: showError },
+                )
               }
             >
               {translateText("common:actions.delete")}
@@ -450,7 +436,7 @@ function TaskPage({ id }: { id: string }) {
             <div className="sticky top-0 z-10 mb-3 space-y-1 bg-background pt-4 pb-3">
               <EditableTitle key={task.title} task={task} className="text-xl" />
               <p className="text-xs text-muted-foreground tabular-nums">
-                {createdBy(task)}
+                {createdBy(task, agents)}
               </p>
             </div>
             <Question task={task} />
@@ -469,14 +455,11 @@ function TaskPage({ id }: { id: string }) {
           aria-label={translateText("details.propertiesTab")}
           className="border-t px-4 py-5 text-xs sm:px-8 @2xl:overflow-y-auto @2xl:border-t-0 @2xl:border-l @2xl:px-4"
         >
-          <TaskProperties
-            task={task}
-            onDone={() => void setNav({ task: null }, { history: "replace" })}
-          >
+          <TaskProperties task={task}>
             <dt className="text-xs leading-8 text-muted-foreground">
               {translateText("fields.updatedAt")}
             </dt>
-            <dd className="leading-8 tabular-nums">{when(task.updated_at)}</dd>
+            <dd className="leading-8 tabular-nums">{when(task.updatedAt)}</dd>
           </TaskProperties>
         </aside>
       </main>
@@ -493,7 +476,7 @@ export function TaskBoard() {
     "navigation",
   ] as const);
   const [nav, setNav] = useTaskNav();
-  const { data, error, refetch } = useTasks();
+  const { tasks: all, loaded, error } = useTasks();
   const [newStatus, setNewStatus] = useState<TaskStatus>("todo");
   // Remembered in this browser, so the page opens as it was left.
   const layout = useWorkspaceStore((s) => s.workspace.taskLayout ?? "list");
@@ -504,8 +487,8 @@ export function TaskBoard() {
   const id = nav.task && nav.task !== "new" ? nav.task : null;
   const [last, setLast] = useState(id);
   if (id && id !== last) setLast(id);
-  const tasks = (data?.tasks ?? []).filter(
-    (task) => scope === "all" || task.assignee.kind === scope,
+  const tasks = all.filter(
+    (task) => scope === "all" || task.assignee === scope,
   );
   const board = layout === "board";
   const create = (status: TaskStatus = "todo") => {
@@ -527,7 +510,7 @@ export function TaskBoard() {
           title={
             <>
               {translateText("navigation:sections.tasks")}
-              {data ? (
+              {loaded ? (
                 <span className="font-normal text-muted-foreground tabular-nums">
                   {tasks.length}
                 </span>
@@ -535,7 +518,6 @@ export function TaskBoard() {
             </>
           }
         >
-          <RefreshButton resource="tasks" />
           <Tabs
             value={scope}
             onValueChange={(value) =>
@@ -603,22 +585,21 @@ export function TaskBoard() {
             board ? "overflow-hidden" : "overflow-y-auto",
           )}
         >
-          {error && !data ? (
+          {error ? (
             <div className="mx-auto max-w-md px-4 py-16">
               <LoadError
                 what={translateText("navigation:sections.tasks")}
                 error={error}
-                onRetry={() => void refetch()}
               />
             </div>
-          ) : !data ? (
+          ) : !loaded ? (
             <Loading
               rows={6}
               className="mx-auto max-w-content px-2 py-3 sm:px-4"
             />
           ) : tasks.length === 0 ? (
             <div className="mx-auto max-w-md px-4 py-16">
-              {data.tasks.length === 0 ? (
+              {all.length === 0 ? (
                 <Empty
                   icon={ListChecksIcon}
                   title={translateText("empty.title")}
@@ -634,11 +615,7 @@ export function TaskBoard() {
               ) : (
                 <Empty
                   icon={ListChecksIcon}
-                  title={
-                    scope === "user"
-                      ? translateText("empty.noUserTasks")
-                      : translateText("empty.noAgentTasks")
-                  }
+                  title={translateText("empty.noUserTasks")}
                   action={
                     <Button
                       size="sm"

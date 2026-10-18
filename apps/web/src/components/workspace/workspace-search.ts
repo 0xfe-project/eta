@@ -37,7 +37,7 @@ export function useSectionLink() {
   });
   return (
     view: keyof typeof sectionPaths,
-    search: { task?: string; routine?: string } = {},
+    search: { task?: string; routine?: string; run?: string } = {},
   ) =>
     fullWindow || !tabs.some((tab) => tab.value === view)
       ? ({ to: sectionPaths[view], search } as const)

@@ -296,6 +296,8 @@
     "stewardChanged": "{{to}} is now the steward, taking over from {{from}}.",
     "stewardSet": "{{to}} is now the steward.",
     "stewardCleared": "{{from}} is no longer the steward.",
-    "wakeBudget": "This message has used its {{budget}} wake-ups; later @mentions stay in the conversation and wake nobody until you write again."
+    "wakeBudget": "This message has used its {{budget}} wake-ups; later @mentions stay in the conversation and wake nobody until you write again.",
+    "routineReport": "Routine “{{name}}” sent a report: {{title}}",
+    "routineReportUntitled": "Routine “{{name}}” sent a report"
   }
 }

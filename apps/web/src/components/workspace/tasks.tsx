@@ -1,13 +1,8 @@
-import type { AssigneeDraft } from "./assignee-draft";
+import type { BoardTaskAssignee } from "@eta/client-contracts";
 import type {
-  LogEntry,
-  RunStatus,
   Task,
   TaskActivity,
-  TaskAssist,
   TaskDetail,
-  TaskLoop,
-  TaskRun,
   TaskStatus,
 } from "@/queries/tasks";
 import { AppWindowIcon } from "@phosphor-icons/react/AppWindow";
@@ -15,15 +10,12 @@ import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { ChatCircleIcon } from "@phosphor-icons/react/ChatCircle";
-import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
-import { GitPullRequestIcon } from "@phosphor-icons/react/GitPullRequest";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { SpinnerIcon } from "@phosphor-icons/react/Spinner";
-import { StopIcon } from "@phosphor-icons/react/Stop";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -36,59 +28,41 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError } from "@/lib/api";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useAgentList } from "@/queries/agents";
 import {
-  useCancelAssist,
   useCommentTask,
   useConfirmTaskDraft,
   useCreateTask,
   useDeleteTask,
-  useInterruptRun,
-  useResumeLoop,
-  useRunLog,
-  useStopLoop,
   useTask,
   useTasks,
   useUpdateTask,
 } from "@/queries/tasks";
+import { wireErrorMessage } from "@/queries/wire";
 import { ArtifactButton } from "./artifact-dialog";
-import {
-  draftInput,
-  draftOf,
-  emptyDraft,
-  useDraftPlaces,
-} from "./assignee-draft";
-import { AssigneeFields } from "./assignee-picker";
 import { BackToTop } from "./back-to-top";
 import { when } from "./routine-format";
 import { Select, SelectOption } from "./select-field";
-import { AssistDialog } from "./task-assist";
 import { useTaskDraft } from "./task-draft";
 import {
+  actorName,
   ago,
   assigneeLabel,
+  assignees,
   createdBy,
-  isActive,
-  isPullURL,
-  placeLabel,
-  providerLabel,
-  remoteLabel,
-  runStatusLabels,
   statuses,
   statusLabel,
 } from "./task-format";
 import { useTaskNav } from "./task-nav";
-import { DeliveredPull } from "./task-pulls";
 import { StatusIcon } from "./task-status-icon";
 import { useGroups } from "./use-groups";
 
-const showError = (error: Error) => toast.error(error.message);
+const showError = (error: Error) => toast.error(wireErrorMessage(error));
 
 function Back({ label, onClick }: { label: string; onClick: () => void }) {
   return (
@@ -104,70 +78,14 @@ function Back({ label, onClick }: { label: string; onClick: () => void }) {
   );
 }
 
-/**
- * A run underway, by its own status: a spinner while the remote agent starts
- * or works, a clock while it waits its turn. Still under reduced motion; the
- * words carry it either way.
- */
-function Working({ status }: { status: RunStatus }) {
-  useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
-  const queued = status === "queued";
-  const Icon = queued ? ClockIcon : SpinnerIcon;
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1 text-xs whitespace-nowrap",
-        queued ? "text-muted-foreground" : "font-medium text-foreground",
-      )}
-    >
-      <Icon
-        aria-hidden="true"
-        className={cn("size-3.5", !queued && "motion-safe:animate-spin")}
-      />
-      {runStatusLabels[status]}
-    </span>
-  );
-}
-
 // --- list ------------------------------------------------------------------------
 
 /** Done and cancelled start folded: they are the past. */
 const folded = new Set<TaskStatus>(["done", "cancelled"]);
 
-/**
- * Whether the task's latest run is underway, or failed. A finished run (the
- * agent replied, asked, or was stopped) shows nothing: the task's status
- * says the rest.
- */
-export function RunState({ task }: { task: Task }) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
-  if (isActive(task.run_status)) return <Working status={task.run_status} />;
-  if (task.run_status === "failed")
-    return (
-      <span className="text-destructive">
-        {translateText("runStatus.failed")}
-      </span>
-    );
-  return null;
-}
-
 export function Comments({ count }: { count: number }) {
   const { t: translateText } = useTranslation([
     "tasks",
-    "agents",
-    "artifacts",
     "common",
     "navigation",
   ] as const);
@@ -184,13 +102,7 @@ export function Comments({ count }: { count: number }) {
 
 /** Title and when on top; number, assignee and activity beneath. */
 function TaskRow({ task }: { task: Task }) {
-  useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
+  useTranslation(["tasks", "common", "navigation"] as const);
   const [, setNav] = useTaskNav();
   return (
     <li>
@@ -206,7 +118,7 @@ function TaskRow({ task }: { task: Task }) {
               {task.title}
             </span>
             <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground tabular-nums">
-              {ago(task.updated_at)}
+              {ago(task.updatedAt)}
             </span>
           </span>
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
@@ -216,7 +128,6 @@ function TaskRow({ task }: { task: Task }) {
               {assigneeLabel(task.assignee)}
             </span>
             <span className="ml-auto flex shrink-0 items-center gap-3 pl-2">
-              <RunState task={task} />
               <Comments count={task.comments} />
             </span>
           </span>
@@ -229,23 +140,19 @@ function TaskRow({ task }: { task: Task }) {
 function TaskList() {
   const { t: translateText } = useTranslation([
     "tasks",
-    "agents",
-    "artifacts",
     "common",
     "navigation",
   ] as const);
   const [, setNav] = useTaskNav();
-  const { data, error, refetch } = useTasks();
+  const { tasks: all, loaded, error } = useTasks();
   const { current: group } = useGroups();
-  // A task is work in a group; the board opens on that group rather than on everything at once.
-  // "All groups" is still one click away — it is the exception, not the view you land on.
+  // A task is work in a conversation; the board opens on that conversation rather than on
+  // everything at once. "All groups" is still one click away.
   const [scope, setScope] = useState<"group" | "all">("group");
   const tasks =
     scope === "group" && group !== undefined
-      ? (data?.tasks.filter(
-          (task: { group_id?: string | null }) => task.group_id === group.id,
-        ) ?? [])
-      : (data?.tasks ?? []);
+      ? all.filter((task) => task.conversationId === group.id)
+      : all;
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const isOpen = (status: TaskStatus) => open[status] ?? !folded.has(status);
   return (
@@ -286,13 +193,12 @@ function TaskList() {
           ))}
         </div>
       )}
-      {error && !data ? (
+      {error ? (
         <LoadError
           what={translateText("navigation:sections.tasks")}
           error={error}
-          onRetry={() => void refetch()}
         />
-      ) : !data ? (
+      ) : !loaded ? (
         <Loading />
       ) : tasks.length === 0 ? (
         <Empty
@@ -309,10 +215,8 @@ function TaskList() {
         </Empty>
       ) : (
         statuses.map(({ value, label }) => {
-          const group = tasks.filter(
-            (task: { status: string }) => task.status === value,
-          );
-          if (!group.length) return null;
+          const section = tasks.filter((task) => task.status === value);
+          if (!section.length) return null;
           return (
             <section key={value} aria-label={label} className="-mx-2">
               <button
@@ -328,11 +232,11 @@ function TaskList() {
                 )}
                 <StatusIcon status={value} className="size-3.5" />
                 {label}
-                <span className="tabular-nums">{group.length}</span>
+                <span className="tabular-nums">{section.length}</span>
               </button>
               {isOpen(value) ? (
                 <ul>
-                  {group.map((task) => (
+                  {section.map((task) => (
                     <TaskRow key={task.id} task={task} />
                   ))}
                 </ul>
@@ -380,13 +284,7 @@ function StatusSelect({
   onChange: (status: TaskStatus) => void;
   className?: string;
 }) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
+  const { t: translateText } = useTranslation(["tasks"] as const);
   return (
     <Select
       id={id}
@@ -404,14 +302,44 @@ function StatusSelect({
   );
 }
 
-/** A task an agent drafted in a chat, to confirm (the old chat's `task_draft` message). */
-interface TaskProposal {
-  id: string;
-  group_id: string;
-  data: Record<string, unknown>;
+function AssigneeSelect({
+  id,
+  value,
+  onChange,
+  className,
+}: {
+  id?: string;
+  value: BoardTaskAssignee;
+  onChange: (assignee: BoardTaskAssignee) => void;
+  className?: string;
+}) {
+  const { t: translateText } = useTranslation(["tasks"] as const);
+  return (
+    <Select
+      id={id}
+      aria-label={id ? undefined : translateText("assignee.label")}
+      className={className}
+      value={value}
+      onValueChange={(value) => onChange(value as BoardTaskAssignee)}
+    >
+      {assignees.map((a) => (
+        <SelectOption key={a.value} value={a.value}>
+          {a.label}
+        </SelectOption>
+      ))}
+    </Select>
+  );
 }
 
-/** A new task; `bare` leaves the heading to a dialog around it. */
+/** A task an agent drafted in a conversation, to confirm (a `task_draft` row of its timeline). */
+export interface TaskProposal {
+  conversationId: string;
+  messageId: string;
+  title: string;
+  description: string;
+}
+
+/** A new task, or a draft being confirmed; `bare` leaves the heading to a dialog around it. */
 export function TaskForm({
   onDone,
   bare = false,
@@ -425,49 +353,51 @@ export function TaskForm({
 }) {
   const { t: translateText } = useTranslation([
     "tasks",
-    "agents",
-    "artifacts",
     "common",
     "navigation",
   ] as const);
   const create = useCreateTask();
   const confirm = useConfirmTaskDraft();
   const { groups } = useGroups();
-  const [groupId, setGroupId] = useState(proposal?.group_id ?? "");
-  const { data } = useTasks();
-  const [title, setTitle] = useState(String(proposal?.data.title ?? ""));
-  const [description, setDescription] = useState(
-    String(proposal?.data.description ?? ""),
-  );
+  const [conversationId, setConversationId] = useState("");
+  const [title, setTitle] = useState(proposal?.title ?? "");
+  const [description, setDescription] = useState(proposal?.description ?? "");
   const [status, setStatus] = useState<TaskStatus>(initialStatus);
-  const [draft, setDraft] = useState<AssigneeDraft>(emptyDraft);
-  const places = useDraftPlaces(draft);
-  const assignee = draftInput(draft, places);
-  const remote = draft.key.startsWith("remote:");
-  const noComputers = (data?.assignees.length ?? 0) === 0;
+  const [assignee, setAssignee] = useState<BoardTaskAssignee>("none");
   return (
     <form
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!title.trim() || !assignee) return;
-        const input = {
+        if (!title.trim()) return;
+        const fields = {
           title: title.trim(),
           description: description.trim(),
           status,
           assignee,
-          group_id: groupId || undefined,
         };
         const callbacks = {
-          onSuccess: (task: TaskDetail) => onDone(task.id),
+          onSuccess: (result: { task: { id: string } }) =>
+            onDone(result.task.id),
           onError: showError,
         };
         if (proposal)
           confirm.mutate(
-            { groupId: proposal.group_id, messageId: proposal.id, input },
+            {
+              conversationId: proposal.conversationId,
+              messageId: proposal.messageId,
+              edits: fields,
+            },
             callbacks,
           );
-        else create.mutate(input, callbacks);
+        else
+          create.mutate(
+            {
+              ...fields,
+              ...(conversationId ? { conversationId } : {}),
+            },
+            callbacks,
+          );
       }}
     >
       {bare ? null : (
@@ -494,11 +424,7 @@ export function TaskForm({
       <Field
         id="task-description"
         label={translateText("fields.description")}
-        hint={
-          remote
-            ? translateText("fields.remoteDescriptionHelp")
-            : translateText("common:labels.markdownSupported")
-        }
+        hint={translateText("common:labels.markdownSupported")}
       >
         <Textarea
           id="task-description"
@@ -518,11 +444,21 @@ export function TaskForm({
           onChange={setStatus}
         />
       </Field>
+      <Field id="task-assignee" label={translateText("assignee.label")}>
+        <AssigneeSelect
+          id="task-assignee"
+          className="w-full"
+          value={assignee}
+          onChange={setAssignee}
+        />
+      </Field>
       {!proposal && (
         <Field label={translateText("fields.optionalGroup")}>
           <Select
-            value={groupId || "none"}
-            onValueChange={(value) => setGroupId(value === "none" ? "" : value)}
+            value={conversationId || "none"}
+            onValueChange={(value) =>
+              setConversationId(value === "none" ? "" : value)
+            }
           >
             <SelectOption value="none">
               {translateText("fields.noGroup")}
@@ -537,25 +473,15 @@ export function TaskForm({
           </Select>
         </Field>
       )}
-      <AssigneeFields id="task" draft={draft} onChange={setDraft} />
-      {noComputers ? (
-        <p className="text-xs text-muted-foreground">
-          {translateText("create.remoteComputerHelp")}
-        </p>
-      ) : null}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={() => onDone()}>
           {translateText("common:actions.cancel")}
         </Button>
         <Button
           type="submit"
-          disabled={
-            !title.trim() || !assignee || create.isPending || confirm.isPending
-          }
+          disabled={!title.trim() || create.isPending || confirm.isPending}
         >
-          {remote && status !== "backlog"
-            ? translateText("actions.createAndStart")
-            : translateText("common:actions.create")}
+          {translateText("common:actions.create")}
         </Button>
       </div>
     </form>
@@ -583,13 +509,7 @@ function Folded({
   enabled?: boolean;
   actions?: React.ReactNode;
 }) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
+  const { t: translateText } = useTranslation(["common"] as const);
   const ref = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [long, setLong] = useState(false);
@@ -603,15 +523,15 @@ function Folded({
     if (el.firstElementChild) observer.observe(el.firstElementChild);
     return () => observer.disconnect();
   }, [enabled, open, children]);
-  const folded = enabled && !open;
+  const isFolded = enabled && !open;
   return (
     <div className="min-w-0">
       <div
         ref={ref}
         className={cn(
           className,
-          folded && [max, "overflow-hidden"],
-          folded &&
+          isFolded && [max, "overflow-hidden"],
+          isFolded &&
             long &&
             "[mask-image:linear-gradient(to_bottom,black_70%,transparent)]",
         )}
@@ -629,8 +549,8 @@ function Folded({
               onClick={() => setOpen(!open)}
             >
               {open
-                ? translateText("common:actions.collapse")
-                : translateText("common:actions.expandFullText")}
+                ? translateText("actions.collapse")
+                : translateText("actions.expandFullText")}
             </Button>
           ) : null}
           {actions}
@@ -640,95 +560,24 @@ function Folded({
   );
 }
 
-function StopRun({ task, run }: { task: string; run: TaskRun }) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
-  const interrupt = useInterruptRun();
-  if (run.status !== "running") return null;
-  return (
-    <Button
-      variant="ghost"
-      size="xs"
-      disabled={interrupt.isPending}
-      onClick={() =>
-        interrupt.mutate({ id: task, run: run.id }, { onError: showError })
-      }
-    >
-      <StopIcon aria-hidden="true" />
-      {translateText("common:actions.stop")}
-    </Button>
-  );
-}
-
-/** A run's state: spinning while at work, red when it failed. */
-function RunStatusText({ run }: { run: TaskRun }) {
-  useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
-  if (isActive(run.status)) return <Working status={run.status} />;
-  return (
-    <span
-      className={cn(
-        "text-xs",
-        run.status === "failed" ? "text-destructive" : "text-muted-foreground",
-      )}
-    >
-      {runStatusLabels[run.status]}
-      {run.error && run.status === "failed" ? `：${run.error}` : ""}
-    </span>
-  );
-}
-
-/** What the task delivered (pull requests, mostly), newest first. */
-function deliverables(task: TaskDetail) {
-  return task.activity
-    .filter((a) => a.kind === "deliverable" && typeof a.data.url === "string")
-    .map((a) => ({
-      id: a.id,
-      url: a.data.url as string,
-      title:
-        (typeof a.data.title === "string" && a.data.title) ||
-        (a.data.url as string).replace("https://github.com/", ""),
-    }))
-    .reverse();
-}
-
 /** A property's name, on the first line of its value. */
 const propertyLabel = "text-xs leading-8 text-muted-foreground";
 
 /**
- * What the task is at now: its status, who has it and what it delivered.
- * Each value starts on an 8-high line beside its name; `children` adds rows.
+ * What the task is at now: its status and who has it. Each value starts on
+ * an 8-high line beside its name; `children` adds rows.
  */
 export function TaskProperties({
   task,
   className,
   children,
-  onDone,
 }: {
   task: TaskDetail;
   className?: string;
   children?: React.ReactNode;
-  onDone: () => void;
 }) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
+  const { t: translateText } = useTranslation(["tasks"] as const);
   const update = useUpdateTask();
-  const links = deliverables(task);
   return (
     <dl
       className={cn(
@@ -743,66 +592,20 @@ export function TaskProperties({
           className="min-w-32"
           value={task.status}
           onChange={(status) =>
-            update.mutate(
-              { id: task.id, changes: { status } },
-              { onError: showError },
-            )
+            update.mutate({ taskId: task.id, status }, { onError: showError })
           }
         />
       </dd>
       <dt className={propertyLabel}>{translateText("assignee.label")}</dt>
       <dd className="min-w-0">
-        <AssigneeRow task={task} />
+        <AssigneeSelect
+          className="min-w-32"
+          value={task.assignee}
+          onChange={(assignee) =>
+            update.mutate({ taskId: task.id, assignee }, { onError: showError })
+          }
+        />
       </dd>
-      {links.length ? (
-        <>
-          <dt className={propertyLabel}>
-            {translateText("details.deliveryTab")}
-          </dt>
-          <dd className="min-w-0">
-            <ul>
-              {links.map((link) =>
-                isPullURL(link.url) ? (
-                  <DeliveredPull
-                    key={link.id}
-                    task={task}
-                    url={link.url}
-                    title={link.title}
-                    onDone={onDone}
-                  />
-                ) : (
-                  <li key={link.id}>
-                    <a
-                      href={link.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-start gap-2 py-1.5 leading-5 underline-offset-4 hover:underline"
-                    >
-                      <GitPullRequestIcon
-                        aria-hidden="true"
-                        className="mt-0.5 size-4 shrink-0"
-                      />
-                      <span className="line-clamp-2 min-w-0 wrap-anywhere">
-                        {link.title}
-                      </span>
-                    </a>
-                  </li>
-                ),
-              )}
-            </ul>
-          </dd>
-        </>
-      ) : null}
-      {task.loops.length ? (
-        <>
-          <dt className={propertyLabel}>
-            {translateText("details.reviewTab")}
-          </dt>
-          <dd className="min-w-0">
-            <LoopRow task={task} loop={task.loops.at(-1)!} />
-          </dd>
-        </>
-      ) : null}
       {children}
     </dl>
   );
@@ -812,13 +615,8 @@ const commentBoxId = "task-comment";
 
 /** A blocked task's open question: the agent's last word, if it is the last. */
 export function Question({ task }: { task: TaskDetail }) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
+  const { t: translateText } = useTranslation(["tasks", "common"] as const);
+  const { agents } = useAgentList();
   if (task.status !== "blocked") return null;
   const last = task.activity.filter((a) => a.kind === "comment").at(-1);
   if (!last || last.actor.kind === "user") return null;
@@ -828,7 +626,7 @@ export function Question({ task }: { task: TaskDetail }) {
       className="space-y-1 bg-muted px-3 py-2"
     >
       <p className="text-xs">
-        <span className="font-medium">{actorName(last)}</span>
+        <span className="font-medium">{actorName(last.actor, agents)}</span>
         <span className="text-muted-foreground">
           {" "}
           {translateText("comments.awaitingYourReply")}
@@ -858,42 +656,11 @@ export function Question({ task }: { task: TaskDetail }) {
 
 // --- detail: timeline ---------------------------------------------------------------
 
-function actorName(a: TaskActivity) {
-  switch (a.actor.kind) {
-    case "user":
-      return translate("tasks:assignee.me");
-    case "agent":
-      return a.actor.agent_name ?? translate("common:entities.agents");
-    case "remote":
-      return remoteLabel(a.data as Parameters<typeof remoteLabel>[0]);
-  }
-  return "eta";
-}
-
-/** The agent a request is for, by the name it goes by. */
-function assistAgent(a: TaskActivity) {
-  const agent = (a.data.agent ?? {}) as { runtime?: string; provider?: string };
-  return remoteLabel({
-    computer_name: str(a.data.computer_name) || null,
-    runtime: agent.runtime,
-    provider: agent.provider,
-  });
-}
-
-const verdictLabels: Record<string, string> = {
-  get pass() {
-    return translate("tasks:review.approved");
-  },
-  get changes_requested() {
-    return translate("tasks:review.changesRequested");
-  },
-};
-
 function str(v: unknown) {
   return typeof v === "string" ? v : "";
 }
 
-/** One line for an event that is not a comment, or null to leave it out. */
+/** One line for an event that is not a comment. */
 function describe(a: TaskActivity): React.ReactNode {
   const d = a.data;
   switch (a.kind) {
@@ -904,43 +671,18 @@ function describe(a: TaskActivity): React.ReactNode {
         from: statusLabel(str(d.from) as TaskStatus),
         to: statusLabel(str(d.to) as TaskStatus),
       });
-    case "assignee": {
-      const to = d.to as Task["assignee"] | undefined;
-      if (!to) return translate("tasks:activity.assigneeChanged");
-      const place = placeLabel(to.place);
+    case "assignee":
       return translate("tasks:activity.assigned", {
-        assignee: assigneeLabel(to),
-        locationSuffix: place
-          ? translate("common:format.commaSuffix", { value: place })
-          : "",
+        assignee: assigneeLabel(str(d.to) as BoardTaskAssignee),
       });
-    }
     case "title":
       return translate("tasks:activity.titleChanged", { title: str(d.to) });
     case "description":
       return translate("tasks:activity.descriptionChanged");
-    case "group":
+    case "conversation":
       return d.to
         ? translate("tasks:activity.groupLinked")
         : translate("tasks:activity.groupUnlinked");
-    case "deliverable":
-      return (
-        <>
-          <GitPullRequestIcon
-            aria-hidden="true"
-            className="mr-1 inline size-3.5 align-[-2px]"
-          />
-          {translate("tasks:activity.deliveredPrefix")}
-          <a
-            href={str(d.url)}
-            target="_blank"
-            rel="noreferrer"
-            className="text-foreground underline underline-offset-4"
-          >
-            {str(d.title) || str(d.url).replace("https://github.com/", "")}
-          </a>
-        </>
-      );
     case "artifact":
       return (
         <>
@@ -950,7 +692,7 @@ function describe(a: TaskActivity): React.ReactNode {
           />
           {translate("tasks:activity.artifactPublishedPrefix")}
           <ArtifactButton
-            id={str(d.artifact_id)}
+            id={str(d.artifactId)}
             version={typeof d.version === "number" ? d.version : undefined}
             className="text-foreground underline underline-offset-4"
           >
@@ -963,38 +705,9 @@ function describe(a: TaskActivity): React.ReactNode {
           </ArtifactButton>
         </>
       );
-    case "cleanup":
-      return a.body ?? translate("tasks:activity.cleanupCompleted");
-    case "assist":
-      return translate("tasks:activity.assistanceRequested", {
-        name: assistAgent(a),
-        roundSuffix:
-          typeof d.round === "number" && d.loop_id
-            ? translate("tasks:review.roundSuffix", { round: d.round })
-            : "",
-      });
-    case "run_queued":
-      return null;
-    case "run_started":
-      return translate("tasks:activity.started");
-    case "run_completed":
-      return translate("tasks:activity.turnCompleted");
-    case "run_nudged":
-      return translate("tasks:activity.noReplyReminder");
-    case "run_failed":
-      return (
-        <span className="text-destructive">
-          {translate("tasks:activity.turnFailed", {
-            reason: a.body ? `：${a.body}` : "",
-          })}
-        </span>
-      );
-    case "run_cancelled":
-      return translate("tasks:activity.turnStopped", {
-        reason: a.body ? `：${a.body}` : "",
-      });
+    case "comment":
+      return a.body;
   }
-  return a.kind;
 }
 
 /** Bookkeeping the task's current state already shows; runs of it fold. */
@@ -1003,11 +716,8 @@ const minor = new Set<string>([
   "title",
   "description",
   "assignee",
-  "group",
+  "conversation",
   "status",
-  "cleanup",
-  "run_completed",
-  "run_nudged",
 ]);
 
 /** The timeline's entries: single events, and runs of minor ones. */
@@ -1022,17 +732,10 @@ function entries(items: TaskActivity[]) {
   return out.map((e) => (Array.isArray(e) && e.length === 1 ? e[0] : e));
 }
 
-function Time({ at }: { at: string }) {
-  useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
+function Time({ at }: { at: number }) {
   return (
     <time
-      dateTime={at}
+      dateTime={new Date(at).toISOString()}
       className="text-xs whitespace-nowrap text-muted-foreground tabular-nums"
     >
       {when(at)}
@@ -1041,527 +744,18 @@ function Time({ at }: { at: string }) {
 }
 
 /** An event as a line: who, what, when. */
-function EventLine({ a, run }: { a: TaskActivity; run?: TaskRun }) {
-  useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
-  // A run's events read as the assignee's; an assisting agent's are named.
-  const who = !a.kind.startsWith("run_")
-    ? `${actorName(a)} `
-    : run?.assist
-      ? `${remoteLabel(run)} `
-      : null;
+function EventLine({ a }: { a: TaskActivity }) {
+  const { agents } = useAgentList();
   return (
     <p className="text-muted-foreground wrap-anywhere">
-      {who}
-      {describe(a)} <Time at={a.created_at} />
+      {actorName(a.actor, agents)} {describe(a)} <Time at={a.createdAt} />
     </p>
-  );
-}
-
-const logKindLabels: Record<LogEntry["kind"], string> = {
-  get user() {
-    return translate("agents:editor.tabs.instructions");
-  },
-  get assistant() {
-    return translate("common:actions.reply");
-  },
-  get tool() {
-    return translate("tasks:log.types.tool");
-  },
-  get reasoning() {
-    return translate("tasks:log.types.thinking");
-  },
-  get terminal() {
-    return translate("tasks:log.types.terminal");
-  },
-  // Its file is on the remote computer, out of the relay's reach.
-  get image() {
-    return translate("tasks:log.types.image");
-  },
-  get other() {
-    return translate("tasks:log.types.other");
-  },
-};
-
-function RunLog({ task, run }: { task: string; run: TaskRun }) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
-  const live = isActive(run.status);
-  const { entries, error, isPending, hasOlder, loadingOlder, loadOlder } =
-    useRunLog(task, run.id, live);
-  if (isPending)
-    return <Loading layout="lines" label={translateText("log.loading")} />;
-  // A read that fails keeps what was read before: it says nothing about the run.
-  const failed = error ? (
-    <p className="text-xs text-destructive">{error.message}</p>
-  ) : null;
-  if (!entries.length)
-    return (
-      failed ?? (
-        <p className="text-xs text-muted-foreground">
-          {translateText("log.empty")}
-        </p>
-      )
-    );
-  return (
-    <div className="space-y-2">
-      {failed}
-      {hasOlder ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 px-2 text-xs text-muted-foreground"
-          disabled={loadingOlder}
-          onClick={() => void loadOlder()}
-        >
-          {loadingOlder
-            ? translateText("log.loadingEarlier")
-            : translateText("log.loadEarlier")}
-        </Button>
-      ) : null}
-      <RunLogEntries entries={entries} />
-    </div>
-  );
-}
-
-function RunLogEntries({ entries }: { entries: LogEntry[] }) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
-  // Entries can be alike (same time, kind and start): number the repeats.
-  const seen = new Map<string, number>();
-  const key = (entry: LogEntry) => {
-    const base = `${entry.at}-${entry.kind}-${entry.text.slice(0, 32)}`;
-    const n = seen.get(base) ?? 0;
-    seen.set(base, n + 1);
-    return `${base}-${n}`;
-  };
-  return (
-    <ol
-      aria-label={translateText("log.title")}
-      className="space-y-2 border-l pl-3 text-xs"
-    >
-      {entries.map((entry) => (
-        <li key={key(entry)} className="min-w-0">
-          <span className="text-muted-foreground">
-            {logKindLabels[entry.kind]}
-            {entry.tool ? ` · ${entry.tool}` : ""}
-            {entry.status && entry.status !== "completed"
-              ? ` · ${entry.status}`
-              : ""}
-          </span>
-          {entry.command ? (
-            <pre className="mt-0.5 bg-muted px-2 py-1 font-mono whitespace-pre-wrap wrap-anywhere">
-              $ {entry.command}
-            </pre>
-          ) : null}
-          {entry.text && entry.kind !== "image" ? (
-            entry.kind === "assistant" || entry.kind === "user" ? (
-              <Folded max="max-h-40">
-                <Markdown className="mt-0.5 text-xs">{entry.text}</Markdown>
-              </Folded>
-            ) : (
-              <Folded max="max-h-20">
-                <pre className="mt-0.5 font-mono whitespace-pre-wrap text-muted-foreground wrap-anywhere">
-                  {entry.text}
-                </pre>
-              </Folded>
-            )
-          ) : null}
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-/** A run where it started: who, how it went, and its log on demand. */
-function RunEntry({
-  task,
-  run,
-  activity,
-}: {
-  task: TaskDetail;
-  run: TaskRun;
-  activity: TaskActivity;
-}) {
-  useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
-  return (
-    <div className="space-y-1">
-      <p className="text-muted-foreground wrap-anywhere">
-        {remoteLabel({
-          computer_name: run.computer_name,
-          runtime: run.runtime,
-          provider: run.provider,
-        })}{" "}
-        {describe(activity)} <Time at={activity.created_at} />
-      </p>
-      <RunControls task={task} run={run} />
-    </div>
-  );
-}
-
-/** How a run went, stopping it, and its log on demand. */
-function RunControls({ task, run }: { task: TaskDetail; run: TaskRun }) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <div className="-ml-2 flex flex-wrap items-center gap-x-1">
-        <span className="px-2">
-          <RunStatusText run={run} />
-        </span>
-        <StopRun task={task.id} run={run} />
-        {run.status === "queued" ? null : (
-          <Button
-            variant="ghost"
-            size="xs"
-            aria-expanded={open}
-            onClick={() => setOpen(!open)}
-          >
-            {open ? (
-              <CaretDownIcon aria-hidden="true" />
-            ) : (
-              <CaretRightIcon aria-hidden="true" />
-            )}
-            {translateText("log.title")}
-          </Button>
-        )}
-      </div>
-      {run.status === "queued" && run.queue_reason ? (
-        <p className="text-xs text-muted-foreground">{run.queue_reason}</p>
-      ) : null}
-      {run.workspace && open ? (
-        <p className="text-xs text-muted-foreground wrap-anywhere">
-          {translateText("log.workspacePrefix")}
-          <code>{run.workspace}</code>
-        </p>
-      ) : null}
-      {open ? <RunLog task={task.id} run={run} /> : null}
-    </>
-  );
-}
-
-const assistStateLabels: Record<TaskAssist["state"], string> = {
-  get waiting() {
-    return translate("common:status.waiting");
-  },
-  get blocked() {
-    return translate("tasks:assist.status.notStarted");
-  },
-  get started() {
-    return translate("tasks:assist.status.started");
-  },
-  get cancelled() {
-    return translate("tasks:status.cancelled");
-  },
-};
-
-const loopStateLabels: Record<TaskLoop["state"], string> = {
-  get active() {
-    return translate("tasks:status.inProgress");
-  },
-  get passed() {
-    return translate("tasks:assist.status.approved");
-  },
-  get exhausted() {
-    return translate("tasks:assist.status.roundsExhausted");
-  },
-  get blocked() {
-    return translate("tasks:assist.status.blocked");
-  },
-  get stopped() {
-    return translate("common:status.stopped");
-  },
-};
-
-/**
- * A request of an assisting agent: whom (by name only), what, and where it
- * stands: waiting or blocked and why, or its run, pinned at the commit it
- * was given.
- */
-function AssistEntry({
-  task,
-  activity,
-}: {
-  task: TaskDetail;
-  activity: TaskActivity;
-}) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
-  const cancel = useCancelAssist();
-  const assist = task.assists.find((x) => x.id === activity.data.assist_id);
-  const run = assist?.run_id
-    ? task.runs.find((r) => r.id === assist.run_id)
-    : undefined;
-  const waiting = assist?.state === "waiting" || assist?.state === "blocked";
-  return (
-    <div className="space-y-1">
-      <p className="flex flex-wrap items-baseline gap-x-2">
-        <span className="text-xs wrap-anywhere">
-          <span className="font-medium">{actorName(activity)}</span>{" "}
-          <span className="text-muted-foreground">{describe(activity)}</span>
-        </span>
-        <Time at={activity.created_at} />
-      </p>
-      <Folded max="max-h-40">
-        <Markdown className="text-sm">{activity.body ?? ""}</Markdown>
-      </Folded>
-      {assist?.pull_url ? (
-        <p className="text-xs text-muted-foreground wrap-anywhere">
-          <GitPullRequestIcon
-            aria-hidden="true"
-            className="mr-1 inline size-3.5 align-[-2px]"
-          />
-          <a
-            href={assist.pull_url}
-            target="_blank"
-            rel="noreferrer"
-            className="underline underline-offset-4"
-          >
-            {assist.pull_url.replace("https://github.com/", "")}
-          </a>
-          {assist.head_sha ? (
-            <>
-              {" "}
-              @ <code>{assist.head_sha.slice(0, 7)}</code>
-            </>
-          ) : null}
-        </p>
-      ) : null}
-      {assist && !run ? (
-        <div className="-ml-2 flex flex-wrap items-center gap-x-1">
-          <span
-            className={cn(
-              "px-2 text-xs wrap-anywhere",
-              assist.state === "blocked"
-                ? "text-destructive"
-                : "text-muted-foreground",
-            )}
-          >
-            {assistStateLabels[assist.state]}
-            {assist.reason ? `：${assist.reason}` : ""}
-          </span>
-          {waiting ? (
-            <Button
-              variant="ghost"
-              size="xs"
-              disabled={cancel.isPending}
-              onClick={() =>
-                cancel.mutate(
-                  { id: task.id, assist: assist.id },
-                  { onError: showError },
-                )
-              }
-            >
-              {translateText("common:actions.cancel")}
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-      {run ? <RunControls task={task} run={run} /> : null}
-    </div>
-  );
-}
-
-/**
- * The task's latest review loop: its round and state, and what the user
- * alone may do with it: carry it on (with more rounds) or stop it.
- */
-function LoopRow({ task, loop }: { task: TaskDetail; loop: TaskLoop }) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
-  const stop = useStopLoop();
-  const resume = useResumeLoop();
-  const [rounds, setRounds] = useState(() =>
-    String(Math.min(10, Math.max(loop.max_rounds, loop.rounds + 1))),
-  );
-  const paused = loop.state === "exhausted" || loop.state === "blocked";
-  const open = paused || loop.state === "active";
-  return (
-    <div className="space-y-1 py-1.5 text-sm">
-      <p className="wrap-anywhere">
-        {remoteLabel({
-          computer_name: task.assignee.computer_name,
-          runtime: loop.runtime,
-          provider: loop.provider,
-        })}{" "}
-        <span className="text-muted-foreground">
-          {translateText("assist.review.progress", {
-            reviewed: loop.rounds,
-            maxRounds: loop.max_rounds,
-            status: loopStateLabels[loop.state],
-          })}
-        </span>
-      </p>
-      {loop.reason ? (
-        <p
-          className={cn(
-            "text-xs wrap-anywhere",
-            paused ? "text-destructive" : "text-muted-foreground",
-          )}
-        >
-          {loop.reason}
-        </p>
-      ) : null}
-      {open ? (
-        <div className="-ml-2 flex flex-wrap items-center gap-x-1">
-          {paused ? (
-            <>
-              <Select
-                aria-label={translateText("assist.review.roundLimit")}
-                size="sm"
-                className="ml-2 w-16"
-                value={rounds}
-                onValueChange={setRounds}
-              >
-                {Array.from({ length: 10 }, (_, i) => String(i + 1))
-                  .filter((n) => Number(n) > loop.rounds)
-                  .map((n) => (
-                    <SelectOption key={n} value={n}>
-                      {n}
-                    </SelectOption>
-                  ))}
-              </Select>
-              <Button
-                variant="ghost"
-                size="xs"
-                disabled={resume.isPending || Number(rounds) <= loop.rounds}
-                onClick={() =>
-                  resume.mutate(
-                    { id: task.id, loop: loop.id, maxRounds: Number(rounds) },
-                    { onError: showError },
-                  )
-                }
-              >
-                {translateText("assist.review.continue")}
-              </Button>
-            </>
-          ) : null}
-          <Button
-            variant="ghost"
-            size="xs"
-            disabled={stop.isPending}
-            onClick={() =>
-              stop.mutate(
-                { id: task.id, loop: loop.id },
-                { onError: showError },
-              )
-            }
-          >
-            {translateText("assist.review.stopLoop")}
-          </Button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-/** Under an assisting agent's answer: ask it more, or pass it on. */
-function AssistReplyActions({
-  task,
-  activity,
-}: {
-  task: TaskDetail;
-  activity: TaskActivity;
-}) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
-  const [asking, setAsking] = useState(false);
-  const setDraft = useTaskDraft((s) => s.setDraft);
-  const runtime = str(activity.data.runtime);
-  const provider = str(activity.data.provider);
-  const remote = task.assignee.kind === "remote";
-  return (
-    <div className="-ml-2 flex flex-wrap gap-x-1">
-      <Button size="xs" variant="ghost" onClick={() => setAsking(true)}>
-        {translateText("assist.followUpWith", {
-          name: providerLabel(provider),
-        })}
-      </Button>
-      {remote ? (
-        <Button
-          size="xs"
-          variant="ghost"
-          onClick={() => {
-            const quote = (activity.body ?? "")
-              .split("\n")
-              .map((line) => `> ${line}`)
-              .join("\n");
-            setDraft(task.id, (draft) =>
-              translateText("assist.resultsMessage", {
-                name: draft ? `${draft}\n\n` : "",
-                roundSuffix: actorName(activity),
-                result: quote,
-              }),
-            );
-            const box = document.getElementById(commentBoxId);
-            box?.scrollIntoView({ block: "center" });
-            box?.focus({ preventScroll: true });
-          }}
-        >
-          {translateText("assist.sendToPrimary")}
-        </Button>
-      ) : null}
-      <AssistDialog
-        task={task}
-        open={asking}
-        onOpenChange={setAsking}
-        agent={{ runtime, provider }}
-      />
-    </div>
   );
 }
 
 /** Minor events in a row, as one line that unfolds into them. */
 function Changes({ items }: { items: TaskActivity[] }) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
+  const { t: translateText } = useTranslation(["tasks"] as const);
   const [open, setOpen] = useState(false);
   return (
     <div>
@@ -1576,11 +770,11 @@ function Changes({ items }: { items: TaskActivity[] }) {
         ) : (
           <CaretRightIcon aria-hidden="true" className="size-3" />
         )}
-        {translateText("assist.changeCount", {
+        {translateText("activity.changeCount", {
           count: items.length,
         })}
         <span className="ml-1">
-          <Time at={items.at(-1)!.created_at} />
+          <Time at={items.at(-1)!.createdAt} />
         </span>
       </button>
       {open ? (
@@ -1619,57 +813,24 @@ function Entry({
   );
 }
 
-const dot = (destructive = false) => (
-  <span
-    className={cn(
-      "size-1.5 bg-muted-foreground/60",
-      destructive && "bg-destructive",
-    )}
-  />
-);
+const dot = <span className="size-1.5 bg-muted-foreground/60" />;
 
-/**
- * The task's history: comments in full (long ones folded), runs with their
- * logs on demand, and bookkeeping folded into "N 条变更".
- */
+/** The task's history: comments in full (long ones folded), bookkeeping folded into "N 条变更". */
 export function Timeline({ task }: { task: TaskDetail }) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
-  // Runs show where they started; their queueing is news only while they
-  // still wait, with why.
-  const runs = new Map(task.runs.map((r) => [r.id, r]));
-  const waiting = (a: TaskActivity) => {
-    const run = a.kind === "run_queued" && a.run_id && runs.get(a.run_id);
-    return run && run.status === "queued" && !run.assist ? run : undefined;
-  };
-  // An assist's run starts and ends where it was asked for.
-  const items = entries(
-    task.activity.filter(
-      (a) =>
-        (describe(a) !== null || waiting(a)) &&
-        !(
-          (a.kind === "run_started" || a.kind === "run_completed") &&
-          a.run_id &&
-          runs.get(a.run_id)?.assist
-        ),
-    ),
-  );
+  const { t: translateText } = useTranslation(["common"] as const);
+  const { agents } = useAgentList();
+  const items = entries(task.activity);
   return (
-    <ol aria-label={translateText("common:labels.timeline")}>
+    <ol aria-label={translateText("labels.timeline")}>
       {items.map((a, i) => {
         const last = i === items.length - 1;
         if (Array.isArray(a))
           return (
-            <Entry key={a[0].id} last={last} mark={dot()}>
+            <Entry key={a[0].id} last={last} mark={dot}>
               <Changes items={a} />
             </Entry>
           );
-        if (a.kind === "comment" || a.kind === "review")
+        if (a.kind === "comment")
           return (
             <Entry
               key={a.id}
@@ -1684,66 +845,18 @@ export function Timeline({ task }: { task: TaskDetail }) {
             >
               <p className="flex flex-wrap items-baseline gap-x-2">
                 <span className="text-xs font-medium wrap-anywhere">
-                  {actorName(a)}
+                  {actorName(a.actor, agents)}
                 </span>
-                <Time at={a.created_at} />
+                <Time at={a.createdAt} />
               </p>
-              {a.kind === "review" ? (
-                <p className="mt-1 text-xs">
-                  <span
-                    className={cn(
-                      "font-medium",
-                      a.data.verdict !== "pass" && "text-destructive",
-                    )}
-                  >
-                    {verdictLabels[str(a.data.verdict)] ?? str(a.data.verdict)}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {typeof a.data.round === "number"
-                      ? translateText("assist.review.roundProgress", {
-                          round: a.data.round,
-                          maxRounds: String(a.data.max_rounds),
-                        })
-                      : ""}
-                    {str(a.data.head_sha)
-                      ? translateText("assist.commitSuffix", {
-                          commit: str(a.data.head_sha).slice(0, 7),
-                        })
-                      : ""}
-                  </span>
-                </p>
-              ) : null}
               <Folded max="max-h-60" className="mt-1">
                 <Markdown className="text-sm">{a.body ?? ""}</Markdown>
               </Folded>
-              {a.actor.kind === "remote" && a.data.assist === true ? (
-                <AssistReplyActions task={task} activity={a} />
-              ) : null}
             </Entry>
           );
-        if (a.kind === "assist")
-          return (
-            <Entry
-              key={a.id}
-              last={last}
-              mark={<span className="size-2 bg-foreground" />}
-            >
-              <AssistEntry task={task} activity={a} />
-            </Entry>
-          );
-        const run =
-          (a.kind === "run_started" && a.run_id && runs.get(a.run_id)) ||
-          waiting(a);
         return (
-          <Entry key={a.id} last={last} mark={dot(a.kind === "run_failed")}>
-            {run ? (
-              <RunEntry task={task} run={run} activity={a} />
-            ) : (
-              <EventLine
-                a={a}
-                run={a.run_id ? runs.get(a.run_id) : undefined}
-              />
-            )}
+          <Entry key={a.id} last={last} mark={dot}>
+            <EventLine a={a} />
           </Entry>
         );
       })}
@@ -1762,10 +875,10 @@ const commentsLike = (task: TaskDetail, body: string) =>
 /**
  * A comment on its way: out of the box the moment it is sent, so the box is
  * free for the next one, and shown under the timeline until the timeline has
- * it. `key` is its Idempotency-Key, so a retry is the same comment.
+ * it.
  */
 interface Outgoing {
-  key: string;
+  id: string;
   body: string;
   /** How many such comments the task had when it was sent. */
   before: number;
@@ -1776,8 +889,6 @@ interface Outgoing {
 export function CommentBox({ task }: { task: TaskDetail }) {
   const { t: translateText } = useTranslation([
     "tasks",
-    "agents",
-    "artifacts",
     "common",
     "navigation",
   ] as const);
@@ -1787,7 +898,6 @@ export function CommentBox({ task }: { task: TaskDetail }) {
     setDraft(task.id, update);
   const [outgoing, setOutgoing] = useState<Outgoing | null>(null);
   const comment = useCommentTask();
-  const [assisting, setAssisting] = useState(false);
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -1795,46 +905,38 @@ export function CommentBox({ task }: { task: TaskDetail }) {
       mountedRef.current = false;
     };
   }, []);
-  const remote = task.assignee.kind === "remote";
   const leftOut = (files: number) => {
     if (files)
       toast.warning(
         translateText("comments.unsupportedAttachments", {
-          action: remote
-            ? translateText("comments.followUpLabel")
-            : translateText("comments.title"),
+          action: translateText("comments.title"),
           count: files,
         }),
       );
   };
-  // Arrived once the task has one more of it, from the response or a refresh:
-  // the timeline shows it in the same render this stops showing it.
+  // Arrived once the task has one more of it, from the reply or a push: the
+  // timeline shows it in the same render this stops showing it.
   const waiting =
     outgoing && commentsLike(task, outgoing.body) <= outgoing.before
       ? outgoing
       : null;
   const deliver = (o: Outgoing) => {
     comment
-      .mutateAsync({ id: task.id, body: o.body, key: o.key })
+      .mutateAsync({ taskId: task.id, body: o.body })
       .catch((error: unknown) => {
-        const failure =
-          error instanceof ApiError
-            ? error.message
-            : translateText("common:errors.network");
+        const failure = wireErrorMessage(error);
         // Gone with the task's view: say so, as the box that held it is gone.
         if (!mountedRef.current) {
           toast.error(
             translateText("comments.deliveryFailed", {
-              action: remote
-                ? translateText("comments.followUpLabel")
-                : translateText("comments.title"),
+              action: translateText("comments.title"),
               message: failure,
             }),
           );
           return;
         }
         setOutgoing((current) =>
-          current?.key === o.key ? { ...current, failure } : current,
+          current?.id === o.id ? { ...current, failure } : current,
         );
       });
   };
@@ -1842,7 +944,7 @@ export function CommentBox({ task }: { task: TaskDetail }) {
     const body = text.trim();
     if (!body || waiting) return;
     const o = {
-      key: crypto.randomUUID(),
+      id: crypto.randomUUID(),
       body,
       before: commentsLike(task, body),
     };
@@ -1879,18 +981,8 @@ export function CommentBox({ task }: { task: TaskDetail }) {
       >
         <Textarea
           id={commentBoxId}
-          aria-label={
-            remote
-              ? translateText("comments.followUpLabel")
-              : translateText("comments.title")
-          }
-          placeholder={
-            remote
-              ? translateText("comments.followUpPlaceholder", {
-                  name: assigneeLabel(task.assignee),
-                })
-              : translateText("comments.placeholder")
-          }
+          aria-label={translateText("comments.title")}
+          placeholder={translateText("comments.placeholder")}
           rows={2}
           maxLength={20000}
           className="min-h-16 text-sm md:text-sm"
@@ -1913,15 +1005,6 @@ export function CommentBox({ task }: { task: TaskDetail }) {
         />
         <div className="flex flex-wrap justify-end gap-2">
           <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => setAssisting(true)}
-          >
-            <RobotIcon aria-hidden="true" />
-            {translateText("assist.title")}
-          </Button>
-          <Button
             type="submit"
             size="sm"
             disabled={!text.trim() || Boolean(waiting)}
@@ -1931,15 +1014,12 @@ export function CommentBox({ task }: { task: TaskDetail }) {
                 <SpinnerIcon aria-hidden="true" className="animate-spin" />
                 {translateText("common:states.sending")}
               </>
-            ) : remote ? (
-              translateText("comments.sendFollowUp")
             ) : (
               translateText("comments.title")
             )}
           </Button>
         </div>
       </form>
-      <AssistDialog task={task} open={assisting} onOpenChange={setAssisting} />
     </>
   );
 }
@@ -1958,8 +1038,6 @@ function OutgoingComment({
 }) {
   const { t: translateText } = useTranslation([
     "tasks",
-    "agents",
-    "artifacts",
     "common",
     "navigation",
   ] as const);
@@ -2017,13 +1095,7 @@ export function EditableTitle({
   task: TaskDetail;
   className?: string;
 }) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
+  const { t: translateText } = useTranslation(["tasks"] as const);
   const update = useUpdateTask();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(task.title);
@@ -2053,7 +1125,7 @@ export function EditableTitle({
     setEditing(false);
     if (title.trim() && title.trim() !== task.title)
       update.mutate(
-        { id: task.id, changes: { title: title.trim() } },
+        { taskId: task.id, title: title.trim() },
         { onError: showError },
       );
   };
@@ -2082,13 +1154,7 @@ export function Description({
   task: TaskDetail;
   fold?: boolean;
 }) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
+  const { t: translateText } = useTranslation(["tasks", "common"] as const);
   const update = useUpdateTask();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(task.description);
@@ -2113,7 +1179,7 @@ export function Description({
             disabled={update.isPending}
             onClick={() =>
               update.mutate(
-                { id: task.id, changes: { description: text } },
+                { taskId: task.id, description: text },
                 { onSuccess: () => setEditing(false), onError: showError },
               )
             }
@@ -2152,77 +1218,15 @@ export function Description({
   );
 }
 
-/** The assignee and its place, changed together. */
-function AssigneeRow({ task }: { task: TaskDetail }) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
-  const update = useUpdateTask();
-  const [draft, setDraft] = useState<AssigneeDraft | null>(null);
-  const places = useDraftPlaces(draft ?? emptyDraft);
-  if (!draft) {
-    const place = placeLabel(task.assignee.place);
-    return (
-      <div className="flex items-start gap-2">
-        <span className="min-w-0 flex-1 py-1.5 leading-5 wrap-anywhere">
-          {assigneeLabel(task.assignee)}
-          {place ? (
-            <span className="mt-0.5 block text-xs text-muted-foreground">
-              {place}
-            </span>
-          ) : null}
-        </span>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="mt-0.5 text-muted-foreground"
-          onClick={() => setDraft(draftOf(task.assignee))}
-        >
-          {translateText("common:actions.change")}
-        </Button>
-      </div>
-    );
-  }
-  const assignee = draftInput(draft, places);
-  return (
-    <div className="space-y-2">
-      <AssigneeFields id="task-detail" draft={draft} onChange={setDraft} />
-      <div className="flex justify-end gap-2">
-        <Button size="sm" variant="ghost" onClick={() => setDraft(null)}>
-          {translateText("common:actions.cancel")}
-        </Button>
-        <Button
-          size="sm"
-          disabled={!assignee || update.isPending}
-          onClick={() =>
-            assignee &&
-            update.mutate(
-              { id: task.id, changes: { assignee } },
-              { onSuccess: () => setDraft(null), onError: showError },
-            )
-          }
-        >
-          {translateText("common:actions.save")}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 /** A task in the side panel: one column, what matters first. */
 function TaskView({ task }: { task: TaskDetail }) {
   const { t: translateText } = useTranslation([
     "tasks",
-    "agents",
-    "artifacts",
     "common",
     "navigation",
   ] as const);
   const [, setNav] = useTaskNav();
+  const { agents } = useAgentList();
   const remove = useDeleteTask();
   return (
     <>
@@ -2248,10 +1252,13 @@ function TaskView({ task }: { task: TaskDetail }) {
                 <DropdownMenuItem
                   variant="destructive"
                   onSelect={() =>
-                    remove.mutate(task.id, {
-                      onSuccess: () => void setNav({ task: null }),
-                      onError: showError,
-                    })
+                    remove.mutate(
+                      { taskId: task.id },
+                      {
+                        onSuccess: () => void setNav({ task: null }),
+                        onError: showError,
+                      },
+                    )
                   }
                 >
                   {translateText("common:actions.delete")}
@@ -2261,14 +1268,10 @@ function TaskView({ task }: { task: TaskDetail }) {
           </div>
           <EditableTitle key={task.title} task={task} />
           <p className="text-xs text-muted-foreground tabular-nums">
-            #{task.number} · {createdBy(task)}
+            #{task.number} · {createdBy(task, agents)}
           </p>
         </header>
-        <TaskProperties
-          task={task}
-          className="bg-muted/50 px-3 py-2"
-          onDone={() => void setNav({ task: null }, { history: "replace" })}
-        />
+        <TaskProperties task={task} className="bg-muted/50 px-3 py-2" />
         <Question task={task} />
         <Description key={task.description} task={task} fold />
         <section aria-labelledby="task-activity" className="space-y-3">
@@ -2291,31 +1294,25 @@ function TaskView({ task }: { task: TaskDetail }) {
 
 /** Where a task would be: loading, failed, or gone. */
 export function TaskMissing({
-  isPending,
+  missing,
   error,
-  onRetry,
 }: {
-  isPending: boolean;
-  error: Error | null;
-  onRetry: () => void;
+  missing: boolean;
+  error: Error | undefined;
 }) {
   const { t: translateText } = useTranslation([
     "tasks",
-    "agents",
-    "artifacts",
     "common",
     "navigation",
   ] as const);
-  const gone = error instanceof ApiError && error.status === 404;
-  if (error && !gone)
+  if (error)
     return (
       <LoadError
         what={translateText("navigation:sections.tasks")}
         error={error}
-        onRetry={onRetry}
       />
     );
-  if (isPending) return <Loading layout="detail" />;
+  if (!missing) return <Loading layout="detail" />;
   return (
     <Empty icon={ListChecksIcon} title={translateText("empty.deletedTitle")}>
       {translateText("common:empty.mayBeDeleted")}
@@ -2325,13 +1322,7 @@ export function TaskMissing({
 
 /** The task board: a status-grouped list, a task, or a new one. */
 export function Tasks() {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "agents",
-    "artifacts",
-    "common",
-    "navigation",
-  ] as const);
+  const { t: translateText } = useTranslation(["tasks", "navigation"] as const);
   const [nav, setNav] = useTaskNav();
   const id = nav.task && nav.task !== "new" ? nav.task : null;
   const listRef = useRef<HTMLDivElement>(null);
@@ -2347,7 +1338,7 @@ export function Tasks() {
     if (!area || detailOpen) return;
     area.scrollTop = listScrollRef.current;
   }, [detailOpen]);
-  const { data: task, isPending, error, refetch } = useTask(id);
+  const { task, missing, error } = useTask(id);
   return (
     <>
       <div
@@ -2373,11 +1364,7 @@ export function Tasks() {
             label={translateText("navigation:sections.tasks")}
             onClick={() => void setNav({ task: null })}
           />
-          <TaskMissing
-            isPending={isPending}
-            error={error}
-            onRetry={() => void refetch()}
-          />
+          <TaskMissing missing={missing} error={error} />
         </div>
       ) : (
         <TaskView key={id} task={task} />

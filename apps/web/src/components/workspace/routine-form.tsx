@@ -1,6 +1,6 @@
-import type { HourlySchedule } from "@/api/routines.gen";
-
+import type { HourlyStep } from "@eta/client-contracts";
 import type { Routine, Schedule } from "@/queries/routines";
+import { HOURLY_STEPS } from "@eta/client-contracts";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -13,7 +13,8 @@ import { listSeparator, translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useConversationList } from "@/queries/conversations";
 import { useModels } from "@/queries/providers";
-import { useSaveRoutine } from "@/queries/routines";
+import { useCreateRoutine, useUpdateRoutine } from "@/queries/routines";
+import { wireErrorMessage } from "@/queries/wire";
 import { ModelSelect } from "./agent-fields";
 import { occurrences, when } from "./routine-format";
 import { Select, SelectOption } from "./select-field";
@@ -55,8 +56,6 @@ const WEEKDAYS = [
   "common:weekdays.saturday",
   "common:weekdays.sunday",
 ] as const;
-// The intervals the control plane accepts.
-const HOURS: HourlySchedule["every"][] = [1, 2, 3, 4, 6, 8, 12];
 
 const browserZone = () => new Intl.DateTimeFormat().resolvedOptions().timeZone;
 const ZONES = [
@@ -170,11 +169,11 @@ function ScheduleFields({
           onValueChange={(value) =>
             onChange({
               ...schedule,
-              every: Number(value) as HourlySchedule["every"],
+              every: Number(value) as HourlyStep,
             })
           }
         >
-          {HOURS.map((n) => (
+          {HOURLY_STEPS.map((n) => (
             <SelectOption key={n} value={n}>
               {translateText("common:time.hours", { count: n })}
             </SelectOption>
@@ -234,7 +233,8 @@ export function RoutineForm({
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const noModels =
     models !== undefined && !models.some((item) => item.available);
-  const save = useSaveRoutine();
+  const create = useCreateRoutine();
+  const update = useUpdateRoutine();
   // The group a new routine belongs to: the one you have open. Read from the cached snapshot so
   // this form works the same in the panel, the full-window page and a test.
   const { conversations } = useConversationList();
@@ -252,7 +252,7 @@ export function RoutineForm({
   );
   const zones = ZONES.includes(timezone) ? ZONES : [timezone, ...ZONES];
   const preview = nextRuns(schedule, timezone);
-  const ready = name.trim() && brief.trim() && model;
+  const ready = name.trim() && brief.trim();
 
   return (
     <form
@@ -260,27 +260,30 @@ export function RoutineForm({
       onSubmit={(e) => {
         e.preventDefault();
         if (!ready) return;
-        save.mutate(
-          {
-            id: routine?.id ?? null,
-            input: {
-              name: name.trim(),
-              brief: brief.trim(),
-              model,
-              schedule,
-              timezone,
-              // The group whose folder and members it runs with. Omitted when there is none open:
-              // "no group" is a state the overview shows, not something to guess at.
-              ...(routine === null && group !== null
-                ? { group_id: group.id }
-                : {}),
+        const fields = {
+          name: name.trim(),
+          brief: brief.trim(),
+          // Empty is the settings' own choice of model.
+          model: model || null,
+          schedule,
+          timezone,
+        };
+        const onError = (error: Error) => toast.error(wireErrorMessage(error));
+        if (routine === null)
+          create.mutate(
+            {
+              ...fields,
+              // The conversation whose folder and members it runs with. Omitted when there is
+              // none open: "no conversation" is a state the list shows, not something to guess at.
+              ...(group === null ? {} : { conversationId: group.id }),
             },
-          },
-          {
-            onSuccess: (id) => onDone(id),
-            onError: (error) => toast.error(error.message),
-          },
-        );
+            { onSuccess: (result) => onDone(result.routine.id), onError },
+          );
+        else
+          update.mutate(
+            { routineId: routine.id, ...fields },
+            { onSuccess: () => onDone(routine.id), onError },
+          );
       }}
     >
       <div className="space-y-1">
@@ -325,7 +328,7 @@ export function RoutineForm({
         hint={
           preview.length ? (
             <span className="tabular-nums">
-              {preview.map((d) => when(d.toISOString())).join(listSeparator())}…
+              {preview.map((d) => when(d.getTime())).join(listSeparator())}…
               {timezone === browserZone()
                 ? null
                 : translateText("schedule.localTimeSuffix")}
@@ -380,6 +383,7 @@ export function RoutineForm({
             aria-describedby={noModels ? "routine-model-hint" : undefined}
             value={model}
             models={models}
+            defaultLabel={translateText("agents:models.default")}
             onValueChange={(value) => setModel(value)}
           />
         </Field>
@@ -388,7 +392,10 @@ export function RoutineForm({
         <Button type="button" variant="outline" onClick={() => onDone()}>
           {translateText("common:actions.cancel")}
         </Button>
-        <Button type="submit" disabled={!ready || save.isPending}>
+        <Button
+          type="submit"
+          disabled={!ready || create.isPending || update.isPending}
+        >
           {routine
             ? translateText("common:actions.save")
             : translateText("common:actions.create")}

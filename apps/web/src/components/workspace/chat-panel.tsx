@@ -45,12 +45,14 @@ import { ACTIVE_STATUSES, RUNNING_STATUSES } from "@/lib/timeline";
 import { summarizeArgs } from "@/lib/tool-summary";
 import { agentName } from "@/queries/agents";
 import { useRunBlocks } from "@/queries/sessions";
+import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar } from "./agent-identity";
 import { ComposerEditor } from "./composer-editor";
 import { ModelChip, ThinkingChip } from "./composer-pickers";
 import { GroupNotice } from "./group-notice";
 import { PendingStrip } from "./pending-strip";
 import { when } from "./routine-format";
+import { TaskCardRow, TaskDraftRow } from "./task-rows";
 import { TranscriptRail } from "./transcript-rail";
 import { AskBlock } from "./transcript/ask-block";
 import { Message, SystemMessage } from "./transcript/message";
@@ -245,30 +247,59 @@ function MemberPicker({
   );
 }
 
+/** What `publish_artifact` returns in its result's `details`. */
+function publishedArtifact(block: ToolBlock) {
+  if (block.name !== "publish_artifact" || block.status !== "completed")
+    return undefined;
+  const { artifactId, title, version } = (block.details ?? {}) as {
+    artifactId?: unknown;
+    title?: unknown;
+    version?: unknown;
+  };
+  return typeof artifactId === "string" &&
+    typeof title === "string" &&
+    typeof version === "number"
+    ? { artifactId, title, version }
+    : undefined;
+}
+
 function ToolActivity({ block }: { block: ToolBlock }) {
   // The arguments are a JSON object; the header shows what the call is *doing*, which is the first
   // thing worth quoting out of it (lib/tool-summary.ts).
   const summary = summarizeArgs(block.input);
+  const artifact = publishedArtifact(block);
   return (
-    <ToolCard
-      tool={block.name}
-      summary={summary.length > 0 ? summary : undefined}
-      status={block.status}
-      statusLabel={activityText[block.status]}
-    >
-      {block.input === undefined || block.input === null ? null : (
-        <ToolCardBlock label={translate("chat:tools.arguments")}>
-          {typeof block.input === "string"
-            ? block.input
-            : JSON.stringify(block.input, null, 2)}
-        </ToolCardBlock>
+    <>
+      <ToolCard
+        tool={block.name}
+        summary={summary.length > 0 ? summary : undefined}
+        status={block.status}
+        statusLabel={activityText[block.status]}
+      >
+        {block.input === undefined || block.input === null ? null : (
+          <ToolCardBlock label={translate("chat:tools.arguments")}>
+            {typeof block.input === "string"
+              ? block.input
+              : JSON.stringify(block.input, null, 2)}
+          </ToolCardBlock>
+        )}
+        {block.output === undefined ? null : (
+          <ToolCardBlock label={translate("chat:tools.result")}>
+            {block.output}
+          </ToolCardBlock>
+        )}
+      </ToolCard>
+      {artifact === undefined ? null : (
+        <ActivityRefCard
+          value={{
+            kind: "artifact",
+            id: artifact.artifactId,
+            title: artifact.title,
+            number: artifact.version,
+          }}
+        />
       )}
-      {block.output === undefined ? null : (
-        <ToolCardBlock label={translate("chat:tools.result")}>
-          {block.output}
-        </ToolCardBlock>
-      )}
-    </ToolCard>
+    </>
   );
 }
 
@@ -525,6 +556,9 @@ const Turn = memo(
       "tasks",
     ] as const);
     if (message.kind === "system") return <GroupNotice message={message} />;
+    if (message.kind === "task_draft")
+      return <TaskDraftRow message={message} />;
+    if (message.kind === "task_card") return <TaskCardRow message={message} />;
     if (message.author === "user")
       return (
         <>

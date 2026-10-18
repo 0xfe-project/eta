@@ -49,7 +49,8 @@ import {
   useConversation,
   useConversationActions,
 } from "@/queries/conversations";
-import { useTasks, useUpdateTask } from "@/queries/tasks";
+import { useLinkTask, useTasks } from "@/queries/tasks";
+import { wireErrorMessage } from "@/queries/wire";
 import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar, AgentStatus } from "./agent-identity";
 import { InspectButton } from "./inspect-button";
@@ -63,7 +64,7 @@ import { useGroups, useOpenGroup } from "./use-groups";
 import { useChosenProject, useResolveProject } from "./use-project-choice";
 import { useWorkspaceStore } from "./workspace-store";
 
-const onError = (error: Error) => toast.error(error.message);
+const onError = (error: Error) => toast.error(wireErrorMessage(error));
 
 /** What a member is doing, in the vocabulary of an agent's status. */
 function memberStatus(status: MemberStatus): AgentStatusName {
@@ -497,8 +498,8 @@ export function GroupMembers() {
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
   const [decided, setDecided] = useState("");
-  const { data: board } = useTasks();
-  const updateTask = useUpdateTask();
+  const { tasks: board } = useTasks();
+  const linkTaskCall = useLinkTask();
   const [linkTask, setLinkTask] = useState(false);
   const [invite, setInvite] = useState(false);
   const [removing, setRemoving] = useState<string>();
@@ -506,7 +507,7 @@ export function GroupMembers() {
   const setFocusedAgent = useWorkspaceStore((state) => state.setFocusedAgent);
   if (!group) return null;
   const members = group.participants;
-  const linked = board?.tasks.filter((t) => t.group_id === group.id) ?? [];
+  const linked = board.filter((t) => t.conversationId === group.id);
   return (
     <section aria-label={translateText("groups.members.title")}>
       <div className="mb-2 flex items-center gap-1">
@@ -719,10 +720,10 @@ export function GroupMembers() {
                 <Button
                   size="xs"
                   variant="ghost"
-                  disabled={updateTask.isPending}
+                  disabled={linkTaskCall.isPending}
                   onClick={() =>
-                    updateTask.mutate(
-                      { id: t.id, changes: { group_id: "" } },
+                    linkTaskCall.mutate(
+                      { taskId: t.id, conversationId: null },
                       { onError },
                     )
                   }
@@ -731,21 +732,21 @@ export function GroupMembers() {
                 </Button>
               </div>
             ))}
-            {board?.tasks
-              .filter((t) => t.group_id !== group.id)
+            {board
+              .filter((t) => t.conversationId !== group.id)
               .map((t) => (
                 <Button
                   key={t.id}
                   variant="ghost"
                   className="justify-start truncate"
-                  disabled={updateTask.isPending || group.archived}
+                  disabled={linkTaskCall.isPending || group.archived}
                   aria-label={translateText("groups.relatedTasks.linkLabel", {
                     number: t.number,
                     title: t.title,
                   })}
                   onClick={() =>
-                    updateTask.mutate(
-                      { id: t.id, changes: { group_id: group.id } },
+                    linkTaskCall.mutate(
+                      { taskId: t.id, conversationId: group.id },
                       { onError },
                     )
                   }
@@ -863,11 +864,11 @@ export function GroupArtifacts() {
     "settings",
   ] as const);
   const { current: group } = useGroups();
-  const { data } = useArtifacts();
+  const { artifacts: all, loaded } = useArtifacts();
   if (!group) return null;
-  const artifacts = data?.artifacts.filter((a) => a.group_id === group.id);
-  if (!data) return <Loading rows={2} />;
-  if (!artifacts?.length)
+  const artifacts = all.filter((a) => a.conversationId === group.id);
+  if (!loaded) return <Loading rows={2} />;
+  if (!artifacts.length)
     return (
       <Empty
         icon={AppWindowIcon}

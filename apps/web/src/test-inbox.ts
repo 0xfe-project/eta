@@ -9,8 +9,8 @@ import type {
   UsageWindow,
 } from "@eta/client-contracts";
 import type { ProductSeed } from "@/test-product";
-import { conversationSections } from "@/test-product";
-import { FakeHost } from "@/test-wire";
+import type { FakeHost } from "@/test-wire";
+import { buildProductHost } from "@/test-product";
 
 export const interactionView = (
   fields: Partial<InteractionView> & { id: string },
@@ -77,36 +77,19 @@ export interface SurfaceSeed extends ProductSeed {
  * memory when seeded; installed as the page's connection and connected.
  */
 export function surfaceHost(seed: SurfaceSeed = {}): FakeHost {
-  const mounted = ["agents", "machines", "projects", "conversations", "inbox"];
-  const host = new FakeHost()
-    .target("agents", { list: seed.agents ?? [] }, { eager: true })
-    .target("machines", { list: seed.machines ?? [] }, { eager: true })
-    .target("projects", { list: seed.projects ?? [] }, { eager: true })
-    .target(
-      "conversations",
-      { list: seed.conversations ?? [] },
-      { eager: true },
-    )
-    .target(
-      "inbox",
-      {
-        list: seed.interactions ?? [],
-        approvals: { tools: seed.approvals ?? [] },
-      },
-      { eager: true },
-    );
-  if (seed.usage !== undefined) {
-    mounted.push("usage");
-    host.target("usage", { agents: seed.usage, models: [], days: [] });
-  }
+  const mounted = ["inbox"];
+  if (seed.usage !== undefined) mounted.push("usage");
   if (seed.memory === true) mounted.push("memory");
-  host.plugins(mounted.map((name) => ({ name, source: "bundled" as const })));
-  for (const summary of seed.conversations ?? []) {
-    host.target(
-      `conversations.${summary.id}`,
-      conversationSections(summary, seed.messages?.[summary.id]),
-    );
-  }
+  const host = buildProductHost(seed, mounted).target(
+    "inbox",
+    {
+      list: seed.interactions ?? [],
+      approvals: { tools: seed.approvals ?? [] },
+    },
+    { eager: true },
+  );
+  if (seed.usage !== undefined)
+    host.target("usage", { agents: seed.usage, models: [], days: [] });
   host.install();
   host.hello();
   return host;

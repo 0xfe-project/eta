@@ -15,28 +15,23 @@ const closed = new Set<string>(["done", "cancelled"]);
 /** Why a task waits for the user, or null. */
 function taskReason(task: Task): string | null {
   if (closed.has(task.status)) return null;
-  // A run an eta agent asked for (#99), once the board has that status.
-  if ((task.run_status as string | null) === "awaiting_confirmation")
-    return translate("overview:attention.awaitingRemoteAssignment");
-  if (task.run_status === "failed")
-    return translate("overview:attention.remoteRunFailed");
   if (task.status === "blocked") return translate("tasks:status.blocked");
   if (task.status === "in_review") return translate("tasks:status.inReview");
-  if (task.assignee.kind === "user")
+  if (task.assignee === "user")
     return translate("overview:attention.assignedToYou");
   return null;
 }
 
 function routineReason(routine: RoutineSummary): string | null {
   const parts = [
-    routine.unseen_reports
+    routine.unseenReports
       ? translate("overview:attention.newReports", {
-          count: routine.unseen_reports,
+          count: routine.unseenReports,
         })
       : null,
-    routine.unseen_failures
+    routine.unseenFailures
       ? translate("overview:attention.failedRuns", {
-          count: routine.unseen_failures,
+          count: routine.unseenFailures,
         })
       : null,
   ].filter(Boolean);
@@ -46,16 +41,16 @@ function routineReason(routine: RoutineSummary): string | null {
 /** The things waiting for the user, and how many in all. */
 export function useAttention() {
   const interactions = usePendingInteractions().length;
-  const { data: board } = useTasks();
-  const { data: routines } = useRoutines();
-  const tasks = (board?.tasks ?? []).flatMap((task) => {
+  const { tasks: board } = useTasks();
+  const { routines } = useRoutines();
+  const tasks = board.flatMap((task) => {
     const reason = taskReason(task);
-    const alert = task.run_status === "failed" || task.status === "blocked";
+    const alert = task.status === "blocked";
     return reason ? [{ task, reason, alert }] : [];
   });
-  const waiting = (routines ?? []).flatMap((routine) => {
+  const waiting = routines.flatMap((routine) => {
     const reason = routineReason(routine);
-    const alert = routine.unseen_failures > 0;
+    const alert = routine.unseenFailures > 0;
     return reason ? [{ routine, reason, alert }] : [];
   });
   return {

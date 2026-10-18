@@ -20,12 +20,15 @@ export function ModelSelect({
   value,
   models,
   invalid,
+  defaultLabel,
   ...props
 }: Omit<React.ComponentProps<typeof Select>, "children"> & {
   value: string;
   /** Undefined while they load. */
   models: Model[] | undefined;
   invalid?: boolean;
+  /** Offers "no model of its own" (the empty value) under this name, instead of asking to pick. */
+  defaultLabel?: string;
 }) {
   const { t: translateText } = useTranslation([
     "agents",
@@ -43,10 +46,11 @@ export function ModelSelect({
       {...props}
       disabled={loading || props.disabled}
     >
-      <SelectOption value="" disabled>
-        {loading
-          ? translateText("models.loading")
-          : translateText("models.select")}
+      <SelectOption value="" disabled={defaultLabel === undefined}>
+        {defaultLabel ??
+          (loading
+            ? translateText("models.loading")
+            : translateText("models.select"))}
       </SelectOption>
       {value && !known ? (
         <SelectOption value={value} disabled>

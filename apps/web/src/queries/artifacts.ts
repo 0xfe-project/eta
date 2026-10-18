@@ -1,65 +1,46 @@
-import type { ArtifactVersion } from "@/api/control-plane.gen";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { controlPlane, unwrap } from "@/lib/api";
+import type {
+  ArtifactArgs,
+  ArtifactResults,
+  ArtifactVersionView,
+  ArtifactView,
+} from "@eta/client-contracts";
+import { useListTarget, useWireMutation } from "@/queries/wire";
 
-// Static sites agents publish (/api/v1/artifacts; apps/control-plane
-// internal/artifacts). A version's preview_url works for an hour, so an
-// artifact is read again whenever it is opened.
+// Static sites agents publish, on the wire: the `artifacts` target (a `list`, not eager) and the
+// actions that share, unshare, delete and ask for an address to preview. Publishing is the
+// agent's `publish_artifact` tool, not an action.
 
-export type { ArtifactVersion };
+export type ArtifactVersion = ArtifactVersionView;
 
-const key = (id: string) => ["artifacts", id] as const;
-
-export function useArtifact(id: string, enabled: boolean) {
-  return useQuery({
-    queryKey: key(id),
-    queryFn: async ({ signal }) =>
-      unwrap(
-        controlPlane.GET("/api/v1/artifacts/{artifact_id}", {
-          params: { path: { artifact_id: id } },
-          signal,
-        }),
-      ),
-    enabled,
-    staleTime: 0,
-    // Previews stay valid for an hour; read new addresses well before.
-    refetchInterval: 30 * 60_000,
-  });
-}
-
-/** Shares a version publicly, or revokes its link. */
-export function useShareArtifact(id: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ version, share }: { version: number; share: boolean }) => {
-      const params = { path: { artifact_id: id, number: version } };
-      return share
-        ? unwrap(
-            controlPlane.PUT(
-              "/api/v1/artifacts/{artifact_id}/versions/{number}/share",
-              { params },
-            ),
-          )
-        : unwrap(
-            controlPlane.DELETE(
-              "/api/v1/artifacts/{artifact_id}/versions/{number}/share",
-              { params },
-            ),
-          );
-    },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: key(id) }),
-  });
-}
-
-/** Where a version's ZIP downloads from, as the user. */
-export const archiveURL = (id: string, version: number) =>
-  `/api/v1/artifacts/${id}/versions/${version}/archive`;
-
+/** Every artifact, with its versions newest first. */
 export function useArtifacts() {
-  return useQuery({
-    queryKey: ["artifacts"],
-    queryFn: async ({ signal }) =>
-      unwrap(controlPlane.GET("/api/v1/artifacts", { signal })),
-    refetchInterval: 15_000,
-  });
+  const { items, loaded, error } = useListTarget<ArtifactView>("artifacts");
+  return { artifacts: items, loaded, error };
+}
+
+/**
+ * An address to load a version from in a sandboxed frame. Asked for each time a version is opened
+ * and never kept: the capability in it works for an hour and then does not.
+ */
+export function usePreview() {
+  return useWireMutation<ArtifactArgs["preview"], ArtifactResults["preview"]>(
+    "artifacts",
+    "preview",
+  );
+}
+
+/** Makes a version public (the same link while it stays shared). */
+export function useShareArtifact() {
+  return useWireMutation<ArtifactArgs["share"], ArtifactResults["share"]>(
+    "artifacts",
+    "share",
+  );
+}
+
+/** Ends a version's public link for good. */
+export function useUnshareArtifact() {
+  return useWireMutation<ArtifactArgs["unshare"], ArtifactResults["unshare"]>(
+    "artifacts",
+    "unshare",
+  );
 }

@@ -1,198 +1,114 @@
 import type {
-  Brief,
-  CronSchedule,
-  DailySchedule,
-  HourlySchedule,
-  ListedRun,
-  Routine,
-  RoutineIn,
+  BriefView,
+  RoutineArgs,
+  RoutineInfo,
+  RoutineResults,
+  RoutineSchedule,
+  RoutineSections,
   RoutineSummary,
-  Run,
-  WeeklySchedule,
-} from "@/api/routines.gen";
-import {
-  queryOptions,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-import { ApiError, routinesApi, unwrap } from "@/lib/api";
+  RunListing,
+  RunStatus,
+  RunView,
+} from "@eta/client-contracts";
+import { useMemo } from "react";
+import { useListTarget, useTarget, useWireMutation } from "@/queries/wire";
 
-// Routines (#23): agents that run on a schedule and leave a report
-// (/api/routines/v1; the control plane's internal/routineapi). Every type
-// comes from routines' OpenAPI document. The list is in summary (no reports, no
-// briefs); a routine's page is fetched when it is opened.
+// Routines on the wire: the `routines` target (an eager `list`, each routine with its latest runs)
+// and one `routines.<id>` target per routine (`info`, `briefs`, `runs` in full, `handoff`).
+// Nothing polls: a run that ends, a brief being revised and the clock's next time arrive as state.
 
-export type { ListedRun, Routine, RoutineSummary, Run };
-export type Schedule =
-  | DailySchedule
-  | WeeklySchedule
-  | HourlySchedule
-  | CronSchedule;
-export type RunStatus = Run["status"];
-export type BriefVersion = Brief;
-/** The document the web generates from lags the host: `group_id` is served, not yet typed. */
-export type RoutineInput = RoutineIn & { group_id?: string };
-
-const keys = {
-  all: ["routines"] as const,
-  one: (id: string) => ["routines", id] as const,
+export type {
+  RunListing as ListedRun,
+  RoutineSummary,
+  RunView as Run,
+  RunStatus,
+  RoutineSchedule as Schedule,
 };
-
-// Faster while something is happening: a run, or a brief being revised.
-const POLL_BUSY = 3000;
-const POLL_IDLE = 30_000;
-
-const routinesQueryOptions = queryOptions({
-  queryKey: keys.all,
-  queryFn: async ({ signal }) =>
-    (await unwrap(routinesApi.GET("/api/routines/v1/routines", { signal })))
-      .routines,
-  refetchInterval: (query) =>
-    (query.state.data ?? []).some(
-      (routine) => routine.runs[0]?.status === "running" || routine.revising,
-    )
-      ? POLL_BUSY
-      : POLL_IDLE,
-});
+export type BriefVersion = BriefView;
+/** A routine with everything its own page shows. */
+export type Routine = RoutineInfo & Omit<RoutineSections, "info">;
 
 export function useRoutines() {
-  return useQuery(routinesQueryOptions);
+  const { items, loaded, error } = useListTarget<RoutineSummary>("routines");
+  return { routines: items, loaded, error };
 }
 
-/** A routine's page; null once it is gone. */
+/** A routine's page. `missing`: the eager list has loaded and has no such routine. */
 export function useRoutine(id: string | null) {
-  return useQuery({
-    queryKey: keys.one(id ?? ""),
-    queryFn: async ({ signal }) => {
-      try {
-        return await unwrap(
-          routinesApi.GET("/api/routines/v1/routines/{routine_id}", {
-            params: { path: { routine_id: id! } },
-            signal,
-          }),
-        );
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 404) return null;
-        throw error;
-      }
-    },
-    enabled: Boolean(id),
-    refetchInterval: (query) => {
-      const routine = query.state.data;
-      const busy =
-        routine?.runs[0]?.status === "running" ||
-        routine?.runs.some((run) =>
-          run.feedback.some(
-            (f) => f.brief_version === null && !f.revision_failed,
-          ),
-        );
-      return busy ? POLL_BUSY : POLL_IDLE;
-    },
-  });
-}
-
-function useRoutineMutation<T, R = unknown>(call: (input: T) => Promise<R>) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: call,
-    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.all }),
-  });
+  const { routines, loaded, error } = useRoutines();
+  const state = useTarget(id === null ? undefined : `routines.${id}`);
+  const info = state?.sections.info as RoutineInfo | undefined;
+  const briefs = state?.sections.briefs as BriefView[] | undefined;
+  const runs = state?.sections.runs as RunView[] | undefined;
+  const handoff = state?.sections.handoff as Routine["handoff"] | undefined;
+  const routine = useMemo<Routine | undefined>(
+    () =>
+      info === undefined || briefs === undefined || runs === undefined
+        ? undefined
+        : { ...info, briefs, runs, handoff: handoff ?? null },
+    [info, briefs, runs, handoff],
+  );
+  return {
+    routine,
+    missing:
+      id !== null &&
+      routine === undefined &&
+      loaded &&
+      !routines.some((item) => item.id === id),
+    error,
+  };
 }
 
 /**
- * Records that the user saw the routine's finished runs (they opened it):
- * its new reports and failures stop waiting for them.
+ * Records that the user saw the routine's finished runs (they opened it): its new reports and
+ * failures stop waiting for them.
  */
 export function useMarkRoutineSeen() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      unwrap(
-        routinesApi.POST("/api/routines/v1/routines/{routine_id}/seen", {
-          params: { path: { routine_id: id } },
-        }),
-      ),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: keys.all, exact: true }),
-  });
-}
-
-export function useSetRoutineEnabled() {
-  return useRoutineMutation(
-    ({ id, enabled }: { id: string; enabled: boolean }) =>
-      unwrap(
-        routinesApi.PATCH("/api/routines/v1/routines/{routine_id}", {
-          params: { path: { routine_id: id } },
-          body: { enabled },
-        }),
-      ),
+  return useWireMutation<RoutineArgs["seen"], RoutineResults["seen"]>(
+    "routines",
+    "seen",
   );
 }
 
-/** Creates (id null) or edits a routine; resolves to its id. */
-export function useSaveRoutine() {
-  return useRoutineMutation(
-    async ({ id, input }: { id: string | null; input: RoutineInput }) =>
-      (id
-        ? await unwrap(
-            routinesApi.PATCH("/api/routines/v1/routines/{routine_id}", {
-              params: { path: { routine_id: id } },
-              body: input,
-            }),
-          )
-        : await unwrap(
-            routinesApi.POST("/api/routines/v1/routines", { body: input }),
-          )
-      ).id,
+export function useCreateRoutine() {
+  return useWireMutation<RoutineArgs["create"], RoutineResults["create"]>(
+    "routines",
+    "create",
+  );
+}
+
+/** Edits a routine, pauses it, or resumes it: whatever fields the call carries. */
+export function useUpdateRoutine() {
+  return useWireMutation<RoutineArgs["update"], RoutineResults["update"]>(
+    "routines",
+    "update",
   );
 }
 
 export function useDeleteRoutine() {
-  return useRoutineMutation((id: string) =>
-    unwrap(
-      routinesApi.DELETE("/api/routines/v1/routines/{routine_id}", {
-        params: { path: { routine_id: id } },
-      }),
-    ),
+  return useWireMutation<RoutineArgs["delete"], RoutineResults["delete"]>(
+    "routines",
+    "delete",
   );
 }
 
 export function useRunRoutineNow() {
-  return useRoutineMutation((id: string) =>
-    unwrap(
-      routinesApi.POST("/api/routines/v1/routines/{routine_id}/run", {
-        params: { path: { routine_id: id } },
-      }),
-    ),
+  return useWireMutation<RoutineArgs["run"], RoutineResults["run"]>(
+    "routines",
+    "run",
   );
 }
 
 export function useRestoreBrief() {
-  return useRoutineMutation(
-    ({ id, version }: { id: string; version: number }) =>
-      unwrap(
-        routinesApi.POST(
-          "/api/routines/v1/routines/{routine_id}/briefs/{version}/restore",
-          {
-            params: { path: { routine_id: id, version } },
-          },
-        ),
-      ),
-  );
+  return useWireMutation<
+    RoutineArgs["restoreBrief"],
+    RoutineResults["restoreBrief"]
+  >("routines", "restoreBrief");
 }
 
 export function useSendFeedback() {
-  return useRoutineMutation(
-    ({ id, runId, text }: { id: string; runId: string; text: string }) =>
-      unwrap(
-        routinesApi.POST(
-          "/api/routines/v1/routines/{routine_id}/runs/{run_id}/feedback",
-          {
-            params: { path: { routine_id: id, run_id: runId } },
-            body: { text },
-          },
-        ),
-      ),
+  return useWireMutation<RoutineArgs["feedback"], RoutineResults["feedback"]>(
+    "routines",
+    "feedback",
   );
 }

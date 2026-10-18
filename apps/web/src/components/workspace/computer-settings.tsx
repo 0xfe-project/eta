@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import type { Computer, ComputerRuntime } from "@/queries/tasks";
+import type { Computer, ComputerRuntime } from "@/queries/computers";
 import { CopyIcon } from "@phosphor-icons/react/Copy";
 import { DesktopIcon } from "@phosphor-icons/react/Desktop";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
@@ -45,15 +45,16 @@ import {
 import { listSeparator, translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
+  providerLabel,
+  runtimeLabel,
   useAddComputer,
   useApproveRuntime,
   useComputers,
   useDeleteComputer,
   useRenewInstall,
   useSetComputerLimit,
-} from "@/queries/tasks";
+} from "@/queries/computers";
 import { when } from "./routine-format";
-import { providerLabel, runtimeLabel } from "./task-format";
 
 // Remote computers (#45): the user's other machines, whose Paseo and Herdr
 // agents work on the task board through the agenvo relay.
