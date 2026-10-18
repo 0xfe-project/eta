@@ -18,7 +18,6 @@ import {
   usePendingInteractions,
   useSetGoal,
   useStopReply,
-  useStreamLost,
 } from "@/queries/chat";
 import { useGroupActions } from "@/queries/groups";
 import {
@@ -27,6 +26,7 @@ import {
   useOutboxActions,
   useOutboxDelivery,
 } from "@/queries/outbox";
+import { useConnectionLost } from "@/queries/wire";
 import { ChatHeader, MobileChatHeader } from "./agent-bar";
 import { AgentEditor } from "./agent-editor";
 import { BottomNav } from "./app-shell";
@@ -80,7 +80,7 @@ export function Workspace({
   const { agents, openEditor } = useAgents();
   const { current: group, groupId, groups } = useGroups();
   const history = useGroupMessages(group?.id);
-  const connectionLost = useStreamLost((s) => s.lost);
+  const connectionLost = useConnectionLost();
   const draftKey = group?.id ?? "";
   const draft = useOutbox((s) => s.drafts[draftKey] ?? EMPTY_DRAFT);
   const setDraft = (next: Draft) =>
