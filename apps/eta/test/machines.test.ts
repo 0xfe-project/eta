@@ -90,6 +90,25 @@ describe("enrolling", () => {
     }
   });
 
+  it("refuses what is not an enrol request, and a body that is too big", async () => {
+    const w = await world();
+    for (const body of ["null", "[]", "not json", '"text"']) {
+      const response = await fetch(`${base(w.host.port)}/machines/enroll`, {
+        method: "POST",
+        body,
+      });
+      expect(response.status).toBe(400);
+    }
+    const big = await fetch(`${base(w.host.port)}/machines/enroll`, {
+      method: "POST",
+      body: JSON.stringify({ code: "x".repeat(10_000) }),
+    });
+    expect(big.status).toBe(413);
+    expect((await fetch(`${base(w.host.port)}/machines/enroll`)).status).toBe(
+      405,
+    );
+  });
+
   it("stops listening after too many bad codes", async () => {
     const w = await world();
     const bad = {
