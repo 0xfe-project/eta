@@ -1,18 +1,16 @@
-"""HTTP surface, for runtimes under /memory and for the browser under /api/memory.
+"""HTTP surface of the memory sidecar, for the eta host.
 
-It is the memory bundle's service: runtimes reach it as /bundles/memory/*
-through the runtime gateway, the browser as /api/bundles/memory/* through
-the gateway, which take /bundles off (docs/architecture/bundles.md#服务).
-The runtime gateway authenticates the runtime and sets X-AXP-Agent-Id; that
-header is the only identity there, so an agent reaches nothing but its own
-memories.
+The host is its only client and listens beside it on loopback; the network is
+the trust boundary. The host names the agent in X-AXP-Agent-Id and the
+conversation in X-AXP-Group-Id; that header is the only identity on the
+agent-side routes, so an agent reaches nothing but its own memories.
 
   /memory/mcp      MCP (streamable HTTP): remember, recall, forget
-  /memory/recall   for the prompt hook: memories relevant to a prompt
-  /memory/capture  for the stop hook: a finished turn, remembered later
+  /memory/recall   before a run: memories relevant to what the agent is told
+  /memory/capture  after a run: a finished turn, remembered later
 
-The browser's gateway forwards only /api/memory, where the agent is named in
-the path: the user sees and edits every agent's memories.
+The user's side names the agent in the path: the user sees and edits every
+agent's memories.
 
   /api/memory/v1/agents/{agent}/memories       GET (?q= searches), POST
   /api/memory/v1/agents/{agent}/memories/{id}  DELETE
@@ -40,7 +38,7 @@ RECALL_MIN_SCORE = 0.2
 MAX_TEXT = 8000
 CAPTURE_BACKLOG = 1000
 SEARCH_LIMIT = 50
-# The bundle's service contract (bundle.json's protocol) and this service's version.
+# What /.well-known/axp-service says this service speaks, and its version.
 PROTOCOL = "axp.memory/1"
 VERSION = "0.1.0"
 
@@ -51,8 +49,8 @@ def create_app(provider: MemoryProvider):
         streamable_http_path="/memory/mcp",
         stateless_http=True,
         json_response=True,
-        # Reached through the runtime gateway under its own host name; the
-        # network is the trust boundary.
+        # Reached by the host on loopback under any host name; the network is
+        # the trust boundary.
         transport_security=TransportSecuritySettings(
             enable_dns_rebinding_protection=False
         ),
@@ -62,7 +60,7 @@ def create_app(provider: MemoryProvider):
     def agent_of(ctx: Context) -> str:
         agent = _agent(ctx.request_context.request)
         if not agent:
-            raise PermissionError("not reached through the runtime gateway")
+            raise PermissionError("no agent named in X-AXP-Agent-Id")
         return agent
 
     # Provider calls block (database, embedding); they run in worker threads.
@@ -133,7 +131,6 @@ def create_app(provider: MemoryProvider):
         if messages and not captures.put(
             agent,
             messages,
-            body.get("model"),
             group_id=request.headers.get("X-AXP-Group-Id") or None,
         ):
             return _error(503, "BUSY")
@@ -188,7 +185,7 @@ def create_app(provider: MemoryProvider):
     async def up(_: Request) -> Response:
         return Response(status_code=204)
 
-    # What AXP checks the bundle's service against (bundle.json's protocol).
+    # Says what this is, for a caller that wants to know before it relies on it.
     @mcp.custom_route("/.well-known/axp-service", methods=["GET"])
     async def describe(_: Request) -> Response:
         return JSONResponse({"protocol": PROTOCOL, "version": VERSION})
@@ -201,7 +198,7 @@ def create_app(provider: MemoryProvider):
 class _Captures:
     """Finished turns, remembered one at a time in the background.
 
-    Extraction takes a model call; the stop hook that sends a turn must not
+    Extraction takes a model call; the request that sends a turn must not
     wait for it. Turns still queued when the service stops are lost.
     """
 
@@ -214,26 +211,24 @@ class _Captures:
         self,
         agent: str,
         messages: list[dict],
-        model: str | None,
         *,
         group_id=None,
     ) -> bool:
         try:
-            self.queue.put_nowait((agent, messages, model, group_id))
+            self.queue.put_nowait((agent, messages, group_id))
         except queue.Full:
             return False
         return True
 
     def _run(self) -> None:
         while True:
-            agent, messages, model, group_id = self.queue.get()
+            agent, messages, group_id = self.queue.get()
             try:
                 added = self.provider.add(
                     agent,
                     messages,
                     source="conversation",
                     infer=True,
-                    model=model,
                     group_id=group_id,
                 )
                 logger.info("Remembered %d facts for agent %s", len(added), agent)

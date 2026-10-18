@@ -1,13 +1,11 @@
 """The mem0 provider: mem0 as a library over PostgreSQL (pgvector).
 
-Facts are extracted by the agent's own model through the LLM gateway and
-embedded locally on the CPU (fastembed), so the service holds no credentials.
+Facts are extracted by the model the service is configured with (an
+OpenAI-compatible API) and embedded locally on the CPU (fastembed).
 """
 
-import contextvars
 import os
 import tempfile
-import threading
 import uuid
 from datetime import UTC, datetime
 
@@ -16,7 +14,6 @@ from datetime import UTC, datetime
 os.environ.setdefault("MEM0_TELEMETRY", "false")
 os.environ.setdefault("MEM0_DIR", os.path.join(tempfile.gettempdir(), "mem0"))
 
-import httpx  # noqa: E402
 from mem0 import Memory as Mem0  # noqa: E402
 from openai import OpenAI  # noqa: E402
 from psycopg_pool import ConnectionPool  # noqa: E402
@@ -27,16 +24,9 @@ from .provider import Memory  # noqa: E402
 TABLE = "memories"
 LIST_LIMIT = 1000
 
-# The agent a model request is made for; the LLM gateway requires it.
-_agent = contextvars.ContextVar[str]("agent")
-
-
-def _name_agent(request: httpx.Request) -> None:
-    request.headers["X-AXP-Agent-Id"] = _agent.get()
-
 
 class Mem0Provider:
-    def __init__(self, database_url: str, llm_url: str, token: str):
+    def __init__(self, database_url: str, llm_url: str, api_key: str, model: str):
         self.memory = Mem0.from_config(
             {
                 "vector_store": {
@@ -67,21 +57,15 @@ class Mem0Provider:
                 "custom_instructions": (
                     "Write every fact in the language the user wrote in."
                 ),
-                # The client is replaced below; mem0 insists on a key.
-                "llm": {"provider": "openai", "config": {"api_key": "unused"}},
+                "llm": {
+                    "provider": "openai",
+                    "config": {"api_key": api_key, "model": model},
+                },
             }
         )
-        # Through the runtime gateway with the bundle's token, which may call
-        # models; the agent header says whose usage the extraction is.
-        self.memory.llm.client = OpenAI(
-            base_url=llm_url,
-            api_key=token,
-            http_client=httpx.Client(
-                event_hooks={"request": [_name_agent]}, timeout=120
-            ),
-        )
-        # The model is set per extraction.
-        self._extracting = threading.Lock()
+        # mem0 reads the endpoint from the environment; this client is told
+        # where the model is, and waits longer than a default request would.
+        self.memory.llm.client = OpenAI(base_url=llm_url, api_key=api_key, timeout=120)
 
     def add(
         self,
@@ -90,32 +74,8 @@ class Mem0Provider:
         *,
         source,
         infer,
-        model=None,
         group_id=None,
     ):
-        if not infer:
-            return self._add(
-                agent_id,
-                messages,
-                source,
-                infer=False,
-                group_id=group_id,
-            )
-        with self._extracting:
-            self.memory.llm.config.model = model
-            token = _agent.set(agent_id)
-            try:
-                return self._add(
-                    agent_id,
-                    messages,
-                    source,
-                    infer=True,
-                    group_id=group_id,
-                )
-            finally:
-                _agent.reset(token)
-
-    def _add(self, agent_id, messages, source, *, infer, group_id):
         # mem0 stamps created_at unless the metadata has it; stamping it here
         # lets the new memories carry it, which mem0's add result does not.
         created_at = datetime.now(UTC).isoformat()
