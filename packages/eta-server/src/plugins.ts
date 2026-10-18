@@ -181,6 +181,8 @@ export class PluginManager {
   private readonly watchIntervalMs: number;
   private readonly onReload: ((plugin: MountedPlugin) => void) | undefined;
   private watcher: ReturnType<typeof setInterval> | undefined;
+  /** Whether a check started by the watch is still running. */
+  private polling = false;
 
   constructor(options: PluginManagerOptions) {
     this.modulesDir = options.modulesDir;
@@ -201,9 +203,18 @@ export class PluginManager {
   watch(ctx: Context): void {
     if (this.watchIntervalMs <= 0 || this.watcher !== undefined) return;
     this.watcher = setInterval(() => {
-      void this.pollForChanges(ctx).catch((error: unknown) =>
-        this.warn(`[eta-server] plugin watch: ${String(error)}`),
-      );
+      // One check at a time. A check is asynchronous (it reads files and may reload), and on a
+      // busy machine it outlasts the interval: a second one starting meanwhile would see the
+      // same edit as new and reload the plugin again, from a list that no longer holds it.
+      if (this.polling) return;
+      this.polling = true;
+      void this.pollForChanges(ctx)
+        .catch((error: unknown) =>
+          this.warn(`[eta-server] plugin watch: ${String(error)}`),
+        )
+        .finally(() => {
+          this.polling = false;
+        });
     }, this.watchIntervalMs);
     (this.watcher as { unref?: () => void }).unref?.();
   }
