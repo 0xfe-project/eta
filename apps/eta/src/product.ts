@@ -131,6 +131,8 @@ export function createProduct(options: {
   timeline.failInterrupted(RESTART_TEXT);
   const interactions = new InteractionStore(db);
   interactions.expirePending();
+  // Settled questions are kept for 30 days, like usage; the ones just expired above are new.
+  interactions.prune();
   // Usage is kept for 30 days; what is older goes now, and again once a day while the host runs.
   const usage = new UsageStore(db);
   usage.prune();
