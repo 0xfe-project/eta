@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { useModelAvailability } from "@/queries/providers";
 import { DeleteAgentDialog } from "./agent-editor";
 import { AgentAvatar, AgentStatus } from "./agent-identity";
+import { UsageLine } from "./usage-line";
 import { useAgents } from "./use-agents";
 
 function AgentRow({ agent }: { agent: AgentView }) {
@@ -81,6 +82,7 @@ function AgentRow({ agent }: { agent: AgentView }) {
         >
           {instructions || translateText("fields.instructionsNotSet")}
         </span>
+        <UsageLine agentId={agent.id} />
       </button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

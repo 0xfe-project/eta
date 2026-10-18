@@ -10,12 +10,8 @@ import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { setWire } from "@/lib/wire";
-import {
-  agentView,
-  conversationView,
-  memberView,
-  productHost,
-} from "@/test-product";
+import { interactionView, surfaceHost } from "@/test-inbox";
+import { agentView, conversationView } from "@/test-product";
 import { Inbox } from "./inbox";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -23,39 +19,26 @@ import { useWorkspaceStore } from "./workspace-store";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-/** Members waiting on a question each: the conversation list says so, their sessions ask. */
+/** Pending questions, one per agent, each in its own group. */
 async function render(waits: { id: string; agent: string }[]) {
-  const host = productHost({
+  const host = surfaceHost({
     agents: [
       agentView({ id: "a1", name: "研究员" }),
       agentView({ id: "a2", name: "运维" }),
     ],
-    conversations: waits.map(({ id, agent }) =>
-      conversationView({
-        id: `g-${agent}`,
-        name: "群聊",
-        participants: [
-          memberView(agent, {
-            sessionId: `s-${id}`,
-            status: "waiting_for_input",
-          }),
-        ],
+    conversations: waits.map(({ agent }) =>
+      conversationView({ id: `g-${agent}`, name: "群聊" }),
+    ),
+    interactions: waits.map(({ id, agent }) =>
+      interactionView({
+        id,
+        agentId: agent,
+        conversationId: `g-${agent}`,
+        prompt: `tasks 请求确认\n${id}`,
       }),
     ),
   });
-  for (const { id } of waits) {
-    host.target(`sessions.s-${id}`, {
-      core: { session: `s-${id}`, running: true },
-      ask: {
-        pending: {
-          questionId: id,
-          question: `tasks 请求确认\n${id}`,
-          options: ["允许", "拒绝"],
-        },
-      },
-    });
-  }
-  host.handle("sessions.answer", () => ({ answered: true }));
+  host.handle("inbox.answer", () => ({ answered: true }));
   // The tasks and routines that wait for the user too: none.
   const queryClient = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity } },
@@ -109,14 +92,29 @@ describe("Inbox", () => {
     expect(items[1].textContent).toContain("运维");
   });
 
-  it("answers a question on the member's session", async () => {
+  it("answers a question on the inbox", async () => {
     const { container, host } = await render([{ id: "i1", agent: "a1" }]);
     await act(async () => button(container, "拒绝").click());
     await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
-    expect(host.calls.find((call) => call.action === "answer")?.args).toEqual({
-      session: "s-i1",
-      questionId: "i1",
-      response: { kind: "selection", selections: ["拒绝"] },
+    expect(host.calls).toEqual([
+      {
+        target: "inbox",
+        action: "answer",
+        args: {
+          id: "i1",
+          response: { kind: "selection", selections: ["拒绝"] },
+        },
+      },
+    ]);
+  });
+
+  it("declines a question with 放弃", async () => {
+    const { container, host } = await render([{ id: "i1", agent: "a1" }]);
+    await act(async () => button(container, "放弃").click());
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    expect(host.calls[0]?.args).toEqual({
+      id: "i1",
+      response: { kind: "none" },
     });
   });
 

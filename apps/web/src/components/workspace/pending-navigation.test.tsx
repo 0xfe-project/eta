@@ -9,6 +9,8 @@ import {
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { setWire } from "@/lib/wire";
+import { surfaceHost } from "@/test-inbox";
 import { PendingList } from "./attention";
 import { useShowLinkedView } from "./workspace-search";
 import { useWorkspaceStore } from "./workspace-store";
@@ -24,7 +26,6 @@ async function mount(ui: () => React.ReactNode, path: string) {
   const client = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity } },
   });
-  client.setQueryData(["chat"], { agents: [], interactions: [] });
   client.setQueryData(["tasks"], {
     assignees: [],
     tasks: [
@@ -91,9 +92,11 @@ const links = (container: HTMLElement) =>
 describe("pending navigation", () => {
   beforeEach(() => {
     useWorkspaceStore.setState({ mobilePanel: "chat" });
+    surfaceHost();
   });
   afterEach(() => {
     document.body.innerHTML = "";
+    setWire(undefined);
   });
 
   it("opens tasks and routines in the side panel beside the chat", async () => {

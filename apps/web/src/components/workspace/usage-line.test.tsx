@@ -1,65 +1,59 @@
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act } from "react";
-import { createRoot } from "react-dom/client";
+import { afterEach, describe, expect, it } from "@rstest/core";
+import { setWire } from "@/lib/wire";
+import { agentUsage, surfaceHost, totals } from "@/test-inbox";
+import { cleanup, flush, mount } from "@/test-render";
 import { UsageLine } from "./usage-line";
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-
-const counts = (total: number, requests = 1) => ({
-  requests,
-  failed: 0,
-  input_tokens: total,
-  output_tokens: 0,
-  cached_tokens: 0,
-  reasoning_tokens: 0,
-  total_tokens: total,
-});
-
-async function render(principal: string) {
-  const container = document.createElement("div");
-  document.body.append(container);
-  await act(async () =>
-    createRoot(container).render(
-      <QueryClientProvider client={new QueryClient()}>
-        <UsageLine principal={principal} />
-      </QueryClientProvider>,
-    ),
-  );
-  await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
-  return container;
-}
-
 describe("an agent's model usage", () => {
-  afterEach(() => {
-    document.body.innerHTML = "";
-    rstest.restoreAllMocks();
+  afterEach(async () => {
+    await cleanup();
+    setWire(undefined);
   });
 
   it("shows its tokens over 5 hours, a day and a week", async () => {
-    rstest.spyOn(globalThis, "fetch").mockImplementation(async () =>
-      Response.json({
-        usage: [
-          {
-            principal: "routine-r1",
-            windows: {
-              "5h": counts(800),
-              "24h": counts(25_000),
-              "7d": counts(1_230_000, 42),
-            },
-            models: [],
-            accounts: [],
-          },
-        ],
-      }),
-    );
-    const line = await render("routine-r1");
-    expect(line.textContent).toBe(
+    surfaceHost({
+      usage: [
+        agentUsage("a1", {
+          "5h": totals(800),
+          "24h": totals(25_000),
+          "7d": totals(1_230_000, 42),
+        }),
+      ],
+    });
+    const { container } = await mount(<UsageLine agentId="a1" />);
+    await flush();
+    expect(container.textContent).toBe(
       "模型用量：5 小时 800 · 24 小时 2.5万 · 7 天 123.0万 tokens（7 天 42 次请求）",
     );
-    const other = await render("agent-2");
-    expect(other.textContent).toBe("模型用量：近 7 天没有");
+  });
+
+  it("says so when the agent has none this week", async () => {
+    surfaceHost({ usage: [agentUsage("a1", { "7d": totals(10, 1) })] });
+    const { container } = await mount(<UsageLine agentId="a2" />);
+    await flush();
+    expect(container.textContent).toBe("模型用量：近 7 天没有");
+  });
+
+  it("draws nothing before the host has said anything", async () => {
+    surfaceHost();
+    const { container } = await mount(<UsageLine agentId="a1" />);
+    await flush();
+    expect(container.textContent).toBe("");
+  });
+
+  it("follows the host as usage moves", async () => {
+    const host = surfaceHost({
+      usage: [agentUsage("a1", { "7d": totals(10, 1) })],
+    });
+    const { container } = await mount(<UsageLine agentId="a1" />);
+    await flush();
+    host.set("usage", {
+      agents: [
+        agentUsage("a1", { "5h": totals(500, 2), "7d": totals(900, 3) }),
+      ],
+    });
+    await flush();
+    expect(container.textContent).toContain("5 小时 500");
+    expect(container.textContent).toContain("7 天 3 次请求");
   });
 });

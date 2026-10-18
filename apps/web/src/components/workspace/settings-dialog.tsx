@@ -16,6 +16,7 @@ import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useNeedsAttention } from "@/queries/providers";
 import { AgentSettings } from "./agent-settings";
+import { ApprovalSettings } from "./approval-settings";
 import { BundleSettings } from "./bundle-settings";
 import { ComputerSettings } from "./computer-settings";
 import { ConnectionSettings } from "./connection-settings";
@@ -190,6 +191,8 @@ export function SettingsDialog() {
               <BundleSettings />
             ) : settings.section === "providers" ? (
               <ProviderSettings />
+            ) : settings.section === "approvals" ? (
+              <ApprovalSettings />
             ) : settings.section === "connections" ? (
               <ConnectionSettings />
             ) : settings.section === "computers" ? (

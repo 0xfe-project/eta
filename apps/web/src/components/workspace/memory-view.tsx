@@ -1,4 +1,4 @@
-import type { Memory, MemorySource } from "@/queries/memory";
+import type { MemoryView as Memory, MemorySource } from "@/queries/memory";
 
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
 import { BrainIcon } from "@phosphor-icons/react/Brain";
@@ -59,8 +59,8 @@ function useDebounced(value: string) {
   return debounced;
 }
 
-function date(iso: string) {
-  return new Date(iso).toLocaleString(formatLocale(), {
+function date(epoch: number) {
+  return new Date(epoch).toLocaleString(formatLocale(), {
     year: "numeric",
     month: "numeric",
     day: "numeric",
@@ -126,7 +126,7 @@ function MemoryRow({ agentId, memory }: { agentId: string; memory: Memory }) {
   const forget = useForget(agentId);
   const { conversations } = useConversationList();
   const groupName = conversations.find(
-    (group) => group.id === memory.source_group_id,
+    (group) => group.id === memory.conversationId,
   )?.name;
   const textRef = useRef<HTMLParagraphElement>(null);
   const [expanded, setExpanded] = useState(false);
@@ -163,21 +163,21 @@ function MemoryRow({ agentId, memory }: { agentId: string; memory: Memory }) {
             {source.label}
           </span>
         ) : null}
-        {memory.source_group_id && (
+        {memory.conversationId && (
           <a
             className="max-w-32 truncate underline underline-offset-2"
-            href={`/?group=${encodeURIComponent(memory.source_group_id)}`}
+            href={`/?group=${encodeURIComponent(memory.conversationId)}`}
           >
             {groupName || translateText("source.group")}
           </a>
         )}
-        {memory.created_at ? (
+        {memory.createdAt ? (
           <time
-            dateTime={memory.created_at}
-            title={date(memory.created_at)}
+            dateTime={new Date(memory.createdAt).toISOString()}
+            title={date(memory.createdAt)}
             className="tabular-nums"
           >
-            {ago(memory.created_at)}
+            {ago(new Date(memory.createdAt).toISOString())}
           </time>
         ) : null}
         {long ? (
