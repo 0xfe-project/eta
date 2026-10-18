@@ -37,6 +37,7 @@ export {
   type ProvidersPluginOptions,
 } from "./bundled/providers";
 export {
+  type RemoteSessions,
   SESSION_ACTIONS,
   sessionsPlugin,
   type SessionsPluginOptions,
@@ -229,9 +230,13 @@ export {
   SubagentFailed,
 } from "./subagent";
 export {
+  createConnection,
+  type EndpointConnection,
+  type EndpointSocket,
   serveWire,
   type Socket,
   type TransportDeps,
+  type WebSocketEndpoint,
   type WireServer,
   type WireServerOptions,
 } from "./transport";

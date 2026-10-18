@@ -23,6 +23,7 @@
 
 import type { MountedPlugin } from "@eta/client-contracts";
 import type { CompactionSummarizer, KernelModels } from "@eta/core";
+import type { RemoteSessions } from "./bundled/sessions";
 import type { SessionManagerOptions } from "./manager";
 import type { EtaConfig } from "./providers/config-types";
 import type { Settings } from "./settings";
@@ -63,6 +64,13 @@ export interface AssembleOptions {
   fetch?: WireServerOptions["fetch"];
   /** Asked before every request, the WebSocket upgrade included (see `WireServerOptions.authorize`). */
   authorize?: WireServerOptions["authorize"];
+  /** More WebSocket routes than `/ws` (see `WireServerOptions.endpoints`). */
+  endpoints?: WireServerOptions["endpoints"];
+  /**
+   * Where `sessions.*` actions for sessions that live on another machine go (see
+   * `RemoteSessions`). Without one every session is local.
+   */
+  remoteSessions?: RemoteSessions | undefined;
   /**
    * Whether to apply the config's network settings to the environment at startup. `false` leaves
    * the environment exactly as the process was started with — what a test wants, and what a
@@ -124,6 +132,10 @@ export interface AssembledServer {
   readonly wire: WireService;
   readonly sessions: SessionManager;
   readonly server: WireServer;
+  /** The model layer sessions generate with: what a host proxies for a machine that has none. */
+  readonly models: KernelModels;
+  /** What a new session starts as: the user's settings, then the config's default model. */
+  readonly defaults: () => Promise<Settings>;
   /** The scanned plugins: what is loaded, and what became of the ones that are not. */
   readonly manager: PluginManager;
   /**
@@ -178,6 +190,7 @@ function mountBundled(
   names: readonly BundledPluginName[],
   deps: {
     manager: SessionManager;
+    remote?: RemoteSessions | undefined;
     providers: ProviderConfigStore;
     settings: SettingsStore;
     home: string;
@@ -185,7 +198,13 @@ function mountBundled(
   },
 ): void {
   if (names.includes("sessions"))
-    mount("sessions", sessionsPlugin({ manager: deps.manager }));
+    mount(
+      "sessions",
+      sessionsPlugin({
+        manager: deps.manager,
+        ...(deps.remote === undefined ? {} : { remote: deps.remote }),
+      }),
+    );
   if (names.includes("providers")) {
     mount(
       "providers",
@@ -279,6 +298,19 @@ export async function assembleServer(
     }
   }
 
+  // What a new session starts as: the user's settings, with the config's default model as the
+  // last resort. The order matters — a model the user chose explicitly wins over the provider
+  // file's default, which is a fallback and not an instruction. Without a provider to fall
+  // back to, a session is left without a model and says so at its first run.
+  const defaults = async (): Promise<Settings> => {
+    const chosen = await settings.read();
+    if (chosen.model !== undefined) return chosen;
+    const fallback = configDefaultModel(config);
+    return fallback === undefined
+      ? chosen
+      : { ...chosen, model: formatModelId(fallback) };
+  };
+
   const store = new FileSessionStore({
     root: join(options.dataDir, "sessions"),
     warn,
@@ -288,18 +320,7 @@ export async function assembleServer(
     ...(envFor === undefined ? {} : { envFor }),
     store,
     modelsFor: () => kernelModels,
-    // What a new session starts as: the user's settings, with the config's default model as the
-    // last resort. The order matters — a model the user chose explicitly wins over the provider
-    // file's default, which is a fallback and not an instruction. Without a provider to fall
-    // back to, a session is left without a model and says so at its first run.
-    settings: async (): Promise<Settings> => {
-      const chosen = await settings.read();
-      if (chosen.model !== undefined) return chosen;
-      const fallback = configDefaultModel(config);
-      return fallback === undefined
-        ? chosen
-        : { ...chosen, model: formatModelId(fallback) };
-    },
+    settings: defaults,
     // The cards that apply to a session's directory, read when it opens: a card written by hand
     // is picked up by the next session, and a card that is gone resolves to the fallback.
     personasFor: (meta) =>
@@ -394,6 +415,7 @@ export async function assembleServer(
   const mounter = createMounter(ctx);
   mountBundled(mounter.mount, wanted, {
     manager: sessions,
+    remote: options.remoteSessions,
     providers,
     settings,
     home: options.home ?? homedir(),
@@ -422,6 +444,7 @@ export async function assembleServer(
       ...(options.hostname === undefined ? {} : { hostname: options.hostname }),
       fetch: options.fetch,
       authorize: options.authorize,
+      endpoints: options.endpoints,
     },
   );
 
@@ -430,6 +453,8 @@ export async function assembleServer(
     wire,
     sessions,
     server,
+    models: kernelModels,
+    defaults,
     manager,
     mount: mounter.mount,
     mounted: listMounted,
