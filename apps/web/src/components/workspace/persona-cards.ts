@@ -15,7 +15,10 @@ export function usePersonas() {
     queryFn: async () => {
       const response = await fetch("/api/v1/personas");
       if (!response.ok) return [] as PersonaOption[];
-      return (await response.json()) as PersonaOption[];
+      // The host answers an envelope (`{ personas: [...] }`), not a bare array: a list route
+      // that grows a field later should not have to change its shape.
+      const body = (await response.json()) as { personas?: PersonaOption[] };
+      return body.personas ?? [];
     },
   });
 }

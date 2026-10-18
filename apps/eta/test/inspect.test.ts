@@ -132,7 +132,11 @@ describe("a session, described to a panel", () => {
       turns: number;
       compactions: number;
       model: string | null;
+      tokens_per_sec: number;
     };
+    // The rate is measured from the run's frames, and the run is over: zero, not the average of
+    // a turn that already finished. A number that never drops would call a quiet session busy.
+    expect(usage.tokens_per_sec).toBe(0);
     expect(usage.input).toBe(120);
     expect(usage.output).toBe(30);
     expect(usage.cache_read).toBe(40);

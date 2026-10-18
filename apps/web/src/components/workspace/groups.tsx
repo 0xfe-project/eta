@@ -50,7 +50,6 @@ import { MemberRing } from "./member-ring";
 import { MemberStats } from "./member-stats";
 import { useReturnFocus } from "./return-focus";
 import { when } from "./routine-format";
-import { TokenRate } from "./token-rate";
 import { useAgents } from "./use-agents";
 import { useGroups, useOpenGroup } from "./use-groups";
 import { useWorkspaceStore } from "./workspace-store";
@@ -572,7 +571,16 @@ export function GroupMembers() {
                 focused === p.agent_id ? "border-foreground" : "border-border",
               )}
             >
-              <AgentAvatar agent={{ id: p.agent_id }} />
+              {/* The row's first thing was the member's avatar; the gauge wraps that one instead
+                  of adding a second avatar beside the numbers. A member with no session yet has
+                  nothing to draw a ring around, so it is just the avatar. */}
+              {typeof p.session_id === "string" ? (
+                <MemberRing sessionId={p.session_id}>
+                  <AgentAvatar agent={{ id: p.agent_id }} />
+                </MemberRing>
+              ) : (
+                <AgentAvatar agent={{ id: p.agent_id }} />
+              )}
               {/* Pressing the member is the same action as pressing its card anywhere else: the
                   chat narrows to it. The menu beside it is the other thing a member has. */}
               <button
@@ -599,63 +607,47 @@ export function GroupMembers() {
                     )}
                   </span>
                 </span>
-                {/* The member's own session, as the panel's one gauge: the ring (in/out) with
-                    the avatar in the middle, the rate it is speaking at, and what it is chasing. */}
-                <div className="flex items-center gap-3">
-                  <div className="min-w-0 flex-1">
-                    <MemberStats sessionId={p.session_id ?? undefined} />
-                  </div>
-                  {typeof p.session_id !== "string" ? null : (
-                    <>
-                      <MemberRing sessionId={p.session_id}>
-                        <foreignObject x="9" y="9" width="26" height="26">
-                          <AgentAvatar
-                            agent={{ id: p.agent_id }}
-                            className="size-[26px]"
-                          />
-                        </foreignObject>
-                      </MemberRing>
-                      <div className="flex shrink-0 flex-col items-end gap-0.5">
-                        <TokenRate sessionId={p.session_id} />
-                        <InspectButton sessionId={p.session_id} />
-                      </div>
-                    </>
-                  )}
-                </div>
+                {/* What this member has spent, is producing, and is chasing. */}
+                <MemberStats sessionId={p.session_id ?? undefined} />
               </button>
-              {(agent || removable) && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      aria-label={translateText(
-                        "common:accessibility.itemActions",
-                        {
-                          name: p.name,
-                        },
-                      )}
-                    >
-                      <DotsThreeIcon aria-hidden="true" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {agent && (
-                      <DropdownMenuItem onSelect={() => openEditor(agent.id)}>
-                        {translateText("settings:title")}
-                      </DropdownMenuItem>
-                    )}
-                    {removable && (
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onSelect={() => setRemoving(p)}
+              <div className="flex shrink-0 items-start gap-1">
+                {typeof p.session_id !== "string" ? null : (
+                  <InspectButton sessionId={p.session_id} />
+                )}
+                {(agent || removable) && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={translateText(
+                          "common:accessibility.itemActions",
+                          {
+                            name: p.name,
+                          },
+                        )}
                       >
-                        {translateText("common:actions.remove")}
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+                        <DotsThreeIcon aria-hidden="true" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {agent && (
+                        <DropdownMenuItem onSelect={() => openEditor(agent.id)}>
+                          {translateText("settings:title")}
+                        </DropdownMenuItem>
+                      )}
+                      {removable && (
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onSelect={() => setRemoving(p)}
+                        >
+                          {translateText("common:actions.remove")}
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
             </li>
           );
         })}

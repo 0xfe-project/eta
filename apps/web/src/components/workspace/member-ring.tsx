@@ -1,84 +1,73 @@
 import type { ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useSessionUsage } from "./session-usage";
 
 /**
- * A member's token spend as one circle.
+ * A member's spend, as a ring around the member's own avatar.
  *
- * The ring is the budget the member has used: the in half in one colour, the out half in another,
- * the rest of the circle the part of the conversation not theirs. In the middle, the agent's own
- * avatar — not a percentage of a context window we do not know per member — so the circle says
- * "this is 乐子人, and this is what 乐子人 cost", not "this is a number out of a number".
+ * The avatar was already the row's first thing; putting the gauge anywhere else made the row carry
+ * two avatars, which is one avatar too many. So the ring wraps the one that was there: the reading
+ * half of the conversation in one colour, the written half in another, and the part of the circle
+ * left over is the share this member did not spend.
  *
- * The rate beside it is the work being visible: it comes from the session's transcript, which is
- * where the server knows it, and it is why the whole card polls at 300ms — a counter that moves
- * is the difference between "busy" and "stalled".
+ * Not a context-window percentage: a member's window is not something this page knows, and a
+ * made-up denominator would make the ring look full when nothing is wrong.
  */
 export function MemberRing({
   sessionId,
   children,
 }: {
   sessionId: string;
-  children?: ReactNode;
+  children: ReactNode;
 }) {
-  const { data: usage } = useQuery({
-    queryKey: ["session-usage", sessionId],
-    staleTime: 300,
-    refetchInterval: 300,
-    queryFn: async () => {
-      const response = await fetch(`/sessions/${sessionId}/usage`);
-      if (!response.ok) return null;
-      return (await response.json()) as {
-        input: number;
-        output: number;
-        cache_read: number;
-        cache_write: number;
-      };
-    },
-  });
+  const { data: usage } = useSessionUsage(sessionId);
   const total =
-    usage === null || usage === undefined
-      ? 0
-      : usage.input + usage.output + usage.cache_read + usage.cache_write;
+    (usage?.input ?? 0) +
+    (usage?.output ?? 0) +
+    (usage?.cache_read ?? 0) +
+    (usage?.cache_write ?? 0);
   const share = (part: number) => (total === 0 ? 0 : Math.min(1, part / total));
+  // The circle's circumference at r=20 in this 48-unit box: the avatar (32px) sits inside it
+  // with a gap, so the ring reads as around the avatar rather than as its border.
+  const circumference = 2 * Math.PI * 20;
+  const read = share(usage?.input ?? 0) * circumference;
+  const written =
+    share((usage?.output ?? 0) + (usage?.cache_write ?? 0)) * circumference;
   return (
-    <div className="flex items-center gap-3">
-      <svg viewBox="0 0 44 44" className="size-11 shrink-0">
+    <span className="relative inline-flex size-12 shrink-0 items-center justify-center">
+      <svg
+        viewBox="0 0 48 48"
+        aria-hidden="true"
+        className="absolute inset-0 size-12 -rotate-90"
+      >
         <circle
-          cx="22"
-          cy="22"
-          r="18"
+          cx="24"
+          cy="24"
+          r="20"
           fill="none"
           stroke="var(--overlay)"
-          strokeWidth="5"
+          strokeWidth="3"
         />
-        {/* in: the model's reading. out: what it said. Two colours, two facts. */}
         <circle
-          cx="22"
-          cy="22"
-          r="18"
+          cx="24"
+          cy="24"
+          r="20"
           fill="none"
           stroke="var(--state-info)"
-          strokeWidth="5"
-          stroke-dasharray={`${share(usage?.input ?? 0) * 113} 113`}
-          transform="rotate(-90 22 22)"
-        >
-          <title>{`in ~${(usage?.input ?? 0).toLocaleString()}`}</title>
-        </circle>
+          strokeWidth="3"
+          strokeDasharray={`${read} ${circumference}`}
+        />
         <circle
-          cx="22"
-          cy="22"
-          r="18"
+          cx="24"
+          cy="24"
+          r="20"
           fill="none"
           stroke="var(--state-warning)"
-          strokeWidth="5"
-          stroke-dasharray={`${share((usage?.output ?? 0) + (usage?.cache_write ?? 0)) * 113} 113`}
-          stroke-dashoffset={-share(usage?.input ?? 0) * 113}
-          transform="rotate(-90 22 22)"
-        >
-          <title>{`out ~${(usage?.output ?? 0).toLocaleString()}`}</title>
-        </circle>
-        {children}
+          strokeWidth="3"
+          strokeDasharray={`${written} ${circumference}`}
+          strokeDashoffset={-read}
+        />
       </svg>
-    </div>
+      {children}
+    </span>
   );
 }

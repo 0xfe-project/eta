@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useGoal, useSetGoal } from "@/queries/chat";
+import { useSessionUsage } from "./session-usage";
 
 /**
  * What one member's session has spent and is chasing — the numbers that belong to a member rather
@@ -12,26 +13,7 @@ import { useGoal, useSetGoal } from "@/queries/chat";
  */
 export function MemberStats({ sessionId }: { sessionId: string | undefined }) {
   const { t: translateText } = useTranslation(["chat", "common"] as const);
-  const { data: usage } = useQuery({
-    queryKey: ["session-usage", sessionId],
-    enabled: sessionId !== undefined,
-    // Fast on purpose: the token counter and token/s are the panel's proof that work is
-    // happening right now. A number that moves only every half minute reads as a stall.
-    staleTime: 300,
-    refetchInterval: 300,
-    queryFn: async () => {
-      const response = await fetch(`/sessions/${sessionId}/usage`);
-      if (!response.ok) return null;
-      return (await response.json()) as {
-        input: number;
-        output: number;
-        cache_read: number;
-        cache_write: number;
-        turns: number;
-        model: string | null;
-      };
-    },
-  });
+  const { data: usage } = useSessionUsage(sessionId);
   const { data: tools } = useQuery({
     queryKey: ["session-tools", sessionId],
     enabled: sessionId !== undefined,
@@ -59,17 +41,29 @@ export function MemberStats({ sessionId }: { sessionId: string | undefined }) {
         : count >= 1_000
           ? `${(count / 1_000).toFixed(1)}k`
           : String(count);
+  const rate = Math.round((usage?.tokens_per_sec ?? 0) * 10) / 10;
   return (
     <div className="space-y-0.5 font-mono text-[10px] text-muted-foreground tabular-nums">
       <p className="truncate" title={usage?.model ?? undefined}>
         {usage?.model ?? "—"}
       </p>
-      <p>
-        in {tokens(usage?.input)} · out {tokens(usage?.output)} · cache{" "}
-        {tokens(
-          usage === null || usage === undefined
-            ? undefined
-            : usage.cache_read + usage.cache_write,
+      {/* The spend, with the rate at the end of the same line: "how much" and "how fast right
+          now" are one question, and the rate is the half that proves the session is alive. */}
+      <p className="flex items-baseline gap-2">
+        <span className="min-w-0 flex-1 truncate">
+          in <span className="text-foreground">{tokens(usage?.input)}</span> ·
+          out <span className="text-foreground">{tokens(usage?.output)}</span> ·
+          cache{" "}
+          <span className="text-foreground">
+            {tokens(
+              usage === null || usage === undefined
+                ? undefined
+                : usage.cache_read + usage.cache_write,
+            )}
+          </span>
+        </span>
+        {rate === 0 ? null : (
+          <span className="shrink-0 text-state-success">{rate} tok/s</span>
         )}
       </p>
       <p>

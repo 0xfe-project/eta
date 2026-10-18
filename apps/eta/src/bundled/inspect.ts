@@ -12,7 +12,8 @@ import { errorResponse } from "../routes";
  *   GET /sessions/:id/prompt   the system prompt, split into the part a provider can cache and
  *                              the part that is rewritten every generation
  *   GET /sessions/:id/tools    the tools this session can call right now
- *   GET /sessions/:id/usage    what it has spent: tokens in, out, cached, and the compaction epoch
+ *   GET /sessions/:id/usage    what it has spent (tokens in, out, cached, the compaction epoch) and
+ *                              what it is producing right now (tokens/sec)
  *
  * All three are reads of live services, not of a stored snapshot: a session's tools are installed
  * when it opens, its prompt is composed per generation, and its numbers move while it runs. A
@@ -312,6 +313,11 @@ export const inspectPlugin = {
             cache_write: cacheWrite,
             turns,
             compactions,
+            // What it is producing right now. The harness measures this from the run's own
+            // frames (a 2s window over the output tokens of the message being written), so it is
+            // 0 between runs rather than the average of the last one — a rate that never drops
+            // would say "busy" about a session that finished an hour ago.
+            tokens_per_sec: managed.session.metrics.tokensPerSec,
             model:
               config.model === undefined
                 ? null
