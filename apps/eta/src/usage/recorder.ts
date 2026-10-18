@@ -16,7 +16,7 @@ import type { ManagedSession, SessionsService } from "@eta/server";
 import type { UsageEntry, UsageStore } from "./store";
 import { kernelOn, sessionTokenTotal } from "@eta/core";
 
-function entryOf(
+export function entryOf(
   meta: ManagedSession["meta"],
   message: AssistantMessage,
 ): UsageEntry {

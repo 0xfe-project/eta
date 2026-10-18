@@ -1,4 +1,9 @@
-import type { AssembledServer, WireService } from "@eta/server";
+import type {
+  AssembledServer,
+  RemoteSessions,
+  WebSocketEndpoint,
+  WireService,
+} from "@eta/server";
 /**
  * The product: the stores, the engine, and the plugins that put them on the wire.
  *
@@ -30,7 +35,12 @@ import { Inbox } from "./inbox/inbox";
 import { inboxPlugin } from "./inbox/plugin";
 import { SettingStore } from "./inbox/setting";
 import { InteractionStore } from "./inbox/store";
+import { MachineHub } from "./machines/hub";
+import { SessionMirrors } from "./machines/mirror";
 import { machinesPlugin } from "./machines/plugin";
+import { RemotePlace } from "./machines/remote-place";
+import { RemoteSessionsRouter } from "./machines/remote-sessions";
+import { serveLink } from "./machines/service";
 import { MachineStore } from "./machines/store";
 import { MemoryClient } from "./memory/client";
 import { memoryRunHooks, memoryTools } from "./memory/hooks";
@@ -48,6 +58,7 @@ import { tasksPlugin } from "./tasks/plugin";
 import { TaskStore } from "./tasks/store";
 import { taskSessionTools } from "./tasks/tools";
 import { usagePlugin } from "./usage/plugin";
+import { entryOf } from "./usage/recorder";
 import { UsageStore } from "./usage/store";
 
 /** What a test sets to move time by hand; a real host leaves all of it alone. */
@@ -64,14 +75,22 @@ export interface RoutinesOptions {
 
 export interface Product {
   readonly engine: Engine;
+  /** The links to other machines. */
+  readonly hub: MachineHub;
   /** The routines' clock; `tick()` makes it look. */
   readonly scheduler: Scheduler;
   /** Every feature's per-session hooks, combined into the one set the session manager takes. */
   readonly sessionHooks: Required<SessionHooks>;
   /** Mount the plugins on an assembled server; resolves when every one of them is in place. */
   mount: (server: AssembledServer) => Promise<void>;
-  /** The product's own HTTP routes (artifact pages); nothing for a path that is not theirs. */
+  /** The product's own HTTP routes (artifact pages, enrolling a machine); nothing for any other path. */
   fetch: (request: Request) => Promise<Response | undefined>;
+  /** Where `sessions.*` actions for sessions on other machines go. */
+  readonly remote: RemoteSessions;
+  /** The product's own WebSocket routes: the link daemons dial. */
+  readonly endpoints: readonly WebSocketEndpoint[];
+  /** Cut the links to other machines (the host is stopping). */
+  close: () => void;
 }
 
 /** The plugins are applied a moment after they are mounted; this is how long to wait for that. */
@@ -83,6 +102,10 @@ export function createProduct(options: {
   /** The memory sidecar's address. Without one there is no memory: no plugin, no tools, no calls. */
   memoryUrl?: string | undefined;
   warn: (message: string) => void;
+  /** The interface the host listens on, for the address a new machine is told to dial. */
+  hostname?: string | undefined;
+  /** The agent's home, where the user's own persona cards are. Defaults to the real one. */
+  home?: string | undefined;
   routines?: RoutinesOptions;
   /** Overrides of what a published site may hold. */
   artifactLimits?: Partial<SiteLimits> | undefined;
@@ -101,6 +124,8 @@ export function createProduct(options: {
 
   // This computer is a machine like any other, and the first thing a project can name.
   machines.ensurePrimary({ name: hostname(), home: homedir(), os: platform() });
+  // Nothing is connected yet: a daemon that was online when the last process stopped is not.
+  machines.markDaemonsOffline();
   // Nothing is running yet, so whatever the last process left in flight cannot be, and no
   // question it asked can still be answered.
   timeline.failInterrupted(RESTART_TEXT);
@@ -150,6 +175,53 @@ export function createProduct(options: {
     warn,
   });
 
+  // Other machines. What the primary does for them needs the server (its models) and the
+  // product's own hooks and tables, none of which exist yet, so it reads them when asked.
+  let running: AssembledServer | undefined;
+  const later: {
+    hooks?: Required<SessionHooks>;
+    inbox?: Inbox;
+  } = {};
+  const hub = new MachineHub({
+    machines,
+    changed: () => wire?.pushNow("machines"),
+    warn,
+    serve: (link) =>
+      serveLink(link, {
+        conversations,
+        projects,
+        machines,
+        models: () => running?.models,
+        hooks: () => later.hooks,
+        approvals: () => later.inbox?.approvals() ?? [],
+        generated: (meta, message) => {
+          try {
+            usage.record(entryOf(meta, message));
+            wire?.push("usage");
+          } catch (error) {
+            warn(`[eta] could not record a generation: ${String(error)}`);
+          }
+        },
+        warn,
+      }),
+  });
+  const mirrors = new SessionMirrors(hub);
+  const remotePlace = new RemotePlace({
+    hub,
+    mirrors,
+    models: () => running?.models,
+    defaults: async () => (await running?.defaults()) ?? {},
+    hooks: () => later.hooks,
+    home: options.home ?? homedir(),
+    warn,
+  });
+  const router = new RemoteSessionsRouter({
+    conversations,
+    machines,
+    hub,
+    models: () => running?.models,
+  });
+
   const targets = new ConversationTargets({
     conversations,
     projects,
@@ -191,6 +263,7 @@ export function createProduct(options: {
     timeline,
     changed,
     warn,
+    remote: remotePlace,
     ...(memory === undefined ? {} : { runHooks: memoryRunHooks(memory) }),
   });
 
@@ -203,7 +276,7 @@ export function createProduct(options: {
     key: loadKey(join(artifactsRoot, ".preview-key")),
     changed: () => wire?.pushNow("artifacts"),
   });
-  const routes = createArtifactRoutes(artifacts);
+  const artifactRoutes = createArtifactRoutes(artifacts);
 
   // Each feature that adds tools, tool middleware or a question observer to sessions is one entry
   // here; the order is the order its tools and middleware are installed in.
@@ -221,13 +294,37 @@ export function createProduct(options: {
       : [{ sessionTools: memoryTools.bind(undefined, memory) }]),
   ]);
 
+  later.hooks = sessionHooks;
+  later.inbox = inbox;
+
   return {
     engine,
+    hub,
     scheduler,
     sessionHooks,
-    fetch: routes,
+    fetch: async (request) =>
+      (await hub.enroll(request)) ?? (await artifactRoutes(request)),
+    remote: router,
+    endpoints: [hub.endpoint],
+    close: () => {
+      hub.close();
+      mirrors.detach();
+    },
     async mount(server) {
+      running = server;
       wire = server.wire;
+      // Sessions on other machines show on this wire like any other; the ones that already
+      // exist are known from the participants that hold them.
+      mirrors.attach(server.wire, () =>
+        machines
+          .list()
+          .filter((machine) => machine.kind === "daemon")
+          .flatMap((machine) =>
+            conversations
+              .sessionsOn(machine.id)
+              .map((session) => ({ session, machineId: machine.id })),
+          ),
+      );
       const pending = new Set([
         "agents",
         "machines",
@@ -258,11 +355,20 @@ export function createProduct(options: {
       );
       server.mount(
         "machines",
-        machinesPlugin({ machines, changed }, applied("machines")),
+        machinesPlugin(
+          {
+            machines,
+            hub,
+            changed,
+            defaultUrl: () =>
+              `http://${options.hostname ?? "127.0.0.1"}:${server.server.port}`,
+          },
+          applied("machines"),
+        ),
       );
       server.mount(
         "projects",
-        projectsPlugin({ ...shared, changed }, applied("projects")),
+        projectsPlugin({ ...shared, hub, changed }, applied("projects")),
       );
       server.mount(
         "conversations",

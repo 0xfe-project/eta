@@ -15,9 +15,11 @@
     "@eta/client-contracts": "*",
     "@eta/client-wire-proto": "*",
     "@eta/core": "*",
+    "@eta/daemon": "*",
     "@eta/execution-node": "*",
     "@eta/harness": "*",
     "@eta/server": "*",
+    "@eta/ssh": "*",
     "croner": "10.0.1",
     "fflate": "^0.8.3",
     "typebox": "1.3.34"

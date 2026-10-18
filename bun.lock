@@ -18,6 +18,27 @@
         "typescript": "5.9.3",
       },
     },
+    "apps/daemon": {
+      "name": "@eta/daemon",
+      "version": "0.1.0",
+      "dependencies": {
+        "@earendil-works/pi-ai": "0.85.1",
+        "@eta/client-contracts": "*",
+        "@eta/client-wire-proto": "*",
+        "@eta/core": "*",
+        "@eta/execution-node": "*",
+        "@eta/harness": "*",
+        "@eta/server": "*",
+        "@eta/ssh": "*",
+        "cordis": "4.0.0-rc.10",
+      },
+      "devDependencies": {
+        "@types/node": "22.19.19",
+        "bun-types": "1.4.2",
+        "typescript": "5.9.3",
+        "vitest": "4.1.9",
+      },
+    },
     "apps/eta": {
       "name": "@eta/app",
       "version": "0.1.0",
@@ -25,9 +46,11 @@
         "@eta/client-contracts": "*",
         "@eta/client-wire-proto": "*",
         "@eta/core": "*",
+        "@eta/daemon": "*",
         "@eta/execution-node": "*",
         "@eta/harness": "*",
         "@eta/server": "*",
+        "@eta/ssh": "*",
         "croner": "10.0.1",
         "fflate": "^0.8.3",
         "typebox": "1.3.34",
@@ -498,6 +521,8 @@
     "@eta/compaction": ["@eta/compaction@workspace:packages/eta-compaction"],
 
     "@eta/core": ["@eta/core@workspace:packages/eta-core"],
+
+    "@eta/daemon": ["@eta/daemon@workspace:apps/daemon"],
 
     "@eta/execution": ["@eta/execution@workspace:packages/eta-execution"],
 

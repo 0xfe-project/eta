@@ -275,6 +275,50 @@ export class ConversationStore {
       .run(sessionId, conversationId, agentId);
   }
 
+  /**
+   * The conversation and agent a session is the side of, and the machine it runs on (the machine
+   * of the conversation's project). A session no participant names is not here.
+   */
+  ofSession(
+    sessionId: string,
+  ):
+    | { conversationId: string; agentId: string; machineId: string }
+    | undefined {
+    const row = this.#db
+      .query<
+        { conversation_id: string; agent_id: string; machine_id: string },
+        [string]
+      >(
+        `SELECT p.conversation_id, p.agent_id, pr.machine_id
+         FROM participant p
+         JOIN conversation c ON c.id = p.conversation_id
+         JOIN project pr ON pr.id = c.project_id
+         WHERE p.session_id = ?`,
+      )
+      .get(sessionId);
+    return row === null
+      ? undefined
+      : {
+          conversationId: row.conversation_id,
+          agentId: row.agent_id,
+          machineId: row.machine_id,
+        };
+  }
+
+  /** The sessions that run on a machine, by the participants that hold them. */
+  sessionsOn(machineId: string): string[] {
+    return this.#db
+      .query<{ session_id: string }, [string]>(
+        `SELECT p.session_id
+         FROM participant p
+         JOIN conversation c ON c.id = p.conversation_id
+         JOIN project pr ON pr.id = c.project_id
+         WHERE pr.machine_id = ? AND p.session_id IS NOT NULL`,
+      )
+      .all(machineId)
+      .map((row) => row.session_id);
+  }
+
   /** The member has been shown the timeline up to `seq`. Only ever forward. */
   setSeen(conversationId: string, agentId: string, seq: number): void {
     this.#db

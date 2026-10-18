@@ -46,7 +46,11 @@ export interface AgentView {
 export type MachineKind = "primary" | "daemon" | "ssh";
 export type MachineStatus = "online" | "offline" | "pending" | "revoked";
 
-/** A computer sessions can run on. Today only the primary exists; the rest arrive with the daemon. */
+/**
+ * A computer sessions can run on: the primary, or a machine that runs the daemon. A daemon is
+ * `pending` from the moment it exchanges its install code until the user approves its
+ * fingerprint, `online` while its link is up, `offline` while it is not, and `revoked` for good.
+ */
 export interface MachineView {
   id: string;
   kind: MachineKind;
@@ -269,14 +273,31 @@ export type AgentCall = {
 
 /* ------------------------------------------------------------------ machines */
 
-export const MACHINE_ACTIONS = ["rename"] as const;
+export const MACHINE_ACTIONS = [
+  "rename",
+  "enroll",
+  "approve",
+  "revoke",
+] as const;
 export type MachineAction = (typeof MACHINE_ACTIONS)[number];
 
 export interface MachineArgs {
   rename: { machineId: string; name: string };
+  /**
+   * Make a one-time install code (good for 24 hours, once). `url` is the address the machine
+   * should dial: what the user's browser sees, because the host cannot know its public name.
+   */
+  enroll: { name?: string; url?: string };
+  /** Let a pending machine in. `fingerprint` must be the one the machine printed. */
+  approve: { machineId: string; fingerprint: string };
+  /** Close the door on a machine. Sessions already running there are not stopped. */
+  revoke: { machineId: string };
 }
 export interface MachineResults {
   rename: { machine: MachineView };
+  enroll: { code: string; expiresAt: number; url: string; command: string };
+  approve: { machine: MachineView };
+  revoke: { machine: MachineView };
 }
 export type MachineCall = {
   [A in MachineAction]: Omit<CallFrame, "target" | "action" | "args"> & {

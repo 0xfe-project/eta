@@ -14,6 +14,7 @@ import type {
 export * from "./artifacts";
 export type * from "./data";
 export * from "./inbox";
+export * from "./link";
 export * from "./memory";
 export * from "./operations";
 export * from "./product";
