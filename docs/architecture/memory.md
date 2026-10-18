@@ -1,67 +1,47 @@
 # 记忆
 
-本文说明 [#12](https://github.com/akarachen/axp/issues/12) 的实现：智能体跨对话的长期记忆。它是必选的内置环境包 `memory`：runtime 镜像里的 `memory` plugin（见[聊天与运行时架构](chat-runtime.md#plugin)），和这个环境包的服务 `bundles/memory/service`（[环境包](bundles.md#服务)）。
+智能体跨对话的长期记忆。它是一个**可选的边车**：`apps/memory`，Python（mem0 作为库 + fastembed 的 CPU 向量），自己的 PostgreSQL（pgvector，表 `memories`）。host 通过 HTTP 调用它；host 不在进程内做任何记忆。
 
 ```
-runtime 容器
-  Codex
-    memory plugin
-      .mcp.json  ── MCP（streamable HTTP）──┐  Authorization: Bearer <runtime key>
-      hooks      ── HTTP ──────────────────┤
-                                           ▼
-runtime 网关 /bundles/memory/* → /memory/*  forward_auth → X-AXP-Agent-Id、X-AXP-Group-Id
-                                           ▼
-memory-service（Nomad job memory，命名空间 <ns>）
-  MemoryProvider → Mem0Provider（mem0 作为库）
-    抽取：智能体自己的模型，带环境包的令牌经 runtime 网关的 /v1（chat completions）
-    向量：fastembed，CPU 推理
-    存储：自己的库 axp_bundle_memory（PostgreSQL + pgvector，表 memories）
+host ──HTTP──▶ 记忆边车 (:8320)
+  memory 插件        POST /memory/recall   run 之前：与要告诉智能体的内容相关的记忆
+  engine 的 run 钩子  POST /memory/capture  run 之后：一轮完成的对话，后台抽取
+  会话工具           /memory/mcp           remember / recall / forget（MCP，streamable HTTP）
+  memory target      /api/memory/v1/agents/{agent}/memories   用户看、搜、加、删
+                                          │
+                                          ▼  抽取：MEMORY_LLM_*（OpenAI 兼容）；向量：fastembed；存储：PostgreSQL + pgvector
 ```
 
-## 记忆怎么来、怎么用
+## 身份
 
-- 两个 hook 的脚本在 plugin 目录（`hooks/memory.mjs`），声明在插件的 `akhook.yml`（akhook 的 `prompt_submit` 和 `stop` 规则），由 akhook 运行，每个智能体都通过必选的 memory 环境包装载（见[插件](plugins.md#hook)）。
-- **每轮召回**：`prompt_submit`（Codex 的 `UserPromptSubmit`） 用用户的输入检索，最多 5 条、相关度不低于 0.2 的记忆以 `additionalContext` 加进本轮上下文（Codex 作为 developer 消息发给模型），每条带 id；有来源群时只标明“本群”或“其他群”，没有来源的不标。
-- **每轮保存**：`stop` 把本轮的用户输入（含插话）和最终回答交给 `/memory/capture`，立即得到 202；memory-service 在后台逐条用该智能体的模型抽取事实再写入，hook 不等模型。用户输入在召回时暂存在 `CODEX_HOME/axp-memory/turns`，保存后删除；超过一天未结束的 turn 的暂存会被清掉。
-- **主动工具**：MCP 工具 `remember`（原样记下一条）、`recall`（检索）、`forget`（按 id 删除）。`skills/memory/SKILL.md` 告诉模型什么时候用它们。
-- 两个 hook 任何失败都只是本轮没有记忆，不会影响 turn。服务停止时还在队列里的保存会丢失。
+边车只认请求头：`X-AXP-Agent-Id`（智能体）与 `X-AXP-Group-Id`（对话 id）。agent 侧的路由里这个头是唯一的身份，所以智能体只能碰到自己的记忆。用户侧的路由把智能体写在路径里（用户能看见并编辑所有智能体的记忆）。**边车没有鉴权，网络就是信任边界**：只让 host 到得了它（loopback，或 compose 里不发布端口的内部网络）。
 
-mem0 v2 只追加不改写：同一事实的新说法会成为新记忆，过时的记忆由模型在发现后 `forget`。抽取时要求用用户的语言写事实，否则中文提问很难检索到英文事实。
+## host 一侧
 
-## 在界面中查看和编辑
+只有给了边车地址才有记忆：`--memory-url <url>`，或环境变量 `ETA_MEMORY_URL`（flag 优先，空值表示没有）。没有地址时：不挂载 `memory` 插件，没有 `memory` target，没有记忆工具，也不会向任何地方发请求；`hello.mounted` 里没有它，界面隐藏记忆页。
 
-全窗口工作区的「记忆」页列出当前智能体的记忆（新的在前，每 15 秒刷新），可以搜索、手动添加（原样记下，不经模型抽取）和删除。浏览器经公共网关的 `/api/bundles/memory/*` 访问记忆服务，网关把路径改成下表的 `/api/memory/*`：
+- **run 之前**（`beforeRun`）：把要告诉智能体的 briefing 的末尾 2000 字作为查询去 `recall`，最多 5 条、相关度不低于 0.2 的记忆放在 briefing 之前，每条标注是"本对话"还是"另一个对话"。
+- **run 之后**（`afterRun`）：只有回复以 `done` 结束才保存——触发消息和智能体的回答作为一轮交给 `capture`，边车立即回 202，在后台用抽取模型逐条抽取事实再写入。失败或被停止的回复不值得记。
+- **工具**：每个会话装 `remember`（原样记一条）、`recall`（检索）、`forget`（按 id 删）。
+- **用户侧**：`memory.list`（可按来源 `conversation` / `agent` / `user` 筛，可搜索）、`memory.remember`（手动添加，原样记下，不经抽取）、`memory.forget`。
 
-记忆页面提供种类筛选：对话中记下（`conversation`）、智能体记下（`agent`）、手动添加（`user`），或全部种类。GET 接口可带 `source=`，与 `q=` 组合；存储先按来源筛选，再应用列表最多 1000 条、搜索最多 50 条的现有上限。未指定种类时显示全部记忆。前端每页显示 20 条，切换种类、来源群、搜索或智能体时回到第一页。
+记忆是锦上添花：每次调用都有时限（recall 3 秒），边车慢或不在时这一轮照常进行；钩子抛错只被报告，不会让回复失败。边车停止时队列里还没保存的会丢失。
 
-| 方法与路径                                           | 作用                                                            |
-| ---------------------------------------------------- | --------------------------------------------------------------- |
-| `GET /api/memory/v1/agents/{agent}/memories`         | 列出全部；带 `?q=` 时按相关度检索，最多 50 条、相关度不低于 0.2 |
-| `POST /api/memory/v1/agents/{agent}/memories`        | `{"text"}`，原样记下一条                                        |
-| `DELETE /api/memory/v1/agents/{agent}/memories/{id}` | 删除；不属于该智能体时 404                                      |
+mem0 v2 只追加不改写：同一事实的新说法会成为新记忆，过时的由模型发现后 `forget`。抽取要求用用户的语言写事实，否则中文提问很难检索到英文事实。
 
-这组接口的智能体由路径指定，因为用户可以看所有智能体的记忆。它们只能从公共网关到达：runtime 网关只把 `/bundles/memory/*` 转成 `/memory/*`，智能体碰不到 `/api/memory/*`。
+## 运行边车
 
-## 来源群
+环境变量：
 
-长期记忆仍按智能体共享，跨群召回不加群过滤。`remember` 和 `capture` 从 runtime 网关的 `X-AXP-Group-Id` 取来源群。来源在接收请求时记下，再跟随后台抽取入队；模型和请求正文不能指定来源。
+| 变量                  | 含义                                                                                |
+| --------------------- | ----------------------------------------------------------------------------------- |
+| `DATABASE_URL`        | 它自己的 PostgreSQL（需要 pgvector 扩展）                                           |
+| `MEMORY_LLM_BASE_URL` | OpenAI 兼容 API 的 base（如 `https://api.openai.com/v1`），用来从一轮对话里抽取事实 |
+| `MEMORY_LLM_API_KEY`  | 上面那个 API 的 key                                                                 |
+| `MEMORY_LLM_MODEL`    | 抽取用的模型                                                                        |
+| `MEMORY_HOST`         | 监听的网卡，默认 `127.0.0.1`                                                        |
+| `MEMORY_PORT`         | 端口，默认 `8320`                                                                   |
 
-mem0 metadata 和公开记忆形状只保存 `source_group_id`。Web 按群快照查当前名称，群改名后同步更新，不在记忆中保留旧名。MCP recall 和 hook 的 `/memory/recall` 在返回时将来源 id 与网关注入的 `X-AXP-Group-Id` 比较，以临时字段 `group_context` 标明 `this`（本群）或 `other`（其他群），没有来源的不标；这两种召回结果不带来源 id。hook 只把标注写进上下文，不查询群，也不依赖 groups 插件路由。手动添加的记忆没有来源群。Web 显示可跳回群的来源名，GET 的 `group_id=` 可与 `source=`、`q=` 组合，存储先过滤再应用条数上限。skill 要求引用其他群的事实时说明来自别的群，必要时请用户确认，不把它当作当前群已经达成的决定。不写 `MEMORY.md`，不为群另建记忆库。
+抽取模型由边车自己配置，与 host 的 providers 无关。向量模型是 `jinaai/jina-embeddings-v2-base-zh`（768 维，中英混合），换模型意味着重新嵌入全部记忆。
 
-## 隔离
-
-memory-service 只认 runtime 网关设置的 `X-AXP-Agent-Id`，并把它作为 mem0 的 `user_id`；请求里自称的身份不起作用，没有这个头的请求被拒绝。删除前检查记忆属于该智能体（mem0 按 id 删除不区分用户）。记忆服务只有 AXP 给它的凭据：它的库的账号，和只能调用模型的环境包令牌。调用模型时它在 `X-AXP-Agent-Id` 里写明是哪个智能体的抽取，因此用量记在对应的智能体上。
-
-## Provider 接口
-
-`axp_memory/provider.py` 的 `MemoryProvider` 只有四个方法：`add(agent_id, messages, infer, model)`、`search`、`list`、`delete`。换别的记忆服务只需实现它们并在 `__main__` 中替换；已有记忆用旧 provider 的 `list` 导出，再以 `infer=False` `add` 到新的。plugin、hook、网关都不用改。
-
-## Embedding 模型
-
-`jinaai/jina-embeddings-v2-base-zh`（768 维，中英混合，长输入）。它由 Turbo 的 `build` 任务下载到 `bundles/memory/service/out/models`（约 600 MB，缓存），生产镜像带上它，服务运行时不联网。换模型要重新嵌入所有记忆。
-
-## 运行
-
-开发和生产一样：controller 按 `bundles/memory/service/job.nomad.hcl` 把它作为 job `memory` 运行在 AXP 的命名空间里，镜像 `axp-memory` 由 `bundles/memory/service/Dockerfile` 从 Turbo 的产物打包（`scripts/build/image.sh memory`）。库 `axp_bundle_memory` 由 AXP 在 PostgreSQL（`pgvector/pgvector:pg17-trixie`）上创建并装好 `vector` 扩展，连接串在环境变量 `DATABASE_URL`；mem0 首次启动时创建 `memories` 表。它在 `/.well-known/axp-service` 报告协议 `axp.memory/1`。
-
-PostgreSQL 镜像是 `postgres:17` 加 pgvector，同为 Debian trixie，因此原有数据目录的排序规则不变（bookworm 版的 `pgvector/pgvector:pg17` 会导致 collation 版本不匹配）。mem0 的遥测已关闭；它的变更历史写在容器内的 SQLite，不保留。
+本地开发：`bun run setup` 装好 Python 依赖后，先 `bun run --cwd apps/memory build` 把向量模型下载到 `apps/memory/out/models`，再在 `apps/memory` 目录里 `FASTEMBED_CACHE_PATH=out/models uv run python -m axp_memory`（带上面的环境变量），host 以 `--memory-url http://127.0.0.1:8320` 启动。容器化见 `deploy/memory.Dockerfile` 与 `deploy/compose.yaml` 的 `memory` profile（带一个 `pgvector/pgvector` 数据库）。

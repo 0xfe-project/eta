@@ -1,133 +1,118 @@
-# AXP
+# eta
 
-Monorepo：Bun workspaces 管理 Web 和 agent runtime，uv 管理 Python 项目，Go 服务各自是独立的 Go 模块（本地包用 `replace` 引用）。
+一个人用来指挥多个智能体的工作台。服务端是**一个 Bun 进程**：Web、产品数据（SQLite）、会话的运行和模型凭据都在里面。其他电脑上可以跑精简的 daemon，让会话在那里运行；记忆是一个可选的边车。
 
 ```text
 apps/
-  gateway/         Caddy：浏览器的入口网关，以及智能体和环境包服务的 runtime 网关
-  control-plane/   Go：产品 API 与内部 API（同一进程两个 listener，内嵌 CLIProxyAPI 提供模型连接、目录与
-                   OpenAI 兼容接口）、controller、routine worker；用本机 Docker 构建镜像，在 Nomad 上运行每个智能体的容器和环境包的服务；
-                   含代码托管（用户自己的 GitHub App，agent 的 git、gh 凭据与 open_pull_request）和定时任务
-                   （每次运行是 worker 里的 ADK agent；自己的数据库，计划在 NATS）
-  web/             Vite + React + React Compiler + TypeScript
-  agent-runtime/   每个 Agent 一个常驻容器的运行时（Node，直接驱动 Codex app-server）
-  remote/          Go：远程电脑上的 axp（daemon 与给智能体用的 CLI）
-  agenvo/          固定的 agenvo 提交，从源码构建中继（内置环境包 agenvo 的服务）和 connector
-bundles/           内置环境包（不是核心代码）：每个一个目录（bundle.json、setup 脚本），有的带一个服务
-                   （service/：Nomad 的 jobspec，memory 的还有它的 Python 代码，mem0 + pgvector）
-plugins/           环境包带来的插件（MCP、skill、hook），聊天智能体和定时任务都用
+  eta/       host：一个 Bun 进程，WebSocket 管道 + cordis 插件 + SQLite（主 node）
+  daemon/    eta-daemon：别的机器上的精简节点，反向连回主 node，只跑会话
+  web/       React 界面，通过那条 WebSocket 读写
+  memory/    Python 边车（mem0 + PostgreSQL/pgvector），可选
 packages/
-  plugins-go/      插件标准：读取插件，编译到聊天智能体（Codex），加载进定时任务（ADK）
-  service-go/      Go 服务框架：配置、数据库与迁移、HTTP API、错误、幂等、命令
-  telemetry-go/    Go 服务共用的日志与错误追踪（Sentry SDK）
+  eta-*      上游 eta 的内核、harness、服务端地板、SSH 与 git 插件
+  client-wire-proto、client-contracts   线上的帧与产品 target 的类型
+deploy/      Dockerfile、memory.Dockerfile、compose.yaml
+docs/architecture/   架构说明
 ```
 
-设计见 [RFC #1](https://github.com/akarachen/axp/issues/1)，实现说明见 [控制面](docs/architecture/control-plane.md)、[聊天与运行时架构](docs/architecture/chat-runtime.md)、[统一入口网关](docs/architecture/gateway.md)、[LLM 网关](docs/architecture/llm-gateway.md)、[记忆](docs/architecture/memory.md)、[代码托管（GitHub）](docs/architecture/forge.md) 、[工具调用规则](docs/architecture/agent-hooks.md)、[环境包](docs/architecture/bundles.md)、[任务与远程电脑](docs/architecture/tasks.md)、[定时任务](docs/architecture/routines.md)、[插件](docs/architecture/plugins.md)、[Artifact](docs/architecture/artifacts.md)、[OOMOL](docs/architecture/oomol.md) 与 [Go 服务框架](docs/architecture/service-framework.md)；新增服务时按[清单](docs/architecture/services.md)核对。
+架构说明（中文）：
+
+- [总览](docs/architecture/overview.md)：进程、分层、代码布局
+- [线协议与 target](docs/architecture/wire-protocol.md)：WebSocket 管道、帧、各 target 与 action
+- [产品模型](docs/architecture/product-model.md)：智能体、machine、project、对话、主理人、唤醒规则
+- [数据](docs/architecture/data.md)：SQLite 与迁移、会话文件、数据目录布局
+- [机器与 daemon](docs/architecture/machines.md)：配对、epoch、模型与工具的代理、远端会话
+- [访问控制](docs/architecture/access.md)：Origin 检查、令牌门、能力路由
+- [记忆](docs/architecture/memory.md)：边车、身份头、host 如何调用它
+- [任务、产物与定时任务](docs/architecture/tasks-artifacts-routines.md)
+
+界面约定见 [DESIGN.md](DESIGN.md) 与 [apps/web/AGENTS.md](apps/web/AGENTS.md)。
 
 ## 环境与初始化
 
-需要 Node.js 24、Bun 1.3.14、uv 和 Go（各 `go.mod` 统一要求 1.26.9，较旧的 go 会自动下载对应工具链）。Python 项目使用 3.13，uv 会按 `.python-version` 自动获取。还需要 Docker 和本机的 Nomad（见 [deploy/README.md](deploy/README.md#一台机器装好-nomad)）。
-
-runtime 镜像里的 hook 规则引擎 [akhook](https://github.com/aghub-app/akhook) 以 submodule 放在 `vendor/akhook`，构建镜像时如果还没拉取会自动初始化；也可以直接 `git clone --recurse-submodules`。
-
-在仓库根目录执行：
+需要 Bun 1.3.14 和 uv（Python 3.13，uv 会按 `.python-version` 自动获取）。不需要 Docker、数据库或任何外部服务。
 
 ```sh
-bun run setup
-bun run dev
+bun run setup     # bun install + uv sync（记忆边车的 Python 依赖）
+bun run dev       # host 与 web 开发服务器
+bun run check     # 提交前的全部检查
 ```
 
-打开脚本输出的 Web 地址（默认 http://localhost:3000 ），新建智能体后即可对话。AXP 是单用户服务。对话区顶部显示当前智能体，点击可切换、新建或进入管理；每个智能体有名称、模型和指令（注入其上下文的系统提示），可在编辑器或设置的“智能体”中修改和删除。
+`bun run dev` 同时启动 host 和 vite：
 
-模型来自控制面内嵌的模型网关：在设置的“模型服务”中用设备码绑定 Codex（ChatGPT）或 Grok（xAI）账号，每个服务可以绑定多个账号并自动轮换。账号登录失效、额度用尽等状态会显示在那里；智能体的模型不可用时不能发送消息，绑定或重新登录后自动恢复。详见 [LLM 网关](docs/architecture/llm-gateway.md)。
+- Web：http://127.0.0.1:3000（`ETA_WEB_PORT` 改端口）
+- host：http://127.0.0.1:8787（`ETA_PORT` 改端口），数据在 `var/eta-dev/`；vite 把 `/ws` 代理给它，host 以 `--allow-origin` 放行 vite 的地址
 
-`bun run dev` 在本机启动控制面（公共与内部 API、controller、routine worker）和 Web；其余跑在本机的 Nomad 上（安装见 [deploy/README.md](deploy/README.md#一台机器装好-nomad)），与生产相同：所有实例共享的基础设施在命名空间 `axp-dev`（数据库、NATS、S3、日志），网关和环境包的服务（记忆、中继）在 `dev-<库名>`，智能体的容器在 `dev-<库名>-agents`。controller 用每个 Agent 的环境包构建它的镜像，为它运行一个常驻容器（状态在它自己的卷上），容器里的 Codex 把所有模型请求经 runtime 网关发给控制面，不持有任何账号凭据。runtime 的基础镜像和环境包服务的镜像在每次启动时用本机 Docker 重建（没有变化时约 1 秒），每个 checkout 一个标签，worktree 之间互不覆盖。
+打开 Web 后，先在设置的"模型服务"里添加模型服务（Codex 用设备码登录，或填 API key），再新建智能体与对话。
 
-智能体要选一个可用的模型才能对话：首次使用在“模型服务”中绑定账号（开发凭据保存在 `apps/control-plane/var/llm-gateway`）。
+`bun run check` 等于 `dprint check`、`bun run lint:repo`（根目录 eslint）和 `turbo run build typecheck lint test knip`。`bun run format` 用 dprint 格式化。CI 与 pre-commit 钩子跑的是同一组检查，turbo 结果走远程缓存。
 
-`bun run dev` 每个实例占用十个连续端口：网关 `P`（浏览器打开的地址）、控制面的 API `P+1` 与内部 API `P+2`（同一进程）、Web `P+3`、runtime 网关 `P+5`（监听所有地址，容器从 bridge 网络的网关 `172.26.64.1` 连它，其余都只监听 loopback）、AXP 的 HTTPS 地址 `P+8`（自签证书，远程电脑和中继用，见[任务与远程电脑](docs/architecture/tasks.md)），其余空着，默认 `P=3000`。被占用时（其他 checkout、worktree 或 agent 已在运行）自动顺延到下一个空闲端口块（3010、3020……），并用文件锁避免并行启动抢到同一端口，因此可以同时运行任意多个实例。用 `bun run dev --port 4000`（或 `AXP_DEV_PORT=4000`）指定端口，被占用或是生产端口（24180）时直接报错。新的 worktree 首次运行会自动安装依赖并执行 migrations。
+## 生产启动
 
-`setup` 安装 JS/Python/Go 依赖。锁文件（`bun.lock`、两个 `uv.lock`、`go.sum`）应一起提交。
+先构建 Web，再让 host 提供它：
 
-开发无需任何环境文件：所有服务地址由 `bun run dev` 设定，其余都是代码里的固定值。
+```sh
+bun run --cwd apps/web build
+bun apps/eta/src/main.ts --data-dir /var/lib/eta --web-dir apps/web/dist --host 0.0.0.0 --port 8787
+```
 
-访问（默认端口块）：
+host 的 flag（`apps/eta/src/main.ts`）：
 
-- Web：http://localhost:3000
-- API 健康检查：http://localhost:3000/api/health
-- 公共 OpenAPI 文档：http://localhost:3000/api/docs
-- 内部 API 文档：http://127.0.0.1:3002/internal/docs
-- runtime 的入口（AXP 的服务与 OpenAI 兼容接口）：http://172.26.64.1:3005
+| flag                  | 含义                                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------------------- |
+| `--data-dir <dir>`    | 数据目录，默认 `~/.eta`：数据库、会话、智能体工作区、产物、模型配置、令牌都在这里                       |
+| `--port <n>`          | 端口，默认 `8787`（0 表示任意空闲端口）                                                                 |
+| `--host <addr>`       | 监听的网卡，默认 `127.0.0.1`。**监听回环以外的地址会自动开启令牌门**                                    |
+| `--web-dir <dir>`     | 构建好的 Web（含 `index.html`）。不给则只提供管道，不提供页面                                           |
+| `--token-file <path>` | 开启令牌门并指定令牌文件（不存在时创建，权限 0600）。监听非回环地址而没给时用 `<数据目录>/access-token` |
+| `--allow-origin <o>`  | 额外允许打开 WebSocket 的页面 origin，可重复。放在改写了 `Host` 的反向代理后面时填页面的外部地址        |
+| `--memory-url <url>`  | 记忆边车的地址，也可用环境变量 `ETA_MEMORY_URL`（flag 优先）。不给则没有记忆                            |
 
-浏览器只访问网关，runtime 和环境包的服务只访问 runtime 网关（`apps/gateway`，Caddy 配置），开发和生产使用同一套路由：`/api/bundles/<name>/` → 环境包的服务，`/api/` → control-plane，其余 → Web。服务之间没有共享密钥，runtime 网关替所有服务认证调用方。详见[网关](docs/architecture/gateway.md)。
+首次访问带令牌的 host：在浏览器打开 `http://host:8787/?token=<令牌>` 一次，之后用 cookie；脚本用 `Authorization: Bearer <令牌>`。`/up` 是健康检查，不需要令牌。细节见[访问控制](docs/architecture/access.md)。
 
-Web 已配置 Query、nuqs、Phosphor Icons、表单校验、通知、Markdown 和 Tailwind，使用方式见 [Web 开发说明](apps/web/README.md)。
+### Docker
 
-## 命令
+```sh
+docker build -f deploy/Dockerfile -t eta .
+docker run -d --name eta -p 8787:8787 -v eta-data:/data eta
+docker exec eta cat /data/access-token      # 令牌
+```
 
-| 根目录命令                   | 用途                                                                         |
-| ---------------------------- | ---------------------------------------------------------------------------- |
-| `bun run dev`                | 启动开发环境，任一进程退出时关闭所有进程                                     |
-| `bun run deploy`             | 把工作区部署到本机的 Nomad（见 `deploy/README.md`）                          |
-| `bun run dev:control-plane`  | 单独启动控制面的公共 API 与内部 API（同一进程）                              |
-| `bun run dev:controller`     | 单独启动 runtime controller（需要 Nomad 和 Docker）                          |
-| `bun run dev:routine-worker` | 单独启动定时任务的 worker                                                    |
-| `bun run dev:web`            | 单独启动 Web                                                                 |
-| `bun run db:migrate`         | 执行数据库迁移                                                               |
-| `bun run build`              | 用 Turbo 构建 Web 与各平台的镜像产物（见下文）                               |
-| `bun run check`              | 格式检查，再构建、类型检查、lint 与全部测试                                  |
-| `bun run lint`               | ESLint、Ruff 与 Go 检查                                                      |
-| `bun run test`               | 全部测试（Web 用 Rstest，runtime 用 Bun，Python 用 pytest，Go 用 `go test`） |
-| `bun run test:control-plane` | 运行 control plane 测试                                                      |
-| `bun run test:agent-runtime` | 运行 runtime 测试（脚本化的 app-server，无需凭据）                           |
-| `bun run format`             | 用 dprint 格式化整个仓库（`format:check` 只检查）                            |
+一个镜像（构建 Web，host 用 `--web-dir` 提供），一个卷 `/data` 放全部数据，监听 `0.0.0.0:8787`，所以令牌门默认开启。镜像名后面的参数会追加给 host，例如 `docker run … eta --allow-origin https://eta.example.com --memory-url http://memory:8320`。健康检查是 `/up`。
 
-TanStack 的 `src/routeTree.gen.ts` 由 `dev` 或 `build` 自动生成；控制面的类型 `src/api/control-plane.gen.ts` 由 `generate` 从控制面的 OpenAPI 文档生成，而这份文档由控制面的 Go 代码生成（见[控制面](docs/architecture/control-plane.md)）。两者都不入库；`check` 会先执行构建，因此可在全新安装后直接执行。
+`deploy/compose.yaml` 把 host 和（可选的）记忆边车放在一起：
 
-构建、检查和测试都通过 [Turborepo](https://turborepo.com) 运行，结果缓存在 `.turbo/cache`，输入没变的任务直接复用。镜像所需的产物在 Docker 之外构建，输出到各应用的 `out/`：
+```sh
+docker compose -f deploy/compose.yaml up -d --build                      # 只有 host
+MEMORY_LLM_BASE_URL=… MEMORY_LLM_API_KEY=… MEMORY_LLM_MODEL=… ETA_MEMORY_URL=http://memory:8320 \
+  docker compose -f deploy/compose.yaml --profile memory up -d --build   # 加上记忆
+```
 
-- Web：`out/server.js`（打包了全部依赖的静态文件服务）和 `out/dist`（SPA 资源），与平台无关；agent runtime 同样是一个打包好的 `out/main.js`。
-- Go：`out/<平台>/` 下的静态二进制，交叉编译。
-- Python：`out/<平台>/site-packages`，只用目标平台的 wheel 安装锁定的依赖。
+放在反向代理后面时设置 `ETA_ALLOW_ORIGIN=https://你的域名`，代理需要升级 WebSocket（`/ws`、`/machines/connect`）。
 
-目标平台写在任务名里（`build:linux-amd64`、`build:linux-arm64`），在哪台机器上构建都得到同一份缓存。Dockerfile 只复制这些产物，产物逐字节不变时 Docker 复用对应的层。镜像用本机的 `docker buildx` 构建，留在本机的 Docker 里（Nomad 从那里运行它们），没有镜像仓库。
+## daemon：让别的电脑跑会话
 
-## 格式化、lint 与提交检查
+daemon 是 `bun build --compile` 的单文件，不含 Web、数据库和模型配置；模型调用和产品工具都回到主 node。
 
-`dprint.json` 统一格式化整个仓库：JS/TS/CSS 用 Biome，Python 用 Ruff，Go 用 gofmt，JSON、Markdown、TOML、YAML 和 Dockerfile 用 dprint 自带插件。lint 由各自的工具负责：Web 用 `@antfu/eslint-config`（格式类规则关闭，交给 dprint），Python 用 Ruff（配置在根目录 `ruff.toml`），Go 暂时只有 `gofmt` 检查和 `go vet`。
+```sh
+bun run --cwd apps/daemon build           # 产出 apps/daemon/out/eta-daemon
+```
 
-`bun install` 会通过 Lefthook 安装 pre-commit 钩子（`lefthook.yml`），提交前依次：
+1. 在主 node 的设置 → 机器里添加一台机器，得到一条命令（安装码 24 小时内有效、一次性）。
+2. 在那台电脑上执行：`eta-daemon setup <主 node 地址> <安装码>`。它在本地生成密钥并显示指纹，等待批准。
+3. 在设置页核对指纹一致后批准。
+4. `eta-daemon run` 启动；`eta-daemon install-service` 注册成 systemd 用户服务（Linux）或 launchd agent（macOS）。
 
-1. ESLint 和 Ruff 对暂存的文件应用安全修复并重新暂存；修不掉的问题（包括只有不安全修复的）会拦下提交。
-2. dprint 格式化暂存的文件并重新暂存。
-3. Turbo 运行构建、类型检查、lint 和测试，没变的部分直接用缓存。
+daemon 只出站连接主 node，主 node 需要对它可达（经反向代理时要能升级 `/machines/connect`）。数据目录默认 `~/.eta-daemon`（`--data-dir` 或 `ETA_DAEMON_DIR`）。原理见[机器与 daemon](docs/architecture/machines.md)。
 
-GitHub Actions（`.github/workflows/ci.yml`）在每个 PR 和推到 `main` 时跑 `bun run check`：squash 合并、`--no-verify` 和机器人推送都绕不过它。CI 里设了 `CI=1`（缺 akhook 等工具的测试失败而不是跳过）和 `AXP_TEST_NATS_URL`（真实 NATS 的测试也跑），PostgreSQL 仍由测试自己通过 `scripts/test-postgres.sh` 启动。
+## 记忆边车
 
-Turbo 用 Vercel Remote Cache（`turbo.json` 的 `remoteCache.teamId`），本机各个 checkout（包括 worktree）和 CI 共用：提交时 pre-commit 跑过的任务会上传，CI 大多直接复用。本机用 `bunx turbo login` 登录一次；CI 用 GitHub 的 OIDC token 换一个短期 token，这需要在 Vercel 团队的 Settings → Build and Deployment → OIDC Policies for CLI Access 里，为这个仓库添加一条 Turborepo CLI 策略。
+可选。没有它，host 不挂载记忆，界面隐藏记忆页。它需要一个带 pgvector 的 PostgreSQL，以及一个 OpenAI 兼容的模型（用来从对话里抽取事实）：
 
-## 日志
+| 环境变量                                                        | 含义                              |
+| --------------------------------------------------------------- | --------------------------------- |
+| `DATABASE_URL`                                                  | 边车自己的 PostgreSQL（pgvector） |
+| `MEMORY_LLM_BASE_URL`、`MEMORY_LLM_API_KEY`、`MEMORY_LLM_MODEL` | 抽取事实用的模型                  |
+| `MEMORY_HOST`、`MEMORY_PORT`                                    | 监听，默认 `127.0.0.1:8320`       |
 
-日志、错误和 trace 都由各进程直接用 Sentry 的 SDK 发到自建的 [Rustrak](https://github.com/rustrak/rustrak)（兼容 Sentry 协议；GPL-3.0，只以官方镜像独立运行，`deploy/nomad/infra.nomad.hcl`）。Go 用 `log/slog` 和 `sentry-go`（`packages/telemetry-go`），Python 用标准库 `logging` 和 `sentry-sdk`（`bundles/memory/service/axp_memory/telemetry.py`），Web 服务端用 `@sentry/bun`（`apps/web/src/server/telemetry.ts`），浏览器用 `@sentry/react`（`apps/web/src/lib/report.ts`）。控制面内嵌的 CLIProxyAPI 的 logrus 记录也经 slog 走同一条路（`library=cliproxy`）。
-
-- 每条日志（`INFO` 及以上）在 stderr 输出一行可读格式 `15:04:05.000 INFO  消息 key=value`（UTC），供 `docker logs` 看；同时是一条 Sentry 日志。
-- `ERROR` 记录是 Sentry 事件，按消息聚合成 issue；未捕获的异常和 panic 也是。HTTP 请求各是一个 transaction（健康检查除外）。
-- 浏览器报未捕获的错误、未处理的 rejection 和 React 的渲染错误。生产构建给每个文件和它的 source map 加上 debug id（`sentry sourcemap inject`），部署时把 source map 上传到 Rustrak，压缩后的堆栈就能还原到源码行。
-- 浏览器和环境包的服务经网关的 `/sentry` 发送（只转发 envelope），DSN 只有公钥，不持有凭据。
-- 没有 `SENTRY_DSN` 时什么都不发送；`SENTRY_ENVIRONMENT` 是环境，release 是部署的版本（`AXP_VERSION`）。
-
-`bun run dev` 用开发基础设施里共享的 Rustrak，启动输出里有它的地址、账号和给本机用的 DSN；所有实例都发到项目 `axp`，环境 `development-<端口>` 区分不同实例。生产见 `deploy/README.md`。
-
-agent runtime 只把自己的日志写到 stdout。Codex 原生的 OpenTelemetry 导出（日志事件含 prompt、trace、指标）是关掉的：Codex 不会说 Sentry 协议，也不再有 Collector，所以智能体的 prompt trace 不再收集。
-
-## 数据库与存储
-
-数据库是 PostgreSQL，由 `DATABASE_URL` 指定。开发默认连开发基础设施里的 `127.0.0.1:24433`（库 `axp`；换一个库名也就换了一组 `dev-<库名>*` 命名空间），生产连 `127.0.0.1:24432`。测试连本机共享的 `axp-dev-postgres` 容器（`127.0.0.1:15432`，`scripts/test-postgres.sh` 启动它，控制面测试会自动调用）。
-
-每个 Agent 的全部状态（工作区和 Codex 会话）在它自己的卷上（Nomad 的 host volume `agent-<id>`），只挂进它自己的容器；容器重建时卷还在，runtime 从卷上恢复 thread。详见 [对话与运行时](docs/architecture/chat-runtime.md)。
-
-## 生产部署
-
-Nomad 的 jobspec 和部署脚本都在 [`deploy/`](deploy/README.md)。在装好 Nomad 和 Docker 的 Linux 机器上克隆仓库后执行 `deploy/nomad/deploy.sh`（或 `bun run deploy`），即可把工作区部署到这台机器。
-
-配置参考：[Vite + React](https://vite.dev/guide/)、[TanStack Router](https://tanstack.com/router/latest/docs/framework/react/installation/with-vite)、[huma](https://huma.rocks)、[Codex app-server](https://github.com/openai/codex/tree/main/codex-rs/app-server)。
+边车没有鉴权，只让 host 能连到它（回环，或 compose 的内部网络）。镜像见 `deploy/memory.Dockerfile`；本地运行与细节见[记忆](docs/architecture/memory.md)。host 用 `--memory-url http://127.0.0.1:8320` 指向它。
