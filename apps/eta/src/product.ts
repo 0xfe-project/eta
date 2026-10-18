@@ -23,6 +23,9 @@ import { SettingStore } from "./inbox/setting";
 import { InteractionStore } from "./inbox/store";
 import { machinesPlugin } from "./machines/plugin";
 import { MachineStore } from "./machines/store";
+import { MemoryClient } from "./memory/client";
+import { memoryRunHooks, memoryTools } from "./memory/hooks";
+import { memoryPlugin } from "./memory/plugin";
 import { projectsPlugin } from "./projects/plugin";
 import { ProjectStore } from "./projects/store";
 import { combineSessionHooks } from "./session-hooks";
@@ -43,9 +46,15 @@ const MOUNT_TIMEOUT_MS = 10_000;
 export function createProduct(options: {
   db: Database;
   dataDir: string;
+  /** The memory sidecar's address. Without one there is no memory: no plugin, no tools, no calls. */
+  memoryUrl?: string | undefined;
   warn: (message: string) => void;
 }): Product {
   const { db, dataDir, warn } = options;
+  const memory =
+    options.memoryUrl === undefined || options.memoryUrl === ""
+      ? undefined
+      : new MemoryClient(options.memoryUrl);
   const agents = new AgentStore(db);
   const machines = new MachineStore(db);
   const projects = new ProjectStore(db);
@@ -98,6 +107,7 @@ export function createProduct(options: {
     timeline,
     changed,
     warn,
+    ...(memory === undefined ? {} : { runHooks: memoryRunHooks(memory) }),
   });
 
   // Each feature that adds tools, tool middleware or a question observer to sessions is one entry
@@ -108,6 +118,9 @@ export function createProduct(options: {
       askObserve: engine.askObserve,
     },
     { toolMiddleware: inbox.toolMiddleware, askObserve: inbox.askObserve },
+    ...(memory === undefined
+      ? []
+      : [{ sessionTools: memoryTools.bind(undefined, memory) }]),
   ]);
 
   return {
@@ -122,6 +135,7 @@ export function createProduct(options: {
         "conversations",
         "inbox",
         "usage",
+        ...(memory === undefined ? [] : ["memory"]),
       ]);
       let ready!: () => void;
       const everyone = new Promise<void>((resolve) => {
@@ -156,6 +170,11 @@ export function createProduct(options: {
       );
       server.mount("inbox", inboxPlugin({ inbox }, applied("inbox")));
       server.mount("usage", usagePlugin({ usage, warn }, applied("usage")));
+      if (memory !== undefined)
+        server.mount(
+          "memory",
+          memoryPlugin({ client: memory }, applied("memory")),
+        );
       let timer: ReturnType<typeof setTimeout> | undefined;
       const late = new Promise<never>((_, reject) => {
         timer = setTimeout(
