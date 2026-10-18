@@ -53,6 +53,7 @@ import { StaticWeb } from "./http/static";
 import { approvalMiddleware } from "./interactions/approval";
 import { AskBridge } from "./interactions/bridge";
 import { InteractionStore } from "./interactions/store";
+import { personaCardsFor } from "./personas";
 import { providerCatalog } from "./providers/catalog";
 import { buildModels } from "./providers/runtime";
 import { RouteRegistry, RouteService } from "./routes";
@@ -248,6 +249,18 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
       // Extraction at the end of a run needs a model call; P3.4 owns the policy of when to spend
       // one. Reading and the write target are what the interface shows, so those come first.
     }),
+    // Persona cards: the built-ins plus the ones for this session's own directory
+    // (`<cwd>/.eta/persona/<id>.persona.md`, and `~/.eta/persona/` everywhere). Without this the
+    // kernel's card table is empty, so an agent that names a card runs as if it had named
+    // nothing — the card exists, the picker lists it, and the prompt never sees it.
+    personasFor: async (meta) => [
+      ...(
+        await personaCardsFor(meta.cwd, {
+          home: options.homeDir ?? homedir(),
+          warn,
+        })
+      ).values(),
+    ],
     // A session's questions become interaction rows (P2.6), which is what the product's
     // confirmation cards are.
     askObserve: (meta) => (action, payload) =>
@@ -423,10 +436,12 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
       agents,
       ask: bridge,
       groups,
+      home: options.homeDir ?? homedir(),
       hub,
       interactions,
       models,
       runner,
+      sessions,
     }),
   ];
 

@@ -484,18 +484,24 @@ export class SessionManager {
     if (this.personasFor !== undefined) {
       const cards = await this.personasFor(meta);
       session.kernel.persona.loadCards(cards);
-      if (meta.persona !== undefined) {
-        const resolved = resolvePersona(
-          new Map(cards.map((card) => [card.id, card])),
-          meta.persona,
+      // Always a card: `""` and "not said" both mean the project's default, which is the
+      // fallback card rather than no voice at all (eta-old resolves the same way). A session
+      // with no persona would answer in whatever tone the model happens to have, which is not
+      // a default anyone chose.
+      const resolved = resolvePersona(
+        new Map(cards.map((card) => [card.id, card])),
+        meta.persona ?? "",
+      );
+      if (
+        meta.persona !== undefined &&
+        meta.persona.length > 0 &&
+        !resolved.exact
+      )
+        this.warn(
+          `[eta-server] session ${meta.id}: persona ${meta.persona} is gone; using ${resolved.id}`,
         );
-        if (!resolved.exact)
-          this.warn(
-            `[eta-server] session ${meta.id}: persona ${meta.persona} is gone; using ${resolved.id}`,
-          );
-        session.kernel.persona.setActive([resolved.id]);
-      }
-    } else if (meta.persona !== undefined) {
+      session.kernel.persona.setActive([resolved.id]);
+    } else if (meta.persona !== undefined && meta.persona.length > 0) {
       session.kernel.persona.setActive([meta.persona]);
     }
     box.pool = session.subagents;

@@ -29,6 +29,7 @@
  * because nothing here runs in a container and there is nothing to restart.
  */
 import type { KernelModels } from "@eta/core";
+import type { SessionManager } from "@eta/server";
 import type { Context } from "cordis";
 import type { AgentStore } from "../agents/store";
 import type {
@@ -45,10 +46,12 @@ import type {
   InteractionStore,
 } from "../interactions/store";
 import type { PluginContext } from "../plugin-api";
+import { resolvePersona } from "@eta/server";
 import { publishAgentDeleted, publishAgentUpdated } from "../agents/events";
 import { modelRejection } from "../agents/model-check";
 import { productDocument } from "../compat/openapi";
 import { toAgent, toGroup, toInteraction, toMessage } from "../compat/shapes";
+import { allPersonaCards, personaCardsFor, personaList } from "../personas";
 import { errorResponse } from "../routes";
 
 /**
@@ -64,6 +67,10 @@ export interface CompatPluginConfig {
   agents: AgentStore;
   groups: GroupStore;
   hub: EventHub;
+  /** Where the user's own cards are (`~/.eta/persona`), for the list and for a live switch. */
+  home: string;
+  /** The live sessions, so naming a different card reaches a conversation already open. */
+  sessions: SessionManager;
   /** For the model check on write, exactly as the internal route does it. */
   models: KernelModels | undefined;
   /** Stopping a reply is a run's business, so this layer asks the runner that owns it. */
@@ -140,7 +147,17 @@ export const compatPlugin = {
   inject: ["routes"],
   apply(ctx: Context, config: CompatPluginConfig): void {
     const plugin = ctx as unknown as PluginContext;
-    const { agents, ask, groups, hub, interactions, models, runner } = config;
+    const {
+      agents,
+      ask,
+      groups,
+      home,
+      hub,
+      interactions,
+      models,
+      runner,
+      sessions,
+    } = config;
 
     /** One group in the product's shape. */
     const groupShape = (groupId: string): AxpGroup | undefined => {
@@ -925,61 +942,61 @@ export const compatPlugin = {
       ),
     );
 
-    // The personas a project offers: cards from the group's own directory, plus the host-wide
-    // ones. The picker lists them; the agent points at a card by its name.
+    // The persona cards this host has: the harness's built-ins, `~/.eta/persona/`, and the cards
+    // of every group's project directory. Standing where the picker stands — nowhere in
+    // particular — the honest list is the union, because the name the picker writes is resolved
+    // again in the directory of the session the agent ends up in.
     plugin.effect(() =>
-      plugin.routes.register("GET", "/api/v1/personas", async (_request) => {
-        const { readdir, readFile } = await import("node:fs/promises");
-        const { join } = await import("node:path");
-        const cards: {
-          id: string;
-          name: string;
-          description: string;
-          custom: boolean;
-        }[] = [];
-        for (const { group } of groups.list()) {
-          if (group.cwd.length === 0) continue;
-          const directory = join(group.cwd, ".eta", "personas");
-          let entries: string[] = [];
-          try {
-            entries = await readdir(directory);
-          } catch {
-            continue;
-          }
-          for (const entry of entries) {
-            if (!entry.endsWith(".md")) continue;
-            const id = entry.slice(0, -3);
-            if (cards.some((card) => card.id === id)) continue;
-            try {
-              const text = await readFile(join(directory, entry), "utf8");
-              // Line-wise reads, not one multiline regex: a heading is the first line that
-              // starts with "# ", a summary the first line after it that quotes or lists.
-              const lines = text.split("\n");
-              const heading = lines
-                .find((line) => line.startsWith("# "))
-                ?.slice(2)
-                .trim();
-              const summary =
-                lines
-                  .find(
-                    (line) => line.startsWith("> ") || line.startsWith("- "),
-                  )
-                  ?.slice(2)
-                  .trim() ?? "";
-              cards.push({
-                id,
-                name: heading ?? id,
-                description: summary.slice(0, 120),
-                custom: false,
-              });
-            } catch {
-              // A card that cannot be read is not a card; the list is not a health check.
-            }
-          }
-        }
-        return Response.json({ personas: cards });
+      plugin.routes.register("GET", "/api/v1/personas", async () => {
+        const cards = await allPersonaCards(
+          groups
+            .list()
+            .map(({ group }) => group.cwd)
+            .filter((cwd) => cwd.length > 0),
+          { home: config.home, warn: plugin.warn },
+        );
+        return Response.json({ personas: personaList(cards) });
       }),
     );
+
+    /**
+     * Put an agent's new card into the sessions it already has, in every group.
+     *
+     * The cards are re-read for each session's own directory, because that is where its run will
+     * look them up: the project's card wins over the home one, and a name that resolves to nothing
+     * falls back rather than leaving the session voiceless (the manager says the same thing when it
+     * opens a session, and both go through `resolvePersona` so they cannot disagree).
+     */
+    const switchLivePersonas = async (
+      agentId: string,
+      persona: string,
+    ): Promise<void> => {
+      for (const { group } of groups.list()) {
+        const sessionId = groups
+          .participantsOf(group.id)
+          .find((participant) => participant.agentId === agentId)?.sessionId;
+        if (sessionId === undefined) continue;
+        const managed = await sessions.session(sessionId);
+        if (managed === undefined) continue;
+        const cards = await personaCardsFor(group.cwd, {
+          home,
+          ...(plugin.warn === undefined ? {} : { warn: plugin.warn }),
+        });
+        managed.session.kernel.persona.loadCards([...cards.values()]);
+        if (persona.length === 0) {
+          // The project's default: the harness's own choice, not a name this layer invents.
+          managed.session.kernel.persona.setActive([]);
+          continue;
+        }
+        const resolved = resolvePersona(cards, persona);
+        if (!resolved.exact) {
+          plugin.warn?.(
+            `[eta] agent ${agentId}: persona ${persona} is not a card here; using ${resolved.id}`,
+          );
+        }
+        managed.session.kernel.persona.setActive([resolved.id]);
+      }
+    };
 
     // Which persona card an agent wears. Its own route rather than a PATCH field: a persona is
     // chosen from the cards a project offers (which is a list, with names and descriptions), and
@@ -1035,7 +1052,11 @@ export const compatPlugin = {
             );
           }
           publishAgentUpdated(hub, record);
-          // Runs already going keep the persona they started with; the next one reads this.
+          // The card reaches the sessions this agent already has: a persona is read when a
+          // prompt is composed, so switching it mid-conversation changes the *next* turn rather
+          // than the one in flight — and without this the agent would keep the old voice until
+          // its session happened to be reopened.
+          await switchLivePersonas(record.id, record.persona);
           return Response.json({
             persona: record.persona,
             uses_project_default: record.persona.length === 0,

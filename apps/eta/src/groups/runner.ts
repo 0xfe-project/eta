@@ -80,8 +80,17 @@ export class WakeRunner {
   readonly #hub: EventHub | undefined;
   readonly #cwd: string;
   readonly #warn: (message: string) => void;
-  /** Background deliveries, chained so a group's answers keep the order they were woken in. */
-  #pending: Promise<unknown> = Promise.resolve();
+  /**
+   * Background deliveries, one chain per session.
+   *
+   * A session is one conversation — a private chat, or one member's side of a group — and it can
+   * only be answering one thing at a time: a second run on the same session would either be merged
+   * into the turn in flight or answered twice. Everything else is independent: an agent in three
+   * groups has three sessions, so its three answers run side by side; a group of three has three
+   * sessions, so its three members do too. One chain for the whole runner made all of them queue
+   * behind each other, which is what "等待中 · 位置 2" was actually reporting.
+   */
+  #chains = new Map<string, Promise<unknown>>();
 
   constructor(options: WakeRunnerOptions) {
     this.#groups = options.groups;
@@ -117,9 +126,9 @@ export class WakeRunner {
    * Deliver a message's wakes without waiting for the answers (P2.6).
    *
    * The product's send answers with the reply rows it started and the web follows the rest over the
-   * stream, so the rows exist by the time this returns and the runs happen after it. Runs are
-   * chained rather than started side by side: a group's timeline should read in the order its
-   * agents were woken.
+   * stream, so the rows exist by the time this returns and the runs happen after it. The rows are
+   * created in wake order (this loop awaits each one), and the runs are chained per session: two
+   * answers in one conversation keep their order, two conversations do not wait for each other.
    */
   async start(groupId: string, messageId?: string): Promise<MessageRecord[]> {
     const group = this.#groups.get(groupId);
@@ -161,7 +170,9 @@ export class WakeRunner {
           ? undefined
           : this.#groups.message(prepared.replyMessageId);
       if (row !== undefined) started.push(row);
-      this.#chain(() =>
+      // Keyed by the session this member answers in: two wakes for one session arrive here in
+      // order and run in order, and every other session is free to run at the same time.
+      this.#chain(prepared.managed.meta.id, () =>
         this.#execute(group.group, groupId, wake.agentId, message, prepared),
       );
     }
@@ -252,11 +263,18 @@ export class WakeRunner {
     return managed.session.kernel;
   }
 
-  #chain(job: () => Promise<unknown>): void {
-    this.#pending = this.#pending.then(job).catch((error: unknown) => {
+  #chain(sessionId: string, job: () => Promise<unknown>): void {
+    const previous = this.#chains.get(sessionId) ?? Promise.resolve();
+    const next = previous.then(job).catch((error: unknown) => {
       this.#warn(
         `[eta] a background delivery failed: ${error instanceof Error ? error.message : String(error)}`,
       );
+    });
+    this.#chains.set(sessionId, next);
+    // The chain is dropped once it is the one that finished: a session that has answered
+    // everything should not leave a promise per conversation behind for the life of the process.
+    void next.finally(() => {
+      if (this.#chains.get(sessionId) === next) this.#chains.delete(sessionId);
     });
   }
 
@@ -510,6 +528,11 @@ export class WakeRunner {
       agentId,
       groupId,
       ...(agent?.model === undefined ? {} : { model: agent.model }),
+      // The card travels with the session, not with the run: the manager resolves it against the
+      // cards of this directory when the session opens, and every turn after that reads it live.
+      ...(agent?.persona === undefined || agent.persona.length === 0
+        ? {}
+        : { persona: agent.persona }),
     });
     this.#groups.setSession(groupId, agentId, created.meta.id);
     return created;
