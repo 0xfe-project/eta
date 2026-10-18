@@ -14,7 +14,15 @@
     "colorModeHint": "Follows the system until you pick one."
   },
   "sections": {
+    "approvals": "Tools that ask first",
     "appearance": "Appearance"
+  },
+  "approvals": {
+    "description": "A listed tool asks in the inbox before every call: allow or deny. Applies to every conversation.",
+    "toolName": "Tool name",
+    "placeholder": "Tool name, e.g. bash",
+    "add": "Add",
+    "empty": "None yet. Every tool runs without asking."
   },
   "accessibility": {
     "needsAttention": "Settings (accounts need attention)",

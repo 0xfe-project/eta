@@ -97,7 +97,6 @@ describe("列表的 key", () => {
       id,
       conversationId: "g1",
       agentId: "a1",
-      sessionId: `s-${id}`,
       prompt: "p",
       options: ["允许"],
       multi: false,
