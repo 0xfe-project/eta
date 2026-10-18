@@ -26,7 +26,6 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
-import { create } from "zustand";
 import { ApiError, controlPlane, fallbackMessage, unwrap } from "@/lib/api";
 
 // The control plane's chat API; every type comes from its OpenAPI document.
@@ -182,9 +181,6 @@ function applyEvent(queryClient: QueryClient, type: string, data: unknown) {
   }
 }
 
-/** Whether the stream dropped and has not come back yet. */
-export const useStreamLost = create<{ lost: boolean }>(() => ({ lost: false }));
-
 /**
  * Keep the chat snapshot live with product events over SSE. Mounted once,
  * for every page (RootDocument). EventSource resumes by itself with
@@ -220,10 +216,8 @@ export function useLiveChat() {
         );
       source.onopen = () => {
         failures = 0;
-        useStreamLost.setState({ lost: false });
       };
       source.onerror = () => {
-        useStreamLost.setState({ lost: true });
         if (source?.readyState === EventSource.CLOSED) retry();
       };
     }

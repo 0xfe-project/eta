@@ -1,4 +1,10 @@
-import type { ProviderView } from "@/queries/providers";
+import type {
+  EtaModelConfig,
+  ModelCapabilities,
+  ProviderInput,
+  ProviderKind,
+  ProviderSummary,
+} from "@eta/client-contracts";
 /**
  * Editing one provider: what it is, where it points, how it authenticates, and what it can run.
  *
@@ -9,8 +15,11 @@ import type { ProviderView } from "@/queries/providers";
  *
  * The key field starts empty and says whether a key is configured: an editor can replace one
  * without ever being shown it.
+ *
+ * A save carries the revision of the config this form was read from. If the config changed since
+ * (another tab, an editor on the file), the host refuses, the page re-reads it, and the person is
+ * told to look again before saving once more.
  */
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -32,9 +41,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  currentRevision,
+  isConfigChanged,
+  providerErrorMessage,
+  useProviders,
+  useSaveProvider,
+} from "@/queries/providers";
 
-const KINDS = [
+const KINDS: ProviderKind[] = [
   "openai-compatible",
+  "openai-responses",
   "openai-codex",
   "kimi-coding",
   "deepseek",
@@ -42,62 +59,101 @@ const KINDS = [
   "zai",
 ];
 
-/** What the form submits. `apiKey` is absent unless the field was typed into or cleared. */
-export interface ProviderPatch {
-  name?: string;
-  kind?: string;
-  baseUrl?: string;
-  apiKey?: string | null;
-  headers?: Record<string, string | null>;
-  models?: {
-    id: string;
-    name?: string;
-    contextWindow?: number;
-    input?: string[];
-  }[];
+/** One model in the form: what can be edited, and the config entry it came from. */
+interface ModelRow {
+  id: string;
+  name: string;
+  contextWindow: string;
+  vision: boolean;
+  source?: EtaModelConfig;
 }
 
-function buildPatch(input: {
+function rowOf(model: EtaModelConfig): ModelRow {
+  return {
+    id: model.id,
+    name: model.name ?? "",
+    contextWindow:
+      model.contextWindow === undefined ? "" : String(model.contextWindow),
+    vision: model.input?.includes("image") ?? false,
+    source: model,
+  };
+}
+
+/**
+ * The entry a row saves as. Everything the form does not show (reasoning, thinking levels, token
+ * limits) stays as it was, and what the person changed goes in `overrides`, which discovery keeps.
+ */
+function modelOf(row: ModelRow): EtaModelConfig | undefined {
+  const id = row.id.trim();
+  if (id.length === 0) return undefined;
+  const was = row.source;
+  const changes: ModelCapabilities = {};
+  const name = row.name.trim();
+  if (name.length > 0 && name !== was?.name) changes.name = name;
+  const contextWindow = Number(row.contextWindow);
+  if (
+    row.contextWindow.trim().length > 0 &&
+    Number.isInteger(contextWindow) &&
+    contextWindow > 0 &&
+    contextWindow !== was?.contextWindow
+  )
+    changes.contextWindow = contextWindow;
+  if (row.vision !== (was?.input?.includes("image") ?? false))
+    changes.input = row.vision ? ["text", "image"] : ["text"];
+  const overrides = { ...was?.overrides, ...changes };
+  return {
+    ...was,
+    id,
+    ...(Object.keys(overrides).length > 0 ? { overrides } : {}),
+  };
+}
+
+/** A name as an id: the provider's address in the config, and the front of its model ids. */
+function slug(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}._-]+/gu, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function uniqueId(name: string, taken: readonly string[]): string {
+  const base = slug(name);
+  if (base.length === 0) return "";
+  let id = base;
+  for (let n = 2; taken.includes(id); n++) id = `${base}-${n}`;
+  return id;
+}
+
+function inputOf(form: {
+  id: string;
   name: string;
-  kind: string;
+  kind: ProviderKind;
   baseUrl: string;
   key: string;
   clearKey: boolean;
   headers: { name: string; value: string }[];
-  models: {
-    id: string;
-    name: string;
-    contextWindow: string;
-    vision: boolean;
-  }[];
-}): ProviderPatch {
-  const patch: ProviderPatch = {
-    name: input.name.trim(),
-    kind: input.kind,
-    baseUrl: input.baseUrl.trim(),
+  models: ModelRow[];
+}): ProviderInput {
+  const name = form.name.trim();
+  const input: ProviderInput = {
+    id: form.id,
+    ...(name.length > 0 ? { name } : {}),
+    kind: form.kind,
+    baseUrl: form.baseUrl.trim(),
     headers: Object.fromEntries(
-      input.headers
+      form.headers
         .map((row) => [row.name.trim(), row.value.trim()] as const)
-        .filter(([name]) => name.length > 0)
-        .map(([name, value]) => [name, value.length === 0 ? null : value]),
+        .filter(([header]) => header.length > 0)
+        .map(([header, value]) => [header, value.length === 0 ? null : value]),
     ),
-    models: input.models
-      .filter((model) => model.id.trim().length > 0)
-      .map((model) => ({
-        id: model.id.trim(),
-        ...(model.name.trim().length === 0 ? {} : { name: model.name.trim() }),
-        ...(Number.isFinite(Number(model.contextWindow)) &&
-        model.contextWindow.trim().length > 0
-          ? { contextWindow: Number(model.contextWindow) }
-          : {}),
-        input: model.vision ? ["text", "image"] : ["text"],
-      })),
+    models: form.models.flatMap((row) => modelOf(row) ?? []),
   };
   // Absent means "leave it alone"; null means "take it away". An untouched field must not erase
   // the key just because the form had nothing to put in it.
-  if (input.clearKey) patch.apiKey = null;
-  else if (input.key.trim().length > 0) patch.apiKey = input.key.trim();
-  return patch;
+  if (form.clearKey) input.apiKey = null;
+  else if (form.key.trim().length > 0) input.apiKey = form.key.trim();
+  return input;
 }
 
 export function ProviderEditor({
@@ -105,14 +161,14 @@ export function ProviderEditor({
   open,
   onOpenChange,
 }: {
-  provider: ProviderView | undefined;
+  provider: ProviderSummary | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const { t: translateText } = useTranslation(["providers", "common"] as const);
-  const client = useQueryClient();
+  const { data: config } = useProviders();
   const [name, setName] = useState(provider?.name ?? "");
-  const [kind, setKind] = useState(provider?.kind ?? KINDS[0]!);
+  const [kind, setKind] = useState<ProviderKind>(provider?.kind ?? KINDS[0]!);
   const [baseUrl, setBaseUrl] = useState(provider?.baseUrl ?? "");
   const [key, setKey] = useState("");
   const [clearKey, setClearKey] = useState(false);
@@ -122,17 +178,14 @@ export function ProviderEditor({
       value: value ?? "",
     })),
   );
-  const [models, setModels] = useState(
-    (provider?.models ?? []).map((model) => ({
-      id: model.id,
-      name: model.name ?? "",
-      contextWindow:
-        model.context_window === null ? "" : String(model.context_window),
-      vision: model.input.includes("image"),
-    })),
+  const [models, setModels] = useState<ModelRow[]>(
+    (provider?.models ?? []).map(rowOf),
   );
   const [saved, setSaved] = useState(false);
+  const [changedElsewhere, setChangedElsewhere] = useState(false);
   const [discarding, setDiscarding] = useState(false);
+  // The config this form was read from: what a save has to be made against.
+  const [revision, setRevision] = useState(config?.revision);
 
   // What the form started as. A dirty form is one the person would lose by closing it, so closing
   // asks first — the rule the whole settings dialog follows, applied to the one form here that can
@@ -142,7 +195,12 @@ export function ProviderEditor({
     kind: provider?.kind ?? KINDS[0]!,
     baseUrl: provider?.baseUrl ?? "",
     headers: JSON.stringify(provider?.headers ?? {}),
-    models: JSON.stringify(provider?.models ?? []),
+    models: JSON.stringify(
+      (provider?.models ?? []).map((model) => {
+        const row = rowOf(model);
+        return [row.id, row.name, row.contextWindow, row.vision];
+      }),
+    ),
   };
   const dirty =
     key.length > 0 ||
@@ -160,41 +218,49 @@ export function ProviderEditor({
         model.contextWindow,
         model.vision,
       ]),
-    ) !==
-      JSON.stringify(
-        (provider?.models ?? []).map((model) => [
-          model.id,
-          model.name ?? "",
-          model.context_window === null ? "" : String(model.context_window),
-          model.input.includes("image"),
-        ]),
-      );
+    ) !== initial.models;
 
-  const save = useMutation({
-    mutationFn: async (patch: ProviderPatch) => {
-      const id = provider?.id ?? name.trim().toLowerCase().replace(/\s+/g, "-");
-      const response = await fetch(
-        `/api/llm/v1/providers/${encodeURIComponent(id)}`,
-        {
-          method: "PUT",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(patch),
+  const id =
+    provider?.id ??
+    uniqueId(
+      name,
+      (config?.providers ?? []).map((existing) => existing.id),
+    );
+  const save = useSaveProvider();
+  const submit = () =>
+    save.mutate(
+      {
+        provider: inputOf({
+          id,
+          name,
+          kind,
+          baseUrl,
+          key,
+          clearKey,
+          headers,
+          models,
+        }),
+        ...(revision === undefined ? {} : { revision }),
+      },
+      {
+        onSuccess: (result) => {
+          setSaved(true);
+          setChangedElsewhere(false);
+          setKey("");
+          setClearKey(false);
+          setRevision(result.revision);
         },
-      );
-      const body = (await response.json().catch(() => null)) as {
-        restart_required?: boolean;
-        error?: { message?: string };
-      } | null;
-      if (!response.ok) throw new Error(body?.error?.message ?? "保存失败");
-      return body?.restart_required === true;
-    },
-    onSuccess: (restartRequired) => {
-      setSaved(restartRequired);
-      setKey("");
-      void client.invalidateQueries({ queryKey: ["llm", "providers"] });
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
+        onError: (error) => {
+          if (isConfigChanged(error)) {
+            // The host re-read the config before refusing: the next save is made against it.
+            setRevision(currentRevision());
+            setChangedElsewhere(true);
+            return;
+          }
+          toast.error(providerErrorMessage(error));
+        },
+      },
+    );
 
   return (
     <Dialog
@@ -231,7 +297,10 @@ export function ProviderEditor({
             <Label htmlFor="provider-kind">
               {translateText("editor.kind")}
             </Label>
-            <Select value={kind} onValueChange={setKind}>
+            <Select
+              value={kind}
+              onValueChange={(next) => setKind(next as ProviderKind)}
+            >
               <SelectTrigger id="provider-kind">
                 <SelectValue />
               </SelectTrigger>
@@ -264,7 +333,7 @@ export function ProviderEditor({
               value={key}
               autoComplete="off"
               placeholder={
-                provider?.has_key === true
+                provider?.hasApiKey === true
                   ? translateText("editor.keyConfigured")
                   : translateText("editor.keyMissing")
               }
@@ -273,7 +342,7 @@ export function ProviderEditor({
                 if (event.target.value.length > 0) setClearKey(false);
               }}
             />
-            {provider?.has_key === true ? (
+            {provider?.hasApiKey === true ? (
               <button
                 type="button"
                 className="justify-self-start text-xs text-muted-foreground underline"
@@ -445,6 +514,14 @@ export function ProviderEditor({
               {translateText("editor.restartRequired")}
             </p>
           ) : null}
+          {changedElsewhere ? (
+            <p
+              role="alert"
+              className="border border-state-warning px-2 py-1 text-xs"
+            >
+              {translateText("errors.configChanged")}
+            </p>
+          ) : null}
         </div>
         {discarding ? (
           <div
@@ -475,20 +552,13 @@ export function ProviderEditor({
         ) : null}
         <DialogFooter>
           <Button
-            onClick={() =>
-              save.mutate(
-                buildPatch({
-                  name,
-                  kind,
-                  baseUrl,
-                  key,
-                  clearKey,
-                  headers,
-                  models,
-                }),
-              )
+            onClick={submit}
+            disabled={
+              save.isPending ||
+              config === undefined ||
+              id.length === 0 ||
+              baseUrl.trim().length === 0
             }
-            disabled={save.isPending || baseUrl.trim().length === 0}
           >
             {translateText("common:actions.save")}
           </Button>

@@ -9,7 +9,7 @@ import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { capabilities } from "@/lib/capabilities";
 import { translate } from "@/lib/i18n";
-import { useNeedsAttention } from "@/queries/llm";
+import { useNeedsAttention } from "@/queries/providers";
 
 // Settings' sections, listed by the dialog and by the phone's 更多 page.
 
@@ -83,15 +83,9 @@ export const settingsSections = everySection.filter(
     ),
 );
 
-/** The sections with accounts the user has to act on. */
+/** The sections with something the user has to act on. */
 export function useSettingsAttention(): Partial<
   Record<SettingsSection, boolean>
 > {
-  // 模型服务 lists every account; 连接 only Grok's, for the grok plugin. Both hooks always run
-  // (hooks cannot be conditional); a surface this host does not serve never needs attention.
-  const grok = useNeedsAttention(true);
-  return {
-    providers: useNeedsAttention(),
-    connections: capabilities.connections ? grok : false,
-  };
+  return { providers: useNeedsAttention() };
 }

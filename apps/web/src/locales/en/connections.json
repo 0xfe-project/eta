@@ -104,19 +104,11 @@
   "status": {
     "error": "Connection error",
     "notConnected": "Not connected",
-    "notLinked": "Not linked",
     "notConfigured": "Not configured",
     "connected": "Connected"
   },
   "errors": {
     "loadStatus": "Unable to load connection status"
-  },
-  "grok": {
-    "summary": "Generate images and videos; search the web and X",
-    "usingAccount": "Using {{accountName}} {{summary}}",
-    "accountTitle": "Grok account",
-    "sharedAccountPrefix": "Uses the same account as ",
-    "sharedAccountSuffix": "’ Grok integration, which also provides Grok models"
   },
   "configuration": {
     "savedReady": "Saved; agents using it will restart when idle",

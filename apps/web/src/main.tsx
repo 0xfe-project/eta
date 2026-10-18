@@ -15,12 +15,15 @@ import {
 } from "@/lib/i18n";
 import { applyTheme, readTheme, watchSystemTheme } from "@/lib/theme";
 import { watchForUpdates } from "@/lib/update";
+import { getWire } from "@/lib/wire";
 import { useOutbox } from "@/queries/outbox";
 import { getRouter } from "./router";
 import "@/styles.css";
 
 async function start() {
   watchForUpdates();
+  // The one connection to the host, open before anything asks for data over it.
+  getWire();
 
   // Makes the app installable from the browser's own install UI.
   if (import.meta.env.PROD && "serviceWorker" in navigator) {

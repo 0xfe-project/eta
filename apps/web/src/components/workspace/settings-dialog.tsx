@@ -14,7 +14,7 @@ import { useTheme } from "@/components/use-theme";
 import { elementPickerDefault, setElementPicker } from "@/lib/element-picker";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { useNeedsAttention } from "@/queries/llm";
+import { useNeedsAttention } from "@/queries/providers";
 import { AgentSettings } from "./agent-settings";
 import { BundleSettings } from "./bundle-settings";
 import { ComputerSettings } from "./computer-settings";
