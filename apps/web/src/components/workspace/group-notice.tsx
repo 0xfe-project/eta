@@ -19,7 +19,7 @@ export function GroupNotice({ message }: { message: ChatMessage }) {
     (p) => p.agent_id === guest && p.member,
   );
   return (
-    <div className="border-l pl-3 text-xs text-muted-foreground">
+    <div className="system-message">
       {message.blocks.map((b) =>
         b.type === "text" ? <p key={b.id}>{b.text}</p> : null,
       )}

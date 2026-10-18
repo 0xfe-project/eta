@@ -101,6 +101,10 @@ describe("a run's log", () => {
     await act(async () =>
       rstest.waitFor(() => expect(client.isFetching()).toBe(0)),
     );
+    // React Query's own settling runs on a macrotask here; one tick before reading the DOM.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
     const log = container.querySelector('ol[aria-label="执行记录"]')!;
     const items = [...log.children].map((li) => li.textContent);
     // In order, and no broken <img>.

@@ -9,7 +9,7 @@
     "latestSuffix": " (latest)",
     "option": "Version {{version}}{{latestLabel}}"
   },
-  "sandboxDescription": "Static pages published by agents run in a sandbox and cannot access AXP’s login state or APIs.",
+  "sandboxDescription": "Static pages published by agents run in a sandbox and cannot access Eta’s login state or APIs.",
   "loadTarget": "this Artifact",
   "sharing": {
     "revokeHint": "Revoking immediately invalidates the link. Sharing again creates a new link.",

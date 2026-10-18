@@ -32,12 +32,12 @@ import {
 } from "@/queries/chat";
 
 // Bundles are what agents are built from: a script run into the agent's
-// image and the plugins it adds, and a service some run as a Nomad job
-// (docs/architecture/bundles.md#服务). AXP's own are read only; the user's
+// image and the plugins it adds, and a service some run in the cluster
+// (the services' own manifests). eta's own are read only; the user's
 // are edited here, and every agent that loads one is rebuilt.
 
 const serviceStates: Record<string, string> = {
-  get deploying() {
+  get applying() {
     return translate("bundles:service.status.deploying");
   },
   get ready() {
@@ -153,12 +153,13 @@ function BundleDialog({
               rows={6}
               spellCheck={false}
               className="max-h-[40dvh] min-h-24 font-mono text-xs leading-relaxed"
-              placeholder={translateText("editor.jobspecPlaceholder", {
+              placeholder={translateText("editor.manifestsPlaceholder", {
                 bundleName: bundle.name,
+                serviceName: bundle.name,
               })}
-              value={draft.jobspec}
+              value={draft.manifests}
               onChange={(e) =>
-                setDraft((d) => ({ ...d, jobspec: e.target.value }))
+                setDraft((d) => ({ ...d, manifests: e.target.value }))
               }
             />
             <div className="flex flex-wrap gap-x-4 gap-y-1.5">

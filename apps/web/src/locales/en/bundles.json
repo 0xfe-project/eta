@@ -12,7 +12,7 @@
     "descriptionLabel": "Notes",
     "scriptLabel": "Script",
     "serviceLabel": "Service",
-    "jobspecPlaceholder": "# Optional: a Nomad job (HCL) run alongside AXP, which agents reach at /bundles/{{bundleName}}/\n# It needs a service named {{bundleName}} (provider nomad, address_mode alloc)",
+    "manifestsPlaceholder": "# Optional: Kubernetes objects running in the cluster, accessed by agents at /bundles/{{bundleName}}/\n# Requires a Service named {{serviceName}} with a port named http",
     "callableModels": "Callable models",
     "separateDatabase": "Separate database",
     "pluginsLabel": "Plugins"
@@ -33,9 +33,9 @@
   },
   "descriptions": {
     "agenvo": "Operate Paseo and Herdr on remote computers: workspaces, agents, input, history and terminals.",
-    "approval": "Ask the user to confirm commands blocked by rules in AXP, then allow them once approved.",
-    "artifacts": "Artifact: Publish static pages to AXP, preview them in chats and tasks, and share them publicly.",
-    "github": "Use git and gh and open PRs as AXP’s GitHub App.",
+    "approval": "Ask the user to confirm commands blocked by rules in Eta, then allow them once approved.",
+    "artifacts": "Artifact: Publish static pages to Eta, preview them in chats and tasks, and share them publicly.",
+    "github": "Use git and gh and open PRs as Eta’s GitHub App.",
     "grok": "Generate images and videos with Grok Imagine; search the web and X.",
     "groups": "Group chat: Read context, invite collaboration with mentions, and organize briefs and task drafts.",
     "memory": "Long-term memory across conversations: recall at the start of each turn and save at the end.",
@@ -45,9 +45,9 @@
   },
   "pluginDescriptions": {
     "agenvo": "Use agenvo to operate Paseo and Herdr on remote computers: manage workspaces and agents, send input, view history, interrupt runs and use terminals.",
-    "approval": "Ask the user to confirm commands blocked by AXP rules.",
+    "approval": "Ask the user to confirm commands blocked by Eta rules.",
     "artifacts": "Publish static pages (ZIP or directory) as Artifacts to preview and share in chats and tasks.",
-    "github": "Get git and gh credentials using AXP’s GitHub App, create pull requests as the App, and draft issues for users to submit.",
+    "github": "Get git and gh credentials using Eta’s GitHub App, create pull requests as the App, and draft issues for users to submit.",
     "grok": "Use the LLM gateway’s Grok account with Grok Imagine to generate images and videos and search the web and X.",
     "groups": "Search, collaborate and organize decisions in the current group.",
     "memory": "Save long-term memory across conversations using the memory service.",

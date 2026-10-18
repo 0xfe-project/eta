@@ -152,6 +152,7 @@ describe("creating an agent step by step", () => {
     expect(api.create.mock.calls[0][0]).toEqual({
       name: "审查",
       description: "只看会出错的地方",
+      persona: "",
       model: "m1",
     });
     expect(api.select).toHaveBeenCalledWith("new");

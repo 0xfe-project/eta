@@ -31,7 +31,8 @@ export type Schedule =
   | CronSchedule;
 export type RunStatus = Run["status"];
 export type BriefVersion = Brief;
-export type RoutineInput = RoutineIn;
+/** The document the web generates from lags the host: `group_id` is served, not yet typed. */
+export type RoutineInput = RoutineIn & { group_id?: string };
 
 const keys = {
   all: ["routines"] as const,

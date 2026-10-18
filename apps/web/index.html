@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AXP</title>
-    <meta name="apple-mobile-web-app-title" content="AXP" />
+    <title>Eta Agent</title>
+    <meta name="apple-mobile-web-app-title" content="Eta Agent" />
     <meta
       name="theme-color"
       content="#ffffff"
@@ -20,8 +20,41 @@
       href="/manifest.webmanifest"
       crossorigin="use-credentials"
     />
-    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/x-icon" href="/Eta-Logo.ico" />
+    <style>
+      /* Document-relative on purpose: the page is served from the vite root in a tab and from a
+         directory in a packaged build, and both resolve this to the copy sitting next to
+         index.html. One face for the whole app — interface and message text alike — and no
+         setting that replaces it: the terminal chrome below is the only thing in mono. */
+      @font-face {
+        font-family: "Eta Sans";
+        src: url("AKRDWGSCNFM-Regular.woff2") format("woff2");
+        font-weight: normal;
+        font-style: normal;
+        font-display: swap;
+      }
+    </style>
+    <link rel="icon" href="/Eta-Logo.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/Eta-Logo.png" />
+    <script>
+      // The color mode, before the first frame. This has to be a real script in the document:
+      // React builds the tree on the client, and a script a component renders never runs. Without
+      // it, a dark-mode reader sees white until the bundle loads and React commits. Kept in step
+      // with apps/web/src/lib/theme.ts — same key, same class, same resolution.
+      (function () {
+        try {
+          var choice = localStorage.getItem("theme") || "system";
+          var dark =
+            choice === "dark" ||
+            (choice === "system" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", dark);
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        } catch (error) {
+          // Storage denied: the app applies the system value again when it mounts.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

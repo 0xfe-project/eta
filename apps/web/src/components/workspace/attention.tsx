@@ -150,7 +150,7 @@ export function Confirmation({ interaction }: { interaction: Interaction }) {
 }
 
 const linkRow =
-  "flex items-center gap-3 px-3 py-2.5 transition-colors duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60 motion-reduce:transition-none";
+  "flex items-center gap-3 px-3 py-2.5 duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60 motion-reduce:transition-none";
 
 /** A task or routine's row: what it is and why it waits, then a caret. */
 function LinkRowBody({
@@ -241,6 +241,20 @@ export function PendingList() {
   if (loading && !total) return <Loading rows={3} />;
   return (
     <div>
+      {/*
+       * This page is now the *cross-group* view. The questions that belong to the conversation you
+       * are in are shown there (the strip above the transcript), because that is where they block
+       * something you are looking at; what is left here is everything else — the ones you would
+       * only find by opening every group in turn.
+       */}
+      <div className="mb-2 border-b pb-2">
+        <h2 className="text-sm font-semibold">
+          {String(translateText("attention.allGroups"))}
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          {String(translateText("attention.allGroupsHint"))}
+        </p>
+      </div>
       {failed.length ? (
         <LoadError
           what={failed.map(({ what }) => what).join(listSeparator())}

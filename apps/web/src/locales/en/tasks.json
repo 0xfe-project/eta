@@ -24,7 +24,7 @@
     "existingWorkspace": "In an existing workspace",
     "uncommittedChanges": " · Uncommitted changes",
     "branchLabel": "Branch (optional)",
-    "branchPlaceholder": "Defaults to axp/<number>-<title>",
+    "branchPlaceholder": "Defaults to eta/<number>-<title>",
     "baseBranchLabel": "Base branch (optional)",
     "baseBranchPlaceholder": "Defaults to the current branch",
     "projectFallback": "project",
@@ -68,7 +68,7 @@
       "upTo": "Up to",
       "maxRoundsLabel": "Maximum review rounds",
       "roundsSuffix": "review rounds",
-      "help": "Stop on approval. When rounds run out, wait for your decision. The reviewing agent reports its verdict with axp task review.",
+      "help": "Stop on approval. When rounds run out, wait for your decision. The reviewing agent reports its verdict with eta task review.",
       "progress": "· Reviewed {{reviewed}}/{{maxRounds}} rounds · {{status}}",
       "roundLimit": "Review round limit",
       "continue": "Continue review",
@@ -93,7 +93,10 @@
   },
   "scope": {
     "mine": "Mine",
-    "label": "Assignee scope"
+    "label": "Assignee scope",
+    "group": "{{name}}",
+    "all": "All groups",
+    "emptyGroup": "No tasks in this group yet"
   },
   "actions": {
     "createWithStatusLabel": "New task: {{status}}",

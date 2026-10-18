@@ -6,18 +6,19 @@ import { InfoIcon } from "@phosphor-icons/react/Info";
 import { SpinnerIcon } from "@phosphor-icons/react/Spinner";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { XCircleIcon } from "@phosphor-icons/react/XCircle";
-import { useTheme } from "next-themes";
 import { useTranslation } from "react-i18next";
 import { Toaster as Sonner } from "sonner";
+import { useTheme } from "@/components/use-theme";
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { t } = useTranslation("common");
-  const { theme = "system", forcedTheme } = useTheme();
+  // The resolved mode, not the choice: a toast has no "follow the system" of its own.
+  const { resolvedTheme } = useTheme();
 
   return (
     <Sonner
       containerAriaLabel={t("accessibility.notifications")}
-      theme={(forcedTheme ?? theme) as ToasterProps["theme"]}
+      theme={resolvedTheme as ToasterProps["theme"]}
       className="toaster group"
       offset={{
         bottom: "calc(4.5rem + env(safe-area-inset-bottom, 0px))",

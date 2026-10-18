@@ -159,60 +159,9 @@ const catalog = Object.fromEntries(
 
 describe("translation coverage", () => {
   it("translates built-in metadata by ID and preserves custom content", () => {
-    const root = join(process.cwd(), "../..");
-    for (const dir of ["bundles", "plugins"] as const) {
-      for (const entry of readdirSync(join(root, dir), {
-        withFileTypes: true,
-      })) {
-        if (!entry.isDirectory()) continue;
-        const file = join(
-          root,
-          dir,
-          entry.name,
-          dir === "bundles" ? "bundle.json" : "plugin.json",
-        );
-        let manifest;
-        try {
-          manifest = JSON.parse(readFileSync(file, "utf8"));
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-          throw error;
-        }
-        const description =
-          dir === "bundles"
-            ? translateBundleDescription
-            : translatePluginDescription;
-        setLanguagePreference("zh");
-        expect(description(manifest.name, manifest.description), file).toBe(
-          manifest.description,
-        );
-        setLanguagePreference("en");
-        expect(
-          description(manifest.name, manifest.description),
-          file,
-        ).not.toMatch(/\p{Script=Han}/u);
-        for (const [field, property] of Object.entries(
-          manifest.config?.properties ?? {},
-        )) {
-          for (const kind of ["title", "description"] as const) {
-            const value = (property as Record<string, string>)[kind];
-            if (!value) continue;
-            expect(
-              translateBundleConfigField(manifest.name, field, kind, value),
-              `${file}:${field}:${kind}`,
-            ).not.toMatch(/\p{Script=Han}/u);
-            setLanguagePreference("zh");
-            // The canonical API-key title is English in the source schema.
-            if (/\p{Script=Han}/u.test(value)) {
-              expect(
-                translateBundleConfigField(manifest.name, field, kind, value),
-              ).toBe(value);
-            }
-            setLanguagePreference("en");
-          }
-        }
-      }
-    }
+    // The bundles' and plugins' manifests went with the old stack; the translators stay
+    // (plugins the user drops into ~/.eta/plugins carry manifests too), checked here on
+    // the built-in ids the catalog still knows.
     expect(translateBundleDescription("oomol", "我的自定义说明")).toBe(
       "我的自定义说明",
     );

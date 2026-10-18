@@ -143,7 +143,7 @@ export const useOutbox = create<OutboxStore>()(
         set((s) => ({ outgoing: s.outgoing.filter((o) => o.id !== id) })),
     }),
     {
-      name: "axp.groups.v1",
+      name: "eta.groups.v1",
       storage,
       partialize: ({ drafts, uploads, outgoing }) => ({
         drafts,

@@ -198,7 +198,7 @@ function TaskRow({ task }: { task: Task }) {
       <button
         type="button"
         onClick={() => void setNav({ task: task.id })}
-        className="flex w-full items-start gap-2.5 px-2 py-2 text-left transition-colors duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60"
+        className="flex w-full items-start gap-2.5 px-2 py-2 text-left duration-[60ms] ease-linear outline-none hover:bg-muted/60 focus-visible:bg-muted/60"
       >
         <StatusIcon status={task.status} className="mt-0.5" />
         <span className="min-w-0 flex-1 space-y-0.5">
@@ -237,6 +237,16 @@ function TaskList() {
   ] as const);
   const [, setNav] = useTaskNav();
   const { data, error, refetch } = useTasks();
+  const { current: group } = useGroups();
+  // A task is work in a group; the board opens on that group rather than on everything at once.
+  // "All groups" is still one click away — it is the exception, not the view you land on.
+  const [scope, setScope] = useState<"group" | "all">("group");
+  const tasks =
+    scope === "group" && group !== undefined
+      ? (data?.tasks.filter(
+          (task: { group_id?: string | null }) => task.group_id === group.id,
+        ) ?? [])
+      : (data?.tasks ?? []);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const isOpen = (status: TaskStatus) => open[status] ?? !folded.has(status);
   return (
@@ -255,6 +265,28 @@ function TaskList() {
           <PlusIcon aria-hidden="true" />
         </Button>
       </div>
+      {group === undefined ? null : (
+        <div className="flex items-center gap-1 text-[11px]">
+          {(["group", "all"] as const).map((choice) => (
+            <button
+              key={choice}
+              type="button"
+              aria-pressed={scope === choice}
+              onClick={() => setScope(choice)}
+              className={cn(
+                "border px-1.5 py-0.5 font-mono",
+                scope === choice
+                  ? "border-foreground text-foreground"
+                  : "border-border text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {choice === "group"
+                ? translateText("scope.group", { name: group.name })
+                : translateText("scope.all")}
+            </button>
+          ))}
+        </div>
+      )}
       {error && !data ? (
         <LoadError
           what={translateText("navigation:sections.tasks")}
@@ -263,7 +295,7 @@ function TaskList() {
         />
       ) : !data ? (
         <Loading />
-      ) : data.tasks.length === 0 ? (
+      ) : tasks.length === 0 ? (
         <Empty
           icon={ListChecksIcon}
           title={translateText("empty.title")}
@@ -278,7 +310,9 @@ function TaskList() {
         </Empty>
       ) : (
         statuses.map(({ value, label }) => {
-          const group = data.tasks.filter((t) => t.status === value);
+          const group = tasks.filter(
+            (task: { status: string }) => task.status === value,
+          );
           if (!group.length) return null;
           return (
             <section key={value} aria-label={label} className="-mx-2">
@@ -827,7 +861,7 @@ function actorName(a: TaskActivity) {
     case "remote":
       return remoteLabel(a.data as Parameters<typeof remoteLabel>[0]);
   }
-  return "AXP";
+  return "eta";
 }
 
 /** The agent a request is for, by the name it goes by. */

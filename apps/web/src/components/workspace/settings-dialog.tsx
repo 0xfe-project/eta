@@ -1,6 +1,4 @@
-import type { WorkspaceState } from "./workspace-store";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
-import { useTheme } from "next-themes";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageSettings } from "@/components/language-settings";
@@ -11,8 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { useTheme } from "@/components/use-theme";
 import { elementPickerDefault, setElementPicker } from "@/lib/element-picker";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -47,143 +45,60 @@ const colorModes = [
     },
   },
 ] as const;
-const fontFields = [
-  {
-    key: "fontSans",
-    get label() {
-      return translate("settings:appearance.interfaceFont");
-    },
-    placeholder: "Geist",
-  },
-  {
-    key: "fontMono",
-    get label() {
-      return translate("settings:appearance.monospaceFont");
-    },
-    placeholder: "Geist Mono",
-  },
-] as const satisfies {
-  key: keyof WorkspaceState;
-  label: string;
-  placeholder: string;
-}[];
-/** A row of mutually exclusive choices with a sliding selection. */
-function Segmented<T extends string>({
-  label,
-  name,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  name: string;
-  options: readonly { value: T; label: string }[];
-  value: T;
-  onChange: (value: T) => void;
-}) {
-  const index = options.findIndex((option) => option.value === value);
-  return (
-    <fieldset className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-      <legend className="sr-only">{label}</legend>
-      <span aria-hidden="true" className="text-sm font-medium">
-        {label}
-      </span>
-      <div className="w-fit max-w-full bg-muted p-1">
-        <div
-          className="relative isolate grid"
-          style={{ gridTemplateColumns: `repeat(${options.length}, 1fr)` }}
-        >
-          {index >= 0 ? (
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 left-0 border border-transparent bg-background shadow-xs transition-transform motion-reduce:transition-none dark:border-input dark:bg-input/30"
-              style={{
-                width: `${100 / options.length}%`,
-                transform: `translateX(${index * 100}%)`,
-              }}
-            />
-          ) : null}
-          {options.map((option) => (
-            <label
-              key={option.value}
-              className="relative cursor-pointer px-3 py-1.5 text-center text-sm text-muted-foreground transition-colors has-checked:text-foreground has-focus-visible:outline-2 has-focus-visible:outline-ring"
-            >
-              <input
-                type="radio"
-                name={name}
-                value={option.value}
-                checked={value === option.value}
-                onChange={() => onChange(option.value)}
-                className="sr-only"
-              />
-              {option.label}
-            </label>
-          ))}
-        </div>
-      </div>
-    </fieldset>
-  );
-}
-
 function AppearanceSettings() {
   const { t: translateText } = useTranslation(["settings", "common"] as const);
   const workspace = useWorkspaceStore((s) => s.workspace);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
-  const { theme = "system", setTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   return (
-    <div className="space-y-3">
-      <h2 className="text-sm font-semibold">
-        {translateText("sections.appearance")}
-      </h2>
-      <LanguageSettings />
-      <Segmented
-        label={translateText("appearance.colorMode")}
-        name="color-mode"
-        options={colorModes}
-        value={theme as (typeof colorModes)[number]["value"]}
-        onChange={setTheme}
-      />
-      {fontFields.map(({ key, label, placeholder }) => (
-        <div
-          key={key}
-          className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_16rem] md:items-center"
-        >
-          <label htmlFor={key} className="text-sm font-medium">
-            {label}
-          </label>
-          <Input
-            id={key}
-            value={workspace[key] ?? ""}
-            placeholder={placeholder}
-            maxLength={200}
-            spellCheck={false}
-            onChange={(e) =>
-              setWorkspace((state) => ({
-                ...state,
-                [key]: e.target.value || undefined,
-              }))
-            }
+    <div>
+      <div className="settings-heading">
+        <h2>{translateText("sections.appearance")}</h2>
+        <p>{translateText("appearance.description")}</p>
+      </div>
+      {/* Rows, not cards: a label on the left, its control on the right, one decision per line. */}
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div>{translateText("appearance.colorMode")}</div>
+          <p>{translateText("appearance.colorModeHint")}</p>
+        </div>
+        <div className="settings-control settings-inline">
+          {colorModes.map((choice) => (
+            <button
+              key={choice.value}
+              type="button"
+              aria-pressed={theme === choice.value}
+              onClick={() => setTheme(choice.value)}
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div>{translateText("appearance.language")}</div>
+        </div>
+        <div className="settings-control">
+          <LanguageSettings />
+        </div>
+      </div>
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div>{translateText("appearance.elementPicker")}</div>
+          <p>{translateText("appearance.elementPickerHint")}</p>
+        </div>
+        <div className="settings-control">
+          <Switch
+            id="react-grab"
+            aria-label={translateText("appearance.elementPicker")}
+            checked={workspace.reactGrab ?? elementPickerDefault()}
+            onCheckedChange={(reactGrab) => {
+              setWorkspace((state) => ({ ...state, reactGrab }));
+              void setElementPicker(reactGrab);
+            }}
           />
         </div>
-      ))}
-      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-        <div className="min-w-0 text-sm">
-          <label htmlFor="react-grab" className="font-medium">
-            {translateText("appearance.elementPicker")}
-          </label>
-          <p id="react-grab-hint" className="text-muted-foreground">
-            {translateText("appearance.elementPickerHint")}
-          </p>
-        </div>
-        <Switch
-          id="react-grab"
-          aria-describedby="react-grab-hint"
-          checked={workspace.reactGrab ?? elementPickerDefault()}
-          onCheckedChange={(reactGrab) => {
-            setWorkspace((state) => ({ ...state, reactGrab }));
-            void setElementPicker(reactGrab);
-          }}
-        />
       </div>
     </div>
   );
@@ -254,7 +169,8 @@ export function SettingsDialog() {
             {translateText("title")}
           </DialogTitle>
         </DialogHeader>
-        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        {/* eta-old's settings: a 196px rail of sections and a column of rows beside it. */}
+        <div className="settings-layout">
           <SettingsNav
             label={translateText("accessibility.sections")}
             sections={settingsSections.map((section) => ({
@@ -267,7 +183,7 @@ export function SettingsDialog() {
               setSettings((state) => ({ ...state, section }))
             }
           />
-          <section className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4">
+          <section className="settings-content">
             {settings.section === "agents" ? (
               <AgentSettings />
             ) : settings.section === "bundles" ? (

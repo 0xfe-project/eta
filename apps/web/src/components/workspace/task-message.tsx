@@ -19,7 +19,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { mentionLabel } from "@/lib/mentions";
 import { useOutbox } from "@/queries/outbox";
 import { useCommentTask, useUpdateTask } from "@/queries/tasks";
-import { frameClass } from "./activity-card";
 import { ActivityRefCard } from "./activity-ref";
 import { runStatusLabels } from "./task-format";
 import { TaskForm } from "./tasks";
@@ -52,22 +51,30 @@ export function TaskMessage({ message }: { message: ChatMessage }) {
   if (message.kind === "task_draft")
     return (
       <>
-        <div
-          className={`${frameClass} flex-col items-stretch border-dashed p-3`}
-        >
-          <div className="mb-2 flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">
+        <div className="draft-card">
+          {/* One line: what this is (10px uppercase mono), what it is called (14px sans), and the
+              one thing you can do about it. The label and the title share the line because they
+              are one sentence, not a heading and a subtitle. */}
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 font-mono text-[10px] tracking-[0.12em] text-faint uppercase">
               {translateText("draft.title")}
             </span>
-            <span className="min-w-0 flex-1 truncate">{title}</span>
-            <Button size="xs" variant="outline" onClick={() => setEdit(true)}>
+            <span className="min-w-0 flex-1 truncate text-sm font-medium">
+              {title}
+            </span>
+            <Button
+              size="xs"
+              variant="outline"
+              className="shrink-0"
+              onClick={() => setEdit(true)}
+            >
               {translateText("draft.editAndCreate")}
             </Button>
           </div>
-          <div className="max-h-52 overflow-y-auto">
+          <div className="mt-2 max-h-52 overflow-y-auto">
             <Markdown>{String(data.description ?? "")}</Markdown>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 font-mono text-[10px] text-faint">
             {translateText("draft.notCreatedHint")}
           </p>
         </div>
@@ -163,7 +170,7 @@ export function TaskMessage({ message }: { message: ChatMessage }) {
             ) : (
               <a
                 key={d.url}
-                className="mt-1 block text-[var(--terminal-link)] hover:underline"
+                className="mt-1 block text-[var(--state-info)] hover:underline"
                 href={d.url}
                 target="_blank"
                 rel="noreferrer"

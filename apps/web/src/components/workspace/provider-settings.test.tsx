@@ -104,12 +104,21 @@ describe("refreshing model status", () => {
     rstest
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input, init) => {
-        requests.push(`${init?.method ?? "GET"} ${String(input)}`);
+        const url = String(input);
+        // The provider list is read alongside the page; only the refresh is the deferred one, or
+        // every query on the page would wait on it.
+        if (url.includes("/api/llm/v1/providers")) {
+          return Response.json({ providers: [] });
+        }
+        requests.push(`${init?.method ?? "GET"} ${url}`);
         return response.promise;
       });
     await render();
 
     await act(async () => refreshButton().click());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
     expect(refreshButton().disabled).toBe(true);
     expect(refreshButton().textContent).toContain("检查中");
     expect(status()).toBe("正在检查…");

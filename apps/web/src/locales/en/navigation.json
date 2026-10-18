@@ -8,12 +8,15 @@
     "more": "More",
     "overview": "Overview",
     "capabilities": "Features",
-    "workspace": "Workspace"
+    "workspace": "Workspace",
+    "context": "Context",
+    "artifacts": "Artifacts"
   },
   "accessibility": {
     "sections": "Sections",
     "workspaceTabs": "Workspace tabs",
-    "skipToContent": "Skip to content"
+    "skipToContent": "Skip to content",
+    "resizePanel": "Resize the panel"
   },
   "actions": {
     "openFullWindow": "Open in full window",

@@ -113,7 +113,7 @@ function CreateForm({
         onSubmit({
           // GitHub App names are unique across GitHub; the suggestion is
           // unlikely to be taken.
-          name: name.trim() || `AXP ${crypto.randomUUID().slice(0, 4)}`,
+          name: name.trim() || `eta ${crypto.randomUUID().slice(0, 4)}`,
           organization:
             owner === "organization" ? organization.trim() : undefined,
         });
@@ -142,7 +142,7 @@ function CreateForm({
             <label
               key={value}
               className={cn(
-                "flex cursor-pointer flex-col gap-0.5 border p-3 transition-colors hover:bg-muted/50 has-focus-visible:ring-1 has-focus-visible:ring-ring",
+                "flex cursor-pointer flex-col gap-0.5 border p-3 hover:bg-muted/50 has-focus-visible:ring-1 has-focus-visible:ring-ring",
                 owner === value && "border-foreground bg-muted/50",
               )}
             >
@@ -364,7 +364,7 @@ function Done({ status }: { status: GitHubStatus }) {
  * The user authorizing the App to act on their behalf: agents then use
  * GitHub as the user, with the App's badge, and can do what GitHub allows
  * only a user, such as creating a repository in their account. An App
- * created before AXP kept its client secret needs the secret first.
+ * created before eta kept its client secret needs the secret first.
  */
 function Authorization({ status }: { status: GitHubStatus }) {
   const { t: translateText } = useTranslation([

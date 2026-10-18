@@ -17,7 +17,7 @@ import { actionClass, frameClass, muted } from "./activity-card";
 /**
  * A workspace or worktree an agenvo script made or opened on a remote
  * computer (its block's operations, read from the native calls it made):
- * what, where, and what became of it. AXP has no page for it, so the card
+ * what, where, and what became of it. eta has no page for it, so the card
  * opens nothing; it unfolds to show every field whole. The tool line above
  * keeps the script and its output.
  */
@@ -66,7 +66,7 @@ const statuses = {
   completed: {
     icon: CheckCircleIcon,
     label: "",
-    className: "text-[var(--terminal-success)]",
+    className: "text-state-success",
   },
   accepted: {
     icon: HourglassMediumIcon,
@@ -80,14 +80,14 @@ const statuses = {
     get label() {
       return translate("common:status.failed");
     },
-    className: "text-[var(--terminal-error)]",
+    className: "text-state-error",
   },
   unknown: {
     icon: QuestionIcon,
     get label() {
       return translate("tasks:operations.resultUnconfirmed");
     },
-    className: "text-[var(--terminal-warning)]",
+    className: "text-state-warning",
   },
 } satisfies Record<ActivityOperation["status"], unknown>;
 
@@ -162,9 +162,7 @@ function ActivityOperationCard({ value }: { value: ActivityOperation }) {
         />
         <span className={cn(line, "flex-1")}>
           <span className={muted}>{action.label} </span>
-          {name ? (
-            <span className="text-[var(--terminal-foreground)]">{name}</span>
-          ) : null}
+          {name ? <span className="text-foreground">{name}</span> : null}
         </span>
         <span
           className={cn("flex shrink-0 items-center gap-1", status.className)}

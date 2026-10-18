@@ -1,12 +1,26 @@
-import type { Attachment } from "@/api/control-plane.gen";
+import type { Attachment as WireAttachment } from "@/api/control-plane.gen";
 import { translate } from "@/lib/i18n";
+
+/**
+ * An uploaded file, with the one thing the host added: where it landed in the project.
+ *
+ * The path is what makes an attachment mean something — the message references it, and the agent
+ * opens it the way it opens any other file. The web's generated types still come from the old
+ * control plane's document, which has no such field, so it is added here rather than faked.
+ */
+export interface Attachment extends WireAttachment {
+  id: string;
+  name: string;
+  content_type: string;
+  size: number;
+  /** Where it landed, relative to the group's folder. */
+  path?: string | null;
+}
 
 // What the chat composer holds: text the user typed, with blocks among it
 // where they pasted long text or files. Blocks are the composer's own: a
 // long paste goes out as the text it stands for, a file as an attachment
 // uploaded the moment it was pasted.
-
-export type { Attachment };
 
 /**
  * A paste longer than this (in characters, counted as Unicode code points,
@@ -67,13 +81,6 @@ export function draftText(draft: Draft) {
   return draft.map((p) => (p.type === "file" ? "" : p.text)).join("");
 }
 
-/** The draft as one plain string, when it holds no blocks. */
-export function onlyText(draft: Draft): string | null {
-  return draft.every((p) => p.type === "text")
-    ? draft.map((p) => p.text).join("")
-    : null;
-}
-
 export function isBlank(draft: Draft) {
   return !draft.some((p) => p.type === "file") && !draftText(draft).trim();
 }
@@ -90,11 +97,22 @@ export function messageParts(
   const parts: OutgoingPart[] = [];
   for (const part of draft) {
     if (part.type !== "file") {
+      // A long paste was also written into the project, so the message can carry its path as well
+      // as its text: the block the person sees, the file the agent can open.
+      const stored = part.type === "paste" ? uploaded(part.id) : undefined;
+      if (typeof stored?.path === "string" && stored.path.length > 0) {
+        parts.push({ type: "text", text: `@${stored.path}` });
+      }
       if (part.text) parts.push({ type: "text", text: part.text });
       continue;
     }
     const attachment = uploaded(part.id);
     if (!attachment) return undefined;
+    // A file is a file in the project: the message carries the reference, and the text beside it
+    // says the same thing, so what the agent reads and what the person sees agree.
+    if (typeof attachment.path === "string" && attachment.path.length > 0) {
+      parts.push({ type: "text", text: `@${attachment.path}` });
+    }
     parts.push({ type: "attachment", attachment });
   }
   return parts;

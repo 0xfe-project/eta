@@ -17,7 +17,7 @@ export async function checkForUpdate() {
   );
   // Offline, or a server without the route: nothing to compare.
   if (!response?.ok) return;
-  if ((await response.text()) === __AXP_BUILD__) return;
+  if ((await response.text()) === __ETA_BUILD__) return;
   offered = true;
   toast(translate("common:updates.available"), {
     duration: Infinity,

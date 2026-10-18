@@ -1,15 +1,11 @@
 import type { WorkspaceView } from "./types";
 
 import type { Draft } from "@/lib/composer";
-import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
-import { InfoIcon } from "@phosphor-icons/react/Info";
-import { SidebarSimpleIcon } from "@phosphor-icons/react/SidebarSimple";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { draftText, EMPTY_DRAFT, partsText } from "@/lib/composer";
 import { listSeparator } from "@/lib/i18n";
 import { mentionedMembers } from "@/lib/mentions";
@@ -20,6 +16,7 @@ import {
   useCompact,
   useGroupMessages,
   usePendingInteractions,
+  useSetGoal,
   useStopReply,
   useStreamLost,
 } from "@/queries/chat";
@@ -30,12 +27,15 @@ import {
   useOutboxActions,
   useOutboxDelivery,
 } from "@/queries/outbox";
-import { AgentBar, AgentTitle } from "./agent-bar";
+import { ChatHeader, MobileChatHeader } from "./agent-bar";
 import { AgentEditor } from "./agent-editor";
-import { BottomNav, Sidebar } from "./app-shell";
+import { BottomNav } from "./app-shell";
 import { ChatPanel, ComposerNotice } from "./chat-panel";
+import { UnboundFolderNotice } from "./folder-notice";
 import { GroupList } from "./groups";
+import { usePaneWidth } from "./pane";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
+import { SidebarPane } from "./sidebar-pane";
 import { useAgents } from "./use-agents";
 import { useGroups } from "./use-groups";
 import { WorkspacePanel } from "./workspace-panel";
@@ -61,15 +61,18 @@ export function Workspace({
   const mobilePanel = useWorkspaceStore((s) => s.mobilePanel);
   const setMobilePanel = useWorkspaceStore((s) => s.setMobilePanel);
   const showPanel = useWorkspaceStore((s) => s.showPanel);
-  // Wide screens can fold the panel away; remembered in this browser.
-  const collapsed = useWorkspaceStore(
-    (s) => s.workspace.panelCollapsed ?? false,
-  );
-  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
-  const collapse = () => {
-    setMobilePanel("chat");
-    setWorkspace((workspace) => ({ ...workspace, panelCollapsed: true }));
-  };
+  // No folding on wide screens: eta-old's right column is always there from `lg` up, and a panel
+  // you have to remember to open is a panel that stays closed. Below `lg` it is a drawer, which is
+  // where a fold is the only way to fit.
+  // The right column's width, kept per screen like the left one's: 320 is where the member blocks'
+  // numbers stop colliding, 720 is where the chat would stop being the thing you read.
+  const panel = usePaneWidth({
+    storageKey: "eta.panel.width",
+    min: 320,
+    max: 720,
+    fallback: 400,
+    edge: "right",
+  });
   const navigate = useNavigate();
   useShowLinkedView();
   const chat = useQuery(chatQueryOptions());
@@ -84,7 +87,7 @@ export function Workspace({
     useOutbox.getState().setDraft(draftKey, next);
   const allOutgoing = useOutbox((s) => s.outgoing);
   const arrived = useMemo(
-    () => new Set(history.messages.map((m) => m.id)),
+    () => new Set<string>(history.messages.map((m: { id: string }) => m.id)),
     [history.messages],
   );
   useOutboxDelivery(arrived);
@@ -103,6 +106,18 @@ export function Workspace({
     .filter((a) => a && !a.model);
   const compact = useCompact();
   const stopReply = useStopReply();
+  const setGoal = useSetGoal();
+  // Narrowing the chat to one member: the state lives in the store, because the sidebar's member
+  // rows and the panel's member cards are the same action. It resets when the conversation does.
+  const focusAgent = useWorkspaceStore((s) => s.focusedAgentId);
+  const setFocusedAgent = useWorkspaceStore((s) => s.setFocusedAgent);
+  useEffect(() => setFocusedAgent(null), [group?.id, setFocusedAgent]);
+  // Which session a goal set from the composer lands on: the member being talked to, or the first
+  // one that has a conversation. A group has one goal per member; the composer speaks for the one
+  // you are addressing.
+  const goalSessionId: string | undefined =
+    (members.find((p: { session_id?: string | null }) => p.session_id)
+      ?.session_id as string | undefined) ?? undefined;
   const answer = useAnswerInteraction();
   const actions = useGroupActions();
   const onError = (error: Error) => toast.error(error.message);
@@ -127,7 +142,7 @@ export function Workspace({
         {
           label: translateText("chat:groups.actions.viewInfo"),
           onClick: () => {
-            onViewChange("members");
+            onViewChange("context");
             showPanel();
           },
         },
@@ -162,7 +177,7 @@ export function Workspace({
   const direct = group?.kind === "direct" ? members[0] : undefined;
   const showInfo = () => {
     if (direct) return openEditor(direct.agent_id);
-    onViewChange("members");
+    onViewChange("context");
     showPanel();
   };
   // Between md and lg the panel is a drawer over the chat, open while
@@ -186,7 +201,7 @@ export function Workspace({
   }, [drawerOpen, setMobilePanel]);
   return (
     <div className="flex h-dvh min-h-0 bg-background">
-      <Sidebar />
+      <SidebarPane />
       <div
         className={cn(
           "min-h-0 min-w-0 flex-1 flex-col md:hidden",
@@ -204,90 +219,70 @@ export function Workspace({
       </div>
       <div
         className={cn(
-          "min-h-0 min-w-0 flex-1 flex-col p-2 md:flex md:p-3",
+          "min-h-0 min-w-0 flex-1 flex-col",
           groupId ? "flex" : "hidden",
         )}
       >
-        <header className="flex h-11 shrink-0 items-center gap-2 pb-2 md:hidden">
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label={
-              mobilePanel === "workspace"
-                ? translateText("actions.backToChat")
-                : translateText("actions.backToConversations")
-            }
-            onClick={() =>
-              mobilePanel === "workspace"
-                ? setMobilePanel("chat")
-                : void navigate({ to: "/", search: {} })
-            }
-          >
-            <ArrowLeftIcon />
-          </Button>
-          <AgentTitle group={group} onInfo={showInfo} />
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label={
-              direct
-                ? translateText("agents:settings.title")
-                : translateText("chat:groups.info")
-            }
-            onClick={showInfo}
-          >
-            <InfoIcon />
-          </Button>
-        </header>
-        <main
-          id="main"
-          className={cn(
-            "isolate grid min-h-0 flex-1 gap-3",
-            !collapsed && "lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]",
-          )}
-        >
+        <MobileChatHeader
+          name={group?.name ?? translateText("sections.chat")}
+          onBack={() =>
+            mobilePanel === "workspace"
+              ? setMobilePanel("chat")
+              : void navigate({ to: "/", search: {} })
+          }
+          backLabel={
+            mobilePanel === "workspace"
+              ? translateText("actions.backToChat")
+              : translateText("actions.backToConversations")
+          }
+          onInfo={showInfo}
+          infoLabel={
+            direct
+              ? translateText("agents:settings.title")
+              : translateText("chat:groups.info")
+          }
+        />
+        <main id="main" className="isolate flex min-h-0 flex-1">
           {/* The chat alone stops at the content width; the panel beside it
               keeps its own. */}
           <div
             className={cn(
-              "relative mx-auto min-h-0 w-full max-w-content min-w-0 md:px-3",
-              mobilePanel === "workspace" && "hidden md:block",
+              // Flush with the gutters: no padding, no card, no gap. The column *is* the band
+              // down the middle — one object from the header rule to the bottom of the window.
+              "relative flex min-h-0 w-full min-w-0 flex-col",
+              mobilePanel === "workspace" && "hidden md:flex",
             )}
           >
-            <Button
-              size="icon"
-              variant="outline"
-              aria-label={translateText("actions.openWorkspace")}
-              title={translateText("sections.workspace")}
-              className={cn(
-                "absolute top-3 right-3 z-10 hidden bg-background shadow-sm",
-                collapsed ? "md:inline-flex" : "md:max-lg:inline-flex",
-              )}
-              onClick={showPanel}
-            >
-              <SidebarSimpleIcon aria-hidden="true" className="-scale-x-100" />
-            </Button>
+            <ChatHeader
+              group={group}
+              onInfo={showInfo}
+              workspaceOpen
+              onOpenWorkspace={showPanel}
+            />
             <ChatPanel
               groupId={group?.id}
               groupName={group?.name}
               group={group}
               agents={agents}
-              groups={groups}
               activeReplies={chat.data?.messages ?? []}
-              model={
-                members.length === 1
-                  ? (agents.find((a) => a.id === members[0].agent_id)?.model ??
-                    undefined)
-                  : members.map((p) => p.name).join(" · ")
-              }
               blocked={blocked}
-              messages={history.messages}
+              // Not a blocker: the group works without a folder, it just works somewhere nobody
+              // chose. The way out sits next to the sentence.
+              notice={<UnboundFolderNotice group={group} />}
+              messages={
+                focusAgent === null
+                  ? history.messages
+                  : history.messages.filter(
+                      (message: { agent_id?: string | null; role: string }) =>
+                        message.role === "user" ||
+                        message.agent_id === focusAgent,
+                    )
+              }
               loading={!chat.data || history.loading}
               hasOlder={history.hasOlder}
               loadingOlder={history.loadingOlder}
               onLoadOlder={history.loadOlder}
               interactions={waiting}
-              head={<AgentBar group={group} onInfo={showInfo} />}
               connectionLost={connectionLost}
               outgoing={outgoing}
               onRetry={outbox.retry}
@@ -302,6 +297,16 @@ export function Workspace({
                   compact.mutate({ groupId: group.id, mentions }, { onError });
                 else outbox.send(group.id, parts, "queue", mentions);
               }}
+              onReload={() => history.loadOlder()}
+              onGoal={(action, objective) =>
+                // Through the route, like the panel's own buttons: one writer for a goal means the
+                // two can never show different ones.
+                setGoal.mutateAsync({
+                  sessionId: goalSessionId,
+                  action,
+                  ...(objective === undefined ? {} : { objective }),
+                })
+              }
               error={
                 (chat.error ?? history.error)
                   ? translateText("chat:errors.loadConversation", {
@@ -380,20 +385,29 @@ export function Workspace({
           {drawerOpen ? (
             <div
               aria-hidden="true"
-              className="fixed inset-0 z-40 hidden bg-black/30 animate-in fade-in-0 md:max-lg:block"
+              className="fixed inset-0 z-40 hidden bg-black/30 md:max-lg:block"
               onClick={() => setMobilePanel("chat")}
             />
           ) : null}
+          {/* The second gutter: drag it and the chat gives up width to the panel. Same line,
+              same band across the top — that is what makes the header read as one object. */}
+          <div
+            aria-label={translateText("accessibility.resizePanel")}
+            className="pane-divider hidden lg:block"
+            {...panel.dividerProps}
+          />
           <WorkspacePanel
             view={view}
             onViewChange={onViewChange}
             onClose={() => setMobilePanel("chat")}
-            onCollapse={collapse}
+            style={{ width: panel.width }}
             className={cn(
+              // Between md and lg the panel is a drawer over the chat; from lg up it is a column
+              // of its own, sized by the gutter beside it.
               drawerOpen
-                ? "md:max-lg:fixed md:max-lg:inset-y-0 md:max-lg:right-0 md:max-lg:z-50 md:max-lg:w-[min(28rem,calc(100vw-3rem))] md:max-lg:border-y-0 md:max-lg:border-r-0 md:max-lg:animate-in md:max-lg:duration-200 md:max-lg:slide-in-from-right"
-                : "hidden lg:flex",
-              collapsed && "lg:hidden",
+                ? "md:max-lg:fixed md:max-lg:inset-y-0 md:max-lg:right-0 md:max-lg:z-50 md:max-lg:flex md:max-lg:w-[min(28rem,calc(100vw-3rem))] md:max-lg:border-y-0 md:max-lg:border-r-0"
+                : "md:max-lg:hidden",
+              "hidden shrink-0 lg:flex",
             )}
           />
         </main>

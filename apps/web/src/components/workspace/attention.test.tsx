@@ -172,7 +172,11 @@ describe("what waits for the user", () => {
       );
     const container = await mount(client, () => <PendingList />);
     await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
-    expect(headings(container)).toEqual(["确认请求1", "任务1"]);
+    expect(headings(container)).toEqual([
+      "所有群在等你的",
+      "确认请求1",
+      "任务1",
+    ]);
     expect(container.textContent).toContain("无法加载定时");
     expect(container.querySelector("li")!.textContent).toContain(
       "删除i1？允许拒绝",

@@ -2,10 +2,10 @@
   "$schema": "https://turborepo.com/schema.json",
   "extends": ["//"],
   "tasks": {
-    // The services' types, from their OpenAPI documents, which are
-    // generated from their code (redocly.yaml lists them).
+    // The types of the frozen OpenAPI snapshots (redocly.yaml lists them).
+    // Nothing else produces them any more, so the task has no dependencies.
     "generate": {
-      "dependsOn": ["@axp/control-plane#openapi"],
+      "inputs": ["openapi/**", "redocly.yaml"],
       "outputs": ["src/api/*.gen.ts"]
     },
     "lint": {

@@ -1,80 +1,47 @@
 import type { ReactNode } from "react";
-import { BellIcon } from "@phosphor-icons/react/Bell";
-import { BrainIcon } from "@phosphor-icons/react/Brain";
 import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
-import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Empty, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
-import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { useTasks } from "@/queries/tasks";
 import { AgentEditor } from "./agent-editor";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
-import { GroupList } from "./groups";
-import { SettingsButton, SettingsDialog } from "./settings-dialog";
+import { SettingsDialog } from "./settings-dialog";
+import { SidebarPane } from "./sidebar-pane";
+import { FolderTree } from "./sidebar-tree";
 import { useAgents, useOpenAgent } from "./use-agents";
-import { useAttention } from "./use-attention";
+import { useWorkspaceStore } from "./workspace-store";
 
 // Shared navigation: the full-window sidebar on wide screens and four
 // bottom tabs on mobile. Conversation lists are the mobile home screen.
 
-const sections = [
-  {
-    to: "/",
-    get label() {
-      return translate("navigation:sections.chat");
-    },
-    icon: ChatsCircleIcon,
-  },
-  {
-    to: "/workspace/inbox",
-    get label() {
-      return translate("navigation:sections.pending");
-    },
-    icon: BellIcon,
-  },
-  {
-    to: "/workspace/tasks",
-    get label() {
-      return translate("navigation:sections.tasks");
-    },
-    icon: ListChecksIcon,
-  },
-  {
-    to: "/workspace/routines",
-    get label() {
-      return translate("navigation:sections.routines");
-    },
-    icon: ClockIcon,
-  },
-  {
-    to: "/workspace/memory",
-    get label() {
-      return translate("navigation:sections.memory");
-    },
-    icon: BrainIcon,
-  },
-] as const;
+// No global entry. The workspace's pages used to be sidebar destinations, each of which then
+// asked "but which group?" — the question the conversation you are in has already answered,
+// which is why they are the panel's tabs now. The sidebar is only the conversations.
+const sections: {
+  to: string;
+  label: string;
+  icon: (props: { className?: string }) => React.ReactNode;
+}[] = [];
 
 /**
- * What each section holds for the user: everything waiting for them, and
- * tasks to accept.
+ * What 总览 holds for the user: everything waiting on them, wherever it is.
+ *
+ * One number, because there is one entry. The breakdown lives inside the overview (which knows
+ * which group each item belongs to), and the group-scoped counts live on the groups themselves.
  */
-function useBadges(): Partial<Record<(typeof sections)[number]["to"], number>> {
-  const { total } = useAttention();
-  const { data } = useTasks();
-  const review = data?.tasks.filter((t) => t.status === "in_review").length;
-  return { "/workspace/tasks": review, "/workspace/inbox": total };
+function useBadges(): Record<string, number> {
+  return {};
 }
 
 const item =
-  "flex h-8 items-center gap-2 px-2 text-sm text-muted-foreground transition-colors duration-[60ms] ease-linear outline-none hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none";
+  "flex h-8 items-center gap-2 px-2 text-sm text-muted-foreground duration-[60ms] ease-linear outline-none hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none";
 
 function Badge({ count }: { count: number | undefined }) {
   return count ? (
@@ -84,107 +51,180 @@ function Badge({ count }: { count: number | undefined }) {
   ) : null;
 }
 
-export function Sidebar() {
+export function Sidebar({ width }: { width?: number } = {}) {
   const { t: translateText } = useTranslation([
     "navigation",
     "agents",
+    "chat",
     "common",
   ] as const);
   const badges = useBadges();
+  const [query, setQuery] = useState("");
+  return (
+    <aside
+      // Sized by the divider (sidebar-pane.tsx) once the user has dragged it; the default is what
+      // a first visit gets.
+      style={width === undefined ? undefined : { width }}
+      className={cn(
+        "hidden shrink-0 flex-col overflow-y-auto border-r bg-surface md:flex",
+        width === undefined && "w-48 lg:w-56",
+      )}
+    >
+      {/* The left end of the one header band (styles.css, `.band`): same height, same field,
+          same rule under it as the chat column and the panel. */}
+      <div className="band pr-2 pl-4">
+        <Link to="/" className="text-lg font-semibold tracking-tight">
+          eta.
+        </Link>
+      </div>
+      {sections.length > 0 ? (
+        <nav
+          aria-label={translateText("accessibility.sections")}
+          className="grid gap-px px-2"
+        >
+          {sections.map(({ to, label, icon: Icon }) => (
+            <Link
+              key={to}
+              to={to}
+              className={item}
+              activeOptions={{ exact: false, includeSearch: false }}
+              activeProps={{
+                className: "bg-sidebar-accent font-medium text-foreground",
+              }}
+            >
+              <Icon aria-hidden="true" className="size-4" />
+              {label}
+              <Badge count={badges[to]} />
+            </Link>
+          ))}
+        </nav>
+      ) : null}
+      {/* Starting a conversation lives next to finding one: both are about the list. */}
+      <div className="flex items-center gap-1 px-2 pb-1">
+        <label className="min-w-0 flex-1">
+          <span className="sr-only">
+            {translateText("chat:groups.search.placeholder")}
+          </span>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={translateText("chat:groups.search.placeholder")}
+            spellCheck={false}
+            autoComplete="off"
+            className="h-7 w-full min-w-0 border border-border bg-transparent px-2 text-xs outline-none placeholder:text-faint focus:border-border-strong"
+          />
+        </label>
+      </div>
+      <FolderTree query={query} />
+      <AgentLibrary />
+      {/*
+       * eta-old's settings entry: the sidebar's last row, the word 设置, a line above it. The
+       * panel and the header both used to carry gear icons — three doors into one room, two of
+       * them pointing at a different place than the third.
+       */}
+      <div className="mt-auto shrink-0 border-t border-border px-2 pt-2 pb-3">
+        <button
+          type="button"
+          onClick={() =>
+            useWorkspaceStore
+              .getState()
+              .setSettings((state) => ({ ...state, open: true }))
+          }
+          className="flex w-full items-center px-2 py-1.5 text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+        >
+          {String(translateText("common:actions.settings"))}
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+/**
+ * The agents you cannot reach from the tree yet.
+ *
+ * A conversation is the thing this sidebar lists, and an agent with a direct chat already has a
+ * row there — under its folder, next to the groups. Listing it again here would be the same
+ * agent twice, which is how a list starts lying about how much there is.
+ *
+ * So this is not "all agents": it is the ones with no conversation anywhere, i.e. the ones that
+ * would otherwise be unreachable. Pressing one opens its chat, which puts it in the tree and out
+ * of this list — the list emptying as you work through it is the point.
+ */
+function AgentLibrary() {
+  const { t: translateText } = useTranslation(["agents", "common"] as const);
   const { agents, loaded, error, openEditor } = useAgents();
   const openAgent = useOpenAgent();
+  const library = agents;
   return (
-    <aside className="hidden w-48 shrink-0 flex-col overflow-y-auto border-r bg-sidebar md:flex lg:w-56">
-      <div className="flex h-12 shrink-0 items-center justify-between pr-2 pl-4">
-        <Link to="/workspace" className="text-lg font-semibold tracking-tight">
-          axp.
-        </Link>
-        <SettingsButton />
+    <section
+      aria-labelledby="sidebar-agents"
+      className="mt-2 flex min-h-0 shrink-0 flex-col border-t border-border px-2 pt-3 pb-2"
+    >
+      <div className="flex h-7 items-center justify-between pl-2">
+        <h2
+          id="sidebar-agents"
+          className="font-mono text-[10px] tracking-[0.12em] text-faint uppercase"
+        >
+          {translateText("agents:library.title")}
+        </h2>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label={translateText("agents:actions.create")}
+          title={translateText("agents:actions.create")}
+          onClick={() => openEditor()}
+        >
+          <PlusIcon aria-hidden="true" />
+        </Button>
       </div>
-      <nav
-        aria-label={translateText("accessibility.sections")}
-        className="grid gap-px px-2"
-      >
-        {sections.map(({ to, label, icon: Icon }) => (
-          <Link
-            key={to}
-            to={to}
-            className={item}
-            activeOptions={{ exact: to === "/", includeSearch: false }}
-            activeProps={{
-              className: "bg-sidebar-accent font-medium text-foreground",
-            }}
-          >
-            <Icon aria-hidden="true" className="size-4" />
-            {label}
-            <Badge count={badges[to]} />
-          </Link>
-        ))}
-      </nav>
-      <GroupList compact />
-      <section
-        aria-labelledby="sidebar-agents"
-        className="mt-5 flex min-h-0 flex-col px-2"
-      >
-        <div className="flex h-7 items-center justify-between pl-2">
-          <h2
-            id="sidebar-agents"
-            className="text-xs font-medium text-muted-foreground"
-          >
-            {translateText("common:entities.agents")}
-          </h2>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={translateText("agents:actions.create")}
-            title={translateText("agents:actions.create")}
-            onClick={() => openEditor()}
-          >
-            <PlusIcon aria-hidden="true" />
-          </Button>
-        </div>
-        {error && !loaded ? (
-          <p className="px-2 text-xs text-muted-foreground">
-            {translateText("agents:errors.loadFailed")}
-          </p>
-        ) : !loaded ? (
-          <Loading rows={2} />
-        ) : agents.length ? null : (
-          <Empty
-            title={translateText("agents:empty.title")}
-            className="px-3 py-4"
-            action={
-              <Button size="xs" variant="outline" onClick={() => openEditor()}>
-                {translateText("agents:actions.create")}
-              </Button>
-            }
-          />
-        )}
+      {error && !loaded ? (
+        <p className="px-2 text-xs text-muted-foreground">
+          {translateText("agents:errors.loadFailed")}
+        </p>
+      ) : !loaded ? (
+        <Loading rows={1} />
+      ) : agents.length === 0 ? (
+        <Empty
+          title={translateText("agents:empty.title")}
+          className="px-3 py-3"
+          action={
+            <Button size="xs" variant="outline" onClick={() => openEditor()}>
+              {translateText("agents:actions.create")}
+            </Button>
+          }
+        />
+      ) : (
         <ul className="grid min-h-0 grid-cols-1 gap-px overflow-y-auto">
-          {agents.map((agent) => (
-            <li key={agent.id}>
-              <button
-                type="button"
-                onClick={() => openAgent(agent.id)}
-                title={translateText("agents:actions.chatWith", {
-                  name: agent.name,
-                })}
-                className={cn(item, "w-full")}
-              >
-                <AgentAvatar agent={agent} className="size-5" />
-                <span className="min-w-0 flex-1 truncate text-left">
-                  {agent.name}
-                </span>
-                <AgentStatusDot status={agent.status} />
-                <span className="sr-only">
-                  {agentStatusLabels[agent.status]}
-                </span>
-              </button>
-            </li>
-          ))}
+          {library.map(
+            (agent: { id: string; name: string; status: string }) => (
+              <li key={agent.id}>
+                <button
+                  type="button"
+                  onClick={() => openAgent(agent.id)}
+                  title={translateText("agents:actions.chatWith", {
+                    name: agent.name,
+                  })}
+                  className={cn(item, "w-full")}
+                >
+                  <AgentAvatar agent={agent} className="size-5" />
+                  <span className="min-w-0 flex-1 truncate text-left">
+                    {agent.name}
+                  </span>
+                  <AgentStatusDot status={agent.status as never} />
+                  <span className="sr-only">
+                    {
+                      agentStatusLabels[
+                        agent.status as keyof typeof agentStatusLabels
+                      ]
+                    }
+                  </span>
+                </button>
+              </li>
+            ),
+          )}
         </ul>
-      </section>
-    </aside>
+      )}
+    </section>
   );
 }
 
@@ -200,15 +240,27 @@ export function BottomNav() {
   ] as const);
   const badges = useBadges();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // Three tabs, written out instead of picked from `sections` by index: the sidebar's list is
+  // about looking across everything, the phone's is about the three things a thumb reaches for.
+  // Indexing one list for both is how a tab silently starts leading somewhere else.
   const tabs = [
-    { ...sections[0], also: [] },
-    { ...sections[2], also: [] },
-    { ...sections[1], also: [] },
+    {
+      to: "/",
+      label: translateText("sections.chat"),
+      icon: ChatsCircleIcon,
+      also: [] as string[],
+    },
+    {
+      to: "/workspace/tasks",
+      label: translateText("sections.tasks"),
+      icon: ListChecksIcon,
+      also: [] as string[],
+    },
     {
       to: "/workspace/more",
       label: translateText("sections.more"),
       icon: DotsThreeIcon,
-      also: ["/workspace", "/workspace/routines", "/workspace/memory"],
+      also: ["/workspace/routines", "/workspace/memory", "/workspace/inbox"],
     },
   ] as const;
   return (
@@ -263,7 +315,7 @@ export function PageHeader({
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-dvh min-h-0 bg-background">
-      <Sidebar />
+      <SidebarPane />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {children}
         <BottomNav />

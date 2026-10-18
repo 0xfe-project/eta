@@ -4,7 +4,7 @@ export default defineConfig({
   include: ["src/**/*.test.{ts,tsx}"],
   testEnvironment: "happy-dom",
   setupFiles: ["./src/test-setup.ts"],
-  source: { define: { __AXP_BUILD__: JSON.stringify("test") } },
+  source: { define: { __ETA_BUILD__: JSON.stringify("test") } },
   tools: {
     swc: { jsc: { transform: { react: { runtime: "automatic" } } } },
   },

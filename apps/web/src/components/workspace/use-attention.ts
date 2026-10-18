@@ -15,7 +15,7 @@ const closed = new Set<string>(["done", "cancelled"]);
 /** Why a task waits for the user, or null. */
 function taskReason(task: Task): string | null {
   if (closed.has(task.status)) return null;
-  // A run an AXP agent asked for (#99), once the board has that status.
+  // A run an eta agent asked for (#99), once the board has that status.
   if ((task.run_status as string | null) === "awaiting_confirmation")
     return translate("overview:attention.awaitingRemoteAssignment");
   if (task.run_status === "failed")

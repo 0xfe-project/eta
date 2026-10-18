@@ -108,7 +108,6 @@ function Chat() {
   return (
     <ChatPanel
       agents={[]}
-      groups={[]}
       activeReplies={chat.data?.messages ?? []}
       groupId={AGENT}
       groupName="研究员"
@@ -131,6 +130,7 @@ function Chat() {
       onStopAll={() => {}}
       onStop={() => {}}
       onAnswer={() => {}}
+      onGoal={async () => {}}
     />
   );
 }
