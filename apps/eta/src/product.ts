@@ -26,6 +26,8 @@ import { MachineStore } from "./machines/store";
 import { projectsPlugin } from "./projects/plugin";
 import { ProjectStore } from "./projects/store";
 import { combineSessionHooks } from "./session-hooks";
+import { usagePlugin } from "./usage/plugin";
+import { UsageStore } from "./usage/store";
 
 export interface Product {
   readonly engine: Engine;
@@ -58,6 +60,9 @@ export function createProduct(options: {
   timeline.failInterrupted(RESTART_TEXT);
   const interactions = new InteractionStore(db);
   interactions.expirePending();
+  // Usage is kept for 30 days; what is older goes now, and again once a day while the host runs.
+  const usage = new UsageStore(db);
+  usage.prune();
 
   /** Say that product state moved, to whoever is looking at it. */
   const changed = (touched?: readonly string[] | "all"): void => {
@@ -116,6 +121,7 @@ export function createProduct(options: {
         "projects",
         "conversations",
         "inbox",
+        "usage",
       ]);
       let ready!: () => void;
       const everyone = new Promise<void>((resolve) => {
@@ -149,6 +155,7 @@ export function createProduct(options: {
         ),
       );
       server.mount("inbox", inboxPlugin({ inbox }, applied("inbox")));
+      server.mount("usage", usagePlugin({ usage, warn }, applied("usage")));
       let timer: ReturnType<typeof setTimeout> | undefined;
       const late = new Promise<never>((_, reject) => {
         timer = setTimeout(
