@@ -255,8 +255,9 @@ describe("a run that fails", () => {
     const { group } = await ada(w);
     const sent = await w.send(group.id, "hi");
     await w.settled(group.id, sent.replies[0]!.id);
-    // Remote machines cannot be made yet; this is what a project on one would look like.
-    w.host.db.exec("UPDATE machine SET kind = 'daemon' WHERE kind = 'primary'");
+    // A machine reached over SSH cannot host sessions yet (the kernel stays on the primary, the
+    // tools go over SSH); this is what a project on one would look like.
+    w.host.db.exec("UPDATE machine SET kind = 'ssh' WHERE kind = 'primary'");
     const next = await w.send(group.id, "again");
     const failed = await w.settled(group.id, next.replies[0]!.id);
     expect(failed).toMatchObject({
