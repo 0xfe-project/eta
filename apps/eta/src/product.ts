@@ -398,7 +398,13 @@ export function createProduct(options: {
         artifactsPlugin({ artifacts, board }, applied("artifacts")),
       );
       server.mount("inbox", inboxPlugin({ inbox }, applied("inbox")));
-      server.mount("usage", usagePlugin({ usage, warn }, applied("usage")));
+      server.mount(
+        "usage",
+        usagePlugin(
+          { usage, routineOf: runner.routineOf, warn },
+          applied("usage"),
+        ),
+      );
       if (memory !== undefined)
         server.mount(
           "memory",

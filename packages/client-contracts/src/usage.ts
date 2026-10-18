@@ -7,7 +7,8 @@
  *
  * `agents` is what an agent's usage line needs: its rolling windows and its models. `models` and
  * `days` are the whole picture, for a settings page. A generation made in a session that belongs
- * to no agent counts under `agentId: null`.
+ * to no agent and no routine counts under `agentId: null`; a routine's runs count under
+ * `routines`.
  */
 
 /** How long a generation is kept. */
@@ -48,6 +49,14 @@ export interface AgentUsage {
   models: ModelUsage[];
 }
 
+/** The same for a routine: what its runs (and revisions of its brief) used. */
+export interface RoutineUsage {
+  routineId: string;
+  windows: Record<UsageWindow, UsageTotals>;
+  /** Over the retention window, the most tokens first. */
+  models: ModelUsage[];
+}
+
 export interface DayUsage extends UsageTotals {
   /** `YYYY-MM-DD`, in UTC. */
   day: string;
@@ -56,6 +65,12 @@ export interface DayUsage extends UsageTotals {
 export interface UsageSections {
   /** Every agent with usage in the retention window, the most tokens in 30 days first. */
   agents: AgentUsage[];
+  /**
+   * Every routine with usage in the retention window, the most tokens in 30 days first. Their
+   * generations are not in `agents` (a routine's session belongs to no agent), only in `models`
+   * and `days`.
+   */
+  routines: RoutineUsage[];
   /** All agents together, the most tokens first. */
   models: ModelUsage[];
   /** All agents together, oldest first; a day without usage has no row. */

@@ -341,6 +341,7 @@ describe("the sums", () => {
     at,
     sessionId: "s1",
     agentId: "a1",
+    routineId: null,
     conversationId: "c1",
     provider: "p",
     model: "m",
@@ -424,6 +425,24 @@ describe("the sums", () => {
     clock.now += 2 * 24 * HOUR;
     store.record(entry(clock.now));
     expect(db.query("SELECT COUNT(*) AS n FROM usage").get()).toEqual({ n: 1 });
+  });
+
+  it("sum a routine's generations apart from every agent's", () => {
+    const { store } = open();
+    store.record(entry(NOW, { agentId: null, routineId: "r1", total: 7 }));
+    store.record(entry(NOW, { agentId: null, routineId: "r1", total: 3 }));
+    store.record(entry(NOW, { agentId: null, routineId: "r2", total: 100 }));
+    store.record(entry(NOW, { agentId: "a1", total: 1 }));
+    expect(
+      store.routines().map((r) => [r.routineId, r.windows["5h"].total]),
+    ).toEqual([
+      ["r2", 100],
+      ["r1", 10],
+    ]);
+    expect(store.routines()[1]!.models).toHaveLength(1);
+    expect(store.agents().map((agent) => agent.agentId)).toEqual(["a1"]);
+    // The whole picture still has all of it.
+    expect(store.models()[0]).toMatchObject({ requests: 4, total: 111 });
   });
 
   it("count a failure as failed and a stop as neither", () => {

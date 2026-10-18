@@ -10,6 +10,7 @@ import type {
   RoutineArgs,
   RoutineSections,
   RoutineSummary,
+  RoutineUsage,
   RunListing,
   RunView,
 } from "@eta/client-contracts";
@@ -797,5 +798,30 @@ describe("feedback and the brief", () => {
       text: "Summarise the news. Be brief.",
       feedback: "Be brief.",
     });
+  });
+});
+
+describe("what a routine's run costs", () => {
+  it("is counted under the routine, not under an agent, and shows in the usage target", async () => {
+    const t = await setup(() => call("finish", { report: "# News\n\nok" }));
+    const routine = await t.create();
+    await t.runNow(routine.id);
+    const row = t.w.host.db
+      .query<{ agent_id: string | null; routine_id: string | null }, []>(
+        "SELECT agent_id, routine_id FROM usage",
+      )
+      .get();
+    expect(row).toEqual({ agent_id: null, routine_id: routine.id });
+
+    t.w.client.subscribe("usage");
+    await until(() => t.w.client.section("usage", "routines") !== undefined);
+    const usage = t.w.client.section<RoutineUsage[]>("usage", "routines")!;
+    expect(usage).toHaveLength(1);
+    expect(usage[0]).toMatchObject({
+      routineId: routine.id,
+      windows: { "5h": { requests: 1 }, "30d": { requests: 1 } },
+    });
+    // Not among the agentless sessions.
+    expect(t.w.client.section<unknown[]>("usage", "agents")).toEqual([]);
   });
 });

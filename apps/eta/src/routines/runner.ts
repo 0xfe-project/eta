@@ -140,15 +140,21 @@ export class RoutineRunner {
    * session anywhere else is not one of ours.
    */
   readonly sessionTools = (input: { meta: SessionMeta }): KernelTool[] => {
-    const { cwd, id } = input.meta;
-    if (dirname(cwd) !== homesIn(this.#dataDir)) return [];
-    const routineId = basename(cwd);
-    if (this.#store.get(routineId) === undefined) return [];
+    const routineId = this.routineOf(input.meta);
+    if (routineId === undefined) return [];
+    const { id } = input.meta;
     return routineTools({
       store: this.#store,
       routineId,
       finish: (finish) => this.#finish(id, finish),
     });
+  };
+
+  /** The routine a session works for (a run or a revision of its brief), if it works for one. */
+  readonly routineOf = (meta: Pick<SessionMeta, "cwd">): string | undefined => {
+    if (dirname(meta.cwd) !== homesIn(this.#dataDir)) return undefined;
+    const routineId = basename(meta.cwd);
+    return this.#store.get(routineId) === undefined ? undefined : routineId;
   };
 
   #finish(sessionId: string, finish: Finish): string | undefined {
