@@ -30,7 +30,8 @@ export class ModelCatalog {
   readonly #models = new Map<string, Model<Api>>();
 
   add(spec: ModelSpec): void {
-    this.#models.set(`${spec.provider}:${spec.id}`, spec as never);
+    const { provider, id } = spec.lookup ?? spec;
+    this.#models.set(`${provider}:${id}`, spec as never);
   }
 
   get(provider: string, id: string): Model<Api> | undefined {
@@ -39,9 +40,16 @@ export class ModelCatalog {
 }
 
 /** A model definition fit to leave the primary: whatever reaches a provider is taken out. */
-export function modelSpecOf(model: Model<Api>): ModelSpec {
+export function modelSpecOf(
+  model: Model<Api>,
+  lookup?: { provider: string; id: string },
+): ModelSpec {
   const { headers: _headers, baseUrl: _baseUrl, ...rest } = model;
-  return { ...rest, baseUrl: "" } as unknown as ModelSpec;
+  return {
+    ...rest,
+    baseUrl: "",
+    ...(lookup === undefined ? {} : { lookup }),
+  } as unknown as ModelSpec;
 }
 
 /**
@@ -60,7 +68,7 @@ const FORWARDED_OPTIONS = [
   "transport",
 ] as const;
 
-function forwardedOptions(
+export function forwardedOptions(
   options: SimpleStreamOptions | undefined,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};

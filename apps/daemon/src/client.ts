@@ -39,6 +39,8 @@ export interface DaemonLinkOptions {
   backoff?: { minMs: number; maxMs: number } | undefined;
   heartbeatMs?: number | undefined;
   silenceMs?: number | undefined;
+  /** Sees every text frame, both ways. A test's way of knowing what crossed the link. */
+  tap?: ((direction: "in" | "out", text: string) => void) | undefined;
 }
 
 function linkUrl(primary: string): string {
@@ -144,7 +146,10 @@ export class DaemonLink {
       };
       socket.addEventListener("open", () => {
         peer = new Peer({
-          send: (text) => socket.send(text),
+          send: (text) => {
+            this.#options.tap?.("out", text);
+            socket.send(text);
+          },
           close: (code, reason) => socket.close(code, reason),
           onPipe: (frame) => attached?.receive(frame),
           onCtl,
@@ -156,7 +161,9 @@ export class DaemonLink {
         });
       });
       socket.addEventListener("message", (event) => {
-        if (typeof event.data === "string") peer?.receive(event.data);
+        if (typeof event.data !== "string") return;
+        this.#options.tap?.("in", event.data);
+        peer?.receive(event.data);
       });
       let ended = false;
       const end = (code: number, reason: string): void => {

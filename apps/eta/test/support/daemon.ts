@@ -57,6 +57,8 @@ export async function startDaemon(
     /** Do not dial; the caller starts the link. */
     idle?: boolean;
     warn?: (message: string) => void;
+    /** Sees every text frame that crosses the link, both ways. */
+    tap?: (direction: "in" | "out", text: string) => void;
   } = {},
 ): Promise<TestDaemon> {
   const dataDir = options.dataDir ?? (await tempDir("eta-daemon-"));
@@ -75,6 +77,7 @@ export async function startDaemon(
     backoff: { minMs: 20, maxMs: 100 },
     heartbeatMs: 200,
     silenceMs: 2_000,
+    tap: options.tap,
     onState: (state) => states.push(state),
     warn: () => undefined,
   });

@@ -98,6 +98,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       artifactLimits: options.artifactLimits,
       memoryUrl: options.memoryUrl,
       hostname,
+      ...(options.home === undefined ? {} : { home: options.home }),
     });
     const web = createWebRoutes(options.webDir);
     server = await assembleServer({
@@ -116,6 +117,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
         (await product.fetch(request)) ?? (await web(request)),
       authorize: access.authorize,
       endpoints: product.endpoints,
+      remoteSessions: product.remote,
       // What the product adds to every session it owns: the agent's words in the system prompt,
       // and, from each of its features, tools, tool middleware and an ear for questions.
       baseSystemPromptFor: product.engine.baseSystemPromptFor,
