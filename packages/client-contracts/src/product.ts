@@ -139,7 +139,16 @@ export interface ConversationInfo {
   updatedAt: number;
 }
 
-export type MessageKind = "message" | "mention" | "system";
+/**
+ * What a row is. `task_draft` and `task_card` are the task board's (see `tasks.ts`): a draft an
+ * agent proposes, and the same row once the user has confirmed it.
+ */
+export type MessageKind =
+  | "message"
+  | "mention"
+  | "system"
+  | "task_draft"
+  | "task_card";
 
 /**
  * Where a reply stands. A user's or a system row is written straight to `done`. A reply is
@@ -182,7 +191,8 @@ export interface MessageView {
    * What the row carries beyond its text. A user row has `woke` (agents given a reply row) and
    * `joined` (agents whose turn it steered); a system row has the `event` it records (`steward`
    * with `from`/`to`, `wake_budget`); a failed reply has the `code` it failed with (`restart`,
-   * `run_failed`, `unavailable`, `gone`).
+   * `run_failed`, `unavailable`, `gone`); a `task_draft` row has `TaskDraftData` and a
+   * `task_card` row has `TaskCardData`.
    */
   data: Record<string, unknown>;
   createdAt: number;

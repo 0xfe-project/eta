@@ -11,9 +11,11 @@ import type {
   ViewDiagnostics,
 } from "./types";
 
+export * from "./artifacts";
 export type * from "./data";
 export * from "./operations";
 export * from "./product";
+export * from "./tasks";
 export type * from "./types";
 export { SERVICE_PROTOCOL } from "./types";
 
