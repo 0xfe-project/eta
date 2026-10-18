@@ -11,6 +11,7 @@ import { AskRegistry } from "@eta/harness";
 import { describe, expect, it } from "vitest";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
 import { HISTORY_LIMIT, Inbox } from "../src/inbox/inbox";
+import { SettingStore } from "../src/inbox/setting";
 import { InteractionStore } from "../src/inbox/store";
 import { until } from "./support/client";
 import { tempDir } from "./support/host";
@@ -324,6 +325,7 @@ describe("the ask channel's own endings", () => {
     const warned: string[] = [];
     const inbox = new Inbox({
       interactions,
+      settings: new SettingStore(db),
       timeline: { active: () => [] } as never,
       changed: () => moved.push(moved.length),
       warn: (message) => warned.push(message),

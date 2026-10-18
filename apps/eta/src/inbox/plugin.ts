@@ -16,6 +16,10 @@ export interface InboxPluginDeps {
 /** The longest answer taken: a person's words, not a file. */
 const MAX_TEXT = 20_000;
 
+/** The most tools the approval list holds, and the longest name in it. */
+const MAX_APPROVALS = 200;
+const MAX_TOOL_NAME = 200;
+
 /**
  * The user's answer, read from untrusted JSON into the shape the ask channel takes. Anything else
  * is an error naming what was wrong, because an answer the session cannot read would resume a run
@@ -72,7 +76,15 @@ export function inboxPlugin(deps: InboxPluginDeps, applied: () => void) {
     (ctx) => {
       const { wire, sessions } = ctx;
       const offs = [
-        publish(wire, "inbox", { list: () => inbox.list() }, { eager: true }),
+        publish(
+          wire,
+          "inbox",
+          {
+            list: () => inbox.list(),
+            approvals: () => ({ tools: inbox.approvals() }),
+          },
+          { eager: true },
+        ),
 
         wire.handle("inbox", "answer", async (call) => {
           const args = new Args(call);
@@ -81,6 +93,22 @@ export function inboxPlugin(deps: InboxPluginDeps, applied: () => void) {
             (call.args as Record<string, unknown>).response,
           );
           return { result: await inbox.answer(sessions, id, response) };
+        }),
+
+        wire.handle("inbox", "setApprovals", (call) => {
+          const args = new Args(call);
+          // The list is replaced, so a call without one must not quietly empty it.
+          if (!Array.isArray(((call.args ?? {}) as { tools?: unknown }).tools))
+            throw new TypeError("inbox.setApprovals needs tools");
+          const tools = args.strings("tools");
+          if (
+            tools.length > MAX_APPROVALS ||
+            tools.some((tool) => tool.length > MAX_TOOL_NAME)
+          )
+            throw new Error("inbox.setApprovals: that is too long a list");
+          return {
+            result: { approvals: { tools: inbox.setApprovals(tools) } },
+          };
         }),
       ];
       return () => {

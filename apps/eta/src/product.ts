@@ -19,6 +19,7 @@ import { ConversationTargets } from "./conversations/targets";
 import { Timeline } from "./conversations/timeline";
 import { Inbox } from "./inbox/inbox";
 import { inboxPlugin } from "./inbox/plugin";
+import { SettingStore } from "./inbox/setting";
 import { InteractionStore } from "./inbox/store";
 import { machinesPlugin } from "./machines/plugin";
 import { MachineStore } from "./machines/store";
@@ -78,6 +79,7 @@ export function createProduct(options: {
   const created = (id: string): void => targets.add(id);
   const inbox = new Inbox({
     interactions,
+    settings: new SettingStore(db),
     timeline,
     changed: () => wire?.pushNow("inbox"),
     warn,
@@ -100,7 +102,7 @@ export function createProduct(options: {
       sessionTools: engine.sessionTools,
       askObserve: engine.askObserve,
     },
-    { askObserve: inbox.askObserve },
+    { toolMiddleware: inbox.toolMiddleware, askObserve: inbox.askObserve },
   ]);
 
   return {

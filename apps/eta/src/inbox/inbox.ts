@@ -8,17 +8,24 @@
  * between `working` and `waiting_for_input`.
  */
 import type { InboxResponse, InteractionView } from "@eta/client-contracts";
-import type { AskObserver } from "@eta/harness";
+import type { ToolMiddleware } from "@eta/core";
+import type { AskObserver, OpenSession } from "@eta/harness";
 import type { SessionMeta, SessionsService } from "@eta/server";
 import type { Timeline } from "../conversations/timeline";
+import type { SettingStore } from "./setting";
 import type { InteractionStore } from "./store";
+import { approvalMiddleware } from "./approval";
 import { interactionId } from "./store";
 
 /** How many settled questions the list carries after the pending ones. */
 export const HISTORY_LIMIT = 100;
 
+/** Where the tools that ask before they run are kept. */
+const APPROVALS = "approvals";
+
 export interface InboxDeps {
   interactions: InteractionStore;
+  settings: SettingStore;
   timeline: Timeline;
   /** Say that the inbox moved, to whoever is looking at it. */
   changed: () => void;
@@ -27,6 +34,7 @@ export interface InboxDeps {
 
 export class Inbox {
   readonly #interactions: InteractionStore;
+  readonly #settings: SettingStore;
   readonly #timeline: Timeline;
   readonly #changed: () => void;
   readonly #warn: (message: string) => void;
@@ -38,6 +46,7 @@ export class Inbox {
 
   constructor(deps: InboxDeps) {
     this.#interactions = deps.interactions;
+    this.#settings = deps.settings;
     this.#timeline = deps.timeline;
     this.#changed = deps.changed;
     this.#warn = deps.warn;
@@ -50,6 +59,39 @@ export class Inbox {
       ...this.#interactions.settled(HISTORY_LIMIT),
     ];
   }
+
+  /** The tool names that ask the user before they run, sorted. */
+  approvals(): string[] {
+    const stored = this.#settings.get(APPROVALS);
+    return Array.isArray(stored)
+      ? stored.filter((tool): tool is string => typeof tool === "string")
+      : [];
+  }
+
+  /** Replace the list: blanks and repeats dropped, the rest sorted. Returns what was kept. */
+  setApprovals(tools: readonly string[]): string[] {
+    const kept = [
+      ...new Set(
+        tools.map((tool) => tool.trim()).filter((tool) => tool !== ""),
+      ),
+    ].sort();
+    this.#settings.set(APPROVALS, kept);
+    this.#changed();
+    return kept;
+  }
+
+  /**
+   * The middleware of one session: it asks through that session's own channel, and reads the list
+   * at every call, so editing the list reaches sessions that are already open.
+   */
+  readonly toolMiddleware = (input: {
+    session: OpenSession;
+  }): ToolMiddleware[] => [
+    approvalMiddleware({
+      tools: () => this.approvals(),
+      ask: input.session.ask,
+    }),
+  ];
 
   /** One session's questions, recorded as they happen. Never lets a bookkeeping error reach the run. */
   readonly askObserve = (meta: SessionMeta): AskObserver => {
