@@ -3,12 +3,12 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "generate": "openapi-typescript --root-types --root-types-no-schema-prefix --default-non-nullable false",
+    "generate": "openapi-typescript --root-types --root-types-no-schema-prefix --default-non-nullable false && bun -e 'import { tanstackRouterGenerator } from \"@tanstack/router-plugin/vite\"; await tanstackRouterGenerator({ target: \"react\", autoCodeSplitting: true, quoteStyle: \"double\" }).configResolved({ root: process.cwd() })'",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --port 3000",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
     "test": "rstest run"
   },
   "dependencies": {
