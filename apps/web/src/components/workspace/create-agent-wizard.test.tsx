@@ -13,8 +13,27 @@ import {
 } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { setWire } from "@/lib/wire";
+import { providersHost } from "@/test-wire";
 import { AgentEditor } from "./agent-editor";
 import { useWorkspaceStore } from "./workspace-store";
+
+const providers = {
+  revision: "r1",
+  providers: [
+    {
+      id: "c",
+      name: "C",
+      kind: "openai-compatible" as const,
+      baseUrl: "http://127.0.0.1:1/v1",
+      hasApiKey: true,
+      models: [
+        { id: "m1", name: "M1" },
+        { id: "m2", name: "M2" },
+      ],
+    },
+  ],
+};
 
 const api = rstest.hoisted(() => ({
   create: rstest.fn(),
@@ -33,20 +52,6 @@ rstest.mock("@/queries/chat", () => {
     useUpdateAgent: () => ({ mutate: () => {}, isPending: false }),
   };
 });
-rstest.mock("@/queries/llm", () => ({
-  useModels: () => ({
-    data: [
-      {
-        id: "m1",
-        display_name: "M1",
-        connector: "c",
-        status: "available",
-        available: true,
-      },
-    ],
-  }),
-  useConnectors: () => ({ data: [{ id: "c", display_name: "C" }] }),
-}));
 rstest.mock("./use-agents", () => ({
   useAgents: () => ({ agents: [], select: api.select }),
 }));
@@ -104,6 +109,7 @@ const alerts = () =>
   );
 
 beforeEach(async () => {
+  providersHost(providers);
   api.create.mockReset();
   api.select.mockReset();
   await act(async () =>
@@ -119,6 +125,7 @@ afterEach(async () => {
     useWorkspaceStore.getState().setAgentEditor({ open: false, agentId: null }),
   );
   await act(async () => root.render(null));
+  setWire(undefined);
 });
 
 describe("creating an agent step by step", () => {
@@ -153,7 +160,7 @@ describe("creating an agent step by step", () => {
       name: "审查",
       description: "只看会出错的地方",
       persona: "",
-      model: "m1",
+      model: "c:m1",
     });
     expect(api.select).toHaveBeenCalledWith("new");
     expect(dialog()).toBeNull();

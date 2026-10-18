@@ -1,9 +1,7 @@
 import type { Bundle } from "@/api/control-plane.gen";
 import type { GitHubStatus } from "@/queries/forge";
-import type { Connection } from "@/queries/llm";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { GithubLogoIcon } from "@phosphor-icons/react/GithubLogo";
-import { ImageIcon } from "@phosphor-icons/react/Image";
 import { PuzzlePieceIcon } from "@phosphor-icons/react/PuzzlePiece";
 import { useCallback, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -43,18 +41,7 @@ import {
 } from "@/queries/bundle-config";
 import { useBundles } from "@/queries/chat";
 import { useGitHubStatus, useRefreshGitHub } from "@/queries/forge";
-import {
-  GROK_CONNECTOR,
-  NEEDS_ACTION,
-  USABLE,
-  useConnections,
-  useConnectors,
-  useUsage,
-} from "@/queries/llm";
-import { connectionStateLabels } from "./connection-state";
 import { GitHubWizard } from "./github-wizard";
-import { ConnectorSection, RefreshStatus } from "./provider-settings";
-import { useWorkspaceStore } from "./workspace-store";
 
 interface Summary {
   summary: string;
@@ -209,118 +196,6 @@ function GitHubConnection() {
         onOpenChange={setOpen}
         returnError={returned?.error}
       />
-    </>
-  );
-}
-
-const grokDescription = () => translate("connections:grok.summary");
-
-function grokSummary(accounts: Connection[] | undefined): Summary {
-  if (!accounts) return { summary: grokDescription() };
-  const active = accounts.find((account) => USABLE.has(account.state));
-  if (active)
-    return {
-      summary: translate("connections:grok.usingAccount", {
-        accountName: active.label,
-        summary: grokDescription(),
-      }),
-    };
-  const stuck = accounts.find((account) => NEEDS_ACTION.has(account.state));
-  if (stuck)
-    return {
-      summary: stuck.error?.message ?? stuck.label,
-      todo: connectionStateLabels[stuck.state],
-    };
-  if (accounts.length)
-    return {
-      summary: accounts[0].label,
-      todo: connectionStateLabels[accounts[0].state],
-    };
-  return {
-    summary: grokDescription(),
-    todo: translate("connections:status.notLinked"),
-  };
-}
-
-/**
- * Grok's account is the model gateway's xAI account: the same one serves
- * Grok models and the grok plugin's images, videos and search.
- */
-function GrokConnection() {
-  const { t: translateText } = useTranslation([
-    "connections",
-    "common",
-    "providers",
-  ] as const);
-  const setSettings = useWorkspaceStore((s) => s.setSettings);
-  const connectors = useConnectors();
-  const connections = useConnections();
-  const { data: usage } = useUsage();
-  const [open, setOpen] = useState(false);
-  const connector = connectors.data?.find((item) => item.id === GROK_CONNECTOR);
-  const accounts = connections.data?.filter(
-    (connection) => connection.connector === GROK_CONNECTOR,
-  );
-  const failed = connectors.error ?? connections.error;
-  const current: Summary = failed
-    ? { summary: failed.message, todo: translateText("common:status.error") }
-    : grokSummary(accounts);
-
-  return (
-    <>
-      <ConnectionCard
-        icon={ImageIcon}
-        name="Grok"
-        {...current}
-        onOpen={() => setOpen(true)}
-      />
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent aria-describedby={undefined} className="sm:max-w-lg">
-          <DialogHeader className="flex-row items-center gap-2">
-            <ImageIcon aria-hidden="true" className="size-5" />
-            <DialogTitle className="text-sm">Grok</DialogTitle>
-          </DialogHeader>
-          {failed ? (
-            <LoadError
-              what={translateText("grok.accountTitle")}
-              error={failed}
-              onRetry={() => {
-                void connectors.refetch();
-                void connections.refetch();
-              }}
-            />
-          ) : connector && accounts ? (
-            <>
-              <RefreshStatus className="justify-end" />
-              <ConnectorSection
-                connector={connector}
-                connections={accounts}
-                usage={usage}
-                hideHeading
-                description={
-                  <>
-                    {translateText("grok.sharedAccountPrefix")}
-                    <Button
-                      variant="link"
-                      size="xs"
-                      className="h-auto px-1"
-                      onClick={() => {
-                        setOpen(false);
-                        setSettings({ open: true, section: "providers" });
-                      }}
-                    >
-                      {translateText("providers:title")}
-                    </Button>
-                    {translateText("grok.sharedAccountSuffix")}
-                  </>
-                }
-              />
-            </>
-          ) : (
-            <Loading rows={1} />
-          )}
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
@@ -576,7 +451,6 @@ export function ConnectionSettings() {
       <h2 className="text-sm font-semibold">{translateText("title")}</h2>
       <div className="grid gap-2 sm:grid-cols-2">
         <GitHubConnection />
-        <GrokConnection />
         {bundles.data
           ?.filter((b): b is Configured => b.builtin && !!b.config)
           .map((b) => (

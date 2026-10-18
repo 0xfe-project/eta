@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { setWire } from "@/lib/wire";
+import { providersHost } from "@/test-wire";
 import { ModelChip, ThinkingChip } from "./composer-pickers";
 
 const requests = rstest.hoisted(() => ({ patches: [] as unknown[] }));
@@ -19,13 +21,22 @@ async function render(node: React.ReactNode) {
     model: "local:m1",
     thinking_level: "off",
   });
-  client.setQueryData(
-    ["llm", "models"],
-    [
-      { id: "local:m1", display_name: "Model One", available: true },
-      { id: "local:m2", display_name: "Model Two", available: true },
+  providersHost({
+    revision: "r1",
+    providers: [
+      {
+        id: "local",
+        name: "Local",
+        kind: "openai-compatible",
+        baseUrl: "http://127.0.0.1:1/v1",
+        hasApiKey: true,
+        models: [
+          { id: "m1", name: "Model One" },
+          { id: "m2", name: "Model Two" },
+        ],
+      },
     ],
-  );
+  });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -44,6 +55,7 @@ async function render(node: React.ReactNode) {
 afterEach(async () => {
   await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
   requests.patches.length = 0;
+  setWire(undefined);
   rstest.restoreAllMocks();
 });
 

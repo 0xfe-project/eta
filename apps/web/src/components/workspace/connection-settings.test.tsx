@@ -40,9 +40,6 @@ async function render(state: object) {
     app: null,
     installations: [],
   });
-  queryClient.setQueryData(["llm", "connectors"], []);
-  queryClient.setQueryData(["llm", "connections"], []);
-  queryClient.setQueryData(["llm", "usage"], []);
   queryClient.setQueryData(
     ["bundles"],
     [weather, { ...weather, name: "plain", config: undefined }],

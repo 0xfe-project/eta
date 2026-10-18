@@ -9,7 +9,7 @@ import { Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { DialogFooter } from "@/components/ui/dialog";
 import { useBundles, useCreateAgent } from "@/queries/chat";
-import { useModels } from "@/queries/llm";
+import { useModels } from "@/queries/providers";
 import {
   BundlesField,
   InstructionsField,
@@ -66,8 +66,11 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
     },
   });
   const model = form.watch("model");
-  // New agents start with the last used model, or the first usable one.
-  const preferred = usable.find((item) => item.id === lastModel) ?? usable[0];
+  // New agents start with the last used model, else the default one, else the first usable one.
+  const preferred =
+    usable.find((item) => item.id === lastModel) ??
+    usable.find((item) => item.default) ??
+    usable[0];
   useEffect(() => {
     if (!model && preferred) form.setValue("model", preferred.id);
   }, [form, model, preferred]);

@@ -1,7 +1,7 @@
 import type { UseFormReturn } from "react-hook-form";
 import type { AgentForm } from "./agent-form";
 import type { Bundle } from "@/queries/chat";
-import type { Model } from "@/queries/llm";
+import type { Model } from "@/queries/providers";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatLocale } from "@/lib/i18n";
 import { translateBundleDescription } from "@/lib/i18n-metadata";
 import { cn } from "@/lib/utils";
-import { useConnectors } from "@/queries/llm";
+import { modelGroups } from "@/queries/providers";
 import { DESCRIPTION_MAX } from "./agent-form";
 import { usePersonas } from "./persona-cards";
 import { Select, SelectGroup, SelectOption } from "./select-field";
@@ -37,12 +37,8 @@ export function ModelSelect({
     "common",
     "providers",
   ] as const);
-  const { data: connectors } = useConnectors();
-  const loading = !models || !connectors;
-  const groups = (connectors ?? []).map((connector) => ({
-    connector,
-    models: (models ?? []).filter((model) => model.connector === connector.id),
-  }));
+  const loading = !models;
+  const groups = modelGroups(models ?? []);
   const known = (models ?? []).some((model) => model.id === value);
   return (
     <Select
@@ -64,26 +60,22 @@ export function ModelSelect({
             : translateText("models.deletedOption", { modelName: value })}
         </SelectOption>
       ) : null}
-      {groups
-        .filter((group) => group.models.length)
-        .map(({ connector, models }) => (
-          <SelectGroup key={connector.id} label={connector.display_name}>
-            {models.map((model) => (
-              <SelectOption
-                key={model.id}
-                value={model.id}
-                disabled={!model.available && model.id !== value}
-              >
-                {model.display_name}
-                {model.status === "unavailable"
-                  ? translateText("common:status.unavailableSuffix")
-                  : model.status === "degraded"
-                    ? translateText("providers:status.degradedSuffix")
-                    : ""}
-              </SelectOption>
-            ))}
-          </SelectGroup>
-        ))}
+      {groups.map(({ provider, label, models }) => (
+        <SelectGroup key={provider} label={label}>
+          {models.map((model) => (
+            <SelectOption
+              key={model.id}
+              value={model.id}
+              disabled={!model.available && model.id !== value}
+            >
+              {model.name}
+              {model.available
+                ? ""
+                : translateText("common:status.unavailableSuffix")}
+            </SelectOption>
+          ))}
+        </SelectGroup>
+      ))}
     </Select>
   );
 }
