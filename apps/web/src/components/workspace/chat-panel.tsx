@@ -1287,8 +1287,12 @@ export function ChatPanel({
             <div className="border-b px-3 py-1.5 text-xs text-muted-foreground">
               {uploading ? translateText("composer.waitForUploads") : hold}
             </div>
-          ) : notice === undefined ? null : (
-            <div className="border-b px-3 py-1.5 text-xs">{notice}</div>
+          ) : (
+            // Rendered as given, not wrapped: a notice is a component that draws its own box
+            // (a dashed frame, an icon, the way out). Wrapping it in a bordered div meant the
+            // wrapper stayed — an empty strip above the input — whenever the notice itself had
+            // nothing to say, which is most of the time.
+            notice
           )}
           <form
             ref={formRef}
