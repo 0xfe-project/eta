@@ -398,10 +398,14 @@ export class NodeShell implements Shell {
         let spillWrites: Promise<void> = Promise.resolve();
         const spillChunk = (text: string): void => {
           const fileSystem = toSpill;
-          const path = spillPath;
-          if (fileSystem === undefined || path === undefined) return;
+          if (fileSystem === undefined) return;
+          // The path is read when the write runs, not when the chunk arrives: the file is
+          // created by the step queued before this one, and output that arrives while it is
+          // being created belongs in it too. Reading it here dropped those chunks (the tail of
+          // a fast command, on a busy machine).
           spillWrites = spillWrites.then(async () => {
-            await fileSystem.appendFile(path, text);
+            if (spillPath === undefined) return;
+            await fileSystem.appendFile(spillPath, text);
           });
         };
         const startSpill = (): void => {
