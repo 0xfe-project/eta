@@ -42,6 +42,8 @@
       "name": "@eta/web",
       "dependencies": {
         "@blobatar/react": "^2.7.0",
+        "@eta/client-contracts": "*",
+        "@eta/client-wire-proto": "*",
         "@hookform/resolvers": "^5.9.1",
         "@lexical/react": "^0.52.0",
         "@lexical/utils": "^0.52.0",
