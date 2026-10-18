@@ -31,7 +31,9 @@ type Usage struct {
 }
 
 // UsageReader is implemented by connectors whose provider reports
-// subscription limits. metadata is the credential CPA keeps for the account.
+// subscription limits, or at least can tell whether it accepts the
+// credential (no windows then). metadata is the credential CPA keeps for
+// the account; for an API key, "api_key" is the key.
 type UsageReader interface {
 	Usage(ctx context.Context, metadata map[string]any) (Usage, error)
 }
@@ -52,14 +54,16 @@ func (s *Service) Usage(ctx context.Context) []Usage {
 	type job struct {
 		auth   *coreauth.Auth
 		reader UsageReader
+		apiKey bool
 	}
 	var jobs []job
 	for _, a := range s.auths.List() {
-		reader, ok := s.byID[s.byProvider[strings.ToLower(a.Provider)]].(UsageReader)
-		if !ok || a.Disabled || a.Status == coreauth.StatusDisabled {
+		connector := s.byProvider[strings.ToLower(a.Provider)]
+		reader, ok := s.byID[connector].(UsageReader)
+		if !ok || disabled(a) {
 			continue
 		}
-		jobs = append(jobs, job{a, reader})
+		jobs = append(jobs, job{a, reader, s.apiKey(connector)})
 	}
 	out := make([]Usage, len(jobs))
 	var wg sync.WaitGroup
@@ -70,13 +74,14 @@ func (s *Service) Usage(ctx context.Context) []Usage {
 			ctx, cancel := context.WithTimeout(ctx, usageTimeout)
 			defer cancel()
 			started := s.now()
-			u, err := j.reader.Usage(ctx, j.auth.Metadata)
-			if userCode(err) == "AUTH_EXPIRED" {
+			u, err := j.reader.Usage(ctx, credential(j.auth))
+			// A key cannot be refreshed; a login can, as CPA does on a 401.
+			if userCode(err) == "AUTH_EXPIRED" && !j.apiKey {
 				if refreshed, rerr := s.auths.ForceRefreshAuth(ctx, j.auth.ID); rerr == nil && refreshed != nil {
 					u, err = j.reader.Usage(ctx, refreshed.Metadata)
 				}
 			}
-			s.record(j.auth.ID, check{started: started, done: s.now(), err: checkError(err)})
+			s.record(j.auth.ID, check{started: started, done: s.now(), err: checkError(err, j.apiKey)})
 			u.ID = j.auth.ID
 			if u.Windows == nil {
 				u.Windows = []UsageWindow{}
@@ -103,10 +108,27 @@ func userCode(err error) string {
 	return ""
 }
 
-func checkError(err error) *ConnectionError {
+// credential is what a UsageReader reads: CPA's metadata for the account,
+// and the key of an API key (CPA keeps it in the attributes).
+func credential(a *coreauth.Auth) map[string]any {
+	key := a.Attributes["api_key"]
+	if key == "" {
+		return a.Metadata
+	}
+	out := make(map[string]any, len(a.Metadata)+1)
+	for k, v := range a.Metadata {
+		out[k] = v
+	}
+	out["api_key"] = key
+	return out
+}
+
+func checkError(err error, apiKey bool) *ConnectionError {
 	switch {
 	case err == nil:
 		return nil
+	case userCode(err) == "AUTH_EXPIRED" && apiKey:
+		return &ConnectionError{"AUTH_EXPIRED", "上游拒绝了 API key，请重新填写。"}
 	case userCode(err) == "AUTH_EXPIRED":
 		return &ConnectionError{"AUTH_EXPIRED", "上游拒绝了登录令牌，请重新登录。"}
 	}
@@ -137,7 +159,7 @@ func (s *Service) withCheck(c Connection, a *coreauth.Auth) Connection {
 	c.CheckedAt, c.CheckError = &ch.done, ch.err
 	if ch.err != nil && ch.err.Code == "AUTH_EXPIRED" && !a.UpdatedAt.After(ch.done) &&
 		(c.State == StateActive || c.State == StateDegraded) {
-		c.State, c.Error, c.RetryAt = StateNeedsLogin, &ConnectionError{"AUTH_EXPIRED", "登录已失效，请重新登录。"}, nil
+		c.State, c.Error, c.RetryAt = StateNeedsLogin, s.authExpired(c.Connector), nil
 	}
 	return c
 }

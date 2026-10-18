@@ -7,7 +7,7 @@
     "image:linux-amd64": "bash ../../scripts/build/image.sh runtime linux amd64",
     "image:linux-arm64": "bash ../../scripts/build/image.sh runtime linux arm64",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
     "test": "bun test",
     "generate": "rm -rf src/protocol && codex app-server generate-ts --out src/protocol"
   },

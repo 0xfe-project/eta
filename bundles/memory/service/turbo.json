@@ -32,7 +32,16 @@
       "dependsOn": ["build", "build:linux-arm64"]
     },
     "lint": {
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/ruff.toml"]
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!benchmarks/**",
+        "!**/*.md",
+        "$TURBO_ROOT$/ruff.toml"
+      ]
+    },
+    "test": {
+      "dependsOn": ["lint"],
+      "inputs": ["$TURBO_DEFAULT$", "!benchmarks/**", "!**/*.md"]
     }
   }
 }
