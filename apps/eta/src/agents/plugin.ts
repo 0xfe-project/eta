@@ -117,13 +117,24 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
           return { result: { agent: viewOf(existing(id)) } };
         }),
 
-        wire.handle("agents", "update", (call) => {
+        wire.handle("agents", "update", async (call) => {
           const args = new Args(call);
           const id = args.string("agentId");
           const before = existing(id);
           const fields = fieldsOf(call, false);
           const agent = agents.update(id, fields)!;
           if (agent.name !== before.name) renameHome(agent);
+          // The model and thinking level belong to a session once it exists; an edit of the agent
+          // is the one thing that overrides what the user chose there.
+          await deps.engine.applySettings(id, {
+            ...(agent.model !== null && agent.model !== before.model
+              ? { model: agent.model }
+              : {}),
+            ...(agent.thinkingLevel !== null &&
+            agent.thinkingLevel !== before.thinkingLevel
+              ? { thinkingLevel: agent.thinkingLevel }
+              : {}),
+          });
           deps.changed("all");
           return { result: { agent: viewOf(agent) } };
         }),

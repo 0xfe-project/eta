@@ -206,6 +206,12 @@ export function createProduct(options: {
       }),
   });
   const mirrors = new SessionMirrors(hub);
+  const router = new RemoteSessionsRouter({
+    conversations,
+    machines,
+    hub,
+    models: () => running?.models,
+  });
   const remotePlace = new RemotePlace({
     hub,
     mirrors,
@@ -213,13 +219,8 @@ export function createProduct(options: {
     defaults: async () => (await running?.defaults()) ?? {},
     hooks: () => later.hooks,
     home: options.home ?? homedir(),
+    forward: (action, args) => router.forward(action, args),
     warn,
-  });
-  const router = new RemoteSessionsRouter({
-    conversations,
-    machines,
-    hub,
-    models: () => running?.models,
   });
 
   const targets = new ConversationTargets({
