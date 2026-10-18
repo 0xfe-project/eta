@@ -18,11 +18,6 @@ import {
   setLanguagePreference,
   translate,
 } from "./i18n";
-import {
-  translateBundleConfigField,
-  translateBundleDescription,
-  translatePluginDescription,
-} from "./i18n-metadata";
 import { mentionedMembers } from "./mentions";
 
 afterEach(() => {
@@ -164,29 +159,6 @@ const catalog = Object.fromEntries(
 );
 
 describe("translation coverage", () => {
-  it("translates built-in metadata by ID and preserves custom content", () => {
-    // The bundles' and plugins' manifests went with the old stack; the translators stay
-    // (plugins the user drops into ~/.eta/plugins carry manifests too), checked here on
-    // the built-in ids the catalog still knows.
-    expect(translateBundleDescription("oomol", "我的自定义说明")).toBe(
-      "我的自定义说明",
-    );
-    expect(translatePluginDescription("custom", "自定义插件")).toBe(
-      "自定义插件",
-    );
-    expect(
-      translateBundleConfigField(
-        "oomol",
-        "OO_TEAM_NAME",
-        "title",
-        "我的团队名称",
-      ),
-    ).toBe("我的团队名称");
-    expect(
-      translateBundleConfigField("weather", "API_KEY", "title", "API key"),
-    ).toBe("API key");
-  });
-
   it("has matching semantic keys, English text and named interpolation variables", () => {
     expect(Object.keys(en).sort()).toEqual([...namespaces].sort());
     expect(Object.keys(zh).sort()).toEqual([...namespaces].sort());

@@ -1,0 +1,10 @@
+**/node_modules
+**/.venv
+**/.turbo
+**/dist
+**/out
+**/__pycache__
+.git
+.github
+.claude
+var
