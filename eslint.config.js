@@ -42,10 +42,14 @@ export default antfu(
     },
   },
   {
-    // Programs, not modules: the server's entry point and the Bun scripts that
-    // check a package's production imports. They await at the top level and
-    // print to the terminal on purpose.
-    files: ["packages/eta-server/src/main.ts", "packages/*/test/*.smoke.mjs"],
+    // Programs, not modules: the entry points of the server and the host and
+    // the Bun scripts that check a package's production imports. They await at
+    // the top level and print to the terminal on purpose.
+    files: [
+      "packages/eta-server/src/main.ts",
+      "apps/eta/src/main.ts",
+      "packages/*/test/*.smoke.mjs",
+    ],
     rules: { "antfu/no-top-level-await": "off", "no-console": "off" },
   },
   {
