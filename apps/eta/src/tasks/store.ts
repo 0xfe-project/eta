@@ -263,6 +263,20 @@ export class TaskStore {
     })();
   }
 
+  /** The comment a client already sent under `clientId` on this task, if any (a retry's twin). */
+  commentByClientId(
+    taskId: string,
+    clientId: string,
+  ): TaskActivityView | undefined {
+    const row = this.#db
+      .query<ActivityRow, [string, string]>(
+        `SELECT * FROM task_activity
+          WHERE task_id = ? AND kind = 'comment' AND json_extract(data, '$.clientId') = ?`,
+      )
+      .get(taskId, clientId);
+    return row === null ? undefined : activityOf(row);
+  }
+
   /** Remove a task and, with it, its timeline. */
   remove(id: string): boolean {
     return this.#db.query("DELETE FROM task WHERE id = ?").run(id).changes > 0;

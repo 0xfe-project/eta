@@ -145,6 +145,31 @@ describe("the tasks target", () => {
     );
   });
 
+  it("adds a comment once however often the same client id is sent", async () => {
+    const w = await world();
+    const made = await create(w, { title: "Retry" });
+    const send = (body: string, clientId?: string) =>
+      w.client.call("tasks", "comment", {
+        taskId: made.id,
+        body,
+        ...(clientId === undefined ? {} : { clientId }),
+      }) as Promise<{ task: BoardTaskDetail; activity: TaskActivityView }>;
+
+    const first = await send("Ping", "c1");
+    const retry = await send("Ping", "c1");
+    expect(retry.activity.id).toBe(first.activity.id);
+    expect(retry.task.comments).toBe(1);
+
+    // Another id, or none, is another comment.
+    expect((await send("Ping", "c2")).task.comments).toBe(2);
+    expect((await send("Ping")).task.comments).toBe(3);
+    expect((await send("Ping")).task.comments).toBe(4);
+    const comments = (await activityOf(w, made.id)).filter(
+      (entry) => entry.kind === "comment",
+    );
+    expect(comments).toHaveLength(4);
+  });
+
   it("refuses what is not a task, a status or a title, and says which", async () => {
     const w = await world();
     const made = await create(w, { title: "Real" });

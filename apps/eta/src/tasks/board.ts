@@ -137,12 +137,23 @@ export class TaskBoard {
     id: string,
     body: string,
     actor: TaskActor,
+    clientId?: string,
   ): { task: BoardTaskDetail; activity: TaskActivityView } {
     this.#existing(id);
     if (body.trim() === "") throw new Error("a comment needs some text");
+    // A retry with the same client id is the same comment: hand back the one already there.
+    const earlier =
+      clientId === undefined
+        ? undefined
+        : this.#deps.tasks.commentByClientId(id, clientId);
+    if (earlier !== undefined)
+      return { task: this.#detailOf(this.#existing(id)), activity: earlier };
     let activity!: TaskActivityView;
     this.#commit(id, "changed", () => {
-      activity = this.#deps.tasks.record(id, "comment", actor, { body })!;
+      activity = this.#deps.tasks.record(id, "comment", actor, {
+        body,
+        data: clientId === undefined ? undefined : { clientId },
+      })!;
     });
     return { task: this.#detailOf(this.#existing(id)), activity };
   }
