@@ -13,6 +13,7 @@ import type {
 
 export type * from "./data";
 export * from "./operations";
+export * from "./product";
 export type * from "./types";
 export { SERVICE_PROTOCOL } from "./types";
 

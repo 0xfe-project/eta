@@ -1,9 +1,13 @@
 import type {
   CompactionSummarizer,
   KernelModels,
+  KernelTool,
   PersonaCard,
+  ToolMiddleware,
 } from "@eta/core";
+import type { AnswerPayload } from "@eta/core/session";
 import type {
+  AskObserver,
   ExecutionEnv,
   MemoryExtractionOutcome,
   MemoryFs,
@@ -40,11 +44,33 @@ import type { SessionListing, SessionMeta, SessionStore } from "./store";
 import process from "node:process";
 import { DEFAULT_COMPACTION_SETTINGS } from "@eta/core";
 import { forkChain } from "@eta/core/session";
-import { envMemoryFs, openSession } from "@eta/harness";
+import { AskRegistry, envMemoryFs, openSession } from "@eta/harness";
 import { forkWrites } from "./fork";
 import { parseModelId } from "./model-id";
 import { resolvePersona } from "./personas";
 import { sessionSubagentRunner } from "./subagent";
+
+/**
+ * Put tools on an open session, and make sure the model is offered them.
+ *
+ * The harness pins `activeToolNames` to the tools it installed, and a pinned set is what the runner
+ * offers the model, so a tool registered afterwards exists in the service and reaches nobody. Only
+ * the names that are missing are added: a session's config is restored from its journal, so a
+ * second open already names them, and appending again would be a duplicate.
+ */
+export function registerSessionTools(
+  session: OpenSession,
+  tools: readonly KernelTool[],
+): void {
+  for (const tool of tools) session.kernel.tools.register(tool);
+  const active = session.kernel.config.read("activeToolNames");
+  const added = tools
+    .map((tool) => tool.name)
+    .filter((name) => !active.includes(name));
+  if (added.length > 0 && active.length > 0) {
+    session.kernel.config.update({ activeToolNames: [...active, ...added] });
+  }
+}
 
 /** A session the manager has open. */
 export interface ManagedSession {
@@ -116,6 +142,38 @@ export interface SessionManagerOptions {
   memoryFor?:
     | ((meta: SessionMeta) => SessionMemoryWiring | undefined)
     | undefined;
+  /**
+   * The base prompt a session's system prompt starts from; absent means the harness's own. The
+   * persona, skills, platform and memory blocks still follow it, so this is where an app says what
+   * is true of *this* session (an agent's standing instructions) without owning the rest.
+   */
+  baseSystemPromptFor?: ((meta: SessionMeta) => string | undefined) | undefined;
+  /**
+   * Middleware on a session's tool calls, read once when it opens.
+   *
+   * What a host wants on this seam is policy ("this tool asks before it runs"), and a session's
+   * tools come into being here, so the policy arrives with them. Installed on the session's own
+   * kernel, so it is disposed with the session.
+   */
+  toolMiddleware?:
+    | ((input: { meta: SessionMeta; session: OpenSession }) => ToolMiddleware[])
+    | undefined;
+  /**
+   * Tools a session gets beyond the harness's own, read once when it opens.
+   *
+   * The other half of the same seam: the host knows what this app has that the harness does not
+   * (a task board, a way to reach other agents) and registers those as tools the model can call.
+   * A session's toolset is fixed for its life rather than changing under a run.
+   */
+  sessionTools?:
+    | ((input: { meta: SessionMeta; session: OpenSession }) => KernelTool[])
+    | undefined;
+  /**
+   * How a session's questions are surfaced: told when one is asked, answered, canceled or
+   * expired. Per session, because the answer is the session's own (who asked, in which
+   * conversation). Absent means nobody is told.
+   */
+  askObserve?: ((meta: SessionMeta) => AskObserver | undefined) | undefined;
   /** Called when a session cannot be opened; the list keeps its row either way. */
   warn?: ((message: string) => void) | undefined;
 }
@@ -145,6 +203,9 @@ export interface ForkSessionOptions {
 export interface CreateSessionOptions {
   /** The project the session works in. Defaults to the process's directory. */
   cwd?: string | undefined;
+  /** The agent whose session this is, and the conversation it is held in (see `SessionMeta`). */
+  agentId?: string | undefined;
+  conversationId?: string | undefined;
   title?: string | undefined;
   persona?: string | undefined;
   model?: string | undefined;
@@ -168,6 +229,10 @@ export class SessionManager {
   private readonly personasFor: SessionManagerOptions["personasFor"];
   private readonly skillsFor: SessionManagerOptions["skillsFor"];
   private readonly memoryFor: SessionManagerOptions["memoryFor"];
+  private readonly baseSystemPromptFor: SessionManagerOptions["baseSystemPromptFor"];
+  private readonly toolMiddleware: SessionManagerOptions["toolMiddleware"];
+  private readonly sessionTools: SessionManagerOptions["sessionTools"];
+  private readonly askObserve: SessionManagerOptions["askObserve"];
   private readonly subagents: SessionManagerOptions["subagents"];
   private readonly warn: (message: string) => void;
   private readonly open = new Map<string, ManagedSession>();
@@ -184,6 +249,10 @@ export class SessionManager {
     this.personasFor = options.personasFor;
     this.skillsFor = options.skillsFor;
     this.memoryFor = options.memoryFor;
+    this.baseSystemPromptFor = options.baseSystemPromptFor;
+    this.toolMiddleware = options.toolMiddleware;
+    this.sessionTools = options.sessionTools;
+    this.askObserve = options.askObserve;
     this.warn = options.warn ?? (() => undefined);
   }
 
@@ -202,6 +271,10 @@ export class SessionManager {
         : { title: (options.title ?? this.defaults?.title) as string }),
       ...(persona === undefined ? {} : { persona }),
       ...(model === undefined ? {} : { model }),
+      ...(options.agentId === undefined ? {} : { agentId: options.agentId }),
+      ...(options.conversationId === undefined
+        ? {}
+        : { conversationId: options.conversationId }),
     };
     await this.store.create(meta);
     return await this.openSession(
@@ -365,9 +438,26 @@ export class SessionManager {
               ? {}
               : { onExtraction: wiring.onExtraction }),
           };
+    // Read once per open, like the settings: who hears about this session's questions is the
+    // session's own answer, and it must not change under it while it runs.
+    const observe = this.askObserve?.(meta);
+    // The harness records an answer in the journal from its own registry. A host that wants to
+    // watch the questions brings a registry (the seam the harness documents), and then it is
+    // also the one recording answers, which needs the journal this very call builds: hence the
+    // late binding. Nobody can answer before `openSession` returns, so nothing is lost.
+    let recordAnswer: ((payload: AnswerPayload) => void) | undefined;
+    const ask =
+      observe === undefined
+        ? true
+        : new AskRegistry({
+            observe,
+            onAnswer: (payload) => recordAnswer?.(payload),
+          });
+    const baseSystemPrompt = this.baseSystemPromptFor?.(meta);
     const session = await openSession({
       storage: (await this.store.open(meta.id))!.storage,
       models,
+      ...(baseSystemPrompt === undefined ? {} : { baseSystemPrompt }),
       // The environment: what a session's tools run against, and where its memory lives. The
       // harness's tools were written against the seam, so a session across the room runs the
       // same read/write/edit/bash as one here.
@@ -405,11 +495,16 @@ export class SessionManager {
       // The ask channel is part of a session here: questions are answered over the
       // wire (`sessions.answer`), and without a registry the model's own ask tool is
       // not installed at all.
-      ask: true,
+      ask,
       // No shared root: each session is its own cordis scope, so its bus,
       // journaling, usage and goals cannot hear another session's events.
       kernel: { warn: this.warn },
     });
+    if (observe !== undefined) {
+      recordAnswer = (payload) => {
+        void session.journaling.recordAnswer(payload);
+      };
+    }
     // The persona cards that apply here, and the one this session is on. A card that is gone
     // resolves to the fallback rather than leaving the session without one — the session keeps
     // its history either way, and a persona is one file.
@@ -431,6 +526,11 @@ export class SessionManager {
       session.kernel.persona.setActive([meta.persona]);
     }
     box.pool = session.subagents;
+    // What the host adds to the toolset goes in before anything can run.
+    for (const middleware of this.toolMiddleware?.({ meta, session }) ?? []) {
+      session.kernel.tools.use(middleware);
+    }
+    registerSessionTools(session, this.sessionTools?.({ meta, session }) ?? []);
     // A session the host opened is a session whose inbox becomes runs: the pump is what
     // decides that, and leaving it off would make "prompt a session nobody attached yet"
     // (a subagent's own run, a session from the store) quietly do nothing.
