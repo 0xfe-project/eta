@@ -14,6 +14,7 @@
  * call fails and the run says so.
  */
 import type {
+  DaemonServiceParams,
   MachineActionArgs,
   MachineActionResults,
   OpenSessionArgs,
@@ -89,7 +90,6 @@ export class DaemonNode {
   readonly #openings = new Map<string, Opening>();
   /** What each open session's prompt was read from, to know when it has to be opened again. */
   readonly #opened = new Map<string, string>();
-  readonly #execs = new Map<string, AbortController>();
   readonly #fibers: { dispose: () => Promise<void> }[] = [];
   #sessions: SessionsService | undefined;
   #peer: Peer | undefined;
@@ -245,15 +245,29 @@ export class DaemonNode {
       warn: this.#warn,
     });
     this.#current = { socket, connection };
+    // The things that can take a while are not pipe calls, which a connection applies one at a
+    // time: they are calls of their own, and a stop on the pipe can overtake them.
+    peer.handle("run", async (raw) => {
+      const { session, text } = raw as DaemonServiceParams["run"];
+      const { managed } = await this.#service().open(session);
+      return await runAndWait(managed, text);
+    });
+    peer.handle("exec", async (raw, { signal }) => {
+      const args = raw as DaemonServiceParams["exec"];
+      return await new LocalTransport().run(args.script, {
+        ...(args.inputBase64 === undefined
+          ? {}
+          : { input: Buffer.from(args.inputBase64, "base64") }),
+        ...(args.timeoutMs === undefined ? {} : { timeoutMs: args.timeoutMs }),
+        signal,
+      });
+    });
     return {
       receive: (frame) => void connection.handle(JSON.stringify(frame)),
       close: () => {
         connection.close();
         if (this.#current?.socket === socket) this.#current = undefined;
         if (this.#peer === peer) this.#peer = undefined;
-        // What was running for the primary is not running now.
-        for (const controller of this.#execs.values()) controller.abort();
-        this.#execs.clear();
       },
     };
   }
@@ -307,31 +321,10 @@ export class DaemonNode {
           return { ok: false, reason: `not a directory: ${path}` };
         return { ok: true };
       },
-      exec: async (args) => {
-        const controller = new AbortController();
-        this.#execs.set(args.execId, controller);
-        try {
-          return await new LocalTransport().run(args.script, {
-            ...(args.inputBase64 === undefined
-              ? {}
-              : { input: Buffer.from(args.inputBase64, "base64") }),
-            ...(args.timeoutMs === undefined
-              ? {}
-              : { timeoutMs: args.timeoutMs }),
-            signal: controller.signal,
-          });
-        } finally {
-          this.#execs.delete(args.execId);
-        }
-      },
-      cancel: ({ execId }) => {
-        this.#execs.get(execId)?.abort();
-        return {};
-      },
       open: (args) => this.#open(args),
-      run: async ({ session, text }) => {
-        const { managed } = await this.#service().open(session);
-        return await runAndWait(managed, text);
+      catalog: ({ models }) => {
+        for (const spec of models) this.#catalog.add(spec);
+        return {};
       },
       config: async ({ session }) => {
         const { managed } = await this.#service().open(session);

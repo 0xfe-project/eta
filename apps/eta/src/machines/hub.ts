@@ -14,6 +14,8 @@
  * models, tools) is the business of the code that asks the hub for a machine's link.
  */
 import type {
+  DaemonServiceParams,
+  DaemonServiceResults,
   MachineActionArgs,
   MachineActionResults,
 } from "@eta/client-contracts";
@@ -41,6 +43,12 @@ export interface MachineLink {
     args: MachineActionArgs[A],
     options?: { timeoutMs?: number; signal?: AbortSignal },
   ) => Promise<MachineActionResults[A]>;
+  /** A call to the daemon that may take a while (a run, a script): it runs beside the pipe. */
+  daemon: <M extends keyof DaemonServiceParams>(
+    method: M,
+    params: DaemonServiceParams[M],
+    options?: { timeoutMs?: number; signal?: AbortSignal },
+  ) => Promise<DaemonServiceResults[M]>;
 }
 
 interface Connection extends MachineLink {
@@ -60,6 +68,11 @@ export interface MachineHubOptions {
   /** How long the link may be silent. Defaults to the link's own limit. */
   silenceMs?: number | undefined;
   now?: (() => number) | undefined;
+  /**
+   * What the primary does for a machine whose link has come up: it answers the machine's calls.
+   * Called once per connection, after the machine is let in and before it is reported ready.
+   */
+  serve?: ((link: MachineLink) => void) | undefined;
 }
 
 /** Bad codes tolerated per window before the door stops listening for a while. */
@@ -187,6 +200,11 @@ export class MachineHub {
           args: unknown,
           options?: { timeoutMs?: number; signal?: AbortSignal },
         ) => pipe.call("machine", action, args, options),
+        daemon: (
+          method: string,
+          params: unknown,
+          options?: { timeoutMs?: number; signal?: AbortSignal },
+        ) => peer.call(method, params, options),
       });
       this.#connections.set(machine.id, connection);
       peer.watch({
@@ -228,6 +246,7 @@ export class MachineHub {
         os: facts.os,
       });
       machines.setStatus(connection.machineId, "online", Date.now());
+      this.#options.serve?.(connection);
       connection.ready = true;
       this.#options.changed();
       for (const listener of this.#ready) listener(connection);

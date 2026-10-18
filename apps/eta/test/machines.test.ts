@@ -223,9 +223,8 @@ describe("the link", () => {
     const work = await tempDir("eta-work-");
     const marker = join(work, "marker");
     const running = link
-      .machine("exec", {
+      .daemon("exec", {
         script: `echo ran >> ${marker}; exec sleep 30`,
-        execId: "e1",
         timeoutMs: 60_000,
       })
       .then(
@@ -283,10 +282,7 @@ describe("the link", () => {
     const link = w.host.product.hub.link(daemon.machineId)!;
     // 9 MB of script: the primary refuses to send it, so nothing reaches the daemon.
     await expect(
-      link.machine("exec", {
-        script: "x".repeat(9 * 1024 * 1024),
-        execId: "big",
-      }),
+      link.daemon("exec", { script: "x".repeat(9 * 1024 * 1024) }),
     ).rejects.toThrow(/too big/);
   });
 });
