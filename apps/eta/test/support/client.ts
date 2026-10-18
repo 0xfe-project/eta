@@ -7,6 +7,8 @@ export interface Client {
   hello: () => Promise<Extract<ServerFrame, { type: "hello" }>>;
   call: (target: string, action: string, args?: unknown) => Promise<unknown>;
   subscribe: (target: string) => void;
+  /** A section of a target's state as the frames have left it (from `hello` or a subscription). */
+  section: <T>(target: string, name: string) => T | undefined;
   close: () => void;
 }
 
@@ -31,6 +33,8 @@ export function connect(
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(url, { headers });
     const frames: ServerFrame[] = [];
+    /** What a client that keeps state would hold: each target's sections, patches merged in. */
+    const states = new Map<string, Record<string, unknown>>();
     const pending = new Map<
       string,
       { resolve: (value: unknown) => void; reject: (error: Error) => void }
@@ -39,6 +43,18 @@ export function connect(
     socket.addEventListener("message", (event) => {
       const frame = JSON.parse(String(event.data)) as ServerFrame;
       frames.push(frame);
+      if (frame.type === "hello") {
+        for (const [target, snapshot] of Object.entries(frame.state))
+          states.set(target, { ...snapshot.sections });
+      } else if (frame.type === "state") {
+        if (frame.snapshot !== undefined)
+          states.set(frame.target, { ...frame.snapshot.sections });
+        else if (frame.patch !== undefined)
+          states.set(frame.target, {
+            ...states.get(frame.target),
+            ...frame.patch.sections,
+          });
+      }
       if (frame.type !== "reply") return;
       const waiter = pending.get(frame.requestId);
       if (waiter === undefined) return;
@@ -76,6 +92,9 @@ export function connect(
         },
         subscribe(target) {
           send({ op: "subscribe", target });
+        },
+        section<T>(target: string, name: string): T | undefined {
+          return states.get(target)?.[name] as T | undefined;
         },
         close() {
           socket.close();

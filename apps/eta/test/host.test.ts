@@ -4,11 +4,18 @@
  * The models are scripted because the subject is the host; the socket and the frames are real.
  */
 import type { ServerFrame } from "@eta/client-contracts";
-import { stateSection } from "@eta/client-contracts";
+import {
+  AGENT_ACTIONS,
+  CONVERSATION_ACTIONS,
+  MACHINE_ACTIONS,
+  PROJECT_ACTIONS,
+  stateSection,
+} from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
 import { databasePath } from "../src/db";
 import { connect, until } from "./support/client";
-import { testHost } from "./support/host";
+import { tempDir, testHost } from "./support/host";
+import { world } from "./support/world";
 
 type StateFrame = Extract<ServerFrame, { type: "state" }>;
 
@@ -22,13 +29,63 @@ describe("the host", () => {
     expect(ops).toContain("sessions.create");
     expect(ops).toContain("sessions.prompt");
     expect(ops).toContain("providers.save");
+    // The product's own targets, next to the upstream ones.
+    expect(ops).toEqual(
+      expect.arrayContaining([
+        ...AGENT_ACTIONS.map((action) => `agents.${action}`),
+        ...MACHINE_ACTIONS.map((action) => `machines.${action}`),
+        ...PROJECT_ACTIONS.map((action) => `projects.${action}`),
+        ...CONVERSATION_ACTIONS.map((action) => `conversations.${action}`),
+      ]),
+    );
     // The eager targets: a page draws its sidebar and settings from hello without asking.
     expect(Object.keys(hello.state)).toEqual(
-      expect.arrayContaining(["sessions", "providers"]),
+      expect.arrayContaining([
+        "sessions",
+        "providers",
+        "agents",
+        "machines",
+        "projects",
+        "conversations",
+      ]),
     );
     expect(hello.mounted.map((plugin) => plugin.name)).toEqual(
-      expect.arrayContaining(["sessions", "providers", "settings", "personas"]),
+      expect.arrayContaining([
+        "sessions",
+        "providers",
+        "settings",
+        "personas",
+        "agents",
+        "machines",
+        "projects",
+        "conversations",
+      ]),
     );
+    expect(hello.mounted.every((plugin) => plugin.error === undefined)).toBe(
+      true,
+    );
+    client.close();
+  });
+
+  it("publishes a target for every conversation there is, from the moment it starts", async () => {
+    const dataDir = await tempDir();
+    const first = await world({ dataDir });
+    const agent = await first.agent("Ada");
+    const project = await first.project({ stewardId: agent.id });
+    const group = await first.group(project.id, [agent.id]);
+    await first.host.close();
+
+    const second = await testHost({ dataDir });
+    const client = await connect(`ws://127.0.0.1:${second.port}/ws`);
+    await client.hello();
+    client.subscribe(`conversations.${group.id}`);
+    await until(
+      () => client.section(`conversations.${group.id}`, "info") !== undefined,
+    );
+    expect(client.section(`conversations.${group.id}`, "info")).toMatchObject({
+      id: group.id,
+      projectId: project.id,
+    });
     client.close();
   });
 
