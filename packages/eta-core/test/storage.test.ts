@@ -1,14 +1,14 @@
-import { storageContract } from "@eta/core/testing";
-import { describe, expect, it } from "vitest";
-import { type MessageEntry } from "@eta/core/session";
+import type { MessageEntry } from "@eta/core/session";
 import {
   MemoryStorage,
-  STORAGE_METHODS,
   setValue,
+  STORAGE_METHODS,
   value,
 } from "@eta/core/storage";
+import { storageContract } from "@eta/core/testing";
+import { describe, expect, it } from "vitest";
 
-describe("StorageService interface shape", () => {
+describe("storageService interface shape", () => {
   it("exposes exactly the agreed method surface", () => {
     expect([...STORAGE_METHODS].sort()).toMatchInlineSnapshot(`
 			[
@@ -68,7 +68,7 @@ storageContract("memory", async () => {
   return { storage, dispose: async () => void (await storage.close()) };
 });
 
-describe("MemoryStorage specifics", () => {
+describe("memoryStorage specifics", () => {
   it("rejects writes after close", async () => {
     const storage = new MemoryStorage();
     await storage.close();

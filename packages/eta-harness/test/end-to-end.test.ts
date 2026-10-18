@@ -8,27 +8,22 @@
  * happy path proves little about machinery whose job is to survive the rest.
  */
 
-import { renderActivePersona } from "../src/prompts/persona";
 import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
-import { applyGoalEntries, type KernelTool, kernelOn, Runner } from "@eta/core";
-import {
-  type GoalEntry,
-  recordGoalEntries,
-  SessionLog,
-} from "@eta/core/session";
-import {
-  MemoryStorage,
-  sessionTokenTotal,
-  type UsageRow,
-} from "@eta/core/storage";
+import type { KernelTool } from "@eta/core";
+import type { GoalEntry } from "@eta/core/session";
+import type { UsageRow } from "@eta/core/storage";
+import type { FakeCompaction } from "@eta/core/testing";
+import { applyGoalEntries, kernelOn, Runner } from "@eta/core";
+import { recordGoalEntries, SessionLog } from "@eta/core/session";
+import { MemoryStorage, sessionTokenTotal } from "@eta/core/storage";
 import {
   assistantMessage,
-  type FakeCompaction,
   fakeCompaction,
   fakeModels,
 } from "@eta/core/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { composeEtaSystemPrompt, MetricsService } from "../src/index";
+import { renderActivePersona } from "../src/prompts/persona";
 import { journaledKernel } from "../src/testing";
 
 const userMsg = (text: string) => ({

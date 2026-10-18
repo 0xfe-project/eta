@@ -26,17 +26,20 @@ import type { ServerFrame } from "@eta/client-wire-proto";
 
 export interface PacerOptions {
   /** The floor between two frames for this socket, read at publish time. */
-  minIntervalMs(): number;
+  minIntervalMs: () => number;
   /** The wire budget, in bytes per second. A frame of N bytes buys `N / this` ms of quiet. */
   targetBytesPerSecond?: number;
   /** Ask the sender what this socket is owed, and account for it. `undefined` = nothing. */
-  next(): { frame: ServerFrame; bytes: number } | undefined;
+  next: () => { frame: ServerFrame; bytes: number } | undefined;
   /** Put the frame on the socket. */
-  deliver(frame: ServerFrame): void;
+  deliver: (frame: ServerFrame) => void;
   now?: () => number;
   schedule?: (run: () => void, ms: number) => ReturnType<typeof setTimeout>;
   unschedule?: (timer: ReturnType<typeof setTimeout>) => void;
 }
+
+/** 4MB/s: a long transcript's patch is tens of KB, which buys tens of milliseconds. */
+export const DEFAULT_BYTES_PER_SECOND = 4_000_000;
 
 /** One socket's budget for one target. */
 export class FramePacer {
@@ -144,9 +147,6 @@ export class FramePacer {
     else clearTimeout(timer);
   }
 }
-
-/** 4MB/s: a long transcript's patch is tens of KB, which buys tens of milliseconds. */
-export const DEFAULT_BYTES_PER_SECOND = 4_000_000;
 
 /** How tightly the session in front streams. */
 export const FOCUSED_INTERVAL_MS = 100;

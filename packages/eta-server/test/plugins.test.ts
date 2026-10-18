@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context } from "cordis";
 import { afterEach, describe, expect, it } from "vitest";
-import { PluginManager, pickPlugin } from "../src/plugins";
+import { pickPlugin, PluginManager } from "../src/plugins";
 import { WireService } from "../src/wire-service";
 
 const roots: string[] = [];

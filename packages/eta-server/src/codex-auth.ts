@@ -21,6 +21,13 @@
  * flow itself is pi-ai's (a network), and what is tested here is everything around it — which
  * attempt is live, whether an answer belongs to it, and what a cancel leaves behind.
  */
+
+import type {
+  AuthOperationOptions,
+  Credential,
+  CredentialInfo,
+  CredentialStore,
+} from "@earendil-works/pi-ai";
 import { randomUUID } from "node:crypto";
 import {
   mkdir,
@@ -32,12 +39,6 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type {
-  AuthOperationOptions,
-  Credential,
-  CredentialInfo,
-  CredentialStore,
-} from "@earendil-works/pi-ai";
 
 /** What a client is told about a login attempt. Never contains a token. */
 export interface CodexLoginView {
@@ -54,17 +55,17 @@ export interface CodexLoginView {
 /** How the flow actually runs: given the interaction callbacks, do the OAuth dance. */
 export type CodexLoginRunner = (interaction: {
   signal: AbortSignal;
-  prompt(prompt: {
+  prompt: (prompt: {
     type: string;
     options?: readonly { id: string; label: string }[];
     signal?: AbortSignal;
-  }): Promise<string>;
-  notify(event: {
+  }) => Promise<string>;
+  notify: (event: {
     type: string;
     url?: string;
     userCode?: string;
     verificationUri?: string;
-  }): void;
+  }) => void;
 }) => Promise<unknown>;
 
 /**
@@ -326,6 +327,7 @@ export class CodexLogin {
             : AbortSignal.any([controller.signal, prompt.signal]);
         return await new Promise<string>((resolve, reject) => {
           const abort = (): void => {
+            // eslint-disable-next-line ts/no-use-before-define -- abort and cleanup call each other
             cleanup();
             reject(new Error("Login cancelled"));
           };
@@ -434,5 +436,5 @@ interface Attempt {
   controller: AbortController;
   view: CodexLoginView;
   timer: ReturnType<typeof setTimeout>;
-  answer?: { promptId: string; settle(value: string): void } | undefined;
+  answer?: { promptId: string; settle: (value: string) => void } | undefined;
 }

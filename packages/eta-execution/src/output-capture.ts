@@ -12,13 +12,14 @@
  * the adaptive publisher, so a client can watch a long command talk without ever
  * holding its output. `applyShellOutputUpdate` applies the deltas on the far side.
  */
-import { AdaptivePublisher } from "./adaptive-publisher";
+
 import type {
   ShellOutputMetadata,
   ShellOutputUpdate,
   ShellOutputView,
   ShellTruncation,
 } from "./types";
+import { AdaptivePublisher } from "./adaptive-publisher";
 import {
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_LINES,
@@ -398,7 +399,8 @@ function suffixPrefixOverlap(
 }
 
 /** Control characters a terminal would eat; a view is text, not a terminal stream. */
-const INVALID_SHELL_OUTPUT = /[\x00-\x08\x0b-\x1f\ufff9-\ufffb]/g;
+// eslint-disable-next-line no-control-regex -- the control characters are the point
+const INVALID_SHELL_OUTPUT = /[\x00-\x08\x0B-\x1F\uFFF9-\uFFFB]/g;
 
 export function sanitizeShellOutput(text: string): string {
   return text.replace(INVALID_SHELL_OUTPUT, "");

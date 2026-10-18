@@ -28,11 +28,11 @@ import {
  * environment. `envMemoryFs` adapts an `ExecutionEnv` when there is one.
  */
 export interface MemoryFs {
-  readFile(path: string): Promise<string | undefined>;
+  readFile: (path: string) => Promise<string | undefined>;
   /** undefined when the path doesn't exist. */
-  mtime(path: string): Promise<number | undefined>;
-  writeFile(path: string, content: string): Promise<void>;
-  listFileNames(dir: string): Promise<string[]>;
+  mtime: (path: string) => Promise<number | undefined>;
+  writeFile: (path: string, content: string) => Promise<void>;
+  listFileNames: (dir: string) => Promise<string[]>;
 }
 
 export const MEMORY_SECTIONS = ["decision", "preference", "lesson"] as const;
@@ -94,6 +94,7 @@ export function parseMemory(text: string, target: MemoryFile): MemoryEntry[] {
       continue;
     }
     if (section === undefined) continue;
+    // eslint-disable-next-line regexp/no-super-linear-backtracking -- one trimmed line of a local file; a rewrite could change what matches
     const item = /^-\s+(?:\[(\d+)\]\s+)?(.*)$/.exec(line.trim());
     if (item === null || item[2].length === 0) continue;
     // A hand-written note carries no number: take the next free one and keep it.
@@ -380,14 +381,14 @@ export interface MemoryExtractionSource {
 }
 
 /** A type alias, not an interface: this goes out as event data and needs an index signature. */
-export type MemoryExtractionOutcome = {
+export interface MemoryExtractionOutcome {
   added: number;
   removed: number;
   /** Ids the model wanted gone that live in another file — reported, not guessed at. */
   foreign: number;
   skipped?: "thin" | "provider";
   reason?: string;
-};
+}
 
 /**
  * What is worth keeping, asked at the end of a run.

@@ -9,10 +9,11 @@
  * noticing that their proxy is silently not being used: a **PAC file** is reported as unsupported
  * rather than ignored, and a **SOCKS-only** system proxy is reported as the different thing it is.
  */
+
+import type { NetworkCommand } from "../src/network";
 import { describe, expect, it } from "vitest";
 import {
   initializeNetwork,
-  type NetworkCommand,
   parseLinuxProxy,
   parseMacProxy,
   parseWindowsProxy,
@@ -65,7 +66,7 @@ describe("macOS", () => {
   });
 });
 
-describe("Windows", () => {
+describe("windows", () => {
   it("reads a per-scheme proxy list", () => {
     const proxy = parseWindowsProxy(
       JSON.stringify({
@@ -104,7 +105,7 @@ describe("Windows", () => {
   });
 });
 
-describe("Linux", () => {
+describe("linux", () => {
   it("reads a manual configuration and its ignore list", () => {
     const proxy = parseLinuxProxy({
       mode: "manual",

@@ -20,24 +20,21 @@
  *   user with three providers and a typo in one still has two that work, which is the whole
  *   difference between a settings page and a wall.
  */
-import {
-  type Api,
-  type CredentialStore,
-  createModels,
-  createProvider,
-  type Model,
-  type MutableModels,
-  type Provider,
-  type ProviderStreams,
-  type ThinkingLevelMap,
+
+import type {
+  Api,
+  CredentialStore,
+  Model,
+  MutableModels,
+  Provider,
+  ProviderStreams,
+  ThinkingLevelMap,
 } from "@earendil-works/pi-ai";
+import type { ProviderRuntimeDefinition } from "./catalog";
+import type { EtaModelConfig, EtaProviderConfig } from "./config-types";
+import { createModels, createProvider } from "@earendil-works/pi-ai";
+import { providerDefinitionForKind } from "./catalog";
 import {
-  type ProviderRuntimeDefinition,
-  providerDefinitionForKind,
-} from "./catalog";
-import {
-  type EtaModelConfig,
-  type EtaProviderConfig,
   effectiveModel,
   MODEL_THINKING_LEVELS,
   modelThinkingLevels,

@@ -7,15 +7,12 @@
  * not include the children. So each one gets a test, with a runner that does
  * nothing but report what it was asked to do.
  */
-import { describe, expect, it } from "vitest";
-import {
-  DEPTH_CAP,
-  SubagentManager,
-  type SubagentRecord,
-  type SubagentUsage,
-} from "../src/subagent";
-import { createSubagentTools } from "../src/tools/subagents";
+
+import type { SubagentRecord, SubagentUsage } from "../src/subagent";
 import type { ToolResult } from "../src/tools/tool";
+import { describe, expect, it } from "vitest";
+import { DEPTH_CAP, SubagentManager } from "../src/subagent";
+import { createSubagentTools } from "../src/tools/subagents";
 
 const usage = (input: number, output: number): SubagentUsage => ({
   input,

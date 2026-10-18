@@ -16,6 +16,17 @@
  *   `readline` does not say whether the last line was newline-terminated, and
  *   the caller needs to know (a torn final line is how a crash shows up).
  */
+
+import type {
+  EnvCallOptions,
+  FileError,
+  FileInfo,
+  FileKind,
+  FileSystem,
+  Result,
+  TextLine,
+  TextLineReader,
+} from "@eta/execution";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import {
@@ -34,20 +45,9 @@ import {
 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join, resolve } from "node:path";
+import process from "node:process";
 import { fileURLToPath } from "node:url";
-import {
-  type EnvCallOptions,
-  err,
-  type FileError,
-  FileError as FileErrorClass,
-  type FileInfo,
-  type FileKind,
-  type FileSystem,
-  ok,
-  type Result,
-  type TextLine,
-  type TextLineReader,
-} from "@eta/execution";
+import { err, FileError as FileErrorClass, ok } from "@eta/execution";
 
 /** Turn an unknown failure into a coded `FileError`. */
 export function toFileError(error: unknown, fallbackPath?: string): FileError {
@@ -115,9 +115,9 @@ export function resolveEnvPath(cwd: string, path: string): string {
 }
 
 function kindOf(stats: {
-  isFile(): boolean;
-  isDirectory(): boolean;
-  isSymbolicLink(): boolean;
+  isFile: () => boolean;
+  isDirectory: () => boolean;
+  isSymbolicLink: () => boolean;
 }): FileKind | undefined {
   if (stats.isFile()) return "file";
   if (stats.isDirectory()) return "directory";

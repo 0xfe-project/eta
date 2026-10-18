@@ -1,3 +1,6 @@
+import type { MessageEntry } from "@eta/core/session";
+import type { StorageService } from "@eta/core/storage";
+import type { JsonlStorageOptions } from "../src/index";
 import {
   mkdtemp,
   open,
@@ -8,11 +11,9 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { MessageEntry } from "@eta/core/session";
-import type { StorageService } from "@eta/core/storage";
 import { storageContract } from "@eta/core/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { JsonlStorage, type JsonlStorageOptions } from "../src/index";
+import { JsonlStorage } from "../src/index";
 
 let dir = "";
 let counter = 0;
@@ -75,7 +76,7 @@ const jsonLines = (raw: string) =>
         },
     );
 
-describe("JsonlStorage — the shared contract", () => {
+describe("jsonlStorage — the shared contract", () => {
   storageContract(
     "jsonl",
     async () => {
@@ -97,7 +98,7 @@ describe("JsonlStorage — the shared contract", () => {
   );
 });
 
-describe("JsonlStorage — the journal on disk", () => {
+describe("jsonlStorage — the journal on disk", () => {
   it("writes eta-agent journal lines: one {w, t} object per commit", async () => {
     const path = nextPath("lines");
     const { storage, dispose } = await openStorage(path);
@@ -151,7 +152,7 @@ describe("JsonlStorage — the journal on disk", () => {
   });
 });
 
-describe("JsonlStorage — torn tail repair", () => {
+describe("jsonlStorage — torn tail repair", () => {
   it("cuts a half-written last line and the cut reaches the disk", async () => {
     const path = nextPath("torn");
     const good = `${JSON.stringify({ w: [{ kind: "entry", entry: messageEntry("a", "committed") }], t: 1 })}\n`;
@@ -271,7 +272,7 @@ describe("JsonlStorage — torn tail repair", () => {
   });
 });
 
-describe("JsonlStorage — compaction", () => {
+describe("jsonlStorage — compaction", () => {
   it("rewrites the journal so a replay yields exactly the same state", async () => {
     const path = nextPath("compact");
     const handle = await openStorage(path);
@@ -437,7 +438,7 @@ function usageOf(input: number, output: number) {
   };
 }
 
-describe("JsonlStorage — fsync discipline", () => {
+describe("jsonlStorage — fsync discipline", () => {
   /**
    * "Repaired" that lives only in this process's page cache is not a repair:
    * the next boot fails the same way. Count the actual sync calls.
@@ -524,7 +525,7 @@ describe("JsonlStorage — fsync discipline", () => {
   });
 });
 
-describe("JsonlStorage — lifecycle", () => {
+describe("jsonlStorage — lifecycle", () => {
   it("refuses writes after close and is idempotent", async () => {
     const handle = await openStorage(nextPath("closed"));
     await handle.storage.close();

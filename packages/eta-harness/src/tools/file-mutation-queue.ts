@@ -7,16 +7,14 @@
  * each other. The queue is per environment and per *canonical* path — a symlink
  * and its target share one queue, because they are one file.
  */
-import {
-  type EnvCallOptions,
-  type ExecutionEnv,
-  getOrThrow,
-} from "@eta/execution";
 
-type MutationQueueState = {
+import type { EnvCallOptions, ExecutionEnv } from "@eta/execution";
+import { getOrThrow } from "@eta/execution";
+
+interface MutationQueueState {
   queues: Map<string, Promise<void>>;
   registration: Promise<void>;
-};
+}
 
 const states = new WeakMap<ExecutionEnv, MutationQueueState>();
 

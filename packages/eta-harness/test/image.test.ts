@@ -3,20 +3,22 @@
  * `test/harness/tools.test.ts`).
  *
  * A picture is recognized by its bytes, not by its name: the magic number is
- * the truth, and the two cases worth being careful about are a PNG that is
- * *animated* (no provider takes one) and a BMP (none takes that either, unless
+ * the truth, and the two cases worth being careful about are a PNG that
+ * is *animated* (no provider takes one) and a BMP (none takes that either, unless
  * an image processor converts it).
  */
+
+import type { ImageContent, ToolCallInfo } from "@eta/core";
+import type { ExecutionToolContext } from "../src/tools/context";
+import type { ToolResult } from "../src/tools/tool";
+import { Buffer } from "node:buffer";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ImageContent, ToolCallInfo } from "@eta/core";
 import { NodeEnvironment } from "@eta/execution-node";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { ExecutionToolContext } from "../src/tools/context";
 import { detectSupportedImageMimeType, encodeBase64 } from "../src/tools/image";
 import { createReadTool } from "../src/tools/read";
-import type { ToolResult } from "../src/tools/tool";
 
 let directory = "";
 let env: NodeEnvironment;

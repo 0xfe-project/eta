@@ -26,7 +26,6 @@ import type {
   OpDescriptor,
   StateSnapshot,
 } from "@eta/client-wire-proto";
-
 import type {
   DispatchOutcome,
   OpContext,
@@ -52,33 +51,33 @@ export interface TargetSummary {
 
 export interface TargetRegistry {
   /** Register one action a target can be asked to perform. */
-  handle(
+  handle: (
     target: string,
     action: string,
     handler: OpHandler,
     meta?: OpMeta,
-  ): () => void;
+  ) => () => void;
   /** Register one target's state. */
-  state(target: string, projector: StateProjector): () => void;
+  state: (target: string, projector: StateProjector) => () => void;
   /**
    * Take an action away, whoever registered it. For the floor's own use: a plugin that forgets
    * to unregister (a user plugin, not ours) must not leave a target behind that answers calls
    * with a dead handler. Returns whether anything was there.
    */
-  unregister(target: string, action: string): boolean;
+  unregister: (target: string, action: string) => boolean;
   /** Take a target's state away, whoever registered it. */
-  unregisterState(target: string): boolean;
+  unregisterState: (target: string) => boolean;
   /** Route one call. Throws `UnknownOpError` when nobody claims it. */
-  dispatch(call: CallFrame, context: OpContext): Promise<DispatchOutcome>;
+  dispatch: (call: CallFrame, context: OpContext) => Promise<DispatchOutcome>;
   /** Everything callable, as `hello` publishes it. */
-  descriptors(): OpDescriptor[];
+  descriptors: () => OpDescriptor[];
   /** Every target and what it offers. */
-  targets(): TargetSummary[];
-  hasState(target: string): boolean;
+  targets: () => TargetSummary[];
+  hasState: (target: string) => boolean;
   /** One target's current state, or undefined when the target shows nothing. */
-  snapshot(target: string): StateSnapshot | undefined;
+  snapshot: (target: string) => StateSnapshot | undefined;
   /** The targets a new client should be given up front. */
-  eagerTargets(): string[];
+  eagerTargets: () => string[];
 }
 
 export class UnknownOpError extends Error {
@@ -92,7 +91,7 @@ export class UnknownOpError extends Error {
   }
 }
 
-const NAME_PATTERN = /^[a-z0-9][a-z0-9._-]*$/i;
+const NAME_PATTERN = /^[a-z0-9][\w.-]*$/i;
 
 export function createTargetRegistry(): TargetRegistry {
   const actions = new Map<

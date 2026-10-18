@@ -14,17 +14,17 @@
  * "unknown op" while the rest of the server keeps running (sessions then run on whatever models
  * the host injected, or fail honestly with `model_unavailable`).
  */
-import type { ProvidersView, ProviderArgs } from "@eta/client-contracts";
+import type { ProviderArgs, ProvidersView } from "@eta/client-contracts";
+import type { ProviderConfigStore } from "../providers/store";
+import type { WireService } from "../wire-service";
 import { Service } from "cordis";
 import {
+  codexAuthPath,
   CodexCredentialStore,
   CodexLogin,
-  codexAuthPath,
   piCodexLogin,
 } from "../codex-auth";
 import { discoverModels } from "../providers/discovery";
-import type { ProviderConfigStore } from "../providers/store";
-import type { WireService } from "../wire-service";
 
 export { PROVIDER_ACTIONS } from "@eta/client-contracts";
 
@@ -65,7 +65,7 @@ export function providersPlugin(options: ProvidersPluginOptions) {
     apply(ctx: unknown): unknown {
       const context = ctx as {
         wire: WireService;
-        effect(execute: () => () => unknown): unknown;
+        effect: (execute: () => () => unknown) => unknown;
       };
       const wire = context.wire;
       // The codex login: a second target's worth of state, kept on this one because it is

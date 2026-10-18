@@ -51,14 +51,14 @@ export interface CompactionRequestState {
  */
 export interface CompactionHost {
   /** The messages a request would carry right now (a copy). */
-  readContext(): AgentMessage[];
+  readContext: () => AgentMessage[];
   /** Swap the context for a summary plus the tail that is kept. */
-  replaceContext(
+  replaceContext: (
     summary: string,
     options: { retainedTail?: readonly AgentMessage[]; tokensBefore: number },
-  ): void;
+  ) => void;
   /** What this run's request would carry, read live. */
-  request(): CompactionRequestState;
+  request: () => CompactionRequestState;
 }
 
 /**
@@ -75,11 +75,11 @@ export interface CompactionHost {
  */
 export interface CompactionDriver {
   /** The runner hands over the context it owns, once, before the first run. */
-  attach(host: CompactionHost): void;
+  attach: (host: CompactionHost) => void;
   /** Compact when the history no longer fits. Awaited before the first request. */
-  threshold(): Promise<boolean>;
+  threshold: () => Promise<boolean>;
   /** Recover from an overflowed request. At most once per run. */
-  overflow(): Promise<boolean>;
+  overflow: () => Promise<boolean>;
 }
 
 /**
@@ -130,5 +130,7 @@ export interface CompactionOutcome {
  * — owns when; this seam owns how to summarize.
  */
 export interface CompactionSummarizer {
-  summarize(request: CompactionRequest): Promise<CompactionOutcome | undefined>;
+  summarize: (
+    request: CompactionRequest,
+  ) => Promise<CompactionOutcome | undefined>;
 }

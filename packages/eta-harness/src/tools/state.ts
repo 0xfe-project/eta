@@ -5,9 +5,11 @@
  * back, list the keys. `null` deletes. The store lives in the journal, so what a
  * model writes down here is there after a restart.
  */
-import { type TSchema, Type } from "typebox";
+
+import type { TSchema } from "typebox";
 import type { StateKV } from "../state";
 import type { HarnessTool, ToolResult } from "./tool";
+import { Type } from "typebox";
 
 export const stateToolSchemas = {
   update: Type.Object({

@@ -41,14 +41,14 @@ export function cancellationOf(
 /** Procedure-facing synchronous admission capability for one drive pass. */
 export interface Gate {
   readonly signal: AbortSignal;
-  admit<T>(invoke: () => T): T;
+  admit: <T>(invoke: () => T) => T;
 }
 
 /** Owner-facing lifecycle controls for one drive pass. */
 export interface GateControl {
-  beginAbort(cancellation: Promise<void>): void;
-  signalAbort(): void;
-  close(error: Error): void;
+  beginAbort: (cancellation: Promise<void>) => void;
+  signalAbort: () => void;
+  close: (error: Error) => void;
 }
 
 type GateState =

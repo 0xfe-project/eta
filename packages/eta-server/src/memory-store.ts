@@ -10,7 +10,8 @@
  * session, which is how `list()`'s reason path is exercised without a file to
  * corrupt.
  */
-import { MemoryStorage, type StorageService } from "@eta/core/storage";
+
+import type { StorageService } from "@eta/core/storage";
 import type {
   SessionListing,
   SessionMeta,
@@ -18,6 +19,7 @@ import type {
   SessionStore,
   StoredSession,
 } from "./store";
+import { MemoryStorage } from "@eta/core/storage";
 
 export class MemorySessionStore implements SessionStore {
   private readonly sessions = new Map<string, StoredSession>();

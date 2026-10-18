@@ -15,8 +15,8 @@ interface Harness {
   wire: WireService;
   frames: ServerFrame[];
   revisions: { turn: number };
-  advance(ms: number): void;
-  restore(): void;
+  advance: (ms: number) => void;
+  restore: () => void;
 }
 
 /** A wire service over a controllable clock, with the state of one target behind it. */

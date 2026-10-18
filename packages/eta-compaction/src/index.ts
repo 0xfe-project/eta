@@ -33,6 +33,7 @@ import type {
 } from "@eta/core";
 import type { Entry, MessageEntry } from "@eta/core/session";
 import type { Usage } from "@eta/core/storage";
+import type { FileOperations } from "./serialize";
 import { addUsage, emptyUsage } from "@eta/core/storage";
 import {
   estimateContextTokens,
@@ -51,7 +52,6 @@ import {
   computeFileLists,
   createFileOps,
   extractFileOpsFromMessage,
-  type FileOperations,
   formatFileOperations,
   serializeConversation,
   serializedTokens,

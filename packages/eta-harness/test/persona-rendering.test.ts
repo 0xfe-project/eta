@@ -1,7 +1,8 @@
-import { Kernel, Runner, type PersonaCard } from "@eta/core";
+import type { PersonaCard } from "@eta/core";
+import { Kernel, Runner } from "@eta/core";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { renderPersonaBlock, renderActivePersona } from "../src/index";
+import { renderActivePersona, renderPersonaBlock } from "../src/index";
 function card(id: string, content = `${id} body`): PersonaCard {
   return { id, name: id, content };
 }

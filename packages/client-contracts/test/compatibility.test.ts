@@ -1,17 +1,14 @@
-import { describe, expect, it } from "vitest";
-import {
-  encodeFrame,
-  stateDiff,
-  type StateSnapshot,
-} from "@eta/client-wire-proto";
-import {
-  stateSection,
-  type HelloFrame,
-  type SessionCall,
-  type SessionHistoryResult,
-  type SessionViewSections,
-  type ProvidersView,
+import type { StateSnapshot } from "@eta/client-wire-proto";
+import type {
+  HelloFrame,
+  ProvidersView,
+  SessionCall,
+  SessionHistoryResult,
+  SessionViewSections,
 } from "../src/index";
+import { encodeFrame, stateDiff } from "@eta/client-wire-proto";
+import { describe, expect, it } from "vitest";
+import { stateSection } from "../src/index";
 
 const sections = {
   core: { session: "s1", cwd: "/work", running: false },

@@ -37,87 +37,86 @@ const OLD_META = JSON.stringify({
 });
 
 /** The old host's journal: `pi.*` bookkeeping, entries with no sequence, one line per commit. */
-const OLD_JOURNAL =
-  [
-    {
-      w: [
-        {
-          kind: "value",
-          op: "set",
-          namespace: "pi.branch.tip",
-          key: "main",
-          value: null,
+const OLD_JOURNAL = `${[
+  {
+    w: [
+      {
+        kind: "value",
+        op: "set",
+        namespace: "pi.branch.tip",
+        key: "main",
+        value: null,
+      },
+      {
+        kind: "value",
+        op: "set",
+        namespace: "pi.lane.config",
+        key: "main",
+        value: {
+          model: {
+            provider: "pro6000",
+            modelId: "qwen3.8-flash-next-uncensored",
+          },
+          thinkingLevel: "off",
+          activeToolNames: [],
         },
-        {
-          kind: "value",
-          op: "set",
-          namespace: "pi.lane.config",
-          key: "main",
-          value: {
-            model: {
-              provider: "pro6000",
-              modelId: "qwen3.8-flash-next-uncensored",
-            },
-            thinkingLevel: "off",
-            activeToolNames: [],
+      },
+    ],
+    t: 1_789_357_345_604,
+  },
+  {
+    w: [
+      {
+        kind: "entry",
+        entry: {
+          id: "entry-user",
+          parentId: null,
+          type: "message",
+          message: {
+            role: "user",
+            content: [{ type: "text", text: "hi" }],
+            timestamp: 1_789_357_426_453,
           },
         },
-      ],
-      t: 1_789_357_345_604,
-    },
-    {
-      w: [
-        {
-          kind: "entry",
-          entry: {
-            id: "entry-user",
-            parentId: null,
-            type: "message",
-            message: {
-              role: "user",
-              content: [{ type: "text", text: "hi" }],
-              timestamp: 1_789_357_426_453,
-            },
+      },
+      {
+        kind: "value",
+        op: "set",
+        namespace: "pi.branch.tip",
+        key: "main",
+        value: "entry-user",
+      },
+    ],
+    t: 1_789_357_426_453,
+  },
+  {
+    w: [
+      {
+        kind: "entry",
+        entry: {
+          id: "entry-reply",
+          parentId: "entry-user",
+          type: "message",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "hello from the old host" }],
+            timestamp: 1_789_357_427_000,
           },
         },
-        {
-          kind: "value",
-          op: "set",
-          namespace: "pi.branch.tip",
-          key: "main",
-          value: "entry-user",
-        },
-      ],
-      t: 1_789_357_426_453,
-    },
-    {
-      w: [
-        {
-          kind: "entry",
-          entry: {
-            id: "entry-reply",
-            parentId: "entry-user",
-            type: "message",
-            message: {
-              role: "assistant",
-              content: [{ type: "text", text: "hello from the old host" }],
-              timestamp: 1_789_357_427_000,
-            },
-          },
-        },
-        {
-          kind: "value",
-          op: "set",
-          namespace: "pi.branch.tip",
-          key: "main",
-          value: "entry-reply",
-        },
-      ],
-      t: 1_789_357_427_000,
-    },
-  ]
-    .map((line) => JSON.stringify(line))
-    .join("\n") + "\n";
+      },
+      {
+        kind: "value",
+        op: "set",
+        namespace: "pi.branch.tip",
+        key: "main",
+        value: "entry-reply",
+      },
+    ],
+    t: 1_789_357_427_000,
+  },
+]
+  .map((line) => JSON.stringify(line))
+  .join("\n")}\n`;
 
 /** A session directory as the old host laid it out. */
 async function oldSession(root: string, id: string): Promise<string> {

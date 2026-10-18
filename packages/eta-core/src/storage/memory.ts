@@ -6,7 +6,6 @@
  * other backend is checked against. Nothing here is durable by design.
  */
 import type { Entry } from "../types/entries";
-import { InMemoryStorageState } from "./state";
 import type {
   CommitResult,
   CompactResult,
@@ -21,6 +20,7 @@ import type {
   UsageScan,
   Value,
 } from "./types";
+import { InMemoryStorageState } from "./state";
 
 export class MemoryStorage implements StorageService {
   private readonly state = new InMemoryStorageState();

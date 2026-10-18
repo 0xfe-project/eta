@@ -19,15 +19,13 @@
  * A missing file is a legitimate state and means "no providers configured" — the server runs,
  * and the failure is the honest one (`model_unavailable`) when a session asks for a model.
  */
+
+import type { ProvidersView } from "@eta/client-contracts";
+import type { EtaConfig, EtaProviderConfig } from "./config-types";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { ProvidersView } from "@eta/client-contracts";
-import {
-  type EtaConfig,
-  type EtaProviderConfig,
-  providerSummary,
-} from "./config-types";
+import { providerSummary } from "./config-types";
 
 /** A caller's mistake, with the name the client shows. */
 export class ProviderConfigError extends Error {

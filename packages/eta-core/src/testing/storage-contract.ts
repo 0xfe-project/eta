@@ -5,15 +5,12 @@
  * behavioural checks. Backends with extra guarantees (crash durability, torn
  * tails) add their own suites on top; they do not get to skip these.
  */
-import { describe, expect, it } from "vitest";
-import {
-  type StorageService,
-  type StorageWrite,
-  setValue,
-  value,
-} from "../storage/types";
+
+import type { StorageService, StorageWrite } from "../storage/types";
 import type { MessageEntry } from "../types/entries";
 import type { Usage } from "../types/messages";
+import { describe, expect, it } from "vitest";
+import { setValue, value } from "../storage/types";
 import { emptyUsage } from "../types/usage";
 
 export interface StorageContractHandle {

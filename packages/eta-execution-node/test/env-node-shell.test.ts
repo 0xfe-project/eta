@@ -31,7 +31,7 @@ envContract("node environment", async () => {
   };
 });
 
-describe("NodeShell specifics", () => {
+describe("nodeShell specifics", () => {
   it("runs a command in the environment's cwd, and in another one when told", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "eta-shell-"));
     const env = new NodeEnvironment({ cwd });

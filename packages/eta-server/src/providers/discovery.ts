@@ -16,12 +16,10 @@
  *   the capability metadata the endpoint knows and the config file does not.
  */
 import type { ProviderHeaders } from "@eta/client-contracts";
-import {
-  type ProviderReference,
-  providerDefinitionForKind,
-  resolveConfiguredModels,
-} from "./catalog";
-import { type EtaModelConfig, sanitizeProviderHeaders } from "./config-types";
+import type { ProviderReference } from "./catalog";
+import type { EtaModelConfig } from "./config-types";
+import { providerDefinitionForKind, resolveConfiguredModels } from "./catalog";
+import { sanitizeProviderHeaders } from "./config-types";
 
 /** What a discovery call needs: where to ask, how to authenticate, and who to tell. */
 export interface DiscoveryOptions {

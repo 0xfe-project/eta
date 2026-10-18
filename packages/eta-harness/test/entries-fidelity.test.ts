@@ -8,8 +8,9 @@
  * terminate marker, which is a real behaviour: a tool can end a run.
  */
 
+import type { Entry, MessageEntry } from "@eta/core/session";
 import { Kernel, kernelOn, Runner } from "@eta/core";
-import { type Entry, type MessageEntry, SessionLog } from "@eta/core/session";
+import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";

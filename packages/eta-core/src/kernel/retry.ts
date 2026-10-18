@@ -77,6 +77,7 @@ export function waitUntil(
     let timer: ReturnType<typeof setTimeout> | undefined;
     const cleanup = (): void => {
       if (timer !== undefined) clearTimeout(timer);
+      // eslint-disable-next-line ts/no-use-before-define -- onAbort and cleanup call each other
       signal.removeEventListener("abort", onAbort);
     };
     const onAbort = (): void => {

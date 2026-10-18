@@ -22,24 +22,25 @@
  * drain). Bounding what is kept — and spilling the rest to a file — is the
  * truncation slice, which this shares with `read`.
  */
-import { type ChildProcess, spawn } from "node:child_process";
+
+import type {
+  EnvCallOptions,
+  ExecutionEnv,
+  ExecutionError,
+  FileSystem,
+  Result,
+  Shell,
+  ShellExecOptions,
+  ShellExecResult,
+} from "@eta/execution";
+import type { ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import { constants as osConstants } from "node:os";
 import { join } from "node:path";
-import {
-  type EnvCallOptions,
-  type ExecutionEnv,
-  type ExecutionError,
-  ExecutionError as ExecutionErrorClass,
-  err,
-  type FileSystem,
-  ok,
-  type Result,
-  type Shell,
-  type ShellExecOptions,
-  type ShellExecResult,
-} from "@eta/execution";
+import process from "node:process";
+import { err, ExecutionError as ExecutionErrorClass, ok } from "@eta/execution";
 import { LiveOutput, OutputBuffer } from "@eta/execution/output";
 import { NodeFileSystem, pathExists, resolveEnvPath } from "./node-fs";
 
@@ -227,6 +228,7 @@ function waitForChildProcess(
     let stdoutEnded = child.stdout === null;
     let stderrEnded = child.stderr === null;
 
+    /* eslint-disable ts/no-use-before-define -- the listeners and cleanup call each other */
     const cleanup = (): void => {
       if (graceTimer !== undefined) clearTimeout(graceTimer);
       child.removeListener("error", onError);
@@ -237,6 +239,7 @@ function waitForChildProcess(
       child.stdout?.removeListener("data", onData);
       child.stderr?.removeListener("data", onData);
     };
+    /* eslint-enable ts/no-use-before-define */
     const finalize = (): void => {
       if (settled) return;
       settled = true;

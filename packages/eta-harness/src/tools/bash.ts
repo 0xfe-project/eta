@@ -23,22 +23,23 @@
  * a frame worth keeping rather than one to drop when the next arrives. A command
  * that floods without ever pausing still ends with a full final frame.
  */
-import type { Static } from "typebox";
-import { Type } from "typebox";
+
 import type {
   EnvCallOptions,
   ShellOutputUpdate,
   ShellOutputView,
   ShellTruncation,
 } from "@eta/execution";
-import { applyShellOutputUpdate } from "@eta/execution/output";
+import type { Static } from "typebox";
+import type { ExecutionToolContext } from "./context";
+import type { HarnessTool, ToolResult } from "./tool";
 import {
+  applyShellOutputUpdate,
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_LINES,
   formatSize,
 } from "@eta/execution/output";
-import type { ExecutionToolContext } from "./context";
-import type { HarnessTool, ToolResult } from "./tool";
+import { Type } from "typebox";
 
 const MAX_TIMEOUT_SECONDS = 2_147_483_647 / 1000;
 /** How often a live update is marked as more than a transient frame. */

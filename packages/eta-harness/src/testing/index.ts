@@ -4,14 +4,14 @@
  */
 
 export { SESSION_CONFIG, TASKS_STATE } from "../journaling";
-export {
-  type EnvContractHandle,
-  type EnvFactory,
-  envContract,
-} from "@eta/execution/testing";
 export { type JournaledKernel, journaledKernel } from "./journaling";
 export {
   runSmokeScenario,
   type SmokeOptions,
   type SmokeReport,
 } from "./smoke-scenario";
+export {
+  envContract,
+  type EnvContractHandle,
+  type EnvFactory,
+} from "@eta/execution/testing";

@@ -11,9 +11,11 @@
  * `background: false` is the blocking form: the spawn returns once the child has
  * settled, which is how a model asks for an answer it needs before continuing.
  */
-import { type TSchema, Type } from "typebox";
+
+import type { TSchema } from "typebox";
 import type { SubagentManager } from "../subagent";
 import type { HarnessTool, ToolResult } from "./tool";
+import { Type } from "typebox";
 
 const agentSchema = Type.Object({
   task: Type.String(),

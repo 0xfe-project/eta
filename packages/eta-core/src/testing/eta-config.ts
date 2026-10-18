@@ -6,8 +6,9 @@
  * names. This reader knows the shape of the eta config (`providers[]` +
  * `defaultModel`), not the contents.
  */
-import { readFile } from "node:fs/promises";
+
 import type { ModelSpec, ProviderSpec } from "./real-models";
+import { readFile } from "node:fs/promises";
 
 interface RawModel {
   id?: unknown;

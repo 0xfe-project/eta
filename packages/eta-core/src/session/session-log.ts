@@ -17,7 +17,6 @@ import type {
   UsageRow,
   ValueWrite,
 } from "../storage/types";
-import { setValue, value } from "../storage/types";
 import type {
   Entry,
   MergeEntry,
@@ -25,14 +24,12 @@ import type {
   NewEntry,
 } from "../types/entries";
 import type { AgentMessage } from "../types/messages";
-import { type ForkedChain, type ForkOptions, forkChain } from "./fork";
+import type { ForkedChain, ForkOptions } from "./fork";
+import type { MergeOptions, RollbackResult } from "./merge";
+import { setValue, value } from "../storage/types";
+import { forkChain } from "./fork";
 import { EntryGraph } from "./graph";
-import {
-  type MergeOptions,
-  mergeTip,
-  type RollbackResult,
-  rollback,
-} from "./merge";
+import { mergeTip, rollback } from "./merge";
 
 /**
  * Where the branch tip lives in the journal.

@@ -1,8 +1,8 @@
 /**
  * Reading a checkout: what the git CLI says about a working directory.
  *
- * Ported from eta-agent's `git.ts`, unchanged in behaviour and narrower in scope: this file only
- * *reads*. Every call spawns `git` inside the given directory with a deadline and a byte cap, and
+ * Ported from eta-agent's `git.ts`, unchanged in behaviour and narrower in scope: this file
+ * only *reads*. Every call spawns `git` inside the given directory with a deadline and a byte cap, and
  * nothing here mutates the checkout — no `git add`, no `git checkout`. The panel is a view.
  *
  * Three details are worth naming because they are the difference between a view and a hang:
@@ -16,8 +16,10 @@
  *   absolute, NUL) is refused rather than normalised: this is a view of one checkout, and the
  *   caller is a wire client.
  */
+
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import process from "node:process";
 
 export interface GitFile {
   path: string;

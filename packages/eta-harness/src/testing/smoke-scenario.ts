@@ -8,14 +8,9 @@
  * storage (memory or a file); nothing here knows either.
  */
 
+import type { Kernel, KernelModels, KernelTool, Runner } from "@eta/core";
 import type { StorageService } from "@eta/core/storage";
-import {
-  type Kernel,
-  type KernelModels,
-  type KernelTool,
-  kernelOn,
-  type Runner,
-} from "@eta/core";
+import { kernelOn } from "@eta/core";
 import { openSession } from "../open";
 import { RunPump } from "../pump";
 

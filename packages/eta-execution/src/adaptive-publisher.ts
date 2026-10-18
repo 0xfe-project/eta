@@ -10,11 +10,14 @@
  * it is nowhere near spending.
  */
 export interface AdaptivePublisherOptions<TValue, TUpdate> {
-  snapshot(): TValue;
-  update(previous: TValue | undefined, current: TValue): TUpdate | undefined;
-  measure(update: TUpdate): number;
-  publish(update: TUpdate): void;
-  onError(error: unknown): void;
+  snapshot: () => TValue;
+  update: (
+    previous: TValue | undefined,
+    current: TValue,
+  ) => TUpdate | undefined;
+  measure: (update: TUpdate) => number;
+  publish: (update: TUpdate) => void;
+  onError: (error: unknown) => void;
   minIntervalMs?: number | undefined;
   targetBytesPerSecond?: number | undefined;
 }

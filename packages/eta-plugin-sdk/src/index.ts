@@ -6,7 +6,7 @@ import type { MemoryFs } from "@eta/harness";
 /** What a handler is given besides the call. */
 export interface OpContext {
   /** Send a frame to the client that called. */
-  reply(frame: import("@eta/client-wire-proto").ServerFrame): void;
+  reply: (frame: import("@eta/client-wire-proto").ServerFrame) => void;
 }
 
 /** What an action did, beyond what it returns. */
@@ -32,23 +32,23 @@ export interface OpMeta {
 
 /** A target's state: what it shows, and when. */
 export interface StateProjector {
-  project(): StateSnapshot;
+  project: () => StateSnapshot;
   /** Include this target's state in `hello`, so a new client draws immediately. */
   eager?: boolean | undefined;
 }
 
 /** The plugin-facing wire surface; socket tables and registries remain private to the host. */
 export interface WireApi {
-  handle(
+  handle: (
     target: string,
     action: string,
     handler: OpHandler,
     meta?: OpMeta,
-  ): () => void;
-  stateOf(target: string, projector: StateProjector): () => void;
-  push(target: string): void;
-  pushNow(target: string): void;
-  event(target: string, name: string, data: unknown): void;
+  ) => () => void;
+  stateOf: (target: string, projector: StateProjector) => () => void;
+  push: (target: string) => void;
+  pushNow: (target: string) => void;
+  event: (target: string, name: string, data: unknown) => void;
 }
 
 export interface SessionFacts {
@@ -59,15 +59,15 @@ export interface SessionFacts {
 }
 
 export interface SessionsListener {
-  opened(session: SessionFacts): void;
-  closed(id: string): void;
-  focused(id: string | undefined): void;
-  changed(session: SessionFacts): void;
+  opened: (session: SessionFacts) => void;
+  closed: (id: string) => void;
+  focused: (id: string | undefined) => void;
+  changed: (session: SessionFacts) => void;
 }
 
 export interface SessionsApi {
   /** Subscribe to session facts. Dispose the subscription when the plugin unloads. */
-  subscribe(listener: SessionsListener): () => void;
+  subscribe: (listener: SessionsListener) => () => void;
 }
 
 export interface SessionEnvironment {
@@ -80,7 +80,7 @@ export interface SessionEnvironment {
 export interface SessionEnvironments<
   E extends SessionEnvironment = SessionEnvironment,
 > {
-  for(session: string): E | undefined | Promise<E | undefined>;
+  for: (session: string) => E | undefined | Promise<E | undefined>;
 }
 
 export type PluginDisposer = () => void | Promise<void>;
@@ -89,7 +89,7 @@ export interface PluginLifecycle {
   /** Register effects synchronously. The host runs their cleanup on unload/reload.
    * Async work must be drained or prevented from publishing after cleanup.
    */
-  effect(execute: () => PluginDisposer): unknown;
+  effect: (execute: () => PluginDisposer) => unknown;
 }
 
 export interface PluginContext extends PluginLifecycle {
@@ -105,5 +105,5 @@ export interface SessionPluginContext extends PluginContext {
 export interface Plugin<C extends PluginLifecycle = PluginContext> {
   name: string;
   inject: string[];
-  apply(ctx: C): unknown;
+  apply: (ctx: C) => unknown;
 }

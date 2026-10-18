@@ -13,9 +13,9 @@ import {
   DEFAULT_RETRY_POLICY,
   kernelOn,
   normalizedRetryPolicy,
-  Runner,
   retryDelayMs,
   retryNotBefore,
+  Runner,
   waitUntil,
 } from "@eta/core";
 import { SessionLog } from "@eta/core/session";

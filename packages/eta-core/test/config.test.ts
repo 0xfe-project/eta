@@ -97,7 +97,7 @@ describe("config validation", () => {
   });
 });
 
-describe("ConfigService", () => {
+describe("configService", () => {
   it("starts from the defaults with the caller's overrides", () => {
     const kernel = Kernel.create({
       config: { model: { provider: "p", modelId: "m" } },

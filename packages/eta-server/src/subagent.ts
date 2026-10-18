@@ -96,7 +96,7 @@ async function runOne(
 ): Promise<SubagentUsage> {
   const session = child.session;
   const ctx = session.kernel.ctx as unknown as {
-    on(name: string, listener: (payload: unknown) => void): () => boolean;
+    on: (name: string, listener: (payload: unknown) => void) => () => boolean;
   };
   const before = session.journaling.usage;
   let status: "completed" | "failed" | "aborted" = "completed";

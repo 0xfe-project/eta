@@ -2,8 +2,8 @@
  * btw — a side request next to the run (port of eta-agent's `harness/btw.ts`,
  * the side-request half).
  *
- * Someone asks the agent something while it is working. The honest answer is a
- * *request*, not a second session: it inherits what the run is, and it does not
+ * Someone asks the agent something while it is working. The honest answer is
+ * a *request*, not a second session: it inherits what the run is, and it does not
  * disturb it.
  *
  * What it inherits, read fresh on every ask and never cached (a model or toolset
@@ -27,16 +27,19 @@
  */
 
 import type { Api, SimpleStreamOptions } from "@earendil-works/pi-ai";
-import {
-  type AgentMessage,
-  type AssistantMessage,
-  type KernelModels,
-  type Message,
-  type Model,
-  type RequestState,
-  type ToolCall,
+import type {
+  AgentMessage,
+  AssistantMessage,
+  Emit,
+  KernelModels,
+  Message,
+  Model,
+  RequestState,
+  ToolCall,
 } from "@eta/core";
-import { addUsage, emptyUsage, type Usage } from "@eta/core/storage";
+import type { Entry } from "@eta/core/session";
+import type { Usage } from "@eta/core/storage";
+import { addUsage, emptyUsage } from "@eta/core/storage";
 
 /** Output cap per request and across one question: turns add up, so the budget is shared. */
 export const SIDE_MAX_TOKENS = 1024;
@@ -268,8 +271,6 @@ async function complete(
  *   that were never saved are panel state, and `replay` rebuilds what the entries
  *   say about them.
  */
-import type { Emit } from "@eta/core";
-import type { Entry } from "@eta/core/session";
 
 export type BtwSaveState = "not-saved" | "queued" | "saved";
 

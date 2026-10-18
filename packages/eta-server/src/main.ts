@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
 /**
  * The entry point: start the server.
  *
@@ -13,8 +15,7 @@
  * Everything else is defaults: `~/.eta/config.json` for providers, `<data-dir>/settings.json`
  * for the defaults new sessions inherit, `<data-dir>/sessions/<id>/` for the sessions themselves.
  */
-import { homedir } from "node:os";
-import { join } from "node:path";
+import process from "node:process";
 import { SERVICE_PROTOCOL } from "@eta/client-contracts";
 import { createLocalEnvironment } from "@eta/execution-node";
 import { assembleServer } from "./server";

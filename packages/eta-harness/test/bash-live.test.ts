@@ -7,20 +7,21 @@
  * state always wins, the last frame is the whole truth, and a consumer that
  * applies the deltas ends up holding exactly the view the producer had.
  */
+
+import type { ShellOutputUpdate, ShellOutputView } from "@eta/execution";
+import type { ExecutionToolContext } from "../src/tools/context";
+import type { ToolResult } from "../src/tools/tool";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ShellOutputUpdate, ShellOutputView } from "@eta/execution";
 import { getOrThrow } from "@eta/execution";
+import { NodeEnvironment } from "@eta/execution-node";
 import {
   applyShellOutputUpdate,
   OUTPUT_MIN_EMIT_INTERVAL_MS,
 } from "@eta/execution/output";
-import { NodeEnvironment } from "@eta/execution-node";
 import { describe, expect, it } from "vitest";
 import { createBashTool } from "../src/tools/bash";
-import type { ExecutionToolContext } from "../src/tools/context";
-import type { ToolResult } from "../src/tools/tool";
 
 const limits = { maxBytes: 2_048, maxLines: 50, retain: "tail" as const };
 

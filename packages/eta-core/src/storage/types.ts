@@ -181,22 +181,22 @@ export interface RepairResult {
 
 export interface StorageService {
   /** Apply one atomic batch. Resolves when the batch is durable. */
-  commit(writes: StorageWrite[]): Promise<CommitResult>;
+  commit: (writes: StorageWrite[]) => Promise<CommitResult>;
 
-  getEntries(ids: string[]): Promise<Map<string, Entry>>;
-  getValue<T>(address: Value<T>): Promise<StoredValue<T> | undefined>;
+  getEntries: (ids: string[]) => Promise<Map<string, Entry>>;
+  getValue: <T>(address: Value<T>) => Promise<StoredValue<T> | undefined>;
   /** Every value whose address starts with the given namespace (+ key prefix). */
-  listValues<T>(prefix: Value<T>): Promise<StoredValue<T>[]>;
+  listValues: <T>(prefix: Value<T>) => Promise<StoredValue<T>[]>;
   /** Walk a branch from an explicit entry; merge entries splice their chains in. */
-  scanBranch(query: StorageBranchScan): Promise<Entry[]>;
-  scanEntries(query: EntryScan): Promise<Entry[]>;
-  scanUsage(query: UsageScan): Promise<UsageRow[]>;
-  getStats(): Promise<SessionStats>;
+  scanBranch: (query: StorageBranchScan) => Promise<Entry[]>;
+  scanEntries: (query: EntryScan) => Promise<Entry[]>;
+  scanUsage: (query: UsageScan) => Promise<UsageRow[]>;
+  getStats: () => Promise<SessionStats>;
 
-  compactJournal(): Promise<CompactResult>;
-  repairTornTail(): Promise<RepairResult>;
-  flush(): Promise<void>;
-  close(): Promise<void>;
+  compactJournal: () => Promise<CompactResult>;
+  repairTornTail: () => Promise<RepairResult>;
+  flush: () => Promise<void>;
+  close: () => Promise<void>;
 }
 
 /** The method surface, asserted in tests so the seam cannot drift silently. */

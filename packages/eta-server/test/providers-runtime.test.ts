@@ -8,13 +8,14 @@
  * The request itself is checked through a fake fetch: the model layer is real (pi-ai builds and
  * streams), only the network is scripted.
  */
+
+import type { EtaProviderConfig } from "../src/providers/config-types";
 import { describe, expect, it } from "vitest";
 import {
   parseProviderModelCatalog,
   providerModelCatalog,
   resolveConfiguredModels,
 } from "../src/providers/catalog";
-import type { EtaProviderConfig } from "../src/providers/config-types";
 import { discoverModels } from "../src/providers/discovery";
 import { buildModels, buildProvider } from "../src/providers/runtime";
 

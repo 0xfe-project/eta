@@ -144,11 +144,11 @@ export interface TextLine {
 
 /** Pull-based line reading: a reader holds one file open and yields lines. */
 export interface TextLineReader {
-  readLine(
+  readLine: (
     options?: EnvCallOptions,
-  ): Promise<Result<TextLine | undefined, FileError>>;
+  ) => Promise<Result<TextLine | undefined, FileError>>;
   /** Release the open file. Best-effort: must not throw or reject. */
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }
 
 /** The filesystem half of an execution environment. */
@@ -157,94 +157,94 @@ export interface FileSystem {
   cwd: string;
 
   /** An absolute addressed path, without requiring it to exist or resolving symlinks. */
-  absolutePath(
+  absolutePath: (
     path: string,
     options?: EnvCallOptions,
-  ): Promise<Result<string, FileError>>;
+  ) => Promise<Result<string, FileError>>;
   /** Join path segments without requiring the result to exist. */
-  joinPath(
+  joinPath: (
     parts: string[],
     options?: EnvCallOptions,
-  ): Promise<Result<string, FileError>>;
+  ) => Promise<Result<string, FileError>>;
   /** Read a UTF-8 text file. */
-  readTextFile(
+  readTextFile: (
     path: string,
     options?: EnvCallOptions,
-  ): Promise<Result<string, FileError>>;
+  ) => Promise<Result<string, FileError>>;
   /** Open a UTF-8 text file for pull-based line reading. */
-  openTextLineReader(
+  openTextLineReader: (
     path: string,
     options?: EnvCallOptions,
-  ): Promise<Result<TextLineReader, FileError>>;
+  ) => Promise<Result<TextLineReader, FileError>>;
   /** Read UTF-8 text lines; implementations may stop once `maxLines` is reached. */
-  readTextLines(
+  readTextLines: (
     path: string,
     options?: EnvCallOptions & { maxLines?: number },
-  ): Promise<Result<string[], FileError>>;
+  ) => Promise<Result<string[], FileError>>;
   /** Read a binary file. */
-  readBinaryFile(
+  readBinaryFile: (
     path: string,
     options?: EnvCallOptions,
-  ): Promise<Result<Uint8Array, FileError>>;
+  ) => Promise<Result<Uint8Array, FileError>>;
   /** Create or overwrite a file, creating parent directories when supported. */
-  writeFile(
+  writeFile: (
     path: string,
     content: string | Uint8Array,
     options?: EnvCallOptions,
-  ): Promise<Result<void, FileError>>;
+  ) => Promise<Result<void, FileError>>;
   /** Create or append to a file, creating parent directories when supported. */
-  appendFile(
+  appendFile: (
     path: string,
     content: string | Uint8Array,
     options?: EnvCallOptions,
-  ): Promise<Result<void, FileError>>;
+  ) => Promise<Result<void, FileError>>;
   /** Atomically rename, replacing the destination when it exists. No cross-filesystem copies. */
-  renameFile(
+  renameFile: (
     source: string,
     destination: string,
     options?: EnvCallOptions,
-  ): Promise<Result<void, FileError>>;
+  ) => Promise<Result<void, FileError>>;
   /** Metadata for the addressed path, without following symlinks. */
-  fileInfo(
+  fileInfo: (
     path: string,
     options?: EnvCallOptions,
-  ): Promise<Result<FileInfo, FileError>>;
+  ) => Promise<Result<FileInfo, FileError>>;
   /** Direct children of a directory, without following symlinks. */
-  listDir(
+  listDir: (
     path: string,
     options?: EnvCallOptions,
-  ): Promise<Result<FileInfo[], FileError>>;
+  ) => Promise<Result<FileInfo[], FileError>>;
   /** The canonical path of an existing path, resolving symlinks where supported. */
-  canonicalPath(
+  canonicalPath: (
     path: string,
     options?: EnvCallOptions,
-  ): Promise<Result<string, FileError>>;
+  ) => Promise<Result<string, FileError>>;
   /** False for a missing path; permission failures are errors, not `false`. */
-  exists(
+  exists: (
     path: string,
     options?: EnvCallOptions,
-  ): Promise<Result<boolean, FileError>>;
+  ) => Promise<Result<boolean, FileError>>;
   /** Create a directory. Defaults to `recursive: true`. */
-  createDir(
+  createDir: (
     path: string,
     options?: EnvCallOptions & { recursive?: boolean },
-  ): Promise<Result<void, FileError>>;
+  ) => Promise<Result<void, FileError>>;
   /** Remove a file or directory. Defaults to `recursive: false`, `force: false`. */
-  remove(
+  remove: (
     path: string,
     options?: EnvCallOptions & { recursive?: boolean; force?: boolean },
-  ): Promise<Result<void, FileError>>;
+  ) => Promise<Result<void, FileError>>;
   /** Create a temporary directory; defaults to `prefix: "tmp-"`. */
-  createTempDir(
+  createTempDir: (
     prefix?: string,
     options?: EnvCallOptions,
-  ): Promise<Result<string, FileError>>;
+  ) => Promise<Result<string, FileError>>;
   /** Create a temporary file; defaults to no prefix and suffix. */
-  createTempFile(
+  createTempFile: (
     options?: EnvCallOptions & { prefix?: string; suffix?: string },
-  ): Promise<Result<string, FileError>>;
+  ) => Promise<Result<string, FileError>>;
   /** Release filesystem resources. Best-effort: must not throw or reject. */
-  cleanup(): Promise<void>;
+  cleanup: () => Promise<void>;
 }
 
 /** What one shell call may be told. */
@@ -345,12 +345,12 @@ export interface ShellExecResult {
 /** The shell half of an execution environment. */
 export interface Shell {
   /** Run a shell command in {@link FileSystem.cwd} unless told otherwise. */
-  exec(
+  exec: (
     command: string,
     options?: ShellExecOptions,
-  ): Promise<Result<ShellExecResult, ExecutionError>>;
+  ) => Promise<Result<ShellExecResult, ExecutionError>>;
   /** Release shell resources. Best-effort: must not throw or reject. */
-  cleanup(): Promise<void>;
+  cleanup: () => Promise<void>;
 }
 
 /** What a tool is handed: a filesystem and a shell. */

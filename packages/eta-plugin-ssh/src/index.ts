@@ -24,8 +24,7 @@
  * deliberately does not do is put a password anywhere: authentication is OpenSSH's (an agent, a
  * key file, a configured host), and the plugin only names the target.
  */
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+
 import type { StateSnapshot } from "@eta/client-wire-proto";
 import type {
   Plugin,
@@ -33,12 +32,10 @@ import type {
   SessionEnvironments,
   WireApi,
 } from "@eta/plugin-sdk";
-import {
-  SshCommandTransport,
-  SshEnvironment,
-  type SshTarget,
-  type SshTransport,
-} from "@eta/ssh";
+import type { SshTarget, SshTransport } from "@eta/ssh";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { SshCommandTransport, SshEnvironment } from "@eta/ssh";
 
 /** The actions this target has. One list, so the wire and the plugin cannot disagree. */
 export const SSH_ACTIONS = [
@@ -86,14 +83,14 @@ export interface SshPluginOptions {
 /** What the manager needs from this plugin: the environment for one session. */
 export interface SshEnvironments
   extends SessionEnvironments<{ env: SshEnvironment; memoryFs: undefined }> {
-  for(
+  for: (
     session: string,
-  ): Promise<{ env: SshEnvironment; memoryFs: undefined } | undefined>;
+  ) => Promise<{ env: SshEnvironment; memoryFs: undefined } | undefined>;
 }
 
 export interface SshPlugin extends Plugin {
   /** Bind a session before resolving its environment. */
-  bind(session: string, targetId: string): void;
+  bind: (session: string, targetId: string) => void;
   environments: SshEnvironments;
 }
 

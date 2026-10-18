@@ -10,23 +10,22 @@
  * Real sockets and a real data directory; the model layer is either absent (no provider at
  * all, the `model_unavailable` path) or scripted.
  */
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+
 import type {
   ServerFrame,
   SessionHistoryResult,
   SessionViewSections,
 } from "@eta/client-contracts";
 import type { ClientFrame } from "@eta/client-wire-proto";
-import {
-  assistantMessage,
-  type FakeModels,
-  fakeModels,
-} from "@eta/core/testing";
+import type { FakeModels } from "@eta/core/testing";
+import type { AssembledServer } from "../src/server";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { afterEach, describe, expect, it } from "vitest";
 import { JOURNAL_FILE } from "../src/file-store";
-import { type AssembledServer, assembleServer } from "../src/server";
+import { assembleServer } from "../src/server";
 
 const roots: string[] = [];
 const servers: AssembledServer[] = [];
@@ -50,9 +49,9 @@ async function until(
 
 interface Client {
   frames: ServerFrame[];
-  call(target: string, action: string, args?: unknown): Promise<unknown>;
-  subscribe(target: string): void;
-  close(): void;
+  call: (target: string, action: string, args?: unknown) => Promise<unknown>;
+  subscribe: (target: string) => void;
+  close: () => void;
 }
 
 function connect(port: number): Promise<Client> {

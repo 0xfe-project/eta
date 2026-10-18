@@ -1,3 +1,4 @@
+import type { GoalEntry } from "../src/types/entries";
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
 import {
@@ -7,7 +8,6 @@ import {
   lastMessageShowsIntent,
   MAX_CONTINUATIONS,
 } from "../src/kernel/goal";
-import type { GoalEntry } from "../src/types/entries";
 import { kernelOn } from "../src/types/events";
 
 function withGoal() {

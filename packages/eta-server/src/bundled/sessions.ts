@@ -1,3 +1,32 @@
+import type {
+  PromptImage,
+  PromptInput,
+  SessionArgs,
+  SidebarSession,
+} from "@eta/client-contracts";
+import type {
+  GoalState,
+  ImageContent,
+  StoredTask,
+  Task,
+  TaskStatus,
+  ThinkingLevel,
+} from "@eta/core";
+import type { AskResponse, BtwSaveState, BtwThread } from "@eta/harness";
+import type {
+  SessionFacts,
+  SessionsApi,
+  SessionsListener,
+} from "@eta/plugin-sdk";
+import type {
+  CreateSessionOptions,
+  ForkSessionOptions,
+  ManagedSession,
+  SessionManager,
+} from "../manager";
+import type { HistoryPage, SearchHit } from "../search";
+import type { SessionMeta } from "../store";
+import type { WireService } from "../wire-service";
 /**
  * The `sessions` plugin: the bundled feature that makes a server a session host.
  *
@@ -22,54 +51,18 @@
  * a run ends (the runner), whether an inject starts a run (the harness pump), or durability
  * (the store). Policy stays where it already is; this file is wiring.
  */
-import type {
-  SidebarSession,
-  SessionArgs,
-  PromptImage,
-  PromptInput,
-} from "@eta/client-contracts";
-import type {
-  GoalState,
-  ImageContent,
-  StoredTask,
-  Task,
-  TaskStatus,
-  ThinkingLevel,
-} from "@eta/core";
+import process from "node:process";
 import { THINKING_LEVELS, thinkingLevelsFor } from "@eta/core";
-import {
-  type AskResponse,
-  type BtwSaveState,
-  type BtwThread,
-  sessionStateKV,
-} from "@eta/harness";
-import type {
-  SessionFacts,
-  SessionsApi,
-  SessionsListener,
-} from "@eta/plugin-sdk";
+import { sessionStateKV } from "@eta/harness";
 import { Service } from "cordis";
-import type {
-  CreateSessionOptions,
-  ForkSessionOptions,
-  ManagedSession,
-  SessionManager,
-} from "../manager";
 import { formatModelId, parseModelId } from "../model-id";
-import {
-  firstHit,
-  type HistoryPage,
-  historyPageOf,
-  type SearchHit,
-} from "../search";
-import type { SessionMeta } from "../store";
-import type { WireService } from "../wire-service";
+import { firstHit, historyPageOf } from "../search";
 
 export {
-  SESSION_ACTIONS,
-  type SessionAction,
   type PromptImage,
   type PromptInput,
+  SESSION_ACTIONS,
+  type SessionAction,
 } from "@eta/client-contracts";
 
 export interface SessionsPluginOptions {
@@ -819,7 +812,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
       // everything it registers dies with it.
       const context = ctx as {
         wire: WireService;
-        effect(execute: () => () => unknown): unknown;
+        effect: (execute: () => () => unknown) => unknown;
       } & ConstructorParameters<typeof Service>[0];
       const wire = context.wire;
 
@@ -925,6 +918,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
             if (session === undefined)
               throw new Error("sessions.archive needs a session");
             if (typeof archived !== "boolean") {
+              // eslint-disable-next-line unicorn/prefer-type-error -- keep the thrown class
               throw new Error("sessions.archive needs archived: true or false");
             }
             await service.setMeta(session, { archived });
@@ -1304,7 +1298,7 @@ function subscribeBus(
   onEvent: (name: string, payload: unknown) => void,
 ): () => void {
   const ctx = managed.session.kernel.ctx as unknown as {
-    on(name: string, listener: (payload: unknown) => void): () => boolean;
+    on: (name: string, listener: (payload: unknown) => void) => () => boolean;
   };
   const offs = FORWARDED_EVENTS.map((name) =>
     ctx.on(name, (payload) => onEvent(name, payload)),

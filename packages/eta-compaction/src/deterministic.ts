@@ -67,8 +67,10 @@ export function maxMinFairAllocations(
 ): number[] {
   const n = sizes.length;
   if (n === 0) return [];
-  const allocations = new Array<number>(n).fill(0);
-  const indices = [...Array(n).keys()].sort((a, b) => sizes[a]! - sizes[b]!);
+  const allocations = Array.from<number>({ length: n }).fill(0);
+  const indices = Array.from({ length: n }, (_, i) => i).sort(
+    (a, b) => sizes[a]! - sizes[b]!,
+  );
   let remaining = budget;
   let count = n;
   for (const index of indices) {

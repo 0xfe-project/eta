@@ -7,9 +7,9 @@
  * that shows one list while the runtime serves another is a page that lies.
  */
 import type { Api, Model, Provider } from "@earendil-works/pi-ai";
+import type { EtaModelConfig } from "./providers/config-types";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import { providerModelCatalog } from "./providers/catalog";
-import type { EtaModelConfig } from "./providers/config-types";
 
 /** The provider, restricted to the models the config lists (or all of them when it lists none). */
 export function codexRuntimeProvider(

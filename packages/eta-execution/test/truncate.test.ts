@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import { truncateHead, truncateTail } from "@eta/execution/output";
+import { describe, expect, it } from "vitest";
 
 const encoder = new TextEncoder();
 
@@ -80,7 +80,7 @@ describe("truncate utilities", () => {
   });
 
   it("does not count a trailing newline as an extra line", () => {
-    const content = `${Array.from({ length: 3 }, () => "line").join("\n")}\n`;
+    const content = `${Array.from({ length: 3 }).fill("line").join("\n")}\n`;
     const head = truncateHead(content, { maxBytes: 100, maxLines: 3 });
     const tail = truncateTail(content, { maxBytes: 100, maxLines: 3 });
 
@@ -149,11 +149,11 @@ describe("truncate utilities", () => {
 
   it("matches Buffer tail truncation semantics for surrogate edge cases", () => {
     const inputs = [
-      "a\ud83d",
-      "\ude42b",
-      "a\ude42b",
-      "\ud83d\ud83d\ude42",
-      "\ud83d\ude42\ude42",
+      "a\uD83D",
+      "\uDE42b",
+      "a\uDE42b",
+      "\uD83D\uD83D\uDE42",
+      "\uD83D\uDE42\uDE42",
       "👩‍💻",
     ];
     for (const input of inputs) assertMatchesEncodedTail(input);
@@ -162,20 +162,20 @@ describe("truncate utilities", () => {
   it("matches Buffer tail truncation semantics across deterministic fuzz cases", () => {
     const alphabet = [
       "a",
-      "\u007f",
+      "\u007F",
       "\u0080",
       "é",
-      "\u07ff",
+      "\u07FF",
       "\u0800",
       "中",
-      "\ud7ff",
-      "\ud800",
-      "\ud83d",
-      "\udc00",
-      "\ude42",
+      "\uD7FF",
+      "\uD800",
+      "\uD83D",
+      "\uDC00",
+      "\uDE42",
       "🙂",
-      "\ue000",
-      "\uffff",
+      "\uE000",
+      "\uFFFF",
     ];
 
     function checkExhaustive(prefix: string, depth: number): void {

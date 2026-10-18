@@ -6,17 +6,18 @@
  * with the same limits the shell uses, and the one line-too-long case is named
  * rather than cut silently.
  */
+
+import type { ToolCallInfo } from "@eta/core";
+import type { ExecutionToolContext } from "../src/tools/context";
+import type { ToolResult } from "../src/tools/tool";
 import { mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ToolCallInfo } from "@eta/core";
 import { getOrThrow } from "@eta/execution";
-import { DEFAULT_MAX_LINES } from "@eta/execution/output";
 import { NodeEnvironment } from "@eta/execution-node";
+import { DEFAULT_MAX_LINES } from "@eta/execution/output";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { ExecutionToolContext } from "../src/tools/context";
 import { createReadTool } from "../src/tools/read";
-import type { ToolResult } from "../src/tools/tool";
 
 let directory = "";
 let env: NodeEnvironment;
@@ -85,7 +86,7 @@ describe("read", () => {
   it("does not count a trailing newline as an extra line at the limit", async () => {
     await env.writeFile(
       "exact.txt",
-      `${Array.from({ length: DEFAULT_MAX_LINES }, () => "x").join("\n")}\n`,
+      `${Array.from({ length: DEFAULT_MAX_LINES }).fill("x").join("\n")}\n`,
     );
     const result = await createReadTool().execute({ path: "exact.txt" }, run());
     expect(result.details).toBeUndefined();
@@ -114,7 +115,7 @@ describe("read", () => {
     await env.writeFile("spaced name.txt", "content");
     expect(
       textOutput(
-        await createReadTool().execute({ path: "spaced\u202fname.txt" }, run()),
+        await createReadTool().execute({ path: "spaced\u202Fname.txt" }, run()),
       ),
     ).toBe("content");
     expect(

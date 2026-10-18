@@ -1,36 +1,37 @@
 {
   "name": "@eta/server",
-  "version": "0.1.0",
-  "description": "The eta server: many sessions in one process, each one a harness session behind a store.",
-  "private": true,
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The eta server: many sessions in one process, each one a harness session behind a store.",
   "exports": {
     ".": "./src/index.ts",
     "./testing": "./src/testing/index.ts"
   },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "scripts": {
     "test": "bun --bun vitest --run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "smoke": "ETA_SMOKE_CONFIG=\"${ETA_SMOKE_CONFIG:-$HOME/.eta/config.json}\" bun --bun vitest --run test/session.e2e.test.ts test/server-smoke.test.ts"
-  },
-  "devDependencies": {
-    "@types/node": "22.19.19",
-    "typescript": "5.9.3",
-    "vitest": "4.1.9",
-    "bun-types": "1.4.2",
-    "@eta/ssh": "*"
+    "smoke": "ETA_SMOKE_CONFIG=\"${ETA_SMOKE_CONFIG:-$HOME/.eta/config.json}\" bun --bun vitest --run test/session.e2e.test.ts test/server-smoke.test.ts",
+    "lint": "eslint ."
   },
   "dependencies": {
-    "@eta/core": "*",
-    "@eta/harness": "*",
-    "@eta/execution-node": "*",
-    "@eta/storage-jsonl": "*",
-    "@eta/client-wire-proto": "*",
     "@earendil-works/pi-ai": "0.85.1",
-    "cordis": "^4.0.0-rc.10",
+    "@eta/client-contracts": "*",
+    "@eta/client-wire-proto": "*",
+    "@eta/core": "*",
+    "@eta/execution-node": "*",
+    "@eta/harness": "*",
     "@eta/plugin-sdk": "*",
-    "@eta/client-contracts": "*"
+    "@eta/storage-jsonl": "*",
+    "cordis": "4.0.0-rc.10"
+  },
+  "devDependencies": {
+    "@eta/ssh": "*",
+    "@types/node": "22.19.19",
+    "bun-types": "1.4.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
   }
 }

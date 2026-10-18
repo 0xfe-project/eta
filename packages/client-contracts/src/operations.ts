@@ -1,4 +1,9 @@
 /** Bundled operation vocabulary. The generic wire package accepts arbitrary plugin actions. */
+
+import type { CallFrame } from "@eta/client-wire-proto";
+import type { JsonValue, Task, TaskStatus, ThinkingLevel } from "./data";
+import type { SessionViewBtwThread } from "./types";
+
 /** The actions this target has. One list, so the wire and the plugin cannot disagree. */
 export const SESSION_ACTIONS = [
   "create",
@@ -60,10 +65,6 @@ export const PROVIDER_ACTIONS = [
   "codexCancel",
 ] as const;
 
-import type { CallFrame } from "@eta/client-wire-proto";
-import type { JsonValue, Task, TaskStatus, ThinkingLevel } from "./data";
-import type { SessionViewBtwThread } from "./types";
-
 export interface CreateSessionInput {
   cwd?: string;
   title?: string;
@@ -76,7 +77,9 @@ export interface ForkSessionInput {
   title?: string;
 }
 
-type Session = { session: string };
+interface Session {
+  session: string;
+}
 type Thread = Session & { threadId: string };
 /** Valid requests from a client. The server still validates untrusted JSON at runtime. */
 export interface SessionArgs {

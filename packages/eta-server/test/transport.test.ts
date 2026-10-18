@@ -10,14 +10,10 @@
  */
 
 import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
+import type { Socket, TransportDeps } from "../src/transport";
 import { Context } from "cordis";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  createConnection,
-  type Socket,
-  serveWire,
-  type TransportDeps,
-} from "../src/transport";
+import { createConnection, serveWire } from "../src/transport";
 import { WireService } from "../src/wire-service";
 
 const SESSIONS_STATE: StateSnapshot = {
@@ -236,7 +232,7 @@ describe("frames the pipe sends on its own", () => {
 });
 
 describe("the Bun binding", () => {
-  let server: { stop(): void } | undefined;
+  let server: { stop: () => void } | undefined;
   let client: WebSocket | undefined;
 
   afterEach(() => {

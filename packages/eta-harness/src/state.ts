@@ -11,23 +11,19 @@
  * Reads come from the storage (committed truth), writes go through the
  * journaling service, which orders them behind whatever the loop already queued.
  */
-import { type SessionLog } from "@eta/core/session";
-import {
-  deleteValue,
-  type StorageService,
-  setValue,
-  value,
-} from "@eta/core/storage";
+import type { SessionLog } from "@eta/core/session";
+import type { StorageService } from "@eta/core/storage";
 import type { JournalingService } from "./journaling";
+import { deleteValue, setValue, value } from "@eta/core/storage";
 
 /** The namespace the model's own keys live in. */
 export const MODEL_STATE = "eta.model-state";
 
 export interface StateKV {
-  get(key: string): Promise<string | undefined>;
+  get: (key: string) => Promise<string | undefined>;
   /** `null` deletes the key. */
-  set(key: string, next: string | null): Promise<void>;
-  keys(): Promise<string[]>;
+  set: (key: string, next: string | null) => Promise<void>;
+  keys: () => Promise<string[]>;
 }
 
 /** The session's own KV, journaled like everything else. */

@@ -9,12 +9,13 @@
  * It deliberately does not decide *when* to send: a caller that owns a run or a timer calls
  * `push`. Pacing (how often a frame may go out) is the pacer's business, a layer above this.
  */
-import {
-  type ServerFrame,
-  type StatePatch,
-  type StateSnapshot,
-  stateDiff,
+
+import type {
+  ServerFrame,
+  StatePatch,
+  StateSnapshot,
 } from "@eta/client-wire-proto";
+import { stateDiff } from "@eta/client-wire-proto";
 
 /** What one subscriber holds, as far as this sender knows. */
 interface Baseline {
@@ -25,9 +26,9 @@ interface Baseline {
 
 export interface StateSenderOptions {
   /** Look one target's state up. Undefined means the target shows nothing (any more). */
-  snapshot(target: string): StateSnapshot | undefined;
+  snapshot: (target: string) => StateSnapshot | undefined;
   /** Diagnostics: a push for a target nobody has. */
-  warn?(message: string): void;
+  warn?: (message: string) => void;
 }
 
 /** One frame, and the socket it is for. The sender decides; the pipe delivers. */
@@ -41,26 +42,30 @@ export interface StateSender {
    * A socket wants a target's state. Returns what to send it now (a full snapshot, or
    * nothing when it was already current), and from then on `push` keeps it up to date.
    */
-  subscribe(socketId: number, target: string, filter?: string): ServerFrame[];
+  subscribe: (
+    socketId: number,
+    target: string,
+    filter?: string,
+  ) => ServerFrame[];
   /** The event filter a socket asked for on a target. */
-  filterOf(socketId: number, target: string): string | undefined;
+  filterOf: (socketId: number, target: string) => string | undefined;
   /** Whether this socket is already subscribed to this target. */
-  watches(socketId: number, target: string): boolean;
-  unsubscribe(socketId: number, target: string): void;
+  watches: (socketId: number, target: string) => boolean;
+  unsubscribe: (socketId: number, target: string) => void;
   /** Which targets one socket is subscribed to. */
-  subscriptions(socketId: number): string[];
+  subscriptions: (socketId: number) => string[];
   /** Say that a target's state may have moved: whoever is behind gets what it is missing. */
-  push(target: string): AddressedFrame[];
+  push: (target: string) => AddressedFrame[];
   /**
    * What one socket is owed for one target, right now — the same decision `push` makes,
    * for one subscriber. `undefined` when it is current (or not subscribed). This is the
    * seam a frame budget sits on: pacing decides *when* to ask, this decides *what*.
    */
-  pending(socketId: number, target: string): AddressedFrame | undefined;
+  pending: (socketId: number, target: string) => AddressedFrame | undefined;
   /** Every socket watching a target, with the event filter each one asked for. */
-  watchersOf(
+  watchersOf: (
     target: string,
-  ): { socketId: number; filter?: string | undefined }[];
+  ) => { socketId: number; filter?: string | undefined }[];
   /**
    * How many sockets are watching a target.
    *
@@ -68,9 +73,9 @@ export interface StateSender {
    * delivery needs the filter (to decide whether this subscriber wants this event), while
    * "is anybody watching" needs a number.
    */
-  watcherCount(target: string): number;
+  watcherCount: (target: string) => number;
   /** Forget a socket (it disconnected). */
-  drop(socketId: number): void;
+  drop: (socketId: number) => void;
 }
 
 export function createStateSender(options: StateSenderOptions): StateSender {

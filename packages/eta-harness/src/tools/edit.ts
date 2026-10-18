@@ -16,18 +16,17 @@
  * A write through a symlink edits the file it points at, and the mutation queue
  * keys on the canonical path, so an edit by link and an edit by name cannot race.
  */
+
+import type { EnvCallOptions, FileError } from "@eta/execution";
 import type { Static } from "typebox";
-import { Type } from "typebox";
-import {
-  type EnvCallOptions,
-  type FileError,
-  getOrThrow,
-} from "@eta/execution";
 import type { ExecutionToolContext } from "./context";
+import type { Edit } from "./edit-diff";
+import type { HarnessTool, ToolResult } from "./tool";
+import { getOrThrow } from "@eta/execution";
+import { Type } from "typebox";
 import {
   applyEditsToNormalizedContent,
   detectLineEnding,
-  type Edit,
   generateDiffString,
   generateUnifiedPatch,
   normalizeToLF,
@@ -36,7 +35,6 @@ import {
 } from "./edit-diff";
 import { withFileMutationQueue } from "./file-mutation-queue";
 import { resolveToolPath } from "./path-utils";
-import type { HarnessTool, ToolResult } from "./tool";
 
 const replaceEditSchema = Type.Object({
   oldText: Type.String({
@@ -64,7 +62,10 @@ type LegacyEditToolInput = EditToolInput & {
   oldText?: unknown;
   newText?: unknown;
 };
-type SingleEditInput = { oldText: string; newText: string };
+interface SingleEditInput {
+  oldText: string;
+  newText: string;
+}
 
 function isSingleEditInput(value: unknown): value is SingleEditInput {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;

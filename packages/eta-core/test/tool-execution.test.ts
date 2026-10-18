@@ -8,9 +8,10 @@
  * clobber one file while two different files still go together.
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type { KernelTool } from "../src/index";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { Kernel, type KernelTool, Runner } from "../src/index";
+import { Kernel, Runner } from "../src/index";
 
 const userMsg = (text: string) => ({
   role: "user" as const,

@@ -18,7 +18,8 @@
  */
 import type { AgentMessage } from "@eta/core";
 import type { Entry } from "@eta/core/session";
-import { systemRowOf, type ViewSystemRow } from "@eta/harness";
+import type { ViewSystemRow } from "@eta/harness";
+import { systemRowOf } from "@eta/harness";
 
 /** One row of a transcript page. */
 export interface HistoryRow {

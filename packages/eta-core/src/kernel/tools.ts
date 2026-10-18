@@ -13,14 +13,17 @@
  */
 
 import type { Context } from "cordis";
-import { Service } from "cordis";
 import type { ToolExecution } from "../types/config";
+import { Service } from "cordis";
 import { AbortRequested, cancellationOf } from "./effect-gate";
 
 /** The minimal tool shape the seam requires. Plugin tools may carry more. */
 export interface KernelTool<TArgs = unknown, TResult = unknown> {
   name: string;
   description?: string;
+  // A method, not a property: its parameters are checked bivariantly, which is
+  // what lets `KernelTool<{ path: string }>` be stored as `KernelTool`.
+  // eslint-disable-next-line ts/method-signature-style
   execute(args: TArgs, call: ToolCallInfo): TResult | Promise<TResult>;
 }
 

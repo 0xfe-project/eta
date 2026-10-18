@@ -14,22 +14,25 @@
  * answers. There is no pretending to be bash in a Map — a test that wants a real
  * shell uses `NodeEnvironment`.
  */
+
+import type {
+  EnvCallOptions,
+  ExecutionEnv,
+  ExecutionError,
+  FileError,
+  FileInfo,
+  FileKind,
+  Result,
+  ShellExecOptions,
+  ShellExecResult,
+  TextLine,
+  TextLineReader,
+} from "@eta/execution";
 import {
-  type EnvCallOptions,
-  type ExecutionEnv,
-  type ExecutionError,
-  ExecutionError as ExecutionErrorClass,
   err,
-  type FileError,
+  ExecutionError as ExecutionErrorClass,
   FileError as FileErrorClass,
-  type FileInfo,
-  type FileKind,
   ok,
-  type Result,
-  type ShellExecOptions,
-  type ShellExecResult,
-  type TextLine,
-  type TextLineReader,
 } from "@eta/execution";
 
 interface MemoryNode {

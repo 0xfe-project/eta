@@ -56,6 +56,9 @@ export interface HarnessTool<
    * Models send what they send; the tool absorbs it or says why it cannot.
    */
   prepareArguments?: ((args: unknown) => unknown) | undefined;
+  // A method, not a property: its parameters are checked bivariantly, which is
+  // what lets a tool with typed arguments be stored as a `HarnessTool<TContext>`.
+  // eslint-disable-next-line ts/method-signature-style
   execute(
     args: Static<TParameters>,
     run: ToolRun<TContext>,

@@ -15,24 +15,26 @@
  *    write beside, fsync, rename, fsync the directory — so a crash leaves the
  *    whole old journal or the whole new one.
  */
+
+import type {
+  CommitResult,
+  CompactResult,
+  Entry,
+  EntryScan,
+  RepairResult,
+  SessionStats,
+  StorageBranchScan,
+  StorageService,
+  StorageWrite,
+  StoredValue,
+  UsageRow,
+  UsageScan,
+  Value,
+} from "@eta/core/storage";
 import { open, rename, stat } from "node:fs/promises";
 import { dirname } from "node:path";
-import {
-  type CommitResult,
-  type CompactResult,
-  type Entry,
-  type EntryScan,
-  InMemoryStorageState,
-  type RepairResult,
-  type SessionStats,
-  type StorageBranchScan,
-  type StorageService,
-  type StorageWrite,
-  type StoredValue,
-  type UsageRow,
-  type UsageScan,
-  type Value,
-} from "@eta/core/storage";
+import process from "node:process";
+import { InMemoryStorageState } from "@eta/core/storage";
 
 export interface JsonlStorageOptions {
   /**

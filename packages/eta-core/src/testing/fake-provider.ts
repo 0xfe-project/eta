@@ -15,8 +15,8 @@ import type {
   Model,
   SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
-import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import type { KernelModels } from "../kernel/providers";
+import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 
 export interface RecordedCall {
   model: Model<Api>;

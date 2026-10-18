@@ -74,7 +74,7 @@ describe("streaming into the bus", () => {
     expect(names).toEqual([
       "end",
       "start",
-      ...Array.from({ length: 5 }, () => "update"),
+      ...Array.from({ length: 5 }).fill("update"),
       "end",
     ]);
     expect(updates.map((u) => u.event.type)).toEqual([

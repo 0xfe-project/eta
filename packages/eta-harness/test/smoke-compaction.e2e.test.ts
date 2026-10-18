@@ -11,8 +11,9 @@
  * side — carrying the earlier decisions forward.
  */
 
+import type { AssistantMessage } from "@eta/core";
 import { etaCompaction } from "@eta/compaction";
-import { type AssistantMessage, kernelOn } from "@eta/core";
+import { kernelOn } from "@eta/core";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
 import {

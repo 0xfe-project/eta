@@ -9,13 +9,14 @@
  * picked up, and no extraction failure ever costs a turn.
  */
 
-import { type KernelModels } from "@eta/core";
+import type { KernelModels } from "@eta/core";
+import type { ExecutionEnv } from "@eta/execution";
+import type { MemoryExtractionOutcome } from "../src/memory";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { MemoryEnvironment } from "../src/env/memory";
-import type { ExecutionEnv } from "@eta/execution";
-import { envMemoryFs, type MemoryExtractionOutcome } from "../src/memory";
+import { envMemoryFs } from "../src/memory";
 import { openSession } from "../src/open";
 
 const userMsg = (text: string) => ({

@@ -13,9 +13,10 @@
  * back from a snapshot.
  */
 import type { StoredTask, Task, TaskService, TaskStatus } from "@eta/core";
-import { type TSchema, Type } from "typebox";
-import { TASK_UPDATE_SUCCESS } from "../prompts/tasks";
+import type { TSchema } from "typebox";
 import type { HarnessTool, ToolResult } from "./tool";
+import { Type } from "typebox";
+import { TASK_UPDATE_SUCCESS } from "../prompts/tasks";
 
 export type { TaskStatus };
 

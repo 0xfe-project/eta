@@ -14,20 +14,22 @@
  * unless an image processor is injected, because no provider takes one.
  */
 import type { ImageContent, TextContent } from "@eta/core";
+import type { EnvCallOptions } from "@eta/execution";
+import type { TruncationResult } from "@eta/execution/output";
 import type { Static } from "typebox";
-import { Type } from "typebox";
-import { type EnvCallOptions, getOrThrow } from "@eta/execution";
+import type { ExecutionToolContext } from "./context";
+import type { HarnessTool, ToolResult } from "./tool";
+import { getOrThrow } from "@eta/execution";
 import {
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_LINES,
   formatSize,
-  type TruncationResult,
   truncateHead,
 } from "@eta/execution/output";
-import type { ExecutionToolContext } from "./context";
+import { Type } from "typebox";
 import { detectSupportedImageMimeType, encodeBase64 } from "./image";
 import { resolveReadToolPath } from "./path-utils";
-import { type HarnessTool, type ToolResult, text } from "./tool";
+import { text } from "./tool";
 
 export const readSchema = Type.Object({
   path: Type.String({

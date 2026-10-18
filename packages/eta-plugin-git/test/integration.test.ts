@@ -10,13 +10,15 @@
  * - without it, nothing else changes: the session is created, prompted and forked the same way, and
  *   the only difference is that `git.*` is not an op and `git` is not a target.
  */
+
+import type { ServerFrame } from "@eta/client-contracts";
+import type { AssembledServer } from "@eta/server";
 import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ServerFrame } from "@eta/client-contracts";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { type AssembledServer, assembleServer } from "@eta/server";
+import { assembleServer } from "@eta/server";
 import { afterEach, describe, expect, it } from "vitest";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -204,9 +206,7 @@ describe("with the plugin installed", () => {
             open.meta.id === created.session && !open.session.runner.running,
         ),
     );
-    await until(
-      () => rows().find((row) => row.session === created.session) !== undefined,
-    );
+    await until(() => rows().some((row) => row.session === created.session));
     const dirty = (await client.call("git", "refresh", {
       session: created.session,
       cwd: repo,

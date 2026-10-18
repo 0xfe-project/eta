@@ -5,17 +5,18 @@
  * the output in arrival order, a note when the tail is all that fit, and a
  * failure that says which failure it was — a code, a timeout, an abort.
  */
+
+import type { ToolCallInfo } from "@eta/core";
+import type { ExecutionToolContext } from "../src/tools/context";
+import type { ToolResult } from "../src/tools/tool";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ToolCallInfo } from "@eta/core";
 import { getOrThrow } from "@eta/execution";
-import { DEFAULT_MAX_LINES } from "@eta/execution/output";
 import { NodeEnvironment } from "@eta/execution-node";
+import { DEFAULT_MAX_LINES } from "@eta/execution/output";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createBashTool } from "../src/tools/bash";
-import type { ExecutionToolContext } from "../src/tools/context";
-import type { ToolResult } from "../src/tools/tool";
 
 let directory = "";
 let env: NodeEnvironment;
@@ -135,7 +136,7 @@ describe("bash", () => {
         going,
         settled,
         new Promise<"no output">((resolve) => {
-          timer = setTimeout(() => resolve("no output"), 3_000);
+          timer = setTimeout(resolve, 3_000, "no output");
         }),
       ]);
       expect(first).toBe("printed");

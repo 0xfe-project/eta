@@ -7,23 +7,23 @@
  * building, which is cheaper than a client that receives frames it cannot read.
  */
 
-import type { StatePatch, StateSnapshot } from "@eta/client-wire-proto";
-
-import { stateDiff } from "@eta/client-wire-proto";
-import {
-  type SessionViewBtwThread,
-  type SessionViewSubagent,
-  type GoalState,
-  type StoredTask,
-  stateSection,
+import type {
+  GoalState,
+  SessionViewBtwThread,
+  SessionViewSubagent,
+  StoredTask,
 } from "@eta/client-contracts";
-import {
-  type GoalState as RuntimeGoal,
-  type StoredTask as RuntimeTask,
+import type { StatePatch, StateSnapshot } from "@eta/client-wire-proto";
+import type {
+  GoalState as RuntimeGoal,
+  StoredTask as RuntimeTask,
 } from "@eta/core";
+import type { BtwThread, SubagentRecord } from "@eta/harness";
+import { stateSection } from "@eta/client-contracts";
+import { stateDiff } from "@eta/client-wire-proto";
 import { MemoryStorage } from "@eta/core/storage";
 import { fakeModels } from "@eta/core/testing";
-import { type BtwThread, type SubagentRecord, openSession } from "@eta/harness";
+import { openSession } from "@eta/harness";
 import { describe, expect, it } from "vitest";
 
 describe("the harness snapshot is what the wire says a view is", () => {

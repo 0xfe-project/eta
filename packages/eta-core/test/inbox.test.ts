@@ -7,6 +7,7 @@
  * apply per kind, so follow-ups can be held in reserve while steering lands.
  */
 import type { ImageContent } from "@earendil-works/pi-ai";
+import type { QueuedItem } from "../src/index";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import {
@@ -15,7 +16,6 @@ import {
   Kernel,
   kernelOn,
   normalizeQueuedInput,
-  type QueuedItem,
   Runner,
 } from "../src/index";
 

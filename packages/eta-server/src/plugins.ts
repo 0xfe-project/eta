@@ -22,14 +22,15 @@
  * server whose control plane depends on its business plane, which is exactly what this refactor
  * set out to stop.
  */
-import { readdir, readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+
 import type {
   MountedPlugin,
   PluginPanelDescriptor,
 } from "@eta/client-contracts";
 import type { Context } from "cordis";
+import { readdir, readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 /** What a plugin's `package.json` says about itself. */
 export interface PluginManifest {
@@ -57,7 +58,7 @@ export interface LoadedPlugin {
   /** What `mounted` reports. `error` set means it is not running. */
   entry: MountedPlugin;
   /** Unload this plugin: every effect it registered, gone. */
-  dispose(): Promise<void>;
+  dispose: () => Promise<void>;
 }
 
 export interface PluginManagerOptions {
@@ -126,11 +127,11 @@ function sweepWire(ctx: Context, added: WireSnapshot): void {
 
 /** The slice of the wire service the manager needs; kept structural so this file stays a leaf. */
 interface WireServiceLike {
-  descriptors(): { name: string; target: string; action: string }[];
-  targets(): { name: string; hasState: boolean }[];
+  descriptors: () => { name: string; target: string; action: string }[];
+  targets: () => { name: string; hasState: boolean }[];
   registry: {
-    unregister(target: string, action: string): boolean;
-    unregisterState(target: string): boolean;
+    unregister: (target: string, action: string) => boolean;
+    unregisterState: (target: string) => boolean;
   };
 }
 
@@ -417,7 +418,7 @@ export class PluginManager {
         plugin as never,
         undefined as never,
       ) as unknown as {
-        dispose(): Promise<void>;
+        dispose: () => Promise<void>;
       };
       // `await fiber` is what makes a load failure *this* plugin's: cordis reports an `apply`
       // that threw by rejecting the fiber, and awaiting it here is how the reason reaches

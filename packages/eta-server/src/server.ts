@@ -20,29 +20,34 @@
  * still starts, still serves, still answers `hello` — with one fewer target. That is the test
  * that the floor is a floor and not a session host with plugins bolted on.
  */
+
+import type { MountedPlugin } from "@eta/client-contracts";
+import type { CompactionSummarizer, KernelModels } from "@eta/core";
+import type { SessionManagerOptions } from "./manager";
+import type { EtaConfig } from "./providers/config-types";
+import type { Settings } from "./settings";
+import type { WireServer } from "./transport";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { MountedPlugin } from "@eta/client-contracts";
-import type { CompactionSummarizer, KernelModels } from "@eta/core";
 import { Context } from "cordis";
 import { personasPlugin } from "./bundled/personas";
 import { providersPlugin } from "./bundled/providers";
 import { sessionsPlugin } from "./bundled/sessions";
 import { settingsPlugin } from "./bundled/settings";
 import { FileSessionStore } from "./file-store";
-import { SessionManager, type SessionManagerOptions } from "./manager";
+import { SessionManager } from "./manager";
 import { formatModelId, parseModelId } from "./model-id";
 import { initializeNetwork } from "./network";
 import { discoverPersonas } from "./personas";
 import { PluginManager } from "./plugins";
-import { configDefaultModel, type EtaConfig } from "./providers/config-types";
+import { configDefaultModel } from "./providers/config-types";
 import { buildModels } from "./providers/runtime";
 import { defaultConfigPath, ProviderConfigStore } from "./providers/store";
 import { messageText } from "./search";
-import { type Settings, SettingsStore, settingsPath } from "./settings";
+import { settingsPath, SettingsStore } from "./settings";
 import { renderSkillsBlock } from "./skills";
-import { serveWire, type WireServer } from "./transport";
+import { serveWire } from "./transport";
 import { WireService } from "./wire-service";
 
 export interface AssembleOptions {
@@ -107,9 +112,9 @@ export interface AssembledServer {
   /** The scanned plugins: what is loaded, and what became of the ones that are not. */
   readonly manager: PluginManager;
   /** Every plugin mounted, and whatever stopped it. */
-  mounted(): MountedPlugin[];
+  mounted: () => MountedPlugin[];
   /** Stop listening, close the sessions, and let go of the files. */
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }
 
 /** Mount the bundled plugins, each through the same `ctx.plugin` a user plugin would use. */
@@ -123,9 +128,9 @@ function mountBundled(
     home: string;
     fetch?: typeof fetch;
   },
-): { mounted: MountedPlugin[]; fibers: { dispose(): Promise<void> }[] } {
+): { mounted: MountedPlugin[]; fibers: { dispose: () => Promise<void> }[] } {
   const mounted: MountedPlugin[] = [];
-  const fibers: { dispose(): Promise<void> }[] = [];
+  const fibers: { dispose: () => Promise<void> }[] = [];
   const record = (name: string, error?: string): void => {
     mounted.push({
       name,
@@ -139,7 +144,7 @@ function mountBundled(
       // registered, which is how "unmount" is the same operation as "unload".
       fibers.push(
         ctx.plugin(plugin as never, undefined as never) as unknown as {
-          dispose(): Promise<void>;
+          dispose: () => Promise<void>;
         },
       );
       record(name);

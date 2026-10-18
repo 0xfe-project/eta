@@ -10,14 +10,11 @@
  * one provider, a static model list, and an auth resolver that supplies the key
  * (or a placeholder, for a keyless local server).
  */
-import {
-  type Api,
-  createModels,
-  createProvider,
-  type Model,
-} from "@earendil-works/pi-ai";
-import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
+
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type { KernelModels } from "../kernel/providers";
+import { createModels, createProvider } from "@earendil-works/pi-ai";
+import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 
 /** One provider, as a configuration file would describe it. */
 export interface ProviderSpec {

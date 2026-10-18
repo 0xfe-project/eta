@@ -68,10 +68,10 @@ async function mounted() {
   const ctx = new Context();
   const wire = new WireService(ctx);
   const listeners = new Set<{
-    opened(session: { id: string; cwd: string }): void;
-    closed(id: string): void;
-    focused(id: string | undefined): void;
-    changed(session: { id: string; cwd: string }): void;
+    opened: (session: { id: string; cwd: string }) => void;
+    closed: (id: string) => void;
+    focused: (id: string | undefined) => void;
+    changed: (session: { id: string; cwd: string }) => void;
   }>();
   const announce = {
     opened: (session: { id: string; cwd: string }) => {
@@ -214,7 +214,7 @@ describe("mounted", () => {
     const fiber = ctx.plugin(
       gitPlugin as never,
       undefined as never,
-    ) as unknown as { dispose(): Promise<void> };
+    ) as unknown as { dispose: () => Promise<void> };
     await until(() => wire.descriptors().length > 0);
     await fiber.dispose();
     expect(wire.descriptors()).toEqual([]);

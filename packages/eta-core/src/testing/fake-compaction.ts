@@ -31,7 +31,7 @@ export interface FakeCompactionOptions {
 
 export interface FakeCompaction extends CompactionDriver {
   /** The host-facing verb a real service also has (a `/compact` command). */
-  manual(): Promise<boolean>;
+  manual: () => Promise<boolean>;
   /** Every ask, in order, including the ones that declined. */
   readonly signals: CompactionSignal[];
   /** The asks that replaced the context, in order. */

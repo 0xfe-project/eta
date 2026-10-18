@@ -1,4 +1,3 @@
-import { describe, expect, expectTypeOf, it } from "vitest";
 import type {
   AnswerEntry,
   AskEntry,
@@ -8,6 +7,7 @@ import type {
   MergeEntry,
   MessageEntry,
 } from "../src/types/entries";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 function base(
   overrides: Partial<{
@@ -153,7 +153,7 @@ describe("entry union", () => {
     >();
   });
 
-  it("NewEntry strips seq and timestamp", () => {
+  it("newEntry strips seq and timestamp", () => {
     expectTypeOf<
       import("../src/types/entries.ts").NewEntry<MessageEntry>
     >().not.toHaveProperty("seq");

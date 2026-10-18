@@ -24,9 +24,11 @@
  * `NO_PROXY` always carries the loopback names: a proxy that is supposed to reach the internet must
  * not intercept a request to the machine the server is running on.
  */
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+
 import type { NetworkConfig } from "@eta/client-contracts";
+import { execFile } from "node:child_process";
+import process from "node:process";
+import { promisify } from "node:util";
 
 const exec = promisify(execFile);
 type Environment = Record<string, string | undefined>;
@@ -114,6 +116,7 @@ export function parseMacProxy(text: string): SystemProxy {
         ? endpoint(value("HTTPSProxy"), value("HTTPSPort"))
         : undefined,
     bypass: bypass(
+      // eslint-disable-next-line regexp/no-super-linear-backtracking -- the OS's proxy listing; a rewrite could change what matches
       [...text.matchAll(/^\s*\d+\s*:\s*(.+)$/gm)].map((match) =>
         (match[1] ?? "").trim(),
       ),

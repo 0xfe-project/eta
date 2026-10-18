@@ -18,12 +18,7 @@ import type {
   StateSnapshot,
 } from "@eta/client-wire-proto";
 import type { WireApi } from "@eta/plugin-sdk";
-import { type Context, Service } from "cordis";
-import {
-  BACKGROUND_INTERVAL_MS,
-  FOCUSED_INTERVAL_MS,
-  FramePacer,
-} from "./pacer";
+import type { Context } from "cordis";
 import type {
   DispatchOutcome,
   OpContext,
@@ -33,9 +28,16 @@ import type {
   TargetRegistry,
   TargetSummary,
 } from "./registry";
-import { createTargetRegistry } from "./registry";
-import { createEventRing, type EventRing, matchesFilter } from "./ring";
+import type { EventRing } from "./ring";
 import type { StateSender } from "./state-sender";
+import { Service } from "cordis";
+import {
+  BACKGROUND_INTERVAL_MS,
+  FOCUSED_INTERVAL_MS,
+  FramePacer,
+} from "./pacer";
+import { createTargetRegistry } from "./registry";
+import { createEventRing, matchesFilter } from "./ring";
 import { createStateSender } from "./state-sender";
 
 /**

@@ -24,6 +24,15 @@
  * and the store writes that down — while the folder, which nothing on disk
  * records, falls back to the store's own and is reported as such.
  */
+
+import type { StorageService } from "@eta/core/storage";
+import type { JsonlStorageOptions } from "@eta/storage-jsonl";
+import type {
+  SessionListing,
+  SessionMeta,
+  SessionStore,
+  StoredSession,
+} from "./store";
 import {
   mkdir,
   open,
@@ -35,14 +44,8 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
-import type { StorageService } from "@eta/core/storage";
-import { JsonlStorage, type JsonlStorageOptions } from "@eta/storage-jsonl";
-import type {
-  SessionListing,
-  SessionMeta,
-  SessionStore,
-  StoredSession,
-} from "./store";
+import process from "node:process";
+import { JsonlStorage } from "@eta/storage-jsonl";
 
 export interface FileSessionStoreOptions {
   /** The directory that holds every session's own directory. */

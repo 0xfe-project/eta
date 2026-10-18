@@ -22,33 +22,9 @@
  */
 
 export {
-  FileSessionStore,
-  type FileSessionStoreOptions,
-  JOURNAL_FILE,
-  META_FILE,
-} from "./file-store";
-export {
-  type CreateSessionOptions,
-  type ManagedSession,
-  newSessionId,
-  SessionManager,
-  type SessionManagerOptions,
-} from "./manager";
-export { MemorySessionStore, type SessionStorageFactory } from "./memory-store";
-export type {
-  SessionListing,
-  SessionMeta,
-  SessionSeed,
-  SessionStore,
-  StoredSession,
-} from "./store";
-
-/* ------------------------------------------------------------------ the floor */
-
-export {
   PERSONA_ACTIONS,
-  type PersonasPluginOptions,
   personasPlugin,
+  type PersonasPluginOptions,
 } from "./bundled/personas";
 /**
  * The server's parts, as parts. `assembleServer` is the one place they are put together: the
@@ -57,31 +33,48 @@ export {
  */
 export {
   PROVIDER_ACTIONS,
-  type ProvidersPluginOptions,
   providersPlugin,
+  type ProvidersPluginOptions,
 } from "./bundled/providers";
 export {
   SESSION_ACTIONS,
-  type SessionsPluginOptions,
   sessionsPlugin,
+  type SessionsPluginOptions,
 } from "./bundled/sessions";
 export {
   SETTINGS_ACTIONS,
-  type SettingsPluginOptions,
   settingsPlugin,
+  type SettingsPluginOptions,
 } from "./bundled/settings";
+
+/* ------------------------------------------------------------------ the floor */
+
 export {
   CODEX_PROVIDER_ID,
+  codexAuthPath,
   CodexCredentialStore,
   CodexLogin,
   type CodexLoginRunner,
   type CodexLoginView,
-  codexAuthPath,
   LOGIN_TIMEOUT_MS,
   piCodexLogin,
 } from "./codex-auth";
 export { codexCatalog, codexRuntimeProvider } from "./codex-provider";
+export {
+  FileSessionStore,
+  type FileSessionStoreOptions,
+  JOURNAL_FILE,
+  META_FILE,
+} from "./file-store";
 export { forkWrites } from "./fork";
+export {
+  type CreateSessionOptions,
+  type ManagedSession,
+  newSessionId,
+  SessionManager,
+  type SessionManagerOptions,
+} from "./manager";
+export { MemorySessionStore, type SessionStorageFactory } from "./memory-store";
 export {
   DEFAULT_PROVIDER,
   formatModelId,
@@ -92,10 +85,10 @@ export {
   initializeNetwork,
   type NetworkCommand,
   type NetworkStatus,
-  PROXY_KEYS,
   parseLinuxProxy,
   parseMacProxy,
   parseWindowsProxy,
+  PROXY_KEYS,
   readSystemProxy,
   type SystemProxy,
 } from "./network";
@@ -107,41 +100,41 @@ export {
   discoverPersonas,
   FALLBACK_PERSONA,
   fallbackPersona,
+  parsePersonaAnswer,
+  personaDirs,
   type PersonaPick,
   type PersonaPickSource,
   PICKER_SYSTEM_PROMPT,
-  parsePersonaAnswer,
-  personaDirs,
   resolvePersona,
   suggestPersonaId,
   summarize,
 } from "./personas";
 export {
   type LoadedPlugin,
+  pickPlugin,
   PLUGIN_MANIFEST_KEY,
   PluginManager,
   type PluginManagerOptions,
   type PluginManifest,
-  pickPlugin,
 } from "./plugins";
 export {
   catalogModelsFor,
-  type ProviderCatalogEntry,
-  type ProviderReference,
   parseProviderModelCatalog,
+  type ProviderCatalogEntry,
   providerCatalogRestrictsModels,
   providerDefinitionForKind,
   providerModelCatalog,
   providerModelDefinition,
+  type ProviderReference,
   resolveConfiguredModels,
 } from "./providers/catalog";
 export {
   applyProviderHeaders,
   configDefaultModel,
+  effectiveModel,
   type EtaConfig,
   type EtaModelConfig,
   type EtaProviderConfig,
-  effectiveModel,
   isCustomKind,
   type ModelCapabilities,
   modelDefaultThinking,
@@ -152,14 +145,14 @@ export {
   sanitizeProviderHeaders,
 } from "./providers/config-types";
 export {
-  type DiscoveryOptions,
-  type DiscoveryResult,
   discoverModels,
   discoversModels,
+  type DiscoveryOptions,
+  type DiscoveryResult,
 } from "./providers/discovery";
 export {
-  type BuildModelsResult,
   buildModels,
+  type BuildModelsResult,
   buildProvider,
   type ProviderBuildFailure,
 } from "./providers/runtime";
@@ -190,10 +183,10 @@ export {
 export {
   branchMessages,
   firstHit,
-  type HistoryPage,
-  type HistoryRow,
   historyOf,
+  type HistoryPage,
   historyPageOf,
+  type HistoryRow,
   messageText,
   type SearchHit,
 } from "./search";
@@ -206,15 +199,15 @@ export {
 } from "./server";
 export {
   type Settings,
+  settingsPath,
   SettingsStore,
   type SettingsStoreOptions,
-  settingsPath,
 } from "./settings";
 export {
   discoverSkillDirs,
   gitRepoChain,
-  type RenderSkillsOptions,
   renderSkillsBlock,
+  type RenderSkillsOptions,
 } from "./skills";
 export {
   type AddressedFrame,
@@ -222,14 +215,21 @@ export {
   type StateSender,
   type StateSenderOptions,
 } from "./state-sender";
+export type {
+  SessionListing,
+  SessionMeta,
+  SessionSeed,
+  SessionStore,
+  StoredSession,
+} from "./store";
 export {
   type SessionSubagentOptions,
-  SubagentFailed,
   sessionSubagentRunner,
+  SubagentFailed,
 } from "./subagent";
 export {
-  type Socket,
   serveWire,
+  type Socket,
   type TransportDeps,
   type WireServer,
   type WireServerOptions,

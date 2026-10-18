@@ -123,7 +123,7 @@ export interface EtaConfig {
 }
 
 /** RFC 7230 token: the only names worth accepting from a settings form. */
-export const HEADER_NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+export const HEADER_NAME_PATTERN = /^[!#$%&'*+.^\w`|~-]+$/;
 export const MAX_PROVIDER_HEADERS = 32;
 export const MAX_HEADER_NAME_LENGTH = 128;
 export const MAX_HEADER_VALUE_LENGTH = 8192;

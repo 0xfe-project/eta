@@ -10,15 +10,10 @@
  * both.
  */
 
+import type { Entry } from "../src/index";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import {
-  type Entry,
-  Kernel,
-  MemoryStorage,
-  Runner,
-  SessionLog,
-} from "../src/index";
+import { Kernel, MemoryStorage, Runner, SessionLog } from "../src/index";
 
 const userMsg = (text: string) => ({
   role: "user" as const,

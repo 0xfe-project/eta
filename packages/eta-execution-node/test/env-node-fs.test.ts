@@ -25,7 +25,7 @@ envContract("node filesystem", async () => {
   };
 });
 
-describe("NodeFileSystem specifics", () => {
+describe("nodeFileSystem specifics", () => {
   it("resolves ~, ~/… and file:// addresses", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "eta-env-"));
     const env = new NodeFileSystem({ cwd });

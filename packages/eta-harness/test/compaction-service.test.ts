@@ -10,14 +10,12 @@
  * journal so a replay rebuilds the same transcript.
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import {
-  type AgentMessage,
-  type CompactionRequest,
-  type CompactionSummarizer,
-  DEFAULT_COMPACTION_SETTINGS,
-  kernelOn,
-  Runner,
+import type {
+  AgentMessage,
+  CompactionRequest,
+  CompactionSummarizer,
 } from "@eta/core";
+import { DEFAULT_COMPACTION_SETTINGS, kernelOn, Runner } from "@eta/core";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
@@ -147,7 +145,7 @@ function session(
   };
 }
 
-describe("CompactionService signals", () => {
+describe("compactionService signals", () => {
   it("threshold() decides: it compacts only when the history no longer fits", async () => {
     const { summarizer, requests } = fakeSummarizer(() => ({
       summary: "cut down",

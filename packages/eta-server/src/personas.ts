@@ -24,9 +24,10 @@
  * is not a card — lands on the fallback. The message is already typed; refusing to start a chat
  * over a chip nobody picked is worse than opening on the wrong card and saying so.
  */
+
+import type { PersonaCard } from "@eta/core";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { PersonaCard } from "@eta/core";
 import { builtinPersonas } from "@eta/harness";
 
 /** The fallback card's name, matching eta-agent's own. */
@@ -204,11 +205,11 @@ export interface AutopickModel {
   /** The identity of the model a session will run on, resolved by the caller. */
   identity: { provider: string; modelId: string };
   /** One call, without tools. */
-  complete(request: {
+  complete: (request: {
     systemPrompt: string;
     userText: string;
     maxTokens: number;
-  }): Promise<string | undefined>;
+  }) => Promise<string | undefined>;
 }
 
 /**
@@ -260,7 +261,7 @@ async function withTimeout<T>(
   if (ms <= 0) return undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<undefined>((resolve) => {
-    timer = setTimeout(() => resolve(undefined), ms);
+    timer = setTimeout(resolve, ms, undefined);
     (timer as { unref?: () => void }).unref?.();
   });
   try {

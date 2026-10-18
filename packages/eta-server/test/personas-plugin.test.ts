@@ -6,18 +6,19 @@
  * with rules worth stating. An id nobody has is *refused*, not quietly turned into the fallback:
  * the user asked for a card, and a different one is not what they asked for.
  */
+
+import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { Context } from "cordis";
 import { afterEach, describe, expect, it } from "vitest";
 import { PERSONA_ACTIONS, personasPlugin } from "../src/bundled/personas";
+import { SessionsService } from "../src/bundled/sessions";
 import { SessionManager } from "../src/manager";
 import { MemorySessionStore } from "../src/memory-store";
 import { WireService } from "../src/wire-service";
-import { SessionsService } from "../src/bundled/sessions";
 
 const roots: string[] = [];
 
@@ -52,8 +53,8 @@ interface Harness {
   frames: { target?: string; frame: ServerFrame }[];
   home: string;
   project: string;
-  load(): Promise<() => Promise<void>>;
-  cards(): { id: string; description: string }[];
+  load: () => Promise<() => Promise<void>>;
+  cards: () => { id: string; description: string }[];
 }
 
 async function harness(): Promise<Harness> {
@@ -72,7 +73,8 @@ async function harness(): Promise<Harness> {
     modelsFor: () => fakeModels([assistantMessage()]) as never,
     personasFor: async () => [],
   });
-  const sessions = new SessionsService(ctx, { manager, wire });
+  // Registers the `sessions` target on the context; nothing reads it back.
+  void new SessionsService(ctx, { manager, wire });
   return {
     wire,
     manager,
@@ -86,7 +88,7 @@ async function harness(): Promise<Harness> {
       );
       await fiber;
       return async () => {
-        await (fiber as unknown as { dispose(): Promise<void> }).dispose();
+        await (fiber as unknown as { dispose: () => Promise<void> }).dispose();
       };
     },
     cards() {

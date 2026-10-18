@@ -35,68 +35,68 @@
  * (`CompactionMisconfigured`) rather than acting like a history that fits.
  */
 
-import type { CompactionSummarizer, KernelTool } from "@eta/core";
+import type {
+  AgentMessage,
+  CompactionSummarizer,
+  KernelConfig,
+  KernelModels,
+  KernelOptions,
+  KernelTool,
+  RunnerOptions,
+  StoredTask,
+} from "@eta/core";
+import type { GoalEntry } from "@eta/core/session";
+import type { StorageService } from "@eta/core/storage";
+import type { ExecutionEnv } from "@eta/execution";
+import type { TSchema } from "typebox";
+import type { MemoryExtractionOutcome, MemoryFile, MemoryFs } from "./memory";
+import type {
+  EtaPromptSection,
+  EtaPromptState,
+  PlatformPromptInfo,
+} from "./prompts";
+import type { RunPumpOptions } from "./pump";
+import type { SubagentRunner } from "./subagent";
+import type { ExecutionToolContext } from "./tools/context";
+import type { HarnessTool, ToolResult } from "./tools/tool";
 import {
-  type AgentMessage,
   applyGoalEntries,
   defaultKernelConfig,
   Kernel,
-  type KernelConfig,
-  type KernelModels,
-  type KernelOptions,
   kernelEmit,
   kernelOn,
   Runner,
-  type RunnerOptions,
-  type StoredTask,
   sessionScope,
   toToolResultMessage,
 } from "@eta/core";
-import {
-  type GoalEntry,
-  recordGoalEntries,
-  SessionLog,
-} from "@eta/core/session";
-import { type StorageService } from "@eta/core/storage";
-import type { TSchema } from "typebox";
+import { recordGoalEntries, SessionLog } from "@eta/core/session";
 import { AskRegistry, createAskUserTool } from "./ask";
 import { BtwManager, btwSideAsk } from "./btw";
 import { CompactionService } from "./compaction-service";
-import type { ExecutionEnv } from "@eta/execution";
 import { JournalingService, SESSION_CONFIG, TASKS_STATE } from "./journaling";
-import {
-  extractMemoryAtRunEnd,
-  MemoryCache,
-  type MemoryExtractionOutcome,
-  type MemoryFile,
-  type MemoryFs,
-} from "./memory";
+import { extractMemoryAtRunEnd, MemoryCache } from "./memory";
 import { MetricsService } from "./metrics";
 import {
   composeEtaSystemPrompt,
   DEFAULT_SYSTEM_PROMPT,
-  type EtaPromptSection,
-  type EtaPromptState,
   etaPromptBlockChars,
   etaPromptSectionsDetailed,
   renderActivePersona,
-  type PlatformPromptInfo,
   renderPlatformBlock,
   taskReminderMessage,
 } from "./prompts";
 import { convertToLlm } from "./prompts/summaries";
-import { RunPump, type RunPumpOptions } from "./pump";
+import { RunPump } from "./pump";
 import { TaskReminderService } from "./reminder";
 import { MODEL_STATE, sessionStateKV } from "./state";
-import { SubagentManager, type SubagentRunner } from "./subagent";
+import { SubagentManager } from "./subagent";
 import { createBashTool } from "./tools/bash";
-import type { ExecutionToolContext } from "./tools/context";
 import { createEditTool } from "./tools/edit";
 import { createReadTool } from "./tools/read";
 import { createStateTools } from "./tools/state";
 import { createSubagentTools } from "./tools/subagents";
 import { createTaskTools } from "./tools/tasks";
-import { type HarnessTool, type ToolResult, toKernelTool } from "./tools/tool";
+import { toKernelTool } from "./tools/tool";
 import { createWriteTool } from "./tools/write";
 import {
   builtinViewContributions,
@@ -532,6 +532,7 @@ export async function openSession(
     ...(options.runner?.systemPrompt === undefined
       ? {
           systemPrompt: async () =>
+            // eslint-disable-next-line ts/no-use-before-define -- only read when a prompt is composed, after the assembly below
             composeEtaSystemPrompt(base, (await refreshPrompt()).state),
         }
       : {}),
@@ -573,6 +574,7 @@ export async function openSession(
     // What the view shows the Context panel: the last blocks a generation used, and
     // the size of what memory said. Both are reads of what already happened, so the
     // frame never waits on I/O.
+    // eslint-disable-next-line ts/no-use-before-define -- only read when a prompt is composed, after the assembly below
     memoryBox.chars = memoryBlock?.length ?? 0;
     return {
       ...(kernel.goal.current === undefined
@@ -614,6 +616,7 @@ export async function openSession(
     const state = await promptState();
     const blocks = etaPromptBlockChars(base, state);
     const sections = etaPromptSectionsDetailed(base, state);
+    // eslint-disable-next-line ts/no-use-before-define -- only read when a prompt is composed, after the assembly below
     if (revision === promptRevision) promptBox.value = { sections, ...blocks };
     return { state, sections, ...blocks };
   };

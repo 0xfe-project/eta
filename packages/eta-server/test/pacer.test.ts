@@ -3,9 +3,10 @@
  *
  * The subject is not "does it send" but "how much": a run streams thousands of events, and
  * every one of them makes the state look different. The pacer's job is that the wire carries a
- * bounded number of bytes per second anyway, and that the frame which does go out is the
- * *newest* state rather than a backlog of stale ones.
+ * bounded number of bytes per second anyway, and that the frame which does go out is
+ * the *newest* state rather than a backlog of stale ones.
  */
+
 import type { ServerFrame } from "@eta/client-wire-proto";
 import { describe, expect, it } from "vitest";
 import { FramePacer } from "../src/pacer";

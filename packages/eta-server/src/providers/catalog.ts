@@ -16,20 +16,22 @@
  * typo in it should fail loudly at load rather than produce a provider that half works.
  */
 import type { Api, Model, Provider } from "@earendil-works/pi-ai";
+import type { ProviderKind } from "@eta/client-contracts";
+import type {
+  EtaModelConfig,
+  ModelCapabilities,
+  ModelInput,
+} from "./config-types";
 import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
 import { kimiCodingProvider } from "@earendil-works/pi-ai/providers/kimi-coding";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import { zaiProvider } from "@earendil-works/pi-ai/providers/zai";
 import { zaiCodingCnProvider } from "@earendil-works/pi-ai/providers/zai-coding-cn";
-import type { ProviderKind } from "@eta/client-contracts";
 import rawCatalog from "./catalog.json";
 import {
   BUILTIN_PROVIDER_PRESETS,
-  type EtaModelConfig,
   isCustomKind,
   MODEL_THINKING_LEVELS,
-  type ModelCapabilities,
-  type ModelInput,
 } from "./config-types";
 
 export interface ProviderRuntimeDefinition {
@@ -336,6 +338,7 @@ export function parseProviderModelCatalog(
     for (const kind of kinds) matchedKinds.add(kind);
     for (const url of baseUrls) matchedBaseUrls.add(url);
     if (typeof provider.restrictToListedModels !== "boolean") {
+      // eslint-disable-next-line unicorn/prefer-type-error -- keep the thrown class
       throw new Error(`invalid provider catalog: ${providerId} restriction`);
     }
     if (!Array.isArray(provider.models))

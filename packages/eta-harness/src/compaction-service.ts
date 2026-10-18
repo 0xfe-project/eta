@@ -33,19 +33,20 @@
  * declined" (a summarizer that returns nothing), and "this run already spent
  * its one overflow recovery". Silence is never an answer.
  */
-import {
-  type CompactionDriver,
-  type CompactionHost,
-  type CompactionOutcome,
-  type CompactionReason,
-  type CompactionSummarizer,
-  type ConfigService,
-  type Emit,
-  kernelEmit,
-  kernelOn,
+
+import type {
+  CompactionDriver,
+  CompactionHost,
+  CompactionOutcome,
+  CompactionReason,
+  CompactionSummarizer,
+  ConfigService,
+  Emit,
 } from "@eta/core";
-import { type Entry } from "@eta/core/session";
-import { type Context, Service } from "cordis";
+import type { Entry } from "@eta/core/session";
+import type { Context } from "cordis";
+import { kernelEmit, kernelOn } from "@eta/core";
+import { Service } from "cordis";
 import {
   estimateContextTokens,
   fitCompactionSettings,
@@ -58,7 +59,7 @@ import {
  * service needs entries, not the journal.
  */
 export interface CompactionEntrySource {
-  entries(): readonly Entry[];
+  entries: () => readonly Entry[];
 }
 
 /**

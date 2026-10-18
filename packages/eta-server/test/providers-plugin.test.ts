@@ -5,11 +5,12 @@
  * with actions that carry a revision, and push when the file changes underneath. These tests
  * load it the way a loader would and check only through the pipe's doors.
  */
+
+import type { ProvidersView } from "@eta/client-contracts";
+import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
-import type { ProvidersView } from "@eta/client-contracts";
 import { Context } from "cordis";
 import { afterEach, describe, expect, it } from "vitest";
 import { PROVIDER_ACTIONS, providersPlugin } from "../src/bundled/providers";
@@ -28,10 +29,10 @@ interface Harness {
   wire: WireService;
   frames: { target?: string; frame: ServerFrame }[];
   store: ProviderConfigStore;
-  load(): Promise<void>;
-  unload(): Promise<void>;
-  call(action: string, args?: unknown): Promise<unknown>;
-  config(): ProvidersView | undefined;
+  load: () => Promise<void>;
+  unload: () => Promise<void>;
+  call: (action: string, args?: unknown) => Promise<unknown>;
+  config: () => ProvidersView | undefined;
 }
 
 async function harness(
@@ -60,7 +61,7 @@ async function harness(
       );
       await fiber;
       unload = async () => {
-        await (fiber as unknown as { dispose(): Promise<void> }).dispose();
+        await (fiber as unknown as { dispose: () => Promise<void> }).dispose();
       };
     },
     async unload() {
@@ -380,7 +381,7 @@ describe("refreshing a provider's model list", () => {
         } as never,
       ),
     ).rejects.toThrow(/no such provider/);
-    await (fiber as unknown as { dispose(): Promise<void> }).dispose();
+    await (fiber as unknown as { dispose: () => Promise<void> }).dispose();
   });
 });
 

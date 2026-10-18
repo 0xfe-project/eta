@@ -8,13 +8,10 @@
  * never billed because it is never history.
  */
 import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
+import type { UsageRow } from "@eta/core/storage";
 import { kernelOn, Runner } from "@eta/core";
 import { SessionLog } from "@eta/core/session";
-import {
-  MemoryStorage,
-  sessionTokenTotal,
-  type UsageRow,
-} from "@eta/core/storage";
+import { MemoryStorage, sessionTokenTotal } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { journaledKernel } from "../src/testing";

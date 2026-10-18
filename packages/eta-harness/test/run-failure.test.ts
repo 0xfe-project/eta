@@ -8,8 +8,10 @@
  * leaves a failure record.
  */
 
-import { type KernelModels, kernelOn, Runner } from "@eta/core";
-import { type Entry, type RunFailedEntry, SessionLog } from "@eta/core/session";
+import type { KernelModels } from "@eta/core";
+import type { Entry, RunFailedEntry } from "@eta/core/session";
+import { kernelOn, Runner } from "@eta/core";
+import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
@@ -190,9 +192,8 @@ describe("runs that did not fail leave no failure record", () => {
         content: [{ type: "toolCall", id: "c1", name: "stop", arguments: {} }],
       }),
     ]);
-    let runner: Runner | undefined;
     const s = session(models);
-    runner = s.runner;
+    const runner: Runner | undefined = s.runner;
     // The cancel lands mid-run, the way a user's stop does: from inside a tool call.
     s.kernel.tools.register({
       name: "stop",

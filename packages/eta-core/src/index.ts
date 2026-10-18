@@ -32,8 +32,8 @@ export {
 } from "./kernel/effect-gate";
 export {
   type GenerateOptions,
-  type GenerationObserver,
   generateWithRetry,
+  type GenerationObserver,
 } from "./kernel/generation";
 export {
   ANTI_SPIN_LIMIT,
@@ -56,8 +56,8 @@ export {
   type QueueKind,
 } from "./kernel/inbox";
 export {
-  KERNEL_SERVICE_NAMES,
   Kernel,
+  KERNEL_SERVICE_NAMES,
   type KernelInspect,
   type KernelOptions,
   sessionScope,
@@ -103,9 +103,9 @@ export {
 export * from "./session/index";
 export * from "./storage/index";
 export {
-  CONFIG_PROPERTIES,
   type CompactionEconomics,
   type CompactionSettings,
+  CONFIG_PROPERTIES,
   type ConfigProperty,
   DEFAULT_COMPACTION_ECONOMICS,
   DEFAULT_COMPACTION_SETTINGS,
@@ -129,9 +129,9 @@ export {
   type GoalStatusName,
   type InjectEvents,
   KERNEL_EVENT_NAMES,
+  kernelEmit,
   type KernelEventName,
   type KernelEvents,
-  kernelEmit,
   kernelOn,
   type MessageEvents,
   type On,

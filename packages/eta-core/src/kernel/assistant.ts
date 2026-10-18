@@ -16,15 +16,15 @@ import type { SettledAssistantMessage } from "../types/entries";
 
 /** Process-local lifecycle observer for one assistant stream. */
 export interface AssistantStreamObserver {
-  start(
+  start: (
     message: AssistantMessage,
     event: Extract<AssistantMessageEvent, { type: "start" }>,
-  ): void | Promise<void>;
-  update(
+  ) => void | Promise<void>;
+  update: (
     message: AssistantMessage,
     event: AssistantMessageEvent,
-  ): void | Promise<void>;
-  end(message: SettledAssistantMessage): void | Promise<void>;
+  ) => void | Promise<void>;
+  end: (message: SettledAssistantMessage) => void | Promise<void>;
 }
 
 function isUpdateEvent(

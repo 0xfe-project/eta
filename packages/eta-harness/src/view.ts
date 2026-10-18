@@ -23,15 +23,17 @@
  * This file returns plain data — no wire types, no frame shapes. The server maps it to
  * the wire, and a structural test there keeps the two honest.
  */
-import {
-  type AgentMessage,
-  type GoalState,
-  type KernelConfig,
-  kernelOn,
-  type StoredTask,
+
+import type {
+  AgentMessage,
+  GoalState,
+  KernelConfig,
+  StoredTask,
 } from "@eta/core";
-import { type Entry } from "@eta/core/session";
-import { type Context, Service } from "cordis";
+import type { Entry } from "@eta/core/session";
+import type { Context } from "cordis";
+import { kernelOn } from "@eta/core";
+import { Service } from "cordis";
 
 /** The session's own slice: who it is, and whether something is happening right now. */
 export interface ViewCore {
@@ -47,9 +49,9 @@ export interface ViewContribution<T = unknown> {
   /** The section name. A plugin prefixes its own name (`git`, `ssh.jump`). */
   name: string;
   /** Project the current state. Cheap: it is called on every frame. */
-  project(): T;
+  project: () => T;
   /** A cheap signature of that state: equal means this section did not change. */
-  revision(): string;
+  revision: () => string;
 }
 
 /**

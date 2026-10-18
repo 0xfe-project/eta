@@ -4,14 +4,16 @@
  * Loaded the way a loader would, checked only through the pipe's doors: an eager state target,
  * a save that merges and pushes, and a reload that actually re-reads the file.
  */
+
+import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
+import type { Settings } from "../src/settings";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
 import { Context } from "cordis";
 import { afterEach, describe, expect, it } from "vitest";
 import { SETTINGS_ACTIONS, settingsPlugin } from "../src/bundled/settings";
-import { type Settings, SettingsStore } from "../src/settings";
+import { SettingsStore } from "../src/settings";
 import { WireService } from "../src/wire-service";
 
 const roots: string[] = [];
@@ -25,9 +27,9 @@ interface Harness {
   wire: WireService;
   frames: { target?: string; frame: ServerFrame }[];
   store: SettingsStore;
-  load(): Promise<() => Promise<void>>;
-  call(action: string, args?: unknown): Promise<unknown>;
-  settings(): Settings | undefined;
+  load: () => Promise<() => Promise<void>>;
+  call: (action: string, args?: unknown) => Promise<unknown>;
+  settings: () => Settings | undefined;
 }
 
 async function until(
@@ -61,7 +63,7 @@ async function harness(): Promise<Harness> {
       );
       await fiber;
       return async () => {
-        await (fiber as unknown as { dispose(): Promise<void> }).dispose();
+        await (fiber as unknown as { dispose: () => Promise<void> }).dispose();
       };
     },
     async call(action, args) {

@@ -8,13 +8,10 @@
  * tool written against the seam from working on one backend and breaking on
  * another.
  */
+
+import type { FileError, FileSystem, Shell } from "../types";
 import { describe, expect, it } from "vitest";
-import {
-  type FileError,
-  type FileSystem,
-  getOrThrow,
-  type Shell,
-} from "../types";
+import { getOrThrow } from "../types";
 
 export interface EnvContractHandle {
   /** The filesystem half — every backend has one. */

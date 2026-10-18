@@ -7,14 +7,11 @@
  * a rollback writes the branch tip as a value, and a reload resumes exactly
  * where the session was — including the new tip a later run hangs off.
  */
-import { describe, expect, it } from "vitest";
+
+import type { StorageService } from "@eta/core/storage";
 import { SESSION_TIP, SessionLog } from "@eta/core/session";
-import {
-  MemoryStorage,
-  type StorageService,
-  setValue,
-  value,
-} from "@eta/core/storage";
+import { MemoryStorage, setValue, value } from "@eta/core/storage";
+import { describe, expect, it } from "vitest";
 
 const userMsg = (text: string) => ({
   role: "user" as const,

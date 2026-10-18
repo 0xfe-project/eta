@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import process from "node:process";
 import { plugin } from "bun";
 plugin({
   name: "focused-entry-no-runtime",

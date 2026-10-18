@@ -11,16 +11,17 @@
  * whether an answer belongs to it, and what a cancel leaves behind. That is the state machine the
  * acceptance asks for.
  */
+
+import type { Credential } from "@earendil-works/pi-ai";
+import type { CodexLoginRunner } from "../src/codex-auth";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Credential } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  codexAuthPath,
   CodexCredentialStore,
   CodexLogin,
-  type CodexLoginRunner,
-  codexAuthPath,
   LOGIN_TIMEOUT_MS,
 } from "../src/codex-auth";
 
@@ -115,8 +116,8 @@ describe("the credential store", () => {
 /**
  * A login runner a test drives by hand.
  *
- * The flow is pi-ai's (a browser, a poll, a network); what these tests are about is everything
- * *around* it — so the runner records what it was handed and waits for the test to finish it,
+ * The flow is pi-ai's (a browser, a poll, a network); what these tests are about is
+ * everything *around* it — so the runner records what it was handed and waits for the test to finish it,
  * fail it, or ask a prompt.
  */
 interface Script {
@@ -131,19 +132,19 @@ interface Script {
     verificationUri?: string;
   }[];
   signals: AbortSignal[];
-  finish(): void;
-  fail(error: unknown): void;
-  ask(prompt: {
+  finish: () => void;
+  fail: (error: unknown) => void;
+  ask: (prompt: {
     type: string;
     options?: readonly { id: string; label: string }[];
     signal?: AbortSignal;
-  }): Promise<string>;
-  notify(event: {
+  }) => Promise<string>;
+  notify: (event: {
     type: string;
     url?: string;
     userCode?: string;
     verificationUri?: string;
-  }): void;
+  }) => void;
 }
 
 function scripted(): { seen: Script; login: CodexLoginRunner } {

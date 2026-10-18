@@ -41,7 +41,7 @@ export function settingsPlugin(options: SettingsPluginOptions) {
     apply(ctx: unknown): unknown {
       const context = ctx as {
         wire: WireService;
-        effect(execute: () => () => unknown): unknown;
+        effect: (execute: () => () => unknown) => unknown;
       };
       const wire = context.wire;
       return context.effect(() => {

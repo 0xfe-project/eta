@@ -258,6 +258,7 @@ export const TASK_REPORT_PROMPT = [
 
 /** The json block a model was asked for, or `undefined` when there is none. */
 export function extractJsonBlock(text: string): unknown {
+  // eslint-disable-next-line regexp/no-super-linear-backtracking -- a model reply; a rewrite could change what matches
   const match = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
   const candidate = match?.[1] ?? text;
   const start = candidate.indexOf("{");

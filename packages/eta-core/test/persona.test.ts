@@ -1,8 +1,8 @@
+import type { PersonaCard } from "../src/types/persona";
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
 import { PersonaService } from "../src/kernel/persona";
 import { kernelOn } from "../src/types/events";
-import type { PersonaCard } from "../src/types/persona";
 
 function card(id: string, content = `${id} body`): PersonaCard {
   return { id, name: id, content };

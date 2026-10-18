@@ -11,12 +11,11 @@ import type {
   Model,
   Usage,
 } from "@earendil-works/pi-ai";
+import type { Emit, GenerateOptions } from "../src/index";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_RETRY_POLICY,
-  type Emit,
-  type GenerateOptions,
   generateWithRetry,
   Kernel,
   kernelEmit,

@@ -10,9 +10,12 @@
  * connection. Those live in `SshCommandTransport` and are covered by its own tests
  * (and by the real-target check, when one is configured).
  */
+
+import type { SshResult, SshRunOptions, SshTransport } from "./transport";
+import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
 import { homedir, tmpdir } from "node:os";
-import type { SshResult, SshRunOptions, SshTransport } from "./transport";
+import process from "node:process";
 
 export interface LocalTransportOptions {
   /** The "remote" home; defaults to this machine's. */
@@ -45,6 +48,7 @@ export class LocalTransport implements SshTransport {
         if (settled) return;
         settled = true;
         if (timer !== undefined) clearTimeout(timer);
+        // eslint-disable-next-line ts/no-use-before-define -- onAbort and its cleanup call each other
         options.signal?.removeEventListener("abort", onAbort);
         resolve(result);
       };
@@ -60,6 +64,9 @@ export class LocalTransport implements SshTransport {
         stderr.push(chunk);
         options.onChunk?.({ stream: "stderr", chunk: chunk.toString("utf8") });
       });
+      // A script that exits without reading its input leaves the write with no
+      // reader (EPIPE); the exit code is the answer, so the write is not.
+      child.stdin.on("error", () => undefined);
       child.stdin.end(options.input ?? "");
       if (options.timeoutMs !== undefined) {
         timer = setTimeout(() => {

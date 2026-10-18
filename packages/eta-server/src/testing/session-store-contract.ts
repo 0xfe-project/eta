@@ -6,8 +6,9 @@
  * is *listed with a reason*. A store that drops what it cannot parse turns a bug
  * into a disappearance, and a user cannot ask about work that is not there.
  */
-import { describe, expect, it } from "vitest";
+
 import type { SessionListing, SessionMeta, SessionStore } from "../store";
+import { describe, expect, it } from "vitest";
 
 export interface SessionStoreContractHandle {
   store: SessionStore;

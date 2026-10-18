@@ -6,10 +6,14 @@
  * arguments validated before the body runs, a typed context, and a result that
  * reaches the model as content blocks rather than as stringified JSON.
  */
+
+import type { ToolCallInfo } from "@eta/core";
+import type { TObject, TString } from "typebox";
+import type { ExecutionToolContext } from "../src/tools/context";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Runner, type ToolCallInfo } from "@eta/core";
+import { Runner } from "@eta/core";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
@@ -18,10 +22,7 @@ import { NodeEnvironment } from "@eta/execution-node";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { journaledKernel } from "../src/testing";
-import {
-  type ExecutionToolContext,
-  executionContext,
-} from "../src/tools/context";
+import { executionContext } from "../src/tools/context";
 import { defineTool, toKernelTool } from "../src/tools/tool";
 
 const userMsg = (text: string) => ({
@@ -31,12 +32,9 @@ const userMsg = (text: string) => ({
 });
 
 // `Type.Object(...)`'s static type, named once so the tool below can use it.
-const echoSchema = Type.Object({
-  path: Type.String(),
-  text: Type.String(),
-});
+type EchoSchema = TObject<{ path: TString; text: TString }>;
 
-const echo = defineTool<ExecutionToolContext, typeof echoSchema>({
+const echo = defineTool<ExecutionToolContext, EchoSchema>({
   name: "echo",
   description: "Write text into a file in the environment's working directory.",
   parameters: Type.Object({
@@ -83,6 +81,8 @@ const callEcho = (args: Record<string, unknown>) =>
       } as never,
     ],
   });
+
+const probeSchema = Type.Object({});
 
 describe("harness tools", () => {
   it("is called by the model end to end, and its result reaches it as text", async () => {
@@ -191,5 +191,3 @@ describe("harness tools", () => {
     expect(seen?.turn).toBeGreaterThan(0);
   });
 });
-
-const probeSchema = Type.Object({});

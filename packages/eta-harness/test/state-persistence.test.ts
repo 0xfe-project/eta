@@ -8,12 +8,11 @@
  * half-applied state.
  */
 
+import type { KernelConfig, StoredTask } from "@eta/core";
 import {
   DEFAULT_COMPACTION_SETTINGS,
   DEFAULT_RETRY_POLICY,
   Kernel,
-  type KernelConfig,
-  type StoredTask,
 } from "@eta/core";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";

@@ -11,7 +11,9 @@
  * become a run is a policy, and a session that wants a different one simply does
  * not start it.
  */
-import { type AssistantMessage, Kernel, Runner } from "@eta/core";
+
+import type { AssistantMessage } from "@eta/core";
+import { Kernel, Runner } from "@eta/core";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { RunPump } from "../src/index";
@@ -36,7 +38,7 @@ function setup(script: AssistantMessage[], pump = false) {
   return { kernel, runner, fake, waker, dispose: () => void kernel.dispose() };
 }
 
-describe("RunPump", () => {
+describe("runPump", () => {
   it("an idle inject starts a turn immediately, no manual run()", async () => {
     const { kernel, runner, fake, waker, dispose } = setup(
       [answer("first"), answer("second")],

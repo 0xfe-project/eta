@@ -6,17 +6,19 @@
  * the file's own shape (BOM, CRLF) survives. Editing through a symlink edits the
  * target, and two edits to the same file, however spelled, are serialized.
  */
+
+import type { ToolCallInfo } from "@eta/core";
+import type { ExecutionToolContext } from "../src/tools/context";
+import type { ToolResult } from "../src/tools/tool";
 import { mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ToolCallInfo } from "@eta/core";
 import { getOrThrow } from "@eta/execution";
 import { NodeEnvironment } from "@eta/execution-node";
 import { applyPatch } from "diff";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { ExecutionToolContext } from "../src/tools/context";
 import { createEditTool } from "../src/tools/edit";
-import { type ToolResult, toKernelTool } from "../src/tools/tool";
+import { toKernelTool } from "../src/tools/tool";
 
 let directory = "";
 let env: NodeEnvironment;
@@ -172,7 +174,7 @@ describe("edit", () => {
     // whitespace, still lands the edit: those differences are not intent.
     await env.writeFile(
       "fuzzy.txt",
-      "const\u00a0value = 1;   \nconst other = 2;\n",
+      "const\u00A0value = 1;   \nconst other = 2;\n",
     );
     await tool().execute(
       {

@@ -7,12 +7,14 @@
  * do the work — a `bash` call and a `read` call through the session's tool registry, not through
  * the environment directly. If the wiring were wrong, those tools would touch this machine.
  */
+
+import type { SessionEnvironments } from "@eta/plugin-sdk";
+import type { AssembledServer } from "@eta/server";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import type { SessionEnvironments } from "@eta/plugin-sdk";
-import { type AssembledServer, assembleServer } from "@eta/server";
+import { assembleServer } from "@eta/server";
 import { LocalTransport } from "@eta/ssh";
 import { afterEach, describe, expect, it } from "vitest";
 import { sshPlugin } from "../src/index";

@@ -12,10 +12,12 @@
  * - **Release only what is ours.** On shutdown the file goes only if it still names this pid —
  *   a backend that was replaced must not delete its successor's file.
  */
+
+import type { ServiceDescriptor } from "@eta/client-contracts";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { ServiceDescriptor } from "@eta/client-contracts";
+import process from "node:process";
 
 /** Whether a pid is a running process (EPERM: it exists, it is just not ours). */
 export function pidAlive(pid: number): boolean {
@@ -65,13 +67,13 @@ export function isServiceDescriptor(
 export type ClaimOutcome =
   | {
       kind: "claimed";
-      publish(
+      publish: (
         descriptor: Omit<
           Extract<ServiceDescriptor, { state: "ready" }>,
           "pid" | "startedAt" | "state"
         >,
-      ): Promise<void>;
-      release(): Promise<void>;
+      ) => Promise<void>;
+      release: () => Promise<void>;
     }
   | { kind: "taken"; owner: ServiceDescriptor };
 

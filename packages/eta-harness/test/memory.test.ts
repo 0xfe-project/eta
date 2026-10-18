@@ -7,6 +7,8 @@
  * a cap that cuts at a line, and a block that says out loud that its content is
  * untrusted.
  */
+
+import type { MemoryFile, MemoryFs } from "../src/memory";
 import { describe, expect, it } from "vitest";
 import { MemoryEnvironment } from "../src/env/memory";
 import {
@@ -18,8 +20,6 @@ import {
   MEMORY_CAP,
   MEMORY_SECTIONS,
   MemoryCache,
-  type MemoryFile,
-  type MemoryFs,
   memoryFileLabel,
   parseMemory,
   renderMemory,
@@ -46,7 +46,7 @@ const stored = (
 /** A filesystem in a record, so a test can watch mtimes move. */
 function memFs(
   files: Record<string, string>,
-): MemoryFs & { touch(path: string): void; files: Record<string, string> } {
+): MemoryFs & { touch: (path: string) => void; files: Record<string, string> } {
   const times: Record<string, number> = Object.fromEntries(
     Object.keys(files).map((key) => [key, 1_000]),
   );

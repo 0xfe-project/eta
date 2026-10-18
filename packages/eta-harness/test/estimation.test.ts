@@ -9,8 +9,8 @@
  * core keeps the seam's types, and the runner asks a driver instead.
  */
 import type { Usage } from "@earendil-works/pi-ai";
+import type { Entry } from "@eta/core/session";
 import { DEFAULT_COMPACTION_SETTINGS } from "@eta/core";
-import { type Entry } from "@eta/core/session";
 import { assistantMessage } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import {

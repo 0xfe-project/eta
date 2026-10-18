@@ -6,14 +6,16 @@
  * connection drops between two commands. No network, no real host, no credentials —
  * the subject here is our own decisions, not OpenSSH's.
  */
+
+import type { SshTarget } from "../src/transport";
+import { Buffer } from "node:buffer";
 import { EventEmitter } from "node:events";
 import { describe, expect, it } from "vitest";
 import {
   hostKeyFingerprint,
-  SshCommandTransport,
-  type SshTarget,
   shellQuote,
   sshArgs,
+  SshCommandTransport,
   validHost,
 } from "../src/transport";
 
@@ -43,8 +45,8 @@ function scriptedSpawn(calls: ScriptedCall[]) {
     const child = new EventEmitter() as EventEmitter & {
       stdout: EventEmitter;
       stderr: EventEmitter;
-      stdin: { end(): void; write(): void };
-      kill(): void;
+      stdin: { end: () => void; write: () => void };
+      kill: () => void;
       pid: number;
     };
     child.stdout = new EventEmitter();

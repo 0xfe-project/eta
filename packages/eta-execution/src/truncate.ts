@@ -45,7 +45,8 @@ export interface TruncationOptions {
   maxBytes?: number;
 }
 
-const nonAsciiPattern = /[^\x00-\x7f]/;
+// eslint-disable-next-line no-control-regex -- the ASCII range starts at NUL
+const nonAsciiPattern = /[^\x00-\x7F]/;
 
 export function utf8ByteLength(content: string): number {
   const firstNonAscii = content.search(nonAsciiPattern);

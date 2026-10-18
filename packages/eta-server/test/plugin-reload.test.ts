@@ -6,9 +6,10 @@
  * reload at all: the plugin looks fine and quietly does its work twice.
  *
  * So each test here is a side effect that is easy to duplicate — a wire registration, a timer, a
- * bus subscription — and the assertion is that after an edit there is one of it, and that the
- * *new* code is the one running.
+ * bus subscription — and the assertion is that after an edit there is one of it, and that
+ * the *new* code is the one running.
  */
+
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -147,7 +148,7 @@ describe("reloading after an edit", () => {
     await manager.reloadChanged(ctx);
 
     // Fire one tick. If the old instance's listener survived, the counter moves twice.
-    (ctx as unknown as { emit(name: string): void }).emit("tick");
+    (ctx as unknown as { emit: (name: string) => void }).emit("tick");
     const outcome = await wire.dispatch(
       { op: "call", target: "watcher", action: "count" },
       {

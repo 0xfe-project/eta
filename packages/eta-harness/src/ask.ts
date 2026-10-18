@@ -22,8 +22,8 @@
  */
 
 import type { AnswerPayload, AskPayload } from "@eta/core/session";
-import { Type } from "typebox";
 import type { HarnessTool, ToolResult } from "./tools/tool";
+import { Type } from "typebox";
 
 export type AskResponse =
   | { kind: "selection"; selections: string[]; comment?: string | undefined }
@@ -32,7 +32,7 @@ export type AskResponse =
 
 interface PendingAsk {
   payload: AskPayload;
-  settle(response: AskResponse): void;
+  settle: (response: AskResponse) => void;
 }
 
 /** A caller that answers asks without a human (a test, a scripted run). */
@@ -80,6 +80,7 @@ export class AskRegistry {
         this.pending.delete(payload.questionId);
         this.deadlines.delete(payload.questionId);
         if (timer !== undefined) clearTimeout(timer);
+        // eslint-disable-next-line ts/no-use-before-define -- onAbort and settle call each other
         options.signal?.removeEventListener("abort", onAbort);
         this.observe?.(action, payload);
         resolve(response);
@@ -87,8 +88,10 @@ export class AskRegistry {
       const onAbort = (): void => settle({ kind: "none" }, "canceled");
       if (options.timeoutMs !== undefined) {
         timer = setTimeout(
-          () => settle({ kind: "none" }, "expired"),
+          settle,
           options.timeoutMs,
+          { kind: "none" },
+          "expired",
         );
         timer.unref?.();
         this.deadlines.set(payload.questionId, Date.now() + options.timeoutMs);

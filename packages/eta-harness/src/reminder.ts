@@ -12,11 +12,13 @@
  * harness with the rest of the battery. Nothing here lands in the transcript: a
  * reminder is transient by design, so the cache prefix stays intact.
  */
-import { type Context, Service } from "cordis";
-import { type Emit, kernelEmit, kernelOn, type TaskService } from "@eta/core";
+
+import type { Emit, TaskService } from "@eta/core";
+import type { Context } from "cordis";
+import type { CadenceConfig, CadenceState } from "./reminder/cadence";
+import { kernelEmit, kernelOn } from "@eta/core";
+import { Service } from "cordis";
 import {
-  type CadenceConfig,
-  type CadenceState,
   createCadenceState,
   DEFAULT_REMINDER_INTERVAL,
   DEFAULT_TASK_TOOL_NAMES,

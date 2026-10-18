@@ -1,3 +1,20 @@
+import type {
+  CompactionSummarizer,
+  KernelModels,
+  PersonaCard,
+} from "@eta/core";
+import type {
+  ExecutionEnv,
+  MemoryExtractionOutcome,
+  MemoryFs,
+  OpenSession,
+  PlatformPromptInfo,
+  SessionMemoryOptions,
+  SubagentManager,
+} from "@eta/harness";
+import type { SessionEnvironment } from "@eta/plugin-sdk";
+import type { Settings } from "./settings";
+import type { SessionListing, SessionMeta, SessionStore } from "./store";
 /**
  * SessionManager — several sessions in one process (REFACTOR.md §5b).
  *
@@ -20,30 +37,13 @@
  * resolving a provider is the application's business — the manager only needs to
  * hand `openSession` something that can generate.
  */
-import type {
-  CompactionSummarizer,
-  KernelModels,
-  PersonaCard,
-} from "@eta/core";
+import process from "node:process";
 import { DEFAULT_COMPACTION_SETTINGS } from "@eta/core";
 import { forkChain } from "@eta/core/session";
-import {
-  type ExecutionEnv,
-  envMemoryFs,
-  type MemoryExtractionOutcome,
-  type MemoryFs,
-  type OpenSession,
-  openSession,
-  type PlatformPromptInfo,
-  type SessionMemoryOptions,
-  type SubagentManager,
-} from "@eta/harness";
-import type { SessionEnvironment } from "@eta/plugin-sdk";
+import { envMemoryFs, openSession } from "@eta/harness";
 import { forkWrites } from "./fork";
 import { parseModelId } from "./model-id";
 import { resolvePersona } from "./personas";
-import type { Settings } from "./settings";
-import type { SessionListing, SessionMeta, SessionStore } from "./store";
 import { sessionSubagentRunner } from "./subagent";
 
 /** A session the manager has open. */

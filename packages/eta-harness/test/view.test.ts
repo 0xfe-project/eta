@@ -8,6 +8,8 @@
  * something to say, its revision moves only when its state does, a withdrawn
  * contribution leaves no trace, and a broken contribution does not take the frame down.
  */
+
+import type { ViewSources } from "../src/view";
 import { Runner } from "@eta/core";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
@@ -16,11 +18,7 @@ import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
 import { openSession } from "../src/open";
 import { journaledKernel } from "../src/testing";
-import {
-  builtinViewContributions,
-  ViewService,
-  type ViewSources,
-} from "../src/view";
+import { builtinViewContributions, ViewService } from "../src/view";
 
 const userMsg = (text: string) => ({
   role: "user" as const,

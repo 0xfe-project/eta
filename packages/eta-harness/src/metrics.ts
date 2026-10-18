@@ -16,8 +16,10 @@
  * session total while a frame can only see the message being written — which is
  * exactly the bug the class was written to prevent.
  */
-import { type Context, Service } from "cordis";
+
+import type { Context } from "cordis";
 import { kernelOn } from "@eta/core";
+import { Service } from "cordis";
 import { OutputRate } from "./metrics/output-rate";
 
 export class MetricsService extends Service {

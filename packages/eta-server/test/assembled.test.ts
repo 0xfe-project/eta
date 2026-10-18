@@ -9,14 +9,16 @@
  * The models are scripted (a fake `KernelModels`) because the subject is the floor, not a
  * provider; the socket, the frames and the plugins are all real.
  */
+
+import type { ServerFrame } from "@eta/client-contracts";
+import type { ClientFrame } from "@eta/client-wire-proto";
+import type { AssembledServer } from "../src/server";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ClientFrame } from "@eta/client-wire-proto";
-import type { ServerFrame } from "@eta/client-contracts";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { afterEach, describe, expect, it } from "vitest";
-import { type AssembledServer, assembleServer } from "../src/server";
+import { assembleServer } from "../src/server";
 
 const roots: string[] = [];
 const servers: AssembledServer[] = [];
@@ -42,9 +44,9 @@ afterEach(async () => {
 /** A client: a real socket, and the frames it has received. */
 interface Client {
   frames: ServerFrame[];
-  call(target: string, action: string, args?: unknown): Promise<unknown>;
-  subscribe(target: string, filter?: string): void;
-  close(): void;
+  call: (target: string, action: string, args?: unknown) => Promise<unknown>;
+  subscribe: (target: string, filter?: string) => void;
+  close: () => void;
 }
 
 function connect(port: number): Promise<Client> {

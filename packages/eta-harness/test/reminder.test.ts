@@ -6,13 +6,9 @@
  * a due reminder once per cycle, and never reminds without tasks. The service
  * lives in the harness, so the test wires it the way an assembler does.
  */
-import {
-  type AssistantMessage,
-  Kernel,
-  kernelEmit,
-  kernelOn,
-  Runner,
-} from "@eta/core";
+
+import type { AssistantMessage } from "@eta/core";
+import { Kernel, kernelEmit, kernelOn, Runner } from "@eta/core";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_REMINDER_INTERVAL, TaskReminderService } from "../src/index";
@@ -43,7 +39,7 @@ const userMsg = (text: string) => ({
   timestamp: 0,
 });
 
-describe("TaskReminderService", () => {
+describe("taskReminderService", () => {
   function session() {
     const kernel = Kernel.create({
       config: { model: { provider: "p", modelId: "m" } },

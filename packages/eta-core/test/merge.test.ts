@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { forkChain } from "@eta/core/session";
-import { EntryGraph } from "@eta/core/session";
-import { mergeBranch, rollback } from "@eta/core/session";
 import type { MessageEntry, NewEntry } from "@eta/core/session";
+import {
+  EntryGraph,
+  forkChain,
+  mergeBranch,
+  rollback,
+} from "@eta/core/session";
+import { describe, expect, it } from "vitest";
 
 const msg = (
   text: string,

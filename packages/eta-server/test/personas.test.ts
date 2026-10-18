@@ -5,11 +5,12 @@
  * read is a card that is absent, never a crash. A session must not fail to open because a file in
  * a directory nobody named is malformed.
  */
+
+import type { AutopickModel } from "../src/personas";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { AutopickModel } from "../src/personas";
 import {
   describeCard,
   discoverPersonas,
@@ -18,8 +19,8 @@ import {
   parsePersonaAnswer,
   personaDirs,
   resolvePersona,
-  summarize,
   suggestPersonaId,
+  summarize,
 } from "../src/personas";
 
 const roots: string[] = [];

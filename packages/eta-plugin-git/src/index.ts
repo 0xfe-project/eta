@@ -19,7 +19,8 @@
  */
 import type { StateSnapshot } from "@eta/client-wire-proto";
 import type { Plugin, SessionPluginContext } from "@eta/plugin-sdk";
-import { type GitDiffKind, gitDiff, gitStatus } from "./git";
+import type { GitDiffKind } from "./git";
+import { gitDiff, gitStatus } from "./git";
 
 export type { SessionsListener } from "@eta/plugin-sdk";
 

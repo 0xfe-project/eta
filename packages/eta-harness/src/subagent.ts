@@ -70,17 +70,17 @@ export type SubagentEventName =
 
 /** Where the pool announces what it did; the session's bus is the usual answer. */
 export interface SubagentBus {
-  emit(
+  emit: (
     type: SubagentEventName,
     payload: SubagentEvents[SubagentEventName],
-  ): void;
+  ) => void;
 }
 
 /** What a running child is handed: report turns, take notes. */
 export interface SubagentApi {
-  reportTurn(recordId: string): void;
+  reportTurn: (recordId: string) => void;
   /** Take (and clear) the steering notes waiting for this child. */
-  pendingNotes(recordId: string): string[];
+  pendingNotes: (recordId: string) => string[];
 }
 
 /** How one child actually runs. The server supplies the real one. */

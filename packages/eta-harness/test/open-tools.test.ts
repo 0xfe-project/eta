@@ -38,7 +38,7 @@ const stopTurn = (text = "done") =>
   assistantMessage({ content: [{ type: "text", text }] });
 
 const registered = (session: {
-  kernel: { tools: { list(): { name: string }[] } };
+  kernel: { tools: { list: () => { name: string }[] } };
 }): string[] => session.kernel.tools.list().map((tool) => tool.name);
 
 const env = new MemoryEnvironment({ cwd: "/work/eta" });

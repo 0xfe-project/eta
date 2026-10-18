@@ -23,11 +23,11 @@ export const DEFAULT_RING_CAPACITY = 512;
 
 export interface EventRing {
   /** Record an event; the oldest is forgotten when the ring is full. */
-  push(frame: EventFrame): void;
+  push: (frame: EventFrame) => void;
   /** The ring, oldest first, optionally narrowed to events whose name contains `filter`. */
-  tail(filter?: string): EventFrame[];
+  tail: (filter?: string) => EventFrame[];
   /** How many events are held right now. */
-  size(): number;
+  size: () => number;
 }
 
 export function createEventRing(capacity = DEFAULT_RING_CAPACITY): EventRing {

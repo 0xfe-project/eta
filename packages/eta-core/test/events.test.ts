@@ -1,11 +1,7 @@
+import type { KernelEvents } from "../src/types/events";
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
-import {
-  KERNEL_EVENT_NAMES,
-  type KernelEvents,
-  kernelEmit,
-  kernelOn,
-} from "../src/types/events";
+import { KERNEL_EVENT_NAMES, kernelEmit, kernelOn } from "../src/types/events";
 
 describe("event vocabulary", () => {
   it("names are pinned against drift", () => {

@@ -5,16 +5,17 @@
  * existing file is replaced. What it also promises, less visibly: two writes to
  * one path never interleave — including when the first one is aborted mid-flight.
  */
+
+import type { ToolCallInfo } from "@eta/core";
+import type { FileError, Result } from "@eta/execution";
+import type { ExecutionToolContext } from "../src/tools/context";
+import type { ToolResult } from "../src/tools/tool";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ToolCallInfo } from "@eta/core";
-import type { FileError, Result } from "@eta/execution";
 import { getOrThrow } from "@eta/execution";
 import { NodeEnvironment } from "@eta/execution-node";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { ExecutionToolContext } from "../src/tools/context";
-import type { ToolResult } from "../src/tools/tool";
 import { createWriteTool } from "../src/tools/write";
 
 let directory = "";

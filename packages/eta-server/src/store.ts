@@ -50,11 +50,11 @@ export type SessionSeed =
 
 export interface SessionStore {
   /** Put a new session in the store, with the metadata the caller chose. */
-  create(meta: SessionMeta): Promise<StoredSession>;
+  create: (meta: SessionMeta) => Promise<StoredSession>;
   /** Open one by id; `undefined` when there is no such session. */
-  open(id: string): Promise<StoredSession | undefined>;
+  open: (id: string) => Promise<StoredSession | undefined>;
   /** Every session, newest first, including the ones that cannot be read. */
-  list(): Promise<SessionListing[]>;
+  list: () => Promise<SessionListing[]>;
   /**
    * Update a session's row — a rename, a pin, an archive. `false` when there is no
    * such session: a caller saving metadata for a session that is gone has raced a
@@ -62,9 +62,9 @@ export interface SessionStore {
    *
    * The journal is untouched: this is what a sidebar reads, and it must stay cheap.
    */
-  save(meta: SessionMeta): Promise<boolean>;
+  save: (meta: SessionMeta) => Promise<boolean>;
   /** Forget a session and everything it held. */
-  remove(id: string): Promise<boolean>;
+  remove: (id: string) => Promise<boolean>;
   /** Stop holding anything open. */
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }

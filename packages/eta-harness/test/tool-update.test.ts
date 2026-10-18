@@ -8,12 +8,8 @@
  * must not publish into a finished call (eta-agent's acceptingUpdates).
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import {
-  type KernelTool,
-  kernelOn,
-  Runner,
-  type ToolCallInfo,
-} from "@eta/core";
+import type { KernelTool, ToolCallInfo } from "@eta/core";
+import { kernelOn, Runner } from "@eta/core";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";

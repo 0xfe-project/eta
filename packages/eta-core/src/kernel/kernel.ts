@@ -11,7 +11,23 @@
  * must not do is expressed as absence — its kernel simply has no goal set,
  * no continuation driver, and no spawn tool (REFACTOR.md §1.4).
  */
+
+import type { KernelConfig } from "../types/config";
+import type { Emit } from "../types/events";
+import type { AgentMessage } from "../types/messages";
+import type { PersonaCard } from "../types/persona";
+import type { StoredTask } from "../types/tasks";
+import type { GoalState } from "./goal";
+import type { QueuedItem } from "./inbox";
 import { Context } from "cordis";
+import { defaultKernelConfig } from "../types/config";
+import { kernelEmit } from "../types/events";
+import { ConfigService } from "./config";
+import { GoalService } from "./goal";
+import { Inbox } from "./inbox";
+import { PersonaService } from "./persona";
+import { TaskService } from "./tasks";
+import { ToolService } from "./tools";
 
 /**
  * The service names one kernel registers. Two sessions under one root must not
@@ -40,21 +56,6 @@ export function sessionScope(
   for (const name of names) scope = scope.isolate(name);
   return scope;
 }
-
-import type { KernelConfig } from "../types/config";
-import { defaultKernelConfig } from "../types/config";
-import type { Emit } from "../types/events";
-import { kernelEmit } from "../types/events";
-import type { AgentMessage } from "../types/messages";
-import type { PersonaCard } from "../types/persona";
-import type { StoredTask } from "../types/tasks";
-import { ConfigService } from "./config";
-import type { GoalState } from "./goal";
-import { GoalService } from "./goal";
-import { Inbox, type QueuedItem } from "./inbox";
-import { PersonaService } from "./persona";
-import { TaskService } from "./tasks";
-import { ToolService } from "./tools";
 
 export interface KernelOptions {
   /** Upper bound on runner turns. `null` (default) runs until the turn loop settles. */

@@ -1,17 +1,18 @@
 {
   "name": "@eta/execution-node",
-  "version": "0.1.0",
-  "description": "Node filesystem and shell adapter for eta execution contracts.",
-  "private": true,
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Node filesystem and shell adapter for eta execution contracts.",
   "exports": {
     ".": "./src/index.ts"
   },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "scripts": {
     "test": "vitest --run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@eta/execution": "*",

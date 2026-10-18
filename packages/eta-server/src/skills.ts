@@ -26,9 +26,10 @@
  * Nothing here is cached: discovery is cheap (a few `existsSync` calls and a `.gitmodules` read),
  * and a cache would be a cache that has to be invalidated when a skill appears.
  */
+
+import type { ExecutionEnv } from "@eta/harness";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, parse, resolve } from "node:path";
-import type { ExecutionEnv } from "@eta/harness";
 
 /** Every `.agents/skills` candidate for a cwd, deduped, closest first. */
 export function discoverSkillDirs(cwd: string, home: string): string[] {
@@ -74,6 +75,7 @@ export function gitRepoChain(cwd: string): string[] {
     } catch {
       /* no .gitmodules */
     }
+    // eslint-disable-next-line regexp/no-super-linear-backtracking -- a local .gitmodules; a rewrite could change what matches
     for (const match of text.matchAll(/^\s*path\s*=\s*(.+)$/gm)) {
       const sub = resolve(base, (match[1] ?? "").trim());
       if (out.includes(sub)) continue;

@@ -22,26 +22,22 @@
  * - **hello is the first frame**: the ops, the mounted plugins, and the state of every eager
  *   target, so a client that just connected can draw before it asks for anything.
  */
-import {
-  type CallFrame,
-  type ClientFrame,
-  decodeClientFrame,
-  encodeFrame,
-  type OpDescriptor,
-  type ServerFrame,
-} from "@eta/client-wire-proto";
 
-import {
-  type DispatchOutcome,
-  type OpContext,
-  UnknownOpError,
-} from "./registry";
+import type {
+  CallFrame,
+  ClientFrame,
+  OpDescriptor,
+  ServerFrame,
+} from "@eta/client-wire-proto";
+import type { DispatchOutcome, OpContext } from "./registry";
 import type { WireService } from "./wire-service";
+import { decodeClientFrame, encodeFrame } from "@eta/client-wire-proto";
+import { UnknownOpError } from "./registry";
 
 /** What one connected client looks like to this file. */
 export interface Socket {
   readonly id: number;
-  send(frame: ServerFrame): void;
+  send: (frame: ServerFrame) => void;
 }
 
 /**
@@ -50,17 +46,17 @@ export interface Socket {
  */
 export interface TransportDeps {
   wire: WireService;
-  mounted(): import("@eta/client-contracts").MountedPlugin[];
+  mounted: () => import("@eta/client-contracts").MountedPlugin[];
   /** Diagnostics. */
-  warn?(message: string): void;
+  warn?: (message: string) => void;
 }
 
 export interface Connection {
   /** Feed one raw frame from the client. */
-  handle(raw: string): Promise<void>;
+  handle: (raw: string) => Promise<void>;
   /** Send a frame to this client (a pushed state, an event). */
-  send(frame: ServerFrame): void;
-  close(): void;
+  send: (frame: ServerFrame) => void;
+  close: () => void;
 }
 
 /** Everything that is true of one connection, with no socket library involved. */
@@ -211,11 +207,11 @@ export interface WireServerOptions {
 export interface WireServer {
   readonly port: number;
   /** Send a frame to every connected client. */
-  broadcast(frame: ServerFrame): void;
+  broadcast: (frame: ServerFrame) => void;
   /** Deliver what a target's subscribers are owed (the state sender decided). */
-  pushState(target: string): void;
+  pushState: (target: string) => void;
   readonly clients: number;
-  stop(): void;
+  stop: () => void;
 }
 
 export function serveWire(

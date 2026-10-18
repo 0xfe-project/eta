@@ -26,10 +26,10 @@ interface Harness {
   wire: WireService;
   manager: SessionManager;
   frames: { target?: string; frame: ServerFrame }[];
-  load(): Promise<void>;
-  unload(): Promise<void>;
-  call(target: string, action: string, args?: unknown): Promise<unknown>;
-  state(target: string): StateSnapshot | undefined;
+  load: () => Promise<void>;
+  unload: () => Promise<void>;
+  call: (target: string, action: string, args?: unknown) => Promise<unknown>;
+  state: (target: string) => StateSnapshot | undefined;
 }
 
 async function harness(
@@ -67,7 +67,7 @@ async function harness(
       const fiber = ctx.plugin(plugin as never, undefined as never);
       await fiber;
       unload = async () => {
-        await (fiber as unknown as { dispose(): Promise<void> }).dispose();
+        await (fiber as unknown as { dispose: () => Promise<void> }).dispose();
       };
     },
     async unload() {
@@ -1345,12 +1345,12 @@ describe("what other plugins hear", () => {
     const sessions = (
       h.ctx as unknown as {
         sessions: {
-          subscribe(listener: {
-            opened(session: { id: string; cwd: string }): void;
-            closed(id: string): void;
-            focused(id: string | undefined): void;
-            changed(session: { id: string; cwd: string }): void;
-          }): () => void;
+          subscribe: (listener: {
+            opened: (session: { id: string; cwd: string }) => void;
+            closed: (id: string) => void;
+            focused: (id: string | undefined) => void;
+            changed: (session: { id: string; cwd: string }) => void;
+          }) => () => void;
         };
       }
     ).sessions;

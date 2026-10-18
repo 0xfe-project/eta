@@ -12,10 +12,10 @@
  */
 
 import type { Context } from "cordis";
-import { Service } from "cordis";
 import type { Emit } from "../types/events";
-import { kernelEmit } from "../types/events";
 import type { StoredTask, Task, TaskStatus } from "../types/tasks";
+import { Service } from "cordis";
+import { kernelEmit } from "../types/events";
 
 const STATUSES: readonly TaskStatus[] = [
   "pending",

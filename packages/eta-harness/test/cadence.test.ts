@@ -6,10 +6,9 @@
  * plugin owns the text. Transient by design: nothing lands in the transcript.
  */
 
+import type { CadenceConfig, CadenceState } from "../src/index";
 import { describe, expect, it } from "vitest";
 import {
-  type CadenceConfig,
-  type CadenceState,
   createCadenceState,
   DEFAULT_REMINDER_INTERVAL,
   DEFAULT_TASK_TOOL_NAMES,

@@ -24,17 +24,17 @@ import type {
   Model,
   SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
+import type { Emit } from "../types/events";
+import type { ThinkingLevel } from "../types/messages";
+import type { KernelModels } from "./providers";
+import type { AgentRetryPolicy } from "./retry";
 import {
   isContextOverflow,
   isRecoverableLength,
   isRetryableAssistantError,
 } from "@earendil-works/pi-ai";
-import type { Emit } from "../types/events";
-import type { ThinkingLevel } from "../types/messages";
 import { consumeAssistantStream } from "./assistant";
-import type { KernelModels } from "./providers";
 import {
-  type AgentRetryPolicy,
   normalizedRetryPolicy,
   retryDelayMs,
   retryNotBefore,
@@ -44,7 +44,7 @@ import {
 /** What the caller wants to hear about while a generation runs. */
 export interface GenerationObserver {
   /** One stream frame: the message as it stands, plus the event that moved it. */
-  update(message: AssistantMessage, event: AssistantMessageEvent): void;
+  update: (message: AssistantMessage, event: AssistantMessageEvent) => void;
 }
 
 export interface GenerateOptions {

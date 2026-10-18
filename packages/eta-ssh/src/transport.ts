@@ -4,8 +4,8 @@
  * Everything above this file is the harness's own vocabulary (an `ExecutionEnv`, a
  * `FileSystem`, a `Shell`); everything below is OpenSSH. Keeping the seam here is
  * what makes the environment testable without a server: the protocol that the
- * environment speaks is a sequence of `sh` scripts, and a transport that runs them
- * *somewhere* — over SSH, or through the local shell — is enough to exercise it.
+ * environment speaks is a sequence of `sh` scripts, and a transport that runs
+ * them *somewhere* — over SSH, or through the local shell — is enough to exercise it.
  *
  * What this file is responsible for, in order of how badly it goes wrong:
  *
@@ -20,10 +20,13 @@
  *   master that died between two of them is detected and replaced instead of
  *   surfacing as a mysterious failure of the command.
  */
+
+import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import process from "node:process";
 
 /** How to reach a machine. */
 export interface SshTarget {
@@ -72,10 +75,10 @@ export interface SshResult {
 export interface SshTransport {
   /** The remote home directory; every relative path starts here. */
   readonly home: string;
-  run(script: string, options?: SshRunOptions): Promise<SshResult>;
+  run: (script: string, options?: SshRunOptions) => Promise<SshResult>;
   /** Whether the transport is going through an SSH hop at all. */
   readonly overSsh: boolean;
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }
 
 /** Quote one argument for `sh`. */
@@ -85,7 +88,7 @@ export function shellQuote(value: string): string {
 
 /** A host name OpenSSH will accept as an argument rather than as an option. */
 export function validHost(value: string): boolean {
-  return /^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,252}$/.test(value);
+  return /^[a-z0-9][\w.:-]{0,252}$/i.test(value);
 }
 
 /** The `ssh` arguments for a target: batch mode, no interactive prompts, own socket. */
@@ -157,18 +160,18 @@ export type SpawnLike = (
   options: { env?: NodeJS.ProcessEnv; stdio: ["pipe", "pipe", "pipe"] },
 ) => {
   stdout: {
-    on(event: "data", listener: (chunk: Buffer) => void): unknown;
+    on: (event: "data", listener: (chunk: Buffer) => void) => unknown;
   } | null;
   stderr: {
-    on(event: "data", listener: (chunk: Buffer) => void): unknown;
+    on: (event: "data", listener: (chunk: Buffer) => void) => unknown;
   } | null;
   stdin: {
-    write(chunk: Uint8Array | string): unknown;
-    end(chunk?: Uint8Array | string): unknown;
+    write: (chunk: Uint8Array | string) => unknown;
+    end: (chunk?: Uint8Array | string) => unknown;
   } | null;
-  on(event: "close", listener: (code: number | null) => void): unknown;
-  on(event: "error", listener: (error: Error) => void): unknown;
-  kill(signal?: NodeJS.Signals): unknown;
+  on: ((event: "close", listener: (code: number | null) => void) => unknown) &
+    ((event: "error", listener: (error: Error) => void) => unknown);
+  kill: (signal?: NodeJS.Signals) => unknown;
   pid?: number | undefined;
 };
 
@@ -350,6 +353,7 @@ export class SshCommandTransport implements SshTransport {
         if (settled) return;
         settled = true;
         if (timer !== undefined) clearTimeout(timer);
+        // eslint-disable-next-line ts/no-use-before-define -- onAbort and its cleanup call each other
         options.signal?.removeEventListener("abort", onAbort);
         resolve(result);
       };

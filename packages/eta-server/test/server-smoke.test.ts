@@ -11,11 +11,12 @@
  * disk becomes a model layer, a client over a real socket creates a session, the run streams, the
  * frames arrive, and the session is still there (with its history) after a reopen.
  */
+
+import type { ServerFrame } from "@eta/client-wire-proto";
+import type { KernelModels } from "@eta/core";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ServerFrame } from "@eta/client-wire-proto";
-import type { KernelModels } from "@eta/core";
 import { describe, expect, it } from "vitest";
 import { buildModels } from "../src/providers/runtime";
 import { ProviderConfigStore } from "../src/providers/store";

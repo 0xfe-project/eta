@@ -335,7 +335,7 @@ export type On = <K extends keyof KernelEvents>(
  */
 export function kernelEmit(ctx: Context): Emit {
   const raw = (
-    ctx as unknown as { emit(name: string, payload: unknown): void }
+    ctx as unknown as { emit: (name: string, payload: unknown) => void }
   ).emit.bind(ctx);
   return raw as Emit;
 }
@@ -344,7 +344,7 @@ export function kernelEmit(ctx: Context): Emit {
 export function kernelOn(ctx: Context): On {
   const raw = (
     ctx as unknown as {
-      on(name: string, listener: (payload: unknown) => void): () => boolean;
+      on: (name: string, listener: (payload: unknown) => void) => () => boolean;
     }
   ).on.bind(ctx);
   return raw as On;

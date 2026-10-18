@@ -8,10 +8,10 @@
  */
 
 import type { Context } from "cordis";
-import { Service } from "cordis";
 import type { Emit } from "../types/events";
-import { kernelEmit } from "../types/events";
 import type { PersonaCard } from "../types/persona";
+import { Service } from "cordis";
+import { kernelEmit } from "../types/events";
 
 export class PersonaService extends Service {
   static readonly provide = "persona";

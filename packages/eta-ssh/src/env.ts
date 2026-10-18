@@ -19,28 +19,23 @@
  * - **Spill files land on the machine the commands run on**, so the agent's own
  *   `read` tool — which goes through this same environment — can open them.
  */
-import { LiveOutput, OutputBuffer } from "@eta/execution/output";
-import {
-  type EnvCallOptions,
-  type ExecutionEnv,
-  ExecutionError,
-  err,
-  FileError,
-  type FileInfo,
-  ok,
-  type Result,
-  type ShellExecOptions,
-  type ShellExecResult,
-  type ShellOutputLimits,
-  type TextLine,
-  type TextLineReader,
+
+import type {
+  EnvCallOptions,
+  ExecutionEnv,
+  FileInfo,
+  Result,
+  ShellExecOptions,
+  ShellExecResult,
+  ShellOutputLimits,
+  TextLine,
+  TextLineReader,
 } from "@eta/execution";
-import {
-  type SshResult,
-  type SshRunOptions,
-  type SshTransport,
-  shellQuote,
-} from "./transport";
+import type { SshResult, SshRunOptions, SshTransport } from "./transport";
+import { Buffer } from "node:buffer";
+import { err, ExecutionError, FileError, ok } from "@eta/execution";
+import { LiveOutput, OutputBuffer } from "@eta/execution/output";
+import { shellQuote } from "./transport";
 
 /** The exit codes the scripts below use; each one maps to a stable error code. */
 const EXIT_NOT_FOUND = 1;
@@ -397,7 +392,7 @@ printf '%s' "$dir"`,
     } = {},
   ): Promise<Result<string, FileError>> {
     const prefix = sanitizePrefix(options.prefix ?? "eta-");
-    const suffix = (options.suffix ?? "").replace(/[^A-Za-z0-9._-]/g, "");
+    const suffix = (options.suffix ?? "").replace(/[^\w.-]/g, "");
     const template =
       suffix.length === 0 ? `${prefix}XXXXXX` : `${prefix}XXXXXX${suffix}`;
     const result = await this.script(
@@ -669,7 +664,7 @@ function quote(value: string): string {
 }
 
 function sanitizePrefix(prefix: string): string {
-  return prefix.replace(/[^A-Za-z0-9._-]/g, "");
+  return prefix.replace(/[^\w.-]/g, "");
 }
 
 function basename(path: string): string {

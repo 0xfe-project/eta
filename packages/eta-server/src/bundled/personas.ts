@@ -11,13 +11,14 @@
  * restart comes back on the card the user chose, and an id nobody has is refused rather than
  * silently accepted.
  */
-import { watch } from "node:fs";
+
 import type { StateSnapshot } from "@eta/client-wire-proto";
 import type { PersonaCard } from "@eta/core";
-import type { ManagedSession } from "../manager";
-import type { SessionManager } from "../manager";
-import { discoverPersonas, resolvePersona, summarize } from "../personas";
+import type { ManagedSession, SessionManager } from "../manager";
 import type { WireService } from "../wire-service";
+import { watch } from "node:fs";
+import process from "node:process";
+import { discoverPersonas, resolvePersona, summarize } from "../personas";
 
 /** The actions this target has. One list, so the wire and the plugin cannot disagree. */
 export const PERSONA_ACTIONS = ["reload", "set"] as const;
@@ -37,9 +38,11 @@ export function personasPlugin(options: PersonasPluginOptions) {
       const context = ctx as {
         wire: WireService;
         sessions: {
-          open(id: string): Promise<{ managed: ManagedSession | undefined }>;
+          open: (
+            id: string,
+          ) => Promise<{ managed: ManagedSession | undefined }>;
         };
-        effect(execute: () => () => unknown): unknown;
+        effect: (execute: () => () => unknown) => unknown;
       };
       const wire = context.wire;
       return context.effect(() => {
@@ -128,7 +131,7 @@ export function personasPlugin(options: PersonasPluginOptions) {
         ];
 
         // Both directories, watched: writing a card is the interface, so it has to be enough.
-        const watchers: { close(): void }[] = [];
+        const watchers: { close: () => void }[] = [];
         for (const base of [options.home, process.cwd()]) {
           try {
             const watcher = watch(

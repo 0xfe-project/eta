@@ -14,14 +14,15 @@
  * the model reads the file when a task matches. Progressive disclosure is the
  * `read` tool's job, not a second API.
  */
-import ignore from "ignore";
-import { parse } from "yaml";
+
 import type {
   EnvCallOptions,
   ExecutionEnv,
   FileInfo,
   Result,
 } from "@eta/execution";
+import ignore from "ignore";
+import { parse } from "yaml";
 
 export { formatSkillInvocation } from "./prompt-blocks";
 

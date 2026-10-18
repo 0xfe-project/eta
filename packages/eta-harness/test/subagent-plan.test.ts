@@ -5,12 +5,15 @@
  * each other actually run at the same time; tasks that do, do not; and what came
  * back can change the plan without redoing work or losing the topology.
  */
+
+import type {
+  Plan,
+  PlannerReport,
+  PlanTask,
+  PlanTaskResult,
+} from "../src/subagent-plan";
 import { describe, expect, it } from "vitest";
 import {
-  type Plan,
-  type PlannerReport,
-  type PlanTask,
-  type PlanTaskResult,
   parsePlan,
   parseReport,
   planWaves,

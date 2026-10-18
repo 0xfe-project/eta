@@ -21,24 +21,20 @@ import type {
 } from "@earendil-works/pi-ai";
 import type { Entry } from "../types/entries";
 import type { Emit } from "../types/events";
-import { kernelEmit } from "../types/events";
 import type { AgentMessage, ThinkingLevel } from "../types/messages";
 import type { CompactionDriver } from "./compaction";
 import type { ConfigService } from "./config";
-import {
-  AbortRequested,
-  cancellationOf,
-  createGate,
-  type Gate,
-  type GateControl,
-} from "./effect-gate";
-import { generateWithRetry } from "./generation";
+import type { Gate, GateControl } from "./effect-gate";
 import type { GoalService } from "./goal";
 import type { QueuedItem } from "./inbox";
 import type { Kernel } from "./kernel";
 import type { KernelModels } from "./providers";
 import type { AgentRetryPolicy } from "./retry";
 import type { KernelTool, ToolService } from "./tools";
+import { kernelEmit } from "../types/events";
+import { AbortRequested, cancellationOf, createGate } from "./effect-gate";
+import { generateWithRetry } from "./generation";
+import { isAbortError } from "./tools";
 
 /**
  * What the runner needs from durability (REFACTOR.md §3 ruling 6): the run
@@ -48,10 +44,8 @@ import type { KernelTool, ToolService } from "./tools";
  */
 export interface RunnerJournal {
   /** Resolve once everything written so far is on disk. */
-  flush(): Promise<void>;
+  flush: () => Promise<void>;
 }
-
-import { isAbortError } from "./tools";
 
 export interface RunnerBoundaryOptions {
   /** Independent judgment call for goal continuation (tool-free request); true = achieved. */
@@ -812,8 +806,8 @@ export class Runner {
    * One provider request: the prompt the caller composed, the transcript, and the
    * tools this turn offers.
    *
-   * The runner adds no prompt text of its own — not even the persona. Persona is
-   * *content*, and content belongs to whoever composes the prompt (the harness's
+   * The runner adds no prompt text of its own — not even the persona. Persona
+   * is *content*, and content belongs to whoever composes the prompt (the harness's
    * composer puts it right after the base prompt, where a provider cache keeps it
    * and where it cannot be duplicated). The harness renders the persona snapshot;
    * `systemPrompt` here is used verbatim.

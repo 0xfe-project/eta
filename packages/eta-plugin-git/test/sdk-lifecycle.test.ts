@@ -5,15 +5,16 @@ import type {
   SessionsListener,
   StateProjector,
 } from "@eta/plugin-sdk";
+import type { GitStatus } from "../src/git";
 import { WireService } from "@eta/server";
 import { Context } from "cordis";
 import { expect, it, vi } from "vitest";
-import { type GitStatus, gitStatus } from "../src/git";
+import { gitStatus } from "../src/git";
 import { gitPlugin } from "../src/index";
 
 vi.mock("../src/git", () => ({ gitStatus: vi.fn(), gitDiff: vi.fn() }));
 
-it("SDK cleanup drains an in-flight read without publishing into the next instance", async () => {
+it("the SDK cleanup drains an in-flight read without publishing into the next instance", async () => {
   let releaseRead!: (status: GitStatus) => void;
   const reading = new Promise<GitStatus>((resolve) => {
     releaseRead = resolve;

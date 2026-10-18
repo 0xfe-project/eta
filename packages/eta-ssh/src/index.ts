@@ -16,7 +16,9 @@ export {
 export { LocalTransport, type LocalTransportOptions } from "./local-transport";
 export {
   hostKeyFingerprint,
+  shellQuote,
   type SpawnLike,
+  sshArgs,
   SshCommandTransport,
   type SshCommandTransportOptions,
   type SshResult,
@@ -24,7 +26,5 @@ export {
   type SshStreamEvent,
   type SshTarget,
   type SshTransport,
-  shellQuote,
-  sshArgs,
   validHost,
 } from "./transport";

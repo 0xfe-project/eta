@@ -14,9 +14,9 @@
  * the kernel's side — when it asks, and what it does with the answer.
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type { FakeCompaction } from "@eta/core/testing";
 import {
   assistantMessage,
-  type FakeCompaction,
   fakeCompaction,
   fakeModels,
 } from "@eta/core/testing";

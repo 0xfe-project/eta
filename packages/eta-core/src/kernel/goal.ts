@@ -13,9 +13,9 @@
  */
 
 import type { Context } from "cordis";
-import { Service } from "cordis";
 import type { GoalEntry, GoalPayload } from "../types/entries";
 import type { Emit } from "../types/events";
+import { Service } from "cordis";
 import { kernelEmit } from "../types/events";
 
 export type GoalStatus = "active" | "paused" | "achieved";

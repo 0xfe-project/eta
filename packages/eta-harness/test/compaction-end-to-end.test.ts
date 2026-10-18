@@ -9,20 +9,15 @@
  */
 
 import type { AssistantMessage, Model, Usage } from "@earendil-works/pi-ai";
+import type { AgentMessage, CompactionSummarizer, Kernel } from "@eta/core";
+import type { CompactionEntrySource } from "../src/index";
 import { etaCompaction } from "@eta/compaction";
-import {
-  type AgentMessage,
-  type CompactionSummarizer,
-  DEFAULT_COMPACTION_SETTINGS,
-  type Kernel,
-  kernelOn,
-  Runner,
-} from "@eta/core";
+import { DEFAULT_COMPACTION_SETTINGS, kernelOn, Runner } from "@eta/core";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { type CompactionEntrySource, CompactionService } from "../src/index";
+import { CompactionService } from "../src/index";
 import { journaledKernel } from "../src/testing";
 
 /**

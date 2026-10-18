@@ -1,8 +1,8 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type { KernelTool } from "../src/kernel/tools";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { Kernel, Runner } from "../src/index";
-import type { KernelTool } from "../src/kernel/tools";
 import { kernelOn } from "../src/types/events";
 
 const userMsg = (text: string) => ({
@@ -29,7 +29,7 @@ function setup(script: AssistantMessage[], tools: KernelTool[] = []) {
   const kernel = Kernel.create();
   for (const t of tools) {
     (
-      kernel.ctx as unknown as { tools: { register(t: KernelTool): void } }
+      kernel.ctx as unknown as { tools: { register: (t: KernelTool) => void } }
     ).tools.register(t);
   }
   const fake = fakeModels(script);
@@ -150,7 +150,7 @@ describe("runner turn loop", () => {
       assistantMessage(),
     ]);
     const tools = (
-      kernel.ctx as unknown as { tools: { register(t: KernelTool): void } }
+      kernel.ctx as unknown as { tools: { register: (t: KernelTool) => void } }
     ).tools;
     // Register before the run; the loop must see it without any restart.
     tools.register({ name: "late", execute: () => "present" });

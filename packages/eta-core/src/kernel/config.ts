@@ -7,16 +7,19 @@
  * inherit whatever the user just chose. Every accepted change reports a
  * `state:config-update`.
  */
-import { type Context, Service } from "cordis";
-import {
-  CONFIG_PROPERTIES,
-  type CompactionSettings,
-  type ConfigProperty,
-  defaultKernelConfig,
-  type KernelConfig,
+
+import type { Context } from "cordis";
+import type {
+  CompactionSettings,
+  ConfigProperty,
+  KernelConfig,
 } from "../types/config";
-import { type Emit, kernelEmit } from "../types/events";
-import { type AgentRetryPolicy, DEFAULT_RETRY_POLICY } from "./retry";
+import type { Emit } from "../types/events";
+import type { AgentRetryPolicy } from "./retry";
+import { Service } from "cordis";
+import { CONFIG_PROPERTIES, defaultKernelConfig } from "../types/config";
+import { kernelEmit } from "../types/events";
+import { DEFAULT_RETRY_POLICY } from "./retry";
 
 /** Duplicate tool names would make a call ambiguous; refuse them at the door. */
 export function validateToolNames(tools: readonly { name: string }[]): void {

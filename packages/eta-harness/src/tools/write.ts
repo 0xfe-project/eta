@@ -11,13 +11,16 @@
  * A partially aborted write is still a real write: the queue is held until the
  * write settles, so the next write to that path waits rather than racing it.
  */
+
+import type { EnvCallOptions } from "@eta/execution";
 import type { Static } from "typebox";
-import { Type } from "typebox";
-import { type EnvCallOptions, getOrThrow } from "@eta/execution";
 import type { ExecutionToolContext } from "./context";
+import type { HarnessTool } from "./tool";
+import { getOrThrow } from "@eta/execution";
+import { Type } from "typebox";
 import { withFileMutationQueue } from "./file-mutation-queue";
 import { resolveToolPath } from "./path-utils";
-import { type HarnessTool, text } from "./tool";
+import { text } from "./tool";
 
 export const writeSchema = Type.Object({
   path: Type.String({

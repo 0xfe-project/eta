@@ -13,9 +13,11 @@
  * — is a second, invisible way for a session's model to change under the user, and the user
  * already has an explicit op for that (`sessions.modelSet`).
  */
+
+import type { ThinkingLevel } from "@eta/core";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { THINKING_LEVELS, type ThinkingLevel } from "@eta/core";
+import { THINKING_LEVELS } from "@eta/core";
 
 /** What a new session inherits. Every field is optional: absent means "the app's own default". */
 export interface Settings {

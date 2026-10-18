@@ -9,14 +9,17 @@
  * project's memory through *that* machine's filesystem, not the server's. That is the difference
  * between a fact and a plausible-looking lie.
  */
+
+import type { ExecutionEnv } from "@eta/harness";
+import type { SessionManagerOptions } from "../src/manager";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { NodeEnvironment } from "@eta/execution-node";
-import { type ExecutionEnv, MemoryEnvironment } from "@eta/harness";
+import { MemoryEnvironment } from "@eta/harness";
 import { afterEach, describe, expect, it } from "vitest";
-import { SessionManager, type SessionManagerOptions } from "../src/manager";
+import { SessionManager } from "../src/manager";
 import { MemorySessionStore } from "../src/memory-store";
 import { renderSkillsBlock } from "../src/skills";
 

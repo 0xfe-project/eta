@@ -1,4 +1,3 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ShellOutputUpdate, ShellOutputView } from "@eta/execution";
 import {
   AdaptivePublisher,
@@ -7,12 +6,13 @@ import {
   OutputBuffer,
   utf8ByteLength,
 } from "@eta/execution/output";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(() => vi.useRealTimers());
 
 describe("portable output", () => {
   it("counts UTF-8 including unpaired surrogates without runtime globals", () => {
-    for (const text of ["ascii", "你好🙂", "\ud800x\udfff", "\ud800\udfff"]) {
+    for (const text of ["ascii", "你好🙂", "\uD800x\uDFFF", "\uD800\uDFFF"]) {
       expect(utf8ByteLength(text)).toBe(new TextEncoder().encode(text).length);
     }
   });

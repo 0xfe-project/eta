@@ -7,15 +7,14 @@
  * move is not sent, a section that went away is reported by its absence, and a client that
  * holds nothing gets everything.
  */
+
+import type { ClientFrame, ServerFrame, StateSnapshot } from "../src/index";
 import { describe, expect, it } from "vitest";
 import {
   CLIENT_OP_NAMES,
-  type ClientFrame,
   decodeClientFrame,
   encodeFrame,
   SERVER_FRAME_TYPES,
-  type ServerFrame,
-  type StateSnapshot,
   stateDiff,
 } from "../src/index";
 

@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
 import { ExecutionError, FileError, getOrThrow } from "@eta/execution";
 import { OutputBuffer, truncateTail } from "@eta/execution/output";
 import * as harness from "@eta/harness";
 import * as legacyEnv from "@eta/harness/env";
+import { describe, expect, it } from "vitest";
 
 describe("execution compatibility exports", () => {
   it("preserves error identity and output helpers for existing consumers", () => {

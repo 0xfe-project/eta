@@ -4,10 +4,11 @@
  * The same suite `NodeEnvironment` runs (its own file, once it exists), so a
  * tool written against `ExecutionEnv` cannot depend on which backend it got.
  */
-import { describe, expect, it } from "vitest";
-import { MemoryEnvironment } from "../src/env/memory";
+
 import { getOrThrow } from "@eta/execution";
 import { envContract } from "@eta/execution/testing";
+import { describe, expect, it } from "vitest";
+import { MemoryEnvironment } from "../src/env/memory";
 
 envContract("memory", () => {
   // No `capabilities.shell`: this backend answers a scripted vocabulary, not
@@ -35,7 +36,7 @@ async function versionedEcho(call: {
   };
 }
 
-describe("MemoryEnvironment specifics", () => {
+describe("memoryEnvironment specifics", () => {
   it("seeds files, directories and symlinks, relative to cwd", async () => {
     const env = new MemoryEnvironment({
       cwd: "/work",

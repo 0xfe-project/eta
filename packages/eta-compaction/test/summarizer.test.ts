@@ -301,6 +301,8 @@ describe("nothing to summarize", () => {
   });
 });
 
+const UPDATE_SUMMARY_PROMPT_MARKER = "You're updating them, not starting over.";
+
 describe("incremental summaries", () => {
   it("updates the previous notes rather than redoing them", async () => {
     const previousSummary = "## Goal\nship the compaction";
@@ -346,8 +348,6 @@ describe("incremental summaries", () => {
     expect(prompt).toContain(SUMMARIZATION_PROMPT.split("\n")[0]!.slice(0, 40));
   });
 });
-
-const UPDATE_SUMMARY_PROMPT_MARKER = "You're updating them, not starting over.";
 
 describe("folding a history the window cannot hold", () => {
   it("asks once per piece, each an update of the running notes", async () => {

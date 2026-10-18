@@ -1,17 +1,17 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ESNext",
     "lib": ["ES2022", "DOM"],
-    "strict": true,
-    "erasableSyntaxOnly": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
+    "module": "ESNext",
     "moduleResolution": "Bundler",
     "resolveJsonModule": true,
+    "types": [],
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
     "verbatimModuleSyntax": true,
-    "types": []
+    "erasableSyntaxOnly": true,
+    "skipLibCheck": true
   },
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }

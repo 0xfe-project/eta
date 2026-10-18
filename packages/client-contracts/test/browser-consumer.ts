@@ -1,14 +1,14 @@
-import {
-  stateSection,
-  SESSION_ACTIONS,
-  type HelloFrame,
-  type ServerFrame,
-  type SessionCall,
-  type SessionViewBtwThread,
-  type SessionViewSubagent,
-  type AgentMessage,
+import type {
+  AgentMessage,
+  HelloFrame,
+  ServerFrame,
+  SessionCall,
+  SessionViewBtwThread,
+  SessionViewSubagent,
 } from "@eta/client-contracts";
-import { encodeFrame, stateDiff, type CallFrame } from "@eta/client-wire-proto";
+import type { CallFrame } from "@eta/client-wire-proto";
+import { SESSION_ACTIONS, stateSection } from "@eta/client-contracts";
+import { encodeFrame, stateDiff } from "@eta/client-wire-proto";
 
 const prompt: SessionCall = {
   op: "call",

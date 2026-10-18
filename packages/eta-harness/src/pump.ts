@@ -17,7 +17,8 @@
  * class the host drives rather than a service that wires itself.
  */
 
-import { type Kernel, kernelOn, type Runner } from "@eta/core";
+import type { Kernel, Runner } from "@eta/core";
+import { kernelOn } from "@eta/core";
 
 export interface RunPumpOptions {
   /**

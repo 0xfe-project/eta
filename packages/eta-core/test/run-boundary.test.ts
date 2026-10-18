@@ -1,9 +1,9 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type { KernelTool } from "../src/kernel/tools";
+import type { AgentMessage } from "../src/types/messages";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { isEmptyStop, Kernel, Runner } from "../src/index";
-import type { KernelTool } from "../src/kernel/tools";
-import type { AgentMessage } from "../src/types/messages";
 
 const userMsg = (text: string) => ({
   role: "user" as const,
