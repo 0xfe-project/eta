@@ -1,0 +1,25 @@
+{
+	"name": "@eta/ssh",
+	"version": "0.1.0",
+	"description": "An ExecutionEnv over SSH: the harness's filesystem and shell, on another machine.",
+	"private": true,
+	"type": "module",
+	"main": "./src/index.ts",
+	"types": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"test": "vitest --run --passWithNoTests",
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"smoke": "vitest --run test/ssh-target.e2e.test.ts"
+	},
+	"devDependencies": {
+		"@types/node": "22.19.19",
+		"typescript": "5.9.3",
+		"vitest": "4.1.9"
+	},
+	"dependencies": {
+		"@eta/execution": "*"
+	}
+}
