@@ -88,6 +88,17 @@ export interface AssembleOptions {
    * memory lives. Passed straight to the manager; the server itself never builds one.
    */
   envFor?: SessionManagerOptions["envFor"] | undefined;
+  /**
+   * The per-session hooks a host product wires into the manager (see `SessionManagerOptions`):
+   * what is added to a session's base prompt and toolset, the policy on its tool calls, and who
+   * hears about its questions. Passed straight through; the server never decides any of them.
+   */
+  baseSystemPromptFor?:
+    | SessionManagerOptions["baseSystemPromptFor"]
+    | undefined;
+  sessionTools?: SessionManagerOptions["sessionTools"] | undefined;
+  toolMiddleware?: SessionManagerOptions["toolMiddleware"] | undefined;
+  askObserve?: SessionManagerOptions["askObserve"] | undefined;
   warn?: ((message: string) => void) | undefined;
 }
 
@@ -115,24 +126,24 @@ export interface AssembledServer {
   readonly server: WireServer;
   /** The scanned plugins: what is loaded, and what became of the ones that are not. */
   readonly manager: PluginManager;
+  /**
+   * Mount a plugin the host ships (a product's own), through the same `ctx.plugin` the bundled
+   * ones use. It is listed in `mounted()` and unloaded by `close()` like they are; one that will
+   * not load is reported there, not thrown.
+   */
+  mount: (name: string, plugin: unknown) => void;
   /** Every plugin mounted, and whatever stopped it. */
   mounted: () => MountedPlugin[];
   /** Stop listening, close the sessions, and let go of the files. */
   close: () => Promise<void>;
 }
 
-/** Mount the bundled plugins, each through the same `ctx.plugin` a user plugin would use. */
-function mountBundled(
-  ctx: Context,
-  names: readonly BundledPluginName[],
-  deps: {
-    manager: SessionManager;
-    providers: ProviderConfigStore;
-    settings: SettingsStore;
-    home: string;
-    fetch?: typeof fetch;
-  },
-): { mounted: MountedPlugin[]; fibers: { dispose: () => Promise<void> }[] } {
+/** Mounts plugins on the context and remembers what became of each. */
+function createMounter(ctx: Context): {
+  mounted: MountedPlugin[];
+  fibers: { dispose: () => Promise<void> }[];
+  mount: (name: string, plugin: unknown) => void;
+} {
   const mounted: MountedPlugin[] = [];
   const fibers: { dispose: () => Promise<void> }[] = [];
   const record = (name: string, error?: string): void => {
@@ -142,7 +153,7 @@ function mountBundled(
       ...(error === undefined ? {} : { error }),
     });
   };
-  const load = (name: BundledPluginName, plugin: unknown): void => {
+  const mount = (name: string, plugin: unknown): void => {
     try {
       // The fiber is what a plugin *is* once loaded: disposing it runs every effect the plugin
       // registered, which is how "unmount" is the same operation as "unload".
@@ -158,10 +169,25 @@ function mountBundled(
       record(name, error instanceof Error ? error.message : String(error));
     }
   };
+  return { mounted, fibers, mount };
+}
+
+/** Mount the bundled plugins, each through the same `ctx.plugin` a user plugin would use. */
+function mountBundled(
+  mount: (name: string, plugin: unknown) => void,
+  names: readonly BundledPluginName[],
+  deps: {
+    manager: SessionManager;
+    providers: ProviderConfigStore;
+    settings: SettingsStore;
+    home: string;
+    fetch?: typeof fetch;
+  },
+): void {
   if (names.includes("sessions"))
-    load("sessions", sessionsPlugin({ manager: deps.manager }));
+    mount("sessions", sessionsPlugin({ manager: deps.manager }));
   if (names.includes("providers")) {
-    load(
+    mount(
       "providers",
       providersPlugin({
         store: deps.providers,
@@ -170,13 +196,12 @@ function mountBundled(
     );
   }
   if (names.includes("settings"))
-    load("settings", settingsPlugin({ store: deps.settings }));
+    mount("settings", settingsPlugin({ store: deps.settings }));
   if (names.includes("personas"))
-    load(
+    mount(
       "personas",
       personasPlugin({ manager: deps.manager, home: deps.home }),
     );
-  return { mounted, fibers };
 }
 
 export async function assembleServer(
@@ -348,13 +373,26 @@ export async function assembleServer(
     ...(options.compaction === undefined
       ? {}
       : { compaction: options.compaction }),
+    ...(options.baseSystemPromptFor === undefined
+      ? {}
+      : { baseSystemPromptFor: options.baseSystemPromptFor }),
+    ...(options.sessionTools === undefined
+      ? {}
+      : { sessionTools: options.sessionTools }),
+    ...(options.toolMiddleware === undefined
+      ? {}
+      : { toolMiddleware: options.toolMiddleware }),
+    ...(options.askObserve === undefined
+      ? {}
+      : { askObserve: options.askObserve }),
     warn,
   });
 
   const wanted =
     options.plugins ??
     (["sessions", "providers", "settings", "personas"] as const);
-  const bundled = mountBundled(ctx, wanted, {
+  const mounter = createMounter(ctx);
+  mountBundled(mounter.mount, wanted, {
     manager: sessions,
     providers,
     settings,
@@ -374,7 +412,7 @@ export async function assembleServer(
 
   // `mounted` is read live: a plugin loaded later (or reloaded) shows up in the next `hello`.
   const listMounted = (): MountedPlugin[] => [
-    ...bundled.mounted,
+    ...mounter.mounted,
     ...manager.mounted(),
   ];
   const server = serveWire(
@@ -393,15 +431,18 @@ export async function assembleServer(
     sessions,
     server,
     manager,
+    mount: mounter.mount,
     mounted: listMounted,
     async close() {
       server.stop();
       providers.stop();
       // The plugins first: their effects are what hold subscriptions and state targets, and
-      // unloading them is what leaves the rest of the shutdown nothing to unwind.
+      // unloading them is what leaves the rest of the shutdown nothing to unwind. Last mounted,
+      // first unloaded: a host's plugin depends on the bundled ones, not the other way round.
       manager.stop();
       await manager.dispose();
-      for (const fiber of bundled.fibers.splice(0)) await fiber.dispose();
+      for (const fiber of mounter.fibers.splice(0).reverse())
+        await fiber.dispose();
       await sessions.closeAll();
       await store.close();
     },

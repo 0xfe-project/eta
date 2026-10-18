@@ -40,6 +40,7 @@ export {
   SESSION_ACTIONS,
   sessionsPlugin,
   type SessionsPluginOptions,
+  type SessionsService,
 } from "./bundled/sessions";
 export {
   SETTINGS_ACTIONS,
