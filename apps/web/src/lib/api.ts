@@ -1,15 +1,13 @@
 import type { paths as ControlPlanePaths } from "@/api/control-plane.gen";
-// Browser clients for the same-origin API behind the edge gateway: the
-// control plane (/api/v1, its routines under /api/routines/v1 and its
-// GitHub connection under /api/forge/v1), the LLM gateway (/api/llm/v1) and
-// the memory bundle's service (/api/bundles/memory/v1). POSTs carry an Idempotency-Key so a
-// retried request cannot run twice.
+// Browser clients for the old same-origin REST API that has not moved to the wire yet: the
+// control plane (/api/v1, for bundles and computers, and its GitHub connection under
+// /api/forge/v1), the LLM gateway (/api/llm/v1) and the memory bundle's service
+// (/api/bundles/memory/v1). POSTs carry an Idempotency-Key so a retried request cannot run twice.
 //
-// The control plane's and routines' clients are typed by their OpenAPI
-// documents, which are generated from the code (`bun run generate` writes
-// src/api; redocly.yaml lists the documents).
+// The control plane's client is typed by a frozen OpenAPI snapshot (`bun run generate` writes
+// src/api from openapi/compat.json; redocly.yaml lists it). Each client goes when its feature
+// moves to @eta/client-contracts.
 
-import type { paths as RoutinesPaths } from "@/api/routines.gen";
 import createClient from "openapi-fetch";
 import { translate } from "@/lib/i18n";
 
@@ -96,7 +94,6 @@ function typedClient<Paths extends object>() {
 }
 
 export const controlPlane = typedClient<ControlPlanePaths>();
-export const routinesApi = typedClient<RoutinesPaths>();
 
 /** The response's data, or its error envelope as an ApiError. */
 export async function unwrap<T>(
