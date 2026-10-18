@@ -100,35 +100,42 @@ export interface MachineFacts {
 
 /**
  * What the daemon can be asked over the pipe, beyond the `sessions.*` actions every eta server
- * has: `machine.<action>` calls.
+ * has: `machine.<action>` calls. They are quick ones. The pipe applies a connection's frames in
+ * order, so anything that can take long (a run, a script) is a `svc` call instead
+ * (`DaemonServiceParams`), which runs alongside.
  */
 export interface MachineActionArgs {
   info: Record<string, never>;
   /** Is this an existing directory on the machine? */
   stat: { path: string };
-  /** Run a script on the machine, the way the SSH transport does. */
-  exec: {
-    script: string;
-    inputBase64?: string;
-    timeoutMs?: number;
-    execId: string;
-  };
-  /** Stop a script started by `exec`. */
-  cancel: { execId: string };
   /**
    * Bring the session of one agent in a conversation in line with the agent, creating it when
    * `session` is not given. The agent's words, the tools it has and the model it uses are the
    * primary's, so they come with the call.
    */
   open: OpenSessionArgs;
-  /** Give the session some words as its next run and wait until it is quiet. */
-  run: { session: string; text: string };
+  /** Tell the daemon about models it may be asked to switch to (definitions, no credentials). */
+  catalog: { models: ModelSpec[] };
   /** What the session is configured with now. */
   config: { session: string };
 }
 export interface MachineActionResults {
   info: MachineFacts;
   stat: { ok: true } | { ok: false; reason: string };
+  open: { session: string };
+  catalog: Record<string, never>;
+  config: { model: string | undefined; thinkingLevel: string };
+}
+
+/** What the primary asks of the daemon that may take a while (`svc` calls). */
+export interface DaemonServiceParams {
+  /** Give the session some words as its next run and wait until it is quiet. */
+  run: { session: string; text: string };
+  /** Run a script on the machine, the way the SSH transport does. */
+  exec: { script: string; inputBase64?: string; timeoutMs?: number };
+}
+export interface DaemonServiceResults {
+  run: RunOutcome;
   exec: {
     code: number;
     stdout: string;
@@ -136,10 +143,6 @@ export interface MachineActionResults {
     timedOut?: boolean;
     aborted?: boolean;
   };
-  cancel: Record<string, never>;
-  open: { session: string };
-  run: RunOutcome;
-  config: { model: string | undefined; thinkingLevel: string };
 }
 
 /** A tool the primary offers a remote session; the daemon registers one that calls back. */
@@ -154,6 +157,8 @@ export interface ToolSpec {
 export type ModelSpec = Record<string, unknown> & {
   id: string;
   provider: string;
+  /** What the model was asked for by, when that is not its own name (a placeholder, an alias). */
+  lookup?: { provider: string; id: string };
 };
 
 export interface OpenSessionArgs {
@@ -189,13 +194,6 @@ export interface RunOutcome {
 export interface ServiceMethodParams {
   /** Generate. Streams the provider's events back; the reply is the final message. */
   "model.stream": {
-    session: string;
-    model: { provider: string; id: string };
-    context: unknown;
-    options?: Record<string, unknown>;
-  };
-  /** One-shot generation, for the things that do not stream. */
-  "model.complete": {
     session: string;
     model: { provider: string; id: string };
     context: unknown;

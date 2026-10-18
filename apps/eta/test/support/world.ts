@@ -30,6 +30,8 @@ export interface World {
     path?: string;
     stewardId?: string | null;
     name?: string;
+    /** A machine other than the primary. */
+    machineId?: string;
   }) => Promise<ProjectView>;
   /** A group conversation in a project. */
   group: (
@@ -97,6 +99,9 @@ export async function world(
         "create",
         {
           path,
+          ...(fields.machineId === undefined
+            ? {}
+            : { machineId: fields.machineId }),
           ...(fields.stewardId === undefined
             ? {}
             : { stewardId: fields.stewardId }),

@@ -25,6 +25,6 @@ export {
   type ServeContext,
   type ServeHandler,
 } from "./link/peer";
-export { modelSpecOf } from "./models";
+export { forwardedOptions, modelSpecOf } from "./models";
 export { DaemonNode, type DaemonNodeOptions } from "./node";
 export { listen, runAndWait } from "./run";
