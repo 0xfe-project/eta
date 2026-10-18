@@ -178,7 +178,6 @@ describe("chat 页里成排出现的东西", () => {
             } as never
           }
           agents={[{ id: "a1", name: "乐子人" } as never]}
-          groups={[]}
           activeReplies={[]}
           messages={
             [

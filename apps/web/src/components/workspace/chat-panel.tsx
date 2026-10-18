@@ -158,12 +158,6 @@ const activityText = {
 // Nothing. A message that slides up and fades in is a message you wait to read; eta-old's
 // transcript puts the row where it belongs and moves on.
 const ENTER = "";
-// Replies holding the agent's runtime; queued ones wait behind them.
-const EXECUTING = new Set<ChatMessage["status"]>([
-  "responding",
-  "waiting_for_input",
-  "stopping",
-]);
 // Failures of the agent's environment, which fail everything waiting at once.
 const ENVIRONMENT_FAILURES = new Set([
   "AGENT_UNAVAILABLE",
@@ -450,52 +444,28 @@ interface TurnActions {
 }
 
 /**
- * What a reply's state line needs from the rest of the conversation; plain
- * values, so a row given the same ones skips rendering.
+ * What a reply's outcome needs from the rest of the conversation; plain values, so a row given the
+ * same ones skips rendering.
+ *
+ * Only outcomes: a reply that is at work is the message itself (its text lands in the row as it is
+ * written), and stopping it is the composer's STOP. A second line saying "working…" under a
+ * message that is visibly growing is the interface talking about itself.
  */
 interface ReplyLine {
-  /** Replies ahead of a queued one. */
-  ahead?: number;
-  elsewhere?: string;
-  /** The agent is starting for this reply. */
-  starting?: boolean;
   /** The next reply failed the same way; this one says so. */
   sameAsNext?: boolean;
   /** The user message a failed reply answered. */
   resend?: ChatMessage;
 }
 
-/** The state line facts per reply. */
-function replyLines(
-  messages: ChatMessage[],
-  agents: Agent[],
-  activeReplies: ChatMessage[],
-  groups: Group[],
-) {
+/** What each reply's outcome needs from the ones around it. */
+function replyLines(messages: ChatMessage[]) {
   const replies = messages.filter(
     (m) => m.role === "assistant" && m.kind === "message",
   );
   const lines = new Map<string, ReplyLine>();
   replies.forEach((message, i) => {
-    if (message.status === "queued") {
-      const before = activeReplies.filter(
-        (m) =>
-          m.agent_id === message.agent_id &&
-          m.id !== message.id &&
-          ACTIVE_STATUSES.has(m.status) &&
-          (m.created_at < message.created_at || EXECUTING.has(m.status)),
-      );
-      const other = before.find((m) => m.group_id !== message.group_id);
-      lines.set(message.id, {
-        ahead: before.length,
-        starting:
-          !before.length &&
-          agents.find((a) => a.id === message.agent_id)?.status === "starting",
-        elsewhere: other
-          ? groups.find((g) => g.id === other.group_id)?.name
-          : undefined,
-      });
-    } else if (message.status === "failed") {
+    if (message.status === "failed") {
       const code = message.failure?.code ?? "";
       const next = replies[i + 1];
       lines.set(message.id, {
@@ -619,11 +589,9 @@ const Turn = memo(
           <time dateTime={message.created_at}>{when(message.created_at)}</time>
           <CopyMessage text={saidText} />
         </div>
-        <ReplyState
+        <ReplyOutcome
           message={message}
-          asking={pending.length > 0}
           line={line}
-          onStop={() => actions.current.onStop(message.id)}
           onResend={(parts) =>
             actions.current.onResend(parts, message.agent_id)
           }
@@ -634,20 +602,24 @@ const Turn = memo(
 );
 
 /**
- * The line under a reply. Only one per agent moves: the reply at work, or
- * the agent starting for the first one waiting.
+ * What a reply has to say about itself once it is over.
+ *
+ * Not while it is working: the answer is the row, growing as it is written, and the composer's
+ * STOP is what stops it. A reply that is waiting its turn is also just an empty row — eta-old has
+ * no "working…" line under a message, and the one this replaced was a report about the queue
+ * rather than about the conversation.
+ *
+ * Two outcomes still need words, because neither is visible in the text: a run that was stopped
+ * (the text is whatever it managed to say, which may be nothing) and a run that failed (the
+ * reason, and the way back: send it again).
  */
-function ReplyState({
+function ReplyOutcome({
   message,
-  asking,
   line,
-  onStop,
   onResend,
 }: {
   message: ChatMessage;
-  asking: boolean;
   line: ReplyLine;
-  onStop: () => void;
   onResend: (parts: OutgoingPart[], agentId?: string) => void;
 }) {
   const { t: translateText } = useTranslation([
@@ -658,69 +630,6 @@ function ReplyState({
     "tasks",
   ] as const);
   switch (message.status) {
-    case "responding":
-    case "waiting_for_input":
-      return (
-        <div className="flex items-center gap-3">
-          {asking ? null : (
-            <span
-              role="status"
-              className="font-mono text-[11px] text-muted-foreground"
-            >
-              {translateText("agents:status.working")}…
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={onStop}
-            className="text-xs text-muted-foreground underline underline-offset-2"
-          >
-            {translateText("common:actions.stop")}
-          </button>
-        </div>
-      );
-    case "stopping":
-      return (
-        <span
-          role="status"
-          className="font-mono text-[11px] text-muted-foreground"
-        >
-          {translateText("reply.stopping")}…
-        </span>
-      );
-    case "queued": {
-      if (line.starting)
-        return (
-          <span
-            role="status"
-            className="font-mono text-[11px] text-muted-foreground"
-          >
-            {translateText("reply.startingAgent")}…
-          </span>
-        );
-      return (
-        <div className="flex flex-wrap items-baseline gap-x-3 text-muted-foreground">
-          <span>
-            {line.elsewhere
-              ? translateText("reply.waitingElsewhere", {
-                  groupName: line.elsewhere,
-                })
-              : line.ahead
-                ? translateText("reply.queuePosition", {
-                    count: line.ahead,
-                  })
-                : translateText("common:status.waiting")}
-          </span>
-          <button
-            type="button"
-            onClick={onStop}
-            className="underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
-          >
-            {translateText("actions.withdraw")}
-          </button>
-        </div>
-      );
-    }
     case "stopped":
       return <Warning>{translateText("common:status.stopped")}</Warning>;
     case "failed": {
@@ -774,7 +683,6 @@ export function ChatPanel({
   notice,
   group,
   agents,
-  groups,
   activeReplies,
   outgoing,
   onRetry,
@@ -816,7 +724,6 @@ export function ChatPanel({
   notice?: React.ReactNode;
   group?: Group;
   agents: Agent[];
-  groups: Group[];
   activeReplies: ChatMessage[];
   /** The user's messages on their way, after the transcript. */
   outgoing: Outgoing[];
@@ -848,10 +755,7 @@ export function ChatPanel({
       ACTIVE_STATUSES.has(message.status) &&
       message.status !== "stopping",
   );
-  const lines = useMemo(
-    () => replyLines(messages, agents, activeReplies, groups),
-    [messages, agents, activeReplies, groups],
-  );
+  const lines = useMemo(() => replyLines(messages), [messages]);
   const pendingByMessage = useMemo(() => {
     const byMessage = new Map<string, Interaction[]>();
     for (const interaction of interactions)

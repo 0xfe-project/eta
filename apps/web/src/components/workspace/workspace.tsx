@@ -264,7 +264,6 @@ export function Workspace({
               groupName={group?.name}
               group={group}
               agents={agents}
-              groups={groups}
               activeReplies={chat.data?.messages ?? []}
               blocked={blocked}
               // Not a blocker: the group works without a folder, it just works somewhere nobody

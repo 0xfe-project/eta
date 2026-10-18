@@ -68,7 +68,6 @@ async function mount(blocks: Block[], { path = "/" } = {}) {
   const ui = () => (
     <ChatPanel
       agents={[]}
-      groups={[]}
       activeReplies={[]}
       groupId="a"
       groupName="助手"
