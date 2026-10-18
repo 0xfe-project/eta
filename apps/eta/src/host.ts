@@ -9,6 +9,7 @@ import type { AssembledServer, AssembleOptions } from "@eta/server";
  * before the floor, because the floor's per-session hooks are its, and mounted on the floor after.
  */
 import type { Database } from "bun:sqlite";
+import type { Product, RoutinesOptions } from "./product";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createLocalEnvironment } from "@eta/execution-node";
@@ -42,6 +43,8 @@ export interface HostOptions {
   home?: string;
   /** Whether to apply the config's network settings to the environment. */
   network?: boolean;
+  /** The routines' clock and limits, for a caller that moves time by hand (a test). */
+  routines?: RoutinesOptions;
   warn?: (message: string) => void;
 }
 
@@ -53,6 +56,8 @@ export interface Host {
   /** The token file, when the gate is on. */
   readonly tokenFile: string | undefined;
   readonly db: Database;
+  /** What the product made on the database: its engine and the routines' clock. */
+  readonly product: Product;
   /** The upstream server: its sessions, wire service and plugin manager. */
   readonly server: AssembledServer;
   /** Stop listening, close the sessions and the database. */
@@ -73,10 +78,16 @@ export async function startHost(options: HostOptions): Promise<Host> {
 
   const db = openDatabase(databasePath(options.dataDir));
   let server: AssembledServer;
+  let product: Product;
   try {
     applyMigrations(db, loadMigrations());
     const warn = options.warn ?? ((message: string) => console.warn(message));
-    const product = createProduct({ db, dataDir: options.dataDir, warn });
+    product = createProduct({
+      db,
+      dataDir: options.dataDir,
+      warn,
+      ...(options.routines === undefined ? {} : { routines: options.routines }),
+    });
     server = await assembleServer({
       dataDir: options.dataDir,
       configPath: join(options.dataDir, "config.json"),
@@ -118,6 +129,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
     webDir: options.webDir,
     tokenFile: access.tokenFile,
     db,
+    product,
     server,
     // Once: a signal and a caller may both ask, and the second has nothing left to close.
     close() {
