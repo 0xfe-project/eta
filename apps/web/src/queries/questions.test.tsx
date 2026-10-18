@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "@rstest/core";
 import { act } from "react";
 import { setWire } from "@/lib/wire";
-import { conversationView, memberView, productHost } from "@/test-product";
+import { interactionView, surfaceHost } from "@/test-inbox";
 import { cleanup, click, flush, mount } from "@/test-render";
 import { useAnswerQuestion, useQuestions } from "./questions";
 
@@ -25,75 +25,88 @@ function Questions({ conversationId }: { conversationId?: string }) {
   );
 }
 
-const waiting = (id: string, session: string) =>
-  conversationView({
-    id,
-    participants: [
-      memberView("a1", { sessionId: session, status: "waiting_for_input" }),
-    ],
-  });
-
-const ask = (questionId: string, question: string) => ({
-  core: { session: "s", running: true },
-  ask: { pending: { questionId, question, options: ["yes", "no"] } },
-});
-
 afterEach(async () => {
   await cleanup();
   setWire(undefined);
 });
 
 describe("the questions waiting for the user", () => {
-  it("come from the sessions of the members who are waiting", async () => {
-    const host = productHost({
-      conversations: [
-        waiting("c1", "s1"),
-        conversationView({
-          id: "c2",
-          participants: [memberView("a2", { sessionId: "s2" })],
+  it("are the inbox's pending rows that belong to a conversation", async () => {
+    surfaceHost({
+      interactions: [
+        interactionView({ id: "i1", prompt: "Delete the branch?" }),
+        interactionView({
+          id: "i2",
+          prompt: "already answered",
+          status: "answered",
+        }),
+        interactionView({
+          id: "i3",
+          prompt: "bare session",
+          conversationId: null,
         }),
       ],
     });
-    host.target("sessions.s1", ask("q1", "Delete the branch?"));
-    host.target("sessions.s2", ask("q2", "not waiting"));
     await mount(<Questions />);
     await flush();
     expect(document.body.textContent).toContain("Delete the branch?");
-    expect(document.body.textContent).not.toContain("not waiting");
+    expect(document.body.textContent).not.toContain("already answered");
+    expect(document.body.textContent).not.toContain("bare session");
   });
 
   it("can be narrowed to one conversation", async () => {
-    const host = productHost({
-      conversations: [waiting("c1", "s1"), waiting("c2", "s2")],
+    surfaceHost({
+      interactions: [
+        interactionView({ id: "i1", prompt: "first", conversationId: "g1" }),
+        interactionView({ id: "i2", prompt: "second", conversationId: "g2" }),
+      ],
     });
-    host.target("sessions.s1", ask("q1", "first"));
-    host.target("sessions.s2", ask("q2", "second"));
-    await mount(<Questions conversationId="c2" />);
+    await mount(<Questions conversationId="g2" />);
     await flush();
     expect(document.body.textContent).toContain("second");
     expect(document.body.textContent).not.toContain("first");
   });
 
-  it("are answered on the member's session, and can be given up", async () => {
-    const host = productHost({ conversations: [waiting("c1", "s1")] });
-    host.target("sessions.s1", ask("q1", "Delete the branch?"));
-    host.handle("sessions.answer", () => ({ answered: true }));
-    host.handle("sessions.askAbort", () => ({ aborted: true }));
+  it("are answered through the inbox, and can be given up", async () => {
+    const host = surfaceHost({
+      interactions: [
+        interactionView({
+          id: "i1",
+          prompt: "Delete the branch?",
+          options: ["yes", "no"],
+        }),
+      ],
+    });
+    host.handle("inbox.answer", () => ({ answered: true }));
     const { container } = await mount(<Questions />);
     await flush();
     await click(container.querySelectorAll("button")[0]);
     await click(container.querySelectorAll("button")[1]);
     await act(async () => undefined);
-    expect(host.calls.map((call) => [call.action, call.args])).toEqual([
+    expect(
+      host.calls.map((call) => [call.target, call.action, call.args]),
+    ).toEqual([
       [
+        "inbox",
         "answer",
-        {
-          session: "s1",
-          questionId: "q1",
-          response: { kind: "selection", selections: ["yes"] },
-        },
+        { id: "i1", response: { kind: "selection", selections: ["yes"] } },
       ],
-      ["askAbort", { session: "s1", questionId: "q1" }],
+      ["inbox", "answer", { id: "i1", response: { kind: "none" } }],
     ]);
+  });
+
+  it("are answered in words when they have no options", async () => {
+    const host = surfaceHost({
+      interactions: [interactionView({ id: "i1", options: [] })],
+    });
+    host.handle("inbox.answer", () => ({ answered: true }));
+    const { container } = await mount(<Questions />);
+    await flush();
+    await click(container.querySelectorAll("button")[0]);
+    await act(async () => undefined);
+    expect(host.calls[0]?.args).toEqual({
+      id: "i1",
+      response: { kind: "freeform", text: "yes" },
+    });
   });
 });

@@ -13,7 +13,7 @@ import { useWireMutation } from "@/queries/wire";
 // things the timeline does not hold live (the streamed text of a reply, the question it is waiting
 // on, its numbers). A conversation's member names its session once the member has first been woken.
 
-export const sessionTarget = (sessionId: string) => `sessions.${sessionId}`;
+const sessionTarget = (sessionId: string) => `sessions.${sessionId}`;
 
 /** The sections of a session the UI reads; any of them may be missing from a session. */
 export type SessionSections = Partial<
@@ -128,14 +128,6 @@ export function useRunBlocks(sessionId: string | undefined) {
 /** The actions on a session, each as a mutation. */
 export function useSessionActions() {
   return {
-    answer: useWireMutation<SessionArgs["answer"], { answered: boolean }>(
-      "sessions",
-      "answer",
-    ),
-    askAbort: useWireMutation<SessionArgs["askAbort"], { aborted: boolean }>(
-      "sessions",
-      "askAbort",
-    ),
     modelSet: useWireMutation<SessionArgs["modelSet"]>("sessions", "modelSet"),
     thinkingLevel: useWireMutation<SessionArgs["thinkingLevel"]>(
       "sessions",

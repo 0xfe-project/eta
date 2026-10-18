@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { formatLocale } from "@/lib/i18n";
-import { useAgentUsage } from "@/queries/llm";
+import { useAgentUsage } from "@/queries/usage";
 
 /** 12,345 → "1.2万"; tokens read best in 万 and 亿. */
 function tokens(n: number) {
@@ -17,14 +17,11 @@ const WINDOWS = [
   ["7d", "common:time.windows.week"],
 ] as const;
 
-/**
- * A chat agent's or a routine's model usage, as the LLM gateway counts it:
- * tokens over the last 5 hours, day and week.
- */
-export function UsageLine({ principal }: { principal: string }) {
+/** An agent's model usage, as the host counts it: tokens over the last 5 hours, day and week. */
+export function UsageLine({ agentId }: { agentId: string }) {
   const { t: translateText } = useTranslation(["agents", "common"] as const);
-  const { data: usage, isPending } = useAgentUsage(principal);
-  if (isPending) return null;
+  const { usage, loaded } = useAgentUsage(agentId);
+  if (!loaded) return null;
   const week = usage?.windows["7d"];
   return (
     <p className="text-xs text-muted-foreground tabular-nums">
@@ -33,7 +30,7 @@ export function UsageLine({ principal }: { principal: string }) {
           ? translateText("usage.tokensAndRequests", {
               tokens: WINDOWS.map(
                 ([key, label]) =>
-                  `${translateText(label)} ${tokens(usage?.windows[key]?.total_tokens ?? 0)}`,
+                  `${translateText(label)} ${tokens(usage?.windows[key]?.total ?? 0)}`,
               ).join(" · "),
               count: week.requests,
             })

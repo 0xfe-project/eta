@@ -7,6 +7,7 @@ import { PackageIcon } from "@phosphor-icons/react/Package";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
+import { ShieldCheckIcon } from "@phosphor-icons/react/ShieldCheck";
 import { capabilities } from "@/lib/capabilities";
 import { translate } from "@/lib/i18n";
 import { useNeedsAttention } from "@/queries/providers";
@@ -38,6 +39,13 @@ const everySection: {
       return translate("providers:title");
     },
     icon: PlugsConnectedIcon,
+  },
+  {
+    value: "approvals",
+    get label() {
+      return translate("settings:sections.approvals");
+    },
+    icon: ShieldCheckIcon,
   },
   {
     value: "connections",
