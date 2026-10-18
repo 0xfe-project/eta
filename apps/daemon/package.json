@@ -1,0 +1,33 @@
+{
+  "name": "@eta/daemon",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The eta daemon: sessions on another machine, reached over one outbound connection to the primary.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun build --compile --target=bun src/main.ts --outfile out/eta-daemon",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "test": "bun --bun vitest --run --passWithNoTests"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "0.85.1",
+    "@eta/client-contracts": "*",
+    "@eta/client-wire-proto": "*",
+    "@eta/core": "*",
+    "@eta/execution-node": "*",
+    "@eta/harness": "*",
+    "@eta/server": "*",
+    "@eta/ssh": "*",
+    "cordis": "4.0.0-rc.10"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.19",
+    "bun-types": "1.4.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}

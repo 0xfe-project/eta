@@ -262,6 +262,17 @@ function listedTask(task: BoardTaskDetail) {
  * the page's connection and connected. Each seeded conversation also gets its own target.
  */
 export function productHost(seed: ProductSeed = {}): FakeHost {
+  const host = buildProductHost(seed);
+  host.install();
+  host.hello();
+  return host;
+}
+
+/** The same host, not yet connected, with `plugins` mounted beside the product's. */
+export function buildProductHost(
+  seed: ProductSeed = {},
+  plugins: string[] = [],
+): FakeHost {
   const host = new FakeHost()
     .target("agents", { list: seed.agents ?? [] }, { eager: true })
     .target("machines", { list: seed.machines ?? [] }, { eager: true })
@@ -280,6 +291,7 @@ export function productHost(seed: ProductSeed = {}): FakeHost {
         "tasks",
         "artifacts",
         "routines",
+        ...plugins,
       ]
         .filter(
           (name) => !(seed.absent as string[] | undefined)?.includes(name),
@@ -316,7 +328,5 @@ export function productHost(seed: ProductSeed = {}): FakeHost {
       conversationSections(summary, seed.messages?.[summary.id]),
     );
   }
-  host.install();
-  host.hello();
   return host;
 }

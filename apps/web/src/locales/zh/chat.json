@@ -133,6 +133,8 @@
     "answered": "已答复",
     "requestLabel": "确认请求",
     "giveUp": "放弃",
+    "canceled": "已拒绝，没有答复",
+    "reply": "回答",
     "required": "需要确认",
     "continueQuestion": "是否继续？",
     "historyTitle": "已处理的确认",

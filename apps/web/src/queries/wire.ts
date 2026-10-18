@@ -3,7 +3,6 @@ import type { TargetState, WireState } from "@/lib/wire";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useStore } from "zustand";
-import { useShallow } from "zustand/react/shallow";
 import { translate } from "@/lib/i18n";
 import { getWire, WireError } from "@/lib/wire";
 
@@ -34,29 +33,6 @@ export function useTarget(target: string | undefined): TargetState | undefined {
   );
   return useStore(wire.store, (state) =>
     target === undefined ? undefined : state.targets[target],
-  );
-}
-
-/**
- * Several targets at once, in the order asked. The array changes only when one of the targets
- * does, so a view over the sessions of every member that is waiting for an answer does not render
- * on every frame of every other target.
- */
-export function useTargets(
-  targets: readonly string[],
-): (TargetState | undefined)[] {
-  const wire = getWire();
-  const key = targets.join("\n");
-  useEffect(() => {
-    const releases =
-      key === "" ? [] : key.split("\n").map((t) => wire.subscribe(t));
-    return () => {
-      for (const release of releases) release();
-    };
-  }, [wire, key]);
-  return useStore(
-    wire.store,
-    useShallow((state) => targets.map((target) => state.targets[target])),
   );
 }
 

@@ -35,6 +35,5 @@
     "emptyTitle": "No matching memories",
     "changeTypeHint": "Try another type or all types.",
     "changeQueryHint": "Try searching with different words."
-  },
-  "notOnThisHost": "This surface is not on this host yet (the memory service, P3.4)."
+  }
 }

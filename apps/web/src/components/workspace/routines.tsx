@@ -45,7 +45,6 @@ import {
 import { RoutineForm } from "./routine-form";
 import { describeSchedule, when } from "./routine-format";
 import { useRoutineNav } from "./routine-nav";
-import { UsageLine } from "./usage-line";
 import { useWorkspaceStore } from "./workspace-store";
 
 const runStatusLabels: Record<RunStatus, string> = {
@@ -644,7 +643,6 @@ export function RoutineDetail({
             .filter(Boolean)
             .join(" · ")}
         </p>
-        <UsageLine principal={`routine-${routine.id}`} />
       </div>
 
       <button

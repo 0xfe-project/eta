@@ -27,6 +27,7 @@ export type SettingsSection =
   | "agents"
   | "bundles"
   | "providers"
+  | "approvals"
   | "connections"
   | "computers"
   | "archived"

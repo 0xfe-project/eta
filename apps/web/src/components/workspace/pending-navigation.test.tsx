@@ -10,12 +10,8 @@ import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { setWire } from "@/lib/wire";
-import {
-  productHost,
-  routineInfo,
-  routineSections,
-  taskDetail,
-} from "@/test-product";
+import { surfaceHost } from "@/test-inbox";
+import { routineInfo, routineSections, taskDetail } from "@/test-product";
 import { PendingList } from "./attention";
 import { useShowLinkedView } from "./workspace-search";
 import { useWorkspaceStore } from "./workspace-store";
@@ -28,8 +24,10 @@ import { useWorkspaceStore } from "./workspace-store";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 async function mount(ui: () => React.ReactNode, path: string) {
-  const client = new QueryClient();
-  productHost({
+  const client = new QueryClient({
+    defaultOptions: { queries: { staleTime: Infinity } },
+  });
+  surfaceHost({
     tasks: [
       {
         task: taskDetail({
@@ -77,6 +75,7 @@ const links = (container: HTMLElement) =>
 describe("pending navigation", () => {
   beforeEach(() => {
     useWorkspaceStore.setState({ mobilePanel: "chat" });
+    surfaceHost();
   });
   afterEach(() => {
     document.body.innerHTML = "";

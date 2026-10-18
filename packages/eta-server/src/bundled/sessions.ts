@@ -4,6 +4,7 @@ import type {
   SessionArgs,
   SidebarSession,
 } from "@eta/client-contracts";
+import type { CallFrame } from "@eta/client-wire-proto";
 import type {
   GoalState,
   ImageContent,
@@ -24,6 +25,7 @@ import type {
   ManagedSession,
   SessionManager,
 } from "../manager";
+import type { DispatchOutcome, OpContext, OpHandler } from "../registry";
 import type { HistoryPage, SearchHit } from "../search";
 import type { SessionMeta } from "../store";
 import type { WireService } from "../wire-service";
@@ -65,8 +67,27 @@ export {
   type SessionAction,
 } from "@eta/client-contracts";
 
+/**
+ * The seam for sessions that live on another machine: this server is only where the user looks
+ * at them. A session id the router `owns` is not looked up in the manager; every `sessions.*`
+ * action addressed to it is handed over (with the call as it came) and the router answers. The
+ * server knows nothing else about such a session: how it is mirrored, and where it runs, is the
+ * router's business.
+ */
+export interface RemoteSessions {
+  /** Whether this session lives elsewhere. Asked on every action, so it must be cheap. */
+  owns: (id: string) => boolean;
+  call: (
+    action: string,
+    call: CallFrame,
+    context: OpContext,
+  ) => Promise<DispatchOutcome>;
+}
+
 export interface SessionsPluginOptions {
   manager: SessionManager;
+  /** Where actions on sessions that are not local go. */
+  remote?: RemoteSessions | undefined;
   /** Diagnostics. */
   warn?: ((message: string) => void) | undefined;
 }
@@ -117,6 +138,7 @@ export class SessionsService extends Service implements SessionsApi {
 
   private readonly manager: SessionManager;
   private readonly wire: WireService;
+  private readonly remote: RemoteSessions | undefined;
   private readonly held = new Map<string, Attached>();
   /**
    * What the store last told us, and nothing more: the *live* parts of a row (is it running,
@@ -131,11 +153,16 @@ export class SessionsService extends Service implements SessionsApi {
 
   constructor(
     ctx: ConstructorParameters<typeof Service>[0],
-    deps: { manager: SessionManager; wire: WireService },
+    deps: {
+      manager: SessionManager;
+      wire: WireService;
+      remote?: RemoteSessions | undefined;
+    },
   ) {
     super(ctx, "sessions");
     this.manager = deps.manager;
     this.wire = deps.wire;
+    this.remote = deps.remote;
     // The sidebar is eager: a client that has just connected draws it from `hello`. The
     // store is asynchronous and a state projector must not be, so the last answer is kept
     // here and refreshed whenever something changed.
@@ -559,6 +586,22 @@ export class SessionsService extends Service implements SessionsApi {
     questionId: string,
     response: unknown,
   ): Promise<boolean> {
+    if (this.remote?.owns(id) === true) {
+      const outcome = await this.remote.call(
+        "answer",
+        {
+          op: "call",
+          target: "sessions",
+          action: "answer",
+          args: { session: id, questionId, response },
+        },
+        { reply: () => undefined },
+      );
+      return (
+        (outcome.result as { answered?: boolean } | undefined)?.answered ===
+        true
+      );
+    }
     const attached = await this.open(id);
     const ask = attached.managed.session.ask;
     if (ask === undefined) throw new Error(`session ${id} has no ask channel`);
@@ -820,14 +863,26 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
         const service = new SessionsService(context, {
           manager: options.manager,
           wire,
+          remote: options.remote,
         });
         void service.refresh();
         const registrations: (() => void)[] = [];
+        const remote = options.remote;
+        // Every action names its session as `session`. One that lives elsewhere is not handled
+        // here at all; the router answers for it, whatever the action is.
+        const routed = (action: string, handler: OpHandler): (() => void) =>
+          wire.handle("sessions", action, (call, opContext) => {
+            const session = (call.args as { session?: unknown } | undefined)
+              ?.session;
+            if (typeof session === "string" && remote?.owns(session) === true)
+              return remote.call(action, call, opContext);
+            return handler(call, opContext);
+          });
 
         // One registration per action, in the shape any plugin would use — which is the
         // only reason they live here rather than in a privileged API surface.
         registrations.push(
-          wire.handle("sessions", "create", async (call) => {
+          routed("create", async (call) => {
             const args = (call.args ?? {}) as Partial<SessionArgs["create"]>;
             const session = await service.create({
               ...args,
@@ -837,7 +892,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "prompt", async (call) => {
+          routed("prompt", async (call) => {
             const args = (call.args ?? {}) as Partial<SessionArgs["prompt"]>;
             if (args.session === undefined || args.text === undefined) {
               throw new Error("sessions.prompt needs a session and a text");
@@ -851,7 +906,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "abort", async (call) => {
+          routed("abort", async (call) => {
             const { session } = (call.args ?? {}) as Partial<
               SessionArgs["abort"]
             >;
@@ -862,7 +917,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "focus", async (call) => {
+          routed("focus", async (call) => {
             const { session } = (call.args ?? {}) as Partial<
               SessionArgs["focus"]
             >;
@@ -873,7 +928,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "delete", async (call) => {
+          routed("delete", async (call) => {
             const { session } = (call.args ?? {}) as Partial<
               SessionArgs["delete"]
             >;
@@ -883,7 +938,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "rename", async (call) => {
+          routed("rename", async (call) => {
             const { session, title } = (call.args ?? {}) as Partial<
               SessionArgs["rename"]
             >;
@@ -898,7 +953,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "pin", async (call) => {
+          routed("pin", async (call) => {
             const { session, pinned } = (call.args ?? {}) as Partial<
               SessionArgs["pin"]
             >;
@@ -911,7 +966,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "archive", async (call) => {
+          routed("archive", async (call) => {
             const { session, archived } = (call.args ?? {}) as Partial<
               SessionArgs["archive"]
             >;
@@ -926,7 +981,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "fork", async (call) => {
+          routed("fork", async (call) => {
             const args = (call.args ?? {}) as Partial<SessionArgs["fork"]>;
             if (args.session === undefined)
               throw new Error("sessions.fork needs a session");
@@ -941,7 +996,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "compact", async (call) => {
+          routed("compact", async (call) => {
             const { session, instructions } = (call.args ?? {}) as Partial<
               SessionArgs["compact"]
             >;
@@ -952,7 +1007,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "btwOpen", async (call) => {
+          routed("btwOpen", async (call) => {
             const { session, kind } = (call.args ?? {}) as Partial<
               SessionArgs["btwOpen"]
             >;
@@ -968,7 +1023,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "btwAsk", async (call) => {
+          routed("btwAsk", async (call) => {
             const { session, threadId, question } = (call.args ??
               {}) as Partial<SessionArgs["btwAsk"]>;
             if (
@@ -985,7 +1040,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "btwAnswer", async (call) => {
+          routed("btwAnswer", async (call) => {
             const { session, threadId, question, answer } = (call.args ??
               {}) as Partial<SessionArgs["btwAnswer"]>;
             if (
@@ -1002,7 +1057,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "btwSave", async (call) => {
+          routed("btwSave", async (call) => {
             const { session, threadId } = (call.args ?? {}) as Partial<
               SessionArgs["btwSave"]
             >;
@@ -1017,7 +1072,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "btwHandoff", async (call) => {
+          routed("btwHandoff", async (call) => {
             const { session, threadId } = (call.args ?? {}) as Partial<
               SessionArgs["btwHandoff"]
             >;
@@ -1034,7 +1089,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "btwClear", async (call) => {
+          routed("btwClear", async (call) => {
             const { session, threadId } = (call.args ?? {}) as Partial<
               SessionArgs["btwClear"]
             >;
@@ -1049,7 +1104,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "subagentStop", async (call) => {
+          routed("subagentStop", async (call) => {
             const { session, id } = (call.args ?? {}) as Partial<
               SessionArgs["subagentStop"]
             >;
@@ -1063,7 +1118,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "goal", async (call) => {
+          routed("goal", async (call) => {
             const { session, action, objective } = (call.args ?? {}) as Partial<
               SessionArgs["goal"]
             >;
@@ -1084,7 +1139,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "taskCreate", async (call) => {
+          routed("taskCreate", async (call) => {
             const { session, content, priority } = (call.args ?? {}) as Partial<
               SessionArgs["taskCreate"]
             >;
@@ -1101,7 +1156,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "taskUpdate", async (call) => {
+          routed("taskUpdate", async (call) => {
             const { session, id, ...patch } = (call.args ?? {}) as Partial<
               SessionArgs["taskUpdate"]
             >;
@@ -1114,7 +1169,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "taskSet", async (call) => {
+          routed("taskSet", async (call) => {
             const { session, id, status } = (call.args ?? {}) as Partial<
               SessionArgs["taskSet"]
             >;
@@ -1135,7 +1190,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "taskRemove", async (call) => {
+          routed("taskRemove", async (call) => {
             const { session, id } = (call.args ?? {}) as Partial<
               SessionArgs["taskRemove"]
             >;
@@ -1148,7 +1203,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "stateDelete", async (call) => {
+          routed("stateDelete", async (call) => {
             const { session, key } = (call.args ?? {}) as Partial<
               SessionArgs["stateDelete"]
             >;
@@ -1160,7 +1215,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "answer", async (call) => {
+          routed("answer", async (call) => {
             const { session, questionId, response } = (call.args ??
               {}) as Partial<SessionArgs["answer"]>;
             if (session === undefined || questionId === undefined) {
@@ -1176,7 +1231,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "askAbort", async (call) => {
+          routed("askAbort", async (call) => {
             const { session, questionId } = (call.args ?? {}) as Partial<
               SessionArgs["askAbort"]
             >;
@@ -1191,7 +1246,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "modelSet", async (call) => {
+          routed("modelSet", async (call) => {
             const { session, model } = (call.args ?? {}) as Partial<
               SessionArgs["modelSet"]
             >;
@@ -1202,7 +1257,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "thinkingLevel", async (call) => {
+          routed("thinkingLevel", async (call) => {
             const { session, level } = (call.args ?? {}) as Partial<
               SessionArgs["thinkingLevel"]
             >;
@@ -1222,7 +1277,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "queueRemove", async (call) => {
+          routed("queueRemove", async (call) => {
             const { session, entryId } = (call.args ?? {}) as Partial<
               SessionArgs["queueRemove"]
             >;
@@ -1240,7 +1295,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "history", async (call) => {
+          routed("history", async (call) => {
             const args = (call.args ?? {}) as Partial<SessionArgs["history"]>;
             if (args.session === undefined)
               throw new Error("sessions.history needs a session");
@@ -1254,7 +1309,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "search", (call) => {
+          routed("search", (call) => {
             const { query } = (call.args ?? {}) as Partial<
               SessionArgs["search"]
             >;
@@ -1266,7 +1321,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
           }),
         );
         registrations.push(
-          wire.handle("sessions", "resync", async (call) => {
+          routed("resync", async (call) => {
             // A resync is a read: it answers with the current state of one session's target.
             // It opens the session when nobody holds it yet — the client is asking to be
             // caught up, and "it is not open" is not an answer to that.

@@ -1,8 +1,7 @@
 import type { paths as ControlPlanePaths } from "@/api/control-plane.gen";
 // Browser clients for the old same-origin REST API that has not moved to the wire yet: the
-// control plane (/api/v1, for bundles and computers, and its GitHub connection under
-// /api/forge/v1), the LLM gateway (/api/llm/v1) and the memory bundle's service
-// (/api/bundles/memory/v1). POSTs carry an Idempotency-Key so a retried request cannot run twice.
+// control plane (/api/v1, for bundles and computers) and its GitHub connection under
+// /api/forge/v1. POSTs carry an Idempotency-Key so a retried request cannot run twice.
 //
 // The control plane's client is typed by a frozen OpenAPI snapshot (`bun run generate` writes
 // src/api from openapi/compat.json; redocly.yaml lists it). Each client goes when its feature
@@ -73,8 +72,6 @@ function client(base: string) {
   };
 }
 
-export const llmApi = client("/api/llm/v1");
-export const memoryApi = client("/api/bundles/memory/v1");
 export const forgeApi = client("/api/forge/v1");
 
 /** A service's client, typed by its OpenAPI document. */

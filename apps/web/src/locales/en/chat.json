@@ -132,6 +132,8 @@
     "expired": "Expired without a response",
     "answered": "Answered",
     "giveUp": "Give up",
+    "canceled": "Declined without a response",
+    "reply": "Reply",
     "requestLabel": "Confirmation request",
     "required": "Confirmation needed",
     "continueQuestion": "Continue?",

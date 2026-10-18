@@ -97,6 +97,8 @@ export async function startHost(options: HostOptions): Promise<Host> {
       ...(options.routines === undefined ? {} : { routines: options.routines }),
       artifactLimits: options.artifactLimits,
       memoryUrl: options.memoryUrl,
+      hostname,
+      ...(options.home === undefined ? {} : { home: options.home }),
     });
     const web = createWebRoutes(options.webDir);
     server = await assembleServer({
@@ -114,6 +116,8 @@ export async function startHost(options: HostOptions): Promise<Host> {
       fetch: async (request) =>
         (await product.fetch(request)) ?? (await web(request)),
       authorize: access.authorize,
+      endpoints: product.endpoints,
+      remoteSessions: product.remote,
       // What the product adds to every session it owns: the agent's words in the system prompt,
       // and, from each of its features, tools, tool middleware and an ear for questions.
       baseSystemPromptFor: product.engine.baseSystemPromptFor,
@@ -147,6 +151,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
     // Once: a signal and a caller may both ask, and the second has nothing left to close.
     close() {
       closing ??= (async () => {
+        product.close();
         await server.close();
         db.close();
       })();

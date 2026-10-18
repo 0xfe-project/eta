@@ -18,7 +18,6 @@ const question = (
   id,
   conversationId: "g1",
   agentId,
-  sessionId: `s-${agentId}`,
   prompt: "跑一下 pwd",
   options: ["允许", "拒绝"],
   multi: false,

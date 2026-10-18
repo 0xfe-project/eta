@@ -1,5 +1,6 @@
 import type { BoardTaskDetail } from "@eta/client-contracts";
-import type { ProductSeed } from "@/test-product";
+import type { InteractionView } from "@/queries/inbox";
+import type { SurfaceSeed } from "@/test-inbox";
 import { afterEach, describe, expect, it } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -12,11 +13,10 @@ import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { setWire } from "@/lib/wire";
+import { interactionView, surfaceHost } from "@/test-inbox";
 import {
   agentView,
   conversationView,
-  memberView,
-  productHost,
   routineInfo,
   routineSections,
   taskDetail,
@@ -46,35 +46,24 @@ const routine = (id: string, reports: number, failures: number) =>
     }),
   );
 
-/** A member waiting on a question: the conversation list says so, its session holds the question. */
-function waiting(id: string, seed: ProductSeed = {}) {
-  const host = productHost({
+/** A pending question in a group, and the host that holds it. */
+function waiting(
+  id: string,
+  extra: Partial<InteractionView> = {},
+  seed: SurfaceSeed = {},
+) {
+  return surfaceHost({
     ...seed,
     agents: [agentView({ id: "a1", name: "研究员" })],
-    conversations: [
-      conversationView({
-        id: `g-${id}`,
-        name: "群聊",
-        participants: [
-          memberView("a1", {
-            sessionId: `s-${id}`,
-            status: "waiting_for_input",
-          }),
-        ],
+    conversations: [conversationView({ id: "g1", name: "群聊" })],
+    interactions: [
+      interactionView({
+        id,
+        prompt: `tasks 请求确认\n删除${id}？`,
+        ...extra,
       }),
     ],
   });
-  host.target(`sessions.s-${id}`, {
-    core: { session: `s-${id}`, running: true },
-    ask: {
-      pending: {
-        questionId: id,
-        question: `tasks 请求确认\n删除${id}？`,
-        options: ["允许", "拒绝"],
-      },
-    },
-  });
-  return host;
 }
 
 async function mount(
@@ -111,7 +100,7 @@ describe("what waits for the user", () => {
   });
 
   it("lists tasks and routines that need them, and nothing else", async () => {
-    productHost({
+    surfaceHost({
       tasks: [
         task(1, { assignee: "user" }),
         task(2, { status: "in_review" }),
@@ -135,26 +124,87 @@ describe("what waits for the user", () => {
   });
 
   it("groups confirmations, tasks and routines, and says which failed to load", async () => {
-    const client = new QueryClient();
     // The host has no routines plugin, so the routines never load.
-    waiting("i1", { absent: ["routines"] });
-    const container = await mount(client, () => <PendingList />);
+    waiting(
+      "i1",
+      {},
+      { tasks: [task(1, { status: "in_review" })], absent: ["routines"] },
+    );
+    const container = await mount(new QueryClient(), () => <PendingList />);
     await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
-    expect(headings(container)).toEqual(["所有群在等你的", "确认请求1"]);
+    expect(headings(container)).toEqual([
+      "所有群在等你的",
+      "确认请求1",
+      "任务1",
+    ]);
     expect(container.textContent).toContain("无法加载定时");
     expect(container.querySelector("li")!.textContent).toContain(
       "删除i1？允许拒绝放弃",
     );
   });
 
-  it("is a page of what waits, and nothing about what was answered before", async () => {
-    const client = new QueryClient({
-      defaultOptions: { queries: { staleTime: Infinity } },
+  describe("the page", () => {
+    const history = () => {
+      const now = Date.now();
+      surfaceHost({
+        agents: [agentView({ id: "a1", name: "研究员" })],
+        conversations: [conversationView({ id: "g1", name: "群聊" })],
+        interactions: [
+          interactionView({ id: "i1", prompt: "tasks 请求确认\n删除i1？" }),
+          interactionView({
+            id: "i2",
+            prompt: "tasks 请求确认\n删除i2？",
+            status: "answered",
+            answer: { kind: "selection", selections: ["允许"] },
+            updatedAt: now,
+          }),
+          interactionView({
+            id: "i3",
+            prompt: "tasks 请求确认\n删除i3？",
+            status: "canceled",
+            answer: { kind: "none" },
+            updatedAt: now,
+          }),
+          interactionView({
+            id: "i4",
+            prompt: "tasks 请求确认\n删除i4？",
+            status: "expired",
+            updatedAt: now - 2 * 86_400_000,
+          }),
+        ],
+      });
+      const client = new QueryClient({
+        defaultOptions: { queries: { staleTime: Infinity } },
+      });
+      return client;
+    };
+
+    it("lists what waits, then what was answered before, by day", async () => {
+      const page = await mount(history(), () => <Notifications />);
+      expect(headings(page)).toContain("已处理的确认");
+      const sections = [...page.querySelectorAll("section[aria-label]")];
+      const rows = sections.map((section) => [
+        section.getAttribute("aria-label"),
+        [...section.querySelectorAll("li")].map((li) => li.textContent),
+      ]);
+      expect(rows[0]?.[0]).toBe("确认请求");
+      expect(page.textContent).toContain("已选择「允许」");
+      expect(page.textContent).toContain("已拒绝，没有答复");
+      expect(page.textContent).toContain("已过期，没有答复");
+      expect(
+        page.querySelectorAll("section[aria-label='今天'] li"),
+      ).toHaveLength(2);
     });
-    waiting("i1");
-    const page = await mount(client, () => <Notifications />);
-    expect(headings(page)).not.toContain("已处理的确认");
-    expect(page.querySelectorAll("li")).toHaveLength(1);
-    expect(page.textContent).toContain("删除i1？");
+
+    it("shows only what waits under 待处理", async () => {
+      const page = await mount(
+        history(),
+        () => <Notifications />,
+        "/?filter=pending",
+      );
+      expect(headings(page)).not.toContain("已处理的确认");
+      expect(page.querySelectorAll("li")).toHaveLength(1);
+      expect(page.textContent).toContain("删除i1？");
+    });
   });
 });

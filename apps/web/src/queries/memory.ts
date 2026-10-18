@@ -1,28 +1,23 @@
+import type {
+  MemoryArgs,
+  MemoryResults,
+  MemorySource,
+  MemoryView,
+} from "@eta/client-contracts";
 import {
   queryOptions,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { z } from "zod";
-import { memoryApi } from "@/lib/api";
+import { getWire } from "@/lib/wire";
+import { useWireState } from "@/queries/wire";
 
-// Agents' long-term memories (/api/bundles/memory/v1). See bundles/memory/service.
+// What the agents remember: the `memory` target. It is calls with no state of its own (the
+// sidecar is the store), so the lists are queries over `memory.list` and are refetched after a
+// change here, and now and then because turns are remembered in the background once they finish.
 
-const memorySchema = z.object({
-  id: z.string(),
-  text: z.string(),
-  source_group_id: z.string().optional(),
-  // Relevance, on search results only.
-  score: z.number().optional(),
-  created_at: z.string().optional(),
-  // Missing on memories from before sources were recorded.
-  source: z.enum(["conversation", "agent", "user"]).optional(),
-});
-
-export type MemorySource = NonNullable<Memory["source"]>;
-
-export type Memory = z.infer<typeof memorySchema>;
+export type { MemorySource, MemoryView };
 
 const keys = {
   agent: (agentId: string) => ["memory", agentId] as const,
@@ -30,40 +25,53 @@ const keys = {
     agentId: string,
     query: string,
     source?: MemorySource,
-    groupId?: string,
+    conversationId?: string,
   ) =>
     [
       "memory",
       agentId,
       query,
       ...(source ? [source] : []),
-      ...(groupId ? [{ groupId }] : []),
+      ...(conversationId ? [{ conversationId }] : []),
     ] as const,
 };
 
-const path = (agentId: string) =>
-  `/agents/${encodeURIComponent(agentId)}/memories`;
-
-// Turns are remembered in the background after they finish.
 const POLL_MS = 15_000;
 
-/** The agent's memories, newest first, or the ones matching ``query``. */
+/**
+ * Whether this host runs with a memory sidecar. The target exists only then, so a host without one
+ * hides the page rather than offering one that cannot load.
+ */
+export function useMemoryMounted(): boolean {
+  return useWireState((state) =>
+    state.mounted.some(
+      (plugin) => plugin.name === "memory" && plugin.error === undefined,
+    ),
+  );
+}
+
+/** The agent's memories, newest first, or the ones matching `query`. */
 function memoriesQueryOptions(
   agentId: string,
   query: string,
   source?: MemorySource,
-  groupId?: string,
+  conversationId?: string,
 ) {
   return queryOptions({
-    queryKey: keys.memories(agentId, query, source, groupId),
-    queryFn: async ({ signal }) => {
-      const params = new URLSearchParams();
-      if (query) params.set("q", query);
-      if (source) params.set("source", source);
-      if (groupId) params.set("group_id", groupId);
-      const search = params.size ? `?${params}` : "";
-      const body = await memoryApi.get(`${path(agentId)}${search}`, signal);
-      return z.array(memorySchema).parse(body.memories);
+    queryKey: keys.memories(agentId, query, source, conversationId),
+    queryFn: async () => {
+      const args: MemoryArgs["list"] = {
+        agentId,
+        ...(query ? { query } : {}),
+        ...(source ? { source } : {}),
+        ...(conversationId ? { conversationId } : {}),
+      };
+      const { memories } = await getWire().call<MemoryResults["list"]>(
+        "memory",
+        "list",
+        args,
+      );
+      return memories;
     },
     refetchInterval: query ? false : POLL_MS,
   });
@@ -73,10 +81,10 @@ export function useMemories(
   agentId: string | undefined,
   query: string,
   source?: MemorySource,
-  groupId?: string,
+  conversationId?: string,
 ) {
   return useQuery({
-    ...memoriesQueryOptions(agentId ?? "", query, source, groupId),
+    ...memoriesQueryOptions(agentId ?? "", query, source, conversationId),
     enabled: Boolean(agentId),
   });
 }
@@ -84,8 +92,11 @@ export function useMemories(
 export function useRemember(agentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (text: string) =>
-      memorySchema.parse(await memoryApi.post(path(agentId), { text })),
+    mutationFn: (text: string) =>
+      getWire().call<MemoryResults["remember"]>("memory", "remember", {
+        agentId,
+        text,
+      } satisfies MemoryArgs["remember"]),
     onSettled: () =>
       queryClient.invalidateQueries({ queryKey: keys.agent(agentId) }),
   });
@@ -94,8 +105,11 @@ export function useRemember(agentId: string) {
 export function useForget(agentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (memoryId: string) =>
-      memoryApi.delete(`${path(agentId)}/${encodeURIComponent(memoryId)}`),
+    mutationFn: (id: string) =>
+      getWire().call<MemoryResults["forget"]>("memory", "forget", {
+        agentId,
+        id,
+      } satisfies MemoryArgs["forget"]),
     onSettled: () =>
       queryClient.invalidateQueries({ queryKey: keys.agent(agentId) }),
   });
