@@ -38,6 +38,11 @@ export interface HostOptions {
   tokenFile?: string;
   /** Other origins that may open the socket, for a page served elsewhere (the dev server). */
   allowOrigins?: readonly string[];
+  /**
+   * The memory sidecar's address. Without one the host has no memory: no `memory` target, no
+   * memory tools, and nothing is ever sent to a sidecar.
+   */
+  memoryUrl?: string;
   /** The model layer, when the caller has its own (a test with scripted answers). */
   models?: AssembleOptions["models"];
   /** Where the agent's home is, for personas. Defaults to the real one. */
@@ -91,6 +96,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       warn,
       ...(options.routines === undefined ? {} : { routines: options.routines }),
       artifactLimits: options.artifactLimits,
+      memoryUrl: options.memoryUrl,
     });
     const web = createWebRoutes(options.webDir);
     server = await assembleServer({

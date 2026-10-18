@@ -1,7 +1,7 @@
 [project]
 name = "axp-memory-service"
 version = "0.1.0"
-description = "Agents' long-term memory behind the runtime gateway."
+description = "Agents' long-term memory: the sidecar of the eta host."
 requires-python = ">=3.13,<3.14"
 dependencies = [
   "fastembed>=0.7",

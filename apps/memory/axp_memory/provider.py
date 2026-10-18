@@ -32,12 +32,11 @@ class MemoryProvider(Protocol):
         *,
         source: str,
         infer: bool,
-        model: str | None = None,
         group_id: str | None = None,
     ) -> list[Memory]:
         """Remember ``messages`` ({"role", "content"}) for the agent.
 
-        With ``infer`` the provider extracts facts with ``model``; without it
+        With ``infer`` the provider extracts facts with its own model; without it
         every message is kept as written. Every memory keeps ``source``.
         """
         ...

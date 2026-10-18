@@ -3,7 +3,7 @@
  *
  *   bun apps/eta/src/main.ts [--data-dir ~/.eta] [--port 8787] [--host 127.0.0.1]
  *                            [--web-dir <built web>] [--token-file <path>]
- *                            [--allow-origin <origin>]...
+ *                            [--allow-origin <origin>]... [--memory-url <sidecar>]
  *
  * A thin shell around `startHost`: flags, a startup summary on one line, and a signal handler.
  * Everything the host serves lives behind the one port; `--web-dir` adds the page, and a host
@@ -23,6 +23,7 @@ const { values } = parseArgs({
     "web-dir": { type: "string" },
     "token-file": { type: "string" },
     "allow-origin": { type: "string", multiple: true },
+    "memory-url": { type: "string" },
   },
   strict: true,
 });
@@ -32,6 +33,8 @@ if (!Number.isInteger(port) || port < 0 || port > 65_535) {
   console.error(`--port: not a port: ${values.port}`);
   process.exit(2);
 }
+
+const memoryUrl = values["memory-url"] ?? process.env.ETA_MEMORY_URL;
 
 const host = await startHost({
   dataDir: resolve(values["data-dir"] ?? join(homedir(), ".eta")),
@@ -44,6 +47,8 @@ const host = await startHost({
     ? {}
     : { tokenFile: resolve(values["token-file"]) }),
   allowOrigins: values["allow-origin"] ?? [],
+  // The flag wins over the environment; an empty value means none.
+  ...(memoryUrl === undefined || memoryUrl === "" ? {} : { memoryUrl }),
 });
 
 console.log(
