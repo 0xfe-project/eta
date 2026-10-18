@@ -1,17 +1,11 @@
 import { useEffect } from "react";
-import { useLiveChat, usePendingInteractions } from "@/queries/chat";
+import { useQuestions } from "@/queries/questions";
 
-/** Counts waiting confirmations in the tab's title. */
-function usePendingTitle() {
-  const pending = usePendingInteractions().length;
+/** Counts the questions waiting for the user in the tab's title. */
+export function LiveChat() {
+  const pending = useQuestions().length;
   useEffect(() => {
     document.title = pending ? `(${pending}) eta` : "eta";
   }, [pending]);
-}
-
-/** The one chat subscription, on every page; see RootDocument. */
-export function LiveChat() {
-  useLiveChat();
-  usePendingTitle();
   return null;
 }

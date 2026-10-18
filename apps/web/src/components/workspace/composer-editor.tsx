@@ -1,5 +1,4 @@
-import type { BlockPart } from "./composer-nodes";
-import type { Draft, FilePart } from "@/lib/composer";
+import type { Draft } from "@/lib/composer";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
@@ -15,7 +14,7 @@ import {
 } from "lexical";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { isLongPaste, MAX_MESSAGE_CHARS, pasteFileName } from "@/lib/composer";
+import { isLongPaste } from "@/lib/composer";
 import { cn } from "@/lib/utils";
 import { $readDraft, $writeDraft, BlockNode } from "./composer-nodes";
 
@@ -24,47 +23,12 @@ import { $readDraft, $writeDraft, BlockNode } from "./composer-nodes";
 // file only says how pastes become blocks and keeps the editor and the
 // draft the same.
 
-/** The clipboard's files, unless it holds rich text with a picture of it. */
-function pastedFiles(data: DataTransfer): File[] {
-  const files = [...data.files];
-  if (!files.length) {
-    for (const item of data.items ?? []) {
-      const file = item.kind === "file" ? item.getAsFile() : null;
-      if (file) files.push(file);
-    }
-  }
-  // Office and web pages put a rendered image beside copied text: the text
-  // is what was copied. A file manager's own text is only names.
-  const rich =
-    data.types.includes("text/html") || data.types.includes("text/rtf");
-  if (
-    rich &&
-    data.getData("text/plain").trim() &&
-    files.every((f) => f.type.startsWith("image/"))
-  )
-    return [];
-  return files;
-}
-
 const sameDraft = (a: Draft, b: Draft) =>
   JSON.stringify(a) === JSON.stringify(b);
 
-/** Folds long pastes and files into blocks; never inserts HTML. */
-function PastePlugin({
-  onFiles,
-  onPaste,
-}: {
-  onFiles: (files: File[]) => FilePart[];
-  /** A long paste: kept as a block, and also written to the project as a file. */
-  onPaste?: (id: string, text: string) => void;
-}) {
+/** Folds long pastes into blocks; never inserts HTML. */
+function PastePlugin() {
   const [editor] = useLexicalComposerContext();
-  const onFilesRef = useRef(onFiles);
-  const onPasteRef = useRef(onPaste);
-  useEffect(() => {
-    onFilesRef.current = onFiles;
-    onPasteRef.current = onPaste;
-  });
   useEffect(
     () =>
       editor.registerCommand(
@@ -77,27 +41,13 @@ function PastePlugin({
                 ? event.clipboardData
                 : event.dataTransfer;
           if (!data) return false;
-          const files = pastedFiles(data);
           const text = data.getData("text/plain").replace(/\r\n?/g, "\n");
-          let blocks: BlockPart[] = [];
-          if (files.length) blocks = onFilesRef.current(files);
-          else if (text.length > MAX_MESSAGE_CHARS)
-            blocks = onFilesRef.current([
-              new File([text], pasteFileName(), {
-                type: "text/plain;charset=utf-8",
-              }),
-            ]);
-          else if (isLongPaste(text)) {
-            const id = crypto.randomUUID();
-            blocks = [{ type: "paste", id, text }];
-            // The block is what the composer shows; the file is what the agent can open. Both,
-            // because a 200-line paste in a message body is a message nobody can read.
-            onPasteRef.current?.(id, text);
-          }
           // Short text: the plain text editor inserts text/plain alone.
-          else return false;
+          if (!isLongPaste(text)) return false;
           event.preventDefault();
-          $insertNodes(blocks.map((part) => new BlockNode(part)));
+          $insertNodes([
+            new BlockNode({ type: "paste", id: crypto.randomUUID(), text }),
+          ]);
           return true;
         },
         COMMAND_PRIORITY_HIGH,
@@ -169,8 +119,6 @@ export function ComposerEditor({
   onKeyDown,
   onCompositionStart,
   onCompositionEnd,
-  onFiles,
-  onPaste,
   placeholder,
   disabled = false,
   className,
@@ -183,10 +131,6 @@ export function ComposerEditor({
   /** The input method's own events: the keydown handler needs to know a composition happened. */
   onCompositionStart?: () => void;
   onCompositionEnd?: () => void;
-  /** Start uploading pasted files; their blocks. */
-  onFiles: (files: File[]) => FilePart[];
-  /** A long paste became a block: also write it into the project as a file. */
-  onPaste?: (id: string, text: string) => void;
   placeholder: string;
   disabled?: boolean;
   className?: string;
@@ -238,7 +182,7 @@ export function ComposerEditor({
         />
       </div>
       <HistoryPlugin />
-      <PastePlugin onFiles={onFiles} onPaste={onPaste} />
+      <PastePlugin />
       <DraftPlugin
         value={value}
         onChange={onChange}

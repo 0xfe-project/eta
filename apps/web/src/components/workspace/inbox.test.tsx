@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { afterEach, describe, expect, it } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   createMemoryHistory,
@@ -9,6 +9,13 @@ import {
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { setWire } from "@/lib/wire";
+import {
+  agentView,
+  conversationView,
+  memberView,
+  productHost,
+} from "@/test-product";
 import { Inbox } from "./inbox";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -16,30 +23,43 @@ import { useWorkspaceStore } from "./workspace-store";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const agent = (id: string, name: string) => ({ id, name });
-const interaction = (id: string, agentId: string, status = "pending") => ({
-  id,
-  agent_id: agentId,
-  group_id: `g-${agentId}`,
-  message_id: `m-${id}`,
-  kind: "choice",
-  prompt: `tasks 请求确认\n${id}`,
-  options: [
-    { value: "allow", label: "允许" },
-    { value: "deny", label: "拒绝" },
-  ],
-  status,
-  revision: 1,
-  created_at: "2026-10-09T09:00:00Z",
-  updated_at: "2026-10-09T09:00:00Z",
-});
-
-async function render(snapshot: object) {
+/** Members waiting on a question each: the conversation list says so, their sessions ask. */
+async function render(waits: { id: string; agent: string }[]) {
+  const host = productHost({
+    agents: [
+      agentView({ id: "a1", name: "研究员" }),
+      agentView({ id: "a2", name: "运维" }),
+    ],
+    conversations: waits.map(({ id, agent }) =>
+      conversationView({
+        id: `g-${agent}`,
+        name: "群聊",
+        participants: [
+          memberView(agent, {
+            sessionId: `s-${id}`,
+            status: "waiting_for_input",
+          }),
+        ],
+      }),
+    ),
+  });
+  for (const { id } of waits) {
+    host.target(`sessions.s-${id}`, {
+      core: { session: `s-${id}`, running: true },
+      ask: {
+        pending: {
+          questionId: id,
+          question: `tasks 请求确认\n${id}`,
+          options: ["允许", "拒绝"],
+        },
+      },
+    });
+  }
+  host.handle("sessions.answer", () => ({ answered: true }));
   // The tasks and routines that wait for the user too: none.
   const queryClient = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity } },
   });
-  queryClient.setQueryData(["chat"], { groups: [], ...snapshot });
   queryClient.setQueryData(["tasks"], { tasks: [], assignees: [] });
   queryClient.setQueryData(["routines"], []);
   const router = createRouter({
@@ -63,7 +83,8 @@ async function render(snapshot: object) {
     );
     await router.load();
   });
-  return container;
+  await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+  return { container, host };
 }
 
 const button = (container: HTMLElement, text: string) =>
@@ -74,57 +95,33 @@ const button = (container: HTMLElement, text: string) =>
 describe("Inbox", () => {
   afterEach(() => {
     document.body.innerHTML = "";
-    rstest.restoreAllMocks();
+    setWire(undefined);
   });
 
-  it("lists every agent's pending confirmations", async () => {
-    const container = await render({
-      agents: [agent("a1", "研究员"), agent("a2", "运维")],
-      interactions: [
-        interaction("i1", "a1"),
-        interaction("i2", "a2"),
-        interaction("i3", "a2", "resolved"),
-      ],
-    });
+  it("lists every agent's pending questions", async () => {
+    const { container } = await render([
+      { id: "i1", agent: "a1" },
+      { id: "i2", agent: "a2" },
+    ]);
     const items = container.querySelectorAll("li");
     expect(items).toHaveLength(2);
     expect(items[0].textContent).toContain("研究员");
     expect(items[1].textContent).toContain("运维");
   });
 
-  it("answers a confirmation", async () => {
-    const answered = {
-      ...interaction("i1", "a1"),
-      status: "submitted",
-      revision: 2,
-    };
-    const fetch = rstest
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(
-        new Response(JSON.stringify(answered), { status: 202 }),
-      );
-    const container = await render({
-      agents: [agent("a1", "研究员")],
-      interactions: [interaction("i1", "a1")],
-    });
+  it("answers a question on the member's session", async () => {
+    const { container, host } = await render([{ id: "i1", agent: "a1" }]);
     await act(async () => button(container, "拒绝").click());
-    // Until the answer's response has settled, however long that takes.
-    for (let i = 0; i < 100; i++) {
-      if (container.textContent?.includes("没有等你处理的事")) break;
-      await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
-    }
-    const [request] = fetch.mock.calls[0] as [Request];
-    expect(request.url).toContain("/api/v1/chat/interactions/i1/answer");
-    expect(request.headers.get("Idempotency-Key")).toBeTruthy();
-    expect(await request.json()).toEqual({ value: "deny" });
-    expect(container.textContent).toContain("没有等你处理的事");
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    expect(host.calls.find((call) => call.action === "answer")?.args).toEqual({
+      session: "s-i1",
+      questionId: "i1",
+      response: { kind: "selection", selections: ["拒绝"] },
+    });
   });
 
   it("opens the agent's conversation", async () => {
-    const container = await render({
-      agents: [agent("a1", "研究员"), agent("a2", "运维")],
-      interactions: [interaction("i2", "a2")],
-    });
+    const { container } = await render([{ id: "i2", agent: "a2" }]);
     await act(async () => button(container, "运维 · 群聊").click());
     const state = useWorkspaceStore.getState();
     expect(window.location.pathname).toBe("/");

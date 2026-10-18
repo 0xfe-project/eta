@@ -2,6 +2,8 @@ import { afterEach, expect, it, rstest } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { setWire } from "@/lib/wire";
+import { agentView, conversationView, productHost } from "@/test-product";
 import { MemoryView } from "./memory-view";
 
 (
@@ -22,12 +24,13 @@ afterEach(async () => {
   await act(async () => root.render(null));
   client.clear();
   rstest.restoreAllMocks();
+  setWire(undefined);
 });
+let host: ReturnType<typeof productHost>;
 async function render() {
-  client.setQueryData(["chat"], {
-    agents: [{ id: "a", name: "助手" }],
-    messages: [],
-    interactions: [],
+  host = productHost({
+    agents: [agentView({ id: "a", name: "助手" })],
+    conversations: [],
   });
   client.setQueryData(["memory", "a", ""], memories);
   await act(async () =>
@@ -43,12 +46,7 @@ const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 it("updates source names from the group snapshot without rewriting memories", async () => {
   await render();
   const updateGroup = (name: string) =>
-    client.setQueryData(["chat"], {
-      agents: [{ id: "a", name: "助手" }],
-      groups: [{ id: "g", name }],
-      messages: [],
-      interactions: [],
-    });
+    host.set("conversations", { list: [conversationView({ id: "g", name })] });
   await act(async () => {
     client.setQueryData(
       ["memory", "a", ""],

@@ -19,7 +19,8 @@
     "errors": {
       "failedAttachments": "有附件上传失败：重试或移除后再发送。",
       "attachmentLimit": "一条消息最多带 {{maxAttachments}} 个附件。",
-      "messageLength": "消息文本超过 {{maxCharacters}} 字符，更长的内容请作为文件粘贴。"
+      "messageLength": "消息文本超过 {{maxCharacters}} 字符，更长的内容请作为文件粘贴。",
+      "messageTooLong": "消息超过 {{maxCharacters}} 字符。"
     },
     "placeholder": "发消息给 {{agentName}}…",
     "createAgentFirst": "先创建智能体",
@@ -131,6 +132,7 @@
     "expired": "已过期，没有答复",
     "answered": "已答复",
     "requestLabel": "确认请求",
+    "giveUp": "放弃",
     "required": "需要确认",
     "continueQuestion": "是否继续？",
     "historyTitle": "已处理的确认",
@@ -154,7 +156,11 @@
     "interruptReply": "插入当前回复"
   },
   "messages": {
-    "mentionTarget": " → {{name}}"
+    "mentionTarget": " → {{name}}",
+    "nobody": "这条消息没有叫醒任何人：对话没有主理人，成员不止一位。@ 一位成员，或设一位主理人。",
+    "joined": "已并入 {{names}} 正在进行的回复",
+    "expand": "展开全文",
+    "collapse": "收起"
   },
   "reply": {
     "stopping": "正在停止",
@@ -164,7 +170,14 @@
     "sameFailureAsNext": "此消息未执行，原因同下。",
     "failed": "回复失败。",
     "queuePosition_one": "等待中 · 前面还有 {{count}} 条",
-    "queuePosition_other": "等待中 · 前面还有 {{count}} 条"
+    "queuePosition_other": "等待中 · 前面还有 {{count}} 条",
+    "codes": {
+      "restart": "宿主重启了，这条回复没有写完。",
+      "runFailed": "运行失败。",
+      "unavailable": "跑不起来。",
+      "gone": "这位成员已不在对话里。"
+    },
+    "queued": "排队中"
   },
   "actions": {
     "withdraw": "撤回",
@@ -260,11 +273,27 @@
   },
   "new": {
     "title": "新对话",
-    "hint": "选一个智能体和目录。对话会出现在左栏那个目录下面。",
-    "folder": "目录",
-    "folderHint": "agent 在这儿干活：命令在这里跑，项目笔记从这里读。",
+    "hint": "选一个项目和一位智能体。对话会出现在左栏那个项目下面。",
     "agent": "智能体",
-    "start": "开始"
+    "start": "开始",
+    "project": "项目",
+    "addPath": "添加目录…",
+    "path": "目录路径",
+    "pathHint": "在主机器上的绝对路径，必须是已存在的目录。成员在这里干活。"
   },
-  "chat": {}
+  "chat": {},
+  "steward": {
+    "label": "主理人：{{name}}",
+    "hint": "没 @ 的消息由主理人接",
+    "none": "没有主理人",
+    "thisConversation": "本对话的主理人",
+    "followProject": "跟随项目",
+    "project": "项目「{{name}}」的主理人"
+  },
+  "system": {
+    "stewardChanged": "{{to}} 成为主理人，接替 {{from}}。",
+    "stewardSet": "{{to}} 成为主理人。",
+    "stewardCleared": "{{from}} 不再是主理人。",
+    "wakeBudget": "这条消息已经用完 {{budget}} 次唤醒；之后的 @ 只记入对话，等你再发言才会唤醒。"
+  }
 }

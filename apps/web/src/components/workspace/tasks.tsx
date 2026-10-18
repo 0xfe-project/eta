@@ -1,5 +1,4 @@
 import type { AssigneeDraft } from "./assignee-draft";
-import type { ChatMessage } from "@/queries/chat";
 import type {
   LogEntry,
   RunStatus,
@@ -405,6 +404,13 @@ function StatusSelect({
   );
 }
 
+/** A task an agent drafted in a chat, to confirm (the old chat's `task_draft` message). */
+interface TaskProposal {
+  id: string;
+  group_id: string;
+  data: Record<string, unknown>;
+}
+
 /** A new task; `bare` leaves the heading to a dialog around it. */
 export function TaskForm({
   onDone,
@@ -415,7 +421,7 @@ export function TaskForm({
   onDone: (id?: string) => void;
   bare?: boolean;
   initialStatus?: TaskStatus;
-  proposal?: ChatMessage;
+  proposal?: TaskProposal;
 }) {
   const { t: translateText } = useTranslation([
     "tasks",

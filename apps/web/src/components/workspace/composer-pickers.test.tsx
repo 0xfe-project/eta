@@ -1,27 +1,11 @@
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act } from "react";
-import { createRoot } from "react-dom/client";
+import { afterEach, describe, expect, it } from "@rstest/core";
 import { setWire } from "@/lib/wire";
+import { cleanup, click, flush, mount } from "@/test-render";
 import { providersHost } from "@/test-wire";
 import { ModelChip, ThinkingChip } from "./composer-pickers";
 
-const requests = rstest.hoisted(() => ({ patches: [] as unknown[] }));
-
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-
-const cleanup: (() => void)[] = [];
-async function render(node: React.ReactNode) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { staleTime: Infinity, retry: false } },
-  });
-  client.setQueryData(["session-model", "s1"], {
-    model: "local:m1",
-    thinking_level: "off",
-  });
-  providersHost({
+function host() {
+  const fake = providersHost({
     revision: "r1",
     providers: [
       {
@@ -37,43 +21,61 @@ async function render(node: React.ReactNode) {
       },
     ],
   });
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () =>
-    root.render(
-      <QueryClientProvider client={client}>{node}</QueryClientProvider>,
-    ),
-  );
-  cleanup.push(() => {
-    root.unmount();
-    container.remove();
+  fake.target("sessions.s1", {
+    core: { session: "s1", running: false },
+    model: { id: "local:m1", thinkingLevel: "off" },
   });
-  return container;
+  fake.handle("sessions.resync", () => ({}));
+  fake.handle("sessions.modelSet", () => ({}));
+  fake.handle("sessions.thinkingLevel", () => ({}));
+  return fake;
 }
 
 afterEach(async () => {
-  await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
-  requests.patches.length = 0;
+  await cleanup();
   setWire(undefined);
-  rstest.restoreAllMocks();
 });
 
 describe("单聊的两个 chip", () => {
   it("说的是这个会话真正在跑的模型，不是设置里的默认", async () => {
-    const container = await render(<ModelChip sessionId="s1" />);
+    host();
+    const { container } = await mount(<ModelChip sessionId="s1" />);
+    await flush();
     expect(container.textContent).toContain("local:m1");
   });
 
   it("思考档显示当前值", async () => {
-    const container = await render(<ThinkingChip sessionId="s1" />);
+    host();
+    const { container } = await mount(<ThinkingChip sessionId="s1" />);
+    await flush();
     expect(container.textContent).toContain("think:off");
   });
 
+  it("换思考档走会话的 thinkingLevel", async () => {
+    const fake = host();
+    const { container } = await mount(<ThinkingChip sessionId="s1" />);
+    await flush();
+    const trigger = container.querySelector("button");
+    // Radix opens its menu on pointer down.
+    trigger?.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
+    );
+    await flush();
+    const item = [...document.querySelectorAll('[role="menuitem"]')].find((i) =>
+      i.textContent?.includes("high"),
+    );
+    await click(item);
+    await flush();
+    expect(
+      fake.calls.find((call) => call.action === "thinkingLevel")?.args,
+    ).toEqual({ session: "s1", level: "high" });
+  });
+
   it("没有会话时不画", async () => {
-    const model = await render(<ModelChip sessionId={undefined} />);
-    expect(model.textContent).toBe("");
-    const thinking = await render(<ThinkingChip sessionId={undefined} />);
-    expect(thinking.textContent).toBe("");
+    host();
+    const model = await mount(<ModelChip sessionId={undefined} />);
+    expect(model.container.textContent).toBe("");
+    const thinking = await mount(<ThinkingChip sessionId={undefined} />);
+    expect(thinking.container.textContent).toBe("");
   });
 });

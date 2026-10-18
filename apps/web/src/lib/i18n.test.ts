@@ -97,7 +97,13 @@ describe("live translations", () => {
     expect(
       describeSchedule({ kind: "weekly", days: [1, 5], time: "08:00" }),
     ).toBe("每周一、五 08:00");
-    const values = { name: "", description: "", model: "", bundles: null };
+    const values = {
+      name: "",
+      description: "",
+      model: "",
+      persona: "",
+      thinkingLevel: "",
+    };
     expect(agentFormSchema.safeParse(values).error?.issues[0].message).toBe(
       "请输入名称。",
     );
@@ -126,8 +132,8 @@ describe("live translations", () => {
 
   it("keeps both everyone mention aliases valid in drafts across languages", () => {
     const members = [
-      { agent_id: "a", name: "Alice" },
-      { agent_id: "b", name: "Bob" },
+      { id: "a", name: "Alice" },
+      { id: "b", name: "Bob" },
     ];
     for (const language of ["en", "zh"] as const) {
       setLanguagePreference(language);

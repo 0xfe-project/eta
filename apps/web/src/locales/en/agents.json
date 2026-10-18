@@ -87,6 +87,10 @@
     "title": "Agents",
     "allReachable": "Every agent has a conversation."
   },
+  "thinking": {
+    "label": "Thinking level",
+    "default": "Model default"
+  },
   "persona": {
     "default": "Project default",
     "label": "Persona"

@@ -24,7 +24,6 @@ export class ApiError extends Error {
 }
 
 const fallbackMessage = () => translate("common:errors.requestFailed");
-export { fallbackMessage };
 
 async function parse(response: Response) {
   const body = await response.json().catch(() => null);

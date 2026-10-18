@@ -39,7 +39,7 @@ import {
   useClearBundleConfig,
   useSetBundleConfig,
 } from "@/queries/bundle-config";
-import { useBundles } from "@/queries/chat";
+import { useBundles } from "@/queries/bundles";
 import { useGitHubStatus, useRefreshGitHub } from "@/queries/forge";
 import { GitHubWizard } from "./github-wizard";
 

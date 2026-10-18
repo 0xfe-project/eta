@@ -1,43 +1,36 @@
+import type { ConversationSummary } from "@eta/client-contracts";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { setWire } from "@/lib/wire";
+import { conversationView, productHost } from "@/test-product";
 import { ArchivedGroups, GroupList } from "./groups";
 import { useWorkspaceStore } from "./workspace-store";
 
 const groups = rstest.hoisted(() => ({
-  list: [] as { id: string; name: string; archived: boolean }[],
+  list: [] as ConversationSummary[],
 }));
 const navigation = rstest.hoisted(() => ({ open: rstest.fn() }));
-const actions = rstest.hoisted(() => ({ update: rstest.fn() }));
+
 rstest.mock("./use-groups", () => ({
   useGroups: () => ({ groups: groups.list }),
   useOpenGroup: () => navigation.open,
-}));
-rstest.mock("@/queries/groups", () => ({
-  useGroupActions: () => ({
-    update: { mutate: actions.update, isPending: false },
-  }),
 }));
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const group = (id: string, name: string, archived: boolean) => ({
-  id,
-  name,
-  archived,
-  kind: "group",
-  participants: [],
-  preview: "",
-  unread: 0,
-  last_message_at: null,
-});
+const group = (id: string, name: string, archived: boolean) =>
+  conversationView({ id, name, archived });
 
 const cleanup: (() => void)[] = [];
+let host: ReturnType<typeof productHost>;
 async function render(node: React.ReactNode) {
   const client = new QueryClient();
+  host = productHost({ conversations: groups.list });
+  host.handle("conversations.update", () => ({}));
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -56,7 +49,7 @@ async function render(node: React.ReactNode) {
 afterEach(async () => {
   await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
   navigation.open.mockClear();
-  actions.update.mockClear();
+  setWire(undefined);
 });
 
 function button(root: ParentNode, label: string) {
@@ -85,8 +78,8 @@ describe("已归档的对话", () => {
     expect(navigation.open).toHaveBeenCalledWith("g2");
     expect(useWorkspaceStore.getState().settings.open).toBe(false);
     await act(async () => button(container, "取消归档")!.click());
-    expect(actions.update.mock.calls[0]![0]).toEqual({
-      id: "g2",
+    expect(host.calls.find((call) => call.action === "update")?.args).toEqual({
+      conversationId: "g2",
       archived: false,
     });
   });

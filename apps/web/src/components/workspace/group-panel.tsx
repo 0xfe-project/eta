@@ -1,6 +1,7 @@
-import type { Group } from "@/queries/chat";
+import type { ConversationSummary } from "@eta/client-contracts";
 import { useTranslation } from "react-i18next";
 import { useArtifacts } from "@/queries/artifacts";
+import { useConversation } from "@/queries/conversations";
 import { useRoutines } from "@/queries/routines";
 import { useTasks } from "@/queries/tasks";
 import { ActivityRefCard } from "./activity-ref";
@@ -16,7 +17,11 @@ import { when } from "./routine-format";
  * this file adds is only what surrounds that: the goal the header cannot hold, and the group's work
  * — tasks, routines, artifacts — under it.
  */
-export function GroupPanel({ group }: { group: Group | undefined }) {
+export function GroupPanel({
+  group,
+}: {
+  group: ConversationSummary | undefined;
+}) {
   const { t: translateText } = useTranslation([
     "chat",
     "navigation",
@@ -27,6 +32,7 @@ export function GroupPanel({ group }: { group: Group | undefined }) {
   const { data: board } = useTasks();
   const { data: routines } = useRoutines();
   const { data: artifacts } = useArtifacts();
+  const { info } = useConversation(group?.id);
   if (group === undefined) return null;
   const tasks =
     board?.tasks.filter(
@@ -45,12 +51,12 @@ export function GroupPanel({ group }: { group: Group | undefined }) {
     <div className="min-h-0 flex-1 overflow-y-auto">
       {/* The one fact the header cannot hold. The name, the folder and the unread count are
           already on screen above; repeating them here is three things to read twice. */}
-      {group.goal.length === 0 ? null : (
+      {info === undefined || info.goal.length === 0 ? null : (
         <section className="border-b px-3 py-2">
           <h3 className="mb-1 font-mono text-[10px] tracking-[0.12em] text-faint uppercase">
             {translateText("chat:groups.fields.goal")}
           </h3>
-          <p className="text-sm leading-[1.65] text-foreground">{group.goal}</p>
+          <p className="text-sm leading-[1.65] text-foreground">{info.goal}</p>
         </section>
       )}
 

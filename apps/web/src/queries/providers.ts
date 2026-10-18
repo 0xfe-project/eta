@@ -1,11 +1,11 @@
 import type {
+  AgentView,
   ProviderArgs,
   ProviderInput,
   ProviderKind,
   ProviderSummary,
   ProvidersView,
 } from "@eta/client-contracts";
-import type { Agent } from "@/queries/chat";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { translate } from "@/lib/i18n";
@@ -163,7 +163,7 @@ export type ModelAvailability =
  * it does not block, and the host decides on send.
  */
 export function modelAvailability(
-  agent: Pick<Agent, "model"> | undefined,
+  agent: Pick<AgentView, "model"> | undefined,
   models: Model[] | undefined,
   stale = false,
 ): ModelAvailability {
@@ -196,7 +196,9 @@ export function modelAvailability(
   return { state: "ok", model };
 }
 
-export function useModelAvailability(agent: Pick<Agent, "model"> | undefined) {
+export function useModelAvailability(
+  agent: Pick<AgentView, "model"> | undefined,
+) {
   const { data, isError } = useModels();
   return modelAvailability(agent, data, isError);
 }

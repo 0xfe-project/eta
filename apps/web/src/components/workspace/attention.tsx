@@ -1,24 +1,21 @@
 import type { ReactNode } from "react";
-import type { Interaction } from "@/queries/chat";
+import type { Question } from "@/queries/questions";
 
 import { BellIcon } from "@phosphor-icons/react/Bell";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { SpinnerIcon } from "@phosphor-icons/react/Spinner";
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
-import { formatLocale, listSeparator, translate } from "@/lib/i18n";
+import { listSeparator } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import {
-  chatQueryOptions,
-  useAnswerInteraction,
-  usePendingInteractions,
-} from "@/queries/chat";
+import { agentName } from "@/queries/agents";
+import { useAnswerQuestion, useQuestions } from "@/queries/questions";
 import { useRoutines } from "@/queries/routines";
 import { useTasks } from "@/queries/tasks";
 import { AgentAvatar } from "./agent-identity";
@@ -32,29 +29,8 @@ import { useSectionLink } from "./workspace-search";
 // routines to open in the same mode (the panel's tab beside the chat, or the
 // full-window page). Each row says what it is, why it waits and what to do.
 
-function clock(iso: string) {
-  return new Date(iso).toLocaleTimeString(formatLocale(), {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-/** How an answered or lapsed confirmation ended. */
-function outcome(interaction: Interaction) {
-  const chosen = interaction.options.find(
-    (option) => option.value === interaction.answer,
-  );
-  if (chosen)
-    return translate("chat:confirmations.selectedChoice", {
-      choice: chosen.label,
-    });
-  if (interaction.status === "expired")
-    return translate("chat:confirmations.expired");
-  return translate("chat:confirmations.answered");
-}
-
-/** A confirmation: who asked, what, and its answers or how it ended. */
-export function Confirmation({ interaction }: { interaction: Interaction }) {
+/** A question a run is waiting on: who asked, where, what, and its answers. */
+function Confirmation({ question }: { question: Question }) {
   const { t: translateText } = useTranslation([
     "overview",
     "agents",
@@ -65,85 +41,82 @@ export function Confirmation({ interaction }: { interaction: Interaction }) {
   const { agents } = useAgents();
   const openGroup = useOpenGroup();
   const { groups } = useGroups();
-  const answer = useAnswerInteraction();
-  const agent = agents.find((a) => a.id === interaction.agent_id);
-  const pending = interaction.status === "pending";
+  const { choose, abort, answer } = useAnswerQuestion();
+  const [picked, setPicked] = useState<string[]>([]);
   // The first line says what is asked ("tasks 请求确认"), the rest the details.
-  const [headline, ...rest] = interaction.prompt.split("\n");
+  const [headline, ...rest] = question.prompt.split("\n");
   const details = rest.join("\n").trim();
+  const onError = (error: Error) => toast.error(error.message);
   return (
     <li className="flex gap-3 px-3 py-3">
       <AgentAvatar
-        agent={agent ?? { id: interaction.agent_id }}
+        agent={{ id: question.agentId }}
         className="size-7 shrink-0"
       />
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-baseline gap-2 text-xs text-muted-foreground">
           <button
             type="button"
-            onClick={() => openGroup(interaction.group_id)}
+            onClick={() => openGroup(question.conversationId)}
             className="min-w-0 truncate font-medium text-foreground underline-offset-4 outline-none hover:underline focus-visible:underline"
           >
-            {agent?.name ?? translateText("agents:labels.deletedAgent")} ·{" "}
-            {groups.find((g) => g.id === interaction.group_id)?.name ??
+            {agentName(agents, question.agentId)} ·{" "}
+            {groups.find((g) => g.id === question.conversationId)?.name ??
               translateText("chat:groups.groupChat")}
           </button>
-          <span className="ml-auto shrink-0 tabular-nums">
-            {clock(interaction.created_at)}
-          </span>
         </div>
-        <div
-          className={cn(
-            "text-sm break-words",
-            !pending && "line-clamp-3 text-muted-foreground",
-          )}
-        >
-          <p className={cn(pending && "font-medium")}>{headline}</p>
+        <div className="text-sm break-words">
+          <p className="font-medium">{headline}</p>
           {details ? (
-            <p
-              className={cn(
-                "whitespace-pre-wrap",
-                pending && "text-muted-foreground",
-              )}
-            >
+            <p className="whitespace-pre-wrap text-muted-foreground">
               {details}
             </p>
           ) : null}
         </div>
-        {pending ? (
-          <div className="flex flex-wrap gap-2 pt-1.5">
-            {interaction.options.map((option, index) => {
-              const chosen =
-                answer.isPending && answer.variables.value === option.value;
-              return (
-                <Button
-                  key={option.value}
-                  variant={index === 0 ? "default" : "outline"}
-                  disabled={answer.isPending}
-                  aria-busy={chosen || undefined}
-                  onClick={() =>
-                    answer.mutate(
-                      { id: interaction.id, value: option.value },
-                      { onError: (error) => toast.error(error.message) },
-                    )
-                  }
-                >
-                  {chosen ? (
-                    <SpinnerIcon
-                      aria-hidden="true"
-                      className="motion-safe:animate-spin"
-                    />
-                  ) : null}
-                  {option.label}
-                </Button>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            {outcome(interaction)}
-          </p>
-        )}
+        <div className="flex flex-wrap gap-2 pt-1.5">
+          {question.options.map((option, index) => {
+            const chosen =
+              answer.isPending && answer.variables?.questionId === question.id;
+            return (
+              <Button
+                key={option}
+                variant={
+                  index === 0 || picked.includes(option) ? "default" : "outline"
+                }
+                disabled={answer.isPending}
+                aria-busy={chosen || undefined}
+                onClick={() =>
+                  question.multi
+                    ? setPicked(
+                        picked.includes(option)
+                          ? picked.filter((p) => p !== option)
+                          : [...picked, option],
+                      )
+                    : choose(question, [option], { onError })
+                }
+              >
+                {chosen ? (
+                  <SpinnerIcon
+                    aria-hidden="true"
+                    className="motion-safe:animate-spin"
+                  />
+                ) : null}
+                {option}
+              </Button>
+            );
+          })}
+          {question.multi ? (
+            <Button
+              disabled={answer.isPending || picked.length === 0}
+              onClick={() => choose(question, picked, { onError })}
+            >
+              {translateText("common:actions.send")}
+            </Button>
+          ) : null}
+          <Button variant="ghost" onClick={() => abort(question, { onError })}>
+            {translateText("chat:confirmations.giveUp")}
+          </Button>
+        </div>
       </div>
     </li>
   );
@@ -221,17 +194,13 @@ export function PendingList() {
   // Only their state: the items come from usePendingInteractions and
   // useAttention.
   const sources = [
-    {
-      what: translateText("chat:confirmations.requestLabel"),
-      query: useQuery(chatQueryOptions()),
-    },
     { what: translateText("navigation:sections.tasks"), query: useTasks() },
     {
       what: translateText("navigation:sections.routines"),
       query: useRoutines(),
     },
   ];
-  const confirmations = usePendingInteractions();
+  const confirmations = useQuestions();
   const { tasks, routines } = useAttention();
   const sectionLink = useSectionLink();
   const failed = sources.filter(({ query }) => query.error);
@@ -272,8 +241,8 @@ export function PendingList() {
         label={translateText("chat:confirmations.requestLabel")}
         count={confirmations.length}
       >
-        {confirmations.map((interaction) => (
-          <Confirmation key={interaction.id} interaction={interaction} />
+        {confirmations.map((question) => (
+          <Confirmation key={question.id} question={question} />
         ))}
       </Group>
       <Group

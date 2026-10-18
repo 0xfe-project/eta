@@ -19,7 +19,8 @@
     "errors": {
       "failedAttachments": "Some attachments failed to upload. Retry or remove them before sending.",
       "attachmentLimit": "Each message can include up to {{maxAttachments}} attachments.",
-      "messageLength": "Message text exceeds {{maxCharacters}} characters. Paste longer content as a file."
+      "messageLength": "Message text exceeds {{maxCharacters}} characters. Paste longer content as a file.",
+      "messageTooLong": "The message is over {{maxCharacters}} characters."
     },
     "placeholder": "Message {{agentName}}…",
     "createAgentFirst": "Create an agent first",
@@ -130,6 +131,7 @@
     "selectedChoice": "Selected “{{choice}}”",
     "expired": "Expired without a response",
     "answered": "Answered",
+    "giveUp": "Give up",
     "requestLabel": "Confirmation request",
     "required": "Confirmation needed",
     "continueQuestion": "Continue?",
@@ -154,7 +156,11 @@
     "interruptReply": "Insert into the current reply"
   },
   "messages": {
-    "mentionTarget": " → {{name}}"
+    "mentionTarget": " → {{name}}",
+    "nobody": "This message woke nobody: the conversation has no steward and more than one member. @mention a member, or set a steward.",
+    "joined": "Joined the reply {{names}} is already writing",
+    "expand": "Show all",
+    "collapse": "Show less"
   },
   "reply": {
     "stopping": "Stopping",
@@ -164,7 +170,14 @@
     "sameFailureAsNext": "This message was not executed for the reason below.",
     "failed": "Reply failed.",
     "queuePosition_one": "Waiting · {{count}} ahead",
-    "queuePosition_other": "Waiting · {{count}} ahead"
+    "queuePosition_other": "Waiting · {{count}} ahead",
+    "codes": {
+      "restart": "The host restarted before this reply was finished.",
+      "runFailed": "The run failed.",
+      "unavailable": "It could not run.",
+      "gone": "This member is no longer in the conversation."
+    },
+    "queued": "Waiting"
   },
   "actions": {
     "withdraw": "Withdraw",
@@ -260,11 +273,27 @@
   },
   "new": {
     "title": "New conversation",
-    "hint": "Pick an agent and a folder. The conversation appears under that folder in the sidebar.",
-    "folder": "Folder",
-    "folderHint": "Where the agent works: commands run here, project notes are read here.",
+    "hint": "Pick a project and an agent. The conversation appears under that project in the sidebar.",
     "agent": "Agent",
-    "start": "Start"
+    "start": "Start",
+    "project": "Project",
+    "addPath": "Add a directory…",
+    "path": "Directory path",
+    "pathHint": "An absolute path on the primary machine; it must be an existing directory. The members work here."
   },
-  "chat": {}
+  "chat": {},
+  "steward": {
+    "label": "Steward: {{name}}",
+    "hint": "Messages that name nobody go to the steward",
+    "none": "No steward",
+    "thisConversation": "Steward of this conversation",
+    "followProject": "Follow the project",
+    "project": "Steward of project \"{{name}}\""
+  },
+  "system": {
+    "stewardChanged": "{{to}} is now the steward, taking over from {{from}}.",
+    "stewardSet": "{{to}} is now the steward.",
+    "stewardCleared": "{{from}} is no longer the steward.",
+    "wakeBudget": "This message has used its {{budget}} wake-ups; later @mentions stay in the conversation and wake nobody until you write again."
+  }
 }

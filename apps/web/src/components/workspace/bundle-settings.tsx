@@ -1,4 +1,4 @@
-import type { Bundle, BundleDraft } from "@/queries/chat";
+import type { Bundle, BundleDraft } from "@/queries/bundles";
 
 import { PackageIcon } from "@phosphor-icons/react/Package";
 import { useState } from "react";
@@ -29,7 +29,7 @@ import {
   useDeleteBundle,
   usePlugins,
   useUpdateBundle,
-} from "@/queries/chat";
+} from "@/queries/bundles";
 
 // Bundles are what agents are built from: a script run into the agent's
 // image and the plugins it adds, and a service some run in the cluster

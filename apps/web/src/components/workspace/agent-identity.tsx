@@ -1,4 +1,4 @@
-import type { Agent } from "@/queries/chat";
+import type { AgentView, AgentStatus as Status } from "@eta/client-contracts";
 import { Blobatar } from "@blobatar/react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
@@ -14,7 +14,7 @@ export function AgentAvatar({
   animate = false,
   className,
 }: {
-  agent: Pick<Agent, "id">;
+  agent: Pick<AgentView, "id">;
   animate?: boolean;
   className?: string;
 }) {
@@ -35,7 +35,7 @@ export function AgentStatusDot({
   status,
   className,
 }: {
-  status: Agent["status"];
+  status: Status;
   className?: string;
 }) {
   return (
@@ -44,18 +44,15 @@ export function AgentStatusDot({
       className={cn(
         "inline-block size-1.5 shrink-0",
         status === "idle" && "bg-muted-foreground/40",
-        status === "starting" &&
-          "bg-muted-foreground motion-safe:animate-pulse",
         status === "working" && "bg-foreground motion-safe:animate-pulse",
         status === "waiting_for_input" && "border border-foreground",
-        status === "unavailable" && "bg-destructive",
         className,
       )}
     />
   );
 }
 
-export function AgentStatus({ status }: { status: Agent["status"] }) {
+export function AgentStatus({ status }: { status: Status }) {
   useTranslation(["agents", "common"] as const);
   return (
     <span className="inline-flex items-center gap-1.5 text-muted-foreground">

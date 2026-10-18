@@ -1,18 +1,18 @@
 interface Member {
-  agent_id: string;
+  id: string;
   name: string;
 }
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Disambiguate equal display names without exposing an id for every member. */
-export function mentionLabel(member: Member, members: Member[]) {
+export function mentionLabel(member: Member, members: readonly Member[]) {
   return members.filter((p) => p.name === member.name).length > 1
-    ? `${member.name}·${member.agent_id.slice(0, 6)}`
+    ? `${member.name}·${member.id.slice(0, 6)}`
     : member.name;
 }
 
 /** Resolve explicit mentions in their written order; a bare message has no targets. */
-export function mentionedMembers(text: string, members: Member[]) {
+export function mentionedMembers(text: string, members: readonly Member[]) {
   const match = (label: string) =>
     new RegExp(
       `(?:^|[\\s，。！？、,:;!?])@${escaped(label)}(?=\\s|[，。！？、,:;!?]|$)`,
@@ -28,7 +28,7 @@ export function mentionedMembers(text: string, members: Member[]) {
       named?.index ?? Infinity,
       everyone?.index ?? Infinity,
     );
-    return Number.isFinite(index) ? [{ id: p.agent_id, index }] : [];
+    return Number.isFinite(index) ? [{ id: p.id, index }] : [];
   });
   return ordered.sort((a, b) => a.index - b.index).map((p) => p.id);
 }
