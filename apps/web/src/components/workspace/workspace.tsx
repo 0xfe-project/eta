@@ -210,7 +210,9 @@ export function Workspace({
       <div
         className={cn(
           "min-h-0 min-w-0 flex-1 flex-col",
-          groupId ? "flex" : "hidden",
+          // Without `?group` a phone shows the list above, while a wide screen opens the
+          // conversation the sidebar marks as current (the last one open, else the newest).
+          groupId ? "flex" : "hidden md:flex",
         )}
       >
         <MobileChatHeader
