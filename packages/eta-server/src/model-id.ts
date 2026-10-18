@@ -7,20 +7,23 @@
  * the one answer both paths use.
  */
 export interface ModelIdentity {
-	provider: string;
-	modelId: string;
+  provider: string;
+  modelId: string;
 }
 
 /** The default provider a bare model id belongs to. */
 export const DEFAULT_PROVIDER = "anthropic";
 
 export function parseModelId(model: string): ModelIdentity {
-	const separator = model.indexOf(":");
-	if (separator <= 0) return { provider: DEFAULT_PROVIDER, modelId: model };
-	return { provider: model.slice(0, separator), modelId: model.slice(separator + 1) };
+  const separator = model.indexOf(":");
+  if (separator <= 0) return { provider: DEFAULT_PROVIDER, modelId: model };
+  return {
+    provider: model.slice(0, separator),
+    modelId: model.slice(separator + 1),
+  };
 }
 
 /** Back to the one string a sidebar, a meta row and an op argument all use. */
 export function formatModelId(identity: ModelIdentity): string {
-	return `${identity.provider}:${identity.modelId}`;
+  return `${identity.provider}:${identity.modelId}`;
 }

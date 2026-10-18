@@ -14,9 +14,9 @@ import type { WireService } from "../wire-service";
 export const SETTINGS_ACTIONS = ["save", "reload"] as const;
 
 export interface SettingsPluginOptions {
-	store: SettingsStore;
-	/** Diagnostics. */
-	warn?: ((message: string) => void) | undefined;
+  store: SettingsStore;
+  /** Diagnostics. */
+  warn?: ((message: string) => void) | undefined;
 }
 
 /**
@@ -24,61 +24,68 @@ export interface SettingsPluginOptions {
  * config, nothing else edits this file), so the section's revision is a signature of its own
  * content — which is exactly what the state sender compares to decide whether a frame is owed.
  */
-function section(settings: Settings): { sections: Record<string, unknown>; revisions: Record<string, string> } {
-	return {
-		sections: { settings },
-		revisions: { settings: JSON.stringify(settings) },
-	};
+function section(settings: Settings): {
+  sections: Record<string, unknown>;
+  revisions: Record<string, string>;
+} {
+  return {
+    sections: { settings },
+    revisions: { settings: JSON.stringify(settings) },
+  };
 }
 
 export function settingsPlugin(options: SettingsPluginOptions) {
-	return {
-		name: "settings",
-		inject: ["wire"],
-		apply(ctx: unknown): unknown {
-			const context = ctx as {
-				wire: WireService;
-				effect(execute: () => () => unknown): unknown;
-			};
-			const wire = context.wire;
-			return context.effect(() => {
-				// The read is asynchronous and a state projector is not, so the last read is what the
-				// section shows — with an empty snapshot until the first one lands (a fabricated
-				// default would be a value the user could act on and be surprised by).
-				let latest: Settings | undefined;
-				void options.store.read().then(
-					(settings) => {
-						latest = settings;
-						wire.pushNow("settings");
-					},
-					(error: unknown) => options.warn?.(`[eta-server] settings: ${String(error)}`),
-				);
+  return {
+    name: "settings",
+    inject: ["wire"],
+    apply(ctx: unknown): unknown {
+      const context = ctx as {
+        wire: WireService;
+        effect(execute: () => () => unknown): unknown;
+      };
+      const wire = context.wire;
+      return context.effect(() => {
+        // The read is asynchronous and a state projector is not, so the last read is what the
+        // section shows — with an empty snapshot until the first one lands (a fabricated
+        // default would be a value the user could act on and be surprised by).
+        let latest: Settings | undefined;
+        void options.store.read().then(
+          (settings) => {
+            latest = settings;
+            wire.pushNow("settings");
+          },
+          (error: unknown) =>
+            options.warn?.(`[eta-server] settings: ${String(error)}`),
+        );
 
-				const registrations: (() => void)[] = [
-					wire.stateOf("settings", {
-						eager: true,
-						project: () => (latest === undefined ? { sections: {}, revisions: {} } : section(latest)),
-					}),
-					wire.handle("settings", "save", async (call) => {
-						const patch = (call.args ?? {}) as Record<string, unknown>;
-						latest = await options.store.save(patch);
-						wire.pushNow("settings");
-						return { result: { settings: latest } };
-					}),
-					wire.handle("settings", "reload", async () => {
-						// The file may have been edited by hand: forget the cached copy first, or this
-						// answers with what this process already believed.
-						options.store.invalidate();
-						latest = await options.store.read();
-						wire.pushNow("settings");
-						return { result: { settings: latest } };
-					}),
-				];
+        const registrations: (() => void)[] = [
+          wire.stateOf("settings", {
+            eager: true,
+            project: () =>
+              latest === undefined
+                ? { sections: {}, revisions: {} }
+                : section(latest),
+          }),
+          wire.handle("settings", "save", async (call) => {
+            const patch = (call.args ?? {}) as Record<string, unknown>;
+            latest = await options.store.save(patch);
+            wire.pushNow("settings");
+            return { result: { settings: latest } };
+          }),
+          wire.handle("settings", "reload", async () => {
+            // The file may have been edited by hand: forget the cached copy first, or this
+            // answers with what this process already believed.
+            options.store.invalidate();
+            latest = await options.store.read();
+            wire.pushNow("settings");
+            return { result: { settings: latest } };
+          }),
+        ];
 
-				return () => {
-					for (const off of registrations.splice(0)) off();
-				};
-			});
-		},
-	};
+        return () => {
+          for (const off of registrations.splice(0)) off();
+        };
+      });
+    },
+  };
 }

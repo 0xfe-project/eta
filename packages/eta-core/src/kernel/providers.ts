@@ -13,20 +13,23 @@ import type { ThinkingLevel } from "../types/messages";
  * stream (or complete) a request. Auth, retries at the transport level, and
  * provider catalogs stay behind this edge.
  */
-export type KernelModels = Pick<Models, "getModel" | "streamSimple" | "completeSimple">;
+export type KernelModels = Pick<
+  Models,
+  "getModel" | "streamSimple" | "completeSimple"
+>;
 
 /**
  * Every thinking level, as a runtime list. The union is compile-time only, and a
  * configuration coming off the wire has to be checked against something.
  */
 export const THINKING_LEVELS = [
-	"off",
-	"minimal",
-	"low",
-	"medium",
-	"high",
-	"xhigh",
-	"max",
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
 ] as const satisfies readonly ThinkingLevel[];
 
 /**
@@ -37,11 +40,15 @@ export const THINKING_LEVELS = [
  * does not mention is left to the provider's default, which is why an unmentioned level
  * counts as supported rather than as absent.
  */
-export function thinkingLevelsFor(model: Model<Api> | undefined): ThinkingLevel[] {
-	if (model === undefined) return [...THINKING_LEVELS];
-	if (model.reasoning !== true) return ["off"];
-	const map = model.thinkingLevelMap ?? {};
-	return THINKING_LEVELS.filter((level) => map[level as keyof typeof map] !== null);
+export function thinkingLevelsFor(
+  model: Model<Api> | undefined,
+): ThinkingLevel[] {
+  if (model === undefined) return [...THINKING_LEVELS];
+  if (model.reasoning !== true) return ["off"];
+  const map = model.thinkingLevelMap ?? {};
+  return THINKING_LEVELS.filter(
+    (level) => map[level as keyof typeof map] !== null,
+  );
 }
 
 /**
@@ -49,9 +56,11 @@ export function thinkingLevelsFor(model: Model<Api> | undefined): ThinkingLevel[
  * wrap it (metrics, a recording proxy) without the kernel knowing.
  */
 export function piAiModels(models: KernelModels): KernelModels {
-	return {
-		getModel: (provider, id) => models.getModel(provider, id),
-		streamSimple: (model, context, options) => models.streamSimple(model, context, options),
-		completeSimple: (model, context, options) => models.completeSimple(model, context, options),
-	};
+  return {
+    getModel: (provider, id) => models.getModel(provider, id),
+    streamSimple: (model, context, options) =>
+      models.streamSimple(model, context, options),
+    completeSimple: (model, context, options) =>
+      models.completeSimple(model, context, options),
+  };
 }

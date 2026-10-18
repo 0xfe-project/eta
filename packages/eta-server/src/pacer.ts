@@ -25,117 +25,124 @@
 import type { ServerFrame } from "@eta/client-wire-proto";
 
 export interface PacerOptions {
-	/** The floor between two frames for this socket, read at publish time. */
-	minIntervalMs(): number;
-	/** The wire budget, in bytes per second. A frame of N bytes buys `N / this` ms of quiet. */
-	targetBytesPerSecond?: number;
-	/** Ask the sender what this socket is owed, and account for it. `undefined` = nothing. */
-	next(): { frame: ServerFrame; bytes: number } | undefined;
-	/** Put the frame on the socket. */
-	deliver(frame: ServerFrame): void;
-	now?: () => number;
-	schedule?: (run: () => void, ms: number) => ReturnType<typeof setTimeout>;
-	unschedule?: (timer: ReturnType<typeof setTimeout>) => void;
+  /** The floor between two frames for this socket, read at publish time. */
+  minIntervalMs(): number;
+  /** The wire budget, in bytes per second. A frame of N bytes buys `N / this` ms of quiet. */
+  targetBytesPerSecond?: number;
+  /** Ask the sender what this socket is owed, and account for it. `undefined` = nothing. */
+  next(): { frame: ServerFrame; bytes: number } | undefined;
+  /** Put the frame on the socket. */
+  deliver(frame: ServerFrame): void;
+  now?: () => number;
+  schedule?: (run: () => void, ms: number) => ReturnType<typeof setTimeout>;
+  unschedule?: (timer: ReturnType<typeof setTimeout>) => void;
 }
 
 /** One socket's budget for one target. */
 export class FramePacer {
-	private readonly options: PacerOptions;
-	private readonly now: () => number;
-	private dirty = false;
-	private nextAt = 0;
-	private timer: ReturnType<typeof setTimeout> | undefined;
-	private disposed = false;
+  private readonly options: PacerOptions;
+  private readonly now: () => number;
+  private dirty = false;
+  private nextAt = 0;
+  private timer: ReturnType<typeof setTimeout> | undefined;
+  private disposed = false;
 
-	constructor(options: PacerOptions) {
-		this.options = options;
-		this.now = options.now ?? Date.now;
-	}
+  constructor(options: PacerOptions) {
+    this.options = options;
+    this.now = options.now ?? Date.now;
+  }
 
-	/** The state moved. Send now if the floor is up, otherwise coalesce into the next frame. */
-	mark(): void {
-		if (this.disposed) return;
-		this.dirty = true;
-		const wait = this.nextAt - this.now();
-		if (wait <= 0) {
-			this.publish(false);
-			return;
-		}
-		this.arm(wait);
-	}
+  /** The state moved. Send now if the floor is up, otherwise coalesce into the next frame. */
+  mark(): void {
+    if (this.disposed) return;
+    this.dirty = true;
+    const wait = this.nextAt - this.now();
+    if (wait <= 0) {
+      this.publish(false);
+      return;
+    }
+    this.arm(wait);
+  }
 
-	/**
-	 * Send without waiting for the floor — a user did something, a run ended, a client just
-	 * attached. Still one frame: everything coalesced so far rides out together.
-	 */
-	flush(): void {
-		if (this.disposed) return;
-		this.dirty = true;
-		this.publish(true);
-	}
+  /**
+   * Send without waiting for the floor — a user did something, a run ended, a client just
+   * attached. Still one frame: everything coalesced so far rides out together.
+   */
+  flush(): void {
+    if (this.disposed) return;
+    this.dirty = true;
+    this.publish(true);
+  }
 
-	/** Forget the accumulated quiet: the next frame goes out as soon as there is one. */
-	relax(): void {
-		this.nextAt = 0;
-	}
+  /** Forget the accumulated quiet: the next frame goes out as soon as there is one. */
+  relax(): void {
+    this.nextAt = 0;
+  }
 
-	/**
-	 * Account for a frame this pacer did not send — the snapshot a new subscriber gets, which
-	 * goes out immediately because the alternative is an empty panel. A big snapshot buys its
-	 * quiet like any other frame; otherwise the floor restarts at zero and the client that just
-	 * arrived collects a burst.
-	 */
-	spent(bytes: number): void {
-		const budget = this.options.targetBytesPerSecond ?? DEFAULT_BYTES_PER_SECOND;
-		this.nextAt = this.now() + Math.max(this.options.minIntervalMs(), (bytes * 1000) / budget);
-	}
+  /**
+   * Account for a frame this pacer did not send — the snapshot a new subscriber gets, which
+   * goes out immediately because the alternative is an empty panel. A big snapshot buys its
+   * quiet like any other frame; otherwise the floor restarts at zero and the client that just
+   * arrived collects a burst.
+   */
+  spent(bytes: number): void {
+    const budget =
+      this.options.targetBytesPerSecond ?? DEFAULT_BYTES_PER_SECOND;
+    this.nextAt =
+      this.now() +
+      Math.max(this.options.minIntervalMs(), (bytes * 1000) / budget);
+  }
 
-	dispose(): void {
-		if (this.timer !== undefined) this.clearTimer();
-		this.disposed = true;
-	}
+  dispose(): void {
+    if (this.timer !== undefined) this.clearTimer();
+    this.disposed = true;
+  }
 
-	private publish(forced: boolean): void {
-		if (this.timer !== undefined) this.clearTimer();
-		if (!this.dirty) return;
-		const wait = this.nextAt - this.now();
-		if (!forced && wait > 0) {
-			this.arm(wait);
-			return;
-		}
-		let owed: { frame: ServerFrame; bytes: number } | undefined;
-		try {
-			owed = this.options.next();
-		} catch {
-			// A projection that throws must not take the event dispatch down with it: stay dirty
-			// and try again on the next change.
-			this.arm(this.options.minIntervalMs());
-			return;
-		}
-		this.dirty = false;
-		if (owed === undefined) return;
-		const delivered = this.now();
-		const budget = this.options.targetBytesPerSecond ?? DEFAULT_BYTES_PER_SECOND;
-		this.nextAt = delivered + Math.max(this.options.minIntervalMs(), (owed.bytes * 1000) / budget);
-		this.options.deliver(owed.frame);
-	}
+  private publish(forced: boolean): void {
+    if (this.timer !== undefined) this.clearTimer();
+    if (!this.dirty) return;
+    const wait = this.nextAt - this.now();
+    if (!forced && wait > 0) {
+      this.arm(wait);
+      return;
+    }
+    let owed: { frame: ServerFrame; bytes: number } | undefined;
+    try {
+      owed = this.options.next();
+    } catch {
+      // A projection that throws must not take the event dispatch down with it: stay dirty
+      // and try again on the next change.
+      this.arm(this.options.minIntervalMs());
+      return;
+    }
+    this.dirty = false;
+    if (owed === undefined) return;
+    const delivered = this.now();
+    const budget =
+      this.options.targetBytesPerSecond ?? DEFAULT_BYTES_PER_SECOND;
+    this.nextAt =
+      delivered +
+      Math.max(this.options.minIntervalMs(), (owed.bytes * 1000) / budget);
+    this.options.deliver(owed.frame);
+  }
 
-	private arm(ms: number): void {
-		if (this.timer !== undefined) return;
-		const schedule = this.options.schedule ?? ((run, delay) => setTimeout(run, delay));
-		this.timer = schedule(() => {
-			this.timer = undefined;
-			this.publish(false);
-		}, ms);
-	}
+  private arm(ms: number): void {
+    if (this.timer !== undefined) return;
+    const schedule =
+      this.options.schedule ?? ((run, delay) => setTimeout(run, delay));
+    this.timer = schedule(() => {
+      this.timer = undefined;
+      this.publish(false);
+    }, ms);
+  }
 
-	private clearTimer(): void {
-		const timer = this.timer;
-		this.timer = undefined;
-		if (timer === undefined) return;
-		if (this.options.unschedule !== undefined) this.options.unschedule(timer);
-		else clearTimeout(timer);
-	}
+  private clearTimer(): void {
+    const timer = this.timer;
+    this.timer = undefined;
+    if (timer === undefined) return;
+    if (this.options.unschedule !== undefined) this.options.unschedule(timer);
+    else clearTimeout(timer);
+  }
 }
 
 /** 4MB/s: a long transcript's patch is tens of KB, which buys tens of milliseconds. */

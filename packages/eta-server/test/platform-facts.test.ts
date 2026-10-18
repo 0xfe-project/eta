@@ -23,146 +23,168 @@ import { renderSkillsBlock } from "../src/skills";
 const roots: string[] = [];
 
 async function scratch(): Promise<string> {
-	const root = await mkdtemp(join(tmpdir(), "eta-platform-"));
-	roots.push(root);
-	return root;
+  const root = await mkdtemp(join(tmpdir(), "eta-platform-"));
+  roots.push(root);
+  return root;
 }
 
 afterEach(async () => {
-	for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
+  for (const root of roots.splice(0))
+    await rm(root, { recursive: true, force: true });
 });
 
 function manager(options: Partial<SessionManagerOptions> = {}) {
-	return new SessionManager({
-		store: new MemorySessionStore(),
-		modelsFor: () => fakeModels([assistantMessage()]) as never,
-		...options,
-	});
+  return new SessionManager({
+    store: new MemorySessionStore(),
+    modelsFor: () => fakeModels([assistantMessage()]) as never,
+    ...options,
+  });
 }
 
 describe("the platform briefing", () => {
-	it("tells the session where the app's files are", async () => {
-		const root = await scratch();
-		const sessions = manager({
-			platformFor: (meta) => ({
-				home: root,
-				cwd: meta.cwd,
-				configPath: join(root, "config.json"),
-				sessionDir: join(root, "sessions", meta.id),
-				memoryTarget: join(meta.cwd, ".eta", "MEMORY.md"),
-				memoryExists: false,
-			}),
-		});
-		const created = await sessions.create({ cwd: "/work/eta" });
-		const prompt = await created.session.promptSections();
-		const platform = prompt.sections.find((section) => section.name === "platform");
-		expect(platform?.text).toContain(join(root, "config.json"));
-		expect(platform?.text).toContain(join(root, "sessions", created.meta.id));
-		expect(platform?.text).toContain(`${root}/.eta/persona`);
-		// The words are the harness's: this is a briefing about eta, rendered from this app's paths.
-		expect(platform?.text).toContain("<platform>");
-	});
+  it("tells the session where the app's files are", async () => {
+    const root = await scratch();
+    const sessions = manager({
+      platformFor: (meta) => ({
+        home: root,
+        cwd: meta.cwd,
+        configPath: join(root, "config.json"),
+        sessionDir: join(root, "sessions", meta.id),
+        memoryTarget: join(meta.cwd, ".eta", "MEMORY.md"),
+        memoryExists: false,
+      }),
+    });
+    const created = await sessions.create({ cwd: "/work/eta" });
+    const prompt = await created.session.promptSections();
+    const platform = prompt.sections.find(
+      (section) => section.name === "platform",
+    );
+    expect(platform?.text).toContain(join(root, "config.json"));
+    expect(platform?.text).toContain(join(root, "sessions", created.meta.id));
+    expect(platform?.text).toContain(`${root}/.eta/persona`);
+    // The words are the harness's: this is a briefing about eta, rendered from this app's paths.
+    expect(platform?.text).toContain("<platform>");
+  });
 
-	it("says nothing about the app when the host supplies no facts", async () => {
-		const sessions = manager();
-		const created = await sessions.create({ cwd: "/work/eta" });
-		const prompt = await created.session.promptSections();
-		expect(prompt.sections.some((section) => section.name === "platform")).toBe(false);
-	});
+  it("says nothing about the app when the host supplies no facts", async () => {
+    const sessions = manager();
+    const created = await sessions.create({ cwd: "/work/eta" });
+    const prompt = await created.session.promptSections();
+    expect(prompt.sections.some((section) => section.name === "platform")).toBe(
+      false,
+    );
+  });
 });
 
 describe("memory", () => {
-	it("reads the project's memory through the environment the session runs in", async () => {
-		const root = await scratch();
-		const project = join(root, "project");
-		await mkdir(join(project, ".eta"), { recursive: true });
-		await writeFile(join(project, ".eta", "MEMORY.md"), "## decision\n- [x#1] the wire is four words\n", "utf8");
+  it("reads the project's memory through the environment the session runs in", async () => {
+    const root = await scratch();
+    const project = join(root, "project");
+    await mkdir(join(project, ".eta"), { recursive: true });
+    await writeFile(
+      join(project, ".eta", "MEMORY.md"),
+      "## decision\n- [x#1] the wire is four words\n",
+      "utf8",
+    );
 
-		const env = new NodeEnvironment({ cwd: project });
-		const sessions = manager({
-			envFor: () => ({ env: env as unknown as ExecutionEnv }),
-			memoryFor: () => ({ home: root }),
-		});
-		const created = await sessions.create({ cwd: project });
-		// The memory block is composed into the prompt, per generation: that is the read path a
-		// model actually sees, and the one worth asserting.
-		const prompt = await created.session.promptSections();
-		const memory = prompt.sections.find((section) => section.name === "memory");
-		expect(memory?.text).toContain("the wire is four words");
-	});
+    const env = new NodeEnvironment({ cwd: project });
+    const sessions = manager({
+      envFor: () => ({ env: env as unknown as ExecutionEnv }),
+      memoryFor: () => ({ home: root }),
+    });
+    const created = await sessions.create({ cwd: project });
+    // The memory block is composed into the prompt, per generation: that is the read path a
+    // model actually sees, and the one worth asserting.
+    const prompt = await created.session.promptSections();
+    const memory = prompt.sections.find((section) => section.name === "memory");
+    expect(memory?.text).toContain("the wire is four words");
+  });
 
-	it("reads a *remote* project's memory through the remote filesystem, not the server's", async () => {
-		// A remote environment is a filesystem the server cannot see: only what it holds is real.
-		const remote = new MemoryEnvironment({
-			files: { "/remote/project/.eta/MEMORY.md": "## lesson\n- [remote#1] this machine's memory\n" },
-		});
-		const sessions = manager({
-			envFor: () => ({ env: remote as unknown as ExecutionEnv }),
-			memoryFor: () => ({ home: "/remote" }),
-		});
-		const created = await sessions.create({ cwd: "/remote/project" });
-		const prompt = await created.session.promptSections();
-		const memory = prompt.sections.find((section) => section.name === "memory");
-		expect(memory?.text).toContain("this machine's memory");
-		// And nothing from the server's own disk, because the remote filesystem is the only one
-		// this session can see.
-		expect(created.session.memory).toBeDefined();
-	});
+  it("reads a *remote* project's memory through the remote filesystem, not the server's", async () => {
+    // A remote environment is a filesystem the server cannot see: only what it holds is real.
+    const remote = new MemoryEnvironment({
+      files: {
+        "/remote/project/.eta/MEMORY.md":
+          "## lesson\n- [remote#1] this machine's memory\n",
+      },
+    });
+    const sessions = manager({
+      envFor: () => ({ env: remote as unknown as ExecutionEnv }),
+      memoryFor: () => ({ home: "/remote" }),
+    });
+    const created = await sessions.create({ cwd: "/remote/project" });
+    const prompt = await created.session.promptSections();
+    const memory = prompt.sections.find((section) => section.name === "memory");
+    expect(memory?.text).toContain("this machine's memory");
+    // And nothing from the server's own disk, because the remote filesystem is the only one
+    // this session can see.
+    expect(created.session.memory).toBeDefined();
+  });
 
-	it("has no memory when the host wires none", async () => {
-		const sessions = manager();
-		const created = await sessions.create({ cwd: "/work/eta" });
-		expect(created.session.memory).toBeUndefined();
-	});
+  it("has no memory when the host wires none", async () => {
+    const sessions = manager();
+    const created = await sessions.create({ cwd: "/work/eta" });
+    expect(created.session.memory).toBeUndefined();
+  });
 });
 
 describe("the environment a session runs in", () => {
-	it("installs the file and shell tools when there is one, and none when there is not", async () => {
-		const root = await scratch();
-		const withEnv = manager({
-			envFor: () => ({ env: new NodeEnvironment({ cwd: root }) as unknown as ExecutionEnv }),
-		});
-		const installed = await withEnv.create({ cwd: root });
-		expect(installed.session.tools).toContain("bash");
-		expect(installed.session.tools).toContain("read");
+  it("installs the file and shell tools when there is one, and none when there is not", async () => {
+    const root = await scratch();
+    const withEnv = manager({
+      envFor: () => ({
+        env: new NodeEnvironment({ cwd: root }) as unknown as ExecutionEnv,
+      }),
+    });
+    const installed = await withEnv.create({ cwd: root });
+    expect(installed.session.tools).toContain("bash");
+    expect(installed.session.tools).toContain("read");
 
-		// A session with no environment is a legitimate session: a side thread, a sandbox.
-		const without = manager();
-		const bare = await without.create({ cwd: root });
-		expect(bare.session.tools).not.toContain("bash");
-	});
+    // A session with no environment is a legitimate session: a side thread, a sandbox.
+    const without = manager();
+    const bare = await without.create({ cwd: root });
+    expect(bare.session.tools).not.toContain("bash");
+  });
 });
 
 describe("skills", () => {
-	it("gives a session the catalog block for its own directory", async () => {
-		const root = await scratch();
-		const project = join(root, "project");
-		const skillsDir = join(project, ".agents", "skills", "porting");
-		await mkdir(skillsDir, { recursive: true });
-		await writeFile(
-			join(skillsDir, "SKILL.md"),
-			"---\nname: porting\ndescription: How to port faithfully.\n---\n\nRead the source.\n",
-			"utf8",
-		);
+  it("gives a session the catalog block for its own directory", async () => {
+    const root = await scratch();
+    const project = join(root, "project");
+    const skillsDir = join(project, ".agents", "skills", "porting");
+    await mkdir(skillsDir, { recursive: true });
+    await writeFile(
+      join(skillsDir, "SKILL.md"),
+      "---\nname: porting\ndescription: How to port faithfully.\n---\n\nRead the source.\n",
+      "utf8",
+    );
 
-		const sessions = manager({
-			envFor: () => ({ env: new NodeEnvironment({ cwd: project }) as unknown as ExecutionEnv }),
-			skillsFor: (meta) =>
-				renderSkillsBlock({ env: new NodeEnvironment({ cwd: meta.cwd }), cwd: meta.cwd, home: root }),
-		});
-		const created = await sessions.create({ cwd: project });
-		const prompt = await created.session.promptSections();
-		const skills = prompt.sections.find((section) => section.name === "skills");
-		expect(skills?.text).toContain("<name>porting</name>");
-		// The location is what lets the model read the file when a task matches.
-		expect(skills?.text).toContain(join(skillsDir, "SKILL.md"));
-	});
+    const sessions = manager({
+      envFor: () => ({
+        env: new NodeEnvironment({ cwd: project }) as unknown as ExecutionEnv,
+      }),
+      skillsFor: (meta) =>
+        renderSkillsBlock({
+          env: new NodeEnvironment({ cwd: meta.cwd }),
+          cwd: meta.cwd,
+          home: root,
+        }),
+    });
+    const created = await sessions.create({ cwd: project });
+    const prompt = await created.session.promptSections();
+    const skills = prompt.sections.find((section) => section.name === "skills");
+    expect(skills?.text).toContain("<name>porting</name>");
+    // The location is what lets the model read the file when a task matches.
+    expect(skills?.text).toContain(join(skillsDir, "SKILL.md"));
+  });
 
-	it("has no skills block when nothing applies", async () => {
-		const root = await scratch();
-		const sessions = manager({ skillsFor: async () => "" });
-		const created = await sessions.create({ cwd: root });
-		const prompt = await created.session.promptSections();
-		expect(prompt.sections.some((section) => section.name === "skills")).toBe(false);
-	});
+  it("has no skills block when nothing applies", async () => {
+    const root = await scratch();
+    const sessions = manager({ skillsFor: async () => "" });
+    const created = await sessions.create({ cwd: root });
+    const prompt = await created.session.promptSections();
+    expect(prompt.sections.some((section) => section.name === "skills")).toBe(
+      false,
+    );
+  });
 });

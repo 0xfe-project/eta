@@ -11,310 +11,385 @@
 import { renderActivePersona } from "../src/prompts/persona";
 import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
 import { applyGoalEntries, type KernelTool, kernelOn, Runner } from "@eta/core";
-import { type GoalEntry, recordGoalEntries, SessionLog } from "@eta/core/session";
-import { MemoryStorage, sessionTokenTotal, type UsageRow } from "@eta/core/storage";
-import { assistantMessage, type FakeCompaction, fakeCompaction, fakeModels } from "@eta/core/testing";
+import {
+  type GoalEntry,
+  recordGoalEntries,
+  SessionLog,
+} from "@eta/core/session";
+import {
+  MemoryStorage,
+  sessionTokenTotal,
+  type UsageRow,
+} from "@eta/core/storage";
+import {
+  assistantMessage,
+  type FakeCompaction,
+  fakeCompaction,
+  fakeModels,
+} from "@eta/core/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { composeEtaSystemPrompt, MetricsService } from "../src/index";
 import { journaledKernel } from "../src/testing";
 
 const userMsg = (text: string) => ({
-	role: "user" as const,
-	content: [{ type: "text" as const, text }],
-	timestamp: 0,
+  role: "user" as const,
+  content: [{ type: "text" as const, text }],
+  timestamp: 0,
 });
 
 const usageOf = (input: number, output: number, cacheRead = 0): Usage => ({
-	input,
-	output,
-	cacheRead,
-	cacheWrite: 0,
-	totalTokens: input + output + cacheRead,
-	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+  input,
+  output,
+  cacheRead,
+  cacheWrite: 0,
+  totalTokens: input + output + cacheRead,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 });
 
 const answer = (text: string, usage = usageOf(100, 20)): AssistantMessage =>
-	assistantMessage({ content: [{ type: "text", text }], stopReason: "stop", usage });
+  assistantMessage({
+    content: [{ type: "text", text }],
+    stopReason: "stop",
+    usage,
+  });
 
-const toolTurn = (calls: { id: string; name: string; args?: Record<string, unknown> }[], usage = usageOf(50, 10)) =>
-	assistantMessage({
-		stopReason: "toolUse",
-		content: calls.map((call) => ({
-			type: "toolCall" as const,
-			id: call.id,
-			name: call.name,
-			arguments: call.args ?? {},
-		})),
-		usage,
-	});
+const toolTurn = (
+  calls: { id: string; name: string; args?: Record<string, unknown> }[],
+  usage = usageOf(50, 10),
+) =>
+  assistantMessage({
+    stopReason: "toolUse",
+    content: calls.map((call) => ({
+      type: "toolCall" as const,
+      id: call.id,
+      name: call.name,
+      arguments: call.args ?? {},
+    })),
+    usage,
+  });
 
 const transient = (message = "upstream 503 service unavailable") =>
-	assistantMessage({ stopReason: "error", errorMessage: message, usage: usageOf(10, 1) });
+  assistantMessage({
+    stopReason: "error",
+    errorMessage: message,
+    usage: usageOf(10, 1),
+  });
 
 const overflow = () =>
-	assistantMessage({ stopReason: "error", errorMessage: "prompt is too long: 210000 tokens > 200000 maximum" });
+  assistantMessage({
+    stopReason: "error",
+    errorMessage: "prompt is too long: 210000 tokens > 200000 maximum",
+  });
 
 /** The whole session's wiring, as the server would build it. */
 function session(script: AssistantMessage[], tools: KernelTool[] = []) {
-	const storage = new MemoryStorage();
-	const log = SessionLog.create(storage);
-	// The one plugin this test needs: a compaction driver, so the overflow step
-	// below has something to recover with. A real one is the harness's service.
-	const compaction: FakeCompaction = fakeCompaction({
-		summary: "everything before was about the migration",
-	});
-	const { kernel, journaling } = journaledKernel(log, {
-		config: {
-			model: { provider: "p", modelId: "m" },
-			activeToolNames: tools.map((tool) => tool.name),
-			thinkingLevel: "low",
-			compaction: { enabled: true, reserveTokens: 1_000, keepRecentTokens: 500, maxContextTokens: 64_000 },
-		},
-	});
-	for (const tool of tools) kernel.tools.register(tool);
+  const storage = new MemoryStorage();
+  const log = SessionLog.create(storage);
+  // The one plugin this test needs: a compaction driver, so the overflow step
+  // below has something to recover with. A real one is the harness's service.
+  const compaction: FakeCompaction = fakeCompaction({
+    summary: "everything before was about the migration",
+  });
+  const { kernel, journaling } = journaledKernel(log, {
+    config: {
+      model: { provider: "p", modelId: "m" },
+      activeToolNames: tools.map((tool) => tool.name),
+      thinkingLevel: "low",
+      compaction: {
+        enabled: true,
+        reserveTokens: 1_000,
+        keepRecentTokens: 500,
+        maxContextTokens: 64_000,
+      },
+    },
+  });
+  for (const tool of tools) kernel.tools.register(tool);
 
-	const fake = fakeModels(script, { chunkSize: 8 });
-	fake.getModel = () =>
-		({
-			provider: "fake",
-			id: "fake-model",
-			api: "openai-completions",
-			contextWindow: 200_000,
-			maxTokens: 8_192,
-		}) as never;
+  const fake = fakeModels(script, { chunkSize: 8 });
+  fake.getModel = () =>
+    ({
+      provider: "fake",
+      id: "fake-model",
+      api: "openai-completions",
+      contextWindow: 200_000,
+      maxTokens: 8_192,
+    }) as never;
 
-	const usageRows: UsageRow[] = [];
-	const runStatuses: string[] = [];
-	const on = kernelOn(kernel.ctx);
-	const offs = [
-		on("usage:recorded", (event) => {
-			usageRows.push(event.row);
-		}),
-		on("turn:run-end", (event) => {
-			runStatuses.push(event.status);
-		}),
-	];
-	const goalRecorder = recordGoalEntries(log, on);
-	const runner = new Runner(kernel, {
-		models: fake,
-		journal: journaling,
-		compaction,
-		// Composed the way the assembler composes it: base prompt, then the persona
-		// block the primitive renders. The runner adds no prompt text of its own.
-		systemPrompt: () =>
-			composeEtaSystemPrompt("You are Eta, a coding agent.", { persona: renderActivePersona(kernel.persona).text }),
-		toolContext: { workspace: "/w" },
-		entryProjectors: {},
-		toProviderMessages: (messages) =>
-			messages.flatMap((message) =>
-				message.role === "compactionSummary"
-					? [
-							{
-								role: "user" as const,
-								content: [{ type: "text" as const, text: `<summary>${message.summary}</summary>` }],
-								timestamp: 0,
-							},
-						]
-					: [message as never],
-			),
-	});
-	const metrics = new MetricsService(kernel.ctx);
-	kernel.persona.loadCards([{ id: "Executor", name: "Executor", content: "Ship it." }]);
-	kernel.persona.setActive(["Executor"]);
+  const usageRows: UsageRow[] = [];
+  const runStatuses: string[] = [];
+  const on = kernelOn(kernel.ctx);
+  const offs = [
+    on("usage:recorded", (event) => {
+      usageRows.push(event.row);
+    }),
+    on("turn:run-end", (event) => {
+      runStatuses.push(event.status);
+    }),
+  ];
+  const goalRecorder = recordGoalEntries(log, on);
+  const runner = new Runner(kernel, {
+    models: fake,
+    journal: journaling,
+    compaction,
+    // Composed the way the assembler composes it: base prompt, then the persona
+    // block the primitive renders. The runner adds no prompt text of its own.
+    systemPrompt: () =>
+      composeEtaSystemPrompt("You are Eta, a coding agent.", {
+        persona: renderActivePersona(kernel.persona).text,
+      }),
+    toolContext: { workspace: "/w" },
+    entryProjectors: {},
+    toProviderMessages: (messages) =>
+      messages.flatMap((message) =>
+        message.role === "compactionSummary"
+          ? [
+              {
+                role: "user" as const,
+                content: [
+                  {
+                    type: "text" as const,
+                    text: `<summary>${message.summary}</summary>`,
+                  },
+                ],
+                timestamp: 0,
+              },
+            ]
+          : [message as never],
+      ),
+  });
+  const metrics = new MetricsService(kernel.ctx);
+  kernel.persona.loadCards([
+    { id: "Executor", name: "Executor", content: "Ship it." },
+  ]);
+  kernel.persona.setActive(["Executor"]);
 
-	return {
-		kernel,
-		runner,
-		compaction,
-		metrics,
-		fake,
-		storage,
-		log,
-		usageRows,
-		runStatuses,
-		stopGoalRecorder: () => goalRecorder.stop(),
-		dispose: () => {
-			goalRecorder.stop();
-			for (const off of offs) off();
-			void kernel.dispose();
-		},
-	};
+  return {
+    kernel,
+    runner,
+    compaction,
+    metrics,
+    fake,
+    storage,
+    log,
+    usageRows,
+    runStatuses,
+    stopGoalRecorder: () => goalRecorder.stop(),
+    dispose: () => {
+      goalRecorder.stop();
+      for (const off of offs) off();
+      void kernel.dispose();
+    },
+  };
 }
 
 const taskTool = (created: string[]): KernelTool => ({
-	name: "task",
-	description: "record a task",
-	execute: (args) => {
-		created.push(String((args as { content?: string }).content ?? ""));
-		return `recorded: ${created.join(", ")}`;
-	},
+  name: "task",
+  description: "record a task",
+  execute: (args) => {
+    created.push(String((args as { content?: string }).content ?? ""));
+    return `recorded: ${created.join(", ")}`;
+  },
 });
 
 beforeEach(() => {
-	vi.useFakeTimers();
+  vi.useFakeTimers();
 });
 
 afterEach(() => {
-	vi.useRealTimers();
+  vi.useRealTimers();
 });
 
 describe("one full session", () => {
-	it("streams, retries, recovers from overflow, steers, and lands in the journal", async () => {
-		const created: string[] = [];
-		const s = session(
-			[
-				toolTurn([{ id: "c1", name: "task", args: { content: "port the storage layer" } }]),
-				transient(),
-				overflow(),
-				answer("Storage ported, tests green."),
-				answer("And the follow-up is handled."),
-			],
-			[taskTool(created)],
-		);
+  it("streams, retries, recovers from overflow, steers, and lands in the journal", async () => {
+    const created: string[] = [];
+    const s = session(
+      [
+        toolTurn([
+          {
+            id: "c1",
+            name: "task",
+            args: { content: "port the storage layer" },
+          },
+        ]),
+        transient(),
+        overflow(),
+        answer("Storage ported, tests green."),
+        answer("And the follow-up is handled."),
+      ],
+      [taskTool(created)],
+    );
 
-		// A middleware that watches every call; the tools plugin's job in a deployment.
-		const seenCalls: string[] = [];
-		s.kernel.tools.use({
-			name: "audit",
-			before: (name, args) => {
-				seenCalls.push(name);
-				return { ok: true, args };
-			},
-		});
+    // A middleware that watches every call; the tools plugin's job in a deployment.
+    const seenCalls: string[] = [];
+    s.kernel.tools.use({
+      name: "audit",
+      before: (name, args) => {
+        seenCalls.push(name);
+        return { ok: true, args };
+      },
+    });
 
-		s.kernel.goal.set("port the storage layer to the kernel");
-		s.kernel.inject(userMsg("start on the storage port"));
-		// Steering arrives after the tool batch; a follow-up waits for the stop.
-		s.kernel.tools.use({
-			name: "steer",
-			after: (name, _args, result) => {
-				if (name === "task") s.kernel.followUp("also rerun the jsonl tests");
-				return result;
-			},
-		});
+    s.kernel.goal.set("port the storage layer to the kernel");
+    s.kernel.inject(userMsg("start on the storage port"));
+    // Steering arrives after the tool batch; a follow-up waits for the stop.
+    s.kernel.tools.use({
+      name: "steer",
+      after: (name, _args, result) => {
+        if (name === "task") s.kernel.followUp("also rerun the jsonl tests");
+        return result;
+      },
+    });
 
-		const run = s.runner.run();
-		// Let the retry backoff elapse (1s base delay).
-		await vi.advanceTimersByTimeAsync(5_000);
-		const result = await run;
+    const run = s.runner.run();
+    // Let the retry backoff elapse (1s base delay).
+    await vi.advanceTimersByTimeAsync(5_000);
+    const result = await run;
 
-		expect(result.status).toBe("completed");
-		expect(result.error).toBeUndefined();
-		// The tool ran; the failure was retried; the overflow was compacted away.
-		expect(created).toEqual(["port the storage layer"]);
-		expect(seenCalls).toEqual(["task"]);
-		expect(s.compaction.compactions).toEqual(["overflow"]);
-		expect(s.runStatuses).toEqual(["completed"]);
+    expect(result.status).toBe("completed");
+    expect(result.error).toBeUndefined();
+    // The tool ran; the failure was retried; the overflow was compacted away.
+    expect(created).toEqual(["port the storage layer"]);
+    expect(seenCalls).toEqual(["task"]);
+    expect(s.compaction.compactions).toEqual(["overflow"]);
+    expect(s.runStatuses).toEqual(["completed"]);
 
-		// The provider saw the persona in its prompt and a compacted context.
-		const lastCall = s.fake.calls.at(-1)!;
-		expect(lastCall.context.systemPrompt).toContain("You are Eta, a coding agent.");
-		expect(lastCall.context.systemPrompt).toContain("Ship it.");
-		expect(JSON.stringify(lastCall.context.messages)).toContain("<summary>");
-		// …and the follow-up it was handed at the boundary.
-		expect(JSON.stringify(lastCall.context.messages)).toContain("also rerun the jsonl tests");
+    // The provider saw the persona in its prompt and a compacted context.
+    const lastCall = s.fake.calls.at(-1)!;
+    expect(lastCall.context.systemPrompt).toContain(
+      "You are Eta, a coding agent.",
+    );
+    expect(lastCall.context.systemPrompt).toContain("Ship it.");
+    expect(JSON.stringify(lastCall.context.messages)).toContain("<summary>");
+    // …and the follow-up it was handed at the boundary.
+    expect(JSON.stringify(lastCall.context.messages)).toContain(
+      "also rerun the jsonl tests",
+    );
 
-		// Usage was recorded for each settled message — the tool turn, the recovered
-		// answer, and the follow-up — and the failed attempts were not billed.
-		expect(s.usageRows.length).toBe(3);
-		expect(s.usageRows.every((row) => row.adjustment === false)).toBe(true);
-		expect(sessionTokenTotal((await s.storage.getStats()).usage)).toBeGreaterThan(0);
-		// Throughput is a number, not a placeholder.
-		expect(s.metrics.tokensPerSec).toBeGreaterThanOrEqual(0);
-		s.dispose();
-	});
+    // Usage was recorded for each settled message — the tool turn, the recovered
+    // answer, and the follow-up — and the failed attempts were not billed.
+    expect(s.usageRows.length).toBe(3);
+    expect(s.usageRows.every((row) => row.adjustment === false)).toBe(true);
+    expect(
+      sessionTokenTotal((await s.storage.getStats()).usage),
+    ).toBeGreaterThan(0);
+    // Throughput is a number, not a placeholder.
+    expect(s.metrics.tokensPerSec).toBeGreaterThanOrEqual(0);
+    s.dispose();
+  });
 
-	it("the journal holds complete turns only, and a replay rebuilds the session", async () => {
-		const created: string[] = [];
-		const s = session(
-			[toolTurn([{ id: "c1", name: "task", args: { content: "one" } }]), answer("first run done")],
-			[taskTool(created)],
-		);
-		s.kernel.goal.set("finish the migration");
-		s.kernel.inject(userMsg("go"));
-		await s.runner.run();
+  it("the journal holds complete turns only, and a replay rebuilds the session", async () => {
+    const created: string[] = [];
+    const s = session(
+      [
+        toolTurn([{ id: "c1", name: "task", args: { content: "one" } }]),
+        answer("first run done"),
+      ],
+      [taskTool(created)],
+    );
+    s.kernel.goal.set("finish the migration");
+    s.kernel.inject(userMsg("go"));
+    await s.runner.run();
 
-		const stats = await s.storage.getStats();
-		const entries = await s.storage.scanEntries({ order: "asc" });
-		// the goal entry the subscriber wrote, the user message, the assistant's
-		// tool call, the tool result, and the final answer.
-		expect(entries).toHaveLength(5);
-		expect(entries[0]!.type).toBe("goal");
-		expect(entries[0]!.parentId).toBeNull();
-		for (let index = 1; index < entries.length; index += 1) {
-			expect(entries[index]!.parentId).toBe(entries[index - 1]!.id);
-		}
+    const stats = await s.storage.getStats();
+    const entries = await s.storage.scanEntries({ order: "asc" });
+    // the goal entry the subscriber wrote, the user message, the assistant's
+    // tool call, the tool result, and the final answer.
+    expect(entries).toHaveLength(5);
+    expect(entries[0]!.type).toBe("goal");
+    expect(entries[0]!.parentId).toBeNull();
+    for (let index = 1; index < entries.length; index += 1) {
+      expect(entries[index]!.parentId).toBe(entries[index - 1]!.id);
+    }
 
-		// A restart: a new kernel over the same journal.
-		const log = await SessionLog.load(s.storage);
-		expect(log.transcript().length).toBe(4); // goal entries are not messages
-		expect(await s.storage.getStats()).toEqual(stats);
+    // A restart: a new kernel over the same journal.
+    const log = await SessionLog.load(s.storage);
+    expect(log.transcript().length).toBe(4); // goal entries are not messages
+    expect(await s.storage.getStats()).toEqual(stats);
 
-		const { kernel: restartedKernel, journaling: restartedJournaling } = journaledKernel(log, {
-			config: { model: { provider: "p", modelId: "m" }, activeToolNames: ["task"] },
-		});
-		restartedKernel.tools.register(taskTool(created));
-		const goalEntries = log.graph.pathOldestFirst().filter((entry): entry is GoalEntry => entry.type === "goal");
-		applyGoalEntries(restartedKernel.goal, goalEntries);
-		expect(restartedKernel.goal.current?.objective).toBe("finish the migration");
-		expect(restartedKernel.goal.current?.status).toBe("active");
+    const { kernel: restartedKernel, journaling: restartedJournaling } =
+      journaledKernel(log, {
+        config: {
+          model: { provider: "p", modelId: "m" },
+          activeToolNames: ["task"],
+        },
+      });
+    restartedKernel.tools.register(taskTool(created));
+    const goalEntries = log.graph
+      .pathOldestFirst()
+      .filter((entry): entry is GoalEntry => entry.type === "goal");
+    applyGoalEntries(restartedKernel.goal, goalEntries);
+    expect(restartedKernel.goal.current?.objective).toBe(
+      "finish the migration",
+    );
+    expect(restartedKernel.goal.current?.status).toBe("active");
 
-		// And it keeps going, appending to the same journal.
-		const fake = fakeModels([answer("resumed")]);
-		const runner = new Runner(restartedKernel, {
-			journal: restartedJournaling,
-			models: fake,
-			initialTranscript: log.transcript(),
-		});
-		restartedKernel.inject(userMsg("continue"));
-		await runner.run();
-		expect(fake.calls[0]!.context.messages.length).toBeGreaterThan(2);
-		// The goal entry, four messages, and the resumed question and answer.
-		expect(await log.storage.scanEntries({})).toHaveLength(7);
-		void restartedKernel.dispose();
-		s.dispose();
-	});
+    // And it keeps going, appending to the same journal.
+    const fake = fakeModels([answer("resumed")]);
+    const runner = new Runner(restartedKernel, {
+      journal: restartedJournaling,
+      models: fake,
+      initialTranscript: log.transcript(),
+    });
+    restartedKernel.inject(userMsg("continue"));
+    await runner.run();
+    expect(fake.calls[0]!.context.messages.length).toBeGreaterThan(2);
+    // The goal entry, four messages, and the resumed question and answer.
+    expect(await log.storage.scanEntries({})).toHaveLength(7);
+    void restartedKernel.dispose();
+    s.dispose();
+  });
 
-	it("an aborted run keeps what it committed, and the next run starts clean", async () => {
-		const created: string[] = [];
-		const slow: KernelTool = {
-			name: "task",
-			execute: async (args) => {
-				created.push(String((args as { content?: string }).content ?? ""));
-				await new Promise((resolve) => setTimeout(resolve, 50));
-				return "slowly recorded";
-			},
-		};
-		const s = session(
-			[toolTurn([{ id: "c1", name: "task", args: { content: "half done" } }]), answer("finished by hand")],
-			[slow],
-		);
-		s.kernel.inject(userMsg("start"));
-		const run = s.runner.run();
-		await vi.advanceTimersByTimeAsync(5);
-		s.runner.abort();
-		await vi.advanceTimersByTimeAsync(100);
-		const aborted = await run;
-		expect(aborted.status).toBe("aborted");
-		expect(created).toEqual(["half done"]); // the effect could not be un-run
+  it("an aborted run keeps what it committed, and the next run starts clean", async () => {
+    const created: string[] = [];
+    const slow: KernelTool = {
+      name: "task",
+      execute: async (args) => {
+        created.push(String((args as { content?: string }).content ?? ""));
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return "slowly recorded";
+      },
+    };
+    const s = session(
+      [
+        toolTurn([{ id: "c1", name: "task", args: { content: "half done" } }]),
+        answer("finished by hand"),
+      ],
+      [slow],
+    );
+    s.kernel.inject(userMsg("start"));
+    const run = s.runner.run();
+    await vi.advanceTimersByTimeAsync(5);
+    s.runner.abort();
+    await vi.advanceTimersByTimeAsync(100);
+    const aborted = await run;
+    expect(aborted.status).toBe("aborted");
+    expect(created).toEqual(["half done"]); // the effect could not be un-run
 
-		// What was committed stands: the user message, the call, the result.
-		const entries = await s.storage.scanEntries({ order: "asc" });
-		expect(entries.length).toBeGreaterThanOrEqual(2);
-		expect(entries[0]!.type).toBe("message");
+    // What was committed stands: the user message, the call, the result.
+    const entries = await s.storage.scanEntries({ order: "asc" });
+    expect(entries.length).toBeGreaterThanOrEqual(2);
+    expect(entries[0]!.type).toBe("message");
 
-		// A fresh run over the replayed journal answers normally.
-		const log = await SessionLog.load(s.storage);
-		const { kernel, journaling } = journaledKernel(log, {
-			config: { model: { provider: "p", modelId: "m" }, activeToolNames: [] },
-		});
-		const fake = fakeModels([answer("clean run")]);
-		const runner = new Runner(kernel, { models: fake, journal: journaling, initialTranscript: log.transcript() });
-		kernel.inject(userMsg("try again"));
-		const second = await runner.run();
-		expect(second.status).toBe("completed");
-		expect(fake.calls[0]!.context.messages.some((message) => message.role === "user")).toBe(true);
-		void kernel.dispose();
-		s.dispose();
-	});
+    // A fresh run over the replayed journal answers normally.
+    const log = await SessionLog.load(s.storage);
+    const { kernel, journaling } = journaledKernel(log, {
+      config: { model: { provider: "p", modelId: "m" }, activeToolNames: [] },
+    });
+    const fake = fakeModels([answer("clean run")]);
+    const runner = new Runner(kernel, {
+      models: fake,
+      journal: journaling,
+      initialTranscript: log.transcript(),
+    });
+    kernel.inject(userMsg("try again"));
+    const second = await runner.run();
+    expect(second.status).toBe("completed");
+    expect(
+      fake.calls[0]!.context.messages.some(
+        (message) => message.role === "user",
+      ),
+    ).toBe(true);
+    void kernel.dispose();
+    s.dispose();
+  });
 });

@@ -22,36 +22,41 @@ import type { EventFrame } from "@eta/client-wire-proto";
 export const DEFAULT_RING_CAPACITY = 512;
 
 export interface EventRing {
-	/** Record an event; the oldest is forgotten when the ring is full. */
-	push(frame: EventFrame): void;
-	/** The ring, oldest first, optionally narrowed to events whose name contains `filter`. */
-	tail(filter?: string): EventFrame[];
-	/** How many events are held right now. */
-	size(): number;
+  /** Record an event; the oldest is forgotten when the ring is full. */
+  push(frame: EventFrame): void;
+  /** The ring, oldest first, optionally narrowed to events whose name contains `filter`. */
+  tail(filter?: string): EventFrame[];
+  /** How many events are held right now. */
+  size(): number;
 }
 
 export function createEventRing(capacity = DEFAULT_RING_CAPACITY): EventRing {
-	/** A fixed-size window: `frames` always holds the ring in order, oldest first. */
-	const frames: EventFrame[] = [];
-	return {
-		push(frame): void {
-			frames.push(frame);
-			if (frames.length > capacity) frames.splice(0, frames.length - capacity);
-		},
-		tail(filter): EventFrame[] {
-			const needle = filter?.trim().toLowerCase();
-			if (needle === undefined || needle.length === 0) return [...frames];
-			// A name is `<family>:<what happened>` (`tool:start`, `turn:run-end`), so a substring
-			// match is what a dev panel means by a filter — "tool" catches the family.
-			return frames.filter((frame) => frame.name.toLowerCase().includes(needle));
-		},
-		size: () => frames.length,
-	};
+  /** A fixed-size window: `frames` always holds the ring in order, oldest first. */
+  const frames: EventFrame[] = [];
+  return {
+    push(frame): void {
+      frames.push(frame);
+      if (frames.length > capacity) frames.splice(0, frames.length - capacity);
+    },
+    tail(filter): EventFrame[] {
+      const needle = filter?.trim().toLowerCase();
+      if (needle === undefined || needle.length === 0) return [...frames];
+      // A name is `<family>:<what happened>` (`tool:start`, `turn:run-end`), so a substring
+      // match is what a dev panel means by a filter — "tool" catches the family.
+      return frames.filter((frame) =>
+        frame.name.toLowerCase().includes(needle),
+      );
+    },
+    size: () => frames.length,
+  };
 }
 
 /** Whether an event name matches a subscription's filter. */
-export function matchesFilter(name: string, filter: string | undefined): boolean {
-	if (filter === undefined) return true;
-	const needle = filter.trim().toLowerCase();
-	return needle.length === 0 || name.toLowerCase().includes(needle);
+export function matchesFilter(
+  name: string,
+  filter: string | undefined,
+): boolean {
+  if (filter === undefined) return true;
+  const needle = filter.trim().toLowerCase();
+  return needle.length === 0 || name.toLowerCase().includes(needle);
 }

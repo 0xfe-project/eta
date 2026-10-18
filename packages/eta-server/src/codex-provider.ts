@@ -12,17 +12,23 @@ import { providerModelCatalog } from "./providers/catalog";
 import type { EtaModelConfig } from "./providers/config-types";
 
 /** The provider, restricted to the models the config lists (or all of them when it lists none). */
-export function codexRuntimeProvider(configured?: EtaModelConfig[]): Provider<Api> {
-	const provider = openaiCodexProvider();
-	if (configured === undefined) return provider;
-	const selected = new Set(configured.map((model) => model.id));
-	return {
-		...provider,
-		getModels: (): readonly Model<Api>[] => provider.getModels().filter((model) => selected.has(model.id)),
-	};
+export function codexRuntimeProvider(
+  configured?: EtaModelConfig[],
+): Provider<Api> {
+  const provider = openaiCodexProvider();
+  if (configured === undefined) return provider;
+  const selected = new Set(configured.map((model) => model.id));
+  return {
+    ...provider,
+    getModels: (): readonly Model<Api>[] =>
+      provider.getModels().filter((model) => selected.has(model.id)),
+  };
 }
 
 /** The models a codex login serves, from the checked-in catalog. */
 export function codexCatalog(): EtaModelConfig[] {
-	return providerModelCatalog({ kind: "openai-codex", baseUrl: "https://chatgpt.com/backend-api" });
+  return providerModelCatalog({
+    kind: "openai-codex",
+    baseUrl: "https://chatgpt.com/backend-api",
+  });
 }

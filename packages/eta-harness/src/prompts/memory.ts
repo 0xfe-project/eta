@@ -23,4 +23,4 @@ Notes are shown with an id like [user#1] or [eta-agent~9f3c#0]. Copy those ids i
 If nothing is worth keeping, output the same object with all empty arrays.`;
 
 export const MEMORY_EXTRACT_SYSTEM_PROMPT =
-	"You keep notes on what's worth remembering about this person and their work. Be terse and specific.";
+  "You keep notes on what's worth remembering about this person and their work. Be terse and specific.";

@@ -8,32 +8,44 @@
  * locale-specific spellings of a path before giving up — a file that exists is
  * a file the model asked for.
  */
-import { type EnvCallOptions, type ExecutionEnv, getOrThrow } from "@eta/execution";
+import {
+  type EnvCallOptions,
+  type ExecutionEnv,
+  getOrThrow,
+} from "@eta/execution";
 
 const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
 const NARROW_NO_BREAK_SPACE = "\u202F";
 
 function normalizeToolPath(path: string): string {
-	const normalized = path.replace(UNICODE_SPACES, " ");
-	return normalized.startsWith("@") ? normalized.slice(1) : normalized;
+  const normalized = path.replace(UNICODE_SPACES, " ");
+  return normalized.startsWith("@") ? normalized.slice(1) : normalized;
 }
 
-export async function resolveToolPath(env: ExecutionEnv, path: string, options?: EnvCallOptions): Promise<string> {
-	return getOrThrow(await env.absolutePath(normalizeToolPath(path), options));
+export async function resolveToolPath(
+  env: ExecutionEnv,
+  path: string,
+  options?: EnvCallOptions,
+): Promise<string> {
+  return getOrThrow(await env.absolutePath(normalizeToolPath(path), options));
 }
 
-export async function resolveReadToolPath(env: ExecutionEnv, path: string, options?: EnvCallOptions): Promise<string> {
-	const resolved = await resolveToolPath(env, path, options);
-	const variants = [
-		resolved,
-		resolved.replace(/ (AM|PM)\./gi, `${NARROW_NO_BREAK_SPACE}$1.`),
-		resolved.normalize("NFD"),
-		resolved.replace(/'/g, "\u2019"),
-		resolved.normalize("NFD").replace(/'/g, "\u2019"),
-	];
+export async function resolveReadToolPath(
+  env: ExecutionEnv,
+  path: string,
+  options?: EnvCallOptions,
+): Promise<string> {
+  const resolved = await resolveToolPath(env, path, options);
+  const variants = [
+    resolved,
+    resolved.replace(/ (AM|PM)\./gi, `${NARROW_NO_BREAK_SPACE}$1.`),
+    resolved.normalize("NFD"),
+    resolved.replace(/'/g, "\u2019"),
+    resolved.normalize("NFD").replace(/'/g, "\u2019"),
+  ];
 
-	for (const variant of new Set(variants)) {
-		if (getOrThrow(await env.exists(variant, options))) return variant;
-	}
-	return resolved;
+  for (const variant of new Set(variants)) {
+    if (getOrThrow(await env.exists(variant, options))) return variant;
+  }
+  return resolved;
 }

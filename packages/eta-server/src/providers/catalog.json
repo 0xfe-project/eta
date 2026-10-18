@@ -1,217 +1,233 @@
 {
-	"version": 1,
-	"providers": [
-		{
-			"id": "openai-codex",
-			"match": {
-				"kinds": ["openai-codex"],
-				"baseUrls": ["https://chatgpt.com/backend-api"]
-			},
-			"auth": { "adapter": "codex-oauth" },
-			"discovery": { "adapter": "catalog" },
-			"runtime": { "adapter": "codex" },
-			"restrictToListedModels": true,
-			"models": [
-				{ "id": "gpt-5.3-codex-spark" },
-				{ "id": "gpt-5.4" },
-				{ "id": "gpt-5.4-mini" },
-				{ "id": "gpt-5.5" },
-				{ "id": "gpt-5.6-luna" },
-				{ "id": "gpt-5.6-sol" },
-				{ "id": "gpt-5.6-terra" },
-				{ "id": "gpt-6-astra" }
-			]
-		},
-		{
-			"id": "kimi-coding",
-			"match": {
-				"kinds": ["kimi-coding"],
-				"baseUrls": ["https://api.kimi.com/coding/v1"]
-			},
-			"auth": { "adapter": "api-key", "required": true, "missingError": "key_required" },
-			"discovery": { "adapter": "openai-models", "requireContextWindow": true },
-			"runtime": {
-				"adapter": "openai-chat",
-				"thinking": "reasoning-effort",
-				"developerRole": false,
-				"store": false,
-				"maxTokensField": "max_tokens",
-				"replayReasoningContent": true
-			},
-			"restrictToListedModels": true,
-			"models": [
-				{
-					"id": "kimi-for-coding",
-					"name": "K2.8 Preview",
-					"contextWindow": 1048576,
-					"maxTokens": 32768,
-					"input": ["text", "image"],
-					"reasoning": true,
-					"thinkingMode": "only",
-					"reasoningEfforts": ["low", "high", "max"],
-					"providerDefaultEffort": "max"
-				},
-				{
-					"id": "kimi-for-coding-highspeed",
-					"name": "K2.7 Code Highspeed",
-					"contextWindow": 262144,
-					"maxTokens": 32768,
-					"input": ["text", "image"],
-					"reasoning": true,
-					"thinkingMode": "only",
-					"reasoningEfforts": []
-				},
-				{
-					"id": "k3",
-					"name": "K3",
-					"contextWindow": 1048576,
-					"maxTokens": 131072,
-					"input": ["text", "image"],
-					"reasoning": true,
-					"thinkingMode": "only",
-					"reasoningEfforts": ["low", "high", "max"],
-					"providerDefaultEffort": "max"
-				},
-				{
-					"id": "k3-256k",
-					"name": "K3-256k",
-					"contextWindow": 262144,
-					"maxTokens": 131072,
-					"input": ["text", "image"],
-					"reasoning": true,
-					"thinkingMode": "only",
-					"reasoningEfforts": ["low", "high", "max"],
-					"providerDefaultEffort": "max"
-				}
-			]
-		},
-		{
-			"id": "deepseek",
-			"match": {
-				"kinds": ["deepseek"],
-				"baseUrls": ["https://api.deepseek.com"]
-			},
-			"auth": { "adapter": "api-key", "required": true, "missingError": "deepseek_key_required" },
-			"discovery": { "adapter": "openai-models" },
-			"runtime": {
-				"adapter": "openai-chat",
-				"thinking": "deepseek",
-				"developerRole": false,
-				"store": false,
-				"maxTokensField": "max_tokens",
-				"replayReasoningContent": true
-			},
-			"restrictToListedModels": true,
-			"models": [
-				{
-					"id": "deepseek-flash",
-					"name": "DeepSeek Flash",
-					"contextWindow": 1000000,
-					"maxTokens": 131072,
-					"input": ["text", "image"],
-					"reasoning": true,
-					"thinkingMode": "both",
-					"reasoningEfforts": ["low", "high", "max"],
-					"providerDefaultEffort": "high"
-				},
-				{
-					"id": "deepseek-v4-pro",
-					"name": "DeepSeek V4 Pro",
-					"contextWindow": 1000000,
-					"maxTokens": 131072,
-					"input": ["text"],
-					"reasoning": true,
-					"thinkingMode": "both",
-					"reasoningEfforts": ["low", "high", "max"],
-					"providerDefaultEffort": "high"
-				}
-			]
-		},
-		{
-			"id": "zai-coding-cn",
-			"match": {
-				"kinds": ["zai-coding-cn"],
-				"baseUrls": ["https://open.bigmodel.cn/api/coding/paas/v4"]
-			},
-			"auth": { "adapter": "api-key", "required": true, "missingError": "key_required" },
-			"discovery": { "adapter": "openai-models" },
-			"runtime": {
-				"adapter": "openai-chat",
-				"thinking": "zai",
-				"developerRole": false,
-				"store": false,
-				"maxTokensField": "max_tokens",
-				"toolStream": "zai"
-			},
-			"restrictToListedModels": true,
-			"models": [
-				{
-					"id": "glm-5.3",
-					"input": ["text"],
-					"reasoning": true,
-					"thinkingMode": "both",
-					"reasoningEfforts": ["low", "high", "max"]
-				},
-				{
-					"id": "glm-5.3-flash",
-					"input": ["text", "image"],
-					"reasoning": true,
-					"thinkingMode": "both",
-					"reasoningEfforts": ["low", "high", "max"]
-				}
-			]
-		},
-		{
-			"id": "zai",
-			"match": {
-				"kinds": ["zai"],
-				"baseUrls": ["https://api.z.ai/api/coding/paas/v4"]
-			},
-			"auth": { "adapter": "api-key", "required": true, "missingError": "key_required" },
-			"discovery": { "adapter": "openai-models" },
-			"runtime": {
-				"adapter": "openai-chat",
-				"thinking": "zai",
-				"developerRole": false,
-				"store": false,
-				"maxTokensField": "max_tokens",
-				"toolStream": "zai"
-			},
-			"restrictToListedModels": true,
-			"models": [
-				{
-					"id": "glm-5.3",
-					"input": ["text"],
-					"reasoning": true,
-					"thinkingMode": "both",
-					"reasoningEfforts": ["low", "high", "max"]
-				},
-				{
-					"id": "glm-5.3-flash",
-					"input": ["text", "image"],
-					"reasoning": true,
-					"thinkingMode": "both",
-					"reasoningEfforts": ["low", "high", "max"]
-				}
-			]
-		},
-		{
-			"id": "openai-compatible",
-			"match": { "kinds": ["openai-compatible"], "baseUrls": [] },
-			"auth": { "adapter": "api-key", "required": false },
-			"discovery": { "adapter": "openai-models" },
-			"runtime": { "adapter": "openai-chat" },
-			"restrictToListedModels": false,
-			"models": []
-		},
-		{
-			"id": "openai-responses",
-			"match": { "kinds": ["openai-responses"], "baseUrls": [] },
-			"auth": { "adapter": "api-key", "required": false },
-			"discovery": { "adapter": "openai-models" },
-			"runtime": { "adapter": "openai-responses" },
-			"restrictToListedModels": false,
-			"models": []
-		}
-	]
+  "version": 1,
+  "providers": [
+    {
+      "id": "openai-codex",
+      "match": {
+        "kinds": ["openai-codex"],
+        "baseUrls": ["https://chatgpt.com/backend-api"]
+      },
+      "auth": { "adapter": "codex-oauth" },
+      "discovery": { "adapter": "catalog" },
+      "runtime": { "adapter": "codex" },
+      "restrictToListedModels": true,
+      "models": [
+        { "id": "gpt-5.3-codex-spark" },
+        { "id": "gpt-5.4" },
+        { "id": "gpt-5.4-mini" },
+        { "id": "gpt-5.5" },
+        { "id": "gpt-5.6-luna" },
+        { "id": "gpt-5.6-sol" },
+        { "id": "gpt-5.6-terra" },
+        { "id": "gpt-6-astra" }
+      ]
+    },
+    {
+      "id": "kimi-coding",
+      "match": {
+        "kinds": ["kimi-coding"],
+        "baseUrls": ["https://api.kimi.com/coding/v1"]
+      },
+      "auth": {
+        "adapter": "api-key",
+        "required": true,
+        "missingError": "key_required"
+      },
+      "discovery": { "adapter": "openai-models", "requireContextWindow": true },
+      "runtime": {
+        "adapter": "openai-chat",
+        "thinking": "reasoning-effort",
+        "developerRole": false,
+        "store": false,
+        "maxTokensField": "max_tokens",
+        "replayReasoningContent": true
+      },
+      "restrictToListedModels": true,
+      "models": [
+        {
+          "id": "kimi-for-coding",
+          "name": "K2.8 Preview",
+          "contextWindow": 1048576,
+          "maxTokens": 32768,
+          "input": ["text", "image"],
+          "reasoning": true,
+          "thinkingMode": "only",
+          "reasoningEfforts": ["low", "high", "max"],
+          "providerDefaultEffort": "max"
+        },
+        {
+          "id": "kimi-for-coding-highspeed",
+          "name": "K2.7 Code Highspeed",
+          "contextWindow": 262144,
+          "maxTokens": 32768,
+          "input": ["text", "image"],
+          "reasoning": true,
+          "thinkingMode": "only",
+          "reasoningEfforts": []
+        },
+        {
+          "id": "k3",
+          "name": "K3",
+          "contextWindow": 1048576,
+          "maxTokens": 131072,
+          "input": ["text", "image"],
+          "reasoning": true,
+          "thinkingMode": "only",
+          "reasoningEfforts": ["low", "high", "max"],
+          "providerDefaultEffort": "max"
+        },
+        {
+          "id": "k3-256k",
+          "name": "K3-256k",
+          "contextWindow": 262144,
+          "maxTokens": 131072,
+          "input": ["text", "image"],
+          "reasoning": true,
+          "thinkingMode": "only",
+          "reasoningEfforts": ["low", "high", "max"],
+          "providerDefaultEffort": "max"
+        }
+      ]
+    },
+    {
+      "id": "deepseek",
+      "match": {
+        "kinds": ["deepseek"],
+        "baseUrls": ["https://api.deepseek.com"]
+      },
+      "auth": {
+        "adapter": "api-key",
+        "required": true,
+        "missingError": "deepseek_key_required"
+      },
+      "discovery": { "adapter": "openai-models" },
+      "runtime": {
+        "adapter": "openai-chat",
+        "thinking": "deepseek",
+        "developerRole": false,
+        "store": false,
+        "maxTokensField": "max_tokens",
+        "replayReasoningContent": true
+      },
+      "restrictToListedModels": true,
+      "models": [
+        {
+          "id": "deepseek-flash",
+          "name": "DeepSeek Flash",
+          "contextWindow": 1000000,
+          "maxTokens": 131072,
+          "input": ["text", "image"],
+          "reasoning": true,
+          "thinkingMode": "both",
+          "reasoningEfforts": ["low", "high", "max"],
+          "providerDefaultEffort": "high"
+        },
+        {
+          "id": "deepseek-v4-pro",
+          "name": "DeepSeek V4 Pro",
+          "contextWindow": 1000000,
+          "maxTokens": 131072,
+          "input": ["text"],
+          "reasoning": true,
+          "thinkingMode": "both",
+          "reasoningEfforts": ["low", "high", "max"],
+          "providerDefaultEffort": "high"
+        }
+      ]
+    },
+    {
+      "id": "zai-coding-cn",
+      "match": {
+        "kinds": ["zai-coding-cn"],
+        "baseUrls": ["https://open.bigmodel.cn/api/coding/paas/v4"]
+      },
+      "auth": {
+        "adapter": "api-key",
+        "required": true,
+        "missingError": "key_required"
+      },
+      "discovery": { "adapter": "openai-models" },
+      "runtime": {
+        "adapter": "openai-chat",
+        "thinking": "zai",
+        "developerRole": false,
+        "store": false,
+        "maxTokensField": "max_tokens",
+        "toolStream": "zai"
+      },
+      "restrictToListedModels": true,
+      "models": [
+        {
+          "id": "glm-5.3",
+          "input": ["text"],
+          "reasoning": true,
+          "thinkingMode": "both",
+          "reasoningEfforts": ["low", "high", "max"]
+        },
+        {
+          "id": "glm-5.3-flash",
+          "input": ["text", "image"],
+          "reasoning": true,
+          "thinkingMode": "both",
+          "reasoningEfforts": ["low", "high", "max"]
+        }
+      ]
+    },
+    {
+      "id": "zai",
+      "match": {
+        "kinds": ["zai"],
+        "baseUrls": ["https://api.z.ai/api/coding/paas/v4"]
+      },
+      "auth": {
+        "adapter": "api-key",
+        "required": true,
+        "missingError": "key_required"
+      },
+      "discovery": { "adapter": "openai-models" },
+      "runtime": {
+        "adapter": "openai-chat",
+        "thinking": "zai",
+        "developerRole": false,
+        "store": false,
+        "maxTokensField": "max_tokens",
+        "toolStream": "zai"
+      },
+      "restrictToListedModels": true,
+      "models": [
+        {
+          "id": "glm-5.3",
+          "input": ["text"],
+          "reasoning": true,
+          "thinkingMode": "both",
+          "reasoningEfforts": ["low", "high", "max"]
+        },
+        {
+          "id": "glm-5.3-flash",
+          "input": ["text", "image"],
+          "reasoning": true,
+          "thinkingMode": "both",
+          "reasoningEfforts": ["low", "high", "max"]
+        }
+      ]
+    },
+    {
+      "id": "openai-compatible",
+      "match": { "kinds": ["openai-compatible"], "baseUrls": [] },
+      "auth": { "adapter": "api-key", "required": false },
+      "discovery": { "adapter": "openai-models" },
+      "runtime": { "adapter": "openai-chat" },
+      "restrictToListedModels": false,
+      "models": []
+    },
+    {
+      "id": "openai-responses",
+      "match": { "kinds": ["openai-responses"], "baseUrls": [] },
+      "auth": { "adapter": "api-key", "required": false },
+      "discovery": { "adapter": "openai-models" },
+      "runtime": { "adapter": "openai-responses" },
+      "restrictToListedModels": false,
+      "models": []
+    }
+  ]
 }

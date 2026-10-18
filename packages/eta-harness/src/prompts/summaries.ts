@@ -34,35 +34,53 @@ export const BRANCH_SUMMARY_SUFFIX = `</summary>`;
 
 /** Whether a message is one a provider takes as-is. */
 function isProviderMessage(message: AgentMessage): message is Message {
-	return message.role === "user" || message.role === "assistant" || message.role === "toolResult";
+  return (
+    message.role === "user" ||
+    message.role === "assistant" ||
+    message.role === "toolResult"
+  );
 }
 
 /** The provider's view of a transcript: pass-through, except where a summary stands in. */
 export function convertToLlm(messages: readonly AgentMessage[]): Message[] {
-	const converted: Message[] = [];
-	for (const message of messages) {
-		if (isProviderMessage(message)) {
-			converted.push(message);
-			continue;
-		}
-		if (message.role === "compactionSummary") {
-			converted.push({
-				role: "user",
-				content: [{ type: "text", text: COMPACTION_SUMMARY_PREFIX + message.summary + COMPACTION_SUMMARY_SUFFIX }],
-				timestamp: message.timestamp,
-			} as Message);
-			continue;
-		}
-		if (message.role === "branchSummary") {
-			converted.push({
-				role: "user",
-				content: [{ type: "text", text: BRANCH_SUMMARY_PREFIX + message.summary + BRANCH_SUMMARY_SUFFIX }],
-				timestamp: message.timestamp,
-			} as Message);
-		}
-		// Anything else is a message the harness does not know how to say: dropping it
-		// silently would hide a bug, so it is dropped *loudly* by the kernel instead —
-		// this function never sees it, because the kernel only calls a hook here.
-	}
-	return converted;
+  const converted: Message[] = [];
+  for (const message of messages) {
+    if (isProviderMessage(message)) {
+      converted.push(message);
+      continue;
+    }
+    if (message.role === "compactionSummary") {
+      converted.push({
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              COMPACTION_SUMMARY_PREFIX +
+              message.summary +
+              COMPACTION_SUMMARY_SUFFIX,
+          },
+        ],
+        timestamp: message.timestamp,
+      } as Message);
+      continue;
+    }
+    if (message.role === "branchSummary") {
+      converted.push({
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              BRANCH_SUMMARY_PREFIX + message.summary + BRANCH_SUMMARY_SUFFIX,
+          },
+        ],
+        timestamp: message.timestamp,
+      } as Message);
+    }
+    // Anything else is a message the harness does not know how to say: dropping it
+    // silently would hide a bug, so it is dropped *loudly* by the kernel instead —
+    // this function never sees it, because the kernel only calls a hook here.
+  }
+  return converted;
 }

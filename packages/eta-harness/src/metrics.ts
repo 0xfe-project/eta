@@ -21,41 +21,43 @@ import { kernelOn } from "@eta/core";
 import { OutputRate } from "./metrics/output-rate";
 
 export class MetricsService extends Service {
-	static readonly provide = "metrics";
+  static readonly provide = "metrics";
 
-	private readonly rate = new OutputRate();
-	private readonly offs: (() => boolean)[] = [];
+  private readonly rate = new OutputRate();
+  private readonly offs: (() => boolean)[] = [];
 
-	constructor(ctx: Context) {
-		super(ctx, "metrics");
-		const on = kernelOn(ctx);
-		this.offs.push(
-			on("turn:run-start", () => {
-				// A new run starts the window over: nothing has been produced yet.
-				this.rate.reset();
-			}),
-			on("message:update", (event) => {
-				// One frame: the in-flight message's output so far, above what is
-				// already committed.
-				const output = (event.message as { usage?: { output?: number } }).usage?.output;
-				if (output !== undefined) this.rate.inFlight(output);
-			}),
-			on("message:end", (event) => {
-				// A settled assistant message: fold in the output the provider reported.
-				if (event.message.role !== "assistant") return;
-				const output = (event.message as { usage?: { output?: number } }).usage?.output ?? 0;
-				this.rate.commit(output);
-			}),
-		);
-	}
+  constructor(ctx: Context) {
+    super(ctx, "metrics");
+    const on = kernelOn(ctx);
+    this.offs.push(
+      on("turn:run-start", () => {
+        // A new run starts the window over: nothing has been produced yet.
+        this.rate.reset();
+      }),
+      on("message:update", (event) => {
+        // One frame: the in-flight message's output so far, above what is
+        // already committed.
+        const output = (event.message as { usage?: { output?: number } }).usage
+          ?.output;
+        if (output !== undefined) this.rate.inFlight(output);
+      }),
+      on("message:end", (event) => {
+        // A settled assistant message: fold in the output the provider reported.
+        if (event.message.role !== "assistant") return;
+        const output =
+          (event.message as { usage?: { output?: number } }).usage?.output ?? 0;
+        this.rate.commit(output);
+      }),
+    );
+  }
 
-	/** Output tokens/sec for the run in progress. */
-	get tokensPerSec(): number {
-		return this.rate.value;
-	}
+  /** Output tokens/sec for the run in progress. */
+  get tokensPerSec(): number {
+    return this.rate.value;
+  }
 
-	/** Stop measuring (a host that takes a session over). */
-	stop(): void {
-		for (const off of this.offs.splice(0)) off();
-	}
+  /** Stop measuring (a host that takes a session over). */
+  stop(): void {
+    for (const off of this.offs.splice(0)) off();
+  }
 }

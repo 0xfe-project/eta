@@ -11,54 +11,63 @@ import type { StatePatch, StateSnapshot } from "@eta/client-wire-proto";
 
 import { stateDiff } from "@eta/client-wire-proto";
 import {
-	type SessionViewBtwThread,
-	type SessionViewSubagent,
-	type GoalState,
-	type StoredTask,
-	stateSection,
+  type SessionViewBtwThread,
+  type SessionViewSubagent,
+  type GoalState,
+  type StoredTask,
+  stateSection,
 } from "@eta/client-contracts";
-import { type GoalState as RuntimeGoal, type StoredTask as RuntimeTask } from "@eta/core";
+import {
+  type GoalState as RuntimeGoal,
+  type StoredTask as RuntimeTask,
+} from "@eta/core";
 import { MemoryStorage } from "@eta/core/storage";
 import { fakeModels } from "@eta/core/testing";
 import { type BtwThread, type SubagentRecord, openSession } from "@eta/harness";
 import { describe, expect, it } from "vitest";
 
 describe("the harness snapshot is what the wire says a view is", () => {
-	it("assigns, reads by section name, and diffs", async () => {
-		const session = await openSession({
-			storage: new MemoryStorage(),
-			models: fakeModels([]) as never,
-			sessionId: "eta-seam",
-			cwd: "/work",
-		});
-		// No cast: the shapes have to line up on their own.
-		const snapshot: StateSnapshot = session.view.snapshot();
-		expect(stateSection(snapshot, "core")?.session).toBe("eta-seam");
-		expect(stateSection(snapshot, "core")?.cwd).toBe("/work");
-		expect(Object.keys(snapshot.revisions).length).toBeGreaterThan(0);
+  it("assigns, reads by section name, and diffs", async () => {
+    const session = await openSession({
+      storage: new MemoryStorage(),
+      models: fakeModels([]) as never,
+      sessionId: "eta-seam",
+      cwd: "/work",
+    });
+    // No cast: the shapes have to line up on their own.
+    const snapshot: StateSnapshot = session.view.snapshot();
+    expect(stateSection(snapshot, "core")?.session).toBe("eta-seam");
+    expect(stateSection(snapshot, "core")?.cwd).toBe("/work");
+    expect(Object.keys(snapshot.revisions).length).toBeGreaterThan(0);
 
-		// A client that holds nothing gets the whole state; one that is current gets nothing.
-		expect(stateDiff(undefined, snapshot)).toBe("full");
-		expect(stateDiff(snapshot.revisions, session.view.snapshot())).toBeUndefined();
+    // A client that holds nothing gets the whole state; one that is current gets nothing.
+    expect(stateDiff(undefined, snapshot)).toBe("full");
+    expect(
+      stateDiff(snapshot.revisions, session.view.snapshot()),
+    ).toBeUndefined();
 
-		// Reading a section by name is typed and admits absence.
-		expect(stateSection(snapshot, "transcript")?.messages).toEqual([]);
-		expect(stateSection(snapshot, "goal")).toBeUndefined();
+    // Reading a section by name is typed and admits absence.
+    expect(stateSection(snapshot, "transcript")?.messages).toEqual([]);
+    expect(stateSection(snapshot, "goal")).toBeUndefined();
 
-		// And a patch is what the pipe would send for a change.
-		session.kernel.tasks.create("a task worth showing");
-		const changed = session.view.snapshot();
-		const patch = stateDiff(snapshot.revisions, changed);
-		expect(patch).not.toBe("full");
-		const typed = patch as StatePatch;
-		expect(Object.keys(typed.sections)).toEqual(["tasks"]);
-		const received: StateSnapshot = JSON.parse(JSON.stringify(changed));
-		expect(stateSection(received, "tasks")?.[0]?.content).toBe("a task worth showing");
-		expect(stateSection(received, "core")).toEqual(stateSection(changed, "core"));
+    // And a patch is what the pipe would send for a change.
+    session.kernel.tasks.create("a task worth showing");
+    const changed = session.view.snapshot();
+    const patch = stateDiff(snapshot.revisions, changed);
+    expect(patch).not.toBe("full");
+    const typed = patch as StatePatch;
+    expect(Object.keys(typed.sections)).toEqual(["tasks"]);
+    const received: StateSnapshot = JSON.parse(JSON.stringify(changed));
+    expect(stateSection(received, "tasks")?.[0]?.content).toBe(
+      "a task worth showing",
+    );
+    expect(stateSection(received, "core")).toEqual(
+      stateSection(changed, "core"),
+    );
 
-		await session.kernel.dispose();
-		session.stop();
-	});
+    await session.kernel.dispose();
+    session.stop();
+  });
 });
 
 // These DTOs must remain structurally compatible with their runtime producers,

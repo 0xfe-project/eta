@@ -16,15 +16,15 @@ export type ToolExecution = "sequential" | "parallel";
 
 /** Which model, thinking level, and tools the session is on. */
 export interface ModelIdentity {
-	provider: string;
-	modelId: string;
+  provider: string;
+  modelId: string;
 }
 
 export interface ModelConfig {
-	model: ModelIdentity;
-	thinkingLevel: ThinkingLevel;
-	/** Names the session may call; the tool registry decides what exists. */
-	activeToolNames: string[];
+  model: ModelIdentity;
+  thinkingLevel: ThinkingLevel;
+  /** Names the session may call; the tool registry decides what exists. */
+  activeToolNames: string[];
 }
 
 /**
@@ -32,76 +32,78 @@ export interface ModelConfig {
  * price-blind: compact on window pressure alone.
  */
 export interface CompactionEconomics {
-	/** What a cache write costs next to a cache read. 12.5 = 1.25x write against 0.1x read. */
-	cacheWriteReadRatio: number;
-	/** The first cut may act on a horizon this many times longer than the estimate. */
-	firstCompactionRequestScale: number;
-	/** Later cuts need this much margin over breakeven before they fire. */
-	subsequentCompactionMargin: number;
+  /** What a cache write costs next to a cache read. 12.5 = 1.25x write against 0.1x read. */
+  cacheWriteReadRatio: number;
+  /** The first cut may act on a horizon this many times longer than the estimate. */
+  firstCompactionRequestScale: number;
+  /** Later cuts need this much margin over breakeven before they fire. */
+  subsequentCompactionMargin: number;
 }
 
 export interface CompactionSettings {
-	enabled: boolean;
-	reserveTokens: number;
-	keepRecentTokens: number;
-	/**
-	 * Window-independent ceiling on how much history one request may carry
-	 * (REFACTOR.md, memory #40/#50). Defaults to 64k; raise it per provider when
-	 * a session genuinely needs more, but a 1M-token window is not a reason to
-	 * resend a million tokens.
-	 */
-	maxContextTokens?: number;
-	economics?: CompactionEconomics;
+  enabled: boolean;
+  reserveTokens: number;
+  keepRecentTokens: number;
+  /**
+   * Window-independent ceiling on how much history one request may carry
+   * (REFACTOR.md, memory #40/#50). Defaults to 64k; raise it per provider when
+   * a session genuinely needs more, but a 1M-token window is not a reason to
+   * resend a million tokens.
+   */
+  maxContextTokens?: number;
+  economics?: CompactionEconomics;
 }
 
 export interface RuntimeConfig {
-	compaction: CompactionSettings;
-	retryPolicy: AgentRetryPolicy;
-	steeringMode: QueueMode;
-	followUpMode: QueueMode;
-	toolExecution: ToolExecution;
-	streamOptions?: SimpleStreamOptions;
+  compaction: CompactionSettings;
+  retryPolicy: AgentRetryPolicy;
+  steeringMode: QueueMode;
+  followUpMode: QueueMode;
+  toolExecution: ToolExecution;
+  streamOptions?: SimpleStreamOptions;
 }
 
 export type KernelConfig = ModelConfig & RuntimeConfig;
 
 export const DEFAULT_COMPACTION_ECONOMICS: CompactionEconomics = Object.freeze({
-	cacheWriteReadRatio: 12.5,
-	firstCompactionRequestScale: 2,
-	subsequentCompactionMargin: 1.5,
+  cacheWriteReadRatio: 12.5,
+  firstCompactionRequestScale: 2,
+  subsequentCompactionMargin: 1.5,
 });
 
 export const DEFAULT_COMPACTION_SETTINGS: CompactionSettings = {
-	enabled: true,
-	reserveTokens: 16384,
-	keepRecentTokens: 20000,
+  enabled: true,
+  reserveTokens: 16384,
+  keepRecentTokens: 20000,
 };
 
-export function defaultKernelConfig(overrides: Partial<KernelConfig> = {}): KernelConfig {
-	return {
-		model: { provider: "unknown", modelId: "unknown" },
-		thinkingLevel: "off",
-		activeToolNames: [],
-		compaction: { ...DEFAULT_COMPACTION_SETTINGS },
-		retryPolicy: { ...DEFAULT_RETRY_POLICY },
-		steeringMode: "all",
-		followUpMode: "all",
-		toolExecution: "parallel",
-		...overrides,
-	};
+export function defaultKernelConfig(
+  overrides: Partial<KernelConfig> = {},
+): KernelConfig {
+  return {
+    model: { provider: "unknown", modelId: "unknown" },
+    thinkingLevel: "off",
+    activeToolNames: [],
+    compaction: { ...DEFAULT_COMPACTION_SETTINGS },
+    retryPolicy: { ...DEFAULT_RETRY_POLICY },
+    steeringMode: "all",
+    followUpMode: "all",
+    toolExecution: "parallel",
+    ...overrides,
+  };
 }
 
 /** Config properties that report a `state:config-update` when they change. */
 export const CONFIG_PROPERTIES = [
-	"model",
-	"thinkingLevel",
-	"activeToolNames",
-	"compaction",
-	"retryPolicy",
-	"steeringMode",
-	"followUpMode",
-	"toolExecution",
-	"streamOptions",
+  "model",
+  "thinkingLevel",
+  "activeToolNames",
+  "compaction",
+  "retryPolicy",
+  "steeringMode",
+  "followUpMode",
+  "toolExecution",
+  "streamOptions",
 ] as const satisfies readonly (keyof KernelConfig)[];
 
 export type ConfigProperty = (typeof CONFIG_PROPERTIES)[number];

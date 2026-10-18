@@ -10,190 +10,237 @@
 
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { applyGoalEntries, Kernel, kernelOn, Runner } from "@eta/core";
-import { type Entry, type GoalEntry, recordGoalEntries, SessionLog } from "@eta/core/session";
-import { MemoryStorage, type StorageService, type StorageWrite, setValue, value } from "@eta/core/storage";
+import {
+  type Entry,
+  type GoalEntry,
+  recordGoalEntries,
+  SessionLog,
+} from "@eta/core/session";
+import {
+  MemoryStorage,
+  type StorageService,
+  type StorageWrite,
+  setValue,
+  value,
+} from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { journaledKernel } from "../src/testing";
 
 const userMsg = (text: string) => ({
-	role: "user" as const,
-	content: [{ type: "text" as const, text }],
-	timestamp: 0,
+  role: "user" as const,
+  content: [{ type: "text" as const, text }],
+  timestamp: 0,
 });
 
 function answer(text: string): AssistantMessage {
-	return assistantMessage({ content: [{ type: "text", text }], stopReason: "stop" });
+  return assistantMessage({
+    content: [{ type: "text", text }],
+    stopReason: "stop",
+  });
 }
 
 function toolCall(id: string, name: string): AssistantMessage {
-	return assistantMessage({ stopReason: "toolUse", content: [{ type: "toolCall", id, name, arguments: {} }] });
+  return assistantMessage({
+    stopReason: "toolUse",
+    content: [{ type: "toolCall", id, name, arguments: {} }],
+  });
 }
 
 /** What a disk holds between processes: the durable write log. */
 class Disk {
-	writes: StorageWrite[] = [];
+  writes: StorageWrite[] = [];
 
-	/** A process handle over this disk: seeded with what survived, appending through. */
-	connect(): StorageService {
-		const inner = new MemoryStorage();
-		const rawCommit = inner.commit.bind(inner);
-		for (const write of this.writes) void rawCommit([write]);
-		const storage: StorageService = Object.create(Object.getPrototypeOf(inner));
-		Object.assign(storage, inner);
-		storage.commit = async (writes: StorageWrite[]) => {
-			const result = await rawCommit(writes);
-			this.writes.push(...structuredClone(writes));
-			return result;
-		};
-		return storage;
-	}
+  /** A process handle over this disk: seeded with what survived, appending through. */
+  connect(): StorageService {
+    const inner = new MemoryStorage();
+    const rawCommit = inner.commit.bind(inner);
+    for (const write of this.writes) void rawCommit([write]);
+    const storage: StorageService = Object.create(Object.getPrototypeOf(inner));
+    Object.assign(storage, inner);
+    storage.commit = async (writes: StorageWrite[]) => {
+      const result = await rawCommit(writes);
+      this.writes.push(...structuredClone(writes));
+      return result;
+    };
+    return storage;
+  }
 
-	/** A fresh process over the same disk after a crash. */
-	restart(): StorageService {
-		return this.connect();
-	}
+  /** A fresh process over the same disk after a crash. */
+  restart(): StorageService {
+    return this.connect();
+  }
 }
 
 function textsOf(entries: Entry[]): string[] {
-	return entries.flatMap((entry) => {
-		if (entry.type !== "message") return [];
-		const message = entry.message;
-		if (message.role !== "user" && message.role !== "assistant" && message.role !== "toolResult") return [];
-		const content = message.content;
-		if (typeof content === "string") return [content];
-		return content
-			.filter((part): part is { type: "text"; text: string } => part.type === "text")
-			.map((part) => part.text);
-	});
+  return entries.flatMap((entry) => {
+    if (entry.type !== "message") return [];
+    const message = entry.message;
+    if (
+      message.role !== "user" &&
+      message.role !== "assistant" &&
+      message.role !== "toolResult"
+    )
+      return [];
+    const content = message.content;
+    if (typeof content === "string") return [content];
+    return content
+      .filter(
+        (part): part is { type: "text"; text: string } => part.type === "text",
+      )
+      .map((part) => part.text);
+  });
 }
 
 function setup(disk: Disk, script: AssistantMessage[]) {
-	const storage = disk.connect();
-	const log = SessionLog.create(storage);
-	const { kernel, journaling } = journaledKernel(log);
-	const fake = fakeModels(script);
-	const runner = new Runner(kernel, { models: fake, journal: journaling });
-	return { storage, log, kernel, runner, fake };
+  const storage = disk.connect();
+  const log = SessionLog.create(storage);
+  const { kernel, journaling } = journaledKernel(log);
+  const fake = fakeModels(script);
+  const runner = new Runner(kernel, { models: fake, journal: journaling });
+  return { storage, log, kernel, runner, fake };
 }
 
 describe("crash recovery — a clean session survives intact", () => {
-	it("replays the journal into the same graph, transcript, values, and usage", async () => {
-		const disk = new Disk();
-		const first = setup(disk, [toolCall("c1", "read"), answer("the answer")]);
-		first.kernel.tools.register({ name: "read", execute: () => "file contents" });
-		first.kernel.inject(userMsg("what is in the file"));
-		await first.runner.run();
-		await first.storage.commit([setValue(value<string>("session.model"), "pro6000/k3")]);
-		await first.storage.close();
+  it("replays the journal into the same graph, transcript, values, and usage", async () => {
+    const disk = new Disk();
+    const first = setup(disk, [toolCall("c1", "read"), answer("the answer")]);
+    first.kernel.tools.register({
+      name: "read",
+      execute: () => "file contents",
+    });
+    first.kernel.inject(userMsg("what is in the file"));
+    await first.runner.run();
+    await first.storage.commit([
+      setValue(value<string>("session.model"), "pro6000/k3"),
+    ]);
+    await first.storage.close();
 
-		const log = await SessionLog.load(disk.restart());
-		expect(textsOf(log.graph.pathOldestFirst())).toEqual(["what is in the file", "file contents", "the answer"]);
-		expect(log.transcript()).toHaveLength(4);
-		expect((await log.storage.getValue(value<string>("session.model")))?.value).toBe("pro6000/k3");
-	});
+    const log = await SessionLog.load(disk.restart());
+    expect(textsOf(log.graph.pathOldestFirst())).toEqual([
+      "what is in the file",
+      "file contents",
+      "the answer",
+    ]);
+    expect(log.transcript()).toHaveLength(4);
+    expect(
+      (await log.storage.getValue(value<string>("session.model")))?.value,
+    ).toBe("pro6000/k3");
+  });
 });
 
 describe("crash recovery — the half turn is dropped, the committed turns stay", () => {
-	it("keeps every completed turn of a crashed run", async () => {
-		const disk = new Disk();
+  it("keeps every completed turn of a crashed run", async () => {
+    const disk = new Disk();
 
-		// A completed run first.
-		const first = setup(disk, [answer("settled")]);
-		first.kernel.inject(userMsg("earlier question"));
-		await first.runner.run();
-		await first.storage.close();
-		const settledWrites = disk.writes.length;
+    // A completed run first.
+    const first = setup(disk, [answer("settled")]);
+    first.kernel.inject(userMsg("earlier question"));
+    await first.runner.run();
+    await first.storage.close();
+    const settledWrites = disk.writes.length;
 
-		// A second process gets a turn in, then dies: the provider never answers
-		// the turn after its tool batch.
-		const second = setup(disk, [toolCall("c1", "read")]);
-		second.kernel.tools.register({ name: "read", execute: () => "file contents" });
-		second.kernel.inject(userMsg("keep going"));
-		await expect(second.runner.run()).rejects.toThrow("script exhausted");
+    // A second process gets a turn in, then dies: the provider never answers
+    // the turn after its tool batch.
+    const second = setup(disk, [toolCall("c1", "read")]);
+    second.kernel.tools.register({
+      name: "read",
+      execute: () => "file contents",
+    });
+    second.kernel.inject(userMsg("keep going"));
+    await expect(second.runner.run()).rejects.toThrow("script exhausted");
 
-		// The crash happened between turns: everything the first turn produced is
-		// durable — the message, the assistant's call, and the tool result.
-		expect(disk.writes.length).toBeGreaterThan(settledWrites);
+    // The crash happened between turns: everything the first turn produced is
+    // durable — the message, the assistant's call, and the tool result.
+    expect(disk.writes.length).toBeGreaterThan(settledWrites);
 
-		const log = await SessionLog.load(disk.restart());
-		const texts = textsOf(log.graph.pathOldestFirst());
-		expect(texts).toEqual(["earlier question", "settled", "keep going", "file contents"]);
-		expect(log.transcript().length).toBeGreaterThanOrEqual(4);
-	});
+    const log = await SessionLog.load(disk.restart());
+    const texts = textsOf(log.graph.pathOldestFirst());
+    expect(texts).toEqual([
+      "earlier question",
+      "settled",
+      "keep going",
+      "file contents",
+    ]);
+    expect(log.transcript().length).toBeGreaterThanOrEqual(4);
+  });
 });
 
 describe("crash recovery — the kernel rebuilds from the journal", () => {
-	it("replays goal entries into a fresh goal service", async () => {
-		const disk = new Disk();
-		const first = setup(disk, [answer("working on it")]);
-		const recorder = recordGoalEntries(first.log, kernelOn(first.kernel.ctx));
-		first.kernel.goal.set("ship the kernel");
-		first.kernel.inject(userMsg("keep going"));
-		await first.runner.run();
-		recorder.stop();
-		await first.storage.close();
+  it("replays goal entries into a fresh goal service", async () => {
+    const disk = new Disk();
+    const first = setup(disk, [answer("working on it")]);
+    const recorder = recordGoalEntries(first.log, kernelOn(first.kernel.ctx));
+    first.kernel.goal.set("ship the kernel");
+    first.kernel.inject(userMsg("keep going"));
+    await first.runner.run();
+    recorder.stop();
+    await first.storage.close();
 
-		const log = await SessionLog.load(disk.restart());
-		const goalEntries = log.graph.pathOldestFirst().filter((entry): entry is GoalEntry => entry.type === "goal");
-		expect(goalEntries.map((entry) => entry.payload.kind)).toEqual(["set"]);
+    const log = await SessionLog.load(disk.restart());
+    const goalEntries = log.graph
+      .pathOldestFirst()
+      .filter((entry): entry is GoalEntry => entry.type === "goal");
+    expect(goalEntries.map((entry) => entry.payload.kind)).toEqual(["set"]);
 
-		const restarted = Kernel.create();
-		applyGoalEntries(restarted.goal, goalEntries);
-		expect(restarted.goal.current?.objective).toBe("ship the kernel");
-		expect(restarted.goal.current?.status).toBe("active");
-		restarted.dispose();
-	});
+    const restarted = Kernel.create();
+    applyGoalEntries(restarted.goal, goalEntries);
+    expect(restarted.goal.current?.objective).toBe("ship the kernel");
+    expect(restarted.goal.current?.status).toBe("active");
+    restarted.dispose();
+  });
 
-	it("a runner resumes with the replayed transcript and keeps going", async () => {
-		const disk = new Disk();
-		const first = setup(disk, [answer("first answer")]);
-		first.kernel.inject(userMsg("first question"));
-		await first.runner.run();
-		await first.storage.close();
+  it("a runner resumes with the replayed transcript and keeps going", async () => {
+    const disk = new Disk();
+    const first = setup(disk, [answer("first answer")]);
+    first.kernel.inject(userMsg("first question"));
+    await first.runner.run();
+    await first.storage.close();
 
-		const log = await SessionLog.load(disk.restart());
-		const resumedAt = log.transcript().length;
-		const { kernel, journaling } = journaledKernel(log);
-		const fake = fakeModels([answer("second answer")]);
-		const runner = new Runner(kernel, {
-			models: fake,
-			journal: journaling,
-			initialTranscript: log.transcript(),
-		});
-		kernel.inject(userMsg("second question"));
-		await runner.run();
+    const log = await SessionLog.load(disk.restart());
+    const resumedAt = log.transcript().length;
+    const { kernel, journaling } = journaledKernel(log);
+    const fake = fakeModels([answer("second answer")]);
+    const runner = new Runner(kernel, {
+      models: fake,
+      journal: journaling,
+      initialTranscript: log.transcript(),
+    });
+    kernel.inject(userMsg("second question"));
+    await runner.run();
 
-		// The restored history reached the provider without being journaled twice.
-		expect(fake.calls).toHaveLength(1);
-		const context = fake.calls[0]!.context.messages;
-		expect(context.filter((message) => message.role === "user")).toHaveLength(2);
+    // The restored history reached the provider without being journaled twice.
+    expect(fake.calls).toHaveLength(1);
+    const context = fake.calls[0]!.context.messages;
+    expect(context.filter((message) => message.role === "user")).toHaveLength(
+      2,
+    );
 
-		const reloaded = await SessionLog.load(disk.restart());
-		expect(reloaded.transcript()).toHaveLength(resumedAt + 2); // the question and the answer
-	});
+    const reloaded = await SessionLog.load(disk.restart());
+    expect(reloaded.transcript()).toHaveLength(resumedAt + 2); // the question and the answer
+  });
 });
 
 describe("crash recovery — the journal is readable while a run is in flight", () => {
-	it("a second reader sees committed turns before the run finishes", async () => {
-		const disk = new Disk();
-		const handle = setup(disk, [toolCall("c1", "slow"), answer("done")]);
-		let visibleDuringRun = -1;
-		handle.kernel.tools.register({
-			name: "slow",
-			execute: async () => {
-				// Mid-run: the first turn is committed, so a window can render it.
-				const reader = await SessionLog.load(disk.restart());
-				visibleDuringRun = reader.graph.size();
-				return "slow result";
-			},
-		});
-		handle.kernel.inject(userMsg("go"));
-		await handle.runner.run();
+  it("a second reader sees committed turns before the run finishes", async () => {
+    const disk = new Disk();
+    const handle = setup(disk, [toolCall("c1", "slow"), answer("done")]);
+    let visibleDuringRun = -1;
+    handle.kernel.tools.register({
+      name: "slow",
+      execute: async () => {
+        // Mid-run: the first turn is committed, so a window can render it.
+        const reader = await SessionLog.load(disk.restart());
+        visibleDuringRun = reader.graph.size();
+        return "slow result";
+      },
+    });
+    handle.kernel.inject(userMsg("go"));
+    await handle.runner.run();
 
-		expect(visibleDuringRun).toBe(2); // the injected message and the assistant's tool call
-		const after = await SessionLog.load(disk.restart());
-		expect(after.graph.size()).toBe(visibleDuringRun + 2); // the tool result and the final answer
-		await handle.storage.close();
-	});
+    expect(visibleDuringRun).toBe(2); // the injected message and the assistant's tool call
+    const after = await SessionLog.load(disk.restart());
+    expect(after.graph.size()).toBe(visibleDuringRun + 2); // the tool result and the final answer
+    await handle.storage.close();
+  });
 });

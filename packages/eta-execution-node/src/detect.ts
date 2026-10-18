@@ -12,10 +12,12 @@ import { NodeEnvironment } from "./node-shell";
 
 /** Whether this runtime can host the Node execution adapter. */
 export function supportsNodeExecution(): boolean {
-	return isNode;
+  return isNode;
 }
 
 /** A local execution environment rooted at `cwd`, or `undefined` when the runtime cannot host one. */
-export function createLocalEnvironment(cwd: string): NodeEnvironment | undefined {
-	return isNode ? new NodeEnvironment({ cwd }) : undefined;
+export function createLocalEnvironment(
+  cwd: string,
+): NodeEnvironment | undefined {
+  return isNode ? new NodeEnvironment({ cwd }) : undefined;
 }

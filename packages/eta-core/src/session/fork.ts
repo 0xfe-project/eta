@@ -13,58 +13,65 @@ import type { Entry } from "../types/entries";
 import type { EntryGraph } from "./graph";
 
 export interface ForkOptions {
-	/** Entry on the tip's ancestry to fork from. Defaults to the current tip. */
-	entryId?: string;
-	/** Include the selected entry (default) or stop at its parent. */
-	position?: "before" | "at";
+  /** Entry on the tip's ancestry to fork from. Defaults to the current tip. */
+  entryId?: string;
+  /** Include the selected entry (default) or stop at its parent. */
+  position?: "before" | "at";
 }
 
 export interface ForkSelection {
-	/** Selected entry ids, root included. */
-	entryIds: ReadonlySet<string>;
-	/** Where the destination's tip points: the entry itself, or its parent. */
-	destinationTip: string | null;
+  /** Selected entry ids, root included. */
+  entryIds: ReadonlySet<string>;
+  /** Where the destination's tip points: the entry itself, or its parent. */
+  destinationTip: string | null;
 }
 
 /** Select the prefix of the current tip's ancestry that a fork copies. */
-export function selectBranchFork(graph: EntryGraph, options: ForkOptions = {}): ForkSelection {
-	const requested = options.entryId ?? graph.tipId();
-	if (requested === null) throw new Error("fork: the source branch is empty");
-	const position = options.position ?? "at";
+export function selectBranchFork(
+  graph: EntryGraph,
+  options: ForkOptions = {},
+): ForkSelection {
+  const requested = options.entryId ?? graph.tipId();
+  if (requested === null) throw new Error("fork: the source branch is empty");
+  const position = options.position ?? "at";
 
-	const entryIds = new Set<string>();
-	let destinationTip: string | null = null;
-	let found = false;
-	// Walk from the tip, not from the requested entry: an entry that is not on
-	// the current branch must be rejected rather than silently forked.
-	let entryId: string | null = graph.tipId();
-	while (entryId !== null) {
-		const parentId = graph.byId(entryId)?.parentId;
-		if (parentId === undefined) throw new Error(`fork: corrupt chain, missing entry ${entryId}`);
-		if (entryId === requested) {
-			found = true;
-			destinationTip = position === "before" ? parentId : entryId;
-			if (position !== "before") entryIds.add(entryId);
-		} else if (found) {
-			entryIds.add(entryId);
-		}
-		entryId = parentId;
-	}
-	if (!found) {
-		throw new Error(`fork: entry ${requested} is not on the current branch`);
-	}
-	return { entryIds, destinationTip };
+  const entryIds = new Set<string>();
+  let destinationTip: string | null = null;
+  let found = false;
+  // Walk from the tip, not from the requested entry: an entry that is not on
+  // the current branch must be rejected rather than silently forked.
+  let entryId: string | null = graph.tipId();
+  while (entryId !== null) {
+    const parentId = graph.byId(entryId)?.parentId;
+    if (parentId === undefined)
+      throw new Error(`fork: corrupt chain, missing entry ${entryId}`);
+    if (entryId === requested) {
+      found = true;
+      destinationTip = position === "before" ? parentId : entryId;
+      if (position !== "before") entryIds.add(entryId);
+    } else if (found) {
+      entryIds.add(entryId);
+    }
+    entryId = parentId;
+  }
+  if (!found) {
+    throw new Error(`fork: entry ${requested} is not on the current branch`);
+  }
+  return { entryIds, destinationTip };
 }
 
 export interface ForkedChain {
-	/** The copied entries, newest-first. */
-	entries: Entry[];
-	tipId: string | null;
+  /** The copied entries, newest-first. */
+  entries: Entry[];
+  tipId: string | null;
 }
 
 /** Materialize a fork selection into a standalone entry chain. */
-export function forkChain(graph: EntryGraph, options: ForkOptions = {}): ForkedChain {
-	const { entryIds, destinationTip } = selectBranchFork(graph, options);
-	const entries = graph.chain().filter((entry) => entryIds.has(entry.id));
-	return { entries, tipId: destinationTip };
+export function forkChain(
+  graph: EntryGraph,
+  options: ForkOptions = {},
+): ForkedChain {
+  const { entryIds, destinationTip } = selectBranchFork(graph, options);
+  const entries = graph.chain().filter((entry) => entryIds.has(entry.id));
+  return { entries, tipId: destinationTip };
 }

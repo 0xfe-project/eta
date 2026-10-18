@@ -1,1 +1,5 @@
-export { envContract, type EnvContractHandle, type EnvFactory } from "./env-contract";
+export {
+  envContract,
+  type EnvContractHandle,
+  type EnvFactory,
+} from "./env-contract";

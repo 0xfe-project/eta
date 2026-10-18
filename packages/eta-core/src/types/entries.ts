@@ -9,113 +9,117 @@
  * Leaf types only: storage, plugins, and the runner all share this vocabulary,
  * so nothing here may import upward.
  */
-import type { AssistantMessage, StopReason, Usage } from "@earendil-works/pi-ai";
+import type {
+  AssistantMessage,
+  StopReason,
+  Usage,
+} from "@earendil-works/pi-ai";
 import type { JsonValue } from "./json";
 import type { AgentMessage } from "./messages";
 
 /** All first-class entry kinds. New kinds join this union explicitly. */
 export type EntryType =
-	| "message"
-	| "compaction"
-	| "branch_summary"
-	| "merge"
-	| "goal"
-	| "ask"
-	| "answer"
-	| "btw"
-	| "run_failed";
+  | "message"
+  | "compaction"
+  | "branch_summary"
+  | "merge"
+  | "goal"
+  | "ask"
+  | "answer"
+  | "btw"
+  | "run_failed";
 
 export interface EntryBase {
-	id: string;
-	/** Single-parent lineage; the merge entry carries a second parent. */
-	parentId: string | null;
-	seq: number;
-	timestamp: number;
-	type: EntryType;
+  id: string;
+  /** Single-parent lineage; the merge entry carries a second parent. */
+  parentId: string | null;
+  seq: number;
+  timestamp: number;
+  type: EntryType;
 }
 
 export interface MessageEntry extends EntryBase {
-	type: "message";
-	message: AgentMessage;
-	/**
-	 * The run ended here: a tool asked to terminate, so no further assistant
-	 * request follows this entry (eta-agent's terminate marker).
-	 */
-	terminate?: true;
+  type: "message";
+  message: AgentMessage;
+  /**
+   * The run ended here: a tool asked to terminate, so no further assistant
+   * request follows this entry (eta-agent's terminate marker).
+   */
+  terminate?: true;
 }
 
 export interface CompactionEntry extends EntryBase {
-	type: "compaction";
-	summary: string;
-	retainedTail: AgentMessage[];
-	tokensBefore: number;
-	/** Whatever the compaction plugin wants to keep alongside the summary. */
-	details?: JsonValue;
-	usage?: Usage;
+  type: "compaction";
+  summary: string;
+  retainedTail: AgentMessage[];
+  tokensBefore: number;
+  /** Whatever the compaction plugin wants to keep alongside the summary. */
+  details?: JsonValue;
+  usage?: Usage;
 }
 
 export interface BranchSummaryEntry extends EntryBase {
-	type: "branch_summary";
-	fromId: string | null;
-	summary: string;
-	details?: JsonValue;
-	usage?: Usage;
+  type: "branch_summary";
+  fromId: string | null;
+  summary: string;
+  details?: JsonValue;
+  usage?: Usage;
 }
 
 export interface MergeEntry extends EntryBase {
-	type: "merge";
-	/** Second parent: tip of the branch being merged in; its chain joins here. */
-	mergedParentId: string;
-	summary: string;
-	details?: JsonValue;
-	usage?: Usage;
+  type: "merge";
+  /** Second parent: tip of the branch being merged in; its chain joins here. */
+  mergedParentId: string;
+  summary: string;
+  details?: JsonValue;
+  usage?: Usage;
 }
 
 /** Goal change recorded in the session log; the goal primitive replays these. */
 export interface GoalPayload {
-	kind: "set" | "pause" | "resume" | "achieved" | "cleared" | "blocked";
-	objective?: string;
-	reason?: string;
+  kind: "set" | "pause" | "resume" | "achieved" | "cleared" | "blocked";
+  objective?: string;
+  reason?: string;
 }
 
 export interface GoalEntry extends EntryBase {
-	type: "goal";
-	payload: GoalPayload;
+  type: "goal";
+  payload: GoalPayload;
 }
 
 /** ask_user question recorded before waiting for a human. */
 export interface AskPayload {
-	questionId: string;
-	question: string;
-	options?: string[];
-	multi?: boolean;
+  questionId: string;
+  question: string;
+  options?: string[];
+  multi?: boolean;
 }
 
 export interface AskEntry extends EntryBase {
-	type: "ask";
-	payload: AskPayload;
+  type: "ask";
+  payload: AskPayload;
 }
 
 /** The human's backfill for an ask entry. */
 export interface AnswerPayload {
-	questionId: string;
-	answers: string[];
+  questionId: string;
+  answers: string[];
 }
 
 export interface AnswerEntry extends EntryBase {
-	type: "answer";
-	payload: AnswerPayload;
+  type: "answer";
+  payload: AnswerPayload;
 }
 
 /** Visible note left by a side thread (btw). */
 export interface BtwPayload {
-	note: string;
-	sourceEntryId?: string;
+  note: string;
+  sourceEntryId?: string;
 }
 
 export interface BtwEntry extends EntryBase {
-	type: "btw";
-	payload: BtwPayload;
+  type: "btw";
+  payload: BtwPayload;
 }
 
 /**
@@ -127,30 +131,32 @@ export interface BtwEntry extends EntryBase {
  * projected from it.
  */
 export interface RunFailedPayload {
-	runId: string;
-	error: string;
+  runId: string;
+  error: string;
 }
 
 export interface RunFailedEntry extends EntryBase {
-	type: "run_failed";
-	payload: RunFailedPayload;
+  type: "run_failed";
+  payload: RunFailedPayload;
 }
 
 export type Entry =
-	| MessageEntry
-	| CompactionEntry
-	| BranchSummaryEntry
-	| MergeEntry
-	| GoalEntry
-	| AskEntry
-	| AnswerEntry
-	| BtwEntry
-	| RunFailedEntry;
+  | MessageEntry
+  | CompactionEntry
+  | BranchSummaryEntry
+  | MergeEntry
+  | GoalEntry
+  | AskEntry
+  | AnswerEntry
+  | BtwEntry
+  | RunFailedEntry;
 
 /** Entry supplied before storage assigns sequence and timestamp. */
-export type NewEntry<TEntry extends Entry = Entry> = TEntry extends Entry ? Omit<TEntry, "seq" | "timestamp"> : never;
+export type NewEntry<TEntry extends Entry = Entry> = TEntry extends Entry
+  ? Omit<TEntry, "seq" | "timestamp">
+  : never;
 
 /** A fully settled assistant message (stopReason resolved). */
 export type SettledAssistantMessage = AssistantMessage & {
-	stopReason: Exclude<StopReason, "pending">;
+  stopReason: Exclude<StopReason, "pending">;
 };

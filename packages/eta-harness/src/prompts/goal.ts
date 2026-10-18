@@ -7,7 +7,7 @@
 
 /** Guidelines injected into the context while an agent pursues a goal. */
 export function goalPursuitGuidelines(objective: string): string {
-	return `Goal: ${objective}
+  return `Goal: ${objective}
 
 Continuation:
 - Goal persists across turns. Don't shrink the objective to fit now.
@@ -22,8 +22,9 @@ Completion:
 
 /** Goal evaluator: a tool-free call that judges whether the goal is achieved. */
 export function goalEvaluatorPrompt(objective: string): string {
-	return `Is the goal achieved? Goal: "${objective}". First state ONE piece of evidence from the conversation, then write YES or NO on the last line.`;
+  return `Is the goal achieved? Goal: "${objective}". First state ONE piece of evidence from the conversation, then write YES or NO on the last line.`;
 }
 
 /** followUp injected at run end to drive a goal continuation turn. */
-export const GOAL_CONTINUATION = "[goal] keep going: make concrete progress on the active goal, or finish it.";
+export const GOAL_CONTINUATION =
+  "[goal] keep going: make concrete progress on the active goal, or finish it.";

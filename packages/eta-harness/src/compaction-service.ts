@@ -34,19 +34,23 @@
  * its one overflow recovery". Silence is never an answer.
  */
 import {
-	type CompactionDriver,
-	type CompactionHost,
-	type CompactionOutcome,
-	type CompactionReason,
-	type CompactionSummarizer,
-	type ConfigService,
-	type Emit,
-	kernelEmit,
-	kernelOn,
+  type CompactionDriver,
+  type CompactionHost,
+  type CompactionOutcome,
+  type CompactionReason,
+  type CompactionSummarizer,
+  type ConfigService,
+  type Emit,
+  kernelEmit,
+  kernelOn,
 } from "@eta/core";
 import { type Entry } from "@eta/core/session";
 import { type Context, Service } from "cordis";
-import { estimateContextTokens, fitCompactionSettings, shouldCompact } from "./estimation";
+import {
+  estimateContextTokens,
+  fitCompactionSettings,
+  shouldCompact,
+} from "./estimation";
 
 /**
  * Where a compaction service reads the branch from — the journaling service,
@@ -54,7 +58,7 @@ import { estimateContextTokens, fitCompactionSettings, shouldCompact } from "./e
  * service needs entries, not the journal.
  */
 export interface CompactionEntrySource {
-	entries(): readonly Entry[];
+  entries(): readonly Entry[];
 }
 
 /**
@@ -64,158 +68,180 @@ export interface CompactionEntrySource {
  * nobody is keeping in bounds.
  */
 export class CompactionMisconfigured extends Error {
-	readonly code = "compaction_misconfigured";
+  readonly code = "compaction_misconfigured";
 
-	constructor(reason: string) {
-		super(`compaction_misconfigured: ${reason}`);
-		this.name = "CompactionMisconfigured";
-	}
+  constructor(reason: string) {
+    super(`compaction_misconfigured: ${reason}`);
+    this.name = "CompactionMisconfigured";
+  }
 }
 
 export interface CompactionServiceOptions {
-	config: ConfigService;
-	/** The journal's owner; cut points are indices into its entries. */
-	journaling: CompactionEntrySource;
-	/**
-	 * The summarizer plugin. Optional only so an assembly can build the service
-	 * before deciding; a signal without one throws (see the class docs).
-	 */
-	summarizer?: CompactionSummarizer;
-	/** Called when a summarizer throws; the run continues either way. */
-	warn?: (message: string) => void;
+  config: ConfigService;
+  /** The journal's owner; cut points are indices into its entries. */
+  journaling: CompactionEntrySource;
+  /**
+   * The summarizer plugin. Optional only so an assembly can build the service
+   * before deciding; a signal without one throws (see the class docs).
+   */
+  summarizer?: CompactionSummarizer;
+  /** Called when a summarizer throws; the run continues either way. */
+  warn?: (message: string) => void;
 }
 
 export class CompactionService extends Service implements CompactionDriver {
-	static readonly provide = "compaction";
+  static readonly provide = "compaction";
 
-	private readonly config: ConfigService;
-	private readonly journaling: CompactionEntrySource;
-	private readonly summarizer: CompactionSummarizer | undefined;
-	private readonly warn: (message: string) => void;
-	private readonly emit: Emit;
-	private host: CompactionHost | undefined;
-	/** One overflow recovery per run: a second overflow is a real failure. */
-	private overflowRecoveryUsed = false;
+  private readonly config: ConfigService;
+  private readonly journaling: CompactionEntrySource;
+  private readonly summarizer: CompactionSummarizer | undefined;
+  private readonly warn: (message: string) => void;
+  private readonly emit: Emit;
+  private host: CompactionHost | undefined;
+  /** One overflow recovery per run: a second overflow is a real failure. */
+  private overflowRecoveryUsed = false;
 
-	constructor(ctx: Context, options: CompactionServiceOptions) {
-		super(ctx, "compaction");
-		this.config = options.config;
-		this.journaling = options.journaling;
-		this.summarizer = options.summarizer;
-		this.warn = options.warn ?? (() => undefined);
-		this.emit = kernelEmit(ctx);
-		// A run starts with the recovery budget restored; the runner never has to
-		// remember to tell us.
-		kernelOn(ctx)("turn:run-start", () => {
-			this.overflowRecoveryUsed = false;
-		});
-	}
+  constructor(ctx: Context, options: CompactionServiceOptions) {
+    super(ctx, "compaction");
+    this.config = options.config;
+    this.journaling = options.journaling;
+    this.summarizer = options.summarizer;
+    this.warn = options.warn ?? (() => undefined);
+    this.emit = kernelEmit(ctx);
+    // A run starts with the recovery budget restored; the runner never has to
+    // remember to tell us.
+    kernelOn(ctx)("turn:run-start", () => {
+      this.overflowRecoveryUsed = false;
+    });
+  }
 
-	/** The runner registers the context it owns (ruling 4). */
-	attach(host: CompactionHost): void {
-		this.host = host;
-	}
+  /** The runner registers the context it owns (ruling 4). */
+  attach(host: CompactionHost): void {
+    this.host = host;
+  }
 
-	/** Whether this service can compact at all: a summarizer and a run behind it. */
-	get available(): boolean {
-		return this.summarizer !== undefined && this.host !== undefined;
-	}
+  /** Whether this service can compact at all: a summarizer and a run behind it. */
+  get available(): boolean {
+    return this.summarizer !== undefined && this.host !== undefined;
+  }
 
-	/** Someone asked for a compaction; do it regardless of the threshold. */
-	async manual(instructions?: string): Promise<boolean> {
-		return this.run("manual", { force: true, ...(instructions === undefined ? {} : { instructions }) });
-	}
+  /** Someone asked for a compaction; do it regardless of the threshold. */
+  async manual(instructions?: string): Promise<boolean> {
+    return this.run("manual", {
+      force: true,
+      ...(instructions === undefined ? {} : { instructions }),
+    });
+  }
 
-	/** Compact when the history no longer fits the model that owns it. */
-	async threshold(): Promise<boolean> {
-		return this.run("threshold", { force: false });
-	}
+  /** Compact when the history no longer fits the model that owns it. */
+  async threshold(): Promise<boolean> {
+    return this.run("threshold", { force: false });
+  }
 
-	/** A request overflowed: cut the history once, then let the caller retry. */
-	async overflow(): Promise<boolean> {
-		// The spent budget is a real answer, not a misconfiguration: the run has
-		// already used its one recovery and a second overflow is a genuine failure.
-		if (this.overflowRecoveryUsed) return false;
-		this.overflowRecoveryUsed = true;
-		return this.run("overflow", { force: true });
-	}
+  /** A request overflowed: cut the history once, then let the caller retry. */
+  async overflow(): Promise<boolean> {
+    // The spent budget is a real answer, not a misconfiguration: the run has
+    // already used its one recovery and a second overflow is a genuine failure.
+    if (this.overflowRecoveryUsed) return false;
+    this.overflowRecoveryUsed = true;
+    return this.run("overflow", { force: true });
+  }
 
-	private async run(reason: CompactionReason, options: { force: boolean; instructions?: string }): Promise<boolean> {
-		const summarizer = this.summarizer;
-		if (summarizer === undefined) {
-			throw new CompactionMisconfigured(
-				`${reason}() was asked to compact, but no summarizer is wired: install one (for instance @eta/compaction) or leave the driver off`,
-			);
-		}
-		const host = this.host;
-		if (host === undefined) {
-			throw new CompactionMisconfigured(`${reason}() was asked to compact, but no run is attached to this service`);
-		}
-		const request = host.request();
-		const model = request.model;
-		if (model === undefined) {
-			throw new CompactionMisconfigured(
-				`${reason}() was asked to compact, but the session's model does not resolve`,
-			);
-		}
+  private async run(
+    reason: CompactionReason,
+    options: { force: boolean; instructions?: string },
+  ): Promise<boolean> {
+    const summarizer = this.summarizer;
+    if (summarizer === undefined) {
+      throw new CompactionMisconfigured(
+        `${reason}() was asked to compact, but no summarizer is wired: install one (for instance @eta/compaction) or leave the driver off`,
+      );
+    }
+    const host = this.host;
+    if (host === undefined) {
+      throw new CompactionMisconfigured(
+        `${reason}() was asked to compact, but no run is attached to this service`,
+      );
+    }
+    const request = host.request();
+    const model = request.model;
+    if (model === undefined) {
+      throw new CompactionMisconfigured(
+        `${reason}() was asked to compact, but the session's model does not resolve`,
+      );
+    }
 
-		const settings = fitCompactionSettings(this.config.read("compaction"), model);
-		const estimate = estimateContextTokens(host.readContext());
-		if (!options.force && !shouldCompact(estimate.tokens, model.contextWindow, settings)) return false;
+    const settings = fitCompactionSettings(
+      this.config.read("compaction"),
+      model,
+    );
+    const estimate = estimateContextTokens(host.readContext());
+    if (
+      !options.force &&
+      !shouldCompact(estimate.tokens, model.contextWindow, settings)
+    )
+      return false;
 
-		const runId = request.runId;
-		this.emit("compaction:start", { runId, reason, startedAt: Date.now() });
-		let outcome: CompactionOutcome | undefined;
-		try {
-			outcome = await summarizer.summarize({
-				reason,
-				...(options.instructions === undefined ? {} : { customInstructions: options.instructions }),
-				messages: host.readContext(),
-				entries: this.journaling.entries(),
-				settings,
-				contextWindow: model.contextWindow,
-				estimatedTokens: estimate.tokens,
-				model: model as never,
-				thinkingLevel: request.thinkingLevel,
-				streamOptions: request.streamOptions as never,
-				signal: request.signal,
-				ask: request.ask,
-			});
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			this.warn(`[eta-compaction] summarizer failed: ${message}`);
-			this.emit("compaction:end", {
-				runId,
-				reason,
-				endedAt: Date.now(),
-				status: "failed",
-				error: message,
-			});
-			return false;
-		}
+    const runId = request.runId;
+    this.emit("compaction:start", { runId, reason, startedAt: Date.now() });
+    let outcome: CompactionOutcome | undefined;
+    try {
+      outcome = await summarizer.summarize({
+        reason,
+        ...(options.instructions === undefined
+          ? {}
+          : { customInstructions: options.instructions }),
+        messages: host.readContext(),
+        entries: this.journaling.entries(),
+        settings,
+        contextWindow: model.contextWindow,
+        estimatedTokens: estimate.tokens,
+        model: model as never,
+        thinkingLevel: request.thinkingLevel,
+        streamOptions: request.streamOptions as never,
+        signal: request.signal,
+        ask: request.ask,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.warn(`[eta-compaction] summarizer failed: ${message}`);
+      this.emit("compaction:end", {
+        runId,
+        reason,
+        endedAt: Date.now(),
+        status: "failed",
+        error: message,
+      });
+      return false;
+    }
 
-		if (outcome === undefined) {
-			this.emit("compaction:end", { runId, reason, endedAt: Date.now(), status: "declined" });
-			return false;
-		}
+    if (outcome === undefined) {
+      this.emit("compaction:end", {
+        runId,
+        reason,
+        endedAt: Date.now(),
+        status: "declined",
+      });
+      return false;
+    }
 
-		host.replaceContext(outcome.summary, {
-			retainedTail: outcome.retainedTail,
-			tokensBefore: outcome.tokensBefore,
-		});
-		// The journaling subscriber writes the entry from this payload, which is
-		// why the event carries the summary rather than an id it cannot know.
-		this.emit("compaction:end", {
-			runId,
-			reason,
-			endedAt: Date.now(),
-			status: "completed",
-			summary: outcome.summary,
-			...(outcome.details === undefined ? {} : { details: outcome.details }),
-			retainedTail: [...outcome.retainedTail],
-			tokensBefore: outcome.tokensBefore,
-			...(outcome.usage === undefined ? {} : { usage: outcome.usage }),
-		});
-		return true;
-	}
+    host.replaceContext(outcome.summary, {
+      retainedTail: outcome.retainedTail,
+      tokensBefore: outcome.tokensBefore,
+    });
+    // The journaling subscriber writes the entry from this payload, which is
+    // why the event carries the summary rather than an id it cannot know.
+    this.emit("compaction:end", {
+      runId,
+      reason,
+      endedAt: Date.now(),
+      status: "completed",
+      summary: outcome.summary,
+      ...(outcome.details === undefined ? {} : { details: outcome.details }),
+      retainedTail: [...outcome.retainedTail],
+      tokensBefore: outcome.tokensBefore,
+      ...(outcome.usage === undefined ? {} : { usage: outcome.usage }),
+    });
+    return true;
+  }
 }

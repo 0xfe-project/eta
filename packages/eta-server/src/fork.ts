@@ -27,18 +27,23 @@ import { setValue } from "@eta/core/storage";
 import { SESSION_CONFIG } from "@eta/harness";
 
 /** The writes that turn an empty session into a copy of a forked chain. */
-export async function forkWrites(source: StorageService, chain: ForkedChain): Promise<StorageWrite[]> {
-	const config = (await source.getValue(SESSION_CONFIG))?.value;
-	return [
-		// Oldest first: a batch is applied in order, and the copy should read as the
-		// source's history rather than as a reversed one.
-		...[...chain.entries].reverse().map((entry): StorageWrite => ({ kind: "entry", entry: copyOf(entry) })),
-		...(config === undefined ? [] : [setValue(SESSION_CONFIG, config)]),
-		// The tip is stated rather than inferred. Appending would leave it on the newest
-		// copied entry, which is wrong for `position: "before"` — and stating it is what
-		// makes the two positions the same code path.
-		setValue(SESSION_TIP, chain.tipId),
-	];
+export async function forkWrites(
+  source: StorageService,
+  chain: ForkedChain,
+): Promise<StorageWrite[]> {
+  const config = (await source.getValue(SESSION_CONFIG))?.value;
+  return [
+    // Oldest first: a batch is applied in order, and the copy should read as the
+    // source's history rather than as a reversed one.
+    ...[...chain.entries]
+      .reverse()
+      .map((entry): StorageWrite => ({ kind: "entry", entry: copyOf(entry) })),
+    ...(config === undefined ? [] : [setValue(SESSION_CONFIG, config)]),
+    // The tip is stated rather than inferred. Appending would leave it on the newest
+    // copied entry, which is wrong for `position: "before"` — and stating it is what
+    // makes the two positions the same code path.
+    setValue(SESSION_TIP, chain.tipId),
+  ];
 }
 
 /**
@@ -47,6 +52,6 @@ export async function forkWrites(source: StorageService, chain: ForkedChain): Pr
  * how that is said out loud; the fields really are gone.
  */
 function copyOf(entry: Entry): NewEntry {
-	const { seq: _seq, timestamp: _timestamp, ...rest } = entry;
-	return rest as NewEntry;
+  const { seq: _seq, timestamp: _timestamp, ...rest } = entry;
+  return rest as NewEntry;
 }

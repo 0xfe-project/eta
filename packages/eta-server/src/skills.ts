@@ -32,63 +32,64 @@ import type { ExecutionEnv } from "@eta/harness";
 
 /** Every `.agents/skills` candidate for a cwd, deduped, closest first. */
 export function discoverSkillDirs(cwd: string, home: string): string[] {
-	const dirs = new Set<string>();
-	let dir = resolve(cwd);
-	const fsRoot = parse(dir).root;
-	for (;;) {
-		dirs.add(join(dir, ".agents", "skills"));
-		if (dir === fsRoot) break;
-		const up = dirname(dir);
-		if (up === dir) break;
-		dir = up;
-	}
-	dirs.add(join(home, ".agents", "skills"));
-	for (const repo of gitRepoChain(cwd)) dirs.add(join(repo, ".agents", "skills"));
-	return [...dirs];
+  const dirs = new Set<string>();
+  let dir = resolve(cwd);
+  const fsRoot = parse(dir).root;
+  for (;;) {
+    dirs.add(join(dir, ".agents", "skills"));
+    if (dir === fsRoot) break;
+    const up = dirname(dir);
+    if (up === dir) break;
+    dir = up;
+  }
+  dirs.add(join(home, ".agents", "skills"));
+  for (const repo of gitRepoChain(cwd))
+    dirs.add(join(repo, ".agents", "skills"));
+  return [...dirs];
 }
 
 /** The git repository containing `cwd`, plus every (recursively nested) submodule root. */
 export function gitRepoChain(cwd: string): string[] {
-	let dir = resolve(cwd);
-	const fsRoot = parse(dir).root;
-	let repo: string | undefined;
-	for (;;) {
-		if (existsSync(join(dir, ".git"))) {
-			repo = dir;
-			break;
-		}
-		if (dir === fsRoot) break;
-		const up = dirname(dir);
-		if (up === dir) break;
-		dir = up;
-	}
-	if (repo === undefined) return [];
-	const out = [repo];
-	const queue = [repo];
-	while (queue.length > 0) {
-		const base = queue.shift() as string;
-		let text = "";
-		try {
-			text = readFileSync(join(base, ".gitmodules"), "utf8");
-		} catch {
-			/* no .gitmodules */
-		}
-		for (const match of text.matchAll(/^\s*path\s*=\s*(.+)$/gm)) {
-			const sub = resolve(base, (match[1] ?? "").trim());
-			if (out.includes(sub)) continue;
-			out.push(sub);
-			queue.push(sub);
-		}
-	}
-	return out;
+  let dir = resolve(cwd);
+  const fsRoot = parse(dir).root;
+  let repo: string | undefined;
+  for (;;) {
+    if (existsSync(join(dir, ".git"))) {
+      repo = dir;
+      break;
+    }
+    if (dir === fsRoot) break;
+    const up = dirname(dir);
+    if (up === dir) break;
+    dir = up;
+  }
+  if (repo === undefined) return [];
+  const out = [repo];
+  const queue = [repo];
+  while (queue.length > 0) {
+    const base = queue.shift() as string;
+    let text = "";
+    try {
+      text = readFileSync(join(base, ".gitmodules"), "utf8");
+    } catch {
+      /* no .gitmodules */
+    }
+    for (const match of text.matchAll(/^\s*path\s*=\s*(.+)$/gm)) {
+      const sub = resolve(base, (match[1] ?? "").trim());
+      if (out.includes(sub)) continue;
+      out.push(sub);
+      queue.push(sub);
+    }
+  }
+  return out;
 }
 
 export interface RenderSkillsOptions {
-	env: ExecutionEnv;
-	cwd: string;
-	home: string;
-	/** Diagnostics from the loader: a skill that would not parse, a directory that would not list. */
-	warn?: ((message: string) => void) | undefined;
+  env: ExecutionEnv;
+  cwd: string;
+  home: string;
+  /** Diagnostics from the loader: a skill that would not parse, a directory that would not list. */
+  warn?: ((message: string) => void) | undefined;
 }
 
 /**
@@ -98,11 +99,19 @@ export interface RenderSkillsOptions {
  * matches. That is progressive disclosure, and it is why the block stays small enough to sit in
  * the stable part of the prompt.
  */
-export async function renderSkillsBlock(options: RenderSkillsOptions): Promise<string> {
-	// The loader is imported here rather than at the top so this file can be used (and its directory
-	// walk tested) without pulling in the harness's YAML and ignore-file machinery.
-	const { formatSkillsForSystemPrompt, loadSkills } = await import("@eta/harness");
-	const { skills, diagnostics } = await loadSkills(options.env, discoverSkillDirs(options.cwd, options.home));
-	for (const diagnostic of diagnostics) options.warn?.(`[eta-skills] ${diagnostic.path}: ${diagnostic.message}`);
-	return formatSkillsForSystemPrompt(skills);
+export async function renderSkillsBlock(
+  options: RenderSkillsOptions,
+): Promise<string> {
+  // The loader is imported here rather than at the top so this file can be used (and its directory
+  // walk tested) without pulling in the harness's YAML and ignore-file machinery.
+  const { formatSkillsForSystemPrompt, loadSkills } = await import(
+    "@eta/harness"
+  );
+  const { skills, diagnostics } = await loadSkills(
+    options.env,
+    discoverSkillDirs(options.cwd, options.home),
+  );
+  for (const diagnostic of diagnostics)
+    options.warn?.(`[eta-skills] ${diagnostic.path}: ${diagnostic.message}`);
+  return formatSkillsForSystemPrompt(skills);
 }

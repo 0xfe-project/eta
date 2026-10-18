@@ -10,16 +10,16 @@ import type { Entry, NewEntry } from "../types/entries";
 
 let counter = 0;
 function nextId(): string {
-	counter += 1;
-	return `entry-${counter.toString(36)}-${Date.now().toString(36)}`;
+  counter += 1;
+  return `entry-${counter.toString(36)}-${Date.now().toString(36)}`;
 }
 
 /** The slice of an entry the graph algorithm needs; every Entry qualifies. */
 export interface GraphNode {
-	id: string;
-	parentId: string | null;
-	type: string;
-	mergedParentId?: string | undefined;
+  id: string;
+  parentId: string | null;
+  type: string;
+  mergedParentId?: string | undefined;
 }
 
 /**
@@ -29,121 +29,140 @@ export interface GraphNode {
  * eta-agent's merge-splice.ts, storage coupling stripped.
  */
 export function spliceMergedChain<T extends GraphNode>(
-	pathNewestFirst: T[],
-	loadById: (id: string) => T | undefined,
+  pathNewestFirst: T[],
+  loadById: (id: string) => T | undefined,
 ): void {
-	const onPath = new Set(pathNewestFirst.map((entry) => entry.id));
-	for (let i = 0; i < pathNewestFirst.length; i += 1) {
-		const candidate = pathNewestFirst[i]!;
-		if (candidate.type !== "merge" || candidate.mergedParentId === undefined) continue;
-		const merged: T[] = [];
-		const seen = new Set<string>(onPath);
-		let node = loadById(candidate.mergedParentId);
-		while (node !== undefined && !seen.has(node.id)) {
-			seen.add(node.id);
-			merged.push(node);
-			if (node.parentId === null) break;
-			node = loadById(node.parentId);
-		}
-		for (const [offset, extra] of merged.entries()) {
-			pathNewestFirst.splice(i + 1 + offset, 0, extra);
-			onPath.add(extra.id);
-		}
-		i += merged.length;
-	}
+  const onPath = new Set(pathNewestFirst.map((entry) => entry.id));
+  for (let i = 0; i < pathNewestFirst.length; i += 1) {
+    const candidate = pathNewestFirst[i]!;
+    if (candidate.type !== "merge" || candidate.mergedParentId === undefined)
+      continue;
+    const merged: T[] = [];
+    const seen = new Set<string>(onPath);
+    let node = loadById(candidate.mergedParentId);
+    while (node !== undefined && !seen.has(node.id)) {
+      seen.add(node.id);
+      merged.push(node);
+      if (node.parentId === null) break;
+      node = loadById(node.parentId);
+    }
+    for (const [offset, extra] of merged.entries()) {
+      pathNewestFirst.splice(i + 1 + offset, 0, extra);
+      onPath.add(extra.id);
+    }
+    i += merged.length;
+  }
 }
 
 export class EntryGraph {
-	private readonly entries = new Map<string, Entry>();
-	private tipEntryId: string | null = null;
-	private seq = 0;
+  private readonly entries = new Map<string, Entry>();
+  private tipEntryId: string | null = null;
+  private seq = 0;
 
-	/**
-	 * Append an entry on the current tip (or on `parentId` when given).
-	 *
-	 * `allowMissingParent` is the replay path: a journal can hold an entry whose
-	 * parent is not in the file (a slice, a truncated tail), and eta-agent's
-	 * answer was to let the branch end there rather than refuse to open the
-	 * session. The chain walk already stops at a missing parent.
-	 * The tip advances to the new entry either way; a side-branch write is
-	 * followed by `setTip` to leave the branch view where it was.
-	 *
-	 * Sequence and timestamp are assigned unless the entry brings its own — a
-	 * replayed journal must rebuild the same order it was written in.
-	 */
-	append<T extends Entry>(entry: NewEntry<T>, options: { allowMissingParent?: boolean } = {}): T {
-		const supplied = entry as { id?: string; parentId?: string | null; seq?: number; timestamp?: number };
-		const full = {
-			...entry,
-			id: supplied.id ?? nextId(),
-			parentId: supplied.parentId ?? this.tipEntryId,
-			seq: supplied.seq ?? ++this.seq,
-			timestamp: supplied.timestamp ?? Date.now(),
-		} as unknown as T;
-		this.seq = Math.max(this.seq, full.seq);
-		const parentId = full.parentId;
-		if (parentId !== null && !this.entries.has(parentId) && options.allowMissingParent !== true) {
-			throw new Error(`append: unknown parent ${parentId}`);
-		}
-		this.entries.set(full.id, full);
-		this.tipEntryId = full.id;
-		return full;
-	}
+  /**
+   * Append an entry on the current tip (or on `parentId` when given).
+   *
+   * `allowMissingParent` is the replay path: a journal can hold an entry whose
+   * parent is not in the file (a slice, a truncated tail), and eta-agent's
+   * answer was to let the branch end there rather than refuse to open the
+   * session. The chain walk already stops at a missing parent.
+   * The tip advances to the new entry either way; a side-branch write is
+   * followed by `setTip` to leave the branch view where it was.
+   *
+   * Sequence and timestamp are assigned unless the entry brings its own — a
+   * replayed journal must rebuild the same order it was written in.
+   */
+  append<T extends Entry>(
+    entry: NewEntry<T>,
+    options: { allowMissingParent?: boolean } = {},
+  ): T {
+    const supplied = entry as {
+      id?: string;
+      parentId?: string | null;
+      seq?: number;
+      timestamp?: number;
+    };
+    const full = {
+      ...entry,
+      id: supplied.id ?? nextId(),
+      parentId: supplied.parentId ?? this.tipEntryId,
+      seq: supplied.seq ?? ++this.seq,
+      timestamp: supplied.timestamp ?? Date.now(),
+    } as unknown as T;
+    this.seq = Math.max(this.seq, full.seq);
+    const parentId = full.parentId;
+    if (
+      parentId !== null &&
+      !this.entries.has(parentId) &&
+      options.allowMissingParent !== true
+    ) {
+      throw new Error(`append: unknown parent ${parentId}`);
+    }
+    this.entries.set(full.id, full);
+    this.tipEntryId = full.id;
+    return full;
+  }
 
-	byId(id: string): Entry | undefined {
-		return this.entries.get(id);
-	}
+  byId(id: string): Entry | undefined {
+    return this.entries.get(id);
+  }
 
-	has(id: string): boolean {
-		return this.entries.has(id);
-	}
+  has(id: string): boolean {
+    return this.entries.has(id);
+  }
 
-	tip(): Entry | undefined {
-		return this.tipEntryId === null ? undefined : this.entries.get(this.tipEntryId);
-	}
+  tip(): Entry | undefined {
+    return this.tipEntryId === null
+      ? undefined
+      : this.entries.get(this.tipEntryId);
+  }
 
-	tipId(): string | null {
-		return this.tipEntryId;
-	}
+  tipId(): string | null {
+    return this.tipEntryId;
+  }
 
-	setTip(id: string | null): void {
-		if (id !== null && !this.entries.has(id)) throw new Error(`setTip: unknown entry ${id}`);
-		this.tipEntryId = id;
-	}
+  setTip(id: string | null): void {
+    if (id !== null && !this.entries.has(id))
+      throw new Error(`setTip: unknown entry ${id}`);
+    this.tipEntryId = id;
+  }
 
-	/** Single-parent chain from an entry (or the tip) up to the root. */
-	chain(entryId: string | null = this.tipEntryId): Entry[] {
-		const out: Entry[] = [];
-		let id = entryId;
-		const seen = new Set<string>();
-		while (id !== null) {
-			const entry = this.entries.get(id);
-			if (entry === undefined || seen.has(id)) break;
-			seen.add(id);
-			out.push(entry);
-			id = entry.parentId;
-		}
-		return out;
-	}
+  /** Single-parent chain from an entry (or the tip) up to the root. */
+  chain(entryId: string | null = this.tipEntryId): Entry[] {
+    const out: Entry[] = [];
+    let id = entryId;
+    const seen = new Set<string>();
+    while (id !== null) {
+      const entry = this.entries.get(id);
+      if (entry === undefined || seen.has(id)) break;
+      seen.add(id);
+      out.push(entry);
+      id = entry.parentId;
+    }
+    return out;
+  }
 
-	/** Branch path newest-first with merged chains spliced in. */
-	path(): Entry[] {
-		const path = this.chain();
-		spliceMergedChain(path, (id) => this.entries.get(id));
-		return path;
-	}
+  /** Branch path newest-first with merged chains spliced in. */
+  path(): Entry[] {
+    const path = this.chain();
+    spliceMergedChain(path, (id) => this.entries.get(id));
+    return path;
+  }
 
-	/** Branch path oldest-first with merged chains spliced in. */
-	pathOldestFirst(): Entry[] {
-		return this.path().reverse();
-	}
+  /** Branch path oldest-first with merged chains spliced in. */
+  pathOldestFirst(): Entry[] {
+    return this.path().reverse();
+  }
 
-	/** Whether `ancestorId` is on the single-parent chain above `entryId`. */
-	isAncestorOf(ancestorId: string, entryId: string | null = this.tipEntryId): boolean {
-		return this.chain(entryId).some((e) => e.id === ancestorId);
-	}
+  /** Whether `ancestorId` is on the single-parent chain above `entryId`. */
+  isAncestorOf(
+    ancestorId: string,
+    entryId: string | null = this.tipEntryId,
+  ): boolean {
+    return this.chain(entryId).some((e) => e.id === ancestorId);
+  }
 
-	size(): number {
-		return this.entries.size;
-	}
+  size(): number {
+    return this.entries.size;
+  }
 }

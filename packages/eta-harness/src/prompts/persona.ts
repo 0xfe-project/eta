@@ -101,25 +101,36 @@ never as a warning from above.
 `;
 
 export function builtinPersonas(): Record<string, string> {
-	return { Thinker: THINKER, Insighter: INSIGHTER, Executor: EXECUTOR, Artist: ARTIST };
+  return {
+    Thinker: THINKER,
+    Insighter: INSIGHTER,
+    Executor: EXECUTOR,
+    Artist: ARTIST,
+  };
 }
 
 /** Render requested names against a card table, in order; report misses. */
 export function renderPersonaBlock(
-	names: string[],
-	cards: ReadonlyMap<string, PersonaCard>,
+  names: string[],
+  cards: ReadonlyMap<string, PersonaCard>,
 ): { text: string; missing: string[] } {
-	const missing: string[] = [];
-	const parts: string[] = [];
-	for (const name of names) {
-		const card = cards.get(name);
-		if (card === undefined) missing.push(name);
-		else parts.push(card.content.trim());
-	}
-	return { text: parts.join("\n\n"), missing };
+  const missing: string[] = [];
+  const parts: string[] = [];
+  for (const name of names) {
+    const card = cards.get(name);
+    if (card === undefined) missing.push(name);
+    else parts.push(card.content.trim());
+  }
+  return { text: parts.join("\n\n"), missing };
 }
 
 /** Render the service's current snapshot without mutating state or emitting events. */
-export function renderActivePersona(persona: PersonaService): { text: string; missing: string[] } {
-	return renderPersonaBlock(persona.activeNamesList(), new Map(persona.list().map((card) => [card.id, card])));
+export function renderActivePersona(persona: PersonaService): {
+  text: string;
+  missing: string[];
+} {
+  return renderPersonaBlock(
+    persona.activeNamesList(),
+    new Map(persona.list().map((card) => [card.id, card])),
+  );
 }

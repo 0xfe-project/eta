@@ -12,16 +12,18 @@ import { describe, expect, it } from "vitest";
 import { createLocalEnvironment, supportsNodeExecution } from "../src/index";
 
 describe("runtime detection", () => {
-	it("offers a working local environment when the runtime has node built-ins", async () => {
-		expect(supportsNodeExecution()).toBe(true);
-		const cwd = await mkdtemp(join(tmpdir(), "eta-detect-"));
-		const env = createLocalEnvironment(cwd);
-		expect(env).toBeDefined();
-		try {
-			expect(getOrThrow(await env!.exec("pwd")).stdout.trim().length).toBeGreaterThan(0);
-		} finally {
-			await env!.cleanup();
-			await rm(cwd, { recursive: true, force: true });
-		}
-	});
+  it("offers a working local environment when the runtime has node built-ins", async () => {
+    expect(supportsNodeExecution()).toBe(true);
+    const cwd = await mkdtemp(join(tmpdir(), "eta-detect-"));
+    const env = createLocalEnvironment(cwd);
+    expect(env).toBeDefined();
+    try {
+      expect(
+        getOrThrow(await env!.exec("pwd")).stdout.trim().length,
+      ).toBeGreaterThan(0);
+    } finally {
+      await env!.cleanup();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
 });

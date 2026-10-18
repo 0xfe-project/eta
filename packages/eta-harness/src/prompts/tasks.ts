@@ -9,15 +9,16 @@
 import type { AgentMessage, Task, TaskStatus } from "@eta/core";
 
 /** What the task tools answer with after a write. */
-export const TASK_UPDATE_SUCCESS = "Updated TODOs. FOLLOW and update your TODO list as you progress.";
+export const TASK_UPDATE_SUCCESS =
+  "Updated TODOs. FOLLOW and update your TODO list as you progress.";
 
 /** Injected at the start of a turn when the session has tasks worth reviewing. */
 export const TASK_REVIEW_PROMPT =
-	"Before anything else, review your current task list (<current_tasks>...</current_tasks> above):" +
-	"\n- Are there tasks that are now completed? Mark them done." +
-	"\n- Are there tasks that are stale or no longer relevant? Cancel them." +
-	"\n- Are there any new tasks implied by the current conversation that should be added?" +
-	"\nAfter updating the list (if needed), continue working on the highest-priority pending or in-progress item.";
+  "Before anything else, review your current task list (<current_tasks>...</current_tasks> above):" +
+  "\n- Are there tasks that are now completed? Mark them done." +
+  "\n- Are there tasks that are stale or no longer relevant? Cancel them." +
+  "\n- Are there any new tasks implied by the current conversation that should be added?" +
+  "\nAfter updating the list (if needed), continue working on the highest-priority pending or in-progress item.";
 
 /**
  * The transient nudge one request carries when the reminder cadence says a review
@@ -29,22 +30,26 @@ export const TASK_REVIEW_PROMPT =
  * nothing to preserve. The system prompt is untouched, so the cacheable prefix
  * stays byte-identical whether the reminder fired or not.
  */
-export function taskReminderMessage(text: string = TASK_REVIEW_PROMPT): AgentMessage {
-	return {
-		role: "user",
-		content: `<system-reminder>\n${text}\n</system-reminder>`,
-		timestamp: Date.now(),
-	} as AgentMessage;
+export function taskReminderMessage(
+  text: string = TASK_REVIEW_PROMPT,
+): AgentMessage {
+  return {
+    role: "user",
+    content: `<system-reminder>\n${text}\n</system-reminder>`,
+    timestamp: Date.now(),
+  } as AgentMessage;
 }
 
 /** Render the live task list into the system prompt block. */
 export function renderCurrentTasks(tasks: readonly Task[]): string {
-	const marks: Record<TaskStatus, string> = {
-		pending: "[ ]",
-		in_progress: "[~]",
-		completed: "[x]",
-		cancelled: "[-]",
-	};
-	const body = tasks.map((t) => `${marks[t.status] ?? "[ ]"} ${t.id}: ${t.content}`).join("\n");
-	return `<current_tasks>\n${body}\n</current_tasks>`;
+  const marks: Record<TaskStatus, string> = {
+    pending: "[ ]",
+    in_progress: "[~]",
+    completed: "[x]",
+    cancelled: "[-]",
+  };
+  const body = tasks
+    .map((t) => `${marks[t.status] ?? "[ ]"} ${t.id}: ${t.content}`)
+    .join("\n");
+  return `<current_tasks>\n${body}\n</current_tasks>`;
 }

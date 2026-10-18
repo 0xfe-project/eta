@@ -11,25 +11,28 @@ import { type SessionLog } from "@eta/core/session";
 import { JournalingService } from "../journaling";
 
 export interface JournaledKernel {
-	kernel: Kernel;
-	/** The service writing this kernel's messages, usage rows and state down. */
-	journaling: JournalingService;
-	log: SessionLog;
+  kernel: Kernel;
+  /** The service writing this kernel's messages, usage rows and state down. */
+  journaling: JournalingService;
+  log: SessionLog;
 }
 
 export function journaledKernel(
-	log: SessionLog,
-	options: { config?: Partial<KernelConfig>; warn?: (message: string) => void } = {},
+  log: SessionLog,
+  options: {
+    config?: Partial<KernelConfig>;
+    warn?: (message: string) => void;
+  } = {},
 ): JournaledKernel {
-	const kernel = Kernel.create({
-		...(options.config === undefined ? {} : { config: options.config }),
-		...(options.warn === undefined ? {} : { warn: options.warn }),
-	});
-	const journaling = new JournalingService(kernel.ctx, {
-		journal: log,
-		config: kernel.config,
-		tasks: kernel.tasks,
-		...(options.warn === undefined ? {} : { warn: options.warn }),
-	});
-	return { kernel, journaling, log };
+  const kernel = Kernel.create({
+    ...(options.config === undefined ? {} : { config: options.config }),
+    ...(options.warn === undefined ? {} : { warn: options.warn }),
+  });
+  const journaling = new JournalingService(kernel.ctx, {
+    journal: log,
+    config: kernel.config,
+    tasks: kernel.tasks,
+    ...(options.warn === undefined ? {} : { warn: options.warn }),
+  });
+  return { kernel, journaling, log };
 }

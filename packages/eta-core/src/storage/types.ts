@@ -25,39 +25,39 @@ import type { Usage } from "../types/messages";
 
 /** One committed entry. Storage assigns seq and the commit timestamp. */
 export interface EntryWrite {
-	kind: "entry";
-	entry: NewEntry;
+  kind: "entry";
+  entry: NewEntry;
 }
 
 export interface UsageRow {
-	id: string;
-	seq: number;
-	usage: Usage;
-	entryId?: string;
-	/** True for corrections (e.g. a provider restated usage after the fact). */
-	adjustment: boolean;
-	details?: JsonValue;
+  id: string;
+  seq: number;
+  usage: Usage;
+  entryId?: string;
+  /** True for corrections (e.g. a provider restated usage after the fact). */
+  adjustment: boolean;
+  details?: JsonValue;
 }
 
 /** One usage measurement, usually per assistant entry. */
 export interface UsageWrite {
-	kind: "usage";
-	row: Omit<UsageRow, "seq">;
+  kind: "usage";
+  row: Omit<UsageRow, "seq">;
 }
 
 export interface ValueSetWrite {
-	kind: "value";
-	op: "set";
-	namespace: string;
-	key: string;
-	value: unknown;
+  kind: "value";
+  op: "set";
+  namespace: string;
+  key: string;
+  value: unknown;
 }
 
 export interface ValueDeleteWrite {
-	kind: "value";
-	op: "delete";
-	namespace: string;
-	key: string;
+  kind: "value";
+  op: "delete";
+  namespace: string;
+  key: string;
 }
 
 export type ValueWrite = ValueSetWrite | ValueDeleteWrite;
@@ -75,28 +75,39 @@ declare const storedValueType: unique symbol;
  * phantom: it never exists at runtime (same trick as eta-agent's values.ts).
  */
 export interface Value<T> {
-	readonly kind: "value";
-	readonly namespace: string;
-	readonly key: string;
-	readonly [storedValueType]?: (value: T) => T;
+  readonly kind: "value";
+  readonly namespace: string;
+  readonly key: string;
+  readonly [storedValueType]?: (value: T) => T;
 }
 
 export function value<T>(namespace: string, key = ""): Value<T> {
-	return { kind: "value", namespace, key };
+  return { kind: "value", namespace, key };
 }
 
 export function setValue<T>(address: Value<T>, next: T): ValueSetWrite {
-	return { kind: "value", op: "set", namespace: address.namespace, key: address.key, value: next };
+  return {
+    kind: "value",
+    op: "set",
+    namespace: address.namespace,
+    key: address.key,
+    value: next,
+  };
 }
 
 export function deleteValue<T>(address: Value<T>): ValueDeleteWrite {
-	return { kind: "value", op: "delete", namespace: address.namespace, key: address.key };
+  return {
+    kind: "value",
+    op: "delete",
+    namespace: address.namespace,
+    key: address.key,
+  };
 }
 
 export interface StoredValue<T> {
-	address: Value<T>;
-	value: T;
-	seq: number;
+  address: Value<T>;
+  value: T;
+  seq: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -104,47 +115,47 @@ export interface StoredValue<T> {
 /* ------------------------------------------------------------------ */
 
 export interface SessionStats {
-	messageCount: number;
-	usage: Usage;
+  messageCount: number;
+  usage: Usage;
 }
 
 export interface CommitResult {
-	firstSeq: number;
-	seqs: number[];
-	timestamp: number;
-	/** Session totals immediately after this commit was applied. */
-	stats: SessionStats;
+  firstSeq: number;
+  seqs: number[];
+  timestamp: number;
+  /** Session totals immediately after this commit was applied. */
+  stats: SessionStats;
 }
 
 export interface EntryCursor {
-	seq: number;
+  seq: number;
 }
 
 export interface BranchScan {
-	start?: string;
-	stopAtType?: EntryType;
-	stopAtId?: string;
-	type?: EntryType;
-	order?: "newestFirst" | "oldestFirst";
-	limit?: number;
-	cursor?: EntryCursor;
+  start?: string;
+  stopAtType?: EntryType;
+  stopAtId?: string;
+  type?: EntryType;
+  order?: "newestFirst" | "oldestFirst";
+  limit?: number;
+  cursor?: EntryCursor;
 }
 
 export type StorageBranchScan = BranchScan & { start: string };
 
 export interface EntryScan {
-	type?: EntryType;
-	fromSeq?: number;
-	toSeq?: number;
-	order?: "asc" | "desc";
-	limit?: number;
+  type?: EntryType;
+  fromSeq?: number;
+  toSeq?: number;
+  order?: "asc" | "desc";
+  limit?: number;
 }
 
 export interface UsageScan {
-	fromSeq?: number;
-	toSeq?: number;
-	order?: "asc" | "desc";
-	limit?: number;
+  fromSeq?: number;
+  toSeq?: number;
+  order?: "asc" | "desc";
+  limit?: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -152,16 +163,16 @@ export interface UsageScan {
 /* ------------------------------------------------------------------ */
 
 export interface CompactResult {
-	rewritten: boolean;
-	beforeBytes: number;
-	afterBytes: number;
-	reason?: string | undefined;
+  rewritten: boolean;
+  beforeBytes: number;
+  afterBytes: number;
+  reason?: string | undefined;
 }
 
 export interface RepairResult {
-	droppedBytes: number;
-	droppedRecords: number;
-	trailingOnly: boolean;
+  droppedBytes: number;
+  droppedRecords: number;
+  trailingOnly: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -169,44 +180,50 @@ export interface RepairResult {
 /* ------------------------------------------------------------------ */
 
 export interface StorageService {
-	/** Apply one atomic batch. Resolves when the batch is durable. */
-	commit(writes: StorageWrite[]): Promise<CommitResult>;
+  /** Apply one atomic batch. Resolves when the batch is durable. */
+  commit(writes: StorageWrite[]): Promise<CommitResult>;
 
-	getEntries(ids: string[]): Promise<Map<string, Entry>>;
-	getValue<T>(address: Value<T>): Promise<StoredValue<T> | undefined>;
-	/** Every value whose address starts with the given namespace (+ key prefix). */
-	listValues<T>(prefix: Value<T>): Promise<StoredValue<T>[]>;
-	/** Walk a branch from an explicit entry; merge entries splice their chains in. */
-	scanBranch(query: StorageBranchScan): Promise<Entry[]>;
-	scanEntries(query: EntryScan): Promise<Entry[]>;
-	scanUsage(query: UsageScan): Promise<UsageRow[]>;
-	getStats(): Promise<SessionStats>;
+  getEntries(ids: string[]): Promise<Map<string, Entry>>;
+  getValue<T>(address: Value<T>): Promise<StoredValue<T> | undefined>;
+  /** Every value whose address starts with the given namespace (+ key prefix). */
+  listValues<T>(prefix: Value<T>): Promise<StoredValue<T>[]>;
+  /** Walk a branch from an explicit entry; merge entries splice their chains in. */
+  scanBranch(query: StorageBranchScan): Promise<Entry[]>;
+  scanEntries(query: EntryScan): Promise<Entry[]>;
+  scanUsage(query: UsageScan): Promise<UsageRow[]>;
+  getStats(): Promise<SessionStats>;
 
-	compactJournal(): Promise<CompactResult>;
-	repairTornTail(): Promise<RepairResult>;
-	flush(): Promise<void>;
-	close(): Promise<void>;
+  compactJournal(): Promise<CompactResult>;
+  repairTornTail(): Promise<RepairResult>;
+  flush(): Promise<void>;
+  close(): Promise<void>;
 }
 
 /** The method surface, asserted in tests so the seam cannot drift silently. */
 export const STORAGE_METHODS = [
-	"commit",
-	"getEntries",
-	"getValue",
-	"listValues",
-	"scanBranch",
-	"scanEntries",
-	"scanUsage",
-	"getStats",
-	"compactJournal",
-	"repairTornTail",
-	"flush",
-	"close",
+  "commit",
+  "getEntries",
+  "getValue",
+  "listValues",
+  "scanBranch",
+  "scanEntries",
+  "scanUsage",
+  "getStats",
+  "compactJournal",
+  "repairTornTail",
+  "flush",
+  "close",
 ] as const satisfies readonly (keyof StorageService)[];
 
 /** Compile-time completeness: every StorageService method is listed above. */
-type _StorageMethodsComplete = Exclude<keyof StorageService, (typeof STORAGE_METHODS)[number]> extends never
-	? true
-	: { missing: Exclude<keyof StorageService, (typeof STORAGE_METHODS)[number]> };
+type _StorageMethodsComplete =
+  Exclude<keyof StorageService, (typeof STORAGE_METHODS)[number]> extends never
+    ? true
+    : {
+        missing: Exclude<
+          keyof StorageService,
+          (typeof STORAGE_METHODS)[number]
+        >;
+      };
 const _storageMethodsComplete: _StorageMethodsComplete = true;
 void _storageMethodsComplete;

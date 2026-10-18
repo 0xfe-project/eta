@@ -11,71 +11,75 @@ import { describe, expect, it } from "vitest";
 import { renderPlatformBlock } from "../src/prompts/platform";
 
 const base = {
-	cwd: "/work/0xts",
-	home: "/home/lemon",
-	configPath: "/home/lemon/.eta/config.json",
-	memoryTarget: "/work/0xts/.eta/MEMORY.md",
+  cwd: "/work/0xts",
+  home: "/home/lemon",
+  configPath: "/home/lemon/.eta/config.json",
+  memoryTarget: "/work/0xts/.eta/MEMORY.md",
 };
 
 describe("the platform briefing", () => {
-	it("tells the agent where the app keeps its own files", () => {
-		const text = renderPlatformBlock({ ...base, sessionDir: "/home/lemon/.eta/sessions/eta-1", memoryExists: false });
-		expect(text.startsWith("<platform>")).toBe(true);
-		expect(text.endsWith("</platform>")).toBe(true);
-		expect(text).toContain("/home/lemon/.eta/config.json");
-		// Headers and keys are the parts the agent is likely to need, and the ones
-		// it must not paste back.
-		expect(text).toContain("`headers`");
-		expect(text).toContain("secrets");
-		expect(text).toContain("/home/lemon/.eta/sessions/eta-1");
-		// The journal is the app's format: an agent that understood it might edit it.
-		expect(text).toContain("journal.jsonl");
-		expect(text).toContain("hand-editing it is not a supported operation");
-	});
+  it("tells the agent where the app keeps its own files", () => {
+    const text = renderPlatformBlock({
+      ...base,
+      sessionDir: "/home/lemon/.eta/sessions/eta-1",
+      memoryExists: false,
+    });
+    expect(text.startsWith("<platform>")).toBe(true);
+    expect(text.endsWith("</platform>")).toBe(true);
+    expect(text).toContain("/home/lemon/.eta/config.json");
+    // Headers and keys are the parts the agent is likely to need, and the ones
+    // it must not paste back.
+    expect(text).toContain("`headers`");
+    expect(text).toContain("secrets");
+    expect(text).toContain("/home/lemon/.eta/sessions/eta-1");
+    // The journal is the app's format: an agent that understood it might edit it.
+    expect(text).toContain("journal.jsonl");
+    expect(text).toContain("hand-editing it is not a supported operation");
+  });
 
-	it("says how a persona card is written, and that it needs no restart", () => {
-		const text = renderPlatformBlock({ ...base, memoryExists: true });
-		expect(text).toContain("<id>.persona.md");
-		expect(text).toContain("/home/lemon/.eta/persona");
-		expect(text).toContain("/work/0xts/.eta/persona");
-		expect(text).toContain("without a restart");
-	});
+  it("says how a persona card is written, and that it needs no restart", () => {
+    const text = renderPlatformBlock({ ...base, memoryExists: true });
+    expect(text).toContain("<id>.persona.md");
+    expect(text).toContain("/home/lemon/.eta/persona");
+    expect(text).toContain("/work/0xts/.eta/persona");
+    expect(text).toContain("without a restart");
+  });
 
-	it("points at the memory file when the project already has one", () => {
-		const text = renderPlatformBlock({ ...base, memoryExists: true });
-		expect(text).toContain("/work/0xts/.eta/MEMORY.md");
-		expect(text).toContain("loaded above as the memory block");
-		expect(text).not.toContain("nothing has been remembered");
-	});
+  it("points at the memory file when the project already has one", () => {
+    const text = renderPlatformBlock({ ...base, memoryExists: true });
+    expect(text).toContain("/work/0xts/.eta/MEMORY.md");
+    expect(text).toContain("loaded above as the memory block");
+    expect(text).not.toContain("nothing has been remembered");
+  });
 
-	it("tells the agent to create .eta/MEMORY.md when the project has none", () => {
-		const text = renderPlatformBlock({ ...base, memoryExists: false });
-		expect(text).toContain("nothing has been remembered");
-		expect(text).toContain("create /work/0xts/.eta/");
-		expect(text).toContain("MEMORY.md");
-		// The rule, not just the instruction: the nearest one up the tree is loaded.
-		expect(text).toContain("nearest .eta/MEMORY.md up the tree");
-	});
+  it("tells the agent to create .eta/MEMORY.md when the project has none", () => {
+    const text = renderPlatformBlock({ ...base, memoryExists: false });
+    expect(text).toContain("nothing has been remembered");
+    expect(text).toContain("create /work/0xts/.eta/");
+    expect(text).toContain("MEMORY.md");
+    // The rule, not just the instruction: the nearest one up the tree is loaded.
+    expect(text).toContain("nearest .eta/MEMORY.md up the tree");
+  });
 
-	it("leaves the session directory out when nothing is persisted", () => {
-		const text = renderPlatformBlock({ ...base, memoryExists: true });
-		expect(text).not.toContain("journal.jsonl");
-	});
+  it("leaves the session directory out when nothing is persisted", () => {
+    const text = renderPlatformBlock({ ...base, memoryExists: true });
+    expect(text).not.toContain("journal.jsonl");
+  });
 });
 
 describe("host-supplied platform facts", () => {
-	it("uses the supplied remote home verbatim without substituting the process home", () => {
-		const text = renderPlatformBlock({
-			...base,
-			home: "/remote/home",
-			cwd: "/remote/work",
-			memoryTarget: "/remote/work/.eta/MEMORY.md",
-			memoryExists: false,
-		});
-		expect(text).toContain("/remote/home/.eta/persona");
-		expect(text).toContain("/remote/work/.eta/persona");
-		expect(text).toContain("/remote/work/.eta/MEMORY.md");
-		expect(text).not.toContain(`${base.home}/.eta/persona`);
-		expect(text).toContain(base.configPath);
-	});
+  it("uses the supplied remote home verbatim without substituting the process home", () => {
+    const text = renderPlatformBlock({
+      ...base,
+      home: "/remote/home",
+      cwd: "/remote/work",
+      memoryTarget: "/remote/work/.eta/MEMORY.md",
+      memoryExists: false,
+    });
+    expect(text).toContain("/remote/home/.eta/persona");
+    expect(text).toContain("/remote/work/.eta/persona");
+    expect(text).toContain("/remote/work/.eta/MEMORY.md");
+    expect(text).not.toContain(`${base.home}/.eta/persona`);
+    expect(text).toContain(base.configPath);
+  });
 });

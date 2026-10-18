@@ -22,19 +22,19 @@ import { systemRowOf, type ViewSystemRow } from "@eta/harness";
 
 /** One row of a transcript page. */
 export interface HistoryRow {
-	entryId: string;
-	seq: number;
-	at: number;
-	message: AgentMessage;
+  entryId: string;
+  seq: number;
+  at: number;
+  message: AgentMessage;
 }
 
 /** One search hit: which session, and the text around the match. */
 export interface SearchHit {
-	session: string;
-	entryId: string;
-	seq: number;
-	/** The readable text of the message the match was in, around the match. */
-	snippet: string;
+  session: string;
+  entryId: string;
+  seq: number;
+  /** The readable text of the message the match was in, around the match. */
+  snippet: string;
 }
 
 /** How much of the message a snippet shows, either side of the match. */
@@ -48,15 +48,17 @@ const SNIPPET_AFTER = 120;
  * match every query about anything the model ever asked for.
  */
 export function messageText(message: unknown): string {
-	const content = (message as { content?: unknown }).content;
-	if (typeof content === "string") return content;
-	if (!Array.isArray(content)) return "";
-	return content
-		.flatMap((block: { type?: string; text?: unknown }) =>
-			block.type === "text" && typeof block.text === "string" ? [block.text] : [],
-		)
-		.join(" ")
-		.trim();
+  const content = (message as { content?: unknown }).content;
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .flatMap((block: { type?: string; text?: unknown }) =>
+      block.type === "text" && typeof block.text === "string"
+        ? [block.text]
+        : [],
+    )
+    .join(" ")
+    .trim();
 }
 
 /**
@@ -71,21 +73,24 @@ export function messageText(message: unknown): string {
  * transcript view means by history.
  */
 export function historyOf(
-	entries: readonly Entry[],
-	options: { beforeSeq?: number | undefined; limit: number },
+  entries: readonly Entry[],
+  options: { beforeSeq?: number | undefined; limit: number },
 ): HistoryRow[] {
-	const messages = branchMessages(entries);
-	const before = options.beforeSeq;
-	// The cursor is exclusive: everything older than it is what this page may draw from.
-	const end = before === undefined ? messages.length : messages.filter((row) => row.seq < before).length;
-	const start = Math.max(0, end - Math.max(0, options.limit));
-	return messages.slice(start, end);
+  const messages = branchMessages(entries);
+  const before = options.beforeSeq;
+  // The cursor is exclusive: everything older than it is what this page may draw from.
+  const end =
+    before === undefined
+      ? messages.length
+      : messages.filter((row) => row.seq < before).length;
+  const start = Math.max(0, end - Math.max(0, options.limit));
+  return messages.slice(start, end);
 }
 
 /** A history page: its messages, and the system rows (a failed run, a goal…) that sit among them. */
 export interface HistoryPage {
-	rows: HistoryRow[];
-	systems: ViewSystemRow[];
+  rows: HistoryRow[];
+  systems: ViewSystemRow[];
 }
 
 /**
@@ -97,36 +102,44 @@ export interface HistoryPage {
  * still finds the record of it.
  */
 export function historyPageOf(
-	entries: readonly Entry[],
-	options: { beforeSeq?: number | undefined; limit: number },
+  entries: readonly Entry[],
+  options: { beforeSeq?: number | undefined; limit: number },
 ): HistoryPage {
-	const rows = historyOf(entries, options);
-	const firstMessage = branchMessages(entries)[0];
-	const oldest = rows[0];
-	const from = oldest === undefined || oldest.entryId === firstMessage?.entryId ? -Infinity : oldest.seq;
-	const before = options.beforeSeq ?? Infinity;
-	const systems: ViewSystemRow[] = [];
-	for (const entry of entries) {
-		if (entry.seq < from || entry.seq >= before) continue;
-		const row = systemRowOf(entry);
-		if (row !== undefined) systems.push(row);
-	}
-	return { rows, systems };
+  const rows = historyOf(entries, options);
+  const firstMessage = branchMessages(entries)[0];
+  const oldest = rows[0];
+  const from =
+    oldest === undefined || oldest.entryId === firstMessage?.entryId
+      ? -Infinity
+      : oldest.seq;
+  const before = options.beforeSeq ?? Infinity;
+  const systems: ViewSystemRow[] = [];
+  for (const entry of entries) {
+    if (entry.seq < from || entry.seq >= before) continue;
+    const row = systemRowOf(entry);
+    if (row !== undefined) systems.push(row);
+  }
+  return { rows, systems };
 }
 
 /** Every message on a branch, oldest first — what a search walks. */
 export function branchMessages(entries: readonly Entry[]): HistoryRow[] {
-	const rows: HistoryRow[] = [];
-	for (const entry of entries) {
-		if (entry.type !== "message") continue;
-		rows.push({ entryId: entry.id, seq: entry.seq, at: entry.timestamp, message: entry.message });
-	}
-	return rows;
+  const rows: HistoryRow[] = [];
+  for (const entry of entries) {
+    if (entry.type !== "message") continue;
+    rows.push({
+      entryId: entry.id,
+      seq: entry.seq,
+      at: entry.timestamp,
+      message: entry.message,
+    });
+  }
+  return rows;
 }
 
 /** Where `needle` first appears in `text`, case-insensitively. */
 function indexOfIgnoreCase(text: string, needle: string): number {
-	return text.toLowerCase().indexOf(needle.toLowerCase());
+  return text.toLowerCase().indexOf(needle.toLowerCase());
 }
 
 /**
@@ -136,20 +149,27 @@ function indexOfIgnoreCase(text: string, needle: string): number {
  * roughly where", and a list of twenty matches inside one long conversation is not more useful than
  * the conversation itself.
  */
-export function firstHit(session: string, entries: readonly Entry[], query: string): SearchHit | undefined {
-	const needle = query.trim();
-	if (needle.length === 0) return undefined;
-	for (const row of branchMessages(entries)) {
-		const text = messageText(row.message);
-		if (text.length === 0) continue;
-		const index = indexOfIgnoreCase(text, needle);
-		if (index < 0) continue;
-		return {
-			session,
-			entryId: row.entryId,
-			seq: row.seq,
-			snippet: text.slice(Math.max(0, index - SNIPPET_BEFORE), index + SNIPPET_AFTER),
-		};
-	}
-	return undefined;
+export function firstHit(
+  session: string,
+  entries: readonly Entry[],
+  query: string,
+): SearchHit | undefined {
+  const needle = query.trim();
+  if (needle.length === 0) return undefined;
+  for (const row of branchMessages(entries)) {
+    const text = messageText(row.message);
+    if (text.length === 0) continue;
+    const index = indexOfIgnoreCase(text, needle);
+    if (index < 0) continue;
+    return {
+      session,
+      entryId: row.entryId,
+      seq: row.seq,
+      snippet: text.slice(
+        Math.max(0, index - SNIPPET_BEFORE),
+        index + SNIPPET_AFTER,
+      ),
+    };
+  }
+  return undefined;
 }
