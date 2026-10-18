@@ -124,6 +124,15 @@ function carriesOwnCapability(request: Request, pathname: string): boolean {
   );
 }
 
+/**
+ * The two routes a daemon uses. A daemon is not a browser: it has no cookie and sends no origin,
+ * so neither check below can say anything about it. Each route authenticates what it carries (an
+ * install code, a device credential), and the host answers for that, not this file.
+ */
+function isMachineRoute(pathname: string): boolean {
+  return pathname === "/machines/enroll" || pathname === "/machines/connect";
+}
+
 const refuse = (status: number, message: string): Response =>
   new Response(message, {
     status,
@@ -170,7 +179,8 @@ export function createAccess(options: AccessOptions): Access {
     tokenFile,
     authorize(request) {
       const url = new URL(request.url);
-      if (url.pathname === "/up") return undefined;
+      if (url.pathname === "/up" || isMachineRoute(url.pathname))
+        return undefined;
 
       if (url.pathname === "/ws" && !originAllowed(request)) {
         return refuse(403, "origin not allowed");
