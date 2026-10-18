@@ -9,6 +9,7 @@ import type { AssembledServer, AssembleOptions } from "@eta/server";
  * before the floor, because the floor's per-session hooks are its, and mounted on the floor after.
  */
 import type { Database } from "bun:sqlite";
+import type { SiteLimits } from "./artifacts/site";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createLocalEnvironment } from "@eta/execution-node";
@@ -40,6 +41,8 @@ export interface HostOptions {
   models?: AssembleOptions["models"];
   /** Where the agent's home is, for personas. Defaults to the real one. */
   home?: string;
+  /** What a published site may hold; the defaults are for real use, a test makes them small. */
+  artifactLimits?: Partial<SiteLimits> | undefined;
   /** Whether to apply the config's network settings to the environment. */
   network?: boolean;
   warn?: (message: string) => void;
@@ -76,7 +79,13 @@ export async function startHost(options: HostOptions): Promise<Host> {
   try {
     applyMigrations(db, loadMigrations());
     const warn = options.warn ?? ((message: string) => console.warn(message));
-    const product = createProduct({ db, dataDir: options.dataDir, warn });
+    const product = createProduct({
+      db,
+      dataDir: options.dataDir,
+      warn,
+      artifactLimits: options.artifactLimits,
+    });
+    const web = createWebRoutes(options.webDir);
     server = await assembleServer({
       dataDir: options.dataDir,
       configPath: join(options.dataDir, "config.json"),
@@ -88,7 +97,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
         const env = createLocalEnvironment(meta.cwd);
         return env === undefined ? undefined : { env };
       },
-      fetch: createWebRoutes(options.webDir),
+      // The product's pages (artifacts) first; they answer for their own paths, found or not.
+      fetch: async (request) =>
+        (await product.fetch(request)) ?? (await web(request)),
       authorize: access.authorize,
       // What the product adds to every session it owns: the agent's words in the system prompt,
       // and, from each of its features, tools, tool middleware and an ear for questions.
