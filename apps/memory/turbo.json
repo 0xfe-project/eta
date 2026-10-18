@@ -1,0 +1,14 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    // The embedding model, the same on every platform.
+    "build": {
+      "inputs": ["axp_memory/embedding.py", "uv.lock"],
+      "outputs": ["out/models/**"]
+    },
+    "lint": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/ruff.toml"]
+    }
+  }
+}

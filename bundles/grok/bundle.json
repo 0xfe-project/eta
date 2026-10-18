@@ -1,5 +1,0 @@
-{
-  "name": "grok",
-  "description": "Grok Imagine 生成图片和视频，网页和 X 搜索。",
-  "plugins": ["grok"]
-}
