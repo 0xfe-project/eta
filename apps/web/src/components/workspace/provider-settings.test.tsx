@@ -50,7 +50,9 @@ function deferred<T>() {
 
 let queryClient: QueryClient;
 
-async function render() {
+const codex = { id: "codex", display_name: "Codex", flow: "oauth_device" };
+
+async function render(connectors: object[] = [codex]) {
   // Seeded data stays fresh, so only what a test triggers is fetched.
   queryClient = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
@@ -62,10 +64,7 @@ async function render() {
     interactions: [],
     event_cursor: "0",
   });
-  queryClient.setQueryData(
-    ["llm", "connectors"],
-    [{ id: "codex", display_name: "Codex", flow: "oauth_device" }],
-  );
+  queryClient.setQueryData(["llm", "connectors"], connectors);
   queryClient.setQueryData(["llm", "connections"], [connection()]);
   queryClient.setQueryData(["llm", "models"], before);
   queryClient.setQueryData(["llm", "usage"], []);
@@ -175,5 +174,83 @@ describe("refreshing model status", () => {
     poll.resolve(Response.json(before));
     await settle();
     expect(models()).toEqual(after.models);
+  });
+});
+
+const button = (text: string) =>
+  [...document.querySelectorAll("button")].find(
+    (b) => b.textContent?.trim() === text,
+  )!;
+
+function type(input: HTMLInputElement, value: string) {
+  Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value",
+  )!.set!.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+describe("adding an API key", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+    rstest.restoreAllMocks();
+  });
+
+  it("shows why a key is rejected, and closes once one is kept", async () => {
+    const requests: string[] = [];
+    rstest
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        requests.push(`${init?.method ?? "GET"} ${url} ${init?.body ?? ""}`);
+        const login = {
+          id: "gemini-1",
+          connector: "gemini",
+          flow: "api_key",
+          status: "pending",
+          expires_at: "2026-10-16T12:00:00Z",
+        };
+        if (url.endsWith("/logins")) return Response.json(login);
+        if (url.endsWith("/input"))
+          return String(init?.body).includes("bad")
+            ? Response.json(
+                {
+                  error: {
+                    code: "INVALID_API_KEY",
+                    message: "API key 无效，请检查后重新填写。",
+                  },
+                },
+                { status: 424 },
+              )
+            : Response.json({ ...login, status: "succeeded" });
+        return Response.json([]);
+      });
+    await render([
+      codex,
+      { id: "gemini", display_name: "Google AI Studio", flow: "api_key" },
+    ]);
+
+    await act(async () => button("添加 API key").click());
+    const input = document.querySelector<HTMLInputElement>("#api-key-gemini")!;
+    expect(input.type).toBe("password");
+    await act(async () => type(input, " bad "));
+    await act(async () => button("校验并保存").click());
+    await settleUntil(() => Boolean(document.querySelector('[role="alert"]')));
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe(
+      "API key 无效，请检查后重新填写。",
+    );
+
+    await act(async () => type(input, "AIza-good"));
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    await act(async () => button("校验并保存").click());
+    await settleUntil(() => !document.querySelector("#api-key-gemini"));
+    expect(document.querySelector("#api-key-gemini")).toBeNull();
+    const posts = requests.filter((r) => r.startsWith("POST"));
+    expect(posts).toEqual([
+      'POST /api/llm/v1/logins {"connector":"gemini"}',
+      'POST /api/llm/v1/logins/gemini-1/input {"api_key":"bad"}',
+      'POST /api/llm/v1/logins {"connector":"gemini"}',
+      'POST /api/llm/v1/logins/gemini-1/input {"api_key":"AIza-good"}',
+    ]);
   });
 });

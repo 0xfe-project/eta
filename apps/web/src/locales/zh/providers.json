@@ -10,7 +10,9 @@
   "actions": {
     "openSettings": "前往模型服务",
     "signInAgain": "重新登录",
-    "linkAccount": "绑定账号"
+    "linkAccount": "绑定账号",
+    "reenterKey": "重新填写",
+    "addKey": "添加 API key"
   },
   "title": "模型服务",
   "recovery": {
@@ -41,6 +43,14 @@
     "waitingWithExpiry": "等待授权… {{minutes}}:{{seconds}} 后过期",
     "loadingCode": "正在获取验证码…",
     "openAuthorization": "打开授权页面"
+  },
+  "apiKey": {
+    "title": "添加 {{providerName}} API key",
+    "instructions": "填入 API key，保存前会先向服务商校验。",
+    "label": "API key",
+    "submit": "校验并保存",
+    "checking": "正在校验…",
+    "added": "已添加 {{providerName}} API key"
   },
   "remove": {
     "confirmTitle": "移除 {{accountName}}？",
