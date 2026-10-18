@@ -5,17 +5,20 @@
  * and publishes the sums as sections. A sum is a read of the table, so a section is never
  * out of step with it; a generation that ended only has to say that the target moved.
  */
+import type { SessionMeta } from "@eta/server";
 import type { UsageStore } from "./store";
 import { productPlugin, publish } from "../wire";
 import { recordGenerations } from "./recorder";
 
 export interface UsagePluginDeps {
   usage: UsageStore;
+  /** The routine a session works for, when it does. */
+  routineOf: (meta: SessionMeta) => string | undefined;
   warn: (message: string) => void;
 }
 
 export function usagePlugin(deps: UsagePluginDeps, applied: () => void) {
-  const { usage, warn } = deps;
+  const { usage, routineOf, warn } = deps;
   return productPlugin(
     "usage",
     ({ wire, sessions }) => {
@@ -25,9 +28,11 @@ export function usagePlugin(deps: UsagePluginDeps, applied: () => void) {
         // Run traffic, not a click: the paced push, so a busy agent costs a bounded number of frames.
         () => wire.push("usage"),
         warn,
+        routineOf,
       );
       const off = publish(wire, "usage", {
         agents: () => usage.agents(),
+        routines: () => usage.routines(),
         models: () => usage.models(),
         days: () => usage.days(),
       });

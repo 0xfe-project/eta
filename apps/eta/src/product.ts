@@ -131,6 +131,8 @@ export function createProduct(options: {
   timeline.failInterrupted(RESTART_TEXT);
   const interactions = new InteractionStore(db);
   interactions.expirePending();
+  // Settled questions are kept for 30 days, like usage; the ones just expired above are new.
+  interactions.prune();
   // Usage is kept for 30 days; what is older goes now, and again once a day while the host runs.
   const usage = new UsageStore(db);
   usage.prune();
@@ -206,6 +208,12 @@ export function createProduct(options: {
       }),
   });
   const mirrors = new SessionMirrors(hub);
+  const router = new RemoteSessionsRouter({
+    conversations,
+    machines,
+    hub,
+    models: () => running?.models,
+  });
   const remotePlace = new RemotePlace({
     hub,
     mirrors,
@@ -213,13 +221,8 @@ export function createProduct(options: {
     defaults: async () => (await running?.defaults()) ?? {},
     hooks: () => later.hooks,
     home: options.home ?? homedir(),
+    forward: (action, args) => router.forward(action, args),
     warn,
-  });
-  const router = new RemoteSessionsRouter({
-    conversations,
-    machines,
-    hub,
-    models: () => running?.models,
   });
 
   const targets = new ConversationTargets({
@@ -397,7 +400,13 @@ export function createProduct(options: {
         artifactsPlugin({ artifacts, board }, applied("artifacts")),
       );
       server.mount("inbox", inboxPlugin({ inbox }, applied("inbox")));
-      server.mount("usage", usagePlugin({ usage, warn }, applied("usage")));
+      server.mount(
+        "usage",
+        usagePlugin(
+          { usage, routineOf: runner.routineOf, warn },
+          applied("usage"),
+        ),
+      );
       if (memory !== undefined)
         server.mount(
           "memory",

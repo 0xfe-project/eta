@@ -305,6 +305,16 @@ export class ConversationStore {
         };
   }
 
+  /** The sessions an agent has, one for each conversation it was woken in. */
+  sessionsOfAgent(agentId: string): string[] {
+    return this.#db
+      .query<{ session_id: string }, [string]>(
+        "SELECT session_id FROM participant WHERE agent_id = ? AND session_id IS NOT NULL",
+      )
+      .all(agentId)
+      .map((row) => row.session_id);
+  }
+
   /** The sessions that run on a machine, by the participants that hold them. */
   sessionsOn(machineId: string): string[] {
     return this.#db

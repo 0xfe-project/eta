@@ -29,7 +29,7 @@ import type { Database } from "bun:sqlite";
 import type { AgentRecord, AgentStore } from "../agents/store";
 import type { MachineStore } from "../machines/store";
 import type { ProjectStore } from "../projects/store";
-import type { SessionHandle, SessionPlace } from "./places";
+import type { SessionHandle, SessionPlace, SessionSettings } from "./places";
 import type { ConversationRecord, ConversationStore } from "./store";
 import type { Timeline } from "./timeline";
 import { LinkError } from "@eta/daemon";
@@ -491,6 +491,39 @@ export class Engine {
       if (this.#stopRow(row) !== undefined) touched.add(row.conversationId);
     }
     if (touched.size > 0) this.#changed([...touched]);
+  }
+
+  /**
+   * An agent's model or thinking level was edited: its sessions take the new ones, wherever they
+   * run, replacing what the user chose on them with the composer's controls. A session that
+   * cannot be reached (its machine is offline) or is in the middle of a run is a warning: it
+   * keeps what it has.
+   */
+  async applySettings(
+    agentId: string,
+    settings: SessionSettings,
+  ): Promise<void> {
+    if (settings.model === undefined && settings.thinkingLevel === undefined)
+      return;
+    for (const sessionId of this.#conversations.sessionsOfAgent(agentId)) {
+      const held = this.#conversations.ofSession(sessionId);
+      const machine =
+        held === undefined ? undefined : this.#machines.get(held.machineId);
+      const place =
+        machine?.kind === "primary"
+          ? this.#local
+          : machine?.kind === "daemon"
+            ? this.#remote
+            : undefined;
+      if (machine === undefined || place === undefined) continue;
+      try {
+        await place.configure(sessionId, machine, settings);
+      } catch (error) {
+        this.#warn(
+          `[eta] could not update session ${sessionId} to the edited agent: ${messageOf(error)}`,
+        );
+      }
+    }
   }
 
   /** Stop one member's replies in one conversation (it is being taken out). */

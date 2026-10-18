@@ -18,10 +18,12 @@ import type {
   EnsureInput,
   SessionHandle,
   SessionPlace,
+  SessionSettings,
 } from "../conversations/places";
 import type { SessionHooks } from "../session-hooks";
 import type { MachineHub, MachineLink } from "./hub";
 import type { SessionMirrors } from "./mirror";
+import type { MachineRecord } from "./store";
 import { LINK_LIMITS } from "@eta/client-contracts";
 import { modelSpecOf } from "@eta/daemon";
 import { builtinPersonas } from "@eta/harness";
@@ -37,6 +39,11 @@ export interface RemotePlaceDeps {
   hooks: () => Required<SessionHooks> | undefined;
   /** The primary's home: where the user's own persona cards are. */
   home: string;
+  /** A `sessions.*` action on a session of a daemon, the way the browser's are sent. */
+  forward: (
+    action: string,
+    args: { session: string; [key: string]: unknown },
+  ) => Promise<unknown>;
   warn: (message: string) => void;
 }
 
@@ -139,6 +146,25 @@ export class RemotePlace implements SessionPlace {
     if (session !== input.existing) input.created(session);
     mirrors.register(session, machine.id);
     return new RemoteHandle(session, link, this.#deps.warn);
+  }
+
+  async configure(
+    sessionId: string,
+    machine: MachineRecord,
+    settings: SessionSettings,
+  ): Promise<void> {
+    if (this.#deps.hub.link(machine.id) === undefined)
+      throw new Error(`${machine.name} is ${machine.status}`);
+    if (settings.model !== undefined)
+      await this.#deps.forward("modelSet", {
+        session: sessionId,
+        model: settings.model,
+      });
+    if (settings.thinkingLevel !== undefined)
+      await this.#deps.forward("thinkingLevel", {
+        session: sessionId,
+        level: settings.thinkingLevel,
+      });
   }
 
   /** What the product adds to this agent's sessions, as the daemon needs to know it. */

@@ -36,7 +36,6 @@ import {
   discoverPersonas,
   FileSessionStore,
   formatModelId,
-  parseModelId,
   renderSkillsBlock,
   SessionManager,
   sessionsPlugin,
@@ -376,24 +375,7 @@ export class DaemonNode {
     if (args.session !== undefined) {
       const id = args.session;
       try {
-        const { managed } = await sessions.open(id);
-        const config = managed.session.kernel.config;
-        if (
-          args.model !== undefined &&
-          formatModelId(config.read("model")) !==
-            formatModelId(parseModelId(args.model))
-        ) {
-          await sessions
-            .modelSet(id, args.model)
-            .catch((error: unknown) =>
-              this.#warn(`[eta-daemon] ${messageOf(error)}`),
-            );
-        }
-        if (
-          args.thinkingLevel !== undefined &&
-          config.read("thinkingLevel") !== args.thinkingLevel
-        )
-          await thinking(id);
+        await sessions.open(id);
         if (this.#opened.get(id) !== args.stamp) {
           await sessions.setMeta(id, {
             persona: args.persona === undefined ? undefined : args.persona,

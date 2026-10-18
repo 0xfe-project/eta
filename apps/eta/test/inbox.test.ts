@@ -298,6 +298,39 @@ describe("a restart", () => {
   });
 });
 
+describe("retention", () => {
+  it("prunes settled questions older than 30 days at startup and never a pending one", async () => {
+    const DAY = 24 * 3_600_000;
+    const dataDir = await tempDir();
+    const first = await world({ dataDir });
+    const insert = (id: string, status: string, age: number) =>
+      first.host.db
+        .query(
+          `INSERT INTO interaction (id, session_id, question_id, prompt, status, created_at, updated_at)
+           VALUES (?, 's', ?, 'p', ?, ?, ?)`,
+        )
+        .run(id, id, status, Date.now() - age, Date.now() - age);
+    insert("old-answered", "answered", 31 * DAY);
+    insert("old-expired", "expired", 40 * DAY);
+    insert("fresh-answered", "answered", 29 * DAY);
+    insert("old-pending", "pending", 90 * DAY);
+
+    const copy = await tempDir();
+    first.host.db.exec(`VACUUM INTO '${copy}/eta.sqlite'`);
+    const restarted = await world({ dataDir: copy });
+    const ids = restarted.host.db
+      .query<{ id: string; status: string }, []>(
+        "SELECT id, status FROM interaction ORDER BY id",
+      )
+      .all();
+    // The old pending one was expired by the restart just now, so it is a fresh settled row.
+    expect(ids).toEqual([
+      { id: "fresh-answered", status: "answered" },
+      { id: "old-pending", status: "expired" },
+    ]);
+  });
+});
+
 describe("the ask channel's own endings", () => {
   const meta = { id: "s1", createdAt: 0, cwd: "/tmp" } as SessionMeta;
   const payload = (questionId: string): AskPayload => ({

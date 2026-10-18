@@ -163,7 +163,8 @@ export interface TaskArgs {
   /** Status defaults to `todo`. Made by the user; an agent makes tasks with its own tools. */
   create: TaskFields & { title: string; conversationId?: string };
   update: TaskFields & { taskId: string };
-  comment: { taskId: string; body: string };
+  /** A retry with the same `clientId` returns the comment already added instead of adding another. */
+  comment: { taskId: string; body: string; clientId?: string };
   /** The task goes, and its activity with it; its cards stay in the timelines, marked deleted. */
   delete: { taskId: string };
   /** Null unlinks. */

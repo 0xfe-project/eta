@@ -10,6 +10,7 @@ import type {
   AgentUsage,
   DayUsage,
   ModelUsage,
+  RoutineUsage,
   UsageTotals,
   UsageWindow,
 } from "@eta/client-contracts";
@@ -32,6 +33,8 @@ export interface UsageEntry {
   at: number;
   sessionId: string;
   agentId: string | null;
+  /** The routine whose run this was, when it was one. */
+  routineId: string | null;
   conversationId: string | null;
   provider: string;
   model: string;
@@ -111,14 +114,15 @@ export class UsageStore {
     this.#db
       .query(
         `INSERT INTO usage
-           (at, session_id, agent_id, conversation_id, provider, model, input, output, cache_read,
+           (at, session_id, agent_id, routine_id, conversation_id, provider, model, input, output, cache_read,
             cache_write, reasoning, total, cost, status, error)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         entry.at,
         entry.sessionId,
         entry.agentId,
+        entry.routineId,
         entry.conversationId,
         entry.provider,
         entry.model,
@@ -146,55 +150,81 @@ export class UsageStore {
 
   /** Every agent with usage in the retention window: its rolling windows and its models. */
   agents(): AgentUsage[] {
+    return this.#owners("agent_id", "routine_id IS NULL").map(
+      ({ id, ...rest }) => ({ agentId: id, ...rest }),
+    );
+  }
+
+  /** Every routine with usage in the retention window, the same way. */
+  routines(): RoutineUsage[] {
+    return this.#owners("routine_id", "routine_id IS NOT NULL").map(
+      ({ id, ...rest }) => ({ routineId: id!, ...rest }),
+    );
+  }
+
+  /** The generations grouped by whoever made them (`column`), with their windows and models. */
+  #owners(
+    column: "agent_id" | "routine_id",
+    filter: string,
+  ): {
+    id: string | null;
+    windows: Record<UsageWindow, UsageTotals>;
+    models: ModelUsage[];
+  }[] {
     const now = this.#now();
-    const byAgent = new Map<string | null, AgentUsage>();
-    const agentOf = (id: string | null): AgentUsage => {
-      let agent = byAgent.get(id);
-      if (agent === undefined) {
-        agent = {
-          agentId: id,
+    const byOwner = new Map<
+      string | null,
+      {
+        id: string | null;
+        windows: Record<UsageWindow, UsageTotals>;
+        models: ModelUsage[];
+      }
+    >();
+    const ownerOf = (id: string | null) => {
+      let owner = byOwner.get(id);
+      if (owner === undefined) {
+        owner = {
+          id,
           windows: Object.fromEntries(
             USAGE_WINDOWS.map((window) => [window, NONE]),
           ) as Record<UsageWindow, UsageTotals>,
           models: [],
         };
-        byAgent.set(id, agent);
+        byOwner.set(id, owner);
       }
-      return agent;
+      return owner;
     };
     for (const window of USAGE_WINDOWS) {
       const rows = this.#db
-        .query<TotalsRow & { agent_id: string | null }, [number]>(
-          `SELECT agent_id, ${TOTALS} FROM usage WHERE at >= ? GROUP BY agent_id`,
+        .query<TotalsRow & { owner: string | null }, [number]>(
+          `SELECT ${column} AS owner, ${TOTALS} FROM usage WHERE at >= ? AND ${filter}
+            GROUP BY ${column}`,
         )
         .all(now - WINDOW_MS[window]);
       for (const row of rows)
-        agentOf(row.agent_id).windows[window] = totalsOf(row);
+        ownerOf(row.owner).windows[window] = totalsOf(row);
     }
     const models = this.#db
       .query<
-        TotalsRow & {
-          agent_id: string | null;
-          provider: string;
-          model: string;
-        },
+        TotalsRow & { owner: string | null; provider: string; model: string },
         [number]
       >(
-        `SELECT agent_id, provider, model, ${TOTALS} FROM usage WHERE at >= ?
-          GROUP BY agent_id, provider, model ORDER BY SUM(total) DESC, provider, model`,
+        `SELECT ${column} AS owner, provider, model, ${TOTALS} FROM usage
+          WHERE at >= ? AND ${filter}
+          GROUP BY ${column}, provider, model ORDER BY SUM(total) DESC, provider, model`,
       )
       .all(now - WINDOW_MS["30d"]);
     for (const row of models) {
-      agentOf(row.agent_id).models.push({
+      ownerOf(row.owner).models.push({
         provider: row.provider,
         model: row.model,
         ...totalsOf(row),
       });
     }
-    return [...byAgent.values()].sort(
+    return [...byOwner.values()].sort(
       (a, b) =>
         b.windows["30d"].total - a.windows["30d"].total ||
-        (a.agentId ?? "").localeCompare(b.agentId ?? ""),
+        (a.id ?? "").localeCompare(b.id ?? ""),
     );
   }
 

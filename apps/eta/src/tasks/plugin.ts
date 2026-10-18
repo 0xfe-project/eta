@@ -99,6 +99,7 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
               args.string("taskId"),
               args.string("body"),
               USER,
+              args.optionalString("clientId"),
             ),
           };
         }),

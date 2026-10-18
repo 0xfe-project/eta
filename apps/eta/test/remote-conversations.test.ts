@@ -530,6 +530,75 @@ describe("what the primary sends with a session", () => {
   });
 });
 
+describe("an agent's model and thinking level on a remote session", () => {
+  const configOf = (
+    r: Awaited<ReturnType<typeof remoteWorld>>,
+    session: string,
+  ) =>
+    r.host.product.hub.link(r.daemon.machineId)!.machine("config", { session });
+
+  it("a chip choice survives the next wake, and an edit of the agent overrides it", async () => {
+    const { models } = scriptedModels(() => say("ok"));
+    const r = await remoteWorld({ models });
+    const { agents, group } = await r.agents("Ada");
+    await r.client.call("agents", "update", {
+      agentId: agents[0]!.id,
+      model: "fake:first",
+      thinkingLevel: "low",
+    });
+    const first = await r.send(group.id, "one");
+    await r.settled(group.id, first.replies[0]!.id);
+    const session = sessionOf(r, group.id)!;
+    expect(await configOf(r, session)).toEqual({
+      model: "fake:first",
+      thinkingLevel: "low",
+    });
+
+    await r.client.call("sessions", "modelSet", {
+      session,
+      model: "fake:chosen",
+    });
+    await r.client.call("sessions", "thinkingLevel", {
+      session,
+      level: "high",
+    });
+    const second = await r.send(group.id, "two");
+    await r.settled(group.id, second.replies[0]!.id);
+    expect(await configOf(r, session)).toEqual({
+      model: "fake:chosen",
+      thinkingLevel: "high",
+    });
+
+    await r.client.call("agents", "update", {
+      agentId: agents[0]!.id,
+      model: "fake:second",
+      thinkingLevel: "medium",
+    });
+    expect(await configOf(r, session)).toEqual({
+      model: "fake:second",
+      thinkingLevel: "medium",
+    });
+  });
+
+  it("an edit while the machine is offline is a warning, not an error", async () => {
+    const warnings: string[] = [];
+    const { models } = scriptedModels(() => say("ok"));
+    const r = await remoteWorld({ models, warn: (m) => warnings.push(m) });
+    const { agents, group } = await r.agents("Ada");
+    const first = await r.send(group.id, "one");
+    await r.settled(group.id, first.replies[0]!.id);
+    await r.daemon.link.stop();
+    await until(
+      () => machineView(r.client, r.daemon.machineId)?.status === "offline",
+    );
+    await r.client.call("agents", "update", {
+      agentId: agents[0]!.id,
+      model: "fake:second",
+    });
+    expect(warnings.join("\n")).toMatch(/could not update session/);
+  });
+});
+
 describe("questions from a remote session", () => {
   const list = (r: {
     client: { section: <T>(t: string, n: string) => T | undefined };

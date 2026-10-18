@@ -22,6 +22,12 @@ const LONG_ACTIONS = new Set(["btwAsk", "compact", "goal", "fork"]);
 const LONG_MS = 10 * 60 * 1000;
 const SHORT_MS = 60 * 1000;
 
+interface ForwardArgs {
+  session?: string;
+  model?: string;
+  [key: string]: unknown;
+}
+
 export class RemoteSessionsRouter implements RemoteSessions {
   readonly #conversations: ConversationStore;
   readonly #machines: MachineStore;
@@ -50,8 +56,12 @@ export class RemoteSessionsRouter implements RemoteSessions {
 
   owns = (id: string): boolean => this.machineOf(id) !== undefined;
 
-  call: RemoteSessions["call"] = async (action, call) => {
-    const args = (call.args ?? {}) as { session?: string; model?: string };
+  call: RemoteSessions["call"] = async (action, call) => ({
+    result: await this.forward(action, (call.args ?? {}) as ForwardArgs),
+  });
+
+  /** One `sessions.*` action on the daemon that holds the session; what the browser's call does. */
+  async forward(action: string, args: ForwardArgs): Promise<unknown> {
     const machine = this.machineOf(args.session ?? "");
     if (machine === undefined)
       throw new Error(`no such session: ${args.session}`);
@@ -64,11 +74,10 @@ export class RemoteSessionsRouter implements RemoteSessions {
     // A model the user picks in the session's own controls has to be known to the daemon first.
     if (action === "modelSet" && typeof args.model === "string")
       await this.#teach(link, args.model);
-    const result = await link.pipe.call("sessions", action, call.args, {
+    return await link.pipe.call("sessions", action, args, {
       timeoutMs: LONG_ACTIONS.has(action) ? LONG_MS : SHORT_MS,
     });
-    return { result };
-  };
+  }
 
   async #teach(link: MachineLink, model: string): Promise<void> {
     const identity = parseModelId(model);

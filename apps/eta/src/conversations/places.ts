@@ -9,13 +9,12 @@
  * machine that runs the daemon (`machines/remote-place.ts`, over the link). The engine's rows,
  * chains, steering, stopping and recovery are the same for both.
  */
-import type { RunOutcome } from "@eta/client-contracts";
+import type { RunOutcome, ThinkingLevel } from "@eta/client-contracts";
 import type { ManagedSession, SessionsService } from "@eta/server";
 import type { AgentRecord } from "../agents/store";
 import type { MachineRecord } from "../machines/store";
 import type { ConversationRecord } from "./store";
 import { runAndWait } from "@eta/daemon";
-import { formatModelId, parseModelId } from "@eta/server";
 
 /** One session, as the engine drives it. */
 export interface SessionHandle {
@@ -57,6 +56,21 @@ export interface SessionPlace {
    * with the agent as it is now, or a new one made on the spot.
    */
   ensure: (input: EnsureInput) => Promise<SessionHandle>;
+  /**
+   * Put these settings on a session that exists (an agent was edited). A session that cannot be
+   * reached or is busy throws; the caller makes a warning of it.
+   */
+  configure: (
+    sessionId: string,
+    machine: MachineRecord,
+    settings: SessionSettings,
+  ) => Promise<void>;
+}
+
+/** The settings of an agent that its sessions carry as their own. */
+export interface SessionSettings {
+  model?: string;
+  thinkingLevel?: ThinkingLevel;
 }
 
 export const messageOf = (error: unknown): string =>
@@ -156,12 +170,27 @@ export class LocalPlace implements SessionPlace {
     return new LocalHandle(sessions, (await sessions.open(id)).managed);
   }
 
+  async configure(
+    sessionId: string,
+    _machine: MachineRecord,
+    settings: SessionSettings,
+  ): Promise<void> {
+    const sessions = this.#sessions;
+    if (sessions === undefined)
+      throw new Error("the session host is not running");
+    if (settings.model !== undefined)
+      await sessions.modelSet(sessionId, settings.model);
+    if (settings.thinkingLevel !== undefined)
+      await sessions.thinkingLevel(sessionId, settings.thinkingLevel);
+  }
+
   /**
-   * An agent can be edited after its sessions exist. The model and the thinking level are the
-   * session's own settings and are changed in place; the instructions and the persona are read
-   * when a session opens, so a session that was opened with other ones is closed here and the
-   * open that follows reads the new ones. Never while it is running: wakes are serial, so by the
-   * time one starts its session is idle.
+   * An agent can be edited after its sessions exist. The model and the thinking level are given
+   * to a session when it is made and are its own after that (the user may change them with the
+   * composer's controls; `configure` is how an edit of the agent overrides them). The
+   * instructions and the persona are read when a session opens, so a session that was opened with
+   * other ones is closed here and the open that follows reads the new ones. Never while it is
+   * running: wakes are serial, so by the time one starts its session is idle.
    */
   async #sync(
     sessions: SessionsService,
@@ -169,25 +198,7 @@ export class LocalPlace implements SessionPlace {
     agent: AgentRecord,
     stamp: string,
   ): Promise<void> {
-    const { managed } = await sessions.open(id);
-    const config = managed.session.kernel.config;
-    if (
-      agent.model !== null &&
-      formatModelId(config.read("model")) !==
-        formatModelId(parseModelId(agent.model))
-    ) {
-      await sessions
-        .modelSet(id, agent.model)
-        .catch((error: unknown) => this.#warn(`[eta] ${messageOf(error)}`));
-    }
-    if (
-      agent.thinkingLevel !== null &&
-      config.read("thinkingLevel") !== agent.thinkingLevel
-    ) {
-      await sessions
-        .thinkingLevel(id, agent.thinkingLevel)
-        .catch((error: unknown) => this.#warn(`[eta] ${messageOf(error)}`));
-    }
+    await sessions.open(id);
     if (this.#opened.get(id) !== stamp) {
       await sessions.setMeta(id, {
         persona: agent.persona === "" ? undefined : agent.persona,

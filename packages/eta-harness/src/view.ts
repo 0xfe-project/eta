@@ -44,6 +44,28 @@ export interface ViewCore {
   streaming?: AgentMessage | undefined;
 }
 
+/**
+ * How much of a message has been written so far, as a number that only grows while it streams.
+ * It is part of the core's revision, so a client that subscribes mid-stream is sent the text so
+ * far and a client already there is sent each step (the frame pacer bounds how many).
+ */
+export function streamedSize(message: AgentMessage | undefined): string {
+  if (message === undefined) return "";
+  const content = (message as { content?: unknown }).content;
+  if (typeof content === "string") return String(content.length);
+  if (!Array.isArray(content)) return "0";
+  let size = content.length;
+  for (const block of content as Record<string, unknown>[]) {
+    for (const key of ["text", "thinking"]) {
+      const text = block[key];
+      if (typeof text === "string") size += text.length;
+    }
+    if (block.arguments !== undefined)
+      size += JSON.stringify(block.arguments).length;
+  }
+  return String(size);
+}
+
 /** One piece of the view, owned by whoever knows the state. */
 export interface ViewContribution<T = unknown> {
   /** The section name. A plugin prefixes its own name (`git`, `ssh.jump`). */
@@ -92,7 +114,7 @@ export class ViewService extends Service {
       project: options.core,
       revision: () => {
         const core = options.core();
-        return `${core.session}|${core.running ? 1 : 0}|${core.streaming === undefined ? "" : "1"}`;
+        return `${core.session}|${core.running ? 1 : 0}|${streamedSize(core.streaming)}`;
       },
     });
   }

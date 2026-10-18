@@ -12,6 +12,9 @@ import type {
 } from "@eta/client-contracts";
 import type { Database } from "bun:sqlite";
 
+/** How long a settled question is kept, counted from the moment it was settled. */
+const INTERACTION_RETENTION_DAYS = 30;
+
 interface Row {
   id: string;
   session_id: string;
@@ -165,6 +168,18 @@ export class InteractionStore {
           WHERE status = 'pending'`,
       )
       .run(Date.now()).changes;
+  }
+
+  /**
+   * Drop the settled questions that were settled more than `INTERACTION_RETENTION_DAYS` ago. A
+   * question still waiting is never dropped, however old. Returns how many rows went.
+   */
+  prune(now = Date.now()): number {
+    return this.#db
+      .query(
+        "DELETE FROM interaction WHERE status <> 'pending' AND updated_at < ?",
+      )
+      .run(now - INTERACTION_RETENTION_DAYS * 24 * 3_600_000).changes;
   }
 
   get(id: string): InteractionView | undefined {
