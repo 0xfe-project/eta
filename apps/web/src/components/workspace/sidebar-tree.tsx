@@ -287,9 +287,6 @@ function GroupRow({
             }
           />
         </div>
-        <p className="truncate font-mono text-[10px] text-muted-foreground">
-          {conversation.id.slice(0, 11)}
-        </p>
       </div>
       {expandable && expanded ? (
         <ul className="mb-0.5 ml-5 border-l border-border">
