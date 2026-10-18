@@ -15,6 +15,7 @@
     "@eta/client-contracts": "*",
     "@eta/client-wire-proto": "*",
     "@eta/core": "*",
+    "@eta/daemon": "*",
     "@eta/execution-node": "*",
     "@eta/harness": "*",
     "@eta/server": "*",
