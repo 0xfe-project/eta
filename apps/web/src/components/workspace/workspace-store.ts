@@ -29,7 +29,7 @@ export type SettingsSection =
   | "providers"
   | "approvals"
   | "connections"
-  | "computers"
+  | "machines"
   | "archived"
   | "appearance";
 interface SettingsState {

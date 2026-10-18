@@ -1,6 +1,6 @@
 import type { paths as ControlPlanePaths } from "@/api/control-plane.gen";
 // Browser clients for the old same-origin REST API that has not moved to the wire yet: the
-// control plane (/api/v1, for bundles and computers) and its GitHub connection under
+// control plane (/api/v1, for bundles) and its GitHub connection under
 // /api/forge/v1. POSTs carry an Idempotency-Key so a retried request cannot run twice.
 //
 // The control plane's client is typed by a frozen OpenAPI snapshot (`bun run generate` writes

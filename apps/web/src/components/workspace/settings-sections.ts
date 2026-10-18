@@ -55,9 +55,9 @@ const everySection: {
     icon: LinkIcon,
   },
   {
-    value: "computers",
+    value: "machines",
     get label() {
-      return translate("computers:title");
+      return translate("machines:title");
     },
     icon: DesktopIcon,
   },
@@ -86,8 +86,7 @@ export const settingsSections = everySection.filter(
   ({ value }) =>
     !(
       (value === "bundles" && !capabilities.bundles) ||
-      (value === "connections" && !capabilities.connections) ||
-      (value === "computers" && !capabilities.computers)
+      (value === "connections" && !capabilities.connections)
     ),
 );
 

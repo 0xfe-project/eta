@@ -281,7 +281,8 @@
     "project": "Project",
     "addPath": "Add a directory…",
     "path": "Directory path",
-    "pathHint": "An absolute path on the primary machine; it must be an existing directory. The members work here."
+    "machine": "Machine",
+    "pathHint": "An absolute path on the chosen machine; it must be an existing directory. The members work here."
   },
   "chat": {},
   "steward": {
