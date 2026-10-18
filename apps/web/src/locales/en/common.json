@@ -18,7 +18,8 @@
     "storageUnavailable": "Unable to save in this browser. Keep the page open to retain your content.",
     "requestFailed": "Request failed. Try again later.",
     "disconnected": "The connection to the host was lost.",
-    "timeout": "The host did not respond in time."
+    "timeout": "The host did not respond in time.",
+    "pluginMissing": "The host has not loaded {{name}}."
   },
   "actions": {
     "retry": "Retry",

@@ -1,21 +1,17 @@
 import type { UseFormReturn } from "react-hook-form";
 import type { AgentForm } from "./agent-form";
-import type { Bundle } from "@/queries/chat";
 import type { Model } from "@/queries/providers";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatLocale } from "@/lib/i18n";
-import { translateBundleDescription } from "@/lib/i18n-metadata";
-import { cn } from "@/lib/utils";
+import { THINKING_LEVELS } from "@/lib/thinking";
+import { usePersonas } from "@/queries/personas";
 import { modelGroups } from "@/queries/providers";
 import { DESCRIPTION_MAX } from "./agent-form";
-import { usePersonas } from "./persona-cards";
 import { Select, SelectGroup, SelectOption } from "./select-field";
-import { useWorkspaceStore } from "./workspace-store";
 
 type Form = UseFormReturn<AgentForm>;
 
@@ -33,7 +29,6 @@ export function ModelSelect({
 }) {
   const { t: translateText } = useTranslation([
     "agents",
-    "bundles",
     "common",
     "providers",
   ] as const);
@@ -80,78 +75,6 @@ export function ModelSelect({
   );
 }
 
-/** One checkbox per bundle; built-in ones first. */
-function BundleList({
-  value,
-  bundles,
-  autoFocus,
-  onChange,
-}: {
-  value: string[] | null;
-  bundles: Bundle[];
-  autoFocus?: boolean;
-  onChange: (value: string[]) => void;
-}) {
-  const { t: translateText } = useTranslation([
-    "agents",
-    "bundles",
-    "common",
-    "providers",
-  ] as const);
-  const names = bundles.map((bundle) => bundle.name);
-  const chosen =
-    value ?? bundles.filter((bundle) => bundle.builtin).map((b) => b.name);
-  const toggle = (name: string, on: boolean) =>
-    onChange(names.filter((n) => (n === name ? on : chosen.includes(n))));
-  return (
-    <ul className="grid grid-cols-2 gap-2">
-      {bundles.map((bundle, index) => {
-        const on = bundle.required || chosen.includes(bundle.name);
-        return (
-          <li key={bundle.name} className="flex">
-            {/* A card per bundle, as in choosing where GitHub's App lives. */}
-            <Label
-              className={cn(
-                "flex-1 cursor-pointer items-start gap-2.5 border p-3 leading-snug duration-[60ms] ease-linear hover:bg-muted/50 has-focus-visible:ring-1 has-focus-visible:ring-ring",
-                on && "border-foreground bg-muted/50",
-              )}
-            >
-              <Checkbox
-                className="mt-px"
-                autoFocus={autoFocus && index === 0}
-                checked={on}
-                disabled={bundle.required}
-                onCheckedChange={(next) => toggle(bundle.name, next === true)}
-              />
-              <span className="min-w-0 space-y-0.5">
-                <span className="block font-medium break-words">
-                  {bundle.name}
-                  {bundle.required
-                    ? translateText("bundles.requiredSuffix")
-                    : ""}
-                  {bundle.builtin ? null : (
-                    <span className="ml-1.5 font-normal text-muted-foreground">
-                      {translateText("common:labels.custom")}
-                    </span>
-                  )}
-                </span>
-                {bundle.description ? (
-                  <span className="block text-muted-foreground">
-                    {translateBundleDescription(
-                      bundle.name,
-                      bundle.description,
-                    )}
-                  </span>
-                ) : null}
-              </span>
-            </Label>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
 export function NameField({
   form,
   autoFocus,
@@ -161,7 +84,6 @@ export function NameField({
 }) {
   const { t: translateText } = useTranslation([
     "agents",
-    "bundles",
     "common",
     "providers",
   ] as const);
@@ -202,7 +124,6 @@ export function ModelField({
 }) {
   const { t: translateText } = useTranslation([
     "agents",
-    "bundles",
     "common",
     "providers",
   ] as const);
@@ -254,42 +175,39 @@ export function ModelField({
   );
 }
 
-export function BundlesField({
-  form,
-  bundles,
-  autoFocus,
-}: {
-  form: Form;
-  bundles: Bundle[];
-  autoFocus?: boolean;
-}) {
-  const { t: translateText } = useTranslation([
-    "agents",
-    "bundles",
-    "common",
-    "providers",
-  ] as const);
+/**
+ * How hard the agent thinks before it answers. The first choice, "the model's own", leaves the
+ * level unset, which is a level too: it is what a model does when nobody asked for more or less.
+ */
+export function ThinkingField({ form }: { form: Form }) {
+  const { t: translateText } = useTranslation(["agents", "common"] as const);
+  const value = form.watch("thinkingLevel");
   return (
-    <div
-      role="group"
-      aria-labelledby="agent-bundles"
-      aria-describedby="agent-bundles-hint"
-      className="space-y-1.5"
-    >
-      <p id="agent-bundles" className="text-xs leading-none">
-        {translateText("bundles:title")}
-      </p>
-      <BundleList
-        value={form.watch("bundles")}
-        bundles={bundles}
-        autoFocus={autoFocus}
-        onChange={(value) =>
-          form.setValue("bundles", value, { shouldDirty: true })
+    <div className="space-y-1.5">
+      <Label htmlFor="agent-thinking">
+        {translateText("agents:thinking.label")}
+      </Label>
+      <Select
+        id="agent-thinking"
+        className="w-full"
+        value={value}
+        onValueChange={(value) =>
+          form.setValue("thinkingLevel", value, { shouldDirty: true })
         }
-      />
-      <p id="agent-bundles-hint" className="text-xs text-muted-foreground">
-        {translateText("bundles.help")}
-      </p>
+      >
+        <SelectOption value="">
+          {translateText("agents:thinking.default")}
+        </SelectOption>
+        {value !== "" &&
+        !(THINKING_LEVELS as readonly string[]).includes(value) ? (
+          <SelectOption value={value}>{value}</SelectOption>
+        ) : null}
+        {THINKING_LEVELS.map((level) => (
+          <SelectOption key={level} value={level}>
+            {level}
+          </SelectOption>
+        ))}
+      </Select>
     </div>
   );
 }
@@ -303,7 +221,6 @@ export function InstructionsField({
 }) {
   const { t: translateText } = useTranslation([
     "agents",
-    "bundles",
     "common",
     "providers",
   ] as const);
@@ -350,9 +267,9 @@ export function InstructionsField({
  * Which persona card an agent wears.
  *
  * An agent's instructions say what it does; its persona says how it sounds while doing it — the
- * two were never the same field. The host keeps the card (`GET/PUT /api/v1/agents/{id}/persona`,
- * the id is the card's name) and answers `""` for "the project's default", which is a card too,
- * so the field lists it as the first choice rather than as "none".
+ * two were never the same field. The cards are the host's (`personas` target, the id is the card's
+ * name), and `""` is "the project's default", which is a card too, so the field lists it as the
+ * first choice rather than as "none". It is saved with the rest of the form.
  */
 function PersonaSelect({
   value,
@@ -368,29 +285,19 @@ function PersonaSelect({
     "chat",
     "common",
   ] as const);
-  const { data: cards } = usePersonas();
-  const agentId = useWorkspaceStore((s) => s.agentEditor.agentId);
+  const cards = usePersonas();
   return (
     <Select
+      id="agent-persona"
       className="w-full"
       aria-invalid={invalid}
       value={value}
-      onValueChange={(next) => {
-        onChange(next);
-        // An existing agent saves immediately: the card is what the *next* run reads, and a
-        // save button on a single dropdown is a save button nobody pressed.
-        if (agentId !== null)
-          fetch(`/api/v1/agents/${agentId}/persona`, {
-            method: "PUT",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ persona: next }),
-          }).catch(() => undefined);
-      }}
+      onValueChange={onChange}
     >
       <SelectOption value="">
         {translateText("agents:persona.default")}
       </SelectOption>
-      {(cards ?? []).map((card) => (
+      {cards.map((card) => (
         <SelectOption key={card.id} value={card.id}>
           {card.name}
           <span className="ml-1 text-muted-foreground">

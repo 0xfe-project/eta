@@ -3,6 +3,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { Markdown } from "@/components/markdown";
+import { setWire } from "@/lib/wire";
+import {
+  agentView,
+  conversationView,
+  memberView,
+  messageView,
+  productHost,
+} from "@/test-product";
 import { GroupNotice } from "./group-notice";
 import { PendingStrip } from "./pending-strip";
 
@@ -23,9 +31,6 @@ rstest.mock("./use-groups", () => ({
   useGroups: () => ({ groups: [], current: undefined }),
   useOpenGroup: () => () => undefined,
 }));
-rstest.mock("@/queries/groups", () => ({
-  useGroupActions: () => ({ member: { mutate: () => {}, isPending: false } }),
-}));
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -36,7 +41,10 @@ async function render(node: React.ReactNode) {
   const client = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
   });
-  client.setQueryData(["chat"], { groups: [], agents: [], interactions: [] });
+  productHost({
+    agents: [agentView({ id: "a1", name: "乐子人" })],
+    conversations: [],
+  });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -54,6 +62,7 @@ async function render(node: React.ReactNode) {
 
 afterEach(async () => {
   await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
+  setWire(undefined);
 });
 
 /** Every failure React reports goes through here; the one we chase says "unique key". */
@@ -74,39 +83,31 @@ async function warningsFrom(node: React.ReactNode): Promise<string[]> {
 
 describe("列表的 key", () => {
   it("系统消息一行一个，没有 key 就会在这里被抓到", async () => {
-    const message = {
-      id: "m1",
+    const message = messageView({
+      conversationId: "g1",
       kind: "system",
-      data: {},
-      blocks: [],
-      created_at: "2026-10-17T00:00:00Z",
-    };
-    expect(
-      await warningsFrom(<GroupNotice message={message as never} />),
-    ).toEqual([]);
+      author: "system",
+      text: "x",
+    });
+    expect(await warningsFrom(<GroupNotice message={message} />)).toEqual([]);
   });
 
   it("待处理条里多条也都有 key", async () => {
-    const interaction = (id: string) => ({
+    const question = (id: string) => ({
       id,
-      agent_id: "a1",
-      group_id: "g1",
-      message_id: "m1",
-      kind: "choice" as const,
-      answer: null,
+      conversationId: "g1",
+      agentId: "a1",
+      sessionId: `s-${id}`,
       prompt: "p",
-      options: [{ value: "allow", label: "允许" }],
-      status: "pending" as const,
-      revision: 1,
-      created_at: "2026-10-17T00:00:00Z",
-      updated_at: "2026-10-17T00:00:00Z",
+      options: ["允许"],
+      multi: false,
     });
     expect(
       await warningsFrom(
         <PendingStrip
-          interactions={[interaction("i1"), interaction("i2")]}
+          questions={[question("i1"), question("i2")]}
           agents={[{ id: "a1", name: "A" }]}
-          onAnswer={() => {}}
+          onChoose={() => {}}
         />,
       ),
     ).toEqual([]);
@@ -114,91 +115,47 @@ describe("列表的 key", () => {
 });
 
 describe("chat 页里成排出现的东西", () => {
-  it("一页里的多条消息、每条里的多个块、以及附件块", async () => {
+  it("一页里的多条消息、每条里的多个块", async () => {
     const { ChatPanel } = await import("./chat-panel");
-    const message = (id: string, role: "user" | "assistant", seq: number) => ({
-      id,
-      group_id: "g1",
-      seq,
-      kind: "message",
-      data: {},
-      agent_id: role === "user" ? null : "a1",
-      role,
-      reply_to_id: null,
-      status: "done",
-      revision: 1,
-      blocks:
-        role === "user"
-          ? [
-              { id: `${id}-t`, type: "text", text: "看这个" },
-              {
-                id: `${id}-a`,
-                type: "attachment",
-                attachment: {
-                  id: "f1",
-                  name: "a.txt",
-                  content_type: "text/plain",
-                  size: 3,
-                },
-              },
-            ]
-          : [
-              { id: `${id}-th`, type: "thinking", text: "先看看", chars: 3 },
-              { id: `${id}-t`, type: "text", text: "好" },
-              {
-                id: `${id}-k`,
-                type: "activity",
-                name: "bash",
-                status: "completed",
-                input: { command: "ls" },
-                output: "a.txt",
-              },
-            ],
-      failure: null,
-      created_at: "2026-10-17T00:00:00Z",
-    });
+    const message = (author: "user" | "agent", seq: number) =>
+      messageView({
+        id: `m${seq}`,
+        conversationId: "g1",
+        seq,
+        author,
+        agentId: author === "agent" ? "a1" : null,
+        text: author === "agent" ? "好" : "看这个",
+        thinking: author === "agent" ? "先看看" : "",
+      });
     expect(
       await warningsFrom(
         <ChatPanel
           groupId="g1"
           groupName="装配"
-          group={
-            {
-              id: "g1",
-              name: "装配",
-              kind: "group",
-              participants: [
-                {
-                  agent_id: "a1",
-                  name: "乐子人",
-                  member: true,
-                  status: "idle",
-                },
-              ],
-            } as never
-          }
-          agents={[{ id: "a1", name: "乐子人" } as never]}
-          activeReplies={[]}
-          messages={
-            [
-              message("m1", "user", 1),
-              message("m2", "assistant", 2),
-              message("m3", "user", 3),
-            ] as never
-          }
+          group={conversationView({
+            id: "g1",
+            name: "装配",
+            participants: [memberView("a1")],
+          })}
+          agents={[agentView({ id: "a1", name: "乐子人" })]}
+          messages={[
+            message("user", 1),
+            message("agent", 2),
+            message("user", 3),
+          ]}
           loading={false}
           hasOlder={false}
           loadingOlder={false}
           onLoadOlder={() => {}}
-          interactions={[]}
+          questions={[]}
           draft={[]}
           onDraftChange={() => {}}
-          onFiles={() => []}
           onSend={() => {}}
           onCompact={() => {}}
           onStop={() => {}}
           onStopAll={() => {}}
-          onAnswer={() => {}}
+          onChoose={() => {}}
+          onAbort={() => {}}
           onGoal={async () => undefined}
           outgoing={[]}
           onRetry={() => {}}

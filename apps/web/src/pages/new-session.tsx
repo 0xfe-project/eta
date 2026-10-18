@@ -1,22 +1,27 @@
+import type { ProjectChoice } from "@/components/workspace/use-project-choice";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { AgentAvatar } from "@/components/workspace/agent-identity";
+import { ProjectField } from "@/components/workspace/project-field";
 import { useAgents } from "@/components/workspace/use-agents";
-import { useGroupActions } from "@/queries/groups";
+import {
+  useChosenProject,
+  useResolveProject,
+} from "@/components/workspace/use-project-choice";
+import { useConversationActions } from "@/queries/conversations";
 
 /**
- * Starting a conversation, without building a group first.
+ * Starting a conversation: a project and an agent.
  *
- * "Talk to this agent about this folder" is the smallest thing a person can want, and it used to
- * take three steps: make a group, name it, invite the agent. A conversation with one member is the
- * same shape underneath (a group with one participant), so the shortcut is honest: the form makes
- * exactly that, and the result shows up in the sidebar under its folder like any other.
+ * The project is one of the existing ones, or a path to add (adding a path that is already a
+ * project returns that project, so the form never asks twice). A project made here takes the agent
+ * as its steward, because a conversation with nobody to take its first message is a room nobody
+ * answers in. The result shows up in the sidebar under its project like any other.
  *
- * Nothing is asked that has a reasonable default: the folder defaults to the one you were last in,
- * and the agent list is the same one the sidebar shows.
+ * Nothing is asked that has a reasonable default: the project is the one the sidebar's "+" was
+ * pressed on, else the first, and the agent list is the same one the sidebar shows.
  */
 export function NewSessionPage() {
   const { t: translateText } = useTranslation([
@@ -26,31 +31,35 @@ export function NewSessionPage() {
   ] as const);
   const navigate = useNavigate();
   const { agents, loaded } = useAgents();
-  const { direct } = useGroupActions();
-  // The sidebar's per-folder "+" hands the folder over in the URL.
-  const search = useSearch({ strict: false }) as { cwd?: string };
+  const { create } = useConversationActions();
+  const resolver = useResolveProject();
+  // The sidebar's per-project "+" hands the project over in the URL.
+  const search = useSearch({ strict: false }) as { project?: string };
   const [agentId, setAgentId] = useState<string | undefined>(undefined);
-  const [cwd, setCwd] = useState(search.cwd ?? "");
+  const [choice, setChoice] = useState<ProjectChoice>({
+    projectId: search.project,
+    path: "",
+  });
+  const { project, adding } = useChosenProject(choice);
   const [failed, setFailed] = useState("");
+  const chosen = agentId ?? agents[0]?.id;
 
-  const start = () => {
-    const chosen = agentId ?? agents[0]?.id;
+  const start = async () => {
     if (chosen === undefined) return;
     setFailed("");
-    direct.mutate(
-      {
-        agentId: chosen,
-        ...(cwd.trim().length === 0 ? {} : { cwd: cwd.trim() }),
-      },
-      {
-        onSuccess: (group) =>
-          void navigate({
-            to: "/",
-            search: { group: group.id, view: "context" },
-          }),
-        onError: (error: Error) => setFailed(error.message),
-      },
-    );
+    try {
+      const target = await resolver.resolve(choice, project, chosen);
+      const { conversation } = await create.mutateAsync({
+        projectId: target.id,
+        agentIds: [chosen],
+      });
+      void navigate({
+        to: "/",
+        search: { group: conversation.id, view: "context" },
+      });
+    } catch (error) {
+      setFailed((error as Error).message);
+    }
   };
 
   return (
@@ -61,19 +70,7 @@ export function NewSessionPage() {
       <p className="text-xs text-muted-foreground">
         {translateText("chat:new.hint")}
       </p>
-      <label className="grid gap-1 text-sm">
-        {translateText("chat:new.folder")}
-        <Input
-          value={cwd}
-          onChange={(event) => setCwd(event.target.value)}
-          placeholder={translateText("chat:groups.fields.cwdPlaceholder")}
-          spellCheck={false}
-          className="font-mono"
-        />
-        <span className="text-xs text-muted-foreground">
-          {translateText("chat:new.folderHint")}
-        </span>
-      </label>
+      <ProjectField choice={choice} onChange={setChoice} />
       <fieldset className="grid gap-1">
         <legend className="mb-1 text-sm">
           {translateText("chat:new.agent")}
@@ -82,11 +79,11 @@ export function NewSessionPage() {
           <p className="text-xs text-muted-foreground">…</p>
         ) : (
           <ul className="max-h-72 overflow-y-auto border border-border">
-            {agents.map((agent: { id: string; name: string }) => (
+            {agents.map((agent) => (
               <li key={agent.id}>
                 <button
                   type="button"
-                  aria-pressed={(agentId ?? agents[0]?.id) === agent.id}
+                  aria-pressed={chosen === agent.id}
                   onClick={() => setAgentId(agent.id)}
                   className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm hover:bg-muted aria-pressed:bg-muted"
                 >
@@ -105,8 +102,13 @@ export function NewSessionPage() {
       ) : null}
       <div className="flex items-center gap-2">
         <Button
-          onClick={start}
-          disabled={direct.isPending || agents.length === 0}
+          onClick={() => void start()}
+          disabled={
+            create.isPending ||
+            resolver.pending ||
+            agents.length === 0 ||
+            (adding && choice.path.trim().length === 0)
+          }
         >
           {translateText("chat:new.start")}
         </Button>

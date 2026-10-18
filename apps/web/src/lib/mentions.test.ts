@@ -3,8 +3,8 @@ import { en, zh } from "@/locales/resources";
 import { mentionedMembers } from "./mentions";
 
 const members = [
-  { agent_id: "a", name: "Aria" },
-  { agent_id: "b", name: "Bolt" },
+  { id: "a", name: "Aria" },
+  { id: "b", name: "Bolt" },
 ];
 describe("group recipients", () => {
   it("keeps explicit mention order, deduplicates, and leaves plain messages as context", () => {
@@ -24,13 +24,13 @@ describe("group recipients", () => {
   it("handles spaces and punctuation in names, and disambiguates duplicate names", () => {
     expect(
       mentionedMembers("@Foo Bar @C++ 请审阅", [
-        { agent_id: "x", name: "Foo Bar" },
-        { agent_id: "y", name: "C++" },
+        { id: "x", name: "Foo Bar" },
+        { id: "y", name: "C++" },
       ]),
     ).toEqual(["x", "y"]);
     const same = [
-      { agent_id: "123456-a", name: "助手" },
-      { agent_id: "654321-b", name: "助手" },
+      { id: "123456-a", name: "助手" },
+      { id: "654321-b", name: "助手" },
     ];
     expect(mentionedMembers("@助手 看看", same)).toEqual([]);
     expect(mentionedMembers("@助手·654321 看看", same)).toEqual(["654321-b"]);

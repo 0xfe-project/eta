@@ -5,16 +5,16 @@ import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { DialogFooter } from "@/components/ui/dialog";
-import { useBundles, useCreateAgent } from "@/queries/chat";
+import { useCreateAgent } from "@/queries/agents";
 import { useModels } from "@/queries/providers";
 import {
-  BundlesField,
   InstructionsField,
   ModelField,
   NameField,
+  PersonaField,
+  ThinkingField,
 } from "./agent-fields";
 import { agentDraft, agentFormSchema } from "./agent-form";
 import { Stepper } from "./stepper";
@@ -24,10 +24,9 @@ import { useWorkspaceStore } from "./workspace-store";
 const steps = [
   "agents:createWizard.nameAndModel",
   "agents:editor.tabs.instructions",
-  "bundles:title",
 ] as const;
 // The fields each step checks before moving on.
-const stepFields = [["name", "model"], ["description"], ["bundles"]] as const;
+const stepFields = [["name", "model"], ["description"]] as const;
 const last = steps.length - 1;
 
 /**
@@ -38,7 +37,6 @@ const last = steps.length - 1;
 export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
   const { t: translateText } = useTranslation([
     "agents",
-    "bundles",
     "common",
     "validation",
   ] as const);
@@ -47,7 +45,6 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const { data: models } = useModels();
-  const { data: bundles } = useBundles();
   const usable = (models ?? []).filter((model) => model.available);
   const create = useCreateAgent();
   const [step, setStep] = useState(0);
@@ -61,8 +58,8 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
       name: "",
       description: "",
       model: "",
-      bundles: null,
       persona: "",
+      thinkingLevel: "",
     },
   });
   const model = form.watch("model");
@@ -116,11 +113,9 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
       setWorkspace((state) => ({ ...state, lastModel: values.model }));
     }
     create.mutate(agentDraft(values), {
-      onSuccess: (created) => {
-        select(created.id);
-        toast.success(
-          translateText("feedback.created", { name: created.name }),
-        );
+      onSuccess: ({ agent }) => {
+        select(agent.id);
+        toast.success(translateText("feedback.created", { name: agent.name }));
         onDone();
       },
       onError: (error) => setFailure(error.message),
@@ -153,9 +148,8 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
               models={models}
               onOpenProviders={openProviders}
             />
+            <ThinkingField form={form} />
           </>
-        ) : step === 1 ? (
-          <InstructionsField form={form} autoFocus />
         ) : (
           <>
             {failure ? (
@@ -172,15 +166,8 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
                 </span>
               </p>
             ) : null}
-            {!bundles ? (
-              <Loading layout="lines" />
-            ) : bundles.length ? (
-              <BundlesField form={form} bundles={bundles} autoFocus />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                {translateText("createWizard.noBundles")}
-              </p>
-            )}
+            <InstructionsField form={form} autoFocus />
+            <PersonaField form={form} />
           </>
         )}
       </div>

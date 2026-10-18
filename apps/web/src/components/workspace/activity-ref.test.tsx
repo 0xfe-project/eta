@@ -1,5 +1,4 @@
-import type { ActivityOperation, ActivityRef } from "@/api/control-plane.gen";
-import type { Block, ChatMessage } from "@/queries/chat";
+import type { ActivityRef } from "@/api/control-plane.gen";
 import { afterEach, describe, expect, it } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -11,23 +10,15 @@ import {
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { ChatPanel } from "./chat-panel";
+import { ActivityRefCard } from "./activity-ref";
 
-// A tool call that made or touched one thing links to it from a card under
-// its Claude line; the line keeps the call's details.
+// A thing a task, a routine, a pull request or an artifact points at links to it from a card; the
+// right panel's task, routine and artifact blocks draw them.
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 const g = globalThis as Record<string, unknown>;
-g.ResizeObserver ??= class {
-  observe() {}
-  disconnect() {}
-};
-g.IntersectionObserver ??= class {
-  observe() {}
-  disconnect() {}
-};
 
 const task: ActivityRef = {
   kind: "task",
@@ -36,61 +27,14 @@ const task: ActivityRef = {
   title: "整理 Q4 发布说明",
   status: "todo",
 };
-function activity(fields: Partial<Block> & { status: string }): Block {
-  return {
-    id: `a-${Math.random()}`,
-    type: "activity",
-    label: "调用工具",
-    name: "tasks.create_task",
-    input: '{"title":"整理 Q4 发布说明"}',
-    ...fields,
-  } as Block;
-}
-function reply(blocks: Block[]): ChatMessage {
-  return {
-    id: "00000000-0000-0000-0001-000000000001",
-    agent_id: "a",
-    group_id: "g",
-    seq: 1,
-    kind: "message",
-    data: {},
-    role: "assistant",
-    reply_to_id: null,
-    status: "completed",
-    revision: 1,
-    blocks,
-    failure: null,
-    created_at: "2026-10-11T00:00:00Z",
-  };
-}
 
-async function mount(blocks: Block[], { path = "/" } = {}) {
+async function mount(refs: ActivityRef[], { path = "/" } = {}) {
   const ui = () => (
-    <ChatPanel
-      agents={[]}
-      activeReplies={[]}
-      groupId="a"
-      groupName="助手"
-      messages={[reply(blocks)]}
-      hasOlder={false}
-      loadingOlder={false}
-      onLoadOlder={() => {}}
-      interactions={[]}
-      draft={[]}
-      onFiles={() => []}
-      onDraftChange={() => {}}
-      onSend={() => {}}
-      outgoing={[]}
-      onRetry={() => {}}
-      onEdit={() => {}}
-      onDiscard={() => {}}
-      onResend={() => {}}
-      onCompact={() => {}}
-      onStopAll={() => {}}
-      onStop={() => {}}
-      onAnswer={() => {}}
-      onGoal={async () => {}}
-    />
+    <div role="log">
+      {refs.map((value, index) => (
+        <ActivityRefCard key={index} value={value} />
+      ))}
+    </div>
   );
   const router = createRouter({
     routeTree: createRootRoute({
@@ -123,11 +67,8 @@ describe("activity ref cards", () => {
     document.body.innerHTML = "";
   });
 
-  it(`opens the task beside the chat (Claude)`, async () => {
-    const { container } = await mount(
-      [activity({ status: "completed", ref: task })],
-      {},
-    );
+  it("opens the task beside the chat", async () => {
+    const { container } = await mount([task]);
     expect(cards(container)).toEqual([
       {
         href: "/?view=tasks&task=t1",
@@ -135,17 +76,12 @@ describe("activity ref cards", () => {
         text: "#16 整理 Q4 发布说明待办",
       },
     ]);
-    // The call's line is still there to expand, apart from the card.
-    expect(container.querySelector("details summary")?.textContent).toContain(
-      "tasks.create_task",
-    );
   });
 
   it("opens it on its page in the full-window workspace", async () => {
-    const { container, router } = await mount(
-      [activity({ status: "completed", ref: task })],
-      { path: "/workspace/inbox" },
-    );
+    const { container, router } = await mount([task], {
+      path: "/workspace/inbox",
+    });
     expect(cards(container)[0].href).toBe("/workspace/tasks?task=t1");
     await act(async () => {
       container.querySelector<HTMLAnchorElement>('[role="log"] a')!.click();
@@ -157,21 +93,13 @@ describe("activity ref cards", () => {
 
   it("links routines and pull requests", async () => {
     const { container } = await mount([
-      activity({
-        status: "completed",
-        name: "routines.create_routine",
-        ref: { kind: "routine", id: "r1", title: "日报" },
-      }),
-      activity({
-        status: "completed",
-        name: "github.open_pull_request",
-        ref: {
-          kind: "pull_request",
-          number: 7,
-          title: "Add cards",
-          url: "https://github.com/akarachen/eta/pull/7",
-        },
-      }),
+      { kind: "routine", id: "r1", title: "日报" },
+      {
+        kind: "pull_request",
+        number: 7,
+        title: "Add cards",
+        url: "https://github.com/akarachen/eta/pull/7",
+      },
     ]);
     expect(cards(container)).toEqual([
       {
@@ -191,11 +119,7 @@ describe("activity ref cards", () => {
     const url =
       "https://github.com/akarachen/eta/issues/new?body=%E5%9D%8F%E4%BA%86&title=%E5%8D%A1%E7%89%87%E9%94%99%E4%BD%8D";
     const { container } = await mount([
-      activity({
-        status: "completed",
-        name: "github.draft_issue",
-        ref: { kind: "issue_draft", title: "卡片错位", url },
-      }),
+      { kind: "issue_draft", title: "卡片错位", url },
     ]);
     expect(cards(container)).toEqual([
       {
@@ -218,16 +142,12 @@ describe("activity ref cards", () => {
       value: { writeText: async (text: string) => void copied.push(text) },
     });
     const { container } = await mount([
-      activity({
-        status: "completed",
-        name: "github.draft_issue",
-        ref: {
-          kind: "issue_draft",
-          title: "长",
-          body: "很长的正文",
-          url: "https://github.com/akarachen/eta/issues/new?title=%E9%95%BF",
-        },
-      }),
+      {
+        kind: "issue_draft",
+        title: "长",
+        body: "很长的正文",
+        url: "https://github.com/akarachen/eta/issues/new?title=%E9%95%BF",
+      },
     ]);
     const copy = container.querySelector<HTMLButtonElement>(
       '[role="log"] button[aria-label^="正文太长"]',
@@ -260,11 +180,7 @@ describe("activity ref cards", () => {
       });
     };
     const { container } = await mount([
-      activity({
-        status: "completed",
-        name: "artifacts.publish_artifact",
-        ref: { kind: "artifact", id, number: 1, title: "季度报告" },
-      }),
+      { kind: "artifact", id, number: 1, title: "季度报告" },
     ]);
     const card = container.querySelector<HTMLButtonElement>(
       '[role="log"] button[aria-label^="打开 Artifact"]',
@@ -289,142 +205,5 @@ describe("activity ref cards", () => {
     expect(download?.getAttribute("href")).toBe(
       `/api/v1/artifacts/${id}/versions/1/archive`,
     );
-  });
-
-  it("links nothing without a ref, or before the call completes", async () => {
-    const { container } = await mount([
-      activity({ status: "completed" }), // list results, history, unknown tools
-      activity({ status: "running", ref: task }),
-      activity({ status: "failed", ref: task }),
-    ]);
-    expect(cards(container)).toEqual([]);
-    expect(container.querySelectorAll("details")).toHaveLength(3);
-  });
-});
-
-// An agenvo script's workspaces and worktrees, read from the native calls
-// it made: one card each, telling done from accepted, refused and unknown.
-const worktree: ActivityOperation = {
-  action: "create_worktree",
-  status: "completed",
-  runtime: "paseo",
-  computer: "办公室 Mac",
-  id: "wks_1",
-  name: "修复登录",
-  project: "eta",
-  path: "/home/u/.paseo/worktrees/eta/feat-x",
-  branch: "feat/x",
-  base: "main",
-};
-const execute = (fields: {
-  status: string;
-  operations?: ActivityOperation[];
-}) =>
-  activity({
-    name: "agenvo.execute",
-    input: '{"code":"return await call(…)"}',
-    ...fields,
-  } as Partial<Block> & { status: string });
-const operationCards = (c: HTMLElement) =>
-  [...c.querySelectorAll<HTMLButtonElement>('[role="log"] li > button')].map(
-    (b) => b.getAttribute("aria-label"),
-  );
-
-describe("activity operation cards", () => {
-  afterEach(() => {
-    document.body.innerHTML = "";
-  });
-
-  it(`shows what a script made, where (Claude)`, async () => {
-    const { container } = await mount(
-      [execute({ status: "completed", operations: [worktree] })],
-      {},
-    );
-    expect(operationCards(container)).toEqual([
-      "创建 worktree：修复登录，已创建（办公室 Mac · Paseo）",
-    ]);
-    const card = container.querySelector('[role="log"] li > button')!;
-    expect(card.textContent).toBe(
-      "创建 worktree 修复登录已创建办公室 Mac · Paseo · eta · feat/x ← main/home/u/.paseo/worktrees/eta/feat-x",
-    );
-    // It links nowhere, and the script's line still expands on its own.
-    expect(container.querySelector('[role="log"] a')).toBeNull();
-    expect(container.querySelector("details summary")?.textContent).toContain(
-      "agenvo.execute",
-    );
-  });
-
-  it("tells each call of a script apart, a failed one's too", async () => {
-    const { container } = await mount([
-      execute({
-        status: "failed",
-        operations: [
-          worktree,
-          {
-            action: "add_project",
-            status: "unknown",
-            runtime: "paseo",
-            computer: "办公室 Mac",
-            path: "/home/u/new",
-            error: "native_error: Paseo creation failed: timed out",
-          },
-          {
-            action: "create_workspace",
-            status: "accepted",
-            runtime: "paseo",
-            path: "/home/u/p",
-          },
-          {
-            action: "create_worktree",
-            status: "failed",
-            runtime: "herdr",
-            computer: "办公室 Mac",
-            branch: "feat/x",
-            error: "worktree_create_failed: fatal: already exists",
-          },
-          {
-            action: "open_worktree",
-            status: "completed",
-            runtime: "herdr",
-            name: "repo",
-          },
-        ],
-      }),
-    ]);
-    expect(operationCards(container)).toEqual([
-      "创建 worktree：修复登录，已创建（办公室 Mac · Paseo）",
-      "添加项目：/home/u/new，结果未确认（办公室 Mac · Paseo）",
-      "创建工作区：/home/u/p，已受理，未确认完成（Paseo）",
-      "创建 worktree，失败（办公室 Mac · Herdr）",
-      "打开 worktree：repo，已打开（Herdr）",
-    ]);
-    const failed = container.querySelectorAll('[role="log"] li > button')[3];
-    expect(failed.textContent).toContain("worktree_create_failed");
-    expect(failed.className).toContain("border-dashed");
-  });
-
-  it("unfolds a card to show every field whole", async () => {
-    const { container } = await mount([
-      execute({ status: "completed", operations: [worktree] }),
-    ]);
-    const card = container.querySelector<HTMLButtonElement>(
-      '[role="log"] li > button',
-    )!;
-    expect(card.getAttribute("aria-expanded")).toBe("false");
-    expect(card.textContent).not.toContain("wks_1");
-    await act(async () => card.click());
-    expect(card.getAttribute("aria-expanded")).toBe("true");
-    expect(card.textContent).toContain("ID wks_1");
-    expect(card.querySelector(".truncate")).toBeNull();
-  });
-
-  it("shows nothing for older history, other calls, or while running", async () => {
-    const { container } = await mount([
-      execute({ status: "completed" }),
-      execute({ status: "running", operations: [worktree] }),
-      execute({ status: "completed", operations: [] }),
-    ]);
-    expect(operationCards(container)).toEqual([]);
-    expect(container.querySelectorAll("details")).toHaveLength(3);
   });
 });

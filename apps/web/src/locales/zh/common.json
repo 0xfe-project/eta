@@ -18,7 +18,8 @@
     "storageUnavailable": "无法保存到当前浏览器，请保持页面打开以保留内容。",
     "requestFailed": "请求失败，请稍后再试。",
     "disconnected": "与宿主的连接已断开。",
-    "timeout": "宿主没有及时回应。"
+    "timeout": "宿主没有及时回应。",
+    "pluginMissing": "宿主没有加载 {{name}}。"
   },
   "actions": {
     "retry": "重试",

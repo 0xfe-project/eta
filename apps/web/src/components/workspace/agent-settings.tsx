@@ -1,5 +1,4 @@
-import type { Agent } from "@/queries/chat";
-import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
+import type { AgentView } from "@eta/client-contracts";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
@@ -8,7 +7,6 @@ import { TrashIcon } from "@phosphor-icons/react/Trash";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,18 +17,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { useRestartAgent } from "@/queries/chat";
 import { useModelAvailability } from "@/queries/providers";
 import { DeleteAgentDialog } from "./agent-editor";
 import { AgentAvatar, AgentStatus } from "./agent-identity";
 import { useAgents } from "./use-agents";
 
-function AgentRow({ agent }: { agent: Agent }) {
+function AgentRow({ agent }: { agent: AgentView }) {
   const { t: translateText } = useTranslation(["agents", "common"] as const);
   const { openEditor } = useAgents();
-  const restart = useRestartAgent();
   const [confirming, setConfirming] = useState(false);
-  const instructions = agent.description.trim();
+  const instructions = agent.instructions.trim();
   const availability = useModelAvailability(agent);
   const modelName =
     availability.state === "not_set"
@@ -103,21 +99,6 @@ function AgentRow({ agent }: { agent: Agent }) {
             <PencilSimpleIcon aria-hidden="true" />
             {translateText("common:actions.edit")}
           </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={restart.isPending}
-            onSelect={() =>
-              restart.mutate(agent.id, {
-                onSuccess: () =>
-                  toast.success(
-                    translateText("feedback.restarted", { name: agent.name }),
-                  ),
-                onError: (error) => toast.error(error.message),
-              })
-            }
-          >
-            <ArrowClockwiseIcon aria-hidden="true" />
-            {translateText("common:actions.restart")}
-          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"
@@ -139,15 +120,11 @@ function AgentRow({ agent }: { agent: Agent }) {
 
 export function AgentSettings() {
   const { t: translateText } = useTranslation(["agents", "common"] as const);
-  const { agents, loaded, error, retry, openEditor } = useAgents();
+  const { agents, loaded, error, openEditor } = useAgents();
 
   if (error && !loaded)
     return (
-      <LoadError
-        what={translateText("common:entities.agents")}
-        error={error}
-        onRetry={retry}
-      />
+      <LoadError what={translateText("common:entities.agents")} error={error} />
     );
   if (!loaded) return <Loading />;
   if (agents.length === 0)

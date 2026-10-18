@@ -1,8 +1,8 @@
-import type { Draft, FilePart } from "@/lib/composer";
+import type { Draft } from "@/lib/composer";
 import { afterEach, describe, expect, it } from "@rstest/core";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { LONG_PASTE, MAX_MESSAGE_CHARS, pasteFileName } from "@/lib/composer";
+import { LONG_PASTE } from "@/lib/composer";
 import { ComposerEditor } from "./composer-editor";
 
 (
@@ -10,30 +10,17 @@ import { ComposerEditor } from "./composer-editor";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 let draft: Draft = [];
-let pastedFiles: File[] = [];
 
 async function render(value: Draft = []) {
   draft = value;
-  pastedFiles = [];
   const container = document.createElement("div");
   document.body.append(container);
-  const onFiles = (files: File[]): FilePart[] => {
-    pastedFiles.push(...files);
-    return files.map((file, i) => ({
-      type: "file",
-      id: `f${i}`,
-      name: file.name,
-      contentType: file.type,
-      size: file.size,
-    }));
-  };
   await act(async () => {
     createRoot(container).render(
       <ComposerEditor
         value={value}
         onChange={(next) => (draft = next)}
         onKeyDown={() => {}}
-        onFiles={onFiles}
         placeholder="发消息"
       />,
     );
@@ -96,39 +83,12 @@ describe("pasting into the composer", () => {
     expect(editor.querySelector("img, script, b")).toBeNull();
   });
 
-  it("turns files into blocks, ignoring their other representations", async () => {
+  it("leaves a pasted file alone: the host has nowhere to put an attachment", async () => {
     const editor = await render();
     const shot = new File(["png"], "image.png", { type: "image/png" });
     await paste(editor, { "text/html": '<img src="blob:x">' }, [shot]);
-    expect(pastedFiles).toEqual([shot]);
-    expect(draft).toEqual([
-      {
-        type: "file",
-        id: "f0",
-        name: "image.png",
-        contentType: "image/png",
-        size: 3,
-      },
-    ]);
-  });
-
-  it("takes copied cells as text, not the picture beside them", async () => {
-    const editor = await render();
-    await paste(
-      editor,
-      { "text/plain": "a\tb", "text/html": "<table></table>" },
-      [new File(["png"], "image.png", { type: "image/png" })],
-    );
-    expect(pastedFiles).toEqual([]);
-  });
-
-  it("sends text too long for a message as a file", async () => {
-    const editor = await render();
-    await paste(editor, { "text/plain": "x".repeat(MAX_MESSAGE_CHARS + 1) });
-    expect(pastedFiles.map((f) => [f.name, f.size])).toEqual([
-      [pasteFileName(), MAX_MESSAGE_CHARS + 1],
-    ]);
-    expect(draft.map((p) => p.type)).toEqual(["file"]);
+    expect(draft).toEqual([]);
+    expect(editor.querySelector("img")).toBeNull();
   });
 
   it("shows a draft set from outside, blocks and line breaks included", async () => {

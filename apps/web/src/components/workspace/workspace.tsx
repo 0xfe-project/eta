@@ -1,37 +1,30 @@
 import type { WorkspaceView } from "./types";
 
-import type { Draft } from "@/lib/composer";
-import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { draftText, EMPTY_DRAFT, partsText } from "@/lib/composer";
-import { listSeparator } from "@/lib/i18n";
+import { draftText, EMPTY_DRAFT } from "@/lib/composer";
 import { mentionedMembers } from "@/lib/mentions";
 import { cn } from "@/lib/utils";
+import { agentName } from "@/queries/agents";
 import {
-  chatQueryOptions,
-  useAnswerInteraction,
-  useCompact,
-  useGroupMessages,
-  usePendingInteractions,
-  useSetGoal,
-  useStopReply,
-} from "@/queries/chat";
-import { useGroupActions } from "@/queries/groups";
+  useConversation,
+  useConversationActions,
+} from "@/queries/conversations";
 import {
-  upload,
   useOutbox,
   useOutboxActions,
   useOutboxDelivery,
 } from "@/queries/outbox";
+import { useProjects } from "@/queries/projects";
+import { useAnswerQuestion, useQuestions } from "@/queries/questions";
+import { useSessionActions } from "@/queries/sessions";
 import { useConnectionLost } from "@/queries/wire";
 import { ChatHeader, MobileChatHeader } from "./agent-bar";
 import { AgentEditor } from "./agent-editor";
 import { BottomNav } from "./app-shell";
 import { ChatPanel, ComposerNotice } from "./chat-panel";
-import { UnboundFolderNotice } from "./folder-notice";
 import { GroupList } from "./groups";
 import { usePaneWidth } from "./pane";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
@@ -75,38 +68,42 @@ export function Workspace({
   });
   const navigate = useNavigate();
   useShowLinkedView();
-  const chat = useQuery(chatQueryOptions());
-  const waiting = usePendingInteractions();
+  const questions = useQuestions();
   const { agents, openEditor } = useAgents();
-  const { current: group, groupId, groups } = useGroups();
-  const history = useGroupMessages(group?.id);
+  const { current: group, groupId } = useGroups();
+  const conversation = useConversation(group?.id);
+  const { projects } = useProjects();
+  const project = projects.find(
+    (candidate) => candidate.id === group?.projectId,
+  );
   const connectionLost = useConnectionLost();
   const draftKey = group?.id ?? "";
   const draft = useOutbox((s) => s.drafts[draftKey] ?? EMPTY_DRAFT);
-  const setDraft = (next: Draft) =>
+  const setDraft = (next: typeof draft) =>
     useOutbox.getState().setDraft(draftKey, next);
   const allOutgoing = useOutbox((s) => s.outgoing);
   const arrived = useMemo(
-    () => new Set<string>(history.messages.map((m: { id: string }) => m.id)),
-    [history.messages],
+    () => new Set<string>(conversation.messages.map((m) => m.id)),
+    [conversation.messages],
   );
   useOutboxDelivery(arrived);
   const outbox = useOutboxActions();
   const outgoing = allOutgoing.filter(
-    (o) => o.groupId === group?.id && !arrived.has(o.id),
+    (o) => o.conversationId === group?.id && !arrived.has(o.id),
   );
-  const members = group?.participants.filter((p) => p.member) ?? [];
-  const targets = (text: string) => {
-    const ids = mentionedMembers(text, members);
-    return ids.length ? ids : members.length === 1 ? [members[0].agent_id] : [];
-  };
-  const selectedTargets = targets(draftText(draft));
-  const unavailable = selectedTargets
-    .map((id) => agents.find((a) => a.id === id))
-    .filter((a) => a && !a.model);
-  const compact = useCompact();
-  const stopReply = useStopReply();
-  const setGoal = useSetGoal();
+  const members = group?.participants ?? [];
+  // Who the text names. Naming nobody is a message for the steward, which the host decides.
+  const targets = (text: string) =>
+    mentionedMembers(
+      text,
+      members.map((member) => ({
+        id: member.agentId,
+        name: agentName(agents, member.agentId),
+      })),
+    );
+  const { stop, read } = useConversationActions();
+  const { compact, goal: setGoal } = useSessionActions();
+  const { choose, abort } = useAnswerQuestion();
   // Narrowing the chat to one member: the state lives in the store, because the sidebar's member
   // rows and the panel's member cards are the same action. It resets when the conversation does.
   const focusAgent = useWorkspaceStore((s) => s.focusedAgentId);
@@ -115,12 +112,15 @@ export function Workspace({
   // Which session a goal set from the composer lands on: the member being talked to, or the first
   // one that has a conversation. A group has one goal per member; the composer speaks for the one
   // you are addressing.
-  const goalSessionId: string | undefined =
-    (members.find((p: { session_id?: string | null }) => p.session_id)
-      ?.session_id as string | undefined) ?? undefined;
-  const answer = useAnswerInteraction();
-  const actions = useGroupActions();
+  const sessionOf = (agentId: string | undefined) =>
+    members.find((member) => member.agentId === agentId)?.sessionId ??
+    undefined;
+  const goalSessionId =
+    (targets(draftText(draft)).map(sessionOf).find(Boolean) ??
+      members.find((member) => member.sessionId !== null)?.sessionId) ||
+    undefined;
   const onError = (error: Error) => toast.error(error.message);
+  const { update } = useConversationActions();
   const blocked = group?.archived ? (
     <ComposerNotice
       message={translateText("chat:notices.groupArchived")}
@@ -128,8 +128,8 @@ export function Workspace({
         {
           label: translateText("chat:groups.actions.unarchive"),
           onClick: () =>
-            actions.update.mutate(
-              { id: group.id, archived: false },
+            update.mutate(
+              { conversationId: group.id, archived: false },
               { onError },
             ),
         },
@@ -148,35 +148,25 @@ export function Workspace({
         },
       ]}
     />
-  ) : unavailable.length && selectedTargets.length === 1 ? (
-    <ComposerNotice
-      message={translateText("chat:notices.modelNotSelected", {
-        agentNames: unavailable.map((a) => a!.name).join(listSeparator()),
-      })}
-      actions={unavailable.map((a) => ({
-        label: translateText("agents:actions.configure", { name: a!.name }),
-        onClick: () => openEditor(a!.id),
-      }))}
-    />
   ) : undefined;
-  const markRead = actions.read.mutate;
+  const markRead = read.mutate;
   useEffect(() => {
-    if (!group || group.last_seq <= group.read_seq) return;
-    const read = () => {
+    if (!group || group.lastSeq <= group.readSeq) return;
+    const mark = () => {
       if (
         document.visibilityState === "visible" &&
         (groupId || window.matchMedia("(min-width: 768px)").matches)
       )
-        markRead({ id: group.id, seq: group.last_seq });
+        markRead({ conversationId: group.id, seq: group.lastSeq });
     };
-    read();
-    document.addEventListener("visibilitychange", read);
-    return () => document.removeEventListener("visibilitychange", read);
+    mark();
+    document.addEventListener("visibilitychange", mark);
+    return () => document.removeEventListener("visibilitychange", mark);
   }, [group, groupId, markRead]);
   // A direct chat has no group info; its agent's settings stand in.
   const direct = group?.kind === "direct" ? members[0] : undefined;
   const showInfo = () => {
-    if (direct) return openEditor(direct.agent_id);
+    if (direct) return openEditor(direct.agentId);
     onViewChange("context");
     showPanel();
   };
@@ -255,6 +245,8 @@ export function Workspace({
           >
             <ChatHeader
               group={group}
+              info={conversation.info}
+              project={project}
               onInfo={showInfo}
               workspaceOpen
               onOpenWorkspace={showPanel}
@@ -264,122 +256,94 @@ export function Workspace({
               groupName={group?.name}
               group={group}
               agents={agents}
-              activeReplies={chat.data?.messages ?? []}
               blocked={blocked}
-              // Not a blocker: the group works without a folder, it just works somewhere nobody
-              // chose. The way out sits next to the sentence.
-              notice={<UnboundFolderNotice group={group} />}
               messages={
                 focusAgent === null
-                  ? history.messages
-                  : history.messages.filter(
-                      (message: { agent_id?: string | null; role: string }) =>
-                        message.role === "user" ||
-                        message.agent_id === focusAgent,
+                  ? conversation.messages
+                  : conversation.messages.filter(
+                      (message) =>
+                        message.author !== "agent" ||
+                        message.agentId === focusAgent,
                     )
               }
-              loading={!chat.data || history.loading}
-              hasOlder={history.hasOlder}
-              loadingOlder={history.loadingOlder}
-              onLoadOlder={history.loadOlder}
-              interactions={waiting}
+              loading={!conversation.loaded}
+              hasOlder={conversation.hasOlder}
+              loadingOlder={conversation.loadingOlder}
+              onLoadOlder={conversation.loadOlder}
+              questions={questions}
               connectionLost={connectionLost}
               outgoing={outgoing}
               onRetry={outbox.retry}
               onEdit={outbox.edit}
               onDiscard={outbox.discard}
-              onResend={(parts, agentId) => {
+              onResend={(text, agentId) => {
                 if (!group) return;
-                const mentions = agentId
-                  ? [agentId]
-                  : targets(partsText(parts));
-                if (partsText(parts) === "/compact" && parts.length === 1)
-                  compact.mutate({ groupId: group.id, mentions }, { onError });
-                else outbox.send(group.id, parts, "queue", mentions);
+                outbox.send(
+                  group.id,
+                  text,
+                  "queue",
+                  agentId ? [agentId] : targets(text),
+                );
               }}
-              onReload={() => history.loadOlder()}
+              onReload={conversation.loadOlder}
               onGoal={(action, objective) =>
-                // Through the route, like the panel's own buttons: one writer for a goal means the
-                // two can never show different ones.
-                setGoal.mutateAsync({
-                  sessionId: goalSessionId,
-                  action,
-                  ...(objective === undefined ? {} : { objective }),
-                })
+                // Through the session, like the panel's own buttons: one writer for a goal means
+                // the two can never show different ones.
+                goalSessionId === undefined
+                  ? Promise.resolve()
+                  : setGoal.mutateAsync({
+                      session: goalSessionId,
+                      action,
+                      ...(objective === undefined ? {} : { objective }),
+                    })
               }
               error={
-                (chat.error ?? history.error)
+                conversation.error
                   ? translateText("chat:errors.loadConversation", {
-                      message: (chat.error ?? history.error)?.message,
+                      message: conversation.error.message,
                     })
                   : undefined
               }
               draft={draft}
               onDraftChange={setDraft}
-              onFiles={(files) =>
-                (group ? files : []).map((file) => {
-                  const id = crypto.randomUUID();
-                  void upload(group!.id, id, file);
-                  return {
-                    type: "file" as const,
-                    id,
-                    name:
-                      file.name || translateText("chat:attachments.pastedFile"),
-                    contentType: file.type || "application/octet-stream",
-                    size: file.size,
-                  };
-                })
-              }
-              onSend={(parts, mode) => {
+              onSend={(text, mode) => {
                 if (!group) return openEditor();
-                const mentions = targets(partsText(parts));
-                if (mode === "steer") {
-                  for (const id of mentions) {
-                    const active = chat.data?.messages.find(
-                      (m) =>
-                        m.agent_id === id &&
-                        [
-                          "responding",
-                          "waiting_for_input",
-                          "stopping",
-                        ].includes(m.status),
-                    );
-                    if (active && active.group_id !== group.id) {
-                      const name = agents.find((a) => a.id === id)?.name;
-                      const elsewhere = groups.find(
-                        (g) => g.id === active.group_id,
-                      )?.name;
-                      toast.info(
-                        translateText("chat:notices.messageQueuedElsewhere", {
-                          agentName: name,
-                          groupName: elsewhere,
-                        }),
-                      );
-                    }
-                  }
-                }
-                outbox.send(group.id, parts, mode, mentions);
+                outbox.send(group.id, text, mode, targets(text));
                 setDraft([]);
               }}
               onCompact={() => {
-                if (!group) return;
-                if (!selectedTargets.length)
-                  return toast.error(
+                const text = draftText(draft);
+                const named = targets(text).map(sessionOf);
+                const sessions = named.length
+                  ? named
+                  : members.length === 1
+                    ? [members[0]?.sessionId]
+                    : [];
+                const session = sessions.find(
+                  (id): id is string => typeof id === "string",
+                );
+                if (session === undefined)
+                  return void toast.error(
                     translateText("chat:commands.compactRequiresMention"),
                   );
-                compact.mutate(
-                  { groupId: group.id, mentions: selectedTargets },
-                  { onError },
-                );
+                compact.mutate({ session }, { onError });
                 setDraft([]);
               }}
-              onStop={(id) => stopReply.mutate(id, { onError })}
-              onStopAll={() => {
-                if (group) actions.stop.mutate(group.id, { onError });
+              onStop={(messageId) => {
+                if (group)
+                  stop.mutate(
+                    { conversationId: group.id, messageId },
+                    { onError },
+                  );
               }}
-              onAnswer={(id, value) =>
-                answer.mutate({ id, value }, { onError })
+              onStopAll={() => {
+                if (group)
+                  stop.mutate({ conversationId: group.id }, { onError });
+              }}
+              onChoose={(question, selections) =>
+                choose(question, selections, { onError })
               }
+              onAbort={(question) => abort(question, { onError })}
             />
           </div>
           {drawerOpen ? (
