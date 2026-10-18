@@ -8,10 +8,19 @@ import type { AssembledServer, WireService } from "@eta/server";
  * is ever shown says `working` without something working.
  */
 import type { Database } from "bun:sqlite";
+import type { SiteLimits } from "./artifacts/site";
 import type { SessionHooks } from "./session-hooks";
 import { homedir, hostname, platform } from "node:os";
+import { join } from "node:path";
 import { agentsPlugin } from "./agents/plugin";
 import { AgentStore } from "./agents/store";
+import { loadKey } from "./artifacts/capability";
+import { artifactsPlugin } from "./artifacts/plugin";
+import { createArtifactRoutes } from "./artifacts/routes";
+import { ArtifactService } from "./artifacts/service";
+import { DEFAULT_LIMITS } from "./artifacts/site";
+import { ArtifactStore } from "./artifacts/store";
+import { artifactSessionTools } from "./artifacts/tools";
 import { Engine, RESTART_TEXT } from "./conversations/engine";
 import { conversationsPlugin } from "./conversations/plugin";
 import { ConversationStore } from "./conversations/store";
@@ -26,6 +35,11 @@ import { INTERRUPTED, RoutineRunner } from "./routines/runner";
 import { Scheduler } from "./routines/scheduler";
 import { RoutineStore } from "./routines/store";
 import { combineSessionHooks } from "./session-hooks";
+import { TaskBoard } from "./tasks/board";
+import { TaskCards } from "./tasks/cards";
+import { tasksPlugin } from "./tasks/plugin";
+import { TaskStore } from "./tasks/store";
+import { taskSessionTools } from "./tasks/tools";
 
 /** What a test sets to move time by hand; a real host leaves all of it alone. */
 export interface RoutinesOptions {
@@ -47,6 +61,8 @@ export interface Product {
   readonly sessionHooks: Required<SessionHooks>;
   /** Mount the plugins on an assembled server; resolves when every one of them is in place. */
   mount: (server: AssembledServer) => Promise<void>;
+  /** The product's own HTTP routes (artifact pages); nothing for a path that is not theirs. */
+  fetch: (request: Request) => Promise<Response | undefined>;
 }
 
 /** The plugins are applied a moment after they are mounted; this is how long to wait for that. */
@@ -57,6 +73,8 @@ export function createProduct(options: {
   dataDir: string;
   warn: (message: string) => void;
   routines?: RoutinesOptions;
+  /** Overrides of what a published site may hold. */
+  artifactLimits?: Partial<SiteLimits> | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
   const agents = new AgentStore(db);
@@ -117,6 +135,25 @@ export function createProduct(options: {
     timeline,
   });
   const created = (id: string): void => targets.add(id);
+
+  // The task board, and the artifacts its cards list.
+  const taskRows = new TaskStore(db);
+  const artifactRows = new ArtifactStore(db);
+  const artifactsOf = (taskId: string) => artifactRows.latestOfTask(taskId);
+  const board = new TaskBoard({
+    db,
+    tasks: taskRows,
+    cards: new TaskCards({
+      db,
+      tasks: taskRows,
+      timeline,
+      conversations,
+      artifactsOf,
+    }),
+    conversations,
+    artifactsOf,
+    changed,
+  });
   const engine = new Engine({
     db,
     agents,
@@ -128,6 +165,17 @@ export function createProduct(options: {
     warn,
   });
 
+  const limits = { ...DEFAULT_LIMITS, ...options.artifactLimits };
+  const artifactsRoot = join(dataDir, "artifacts");
+  const artifacts = new ArtifactService({
+    store: artifactRows,
+    root: artifactsRoot,
+    limits,
+    key: loadKey(join(artifactsRoot, ".preview-key")),
+    changed: () => wire?.pushNow("artifacts"),
+  });
+  const routes = createArtifactRoutes(artifacts);
+
   // Each feature that adds tools, tool middleware or a question observer to sessions is one entry
   // here; the order is the order its tools and middleware are installed in.
   const sessionHooks = combineSessionHooks([
@@ -136,12 +184,15 @@ export function createProduct(options: {
       askObserve: engine.askObserve,
     },
     { sessionTools: runner.sessionTools },
+    { sessionTools: taskSessionTools({ board, agents }) },
+    { sessionTools: artifactSessionTools({ artifacts, board, limits }) },
   ]);
 
   return {
     engine,
     scheduler,
     sessionHooks,
+    fetch: routes,
     async mount(server) {
       wire = server.wire;
       const pending = new Set([
@@ -150,6 +201,8 @@ export function createProduct(options: {
         "projects",
         "conversations",
         "routines",
+        "tasks",
+        "artifacts",
       ]);
       let ready!: () => void;
       const everyone = new Promise<void>((resolve) => {
@@ -195,6 +248,11 @@ export function createProduct(options: {
           },
           applied("routines"),
         ),
+      );
+      server.mount("tasks", tasksPlugin({ board }, applied("tasks")));
+      server.mount(
+        "artifacts",
+        artifactsPlugin({ artifacts, board }, applied("artifacts")),
       );
       let timer: ReturnType<typeof setTimeout> | undefined;
       const late = new Promise<never>((_, reject) => {
