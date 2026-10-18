@@ -91,10 +91,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
       fetch: createWebRoutes(options.webDir),
       authorize: access.authorize,
       // What the product adds to every session it owns: the agent's words in the system prompt,
-      // the tools for reaching the other members, and a window on the session's questions.
+      // and, from each of its features, tools, tool middleware and an ear for questions.
       baseSystemPromptFor: product.engine.baseSystemPromptFor,
-      sessionTools: product.engine.sessionTools,
-      askObserve: product.engine.askObserve,
+      ...product.sessionHooks,
       ...(options.models === undefined ? {} : { models: options.models }),
       ...(options.home === undefined ? {} : { home: options.home }),
       ...(options.network === undefined ? {} : { network: options.network }),

@@ -8,6 +8,7 @@ import type { AssembledServer, WireService } from "@eta/server";
  * is ever shown says `working` without something working.
  */
 import type { Database } from "bun:sqlite";
+import type { SessionHooks } from "./session-hooks";
 import { homedir, hostname, platform } from "node:os";
 import { agentsPlugin } from "./agents/plugin";
 import { AgentStore } from "./agents/store";
@@ -20,9 +21,12 @@ import { machinesPlugin } from "./machines/plugin";
 import { MachineStore } from "./machines/store";
 import { projectsPlugin } from "./projects/plugin";
 import { ProjectStore } from "./projects/store";
+import { combineSessionHooks } from "./session-hooks";
 
 export interface Product {
   readonly engine: Engine;
+  /** Every feature's per-session hooks, combined into the one set the session manager takes. */
+  readonly sessionHooks: Required<SessionHooks>;
   /** Mount the plugins on an assembled server; resolves when every one of them is in place. */
   mount: (server: AssembledServer) => Promise<void>;
 }
@@ -77,8 +81,18 @@ export function createProduct(options: {
     warn,
   });
 
+  // Each feature that adds tools, tool middleware or a question observer to sessions is one entry
+  // here; the order is the order its tools and middleware are installed in.
+  const sessionHooks = combineSessionHooks([
+    {
+      sessionTools: engine.sessionTools,
+      askObserve: engine.askObserve,
+    },
+  ]);
+
   return {
     engine,
+    sessionHooks,
     async mount(server) {
       wire = server.wire;
       const pending = new Set([
