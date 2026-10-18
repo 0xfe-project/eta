@@ -3,9 +3,9 @@ import type {
   MessageView,
   SendResult,
 } from "@eta/client-contracts";
-import type { AgentMessage, KernelTool } from "@eta/core";
+import type { KernelTool } from "@eta/core";
 import type { AskObserver } from "@eta/harness";
-import type { ManagedSession, SessionMeta, SessionsService } from "@eta/server";
+import type { SessionMeta, SessionsService } from "@eta/server";
 /**
  * The engine: what a message does.
  *
@@ -29,12 +29,13 @@ import type { Database } from "bun:sqlite";
 import type { AgentRecord, AgentStore } from "../agents/store";
 import type { MachineStore } from "../machines/store";
 import type { ProjectStore } from "../projects/store";
+import type { SessionHandle, SessionPlace } from "./places";
 import type { ConversationRecord, ConversationStore } from "./store";
 import type { Timeline } from "./timeline";
-import { kernelOn } from "@eta/core";
+import { LinkError } from "@eta/daemon";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/harness";
-import { formatModelId, parseModelId } from "@eta/server";
 import { briefing } from "./briefing";
+import { LocalPlace, messageOf } from "./places";
 import {
   judgeMention,
   resolveNamed,
@@ -75,6 +76,11 @@ export interface RunHooks {
 
 export interface EngineOptions {
   runHooks?: RunHooks | undefined;
+  /**
+   * Where the sessions of a project on a daemon machine live. Without one, such a project's
+   * replies fail as unavailable, which is what a host with no link to other machines should say.
+   */
+  remote?: SessionPlace | undefined;
   db: Database;
   agents: AgentStore;
   machines: MachineStore;
@@ -89,7 +95,7 @@ export interface EngineOptions {
 /** A reply that is running: which session runs it, to stop it or to join it. */
 interface Running {
   replyId: string;
-  managed: ManagedSession;
+  handle: SessionHandle;
 }
 
 export class Engine {
@@ -102,8 +108,9 @@ export class Engine {
   readonly #changed: EngineOptions["changed"];
   readonly #warn: (message: string) => void;
   readonly #hooks: RunHooks;
+  readonly #local: LocalPlace;
+  readonly #remote: SessionPlace | undefined;
 
-  #sessions: SessionsService | undefined;
   #closing = false;
   /** Replies waiting their turn on a participant's session, by `conversation:agent`. */
   readonly #chains = new Map<string, Promise<unknown>>();
@@ -122,11 +129,13 @@ export class Engine {
     this.#changed = options.changed;
     this.#warn = options.warn;
     this.#hooks = options.runHooks ?? {};
+    this.#remote = options.remote;
+    this.#local = new LocalPlace({ opened: this.#opened, warn: options.warn });
   }
 
   /** The session host this engine runs on; set when the conversations plugin is applied. */
   attach(sessions: SessionsService): void {
-    this.#sessions = sessions;
+    this.#local.attach(sessions);
     this.#closing = false;
   }
 
@@ -136,10 +145,9 @@ export class Engine {
    */
   async detach(): Promise<void> {
     this.#closing = true;
-    for (const running of this.#running.values())
-      running.managed.session.runner.abort();
+    for (const running of this.#running.values()) running.handle.abort();
     await Promise.allSettled([...this.#chains.values()]);
-    this.#sessions = undefined;
+    this.#local.detach();
   }
 
   /* ---------------------------------------------------------------- hooks */
@@ -154,12 +162,7 @@ export class Engine {
     const agent = this.#agents.get(meta.agentId);
     if (agent === undefined) return undefined;
     this.#opened.set(meta.id, stampOf(agent));
-    const parts = [
-      DEFAULT_SYSTEM_PROMPT,
-      `In this conversation you are ${agent.name}. The other members, and the user, address you by that name.`,
-    ];
-    if (agent.instructions.trim() !== "") parts.push(agent.instructions);
-    return parts.join("\n\n");
+    return promptOf(agent);
   };
 
   /** The tools an agent's session has beyond the harness's: reaching the other members. */
@@ -309,7 +312,7 @@ export class Engine {
     const running = this.#running.get(keyOf(conversationId, agentId));
     return (
       running !== undefined &&
-      running.managed.session.runner.running &&
+      running.handle.running &&
       this.#timeline.get(running.replyId)?.status !== "stopping"
     );
   }
@@ -337,18 +340,15 @@ export class Engine {
     agentId: string,
     message: MessageView,
   ): Promise<void> {
-    const sessions = this.#sessions;
     const participant = this.#conversations.participant(
       conversation.id,
       agentId,
     );
-    if (sessions === undefined || participant?.sessionId == null)
+    const running = this.#running.get(keyOf(conversation.id, agentId));
+    if (running === undefined || participant?.sessionId == null)
       throw new Error("no session to join");
     const told = this.#briefingFor(conversation, participant, message);
-    await sessions.prompt(participant.sessionId, {
-      text: told.text,
-      mode: "steer",
-    });
+    await running.handle.steer(told.text);
     this.#conversations.setSeen(conversation.id, agentId, told.seen);
   }
 
@@ -516,9 +516,7 @@ export class Engine {
       "stopping",
     );
     if (stopping !== undefined && row.agentId !== null) {
-      this.#running
-        .get(keyOf(row.conversationId, row.agentId))
-        ?.managed.session.runner.abort();
+      this.#running.get(keyOf(row.conversationId, row.agentId))?.handle.abort();
     }
     return stopping;
   }
@@ -572,21 +570,32 @@ export class Engine {
       project === undefined ? undefined : this.#machines.get(project.machineId);
     if (project === undefined || machine === undefined)
       return fail("unavailable", "The conversation's project is gone.");
-    if (machine.kind !== "primary") {
+    const place =
+      machine.kind === "primary"
+        ? this.#local
+        : machine.kind === "daemon"
+          ? this.#remote
+          : undefined;
+    if (place === undefined) {
       return fail("unavailable", `Sessions cannot run on ${machine.name} yet.`);
     }
     const trigger = this.#timeline.get(reply.replyToId ?? "");
     if (trigger === undefined)
       return fail("gone", "The message this reply answers is gone.");
 
-    let managed: ManagedSession;
+    let handle: SessionHandle;
     try {
-      managed = await this.#sessionFor(
+      handle = await place.ensure({
         conversation,
-        participant.agentId,
         agent,
-        project.path,
-      );
+        machine,
+        cwd: project.path,
+        existing: participant.sessionId,
+        prompt: promptOf(agent),
+        stamp: stampOf(agent),
+        created: (id) =>
+          this.#conversations.setSession(conversation.id, agent.id, id),
+      });
     } catch (error) {
       return fail("unavailable", messageOf(error));
     }
@@ -612,59 +621,46 @@ export class Engine {
     const prompt = extra === undefined ? told.text : `${extra}\n\n${told.text}`;
     this.#conversations.setSeen(conversationId, agent.id, told.seen);
     const key = keyOf(conversationId, agent.id);
-    this.#running.set(key, { replyId, managed });
+    this.#running.set(key, { replyId, handle });
     this.#timeline.transition(replyId, ["queued"], "working");
     this.#changed([conversationId]);
 
-    const heard = listen(managed);
     try {
-      const { kernel, runner } = managed.session;
-      kernel.nextRun({
-        role: "user",
-        timestamp: Date.now(),
-        content: [{ type: "text", text: prompt }],
-      });
-      let result = await runner.run();
-      // Words that reached the inbox after the run's last look (a steer that lost the race) are
-      // this reply's too: the row ends when the session is quiet. A run that failed leaves the
-      // inbox as it found it, and asking again would only fail again.
-      while (
-        result.status === "completed" &&
-        kernel.inboxDepth > 0 &&
-        !this.#closing
-      )
-        result = await runner.run();
-
-      const said = heard.said();
+      const result = await handle.run(prompt, () => !this.#closing);
       if (this.#closing && result.status === "aborted") {
         this.#timeline.finish(replyId, {
           status: "failed",
-          text: said.text || RESTART_TEXT,
-          thinking: said.thinking,
+          text: result.text || RESTART_TEXT,
+          thinking: result.thinking,
           data: { ...reply.data, code: "restart" },
         });
       } else if (result.status === "failed") {
         this.#timeline.finish(replyId, {
           status: "failed",
           text: result.error ?? "The run failed.",
-          thinking: said.thinking,
+          thinking: result.thinking,
           data: { ...reply.data, code: "run_failed" },
         });
       } else {
         this.#timeline.finish(replyId, {
           status: result.status === "aborted" ? "stopped" : "done",
-          text: said.text,
-          thinking: said.thinking,
+          text: result.text,
+          thinking: result.thinking,
         });
       }
     } catch (error) {
+      // A link cut under the run: what the machine did is unknown, and nothing is run again.
+      const lost =
+        error instanceof LinkError &&
+        (error.kind === "lost" || error.kind === "timeout");
       this.#timeline.finish(replyId, {
         status: "failed",
-        text: messageOf(error),
-        data: { ...reply.data, code: "run_failed" },
+        text: lost
+          ? `The link to ${machine.name} failed while this reply was running, so what it did there is unknown. Nothing was run again. (${error.message})`
+          : messageOf(error),
+        data: { ...reply.data, code: lost ? "link_lost" : "run_failed" },
       });
     } finally {
-      heard.stop();
       this.#running.delete(key);
       this.#changed([conversationId]);
     }
@@ -716,93 +712,6 @@ export class Engine {
     return this.#agents.get(message.agentId ?? "")?.name ?? "another agent";
   }
 
-  /* ---------------------------------------------------------------- sessions */
-
-  /**
-   * The agent's session in this conversation: the one the participant row names, brought in line
-   * with the agent as it is now, or a new one made on the spot.
-   */
-  async #sessionFor(
-    conversation: ConversationRecord,
-    agentId: string,
-    agent: AgentRecord,
-    cwd: string,
-  ): Promise<ManagedSession> {
-    const sessions = this.#sessions;
-    if (sessions === undefined)
-      throw new Error("the session host is not running");
-    const existing = this.#conversations.participant(
-      conversation.id,
-      agentId,
-    )?.sessionId;
-    if (existing !== undefined && existing !== null) {
-      try {
-        await this.#syncSession(sessions, existing, agent);
-        return (await sessions.open(existing)).managed;
-      } catch (error) {
-        // The row outlived its journal: say so, then start over rather than failing every wake.
-        if (!messageOf(error).startsWith("no such session")) throw error;
-        this.#warn(
-          `[eta] session ${existing} (agent ${agentId} in ${conversation.id}) is gone; starting a new one`,
-        );
-      }
-    }
-    const id = await sessions.create({
-      cwd,
-      title: `${conversation.name} · ${agent.name}`,
-      agentId,
-      conversationId: conversation.id,
-      ...(agent.model === null ? {} : { model: agent.model }),
-      ...(agent.persona === "" ? {} : { persona: agent.persona }),
-    });
-    this.#conversations.setSession(conversation.id, agentId, id);
-    if (agent.thinkingLevel !== null) {
-      await sessions
-        .thinkingLevel(id, agent.thinkingLevel)
-        .catch((error: unknown) => this.#warn(`[eta] ${messageOf(error)}`));
-    }
-    return (await sessions.open(id)).managed;
-  }
-
-  /**
-   * An agent can be edited after its sessions exist. The model and the thinking level are the
-   * session's own settings and are changed in place; the instructions and the persona are read
-   * when a session opens, so a session that was opened with other ones is closed here and the
-   * open that follows reads the new ones. Never while it is running: wakes are serial, so by the
-   * time one starts its session is idle.
-   */
-  async #syncSession(
-    sessions: SessionsService,
-    id: string,
-    agent: AgentRecord,
-  ): Promise<void> {
-    const { managed } = await sessions.open(id);
-    const config = managed.session.kernel.config;
-    if (
-      agent.model !== null &&
-      formatModelId(config.read("model")) !==
-        formatModelId(parseModelId(agent.model))
-    ) {
-      await sessions
-        .modelSet(id, agent.model)
-        .catch((error: unknown) => this.#warn(`[eta] ${messageOf(error)}`));
-    }
-    if (
-      agent.thinkingLevel !== null &&
-      config.read("thinkingLevel") !== agent.thinkingLevel
-    ) {
-      await sessions
-        .thinkingLevel(id, agent.thinkingLevel)
-        .catch((error: unknown) => this.#warn(`[eta] ${messageOf(error)}`));
-    }
-    if (this.#opened.get(id) !== stampOf(agent)) {
-      await sessions.setMeta(id, {
-        persona: agent.persona === "" ? undefined : agent.persona,
-      });
-      await sessions.close(id);
-    }
-  }
-
   /* ---------------------------------------------------------------- reading */
 
   #requireConversation(id: string): ConversationRecord {
@@ -834,37 +743,12 @@ function nameIn(
   return members.find((member) => member.id === id)?.name ?? id;
 }
 
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-/**
- * What the session says during one run: the text of its last assistant message that had any, and
- * what it thought in the same message (or, failing that, the last thought it had).
- */
-function listen(managed: ManagedSession): {
-  said: () => { text: string; thinking: string };
-  stop: () => void;
-} {
-  let text = "";
-  let thinking = "";
-  const off = kernelOn(managed.session.kernel.ctx)(
-    "message:end",
-    ({ message }: { message: AgentMessage }) => {
-      if (message.role !== "assistant") return;
-      const blocks = Array.isArray(message.content) ? message.content : [];
-      const spoken = blocks
-        .filter((block) => block.type === "text")
-        .map((block) => (block as { text: string }).text)
-        .join("");
-      const thought = blocks
-        .filter((block) => block.type === "thinking")
-        .map((block) => (block as { thinking: string }).thinking)
-        .join("\n\n")
-        .trim();
-      if (thought !== "") thinking = thought;
-      if (spoken.trim() !== "") text = spoken;
-    },
-  );
-  return { said: () => ({ text, thinking }), stop: () => void off() };
+/** The base of an agent's system prompt: the harness's own, who it is here, what it was told. */
+function promptOf(agent: AgentRecord): string {
+  const parts = [
+    DEFAULT_SYSTEM_PROMPT,
+    `In this conversation you are ${agent.name}. The other members, and the user, address you by that name.`,
+  ];
+  if (agent.instructions.trim() !== "") parts.push(agent.instructions);
+  return parts.join("\n\n");
 }
