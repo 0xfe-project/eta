@@ -243,6 +243,35 @@ export class Timeline {
     return changed === 0 ? undefined : this.get(id);
   }
 
+  /**
+   * Make a row another kind of row, keeping its place: a task draft becomes its card. The
+   * revision moves like any other change, so a client holding the draft knows the card is newer.
+   */
+  retype(
+    id: string,
+    kind: MessageKind,
+    data: Record<string, unknown>,
+  ): MessageView | undefined {
+    const changed = this.#db
+      .query(
+        "UPDATE message SET kind = ?, data = ?, revision = revision + 1, updated_at = ? WHERE id = ?",
+      )
+      .run(kind, JSON.stringify(data), Date.now(), id).changes;
+    return changed === 0 ? undefined : this.get(id);
+  }
+
+  /** The cards that show a task, one per conversation it was confirmed in. */
+  cardsOf(taskId: string): MessageView[] {
+    return this.#db
+      .query<Row, [string]>(
+        `SELECT * FROM message
+          WHERE kind = 'task_card' AND json_extract(data, '$.taskId') = ?
+          ORDER BY conversation_id, seq`,
+      )
+      .all(taskId)
+      .map(viewOf);
+  }
+
   repliesTo(messageId: string): MessageView[] {
     return this.#db
       .query<Row, [string]>(

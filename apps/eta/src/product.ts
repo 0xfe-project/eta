@@ -22,6 +22,11 @@ import { MachineStore } from "./machines/store";
 import { projectsPlugin } from "./projects/plugin";
 import { ProjectStore } from "./projects/store";
 import { combineSessionHooks } from "./session-hooks";
+import { TaskBoard } from "./tasks/board";
+import { TaskCards } from "./tasks/cards";
+import { tasksPlugin } from "./tasks/plugin";
+import { TaskStore } from "./tasks/store";
+import { taskSessionTools } from "./tasks/tools";
 
 export interface Product {
   readonly engine: Engine;
@@ -70,6 +75,24 @@ export function createProduct(options: {
     timeline,
   });
   const created = (id: string): void => targets.add(id);
+
+  // The task board. Artifacts are not here yet, so a card lists none.
+  const taskRows = new TaskStore(db);
+  const artifactsOf = () => [];
+  const board = new TaskBoard({
+    db,
+    tasks: taskRows,
+    cards: new TaskCards({
+      db,
+      tasks: taskRows,
+      timeline,
+      conversations,
+      artifactsOf,
+    }),
+    conversations,
+    artifactsOf,
+    changed,
+  });
   const engine = new Engine({
     db,
     agents,
@@ -88,6 +111,7 @@ export function createProduct(options: {
       sessionTools: engine.sessionTools,
       askObserve: engine.askObserve,
     },
+    { sessionTools: taskSessionTools({ board, agents }) },
   ]);
 
   return {
@@ -100,6 +124,7 @@ export function createProduct(options: {
         "machines",
         "projects",
         "conversations",
+        "tasks",
       ]);
       let ready!: () => void;
       const everyone = new Promise<void>((resolve) => {
@@ -132,6 +157,7 @@ export function createProduct(options: {
           applied("conversations"),
         ),
       );
+      server.mount("tasks", tasksPlugin({ board }, applied("tasks")));
       let timer: ReturnType<typeof setTimeout> | undefined;
       const late = new Promise<never>((_, reject) => {
         timer = setTimeout(
