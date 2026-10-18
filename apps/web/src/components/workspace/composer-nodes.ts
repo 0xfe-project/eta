@@ -21,7 +21,7 @@ import { createElement } from "react";
 import { ComposerBlock } from "./composer-block";
 
 // The composer's content as Lexical nodes: text and line breaks in one
-// paragraph, and blocks (long pastes and files) as inline nodes that move,
+// paragraph, and blocks (long pastes) as inline nodes that move,
 // select, delete and undo as one character.
 
 export type BlockPart = Exclude<DraftPart, { type: "text" }>;
@@ -79,9 +79,7 @@ export class BlockNode extends DecoratorNode<ReactElement> {
 
   // What copying it as text gives: a paste's whole text.
   getTextContent() {
-    return this.__part.type === "paste"
-      ? this.__part.text
-      : `[${this.__part.name}]`;
+    return this.__part.text;
   }
 
   decorate(editor: LexicalEditor) {
@@ -96,7 +94,7 @@ export class BlockNode extends DecoratorNode<ReactElement> {
       expand: () =>
         editor.update(() => {
           const node = $getNodeByKey(key);
-          if (!node || part.type !== "paste") return;
+          if (!node) return;
           const nodes = $textNodes(part.text);
           for (const n of nodes) node.insertBefore(n);
           node.remove();

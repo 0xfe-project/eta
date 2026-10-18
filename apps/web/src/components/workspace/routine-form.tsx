@@ -2,7 +2,6 @@ import type { HourlySchedule } from "@/api/routines.gen";
 
 import type { Routine, Schedule } from "@/queries/routines";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
-import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -12,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { listSeparator, translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { chatQueryOptions } from "@/queries/chat";
+import { useConversationList } from "@/queries/conversations";
 import { useModels } from "@/queries/providers";
 import { useSaveRoutine } from "@/queries/routines";
 import { ModelSelect } from "./agent-fields";
@@ -238,13 +237,10 @@ export function RoutineForm({
   const save = useSaveRoutine();
   // The group a new routine belongs to: the one you have open. Read from the cached snapshot so
   // this form works the same in the panel, the full-window page and a test.
-  const client = useQueryClient();
-  const chat = client.getQueryData(chatQueryOptions().queryKey) as
-    | { groups?: { id: string; name: string }[] }
-    | undefined;
+  const { conversations } = useConversationList();
   const selectedGroupId = useWorkspaceStore((s) => s.workspace.selectedGroupId);
   const group =
-    chat?.groups?.find((candidate) => candidate.id === selectedGroupId) ?? null;
+    conversations.find((candidate) => candidate.id === selectedGroupId) ?? null;
   const [name, setName] = useState(routine?.name ?? "");
   const [brief, setBrief] = useState(routine?.briefs[0]?.text ?? "");
   const [model, setModel] = useState(routine?.model ?? "");

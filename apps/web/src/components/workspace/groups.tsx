@@ -1,10 +1,14 @@
-import type { Group } from "@/queries/chat";
+import type {
+  AgentStatus as AgentStatusName,
+  ConversationSummary,
+  MemberStatus,
+} from "@eta/client-contracts";
+import type { ProjectChoice } from "./use-project-choice";
 import { AppWindowIcon } from "@phosphor-icons/react/AppWindow";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { UsersThreeIcon } from "@phosphor-icons/react/UsersThree";
-import { useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -39,28 +43,40 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { agentName } from "@/queries/agents";
 import { useArtifacts } from "@/queries/artifacts";
-import { chatQueryOptions } from "@/queries/chat";
-import { useGroupActions } from "@/queries/groups";
+import {
+  useConversation,
+  useConversationActions,
+} from "@/queries/conversations";
 import { useTasks, useUpdateTask } from "@/queries/tasks";
 import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar, AgentStatus } from "./agent-identity";
 import { InspectButton } from "./inspect-button";
 import { MemberRing } from "./member-ring";
 import { MemberStats } from "./member-stats";
+import { ProjectField } from "./project-field";
 import { useReturnFocus } from "./return-focus";
 import { when } from "./routine-format";
 import { useAgents } from "./use-agents";
 import { useGroups, useOpenGroup } from "./use-groups";
+import { useChosenProject, useResolveProject } from "./use-project-choice";
 import { useWorkspaceStore } from "./workspace-store";
 
 const onError = (error: Error) => toast.error(error.message);
+
+/** What a member is doing, in the vocabulary of an agent's status. */
+function memberStatus(status: MemberStatus): AgentStatusName {
+  return status === "idle" || status === "waiting_for_input"
+    ? status
+    : "working";
+}
 
 function GroupAvatars({
   group,
   className,
 }: {
-  group: Group;
+  group: ConversationSummary;
   className?: string;
 }) {
   return (
@@ -68,16 +84,13 @@ function GroupAvatars({
       className={cn("flex shrink-0 -space-x-2", className)}
       aria-hidden="true"
     >
-      {group.participants
-        .filter((p) => p.member)
-        .slice(0, 3)
-        .map((p) => (
-          <AgentAvatar
-            key={p.agent_id}
-            agent={{ id: p.agent_id }}
-            className="size-6"
-          />
-        ))}
+      {group.participants.slice(0, 3).map((p) => (
+        <AgentAvatar
+          key={p.agentId}
+          agent={{ id: p.agentId }}
+          className="size-6"
+        />
+      ))}
     </span>
   );
 }
@@ -109,12 +122,17 @@ export function CreateGroup({
   const setOpen = onOpenChange ?? setUncontrolled;
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
-  // Where the group works. A text field for now: the folder picker is the desktop's job, and a
-  // typed path is honest about what will be used.
-  const [cwd, setCwd] = useState("");
+  // Where the group works: a project, or a typed path to add as one (a folder picker is the
+  // desktop's job, and a typed path is honest about what will be used).
+  const [choice, setChoice] = useState<ProjectChoice>({
+    projectId: undefined,
+    path: "",
+  });
+  const { project, adding } = useChosenProject(choice);
+  const resolver = useResolveProject();
   const [chosen, setChosen] = useState<string[]>(members);
   const { agents } = useAgents();
-  const { create } = useGroupActions();
+  const { create, update } = useConversationActions();
   const openGroup = useOpenGroup();
   const returnFocus = useReturnFocus(open);
   // isPending only updates on the next render; a double click on 创建群
@@ -154,29 +172,34 @@ export function CreateGroup({
             e.preventDefault();
             if (sendingRef.current) return;
             sendingRef.current = true;
-            create.mutate(
-              {
-                name: name.trim(),
-                goal,
-                members: chosen,
-                // Omitted when empty: "no folder" is a state the store keeps, not an empty path
-                // pretending to be one.
-                ...(cwd.trim().length === 0 ? {} : { cwd: cwd.trim() }),
-              },
-              {
-                onSettled: () => {
-                  sendingRef.current = false;
-                },
-                onError,
-                onSuccess: (g) => {
-                  setOpen(false);
-                  setName("");
-                  setGoal("");
-                  setCwd("");
-                  openGroup(g.id);
-                },
-              },
-            );
+            void (async () => {
+              try {
+                const target = await resolver.resolve(
+                  choice,
+                  project,
+                  chosen[0] ?? null,
+                );
+                const { conversation } = await create.mutateAsync({
+                  projectId: target.id,
+                  name: name.trim(),
+                  agentIds: chosen,
+                });
+                if (goal.trim())
+                  await update.mutateAsync({
+                    conversationId: conversation.id,
+                    goal,
+                  });
+                setOpen(false);
+                setName("");
+                setGoal("");
+                setChoice({ projectId: undefined, path: "" });
+                openGroup(conversation.id);
+              } catch (error) {
+                onError(error as Error);
+              } finally {
+                sendingRef.current = false;
+              }
+            })();
           }}
         >
           <label className="grid gap-2 text-sm">
@@ -189,19 +212,7 @@ export function CreateGroup({
               required
             />
           </label>
-          <label className="grid gap-2 text-sm">
-            {translateText("groups.fields.cwd")}
-            <Input
-              value={cwd}
-              onChange={(e) => setCwd(e.target.value)}
-              placeholder={translateText("groups.fields.cwdPlaceholder")}
-              spellCheck={false}
-              className="font-mono"
-            />
-            <span className="text-xs text-muted-foreground">
-              {translateText("groups.fields.cwdHelp")}
-            </span>
-          </label>
+          <ProjectField choice={choice} onChange={setChoice} />
           <label className="grid gap-2 text-sm">
             {translateText("groups.fields.optionalGoal")}
             <Textarea
@@ -237,7 +248,12 @@ export function CreateGroup({
           <DialogFooter>
             <Button
               type="submit"
-              disabled={!name.trim() || !chosen.length || create.isPending}
+              disabled={
+                !name.trim() ||
+                !chosen.length ||
+                create.isPending ||
+                (adding && choice.path.trim().length === 0)
+              }
             >
               {translateText("groups.actions.createGroup")}
             </Button>
@@ -356,12 +372,12 @@ export function GroupList({ compact = false }: { compact?: boolean }) {
               <span className="min-w-0 flex-1">
                 <span className="flex items-center justify-between gap-2">
                   <span className="min-w-0 truncate text-sm">{g.name}</span>
-                  {!compact && g.last_message_at && (
+                  {!compact && g.lastMessageAt !== null && (
                     <time
-                      dateTime={g.last_message_at}
+                      dateTime={new Date(g.lastMessageAt).toISOString()}
                       className="shrink-0 text-xs text-muted-foreground tabular-nums"
                     >
-                      {when(g.last_message_at).replace(
+                      {when(g.lastMessageAt).replace(
                         `${translateText("common:time.today")} `,
                         "",
                       )}
@@ -406,7 +422,7 @@ export function ArchivedGroups() {
   ] as const);
   const { groups } = useGroups();
   const open = useOpenGroup();
-  const { update } = useGroupActions();
+  const { update } = useConversationActions();
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const archived = groups.filter((g) => g.archived);
   return (
@@ -430,7 +446,7 @@ export function ArchivedGroups() {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm">{g.name}</span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {g.last_message_at && `${when(g.last_message_at)} · `}
+                    {g.lastMessageAt !== null && `${when(g.lastMessageAt)} · `}
                     {g.preview ||
                       (g.kind === "direct"
                         ? translateText("groups.directChat")
@@ -443,7 +459,10 @@ export function ArchivedGroups() {
                 variant="outline"
                 disabled={update.isPending}
                 onClick={() =>
-                  update.mutate({ id: g.id, archived: false }, { onError })
+                  update.mutate(
+                    { conversationId: g.id, archived: false },
+                    { onError },
+                  )
                 }
               >
                 {translateText("groups.actions.unarchive")}
@@ -469,10 +488,11 @@ export function GroupMembers() {
     "common",
     "settings",
   ] as const);
-  const { data: chat } = useQuery(chatQueryOptions());
-  const { current: group, groups } = useGroups();
+  const { current: group } = useGroups();
+  // The conversation's own facts (goal, decisions) live on its target, not in the list.
+  const { info } = useConversation(group?.id);
   const { agents, openEditor } = useAgents();
-  const { update, member } = useGroupActions();
+  const { update, invite: invite_, remove } = useConversationActions();
   const [edit, setEdit] = useState(false);
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
@@ -481,11 +501,11 @@ export function GroupMembers() {
   const updateTask = useUpdateTask();
   const [linkTask, setLinkTask] = useState(false);
   const [invite, setInvite] = useState(false);
-  const [removing, setRemoving] = useState<Group["participants"][number]>();
+  const [removing, setRemoving] = useState<string>();
   const focused = useWorkspaceStore((state) => state.focusedAgentId);
   const setFocusedAgent = useWorkspaceStore((state) => state.setFocusedAgent);
   if (!group) return null;
-  const members = group.participants.filter((p) => p.member);
+  const members = group.participants;
   const linked = board?.tasks.filter((t) => t.group_id === group.id) ?? [];
   return (
     <section aria-label={translateText("groups.members.title")}>
@@ -514,8 +534,8 @@ export function GroupMembers() {
             <DropdownMenuItem
               onSelect={() => {
                 setName(group.name);
-                setGoal(group.goal);
-                setDecided(group.decided);
+                setGoal(info?.goal ?? "");
+                setDecided(info?.decided ?? "");
                 setEdit(true);
               }}
             >
@@ -532,7 +552,7 @@ export function GroupMembers() {
             <DropdownMenuItem
               onSelect={() =>
                 update.mutate(
-                  { id: group.id, archived: !group.archived },
+                  { conversationId: group.id, archived: !group.archived },
                   { onError },
                 )
               }
@@ -548,38 +568,28 @@ export function GroupMembers() {
           and auto-fill columns turn that into two cramped columns in a 320px panel. */}
       <ul className="grid grid-cols-1 gap-1">
         {members.map((p) => {
-          const agent = agents.find((a) => a.id === p.agent_id);
-          const active = chat?.messages.find(
-            (m) =>
-              m.agent_id === p.agent_id &&
-              ["responding", "waiting_for_input", "stopping"].includes(
-                m.status,
-              ),
-          );
-          const elsewhere =
-            active && active.group_id !== group.id
-              ? groups.find((g) => g.id === active.group_id)?.name
-              : undefined;
+          const agent = agents.find((a) => a.id === p.agentId);
+          const name = agentName(agents, p.agentId);
           const removable = group.kind === "group" && members.length > 1;
           return (
             <li
-              key={p.agent_id}
+              key={p.agentId}
               className={cn(
                 "flex min-w-0 items-start gap-2 border px-2 py-1.5",
                 // Focused is a frame around the card, not a different card: the numbers stay where
                 // they were, so comparing two members does not mean re-learning the layout.
-                focused === p.agent_id ? "border-foreground" : "border-border",
+                focused === p.agentId ? "border-foreground" : "border-border",
               )}
             >
               {/* The row's first thing was the member's avatar; the gauge wraps that one instead
                   of adding a second avatar beside the numbers. A member with no session yet has
                   nothing to draw a ring around, so it is just the avatar. */}
-              {typeof p.session_id === "string" ? (
-                <MemberRing sessionId={p.session_id}>
-                  <AgentAvatar agent={{ id: p.agent_id }} />
-                </MemberRing>
+              {p.sessionId === null ? (
+                <AgentAvatar agent={{ id: p.agentId }} />
               ) : (
-                <AgentAvatar agent={{ id: p.agent_id }} />
+                <MemberRing sessionId={p.sessionId}>
+                  <AgentAvatar agent={{ id: p.agentId }} />
+                </MemberRing>
               )}
               {/* Pressing the member is the same action as pressing its card anywhere else: the
                   chat narrows to it. The menu beside it is the other thing a member has. */}
@@ -588,31 +598,27 @@ export function GroupMembers() {
                 // Press to focus, press again to let go. The frame is the whole state: white
                 // border = narrowed to this member, and the same press takes it back.
                 onClick={() =>
-                  setFocusedAgent(focused === p.agent_id ? null : p.agent_id)
+                  setFocusedAgent(focused === p.agentId ? null : p.agentId)
                 }
-                title={translateText("groups.members.focus", { name: p.name })}
+                title={translateText("groups.members.focus", { name })}
                 className="min-w-0 flex-1 text-left text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
-                <span className="block truncate" title={p.name}>
-                  {p.name}{" "}
+                <span className="block truncate" title={name}>
+                  {name}{" "}
                   <span className="text-xs text-muted-foreground">
-                    {elsewhere ? (
-                      translateText("groups.members.replyingElsewhere", {
-                        groupName: elsewhere,
-                      })
-                    ) : agent ? (
-                      <AgentStatus status={agent.status} />
+                    {agent ? (
+                      <AgentStatus status={memberStatus(p.status)} />
                     ) : (
                       translateText("common:status.deleted")
                     )}
                   </span>
                 </span>
                 {/* What this member has spent, is producing, and is chasing. */}
-                <MemberStats sessionId={p.session_id ?? undefined} />
+                <MemberStats sessionId={p.sessionId ?? undefined} />
               </button>
               <div className="flex shrink-0 items-start gap-1">
-                {typeof p.session_id !== "string" ? null : (
-                  <InspectButton sessionId={p.session_id} />
+                {p.sessionId === null ? null : (
+                  <InspectButton sessionId={p.sessionId} />
                 )}
                 {(agent || removable) && (
                   <DropdownMenu>
@@ -623,7 +629,7 @@ export function GroupMembers() {
                         aria-label={translateText(
                           "common:accessibility.itemActions",
                           {
-                            name: p.name,
+                            name,
                           },
                         )}
                       >
@@ -639,7 +645,7 @@ export function GroupMembers() {
                       {removable && (
                         <DropdownMenuItem
                           variant="destructive"
-                          onSelect={() => setRemoving(p)}
+                          onSelect={() => setRemoving(p.agentId)}
                         >
                           {translateText("common:actions.remove")}
                         </DropdownMenuItem>
@@ -660,7 +666,7 @@ export function GroupMembers() {
           <AlertDialogHeader>
             <AlertDialogTitle className="wrap-anywhere">
               {translateText("groups.members.removeConfirmTitle", {
-                name: removing?.name,
+                name: removing === undefined ? "" : agentName(agents, removing),
               })}
             </AlertDialogTitle>
             <AlertDialogDescription>
@@ -673,15 +679,11 @@ export function GroupMembers() {
             </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
-              disabled={member.isPending}
+              disabled={remove.isPending}
               onClick={() =>
                 removing &&
-                member.mutate(
-                  {
-                    groupId: group.id,
-                    agentId: removing.agent_id,
-                    member: false,
-                  },
+                remove.mutate(
+                  { conversationId: group.id, agentId: removing },
                   { onError },
                 )
               }
@@ -770,7 +772,7 @@ export function GroupMembers() {
               e.preventDefault();
               update.mutate(
                 {
-                  id: group.id,
+                  conversationId: group.id,
                   name: group.kind === "group" ? name : undefined,
                   goal,
                   decided,
@@ -826,16 +828,16 @@ export function GroupMembers() {
           </DialogHeader>
           <div className="grid max-h-80 gap-1 overflow-y-auto">
             {agents
-              .filter((a) => !members.some((p) => p.agent_id === a.id))
+              .filter((a) => !members.some((p) => p.agentId === a.id))
               .map((a) => (
                 <Button
                   key={a.id}
                   variant="ghost"
                   className="justify-start"
-                  disabled={member.isPending}
+                  disabled={invite_.isPending}
                   onClick={() =>
-                    member.mutate(
-                      { groupId: group.id, agentId: a.id, member: true },
+                    invite_.mutate(
+                      { conversationId: group.id, agentId: a.id },
                       { onError, onSuccess: () => setInvite(false) },
                     )
                   }

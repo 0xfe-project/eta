@@ -1,21 +1,25 @@
-import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { parseAsString, useQueryState } from "nuqs";
-import { useEffect } from "react";
-import { chatQueryOptions } from "@/queries/chat";
+import { useEffect, useMemo } from "react";
+import { useConversationList } from "@/queries/conversations";
 import { useWorkspaceStore } from "./workspace-store";
 
+/** The conversations, newest activity first, and the one open (`?group=`, else the last one). */
 export function useGroups() {
-  const { data } = useQuery(chatQueryOptions());
+  const { conversations } = useConversationList();
   const [groupId] = useQueryState("group", parseAsString);
-  const groups = data?.groups ?? [];
-  const recent = [...groups].sort((a, b) =>
-    b.updated_at.localeCompare(a.updated_at),
+  const recent = useMemo(
+    () =>
+      [...conversations].sort(
+        (a, b) =>
+          (b.lastMessageAt ?? b.updatedAt) - (a.lastMessageAt ?? a.updatedAt),
+      ),
+    [conversations],
   );
   const selected = useWorkspaceStore((s) => s.workspace.selectedGroupId);
   const current = groupId
-    ? groups.find((g) => g.id === groupId)
-    : (groups.find((g) => g.id === selected) ??
+    ? recent.find((g) => g.id === groupId)
+    : (recent.find((g) => g.id === selected) ??
       recent.find((g) => !g.archived));
   useEffect(() => {
     if (current && selected !== current.id)

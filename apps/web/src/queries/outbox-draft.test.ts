@@ -42,7 +42,6 @@ describe("草稿按会话保存", () => {
       KEY,
       JSON.stringify({
         drafts: { g1: [{ type: "text", text: "还在" }] },
-        uploads: {},
         outgoing: [],
       }),
     );

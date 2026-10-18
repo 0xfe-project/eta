@@ -1,6 +1,6 @@
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,8 +9,10 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { THINKING_LEVELS } from "@/lib/thinking";
 import { cn } from "@/lib/utils";
 import { modelGroups, useModels } from "@/queries/providers";
+import { useSession, useSessionActions } from "@/queries/sessions";
 
 /**
  * The two chips a single-agent conversation carries: which model, and how hard it thinks.
@@ -25,63 +27,21 @@ import { modelGroups, useModels } from "@/queries/providers";
  * answer to put in one chip. There the composer's member picker takes their place.
  */
 
-interface Live {
-  model: string | null;
-  thinking_level: string;
-}
-
-const sessionKey = (id: string | undefined) => ["session-model", id] as const;
-
-function useSessionModel(sessionId: string | undefined) {
-  return useQuery({
-    queryKey: sessionKey(sessionId),
-    enabled: sessionId !== undefined,
-    staleTime: 5_000,
-    queryFn: async (): Promise<Live | null> => {
-      if (sessionId === undefined) return null;
-      const response = await fetch(
-        `/sessions/${encodeURIComponent(sessionId)}/model`,
-      );
-      return response.ok ? ((await response.json()) as Live) : null;
-    },
-  });
-}
-
-function usePatchModel(sessionId: string | undefined) {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: async (patch: { model?: string; thinking_level?: string }) => {
-      if (sessionId === undefined) return null;
-      const response = await fetch(
-        `/sessions/${encodeURIComponent(sessionId)}/model`,
-        {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(patch),
-        },
-      );
-      if (!response.ok) throw new Error("model change refused");
-      return (await response.json()) as Live;
-    },
-    onSuccess: (live) => {
-      if (live !== null) client.setQueryData(sessionKey(sessionId), live);
-    },
-  });
-}
+const onError = (error: Error) => toast.error(error.message);
 
 const CHIP =
   "inline-flex h-7 min-w-0 items-center gap-1 border border-border px-2 font-mono text-[11px] text-muted-foreground outline-none hover:border-border-strong focus-visible:ring-1 focus-visible:ring-ring";
 
 export function ModelChip({ sessionId }: { sessionId: string | undefined }) {
   const { t: translateText } = useTranslation(["chat", "common"] as const);
-  const { data: live } = useSessionModel(sessionId);
-  const patch = usePatchModel(sessionId);
+  const live = useSession(sessionId)?.model;
+  const { modelSet } = useSessionActions();
   // The menu lists the configured providers' models, one group per provider.
   const { data: models } = useModels();
   const groups = modelGroups(models ?? []);
   if (sessionId === undefined) return null;
-  const current = live?.model ?? "";
-  const pending = patch.isPending ? patch.variables?.model : undefined;
+  const current = live?.id ?? "";
+  const pending = modelSet.isPending ? modelSet.variables?.model : undefined;
   const shown = current.length > 0 ? current : "—";
   return (
     <DropdownMenu>
@@ -111,7 +71,12 @@ export function ModelChip({ sessionId }: { sessionId: string | undefined }) {
               <DropdownMenuItem
                 key={model.id}
                 disabled={!model.available}
-                onSelect={() => patch.mutate({ model: model.id })}
+                onSelect={() =>
+                  modelSet.mutate(
+                    { session: sessionId, model: model.id },
+                    { onError },
+                  )
+                }
               >
                 <span className="min-w-0 flex-1 truncate">{model.name}</span>
                 <span className="font-mono text-[10px] text-faint">
@@ -126,14 +91,12 @@ export function ModelChip({ sessionId }: { sessionId: string | undefined }) {
   );
 }
 
-const LEVELS = ["off", "minimal", "low", "medium", "high"] as const;
-
 export function ThinkingChip({ sessionId }: { sessionId: string | undefined }) {
   const { t: translateText } = useTranslation(["chat"] as const);
-  const { data: live } = useSessionModel(sessionId);
-  const patch = usePatchModel(sessionId);
+  const live = useSession(sessionId)?.model;
+  const { thinkingLevel } = useSessionActions();
   if (sessionId === undefined) return null;
-  const level = live?.thinking_level ?? "off";
+  const level = live?.thinkingLevel ?? "off";
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -150,10 +113,15 @@ export function ThinkingChip({ sessionId }: { sessionId: string | undefined }) {
         <DropdownMenuLabel>
           {translateText("chat:composer.thinking")}
         </DropdownMenuLabel>
-        {LEVELS.map((choice) => (
+        {THINKING_LEVELS.map((choice) => (
           <DropdownMenuItem
             key={choice}
-            onSelect={() => patch.mutate({ thinking_level: choice })}
+            onSelect={() =>
+              thinkingLevel.mutate(
+                { session: sessionId, level: choice },
+                { onError },
+              )
+            }
           >
             <span
               className={cn(
