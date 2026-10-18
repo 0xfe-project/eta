@@ -2,7 +2,7 @@
   "name": "axp",
   "type": "module",
   "private": true,
-  "packageManager": "bun@1.3.14",
+  "packageManager": "bun@1.4.3",
   "workspaces": ["apps/*", "packages/*", "bundles/*/service"],
   "engines": {
     "node": ">=22.12.0"

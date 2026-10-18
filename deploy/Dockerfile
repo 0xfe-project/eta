@@ -29,7 +29,7 @@ LABEL service="axp"
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=oven/bun:1.3.14 /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=oven/bun:1.4.3 /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=caddy:2.11.7-alpine /usr/bin/caddy /usr/local/bin/caddy
 # The controller builds agents' images with this machine's Docker (its socket),
 # with BuildKit: their Dockerfiles cache downloads (RUN --mount).

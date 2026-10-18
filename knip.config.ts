@@ -5,8 +5,9 @@ import type { KnipConfig } from "knip";
 export default {
   // The akhook submodule is another project, built from source.
   ignore: ["vendor/**"],
-  // System tools the Turbo scripts call.
-  ignoreBinaries: ["go", "gofmt", "uv"],
+  // System tools the Turbo scripts call. knip reads `bun check` (Bun's type
+  // checker) as a `check` binary.
+  ignoreBinaries: ["go", "gofmt", "uv", "check"],
   // Run by path: scripts/dev.sh runs concurrently, the forge service's Go
   // tests run emulate (their emulated GitHub), apps/web/sentry.sh runs
   // Sentry's CLI.
