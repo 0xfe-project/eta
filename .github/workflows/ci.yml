@@ -22,11 +22,8 @@ jobs:
     env:
       # Tests that need a tool fail instead of skipping without it.
       CI: "1"
-      AXP_TEST_NATS_URL: nats://127.0.0.1:14222
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: true
 
       # Turborepo's Remote Cache (turbo.json's remoteCache), which development
       # machines fill as they commit: a short-lived token for the Vercel team,
@@ -41,33 +38,17 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: apps/control-plane/go.mod
-          cache-dependency-path: "**/go.sum"
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           enable-cache: true
           cache-dependency-glob: "**/uv.lock"
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: vendor/akhook
 
-      # Bun's package store; Go's, uv's and Cargo's are cached by their setup
-      # actions above.
+      # Bun's package store; uv's is cached by its setup action above.
       - uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
-
-      # The queue tests' NATS.
-      - name: Start NATS
-        run: docker run -d --name nats -p 127.0.0.1:14222:4222 nats:2.14-alpine --jetstream
-      # The tests that need PostgreSQL run scripts/test-postgres.sh themselves,
-      # in parallel; on a fresh machine they would race to create it.
-      - name: Start PostgreSQL
-        run: bash scripts/test-postgres.sh
 
       - run: bun install --frozen-lockfile
       - run: bun run check

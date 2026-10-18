@@ -15,11 +15,8 @@ export default antfu(
     toml: false,
     ignores: [
       "**/*.gen.ts",
-      // Generated from the pinned Codex's app-server schema.
-      "apps/agent-runtime/src/protocol/**",
-      // Generated from the shadcn and brainless registries.
+      // Generated from the shadcn registry.
       "apps/web/src/components/ui/**",
-      "apps/web/src/components/brainless/**",
       "**/.venv/**",
       "**/out/**",
     ],
@@ -68,11 +65,5 @@ export default antfu(
     files: ["apps/web/public/sw.js"],
     languageOptions: { globals: globals.serviceworker },
     rules: { "no-restricted-globals": "off" },
-  },
-  {
-    // Production server, run by Bun next to the built dist/.
-    files: ["apps/web/server.js"],
-    languageOptions: { globals: globals.bunBuiltin },
-    rules: { "antfu/no-import-dist": "off" },
   },
 );
