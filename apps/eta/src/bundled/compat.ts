@@ -69,6 +69,8 @@ export interface CompatPluginConfig {
   hub: EventHub;
   /** Where the user's own cards are (`~/.eta/persona`), for the list and for a live switch. */
   home: string;
+  /** Diagnostics for a card that could not be read, or a name that is not a card here. */
+  warn?: ((message: string) => void) | undefined;
   /** The live sessions, so naming a different card reaches a conversation already open. */
   sessions: SessionManager;
   /** For the model check on write, exactly as the internal route does it. */
@@ -157,6 +159,7 @@ export const compatPlugin = {
       models,
       runner,
       sessions,
+      warn,
     } = config;
 
     /** One group in the product's shape. */
@@ -953,7 +956,7 @@ export const compatPlugin = {
             .list()
             .map(({ group }) => group.cwd)
             .filter((cwd) => cwd.length > 0),
-          { home: config.home, warn: plugin.warn },
+          { home, ...(warn === undefined ? {} : { warn }) },
         );
         return Response.json({ personas: personaList(cards) });
       }),
@@ -980,7 +983,7 @@ export const compatPlugin = {
         if (managed === undefined) continue;
         const cards = await personaCardsFor(group.cwd, {
           home,
-          ...(plugin.warn === undefined ? {} : { warn: plugin.warn }),
+          ...(warn === undefined ? {} : { warn }),
         });
         managed.session.kernel.persona.loadCards([...cards.values()]);
         if (persona.length === 0) {
@@ -990,7 +993,7 @@ export const compatPlugin = {
         }
         const resolved = resolvePersona(cards, persona);
         if (!resolved.exact) {
-          plugin.warn?.(
+          warn?.(
             `[eta] agent ${agentId}: persona ${persona} is not a card here; using ${resolved.id}`,
           );
         }

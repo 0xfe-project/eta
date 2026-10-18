@@ -442,6 +442,7 @@ export async function assembleHost(options: HostOptions): Promise<Host> {
       models,
       runner,
       sessions,
+      warn,
     }),
   ];
 
