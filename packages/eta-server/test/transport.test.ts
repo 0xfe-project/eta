@@ -296,18 +296,121 @@ describe("the Bun binding", () => {
     });
   });
 
-  it("answers 404 for anything that is not the socket, or a mounted route", async () => {
+  it("answers 404 for anything that is not the socket, when the host serves nothing else", async () => {
     const { deps } = harness();
     const wire = serveWire(
       { wire: deps.wire, mounted: deps.mounted },
-      { port: 0, staticRoutes: { "/": () => new Response("ui") } },
+      { port: 0 },
     );
     server = wire;
-    expect(await (await fetch(`http://127.0.0.1:${wire.port}/`)).text()).toBe(
-      "ui",
-    );
+    expect((await fetch(`http://127.0.0.1:${wire.port}/`)).status).toBe(404);
     expect((await fetch(`http://127.0.0.1:${wire.port}/nope`)).status).toBe(
       404,
     );
+  });
+
+  it("hands every request that is not the socket to the host's fetch, and 404s what it declines", async () => {
+    const { deps } = harness();
+    const seen: string[] = [];
+    const wire = serveWire(
+      { wire: deps.wire, mounted: deps.mounted },
+      {
+        port: 0,
+        fetch: async (request) => {
+          const { pathname } = new URL(request.url);
+          seen.push(`${request.method} ${pathname}`);
+          if (pathname === "/up") return new Response("ok");
+          // Not only GET, and not only the paths a table would list.
+          if (pathname === "/echo") return new Response(await request.text());
+          return undefined;
+        },
+      },
+    );
+    server = wire;
+    const origin = `http://127.0.0.1:${wire.port}`;
+    expect(await (await fetch(`${origin}/up`)).text()).toBe("ok");
+    expect(
+      await (
+        await fetch(`${origin}/echo`, { method: "POST", body: "body" })
+      ).text(),
+    ).toBe("body");
+    // Declined: the same 404 as with no hook at all.
+    expect((await fetch(`${origin}/nope`)).status).toBe(404);
+    expect(seen).toEqual(["GET /up", "POST /echo", "GET /nope"]);
+
+    // The socket is the pipe's, not the host's: its upgrade never reaches the hook.
+    client = new WebSocket(`ws://127.0.0.1:${wire.port}/ws`);
+    await new Promise<void>((resolve, reject) => {
+      client?.addEventListener("open", () => resolve());
+      client?.addEventListener("error", () =>
+        reject(new Error("could not connect")),
+      );
+    });
+    expect(seen).toHaveLength(3);
+  });
+
+  it("asks authorize before every request: the routes and the socket's upgrade alike", async () => {
+    const { deps } = harness();
+    const asked: string[] = [];
+    let hostCalls = 0;
+    const wire = serveWire(
+      { wire: deps.wire, mounted: deps.mounted },
+      {
+        port: 0,
+        authorize: (request) => {
+          const { pathname } = new URL(request.url);
+          asked.push(pathname);
+          if (pathname === "/up") return undefined;
+          return request.headers.get("authorization") === "Bearer let-me-in"
+            ? undefined
+            : new Response("nope", { status: 401 });
+        },
+        fetch: () => {
+          hostCalls++;
+          return new Response("served");
+        },
+      },
+    );
+    server = wire;
+    const origin = `http://127.0.0.1:${wire.port}`;
+
+    // Refused: the host's fetch is never reached, and the refusal is the hook's own response.
+    const refused = await fetch(`${origin}/page`);
+    expect(refused.status).toBe(401);
+    expect(await refused.text()).toBe("nope");
+    expect(hostCalls).toBe(0);
+    // Refused for an unknown path too: a 404 would tell a stranger what exists.
+    expect((await fetch(`${origin}/nope`)).status).toBe(401);
+    // The hook can wave a route through, and a request that passes it reaches the host.
+    expect(await (await fetch(`${origin}/up`)).text()).toBe("served");
+    expect(
+      await (
+        await fetch(`${origin}/page`, {
+          headers: { authorization: "Bearer let-me-in" },
+        })
+      ).text(),
+    ).toBe("served");
+
+    // The upgrade is refused before a socket exists: the connection fails, nothing is mounted.
+    const refusedSocket = new WebSocket(`ws://127.0.0.1:${wire.port}/ws`);
+    await new Promise<void>((resolve) => {
+      refusedSocket.addEventListener("error", () => resolve());
+      refusedSocket.addEventListener("open", () => resolve());
+    });
+    expect(refusedSocket.readyState).not.toBe(WebSocket.OPEN);
+    expect(wire.clients).toBe(0);
+    expect(asked).toContain("/ws");
+
+    // And with what the hook wants, the same upgrade goes through.
+    client = new WebSocket(`ws://127.0.0.1:${wire.port}/ws`, {
+      headers: { authorization: "Bearer let-me-in" },
+    });
+    await new Promise<void>((resolve, reject) => {
+      client?.addEventListener("open", () => resolve());
+      client?.addEventListener("error", () =>
+        reject(new Error("could not connect")),
+      );
+    });
+    expect(wire.clients).toBe(1);
   });
 });
