@@ -17,6 +17,9 @@ import { conversationsPlugin } from "./conversations/plugin";
 import { ConversationStore } from "./conversations/store";
 import { ConversationTargets } from "./conversations/targets";
 import { Timeline } from "./conversations/timeline";
+import { Inbox } from "./inbox/inbox";
+import { inboxPlugin } from "./inbox/plugin";
+import { InteractionStore } from "./inbox/store";
 import { machinesPlugin } from "./machines/plugin";
 import { MachineStore } from "./machines/store";
 import { projectsPlugin } from "./projects/plugin";
@@ -49,8 +52,11 @@ export function createProduct(options: {
 
   // This computer is a machine like any other, and the first thing a project can name.
   machines.ensurePrimary({ name: hostname(), home: homedir(), os: platform() });
-  // Nothing is running yet, so whatever the last process left in flight cannot be.
+  // Nothing is running yet, so whatever the last process left in flight cannot be, and no
+  // question it asked can still be answered.
   timeline.failInterrupted(RESTART_TEXT);
+  const interactions = new InteractionStore(db);
+  interactions.expirePending();
 
   /** Say that product state moved, to whoever is looking at it. */
   const changed = (touched?: readonly string[] | "all"): void => {
@@ -70,6 +76,12 @@ export function createProduct(options: {
     timeline,
   });
   const created = (id: string): void => targets.add(id);
+  const inbox = new Inbox({
+    interactions,
+    timeline,
+    changed: () => wire?.pushNow("inbox"),
+    warn,
+  });
   const engine = new Engine({
     db,
     agents,
@@ -88,6 +100,7 @@ export function createProduct(options: {
       sessionTools: engine.sessionTools,
       askObserve: engine.askObserve,
     },
+    { askObserve: inbox.askObserve },
   ]);
 
   return {
@@ -100,6 +113,7 @@ export function createProduct(options: {
         "machines",
         "projects",
         "conversations",
+        "inbox",
       ]);
       let ready!: () => void;
       const everyone = new Promise<void>((resolve) => {
@@ -132,6 +146,7 @@ export function createProduct(options: {
           applied("conversations"),
         ),
       );
+      server.mount("inbox", inboxPlugin({ inbox }, applied("inbox")));
       let timer: ReturnType<typeof setTimeout> | undefined;
       const late = new Promise<never>((_, reject) => {
         timer = setTimeout(
