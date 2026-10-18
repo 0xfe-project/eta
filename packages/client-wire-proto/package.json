@@ -1,0 +1,21 @@
+{
+	"name": "@eta/client-wire-proto",
+	"version": "0.1.0",
+	"description": "The pipe protocol between eta-server and any client: calls in, replies/state/events out. No op vocabulary, no business semantics.",
+	"private": true,
+	"type": "module",
+	"main": "./src/index.ts",
+	"types": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"test": "vitest --run --passWithNoTests",
+		"typecheck": "tsc -p tsconfig.json --noEmit"
+	},
+	"devDependencies": {
+		"@types/node": "22.19.19",
+		"typescript": "5.9.3",
+		"vitest": "4.1.9"
+	}
+}
