@@ -27,6 +27,7 @@ import {
 import { createWebRoutes } from "./http";
 import { GatewayModels } from "./llm/models";
 import { llmPlugin } from "./llm/plugin";
+import { LLM_ROUTE } from "./llm/route";
 import { openLlm } from "./llm/runtime";
 import { createProduct } from "./product";
 
@@ -126,6 +127,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       ...(options.routines === undefined ? {} : { routines: options.routines }),
       artifactLimits: options.artifactLimits,
       memoryUrl: options.memoryUrl,
+      gateway: () => llm,
       publicUrl: options.publicUrl,
       mcp: options.mcp,
       akhook: options.akhook,
@@ -146,7 +148,12 @@ export async function startHost(options: HostOptions): Promise<Host> {
       },
       // The product's pages (artifacts) first; they answer for their own paths, found or not.
       fetch: async (request) =>
-        (await product.fetch(request)) ?? (await web(request)),
+        (llm !== undefined &&
+        new URL(request.url).pathname.startsWith(LLM_ROUTE)
+          ? await llm.forward(request)
+          : undefined) ??
+        (await product.fetch(request)) ??
+        (await web(request)),
       authorize: access.authorize,
       endpoints: product.endpoints,
       remoteSessions: product.remote,

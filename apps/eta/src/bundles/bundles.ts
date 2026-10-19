@@ -33,6 +33,15 @@ const BUILTIN_DIR = fileURLToPath(
   new URL("../../../../bundles", import.meta.url),
 );
 
+/** What the bundles need of the LLM gateway: where it is, and an agent's key for it. */
+export interface GatewayKeys {
+  origin: string;
+  scopedKey: (agentId: string) => string;
+}
+
+/** An agent id a scoped key can be made for (the same pattern the gateway holds to). */
+const KEY_SCOPE = /^[\w-]{1,64}$/;
+
 export class Bundles {
   readonly registry: BundleRegistry;
   readonly rows: BundleRows;
@@ -41,6 +50,7 @@ export class Bundles {
   readonly #agentBundles: (agentId: string | undefined) => readonly string[];
   readonly #warn: (message: string) => void;
   readonly #home: string;
+  readonly #gateway: () => GatewayKeys | undefined;
 
   constructor(options: {
     db: Database;
@@ -53,6 +63,8 @@ export class Bundles {
     hub: MachineHub;
     /** The bundles an agent loads, by name. */
     agentBundles: (agentId: string | undefined) => readonly string[];
+    /** The LLM gateway, once it is up (it starts after the product), or none. */
+    gateway?: (() => GatewayKeys | undefined) | undefined;
     /** Say the `bundles` target moved. */
     changed: () => void;
     warn: (message: string) => void;
@@ -61,6 +73,7 @@ export class Bundles {
     this.#agentBundles = options.agentBundles;
     this.#warn = options.warn;
     this.#home = options.home;
+    this.#gateway = options.gateway ?? (() => undefined);
     this.rows = new BundleRows(options.db, options.key);
     this.registry = new BundleRegistry({
       builtinDir: options.builtinDir ?? BUILTIN_DIR,
@@ -98,9 +111,22 @@ export class Bundles {
 
   /** The bundles an agent's sessions on this machine load. */
   #active(agentId: string | undefined) {
-    return this.registry.active(this.#agentBundles(agentId), (name) =>
-      this.services.urlOf(name),
-    );
+    const key = this.gatewayKey(agentId);
+    const gateway = this.#gateway();
+    return this.registry
+      .active(this.#agentBundles(agentId), (name) => this.services.urlOf(name))
+      .map((active) =>
+        gateway === undefined || key === undefined
+          ? active
+          : { ...active, gateway: { url: gateway.origin, key } },
+      );
+  }
+
+  /** The agent's key for the LLM gateway's `/v1`, when there is a gateway and the agent has one. */
+  gatewayKey(agentId: string | undefined): string | undefined {
+    const gateway = this.#gateway();
+    if (gateway === undefined || agentId === undefined) return undefined;
+    return KEY_SCOPE.test(agentId) ? gateway.scopedKey(agentId) : undefined;
   }
 
   /** The MCP servers of the bundles an agent loads, one source each, for a session in `cwd`. */

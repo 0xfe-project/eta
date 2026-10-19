@@ -139,6 +139,7 @@ export class RemotePlace implements SessionPlace {
     const known = this.#deps
       .models()
       ?.getModel(identity.provider, identity.modelId);
+    const gatewayKey = this.#deps.bundles.gatewayKey(agent.id);
     const { session } = await link.machine("open", {
       ...(input.existing === null ? {} : { session: input.existing }),
       cwd: input.cwd,
@@ -162,6 +163,7 @@ export class RemotePlace implements SessionPlace {
       tools: this.#tools(conversation.id, agent.id, input.cwd),
       akhook: this.#deps.akhook(),
       bundles: await this.#deps.bundles.openOn(link, agent.bundles),
+      ...(gatewayKey === undefined ? {} : { gatewayKey }),
     });
     if (session !== input.existing) input.created(session);
     mirrors.register(session, machine.id);

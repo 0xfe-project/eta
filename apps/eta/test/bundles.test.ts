@@ -37,9 +37,7 @@ describe("the bundles that are listed", () => {
     w.client.subscribe("bundles");
     await until(() => listed(w.client).length > 0);
     const names = listed(w.client).map((bundle) => bundle.name);
-    expect(names).toEqual(
-      expect.arrayContaining(["agenvo", "github", "grok", "oomol"]),
-    );
+    expect(names).toEqual(expect.arrayContaining(["github", "grok", "oomol"]));
     const github = view(w, "github")!;
     expect(github.source).toEqual({ kind: "builtin" });
     expect(github.requires).toEqual(["git", "gh", "github-mcp-server"]);
@@ -49,11 +47,6 @@ describe("the bundles that are listed", () => {
       { name: "GITHUB_PERSONAL_ACCESS_TOKEN", secret: true, set: false },
     ]);
     expect(github.configured).toBe(false);
-    // It has a service, which waits for its secret.
-    expect(view(w, "agenvo")!.service).toEqual({
-      state: "stopped",
-      message: null,
-    });
     expect(listed(w.client).every((bundle) => bundle.problem === null)).toBe(
       true,
     );

@@ -38,6 +38,8 @@ export interface AgentsDeps {
   changed: (conversations?: readonly string[] | "all") => void;
   /** A conversation exists now: its target has to be published. */
   created: (conversationId: string) => void;
+  /** An agent is gone: whatever it was given outside the database goes with it. */
+  removed: (agentId: string) => void;
 }
 
 export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
@@ -157,6 +159,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             // Stewards and memberships go with the row (ON DELETE SET NULL / CASCADE).
             agents.remove(agent.id);
           })();
+          deps.removed(id);
           deps.changed("all");
           return { result: { agentId: id } };
         }),

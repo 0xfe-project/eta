@@ -17,6 +17,7 @@ import type {
 } from "@eta/server";
 import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/site";
+import type { GatewayKeys } from "./bundles/bundles";
 import type { McpTuning } from "./mcp/service";
 import type { SessionHooks } from "./session-hooks";
 import { homedir, hostname, platform } from "node:os";
@@ -124,6 +125,12 @@ export function createProduct(options: {
   dataDir: string;
   /** The memory sidecar's address. Without one there is no memory: no plugin, no tools, no calls. */
   memoryUrl?: string | undefined;
+  /** The LLM gateway, once it is up (it starts after the product): bundles hand agents keys for it. */
+  gateway?:
+    | (() =>
+        | (GatewayKeys & { revoke: (agentId: string) => Promise<void> })
+        | undefined)
+    | undefined;
   /** akhook: the user-level file, and host layers beyond the environment's and the data directory's. */
   akhook?: AkhookOptions | undefined;
   warn: (message: string) => void;
@@ -264,6 +271,7 @@ export function createProduct(options: {
     hub,
     agentBundles: (agentId) =>
       agentId === undefined ? [] : (agents.get(agentId)?.bundles ?? []),
+    gateway: options.gateway,
     changed: () => wire?.pushNow("bundles"),
     warn,
   });
@@ -474,7 +482,23 @@ export function createProduct(options: {
       server.mount(
         "agents",
         agentsPlugin(
-          { ...shared, dataDir, db, engine, changed, created },
+          {
+            ...shared,
+            dataDir,
+            db,
+            engine,
+            changed,
+            created,
+            removed: (agentId) =>
+              void options
+                .gateway?.()
+                ?.revoke(agentId)
+                .catch((error) =>
+                  warn(
+                    `[eta] llm: could not end the keys of ${agentId}: ${String(error)}`,
+                  ),
+                ),
+          },
           applied("agents"),
         ),
       );

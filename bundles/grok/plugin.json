@@ -1,20 +1,6 @@
 {
   "name": "grok",
   "version": "1.0.0",
-  "description": "Grok Imagine for images and video, and web and X search, through the grok-api MCP server.",
-  "requires": ["grok-api"],
-  "config": {
-    "type": "object",
-    "additionalProperties": false,
-    "required": ["XAI_API_KEY"],
-    "properties": {
-      "XAI_API_KEY": {
-        "type": "string",
-        "title": "xAI API key",
-        "writeOnly": true,
-        "maxLength": 256,
-        "description": "Created in the [xAI console](https://console.x.ai)."
-      }
-    }
-  }
+  "description": "Grok Imagine for images and video, and web and X search, through the LLM gateway's Grok account.",
+  "requires": ["grok-api"]
 }

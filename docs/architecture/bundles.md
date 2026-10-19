@@ -28,7 +28,7 @@
 - `config`：JSON Schema 的子集，`type: object`，属性都是字符串；`required`、`title`、`description`（Markdown）、`writeOnly`（机密）、`minLength`、`maxLength`（默认并最多 4096）、`pattern`。属性名就是环境变量名，大写字母、数字和下划线，不能是 `PATH`、`HOME` 这类系统变量，也不能以 `ETA_`、`LD_`、`NODE_` 开头。
 - `service`：`{ "command": [...], "env": {...}, "ready": "/" }`，见下。
 
-mcp.json 里可以写 `${变量}`：`${PLUGIN_ROOT}`（包在这台机器上的目录）、`${ETA_WORKSPACE_DIR}`（会话的工作目录）、`${ETA_SERVICE_URL}`（包的服务地址，只在主机器上有）和 `config` 里声明的任何一项。用到本机没有的变量，这个服务器被丢掉并记一条警告，其他照常。akhook.yml 只展开 `${PLUGIN_ROOT}` 和 `${ETA_WORKSPACE_DIR}`，配置值不进文本。
+mcp.json 里可以写 `${变量}`：`${PLUGIN_ROOT}`（包在这台机器上的目录）、`${ETA_WORKSPACE_DIR}`（会话的工作目录）、`${ETA_SERVICE_URL}`（包的服务地址，只在主机器上有）、`${ETA_GATEWAY_URL}` 与 `${ETA_AGENT_KEY}`（LLM 网关的地址和这个智能体的 key，见下）和 `config` 里声明的任何一项。用到本机没有的变量，这个服务器被丢掉并记一条警告，其他照常。akhook.yml 只展开 `${PLUGIN_ROOT}` 和 `${ETA_WORKSPACE_DIR}`，配置值不进文本。
 
 规则 id 归在包名下（`<name>/<id>`），所以两个包的规则不会撞。`prompt_submit` 和 `stop` 属于一次回复，由主 node 执行，对远端机器上的会话也一样；工具调用规则（`file_change`、`shell_exec`、`tool_call`、`stream`）在会话所在的机器上执行。
 
@@ -83,6 +83,15 @@ daemon 把文件放进 `<数据目录>/bundles/<哈希>/`（先写临时目录�
 
 `${ETA_SERVICE_URL}` 在 daemon 上没有（服务只在回环上），用它的 MCP 服务器在 daemon 的会话里被丢掉。
 
+## LLM 网关的 key
+
+包的 MCP 服务器要用模型订阅（例如 grok：Grok Imagine 和搜索走网关里的 Grok 账号）时，用 `${ETA_GATEWAY_URL}`（`/v1` 挂在它下面）和 `${ETA_AGENT_KEY}`，用户什么都不用填。
+
+- **key**：宿主为每个智能体派生一把只开 `/v1` 的 key（`etak.<智能体 id>.<HMAC>`，HMAC 以宿主本次启动的随机 key 为密钥），不存表；网关校验时重算。删除智能体时宿主让网关吊销这个 id 的 key；网关重启换了宿主 key，旧的全部失效。它进不了账号 API（`/api/llm`）和别的路径。
+- **主机器**的会话：`${ETA_GATEWAY_URL}` 是回环 `http://127.0.0.1:<端口>`。
+- **daemon** 的会话：回环不通，所以是 `<主 node 地址>/llm`。主 node 在自己的端口上挂了 `/llm/v1/*`，不走令牌门（daemon 没有 cookie），只认 `etak.` 开头的智能体 key，转给网关的 `/v1`，请求体和响应都是流。`machine.open` 的 `gatewayKey` 把 key 带给 daemon，只存在内存里，和配置值一样。
+- 没有网关（库没构建）时两个变量都没有，用它们的 MCP 服务器被丢掉并记警告。
+
 ## 就绪（`requires`）
 
 `machine.which { commands }` 让 daemon 在它的 PATH 上找命令；主机器直接找。主 node 在启动、daemon 连上、包变了、`bundles.recheck` 时问一遍，结果缓存；主机器每次生成列表时现查。`list` 里每个包带 `machines: [{ machineId, name, ready, missing, checked }]`，离线的机器 `checked: false`。
@@ -118,9 +127,8 @@ daemon 把文件放进 `<数据目录>/bundles/<哈希>/`（先写临时目录�
 | 包     | 内容                                                                                                                                         | requires                         |
 | ------ | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
 | github | 技能 `github`（gh/git 用机器上自己的登录，`github__*` 工具用设置里的 token）；MCP `github-mcp-server stdio`；config 令牌                     | `git`、`gh`、`github-mcp-server` |
-| grok   | 技能 `grok`；MCP `grok-api mcp`（图像、视频、网页和 X 搜索）；config `XAI_API_KEY`                                                           | `grok-api`                       |
+| grok   | 技能 `grok`；MCP `grok-api mcp`（图像、视频、网页和 X 搜索），经 LLM 网关用 Grok 订阅账号，密钥是智能体自己的网关 key；没有 config           | `grok-api`                       |
 | oomol  | 技能 `oomol`；一个零依赖的 stdio MCP（`server/oo-mcp.mjs`）把 `oo` CLI 当一个工具跑，密钥只在它的进程里；config `OO_API_KEY`、`OO_TEAM_NAME` | `node`、`oo`                     |
-| agenvo | 技能 `agenvo`；服务 `service/start.mjs` 起 agenvo 中继；MCP 指向 `${ETA_SERVICE_URL}/mcp`；config `AGENVO_ADMIN_SECRET`                      | `node`、`agenvo-server`          |
 
 groups、tasks、artifacts、approval、memory、routines 已经是产品功能，不再是环境包。每个包的 `skills/*/references/setup.md` 写着怎么安装和配置，智能体按它指引用户。
 

@@ -237,6 +237,39 @@ describe("what a session is given", () => {
     expect(warnings.join()).toContain("ETA_SERVICE_URL");
   });
 
+  it("gives the gateway's address and the agent's key to the servers that name them, and drops them where there is none", () => {
+    const read = readBundle(
+      bundle({
+        "plugin.json": JSON.stringify({ name: "gw", version: "1.0.0" }),
+        "mcp.json": JSON.stringify({
+          mcpServers: {
+            gw: {
+              command: "tool",
+              args: ["--base-url", "${ETA_GATEWAY_URL}/v1"],
+              env: { API_KEY: "${ETA_AGENT_KEY}" },
+            },
+          },
+        }),
+      }),
+    );
+    const base = { bundle: read, config: {}, configured: true };
+    const gateway = { url: "http://primary:1/llm", key: "etak.a.mac" };
+    expect(
+      bundleMcpServers({ ...base, gateway }, { cwd: "/w" }).gw,
+    ).toMatchObject({
+      command: "tool",
+      args: ["--base-url", "http://primary:1/llm/v1"],
+      env: { API_KEY: "etak.a.mac" },
+    });
+    const warnings: string[] = [];
+    expect(
+      bundleMcpServers(base, { cwd: "/w" }, (message) =>
+        warnings.push(message),
+      ),
+    ).toEqual({});
+    expect(warnings.join()).toContain("has no value here");
+  });
+
   it("starts nothing and hooks nothing until the bundle is configured, but keeps its skills", () => {
     const a = active({});
     expect(bundleMcpServers(a, { cwd: "/w" })).toEqual({});
