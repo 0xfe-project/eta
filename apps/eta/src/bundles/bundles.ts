@@ -172,6 +172,16 @@ export class Bundles {
       new URL(request.url).pathname,
     );
     if (match === null) return undefined;
+    // A page of another origin must not be able to drive a bundle's service with the user's
+    // cookie: a write that names another origin is refused.
+    const origin = request.headers.get("origin");
+    if (
+      origin !== null &&
+      request.method !== "GET" &&
+      request.method !== "HEAD" &&
+      new URL(origin).host !== new URL(request.url).host
+    )
+      return new Response("cross-origin write refused", { status: 403 });
     return (
       (await this.services.proxy(match[1]!, request, match[2] ?? "/")) ??
       new Response("no such service", { status: 404 })

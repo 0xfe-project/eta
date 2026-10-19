@@ -17,12 +17,9 @@
     "tabs": {
       "general": "General",
       "instructions": "Instructions",
-      "environment": "Environment"
+      "environment": "Bundles"
     },
     "sectionsLabel": "Agent settings sections"
-  },
-  "environment": {
-    "buildFailed": "Environment build failed"
   },
   "models": {
     "loading": "Loading models…",
@@ -35,10 +32,6 @@
       "deleted": "{{modelName}} no longer exists. Select another model.",
       "unavailable": "{{modelName}} is temporarily unavailable: {{reason}}"
     }
-  },
-  "bundles": {
-    "requiredSuffix": " · Required",
-    "help": "These bundles build the agent’s environment, including tools and plugins. Changes rebuild the environment and take effect when the agent is idle."
   },
   "fields": {
     "namePlaceholder": "e.g. Code review",
@@ -72,7 +65,6 @@
     "nameAndModel": "Name and model",
     "stepsLabel": "Creation steps",
     "failed": "Creation failed: {{message}}",
-    "noBundles": "No bundles yet; the agent uses the default environment.",
     "retry": "Retry creation"
   },
   "usage": {

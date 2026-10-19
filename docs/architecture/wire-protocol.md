@@ -51,6 +51,7 @@
 | tasks         | `tasks`、`tasks.<id>`                 | `create` `update` `comment` `delete` `link` `confirmDraft`                                          |
 | artifacts     | `artifacts`                           | `share` `unshare` `delete` `preview`                                                                |
 | routines      | `routines`、`routines.<id>`           | `create` `update` `delete` `run` `seen` `feedback` `restoreBrief`                                   |
+| bundles       | `bundles`                             | `configure` `add` `remove` `refresh` `recheck`                                                      |
 | memory        | `memory`（仅有边车时挂载）            | `list` `remember` `forget`                                                                          |
 | llm           | `llm`（eager；仅有网关库时挂载）      | `refresh` `loginStart` `loginPoll` `loginSubmit` `loginCancel` `setEnabled` `remove`                |
 

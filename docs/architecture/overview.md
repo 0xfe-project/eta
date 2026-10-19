@@ -8,7 +8,7 @@ eta 是一个人用来指挥多个智能体的工作台。服务端是**一个 B
    ▼
 主 node  apps/eta                              ← 唯一的进程；SQLite + 文件在一个数据目录里
    ├─ 上游地板  packages/eta-server：sessions、providers、settings、personas
-   ├─ 产品插件  agents machines projects conversations inbox usage tasks artifacts routines [memory] [llm]
+   ├─ 产品插件  agents machines projects conversations inbox usage tasks artifacts routines bundles [memory] [llm]
    ├─ LLM 网关  packages/llm-gateway：嵌入 CLIProxyAPI 的 Go 库，bun:ffi 加载（订阅账号、Gemini key）
    ├─ 本机会话  harness（packages/eta-core、eta-harness…）直接在进程里跑
    │
@@ -33,7 +33,7 @@ eta 是一个人用来指挥多个智能体的工作台。服务端是**一个 B
 apps/
   eta/        host：入口 main.ts、host.ts（组装）、product.ts（产品插件）、access.ts（访问控制）、
               db.ts + migrations/（SQLite），以及 agents、machines、projects、conversations、inbox、usage、
-              memory、tasks、artifacts、routines 各一个目录
+              memory、tasks、artifacts、routines、bundles 各一个目录
   daemon/     eta-daemon：setup / run / install-service
   web/        React 界面，通过 WebSocket 读写
   memory/     Python 边车
@@ -44,6 +44,7 @@ packages/
   eta-plugin-akhook   声明式规则（akhook 的配置）与流式规则，见 [akhook](akhook.md)
   client-wire-proto、client-contracts   线上的帧，以及产品 target 的类型（Web 与 host 共用）
   llm-gateway   Go（CLIProxyAPI）网关，c-shared 库 + bun:ffi 绑定
+bundles/      内置的环境包（github、grok、oomol、agenvo），见[环境包](bundles.md)
 deploy/       Dockerfile、memory.Dockerfile、compose.yaml
 ```
 

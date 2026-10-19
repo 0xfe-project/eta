@@ -17,12 +17,9 @@
     "tabs": {
       "general": "常规",
       "instructions": "指令",
-      "environment": "环境"
+      "environment": "环境包"
     },
     "sectionsLabel": "智能体设置分类"
-  },
-  "environment": {
-    "buildFailed": "环境构建失败"
   },
   "models": {
     "loading": "正在加载模型…",
@@ -35,10 +32,6 @@
       "deleted": "{{modelName}} 已不存在，请更换模型。",
       "unavailable": "{{modelName}} 暂不可用：{{reason}}"
     }
-  },
-  "bundles": {
-    "requiredSuffix": " · 必选",
-    "help": "智能体的环境由这些环境包构建：安装的工具、可用的插件。修改后重新构建，在空闲时生效。"
   },
   "fields": {
     "namePlaceholder": "例如：代码审查",
@@ -72,7 +65,6 @@
     "nameAndModel": "名称与模型",
     "stepsLabel": "新建步骤",
     "failed": "创建失败：{{message}}",
-    "noBundles": "还没有环境包，智能体使用默认环境。",
     "retry": "重试创建"
   },
   "usage": {

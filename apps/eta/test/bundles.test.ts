@@ -465,6 +465,12 @@ Bun.serve({
       cookie: null,
     });
     expect(String(body.data)).toContain(join("bundles", "svc"));
+    // A page of another origin cannot write to it with the user's cookie.
+    const foreign = await fetch(
+      `http://127.0.0.1:${w.host.port}/bundles/svc/service/hello`,
+      { method: "POST", headers: { origin: "http://evil.example" }, body: "x" },
+    );
+    expect(foreign.status).toBe(403);
     expect(JSON.stringify(w.client.frames)).not.toContain(SECRET);
   });
 
