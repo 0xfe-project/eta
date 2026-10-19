@@ -1,6 +1,7 @@
 import type { UseFormReturn } from "react-hook-form";
 import type { AgentForm } from "./agent-form";
 import type { Model } from "@/queries/providers";
+import { useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -134,6 +135,10 @@ export function ModelField({
     "providers",
   ] as const);
   const error = form.formState.errors.model;
+  // useWatch, not form.watch: the React Compiler memoises these components on their props, and
+  // `form` is the same object every render. A read the compiler cannot see never invalidates that
+  // memo, so the component kept its old render and the trigger kept its old label.
+  const chosenModel = useWatch({ control: form.control, name: "model" });
   // Only once they have loaded can there be none.
   const noModels =
     models !== undefined && !models.some((model) => model.available);
@@ -144,7 +149,7 @@ export function ModelField({
       </Label>
       <ModelSelect
         id="agent-model"
-        value={form.watch("model")}
+        value={chosenModel}
         models={models}
         invalid={Boolean(error)}
         aria-describedby={error || noModels ? "agent-model-hint" : undefined}
@@ -187,7 +192,7 @@ export function ModelField({
  */
 export function ThinkingField({ form }: { form: Form }) {
   const { t: translateText } = useTranslation(["agents", "common"] as const);
-  const value = form.watch("thinkingLevel");
+  const value = useWatch({ control: form.control, name: "thinkingLevel" });
   return (
     <div className="space-y-1.5">
       <Label htmlFor="agent-thinking">
@@ -231,7 +236,8 @@ export function InstructionsField({
     "providers",
   ] as const);
   const error = form.formState.errors.description;
-  const length = form.watch("description").length;
+  const description = useWatch({ control: form.control, name: "description" });
+  const length = (description ?? "").length;
   return (
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-2">
@@ -318,13 +324,14 @@ function PersonaSelect({
 /** The persona row in the editor form: label + PersonaSelect wired to react-hook-form. */
 export function PersonaField({ form }: { form: Form }) {
   const { t: translateText } = useTranslation(["agents", "common"] as const);
+  const persona = useWatch({ control: form.control, name: "persona" });
   return (
     <div className="space-y-1.5">
       <Label htmlFor="agent-persona">
         {translateText("agents:persona.label")}
       </Label>
       <PersonaSelect
-        value={form.watch("persona")}
+        value={persona}
         onChange={(next) =>
           form.setValue("persona", next, { shouldDirty: true })
         }
@@ -341,7 +348,7 @@ export function PersonaField({ form }: { form: Form }) {
 export function BundlesField({ form }: { form: Form }) {
   const { t: translateText } = useTranslation(["bundles", "common"] as const);
   const { bundles } = useBundles();
-  const chosen = form.watch("bundles") ?? [];
+  const chosen = useWatch({ control: form.control, name: "bundles" }) ?? [];
   const gone = chosen.filter(
     (name) => !bundles.some((bundle) => bundle.name === name),
   );

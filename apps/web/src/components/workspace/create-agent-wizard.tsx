@@ -2,7 +2,7 @@ import type { AgentForm } from "./agent-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useEffect, useRef, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -62,7 +62,7 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
       thinkingLevel: "",
     },
   });
-  const model = form.watch("model");
+  const model = useWatch({ control: form.control, name: "model" });
   // New agents start with the last used model, else the default one, else the first usable one.
   const preferred =
     usable.find((item) => item.id === lastModel) ??

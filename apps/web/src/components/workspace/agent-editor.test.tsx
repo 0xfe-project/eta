@@ -197,6 +197,20 @@ describe("editing an agent in tabs", () => {
     });
   });
 
+  it("shows the chosen persona in the trigger as soon as it is picked", async () => {
+    // The click has to change what the trigger reads right away: the same tick, without
+    // waiting for a save, a refetch or anything else re-rendering the tree.
+    const trigger = () =>
+      document.getElementById("agent-persona") as HTMLButtonElement;
+    expect(trigger().textContent).toContain("项目默认");
+    await click(trigger());
+    const option = [
+      ...document.querySelectorAll<HTMLElement>('[role="option"]'),
+    ].find((candidate) => candidate.textContent?.includes("简短"))!;
+    await click(option as unknown as HTMLButtonElement);
+    expect(trigger().textContent).toContain("简短");
+  });
+
   it("has no bundles to choose: the host has none", async () => {
     expect(
       buttons().some((b) => b.closest("nav") && b.textContent === "环境包"),

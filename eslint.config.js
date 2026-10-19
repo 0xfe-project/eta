@@ -66,4 +66,21 @@ export default antfu(
     languageOptions: { globals: globals.serviceworker },
     rules: { "no-restricted-globals": "off" },
   },
+  {
+    // `form.watch("x")` is a plain read of mutable state outside React. The React Compiler
+    // memoises a component on its props, and `form` is the same object on every render, so that
+    // read never invalidates the memo: the component keeps its old render and the field keeps its
+    // old label until something remounts it. useWatch is a hook, so the compiler can see it.
+    files: ["apps/web/src/**/*.ts", "apps/web/src/**/*.tsx"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "CallExpression[callee.property.name='watch']",
+          message:
+            "Use useWatch({ control: form.control, name }) — the React Compiler memoises form.watch reads away.",
+        },
+      ],
+    },
+  },
 );
