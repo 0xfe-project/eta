@@ -20,9 +20,13 @@ export interface MachineRecord {
   fingerprint: string | null;
   home: string | null;
   os: string | null;
+  maxActiveRuns: number;
   createdAt: number;
   lastSeenAt: number | null;
 }
+
+/** How many task runs a machine may work on at once, at most. */
+const MAX_ACTIVE_RUNS_LIMIT = 20;
 
 interface Row {
   id: string;
@@ -32,6 +36,7 @@ interface Row {
   fingerprint: string | null;
   home: string | null;
   os: string | null;
+  max_active_runs: number;
   created_at: number;
   last_seen_at: number | null;
 }
@@ -44,6 +49,7 @@ const recordOf = (row: Row): MachineRecord => ({
   fingerprint: row.fingerprint,
   home: row.home,
   os: row.os,
+  maxActiveRuns: row.max_active_runs,
   createdAt: row.created_at,
   lastSeenAt: row.last_seen_at,
 });
@@ -124,6 +130,18 @@ export class MachineStore {
     const changed = this.#db
       .query("UPDATE machine SET name = ? WHERE id = ?")
       .run(name, id).changes;
+    return changed === 0 ? undefined : this.get(id);
+  }
+
+  /** How many task runs the machine works on at once. */
+  setMaxActiveRuns(id: string, limit: number): MachineRecord | undefined {
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_ACTIVE_RUNS_LIMIT)
+      throw new Error(
+        `runs at once must be a whole number from 1 to ${MAX_ACTIVE_RUNS_LIMIT}`,
+      );
+    const changed = this.#db
+      .query("UPDATE machine SET max_active_runs = ? WHERE id = ?")
+      .run(limit, id).changes;
     return changed === 0 ? undefined : this.get(id);
   }
 

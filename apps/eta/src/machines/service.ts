@@ -17,7 +17,8 @@
  *   conversation and the inbox hear it exactly as they hear a local session's.
  *
  * Every call names a session, and a session is only believed to be what the primary's own rows say
- * it is: the machine on the link must be the machine of the session's project.
+ * it is: the machine on the link must be the machine of the session's project, or of the task run
+ * the session works for.
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { McpCredentialCall } from "@eta/client-contracts";
@@ -30,10 +31,17 @@ import type { MachineLink } from "./hub";
 import type { MachineStore } from "./store";
 import { forwardedOptions } from "@eta/daemon";
 import { SshEnvironment } from "@eta/ssh";
+import { runKey } from "../tasks/run-key";
 import { LinkTransport } from "./link-transport";
 
 export interface LinkServiceDeps {
   conversations: ConversationStore;
+  /** The task run a session works for, as the primary's rows know it. */
+  taskRun: (
+    session: string,
+  ) =>
+    | { runId: string; agentId: string; machineId: string; cwd: string }
+    | undefined;
   projects: ProjectStore;
   machines: MachineStore;
   /** The model layer; not there until the server is up. */
@@ -61,6 +69,20 @@ export function serveLink(link: MachineLink, deps: LinkServiceDeps): void {
   /** The primary's own idea of a session, or nothing for one that is not this machine's. */
   const held = (session: unknown): Held | undefined => {
     if (typeof session !== "string") return undefined;
+    const run = deps.taskRun(session);
+    if (run !== undefined) {
+      if (run.machineId !== link.machineId) return undefined;
+      return {
+        cwd: run.cwd,
+        meta: {
+          id: session,
+          createdAt: 0,
+          cwd: run.cwd,
+          agentId: run.agentId,
+          conversationId: runKey(run.runId),
+        },
+      };
+    }
     const found = deps.conversations.ofSession(session);
     if (found === undefined || found.machineId !== link.machineId)
       return undefined;
@@ -134,14 +156,14 @@ export function serveLink(link: MachineLink, deps: LinkServiceDeps): void {
     const hooks = deps.hooks();
     if (found === undefined || hooks === undefined)
       throw new Error(`unknown session: ${params.session}`);
-    const key = `${found.meta.conversationId}:${found.meta.agentId}`;
-    let set = tools.get(key);
+    // A session's tools are made once; runs of one agent are sessions of their own.
+    let set = tools.get(params.session);
     if (set === undefined) {
       set = hooks.sessionTools({
         meta: found.meta,
         session: undefined as never,
       });
-      tools.set(key, set);
+      tools.set(params.session, set);
     }
     const tool = set.find((candidate) => candidate.name === params.name);
     if (tool === undefined) throw new Error(`no such tool: ${params.name}`);

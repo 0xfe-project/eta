@@ -1,10 +1,10 @@
 import type {
-  BoardTaskAssignee,
   BoardTaskStatus,
   MessageView,
   TaskArtifactRef,
   TaskCardData,
   TaskDraftData,
+  TaskWorkspaceMode,
 } from "@eta/client-contracts";
 /**
  * Task cards in a conversation's timeline.
@@ -13,7 +13,8 @@ import type {
  * proposal is a row of its timeline (`task_draft`) carrying a title and a description built from
  * what was agreed. Nothing is on the board yet and nothing is woken: a draft is an invitation to
  * decide. When the user confirms it, the same row becomes the task's card (`task_card`) and holds
- * the task's facts from then on, refreshed whenever the task changes.
+ * the task's facts from then on, refreshed whenever the task changes. The agent that proposed it is
+ * the task's executor, and the workspace it chose is where the executor will work.
  *
  * One row, three states, and that is the point: the conversation keeps its history, the card is
  * where the proposal was, and there is no second copy of the task to drift. A task has at most one
@@ -34,6 +35,8 @@ export interface DraftInput {
   acceptance: string;
   /** Where in the conversation this came from, as plain text; the board works it out when absent. */
   source?: string | undefined;
+  /** Where the executor works: a worktree of its own, or the project's directory. */
+  workspace: TaskWorkspaceMode;
 }
 
 /** What the user may have changed on the way to the board. */
@@ -41,7 +44,6 @@ export interface ConfirmFields {
   title?: string | undefined;
   description?: string | undefined;
   status?: BoardTaskStatus | undefined;
-  assignee?: BoardTaskAssignee | undefined;
 }
 
 export interface TaskCardsDeps {
@@ -64,7 +66,7 @@ function cardData(
     number: task.number,
     title: task.title,
     status: task.status,
-    assignee: task.assignee,
+    runStatus: task.runStatus,
     conversationId: task.conversationId,
     comments: task.comments,
     summary,
@@ -108,6 +110,7 @@ export class TaskCards {
         `## 验收标准\n\n${input.draft.acceptance.trim()}`,
         `来源：对话《${conversation.name}》${source}。`,
       ].join("\n\n"),
+      workspace: input.draft.workspace,
     };
     return timeline.append({
       conversationId: input.conversationId,
@@ -152,7 +155,11 @@ export class TaskCards {
         title,
         description: input.fields.description ?? draft.description,
         status: input.fields.status,
-        assignee: input.fields.assignee,
+        // The agent that proposed it executes it, in the project the conversation is in.
+        createdByAgent: row.agentId ?? undefined,
+        projectId: this.#deps.conversations.get(input.conversationId)
+          ?.projectId,
+        workspaceMode: draft.workspace ?? "local",
         conversationId: input.conversationId,
         origin: { draftId: row.id },
       });

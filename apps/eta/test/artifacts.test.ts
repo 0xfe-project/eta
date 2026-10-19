@@ -34,7 +34,7 @@ async function room(options: Parameters<typeof world>[0] = {}) {
     if (request.lastRole === "toolResult") results.push(request.last);
     return plans[who]?.[results.length] ?? say("done");
   });
-  const w = await world({ models, ...options });
+  const w = await world({ models, tasks: { runs: false }, ...options });
   const ada = await w.agent("Ada");
   const bob = await w.agent("Bob");
   const project = await w.project({ stewardId: ada.id });
@@ -175,10 +175,15 @@ describe("publish_artifact", () => {
   it("links an artifact to a task: an entry on its timeline and a line on its card", async () => {
     const r = await room();
     await r.write({ "site/index.html": "x" });
-    const made = (await r.w.client.call("tasks", "create", {
-      title: "Docs",
-      conversationId: r.group.id,
-    })) as { task: BoardTaskDetail };
+    const made = r.w.host.product.board.create(
+      {
+        title: "Docs",
+        conversationId: r.group.id,
+        workspace: "local",
+        status: "backlog",
+      },
+      { kind: "agent", agentId: r.ada.id },
+    );
     // A card needs a confirmed draft.
     const [drafted] = await r.play("Ada", [
       call("draft_task", { title: "Docs 2", goal: "g", acceptance: "a" }),

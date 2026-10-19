@@ -26,7 +26,7 @@ async function drafted() {
           acceptance: "The sign-in test passes",
         }),
   );
-  const w = await world({ models });
+  const w = await world({ models, tasks: { runs: false } });
   const ada = await w.agent("Ada");
   const project = await w.project({ stewardId: ada.id });
   const group = await w.group(project.id, [ada.id], "login");
@@ -85,19 +85,21 @@ describe("a task draft", () => {
   });
 
   it("becomes a task and a card on confirm, and keeps its place in the timeline", async () => {
-    const { w, group, draft } = await drafted();
+    const { w, ada, project, group, draft } = await drafted();
     const { task, message } = await confirm(w, group.id, draft.id, {
       title: "  Fix the login form ",
       status: "in_review",
-      assignee: "user",
     });
     expect(task).toMatchObject({
       number: 1,
       title: "Fix the login form",
       status: "in_review",
-      assignee: "user",
       conversationId: group.id,
-      createdBy: { kind: "user", agentId: null },
+      // The agent that proposed it executes it, in the conversation's project.
+      createdBy: { kind: "agent", agentId: ada.id },
+      originConversationId: group.id,
+      projectId: project.id,
+      workspace: { mode: "local", path: null, branch: null },
       // Not edited, so it is the draft's.
       description: (draft.data as { description: string }).description,
     });
@@ -113,7 +115,7 @@ describe("a task draft", () => {
       number: 1,
       title: "Fix the login form",
       status: "in_review",
-      assignee: "user",
+      runStatus: null,
       conversationId: group.id,
       comments: 0,
       summary: "",
@@ -135,8 +137,8 @@ describe("a task draft", () => {
     )![0]!;
     expect(created).toMatchObject({
       kind: "created",
-      actor: { kind: "user" },
-      data: { status: "in_review", assignee: "user", draftId: draft.id },
+      actor: { kind: "agent", agentId: ada.id },
+      data: { status: "in_review", draftId: draft.id },
     });
   });
 
@@ -144,7 +146,7 @@ describe("a task draft", () => {
     const { w, group, draft } = await drafted();
     const first = await confirm(w, group.id, draft.id);
     const revision = revisionOf(w, draft.id);
-    expect(first.task).toMatchObject({ status: "todo", assignee: "none" });
+    expect(first.task).toMatchObject({ status: "todo" });
 
     const second = await confirm(w, group.id, draft.id, { title: "Other" });
     expect(second.task.id).toBe(first.task.id);
@@ -249,14 +251,19 @@ describe("a task card", () => {
     );
   });
 
-  it("is made by a confirmed draft only: creating or linking a task puts no card anywhere", async () => {
-    const { w, group } = await drafted();
-    const made = (await w.client.call("tasks", "create", {
-      title: "By hand",
-      conversationId: group.id,
-    })) as { task: BoardTaskDetail };
+  it("is made by a confirmed draft only: making or commenting on a task another way puts no card anywhere", async () => {
+    const { w, ada, group } = await drafted();
+    const made = w.host.product.board.create(
+      {
+        title: "By the agent's tool",
+        conversationId: group.id,
+        workspace: "local",
+        status: "backlog",
+      },
+      { kind: "agent", agentId: ada.id },
+    );
     await w.client.call("tasks", "comment", {
-      taskId: made.task.id,
+      taskId: made.id,
       body: "hello",
     });
     expect(w.rows(group.id).map((row) => row.kind)).toEqual([

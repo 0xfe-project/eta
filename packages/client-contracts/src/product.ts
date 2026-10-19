@@ -63,6 +63,8 @@ export interface MachineView {
   /** The machine's home directory, when it has said. */
   home: string | null;
   os: string | null;
+  /** How many task runs the machine works on at once; the rest wait in the queue. */
+  maxActiveRuns: number;
   createdAt: number;
   lastSeenAt: number | null;
 }
@@ -300,6 +302,7 @@ export const MACHINE_ACTIONS = [
   "enroll",
   "approve",
   "revoke",
+  "setMaxActiveRuns",
 ] as const;
 export type MachineAction = (typeof MACHINE_ACTIONS)[number];
 
@@ -314,12 +317,15 @@ export interface MachineArgs {
   approve: { machineId: string; fingerprint: string };
   /** Close the door on a machine. Sessions already running there are not stopped. */
   revoke: { machineId: string };
+  /** How many task runs the machine works on at once, 1 to 20; runs already going go on. */
+  setMaxActiveRuns: { machineId: string; maxActiveRuns: number };
 }
 export interface MachineResults {
   rename: { machine: MachineView };
   enroll: { code: string; expiresAt: number; url: string; command: string };
   approve: { machine: MachineView };
   revoke: { machine: MachineView };
+  setMaxActiveRuns: { machine: MachineView };
 }
 export type MachineCall = {
   [A in MachineAction]: Omit<CallFrame, "target" | "action" | "args"> & {

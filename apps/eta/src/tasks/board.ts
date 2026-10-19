@@ -1,12 +1,13 @@
 import type {
-  BoardTaskAssignee,
   BoardTaskDetail,
   BoardTaskStatus,
   BoardTaskView,
   MessageView,
+  TaskActivityKind,
   TaskActivityView,
   TaskActor,
   TaskArtifactRef,
+  TaskWorkspaceMode,
 } from "@eta/client-contracts";
 /**
  * The task board: what can be done to tasks, whoever asks.
@@ -20,8 +21,9 @@ import type {
 import type { Database } from "bun:sqlite";
 import type { ConversationStore } from "../conversations/store";
 import type { DraftInput, TaskCards } from "./cards";
+import type { TaskRunStore } from "./runs";
 import type { TaskRecord, TaskStore } from "./store";
-import { TASK_ASSIGNEES, TASK_STATUSES } from "@eta/client-contracts";
+import { TASK_STATUSES } from "@eta/client-contracts";
 
 /** Something a viewer of the board may want to read again. */
 export interface BoardChange {
@@ -34,7 +36,6 @@ export interface FieldsInput {
   title?: string | undefined;
   description?: string | undefined;
   status?: string | undefined;
-  assignee?: string | undefined;
 }
 
 /** The same fields once they have been checked. */
@@ -42,12 +43,31 @@ interface Fields {
   title?: string;
   description?: string;
   status?: BoardTaskStatus;
-  assignee?: BoardTaskAssignee;
 }
+
+/**
+ * What the board asks of the runs of its tasks (`runner.ts` is the one that answers; it is made
+ * after the board, because it works through the board, so it is attached afterwards).
+ */
+export interface TaskRuns {
+  /** A task that may run was made (or moved out of the backlog): queue its first run. */
+  start: (taskId: string) => void;
+  /** The task is done or cancelled: its runs stop. */
+  stop: (taskId: string, why: string) => void;
+  /** Whether a run of the task is starting or going. */
+  active: (taskId: string) => boolean;
+  /** A comment on the task, for the run that is going to read. */
+  deliver: (taskId: string, activity: TaskActivityView) => void;
+}
+
+/** Whether a task in this status is one an executor works on. */
+const workable = (status: BoardTaskStatus): boolean =>
+  status !== "backlog" && status !== "done" && status !== "cancelled";
 
 export interface TaskBoardDeps {
   db: Database;
   tasks: TaskStore;
+  runs: TaskRunStore;
   cards: TaskCards;
   conversations: ConversationStore;
   /** The newest version of each artifact published for a task. */
@@ -62,9 +82,9 @@ const viewOf = (task: TaskRecord): BoardTaskView => ({
   number: task.number,
   title: task.title,
   status: task.status,
-  assignee: task.assignee,
   createdBy: task.createdBy,
   conversationId: task.conversationId,
+  runStatus: task.runStatus,
   comments: task.comments,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
@@ -73,9 +93,15 @@ const viewOf = (task: TaskRecord): BoardTaskView => ({
 export class TaskBoard {
   readonly #deps: TaskBoardDeps;
   readonly #listeners = new Set<(change: BoardChange) => void>();
+  #runs: TaskRuns | undefined;
 
   constructor(deps: TaskBoardDeps) {
     this.#deps = deps;
+  }
+
+  /** The runner that answers for the runs of tasks; until it is attached, tasks do not run. */
+  attach(runs: TaskRuns): void {
+    this.#runs = runs;
   }
 
   /** Be told of every change to the board, until the returned function is called. */
@@ -106,39 +132,71 @@ export class TaskBoard {
 
   /* ---------------------------------------------------------------- changes */
 
+  /**
+   * An agent makes a task at once (the user asked for one). Users do not make tasks: the one who
+   * makes a task is the one who executes it. A task made this way has no card, since only a
+   * confirmed draft puts one in a timeline, and its first run is queued.
+   */
   create(
-    input: FieldsInput & { title: string; conversationId?: string | undefined },
+    input: FieldsInput & {
+      title: string;
+      conversationId: string;
+      workspace: TaskWorkspaceMode;
+    },
     actor: TaskActor,
   ): BoardTaskDetail {
+    if (actor.kind !== "agent" || actor.agentId === null)
+      throw new Error("only an agent makes a task");
     const { title, ...fields } = this.#fieldsOf(input);
     if (title === undefined) throw new Error("a task needs a title");
+    const conversationId = this.#conversation(input.conversationId)!;
     const task = this.#deps.tasks.create({
       ...fields,
       title,
-      conversationId: this.#conversation(input.conversationId),
-      createdByAgent:
-        actor.kind === "agent" ? (actor.agentId ?? undefined) : undefined,
+      conversationId,
+      createdByAgent: actor.agentId,
+      projectId: this.#deps.conversations.get(conversationId)?.projectId,
+      workspaceMode: input.workspace,
     });
-    // A task made this way has no card: only a confirmed draft puts one in a timeline.
     this.#announce(task.id, "created", []);
-    return this.#detailOf(task);
+    if (workable(task.status)) this.#runs?.start(task.id);
+    return this.#detailOf(this.#existing(task.id));
   }
 
   update(id: string, input: FieldsInput, actor: TaskActor): BoardTaskDetail {
-    this.#existing(id);
+    const before = this.#existing(id);
     const fields = this.#fieldsOf(input);
     this.#commit(id, "changed", () => {
       this.#deps.tasks.update(id, fields, actor);
     });
-    return this.#detailOf(this.#existing(id));
+    const after = this.#existing(id);
+    if (after.status !== before.status) {
+      // Done or cancelled work is not worked on any more. Out of the backlog, a task that never
+      // ran starts; one that has run already is rerun by hand.
+      if (after.status === "done" || after.status === "cancelled")
+        this.#runs?.stop(id, `The task is ${after.status}.`);
+      else if (
+        workable(after.status) &&
+        !workable(before.status) &&
+        this.#deps.runs.ofTask(id).length === 0
+      )
+        this.#runs?.start(id);
+    }
+    return this.#detailOf(after);
   }
 
+  /**
+   * Comment on a task. A comment that is not the executor's own words (a run's tools say so with
+   * `deliver: false`) is also handed to the run that is going, which carries on with it. A retry
+   * with the same client id is the same comment and is delivered once.
+   */
   comment(
     id: string,
     body: string,
     actor: TaskActor,
-    clientId?: string,
+    options: { clientId?: string | undefined; deliver?: boolean } = {},
   ): { task: BoardTaskDetail; activity: TaskActivityView } {
+    const { clientId } = options;
     this.#existing(id);
     if (body.trim() === "") throw new Error("a comment needs some text");
     // A retry with the same client id is the same comment: hand back the one already there.
@@ -155,6 +213,7 @@ export class TaskBoard {
         data: clientId === undefined ? undefined : { clientId },
       })!;
     });
+    if (options.deliver !== false) this.#runs?.deliver(id, activity);
     return { task: this.#detailOf(this.#existing(id)), activity };
   }
 
@@ -175,6 +234,8 @@ export class TaskBoard {
   /** Delete a task. Its cards stay in the timelines they are in, and say it is gone. */
   remove(id: string): void {
     this.#existing(id);
+    if (this.#runs?.active(id) === true)
+      throw new Error("a run is working on this task; stop it before deleting");
     this.#commit(id, "removed", () => {
       this.#deps.tasks.remove(id);
     });
@@ -198,6 +259,45 @@ export class TaskBoard {
   artifactsChanged(taskId: string): void {
     if (this.#deps.tasks.get(taskId) === undefined) return;
     this.#commit(taskId, "changed", () => undefined);
+  }
+
+  /* ---------------------------------------------------------------- runs */
+
+  /**
+   * Something happened to a run of the task: it goes on the timeline and into the cards, and the
+   * board is told. `kind` is absent when the run changed in a way the timeline has no entry for
+   * (it started waiting for a different reason, it is going now).
+   */
+  runEvent(
+    taskId: string,
+    event?: {
+      kind: TaskActivityKind;
+      runId: string;
+      body?: string | undefined;
+      data?: Record<string, unknown> | undefined;
+      actor?: TaskActor | undefined;
+    },
+  ): void {
+    if (this.#deps.tasks.get(taskId) === undefined) return;
+    this.#commit(taskId, "changed", () => {
+      if (event === undefined) return;
+      this.#deps.tasks.record(
+        taskId,
+        event.kind,
+        event.actor ?? { kind: "system", agentId: null },
+        {
+          runId: event.runId,
+          ...(event.body === undefined ? {} : { body: event.body }),
+          ...(event.data === undefined ? {} : { data: event.data }),
+        },
+      );
+    });
+  }
+
+  /** The worktree a run made for the task. */
+  setWorktree(id: string, path: string, branch: string): void {
+    this.#deps.tasks.setWorktree(id, path, branch);
+    this.#commit(id, "changed", () => undefined);
   }
 
   /* ---------------------------------------------------------------- drafts */
@@ -226,8 +326,9 @@ export class TaskBoard {
     });
     if (created) {
       this.#announce(task.id, "created", [input.conversationId]);
+      if (workable(task.status)) this.#runs?.start(task.id);
     }
-    return { task: this.#detailOf(task), message };
+    return { task: this.#detailOf(this.#existing(task.id)), message };
   }
 
   /* ---------------------------------------------------------------- inside */
@@ -252,7 +353,27 @@ export class TaskBoard {
   }
 
   #detailOf(task: TaskRecord): BoardTaskDetail {
-    return { ...task, artifacts: this.#deps.artifactsOf(task.id) };
+    const {
+      description,
+      projectId,
+      workspaceMode,
+      worktreePath,
+      worktreeBranch,
+      originConversationId,
+    } = task;
+    return {
+      ...viewOf(task),
+      description,
+      projectId,
+      originConversationId,
+      workspace: {
+        mode: workspaceMode,
+        path: worktreePath,
+        branch: worktreeBranch,
+      },
+      artifacts: this.#deps.artifactsOf(task.id),
+      runs: this.#deps.runs.ofTask(task.id).map(({ taskId: _, ...run }) => run),
+    };
   }
 
   #existing(id: string): TaskRecord {
@@ -284,14 +405,6 @@ export class TaskBoard {
         );
       }
       fields.status = input.status as BoardTaskStatus;
-    }
-    if (input.assignee !== undefined) {
-      if (!(TASK_ASSIGNEES as readonly string[]).includes(input.assignee)) {
-        throw new Error(
-          `assignee must be one of ${TASK_ASSIGNEES.join(", ")}, not ${input.assignee}`,
-        );
-      }
-      fields.assignee = input.assignee as BoardTaskAssignee;
     }
     return fields;
   }
