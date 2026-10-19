@@ -1,13 +1,16 @@
 import type {
   AgentView,
+  AttachmentView,
   ConversationSummary,
   MessageView,
 } from "@eta/client-contracts";
-import type { Draft } from "@/lib/composer";
-import type { RunBlock } from "@/lib/run";
+import type { Draft, FilePart } from "@/lib/composer";
+import type { ToolBlock } from "@/lib/run";
 import type { Outgoing, SendMode } from "@/queries/outbox";
 import type { Question } from "@/queries/questions";
+import { MAX_ATTACHMENTS } from "@eta/client-contracts";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
+import { PaperclipIcon } from "@phosphor-icons/react/Paperclip";
 import { useNavigate } from "@tanstack/react-router";
 import {
   memo,
@@ -30,23 +33,28 @@ import {
 import {
   afterCommand,
   charCount,
+  draftFiles,
   draftText,
   isBlank,
   isLongPaste,
   MAX_MESSAGE_CHARS,
   plainDraft,
 } from "@/lib/composer";
-import { buildMenu } from "@/lib/composer-menu";
+import { buildMenu, mentionAt } from "@/lib/composer-menu";
 import { translate } from "@/lib/i18n";
 import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { firstVisible } from "@/lib/rail";
+import { savedTools } from "@/lib/run";
 import { readTheme, setTheme } from "@/lib/theme";
 import { ACTIVE_STATUSES, RUNNING_STATUSES } from "@/lib/timeline";
 import { summarizeArgs } from "@/lib/tool-summary";
 import { agentName } from "@/queries/agents";
+import { beginUpload, useOutbox } from "@/queries/outbox";
+import { useProjectFiles } from "@/queries/projects";
 import { useRunBlocks } from "@/queries/sessions";
 import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar } from "./agent-identity";
+import { AttachmentChip } from "./composer-block";
 import { ComposerEditor } from "./composer-editor";
 import { ModelChip, ThinkingChip } from "./composer-pickers";
 import { GroupNotice } from "./group-notice";
@@ -61,7 +69,6 @@ import { ThinkingBlock } from "./transcript/thinking-block";
 import { ToolCard, ToolCardBlock } from "./transcript/tool-card";
 import { useWorkspaceStore } from "./workspace-store";
 
-type ToolBlock = Extract<RunBlock, { type: "tool" }>;
 type SlashName =
   | "/stop"
   | "/queue"
@@ -153,6 +160,23 @@ const FAILURE_CODES = {
   unavailable: "unavailable",
   gone: "gone",
 } as const;
+
+/** The files a message came with (`data.attachments`), under its text. */
+function MessageFiles({ data }: { data: Record<string, unknown> }) {
+  const files = Array.isArray(data.attachments)
+    ? (data.attachments as Partial<AttachmentView>[]).filter(
+        (file): file is AttachmentView =>
+          typeof file?.id === "string" && typeof file.name === "string",
+      )
+    : [];
+  return files.length === 0 ? null : (
+    <div className="flex flex-col items-start">
+      {files.map((file) => (
+        <AttachmentChip key={file.id} attachment={file} />
+      ))}
+    </div>
+  );
+}
 
 /**
  * What the user wrote. A message that is a screenful (a pasted log, a file's contents) is folded
@@ -571,6 +595,7 @@ const Turn = memo(
             }
           >
             <UserText text={message.text} />
+            <MessageFiles data={message.data} />
           </Message>
           {nobody ? (
             <p role="status" className="text-xs text-state-warning">
@@ -606,6 +631,12 @@ const Turn = memo(
               // for reading the answer critically rather than a second answer.
               <ThinkingBlock text={message.thinking} />
             )}
+            {savedTools(message.data).map((block) => (
+              // What it did with tools, as the cards the run showed while it worked.
+              <div key={block.id} className="space-y-1">
+                <ToolActivity block={block} />
+              </div>
+            ))}
             {message.text === "" || message.status === "failed" ? null : (
               <div className="message-content">
                 <Markdown>{message.text}</Markdown>
@@ -755,7 +786,7 @@ export function ChatPanel({
   questions: readonly Question[];
   draft: Draft;
   onDraftChange: (draft: Draft) => void;
-  onSend: (text: string, mode: SendMode) => void;
+  onSend: (text: string, mode: SendMode, files?: AttachmentView[]) => void;
   onCompact: () => void;
   onStop: (replyId: string) => void;
   /** `/stop`: stops every reply in the group. */
@@ -874,15 +905,32 @@ export function ChatPanel({
   const [menuDismissed, setMenuDismissed] = useState(false);
   const text = draftText(draft);
   const mentioned = mentionedMembers(text, members);
-  // Why the draft cannot go yet: the limit.
+  // The files in the draft, and how far each upload has got.
+  const uploads = useOutbox((state) => state.uploads);
+  const fileParts = draftFiles(draft);
+  const uploaded = fileParts.flatMap((part) => {
+    const attachment = uploads[part.id]?.attachment;
+    return attachment === undefined ? [] : [attachment];
+  });
+  // Why the draft cannot go yet: the limits, and files that are not up.
   const hold =
     charCount(text) > MAX_MESSAGE_CHARS
       ? translateText("composer.errors.messageTooLong", {
           maxCharacters: MAX_MESSAGE_CHARS,
         })
-      : undefined;
-  // One menu, two sources (lib/composer-menu.ts): `@` offers the group's members (the host has no
-  // file listing yet, so no files), `/` offers commands.
+      : fileParts.length > MAX_ATTACHMENTS
+        ? translateText("composer.errors.attachmentLimit", {
+            maxAttachments: MAX_ATTACHMENTS,
+          })
+        : fileParts.some((part) => uploads[part.id]?.error !== undefined)
+          ? translateText("composer.errors.failedAttachments")
+          : uploaded.length < fileParts.length
+            ? translateText("composer.waitForUploads")
+            : undefined;
+  // The project's files, asked for from its machine once an `@` is being typed.
+  const files = useProjectFiles(group?.projectId, mentionAt(text) !== null);
+  // One menu, three sources (lib/composer-menu.ts): `@` offers the group's members, then the
+  // project's files, and `/` offers commands.
   const menu = buildMenu({
     text,
     members: members.map((member) => ({
@@ -890,7 +938,7 @@ export function ChatPanel({
       name: mentionLabel(member, members),
       busy: member.status !== "idle",
     })),
-    files: [],
+    files,
     commands: SLASH_COMMANDS,
     dismissed: menuDismissed || blocked !== undefined,
   });
@@ -904,9 +952,11 @@ export function ChatPanel({
               : {
                   name: item.value.trim() as `@${string}`,
                   description:
-                    item.kind === "member" && item.hint
-                      ? translateText("mentions.busyHint")
-                      : translateText("mentions.replyHint"),
+                    item.kind === "file"
+                      ? translateText("composer.fileHint")
+                      : item.kind === "member" && item.hint
+                        ? translateText("mentions.busyHint")
+                        : translateText("mentions.replyHint"),
                 },
         );
   const menuOpen = matches.length > 0;
@@ -967,13 +1017,20 @@ export function ChatPanel({
     const name = space === -1 ? first : first.slice(0, space);
     const command = SLASH_COMMANDS.find((c) => c.name === name);
     if (command) run(command.name, afterCommand(first, name));
-    else onSend(text, "queue");
+    else onSend(text, "queue", uploaded);
     // Sending jumps back to the live end, as in a terminal.
     transcript.toBottom();
     formRef.current?.querySelector<HTMLElement>("[contenteditable]")?.focus();
   }
+  // Files pasted into the box or picked with the paperclip: uploading before they are sent.
+  const attach = (files: File[]): FilePart[] =>
+    groupId === undefined
+      ? []
+      : files.map((file) => beginUpload(groupId, file));
+  const pick = useRef<HTMLInputElement>(null);
   const editorProps = {
     value: draft,
+    onFiles: attach,
     onChange: (next: Draft) => {
       setDraft(next);
       setMenuIndex(0);
@@ -1212,6 +1269,11 @@ export function ChatPanel({
                     <div key={item.id} className="space-y-3 pt-1">
                       <Message role="user">
                         <UserText text={item.text} />
+                        {item.attachments.map((file) => (
+                          <div key={file.id}>
+                            <AttachmentChip attachment={file} />
+                          </div>
+                        ))}
                       </Message>
                       {item.failure ? (
                         <ComposerNotice
@@ -1337,6 +1399,29 @@ export function ChatPanel({
                       }
                     />
                   )}
+                  <button
+                    type="button"
+                    className="composer-control"
+                    aria-label={translateText("attachments.pick")}
+                    title={translateText("attachments.pick")}
+                    disabled={groupId === undefined}
+                    onClick={() => pick.current?.click()}
+                  >
+                    <PaperclipIcon aria-hidden="true" className="size-3.5" />
+                  </button>
+                  <input
+                    ref={pick}
+                    type="file"
+                    multiple
+                    hidden
+                    data-testid="composer-pick"
+                    onChange={(event) => {
+                      const picked = [...(event.target.files ?? [])];
+                      event.target.value = "";
+                      if (picked.length)
+                        setDraft([...draft, ...attach(picked)]);
+                    }}
+                  />
                   <span className="composer-toolbar-hints min-w-0 truncate">
                     {active === undefined
                       ? translateText("composer.sendHint")

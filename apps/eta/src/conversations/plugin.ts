@@ -9,6 +9,7 @@
 import type { ConversationSummary } from "@eta/client-contracts";
 import type { AgentStore } from "../agents/store";
 import type { ProjectStore } from "../projects/store";
+import type { AttachmentStore } from "./attachments";
 import type { Engine } from "./engine";
 import type { ConversationRecord, ConversationStore } from "./store";
 import type { ConversationTargets } from "./targets";
@@ -23,6 +24,7 @@ export interface ConversationsDeps {
   conversations: ConversationStore;
   timeline: Timeline;
   engine: Engine;
+  attachments: AttachmentStore;
   targets: ConversationTargets;
   changed: (conversations?: readonly string[] | "all") => void;
   created: (conversationId: string) => void;
@@ -168,12 +170,44 @@ export function conversationsPlugin(
             throw new Error("conversations.send: mode must be queue or steer");
           const result = await engine.send({
             conversationId: args.string("conversationId"),
-            text: args.string("text"),
+            text: args.optionalString("text") ?? "",
             mentions: args.strings("mentions"),
             mode,
             clientId: args.optionalString("clientId"),
+            attachments: args.strings("attachments"),
           });
           return { result };
+        }),
+
+        wire.handle("conversations", "attach", async (call) => {
+          const args = new Args(call);
+          const id = args.string("conversationId");
+          existing(id);
+          const attachment = await deps.attachments.receive({
+            conversationId: id,
+            uploadId: args.string("uploadId"),
+            name: args.string("name"),
+            contentType:
+              args.optionalString("contentType") || "application/octet-stream",
+            index: args.integer("index"),
+            last: args.optionalBoolean("last") ?? false,
+            data: args.optionalString("data") ?? "",
+          });
+          return { result: { attachment } };
+        }),
+
+        wire.handle("conversations", "unattach", async (call) => {
+          const args = new Args(call);
+          const id = args.string("conversationId");
+          existing(id);
+          return {
+            result: {
+              removed: await deps.attachments.remove(
+                id,
+                args.string("attachmentId"),
+              ),
+            },
+          };
         }),
 
         wire.handle("conversations", "stop", (call) => {

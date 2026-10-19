@@ -1,3 +1,6 @@
+import type { PromptImage } from "./operations";
+import type { ToolActivity } from "./product";
+
 /**
  * The link between the primary and a machine that runs the daemon.
  *
@@ -130,7 +133,7 @@ export interface MachineActionResults {
 /** What the primary asks of the daemon that may take a while (`svc` calls). */
 export interface DaemonServiceParams {
   /** Give the session some words as its next run and wait until it is quiet. */
-  run: { session: string; text: string };
+  run: { session: string; text: string; images?: PromptImage[] };
   /** Run a script on the machine, the way the SSH transport does. */
   exec: { script: string; inputBase64?: string; timeoutMs?: number };
 }
@@ -194,6 +197,8 @@ export interface RunOutcome {
   error?: string;
   text: string;
   thinking: string;
+  /** The tool calls the run made, shortened for the reply's row; absent when there were none. */
+  activity?: ToolActivity[];
 }
 
 /** What the daemon asks of the primary (`svc` calls). */

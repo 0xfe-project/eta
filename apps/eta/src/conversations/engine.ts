@@ -1,11 +1,13 @@
 import type {
   MessageStatus,
   MessageView,
+  PromptImage,
   SendResult,
 } from "@eta/client-contracts";
-import type { KernelTool } from "@eta/core";
+import type { KernelModels, KernelTool } from "@eta/core";
 import type { AskObserver } from "@eta/harness";
 import type { SessionMeta, SessionsService } from "@eta/server";
+import type { SshTransport } from "@eta/ssh";
 /**
  * The engine: what a message does.
  *
@@ -27,13 +29,16 @@ import type { SessionMeta, SessionsService } from "@eta/server";
  */
 import type { Database } from "bun:sqlite";
 import type { AgentRecord, AgentStore } from "../agents/store";
-import type { MachineStore } from "../machines/store";
+import type { MachineRecord, MachineStore } from "../machines/store";
 import type { ProjectStore } from "../projects/store";
+import type { AttachmentRecord, AttachmentStore } from "./attachments";
 import type { SessionHandle, SessionPlace, SessionSettings } from "./places";
 import type { ConversationRecord, ConversationStore } from "./store";
 import type { Timeline } from "./timeline";
 import { LinkError } from "@eta/daemon";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/harness";
+import { parseModelId } from "@eta/server";
+import { viewOf as attachmentView } from "./attachments";
 import { briefing } from "./briefing";
 import { LocalPlace, messageOf } from "./places";
 import {
@@ -115,6 +120,12 @@ export interface EngineOptions {
   projects: ProjectStore;
   conversations: ConversationStore;
   timeline: Timeline;
+  /** The files people attach to messages. */
+  attachments: AttachmentStore;
+  /** A way to run a script on a machine other than this one, to put attached files there. */
+  shell?: ((machine: MachineRecord) => SshTransport) | undefined;
+  /** The model layer, to know whether a session's model takes images; not there until the server is up. */
+  models?: (() => KernelModels | undefined) | undefined;
   /** Say that product state moved: these conversations, or all of them. */
   changed: (conversations?: readonly string[] | "all") => void;
   warn: (message: string) => void;
@@ -133,6 +144,9 @@ export class Engine {
   readonly #projects: ProjectStore;
   readonly #conversations: ConversationStore;
   readonly #timeline: Timeline;
+  readonly #attachments: AttachmentStore;
+  readonly #shell: EngineOptions["shell"];
+  readonly #models: EngineOptions["models"];
   readonly #changed: EngineOptions["changed"];
   readonly #warn: (message: string) => void;
   readonly #hooks: RunHooks;
@@ -154,6 +168,9 @@ export class Engine {
     this.#projects = options.projects;
     this.#conversations = options.conversations;
     this.#timeline = options.timeline;
+    this.#attachments = options.attachments;
+    this.#shell = options.shell;
+    this.#models = options.models;
     this.#changed = options.changed;
     this.#warn = options.warn;
     this.#hooks = options.runHooks ?? {};
@@ -236,10 +253,13 @@ export class Engine {
     mentions: readonly string[];
     mode: "queue" | "steer";
     clientId?: string | undefined;
+    /** Ids of files uploaded to this conversation (`AttachmentStore.receive`). */
+    attachments?: readonly string[] | undefined;
   }): Promise<SendResult> {
     const conversation = this.#requireConversation(input.conversationId);
     const text = input.text.trim();
-    if (text === "") throw new Error("a message needs some text");
+    if (text === "" && (input.attachments?.length ?? 0) === 0)
+      throw new Error("conversations.send needs text (or an attachment)");
     if (input.clientId !== undefined) {
       if (input.clientId === "" || input.clientId.length > 128)
         throw new Error("clientId must be 1 to 128 characters");
@@ -255,6 +275,10 @@ export class Engine {
     }
 
     const id = input.clientId ?? crypto.randomUUID();
+    const files = this.#attachments.check(
+      conversation.id,
+      input.attachments ?? [],
+    );
     const planned: { agentId: string; join: boolean }[] = [];
     const replies: MessageView[] = [];
     let message!: MessageView;
@@ -292,8 +316,15 @@ export class Engine {
         data: {
           woke: planned.filter((p) => !p.join).map((p) => p.agentId),
           joined: planned.filter((p) => p.join).map((p) => p.agentId),
+          ...(files.length === 0
+            ? {}
+            : { attachments: files.map(attachmentView) }),
         },
       });
+      this.#attachments.claim(
+        files.map((file) => file.id),
+        id,
+      );
       for (const target of planned) {
         if (!target.join)
           replies.push(
@@ -319,6 +350,7 @@ export class Engine {
     }
     if (joined.length !== planned.filter((p) => p.join).length) {
       this.#timeline.setData(message.id, {
+        ...message.data,
         woke: replies.map((reply) => reply.agentId),
         joined,
       });
@@ -375,8 +407,13 @@ export class Engine {
     const running = this.#running.get(keyOf(conversation.id, agentId));
     if (running === undefined || participant?.sessionId == null)
       throw new Error("no session to join");
-    const told = this.#briefingFor(conversation, participant, message);
-    await running.handle.steer(told.text);
+    const told = await this.#briefingFor(
+      conversation,
+      participant,
+      message,
+      running.handle,
+    );
+    await running.handle.steer(told.text, told.images);
     this.#conversations.setSeen(conversation.id, agentId, told.seen);
   }
 
@@ -664,10 +701,11 @@ export class Engine {
     if (this.#timeline.get(replyId)?.status !== "queued") return;
 
     // What it is told is settled before the row says it is working, so one push carries both.
-    const told = this.#briefingFor(
+    const told = await this.#briefingFor(
       conversation,
       this.#conversations.participant(conversationId, agent.id) ?? participant,
       trigger,
+      handle,
     );
     const info: RunInfo = {
       conversationId,
@@ -689,26 +727,34 @@ export class Engine {
     this.#changed([conversationId]);
 
     try {
-      const result = await handle.run(prompt, () => !this.#closing);
+      const result = await handle.run(
+        prompt,
+        () => !this.#closing,
+        told.images,
+      );
+      // What the run did with tools stays on the row, so the page draws it after the run too.
+      const activity =
+        result.activity === undefined ? {} : { activity: result.activity };
       if (this.#closing && result.status === "aborted") {
         this.#timeline.finish(replyId, {
           status: "failed",
           text: result.text || RESTART_TEXT,
           thinking: result.thinking,
-          data: { ...reply.data, code: "restart" },
+          data: { ...reply.data, ...activity, code: "restart" },
         });
       } else if (result.status === "failed") {
         this.#timeline.finish(replyId, {
           status: "failed",
           text: result.error ?? "The run failed.",
           thinking: result.thinking,
-          data: { ...reply.data, code: "run_failed" },
+          data: { ...reply.data, ...activity, code: "run_failed" },
         });
       } else {
         this.#timeline.finish(replyId, {
           status: result.status === "aborted" ? "stopped" : "done",
           text: result.text,
           thinking: result.thinking,
+          data: { ...reply.data, ...activity },
         });
       }
     } catch (error) {
@@ -753,20 +799,100 @@ export class Engine {
       );
   }
 
-  /** What the agent is told for this wake, and how far that brings it. */
-  #briefingFor(
+  /**
+   * What the agent is told for this wake, and how far that brings it. Files that came with the
+   * messages it is told about are put where it can open them (on its session's machine) and named
+   * under their messages; the images among them also go in as image input when its model takes
+   * them.
+   */
+  async #briefingFor(
     conversation: ConversationRecord,
     participant: { agentId: string; lastSeq: number },
     trigger: MessageView,
+    handle: SessionHandle,
   ) {
-    return briefing({
-      conversation: conversation.name,
-      me: participant.agentId,
-      lastSeq: participant.lastSeq,
-      rows: this.#timeline.after(conversation.id, participant.lastSeq),
-      trigger,
-      nameOf: (message) => this.#nameOf(message),
-    });
+    const rows = this.#timeline.after(conversation.id, participant.lastSeq);
+    const shown = rows.some((row) => row.id === trigger.id)
+      ? rows
+      : [...rows, trigger];
+    const files = new Map<string, AttachmentRecord[]>();
+    for (const row of shown) {
+      const carried = this.#attachments.carried(row.data);
+      if (carried.length > 0) files.set(row.id, carried);
+    }
+    const lines = new Map<string, string[]>();
+    let images: PromptImage[] = [];
+    if (files.size > 0) {
+      const all = [...files.values()].flat();
+      const placed = await this.#place(all, conversation);
+      for (const [rowId, carried] of files) {
+        lines.set(
+          rowId,
+          carried.map((file) => {
+            const path = placed.paths.get(file.id);
+            return path === undefined
+              ? `[attachment ${file.name} could not be put where you can read it: ${placed.failed.get(file.id) ?? "unknown error"}]`
+              : `[attachment: ${path} (${file.contentType}, ${file.size} bytes)]`;
+          }),
+        );
+      }
+      if (await this.#takesImages(handle))
+        images = await this.#attachments.images(
+          all.filter((file) => placed.paths.has(file.id)),
+        );
+    }
+    return {
+      ...briefing({
+        conversation: conversation.name,
+        me: participant.agentId,
+        lastSeq: participant.lastSeq,
+        rows,
+        trigger,
+        nameOf: (message) => this.#nameOf(message),
+        filesOf: (message) => lines.get(message.id) ?? [],
+      }),
+      images,
+    };
+  }
+
+  /** Put the files where the conversation's sessions can open them; a machine out of reach fails them all. */
+  async #place(
+    files: readonly AttachmentRecord[],
+    conversation: ConversationRecord,
+  ) {
+    try {
+      return await this.#attachments.deliver(
+        files,
+        this.#transportFor(conversation),
+      );
+    } catch (error) {
+      const failed = new Map(files.map((file) => [file.id, messageOf(error)]));
+      return { paths: new Map<string, string>(), failed };
+    }
+  }
+
+  /** How to run a script where the conversation's sessions are; undefined for this machine. */
+  #transportFor(conversation: ConversationRecord): SshTransport | undefined {
+    const project = this.#projects.get(conversation.projectId);
+    const machine =
+      project === undefined ? undefined : this.#machines.get(project.machineId);
+    if (machine === undefined || machine.kind === "primary") return undefined;
+    if (this.#shell === undefined)
+      throw new Error(`files cannot be sent to ${machine.name} from here`);
+    return this.#shell(machine);
+  }
+
+  /** Whether the session's model accepts images; when that cannot be told, no images are sent. */
+  async #takesImages(handle: SessionHandle): Promise<boolean> {
+    try {
+      const id = await handle.model();
+      if (id === undefined) return false;
+      const { provider, modelId } = parseModelId(id);
+      const model = this.#models?.()?.getModel(provider, modelId);
+      return model?.input?.includes("image") === true;
+    } catch {
+      return false;
+    }
   }
 
   #nameOf(message: MessageView): string {

@@ -10,6 +10,7 @@
   config.json               上游设置（模型、provider 等；providers 插件维护）
   llm/                      LLM 网关的状态：auths/ 凭据、models.json、providers.json（Gemini key）
   sessions/<会话 id>/       上游会话：meta.json + journal.jsonl（本机会话）
+  attachments/<对话 id>/    用户附在消息上的文件：<附件 id>-<文件名>（上传中是 .up-<id>，重启时清理）
   agents/<智能体 id>/       智能体的工作区（它同时是一个 project）
   routines/<定时任务 id>/   定时任务每次运行的工作目录
   artifacts/<产物 id>/<版本>/   archive.zip 与解压后的 files/；artifacts/.preview-key 是预览地址的签名密钥
@@ -39,6 +40,7 @@ daemon 有自己的数据目录（默认 `~/.eta-daemon`，见[机器与 daemon]
 | 0010 artifacts     | `artifact`、`artifact_version`、`artifact_share`                                                                                |
 | 0011–0013          | `routine`、`routine_run`（同一定时任务同一时刻最多一次运行，由唯一索引保证）、`routine_feedback`、`routine_brief`（简报的版本） |
 | 0014               | `machine_enrollment`（一次性安装码，只存摘要）                                                                                  |
+| 0028               | `attachment`（附件：属于哪个对话、名字、类型、大小、被哪条消息认领；未发送的 24 小时后清理）                                    |
 
 外键的取舍：`message.agent_id`、`interaction`、`usage` 里指向智能体和对话的列**没有**外键，因为这些行是历史，比智能体活得久。
 

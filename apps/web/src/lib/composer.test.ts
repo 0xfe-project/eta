@@ -3,6 +3,7 @@ import { describe, expect, it } from "@rstest/core";
 import {
   afterCommand,
   charCount,
+  draftFiles,
   draftOf,
   draftText,
   isBlank,
@@ -35,6 +36,22 @@ describe("a draft as a message", () => {
     expect(isBlank([{ type: "text", text: " \n" }])).toBe(true);
     expect(isBlank([])).toBe(true);
     expect(isBlank(draft)).toBe(false);
+  });
+
+  it("does not count a file as text, and is not blank with one", () => {
+    const file = {
+      type: "file" as const,
+      id: "f",
+      name: "a.png",
+      contentType: "image/png",
+      size: 3,
+    };
+    expect(draftText([{ type: "text", text: "看" }, file])).toBe("看");
+    expect(isBlank([file])).toBe(false);
+    expect(draftFiles([{ type: "text", text: "看" }, file, file])).toEqual([
+      file,
+      file,
+    ]);
   });
 
   it("splits a slash command from what follows it", () => {

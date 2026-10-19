@@ -19,6 +19,8 @@
 
 project = machine + 目录（同一台机器上同一路径唯一）。`steward_id` 是主理人：没有 @ 任何人的消息交给它。对话可以有自己的主理人（`conversation.steward_id`），为空则沿用 project 的。有效主理人 = 对话的 ?? project 的（`effectiveSteward`）。
 
+**文件列表**（`projects.files`，输入框的 `@` 菜单用）：在 project 所在的机器上用一段 shell 脚本列出（本机经进程自己的 shell，daemon 经链路的 `exec`，所以只有一套实现）：git 检出里取 git 认识的文件（已跟踪、未被忽略），否则是深度 ≤ 8 的 `find`；再滤掉 `node_modules`、`.git`、`.eta`、`dist`、`build` 等目录，按浅层优先排序，默认 2000、最多 5000 条，超出时 `truncated`。路径相对 project 目录，也就是智能体的工作目录。菜单里成员在前、文件在后。
+
 **切换主理人**：旧智能体的会话保留，仍然可以被 @；新智能体的会话在第一次被唤醒时才创建，只被告知它没看过的部分（`participant.last_seq` 之后的行）；时间线上落一条 `system` 行（"X 现在是主理人，接替 Y"）。
 
 ## 对话与成员
@@ -26,6 +28,11 @@ project = machine + 目录（同一台机器上同一路径唯一）。`steward_
 - 对话 `kind` 是 `group` 或 `direct`。有 `goal`、`decided` 两段文字（讨论的目标与已定的结论）、`read_seq`（用户读到哪）、`archived`。
 - `participant`：谁参加。`session_id` 是该智能体在这个对话里的会话（首次唤醒时创建，之后一直复用，重启后同样按这行找回），`last_seq` 是它被告知到哪一行。
 - `message`（时间线）：`seq` 在对话内递增，是阅读顺序。`kind` 有 `message`、`mention`、`system`、`task_draft`、`task_card`；`status` 有 `queued`、`working`、`waiting_for_input`、`done`、`failed`、`stopping`、`stopped`。**回复行占着它的位置**：入队时就有 `seq`，文字陆续到达时 `revision` 增长而 `seq` 不变。
+- 回复结束时，这次运行的工具活动存进行的 `data.activity`（`ToolActivity[]`：名称、裁短的输入、输出开头最多 2000 字符、状态，以及工具留给页面的 `details`，如 `publish_artifact` 的产物引用；`details` 超过 4000 字节丢弃，最多 200 条）。回复进行中页面从会话的 transcript 画工具卡，结束后从这里画同样的卡片和产物卡。远端会话由 daemon 的 `run` 随 `RunOutcome.activity` 带回，不需要迁移。
+
+## 附件
+
+用户行的 `data.attachments`（`AttachmentView[]`：id、名字、类型、大小）列出它带来的文件，文件本身在主 node 的数据目录里（见[数据](data.md)），上传方式见[线协议](wire-protocol.md)。智能体被唤醒（或被插话加入）时，简报里每条消息下面列出它的文件：**本机会话**得到数据目录里文件的绝对路径；**daemon 上的会话**得到写在 daemon 机器上的副本 `~/.eta/uploads/<对话 id>/<附件 id>-<名字>`（经链路的 `exec` 分块写入，已有同样大小的文件就跳过）。某个文件写不过去时，简报里写明原因，回复照常运行。png/jpeg/gif/webp 图片（最多 4 张、合计 3 MB 内）在会话的模型声明支持图像输入时，还随这条消息作为图像送给模型；模型不支持时只有路径，智能体可以用工具读。
 
 ## 唤醒规则
 

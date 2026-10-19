@@ -9,25 +9,36 @@
  * machine that runs the daemon (`machines/remote-place.ts`, over the link). The engine's rows,
  * chains, steering, stopping and recovery are the same for both.
  */
-import type { RunOutcome, ThinkingLevel } from "@eta/client-contracts";
+import type {
+  PromptImage,
+  RunOutcome,
+  ThinkingLevel,
+} from "@eta/client-contracts";
 import type { ManagedSession, SessionsService } from "@eta/server";
 import type { AgentRecord } from "../agents/store";
 import type { MachineRecord } from "../machines/store";
 import type { ConversationRecord } from "./store";
 import { runAndWait } from "@eta/daemon";
+import { formatModelId } from "@eta/server";
 
 /** One session, as the engine drives it. */
 export interface SessionHandle {
   readonly id: string;
   /** Whether a turn is in flight, which a steer can join. */
   readonly running: boolean;
-  /** Put words into the turn in flight; they arrive at its next boundary. */
-  steer: (text: string) => Promise<void>;
+  /** Put words (and images) into the turn in flight; they arrive at its next boundary. */
+  steer: (text: string, images?: PromptImage[]) => Promise<void>;
+  /** The model the session runs on now, as `provider:modelId`; undefined when it cannot say. */
+  model: () => Promise<string | undefined>;
   /**
    * Give the session these words as its next run and wait until it is quiet. `keepGoing` lets a
    * caller that is shutting down end the wait between two runs of the same reply.
    */
-  run: (prompt: string, keepGoing: () => boolean) => Promise<RunOutcome>;
+  run: (
+    prompt: string,
+    keepGoing: () => boolean,
+    images?: PromptImage[],
+  ) => Promise<RunOutcome>;
   /** Ask the run in flight to stop. */
   abort: () => void;
 }
@@ -94,12 +105,26 @@ class LocalHandle implements SessionHandle {
     return this.#managed.session.runner.running;
   }
 
-  steer(text: string): Promise<void> {
-    return this.#sessions.prompt(this.id, { text, mode: "steer" });
+  steer(text: string, images?: PromptImage[]): Promise<void> {
+    return this.#sessions.prompt(this.id, {
+      text,
+      mode: "steer",
+      ...(images === undefined || images.length === 0 ? {} : { images }),
+    });
   }
 
-  run(prompt: string, keepGoing: () => boolean): Promise<RunOutcome> {
-    return runAndWait(this.#managed, prompt, keepGoing);
+  model(): Promise<string | undefined> {
+    return Promise.resolve(
+      formatModelId(this.#managed.session.kernel.config.read("model")),
+    );
+  }
+
+  run(
+    prompt: string,
+    keepGoing: () => boolean,
+    images?: PromptImage[],
+  ): Promise<RunOutcome> {
+    return runAndWait(this.#managed, prompt, keepGoing, images);
   }
 
   abort(): void {

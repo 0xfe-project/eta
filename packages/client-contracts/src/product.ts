@@ -169,6 +169,22 @@ export type MessageStatus =
   | "stopping"
   | "stopped";
 
+/**
+ * One tool call a reply made, kept on the reply's row when it ends (`data.activity`, oldest
+ * first) so the page can draw the same cards after the run as during it. Everything is short:
+ * `input` is the call's arguments with long values cut, `output` is the head of the result text,
+ * and `details` is what the tool left for the page (`publish_artifact` names its artifact) and is
+ * dropped when it is large. A call the run ended before the result of is `failed`.
+ */
+export interface ToolActivity {
+  id: string;
+  name: string;
+  input?: unknown;
+  output?: string;
+  status: "completed" | "failed";
+  details?: unknown;
+}
+
 /** One row of a conversation's timeline. */
 export interface MessageView {
   id: string;
@@ -193,9 +209,11 @@ export interface MessageView {
   replyToId: string | null;
   /**
    * What the row carries beyond its text. A user row has `woke` (agents given a reply row) and
-   * `joined` (agents whose turn it steered); a system row has the `event` it records (`steward`
+   * `joined` (agents whose turn it steered) and, when files came with it, `attachments`
+   * (`AttachmentView[]`); a system row has the `event` it records (`steward`
    * with `from`/`to`, `wake_budget`); a failed reply has the `code` it failed with (`restart`,
-   * `run_failed`, `unavailable`, `gone`); a `task_draft` row has `TaskDraftData` and a
+   * `run_failed`, `unavailable`, `gone`) and, like any reply that ran, the `activity` of its
+   * tool calls (`ToolActivity[]`, absent when it made none); a `task_draft` row has `TaskDraftData` and a
    * `task_card` row has `TaskCardData`.
    */
   data: Record<string, unknown>;
@@ -309,7 +327,12 @@ export type MachineCall = {
 
 /* ------------------------------------------------------------------ projects */
 
-export const PROJECT_ACTIONS = ["create", "update", "setSteward"] as const;
+export const PROJECT_ACTIONS = [
+  "create",
+  "update",
+  "setSteward",
+  "files",
+] as const;
 export type ProjectAction = (typeof PROJECT_ACTIONS)[number];
 
 export interface ProjectArgs {
@@ -323,12 +346,19 @@ export interface ProjectArgs {
   update: { projectId: string; name?: string; archived?: boolean };
   /** Null clears it. Writes a system row into every conversation that follows the project. */
   setSteward: { projectId: string; agentId: string | null };
+  /**
+   * The project's files, relative to its directory, listed on the project's own machine. Shallow
+   * files come first; `limit` (default 2000, at most 5000) caps the list.
+   */
+  files: { projectId: string; limit?: number };
 }
 export interface ProjectResults {
   /** `existed` when the machine already had a project at that path: that one is returned. */
   create: { project: ProjectView; existed: boolean };
   update: { project: ProjectView };
   setSteward: { project: ProjectView };
+  /** `truncated` when more files exist than were returned. */
+  files: { files: string[]; truncated: boolean };
 }
 export type ProjectCall = {
   [A in ProjectAction]: Omit<CallFrame, "target" | "action" | "args"> & {
@@ -350,6 +380,8 @@ export const CONVERSATION_ACTIONS = [
   "stop",
   "read",
   "history",
+  "attach",
+  "unattach",
 ] as const;
 export type ConversationAction = (typeof CONVERSATION_ACTIONS)[number];
 
@@ -379,7 +411,29 @@ export interface ConversationArgs {
     mentions?: string[];
     mode?: "queue" | "steer";
     clientId?: string;
+    /**
+     * Files uploaded with `attach`, by id (at most `MAX_ATTACHMENTS`). The text may be empty when
+     * there are some. They are handed to every agent the message wakes, as files it can open.
+     */
+    attachments?: string[];
   };
+  /**
+   * One chunk of a file on its way to the conversation, in order from `index` 0; `data` is the
+   * chunk in base64 (at most `ATTACH_CHUNK_BYTES` of file). `uploadId` is chosen by the client
+   * and becomes the attachment's id, so a chunk resent after a lost reply is the same upload.
+   * The reply has the `attachment` once `last` was sent.
+   */
+  attach: {
+    conversationId: string;
+    uploadId: string;
+    name: string;
+    contentType?: string;
+    index: number;
+    last?: boolean;
+    data: string;
+  };
+  /** Takes back an attachment that has not been sent. */
+  unattach: { conversationId: string; attachmentId: string };
   /** One reply (`messageId`), or every reply in flight in the conversation. */
   stop: { conversationId: string; messageId?: string };
   /** Moves the user's read mark forward to `seq` (never back, never past the newest row). */
@@ -387,6 +441,20 @@ export interface ConversationArgs {
   /** The page of rows before `beforeSeq` (the newest when omitted), oldest first. */
   history: { conversationId: string; beforeSeq?: number; limit?: number };
 }
+
+/** A file attached to a message (`data.attachments` of the user's row lists them). */
+export interface AttachmentView {
+  id: string;
+  name: string;
+  contentType: string;
+  size: number;
+}
+
+/** A file at most this large, and a message at most this many files. */
+export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+export const MAX_ATTACHMENTS = 10;
+/** The most file bytes one `attach` call carries. */
+export const ATTACH_CHUNK_BYTES = 384 * 1024;
 
 /** What `send` did. */
 export interface SendResult {
@@ -416,6 +484,8 @@ export interface ConversationResults {
   stop: { stopped: MessageView[] };
   read: { conversation: ConversationSummary };
   history: HistoryResult;
+  attach: { attachment: AttachmentView | null };
+  unattach: { removed: boolean };
 }
 export type ConversationCall = {
   [A in ConversationAction]: Omit<CallFrame, "target" | "action" | "args"> & {
