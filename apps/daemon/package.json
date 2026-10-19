@@ -20,10 +20,10 @@
     "@eta/core": "*",
     "@eta/execution-node": "*",
     "@eta/harness": "*",
+    "@eta/mcp": "*",
     "@eta/plugin-akhook": "*",
     "@eta/server": "*",
     "@eta/ssh": "*",
-    "@modelcontextprotocol/sdk": "1.32.1",
     "cordis": "4.0.0-rc.10"
   },
   "devDependencies": {

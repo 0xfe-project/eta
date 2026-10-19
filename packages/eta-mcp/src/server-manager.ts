@@ -11,6 +11,7 @@
  * making every call wait for another doomed attempt.
  */
 import type {
+  FetchLike,
   OAuthClientProvider,
   Transport,
 } from "@modelcontextprotocol/client";
@@ -61,6 +62,8 @@ export interface ManagerOptions {
   /** Hooks used when a call brings none of its own. */
   hooks?: McpHooks;
   authProviderFor?: AuthProviderFor;
+  /** The `fetch` of HTTP and SSE transports (token requests included); a host passes createRefreshDedupingFetch(). */
+  fetch?: FetchLike;
   /** Variables for `${NAME}` in configs, and the base of a child's environment when it inherits. */
   env?: NodeJS.ProcessEnv;
   /** Launch acceleration (npx, bunx, uvx → the installed executable). `false` starts commands as written. */
@@ -189,6 +192,8 @@ export class ServerManager {
   readonly failures: FailureTracker;
   private readonly connections = new Map<string, Connection>();
   private readonly connecting = new Map<string, Promise<Connection>>();
+  /** Keys somebody joined an attempt for since it began (see `wasJoined`). */
+  private readonly joined = new Set<string>();
   private readonly wanted = new Map<string, Wanted>();
   private readonly listeners = new Set<ToolsChangedListener>();
   private timer: ReturnType<typeof setInterval> | undefined;
@@ -251,7 +256,10 @@ export class ServerManager {
       return existing;
     }
     const pending = this.connecting.get(key);
-    if (pending) return await raceAbort(pending, options.signal);
+    if (pending) {
+      this.joined.add(key);
+      return await raceAbort(pending, options.signal);
+    }
 
     if (!options.force) {
       const failure = this.failures.describe(key);
@@ -261,6 +269,7 @@ export class ServerManager {
       }
     }
 
+    this.joined.delete(key);
     const attempt = (async (): Promise<Connection> => {
       // A changed config, or a dead connection: whatever is there goes first.
       if (existing) await this.dispose(existing);
@@ -318,6 +327,14 @@ export class ServerManager {
     this.startTimer();
   }
 
+  /**
+   * Whether anyone else asked for this server while its latest connection attempt was under way,
+   * so that whoever made the attempt (a warm-up) knows the connection is not only theirs to close.
+   */
+  wasJoined(owner: string, name: string): boolean {
+    return this.joined.has(keyOf(owner, name));
+  }
+
   /** Counts a call in flight so the idle check leaves the server alone, and keeps it fresh. */
   async use<T>(connection: Connection, run: () => Promise<T>): Promise<T> {
     connection.inFlight++;
@@ -338,9 +355,10 @@ export class ServerManager {
     const key = keyOf(owner, name);
     this.wanted.delete(key);
     this.failures.clear(key);
+    // What there is now: a connection made after this call is somebody else's to close.
     const connection = this.connections.get(key);
-    if (connection) await this.dispose(connection);
     const pending = this.connecting.get(key);
+    if (connection) await this.dispose(connection);
     if (pending) {
       await pending.then(
         (connected) => this.dispose(connected),
@@ -526,6 +544,7 @@ export class ServerManager {
     const transportOptions = {
       ...(Object.keys(headers).length > 0 ? { requestInit: { headers } } : {}),
       ...(authProvider ? { authProvider } : {}),
+      ...(this.options.fetch ? { fetch: this.options.fetch } : {}),
     };
 
     const kinds =

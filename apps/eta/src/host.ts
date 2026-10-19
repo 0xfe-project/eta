@@ -11,6 +11,7 @@ import type { AssembledServer, AssembleOptions } from "@eta/server";
 import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/site";
 import type { LlmOptions, LlmRuntime } from "./llm/runtime";
+import type { McpTuning } from "./mcp/service";
 import type { AkhookOptions, Product, RoutinesOptions } from "./product";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -60,6 +61,13 @@ export interface HostOptions {
   home?: string;
   /** What a published site may hold; the defaults are for real use, a test makes them small. */
   artifactLimits?: Partial<SiteLimits> | undefined;
+  /**
+   * The address the user's browser reaches the host at (`https://eta.example.com`), when it is not
+   * the one the web page was opened at: where an MCP server's OAuth sign-in returns to.
+   */
+  publicUrl?: string;
+  /** The MCP library's settings for a test (fake servers, no timers). */
+  mcp?: McpTuning;
   /** Whether to apply the config's network settings to the environment. */
   network?: boolean;
   /**
@@ -118,6 +126,8 @@ export async function startHost(options: HostOptions): Promise<Host> {
       ...(options.routines === undefined ? {} : { routines: options.routines }),
       artifactLimits: options.artifactLimits,
       memoryUrl: options.memoryUrl,
+      publicUrl: options.publicUrl,
+      mcp: options.mcp,
       akhook: options.akhook,
       hostname,
       ...(options.home === undefined ? {} : { home: options.home }),

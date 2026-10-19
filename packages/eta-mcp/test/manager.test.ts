@@ -75,6 +75,23 @@ describe("lazy connection and sharing", () => {
     expect(h.starts()).toBe(1);
   });
 
+  it("closing a server leaves alone a connection made while it was closing", async () => {
+    const h = await setup();
+    const scope = h.manager.scope({
+      owner: "a",
+      sources: [h.source({ s: h.stdio(spec) })],
+    });
+    await scope.connect("s");
+
+    // The close is under way (the old process is being stopped) when the next caller connects.
+    const closing = h.manager.servers.close("a", "s");
+    const next = scope.connect("s");
+    await closing;
+    expect(await next).toMatchObject({ ok: true });
+    expect(h.manager.servers.get("a", "s")?.status).toBe("connected");
+    expect(h.starts()).toBe(2);
+  });
+
   it("reconnects with a changed config", async () => {
     const h = await setup();
     const scope = h.manager.scope({

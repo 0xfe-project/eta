@@ -436,6 +436,10 @@ export class McpScope {
         const definition = pending[next++];
         if (!definition || options.signal?.aborted === true) return;
         try {
+          // A connection that was already up belongs to whoever opened it.
+          const alreadyUp =
+            this.host.manager.get(this.owner, definition.name)?.status ===
+            "connected";
           const connection = await this.host.manager.connect(
             this.owner,
             definition,
@@ -454,7 +458,13 @@ export class McpScope {
           result.discovered.push(definition.name);
           const keepOpen =
             lifecycleOf(definition) !== "lazy" || definition.idleTimeout === 0;
-          if (!keepOpen)
+          // Only a connection this warm-up opened, and nobody joined, is its to close; the rest is
+          // in use (or about to be) and is left to the idle check.
+          if (
+            !keepOpen &&
+            !alreadyUp &&
+            !this.host.manager.wasJoined(this.owner, definition.name)
+          )
             await this.host.manager.close(this.owner, definition.name);
         } catch (error) {
           if (isAbort(error, options.signal)) return;

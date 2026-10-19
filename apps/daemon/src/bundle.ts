@@ -6,7 +6,8 @@
  *
  * ```
  * plugin.json        name, description, requires, config, service
- * mcp.json           { "mcpServers": { "<name>": { command, args, env, cwd } | { url, headers } } }
+ * mcp.json           { "mcpServers": { "<name>": { command, args, env, cwd } | { url, headers }, plus the
+ *                    @eta/mcp fields: lifecycle, directTools, approveTools, auth, ... } }
  * skills/<name>/SKILL.md  Agent Skills (and whatever references they carry)
  * akhook.yml         hook rules, akhook's own file
  * ```
@@ -20,8 +21,8 @@
  * environment, and in `${NAME}` of a URL or header) and its hook commands (as environment). They
  * are not in the akhook text, not in the session's shell and not in a file.
  */
+import type { McpServerEntry } from "@eta/mcp";
 import type { ConfigInput } from "@eta/plugin-akhook";
-import type { McpServerConfig } from "./mcp";
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import {
@@ -36,6 +37,7 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, normalize, sep } from "node:path";
 import process from "node:process";
+import { parseMcpServers } from "@eta/mcp";
 
 export class BundleError extends Error {
   override readonly name = "BundleError";
@@ -72,20 +74,11 @@ export interface BundleManifest {
   service?: BundleServiceSpec | undefined;
 }
 
-type McpDecl =
-  | {
-      command: string;
-      args: string[];
-      env: Record<string, string>;
-      cwd?: string | undefined;
-    }
-  | { url: string; headers: Record<string, string> };
-
 export interface Bundle {
   manifest: BundleManifest;
   /** Where it is on this machine. */
   dir: string;
-  mcp: Record<string, McpDecl>;
+  mcp: Record<string, McpServerEntry>;
   /** The names of the skill directories it has. */
   skills: string[];
   /** The text of its `akhook.yml`, when it has one. */
@@ -202,32 +195,21 @@ function serviceOf(raw: unknown): BundleServiceSpec | undefined {
   };
 }
 
-function mcpOf(raw: unknown): Record<string, McpDecl> {
+function mcpOf(raw: unknown): Record<string, McpServerEntry> {
   if (raw === undefined) return {};
   if (!isPlain(raw) || !isPlain(raw.mcpServers ?? {}))
     throw new BundleError("mcp.json: mcpServers must be a mapping");
-  const servers: Record<string, McpDecl> = {};
-  for (const [name, decl] of Object.entries(raw.mcpServers ?? {})) {
+  const declared = raw.mcpServers ?? {};
+  for (const [name, decl] of Object.entries(declared)) {
     if (!/^[\w-]{1,32}$/.test(name))
       throw new BundleError(`mcp.json: ${name} is not a usable server name`);
     if (!isPlain(decl))
       throw new BundleError(`mcp.json: ${name} must be a mapping`);
-    if (typeof decl.command === "string") {
-      servers[name] = {
-        command: decl.command,
-        args: strings(`mcp.json ${name}.args`, decl.args),
-        env: stringMap(`mcp.json ${name}.env`, decl.env),
-        ...(typeof decl.cwd === "string" ? { cwd: decl.cwd } : {}),
-      };
-    } else if (typeof decl.url === "string") {
-      servers[name] = {
-        url: decl.url,
-        headers: stringMap(`mcp.json ${name}.headers`, decl.headers),
-      };
-    } else {
-      throw new BundleError(`mcp.json: ${name} needs a command or a url`);
-    }
   }
+  // The library reads the whole entry (lifecycle, directTools, approveTools, ...); a bundle that
+  // writes one wrong is refused rather than half loaded.
+  const { servers, issues } = parseMcpServers({ mcpServers: declared });
+  if (issues.length > 0) throw new BundleError(`mcp.json: ${issues[0]}`);
   return servers;
 }
 
@@ -346,7 +328,7 @@ export function bundleSkillDirs(active: ActiveBundle): string[] {
 }
 
 /**
- * The MCP servers of the bundle, ready to start on this machine. A bundle that is not configured
+ * The MCP servers of the bundle, ready for the MCP library to start on this machine. A bundle that is not configured
  * has none, and a server that asks for something this machine does not have (the service's
  * address, from a daemon) is reported and left out.
  */
@@ -354,36 +336,35 @@ export function bundleMcpServers(
   active: ActiveBundle,
   session: SessionVars,
   warn: (message: string) => void = () => undefined,
-): McpServerConfig[] {
-  if (!active.configured) return [];
+): Record<string, McpServerEntry> {
+  if (!active.configured) return {};
   const vars = varsOf(active, session);
-  const servers: McpServerConfig[] = [];
+  const servers: Record<string, McpServerEntry> = {};
   for (const [name, decl] of Object.entries(active.bundle.mcp)) {
     const where = `bundle ${active.bundle.manifest.name}, server ${name}`;
+    const fill = (text: string): string => expand(text, vars, where);
+    const fillAll = (record: Record<string, string>): Record<string, string> =>
+      Object.fromEntries(
+        Object.entries(record).map(([key, value]) => [key, fill(value)]),
+      );
     try {
-      if ("command" in decl) {
-        const env: Record<string, string> = {};
+      const entry: McpServerEntry = { ...decl };
+      if (decl.command !== undefined) {
         // The config reaches the process as its environment, under the names it was declared by.
+        const env: Record<string, string> = {};
         for (const [key, value] of Object.entries(active.config))
           if (value !== "") env[key] = value;
-        for (const [key, value] of Object.entries(decl.env))
-          env[key] = expand(value, vars, where);
-        servers.push({
-          name,
-          command: expand(decl.command, vars, where),
-          args: decl.args.map((arg) => expand(arg, vars, where)),
-          env,
-          cwd:
-            decl.cwd === undefined
-              ? active.bundle.dir
-              : expand(decl.cwd, vars, where),
-        });
-      } else {
-        const headers: Record<string, string> = {};
-        for (const [key, value] of Object.entries(decl.headers))
-          headers[key] = expand(value, vars, where);
-        servers.push({ name, url: expand(decl.url, vars, where), headers });
+        Object.assign(env, fillAll(decl.env ?? {}));
+        entry.command = fill(decl.command);
+        entry.args = (decl.args ?? []).map(fill);
+        entry.env = env;
+        entry.cwd = decl.cwd === undefined ? active.bundle.dir : fill(decl.cwd);
       }
+      if (decl.url !== undefined) entry.url = fill(decl.url);
+      if (decl.headers !== undefined) entry.headers = fillAll(decl.headers);
+      if (decl.bearerToken !== undefined)
+        entry.bearerToken = fill(decl.bearerToken);
+      servers[name] = entry;
     } catch (error) {
       warn(`[eta] ${error instanceof Error ? error.message : String(error)}`);
     }

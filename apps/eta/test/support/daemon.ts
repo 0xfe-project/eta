@@ -60,8 +60,8 @@ export async function startDaemon(
     warn?: (message: string) => void;
     /** Sees every text frame that crosses the link, both ways. */
     tap?: (direction: "in" | "out", text: string) => void;
-    /** The MCP servers its sessions get. */
-    mcp?: Pick<DaemonNodeOptions, "mcpServers">;
+    /** The MCP library's manager settings on the daemon (a fake `fetch`, no timers). */
+    mcp?: DaemonNodeOptions["mcp"];
   } = {},
 ): Promise<TestDaemon> {
   const dataDir = options.dataDir ?? (await tempDir("eta-daemon-"));
@@ -70,10 +70,12 @@ export async function startDaemon(
   const node = new DaemonNode({
     dataDir,
     version: "test",
+    // The real home (its personas, its `~/.eta/mcp.json`) is not this test's business.
+    home: dataDir,
+    ...(options.mcp === undefined ? {} : { mcp: options.mcp }),
     // The real user's akhook file is not this test's business.
     akhookUserConfig: join(dataDir, "no-user-akhook.yml"),
     warn: options.warn ?? (() => undefined),
-    ...options.mcp,
   });
   await node.start();
   const states: LinkState[] = [];

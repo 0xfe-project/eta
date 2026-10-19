@@ -1,5 +1,5 @@
 import type { OpenedBundle } from "@eta/client-contracts";
-import type { McpServerConfig } from "@eta/daemon";
+import type { McpConfigSource } from "@eta/mcp";
 /**
  * Bundles on the host: everything the product needs from them, in one place.
  *
@@ -11,6 +11,7 @@ import type { McpServerConfig } from "@eta/daemon";
 import type { ConfigInput } from "@eta/plugin-akhook";
 import type { SessionMeta } from "@eta/server";
 import type { Database } from "bun:sqlite";
+import type { Buffer } from "node:buffer";
 import type { MachineHub, MachineLink } from "../machines/hub";
 import type { MachineStore } from "../machines/store";
 import { mkdirSync } from "node:fs";
@@ -21,9 +22,7 @@ import {
   bundleHookLayer,
   bundleMcpServers,
   bundleSkillDirs,
-  mcpSessionTools,
 } from "@eta/daemon";
-import { loadKey } from "../artifacts/capability";
 import { Readiness } from "./plugin";
 import { BundleRegistry } from "./registry";
 import { BundleRows } from "./rows";
@@ -39,14 +38,15 @@ export class Bundles {
   readonly rows: BundleRows;
   readonly services: BundleServices;
   readonly readiness: Readiness;
-  /** The MCP tools of the bundles an agent loads, for the host's own sessions. */
-  readonly mcp: ReturnType<typeof mcpSessionTools>;
   readonly #agentBundles: (agentId: string | undefined) => readonly string[];
   readonly #warn: (message: string) => void;
+  readonly #home: string;
 
   constructor(options: {
     db: Database;
     dataDir: string;
+    /** The host's secret key, which the values are sealed under. */
+    key: Buffer;
     /** The user's home: `~/.eta/bundles` is under it. */
     home: string;
     machines: MachineStore;
@@ -60,10 +60,8 @@ export class Bundles {
   }) {
     this.#agentBundles = options.agentBundles;
     this.#warn = options.warn;
-    this.rows = new BundleRows(
-      options.db,
-      loadKey(join(options.dataDir, "secret.key")),
-    );
+    this.#home = options.home;
+    this.rows = new BundleRows(options.db, options.key);
     this.registry = new BundleRegistry({
       builtinDir: options.builtinDir ?? BUILTIN_DIR,
       root: join(options.home, ".eta", "bundles"),
@@ -93,7 +91,6 @@ export class Bundles {
       changed: options.changed,
       warn: options.warn,
     });
-    this.mcp = mcpSessionTools((meta) => this.serversFor(meta), options.warn);
     // A machine that connects (or reconnects) is asked again what it has.
     options.hub.onReady(() => void this.readiness.check());
     mkdirSync(join(options.dataDir, "bundles"), { recursive: true });
@@ -106,10 +103,15 @@ export class Bundles {
     );
   }
 
-  serversFor(meta: SessionMeta): McpServerConfig[] {
-    return this.#active(meta.agentId).flatMap((active) =>
-      bundleMcpServers(active, { cwd: meta.cwd }, this.#warn),
-    );
+  /** The MCP servers of the bundles an agent loads, one source each, for a session in `cwd`. */
+  mcpSourcesFor(
+    agentId: string | undefined,
+    cwd: string | undefined,
+  ): McpConfigSource[] {
+    return this.#active(agentId).map((active) => ({
+      name: `bundle:${active.bundle.manifest.name}`,
+      servers: bundleMcpServers(active, { cwd: cwd ?? this.#home }, this.#warn),
+    }));
   }
 
   skillDirsFor(meta: SessionMeta): string[] {

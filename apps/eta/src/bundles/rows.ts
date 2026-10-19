@@ -7,7 +7,7 @@
  */
 import type { Database } from "bun:sqlite";
 import type { Buffer } from "node:buffer";
-import { seal, unseal } from "./seal";
+import { seal, unseal } from "../secret";
 
 export interface SourceRow {
   name: string;

@@ -209,18 +209,18 @@ describe("what a session is given", () => {
       "http://127.0.0.1:9",
     );
     const servers = bundleMcpServers(a, { cwd: "/work" });
-    const local = servers.find((server) => server.name === "local")!;
+    const local = servers.local!;
     expect(local).toMatchObject({
       command: `${a.bundle.dir}/run`,
       args: ["--region", "eu", "--cwd", "/work"],
     });
-    expect("env" in local && local.env).toEqual({
+    expect(local.env).toEqual({
       DEMO_KEY: "k-secret",
       DEMO_REGION: "eu",
       EXTRA: "x-eu",
     });
     // An HTTP server gets the value in its header and the service's address.
-    expect(servers.find((server) => server.name === "remote")).toMatchObject({
+    expect(servers.remote).toMatchObject({
       url: "http://127.0.0.1:9/mcp",
       headers: { Authorization: "Bearer k-secret" },
     });
@@ -233,13 +233,13 @@ describe("what a session is given", () => {
       { cwd: "/work" },
       (message) => warnings.push(message),
     );
-    expect(servers.map((server) => server.name)).toEqual(["local"]);
+    expect(Object.keys(servers)).toEqual(["local"]);
     expect(warnings.join()).toContain("ETA_SERVICE_URL");
   });
 
   it("starts nothing and hooks nothing until the bundle is configured, but keeps its skills", () => {
     const a = active({});
-    expect(bundleMcpServers(a, { cwd: "/w" })).toEqual([]);
+    expect(bundleMcpServers(a, { cwd: "/w" })).toEqual({});
     expect(bundleHookLayer(a, { cwd: "/w" })).toBeUndefined();
     expect(bundleSkillDirs(a)).toEqual([join(a.bundle.dir, "skills")]);
   });

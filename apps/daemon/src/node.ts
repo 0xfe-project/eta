@@ -23,10 +23,11 @@ import type {
 import type { CallFrame, ServerFrame } from "@eta/client-wire-proto";
 import type { KernelTool, PersonaCard, ThinkingLevel } from "@eta/core";
 import type { AskObserver, OpenSession } from "@eta/harness";
+import type { McpConfigSource } from "@eta/mcp";
 import type { SessionMeta, SessionsService, Socket } from "@eta/server";
 import type { ActiveBundle } from "./bundle";
 import type { Peer } from "./link/peer";
-import type { McpServerConfig } from "./mcp";
+import type { McpHostOptions } from "./mcp-host";
 import { Buffer } from "node:buffer";
 import { mkdirSync } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -34,6 +35,7 @@ import { homedir, hostname, platform } from "node:os";
 import { isAbsolute, join } from "node:path";
 import process from "node:process";
 import { createLocalEnvironment } from "@eta/execution-node";
+import { createRefreshDedupingFetch } from "@eta/mcp";
 import {
   additionalConfigPathsFromEnv,
   AkhookSession,
@@ -59,7 +61,8 @@ import {
   isConfigured,
   readBundle,
 } from "./bundle";
-import { mcpSessionTools } from "./mcp";
+import { relayAuthProviderFor } from "./mcp-auth";
+import { McpHost } from "./mcp-host";
 import { ModelCatalog, remoteModels } from "./models";
 import { Reports } from "./reports";
 import { runAndWait } from "./run";
@@ -72,8 +75,10 @@ export interface DaemonNodeOptions {
   /** The user-level akhook file on this machine; defaults to akhook's own path. */
   akhookUserConfig?: string | undefined;
   warn?: ((message: string) => void) | undefined;
-  /** The MCP servers a session gets, started on this machine; none by default. */
-  mcpServers?: ((meta: SessionMeta) => readonly McpServerConfig[]) | undefined;
+  /** The user's home on this machine (personas, `~/.eta/mcp.json`); the real one by default. */
+  home?: string | undefined;
+  /** Overrides of the MCP library's manager, for a test. */
+  mcp?: McpHostOptions["manager"];
 }
 
 /** What the primary last said about one agent's session in one conversation. */
@@ -117,7 +122,7 @@ export class DaemonNode {
   readonly #manager: SessionManager;
   readonly #store: FileSessionStore;
   readonly #catalog = new ModelCatalog();
-  readonly #mcp: ReturnType<typeof mcpSessionTools>;
+  readonly #mcp: McpHost;
   /** The bundles the primary sent, by contents. */
   readonly #bundles: BundleStore;
   /** The openings the primary sent, by `conversation:agent`; read when a session opens. */
@@ -145,17 +150,17 @@ export class DaemonNode {
       root: join(options.dataDir, "sessions"),
       warn,
     });
-    const home = homedir();
+    const home = options.home ?? homedir();
     this.#bundles = new BundleStore(join(options.dataDir, "bundles"));
-    this.#mcp = mcpSessionTools(
-      (meta) => [
-        ...(options.mcpServers?.(meta) ?? []),
-        ...(this.#openingOf(meta)?.bundles ?? []).flatMap((active) =>
-          bundleMcpServers(active, { cwd: meta.cwd }, warn),
-        ),
-      ],
+    // Credentials are the primary's: a token this machine refreshes is saved there.
+    this.#mcp = new McpHost({
+      dataDir: options.dataDir,
+      home,
       warn,
-    );
+      authProviderFor: relayAuthProviderFor(() => this.#peer),
+      fetch: createRefreshDedupingFetch(),
+      manager: options.mcp,
+    });
     this.#manager = new SessionManager({
       store: this.#store,
       // Generation is the primary's: this is a model layer that asks it.
@@ -206,7 +211,11 @@ export class DaemonNode {
             specs: opening.tools,
             peer: () => this.#peer,
           }),
-          ...this.#mcp.sessionTools(input),
+          ...this.#mcp.sessionTools({
+            ...input,
+            bundles: this.#bundleSources(opening, meta),
+            akhook: this.#akhook(input).middleware,
+          }),
         ];
       },
       // The rules of the machine the session runs on (the user's file, the project's
@@ -329,6 +338,7 @@ export class DaemonNode {
   async close(): Promise<void> {
     for (const fiber of this.#fibers.splice(0).reverse()) await fiber.dispose();
     await this.#manager.closeAll();
+    await this.#mcp.close();
     await this.#store.close();
   }
 
@@ -355,6 +365,14 @@ export class DaemonNode {
       this.#akhookSessions.set(session, made);
     }
     return made;
+  }
+
+  /** The MCP servers of the bundles the agent loads, one source each. */
+  #bundleSources(opening: Opening, meta: SessionMeta): McpConfigSource[] {
+    return opening.bundles.map((active) => ({
+      name: `bundle:${active.bundle.manifest.name}`,
+      servers: bundleMcpServers(active, { cwd: meta.cwd }, this.#warn),
+    }));
   }
 
   #openingOf(meta: SessionMeta): Opening | undefined {
@@ -498,7 +516,6 @@ export class DaemonNode {
           await sessions.close(id);
           await sessions.open(id);
         }
-        await this.#mcp.settled(id);
         return { session: id };
       } catch (error) {
         // The row outlived its journal: start over rather than failing every wake.
@@ -517,7 +534,6 @@ export class DaemonNode {
       ...(args.persona === undefined ? {} : { persona: args.persona }),
     });
     await thinking(id);
-    await this.#mcp.settled(id);
     return { session: id };
   }
 }

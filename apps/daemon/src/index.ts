@@ -44,11 +44,17 @@ export {
   type ServeHandler,
 } from "./link/peer";
 export {
-  type McpConnections,
-  type McpServerConfig,
-  mcpSessionTools,
-  openMcp,
-} from "./mcp";
+  mcpServerKey,
+  relayAuthProviderFor,
+  relayCredentialStore,
+  RELAYED_KINDS,
+} from "./mcp-auth";
+export {
+  McpHost,
+  type McpHostOptions,
+  type McpSessionInput,
+  mcpSources,
+} from "./mcp-host";
 export { forwardedOptions, modelSpecOf } from "./models";
 export { DaemonNode, type DaemonNodeOptions } from "./node";
 export { listen, runAndWait } from "./run";

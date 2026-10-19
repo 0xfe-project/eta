@@ -241,6 +241,21 @@ describe("warm-up", () => {
     expect(scope.tools("lazy")).toHaveLength(3);
   });
 
+  it("leaves a lazy server open when a call joined its connection while it was read", async () => {
+    const h = await setup();
+    const scope = h.manager.scope({
+      owner: "a",
+      sources: [h.source({ s: h.stdio(files) })],
+    });
+    // The call arrives while the warm-up is still connecting, and shares that connection.
+    const warming = scope.warmUp();
+    const connected = scope.connect("s");
+    await warming;
+    expect(await connected).toMatchObject({ ok: true });
+    expect(h.manager.servers.get("a", "s")?.status).toBe("connected");
+    expect(h.starts()).toBe(1);
+  });
+
   it("does not touch servers whose cache is valid", async () => {
     const h = await setup();
     const scope = h.manager.scope({

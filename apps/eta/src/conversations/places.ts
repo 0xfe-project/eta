@@ -136,7 +136,6 @@ class LocalHandle implements SessionHandle {
 export class LocalPlace implements SessionPlace {
   readonly #opened: Map<string, string>;
   readonly #warn: (message: string) => void;
-  readonly #settled: ((sessionId: string) => Promise<void>) | undefined;
   #sessions: SessionsService | undefined;
 
   /**
@@ -145,12 +144,9 @@ export class LocalPlace implements SessionPlace {
    */
   constructor(options: {
     opened: Map<string, string>;
-    /** Resolves when the session has all its tools (the MCP servers connect after it opens). */
-    settled?: ((sessionId: string) => Promise<void>) | undefined;
     warn: (message: string) => void;
   }) {
     this.#opened = options.opened;
-    this.#settled = options.settled;
     this.#warn = options.warn;
   }
 
@@ -174,7 +170,6 @@ export class LocalPlace implements SessionPlace {
           sessions,
           (await sessions.open(input.existing)).managed,
         );
-        await this.#settled?.(handle.id);
         return handle;
       } catch (error) {
         // The row outlived its journal: say so, then start over rather than failing every wake.
@@ -199,7 +194,6 @@ export class LocalPlace implements SessionPlace {
         .catch((error: unknown) => this.#warn(`[eta] ${messageOf(error)}`));
     }
     const handle = new LocalHandle(sessions, (await sessions.open(id)).managed);
-    await this.#settled?.(id);
     return handle;
   }
 

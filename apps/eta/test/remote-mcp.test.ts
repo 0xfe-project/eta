@@ -1,7 +1,9 @@
 /**
- * An MCP server on a remote session: it starts on the daemon's machine, with the session, and
- * its tools are the model's like any other.
+ * An MCP server on a remote session: the project's `.mcp.json` names it, it starts on the daemon's
+ * machine when the session first calls it, and the model reaches it through the `mcp` tool.
  */
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { until } from "./support/client";
@@ -25,24 +27,21 @@ describe("an MCP server on a remote session", () => {
   it("starts on the daemon, serves the session's calls and ends with the session", async () => {
     const { models, requests } = scriptedModels((request) => {
       if (request.lastRole === "toolResult") return say(`saw: ${request.last}`);
-      return call("fake__pid", {});
+      return call("mcp", { tool: "pid", server: "fake" });
     });
-    const r = await remoteWorld(
-      { models },
-      {
-        mcp: {
-          mcpServers: () => [
-            { name: "fake", command: process.execPath, args: [script] },
-          ],
-        },
-      },
+    const r = await remoteWorld({ models });
+    await writeFile(
+      join(r.dir, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: { fake: { command: process.execPath, args: [script] } },
+      }),
     );
     const { group } = await r.agents("Ada");
     const sent = await r.send(group.id, "which process?");
     const done = await r.settled(group.id, sent.replies[0]!.id);
 
     expect(done.status).toBe("done");
-    expect(requests[0]!.tools).toContain("fake__echo");
+    expect(requests[0]!.tools).toContain("mcp");
     const pid = Number(/saw: .*?(\d+)/.exec(done.text ?? "")?.[1]);
     expect(pid).toBeGreaterThan(0);
     // The server is a process of the daemon's machine, not a thing the primary relayed.

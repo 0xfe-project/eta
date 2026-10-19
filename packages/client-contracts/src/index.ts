@@ -17,6 +17,7 @@ export type * from "./data";
 export * from "./inbox";
 export * from "./link";
 export * from "./llm";
+export * from "./mcp";
 export * from "./memory";
 export * from "./operations";
 export * from "./product";

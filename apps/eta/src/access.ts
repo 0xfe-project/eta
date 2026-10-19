@@ -30,6 +30,8 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 
+import { MCP_CALLBACK_PATH } from "./mcp/path";
+
 const COOKIE = "eta_session";
 /** Thirty days: a browser that was let in once should not be asked again on Monday. */
 const COOKIE_MAX_AGE = 30 * 24 * 60 * 60;
@@ -114,13 +116,18 @@ function askedFor(request: Request): { host: string; origin: string } {
 /**
  * The pages that carry their own capability: an artifact's preview (a signed address, because a
  * sandboxed iframe sends no cookie) and its public share (a secret token, for people who are not
- * the user). They are exempt from the token gate for that reason and no other, and only to read:
- * everything else, the app's own `/artifacts/` downloads included, stays behind it.
+ * the user), and the return of an MCP server's OAuth sign-in (the browser comes back from the
+ * provider, a site that holds no cookie of ours; the route completes only a sign-in this host is
+ * waiting for, found by its unguessable `state`). They are exempt from the token gate for that
+ * reason and no other, and only to read: everything else, the app's own `/artifacts/` downloads
+ * included, stays behind it.
  */
 function carriesOwnCapability(request: Request, pathname: string): boolean {
   return (
     (request.method === "GET" || request.method === "HEAD") &&
-    (pathname.startsWith("/preview/") || pathname.startsWith("/share/"))
+    (pathname.startsWith("/preview/") ||
+      pathname.startsWith("/share/") ||
+      pathname === MCP_CALLBACK_PATH)
   );
 }
 

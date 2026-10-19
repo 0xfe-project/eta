@@ -17,6 +17,7 @@ import type {
 } from "@eta/server";
 import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/site";
+import type { McpTuning } from "./mcp/service";
 import type { SessionHooks } from "./session-hooks";
 import { homedir, hostname, platform } from "node:os";
 import { join } from "node:path";
@@ -50,6 +51,8 @@ import { RemoteSessionsRouter } from "./machines/remote-sessions";
 import { serveLink } from "./machines/service";
 import { transportOn } from "./machines/shell";
 import { MachineStore } from "./machines/store";
+import { mcpPlugin } from "./mcp/plugin";
+import { McpService } from "./mcp/service";
 import { MemoryClient } from "./memory/client";
 import { memoryRunHooks, memoryTools } from "./memory/hooks";
 import { memoryPlugin } from "./memory/plugin";
@@ -59,6 +62,7 @@ import { routinesPlugin } from "./routines/plugin";
 import { INTERRUPTED, RoutineRunner } from "./routines/runner";
 import { Scheduler } from "./routines/scheduler";
 import { RoutineStore } from "./routines/store";
+import { loadSecretKey } from "./secret";
 import { combineSessionHooks } from "./session-hooks";
 import { TaskBoard } from "./tasks/board";
 import { TaskCards } from "./tasks/cards";
@@ -130,6 +134,10 @@ export function createProduct(options: {
   routines?: RoutinesOptions;
   /** Overrides of what a published site may hold. */
   artifactLimits?: Partial<SiteLimits> | undefined;
+  /** The address the user's browser reaches the host at, for MCP sign-in callbacks. */
+  publicUrl?: string | undefined;
+  /** The MCP library's manager and fetch, for a test with fake servers. */
+  mcp?: McpTuning | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
   const memory =
@@ -161,7 +169,14 @@ export function createProduct(options: {
   /** Say that product state moved, to whoever is looking at it. */
   const changed = (touched?: readonly string[] | "all"): void => {
     if (wire === undefined) return;
-    for (const target of ["agents", "machines", "projects", "conversations"])
+    // `mcp` lists each agent's servers, so it moves with the agents.
+    for (const target of [
+      "agents",
+      "machines",
+      "projects",
+      "conversations",
+      "mcp",
+    ])
       wire.pushNow(target);
     const ids =
       touched === "all"
@@ -215,6 +230,7 @@ export function createProduct(options: {
     hooks?: Required<SessionHooks>;
     inbox?: Inbox;
     akhook?: AkhookHost;
+    mcp?: McpService;
   } = {};
   const hub = new MachineHub({
     machines,
@@ -228,15 +244,21 @@ export function createProduct(options: {
         models: () => running?.models,
         hooks: () => later.hooks,
         approvals: () => later.inbox?.approvals() ?? [],
+        mcpCredential: async (call) => {
+          if (later.mcp === undefined) throw new Error("the host is starting");
+          return await later.mcp.relay(call);
+        },
         generated,
         warn,
       }),
   });
   const mirrors = new SessionMirrors(hub, (id) => machines.get(id)?.name);
   // The bundles agents load: their files, values, services and the readiness of each machine.
+  const secretKey = loadSecretKey(dataDir);
   const bundles = new Bundles({
     db,
     dataDir,
+    key: secretKey,
     home: options.home ?? homedir(),
     machines,
     hub,
@@ -307,6 +329,21 @@ export function createProduct(options: {
     bundleLayers: (agentId, cwd) => bundles.layersFor(agentId, cwd),
     warn,
   });
+  // MCP: the servers of the agents' bundles, the user's files and the projects, started on this
+  // machine; OAuth credentials sealed in the database; the sign-in callback.
+  const mcp = new McpService({
+    db,
+    key: secretKey,
+    dataDir,
+    home: options.home ?? homedir(),
+    agents: () => agents.list().map(({ id, name }) => ({ id, name })),
+    bundleSources: (agentId, cwd) => bundles.mcpSourcesFor(agentId, cwd),
+    publicUrl: options.publicUrl,
+    changed: () => wire?.pushNow("mcp"),
+    warn,
+    ...options.mcp,
+  });
+  later.mcp = mcp;
   const attachments = new AttachmentStore(db, dataDir);
   const engine = new Engine({
     db,
@@ -322,7 +359,6 @@ export function createProduct(options: {
     warn,
     remote: remotePlace,
     bundleStamp: (agent) => bundles.stampOf(agent.bundles),
-    settled: bundles.mcp.settled,
     runHooks: combineRunHooks([
       akhook.runHooks,
       ...(memory === undefined ? [] : [memoryRunHooks(memory)]),
@@ -361,12 +397,18 @@ export function createProduct(options: {
   ];
   // What the product's tools are, as a daemon's sessions get them (specs the daemon calls back).
   later.hooks = combineSessionHooks(productHooks);
-  // The host's own sessions also get the MCP servers of their agent's bundles. They connect
-  // after the session opens, which the engine waits for; they are not in `later.hooks` because a
-  // daemon starts its own, on its own machine.
+  // The host's own sessions also get MCP: the proxy tool and the direct tools of their agent's
+  // servers, with akhook asked about each call. They are not in `later.hooks` because a daemon
+  // starts its own, on its own machine.
   const sessionHooks = combineSessionHooks([
     ...productHooks,
-    { sessionTools: bundles.mcp.sessionTools },
+    {
+      sessionTools: (input) =>
+        mcp.sessionTools({
+          ...input,
+          akhook: akhook.toolMiddleware(input)[0],
+        }),
+    },
   ]);
   later.inbox = inbox;
   later.akhook = akhook;
@@ -380,6 +422,7 @@ export function createProduct(options: {
     skillDirsFor: (meta) => bundles.skillDirsFor(meta),
     fetch: async (request) =>
       (await hub.enroll(request)) ??
+      (await mcp.route(request)) ??
       (await bundles.route(request)) ??
       (await artifactRoutes(request)),
     remote: router,
@@ -387,6 +430,7 @@ export function createProduct(options: {
     close: async () => {
       hub.close();
       mirrors.detach();
+      await mcp.close();
       await bundles.close();
     },
     async mount(server) {
@@ -415,6 +459,7 @@ export function createProduct(options: {
         "inbox",
         "usage",
         "bundles",
+        "mcp",
         ...(memory === undefined ? [] : ["memory"]),
       ]);
       let ready!: () => void;
@@ -491,6 +536,7 @@ export function createProduct(options: {
           applied("bundles"),
         ),
       );
+      server.mount("mcp", mcpPlugin({ service: mcp }, applied("mcp")));
       if (memory !== undefined)
         server.mount(
           "memory",

@@ -28,7 +28,12 @@ describe("an agent that loads a bundle, on a daemon", () => {
       const results = request.transcript.filter((line) =>
         line.startsWith("toolResult"),
       ).length;
-      if (results === 0) return call("fake__env", { name: "DEMO_TOKEN" });
+      if (results === 0)
+        return call("mcp", {
+          tool: "env",
+          server: "fake",
+          args: { name: "DEMO_TOKEN" },
+        });
       if (results === 1)
         return call("bash", { command: 'echo "shell:[$DEMO_TOKEN]"' });
       if (results === 2) return call("bash", { command: "touch forbidden" });
@@ -61,9 +66,7 @@ describe("an agent that loads a bundle, on a daemon", () => {
     expect(first.system).toContain("demo-skill");
     expect(first.system).toContain(join(r.daemon.dataDir, "bundles"));
     expect(first.system).not.toContain(join(home, ".eta"));
-    expect(first.tools).toEqual(
-      expect.arrayContaining(["fake__echo", "fake__env"]),
-    );
+    expect(first.tools).toEqual(expect.arrayContaining(["mcp"]));
     // The prompt_submit rule runs on the primary, with the same values.
     expect(first.transcript.join("\n")).toContain(
       `hook-token-len:${SECRET.length}`,
@@ -135,7 +138,7 @@ describe("an agent that loads a bundle, on a daemon", () => {
     const sent = await r.send(group.id, "hi");
     await r.settled(group.id, sent.replies[0]!.id);
     expect(requests[0]!.system).toContain("demo-skill");
-    expect(requests[0]!.tools).not.toContain("fake__echo");
+    expect(requests[0]!.tools).not.toContain("mcp");
   });
 });
 

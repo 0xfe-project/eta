@@ -2,7 +2,7 @@
  * What the primary does for a daemon.
  *
  * The daemon holds no provider keys, no database and no product plugins, so over its link it asks
- * the primary for the four things it lacks:
+ * the primary for the things it lacks:
  *
  * - **Generation** (`model.stream`). The primary resolves the model, adds the credentials, streams
  *   from the provider and sends each event back. Keys and Codex tokens never leave this process,
@@ -11,6 +11,8 @@
  *   execution environment whose scripts run on the daemon (the SSH environment over the link), so
  *   a tool that reads the session's files reads the machine's.
  * - **The approval list** (`tool.gate`): does the user want to be asked before this tool runs?
+ * - **MCP credentials** (`mcp.credential`): the OAuth tokens of MCP servers are kept here, once
+ *   per server URL; a daemon reads them for its connections and saves the ones it refreshes.
  * - **Questions** (`ask.observe`): a session on the daemon asked, was answered or gave up; the
  *   conversation and the inbox hear it exactly as they hear a local session's.
  *
@@ -18,6 +20,7 @@
  * it is: the machine on the link must be the machine of the session's project.
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type { McpCredentialCall } from "@eta/client-contracts";
 import type { KernelModels, KernelTool } from "@eta/core";
 import type { SessionMeta } from "@eta/server";
 import type { ConversationStore } from "../conversations/store";
@@ -39,6 +42,8 @@ export interface LinkServiceDeps {
   hooks: () => Required<SessionHooks> | undefined;
   /** The tools the user wants to be asked about. */
   approvals: () => readonly string[];
+  /** A daemon's read or write of an MCP server's OAuth state; the credentials are the primary's. */
+  mcpCredential: (call: McpCredentialCall) => Promise<unknown>;
   /** A generation ended: count it. */
   generated: (meta: SessionMeta, message: AssistantMessage) => void;
   warn: (message: string) => void;
@@ -113,6 +118,10 @@ export function serveLink(link: MachineLink, deps: LinkServiceDeps): void {
     const { name } = raw as { name: string };
     return { ask: deps.approvals().includes(name) };
   });
+
+  link.peer.handle("mcp.credential", (raw) =>
+    deps.mcpCredential(raw as McpCredentialCall),
+  );
 
   link.peer.handle("tool.call", async (raw, { signal }) => {
     const params = raw as {

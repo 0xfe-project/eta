@@ -209,7 +209,12 @@ describe("an agent that loads a bundle", () => {
       const results = request.transcript.filter((line) =>
         line.startsWith("toolResult"),
       ).length;
-      if (results === 0) return call("fake__env", { name: "DEMO_TOKEN" });
+      if (results === 0)
+        return call("mcp", {
+          tool: "env",
+          server: "fake",
+          args: { name: "DEMO_TOKEN" },
+        });
       if (results === 1)
         return call("bash", { command: 'echo "shell:[$DEMO_TOKEN]"' });
       if (results === 2) return call("bash", { command: "touch forbidden" });
@@ -267,9 +272,7 @@ describe("an agent that loads a bundle", () => {
       join(home, ".eta", "bundles", "demo", "skills"),
     );
     // MCP tools, from a server started for this session.
-    expect(first.tools).toEqual(
-      expect.arrayContaining(["fake__echo", "fake__env"]),
-    );
+    expect(first.tools).toEqual(expect.arrayContaining(["mcp"]));
     // The hook rule that adds a line to the prompt ran with the secret in its environment.
     expect(first.transcript.join("\n")).toContain(
       `hook-token-len:${SECRET.length}`,
@@ -304,7 +307,7 @@ describe("an agent that loads a bundle", () => {
     const one = await w.send(group.id, "hello");
     await w.settled(group.id, one.replies[0]!.id);
     expect(requests[0]!.system).toContain("demo-skill");
-    expect(requests[0]!.tools).not.toContain("fake__echo");
+    expect(requests[0]!.tools).not.toContain("mcp");
     // No token, no hook line either.
     expect(requests[0]!.transcript.join("\n")).not.toContain("hook-token-len");
 
@@ -314,7 +317,7 @@ describe("an agent that loads a bundle", () => {
     });
     const two = await w.send(group.id, "again");
     await w.settled(group.id, two.replies[0]!.id);
-    expect(requests.at(-1)!.tools).toContain("fake__echo");
+    expect(requests.at(-1)!.tools).toContain("mcp");
   });
 
   it("follows an edit of the bundle's files at the next message", async () => {
@@ -369,7 +372,7 @@ describe("an agent that loads a bundle", () => {
     const sent = await w.send(group.id, "hi");
     await w.settled(group.id, sent.replies[0]!.id);
     expect(requests[0]!.system).not.toContain("demo-skill");
-    expect(requests[0]!.tools).not.toContain("fake__echo");
+    expect(requests[0]!.tools).not.toContain("mcp");
   });
 });
 

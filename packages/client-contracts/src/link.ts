@@ -246,7 +246,21 @@ export interface ServiceMethodParams {
   };
   /** Does the user want to be asked before this tool runs? */
   "tool.gate": { session: string; name: string };
+  /**
+   * Read, write or forget a piece of an MCP server's OAuth state. The credentials are the
+   * primary's, one set per server URL (`serverKey` is a hash of it); a daemon refreshing a token
+   * saves it here. A login's PKCE verifier is not relayed: signing in is the primary's.
+   */
+  "mcp.credential": McpCredentialCall;
 }
+
+/** The pieces of OAuth state a daemon may ask for. */
+export type McpRelayedKind = "tokens" | "clientInformation" | "discoveryState";
+
+export type McpCredentialCall =
+  | { op: "get"; serverKey: string; kind: McpRelayedKind }
+  | { op: "set"; serverKey: string; kind: McpRelayedKind; value: unknown }
+  | { op: "delete"; serverKey: string; kind: McpRelayedKind };
 
 /** What the daemon tells the primary without waiting (`svc` notifications). */
 export interface ServiceNotifyParams {

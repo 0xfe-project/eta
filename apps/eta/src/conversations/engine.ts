@@ -111,8 +111,6 @@ export interface EngineOptions {
   runHooks?: RunHooks | undefined;
   /** What an agent's bundles add to the stamp of its sessions: a change reopens them. */
   bundleStamp?: ((agent: AgentRecord) => string) | undefined;
-  /** Resolves when a session of this process has what it was given besides its own tools (MCP). */
-  settled?: ((sessionId: string) => Promise<void>) | undefined;
   /**
    * Where the sessions of a project on a daemon machine live. Without one, such a project's
    * replies fail as unavailable, which is what a host with no link to other machines should say.
@@ -183,7 +181,6 @@ export class Engine {
     this.#bundleStamp = options.bundleStamp;
     this.#local = new LocalPlace({
       opened: this.#opened,
-      settled: options.settled,
       warn: options.warn,
     });
   }

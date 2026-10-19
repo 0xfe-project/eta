@@ -20,6 +20,7 @@
     "@eta/execution-node": "*",
     "@eta/harness": "*",
     "@eta/llm-gateway": "*",
+    "@eta/mcp": "*",
     "@eta/plugin-akhook": "*",
     "@eta/server": "*",
     "@eta/ssh": "*",

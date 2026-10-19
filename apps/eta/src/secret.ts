@@ -1,5 +1,5 @@
 /**
- * Sealing: what a bundle's configuration is stored as.
+ * Sealing: what the host stores secrets as (a bundle's configuration, MCP OAuth credentials).
  *
  * AES-256-GCM under the host's key. The key is a file next to the database that never leaves the
  * host, so the database can be copied, backed up or read by a tool without the values in it
@@ -7,6 +7,12 @@
  */
 import { Buffer } from "node:buffer";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { join } from "node:path";
+import { loadKey } from "./artifacts/capability";
+
+/** The host's key: `<dataDir>/secret.key`, 32 random bytes made (0600) the first time. */
+export const loadSecretKey = (dataDir: string): Buffer =>
+  loadKey(join(dataDir, "secret.key"));
 
 const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
