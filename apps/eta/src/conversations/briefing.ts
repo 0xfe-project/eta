@@ -37,7 +37,10 @@ export function briefing(input: {
   /** The row that woke it. */
   trigger: MessageView;
   nameOf: (message: MessageView) => string;
+  /** Lines naming the files a row came with, where the agent can open them. */
+  filesOf?: (message: MessageView) => readonly string[];
 }): Briefing {
+  const filesOf = input.filesOf ?? (() => []);
   const earlier: string[] = [];
   let seen = input.lastSeq;
   // A reply still being written is not readable yet, and the mark must not move past it, or its
@@ -55,8 +58,11 @@ export function briefing(input: {
     }
     if (!blocked) seen = Math.max(seen, row.seq);
     // A reply that ended with nothing to say (stopped before it began) is not news.
-    if (row.text.trim() === "") continue;
-    earlier.push(`- ${input.nameOf(row)}: ${clip(row.text)}`);
+    const files = filesOf(row);
+    if (row.text.trim() === "" && files.length === 0) continue;
+    earlier.push(
+      [`- ${input.nameOf(row)}: ${clip(row.text)}`, ...files].join("\n"),
+    );
   }
 
   const omitted = Math.max(0, earlier.length - MAX_EARLIER);
@@ -70,7 +76,11 @@ export function briefing(input: {
       "",
     );
   }
-  parts.push(`${input.nameOf(input.trigger)} says:`, input.trigger.text);
+  parts.push(
+    `${input.nameOf(input.trigger)} says:`,
+    input.trigger.text,
+    ...filesOf(input.trigger),
+  );
   return { text: parts.join("\n"), seen };
 }
 

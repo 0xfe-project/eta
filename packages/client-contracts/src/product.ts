@@ -209,7 +209,8 @@ export interface MessageView {
   replyToId: string | null;
   /**
    * What the row carries beyond its text. A user row has `woke` (agents given a reply row) and
-   * `joined` (agents whose turn it steered); a system row has the `event` it records (`steward`
+   * `joined` (agents whose turn it steered) and, when files came with it, `attachments`
+   * (`AttachmentView[]`); a system row has the `event` it records (`steward`
    * with `from`/`to`, `wake_budget`); a failed reply has the `code` it failed with (`restart`,
    * `run_failed`, `unavailable`, `gone`) and, like any reply that ran, the `activity` of its
    * tool calls (`ToolActivity[]`, absent when it made none); a `task_draft` row has `TaskDraftData` and a
@@ -379,6 +380,8 @@ export const CONVERSATION_ACTIONS = [
   "stop",
   "read",
   "history",
+  "attach",
+  "unattach",
 ] as const;
 export type ConversationAction = (typeof CONVERSATION_ACTIONS)[number];
 
@@ -408,7 +411,29 @@ export interface ConversationArgs {
     mentions?: string[];
     mode?: "queue" | "steer";
     clientId?: string;
+    /**
+     * Files uploaded with `attach`, by id (at most `MAX_ATTACHMENTS`). The text may be empty when
+     * there are some. They are handed to every agent the message wakes, as files it can open.
+     */
+    attachments?: string[];
   };
+  /**
+   * One chunk of a file on its way to the conversation, in order from `index` 0; `data` is the
+   * chunk in base64 (at most `ATTACH_CHUNK_BYTES` of file). `uploadId` is chosen by the client
+   * and becomes the attachment's id, so a chunk resent after a lost reply is the same upload.
+   * The reply has the `attachment` once `last` was sent.
+   */
+  attach: {
+    conversationId: string;
+    uploadId: string;
+    name: string;
+    contentType?: string;
+    index: number;
+    last?: boolean;
+    data: string;
+  };
+  /** Takes back an attachment that has not been sent. */
+  unattach: { conversationId: string; attachmentId: string };
   /** One reply (`messageId`), or every reply in flight in the conversation. */
   stop: { conversationId: string; messageId?: string };
   /** Moves the user's read mark forward to `seq` (never back, never past the newest row). */
@@ -416,6 +441,20 @@ export interface ConversationArgs {
   /** The page of rows before `beforeSeq` (the newest when omitted), oldest first. */
   history: { conversationId: string; beforeSeq?: number; limit?: number };
 }
+
+/** A file attached to a message (`data.attachments` of the user's row lists them). */
+export interface AttachmentView {
+  id: string;
+  name: string;
+  contentType: string;
+  size: number;
+}
+
+/** A file at most this large, and a message at most this many files. */
+export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+export const MAX_ATTACHMENTS = 10;
+/** The most file bytes one `attach` call carries. */
+export const ATTACH_CHUNK_BYTES = 384 * 1024;
 
 /** What `send` did. */
 export interface SendResult {
@@ -445,6 +484,8 @@ export interface ConversationResults {
   stop: { stopped: MessageView[] };
   read: { conversation: ConversationSummary };
   history: HistoryResult;
+  attach: { attachment: AttachmentView | null };
+  unattach: { removed: boolean };
 }
 export type ConversationCall = {
   [A in ConversationAction]: Omit<CallFrame, "target" | "action" | "args"> & {

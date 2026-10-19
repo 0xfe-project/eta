@@ -1,3 +1,4 @@
+import type { PromptImage } from "./operations";
 import type { ToolActivity } from "./product";
 
 /**
@@ -132,7 +133,7 @@ export interface MachineActionResults {
 /** What the primary asks of the daemon that may take a while (`svc` calls). */
 export interface DaemonServiceParams {
   /** Give the session some words as its next run and wait until it is quiet. */
-  run: { session: string; text: string };
+  run: { session: string; text: string; images?: PromptImage[] };
   /** Run a script on the machine, the way the SSH transport does. */
   exec: { script: string; inputBase64?: string; timeoutMs?: number };
 }

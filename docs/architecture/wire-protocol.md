@@ -39,20 +39,24 @@
 
 产品插件（`apps/eta`，都是 cordis 插件，注入 `wire` 与 `sessions`）：
 
-| 插件          | target                                | action                                                                          |
-| ------------- | ------------------------------------- | ------------------------------------------------------------------------------- |
-| agents        | `agents`（eager）                     | `create` `update` `delete` `direct`                                             |
-| machines      | `machines`（eager）                   | `enroll` `approve` `revoke` `rename`                                            |
-| projects      | `projects`（eager）                   | `create` `update` `setSteward` `files`（归档经 `update`）                       |
-| conversations | `conversations`、`conversations.<id>` | `create` `update` `invite` `remove` `setSteward` `send` `stop` `read` `history` |
-| inbox         | `inbox`                               | `answer` `setApprovals`                                                         |
-| usage         | `usage`                               | 只读                                                                            |
-| tasks         | `tasks`、`tasks.<id>`                 | `create` `update` `comment` `delete` `link` `confirmDraft`                      |
-| artifacts     | `artifacts`                           | `share` `unshare` `delete` `preview`                                            |
-| routines      | `routines`、`routines.<id>`           | `create` `update` `delete` `run` `seen` `feedback` `restoreBrief`               |
-| memory        | `memory`（仅有边车时挂载）            | `list` `remember` `forget`                                                      |
+| 插件          | target                                | action                                                                                              |
+| ------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| agents        | `agents`（eager）                     | `create` `update` `delete` `direct`                                                                 |
+| machines      | `machines`（eager）                   | `enroll` `approve` `revoke` `rename`                                                                |
+| projects      | `projects`（eager）                   | `create` `update` `setSteward` `files`（归档经 `update`）                                           |
+| conversations | `conversations`、`conversations.<id>` | `create` `update` `invite` `remove` `setSteward` `send` `stop` `read` `history` `attach` `unattach` |
+| inbox         | `inbox`                               | `answer` `setApprovals`                                                                             |
+| usage         | `usage`                               | 只读                                                                                                |
+| tasks         | `tasks`、`tasks.<id>`                 | `create` `update` `comment` `delete` `link` `confirmDraft`                                          |
+| artifacts     | `artifacts`                           | `share` `unshare` `delete` `preview`                                                                |
+| routines      | `routines`、`routines.<id>`           | `create` `update` `delete` `run` `seen` `feedback` `restoreBrief`                                   |
+| memory        | `memory`（仅有边车时挂载）            | `list` `remember` `forget`                                                                          |
 
 eager 的 target 随 `hello` 到达，页面不用先订阅就能画出来。
+
+## 附件怎么上传
+
+附件走同一条 WebSocket，不另开 HTTP 路由：`conversations.attach` 一次带一块（至多 384 KiB 文件内容的 base64），`index` 从 0 起严格递增，`last` 标记最后一块，回复在最后一块时带上附件。上传 id（`uploadId`，客户端生成的 uuid）就是附件的 id，所以丢了回复后重发同一块是同一次上传。选这个而不是 HTTP 上传：访问控制、重连与超时已经在这条连接上，界面也不必再认第二种认证；代价是文件上限 20 MB 要拆成最多 54 次调用，对人手粘贴的文件够用。`conversations.send` 的 `attachments` 列出已上传的附件 id（至多 10 个，文本可以为空），消息认领它们后不能再撤回（`unattach` 只撤回未发送的）。
 
 ## 界面如何用
 

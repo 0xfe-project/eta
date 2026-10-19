@@ -26,6 +26,7 @@ import { ArtifactService } from "./artifacts/service";
 import { DEFAULT_LIMITS } from "./artifacts/site";
 import { ArtifactStore } from "./artifacts/store";
 import { artifactSessionTools } from "./artifacts/tools";
+import { AttachmentStore } from "./conversations/attachments";
 import { Engine, RESTART_TEXT } from "./conversations/engine";
 import { conversationsPlugin } from "./conversations/plugin";
 import { ConversationStore } from "./conversations/store";
@@ -41,6 +42,7 @@ import { machinesPlugin } from "./machines/plugin";
 import { RemotePlace } from "./machines/remote-place";
 import { RemoteSessionsRouter } from "./machines/remote-sessions";
 import { serveLink } from "./machines/service";
+import { transportOn } from "./machines/shell";
 import { MachineStore } from "./machines/store";
 import { MemoryClient } from "./memory/client";
 import { memoryRunHooks, memoryTools } from "./memory/hooks";
@@ -257,8 +259,12 @@ export function createProduct(options: {
     changed: () => wire?.pushNow("inbox"),
     warn,
   });
+  const attachments = new AttachmentStore(db, dataDir);
   const engine = new Engine({
     db,
+    attachments,
+    shell: (machine) => transportOn(machine, hub),
+    models: () => running?.models,
     agents,
     machines,
     projects,
@@ -376,7 +382,7 @@ export function createProduct(options: {
       server.mount(
         "conversations",
         conversationsPlugin(
-          { ...shared, engine, targets, changed, created },
+          { ...shared, engine, attachments, targets, changed, created },
           applied("conversations"),
         ),
       );

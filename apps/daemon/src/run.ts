@@ -7,7 +7,11 @@
  * left in the inbox, and what the session said is the text of its last assistant message that
  * had any, with what it thought in the same message (or, failing that, the last thought it had).
  */
-import type { RunOutcome, ToolActivity } from "@eta/client-contracts";
+import type {
+  PromptImage,
+  RunOutcome,
+  ToolActivity,
+} from "@eta/client-contracts";
 import type { AgentMessage } from "@eta/core";
 import type { ManagedSession } from "@eta/server";
 import { kernelOn } from "@eta/core";
@@ -50,12 +54,13 @@ export function listen(managed: ManagedSession): {
  * Run the session on `prompt` until it is quiet. Words that reached the inbox after the run's
  * last look (a steer that lost the race) belong to this run too; a run that failed leaves the
  * inbox as it found it, and asking again would only fail again. `keepGoing` lets a caller that
- * is shutting down end the loop.
+ * is shutting down end the loop. `images` go in the same first message as the words.
  */
 export async function runAndWait(
   managed: ManagedSession,
   prompt: string,
   keepGoing: () => boolean = () => true,
+  images: readonly PromptImage[] = [],
 ): Promise<RunOutcome> {
   const heard = listen(managed);
   try {
@@ -63,7 +68,14 @@ export async function runAndWait(
     kernel.nextRun({
       role: "user",
       timestamp: Date.now(),
-      content: [{ type: "text", text: prompt }],
+      content: [
+        { type: "text", text: prompt },
+        ...images.map((image) => ({
+          type: "image" as const,
+          data: image.dataBase64,
+          mimeType: image.mime,
+        })),
+      ],
     });
     let result = await runner.run();
     while (

@@ -247,9 +247,9 @@ export class DaemonNode {
     // The things that can take a while are not pipe calls, which a connection applies one at a
     // time: they are calls of their own, and a stop on the pipe can overtake them.
     peer.handle("run", async (raw) => {
-      const { session, text } = raw as DaemonServiceParams["run"];
+      const { session, text, images } = raw as DaemonServiceParams["run"];
       const { managed } = await this.#service().open(session);
-      return await runAndWait(managed, text);
+      return await runAndWait(managed, text, undefined, images);
     });
     peer.handle("exec", async (raw, { signal }) => {
       const args = raw as DaemonServiceParams["exec"];

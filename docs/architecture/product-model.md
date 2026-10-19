@@ -30,6 +30,10 @@ project = machine + 目录（同一台机器上同一路径唯一）。`steward_
 - `message`（时间线）：`seq` 在对话内递增，是阅读顺序。`kind` 有 `message`、`mention`、`system`、`task_draft`、`task_card`；`status` 有 `queued`、`working`、`waiting_for_input`、`done`、`failed`、`stopping`、`stopped`。**回复行占着它的位置**：入队时就有 `seq`，文字陆续到达时 `revision` 增长而 `seq` 不变。
 - 回复结束时，这次运行的工具活动存进行的 `data.activity`（`ToolActivity[]`：名称、裁短的输入、输出开头最多 2000 字符、状态，以及工具留给页面的 `details`，如 `publish_artifact` 的产物引用；`details` 超过 4000 字节丢弃，最多 200 条）。回复进行中页面从会话的 transcript 画工具卡，结束后从这里画同样的卡片和产物卡。远端会话由 daemon 的 `run` 随 `RunOutcome.activity` 带回，不需要迁移。
 
+## 附件
+
+用户行的 `data.attachments`（`AttachmentView[]`：id、名字、类型、大小）列出它带来的文件，文件本身在主 node 的数据目录里（见[数据](data.md)），上传方式见[线协议](wire-protocol.md)。智能体被唤醒（或被插话加入）时，简报里每条消息下面列出它的文件：**本机会话**得到数据目录里文件的绝对路径；**daemon 上的会话**得到写在 daemon 机器上的副本 `~/.eta/uploads/<对话 id>/<附件 id>-<名字>`（经链路的 `exec` 分块写入，已有同样大小的文件就跳过）。某个文件写不过去时，简报里写明原因，回复照常运行。png/jpeg/gif/webp 图片（最多 4 张、合计 3 MB 内）在会话的模型声明支持图像输入时，还随这条消息作为图像送给模型；模型不支持时只有路径，智能体可以用工具读。
+
 ## 唤醒规则
 
 **一次唤醒就是一条回复行。** 没有单独的唤醒表或队列：`queued` 的回复行是等着会话的唤醒，`working` 是正在跑的，进程重启时把遗留的在途行统一标为失败（"服务重启，这条回复没有完成"）。
