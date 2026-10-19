@@ -85,6 +85,12 @@ export interface AssembleOptions {
    * config — which is what a normal start does.
    */
   models?: KernelModels | undefined;
+  /**
+   * Wraps the model layer once it is known, however it was made. A host that serves models of its
+   * own beside the configured providers (the LLM gateway's) answers for those and hands the rest
+   * to `base`.
+   */
+  overlayModels?: ((base: KernelModels) => KernelModels) | undefined;
   /** Which bundled plugins to mount. Default: all of them. */
   plugins?: readonly BundledPluginName[];
   /** How often to check the user's plugin directory for edits. Zero disables watching. */
@@ -266,7 +272,7 @@ export async function assembleServer(
       warn(`[eta-server] could not build the model layer: ${String(error)}`);
     }
   }
-  const kernelModels: KernelModels = models ?? {
+  const configuredModels: KernelModels = models ?? {
     // No providers configured: every model resolution fails, which is exactly what
     // `model_unavailable` means. A keyless fake here would make the failure look like a
     // provider problem much later, at request time.
@@ -278,6 +284,8 @@ export async function assembleServer(
       throw new Error("model_unavailable: no providers are configured");
     },
   };
+  const kernelModels: KernelModels =
+    options.overlayModels?.(configuredModels) ?? configuredModels;
 
   // The network settings in force, put into the environment *before* anything builds a client:
   // whatever the provider layer uses later picks them up the way any Node process would. The

@@ -10,6 +10,7 @@ import type { AssembledServer, AssembleOptions } from "@eta/server";
  */
 import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/site";
+import type { LlmOptions, LlmRuntime } from "./llm/runtime";
 import type { Product, RoutinesOptions } from "./product";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -23,6 +24,9 @@ import {
   openDatabase,
 } from "./db";
 import { createWebRoutes } from "./http";
+import { GatewayModels } from "./llm/models";
+import { llmPlugin } from "./llm/plugin";
+import { openLlm } from "./llm/runtime";
 import { createProduct } from "./product";
 
 export interface HostOptions {
@@ -43,6 +47,13 @@ export interface HostOptions {
    * memory tools, and nothing is ever sent to a sidecar.
    */
   memoryUrl?: string;
+  /**
+   * Whether to load the LLM gateway: subscription accounts (Codex, Grok) and Gemini API keys,
+   * served as the `llm` provider. Off by default so a host made for a test does not load a
+   * native library; `main.ts` turns it on. A host whose gateway library is not built runs
+   * without one and says so. The object form is for tests, which point an upstream at a fake.
+   */
+  llm?: boolean | LlmOptions;
   /** The model layer, when the caller has its own (a test with scripted answers). */
   models?: AssembleOptions["models"];
   /** Where the agent's home is, for personas. Defaults to the real one. */
@@ -68,6 +79,8 @@ export interface Host {
   readonly product: Product;
   /** The upstream server: its sessions, wire service and plugin manager. */
   readonly server: AssembledServer;
+  /** The gateway's account API, when it is loaded. */
+  readonly llm: LlmRuntime | undefined;
   /** Stop listening, close the sessions and the database. */
   close: () => Promise<void>;
 }
@@ -87,6 +100,8 @@ export async function startHost(options: HostOptions): Promise<Host> {
   const db = openDatabase(databasePath(options.dataDir));
   let server: AssembledServer;
   let product: Product;
+  let llm: LlmRuntime | undefined;
+  const gatewayModels = new GatewayModels();
   try {
     applyMigrations(db, loadMigrations());
     const warn = options.warn ?? ((message: string) => console.warn(message));
@@ -123,13 +138,36 @@ export async function startHost(options: HostOptions): Promise<Host> {
       baseSystemPromptFor: product.engine.baseSystemPromptFor,
       ...product.sessionHooks,
       ...(options.models === undefined ? {} : { models: options.models }),
+      ...(options.llm !== undefined && options.llm !== false
+        ? { overlayModels: gatewayModels.overlay }
+        : {}),
       ...(options.home === undefined ? {} : { home: options.home }),
       ...(options.network === undefined ? {} : { network: options.network }),
       warn,
     });
     try {
       await product.mount(server);
+      // After the server: it has applied the network settings, which the gateway's own
+      // requests to the providers then inherit.
+      if (options.llm !== undefined && options.llm !== false) {
+        llm = await openLlm({
+          ...(options.llm === true ? {} : options.llm),
+          dataDir: options.dataDir,
+          models: gatewayModels,
+          warn,
+        });
+        if (llm !== undefined) {
+          const { client } = llm;
+          await new Promise<void>((resolve) => {
+            server.mount(
+              "llm",
+              llmPlugin({ client, models: gatewayModels, warn }, resolve),
+            );
+          });
+        }
+      }
     } catch (error) {
+      llm?.close();
       await server.close();
       throw error;
     }
@@ -148,11 +186,13 @@ export async function startHost(options: HostOptions): Promise<Host> {
     db,
     product,
     server,
+    llm,
     // Once: a signal and a caller may both ask, and the second has nothing left to close.
     close() {
       closing ??= (async () => {
         product.close();
         await server.close();
+        llm?.close();
         db.close();
       })();
       return closing;
