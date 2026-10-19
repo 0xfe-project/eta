@@ -180,35 +180,75 @@ function GroupRow({
   const busy = members.filter(busyMember);
 
   return (
-    <SidebarMenuItem>
+    <SidebarMenuItem className="group/menu-item relative" data-active={active}>
       {draft === null ? (
-        <SidebarMenuButton
-          isActive={active}
-          onClick={onOpen}
-          title={conversation.name}
-          className={cn("h-9 text-sm", expandable && "pr-14")}
-        >
-          <MemberStack members={members} />
-          <span className="min-w-0 flex-1 truncate">{conversation.name}</span>
-          {busy.length > 0 ? (
-            <span
-              className="shrink-0 font-mono text-[10px] text-state-success"
-              title={busy.map((m) => nameOf(m.agentId)).join("、")}
-            >
-              ●
+        <>
+          {/* The row's own click target, under everything: the caret that expands the members
+           * sits between the avatars and the name, and a button cannot hold another button. */}
+          <button
+            type="button"
+            data-sidebar="menu-button"
+            data-active={active}
+            title={conversation.name}
+            onClick={onOpen}
+            className={cn(
+              // Only the row, not the members listed under it.
+              "absolute inset-x-0 top-0 h-9 rounded-none transition-colors",
+              "hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden",
+              active && "bg-sidebar-accent",
+            )}
+          >
+            <span className="sr-only">{conversation.name}</span>
+          </button>
+          <div className="pointer-events-none relative z-10 flex h-9 items-center gap-1.5 px-2 pr-8 text-sm">
+            <MemberStack members={members} />
+            {expandable ? (
+              <button
+                type="button"
+                aria-label={
+                  expanded
+                    ? translateText("chat:groups.members.collapse")
+                    : translateText("chat:groups.members.expand")
+                }
+                aria-expanded={expanded}
+                onClick={onToggle}
+                className="pointer-events-auto flex size-3.5 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
+              >
+                <CaretRightIcon
+                  aria-hidden="true"
+                  className={cn(
+                    "size-3.5 transition-transform",
+                    expanded && "rotate-90",
+                  )}
+                />
+              </button>
+            ) : (
+              // The same width, so names line up whether a row expands or not.
+              <span aria-hidden="true" className="size-3.5 shrink-0" />
+            )}
+            <span className="min-w-0 flex-1 truncate">{conversation.name}</span>
+            {busy.length > 0 ? (
+              <span
+                className="shrink-0 font-mono text-[10px] text-state-success"
+                title={busy.map((m) => nameOf(m.agentId)).join("、")}
+              >
+                ●
+              </span>
+            ) : null}
+            {conversation.unread > 0 ? (
+              <span className="shrink-0 font-mono text-[10px] text-foreground tabular-nums">
+                {conversation.unread}
+              </span>
+            ) : null}
+            <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+              {humanizeAge(
+                conversation.lastMessageAt ?? conversation.updatedAt,
+              )}
             </span>
-          ) : null}
-          {conversation.unread > 0 ? (
-            <span className="shrink-0 font-mono text-[10px] text-foreground tabular-nums">
-              {conversation.unread}
-            </span>
-          ) : null}
-          <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-            {humanizeAge(conversation.lastMessageAt ?? conversation.updatedAt)}
-          </span>
-        </SidebarMenuButton>
+          </div>
+        </>
       ) : (
-        <div className="flex h-9 items-center px-2">
+        <div className="relative z-10 flex h-9 items-center px-2">
           <RenameField
             value={draft}
             onChange={setDraft}
@@ -217,24 +257,6 @@ function GroupRow({
           />
         </div>
       )}
-      {expandable ? (
-        <SidebarMenuAction
-          showOnHover
-          aria-label={
-            expanded
-              ? translateText("chat:groups.members.collapse")
-              : translateText("chat:groups.members.expand")
-          }
-          aria-expanded={expanded}
-          onClick={onToggle}
-          className="top-2 right-7"
-        >
-          <CaretRightIcon
-            aria-hidden="true"
-            className={cn(expanded && "rotate-90")}
-          />
-        </SidebarMenuAction>
-      ) : null}
       <RowMenu
         // A private chat is named after its agent: the host renames it with the agent.
         onRename={direct ? undefined : () => setDraft(conversation.name)}
@@ -346,7 +368,7 @@ function RowMenu({
         <SidebarMenuAction
           showOnHover
           aria-label={translateText("chat:groups.accessibility.actions")}
-          className="top-2"
+          className="top-2 z-20"
         >
           <DotsThreeIcon aria-hidden="true" />
         </SidebarMenuAction>
