@@ -301,5 +301,14 @@
     "wakeBudget": "这条消息已经用完 {{budget}} 次唤醒；之后的 @ 只记入对话，等你再发言才会唤醒。",
     "routineReport": "例行任务「{{name}}」发来报告：{{title}}",
     "routineReportUntitled": "例行任务「{{name}}」发来报告"
+  },
+  "usage": {
+    "system": "系统提示",
+    "context": "对话",
+    "user": "用户",
+    "assistant": "助手",
+    "tooldefs": "工具定义",
+    "tool": "工具结果",
+    "ring": "上下文 {{percent}}%：已用 {{used}}，窗口 {{window}}k"
   }
 }

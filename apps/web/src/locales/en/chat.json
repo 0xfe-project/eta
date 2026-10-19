@@ -301,5 +301,14 @@
     "wakeBudget": "This message has used its {{budget}} wake-ups; later @mentions stay in the conversation and wake nobody until you write again.",
     "routineReport": "Routine “{{name}}” sent a report: {{title}}",
     "routineReportUntitled": "Routine “{{name}}” sent a report"
+  },
+  "usage": {
+    "system": "System prompt",
+    "context": "Conversation",
+    "user": "User",
+    "assistant": "Assistant",
+    "tooldefs": "Tool definitions",
+    "tool": "Tool results",
+    "ring": "Context {{percent}}%: {{used}} used of a {{window}}k window"
   }
 }
