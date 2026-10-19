@@ -2,16 +2,11 @@ import type { ReactNode } from "react";
 import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
-import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { Empty, Loading } from "@/components/states";
-import { Button } from "@/components/ui/button";
 import {
   SidebarContent,
   SidebarGroup,
-  SidebarGroupAction,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuBadge,
@@ -23,11 +18,8 @@ import {
 import { translate } from "@/lib/i18n";
 import { useTasks } from "@/queries/tasks";
 import { AgentEditor } from "./agent-editor";
-import { AgentAvatar, AgentStatusDot } from "./agent-identity";
-import { agentStatusLabels } from "./agent-status";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { ConversationList } from "./sidebar-tree";
-import { useAgents, useOpenAgent } from "./use-agents";
 
 // Shared navigation: the full-window sidebar on wide screens and three
 // bottom tabs on mobile. The conversation list is the mobile home screen.
@@ -57,19 +49,10 @@ function useBadges(): Partial<Record<(typeof sections)[number]["to"], number>> {
   };
 }
 
-const groupLabel = "text-xs font-medium text-muted-foreground";
-
 export function Sidebar() {
-  const { t: translateText } = useTranslation([
-    "navigation",
-    "agents",
-    "chat",
-    "common",
-  ] as const);
+  const { t: translateText } = useTranslation(["navigation"] as const);
   const badges = useBadges();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { agents, loaded, error, openEditor } = useAgents();
-  const openAgent = useOpenAgent();
   return (
     <SidebarRoot
       collapsible="none"
@@ -104,59 +87,6 @@ export function Sidebar() {
           </SidebarMenu>
         </SidebarGroup>
         <ConversationList />
-        <SidebarGroup aria-labelledby="sidebar-agents">
-          <SidebarGroupLabel id="sidebar-agents" className={groupLabel}>
-            {translateText("common:entities.agents")}
-          </SidebarGroupLabel>
-          <SidebarGroupAction
-            aria-label={translateText("agents:actions.create")}
-            title={translateText("agents:actions.create")}
-            onClick={() => openEditor()}
-          >
-            <PlusIcon aria-hidden="true" />
-          </SidebarGroupAction>
-          {error && !loaded ? (
-            <p className="px-2 text-xs text-muted-foreground">
-              {translateText("agents:errors.loadFailed")}
-            </p>
-          ) : !loaded ? (
-            <Loading rows={2} />
-          ) : agents.length ? null : (
-            <Empty
-              title={translateText("agents:empty.title")}
-              className="px-3 py-4"
-              action={
-                <Button
-                  size="xs"
-                  variant="outline"
-                  onClick={() => openEditor()}
-                >
-                  {translateText("agents:actions.create")}
-                </Button>
-              }
-            />
-          )}
-          <SidebarMenu>
-            {agents.map((agent) => (
-              <SidebarMenuItem key={agent.id}>
-                <SidebarMenuButton
-                  onClick={() => openAgent(agent.id)}
-                  title={translateText("agents:actions.chatWith", {
-                    name: agent.name,
-                  })}
-                  className="text-sm"
-                >
-                  <AgentAvatar agent={agent} className="size-5" />
-                  <span className="min-w-0 flex-1 truncate">{agent.name}</span>
-                  <AgentStatusDot status={agent.status} />
-                  <span className="sr-only">
-                    {agentStatusLabels[agent.status]}
-                  </span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarGroup>
       </SidebarContent>
     </SidebarRoot>
   );

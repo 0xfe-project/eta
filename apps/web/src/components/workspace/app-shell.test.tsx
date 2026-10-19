@@ -14,6 +14,7 @@ import {
 } from "@/test-product";
 import { agentStatusLabels } from "./agent-status";
 import { Sidebar } from "./app-shell";
+import { GroupList } from "./groups";
 
 const state = rstest.hoisted(() => ({
   agents: [] as { id: string; name: string; status: string }[],
@@ -66,7 +67,11 @@ async function render(node: React.ReactNode) {
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
   });
   productHost({
-    agents: state.agents.map((a) => agentView({ ...a, status: "idle" })),
+    agents: state.agents.map((a, index) =>
+      agentView({ ...a, createdAt: index + 1 } as Parameters<
+        typeof agentView
+      >[0]),
+    ),
     projects: [
       projectView({
         id: "p-eta",
@@ -116,82 +121,108 @@ const agent = (id: string, name: string, status = "idle") => ({
   status,
 });
 
-describe("智能体库", () => {
-  it("lists every agent, whether or not it already has a conversation", async () => {
-    state.agents = [agent("a1", "乐子人"), agent("a2", "装配检查")];
+const rowNames = (container: HTMLElement) =>
+  [...container.querySelectorAll('[data-sidebar="menu-button"]')]
+    .filter((row) => !row.hasAttribute("data-to"))
+    .map((row) => row.getAttribute("title"));
+
+describe("左栏的一张列表", () => {
+  const now = Date.now();
+  const lists = () => {
+    state.agents = [
+      agent("a1", "乐子人"),
+      agent("a2", "装配检查", "working"),
+      agent("a3", "闲着"),
+    ];
+    // `useGroups` hands the conversations over newest activity first.
     state.groups = [
       conversationView({
-        id: "g1",
+        id: "d1",
         name: "乐子人",
         kind: "direct",
         projectId: "p",
         participants: [memberView("a1")],
+        lastMessageAt: now - 60_000,
       }),
-    ];
-    const container = await render(<Sidebar />);
-    const library = container.querySelector(
-      '[aria-labelledby="sidebar-agents"]',
-    )!;
-    // Both, every time: an agent is a durable actor, not a conversation that gets used up.
-    // 乐子人 already has a private chat in the tree — it stays here anyway, because this list
-    // answers "who exists", not "who have I not talked to yet".
-    expect(library.textContent).toContain("装配检查");
-    expect(library.textContent).toContain("乐子人");
-  });
-
-  it("keeps offering an agent after its conversation is open", async () => {
-    state.agents = [agent("a1", "乐子人")];
-    state.groups = [
       conversationView({
         id: "g1",
-        name: "乐子人",
-        kind: "direct",
+        name: "装配",
         projectId: "p",
-        participants: [memberView("a1")],
+        participants: [memberView("a1"), memberView("a2")],
+        lastMessageAt: now - 3_600_000,
       }),
     ];
+  };
+
+  it("holds a group, an agent's direct chat once, and an agent without one", async () => {
+    lists();
     const container = await render(<Sidebar />);
-    const library = container.querySelector(
-      '[aria-labelledby="sidebar-agents"]',
-    )!;
-    const row = [...library.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes("乐子人"),
-    )!;
-    await act(async () => row.click());
-    // Pressing it again is the same conversation, not a second one and not a shorter list.
-    expect(state.openAgent).toHaveBeenCalledWith("a1");
-    expect(library.textContent).toContain("乐子人");
+    // 乐子人 appears once, as its direct chat; the two without a chat come after, by creation.
+    expect(rowNames(container)).toEqual([
+      "乐子人",
+      "装配",
+      "与 装配检查 对话",
+      "与 闲着 对话",
+    ]);
+    expect(
+      container.querySelectorAll('[data-sidebar="group-label"]'),
+    ).toHaveLength(1);
+    expect(container.textContent).not.toContain("智能体");
+    expect(
+      container.querySelector('[aria-labelledby="sidebar-agents"]'),
+    ).toBeNull();
   });
 
-  it("opens a chat when a library agent is pressed", async () => {
-    state.agents = [agent("a2", "装配检查")];
-    state.groups = [];
+  it("shows an agent without a chat with its status", async () => {
+    lists();
     const container = await render(<Sidebar />);
-    const button = [...container.querySelectorAll("button")].find((b) =>
+    const row = [...container.querySelectorAll("button")].find((b) =>
       b.textContent?.includes("装配检查"),
     )!;
-    await act(async () => button.click());
+    expect(row.textContent).toBe(`装配检查${agentStatusLabels.working}`);
+  });
+
+  it("opens the direct chat of an agent without one when it is pressed", async () => {
+    lists();
+    const container = await render(<Sidebar />);
+    const row = [...container.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("装配检查"),
+    )!;
+    await act(async () => row.click());
     expect(state.openAgent).toHaveBeenCalledWith("a2");
   });
 
-  it("shows every agent with its status", async () => {
-    state.agents = [
-      agent("a1", "乐子人", "working"),
-      agent("a2", "装配检查", "waiting_for_input"),
-      agent("a3", "闲着", "idle"),
-    ];
+  it("has no button to create an agent", async () => {
+    lists();
+    const container = await render(<Sidebar />);
+    expect(container.querySelector('[title="新建智能体"]')).toBeNull();
+  });
+
+  it("is the same single list on the phone's home", async () => {
+    lists();
+    const container = await render(<GroupList />);
+    const titles = [...container.querySelectorAll("li button")].map((b) =>
+      b.getAttribute("title"),
+    );
+    expect(titles).toEqual([
+      "乐子人",
+      "装配",
+      "与 装配检查 对话",
+      "与 闲着 对话",
+    ]);
+    expect(container.querySelectorAll("h2")).toHaveLength(1);
+    const row = [...container.querySelectorAll<HTMLElement>("li button")].find(
+      (b) => b.textContent?.includes("闲着"),
+    )!;
+    await act(async () => row.click());
+    expect(state.openAgent).toHaveBeenCalledWith("a3");
+  });
+
+  it("says so once when there is nothing to chat with", async () => {
+    state.agents = [];
     state.groups = [];
     const container = await render(<Sidebar />);
-    const rows = [
-      ...container.querySelectorAll(
-        '[aria-labelledby="sidebar-agents"] [data-sidebar="menu-button"]',
-      ),
-    ];
-    expect(rows.map((row) => row.textContent)).toEqual([
-      `乐子人${agentStatusLabels.working}`,
-      `装配检查${agentStatusLabels.waiting_for_input}`,
-      `闲着${agentStatusLabels.idle}`,
-    ]);
+    expect(container.textContent).toContain("还没有对话");
   });
 });
 

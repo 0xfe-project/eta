@@ -55,9 +55,6 @@
     "working": "工作中",
     "awaitingConfirmation": "等待确认"
   },
-  "errors": {
-    "loadFailed": "无法加载智能体"
-  },
   "labels": {
     "deletedAgent": "已删除的智能体"
   },
@@ -75,10 +72,6 @@
     "summary": "模型用量：{{usage}}",
     "tokensAndRequests_one": "{{tokens}} tokens（7 天 {{count}} 次请求）",
     "tokensAndRequests_other": "{{tokens}} tokens（7 天 {{count}} 次请求）"
-  },
-  "library": {
-    "title": "智能体库",
-    "allReachable": "每个智能体都已经有对话了。"
   },
   "thinking": {
     "label": "思考档",

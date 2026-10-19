@@ -1,4 +1,8 @@
-import type { ConversationSummary, MemberView } from "@eta/client-contracts";
+import type {
+  AgentView,
+  ConversationSummary,
+  MemberView,
+} from "@eta/client-contracts";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
@@ -28,8 +32,11 @@ import {
 import { cn } from "@/lib/utils";
 import { agentName, useAgentList } from "@/queries/agents";
 import { useConversationActions } from "@/queries/conversations";
-import { AgentAvatar } from "./agent-identity";
-import { useGroups, useOpenGroup } from "./use-groups";
+import { AgentAvatar, AgentStatusDot } from "./agent-identity";
+import { agentStatusLabels } from "./agent-status";
+import { useOpenAgent } from "./use-agents";
+import { useChatList } from "./use-chat-list";
+import { useOpenGroup } from "./use-groups";
 import { useWorkspaceStore } from "./workspace-store";
 
 /** "3m" / "5h" / "1d": the age of a conversation, at a glance. */
@@ -43,22 +50,23 @@ function humanizeAge(at: number): string {
 }
 
 /**
- * The sidebar's conversations: private chats and groups in one flat list, newest activity first.
+ * The sidebar's one list: everything you can chat with, newest activity first.
  *
- * What a row shows is the conversation, not where it runs: a private chat shows its agent, a
- * group its members. The project is chosen when a conversation is made (`+`), not by a heading
- * here, so the list reads as the people you talk to, ordered by who spoke last.
+ * Group chats and every agent (as its private chat) in a flat list; an agent that has not been
+ * talked to yet comes last and opens its chat when pressed. What a row shows is the conversation,
+ * not where it runs: a private chat shows its agent, a group its members. The project is chosen
+ * when a conversation is made (`+`), not by a heading here.
  */
 export function ConversationList() {
   const { t: translateText } = useTranslation(["chat"] as const);
-  // Already newest activity first (`lastMessageAt`, else `updatedAt`); archived ones are Settings'.
-  const { groups, current } = useGroups();
+  // Conversations newest activity first (`lastMessageAt`, else `updatedAt`), archived ones are
+  // Settings'; then the agents with no chat yet.
+  const { rows, current, loaded } = useChatList();
   const open = useOpenGroup();
   const navigate = useNavigate();
   const setFocusedAgent = useWorkspaceStore((state) => state.setFocusedAgent);
   const focusedAgentId = useWorkspaceStore((state) => state.focusedAgentId);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const shown = groups.filter((conversation) => !conversation.archived);
 
   return (
     <SidebarGroup aria-labelledby="sidebar-conversations">
@@ -75,38 +83,64 @@ export function ConversationList() {
       >
         <PlusIcon aria-hidden="true" />
       </SidebarGroupAction>
-      {shown.length === 0 ? (
-        <p className="px-2 text-xs text-muted-foreground">
-          {translateText("chat:groups.empty.title")}
-        </p>
+      {rows.length === 0 ? (
+        loaded ? (
+          <p className="px-2 text-xs text-muted-foreground">
+            {translateText("chat:groups.empty.title")}
+          </p>
+        ) : null
       ) : (
         <SidebarMenu>
-          {shown.map((conversation) => (
-            <GroupRow
-              key={conversation.id}
-              conversation={conversation}
-              active={current?.id === conversation.id}
-              expanded={expanded[conversation.id] === true}
-              onToggle={() =>
-                setExpanded((state) => ({
-                  ...state,
-                  [conversation.id]: !state[conversation.id],
-                }))
-              }
-              onOpen={() => open(conversation.id)}
-              // A member listed under a group is a member *of that group*: pressing it
-              // narrows the conversation to it, the same action as its card in the panel.
-              // Press to focus, press again to let go. Opening a separate private chat is
-              // what the agent list is for.
-              onOpenAgent={(agentId) => {
-                setFocusedAgent(focusedAgentId === agentId ? null : agentId);
-                open(conversation.id);
-              }}
-            />
-          ))}
+          {rows.map((row) => {
+            if (row.kind === "agent")
+              return <AgentRow key={row.agent.id} agent={row.agent} />;
+            const { conversation } = row;
+            return (
+              <GroupRow
+                key={conversation.id}
+                conversation={conversation}
+                active={current?.id === conversation.id}
+                expanded={expanded[conversation.id] === true}
+                onToggle={() =>
+                  setExpanded((state) => ({
+                    ...state,
+                    [conversation.id]: !state[conversation.id],
+                  }))
+                }
+                onOpen={() => open(conversation.id)}
+                // A member listed under a group is a member *of that group*: pressing it
+                // narrows the conversation to it, the same action as its card in the panel.
+                // Press to focus, press again to let go.
+                onOpenAgent={(agentId) => {
+                  setFocusedAgent(focusedAgentId === agentId ? null : agentId);
+                  open(conversation.id);
+                }}
+              />
+            );
+          })}
         </SidebarMenu>
       )}
     </SidebarGroup>
+  );
+}
+
+/** An agent nobody has talked to yet: pressing it makes its private chat and opens it. */
+function AgentRow({ agent }: { agent: AgentView }) {
+  const { t: translateText } = useTranslation(["agents"] as const);
+  const openAgent = useOpenAgent();
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        onClick={() => openAgent(agent.id)}
+        title={translateText("actions.chatWith", { name: agent.name })}
+        className="h-9 text-sm"
+      >
+        <AgentAvatar agent={agent} className="size-5" />
+        <span className="min-w-0 flex-1 truncate">{agent.name}</span>
+        <AgentStatusDot status={agent.status} />
+        <span className="sr-only">{agentStatusLabels[agent.status]}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   );
 }
 

@@ -55,9 +55,6 @@
     "working": "Working",
     "awaitingConfirmation": "Awaiting confirmation"
   },
-  "errors": {
-    "loadFailed": "Unable to load agents"
-  },
   "labels": {
     "deletedAgent": "Deleted agent"
   },
@@ -75,10 +72,6 @@
     "summary": "Model usage: {{usage}}",
     "tokensAndRequests_one": "{{tokens}} tokens ({{count}} request in 7 days)",
     "tokensAndRequests_other": "{{tokens}} tokens ({{count}} requests in 7 days)"
-  },
-  "library": {
-    "title": "Agents",
-    "allReachable": "Every agent has a conversation."
   },
   "thinking": {
     "label": "Thinking level",

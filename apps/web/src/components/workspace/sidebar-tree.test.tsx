@@ -122,7 +122,12 @@ describe("侧边栏的对话列表", () => {
       group("g1", "装配", "p-eta"),
       group("g2", "旧的", "p-eta", { archived: true }),
     ]);
-    expect(rowNames(container)).toEqual(["装配"]);
+    // The two agents have no chat yet, so they follow as their own rows.
+    expect(rowNames(container)).toEqual([
+      "装配",
+      "与 乐子人 对话",
+      "与 装配检查 对话",
+    ]);
   });
 
   it("starts a conversation from the one + on the list heading", async () => {
@@ -144,9 +149,11 @@ describe("侧边栏的对话列表", () => {
 
   it("shows members when expanded, and a member row focuses that agent in the group", async () => {
     const { container } = await tree([group("g1", "装配", "p-eta")]);
-    expect(button(container, "乐子人")).toBeUndefined();
+    const member = () =>
+      container.querySelector('[data-sidebar="menu-sub-button"]');
+    expect(member()).toBeNull();
     await click(container.querySelector('[aria-label="展开成员"]'));
-    await click(button(container, "乐子人"));
+    await click(member());
     // A member listed under a group is a member of that group: pressing it narrows the
     // conversation to it, rather than starting a separate private chat.
     expect(navigation.navigate).toHaveBeenCalledWith({
