@@ -135,7 +135,10 @@ describe("the gateway's accounts on the model services page", () => {
           connector: "xai",
           label: "grok@example.com",
           state: "needs_login",
-          error: { code: "AUTH_EXPIRED", message: "登录已失效，请重新登录。" },
+          error: {
+            code: "login_expired",
+            message: "The login is no longer accepted.",
+          },
         }),
       ],
       quota: [
@@ -265,7 +268,10 @@ describe("the gateway's accounts on the model services page", () => {
     const host = (await render())
       .handle("llm.loginStart", () => ({ login }))
       .handle("llm.loginSubmit", () => {
-        if (!accept) throw new Error("API key 无效，请检查后重新填写。");
+        if (!accept)
+          throw Object.assign(new Error("The API key is invalid."), {
+            problem: { code: "invalid_api_key" },
+          });
         return { login: { ...login, status: "succeeded" } };
       });
     await press(/添加 API key/, section("gemini"));
@@ -286,7 +292,7 @@ describe("the gateway's accounts on the model services page", () => {
     await type("AIza-wrong");
     await press(/校验并保存/);
     await settle();
-    expect(text()).toContain("API key 无效，请检查后重新填写。");
+    expect(text()).toContain("API key 无效，请重新填写。");
     expect(document.querySelector("[role=dialog]")).not.toBeNull();
 
     accept = true;
@@ -370,8 +376,9 @@ describe("the gateway's accounts on the model services page", () => {
           status: "unavailable",
           available: false,
           reason: {
-            code: "AUTH_EXPIRED",
-            message: "Grok 账号登录已失效，请重新登录。",
+            code: "login_expired",
+            message: "Grok login is no longer accepted.",
+            params: { provider: "Grok" },
           },
         },
       ],
@@ -381,8 +388,6 @@ describe("the gateway's accounts on the model services page", () => {
       ["llm:gpt-5", "Codex", true],
       ["llm:grok-4", "Grok", false],
     ]);
-    expect(models[1]!.unavailableReason).toBe(
-      "Grok 账号登录已失效，请重新登录。",
-    );
+    expect(models[1]!.unavailableReason).toBe("登录已失效，请重新登录。");
   });
 });

@@ -143,7 +143,7 @@ func TestOne502StaysOnItsModelAndEnds(t *testing.T) {
 		t.Fatalf("account after one 502: %s", c.State)
 	}
 	m := f.model(t, "gpt-1")
-	wantModel(t, m, ModelDegraded, "UPSTREAM_UNSTABLE")
+	wantModel(t, m, ModelDegraded, CodeUpstreamUnstable)
 	if m.RetryAt == nil || m.RetryAt.After(time.Now().Add(2*time.Minute)) {
 		t.Fatalf("retry_at = %v, want CPA's short transient cooldown", m.RetryAt)
 	}
@@ -173,7 +173,7 @@ func TestPersistent5xxNeverLocksTheModel(t *testing.T) {
 	// locked account, and no cooldown grows past CPA's transient one.
 	for _, id := range []string{"gpt-1", "gpt-2"} {
 		m := f.model(t, id)
-		wantModel(t, m, ModelDegraded, "UPSTREAM_UNSTABLE")
+		wantModel(t, m, ModelDegraded, CodeUpstreamUnstable)
 		if m.RetryAt == nil || m.RetryAt.After(time.Now().Add(2*time.Minute)) {
 			t.Fatalf("%s retry_at = %v", id, m.RetryAt)
 		}
@@ -194,14 +194,14 @@ func TestDefinitiveErrorsKeepTheirReasonAndScope(t *testing.T) {
 	f := newFixture(t)
 	f.remove(t, "b")
 	f.result("a", "gpt-2", http.StatusNotFound)
-	wantModel(t, f.model(t, "gpt-2"), ModelUnavailable, "MODEL_NOT_FOUND")
+	wantModel(t, f.model(t, "gpt-2"), ModelUnavailable, CodeModelNotFound)
 	wantModel(t, f.model(t, "gpt-1"), ModelAvailable, "")
 
 	f.result("a", "gpt-1", http.StatusUnauthorized)
 	if c := f.conn(t, "a"); c.State != StateNeedsLogin {
 		t.Fatalf("account after a 401: %s", c.State)
 	}
-	wantModel(t, f.model(t, "gpt-1"), ModelUnavailable, "AUTH_EXPIRED")
+	wantModel(t, f.model(t, "gpt-1"), ModelUnavailable, CodeLoginExpired)
 	// Another provider is not affected.
 	wantModel(t, f.model(t, "grok"), ModelAvailable, "")
 	if c := f.conn(t, "x"); c.State != StateActive {
@@ -214,7 +214,7 @@ func TestAnotherAccountKeepsTheModel(t *testing.T) {
 	f.result("a", "gpt-1", http.StatusUnauthorized)
 	wantModel(t, f.model(t, "gpt-1"), ModelAvailable, "")
 	// gpt-2 is only on a.
-	wantModel(t, f.model(t, "gpt-2"), ModelUnavailable, "AUTH_EXPIRED")
+	wantModel(t, f.model(t, "gpt-2"), ModelUnavailable, CodeLoginExpired)
 }
 
 func TestRefreshChecksEachAccountOnceForConcurrentCalls(t *testing.T) {
@@ -272,7 +272,7 @@ func TestRefreshChecksEachAccountOnceForConcurrentCalls(t *testing.T) {
 func TestFailedCheckDoesNotTakeModelsDown(t *testing.T) {
 	f := newFixture(t)
 	f.codex.read = func(context.Context) error {
-		return &UserError{Code: "USAGE_UNAVAILABLE", Message: "x", Cause: errors.New("status 502")}
+		return &UserError{Code: CodeUsageUnavailable, Message: "x", Cause: errors.New("status 502")}
 	}
 	s, err := f.s.Refresh(context.Background())
 	if err != nil {
@@ -282,7 +282,7 @@ func TestFailedCheckDoesNotTakeModelsDown(t *testing.T) {
 		if c.State != StateActive {
 			t.Fatalf("%s: %s after a failed check", c.ID, c.State)
 		}
-		if c.Connector == "codex" && (c.CheckError == nil || c.CheckError.Code != "CHECK_FAILED") {
+		if c.Connector == "codex" && (c.CheckError == nil || c.CheckError.Code != CodeCheckFailed) {
 			t.Fatalf("%s check error = %+v", c.ID, c.CheckError)
 		}
 	}
@@ -294,7 +294,7 @@ func TestFailedCheckDoesNotTakeModelsDown(t *testing.T) {
 func TestRejectedLoginCheck(t *testing.T) {
 	f := newFixture(t)
 	f.remove(t, "b")
-	f.codex.read = func(context.Context) error { return &UserError{Code: "AUTH_EXPIRED", Message: "x"} }
+	f.codex.read = func(context.Context) error { return &UserError{Code: CodeLoginExpired, Message: "x"} }
 	if _, err := f.s.Refresh(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +305,7 @@ func TestRejectedLoginCheck(t *testing.T) {
 	if c := f.conn(t, "a"); c.State != StateNeedsLogin {
 		t.Fatalf("account after a rejected check: %s", c.State)
 	}
-	wantModel(t, f.model(t, "gpt-1"), ModelUnavailable, "AUTH_EXPIRED")
+	wantModel(t, f.model(t, "gpt-1"), ModelUnavailable, CodeLoginExpired)
 
 	// A request that succeeds afterwards is newer news than the check.
 	time.Sleep(5 * time.Millisecond)
@@ -319,7 +319,7 @@ func TestLateCheckDoesNotOverwriteNewerOne(t *testing.T) {
 	f := newFixture(t)
 	now := time.Now()
 	f.s.record("a", check{started: now, done: now.Add(time.Second)})
-	f.s.record("a", check{started: now.Add(-time.Second), done: now.Add(2 * time.Second), err: &ConnectionError{Code: "AUTH_EXPIRED"}})
+	f.s.record("a", check{started: now.Add(-time.Second), done: now.Add(2 * time.Second), err: &Problem{Code: CodeLoginExpired}})
 	if c := f.conn(t, "a"); c.State != StateActive || c.CheckError != nil {
 		t.Fatalf("older check won: %+v", c)
 	}

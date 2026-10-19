@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { listSeparator } from "@/lib/i18n";
+import { llmProblemText } from "@/lib/llm-problem";
 import { cn } from "@/lib/utils";
 import {
   NEEDS_ACTION,
@@ -56,14 +57,23 @@ import {
   useSubmitApiKey,
 } from "@/queries/llm";
 import { wireErrorMessage } from "@/queries/wire";
-import { connectionStateLabels, recoveryText, windowLabel } from "./llm-state";
+import {
+  connectionStateLabels,
+  connectorHint,
+  recoveryText,
+  windowLabel,
+} from "./llm-state";
 import { useAgents } from "./use-agents";
 
 /** Remaining share of each subscription window, as the provider reports it. */
 function QuotaWindows({ quota }: { quota: LlmQuota }) {
   const { t: translateText } = useTranslation(["llm", "common"] as const);
   if (quota.error)
-    return <p className="text-xs text-muted-foreground">{quota.error}</p>;
+    return (
+      <p className="text-xs text-muted-foreground">
+        {llmProblemText(quota.error)}
+      </p>
+    );
   if (quota.windows.length === 0) return null;
   return (
     <dl className="grid grid-cols-[2.5rem_minmax(0,1fr)_11.5rem] items-center gap-x-3 gap-y-1.5 text-xs">
@@ -200,7 +210,8 @@ function ApiKeyDialog({ connector, open, onOpenChange }: LoginDialogProps) {
               {translateText("apiKey.title", { name: connector.name })}
             </DialogTitle>
             <DialogDescription>
-              {connector.hint ?? translateText("apiKey.instructions")}
+              {connectorHint(connector.id) ??
+                translateText("apiKey.instructions")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1">
@@ -294,7 +305,9 @@ function DeviceLoginDialog({
   const error = failure
     ? wireErrorMessage(failure)
     : login && login.status !== "pending" && login.status !== "succeeded"
-      ? (login.error ?? translateText("login.failed"))
+      ? login.error
+        ? llmProblemText(login.error)
+        : translateText("login.failed")
       : undefined;
 
   return (
@@ -348,8 +361,10 @@ function DeviceLoginDialog({
               : translateText("login.loadingCode")}
           </p>
         )}
-        {connector.hint ? (
-          <p className="text-xs text-muted-foreground">{connector.hint}</p>
+        {connectorHint(connector.id) ? (
+          <p className="text-xs text-muted-foreground">
+            {connectorHint(connector.id)}
+          </p>
         ) : null}
         <DialogFooter>
           {error ? (
@@ -455,12 +470,12 @@ function ConnectionRow({
       </div>
       {connection.error && connection.state !== "disabled" ? (
         <p className="text-xs text-muted-foreground">
-          {connection.error.message}
+          {llmProblemText(connection.error)}
         </p>
       ) : null}
-      {connection.checkError?.code === "CHECK_FAILED" ? (
+      {connection.checkError?.code === "check_failed" ? (
         <p className="text-xs text-muted-foreground">
-          {connection.checkError.message}
+          {llmProblemText(connection.checkError)}
         </p>
       ) : null}
       {quota && !disabled ? <QuotaWindows quota={quota} /> : null}

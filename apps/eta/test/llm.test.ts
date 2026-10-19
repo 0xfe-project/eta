@@ -61,6 +61,16 @@ describe("the LLM gateway in the host", () => {
         [],
       );
 
+      // A refusal reaches the client as the gateway's code (and params), untranslated; the
+      // message is an English diagnostic.
+      await expect(
+        client.call("llm", "loginPoll", { id: "no-such-login" }),
+      ).rejects.toThrow("Not found.");
+      const refusals = client.frames.filter(
+        (frame) => frame.type === "reply" && !frame.ok,
+      ) as { error: string; problem?: { code: string } }[];
+      expect(refusals.at(-1)?.problem).toEqual({ code: "not_found" });
+
       // The model layer answers for `llm:<model>`.
       const models = host.server.models;
       const model = models.getModel("llm", MODEL);

@@ -125,11 +125,19 @@ export interface ReplyFrame {
   result?: unknown;
 }
 
+/** A failure the client translates: a stable code and the values its text needs. */
+export interface ErrorProblem {
+  code: string;
+  params?: Record<string, string | number> | undefined;
+}
+
 export interface ReplyErrorFrame {
   type: "reply";
   requestId: string;
   ok: false;
+  /** The server's own words; for a failure with a `problem`, a diagnostic for logs. */
   error: string;
+  problem?: ErrorProblem | undefined;
 }
 
 /** A target's state, whole or as a delta. */

@@ -39,8 +39,8 @@ type Model struct {
 	Available bool `json:"available"`
 	// Reason explains a degraded or unavailable model; RetryAt is when it
 	// recovers by itself, if it does.
-	Reason  *ConnectionError `json:"reason,omitempty"`
-	RetryAt *time.Time       `json:"retry_at,omitempty"`
+	Reason  *Problem   `json:"reason,omitempty"`
+	RetryAt *time.Time `json:"retry_at,omitempty"`
 }
 
 // Service ties connectors, CPA's auth manager and the model catalog together.
@@ -206,7 +206,7 @@ func (s *Service) Models() []Model {
 
 	type status struct {
 		state   string
-		reason  *ConnectionError
+		reason  *Problem
 		retryAt *time.Time
 	}
 	best := map[string]status{}
@@ -279,7 +279,7 @@ func (s *Service) connectorName(id string) string {
 	if c, ok := s.byID[id]; ok {
 		return c.Info().DisplayName
 	}
-	return "该服务"
+	return id
 }
 
 // apiKey reports a connector whose credentials are API keys the user
@@ -290,11 +290,11 @@ func (s *Service) apiKey(connector string) bool {
 }
 
 // authExpired is a credential the provider rejects, as the user fixes it.
-func (s *Service) authExpired(connector string) *ConnectionError {
+func (s *Service) authExpired(connector string) *Problem {
 	if s.apiKey(connector) {
-		return &ConnectionError{"AUTH_EXPIRED", "API key 无效，请重新填写。"}
+		return problem(CodeInvalidAPIKey, "The API key is invalid.")
 	}
-	return &ConnectionError{"AUTH_EXPIRED", "登录已失效，请重新登录。"}
+	return problem(CodeLoginExpired, "The login is no longer accepted; sign in again.")
 }
 
 func modelRank(state string) int {

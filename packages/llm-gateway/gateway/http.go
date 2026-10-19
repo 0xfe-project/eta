@@ -34,7 +34,7 @@ func Admin(s *Service, logger *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/llm/v1/logins/{id}/input", h.submitLogin)
 	mux.HandleFunc("DELETE /api/llm/v1/logins/{id}", h.cancelLogin)
 	mux.HandleFunc("/api/llm/", func(w http.ResponseWriter, r *http.Request) {
-		h.fail(w, r, http.StatusNotFound, "NOT_FOUND", "资源不存在。")
+		h.fail(w, r, http.StatusNotFound, CodeNotFound, "Not found.", nil)
 	})
 	return mux
 }
@@ -49,7 +49,7 @@ func (h handler) patchConnection(w http.ResponseWriter, r *http.Request) {
 		Enabled *bool `json:"enabled"`
 	}
 	if json.NewDecoder(r.Body).Decode(&body) != nil || body.Enabled == nil {
-		h.fail(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "请求参数无效。")
+		h.fail(w, r, http.StatusUnprocessableEntity, CodeInvalidRequest, "Invalid request.", nil)
 		return
 	}
 	conn, err := h.s.SetEnabled(r.Context(), r.PathValue("id"), *body.Enabled)
@@ -83,7 +83,7 @@ func (h handler) startLogin(w http.ResponseWriter, r *http.Request) {
 		LoginInput
 	}
 	if json.NewDecoder(r.Body).Decode(&body) != nil || body.Connector == "" {
-		h.fail(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "请求参数无效。")
+		h.fail(w, r, http.StatusUnprocessableEntity, CodeInvalidRequest, "Invalid request.", nil)
 		return
 	}
 	sess, err := h.s.StartLogin(r.Context(), body.Connector, body.LoginInput)
@@ -106,7 +106,7 @@ func (h handler) pollLogin(w http.ResponseWriter, r *http.Request) {
 func (h handler) submitLogin(w http.ResponseWriter, r *http.Request) {
 	var in LoginInput
 	if json.NewDecoder(r.Body).Decode(&in) != nil {
-		h.fail(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "请求参数无效。")
+		h.fail(w, r, http.StatusUnprocessableEntity, CodeInvalidRequest, "Invalid request.", nil)
 		return
 	}
 	if err := h.s.SubmitLogin(r.Context(), r.PathValue("id"), in); err != nil {
@@ -131,25 +131,24 @@ func (h handler) error(w http.ResponseWriter, r *http.Request, err error) {
 	var ue *UserError
 	switch {
 	case errors.Is(err, ErrNotFound):
-		h.fail(w, r, http.StatusNotFound, "NOT_FOUND", "资源不存在。")
+		h.fail(w, r, http.StatusNotFound, CodeNotFound, "Not found.", nil)
 	case errors.Is(err, ErrUnsupported):
-		h.fail(w, r, http.StatusConflict, "UNSUPPORTED", "该连接方式不支持此操作。")
+		h.fail(w, r, http.StatusConflict, CodeUnsupported, "The connector does not support this operation.", nil)
 	case errors.As(err, &ue):
 		h.logger.Warn("llm request failed", "path", r.URL.Path, "error", err)
-		h.fail(w, r, http.StatusFailedDependency, ue.Code, ue.Message)
+		h.fail(w, r, http.StatusFailedDependency, ue.Code, ue.Message, ue.Params)
 	default:
 		h.logger.Error("llm request failed", "path", r.URL.Path, "error", err)
-		h.fail(w, r, http.StatusFailedDependency, "UPSTREAM_ERROR", "模型服务暂时不可用，请稍后再试。")
+		h.fail(w, r, http.StatusFailedDependency, CodeGatewayUnavailable, "The gateway failed.", nil)
 	}
 }
 
 // fail writes the error envelope.
-func (h handler) fail(w http.ResponseWriter, r *http.Request, status int, code, message string) {
-	writeJSON(w, status, map[string]any{"error": map[string]string{
-		"code":       code,
-		"message":    message,
-		"request_id": r.Header.Get("X-Request-Id"),
-	}})
+func (h handler) fail(w http.ResponseWriter, r *http.Request, status int, code, message string, params Params) {
+	writeJSON(w, status, map[string]any{"error": struct {
+		Problem
+		RequestID string `json:"request_id"`
+	}{Problem{Code: code, Message: message, Params: params}, r.Header.Get("X-Request-Id")}})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

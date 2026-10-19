@@ -26,6 +26,7 @@
 import type {
   CallFrame,
   ClientFrame,
+  ErrorProblem,
   OpDescriptor,
   ServerFrame,
 } from "@eta/client-wire-proto";
@@ -57,6 +58,23 @@ export interface Connection {
   /** Send a frame to this client (a pushed state, an event). */
   send: (frame: ServerFrame) => void;
   close: () => void;
+}
+
+/**
+ * The `problem` an error carries (a stable code and its params, for the client to translate), if
+ * it has one. A plugin passes it through unchanged; the transport only forwards it.
+ */
+function problemOf(error: unknown): ErrorProblem | undefined {
+  if (typeof error !== "object" || error === null || !("problem" in error))
+    return undefined;
+  const { problem } = error as { problem: unknown };
+  if (
+    typeof problem !== "object" ||
+    problem === null ||
+    typeof (problem as { code?: unknown }).code !== "string"
+  )
+    return undefined;
+  return problem as ErrorProblem;
 }
 
 /** Everything that is true of one connection, with no socket library involved. */
@@ -160,7 +178,14 @@ export function createConnection(
         send({ type: "error", message });
         return;
       }
-      send({ type: "reply", requestId, ok: false, error: message });
+      const problem = problemOf(error);
+      send({
+        type: "reply",
+        requestId,
+        ok: false,
+        error: message,
+        ...(problem === undefined ? {} : { problem }),
+      });
     }
   };
 

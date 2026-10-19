@@ -23,6 +23,20 @@ export const connectionStateLabels: Record<LlmConnectionState, string> = {
   },
 };
 
+/** The guidance shown with a connector's login, by connector id; none for one we don't know. */
+export function connectorHint(id: string): string | undefined {
+  switch (id) {
+    case "codex":
+      return translate("llm:connectorHints.codex");
+    case "xai":
+      return translate("llm:connectorHints.xai");
+    case "gemini":
+      return translate("llm:connectorHints.gemini");
+    default:
+      return undefined;
+  }
+}
+
 /**
  * How long until an account recovers by itself, or a quota window resets; empty when it already
  * has or never says.

@@ -77,5 +77,41 @@
     "hours_other": "约 {{count}} 小时后重置",
     "days_one": "约 {{count}} 天后重置",
     "days_other": "约 {{count}} 天后重置"
+  },
+  "problems": {
+    "loginExpired": "登录已失效，请重新登录。",
+    "invalidApiKey": "API key 无效，请重新填写。",
+    "quotaExhausted": "额度已用尽，恢复后会自动继续使用。",
+    "rateLimited": "请求过于频繁，稍后会自动恢复。",
+    "upstreamError": "上游拒绝了该账号（HTTP {{status}}），可能没有使用权限或已被停用。",
+    "upstreamUnstable": "上游暂时故障（HTTP {{status}}），稍后会自动重试。",
+    "upstreamUnreachable": "上游暂时无法连接，稍后会自动重试。",
+    "accountDisabled": "账号已停用。",
+    "modelDisabled": "该模型已停用。",
+    "modelQuotaExhausted": "{{provider}} 账号的该模型额度已用尽，恢复后可继续使用。",
+    "modelForbidden": "{{provider}} 账号无权使用该模型（HTTP {{status}}）。",
+    "modelNotFound": "{{provider}} 暂不提供该模型。",
+    "noConnection": "尚未绑定 {{provider}} 账号。",
+    "checkFailed": "暂时无法连接上游，未能完成检查；状态保持不变。",
+    "usageUnavailable": "暂时无法读取用量。",
+    "noToken": "该账号没有可用的登录令牌。",
+    "loginStartFailed": "无法发起 {{provider}} 登录，请稍后再试。",
+    "loginTimeout": "已超时，请重新填写。",
+    "deviceCodeTimeout": "验证码已过期，请重新发起。",
+    "loginFailed": "登录失败，请重试。",
+    "loginSaveFailed": "登录成功但保存凭据失败，请重试。",
+    "apiKeyRequired": "请填写 API key。",
+    "duplicateApiKey": "这个 API key 已经添加过了。",
+    "keyCheckUnavailable": "暂时无法连接 {{provider}} 校验 API key，请稍后再试。",
+    "notFound": "资源不存在。",
+    "invalidRequest": "请求参数无效。",
+    "unsupported": "该连接方式不支持此操作。",
+    "gatewayUnavailable": "模型服务暂时不可用，请稍后再试。",
+    "unknown": "未知错误（{{code}}）：{{message}}"
+  },
+  "connectorHints": {
+    "codex": "使用 ChatGPT 账号登录。如果授权页提示不允许设备码登录，请先在 ChatGPT 设置的“安全”中开启 Codex 的设备码授权。",
+    "xai": "需要可以使用 Grok API 的 xAI 账号（例如 SuperGrok 订阅）。",
+    "gemini": "在 Google AI Studio（aistudio.google.com/apikey）创建 API key 后填入。"
   }
 }

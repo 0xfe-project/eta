@@ -31,7 +31,6 @@ func (x *XAI) Info() gateway.ConnectorInfo {
 		DisplayName: "Grok",
 		Flow:        gateway.FlowDevice,
 		Provider:    "xai",
-		Hint:        "需要可以使用 Grok API 的 xAI 账号（例如 SuperGrok 订阅）。",
 	}
 }
 
@@ -43,7 +42,7 @@ func (x *XAI) StartLogin(ctx context.Context, _ gateway.LoginInput) (*gateway.Lo
 		ExpiresIn int    `json:"expires_in"`
 	}
 	if err := gateway.Manage(ctx, x.Management, x.ManagementURL("/xai-auth-url"), http.MethodGet, nil, &res); err != nil {
-		return nil, &gateway.UserError{Code: "LOGIN_START_FAILED", Message: "无法发起 xAI 登录，请稍后再试。", Cause: err}
+		return nil, &gateway.UserError{Code: gateway.CodeLoginStartFailed, Message: "Could not start the xAI login.", Params: gateway.Params{"provider": "xAI"}, Cause: err}
 	}
 	if res.ExpiresIn <= 0 {
 		res.ExpiresIn = 900
@@ -84,7 +83,7 @@ func (x *XAI) PollLogin(ctx context.Context, id string) (*gateway.LoginSession, 
 		return snapshot()
 	}
 	if time.Now().After(sess.ExpiresAt) {
-		x.finish(sess, gateway.LoginExpired, "验证码已过期，请重新发起。")
+		x.finish(sess, gateway.LoginExpired, gateway.CodeDeviceCodeTimeout, "The device code expired.")
 		return snapshot()
 	}
 	var res struct {
@@ -96,23 +95,26 @@ func (x *XAI) PollLogin(ctx context.Context, id string) (*gateway.LoginSession, 
 	case err != nil:
 		return nil, err
 	case res.Status == "ok":
-		x.finish(sess, gateway.LoginSucceeded, "")
+		x.finish(sess, gateway.LoginSucceeded, "", "")
 	case res.Status == "error":
-		msg := "登录失败，请重试。"
+		msg := "The login failed."
 		if strings.Contains(strings.ToLower(res.Error), "timeout") || strings.Contains(res.Error, "expired") {
-			x.finish(sess, gateway.LoginExpired, "验证码已过期，请重新发起。")
+			x.finish(sess, gateway.LoginExpired, gateway.CodeDeviceCodeTimeout, "The device code expired.")
 		} else {
-			x.finish(sess, gateway.LoginFailed, msg)
+			x.finish(sess, gateway.LoginFailed, gateway.CodeLoginFailed, msg)
 		}
 	}
 	return snapshot()
 }
 
-func (x *XAI) finish(sess *gateway.LoginSession, status, msg string) {
+func (x *XAI) finish(sess *gateway.LoginSession, status, code, msg string) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	sess.Status = status
-	sess.Error = msg
+	sess.Error = nil
+	if code != "" {
+		sess.Error = &gateway.Problem{Code: code, Message: msg}
+	}
 }
 
 func (x *XAI) SubmitLogin(context.Context, string, gateway.LoginInput) error {

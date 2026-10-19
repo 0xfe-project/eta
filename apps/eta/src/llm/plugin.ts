@@ -20,7 +20,6 @@ import type {
 import type { CatalogModel, GatewayClient } from "./client";
 import type { GatewayModels } from "./models";
 import { Args, productPlugin, publish } from "../wire";
-import { LlmError } from "./client";
 
 export interface LlmPluginDeps {
   client: GatewayClient;
@@ -36,13 +35,6 @@ export interface LlmPluginDeps {
 function view(model: CatalogModel): LlmModel {
   const { reasoningLevels: _levels, image: _image, ...rest } = model;
   return rest;
-}
-
-/** A refusal the gateway explained is passed on in its own words. */
-function plain(error: unknown): Error {
-  return error instanceof LlmError
-    ? new Error(error.message)
-    : (error as Error);
 }
 
 export function llmPlugin(deps: LlmPluginDeps, applied: () => void) {
@@ -118,80 +110,52 @@ export function llmPlugin(deps: LlmPluginDeps, applied: () => void) {
 
       const registrations = [
         wire.handle("llm", "refresh", async () => {
-          try {
-            const checked = await client.refresh();
-            connections = checked.connections;
-            catalog = checked.models;
-            quota = checked.quota;
-            await models.update(catalog);
-            wire.pushNow("llm");
-            return { result: {} };
-          } catch (error) {
-            throw plain(error);
-          }
+          const checked = await client.refresh();
+          connections = checked.connections;
+          catalog = checked.models;
+          quota = checked.quota;
+          await models.update(catalog);
+          wire.pushNow("llm");
+          return { result: {} };
         }),
         wire.handle("llm", "loginStart", async (call) => {
           const args = new Args(call);
-          try {
-            const login = await client.loginStart(args.string("connector"));
-            return { result: { login } };
-          } catch (error) {
-            throw plain(error);
-          }
+          const login = await client.loginStart(args.string("connector"));
+          return { result: { login } };
         }),
         wire.handle("llm", "loginPoll", async (call) => {
-          try {
-            const login = await client.loginPoll(new Args(call).string("id"));
-            // The credential is in as soon as the login succeeds; the catalog follows within
-            // moments, so read it now rather than on the next tick.
-            if (login.status === "succeeded") void after();
-            return { result: { login } };
-          } catch (error) {
-            throw plain(error);
-          }
+          const login = await client.loginPoll(new Args(call).string("id"));
+          // The credential is in as soon as the login succeeds; the catalog follows within
+          // moments, so read it now rather than on the next tick.
+          if (login.status === "succeeded") void after();
+          return { result: { login } };
         }),
         wire.handle("llm", "loginSubmit", async (call) => {
           const args = new Args(call);
-          try {
-            const login = await client.loginSubmit(
-              args.string("id"),
-              args.string("apiKey"),
-            );
-            if (login.status === "succeeded") void after();
-            return { result: { login } };
-          } catch (error) {
-            throw plain(error);
-          }
+          const login = await client.loginSubmit(
+            args.string("id"),
+            args.string("apiKey"),
+          );
+          if (login.status === "succeeded") void after();
+          return { result: { login } };
         }),
         wire.handle("llm", "loginCancel", async (call) => {
-          try {
-            await client.loginCancel(new Args(call).string("id"));
-            return { result: {} };
-          } catch (error) {
-            throw plain(error);
-          }
+          await client.loginCancel(new Args(call).string("id"));
+          return { result: {} };
         }),
         wire.handle("llm", "setEnabled", async (call) => {
           const args = new Args(call);
           const enabled = args.optionalBoolean("enabled");
           if (enabled === undefined)
             throw new Error("llm.setEnabled needs enabled");
-          try {
-            await client.setEnabled(args.string("id"), enabled);
-            await sync();
-            return { result: {} };
-          } catch (error) {
-            throw plain(error);
-          }
+          await client.setEnabled(args.string("id"), enabled);
+          await sync();
+          return { result: {} };
         }),
         wire.handle("llm", "remove", async (call) => {
-          try {
-            await client.remove(new Args(call).string("id"));
-            await sync();
-            return { result: {} };
-          } catch (error) {
-            throw plain(error);
-          }
+          await client.remove(new Args(call).string("id"));
+          await sync();
+          return { result: {} };
         }),
       ];
 

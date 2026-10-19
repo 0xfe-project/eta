@@ -11,6 +11,7 @@ import { LLM_PROVIDER_ID } from "@eta/client-contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { translate } from "@/lib/i18n";
+import { llmProblemText } from "@/lib/llm-problem";
 import { getWire, WireError } from "@/lib/wire";
 import { NEEDS_ACTION, useLlm } from "@/queries/llm";
 import {
@@ -164,7 +165,8 @@ export function gatewayModels(
     contextWindow: model.contextWindow,
     available: model.available,
     default: false,
-    unavailableReason: model.reason?.message,
+    unavailableReason:
+      model.reason === undefined ? undefined : llmProblemText(model.reason),
   }));
 }
 
