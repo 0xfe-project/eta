@@ -6,7 +6,6 @@ import type {
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -63,8 +62,10 @@ export function ConversationList() {
   // Settings'; then the agents with no chat yet.
   const { rows, current, loaded } = useChatList();
   const open = useOpenGroup();
-  const navigate = useNavigate();
   const setFocusedAgent = useWorkspaceStore((state) => state.setFocusedAgent);
+  const setNewConversation = useWorkspaceStore(
+    (state) => state.setNewConversation,
+  );
   const focusedAgentId = useWorkspaceStore((state) => state.focusedAgentId);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
@@ -79,7 +80,7 @@ export function ConversationList() {
       <SidebarGroupAction
         aria-label={translateText("chat:new.title")}
         title={translateText("chat:new.title")}
-        onClick={() => void navigate({ to: "/new" })}
+        onClick={() => setNewConversation({ open: true })}
       >
         <PlusIcon aria-hidden="true" />
       </SidebarGroupAction>

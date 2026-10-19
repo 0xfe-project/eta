@@ -12,7 +12,6 @@ import { MAX_ATTACHMENTS } from "@eta/client-contracts";
 import { ArrowDownIcon } from "@phosphor-icons/react/ArrowDown";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { PaperclipIcon } from "@phosphor-icons/react/Paperclip";
-import { useNavigate } from "@tanstack/react-router";
 import {
   memo,
   useEffect,
@@ -947,7 +946,6 @@ export function ChatPanel({
     onLoadOlder,
   });
 
-  const navigate = useNavigate();
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
   // What the rail numbers: the agent's replies (squares) and your own messages (circles). A
   // conversation with one of each has nothing to jump between, and the rail draws nothing.
@@ -968,6 +966,9 @@ export function ChatPanel({
   // Composition state the keydown handler needs but the DOM only reports to other listeners.
   const ime = useRef({ composing: false, endedAt: 0 });
   const setSettings = useWorkspaceStore((state) => state.setSettings);
+  const setNewConversation = useWorkspaceStore(
+    (state) => state.setNewConversation,
+  );
   const listId = useId();
   const [menuIndex, setMenuIndex] = useState(0);
   const [menuDismissed, setMenuDismissed] = useState(false);
@@ -1048,7 +1049,7 @@ export function ChatPanel({
       setSettings((state) => ({ ...state, open: true }));
       setDraft([]);
     } else if (name === "/new") {
-      void navigate({ to: "/new", search: { project: group?.projectId } });
+      setNewConversation({ open: true, projectId: group?.projectId });
       setDraft([]);
     } else if (rest.length > 0) {
       onSend(rest, name === "/steer" ? "steer" : "queue");

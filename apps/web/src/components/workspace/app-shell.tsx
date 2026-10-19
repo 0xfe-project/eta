@@ -18,6 +18,7 @@ import {
 import { translate } from "@/lib/i18n";
 import { useTasks } from "@/queries/tasks";
 import { AgentEditor } from "./agent-editor";
+import { NewConversationDialog } from "./new-conversation-dialog";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { ConversationList } from "./sidebar-tree";
 
@@ -167,6 +168,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
       <SettingsDialog />
       <AgentEditor />
+      <NewConversationDialog />
     </SidebarProvider>
   );
 }

@@ -146,7 +146,10 @@ describe("侧边栏的对话列表", () => {
     const adds = container.querySelectorAll('button[title="新对话"]');
     expect(adds).toHaveLength(1);
     await click(adds[0]);
-    expect(navigation.navigate).toHaveBeenCalledWith({ to: "/new" });
+    // A dialog over the list, not a page: the list stays where it was.
+    expect(useWorkspaceStore.getState().newConversation).toEqual({
+      open: true,
+    });
   });
 
   it("opens a conversation when its row is clicked", async () => {

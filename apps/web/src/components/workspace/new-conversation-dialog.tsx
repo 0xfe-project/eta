@@ -1,41 +1,80 @@
-import type { ProjectChoice } from "@/components/workspace/use-project-choice";
+import type { ProjectChoice } from "./use-project-choice";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { AgentAvatar } from "@/components/workspace/agent-identity";
-import { ProjectField } from "@/components/workspace/project-field";
-import { useAgents } from "@/components/workspace/use-agents";
 import {
-  useChosenProject,
-  useResolveProject,
-} from "@/components/workspace/use-project-choice";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useConversationActions } from "@/queries/conversations";
+import { AgentAvatar } from "./agent-identity";
+import { ProjectField } from "./project-field";
+import { useAgents } from "./use-agents";
+import { useChosenProject, useResolveProject } from "./use-project-choice";
+import { useWorkspaceStore } from "./workspace-store";
 
 /**
  * Starting a conversation: a project and an agent.
+ *
+ * A dialog over whatever is on screen, like settings — not a page. It asks two things, and going
+ * to a page for them took the sidebar and the panel away, which left a mostly empty screen behind
+ * a form that fits in a corner of it.
  *
  * The project is one of the existing ones, or a path to add (adding a path that is already a
  * project returns that project, so the form never asks twice). A project made here takes the agent
  * as its steward, because a conversation with nobody to take its first message is a room nobody
  * answers in. The result shows up in the sidebar like any other.
  *
- * Nothing is asked that has a reasonable default: the project is the first, and the agent list
- * is the same one the sidebar shows.
+ * Nothing is asked that has a reasonable default: the project is the one it was opened from (else
+ * the first), and the agent list is the same one the sidebar shows.
  */
-export function NewSessionPage() {
-  const { t: translateText } = useTranslation([
-    "chat",
-    "agents",
-    "common",
-  ] as const);
+export function NewConversationDialog() {
+  const { t: translateText } = useTranslation(["chat"] as const);
+  const open = useWorkspaceStore((state) => state.newConversation.open);
+  const projectId = useWorkspaceStore(
+    (state) => state.newConversation.projectId,
+  );
+  const setNewConversation = useWorkspaceStore(
+    (state) => state.setNewConversation,
+  );
+  const close = () => setNewConversation({ open: false });
+  return (
+    <Dialog open={open} onOpenChange={(next) => (next ? undefined : close())}>
+      <DialogContent className="gap-3 sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{translateText("chat:new.title")}</DialogTitle>
+          <DialogDescription>
+            {translateText("chat:new.hint")}
+          </DialogDescription>
+        </DialogHeader>
+        {/* Mounted per open: a form left half filled in is not what the next open should show. */}
+        {open ? (
+          <NewConversationForm projectId={projectId} onDone={close} />
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function NewConversationForm({
+  projectId,
+  onDone,
+}: {
+  projectId: string | undefined;
+  onDone: () => void;
+}) {
+  const { t: translateText } = useTranslation(["chat", "agents"] as const);
   const navigate = useNavigate();
   const { agents, loaded } = useAgents();
   const { create } = useConversationActions();
   const resolver = useResolveProject();
   const [agentId, setAgentId] = useState<string | undefined>(undefined);
   const [choice, setChoice] = useState<ProjectChoice>({
-    projectId: undefined,
+    projectId,
     path: "",
   });
   const { project, adding } = useChosenProject(choice);
@@ -51,6 +90,7 @@ export function NewSessionPage() {
         projectId: target.id,
         agentIds: [chosen],
       });
+      onDone();
       void navigate({
         to: "/",
         search: { group: conversation.id, view: "context" },
@@ -61,13 +101,7 @@ export function NewSessionPage() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-xl min-h-0 flex-col gap-4 p-4">
-      <h1 className="text-lg font-semibold">
-        {translateText("chat:new.title")}
-      </h1>
-      <p className="text-xs text-muted-foreground">
-        {translateText("chat:new.hint")}
-      </p>
+    <>
       <ProjectField choice={choice} onChange={setChoice} />
       <fieldset className="grid gap-1">
         <legend className="mb-1 text-sm">
@@ -110,13 +144,7 @@ export function NewSessionPage() {
         >
           {translateText("chat:new.start")}
         </Button>
-        <Button
-          variant="ghost"
-          onClick={() => void navigate({ to: "/", search: {} })}
-        >
-          {translateText("common:actions.cancel")}
-        </Button>
       </div>
-    </div>
+    </>
   );
 }

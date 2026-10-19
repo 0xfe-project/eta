@@ -40,6 +40,16 @@ interface AgentEditorState {
   open: boolean;
   agentId: string | null;
 }
+/**
+ * Starting a conversation: closed, or open on the project it should begin in.
+ *
+ * A layer like settings, not a page: the form is two choices, and leaving the conversation behind
+ * to make one meant the sidebar and the panel went away and the screen was mostly empty.
+ */
+interface NewConversationState {
+  open: boolean;
+  projectId?: string | undefined;
+}
 
 type Update<T> = T | ((state: T) => T);
 
@@ -59,12 +69,14 @@ interface WorkspaceStore {
   setFocusedAgent: (agentId: string | null) => void;
   settings: SettingsState;
   agentEditor: AgentEditorState;
+  newConversation: NewConversationState;
   setWorkspace: (update: Update<WorkspaceState>) => void;
   setMobilePanel: (panel: "chat" | "workspace") => void;
   /** Shows the side panel: over the chat when narrow, unfolded when wide. */
   showPanel: () => void;
   setSettings: (update: Update<SettingsState>) => void;
   setAgentEditor: (update: Update<AgentEditorState>) => void;
+  setNewConversation: (update: Update<NewConversationState>) => void;
 }
 
 function apply<T>(update: Update<T>, state: T): T {
@@ -108,6 +120,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       setFocusedAgent: (focusedAgentId) => set({ focusedAgentId }),
       settings: { open: false, section: "agents" },
       agentEditor: { open: false, agentId: null },
+      newConversation: { open: false },
       setWorkspace: (update) =>
         set((s) => ({ workspace: apply(update, s.workspace) })),
       setMobilePanel: (mobilePanel) => set({ mobilePanel }),
@@ -120,6 +133,8 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         set((s) => ({ settings: apply(update, s.settings) })),
       setAgentEditor: (update) =>
         set((s) => ({ agentEditor: apply(update, s.agentEditor) })),
+      setNewConversation: (update) =>
+        set((s) => ({ newConversation: apply(update, s.newConversation) })),
     }),
     {
       name: storageKey,

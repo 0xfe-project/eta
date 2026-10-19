@@ -27,6 +27,7 @@ import { AgentEditor } from "./agent-editor";
 import { BottomNav, Sidebar } from "./app-shell";
 import { ChatPanel, ComposerNotice } from "./chat-panel";
 import { GroupList } from "./groups";
+import { NewConversationDialog } from "./new-conversation-dialog";
 import { usePaneWidth } from "./pane";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { useAgents } from "./use-agents";
@@ -380,6 +381,7 @@ export function Workspace({
       </div>
       <SettingsDialog />
       <AgentEditor />
+      <NewConversationDialog />
     </SidebarProvider>
   );
 }
