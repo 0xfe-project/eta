@@ -1,8 +1,8 @@
 /**
  * The conditions the embedding rests on, each in a process of its own (the library loads once per
  * process, and a crash must fail one test, not the runner): streaming under preemption and
- * garbage collection, clients that hang up mid-stream, and the host's signal handlers still
- * running after the library is loaded. The scripts are in `scripts/`.
+ * garbage collection, an idle event loop that keeps ticking, clients that hang up mid-stream, and
+ * the host's signal handlers still running after the library is loaded. The scripts are in `scripts/`.
  */
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -32,6 +32,21 @@ describe("the gateway library inside Bun", () => {
     };
     expect(result.torn).toBe(0);
     expect(result.requests).toBeGreaterThan(100);
+  }, 120_000);
+
+  it("keeps an idle event loop ticking while the collector runs", async () => {
+    // Several at once: the hang this guards against came in about a third of runs.
+    const runs = await Promise.all(
+      Array.from({ length: 6 }, () => run("idle.ts", "12")),
+    );
+    for (const { stdout, stderr, code } of runs) {
+      expect(code, stderr).toBe(0);
+      const { ticks } = JSON.parse(stdout.split("\n").at(-1)!) as {
+        ticks: number;
+      };
+      // 120 if nothing stalls; a deadlock stops the count for good.
+      expect(ticks).toBeGreaterThan(100);
+    }
   }, 120_000);
 
   it("survives clients that hang up mid-stream, and cancels the upstream", async () => {

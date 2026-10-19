@@ -57,24 +57,83 @@ interface Symbols {
   LlmFree: (pointer: Pointer) => void;
 }
 
-let loaded: { path: string; symbols: Symbols } | undefined;
+let loaded:
+  | { path: string; symbols: Symbols; restoreSignals: () => void }
+  | undefined;
 let running = false;
 
-function load(path: string): Symbols {
+/**
+ * Go's runtime, loaded as a shared library, sets `SA_ONSTACK` on every signal handler it finds
+ * installed and did not install itself, so that a handler never runs on a small goroutine stack.
+ * One of them is JavaScriptCore's: the signal (SIGPWR) its collector sends a JavaScript thread to
+ * suspend it and copy its stack. Bun's main thread has an alternate signal stack (for its crash
+ * handler), so with the flag the handler runs there, reports a stack pointer outside the thread's
+ * stack, and the collector waits for a copy that never fits: the event loop stops for good,
+ * seconds to minutes after the gateway starts (test/scripts/idle.ts).
+ *
+ * So the handlers are read before the library loads, and every one that is still the same handler
+ * but changed (only its flags can have) is put back as it was. JavaScriptCore only sends the
+ * signal to its own threads, never to Go's, so the flag was not needed. Go's own handlers (the
+ * synchronous signals, which it chains to Bun's, SIGPIPE and SIGURG) are left alone.
+ */
+function snapshotSignals(): () => void {
+  const libc = dlopen(
+    process.platform === "darwin" ? "libSystem.B.dylib" : "libc.so.6",
+    {
+      sigaction: {
+        args: [FFIType.i32, FFIType.ptr, FFIType.ptr],
+        returns: FFIType.i32,
+      },
+    },
+  ).symbols as unknown as {
+    sigaction: (signal: number, next: Buffer | null, old: Buffer) => number;
+  };
+  // Larger than any platform's struct sigaction, read and written as opaque bytes; its first
+  // field is the handler everywhere.
+  const read = (signal: number) => {
+    const action = Buffer.alloc(256);
+    return libc.sigaction(signal, null, action) === 0 ? action : undefined;
+  };
+  const before = new Map<number, Buffer>();
+  for (let signal = 1; signal < 65; signal++) {
+    const action = read(signal);
+    if (action !== undefined) before.set(signal, action);
+  }
+  return () => {
+    for (const [signal, action] of before) {
+      const now = read(signal);
+      if (
+        now !== undefined &&
+        now.readBigUInt64LE(0) === action.readBigUInt64LE(0) &&
+        !now.equals(action)
+      ) {
+        libc.sigaction(signal, action, Buffer.alloc(256));
+      }
+    }
+  };
+}
+
+function load(path: string): NonNullable<typeof loaded> {
   if (loaded !== undefined) {
     if (loaded.path !== path)
       throw new Error(
         `the gateway library is already loaded from ${loaded.path}`,
       );
-    return loaded.symbols;
+    return loaded;
   }
+  // Go's runtime starts initialising as the library loads.
+  const restoreSignals = snapshotSignals();
   const library = dlopen(path, {
     LlmStart: { args: [FFIType.ptr], returns: FFIType.ptr },
     LlmStop: { args: [], returns: FFIType.void },
     LlmFree: { args: [FFIType.ptr], returns: FFIType.void },
   });
-  loaded = { path, symbols: library.symbols as unknown as Symbols };
-  return loaded.symbols;
+  loaded = {
+    path,
+    symbols: library.symbols as unknown as Symbols,
+    restoreSignals,
+  };
+  return loaded;
 }
 
 /** Start the gateway in this process. Throws with the library's reason when it cannot. */
@@ -87,7 +146,7 @@ export function startGateway(options: GatewayOptions): Gateway {
   }
   if (running)
     throw new Error("the LLM gateway is already running in this process");
-  const symbols = load(path);
+  const { symbols, restoreSignals } = load(path);
   const key = randomBytes(32).toString("hex");
   const config = JSON.stringify({
     stateDir: options.stateDir,
@@ -95,6 +154,8 @@ export function startGateway(options: GatewayOptions): Gateway {
     ...(options.cpaExtra === undefined ? {} : { cpaExtra: options.cpaExtra }),
   });
   const pointer = symbols.LlmStart(Buffer.from(`${config}\0`));
+  // Go's runtime has finished initialising once a call into it returns.
+  restoreSignals();
   if (pointer === null) throw new Error("the LLM gateway did not answer");
   let reply: { port?: number; error?: string };
   try {
