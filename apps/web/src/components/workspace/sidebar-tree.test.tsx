@@ -1,6 +1,7 @@
 import type { ConversationSummary } from "@eta/client-contracts";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import { setWire } from "@/lib/wire";
 import {
   agentView,
@@ -65,11 +66,14 @@ const group = (
 
 async function tree(
   conversations: ConversationSummary[],
-  query = "",
   machines = [machineView({ id: "m1", name: "这台" })],
 ) {
   const host = productHost({ agents, projects, machines, conversations });
-  const mounted = await mount(<ProjectTree query={query} />);
+  const mounted = await mount(
+    <SidebarProvider>
+      <ProjectTree />
+    </SidebarProvider>,
+  );
   await flush();
   return { ...mounted, host };
 }
@@ -80,21 +84,21 @@ describe("侧边栏的树", () => {
       group("g1", "装配", "p-eta"),
       group("g2", "装修", "p-house"),
     ]);
-    const headings = [...container.querySelectorAll("h3")].map(
-      (h) => h.textContent,
-    );
+    const headings = [
+      ...container.querySelectorAll('[data-sidebar="group-label"]'),
+    ].map((h) => h.textContent);
     expect(headings).toEqual(["eta", "house"]);
   });
 
   it("keeps a project with nothing in it, so there is a + to start in", async () => {
     const { container } = await tree([group("g1", "装配", "p-eta")]);
-    const headings = [...container.querySelectorAll("h3")].map(
-      (h) => h.textContent,
-    );
+    const headings = [
+      ...container.querySelectorAll('[data-sidebar="group-label"]'),
+    ].map((h) => h.textContent);
     expect(headings).toEqual(["eta", "house"]);
     await click(
       container.querySelector(
-        'section[aria-label="house"] button[title="新对话"]',
+        '[role="group"][aria-label="house"] button[title="新对话"]',
       ),
     );
     expect(navigation.navigate).toHaveBeenCalledWith({
@@ -142,13 +146,15 @@ describe("侧边栏的树", () => {
       }),
       group("g1", "装配", "p-eta"),
     ]);
-    const headings = [...container.querySelectorAll("h3")].map(
-      (heading) => heading.textContent,
-    );
+    const headings = [
+      ...container.querySelectorAll('[data-sidebar="group-label"]'),
+    ].map((heading) => heading.textContent);
     expect(headings).toEqual(["私聊", "eta", "house"]);
     expect(container.textContent).toContain("乐子人");
     // A private chat has no members to show: its name *is* the agent.
-    const direct = container.querySelector('section[aria-label="私聊"]')!;
+    const direct = container.querySelector(
+      '[role="group"][aria-label="私聊"]',
+    )!;
     expect(direct.querySelector('[aria-label="展开成员"]')).toBeNull();
     expect(direct.querySelector('button[title="新对话"]')).toBeNull();
   });
@@ -161,7 +167,6 @@ describe("侧边栏的树", () => {
   it("groups the projects by machine once there is more than one", async () => {
     const { container } = await tree(
       [group("g1", "装配", "p-eta"), group("g2", "装修", "p-far")],
-      "",
       [
         machineView({ id: "m1", name: "这台" }),
         machineView({ id: "m2", name: "远端", kind: "daemon" }),
@@ -189,23 +194,6 @@ describe("侧边栏的树", () => {
     const remote = [...container.querySelectorAll("h2")][1]!.parentElement!;
     expect(remote.textContent).toContain("far");
     expect(remote.textContent).not.toContain("eta");
-  });
-
-  it("filters locally by name, project or member", async () => {
-    const { container } = await tree(
-      [group("g1", "装配", "p-eta"), group("g2", "装修", "p-house")],
-      "house",
-    );
-    expect(container.textContent).toContain("装修");
-    expect(container.textContent).not.toContain("装配");
-  });
-
-  it("falls back to a sentence when a search matches nothing", async () => {
-    const { container } = await tree(
-      [group("g1", "装配", "p-eta")],
-      "没有这个",
-    );
-    expect(container.textContent).toContain("没有匹配的对话");
   });
 
   it("archives and renames through conversations.update, but cannot delete", async () => {

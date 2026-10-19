@@ -1,5 +1,7 @@
 import type { ConversationSummary, MemberView } from "@eta/client-contracts";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
+import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
+import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { useNavigate } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -11,7 +13,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { matchesQuery, projectTree } from "@/lib/projects";
+import {
+  SidebarGroup,
+  SidebarGroupAction,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuAction,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+} from "@/components/ui/sidebar";
+import { projectTree } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 import { agentName, useAgentList } from "@/queries/agents";
 import {
@@ -43,15 +57,11 @@ function humanizeAge(at: number): string {
  * workspace, and its name *is* the agent, so it has no members to expand.
  */
 
-const row =
-  "group flex min-h-8 w-full min-w-0 items-center gap-1.5 px-2 text-left text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring";
-
-export function ProjectTree({ query = "" }: { query?: string }) {
+export function ProjectTree() {
   const { t: translateText } = useTranslation(["chat", "navigation"] as const);
   const { conversations } = useConversationList();
   const { projects } = useProjects();
   const { machines } = useMachines();
-  const { agents } = useAgentList();
   const { current } = useGroups();
   const open = useOpenGroup();
   const navigate = useNavigate();
@@ -65,107 +75,89 @@ export function ProjectTree({ query = "" }: { query?: string }) {
         conversations,
         projects,
         machines,
-        searching: query.trim().length > 0,
-        matches: (conversation, project) =>
-          matchesQuery(
-            conversation,
-            project,
-            conversation.participants.map((m) => agentName(agents, m.agentId)),
-            query,
-          ),
+        searching: false,
+        matches: () => true,
       }),
-    [conversations, projects, machines, agents, query],
+    [conversations, projects, machines],
   );
 
   if (groups.length === 0) {
     return (
-      <p className="px-3 py-2 text-xs text-muted-foreground">
-        {query.trim().length > 0
-          ? translateText("chat:groups.search.empty")
-          : translateText("chat:groups.empty.title")}
+      <p className="px-4 py-2 text-xs text-muted-foreground">
+        {translateText("chat:groups.empty.title")}
       </p>
     );
   }
 
-  return (
-    <div className="flex min-h-0 flex-col gap-2 overflow-y-auto px-1 pb-2">
-      {groups.map((group) => (
-        <div key={group.machine?.id ?? "all"} className="grid gap-2">
-          {group.machine === undefined ? null : (
-            <h2 className="px-2 font-mono text-[10px] tracking-[0.12em] text-muted-foreground uppercase">
-              {group.machine.name}
-            </h2>
-          )}
-          {group.sections.map((section) => (
-            <section
-              key={section.key}
-              aria-label={
-                section.direct
-                  ? translateText("chat:groups.directChat")
-                  : section.label
+  return groups.map((group) => (
+    <div key={group.machine?.id ?? "all"} className="contents">
+      {group.machine === undefined ? null : (
+        <h2 className="px-4 pt-3 text-xs font-medium text-muted-foreground">
+          {group.machine.name}
+        </h2>
+      )}
+      {group.sections.map((section) => (
+        // The project's own heading: its name, and the one action that belongs to a project
+        // rather than to a conversation in it — starting another one there.
+        <SidebarGroup
+          key={section.key}
+          role="group"
+          aria-label={
+            section.direct
+              ? translateText("chat:groups.directChat")
+              : section.label
+          }
+        >
+          <SidebarGroupLabel
+            className="text-xs font-medium text-muted-foreground"
+            title={section.path || undefined}
+          >
+            <span className="truncate">
+              {section.direct
+                ? translateText("chat:groups.directChat")
+                : section.label}
+            </span>
+          </SidebarGroupLabel>
+          {section.direct ? null : (
+            <SidebarGroupAction
+              aria-label={translateText("chat:new.title")}
+              title={translateText("chat:new.title")}
+              onClick={() =>
+                void navigate({ to: "/new", search: { project: section.key } })
               }
             >
-              {/* The project's own row: its name, and the one action that belongs to a project
-                  rather than to a conversation in it — starting another one there. */}
-              <div className="flex h-6 items-center gap-1 px-2">
-                <h3
-                  className="min-w-0 flex-1 truncate font-mono text-[10px] tracking-[0.12em] text-faint uppercase"
-                  title={section.path || undefined}
-                >
-                  {section.direct
-                    ? translateText("chat:groups.directChat")
-                    : section.label}
-                </h3>
-                {section.direct ? null : (
-                  <button
-                    type="button"
-                    aria-label={translateText("chat:new.title")}
-                    title={translateText("chat:new.title")}
-                    onClick={() =>
-                      void navigate({
-                        to: "/new",
-                        search: { project: section.key },
-                      })
-                    }
-                    className="shrink-0 border border-border px-1 text-xs leading-none text-muted-foreground hover:border-border-strong hover:text-foreground"
-                  >
-                    +
-                  </button>
-                )}
-              </div>
-              <ul>
-                {section.conversations.map((conversation) => (
-                  <GroupRow
-                    key={conversation.id}
-                    conversation={conversation}
-                    active={current?.id === conversation.id}
-                    expanded={expanded[conversation.id] === true}
-                    onToggle={() =>
-                      setExpanded((state) => ({
-                        ...state,
-                        [conversation.id]: !state[conversation.id],
-                      }))
-                    }
-                    onOpen={() => open(conversation.id)}
-                    // A member listed under a group is a member *of that group*: pressing it
-                    // narrows the conversation to it, the same action as its card in the panel.
-                    // Press to focus, press again to let go. Opening a separate private chat is
-                    // what the agent library is for.
-                    onOpenAgent={(agentId) => {
-                      setFocusedAgent(
-                        focusedAgentId === agentId ? null : agentId,
-                      );
-                      open(conversation.id);
-                    }}
-                  />
-                ))}
-              </ul>
-            </section>
-          ))}
-        </div>
+              <PlusIcon aria-hidden="true" />
+            </SidebarGroupAction>
+          )}
+          <SidebarMenu>
+            {section.conversations.map((conversation) => (
+              <GroupRow
+                key={conversation.id}
+                conversation={conversation}
+                active={current?.id === conversation.id}
+                expanded={expanded[conversation.id] === true}
+                onToggle={() =>
+                  setExpanded((state) => ({
+                    ...state,
+                    [conversation.id]: !state[conversation.id],
+                  }))
+                }
+                onOpen={() => open(conversation.id)}
+                // A member listed under a group is a member *of that group*: pressing it
+                // narrows the conversation to it, the same action as its card in the panel.
+                // Press to focus, press again to let go. Opening a separate private chat is
+                // what the agent list is for.
+                onOpenAgent={(agentId) => {
+                  setFocusedAgent(focusedAgentId === agentId ? null : agentId);
+                  open(conversation.id);
+                }}
+              />
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
       ))}
     </div>
-  );
+  ));
 }
 
 /** Whether a member is answering, or about to. */
@@ -204,58 +196,16 @@ function GroupRow({
   const busy = members.filter(busyMember);
 
   return (
-    <li>
-      {/*
-       * eta-old's session row: the title on top with its age at the right and a `⋯` beside it, the
-       * id under it. Two lines because they answer two questions in the order you ask them — what
-       * is this, which one is it — and the border appears only for the row you are in. Where it
-       * works is the heading above it.
-       */}
-      <div
-        className={cn(
-          "group mb-1 border p-2",
-          active
-            ? "border-border-strong bg-sidebar-accent"
-            : "border-transparent hover:bg-sidebar-accent",
-        )}
-      >
-        <div className="flex items-center gap-1">
-          {expandable ? (
-            <button
-              type="button"
-              aria-label={
-                expanded
-                  ? translateText("chat:groups.members.collapse")
-                  : translateText("chat:groups.members.expand")
-              }
-              aria-expanded={expanded}
-              onClick={onToggle}
-              className="shrink-0 text-muted-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <CaretRightIcon
-                aria-hidden="true"
-                className={cn("size-3", expanded && "rotate-90")}
-              />
-            </button>
-          ) : null}
+    <SidebarMenuItem>
+      {draft === null ? (
+        <SidebarMenuButton
+          isActive={active}
+          onClick={onOpen}
+          title={conversation.name}
+          className={cn("h-9 text-sm", expandable && "pr-14")}
+        >
           <MemberStack members={members} />
-          {draft === null ? (
-            <button
-              type="button"
-              onClick={onOpen}
-              className="min-w-0 flex-1 truncate text-left text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              title={conversation.name}
-            >
-              {conversation.name}
-            </button>
-          ) : (
-            <RenameField
-              value={draft}
-              onChange={setDraft}
-              onCommit={commitRename}
-              onCancel={() => setDraft(null)}
-            />
-          )}
+          <span className="min-w-0 flex-1 truncate">{conversation.name}</span>
           {busy.length > 0 ? (
             <span
               className="shrink-0 font-mono text-[10px] text-state-success"
@@ -269,58 +219,83 @@ function GroupRow({
               {conversation.unread}
             </span>
           ) : null}
-          <span className="ml-auto shrink-0 font-mono text-[10px] text-muted-foreground">
+          <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
             {humanizeAge(conversation.lastMessageAt ?? conversation.updatedAt)}
           </span>
-          <RowMenu
-            // A private chat is named after its agent: the host renames it with the agent.
-            onRename={direct ? undefined : () => setDraft(conversation.name)}
-            archived={conversation.archived}
-            onArchive={() =>
-              update.mutate(
-                {
-                  conversationId: conversation.id,
-                  archived: !conversation.archived,
-                },
-                { onError },
-              )
-            }
+        </SidebarMenuButton>
+      ) : (
+        <div className="flex h-9 items-center px-2">
+          <RenameField
+            value={draft}
+            onChange={setDraft}
+            onCommit={commitRename}
+            onCancel={() => setDraft(null)}
           />
         </div>
-      </div>
-      {expandable && expanded ? (
-        <ul className="mb-0.5 ml-5 border-l border-border">
-          {members.map((member) => (
-            <li key={member.agentId}>
-              <button
-                type="button"
-                onClick={() => onOpenAgent(member.agentId)}
-                title={translateText("chat:groups.members.talkAlone", {
-                  name: nameOf(member.agentId),
-                })}
-                className={cn(
-                  row,
-                  "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <AgentAvatar
-                  agent={{ id: member.agentId }}
-                  className="size-3.5 shrink-0"
-                />
-                <span className="min-w-0 flex-1 truncate">
-                  {nameOf(member.agentId)}
-                </span>
-                {busyMember(member) ? (
-                  <span className="shrink-0 font-mono text-[10px] text-state-success">
-                    ●
-                  </span>
-                ) : null}
-              </button>
-            </li>
-          ))}
-        </ul>
+      )}
+      {expandable ? (
+        <SidebarMenuAction
+          showOnHover
+          aria-label={
+            expanded
+              ? translateText("chat:groups.members.collapse")
+              : translateText("chat:groups.members.expand")
+          }
+          aria-expanded={expanded}
+          onClick={onToggle}
+          className="top-2 right-7"
+        >
+          <CaretRightIcon
+            aria-hidden="true"
+            className={cn(expanded && "rotate-90")}
+          />
+        </SidebarMenuAction>
       ) : null}
-    </li>
+      <RowMenu
+        // A private chat is named after its agent: the host renames it with the agent.
+        onRename={direct ? undefined : () => setDraft(conversation.name)}
+        archived={conversation.archived}
+        onArchive={() =>
+          update.mutate(
+            {
+              conversationId: conversation.id,
+              archived: !conversation.archived,
+            },
+            { onError },
+          )
+        }
+      />
+      {expandable && expanded ? (
+        <SidebarMenuSub>
+          {members.map((member) => (
+            <SidebarMenuSubItem key={member.agentId}>
+              <SidebarMenuSubButton asChild>
+                <button
+                  type="button"
+                  onClick={() => onOpenAgent(member.agentId)}
+                  title={translateText("chat:groups.members.talkAlone", {
+                    name: nameOf(member.agentId),
+                  })}
+                >
+                  <AgentAvatar
+                    agent={{ id: member.agentId }}
+                    className="size-3.5"
+                  />
+                  <span className="min-w-0 flex-1 truncate">
+                    {nameOf(member.agentId)}
+                  </span>
+                  {busyMember(member) ? (
+                    <span className="shrink-0 font-mono text-[10px] text-state-success">
+                      ●
+                    </span>
+                  ) : null}
+                </button>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+          ))}
+        </SidebarMenuSub>
+      ) : null}
+    </SidebarMenuItem>
   );
 }
 
@@ -384,13 +359,13 @@ function RowMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button
-          type="button"
+        <SidebarMenuAction
+          showOnHover
           aria-label={translateText("chat:groups.accessibility.actions")}
-          className="shrink-0 border border-transparent px-1 text-xs text-muted-foreground hover:border-border-strong hover:text-foreground"
+          className="top-2"
         >
-          ⋯
-        </button>
+          <DotsThreeIcon aria-hidden="true" />
+        </SidebarMenuAction>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-32">
         {onRename === undefined ? null : (

@@ -70,23 +70,6 @@ const activity = (conversation: ConversationSummary) =>
 const newestFirst = (a: ConversationSummary, b: ConversationSummary) =>
   activity(b) - activity(a);
 
-/** Whether a conversation matches a search: its name, its project, or one of its members. */
-export function matchesQuery(
-  conversation: ConversationSummary,
-  project: ProjectView | undefined,
-  memberNames: readonly string[],
-  query: string,
-): boolean {
-  const needle = query.trim().toLowerCase();
-  if (needle.length === 0) return true;
-  return [
-    conversation.name,
-    project?.name ?? "",
-    project?.path ?? "",
-    ...memberNames,
-  ].some((text) => text.toLowerCase().includes(needle));
-}
-
 /**
  * The tree for the conversations that are not archived and match `matches`. Projects with nothing
  * in them are kept while nothing is searched for, so a new project has a "+" to start in.

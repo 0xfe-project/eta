@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import { setWire } from "@/lib/wire";
 import {
   agentView,
@@ -11,6 +12,7 @@ import {
   productHost,
   projectView,
 } from "@/test-product";
+import { agentStatusLabels } from "./agent-status";
 import { Sidebar } from "./app-shell";
 
 const state = rstest.hoisted(() => ({
@@ -39,8 +41,20 @@ rstest.mock("./use-attention", () => ({
 }));
 // The sidebar links through the router; this test is about the list, so the link is a plain one.
 rstest.mock("@tanstack/react-router", () => ({
-  Link: ({ children }: { children?: React.ReactNode }) => <a>{children}</a>,
-  useRouterState: () => ({ location: { pathname: "/" } }),
+  Link: ({
+    children,
+    to,
+    ...props
+  }: {
+    children?: React.ReactNode;
+    to?: string;
+  }) => (
+    <a data-to={to} {...props}>
+      {children}
+    </a>
+  ),
+  useRouterState: ({ select }: { select: (s: unknown) => unknown }) =>
+    select({ location: { pathname: "/" } }),
   // The folder header's "+" navigates to /new with a cwd.
   useNavigate: () => () => undefined,
 }));
@@ -80,7 +94,9 @@ async function render(node: React.ReactNode) {
   const root = createRoot(container);
   await act(async () =>
     root.render(
-      <QueryClientProvider client={client}>{node}</QueryClientProvider>,
+      <QueryClientProvider client={client}>
+        <SidebarProvider>{node}</SidebarProvider>
+      </QueryClientProvider>,
     ),
   );
   cleanup.push(() => {
@@ -96,44 +112,10 @@ afterEach(async () => {
   setWire(undefined);
 });
 
-const agent = (id: string, name: string) => ({ id, name, status: "idle" });
-
-async function typeInto(input: HTMLInputElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(
-    HTMLInputElement.prototype,
-    "value",
-  )?.set;
-  await act(async () => {
-    setter?.call(input, value);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
-describe("左栏的搜索框", () => {
-  it("filters the tree by conversation name or project", async () => {
-    state.agents = [];
-    state.groups = [
-      conversationView({
-        id: "g1",
-        name: "装配",
-        projectId: "p-eta",
-        lastMessageAt: 2,
-      }),
-      conversationView({
-        id: "g2",
-        name: "装修",
-        projectId: "p-house",
-        lastMessageAt: 1,
-      }),
-    ];
-    const container = await render(<Sidebar />);
-    expect(container.textContent).toContain("装修");
-
-    // A project's path is as good a way to find a conversation as its own name.
-    await typeInto(container.querySelector("input")!, "desktop");
-    expect(container.textContent).toContain("装配");
-    expect(container.textContent).not.toContain("装修");
-  });
+const agent = (id: string, name: string, status = "idle") => ({
+  id,
+  name,
+  status,
 });
 
 describe("智能体库", () => {
@@ -192,5 +174,56 @@ describe("智能体库", () => {
     )!;
     await act(async () => button.click());
     expect(state.openAgent).toHaveBeenCalledWith("a2");
+  });
+
+  it("shows every agent with its status", async () => {
+    state.agents = [
+      agent("a1", "乐子人", "working"),
+      agent("a2", "装配检查", "waiting_for_input"),
+      agent("a3", "闲着", "idle"),
+    ];
+    state.groups = [];
+    const container = await render(<Sidebar />);
+    const rows = [
+      ...container.querySelectorAll(
+        '[aria-labelledby="sidebar-agents"] [data-sidebar="menu-button"]',
+      ),
+    ];
+    expect(rows.map((row) => row.textContent)).toEqual([
+      `乐子人${agentStatusLabels.working}`,
+      `装配检查${agentStatusLabels.waiting_for_input}`,
+      `闲着${agentStatusLabels.idle}`,
+    ]);
+  });
+});
+
+describe("左栏的页眉", () => {
+  it("carries the wordmark and the one settings button", async () => {
+    state.agents = [];
+    state.groups = [];
+    const container = await render(<Sidebar />);
+    const header = container.querySelector('[data-sidebar="header"]')!;
+    expect(header.textContent).toContain("eta.");
+    expect(header.querySelectorAll("button")).toHaveLength(1);
+    expect(container.querySelectorAll('button[title="设置"]')).toHaveLength(1);
+  });
+
+  it("links the sections and marks the current one", async () => {
+    state.agents = [];
+    state.groups = [];
+    const container = await render(<Sidebar />);
+    const links = [...container.querySelectorAll("a[data-to]")].filter((a) =>
+      a.hasAttribute("data-active"),
+    );
+    expect(links.map((a) => a.getAttribute("data-to"))).toEqual([
+      "/",
+      "/workspace/inbox",
+      "/workspace/tasks",
+      "/workspace/routines",
+      "/workspace/memory",
+    ]);
+    expect(
+      links.filter((a) => a.getAttribute("data-active") === "true"),
+    ).toHaveLength(1);
   });
 });

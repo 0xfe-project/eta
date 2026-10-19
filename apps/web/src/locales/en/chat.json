@@ -115,10 +115,6 @@
       "unboundNotice": "This group has no folder yet — its agents run in the host's directory and project notes are read from there.",
       "bindFolder": "Set folder"
     },
-    "search": {
-      "empty": "Nothing matches that search.",
-      "placeholder": "Search conversations or folders"
-    },
     "empty": {
       "title": "No conversations yet."
     },

@@ -115,10 +115,6 @@
       "unboundNotice": "这个群还没绑目录：成员跑在宿主启动的目录里，项目笔记也从那里读。",
       "bindFolder": "绑定目录"
     },
-    "search": {
-      "empty": "没有匹配的对话。",
-      "placeholder": "搜索对话或目录"
-    },
     "empty": {
       "title": "还没有对话。"
     },
