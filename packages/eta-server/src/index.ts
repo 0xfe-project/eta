@@ -73,6 +73,7 @@ export {
   type CreateSessionOptions,
   type ManagedSession,
   newSessionId,
+  registerSessionTools,
   SessionManager,
   type SessionManagerOptions,
 } from "./manager";
