@@ -218,6 +218,31 @@ export interface WireServerOptions {
    * the upgrade: a host that guarded only its own routes would leave the pipe open.
    */
   authorize?: ((request: Request) => Response | undefined) | undefined;
+  /**
+   * More WebSocket routes than `/ws`, for a host whose other peers speak a protocol of their own
+   * over the same port (a daemon dialing in). The pipe knows nothing of them beyond "this path
+   * upgrades, and these are its handlers"; `authorize` still runs first.
+   */
+  endpoints?: readonly WebSocketEndpoint[] | undefined;
+}
+
+/** What an endpoint is given to talk to one peer. */
+export interface EndpointSocket {
+  send: (text: string) => void;
+  close: (code?: number, reason?: string) => void;
+}
+
+/** One peer on an endpoint: text in, and told when it is gone. */
+export interface EndpointConnection {
+  message: (text: string) => void | Promise<void>;
+  close: () => void;
+}
+
+export interface WebSocketEndpoint {
+  path: string;
+  /** Decide about an upgrade: a `Response` refuses it; otherwise what `open` is handed. */
+  accept: (request: Request) => Response | { context: unknown };
+  open: (socket: EndpointSocket, context: unknown) => EndpointConnection;
 }
 
 export interface WireServer {
@@ -257,7 +282,15 @@ export function serveWire(
     }
   });
 
-  const server = Bun.serve<{ socketId: number }>({
+  const endpoints = new Map(
+    (options.endpoints ?? []).map((endpoint) => [endpoint.path, endpoint]),
+  );
+  const peers = new Map<number, EndpointConnection>();
+
+  const server = Bun.serve<{
+    socketId: number;
+    endpoint?: { path: string; context: unknown };
+  }>({
     port: options.port,
     hostname: options.hostname ?? "127.0.0.1",
     fetch(request, bunServer) {
@@ -265,6 +298,21 @@ export function serveWire(
       if (refused !== undefined) return refused;
       if (new URL(request.url).pathname === "/ws") {
         if (bunServer.upgrade(request, { data: { socketId: 0 } }))
+          return undefined;
+        return new Response("websocket upgrade failed", { status: 400 });
+      }
+      const endpoint = endpoints.get(new URL(request.url).pathname);
+      if (endpoint !== undefined) {
+        const accepted = endpoint.accept(request);
+        if (accepted instanceof Response) return accepted;
+        if (
+          bunServer.upgrade(request, {
+            data: {
+              socketId: 0,
+              endpoint: { path: endpoint.path, context: accepted.context },
+            },
+          })
+        )
           return undefined;
         return new Response("websocket upgrade failed", { status: 400 });
       }
@@ -278,6 +326,20 @@ export function serveWire(
         // The id rides on the socket's own data: Bun hands the same object back on
         // every callback, so this is how a frame finds its connection.
         raw.data.socketId = id;
+        if (raw.data.endpoint !== undefined) {
+          const { path, context } = raw.data.endpoint;
+          peers.set(
+            id,
+            endpoints.get(path)!.open(
+              {
+                send: (text) => void raw.send(text),
+                close: (code, reason) => raw.close(code, reason),
+              },
+              context,
+            ),
+          );
+          return;
+        }
         const socket: Socket = {
           id,
           send: (frame) => raw.send(encodeFrame(frame)),
@@ -285,14 +347,25 @@ export function serveWire(
         connections.set(id, createConnection(socket, deps));
       },
       async message(raw, body) {
+        const text =
+          typeof body === "string" ? body : new TextDecoder().decode(body);
+        const peer = peers.get(raw.data.socketId);
+        if (peer !== undefined) {
+          await peer.message(text);
+          return;
+        }
         const connection = connections.get(raw.data.socketId);
         if (connection === undefined) return;
-        await connection.handle(
-          typeof body === "string" ? body : new TextDecoder().decode(body),
-        );
+        await connection.handle(text);
       },
       close(raw) {
         const id = raw.data.socketId;
+        const peer = peers.get(id);
+        if (peer !== undefined) {
+          peers.delete(id);
+          peer.close();
+          return;
+        }
         const connection = connections.get(id);
         connections.delete(id);
         connection?.close();
@@ -312,6 +385,8 @@ export function serveWire(
     stop(): void {
       for (const connection of connections.values()) connection.close();
       connections.clear();
+      for (const peer of peers.values()) peer.close();
+      peers.clear();
       server.stop(true);
     },
   };

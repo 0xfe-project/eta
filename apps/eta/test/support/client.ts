@@ -7,17 +7,18 @@ export interface Client {
   hello: () => Promise<Extract<ServerFrame, { type: "hello" }>>;
   call: (target: string, action: string, args?: unknown) => Promise<unknown>;
   subscribe: (target: string) => void;
+  unsubscribe: (target: string) => void;
   /** A section of a target's state as the frames have left it (from `hello` or a subscription). */
   section: <T>(target: string, name: string) => T | undefined;
   close: () => void;
 }
 
 export async function until(
-  predicate: () => boolean,
+  predicate: () => boolean | Promise<boolean>,
   timeoutMs = 5_000,
 ): Promise<void> {
   const started = Date.now();
-  while (!predicate()) {
+  while (!(await predicate())) {
     if (Date.now() - started > timeoutMs) {
       throw new Error("timed out waiting for the frames");
     }
@@ -92,6 +93,9 @@ export function connect(
         },
         subscribe(target) {
           send({ op: "subscribe", target });
+        },
+        unsubscribe(target) {
+          send({ op: "unsubscribe", target });
         },
         section<T>(target: string, name: string): T | undefined {
           return states.get(target)?.[name] as T | undefined;
