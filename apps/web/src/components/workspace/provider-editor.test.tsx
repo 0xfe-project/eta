@@ -90,9 +90,7 @@ function type(element: HTMLInputElement, value: string) {
 describe("provider 编辑表单", () => {
   it("提交时不带 key，等于「别动它」，并带上读到的 revision", async () => {
     const fake = host();
-    await render(
-      <ProviderEditor provider={provider} open onOpenChange={() => {}} />,
-    );
+    await render(<ProviderEditor provider={provider} onClose={() => {}} />);
     await save();
     const [call] = saves(fake);
     expect(call?.args).toMatchObject({
@@ -108,15 +106,14 @@ describe("provider 编辑表单", () => {
     expect("apiKey" in (call!.args as { provider: object }).provider).toBe(
       false,
     );
-    // Saving says it takes a restart, because it does.
-    expect(document.body.textContent).toContain("重启");
+    // The host reads config.json per turn: saving says so, and nothing claims a restart.
+    expect(document.body.textContent).toContain("已保存");
+    expect(document.body.textContent).not.toContain("重启");
   });
 
   it("清除 key 时提交 null", async () => {
     const fake = host();
-    await render(
-      <ProviderEditor provider={provider} open onOpenChange={() => {}} />,
-    );
+    await render(<ProviderEditor provider={provider} onClose={() => {}} />);
     const clear = [...document.querySelectorAll("button")].find((button) =>
       button.textContent?.includes("清除 key"),
     )!;
@@ -130,9 +127,7 @@ describe("provider 编辑表单", () => {
 
   it("没动的模型原样存回，改了的写进 overrides", async () => {
     const fake = host();
-    await render(
-      <ProviderEditor provider={provider} open onOpenChange={() => {}} />,
-    );
+    await render(<ProviderEditor provider={provider} onClose={() => {}} />);
     await save();
     // Reasoning, thinking levels and the rest of what the form does not show are kept.
     expect(
@@ -153,9 +148,7 @@ describe("provider 编辑表单", () => {
 
   it("新建的 provider 用名字当 id，重名时加个数", async () => {
     const fake = host();
-    await render(
-      <ProviderEditor provider={undefined} open onOpenChange={() => {}} />,
-    );
+    await render(<ProviderEditor provider={undefined} onClose={() => {}} />);
     const base = document.querySelector<HTMLInputElement>("#provider-base")!;
     const name = document.querySelector<HTMLInputElement>("#provider-name")!;
     await act(async () => type(base, "https://example.com/v1"));
@@ -185,9 +178,7 @@ describe("provider 编辑表单", () => {
       }
       return { revision: "r10" };
     });
-    await render(
-      <ProviderEditor provider={provider} open onOpenChange={() => {}} />,
-    );
+    await render(<ProviderEditor provider={provider} onClose={() => {}} />);
     await save();
     expect(document.querySelector('[role="alert"]')?.textContent).toContain(
       "已重新读取",
@@ -206,21 +197,15 @@ describe("改了一半就走", () => {
     providersHost(config);
     const closed: boolean[] = [];
     await render(
-      <ProviderEditor
-        provider={provider}
-        open
-        onOpenChange={(open) => closed.push(open)}
-      />,
+      <ProviderEditor provider={provider} onClose={() => closed.push(false)} />,
     );
     const name = document.querySelector<HTMLInputElement>("#provider-name")!;
     await act(async () => type(name, "改了个名字"));
-    // The dialog's own close path: Escape / the X both land here.
-    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    await act(async () => {
-      dialog.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
-      );
-    });
+    // The form's own way out: 返回, above the fields.
+    const back = [...document.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("返回"),
+    )!;
+    await act(async () => back.click());
     const alert = document.querySelector('[role="alertdialog"]');
     expect(alert?.textContent).toContain("还没保存");
     expect(closed).toEqual([]);

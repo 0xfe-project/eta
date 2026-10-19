@@ -160,8 +160,19 @@ describe("removing a provider", () => {
         () => ({ revision: "r2" }),
       ),
     );
-    await openMenu();
-    await choose(/^移除$/);
+    // Removing lives in the editor now: the row opens it, the save row asks.
+    await act(async () =>
+      [...document.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "编辑")!
+        .click(),
+    );
+    await settle();
+    await act(async () =>
+      [...document.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "删除")!
+        .click(),
+    );
+    await settle();
     expect(
       document.querySelector('[role="alertdialog"]')?.textContent,
     ).toContain("「小助手」");

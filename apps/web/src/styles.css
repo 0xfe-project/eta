@@ -1111,6 +1111,9 @@
 
   .settings-content {
     min-width: 0;
+    /* A grid item's automatic minimum is its content: without this the column grows past the
+       dialog and the sticky save row is clipped by it instead of sitting at its bottom. */
+    min-height: 0;
     overflow-y: auto;
     padding: 16px 20px;
   }
@@ -1190,5 +1193,166 @@
     display: flex;
     align-items: center;
     gap: 6px;
+  }
+
+  /* One provider, edited in place: the content column turns into its form and 返回 brings the
+     list back. Ported from eta-old's settings.css, numbers included. */
+  .settings-back {
+    margin-bottom: 10px;
+    font-size: 12px;
+    color: var(--muted-foreground);
+  }
+  .settings-back button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .settings-back button:hover {
+    color: var(--foreground);
+  }
+
+  .settings-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 10px 0;
+    font-size: 12px;
+  }
+  .settings-field input:not([type="checkbox"]) {
+    width: 100%;
+  }
+
+  .settings-primary {
+    padding: 6px 12px;
+    background: var(--foreground);
+    color: var(--background);
+    font-size: 12px;
+  }
+  .settings-danger {
+    color: var(--destructive);
+  }
+
+  .settings-model {
+    margin-bottom: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    padding: 10px;
+  }
+  .settings-model-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .settings-model-title strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-weight: 500;
+  }
+  .settings-model-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--muted-foreground);
+  }
+  .settings-model details {
+    margin-top: 8px;
+    font-size: 12px;
+  }
+  .settings-model summary {
+    cursor: pointer;
+  }
+  .settings-model-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 10px;
+  }
+  .settings-model-fields > .settings-check,
+  .settings-model-fields > .settings-hint {
+    grid-column: 1 / -1;
+  }
+  .settings-model .settings-row select {
+    max-width: 65%;
+  }
+
+  .settings-add-model {
+    width: 100%;
+    margin: 8px 0;
+    border: 1px solid var(--border);
+    padding: 6px;
+    font-size: 12px;
+  }
+  .settings-add-model:hover {
+    border-color: var(--border-strong);
+    background: var(--overlay-hover);
+  }
+
+  .settings-headers {
+    margin: 10px 0;
+    font-size: 12px;
+  }
+  .settings-headers summary {
+    cursor: pointer;
+  }
+  .settings-header-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 0;
+  }
+  .settings-header-row input {
+    min-width: 0;
+  }
+  .settings-header-row .settings-text-button {
+    margin: 0;
+  }
+
+  .settings-text-button {
+    margin: 4px 0;
+    font-size: 11px;
+    color: var(--muted-foreground);
+  }
+  .settings-text-button:hover {
+    color: var(--foreground);
+  }
+
+  .settings-check {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 12px;
+  }
+  /* A checkbox must never stretch to its label's width: percentage sizing on a flex item inside an
+     auto-sized label overflows the label box. */
+  .settings-check input[type="checkbox"] {
+    width: auto;
+    flex: 0 0 auto;
+  }
+
+  /* The save row stays at the bottom of the column, so the button that finishes the form is always
+     the one under the hand that just typed in it. */
+  .settings-provider-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin-top: 10px;
+    border-top: 1px solid var(--border);
+    background: var(--background);
+  }
+  .settings-save {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 0;
+    font-size: 11px;
+    color: var(--muted-foreground);
+  }
+  .settings-save > .settings-primary {
+    margin-left: auto;
   }
 }

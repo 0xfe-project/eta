@@ -46,7 +46,7 @@
   },
   "editor": {
     "newTitle": "新建 provider",
-    "description": "保存进 config.json，重启后生效。",
+    "description": "保存写进 config.json，下一次请求就生效。",
     "name": "名字",
     "kind": "类型",
     "baseUrl": "接口地址",
@@ -65,11 +65,19 @@
     "contextWindow": "上下文窗口",
     "vision": "支持图片",
     "addModel": "加一个模型",
-    "restartRequired": "已保存。重启宿主后生效。",
     "configured": "已配置的 provider",
     "empty": "还没有 provider。加一个，宿主才有东西可跑。",
     "modelCount": "{{count}} 个模型",
     "unsaved": "这个表单有还没保存的改动。",
-    "discard": "放弃改动"
+    "discard": "放弃改动",
+    "defaultThinking": "默认思考等级",
+    "followProvider": "跟随供应商默认",
+    "modelSettings": "模型设置",
+    "newModel": "新模型",
+    "contextUnknown": "上下文未知",
+    "reasoning": "推理",
+    "removeModel": "移除模型 {{name}}",
+    "noModels": "还没有模型。",
+    "headersHint": "空的请求头不会写进 config.json。"
   }
 }

@@ -6,12 +6,12 @@ import type {
   ProviderSummary,
 } from "@eta/client-contracts";
 /**
- * Editing one provider: what it is, where it points, how it authenticates, and what it can run.
+ * Editing one provider, in place: the settings column turns into this form and 返回 brings the list
+ * back. It is not a dialog — a form one level deep inside another one asks the person to keep track
+ * of two ways out, and the thing being edited is one row of the list behind it.
  *
- * The form is written against what the host can actually do, and that has one sharp edge: a change
- * is saved to `config.json` and takes effect on the next start, because providers are built once at
- * startup and handed to sessions. So saving says so — a form that looks like it took effect and did
- * not is worse than one that admits it needs a restart.
+ * The form is written against what the host can actually do: a change is written to `config.json`,
+ * which the host reads per turn, so it takes effect on the next request. Nothing is restarted.
  *
  * The key field starts empty and says whether a key is configured: an editor can replace one
  * without ever being shown it.
@@ -20,18 +20,21 @@ import type {
  * (another tab, an editor on the file), the host refuses, the page re-reads it, and the person is
  * told to look again before saving once more.
  */
+import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -41,13 +44,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { listSeparator } from "@/lib/i18n";
+import { THINKING_LEVELS } from "@/lib/thinking";
 import {
   currentRevision,
   isConfigChanged,
   providerErrorMessage,
+  providerLabel,
+  useDeleteProvider,
   useProviders,
   useSaveProvider,
 } from "@/queries/providers";
+import { useAgents } from "./use-agents";
 
 const KINDS: ProviderKind[] = [
   "openai-compatible",
@@ -59,12 +67,21 @@ const KINDS: ProviderKind[] = [
   "zai",
 ];
 
+/** Kinds you point at an endpoint of your own: their models are yours to spell out. */
+const CUSTOM_KINDS: readonly ProviderKind[] = [
+  "openai-compatible",
+  "openai-responses",
+];
+const isCustomKind = (kind: ProviderKind) => CUSTOM_KINDS.includes(kind);
+
 /** One model in the form: what can be edited, and the config entry it came from. */
 interface ModelRow {
   id: string;
   name: string;
   contextWindow: string;
   vision: boolean;
+  reasoning: boolean;
+  defaultThinking: EtaModelConfig["defaultThinking"];
   source?: EtaModelConfig;
 }
 
@@ -75,13 +92,15 @@ function rowOf(model: EtaModelConfig): ModelRow {
     contextWindow:
       model.contextWindow === undefined ? "" : String(model.contextWindow),
     vision: model.input?.includes("image") ?? false,
+    reasoning: model.reasoning === true,
+    defaultThinking: model.defaultThinking,
     source: model,
   };
 }
 
 /**
- * The entry a row saves as. Everything the form does not show (reasoning, thinking levels, token
- * limits) stays as it was, and what the person changed goes in `overrides`, which discovery keeps.
+ * The entry a row saves as. Everything the form does not show (token limits, thinking modes,
+ * efforts) stays as it was, and what the person changed goes in `overrides`, which discovery keeps.
  */
 function modelOf(row: ModelRow): EtaModelConfig | undefined {
   const id = row.id.trim();
@@ -101,8 +120,11 @@ function modelOf(row: ModelRow): EtaModelConfig | undefined {
   if (row.vision !== (was?.input?.includes("image") ?? false))
     changes.input = row.vision ? ["text", "image"] : ["text"];
   const overrides = { ...was?.overrides, ...changes };
+  const base: EtaModelConfig = { ...(was ?? { id }) };
+  if (row.defaultThinking === undefined) delete base.defaultThinking;
+  else base.defaultThinking = row.defaultThinking;
   return {
-    ...was,
+    ...base,
     id,
     ...(Object.keys(overrides).length > 0 ? { overrides } : {}),
   };
@@ -156,17 +178,173 @@ function inputOf(form: {
   return input;
 }
 
+/** One model as a card: what it is, what it can do, and the fields behind a disclosure. */
+function ModelCard({
+  row,
+  index,
+  custom,
+  onUpdate,
+  onRemove,
+}: {
+  row: ModelRow;
+  index: number;
+  custom: boolean;
+  onUpdate: (patch: Partial<ModelRow>) => void;
+  onRemove: () => void;
+}) {
+  const { t: translateText } = useTranslation(["providers"] as const);
+  const id = row.id.trim();
+  const name = row.name.trim();
+  const title =
+    name.length > 0
+      ? name
+      : id.length > 0
+        ? id
+        : translateText("editor.newModel");
+  return (
+    <div className="settings-model">
+      <div className="settings-model-title">
+        <strong className="font-mono">{title}</strong>
+        <button
+          type="button"
+          className="settings-text-button"
+          aria-label={translateText("editor.removeModel", { name: title })}
+          onClick={onRemove}
+        >
+          ✕
+        </button>
+      </div>
+      {name.length > 0 && name !== id ? (
+        <p className="settings-hint font-mono">{id}</p>
+      ) : null}
+      <div className="settings-model-meta">
+        <span>
+          {row.contextWindow.trim().length > 0
+            ? `${Number(row.contextWindow).toLocaleString()} tokens`
+            : translateText("editor.contextUnknown")}
+        </span>
+        {row.vision ? <span>{translateText("editor.vision")}</span> : null}
+        {row.reasoning ? (
+          <span>{translateText("editor.reasoning")}</span>
+        ) : null}
+      </div>
+      <label className="settings-row">
+        <span>{translateText("editor.defaultThinking")}</span>
+        <select
+          aria-label={`${translateText("editor.defaultThinking")} ${title}`}
+          value={row.defaultThinking ?? ""}
+          onChange={(event) =>
+            onUpdate({
+              defaultThinking:
+                event.target.value === ""
+                  ? undefined
+                  : (event.target.value as ModelRow["defaultThinking"]),
+            })
+          }
+        >
+          <option value="">{translateText("editor.followProvider")}</option>
+          {THINKING_LEVELS.map((level) => (
+            <option key={level} value={level}>
+              {level}
+            </option>
+          ))}
+        </select>
+      </label>
+      {custom ? (
+        <details>
+          <summary>{translateText("editor.modelSettings")}</summary>
+          <div className="settings-model-fields">
+            <div className="settings-field">
+              <Label htmlFor={`model-id-${index}`}>
+                {translateText("editor.modelId")}
+              </Label>
+              <Input
+                id={`model-id-${index}`}
+                className="font-mono"
+                value={row.id}
+                placeholder="model-id"
+                onChange={(event) => onUpdate({ id: event.target.value })}
+              />
+            </div>
+            <div className="settings-field">
+              <Label htmlFor={`model-name-${index}`}>
+                {translateText("editor.modelName")}
+              </Label>
+              <Input
+                id={`model-name-${index}`}
+                value={row.name}
+                onChange={(event) => onUpdate({ name: event.target.value })}
+              />
+            </div>
+            <div className="settings-field">
+              <Label htmlFor={`model-window-${index}`}>
+                {translateText("editor.contextWindow")}
+              </Label>
+              <Input
+                id={`model-window-${index}`}
+                aria-label={translateText("editor.contextWindow")}
+                className="font-mono"
+                inputMode="numeric"
+                value={row.contextWindow}
+                onChange={(event) =>
+                  onUpdate({ contextWindow: event.target.value })
+                }
+              />
+            </div>
+            <label className="settings-check">
+              <input
+                type="checkbox"
+                checked={row.vision}
+                onChange={(event) => onUpdate({ vision: event.target.checked })}
+              />
+              {translateText("editor.vision")}
+            </label>
+          </div>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+/** What a form is worth comparing by: every field a person can change, as one string. */
+function fingerprint(form: {
+  name: string;
+  kind: ProviderKind;
+  baseUrl: string;
+  headers: Record<string, string | null>;
+  models: ModelRow[];
+  key: string;
+  clearKey: boolean;
+}): string {
+  return JSON.stringify([
+    form.name,
+    form.kind,
+    form.baseUrl,
+    form.key,
+    form.clearKey,
+    Object.entries(form.headers).filter(([name]) => name.length > 0),
+    form.models.map((row) => [
+      row.id,
+      row.name,
+      row.contextWindow,
+      row.vision,
+      row.defaultThinking ?? "",
+    ]),
+  ]);
+}
+
 export function ProviderEditor({
   provider,
-  open,
-  onOpenChange,
+  onClose,
 }: {
   provider: ProviderSummary | undefined;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  onClose: () => void;
 }) {
   const { t: translateText } = useTranslation(["providers", "common"] as const);
   const { data: config } = useProviders();
+  const { agents } = useAgents();
+  const remove = useDeleteProvider();
+  const [removing, setRemoving] = useState(false);
   const [name, setName] = useState(provider?.name ?? "");
   const [kind, setKind] = useState<ProviderKind>(provider?.kind ?? KINDS[0]!);
   const [baseUrl, setBaseUrl] = useState(provider?.baseUrl ?? "");
@@ -187,38 +365,31 @@ export function ProviderEditor({
   // The config this form was read from: what a save has to be made against.
   const [revision, setRevision] = useState(config?.revision);
 
-  // What the form started as. A dirty form is one the person would lose by closing it, so closing
-  // asks first — the rule the whole settings dialog follows, applied to the one form here that can
-  // hold an unsubmitted key.
-  const initial = {
-    name: provider?.name ?? "",
-    kind: provider?.kind ?? KINDS[0]!,
-    baseUrl: provider?.baseUrl ?? "",
-    headers: JSON.stringify(provider?.headers ?? {}),
-    models: JSON.stringify(
-      (provider?.models ?? []).map((model) => {
-        const row = rowOf(model);
-        return [row.id, row.name, row.contextWindow, row.vision];
-      }),
-    ),
-  };
-  const dirty =
-    key.length > 0 ||
-    clearKey ||
-    name !== initial.name ||
-    kind !== initial.kind ||
-    baseUrl !== initial.baseUrl ||
-    JSON.stringify(
-      Object.fromEntries(headers.map((row) => [row.name, row.value])),
-    ) !== initial.headers ||
-    JSON.stringify(
-      models.map((model) => [
-        model.id,
-        model.name,
-        model.contextWindow,
-        model.vision,
-      ]),
-    ) !== initial.models;
+  // A dirty form is one the person would lose by leaving it, so 返回 asks first — the rule the whole
+  // settings dialog follows, applied to the one form here that can hold an unsubmitted key. The
+  // form is compared against what was last read or written, not against the row behind it: after a
+  // save the row follows, and a form that flickered back to "unsaved" while it did would be wrong.
+  const [baseline, setBaseline] = useState(() =>
+    fingerprint({
+      name: provider?.name ?? "",
+      kind: provider?.kind ?? KINDS[0]!,
+      baseUrl: provider?.baseUrl ?? "",
+      headers: provider?.headers ?? {},
+      models: (provider?.models ?? []).map(rowOf),
+      key: "",
+      clearKey: false,
+    }),
+  );
+  const current = fingerprint({
+    name,
+    kind,
+    baseUrl,
+    headers: Object.fromEntries(headers.map((row) => [row.name, row.value])),
+    models,
+    key,
+    clearKey,
+  });
+  const dirty = current !== baseline;
 
   const id =
     provider?.id ??
@@ -226,6 +397,7 @@ export function ProviderEditor({
       name,
       (config?.providers ?? []).map((existing) => existing.id),
     );
+  const custom = isCustomKind(kind);
   const save = useSaveProvider();
   const submit = () =>
     save.mutate(
@@ -249,6 +421,19 @@ export function ProviderEditor({
           setKey("");
           setClearKey(false);
           setRevision(result.revision);
+          setBaseline(
+            fingerprint({
+              name,
+              kind,
+              baseUrl,
+              headers: Object.fromEntries(
+                headers.map((row) => [row.name, row.value]),
+              ),
+              models,
+              key: "",
+              clearKey: false,
+            }),
+          );
         },
         onError: (error) => {
           if (isConfigChanged(error)) {
@@ -262,267 +447,223 @@ export function ProviderEditor({
       },
     );
 
+  const back = () => {
+    if (dirty) {
+      setDiscarding(true);
+      return;
+    }
+    onClose();
+  };
+
+  const providerName = provider ? providerLabel(provider) : "";
+  // Removing a provider takes its models away from the agents that use them.
+  const affectedAgents = provider
+    ? agents
+        .filter((agent) => agent.model?.startsWith(`${provider.id}:`))
+        .map((agent) =>
+          translateText("common:format.quotedValue", { value: agent.name }),
+        )
+    : [];
+
+  const patchModel = (index: number, patch: Partial<ModelRow>) =>
+    setModels((current) =>
+      current.map((row, at) => (at === index ? { ...row, ...patch } : row)),
+    );
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next && dirty && !saved) {
-          setDiscarding(true);
-          return;
-        }
-        onOpenChange(next);
-      }}
-    >
-      <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="font-mono">
-            {provider?.id ?? translateText("editor.newTitle")}
-          </DialogTitle>
-          <DialogDescription>
-            {translateText("editor.description")}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-3">
-          <div className="grid gap-1">
-            <Label htmlFor="provider-name">
-              {translateText("editor.name")}
-            </Label>
-            <Input
-              id="provider-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </div>
-          <div className="grid gap-1">
-            <Label htmlFor="provider-kind">
-              {translateText("editor.kind")}
-            </Label>
-            <Select
-              value={kind}
-              onValueChange={(next) => setKind(next as ProviderKind)}
-            >
-              <SelectTrigger id="provider-kind">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {KINDS.map((choice) => (
-                  <SelectItem key={choice} value={choice}>
-                    <span className="font-mono">{choice}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid gap-1">
-            <Label htmlFor="provider-base">
-              {translateText("editor.baseUrl")}
-            </Label>
-            <Input
-              id="provider-base"
-              value={baseUrl}
-              spellCheck={false}
-              className="font-mono"
-              onChange={(event) => setBaseUrl(event.target.value)}
-            />
-          </div>
-          <div className="grid gap-1">
-            <Label htmlFor="provider-key">{translateText("editor.key")}</Label>
-            <Input
-              id="provider-key"
-              type="password"
-              value={key}
-              autoComplete="off"
-              placeholder={
-                provider?.hasApiKey === true
-                  ? translateText("editor.keyConfigured")
-                  : translateText("editor.keyMissing")
-              }
-              onChange={(event) => {
-                setKey(event.target.value);
-                if (event.target.value.length > 0) setClearKey(false);
+    <div>
+      <div className="settings-back">
+        <button type="button" onClick={back}>
+          <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
+          {translateText("common:actions.back")}
+        </button>
+      </div>
+      <div className="settings-heading">
+        <h2 className="font-mono">
+          {provider?.id ?? translateText("editor.newTitle")}
+        </h2>
+        <p>{translateText("editor.description")}</p>
+      </div>
+      <fieldset className="min-w-0">
+        <div className="settings-field">
+          <Label htmlFor="provider-name">{translateText("editor.name")}</Label>
+          <Input
+            id="provider-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </div>
+        <div className="settings-field">
+          <Label htmlFor="provider-kind">{translateText("editor.kind")}</Label>
+          <Select
+            value={kind}
+            onValueChange={(next) => setKind(next as ProviderKind)}
+          >
+            <SelectTrigger id="provider-kind">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {KINDS.map((choice) => (
+                <SelectItem key={choice} value={choice}>
+                  <span className="font-mono">{choice}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="settings-field">
+          <Label htmlFor="provider-base">
+            {translateText("editor.baseUrl")}
+          </Label>
+          <Input
+            id="provider-base"
+            value={baseUrl}
+            spellCheck={false}
+            className="font-mono"
+            onChange={(event) => setBaseUrl(event.target.value)}
+          />
+        </div>
+        <div className="settings-field">
+          <Label htmlFor="provider-key">{translateText("editor.key")}</Label>
+          <Input
+            id="provider-key"
+            type="password"
+            value={key}
+            autoComplete="off"
+            placeholder={
+              provider?.hasApiKey === true
+                ? translateText("editor.keyConfigured")
+                : translateText("editor.keyMissing")
+            }
+            onChange={(event) => {
+              setKey(event.target.value);
+              if (event.target.value.length > 0) setClearKey(false);
+            }}
+          />
+          {provider?.hasApiKey === true ? (
+            <button
+              type="button"
+              className="settings-text-button justify-self-start text-left"
+              onClick={() => {
+                setClearKey((current) => !current);
+                setKey("");
               }}
-            />
-            {provider?.hasApiKey === true ? (
-              <button
-                type="button"
-                className="justify-self-start text-xs text-muted-foreground underline"
-                onClick={() => {
-                  setClearKey((current) => !current);
-                  setKey("");
-                }}
-              >
-                {clearKey
-                  ? translateText("editor.keepKey")
-                  : translateText("editor.clearKey")}
-              </button>
-            ) : null}
-          </div>
-          <div className="grid gap-1">
-            <Label>{translateText("editor.headers")}</Label>
-            {headers.map((row, at) => (
-              <div key={at} className="flex gap-1">
-                <Input
-                  aria-label={translateText("editor.headerName")}
-                  value={row.name}
-                  className="w-40 font-mono"
-                  onChange={(event) =>
-                    setHeaders((current) =>
-                      current.map((candidate, index) =>
-                        index === at
-                          ? { ...candidate, name: event.target.value }
-                          : candidate,
-                      ),
-                    )
-                  }
-                />
-                <Input
-                  aria-label={translateText("editor.headerValue")}
-                  value={row.value}
-                  className="min-w-0 flex-1 font-mono"
-                  onChange={(event) =>
-                    setHeaders((current) =>
-                      current.map((candidate, index) =>
-                        index === at
-                          ? { ...candidate, value: event.target.value }
-                          : candidate,
-                      ),
-                    )
-                  }
-                />
-                <Button
-                  size="icon-xs"
-                  variant="ghost"
-                  aria-label={translateText("common:actions.delete")}
-                  onClick={() =>
-                    setHeaders((current) =>
-                      current.filter((_, index) => index !== at),
-                    )
-                  }
-                >
-                  ×
-                </Button>
-              </div>
-            ))}
-            <Button
-              size="xs"
-              variant="outline"
-              className="justify-self-start"
-              onClick={() =>
-                setHeaders((current) => [...current, { name: "", value: "" }])
-              }
             >
-              {translateText("editor.addHeader")}
-            </Button>
-          </div>
-          <div className="grid gap-1">
-            <Label>{translateText("editor.models")}</Label>
-            {models.map((model, at) => (
-              <div key={at} className="flex flex-wrap items-center gap-1">
-                <Input
-                  aria-label={translateText("editor.modelId")}
-                  value={model.id}
-                  placeholder="model-id"
-                  className="w-44 font-mono"
-                  onChange={(event) =>
-                    setModels((current) =>
-                      current.map((candidate, index) =>
-                        index === at
-                          ? { ...candidate, id: event.target.value }
-                          : candidate,
-                      ),
-                    )
-                  }
-                />
-                <Input
-                  aria-label={translateText("editor.modelName")}
-                  value={model.name}
-                  className="min-w-0 flex-1"
-                  onChange={(event) =>
-                    setModels((current) =>
-                      current.map((candidate, index) =>
-                        index === at
-                          ? { ...candidate, name: event.target.value }
-                          : candidate,
-                      ),
-                    )
-                  }
-                />
-                <Input
-                  aria-label={translateText("editor.contextWindow")}
-                  value={model.contextWindow}
-                  inputMode="numeric"
-                  className="w-24 font-mono"
-                  onChange={(event) =>
-                    setModels((current) =>
-                      current.map((candidate, index) =>
-                        index === at
-                          ? { ...candidate, contextWindow: event.target.value }
-                          : candidate,
-                      ),
-                    )
-                  }
-                />
-                <label className="flex items-center gap-1 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={model.vision}
-                    onChange={(event) =>
-                      setModels((current) =>
-                        current.map((candidate, index) =>
-                          index === at
-                            ? { ...candidate, vision: event.target.checked }
-                            : candidate,
-                        ),
-                      )
-                    }
-                  />
-                  {translateText("editor.vision")}
-                </label>
-                <Button
-                  size="icon-xs"
-                  variant="ghost"
-                  aria-label={translateText("common:actions.delete")}
-                  onClick={() =>
-                    setModels((current) =>
-                      current.filter((_, index) => index !== at),
-                    )
-                  }
-                >
-                  ×
-                </Button>
-              </div>
-            ))}
-            <Button
-              size="xs"
-              variant="outline"
-              className="justify-self-start"
-              onClick={() =>
-                setModels((current) => [
-                  ...current,
-                  { id: "", name: "", contextWindow: "", vision: false },
-                ])
-              }
-            >
-              {translateText("editor.addModel")}
-            </Button>
-          </div>
-          {saved ? (
-            <p
-              role="status"
-              className="border border-state-warning px-2 py-1 text-xs"
-            >
-              {translateText("editor.restartRequired")}
-            </p>
-          ) : null}
-          {changedElsewhere ? (
-            <p
-              role="alert"
-              className="border border-state-warning px-2 py-1 text-xs"
-            >
-              {translateText("errors.configChanged")}
-            </p>
+              {clearKey
+                ? translateText("editor.keepKey")
+                : translateText("editor.clearKey")}
+            </button>
           ) : null}
         </div>
+        <details className="settings-headers" open={headers.length > 0}>
+          <summary>{translateText("editor.headers")}</summary>
+          {headers.map((row, at) => (
+            <div key={at} className="settings-header-row">
+              <Input
+                aria-label={translateText("editor.headerName")}
+                className="font-mono"
+                placeholder="User-Agent"
+                value={row.name}
+                onChange={(event) =>
+                  setHeaders((current) =>
+                    current.map((candidate, index) =>
+                      index === at
+                        ? { ...candidate, name: event.target.value }
+                        : candidate,
+                    ),
+                  )
+                }
+              />
+              <Input
+                aria-label={translateText("editor.headerValue")}
+                className="font-mono"
+                value={row.value}
+                onChange={(event) =>
+                  setHeaders((current) =>
+                    current.map((candidate, index) =>
+                      index === at
+                        ? { ...candidate, value: event.target.value }
+                        : candidate,
+                    ),
+                  )
+                }
+              />
+              <button
+                type="button"
+                className="settings-text-button"
+                aria-label={translateText("common:actions.delete")}
+                onClick={() =>
+                  setHeaders((current) =>
+                    current.filter((_, index) => index !== at),
+                  )
+                }
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="settings-text-button"
+            onClick={() =>
+              setHeaders((current) => [...current, { name: "", value: "" }])
+            }
+          >
+            ＋ {translateText("editor.addHeader")}
+          </button>
+          <p className="settings-hint">{translateText("editor.headersHint")}</p>
+        </details>
+        <div className="settings-section-label">
+          {translateText("editor.models")}
+        </div>
+        {models.length === 0 ? (
+          <p className="settings-hint">{translateText("editor.noModels")}</p>
+        ) : null}
+        {models.map((row, at) => (
+          <ModelCard
+            // Rows have no identity of their own until they have an id; the position is what the
+            // person is looking at, and editing a field must not remount the card under the hand.
+            key={at}
+            index={at}
+            row={row}
+            custom={custom}
+            onUpdate={(patch) => patchModel(at, patch)}
+            onRemove={() =>
+              setModels((current) => current.filter((_, index) => index !== at))
+            }
+          />
+        ))}
+        {custom ? (
+          <button
+            type="button"
+            className="settings-add-model"
+            onClick={() =>
+              setModels((current) => [
+                ...current,
+                {
+                  id: "",
+                  name: "",
+                  contextWindow: "",
+                  vision: false,
+                  reasoning: false,
+                  defaultThinking: undefined,
+                },
+              ])
+            }
+          >
+            ＋ {translateText("editor.addModel")}
+          </button>
+        ) : null}
+      </fieldset>
+      <div className="settings-provider-actions">
+        {changedElsewhere ? (
+          <p
+            role="alert"
+            className="border border-state-warning px-2 py-1 text-xs"
+          >
+            {translateText("errors.configChanged")}
+          </p>
+        ) : null}
         {discarding ? (
           <div
             role="alertdialog"
@@ -543,15 +684,35 @@ export function ProviderEditor({
               size="xs"
               onClick={() => {
                 setDiscarding(false);
-                onOpenChange(false);
+                onClose();
               }}
             >
               {translateText("editor.discard")}
             </Button>
           </div>
         ) : null}
-        <DialogFooter>
+        <div className="settings-save">
+          {provider ? (
+            <button
+              type="button"
+              className="settings-danger"
+              disabled={remove.isPending}
+              onClick={() => setRemoving(true)}
+            >
+              {translateText("common:actions.delete")}
+            </button>
+          ) : (
+            <span />
+          )}
+          <span role="status">
+            {dirty
+              ? translateText("editor.unsaved")
+              : saved
+                ? translateText("common:feedback.saved")
+                : ""}
+          </span>
           <Button
+            className="settings-primary"
             onClick={submit}
             disabled={
               save.isPending ||
@@ -562,8 +723,49 @@ export function ProviderEditor({
           >
             {translateText("common:actions.save")}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </div>
+      {provider ? (
+        <AlertDialog open={removing} onOpenChange={setRemoving}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {translateText("remove.confirmTitle", { providerName })}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {affectedAgents.length
+                  ? translateText("remove.affectedAgents", {
+                      agents: affectedAgents.join(listSeparator()),
+                      providerName,
+                    })
+                  : translateText("remove.credentialsNotice")}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>
+                {translateText("common:actions.cancel")}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={() =>
+                  remove.mutate(provider.id, {
+                    onSuccess: () => {
+                      toast.success(
+                        translateText("remove.success", { providerName }),
+                      );
+                      onClose();
+                    },
+                    onError: (error) =>
+                      toast.error(providerErrorMessage(error)),
+                  })
+                }
+              >
+                {translateText("common:actions.remove")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
+    </div>
   );
 }

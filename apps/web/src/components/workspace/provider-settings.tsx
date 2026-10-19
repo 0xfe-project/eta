@@ -8,16 +8,6 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { LoadError, Loading } from "@/components/states";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,11 +21,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { listSeparator } from "@/lib/i18n";
 import {
   keyMissing,
   providerErrorMessage,
@@ -43,7 +31,6 @@ import {
   signsIn,
   useAnswerLogin,
   useCancelLogin,
-  useDeleteProvider,
   useLoginStatus,
   useProviders,
   useRefreshProvider,
@@ -51,7 +38,6 @@ import {
 } from "@/queries/providers";
 import { LlmAccounts } from "./llm-accounts";
 import { ProviderEditor } from "./provider-editor";
-import { useAgents } from "./use-agents";
 
 /** Device-code sign-in to Codex: show the code, open the page, wait. */
 function LoginDialog({
@@ -216,19 +202,10 @@ function ProviderRow({
   onEdit: () => void;
 }) {
   const { t: translateText } = useTranslation(["providers", "common"] as const);
-  const { agents } = useAgents();
   const refresh = useRefreshProvider();
-  const remove = useDeleteProvider();
-  const [confirming, setConfirming] = useState(false);
   const [login, setLogin] = useState(0);
   const providerName = providerLabel(provider);
   const required = keyMissing(provider);
-  // Removing a provider takes its models away from the agents that use them.
-  const affectedAgents = agents
-    .filter((agent) => agent.model?.startsWith(`${provider.id}:`))
-    .map((agent) =>
-      translateText("common:format.quotedValue", { value: agent.name }),
-    );
 
   return (
     <li className="flex min-w-0 items-center gap-2 px-3 py-1.5">
@@ -304,51 +281,8 @@ function ProviderRow({
               {translateText("actions.refreshModels")}
             </DropdownMenuItem>
           )}
-          {signsIn(provider) ? null : <DropdownMenuSeparator />}
-          <DropdownMenuItem
-            variant="destructive"
-            onSelect={() => setConfirming(true)}
-          >
-            {translateText("common:actions.remove")}
-          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <AlertDialog open={confirming} onOpenChange={setConfirming}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {translateText("remove.confirmTitle", { providerName })}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {affectedAgents.length
-                ? translateText("remove.affectedAgents", {
-                    agents: affectedAgents.join(listSeparator()),
-                    providerName,
-                  })
-                : translateText("remove.credentialsNotice")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>
-              {translateText("common:actions.cancel")}
-            </AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={() =>
-                remove.mutate(provider.id, {
-                  onSuccess: () =>
-                    toast.success(
-                      translateText("remove.success", { providerName }),
-                    ),
-                  onError: (error) => toast.error(providerErrorMessage(error)),
-                })
-              }
-            >
-              {translateText("common:actions.remove")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
       {login ? (
         // Keyed so every open starts a fresh sign-in.
         <LoginDialog
@@ -376,6 +310,23 @@ export function ProviderSettings() {
     undefined,
   );
   if (error) return <LoadError what={translateText("title")} error={error} />;
+  // Editing replaces the list: it is one row's worth of the same column, and a person who is
+  // looking at a form is not also choosing which provider to edit.
+  if (editing !== undefined)
+    return (
+      <ProviderEditor
+        key={editing === "new" ? "new" : editing.id}
+        // The row as it is now, so a save shows in the editor that made it.
+        provider={
+          editing === "new"
+            ? undefined
+            : (data?.providers.find(
+                (candidate) => candidate.id === editing.id,
+              ) ?? editing)
+        }
+        onClose={() => setEditing(undefined)}
+      />
+    );
   return (
     <div className="space-y-4">
       <LlmAccounts />
@@ -412,19 +363,6 @@ export function ProviderSettings() {
             ))}
           </ul>
         )}
-        <ProviderEditor
-          key={editing === "new" ? "new" : (editing?.id ?? "closed")}
-          // The row as it is now, so a save shows in the editor that made it.
-          provider={
-            editing === undefined || editing === "new"
-              ? undefined
-              : (data?.providers.find(
-                  (candidate) => candidate.id === editing.id,
-                ) ?? editing)
-          }
-          open={editing !== undefined}
-          onOpenChange={(open) => !open && setEditing(undefined)}
-        />
       </div>
     </div>
   );

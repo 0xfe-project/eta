@@ -46,7 +46,7 @@
   },
   "editor": {
     "newTitle": "New provider",
-    "description": "Saved to config.json; the new provider is used after a restart.",
+    "description": "Saved to config.json; the next request uses it.",
     "name": "Name",
     "kind": "Kind",
     "baseUrl": "Base URL",
@@ -65,11 +65,19 @@
     "contextWindow": "Context window",
     "vision": "Images",
     "addModel": "Add model",
-    "restartRequired": "Saved. Restart the host for it to take effect.",
     "configured": "Configured providers",
     "empty": "No providers yet. Add one to give the host something to run.",
     "modelCount": "{{count}} models",
     "unsaved": "This form has changes that would be lost.",
-    "discard": "Discard them"
+    "discard": "Discard them",
+    "defaultThinking": "Default thinking level",
+    "followProvider": "Follow the provider",
+    "modelSettings": "Model settings",
+    "newModel": "New model",
+    "contextUnknown": "Context unknown",
+    "reasoning": "Reasoning",
+    "removeModel": "Remove model {{name}}",
+    "noModels": "No models yet.",
+    "headersHint": "A header with no name is not written to config.json."
   }
 }
