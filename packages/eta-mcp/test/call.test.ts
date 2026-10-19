@@ -615,10 +615,12 @@ describe("elicitation", () => {
     const { call } = await one(
       { tools: [tool("ask", { behavior: "elicit", elicit: form })] },
       {
-        extra: { requestTimeoutMs: 300 },
+        // The answer takes longer than the timeout; the margin is for a loaded test machine,
+        // where the round trip around the answer alone can take a few hundred milliseconds.
+        extra: { requestTimeoutMs: 1000 },
         hooks: {
           elicit: async () => {
-            await new Promise((resolve) => setTimeout(resolve, 600));
+            await new Promise((resolve) => setTimeout(resolve, 1500));
             return { action: "accept", content: { pick: "a" } };
           },
         },

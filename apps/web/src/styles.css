@@ -681,18 +681,21 @@
     margin: 0 auto;
     display: flex;
     flex-direction: column;
-    border: 1px solid var(--border);
+    /* The frame is the loudest line in the composer: everything inside it is quieter, so the box
+       reads as one thing and the transcript's hairlines do not compete with it. */
+    border: 1px solid var(--border-strong);
+    background: var(--background);
+    transition: border-color 120ms;
+  }
+  .input-outer:focus-within,
+  .input-outer:has(.composer-card.drag-over) {
+    border-color: var(--primary);
   }
   .composer-card {
     display: flex;
     flex-direction: column;
-    background: var(--background);
   }
-  .composer-card:focus-within {
-    border-color: var(--primary);
-  }
-  .composer-card.drag-over {
-    border-color: var(--primary);
+  .composer-card.drag-over .composer-editor {
     background: var(--overlay);
   }
   .composer-editor {
@@ -719,6 +722,8 @@
     gap: 8px;
     padding: 4px 8px;
     border-top: 1px solid var(--border);
+    /* A step down from the text: the controls sit on the window's field, the draft on paper. */
+    background: var(--surface);
   }
   .composer-toolbar-hints {
     font-family: var(--font-mono);
@@ -735,17 +740,21 @@
     height: 28px;
     min-height: 28px;
     padding: 0 8px;
-    border: 1px solid var(--border-strong);
+    /* Secondary: no frame until hovered, so send is the one solid thing in the row. */
+    border: 1px solid transparent;
     font-family: var(--font-mono);
     font-size: 11px;
     line-height: 1;
     white-space: nowrap;
-    color: var(--foreground);
+    color: var(--muted-foreground);
     background: transparent;
     cursor: pointer;
   }
-  .composer-control:hover {
+  .composer-control:hover,
+  .composer-control[aria-expanded="true"] {
+    border-color: var(--border-strong);
     background: var(--overlay-hover);
+    color: var(--foreground);
   }
   .composer-control:disabled {
     opacity: 0.5;
@@ -780,13 +789,14 @@
     flex-shrink: 1;
     text-transform: uppercase;
   }
-  .composer-submit-control {
+  .composer-submit-control,
+  .composer-submit-control:hover {
+    border-color: var(--primary);
     background: var(--primary);
     color: var(--primary-foreground);
   }
   .composer-submit-control:hover {
-    background: transparent;
-    color: var(--foreground);
+    opacity: 0.85;
   }
   .composer-controls {
     flex: 1;
