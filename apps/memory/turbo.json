@@ -8,7 +8,10 @@
       "outputs": ["out/models/**"]
     },
     "lint": {
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/ruff.toml"]
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "$TURBO_ROOT$/ruff.toml"]
+    },
+    "test": {
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"]
     }
   }
 }

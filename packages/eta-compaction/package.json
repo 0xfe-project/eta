@@ -13,7 +13,7 @@
     "test": "vitest --run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "smoke": "bun run --cwd ../eta-harness smoke",
-    "lint": "eslint ."
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
   },
   "dependencies": {
     "@eta/core": "*",

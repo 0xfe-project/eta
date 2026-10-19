@@ -13,7 +13,7 @@
     "test": "vitest --run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "smoke": "vitest --run test/ssh-target.e2e.test.ts",
-    "lint": "eslint ."
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
   },
   "dependencies": {
     "@eta/execution": "*"

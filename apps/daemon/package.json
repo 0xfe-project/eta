@@ -10,7 +10,7 @@
   "scripts": {
     "build": "bun build --compile --target=bun src/main.ts --outfile out/eta-daemon",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint .",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
     "test": "bun --bun vitest --run --passWithNoTests"
   },
   "dependencies": {

@@ -5,23 +5,59 @@
   // a commit's pre-commit run uploads, so CI mostly replays. Each machine
   // authenticates itself (`turbo login`; CI exchanges its OIDC token).
   "remoteCache": { "teamId": "team_m0cGPvm66wsuOjDpnCrXUDPz" },
+  "cacheMaxAge": "7d",
+  "cacheMaxSize": "2GB",
+  // --affected stays package-level (affectedUsingTaskInputs off): the libraries
+  // are read from source, so a change must reach every dependent package.
+  "futureFlags": {
+    "filterUsingTasks": true,
+    "strictTaskEntrypointSelection": true,
+    "githubActionsRemoteBaseRefFallback": true
+  },
   "tasks": {
     "build": {
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
       "outputs": ["dist/**", "out/**"]
     },
     "typecheck": {
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
       "dependsOn": ["build"],
       "outputs": []
     },
     "lint": {
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
       "outputs": []
     },
     "test": {
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
       "outputs": []
     },
-    // Knip reads the whole repository, so it always runs.
+    // Root-level ESLint for files outside the workspaces (each workspace lints
+    // itself).
+    "//#lint:repo": {
+      "inputs": [
+        "*.{js,mjs,ts,json,jsonc}",
+        "deploy/**/*.{js,mjs,ts,json,jsonc}"
+      ],
+      "outputs": []
+    },
+    // Knip checks the TypeScript/JavaScript workspaces and root configs.
     "//#knip": {
-      "cache": false
+      "inputs": [
+        "package.json",
+        "bun.lock",
+        "knip.config.ts",
+        "eslint.config.js",
+        "apps/*/{package,tsconfig}.json",
+        "apps/*/{src,test,tests,.storybook}/**/*.{ts,tsx,js,mjs,css}",
+        "apps/*/*.{ts,js,mjs}",
+        "packages/*/package.json",
+        "packages/*/{src,test,tests}/**/*.{ts,tsx,js,mjs}",
+        "packages/*/*.{ts,js,mjs}",
+        "apps/*/public/**/*.js",
+        "!**/*.gen.ts"
+      ],
+      "outputs": []
     },
     "dev": {
       "cache": false,

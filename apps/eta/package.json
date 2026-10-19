@@ -8,7 +8,7 @@
     "dev": "bun --watch src/main.ts --data-dir ../../var/eta-dev --allow-origin http://127.0.0.1:${ETA_WEB_PORT:-3000}",
     "start": "bun src/main.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint .",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
     "test": "bun --bun vitest --run --passWithNoTests"
   },
   "dependencies": {
