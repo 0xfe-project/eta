@@ -12,6 +12,7 @@
 import type {
   Api,
   AssistantMessage,
+  AssistantMessageEvent,
   Context,
   Message,
   Model,
@@ -25,6 +26,7 @@ import type { AgentMessage, ThinkingLevel } from "../types/messages";
 import type { CompactionDriver } from "./compaction";
 import type { ConfigService } from "./config";
 import type { Gate, GateControl } from "./effect-gate";
+import type { GenerationInterrupt } from "./generation";
 import type { GoalService } from "./goal";
 import type { QueuedItem } from "./inbox";
 import type { Kernel } from "./kernel";
@@ -117,7 +119,35 @@ export interface RunnerOptions {
    * Read once per turn, so a request that is not sent does not consume anything.
    */
   transientMessages?: () => AgentMessage | readonly AgentMessage[] | undefined;
+  /**
+   * Look at the generation as it streams and, by answering with an interrupt,
+   * stop it: the partial output is thrown away (never in the transcript or the
+   * journal), the interrupt's messages are added to the transcript, and the
+   * turn generates again — same turn, same run. Called once per stream frame
+   * with the message as it stands; a plugin that needs cross-frame state keeps
+   * it itself and resets it on `generation:interrupted` and `message:start`.
+   */
+  guardGeneration?: (frame: GenerationFrame) => GenerationVerdict;
+  /** Interrupts honoured per turn (default `DEFAULT_MAX_INTERRUPTS`); the guard is not asked past it. */
+  maxInterrupts?: number;
 }
+
+/** One stream frame, as the generation guard sees it. */
+export interface GenerationFrame {
+  runId: string;
+  turnId: string;
+  /** The message as it stands, a snapshot. */
+  message: AssistantMessage;
+  event: AssistantMessageEvent;
+  /** Interruptions of this turn's generation so far. */
+  interrupts: number;
+}
+
+export type GenerationVerdict =
+  | GenerationInterrupt
+  | undefined
+  | void
+  | Promise<GenerationInterrupt | undefined | void>;
 
 /** What a request would carry right now (eta-agent's LaneRequestState). */
 export interface RequestState {
@@ -165,6 +195,9 @@ export class Runner {
   private inFlight: Promise<RunResult> | undefined;
   private gate: { gate: Gate; control: GateControl } | undefined;
   private readonly pendingEffects = new Set<Promise<unknown>>();
+  /** Who watches the stream; the first guard to answer with an interrupt decides. */
+  private readonly guards: ((frame: GenerationFrame) => GenerationVerdict)[] =
+    [];
 
   constructor(kernel: Kernel, options: RunnerOptions) {
     this.kernel = kernel;
@@ -177,7 +210,24 @@ export class Runner {
       this.transcript.push(...options.initialTranscript);
     this.tools = kernel.tools;
     this.goal = kernel.goal;
+    if (options.guardGeneration !== undefined)
+      this.guards.push(options.guardGeneration);
     this.attachCompaction(options.compaction);
+  }
+
+  /**
+   * Add a stream guard after construction (a plugin that holds the session
+   * only once it is assembled). Guards are asked in the order they were added,
+   * and the first interrupt wins. Returns the function that removes it.
+   */
+  addGenerationGuard(
+    guard: (frame: GenerationFrame) => GenerationVerdict,
+  ): () => void {
+    this.guards.push(guard);
+    return () => {
+      const index = this.guards.indexOf(guard);
+      if (index >= 0) this.guards.splice(index, 1);
+    };
   }
 
   /**
@@ -643,6 +693,7 @@ export class Runner {
     });
 
     const config = this.config.get();
+    let interrupts = 0;
     // Everything that can go wrong mid-generation is generateWithRetry's
     // business; the loop below only sees the message that settled it.
     const assistant = await generateWithRetry({
@@ -658,6 +709,9 @@ export class Runner {
       contextFor: () =>
         this.assembleContext(toolContext, systemPrompt, transient),
       emit: this.emit,
+      ...(this.options.maxInterrupts === undefined
+        ? {}
+        : { maxInterrupts: this.options.maxInterrupts }),
       observer: {
         update: (message, event) => {
           // Every frame is a snapshot: nothing downstream may hold a live
@@ -668,7 +722,30 @@ export class Runner {
             message: structuredClone(message),
             event: structuredClone(event),
           });
+          return this.askGuards({
+            runId,
+            turnId,
+            message: structuredClone(message),
+            event: structuredClone(event),
+            interrupts,
+          });
         },
+      },
+      onInterrupt: (interrupt, partial, count) => {
+        interrupts = count;
+        this.emit("generation:interrupted", {
+          runId,
+          turnId,
+          reason: interrupt.reason,
+          ...(interrupt.source === undefined
+            ? {}
+            : { source: interrupt.source }),
+          count,
+          discardedChars: discardedChars(partial),
+          usage: structuredClone(partial.usage),
+          injected: interrupt.inject?.length ?? 0,
+        });
+        for (const message of interrupt.inject ?? []) this.push(message);
       },
       recoverOverflow: () =>
         this.compaction?.overflow() ?? Promise.resolve(false),
@@ -692,6 +769,17 @@ export class Runner {
       usage: assistant.usage,
     });
     return assistant;
+  }
+
+  /** Ask each guard in turn; the first to interrupt decides. */
+  private async askGuards(
+    frame: GenerationFrame,
+  ): Promise<GenerationInterrupt | undefined> {
+    for (const guard of [...this.guards]) {
+      const verdict = await guard(frame);
+      if (verdict !== undefined) return verdict;
+    }
+    return undefined;
   }
 
   /**
@@ -888,6 +976,17 @@ export class Runner {
       total: system + user + assistant + toolDefs,
     };
   }
+}
+
+/** How much output a partial assistant message holds: text, thinking and tool arguments. */
+function discardedChars(message: AssistantMessage): number {
+  let total = 0;
+  for (const part of message.content) {
+    if (part.type === "text") total += part.text.length;
+    else if (part.type === "thinking") total += part.thinking.length;
+    else total += JSON.stringify(part.arguments ?? {}).length;
+  }
+  return total;
 }
 
 /** True when an assistant message stopped cleanly with nothing in it. */

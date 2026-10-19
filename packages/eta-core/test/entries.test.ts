@@ -114,6 +114,11 @@ describe("entry union", () => {
         type: "run_failed",
         payload: { runId: "r", error: "model_unavailable: x/y" },
       },
+      {
+        ...base(),
+        type: "interrupt",
+        payload: { runId: "r", turnId: "t", reason: "rule", discardedChars: 3 },
+      },
     ];
     const kinds: unknown[] = entries.map((e) => {
       switch (e.type) {
@@ -135,6 +140,8 @@ describe("entry union", () => {
           return e.payload.note;
         case "run_failed":
           return e.payload.error;
+        case "interrupt":
+          return e.payload.reason;
       }
       return undefined;
     });
@@ -150,6 +157,7 @@ describe("entry union", () => {
       | "answer"
       | "btw"
       | "run_failed"
+      | "interrupt"
     >();
   });
 

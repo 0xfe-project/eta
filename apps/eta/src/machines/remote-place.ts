@@ -37,6 +37,8 @@ export interface RemotePlaceDeps {
   defaults: () => Promise<Settings>;
   /** The product's per-session hooks; not there until the product is made. */
   hooks: () => Required<SessionHooks> | undefined;
+  /** The host's akhook layers, as text: the rules a remote session lives under besides its own. */
+  akhook: () => { name: string; text: string }[];
   /** The primary's home: where the user's own persona cards are. */
   home: string;
   /** A `sessions.*` action on a session of a daemon, the way the browser's are sent. */
@@ -142,6 +144,7 @@ export class RemotePlace implements SessionPlace {
             }),
           }),
       tools: this.#tools(conversation.id, agent.id, input.cwd),
+      akhook: this.#deps.akhook(),
     });
     if (session !== input.existing) input.created(session);
     mirrors.register(session, machine.id);

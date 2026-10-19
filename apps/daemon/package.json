@@ -20,6 +20,7 @@
     "@eta/core": "*",
     "@eta/execution-node": "*",
     "@eta/harness": "*",
+    "@eta/plugin-akhook": "*",
     "@eta/server": "*",
     "@eta/ssh": "*",
     "@modelcontextprotocol/sdk": "1.32.1",

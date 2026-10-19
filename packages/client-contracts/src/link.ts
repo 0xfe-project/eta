@@ -181,6 +181,12 @@ export interface OpenSessionArgs {
   /** The model's definition, so the daemon can resolve it without a catalog. */
   modelSpec?: ModelSpec;
   tools: ToolSpec[];
+  /**
+   * The primary's akhook layers, as text: rules the daemon applies after its own user and project
+   * files, which cannot disable or replace them. Sent with every open, so a change reaches a
+   * session that is already there at its next wake.
+   */
+  akhook?: { name: string; text: string }[];
 }
 
 export interface RunOutcome {

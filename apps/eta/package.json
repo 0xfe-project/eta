@@ -20,6 +20,7 @@
     "@eta/execution-node": "*",
     "@eta/harness": "*",
     "@eta/llm-gateway": "*",
+    "@eta/plugin-akhook": "*",
     "@eta/server": "*",
     "@eta/ssh": "*",
     "croner": "10.0.1",

@@ -1,11 +1,4 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import type {
-  AssembledServer,
-  RemoteSessions,
-  SessionMeta,
-  WebSocketEndpoint,
-  WireService,
-} from "@eta/server";
 /**
  * The product: the stores, the engine, and the plugins that put them on the wire.
  *
@@ -14,6 +7,14 @@ import type {
  * then. Between the two, the replies a dead process left in flight are failed, so nothing a client
  * is ever shown says `working` without something working.
  */
+import type { ConfigInput } from "@eta/plugin-akhook";
+import type {
+  AssembledServer,
+  RemoteSessions,
+  SessionMeta,
+  WebSocketEndpoint,
+  WireService,
+} from "@eta/server";
 import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/site";
 import type { SessionHooks } from "./session-hooks";
@@ -21,6 +22,7 @@ import { homedir, hostname, platform } from "node:os";
 import { join } from "node:path";
 import { agentsPlugin } from "./agents/plugin";
 import { AgentStore } from "./agents/store";
+import { AkhookHost } from "./akhook";
 import { loadKey } from "./artifacts/capability";
 import { artifactsPlugin } from "./artifacts/plugin";
 import { createArtifactRoutes } from "./artifacts/routes";
@@ -28,7 +30,7 @@ import { ArtifactService } from "./artifacts/service";
 import { DEFAULT_LIMITS } from "./artifacts/site";
 import { ArtifactStore } from "./artifacts/store";
 import { artifactSessionTools } from "./artifacts/tools";
-import { Engine, RESTART_TEXT } from "./conversations/engine";
+import { combineRunHooks, Engine, RESTART_TEXT } from "./conversations/engine";
 import { conversationsPlugin } from "./conversations/plugin";
 import { ConversationStore } from "./conversations/store";
 import { ConversationTargets } from "./conversations/targets";
@@ -62,6 +64,13 @@ import { taskSessionTools } from "./tasks/tools";
 import { usagePlugin } from "./usage/plugin";
 import { entryOf } from "./usage/recorder";
 import { UsageStore } from "./usage/store";
+
+export interface AkhookOptions {
+  /** The user-level configuration file; defaults to akhook's own path. */
+  userConfigPath?: string | undefined;
+  /** Host layers that neither the user's nor a project's file can disable or replace. */
+  additional?: readonly ConfigInput[] | undefined;
+}
 
 /** What a test sets to move time by hand; a real host leaves all of it alone. */
 export interface RoutinesOptions {
@@ -105,6 +114,8 @@ export function createProduct(options: {
   dataDir: string;
   /** The memory sidecar's address. Without one there is no memory: no plugin, no tools, no calls. */
   memoryUrl?: string | undefined;
+  /** akhook: the user-level file, and host layers beyond the environment's and the data directory's. */
+  akhook?: AkhookOptions | undefined;
   warn: (message: string) => void;
   /** The interface the host listens on, for the address a new machine is told to dial. */
   hostname?: string | undefined;
@@ -197,6 +208,7 @@ export function createProduct(options: {
   const later: {
     hooks?: Required<SessionHooks>;
     inbox?: Inbox;
+    akhook?: AkhookHost;
   } = {};
   const hub = new MachineHub({
     machines,
@@ -228,6 +240,7 @@ export function createProduct(options: {
     models: () => running?.models,
     defaults: async () => (await running?.defaults()) ?? {},
     hooks: () => later.hooks,
+    akhook: () => later.akhook?.layerTexts() ?? [],
     home: options.home ?? homedir(),
     forward: (action, args) => router.forward(action, args),
     warn,
@@ -265,6 +278,15 @@ export function createProduct(options: {
     changed: () => wire?.pushNow("inbox"),
     warn,
   });
+  // The rules of the user's akhook files and the host's own, and the approval list: one set of
+  // tool-call checks per session, one question when several of them want to ask.
+  const akhook = new AkhookHost({
+    dataDir,
+    userConfigPath: options.akhook?.userConfigPath,
+    additional: options.akhook?.additional,
+    approvals: () => inbox.approvals(),
+    warn,
+  });
   const engine = new Engine({
     db,
     agents,
@@ -275,7 +297,10 @@ export function createProduct(options: {
     changed,
     warn,
     remote: remotePlace,
-    ...(memory === undefined ? {} : { runHooks: memoryRunHooks(memory) }),
+    runHooks: combineRunHooks([
+      akhook.runHooks,
+      ...(memory === undefined ? [] : [memoryRunHooks(memory)]),
+    ]),
   });
 
   const limits = { ...DEFAULT_LIMITS, ...options.artifactLimits };
@@ -299,7 +324,11 @@ export function createProduct(options: {
     { sessionTools: runner.sessionTools },
     { sessionTools: taskSessionTools({ board, agents }) },
     { sessionTools: artifactSessionTools({ artifacts, board, limits }) },
-    { toolMiddleware: inbox.toolMiddleware, askObserve: inbox.askObserve },
+    {
+      toolMiddleware: akhook.toolMiddleware,
+      sessionAttach: akhook.sessionAttach,
+      askObserve: inbox.askObserve,
+    },
     ...(memory === undefined
       ? []
       : [{ sessionTools: memoryTools.bind(undefined, memory) }]),
@@ -307,6 +336,7 @@ export function createProduct(options: {
 
   later.hooks = sessionHooks;
   later.inbox = inbox;
+  later.akhook = akhook;
 
   return {
     engine,

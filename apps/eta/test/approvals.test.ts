@@ -12,8 +12,8 @@ import type { World } from "./support/world";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { INBOX_ACTIONS } from "@eta/client-contracts";
+import { akhookMiddleware } from "@eta/plugin-akhook";
 import { describe, expect, it } from "vitest";
-import { approvalMiddleware } from "../src/inbox/approval";
 import { until } from "./support/client";
 import { tempDir } from "./support/host";
 import { call, say, scriptedModels } from "./support/models";
@@ -228,8 +228,8 @@ describe("the approval middleware", () => {
   const info = { turn: 0, toolCallId: "c1" };
 
   it("lets an unlisted tool through untouched", async () => {
-    const middleware = approvalMiddleware({
-      tools: () => ["bash"],
+    const middleware = akhookMiddleware({
+      approvals: (name) => name === "bash",
       ask: undefined,
     });
     const args = { path: "x" };
@@ -240,8 +240,8 @@ describe("the approval middleware", () => {
   });
 
   it("refuses a listed tool when the session has no way to ask", async () => {
-    const middleware = approvalMiddleware({
-      tools: () => ["bash"],
+    const middleware = akhookMiddleware({
+      approvals: (name) => name === "bash",
       ask: undefined,
     });
     const verdict = await middleware.before!("bash", {}, info);

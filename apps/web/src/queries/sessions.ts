@@ -99,7 +99,11 @@ function useStreamedMessage(
     const off = getWire().onEvent(sessionTarget(sessionId), (event) => {
       if (event.name === "message:update")
         latest = (event.data as { message?: AgentMessage }).message;
-      else if (event.name === "turn:run-start" || event.name === "turn:run-end")
+      else if (
+        event.name === "turn:run-start" ||
+        event.name === "turn:run-end" ||
+        event.name === "generation:interrupted"
+      )
         latest = undefined;
       else return;
       // A token is an event; the page draws a few times a second, not per token.

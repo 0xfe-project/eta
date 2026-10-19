@@ -25,7 +25,7 @@ import type {
   SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 import type { Emit } from "../types/events";
-import type { ThinkingLevel } from "../types/messages";
+import type { AgentMessage, ThinkingLevel } from "../types/messages";
 import type { KernelModels } from "./providers";
 import type { AgentRetryPolicy } from "./retry";
 import {
@@ -33,7 +33,7 @@ import {
   isRecoverableLength,
   isRetryableAssistantError,
 } from "@earendil-works/pi-ai";
-import { consumeAssistantStream } from "./assistant";
+import { consumeInterruptibleStream, STOP_STREAM } from "./assistant";
 import {
   normalizedRetryPolicy,
   retryDelayMs,
@@ -41,10 +41,42 @@ import {
   waitUntil,
 } from "./retry";
 
+/**
+ * A request to stop the generation in flight, throw its partial output away,
+ * add messages to the transcript, and generate again.
+ *
+ * It is the one thing a stream observer can answer a frame with. The discarded
+ * partial never reaches the transcript or the journal; the injected messages do
+ * (they are what the model reads on the next attempt), so the history says why
+ * the attempt that follows is different.
+ */
+export interface GenerationInterrupt {
+  /** Why the generation was stopped; recorded with the interruption. */
+  reason: string;
+  /** Who asked (a rule id, a plugin name); recorded with the interruption. */
+  source?: string;
+  /** Messages the transcript gains before the next attempt. */
+  inject?: readonly AgentMessage[];
+}
+
+/** How many times one turn's generation may be interrupted before frames are no longer asked. */
+export const DEFAULT_MAX_INTERRUPTS = 8;
+
 /** What the caller wants to hear about while a generation runs. */
 export interface GenerationObserver {
-  /** One stream frame: the message as it stands, plus the event that moved it. */
-  update: (message: AssistantMessage, event: AssistantMessageEvent) => void;
+  /**
+   * One stream frame: the message as it stands, plus the event that moved it.
+   * Answering with an interrupt stops the generation; the frame is the last one
+   * of that attempt.
+   */
+  update: (
+    message: AssistantMessage,
+    event: AssistantMessageEvent,
+  ) =>
+    | GenerationInterrupt
+    | undefined
+    | void
+    | Promise<GenerationInterrupt | undefined | void>;
 }
 
 export interface GenerateOptions {
@@ -69,6 +101,18 @@ export interface GenerateOptions {
    * the attempt is worth repeating; false means give up.
    */
   recoverOverflow: () => Promise<boolean>;
+  /**
+   * An observer interrupt took effect: the attempt was stopped and `partial` is
+   * what it had produced. Called before the next attempt assembles its context,
+   * so whatever it adds to the transcript is part of that request.
+   */
+  onInterrupt?: (
+    interrupt: GenerationInterrupt,
+    partial: AssistantMessage,
+    count: number,
+  ) => void;
+  /** Interrupts honoured per call; later ones are ignored. Default `DEFAULT_MAX_INTERRUPTS`. */
+  maxInterrupts?: number;
 }
 
 /**
@@ -83,8 +127,14 @@ export async function generateWithRetry(
 ): Promise<AssistantMessage> {
   const policy = normalizedRetryPolicy(options.retryPolicy);
   let attempt = 1;
+  let interrupts = 0;
+  const maxInterrupts = options.maxInterrupts ?? DEFAULT_MAX_INTERRUPTS;
   for (;;) {
     const context = options.contextFor();
+    // This attempt's own stop: an interrupt aborts the request behind the
+    // stream without touching the run's signal.
+    const attemptStop = new AbortController();
+    const attemptSignal = AbortSignal.any([options.signal, attemptStop.signal]);
     options.emit("prompt:assembled", {
       runId: options.runId,
       systemPromptChars: (context.systemPrompt ?? "").length,
@@ -97,25 +147,42 @@ export async function generateWithRetry(
       context,
       {
         ...options.streamOptions,
-        signal: options.signal,
+        signal: attemptSignal,
         // "off" is the kernel's spelling for "no reasoning field at all".
         ...(options.thinkingLevel === "off"
           ? {}
           : { reasoning: options.thinkingLevel }),
       },
     );
-    const assistant = await consumeAssistantStream(stream, {
+    let interrupt = undefined as GenerationInterrupt | undefined;
+    let partial = undefined as AssistantMessage | undefined;
+    const assistant = await consumeInterruptibleStream(stream, {
       start: () => {
         options.emit("message:start", {
           runId: options.runId,
           turnId: options.turnId,
         });
       },
-      update: (message, event) => {
-        options.observer.update(message, event);
+      update: async (message, event) => {
+        partial = message;
+        const verdict = await options.observer.update(message, event);
+        if (verdict === undefined || interrupts >= maxInterrupts) return;
+        interrupt = verdict;
+        attemptStop.abort();
+        return STOP_STREAM;
       },
       end: () => undefined,
     });
+
+    if (assistant === undefined && interrupt !== undefined && partial) {
+      // The attempt is over and nothing it produced is history. The interrupt
+      // is told first, so what it injects is in the next request's context.
+      interrupts += 1;
+      options.onInterrupt?.(interrupt, partial, interrupts);
+      continue;
+    }
+    if (assistant === undefined)
+      throw new Error("Assistant stream stopped without an interrupt");
 
     if (assistant.stopReason !== "error" && assistant.stopReason !== "length") {
       if (attempt > 1) {
