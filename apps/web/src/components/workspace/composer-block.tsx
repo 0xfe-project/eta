@@ -1,3 +1,4 @@
+import type { AttachmentView } from "@eta/client-contracts";
 import type { DraftPart } from "@/lib/composer";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -9,7 +10,9 @@ import {
   DialogFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { charCount } from "@/lib/composer";
+import { charCount, fileSize } from "@/lib/composer";
+import { cn } from "@/lib/utils";
+import { dropUpload, retryUpload, useOutbox } from "@/queries/outbox";
 // Blocks as the composer and the transcript show them: one bracketed line,
 // like the terminals' own `[Pasted text #1 +42 lines]`, that opens what it
 // stands for.
@@ -105,6 +108,60 @@ function PasteBlock({
   );
 }
 
+function FileBlock({
+  part,
+  remove,
+}: {
+  part: Extract<DraftPart, { type: "file" }>;
+} & BlockActions) {
+  const { t: translateText } = useTranslation(["chat", "common"] as const);
+  const upload = useOutbox((s) => s.uploads[part.id]);
+  const failure = upload?.error;
+  const uploading = upload?.attachment === undefined && failure === undefined;
+  return (
+    <span className={CHIP}>
+      <span
+        className={cn(
+          "min-w-0 truncate",
+          uploading && "motion-safe:animate-upload-pulse",
+        )}
+      >
+        [{part.name} · {fileSize(part.size)}]
+      </span>
+      {uploading ? (
+        <span role="status">{translateText("common:states.uploading")}</span>
+      ) : null}
+      {failure ? (
+        <span role="alert" className="min-w-0 truncate text-state-warning">
+          {failure}
+        </span>
+      ) : null}
+      {failure ? (
+        <button
+          type="button"
+          className={ACTION}
+          onClick={() => retryUpload(part.id)}
+        >
+          {translateText("common:actions.retry")}
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className={ACTION}
+        aria-label={translateText("common:actions.removeItem", {
+          name: part.name,
+        })}
+        onClick={() => {
+          dropUpload(part.id);
+          remove();
+        }}
+      >
+        ×
+      </button>
+    </span>
+  );
+}
+
 /** A block in the composer. */
 export function ComposerBlock({
   part,
@@ -112,5 +169,22 @@ export function ComposerBlock({
 }: {
   part: DraftPart;
 } & BlockActions) {
-  return part.type === "paste" ? <PasteBlock part={part} {...actions} /> : null;
+  if (part.type === "paste") return <PasteBlock part={part} {...actions} />;
+  if (part.type === "file") return <FileBlock part={part} {...actions} />;
+  return null;
+}
+
+/** A sent (or sending) message's attachment: its name and size, on one line. */
+export function AttachmentChip({
+  attachment,
+}: {
+  attachment: Pick<AttachmentView, "name" | "size">;
+}) {
+  return (
+    <span className={CHIP}>
+      <span className="min-w-0 truncate">
+        [{attachment.name} · {fileSize(attachment.size)}]
+      </span>
+    </span>
+  );
 }

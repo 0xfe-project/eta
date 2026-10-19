@@ -214,6 +214,7 @@
     "pastedTextSummary": "粘贴文本 · {{characterCount}} 字符",
     "removePastedText": "移除粘贴文本",
     "expandText": "展开为文本",
+    "pick": "添加附件",
     "pastedFile": "粘贴的文件",
     "pastedFileName": "粘贴文本.txt",
     "errors": {

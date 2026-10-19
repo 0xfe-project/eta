@@ -214,6 +214,7 @@
     "pastedTextSummary": "Pasted text · {{characterCount}} characters",
     "removePastedText": "Remove pasted text",
     "expandText": "Expand as text",
+    "pick": "Attach files",
     "pastedFile": "Pasted file",
     "pastedFileName": "Pasted text.txt",
     "errors": {

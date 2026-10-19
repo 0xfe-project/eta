@@ -394,6 +394,29 @@ describe("a reply that is writing", () => {
     expect(container.textContent).toContain("发布好了");
   });
 
+  it("shows the files a message came with under its words", async () => {
+    const user = row({
+      text: "看这个",
+      data: {
+        attachments: [
+          {
+            id: "f1",
+            name: "报告.pdf",
+            contentType: "application/pdf",
+            size: 2048,
+          },
+          { id: "f2", name: "图.png", contentType: "image/png", size: 10 },
+        ],
+      },
+    });
+    history = [user];
+    const { container } = await start();
+    await flush();
+    expect(container.textContent).toContain("看这个");
+    expect(container.textContent).toContain("[报告.pdf · 2.0 KB]");
+    expect(container.textContent).toContain("[图.png · 10 B]");
+  });
+
   it("asks its question in a card and answers on the inbox", async () => {
     const user = row({ text: "删掉吗" });
     const reply = row({

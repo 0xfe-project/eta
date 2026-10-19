@@ -308,9 +308,9 @@ export function Workspace({
               }
               draft={draft}
               onDraftChange={setDraft}
-              onSend={(text, mode) => {
+              onSend={(text, mode, files) => {
                 if (!group) return openEditor();
-                outbox.send(group.id, text, mode, targets(text));
+                outbox.send(group.id, text, mode, targets(text), files);
                 setDraft([]);
               }}
               onCompact={() => {
