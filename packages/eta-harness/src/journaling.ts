@@ -21,6 +21,7 @@
  * - `compaction:end`   → the compaction entry (the service's payload carries it).
  * - `turn:run-failed`  → one `run_failed` entry, staged ahead of the run
  *                        boundary's flush, so a failed run ends durable.
+ * - `generation:interrupted` → one `interrupt` entry (the discarded output is not kept).
  * - `turn:run-end`     → whatever is still staged.
  *
  * The entry ids live here now, which is why `message:end` carries no entryId:
@@ -44,6 +45,7 @@ import type {
   BtwEntry,
   CommitOutcome,
   Entry,
+  InterruptEntry,
   MessageEntry,
   NewEntry,
   RunFailedEntry,
@@ -106,6 +108,13 @@ let runFailedCounter = 0;
 function runFailedId(): string {
   runFailedCounter += 1;
   return `run-failed-${runFailedCounter.toString(36)}-${Date.now().toString(36)}`;
+}
+
+let interruptCounter = 0;
+
+function interruptId(): string {
+  interruptCounter += 1;
+  return `interrupt-${interruptCounter.toString(36)}-${Date.now().toString(36)}`;
 }
 
 let compactionCounter = 0;
@@ -172,6 +181,9 @@ export class JournalingService extends Service {
       on("turn:run-failed", (event) => {
         // Staged only: the runner's flush, which follows, is the commit that lands it.
         this.recordRunFailure(event.runId, event.error);
+      }),
+      on("generation:interrupted", (event) => {
+        this.recordInterrupt(event);
       }),
       on("turn:run-end", () => {
         void this.enqueueCommit();
@@ -437,6 +449,36 @@ export class JournalingService extends Service {
       type: "run_failed",
       payload: { runId, error },
     } as NewEntry<RunFailedEntry>);
+    this.emit("entry:added", { entry });
+  }
+
+  /**
+   * The system record of a stopped-and-regenerated generation. The discarded
+   * output is not in it: only who stopped the attempt, why, and how much it had
+   * produced. The reminder the interrupt injected is its own message entry.
+   */
+  private recordInterrupt(event: {
+    runId: string;
+    turnId: string;
+    reason: string;
+    source?: string;
+    discardedChars: number;
+  }): void {
+    const log = this.log;
+    if (log === undefined) return;
+    this.entryVersion += 1;
+    const entry = log.record<InterruptEntry>({
+      id: interruptId(),
+      parentId: null,
+      type: "interrupt",
+      payload: {
+        runId: event.runId,
+        turnId: event.turnId,
+        reason: event.reason,
+        ...(event.source === undefined ? {} : { source: event.source }),
+        discardedChars: event.discardedChars,
+      },
+    } as NewEntry<InterruptEntry>);
     this.emit("entry:added", { entry });
   }
 

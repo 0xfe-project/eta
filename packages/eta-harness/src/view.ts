@@ -198,6 +198,10 @@ export function streamingBox(ctx: Context): {
   kernelOn(ctx)("message:end", () => {
     current = undefined;
   });
+  // A thrown-away generation is not a message: nothing of it may stay on screen.
+  kernelOn(ctx)("generation:interrupted", () => {
+    current = undefined;
+  });
   return { current: () => current };
 }
 

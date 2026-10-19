@@ -49,6 +49,32 @@ export async function consumeAssistantStream(
   stream: AssistantMessageEventStream,
   observer: AssistantStreamObserver,
 ): Promise<SettledAssistantMessage> {
+  // The strict observer cannot return STOP_STREAM, so the stream always settles.
+  return (await consumeInterruptibleStream(stream, observer))!;
+}
+
+/** Returned by an interruptible observer's `update` to stop reading the stream. */
+export const STOP_STREAM = Symbol("stop-stream");
+
+/** An observer that may cut the stream short by returning `STOP_STREAM` from `update`. */
+export interface InterruptibleStreamObserver
+  extends Omit<AssistantStreamObserver, "update"> {
+  update: (
+    message: AssistantMessage,
+    event: AssistantMessageEvent,
+  ) => void | typeof STOP_STREAM | Promise<void | typeof STOP_STREAM>;
+}
+
+/**
+ * Like `consumeAssistantStream`, but the observer can stop the read: the frame
+ * that returned `STOP_STREAM` is the last one consumed, `end` is never called,
+ * and the result is `undefined`. The stream is abandoned, not awaited — whoever
+ * stops it owns aborting the request behind it.
+ */
+export async function consumeInterruptibleStream(
+  stream: AssistantMessageEventStream,
+  observer: InterruptibleStreamObserver,
+): Promise<SettledAssistantMessage | undefined> {
   let started = false;
   for await (const event of stream) {
     if (event.type === "start") {
@@ -67,7 +93,8 @@ export async function consumeAssistantStream(
         );
       // The partial the provider hands over is the whole message so far; the
       // observer copies it, so nothing downstream can hold a live reference.
-      await observer.update({ ...event.partial }, event);
+      const verdict = await observer.update({ ...event.partial }, event);
+      if (verdict === STOP_STREAM) return undefined;
       continue;
     }
     if (!started)

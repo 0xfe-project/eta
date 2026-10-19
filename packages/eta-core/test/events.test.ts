@@ -18,6 +18,7 @@ describe("event vocabulary", () => {
 			  "compaction:end",
 			  "compaction:start",
 			  "entry:added",
+			  "generation:interrupted",
 			  "goal:changed",
 			  "goal:cleared",
 			  "inject:received",

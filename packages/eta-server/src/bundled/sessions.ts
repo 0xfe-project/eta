@@ -111,6 +111,7 @@ const FORWARDED_EVENTS = [
   "message:start",
   "message:update",
   "message:end",
+  "generation:interrupted",
   "entry:added",
   "tool:start",
   "tool:update",
