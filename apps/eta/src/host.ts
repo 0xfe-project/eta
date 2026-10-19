@@ -12,7 +12,12 @@ import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/site";
 import type { LlmOptions, LlmRuntime } from "./llm/runtime";
 import type { McpTuning } from "./mcp/service";
-import type { AkhookOptions, Product, RoutinesOptions } from "./product";
+import type {
+  AkhookOptions,
+  Product,
+  RoutinesOptions,
+  TasksOptions,
+} from "./product";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createLocalEnvironment } from "@eta/execution-node";
@@ -79,6 +84,8 @@ export interface HostOptions {
   akhook?: AkhookOptions;
   /** The routines' clock and limits, for a caller that moves time by hand (a test). */
   routines?: RoutinesOptions;
+  /** Whether tasks run; a test that is about the board and not the runs turns them off. */
+  tasks?: TasksOptions;
   warn?: (message: string) => void;
 }
 
@@ -125,6 +132,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       dataDir: options.dataDir,
       warn,
       ...(options.routines === undefined ? {} : { routines: options.routines }),
+      ...(options.tasks === undefined ? {} : { tasks: options.tasks }),
       artifactLimits: options.artifactLimits,
       memoryUrl: options.memoryUrl,
       gateway: () => llm,

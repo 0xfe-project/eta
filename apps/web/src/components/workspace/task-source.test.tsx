@@ -31,9 +31,27 @@ describe("任务详情的来源", () => {
       const labels = [...container.querySelectorAll("dt")].map(
         (dt) => dt.textContent,
       );
-      expect(labels).toEqual(["状态", "指派给"]);
+      // A note the user made cannot run: no executor, no workspace.
+      expect(labels).toEqual(["状态"]);
       expect(container.querySelector('[aria-label="关联群"]')).toBeNull();
       expect(container.textContent).not.toContain("任务讨论");
     },
   );
+
+  it("names the executor, the workspace and the run of an agent's task", async () => {
+    productHost();
+    const task = {
+      ...taskDetail({
+        id: "t2",
+        createdBy: { kind: "agent", agentId: "a1" },
+      }),
+      activity: [],
+    };
+    const { container } = await mount(<TaskProperties task={task} />);
+    await flush();
+    const labels = [...container.querySelectorAll("dt")].map(
+      (dt) => dt.textContent,
+    );
+    expect(labels).toEqual(["状态", "执行者", "工作区", "运行"]);
+  });
 });

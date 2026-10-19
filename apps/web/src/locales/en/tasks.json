@@ -1,8 +1,14 @@
 {
   "assignee": {
-    "unassigned": "Unassigned",
-    "me": "Me",
-    "label": "Assignee"
+    "me": "Me"
+  },
+  "executor": {
+    "label": "Executor"
+  },
+  "workspace": {
+    "label": "Workspace",
+    "worktree": "Own git worktree",
+    "local": "Project directory"
   },
   "status": {
     "inProgress": "In progress",
@@ -14,17 +20,30 @@
     "done": "Completed",
     "cancelled": "Cancelled"
   },
+  "runStatus": {
+    "queued": "Queued",
+    "running": "Running",
+    "completed": "Completed",
+    "failed": "Run failed"
+  },
+  "queueReason": {
+    "taskBusy": "Waiting for this task's previous run to end",
+    "machineFull": "This machine is running as many as it may; waiting for a slot",
+    "machineOffline": "This machine is offline; it starts when it connects"
+  },
+  "runs": {
+    "label": "Run",
+    "never": "Never run",
+    "run": "Run",
+    "rerun": "Run again"
+  },
   "scope": {
-    "mine": "Mine",
-    "label": "Assignee scope",
     "group": "{{name}}",
     "all": "All groups",
     "emptyGroup": "No tasks in this group yet"
   },
   "actions": {
-    "createWithStatusLabel": "New task: {{status}}",
-    "create": "New task",
-    "viewAll": "View all tasks",
+    "createAndStart": "Confirm and start",
     "changeTitle": "Change title",
     "editDescription": "Edit description",
     "addDescription": "Add description"
@@ -39,9 +58,7 @@
     "title": "Title",
     "titlePlaceholder": "e.g. Fix the login page layout in Safari",
     "description": "Description",
-    "descriptionPlaceholder": "Goal, background, completion criteria…",
-    "optionalGroup": "Related group (optional)",
-    "noGroup": "None"
+    "descriptionPlaceholder": "Goal, background, completion criteria…"
   },
   "layout": {
     "label": "Layout",
@@ -50,8 +67,7 @@
   },
   "empty": {
     "title": "No tasks yet",
-    "description": "Give an agent work to do. It will record each step in the timeline.",
-    "noUserTasks": "No tasks assigned to you",
+    "description": "An agent proposes a task in a conversation; once you confirm it, the agent gets to work and records each step in the timeline.",
     "deletedTitle": "This task no longer exists"
   },
   "activity": {
@@ -59,26 +75,37 @@
     "createdByMe": "Created by me",
     "created": "Created the task",
     "statusChanged": "Changed status from “{{from}}” to “{{to}}”",
-    "assigned": "Assigned to {{assignee}}",
     "titleChanged": "Changed title to “{{title}}”",
     "descriptionChanged": "Updated the description",
     "groupLinked": "Linked a group",
     "groupUnlinked": "Unlinked the group",
     "artifactPublishedPrefix": "Published Artifact ",
+    "started": "Started work",
+    "turnCompleted": "Completed this turn",
+    "noReplyReminder": "This turn ended without a report; one reminder was sent",
+    "turnFailed": "This turn failed{{reason}}",
+    "turnStopped": "This turn stopped{{reason}}",
     "changeCount": "{{count}} changes",
     "changeCount_one": "{{count}} change",
     "changeCount_other": "{{count}} changes"
   },
+  "log": {
+    "loading": "Loading records…",
+    "empty": "No records yet.",
+    "title": "Execution log",
+    "workspacePrefix": "Workspace ",
+    "done": "Done",
+    "failed": "Failed"
+  },
   "draft": {
     "title": "Task draft",
-    "editAndCreate": "Edit and create",
-    "notCreatedHint": "No task has been created yet.",
+    "editAndCreate": "Edit and confirm",
+    "notCreatedHint": "Confirming creates the task; the agent that proposed it runs it in {{workspace}}.",
     "confirmTitle": "Confirm task draft",
-    "confirmDescription": "Edit the content, then create it."
+    "confirmDescription": "Edit the content, then confirm; the agent starts right away."
   },
   "card": {
     "deletedSummary": "#{{number}} {{title}} · Task deleted",
-    "assignedToYou": "Assigned to you",
     "commentCount": "{{count}} comments",
     "commentCount_one": "{{count}} comment",
     "commentCount_other": "{{count}} comments"
@@ -89,7 +116,7 @@
     "awaitingYourReply": " Waiting for your reply",
     "unsupportedAttachments": "{{action}} does not support images or files yet; {{count}} were not added.",
     "deliveryFailed": "{{action}} was not delivered: {{message}}",
-    "placeholder": "Write a comment; Markdown supported",
+    "placeholder": "Write a comment; Markdown supported. A running task reads it right away",
     "queuedToSend": "Queued to send",
     "notDelivered": "Not delivered: {{message}}"
   }

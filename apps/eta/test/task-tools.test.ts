@@ -35,7 +35,7 @@ function script(calls: ReturnType<typeof call>[]) {
 describe("the task tools", () => {
   it("are offered to an agent in a conversation, and to a bare session not at all", async () => {
     const { models, requests } = scriptedModels(() => say("ok"));
-    const w = await world({ models });
+    const w = await world({ models, tasks: { runs: false } });
     const ada = await w.agent("Ada");
     const project = await w.project({ stewardId: ada.id });
     const group = await w.group(project.id, [ada.id]);
@@ -58,7 +58,7 @@ describe("the task tools", () => {
       call("create_task", {
         title: "Write the docs",
         description: "The README",
-        assignee: "user",
+        workspace: "local",
       }),
       call("list_tasks", {}),
       call("update_task", { task: "#1", status: "in_review" }),
@@ -66,7 +66,7 @@ describe("the task tools", () => {
       call("get_task", { task: "1" }),
       call("list_tasks", { status: "done" }),
     ]);
-    const w = await world({ models });
+    const w = await world({ models, tasks: { runs: false } });
     const ada = await w.agent("Ada");
     const project = await w.project({ stewardId: ada.id });
     const group = await w.group(project.id, [ada.id]);
@@ -80,13 +80,13 @@ describe("the task tools", () => {
 
     expect(results[0]).toBe('Created task #1 "Write the docs".');
     expect(results[1]).toBe(
-      "#1 [todo] Write the docs — waiting on the user, created by Ada",
+      "#1 [todo] Write the docs — never run, created by Ada",
     );
     expect(results[2]).toBe('#1 is now [in_review] "Write the docs".');
     expect(results[3]).toBe("Commented on #1.");
     // The task in full: its line, its description, and a timeline an agent can read.
     expect(results[4]).toContain(
-      "#1 [in_review] Write the docs — waiting on the user, created by Ada",
+      "#1 [in_review] Write the docs — never run, created by Ada",
     );
     expect(results[4]).toContain("The README");
     expect(results[4]).toMatch(/\[created\] Ada/);
@@ -103,7 +103,6 @@ describe("the task tools", () => {
     ).toMatchObject({
       number: 1,
       status: "in_review",
-      assignee: "user",
       comments: 1,
       // It is linked to the conversation the agent made it in, and credited to the agent.
       conversationId: group.id,
@@ -142,7 +141,7 @@ describe("the task tools", () => {
       call("comment_task", { task: "99", body: "z" }),
       call("draft_task", { title: " ", goal: "g", acceptance: "a" }),
     ]);
-    const w = await world({ models });
+    const w = await world({ models, tasks: { runs: false } });
     const ada = await w.agent("Ada");
     const project = await w.project({ stewardId: ada.id });
     const group = await w.group(project.id, [ada.id]);
@@ -175,7 +174,7 @@ describe("the task tools", () => {
           })
         : call("update_task", { task: "1", status: "done" });
     });
-    const w = await world({ models });
+    const w = await world({ models, tasks: { runs: false } });
     const ada = await w.agent("Ada");
     const project = await w.project({ stewardId: ada.id });
     const group = await w.group(project.id, [ada.id]);

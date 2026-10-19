@@ -17,7 +17,6 @@ import type {
 import type { ManagedSession, SessionsService } from "@eta/server";
 import type { AgentRecord } from "../agents/store";
 import type { MachineRecord } from "../machines/store";
-import type { ConversationRecord } from "./store";
 import { runAndWait } from "@eta/daemon";
 import { formatModelId } from "@eta/server";
 
@@ -45,7 +44,11 @@ export interface SessionHandle {
 
 /** What a place needs to find or make an agent's session in a conversation. */
 export interface EnsureInput {
-  conversation: ConversationRecord;
+  /**
+   * What the session is held in: a conversation, or a task run (`tasks/run-key.ts`). Its id is the
+   * session's `conversationId`; its name is the session's title.
+   */
+  conversation: { id: string; name: string };
   agent: AgentRecord;
   /** The machine the project is on. */
   machine: MachineRecord;

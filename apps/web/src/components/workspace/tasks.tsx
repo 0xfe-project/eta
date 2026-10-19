@@ -1,21 +1,24 @@
-import type { BoardTaskAssignee } from "@eta/client-contracts";
 import type {
+  RunStatus,
   Task,
   TaskActivity,
   TaskDetail,
+  TaskRun,
   TaskStatus,
 } from "@/queries/tasks";
 import { AppWindowIcon } from "@phosphor-icons/react/AppWindow";
+import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { ChatCircleIcon } from "@phosphor-icons/react/ChatCircle";
+import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
-import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { SpinnerIcon } from "@phosphor-icons/react/Spinner";
+import { StopIcon } from "@phosphor-icons/react/Stop";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -37,8 +40,9 @@ import { useAgentList } from "@/queries/agents";
 import {
   useCommentTask,
   useConfirmTaskDraft,
-  useCreateTask,
   useDeleteTask,
+  useInterruptRun,
+  useRerunTask,
   useTask,
   useTasks,
   useUpdateTask,
@@ -52,13 +56,16 @@ import { useTaskDraft } from "./task-draft";
 import {
   actorName,
   ago,
-  assigneeLabel,
-  assignees,
   createdBy,
+  isActive,
+  queueReasonLabels,
+  runStatusLabels,
   statuses,
   statusLabel,
+  workspaceLabel,
 } from "./task-format";
 import { useTaskNav } from "./task-nav";
+import { RunLog } from "./task-run-log";
 import { StatusIcon } from "./task-status-icon";
 import { useGroups } from "./use-groups";
 
@@ -83,6 +90,41 @@ function Back({ label, onClick }: { label: string; onClick: () => void }) {
 /** Done and cancelled start folded: they are the past. */
 const folded = new Set<TaskStatus>(["done", "cancelled"]);
 
+/**
+ * A run underway, by its own status: a spinner while the executor starts or works, a clock while
+ * it waits its turn. Still under reduced motion; the words carry it either way.
+ */
+function Working({ status }: { status: RunStatus }) {
+  const queued = status === "queued";
+  const Icon = queued ? ClockIcon : SpinnerIcon;
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1 text-xs whitespace-nowrap",
+        queued ? "text-muted-foreground" : "font-medium text-foreground",
+      )}
+    >
+      <Icon
+        aria-hidden="true"
+        className={cn("size-3.5", !queued && "motion-safe:animate-spin")}
+      />
+      {runStatusLabels[status]}
+    </span>
+  );
+}
+
+/**
+ * Whether the task's latest run is underway, or failed. A finished run shows nothing: the task's
+ * status says the rest.
+ */
+export function RunState({ task }: { task: Task }) {
+  useTranslation(["tasks", "common"] as const);
+  if (isActive(task.runStatus)) return <Working status={task.runStatus} />;
+  if (task.runStatus === "failed")
+    return <span className="text-destructive">{runStatusLabels.failed}</span>;
+  return null;
+}
+
 export function Comments({ count }: { count: number }) {
   const { t: translateText } = useTranslation([
     "tasks",
@@ -100,10 +142,11 @@ export function Comments({ count }: { count: number }) {
   ) : null;
 }
 
-/** Title and when on top; number, assignee and activity beneath. */
+/** Title and when on top; number, executor and activity beneath. */
 function TaskRow({ task }: { task: Task }) {
   useTranslation(["tasks", "common", "navigation"] as const);
   const [, setNav] = useTaskNav();
+  const { agents } = useAgentList();
   return (
     <li>
       <button
@@ -125,9 +168,10 @@ function TaskRow({ task }: { task: Task }) {
             <span className="shrink-0">#{task.number}</span>
             <span aria-hidden="true">·</span>
             <span className="min-w-0 truncate">
-              {assigneeLabel(task.assignee)}
+              {actorName(task.createdBy, agents)}
             </span>
             <span className="ml-auto flex shrink-0 items-center gap-3 pl-2">
+              <RunState task={task} />
               <Comments count={task.comments} />
             </span>
           </span>
@@ -143,7 +187,6 @@ function TaskList() {
     "common",
     "navigation",
   ] as const);
-  const [, setNav] = useTaskNav();
   const { tasks: all, loaded, error } = useTasks();
   const { current: group } = useGroups();
   // A task is work in a conversation; the board opens on that conversation rather than on
@@ -157,20 +200,9 @@ function TaskList() {
   const isOpen = (status: TaskStatus) => open[status] ?? !folded.has(status);
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">
-          {translateText("navigation:sections.tasks")}
-        </h2>
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          aria-label={translateText("actions.create")}
-          title={translateText("common:actions.new")}
-          onClick={() => void setNav({ task: "new" })}
-        >
-          <PlusIcon aria-hidden="true" />
-        </Button>
-      </div>
+      <h2 className="text-sm font-semibold">
+        {translateText("navigation:sections.tasks")}
+      </h2>
       {group === undefined ? null : (
         <div className="flex items-center gap-1 text-[11px]">
           {(["group", "all"] as const).map((choice) => (
@@ -201,16 +233,7 @@ function TaskList() {
       ) : !loaded ? (
         <Loading />
       ) : tasks.length === 0 ? (
-        <Empty
-          icon={ListChecksIcon}
-          title={translateText("empty.title")}
-          action={
-            <Button size="sm" onClick={() => void setNav({ task: "new" })}>
-              <PlusIcon aria-hidden="true" data-icon="inline-start" />
-              {translateText("actions.create")}
-            </Button>
-          }
-        >
+        <Empty icon={ListChecksIcon} title={translateText("empty.title")}>
           {translateText("empty.description")}
         </Empty>
       ) : (
@@ -302,35 +325,6 @@ function StatusSelect({
   );
 }
 
-function AssigneeSelect({
-  id,
-  value,
-  onChange,
-  className,
-}: {
-  id?: string;
-  value: BoardTaskAssignee;
-  onChange: (assignee: BoardTaskAssignee) => void;
-  className?: string;
-}) {
-  const { t: translateText } = useTranslation(["tasks"] as const);
-  return (
-    <Select
-      id={id}
-      aria-label={id ? undefined : translateText("assignee.label")}
-      className={className}
-      value={value}
-      onValueChange={(value) => onChange(value as BoardTaskAssignee)}
-    >
-      {assignees.map((a) => (
-        <SelectOption key={a.value} value={a.value}>
-          {a.label}
-        </SelectOption>
-      ))}
-    </Select>
-  );
-}
-
 /** A task an agent drafted in a conversation, to confirm (a `task_draft` row of its timeline). */
 export interface TaskProposal {
   conversationId: string;
@@ -339,82 +333,54 @@ export interface TaskProposal {
   description: string;
 }
 
-/** A new task, or a draft being confirmed; `bare` leaves the heading to a dialog around it. */
+/**
+ * The draft being confirmed. Tasks are not made here: an agent proposes them, and the user decides
+ * on the proposal (edited if need be). Confirming creates the task and starts its executor; a
+ * backlog task is created and waits.
+ */
 export function TaskForm({
   onDone,
-  bare = false,
-  initialStatus = "todo",
   proposal,
 }: {
   onDone: (id?: string) => void;
-  bare?: boolean;
-  initialStatus?: TaskStatus;
-  proposal?: TaskProposal;
+  proposal: TaskProposal;
 }) {
   const { t: translateText } = useTranslation([
     "tasks",
     "common",
     "navigation",
   ] as const);
-  const create = useCreateTask();
   const confirm = useConfirmTaskDraft();
-  const { groups } = useGroups();
-  const [conversationId, setConversationId] = useState("");
-  const [title, setTitle] = useState(proposal?.title ?? "");
-  const [description, setDescription] = useState(proposal?.description ?? "");
-  const [status, setStatus] = useState<TaskStatus>(initialStatus);
-  const [assignee, setAssignee] = useState<BoardTaskAssignee>("none");
+  const [title, setTitle] = useState(proposal.title);
+  const [description, setDescription] = useState(proposal.description);
+  const [status, setStatus] = useState<TaskStatus>("todo");
   return (
     <form
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
         if (!title.trim()) return;
-        const fields = {
-          title: title.trim(),
-          description: description.trim(),
-          status,
-          assignee,
-        };
-        const callbacks = {
-          onSuccess: (result: { task: { id: string } }) =>
-            onDone(result.task.id),
-          onError: showError,
-        };
-        if (proposal)
-          confirm.mutate(
-            {
-              conversationId: proposal.conversationId,
-              messageId: proposal.messageId,
-              edits: fields,
+        confirm.mutate(
+          {
+            conversationId: proposal.conversationId,
+            messageId: proposal.messageId,
+            edits: {
+              title: title.trim(),
+              description: description.trim(),
+              status,
             },
-            callbacks,
-          );
-        else
-          create.mutate(
-            {
-              ...fields,
-              ...(conversationId ? { conversationId } : {}),
-            },
-            callbacks,
-          );
+          },
+          {
+            onSuccess: (result) => onDone(result.task.id),
+            onError: showError,
+          },
+        );
       }}
     >
-      {bare ? null : (
-        <div className="space-y-1">
-          <Back
-            label={translateText("navigation:sections.tasks")}
-            onClick={() => onDone()}
-          />
-          <h2 className="text-sm font-semibold">
-            {translateText("actions.create")}
-          </h2>
-        </div>
-      )}
       <Field id="task-title" label={translateText("fields.title")}>
         <Input
           id="task-title"
-          autoFocus={bare}
+          autoFocus
           maxLength={200}
           placeholder={translateText("fields.titlePlaceholder")}
           value={title}
@@ -444,44 +410,14 @@ export function TaskForm({
           onChange={setStatus}
         />
       </Field>
-      <Field id="task-assignee" label={translateText("assignee.label")}>
-        <AssigneeSelect
-          id="task-assignee"
-          className="w-full"
-          value={assignee}
-          onChange={setAssignee}
-        />
-      </Field>
-      {!proposal && (
-        <Field label={translateText("fields.optionalGroup")}>
-          <Select
-            value={conversationId || "none"}
-            onValueChange={(value) =>
-              setConversationId(value === "none" ? "" : value)
-            }
-          >
-            <SelectOption value="none">
-              {translateText("fields.noGroup")}
-            </SelectOption>
-            {groups
-              .filter((g) => !g.archived)
-              .map((g) => (
-                <SelectOption key={g.id} value={g.id}>
-                  {g.name}
-                </SelectOption>
-              ))}
-          </Select>
-        </Field>
-      )}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={() => onDone()}>
           {translateText("common:actions.cancel")}
         </Button>
-        <Button
-          type="submit"
-          disabled={!title.trim() || create.isPending || confirm.isPending}
-        >
-          {translateText("common:actions.create")}
+        <Button type="submit" disabled={!title.trim() || confirm.isPending}>
+          {status === "backlog"
+            ? translateText("common:actions.create")
+            : translateText("actions.createAndStart")}
         </Button>
       </div>
     </form>
@@ -564,8 +500,8 @@ function Folded({
 const propertyLabel = "text-xs leading-8 text-muted-foreground";
 
 /**
- * What the task is at now: its status and who has it. Each value starts on
- * an 8-high line beside its name; `children` adds rows.
+ * What the task is at now: its status, who executes it and where. Each value starts on an 8-high
+ * line beside its name; `children` adds rows.
  */
 export function TaskProperties({
   task,
@@ -578,6 +514,7 @@ export function TaskProperties({
 }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
   const update = useUpdateTask();
+  const { agents } = useAgentList();
   return (
     <dl
       className={cn(
@@ -596,16 +533,30 @@ export function TaskProperties({
           }
         />
       </dd>
-      <dt className={propertyLabel}>{translateText("assignee.label")}</dt>
-      <dd className="min-w-0">
-        <AssigneeSelect
-          className="min-w-32"
-          value={task.assignee}
-          onChange={(assignee) =>
-            update.mutate({ taskId: task.id, assignee }, { onError: showError })
-          }
-        />
-      </dd>
+      {task.createdBy.kind === "agent" ? (
+        <>
+          <dt className={propertyLabel}>{translateText("executor.label")}</dt>
+          <dd className="min-w-0 py-1.5 leading-5 wrap-anywhere">
+            {actorName(task.createdBy, agents)}
+          </dd>
+          <dt className={propertyLabel}>{translateText("workspace.label")}</dt>
+          <dd className="min-w-0 py-1.5 leading-5">
+            {workspaceLabel(task.workspace)}
+            {task.workspace.branch ? (
+              <span className="text-muted-foreground">
+                {" · "}
+                <code>{task.workspace.branch}</code>
+              </span>
+            ) : null}
+            {task.workspace.path ? (
+              <span className="block text-xs text-muted-foreground wrap-anywhere">
+                <code>{task.workspace.path}</code>
+              </span>
+            ) : null}
+          </dd>
+          <RunRow task={task} />
+        </>
+      ) : null}
       {children}
     </dl>
   );
@@ -671,10 +622,6 @@ function describe(a: TaskActivity): React.ReactNode {
         from: statusLabel(str(d.from) as TaskStatus),
         to: statusLabel(str(d.to) as TaskStatus),
       });
-    case "assignee":
-      return translate("tasks:activity.assigned", {
-        assignee: assigneeLabel(str(d.to) as BoardTaskAssignee),
-      });
     case "title":
       return translate("tasks:activity.titleChanged", { title: str(d.to) });
     case "description":
@@ -707,6 +654,26 @@ function describe(a: TaskActivity): React.ReactNode {
       );
     case "comment":
       return a.body;
+    case "run_queued":
+      return null;
+    case "run_started":
+      return translate("tasks:activity.started");
+    case "run_completed":
+      return translate("tasks:activity.turnCompleted");
+    case "run_nudged":
+      return translate("tasks:activity.noReplyReminder");
+    case "run_failed":
+      return (
+        <span className="text-destructive">
+          {translate("tasks:activity.turnFailed", {
+            reason: a.body ? `：${a.body}` : "",
+          })}
+        </span>
+      );
+    case "run_interrupted":
+      return translate("tasks:activity.turnStopped", {
+        reason: a.body ? `：${a.body}` : "",
+      });
   }
 }
 
@@ -715,9 +682,10 @@ const minor = new Set<string>([
   "created",
   "title",
   "description",
-  "assignee",
   "conversation",
   "status",
+  "run_completed",
+  "run_nudged",
 ]);
 
 /** The timeline's entries: single events, and runs of minor ones. */
@@ -744,17 +712,22 @@ function Time({ at }: { at: number }) {
 }
 
 /** An event as a line: who, what, when. */
-function EventLine({ a }: { a: TaskActivity }) {
+function EventLine({ a, task }: { a: TaskActivity; task: TaskDetail }) {
   const { agents } = useAgentList();
+  // A run's events read as the executor's.
+  const who = actorName(
+    a.kind.startsWith("run_") ? task.createdBy : a.actor,
+    agents,
+  );
   return (
     <p className="text-muted-foreground wrap-anywhere">
-      {actorName(a.actor, agents)} {describe(a)} <Time at={a.createdAt} />
+      {who} {describe(a)} <Time at={a.createdAt} />
     </p>
   );
 }
 
 /** Minor events in a row, as one line that unfolds into them. */
-function Changes({ items }: { items: TaskActivity[] }) {
+function Changes({ items, task }: { items: TaskActivity[]; task: TaskDetail }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
   const [open, setOpen] = useState(false);
   return (
@@ -781,7 +754,7 @@ function Changes({ items }: { items: TaskActivity[] }) {
         <ul className="mt-1 space-y-1">
           {items.map((a) => (
             <li key={a.id}>
-              <EventLine a={a} />
+              <EventLine a={a} task={task} />
             </li>
           ))}
         </ul>
@@ -815,11 +788,162 @@ function Entry({
 
 const dot = <span className="size-1.5 bg-muted-foreground/60" />;
 
+/** Stopping a run that has not ended; one that waits never starts. */
+function StopRun({ task, run }: { task: string; run: TaskRun }) {
+  const { t: translateText } = useTranslation(["common"] as const);
+  const interrupt = useInterruptRun();
+  if (!isActive(run.status)) return null;
+  return (
+    <Button
+      variant="ghost"
+      size="xs"
+      disabled={interrupt.isPending}
+      onClick={() =>
+        interrupt.mutate(
+          { taskId: task, runId: run.id },
+          { onError: showError },
+        )
+      }
+    >
+      <StopIcon aria-hidden="true" />
+      {translateText("actions.stop")}
+    </Button>
+  );
+}
+
+/** A run's state: spinning while at work, red when it failed. */
+function RunStatusText({ run }: { run: TaskRun }) {
+  useTranslation(["tasks", "common"] as const);
+  if (isActive(run.status)) return <Working status={run.status} />;
+  return (
+    <span
+      className={cn(
+        "text-xs",
+        run.status === "failed" ? "text-destructive" : "text-muted-foreground",
+      )}
+    >
+      {runStatusLabels[run.status]}
+      {run.error && run.status === "failed" ? `：${run.error}` : ""}
+    </span>
+  );
+}
+
+/** How a run is going, stopping it, and its log on demand. */
+function RunControls({ task, run }: { task: TaskDetail; run: TaskRun }) {
+  const { t: translateText } = useTranslation(["tasks", "common"] as const);
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <div className="-ml-2 flex flex-wrap items-center gap-x-1">
+        <span className="px-2">
+          <RunStatusText run={run} />
+        </span>
+        <StopRun task={task.id} run={run} />
+        {run.status === "queued" ? null : (
+          <Button
+            variant="ghost"
+            size="xs"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
+            {open ? (
+              <CaretDownIcon aria-hidden="true" />
+            ) : (
+              <CaretRightIcon aria-hidden="true" />
+            )}
+            {translateText("log.title")}
+          </Button>
+        )}
+      </div>
+      {run.status === "queued" && run.queueReason ? (
+        <p className="text-xs text-muted-foreground">
+          {queueReasonLabels[run.queueReason]}
+        </p>
+      ) : null}
+      {run.workspace && open ? (
+        <p className="text-xs text-muted-foreground wrap-anywhere">
+          {translateText("log.workspacePrefix")}
+          <code>{run.workspace}</code>
+        </p>
+      ) : null}
+      {open ? <RunLog run={run} /> : null}
+    </>
+  );
+}
+
+/** A run where it started: who, how it went, and its log on demand. */
+function RunEntry({
+  task,
+  run,
+  activity,
+}: {
+  task: TaskDetail;
+  run: TaskRun;
+  activity: TaskActivity;
+}) {
+  return (
+    <div className="space-y-1">
+      {activity.kind === "run_queued" ? null : (
+        <EventLine a={activity} task={task} />
+      )}
+      <RunControls task={task} run={run} />
+    </div>
+  );
+}
+
+/**
+ * The run row of the task's properties: how the latest run is going, and a new run, in a fresh
+ * session, once none is going.
+ */
+function RunRow({ task }: { task: TaskDetail }) {
+  const { t: translateText } = useTranslation(["tasks"] as const);
+  const rerun = useRerunTask();
+  const latest = task.runs.at(-1);
+  const open = task.runs.some((run) => isActive(run.status));
+  return (
+    <>
+      <dt className={propertyLabel}>{translateText("runs.label")}</dt>
+      <dd className="flex min-w-0 flex-wrap items-center gap-x-1 leading-8">
+        {latest ? (
+          <span className="mr-1">
+            <RunStatusText run={latest} />
+          </span>
+        ) : (
+          <span className="mr-1 text-xs text-muted-foreground">
+            {translateText("runs.never")}
+          </span>
+        )}
+        {open ? null : (
+          <Button
+            variant="ghost"
+            size="xs"
+            disabled={rerun.isPending}
+            onClick={() =>
+              rerun.mutate({ taskId: task.id }, { onError: showError })
+            }
+          >
+            <ArrowClockwiseIcon aria-hidden="true" />
+            {latest ? translateText("runs.rerun") : translateText("runs.run")}
+          </Button>
+        )}
+      </dd>
+    </>
+  );
+}
+
 /** The task's history: comments in full (long ones folded), bookkeeping folded into "N 条变更". */
 export function Timeline({ task }: { task: TaskDetail }) {
   const { t: translateText } = useTranslation(["common"] as const);
   const { agents } = useAgentList();
-  const items = entries(task.activity);
+  // Runs show where they started; their queueing is news only while they still wait, with why.
+  const runs = new Map(task.runs.map((run) => [run.id, run]));
+  const waiting = (a: TaskActivity) => {
+    const run = a.kind === "run_queued" && a.runId && runs.get(a.runId);
+    return run && run.status === "queued" ? run : undefined;
+  };
+  const items = entries(
+    task.activity.filter((a) => describe(a) !== null || waiting(a)),
+  );
   return (
     <ol aria-label={translateText("labels.timeline")}>
       {items.map((a, i) => {
@@ -827,7 +951,7 @@ export function Timeline({ task }: { task: TaskDetail }) {
         if (Array.isArray(a))
           return (
             <Entry key={a[0].id} last={last} mark={dot}>
-              <Changes items={a} />
+              <Changes items={a} task={task} />
             </Entry>
           );
         if (a.kind === "comment")
@@ -854,9 +978,26 @@ export function Timeline({ task }: { task: TaskDetail }) {
               </Folded>
             </Entry>
           );
+        const run =
+          (a.kind === "run_started" && a.runId && runs.get(a.runId)) ||
+          waiting(a);
         return (
-          <Entry key={a.id} last={last} mark={dot}>
-            <EventLine a={a} />
+          <Entry
+            key={a.id}
+            last={last}
+            mark={
+              a.kind === "run_failed" ? (
+                <span className="size-1.5 bg-destructive" />
+              ) : (
+                dot
+              )
+            }
+          >
+            {run ? (
+              <RunEntry task={task} run={run} activity={a} />
+            ) : (
+              <EventLine a={a} task={task} />
+            )}
           </Entry>
         );
       })}
@@ -1320,11 +1461,11 @@ export function TaskMissing({
   );
 }
 
-/** The task board: a status-grouped list, a task, or a new one. */
+/** The task board: a status-grouped list, or a task. */
 export function Tasks() {
   const { t: translateText } = useTranslation(["tasks", "navigation"] as const);
   const [nav, setNav] = useTaskNav();
-  const id = nav.task && nav.task !== "new" ? nav.task : null;
+  const id = nav.task ?? null;
   const listRef = useRef<HTMLDivElement>(null);
   const listScrollRef = useRef(0);
   const detailOpen = Boolean(nav.task);
@@ -1356,9 +1497,7 @@ export function Tasks() {
       >
         <TaskList />
       </div>
-      {nav.task === "new" ? (
-        <TaskForm onDone={(id) => void setNav({ task: id ?? null })} />
-      ) : !id ? null : !task ? (
+      {!id ? null : !task ? (
         <div className="space-y-3">
           <Back
             label={translateText("navigation:sections.tasks")}

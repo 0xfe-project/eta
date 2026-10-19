@@ -18,6 +18,7 @@ import type {
 import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/site";
 import type { GatewayKeys } from "./bundles/bundles";
+import type { MachineRecord } from "./machines/store";
 import type { McpTuning } from "./mcp/service";
 import type { SessionHooks } from "./session-hooks";
 import { homedir, hostname, platform } from "node:os";
@@ -68,8 +69,12 @@ import { combineSessionHooks } from "./session-hooks";
 import { TaskBoard } from "./tasks/board";
 import { TaskCards } from "./tasks/cards";
 import { tasksPlugin } from "./tasks/plugin";
+import { runIdOf } from "./tasks/run-key";
+import { TaskRunner } from "./tasks/runner";
+import { TaskRunStore } from "./tasks/runs";
 import { TaskStore } from "./tasks/store";
 import { taskSessionTools } from "./tasks/tools";
+import { workspaceChooser } from "./tasks/workspace";
 import { usagePlugin } from "./usage/plugin";
 import { entryOf } from "./usage/recorder";
 import { UsageStore } from "./usage/store";
@@ -93,8 +98,16 @@ export interface RoutinesOptions {
   timer?: boolean;
 }
 
+/** What a test sets to keep tasks from running; a real host leaves all of it alone. */
+export interface TasksOptions {
+  /** False keeps the runner from taking runs: a task is made and confirmed, and nothing starts. */
+  runs?: boolean;
+}
+
 export interface Product {
   readonly engine: Engine;
+  /** The task board: what a test makes tasks with, since only agents' tools do in use. */
+  readonly board: TaskBoard;
   /** The links to other machines. */
   readonly hub: MachineHub;
   /** The routines' clock; `tick()` makes it look. */
@@ -139,6 +152,7 @@ export function createProduct(options: {
   /** The agent's home, where the user's own persona cards are. Defaults to the real one. */
   home?: string | undefined;
   routines?: RoutinesOptions;
+  tasks?: TasksOptions;
   /** Overrides of what a published site may hold. */
   artifactLimits?: Partial<SiteLimits> | undefined;
   /** The address the user's browser reaches the host at, for MCP sign-in callbacks. */
@@ -212,10 +226,23 @@ export function createProduct(options: {
     posted: (conversationId) => changed([conversationId]),
     warn,
   });
+  // The task board's rows. A task run's session is held in `task-run:<id>` (`tasks/run-key.ts`);
+  // what counts it, asks about it or remembers it knows it by the conversation the task came from.
+  const taskRows = new TaskStore(db);
+  const runRows = new TaskRunStore(db);
+  const originOf = (meta: SessionMeta): SessionMeta => {
+    const runId = runIdOf(meta.conversationId);
+    if (runId === undefined) return meta;
+    const run = runRows.get(runId);
+    const task = run === undefined ? undefined : taskRows.get(run.taskId);
+    return { ...meta, conversationId: task?.originConversationId ?? undefined };
+  };
   // A model request ended, for a session of this host or of a daemon: count it.
   const generated = (meta: SessionMeta, message: AssistantMessage): void => {
     try {
-      usage.record(entryOf(meta, message, runner.routineOf(meta) ?? null));
+      usage.record(
+        entryOf(originOf(meta), message, runner.routineOf(meta) ?? null),
+      );
       // Run traffic, not a click: the paced push, so a busy agent costs a bounded number of frames.
       wire?.push("usage");
     } catch (error) {
@@ -234,6 +261,7 @@ export function createProduct(options: {
   // product's own hooks and tables, none of which exist yet, so it reads them when asked.
   let running: AssembledServer | undefined;
   const later: {
+    taskRunner?: TaskRunner;
     hooks?: Required<SessionHooks>;
     inbox?: Inbox;
     akhook?: AkhookHost;
@@ -241,10 +269,31 @@ export function createProduct(options: {
   } = {};
   const hub = new MachineHub({
     machines,
-    changed: () => wire?.pushNow("machines"),
+    changed: () => {
+      wire?.pushNow("machines");
+      // A machine that came up may be the one a run was waiting for.
+      later.taskRunner?.pump();
+    },
     warn,
     serve: (link) =>
       serveLink(link, {
+        taskRun: (session) => {
+          const run = runRows.bySession(session);
+          const task = run === undefined ? undefined : taskRows.get(run.taskId);
+          if (
+            run === undefined ||
+            task?.createdBy.agentId == null ||
+            run.machineId === null ||
+            run.workspace === null
+          )
+            return undefined;
+          return {
+            runId: run.id,
+            agentId: task.createdBy.agentId,
+            machineId: run.machineId,
+            cwd: run.workspace,
+          };
+        },
         conversations,
         projects,
         machines,
@@ -303,12 +352,12 @@ export function createProduct(options: {
   const created = (id: string): void => targets.add(id);
 
   // The task board, and the artifacts its cards list.
-  const taskRows = new TaskStore(db);
   const artifactRows = new ArtifactStore(db);
   const artifactsOf = (taskId: string) => artifactRows.latestOfTask(taskId);
   const board = new TaskBoard({
     db,
     tasks: taskRows,
+    runs: runRows,
     cards: new TaskCards({
       db,
       tasks: taskRows,
@@ -353,6 +402,10 @@ export function createProduct(options: {
   });
   later.mcp = mcp;
   const attachments = new AttachmentStore(db, dataDir);
+  const runHooks = combineRunHooks([
+    akhook.runHooks,
+    ...(memory === undefined ? [] : [memoryRunHooks(memory)]),
+  ]);
   const engine = new Engine({
     db,
     attachments,
@@ -367,11 +420,30 @@ export function createProduct(options: {
     warn,
     remote: remotePlace,
     bundleStamp: (agent) => bundles.stampOf(agent.bundles),
-    runHooks: combineRunHooks([
-      akhook.runHooks,
-      ...(memory === undefined ? [] : [memoryRunHooks(memory)]),
-    ]),
+    runHooks,
   });
+  // The executors of tasks: a fresh session of the agent that made a task for each run, on the
+  // machine of the task's project.
+  const transport = (machine: MachineRecord) => transportOn(machine, hub);
+  const taskRunner = new TaskRunner({
+    board,
+    tasks: taskRows,
+    runs: runRows,
+    agents,
+    machines,
+    projects,
+    conversations,
+    timeline,
+    engine,
+    transport,
+    dataDir,
+    hooks: runHooks,
+    changed: (touched) => changed(touched),
+    warn,
+  });
+  later.taskRunner = taskRunner;
+  // Nothing is running yet, so the runs the last process left going cannot be.
+  taskRunner.recover();
 
   const limits = { ...DEFAULT_LIMITS, ...options.artifactLimits };
   const artifactsRoot = join(dataDir, "artifacts");
@@ -392,16 +464,33 @@ export function createProduct(options: {
       askObserve: engine.askObserve,
     },
     { sessionTools: runner.sessionTools },
-    { sessionTools: taskSessionTools({ board, agents }) },
+    {
+      sessionTools: taskSessionTools({
+        board,
+        agents,
+        runner: taskRunner,
+        workspaceFor: workspaceChooser({
+          conversations,
+          projects,
+          machines,
+          transport,
+        }),
+      }),
+    },
     { sessionTools: artifactSessionTools({ artifacts, board, limits }) },
     {
       toolMiddleware: akhook.toolMiddleware,
       sessionAttach: akhook.sessionAttach,
-      askObserve: inbox.askObserve,
+      askObserve: (meta: SessionMeta) => inbox.askObserve(originOf(meta)),
     },
     ...(memory === undefined
       ? []
-      : [{ sessionTools: memoryTools.bind(undefined, memory) }]),
+      : [
+          {
+            sessionTools: (input: Parameters<typeof memoryTools>[1]) =>
+              memoryTools(memory, { ...input, meta: originOf(input.meta) }),
+          },
+        ]),
   ];
   // What the product's tools are, as a daemon's sessions get them (specs the daemon calls back).
   later.hooks = combineSessionHooks(productHooks);
@@ -423,6 +512,7 @@ export function createProduct(options: {
 
   return {
     engine,
+    board,
     hub,
     scheduler,
     sessionHooks,
@@ -436,6 +526,8 @@ export function createProduct(options: {
     remote: router,
     endpoints: [hub.endpoint],
     close: async () => {
+      // The runs stop first: they work through the links and the session host.
+      await taskRunner.detach();
       hub.close();
       mirrors.detach();
       await mcp.close();
@@ -451,9 +543,10 @@ export function createProduct(options: {
           .list()
           .filter((machine) => machine.kind === "daemon")
           .flatMap((machine) =>
-            conversations
-              .sessionsOn(machine.id)
-              .map((session) => ({ session, machineId: machine.id })),
+            [
+              ...conversations.sessionsOn(machine.id),
+              ...runRows.sessionsOn(machine.id),
+            ].map((session) => ({ session, machineId: machine.id })),
           ),
       );
       const pending = new Set([
@@ -508,7 +601,11 @@ export function createProduct(options: {
           {
             machines,
             hub,
-            changed,
+            changed: () => {
+              changed();
+              // The limit may have moved: runs that were waiting for a slot can start.
+              taskRunner.pump();
+            },
             defaultUrl: () =>
               `http://${options.hostname ?? "127.0.0.1"}:${server.server.port}`,
           },
@@ -540,7 +637,10 @@ export function createProduct(options: {
           applied("routines"),
         ),
       );
-      server.mount("tasks", tasksPlugin({ board }, applied("tasks")));
+      server.mount(
+        "tasks",
+        tasksPlugin({ board, runner: taskRunner }, applied("tasks")),
+      );
       server.mount(
         "artifacts",
         artifactsPlugin({ artifacts, board }, applied("artifacts")),
@@ -584,6 +684,8 @@ export function createProduct(options: {
         clearTimeout(timer);
       }
       bundles.start();
+      // Everything the runs need is in place: the queue is looked at now.
+      if (options.tasks?.runs !== false) taskRunner.attach();
     },
   };
 }

@@ -16,7 +16,7 @@ import { assistantMessage, fakeModels } from "@eta/core/testing";
 export const HANG = Symbol("hang");
 
 export interface Request {
-  /** The agent asking, from "In this conversation you are <name>" in its system prompt. */
+  /** The agent asking, from "In this conversation (or task) you are <name>" in its system prompt. */
   agent: string | undefined;
   system: string;
   /** The text of every message the request carries, oldest first, as `role: text`. */
@@ -105,7 +105,9 @@ export function scriptedModels(
       }[];
       const last = messages.at(-1);
       const request: Request = {
-        agent: /In this conversation you are ([^.]+)\./.exec(system)?.[1],
+        agent: /In this (?:conversation|task) you are ([^.]+)\./.exec(
+          system,
+        )?.[1],
         system,
         transcript: messages.map(
           (message) => `${message.role}: ${textOf(message.content)}`,

@@ -38,6 +38,7 @@ import type { Timeline } from "./timeline";
 import { LinkError } from "@eta/daemon";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/harness";
 import { parseModelId } from "@eta/server";
+import { runIdOf, runKey } from "../tasks/run-key";
 import { viewOf as attachmentView } from "./attachments";
 import { briefing } from "./briefing";
 import { LocalPlace, messageOf } from "./places";
@@ -214,7 +215,7 @@ export class Engine {
     const agent = this.#agents.get(meta.agentId);
     if (agent === undefined) return undefined;
     this.#opened.set(meta.id, this.#stamp(agent));
-    return promptOf(agent);
+    return promptOf(agent, runIdOf(meta.conversationId) !== undefined);
   };
 
   /** What a session's prompt, persona and bundles were read from. */
@@ -226,6 +227,8 @@ export class Engine {
   readonly sessionTools = (input: { meta: SessionMeta }): KernelTool[] => {
     const { agentId, conversationId } = input.meta;
     if (agentId === undefined || conversationId === undefined) return [];
+    // A task run's session is held in no conversation: it has no members to reach.
+    if (runIdOf(conversationId) !== undefined) return [];
     return conversationTools(this, conversationId, agentId);
   };
 
@@ -251,6 +254,45 @@ export class Engine {
       if (row !== undefined) this.#changed([conversationId]);
     };
   };
+
+  /**
+   * A fresh session of an agent for one run of a task, on the machine and in the directory the
+   * task works in. It is what a conversation's session is made of (the agent's model, persona,
+   * instructions, skills, MCP servers, bundles and memory) and nothing of what that session
+   * remembers: no history, no participant row. Where it lives is the machine's: this process, or
+   * a daemon over the link.
+   */
+  async openRunSession(input: {
+    runId: string;
+    title: string;
+    agent: AgentRecord;
+    machine: MachineRecord;
+    cwd: string;
+    /** The session was made: record it before anything else can fail. */
+    created: (sessionId: string) => void;
+  }): Promise<SessionHandle> {
+    const place = this.#placeOf(input.machine);
+    if (place === undefined)
+      throw new Error(`Sessions cannot run on ${input.machine.name} yet.`);
+    return await place.ensure({
+      conversation: { id: runKey(input.runId), name: input.title },
+      agent: input.agent,
+      machine: input.machine,
+      cwd: input.cwd,
+      existing: null,
+      prompt: promptOf(input.agent, true),
+      stamp: this.#stamp(input.agent),
+      created: input.created,
+    });
+  }
+
+  #placeOf(machine: MachineRecord): SessionPlace | undefined {
+    return machine.kind === "primary"
+      ? this.#local
+      : machine.kind === "daemon"
+        ? this.#remote
+        : undefined;
+  }
 
   /* ---------------------------------------------------------------- send */
 
@@ -586,12 +628,7 @@ export class Engine {
       const held = this.#conversations.ofSession(sessionId);
       const machine =
         held === undefined ? undefined : this.#machines.get(held.machineId);
-      const place =
-        machine?.kind === "primary"
-          ? this.#local
-          : machine?.kind === "daemon"
-            ? this.#remote
-            : undefined;
+      const place = machine === undefined ? undefined : this.#placeOf(machine);
       if (machine === undefined || place === undefined) continue;
       try {
         await place.configure(sessionId, machine, settings);
@@ -680,12 +717,7 @@ export class Engine {
       project === undefined ? undefined : this.#machines.get(project.machineId);
     if (project === undefined || machine === undefined)
       return fail("unavailable", "The conversation's project is gone.");
-    const place =
-      machine.kind === "primary"
-        ? this.#local
-        : machine.kind === "daemon"
-          ? this.#remote
-          : undefined;
+    const place = this.#placeOf(machine);
     if (place === undefined) {
       return fail("unavailable", `Sessions cannot run on ${machine.name} yet.`);
     }
@@ -945,10 +977,12 @@ function nameIn(
 }
 
 /** The base of an agent's system prompt: the harness's own, who it is here, what it was told. */
-function promptOf(agent: AgentRecord): string {
+function promptOf(agent: AgentRecord, task = false): string {
   const parts = [
     DEFAULT_SYSTEM_PROMPT,
-    `In this conversation you are ${agent.name}. The other members, and the user, address you by that name.`,
+    task
+      ? `In this task you are ${agent.name}. You work on it alone, in a session of your own: nobody else is in it, and what you report on the task is what the user reads.`
+      : `In this conversation you are ${agent.name}. The other members, and the user, address you by that name.`,
   ];
   if (agent.instructions.trim() !== "") parts.push(agent.instructions);
   return parts.join("\n\n");

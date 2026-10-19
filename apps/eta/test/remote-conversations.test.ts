@@ -256,10 +256,10 @@ describe("the primary's tools on a remote session", () => {
         : call("create_task", {
             title: "Write the docs",
             description: "The README",
-            assignee: "user",
+            workspace: "local",
           }),
     );
-    const r = await remoteWorld({ models });
+    const r = await remoteWorld({ models, tasks: { runs: false } });
     const { agents, group } = await r.agents("Ada");
     r.client.subscribe("tasks");
     const sent = await r.send(group.id, "track the docs");

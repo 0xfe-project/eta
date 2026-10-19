@@ -5,6 +5,8 @@ import type {
   TaskActivityView,
   TaskArgs,
   TaskResults,
+  TaskRunStatus,
+  TaskRunView,
 } from "@eta/client-contracts";
 import { useMemo } from "react";
 import { rememberRows } from "@/queries/conversations";
@@ -22,6 +24,8 @@ import {
 export type Task = BoardTaskView;
 export type TaskStatus = BoardTaskStatus;
 export type TaskActivity = TaskActivityView;
+export type TaskRun = TaskRunView;
+export type RunStatus = TaskRunStatus;
 /** A task with its history, as its own page needs it. */
 export type TaskDetail = BoardTaskDetail & { activity: TaskActivityView[] };
 
@@ -53,10 +57,19 @@ export function useTask(id: string | null) {
   return { task, missing, error };
 }
 
-export function useCreateTask() {
-  return useWireMutation<TaskArgs["create"], TaskResults["create"]>(
+/** Stop a run: a queued one never starts, a going one ends `interrupted`. */
+export function useInterruptRun() {
+  return useWireMutation<TaskArgs["interrupt"], TaskResults["interrupt"]>(
     "tasks",
-    "create",
+    "interrupt",
+  );
+}
+
+/** A new run of the task, in a fresh session. */
+export function useRerunTask() {
+  return useWireMutation<TaskArgs["rerun"], TaskResults["rerun"]>(
+    "tasks",
+    "rerun",
   );
 }
 

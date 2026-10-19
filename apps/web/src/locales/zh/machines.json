@@ -15,6 +15,7 @@
   "actions": {
     "add": "添加机器",
     "rename": "重命名",
+    "runs": "同时运行数",
     "revoke": "撤销"
   },
   "fields": {
@@ -41,6 +42,11 @@
   },
   "rename": {
     "title": "重命名 {{name}}"
+  },
+  "runs": {
+    "title": "{{name}} 同时运行的任务数",
+    "label": "同时运行的任务数（1–20）",
+    "summary": "同时运行 {{count}} 个任务"
   },
   "revoke": {
     "confirmTitle": "撤销 {{name}}？",

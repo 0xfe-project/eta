@@ -28,13 +28,13 @@ describe("workspace store persistence", () => {
   });
 
   it("remembers how the task page was left", async () => {
-    const page = { taskLayout: "board", taskScope: "user" };
+    const page = { taskLayout: "board" };
     localStorage.setItem(key, JSON.stringify({ ...saved, ...page }));
     await useWorkspaceStore.persist.rehydrate();
     expect(useWorkspaceStore.getState().workspace).toMatchObject(page);
   });
 
-  it("reads a task scope that no longer exists as unset", async () => {
+  it("drops a task scope saved before the board had none", async () => {
     localStorage.setItem(
       key,
       JSON.stringify({ ...saved, taskLayout: "board", taskScope: "remote" }),

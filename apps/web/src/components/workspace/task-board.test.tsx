@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
 import { setWire } from "@/lib/wire";
-import { productHost, taskActivity, taskDetail } from "@/test-product";
+import {
+  agentView,
+  productHost,
+  taskActivity,
+  taskDetail,
+} from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
 import { TaskBoard } from "./task-board";
 import { useWorkspaceStore } from "./workspace-store";
@@ -23,7 +28,28 @@ const first = taskDetail({
   number: 1,
   title: "测试任务",
   description: "任务说明",
-  assignee: "user",
+  createdBy: { kind: "agent", agentId: "a1" },
+  runStatus: "running",
+  workspace: {
+    mode: "worktree",
+    path: "/data/worktrees/p1/task-1",
+    branch: "eta/task-1",
+  },
+  runs: [
+    {
+      id: "r1",
+      status: "running",
+      queueReason: null,
+      machineId: "m1",
+      sessionId: "s1",
+      workspace: "/data/worktrees/p1/task-1",
+      nudged: false,
+      error: null,
+      createdAt: 2500,
+      startedAt: 2600,
+      finishedAt: null,
+    },
+  ],
   updatedAt: 3000,
 });
 const second = taskDetail({
@@ -36,17 +62,28 @@ const second = taskDetail({
 
 function board() {
   const host = productHost({
+    agents: [agentView({ id: "a1", name: "小艾" })],
     tasks: [
-      { task: first, activity: [taskActivity({ id: "a1", body: "好的" })] },
+      {
+        task: first,
+        activity: [
+          taskActivity({ id: "a1", body: "好的" }),
+          taskActivity({
+            id: "a2",
+            kind: "run_started",
+            runId: "r1",
+            actor: { kind: "system", agentId: null },
+          }),
+        ],
+      },
       { task: second },
     ],
   });
   host.handle("tasks.update", (args) => ({
     task: { ...first, ...(args as object) },
   }));
-  host.handle("tasks.create", (args) => ({
-    task: { ...first, id: "t3", ...(args as object) },
-  }));
+  host.handle("tasks.interrupt", () => ({ task: first }));
+  host.handle("tasks.rerun", () => ({ task: first, run: first.runs[0] }));
   host.hello();
   return host;
 }
@@ -64,7 +101,6 @@ describe("task board", () => {
     useWorkspaceStore.getState().setWorkspace((workspace) => ({
       ...workspace,
       taskLayout: "list",
-      taskScope: "all",
     }));
   });
 
@@ -83,22 +119,28 @@ describe("task board", () => {
     expect(container.textContent).toContain("2");
   });
 
-  it("narrows to the tasks that wait on the user, and back", async () => {
+  it("shows the executor and the run of each task on its row", async () => {
     board();
     const { container } = await mount(<TaskBoard />);
     await flush();
-    const mine = [...container.querySelectorAll('[role="tab"]')].find(
-      (tab) => tab.textContent === "我的",
+    const row = [...container.querySelectorAll("li")].find((li) =>
+      li.textContent?.includes("测试任务"),
     )!;
-    await act(async () => {
-      mine.dispatchEvent(
-        new MouseEvent("mousedown", { bubbles: true, button: 0 }),
-      );
-      (mine as HTMLElement).click();
-    });
-    expect(useWorkspaceStore.getState().workspace.taskScope).toBe("user");
-    expect(container.textContent).toContain("测试任务");
-    expect(container.textContent).not.toContain("另一个任务");
+    expect(row.textContent).toContain("小艾");
+    expect(row.textContent).toContain("正在运行");
+  });
+
+  it("has no way to make a task: tasks are proposed by agents", async () => {
+    const host = board();
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    expect(container.textContent).not.toContain("新建");
+    expect(
+      [...container.querySelectorAll("button")].filter((b) =>
+        /新建|创建/.test(`${b.textContent}${b.getAttribute("aria-label")}`),
+      ),
+    ).toHaveLength(0);
+    expect(host.calls.filter((c) => c.action === "create")).toHaveLength(0);
   });
 
   it("changes a task's status from its row without opening it", async () => {
@@ -122,37 +164,6 @@ describe("task board", () => {
       taskId: "t1",
       status: "done",
     });
-  });
-
-  it("creates a task from the form and opens it", async () => {
-    navigation.task = "new";
-    const host = board();
-    const { show } = await mount(<TaskBoard />);
-    await flush();
-    const title = document.querySelector<HTMLInputElement>("#task-title")!;
-    const setter = Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
-      "value",
-    )!.set!;
-    await act(async () => {
-      setter.call(title, "新任务");
-      title.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    const form = title.form!;
-    await act(async () => {
-      form.dispatchEvent(
-        new Event("submit", { bubbles: true, cancelable: true }),
-      );
-    });
-    await flush();
-    expect(host.calls.find((c) => c.action === "create")?.args).toEqual({
-      title: "新任务",
-      description: "",
-      status: "todo",
-      assignee: "none",
-    });
-    expect(navigation.set).toHaveBeenCalledWith({ task: "t3" });
-    await show(null);
   });
 
   it("gives an open task the page, with the list out of the way", async () => {
@@ -188,31 +199,132 @@ describe("task board", () => {
     );
   });
 
-  it("edits the status and the assignee of the open task", async () => {
+  it("edits the status of the open task, and shows its executor and workspace", async () => {
     navigation.task = "t1";
     const host = board();
     const { container } = await mount(<TaskBoard />);
     await flush();
-    const triggers = container.querySelectorAll<HTMLElement>(
-      'aside [role="combobox"]',
+    const aside = container.querySelector("aside")!;
+    expect(aside.textContent).toContain("小艾");
+    expect(aside.textContent).toContain("独立 worktree");
+    expect(aside.textContent).toContain("eta/task-1");
+    expect(aside.textContent).toContain("/data/worktrees/p1/task-1");
+    // Nobody is assigned: the executor is whoever made the task.
+    expect(aside.textContent).not.toContain("指派");
+    const trigger = aside.querySelector<HTMLElement>('[role="combobox"]')!;
+    await click(trigger);
+    await click(
+      [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+        (option) => option.textContent === "受阻",
+      ),
     );
-    const choose = async (trigger: HTMLElement, text: string) => {
-      await click(trigger);
-      await click(
-        [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
-          (option) => option.textContent === text,
-        ),
-      );
-    };
-    await choose(triggers[0]!, "受阻");
-    await choose(triggers[1]!, "未指派");
     await flush();
     expect(
       host.calls.filter((c) => c.action === "update").map((c) => c.args),
-    ).toEqual([
-      { taskId: "t1", status: "blocked" },
-      { taskId: "t1", assignee: "none" },
-    ]);
+    ).toEqual([{ taskId: "t1", status: "blocked" }]);
+  });
+
+  it("stops the run that is going, from the timeline", async () => {
+    navigation.task = "t1";
+    const host = board();
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    const stop = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "停止",
+    )!;
+    await click(stop);
+    await flush();
+    expect(host.calls.find((c) => c.action === "interrupt")?.args).toEqual({
+      taskId: "t1",
+      runId: "r1",
+    });
+  });
+
+  it("offers a new run only when none is going, and asks for it", async () => {
+    navigation.task = "t2";
+    const host = board();
+    host.set("tasks.t2", {
+      task: taskDetail({
+        id: "t2",
+        number: 2,
+        title: "另一个任务",
+        status: "in_review",
+        createdBy: { kind: "agent", agentId: "a1" },
+        runStatus: "completed",
+        runs: [{ ...first.runs[0]!, id: "r2", status: "completed" }],
+      }),
+      activity: [],
+    });
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    const rerun = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "重新运行",
+    )!;
+    await click(rerun);
+    await flush();
+    expect(host.calls.find((c) => c.action === "rerun")?.args).toEqual({
+      taskId: "t2",
+    });
+  });
+
+  it("draws a run's log from its session's transcript", async () => {
+    navigation.task = "t1";
+    const host = board();
+    host.target("sessions.s1", {
+      core: { session: "s1", running: true },
+      transcript: {
+        messages: [
+          {
+            entryId: "e1",
+            message: {
+              role: "user",
+              content: [{ type: "text", text: "简报" }],
+            },
+          },
+          {
+            entryId: "e2",
+            message: {
+              role: "assistant",
+              timestamp: 1,
+              content: [
+                { type: "text", text: "我先看看目录" },
+                {
+                  type: "toolCall",
+                  id: "c1",
+                  name: "bash",
+                  arguments: { command: "ls" },
+                },
+              ],
+            },
+          },
+          {
+            entryId: "e3",
+            message: {
+              role: "toolResult",
+              toolCallId: "c1",
+              isError: false,
+              content: [{ type: "text", text: "src" }],
+            },
+          },
+        ],
+      },
+    });
+    host.handle("sessions.resync", () => ({}));
+    host.hello();
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    const log = [...container.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("执行记录"),
+    )!;
+    await click(log);
+    await flush();
+    const text = container.querySelector(
+      '[aria-label="执行记录"]',
+    )!.textContent;
+    expect(text).toContain("我先看看目录");
+    expect(text).toContain("bash");
+    // The briefing is the task itself, not a line of the log.
+    expect(text).not.toContain("简报");
   });
 
   it("finds the list as it was left, at the task just open", async () => {
