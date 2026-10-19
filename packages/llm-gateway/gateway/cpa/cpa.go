@@ -10,7 +10,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -20,7 +19,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
@@ -41,6 +39,8 @@ import (
 // Proxy is a configured, not yet running, CPA service.
 type Proxy struct {
 	Service *cliproxy.Service
+	// Keys decides who /v1 admits.
+	Keys *Keys
 	// Auths is the core auth manager the service routes with.
 	Auths      *coreauth.Manager
 	AuthDir    string
@@ -76,8 +76,8 @@ func New(stateDir, accessKey string, extra map[string]any, logger *slog.Logger) 
 
 	routeLogs(logger)
 	// The only access provider: without one, CPA serves /v1 unauthenticated.
-	provider := bearerKey{key: accessKey}
-	sdkaccess.RegisterProvider(provider.Identifier(), provider)
+	keys := NewKeys(accessKey)
+	sdkaccess.RegisterProvider(keys.Identifier(), keys)
 
 	store := sdkauth.GetTokenStore()
 	if setter, ok := store.(interface{ SetBaseDir(string) }); ok {
@@ -85,7 +85,7 @@ func New(stateDir, accessKey string, extra map[string]any, logger *slog.Logger) 
 	}
 	auths := coreauth.NewManager(store, nil, nil)
 
-	p := &Proxy{Auths: auths, AuthDir: authDir, ConfigPath: cfgPath, ready: make(chan struct{}), managementPW: pw}
+	p := &Proxy{Keys: keys, Auths: auths, AuthDir: authDir, ConfigPath: cfgPath, ready: make(chan struct{}), managementPW: pw}
 	svc, err := cliproxy.NewBuilder().
 		WithConfig(cfg).
 		WithConfigPath(cfgPath).
@@ -200,24 +200,6 @@ func (t engineTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	res := rec.Result()
 	res.Request = req
 	return res, nil
-}
-
-// bearerKey is the only caller /v1 admits: the host process that started the
-// gateway, which holds the key and hands it to its model layer. Anything else
-// on the machine that can reach the loopback port gets a 401.
-type bearerKey struct{ key string }
-
-func (bearerKey) Identifier() string { return "eta-host" }
-
-func (b bearerKey) Authenticate(_ context.Context, r *http.Request) (*sdkaccess.Result, *sdkaccess.AuthError) {
-	got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if got == "" || got == r.Header.Get("Authorization") {
-		return nil, sdkaccess.NewNoCredentialsError()
-	}
-	if b.key == "" || subtle.ConstantTimeCompare([]byte(got), []byte(b.key)) != 1 {
-		return nil, sdkaccess.NewInvalidCredentialError()
-	}
-	return &sdkaccess.Result{Provider: "eta-host", Principal: "host"}, nil
 }
 
 // routeLogs sends CPA's logs (logrus, which only CPA uses here) to logger

@@ -289,6 +289,14 @@ describe("a host beyond loopback", () => {
     expect(
       access.authorize(new Request("http://eta.example/up")),
     ).toBeUndefined();
+    // A daemon's session reaches the LLM gateway under /llm with an agent's key, not a cookie;
+    // the route checks the key itself.
+    expect(
+      access.authorize(new Request("http://eta.example/llm/v1/models")),
+    ).toBeUndefined();
+    expect(
+      access.authorize(new Request("http://eta.example/llmx"))?.status,
+    ).toBe(401);
   });
 
   it("trusts the origin it was asked for, because a rebound name has no cookie", async () => {

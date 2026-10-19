@@ -288,6 +288,11 @@ export interface ActiveBundle {
   configured: boolean;
   /** Where the bundle's service listens, when it has one and this machine can reach it. */
   serviceUrl?: string | undefined;
+  /**
+   * The LLM gateway as this machine reaches it, with the agent's own key for it: `url` is the
+   * address `/v1` hangs off. Held in memory, given to the bundle's MCP servers only.
+   */
+  gateway?: { url: string; key: string } | undefined;
 }
 
 export interface SessionVars {
@@ -317,6 +322,10 @@ function varsOf(active: ActiveBundle, session: SessionVars) {
   vars.PLUGIN_ROOT = active.bundle.dir;
   vars.ETA_WORKSPACE_DIR = session.cwd;
   if (active.serviceUrl !== undefined) vars.ETA_SERVICE_URL = active.serviceUrl;
+  if (active.gateway !== undefined) {
+    vars.ETA_GATEWAY_URL = active.gateway.url;
+    vars.ETA_AGENT_KEY = active.gateway.key;
+  }
   return vars;
 }
 

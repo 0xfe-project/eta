@@ -8,7 +8,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 /** The fake MCP server (stdio) the daemon's tests use. */
-const FAKE_MCP = fileURLToPath(
+export const FAKE_MCP = fileURLToPath(
   new URL("../../../daemon/test/fixtures/fake-mcp-stdio.ts", import.meta.url),
 );
 

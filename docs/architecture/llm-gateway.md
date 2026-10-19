@@ -24,7 +24,7 @@ Bun 进程（host）                                    同一个进程里的 Go
 只使用 SDK 导出的包（`sdk/cliproxy`、`sdk/cliproxy/auth`、`sdk/access`、`sdk/api`、`sdk/config`、`sdk/translator/builtin`）和 CPA 的管理 HTTP API，不导入 `internal/`。当前版本 **v8.0.33**（模块路径 `github.com/router-for-me/CLIProxyAPI/v8`；CPA 仓库的 `docs/sdk-usage.md` 写的仍是 `/v6`，实现以 v8 的代码为准）。
 
 - **监听**：SDK 的 `Service.Run` 一定会自己 `net.Listen`，无法关闭，所以让它监听 `127.0.0.1:0`（没有任何路由指向它）。CPA 的 gin 引擎由 `RouterConfigurator` 交出来，作为 `http.Handler` 挂到网关自己的 listener 的 `/v1/` 下；客户端断开即取消请求上下文（CPA 随之取消上游请求），流式响应逐段写到 `ResponseWriter`。`OnAfterStart` 之后（凭据已加载、路由已注册）才算就绪：之前 `/v1` 返回 503，`GET /api/llm/ready` 返回 503。
-- **鉴权**：唯一的访问提供者 `eta-host` 只认 host 的 bearer key（常量时间比较），没有或错误一律 401。账号 API 用同一把 key。
+- **鉴权**：唯一的访问提供者 `eta-host`（`gateway/cpa/keys.go`）认两种 bearer：host 的 key，和由它派生的**智能体 key** `etak.<智能体 id>.<HMAC-SHA256(host key, id)>`（常量时间比较，id 只允许字母数字下划线连字符，没有或错误一律 401）。智能体 key 只开 `/v1`；账号 API 和吊销（`DELETE /api/llm/v1/keys/<id>`）只认 host 的 key。key 是派生的所以不存表，吊销记在内存里（host 重启网关即换 host key，旧 key 全部失效）。环境包经它用订阅账号，见[环境包](bundles.md#llm-网关的-key)；主 node 在自己端口上的 `/llm/v1/*` 把 daemon 的请求转给 `/v1`，只放行智能体 key。
 - **管理 API**：`config.yaml` 在每次启动时生成，管理密钥是每次随机的 `secret-key`，`allow-remote: false`；`cpa.Proxy.Management()` 在进程内直接调用 gin 引擎，不经过网络。
 - **日志**：CPA 用 logrus；网关把它的输出丢弃，用 hook 把每条记录（级别、字段）交给 `slog`（`library=cliproxy`，写到 stderr）。
 - **信号**：CPA v8.0.33 的 SDK 依赖树（565 个包）里没有 `os/signal`；只有 CLI 入口注册了 SIGINT/SIGTERM，不在依赖树里。`pluginhost` 只有显式 `WithPluginHost` 才启用，我们不用。Go 运行时以 c-shared 加载时只为 SIGSEGV、SIGBUS、SIGFPE、SIGPIPE、SIGURG 装处理器，其余转交宿主。`test/ffi.test.ts` 把这点和下面两项做成了测试。

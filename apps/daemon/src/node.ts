@@ -72,6 +72,11 @@ export interface DaemonNodeOptions {
   /** Where sessions live: `<dataDir>/sessions`. */
   dataDir: string;
   version: string;
+  /**
+   * The primary's address (`http(s)://host:port`), where its LLM gateway is reached under
+   * `/llm`. Without it a session gets no gateway, and the MCP servers that need it are dropped.
+   */
+  primaryUrl?: string | undefined;
   /** The user-level akhook file on this machine; defaults to akhook's own path. */
   akhookUserConfig?: string | undefined;
   warn?: ((message: string) => void) | undefined;
@@ -457,6 +462,11 @@ export class DaemonNode {
   /** The bundles an open names, from the copies kept here; one that is missing is left out. */
   #activeBundles(args: OpenSessionArgs): ActiveBundle[] {
     const active: ActiveBundle[] = [];
+    const { primaryUrl } = this.#options;
+    const gateway =
+      args.gatewayKey === undefined || primaryUrl === undefined
+        ? undefined
+        : { url: `${new URL(primaryUrl).origin}/llm`, key: args.gatewayKey };
     for (const opened of args.bundles ?? []) {
       try {
         const bundle = readBundle(this.#bundles.dir(opened.hash));
@@ -465,6 +475,7 @@ export class DaemonNode {
           config: opened.config,
           configured:
             opened.configured && isConfigured(bundle.manifest, opened.config),
+          gateway,
         });
       } catch (error) {
         this.#warn(

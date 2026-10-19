@@ -5,7 +5,9 @@ description: Generate or edit images and videos with Grok Imagine, and search th
 
 # Grok
 
-The `grok__*` tools call xAI with the API key the user set in eta's settings → Bundles → grok.
+The `grok__*` tools call xAI through the LLM gateway, with the Grok account connected in eta's
+settings → Model services (subscriptions). When no Grok account is connected they fail; tell
+the user to connect one there.
 
 - `image_generate`: generate an image from a prompt, or edit images by passing them as
   `image` / `images`. Save results into the workspace with `out` (one file) or `out_dir`
@@ -18,5 +20,5 @@ The `grok__*` tools call xAI with the API key the user set in eta's settings →
 
 Relative paths are relative to the workspace.
 
-If the tools are missing, the key is not set or `grok-api` is not installed on this machine:
-read [references/setup.md](references/setup.md) and walk the user through it.
+If the tools are missing, `grok-api` is not installed on this machine: read
+[references/setup.md](references/setup.md) and walk the user through it.

@@ -104,10 +104,15 @@ func (m *Module) Addr() net.Addr { return m.ln.Addr() }
 func (m *Module) Ready() <-chan struct{} { return m.proxy.Ready() }
 
 // Handler serves /v1 (CPA's OpenAI-compatible API, which authenticates the
-// key itself) and /api/llm (the account API, behind the same key).
+// host's key or a scoped key itself) and /api/llm (the account API, behind the same key).
 func (m *Module) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", m.proxy.Handler())
+	// Ends the keys the host derived for one scope (an agent that is gone).
+	mux.Handle("DELETE /api/llm/v1/keys/{scope}", m.requireKey(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		m.proxy.Keys.Revoke(r.PathValue("scope"))
+		w.WriteHeader(http.StatusNoContent)
+	})))
 	mux.Handle("/api/llm/", m.requireKey(gateway.Admin(m.service, m.logger)))
 	// 200 once the credentials are loaded and /v1 serves; 503 before.
 	mux.Handle("GET /api/llm/ready", m.requireKey(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -121,6 +126,7 @@ func (m *Module) Handler() http.Handler {
 	return mux
 }
 
+// requireKey admits the host key alone: a scoped key is for /v1 only.
 func (m *Module) requireKey(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")

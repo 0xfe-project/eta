@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "agenvo": {
-      "url": "${ETA_SERVICE_URL}/mcp",
-      "headers": { "Authorization": "Bearer ${AGENVO_ADMIN_SECRET}" }
-    }
-  }
-}

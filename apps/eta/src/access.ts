@@ -30,6 +30,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 
+import { LLM_ROUTE } from "./llm/route";
 import { MCP_CALLBACK_PATH } from "./mcp/path";
 
 const COOKIE = "eta_session";
@@ -140,6 +141,15 @@ function isMachineRoute(pathname: string): boolean {
   return pathname === "/machines/enroll" || pathname === "/machines/connect";
 }
 
+/**
+ * The gateway route a daemon's sessions use for their bundles' tools. It is not a browser's and
+ * carries no cookie, so the token gate cannot say anything about it; the route admits an agent's
+ * scoped key and nothing else (see `llm/runtime.ts`).
+ */
+function isGatewayRoute(pathname: string): boolean {
+  return pathname.startsWith(LLM_ROUTE);
+}
+
 const refuse = (status: number, message: string): Response =>
   new Response(message, {
     status,
@@ -186,7 +196,11 @@ export function createAccess(options: AccessOptions): Access {
     tokenFile,
     authorize(request) {
       const url = new URL(request.url);
-      if (url.pathname === "/up" || isMachineRoute(url.pathname))
+      if (
+        url.pathname === "/up" ||
+        isMachineRoute(url.pathname) ||
+        isGatewayRoute(url.pathname)
+      )
         return undefined;
 
       if (url.pathname === "/ws" && !originAllowed(request)) {

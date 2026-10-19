@@ -208,6 +208,12 @@ export interface OpenSessionArgs {
    * the machine does not write them down.
    */
   bundles?: OpenedBundle[];
+  /**
+   * The agent's key for the primary's LLM gateway (`/llm/v1` on the primary's address), when it
+   * has one. It opens `/v1` and nothing else; the bundles' MCP servers get it as
+   * `${ETA_AGENT_KEY}`, held in memory like the config values.
+   */
+  gatewayKey?: string;
 }
 
 /** A bundle in an `open`: which contents, and the values its processes get. */

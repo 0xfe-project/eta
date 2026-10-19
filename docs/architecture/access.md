@@ -32,9 +32,11 @@ WebSocket 管道会在这台电脑上以运行 host 的用户身份执行命令�
 
 这三类**只读**（GET/HEAD）免令牌门，不为别的原因。其余一切，包括应用自己的 `/artifacts/<id>/<版本>/archive.zip` 下载，仍在令牌门后。预览与分享的每个文件都带 `Content-Security-Policy: sandbox`（不含 `allow-same-origin`），所以别人的 HTML 在不透明 origin 里运行，读不到 cookie 与存储，也不能以用户身份调用 host；另有 `Referrer-Policy: no-referrer`。对无效的能力或令牌，不说明为什么无效。
 
-## daemon 的两个入口
+## daemon 的入口
 
 `/machines/enroll` 与 `/machines/connect` 同样不经这两道检查：daemon 没有 cookie，也不发 origin。它们各自校验自己携带的东西（安装码、设备凭据），见[机器与 daemon](machines.md)。
+
+`/llm/v1/*` 同理：daemon 上的会话经它用 LLM 网关，凭据是智能体 key（`Authorization: Bearer etak.…`，只开网关的 `/v1`），宿主自己的 key 在这里无效，其他路径不可达，见[环境包](bundles.md#llm-网关的-key)。
 
 ## 放在反向代理后面
 

@@ -1,6 +1,6 @@
 import type { Pointer } from "bun:ffi";
 import { Buffer } from "node:buffer";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 /**
  * The LLM gateway, loaded into this process.
  *
@@ -18,6 +18,17 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 import { CString, dlopen, FFIType } from "bun:ffi";
+
+/** What a scope may be: no dots, so a key splits unambiguously (the same pattern as the Go side). */
+const SCOPE = /^[\w-]{1,64}$/;
+
+function scopedKeyOf(hostKey: string, scope: string): string {
+  if (!SCOPE.test(scope)) throw new Error(`not a key scope: ${scope}`);
+  const mac = createHmac("sha256", hostKey)
+    .update(`eta-llm-scope:${scope}`)
+    .digest("hex");
+  return `etak.${scope}.${mac}`;
+}
 
 /** Where `bun run build` leaves the library, unless `ETA_LLM_LIB` says otherwise. */
 export function libraryPath(): string {
@@ -45,6 +56,15 @@ export interface Gateway {
   readonly baseUrl: string;
   /** The key `/v1` and `/api/llm` expect as a bearer token. */
   readonly key: string;
+  /** `http://127.0.0.1:<port>`: the base `/v1` and `/api/llm` hang off. */
+  readonly origin: string;
+  /**
+   * A key for `/v1` alone, for one scope (an agent's id): derived from the host's key, so it is
+   * made here without a call and the gateway checks it without a table. It reaches no other path.
+   */
+  scopedKey: (scope: string) => string;
+  /** End every key of a scope, until the gateway restarts (which ends them all). */
+  revoke: (scope: string) => Promise<void>;
   /** A request to the gateway, with the key. `path` starts with `/`. */
   fetch: (path: string, init?: RequestInit) => Promise<Response>;
   /** Stop the listener and CPA. Blocks until they are down. */
@@ -169,15 +189,22 @@ export function startGateway(options: GatewayOptions): Gateway {
   const port = reply.port;
   const origin = `http://127.0.0.1:${port}`;
   let stopped = false;
+  const send: Gateway["fetch"] = (requestPath, init) => {
+    const headers = new Headers(init?.headers);
+    headers.set("authorization", `Bearer ${key}`);
+    return fetch(`${origin}${requestPath}`, { ...init, headers });
+  };
   return {
     port,
+    origin,
     baseUrl: `${origin}/v1`,
     key,
-    fetch: (requestPath, init) => {
-      const headers = new Headers(init?.headers);
-      headers.set("authorization", `Bearer ${key}`);
-      return fetch(`${origin}${requestPath}`, { ...init, headers });
+    scopedKey: (scope) => scopedKeyOf(key, scope),
+    revoke: async (scope) => {
+      scopedKeyOf(key, scope);
+      await send(`/api/llm/v1/keys/${scope}`, { method: "DELETE" });
     },
+    fetch: send,
     stop() {
       if (stopped) return;
       stopped = true;

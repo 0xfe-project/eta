@@ -9,6 +9,7 @@ import type { GatewayModels } from "./models";
 import { join } from "node:path";
 import { gatewayBuilt, startGateway } from "@eta/llm-gateway";
 import { GatewayClient } from "./client";
+import { LLM_ROUTE } from "./route";
 
 export interface LlmOptions {
   /** Merged over CPA's generated config: how a test points an upstream at a fake server. */
@@ -17,6 +18,17 @@ export interface LlmOptions {
 
 export interface LlmRuntime {
   readonly client: GatewayClient;
+  /** Where sessions on the host's machine reach the gateway: `http://127.0.0.1:<port>`. */
+  readonly origin: string;
+  /** The `/v1`-only key of one agent (its id), for its sessions' tools. */
+  scopedKey: (agentId: string) => string;
+  /** End an agent's keys, when the agent is gone. */
+  revoke: (agentId: string) => Promise<void>;
+  /**
+   * Serve a request a daemon's session made to `/llm/v1/...`: only a scoped key passes (the
+   * gateway checks it), and only `/v1` is reachable. The body and the answer stream.
+   */
+  forward: (request: Request) => Promise<Response>;
   /** Stop the gateway. Blocks until it is down. */
   close: () => void;
 }
@@ -64,7 +76,7 @@ export async function openLlm(
       warn(
         "[eta] llm: the gateway is slow to load its credentials; serving without them",
       );
-      return { client, close: gateway.stop };
+      return runtimeOf(gateway, client);
     }
     await Bun.sleep(50);
   }
@@ -73,5 +85,43 @@ export async function openLlm(
   } catch (error) {
     warn(`[eta] llm: could not read the model catalog: ${String(error)}`);
   }
-  return { client, close: gateway.stop };
+  return runtimeOf(gateway, client);
+}
+
+/** What the other parts of the host get of a started gateway. */
+function runtimeOf(
+  gateway: ReturnType<typeof startGateway>,
+  client: GatewayClient,
+): LlmRuntime {
+  return {
+    client,
+    close: gateway.stop,
+    origin: gateway.origin,
+    scopedKey: gateway.scopedKey,
+    revoke: gateway.revoke,
+    async forward(request) {
+      const url = new URL(request.url);
+      const path = url.pathname.slice(LLM_ROUTE.length - 1);
+      const credential = request.headers.get("authorization") ?? "";
+      // Only an agent's scoped key, and only /v1: the host's own key must not work from outside,
+      // even if it leaked this far.
+      if (!path.startsWith("/v1/") || !credential.startsWith("Bearer etak."))
+        return new Response("unauthorized", { status: 401 });
+      const headers = new Headers();
+      for (const name of ["authorization", "content-type", "accept"]) {
+        const value = request.headers.get(name);
+        if (value !== null) headers.set(name, value);
+      }
+      const answer = await fetch(`${gateway.origin}${path}${url.search}`, {
+        method: request.method,
+        headers,
+        body: request.body,
+        signal: request.signal,
+      });
+      return new Response(answer.body, {
+        status: answer.status,
+        headers: { "content-type": answer.headers.get("content-type") ?? "" },
+      });
+    },
+  };
 }
