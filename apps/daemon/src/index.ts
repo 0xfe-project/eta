@@ -25,6 +25,12 @@ export {
   type ServeContext,
   type ServeHandler,
 } from "./link/peer";
+export {
+  type McpConnections,
+  type McpServerConfig,
+  mcpSessionTools,
+  openMcp,
+} from "./mcp";
 export { forwardedOptions, modelSpecOf } from "./models";
 export { DaemonNode, type DaemonNodeOptions } from "./node";
 export { listen, runAndWait } from "./run";

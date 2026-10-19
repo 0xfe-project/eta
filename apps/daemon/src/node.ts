@@ -25,6 +25,7 @@ import type { KernelTool, PersonaCard, ThinkingLevel } from "@eta/core";
 import type { AskObserver } from "@eta/harness";
 import type { SessionMeta, SessionsService, Socket } from "@eta/server";
 import type { Peer } from "./link/peer";
+import type { McpServerConfig } from "./mcp";
 import { Buffer } from "node:buffer";
 import { mkdirSync } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -44,6 +45,7 @@ import {
 import { LocalTransport } from "@eta/ssh";
 import { Context } from "cordis";
 import { approvalMiddleware } from "./approval";
+import { mcpSessionTools } from "./mcp";
 import { ModelCatalog, remoteModels } from "./models";
 import { runAndWait } from "./run";
 import { proxyTools } from "./tools";
@@ -53,6 +55,8 @@ export interface DaemonNodeOptions {
   dataDir: string;
   version: string;
   warn?: ((message: string) => void) | undefined;
+  /** The MCP servers a session gets, started on this machine; none by default. */
+  mcpServers?: ((meta: SessionMeta) => readonly McpServerConfig[]) | undefined;
 }
 
 /** What the primary last said about one agent's session in one conversation. */
@@ -85,6 +89,7 @@ export class DaemonNode {
   readonly #manager: SessionManager;
   readonly #store: FileSessionStore;
   readonly #catalog = new ModelCatalog();
+  readonly #mcp: ReturnType<typeof mcpSessionTools>;
   /** The openings the primary sent, by `conversation:agent`; read when a session opens. */
   readonly #openings = new Map<string, Opening>();
   /** What each open session's prompt was read from, to know when it has to be opened again. */
@@ -107,6 +112,7 @@ export class DaemonNode {
       warn,
     });
     const home = homedir();
+    this.#mcp = mcpSessionTools(options.mcpServers ?? (() => []), warn);
     this.#manager = new SessionManager({
       store: this.#store,
       // Generation is the primary's: this is a model layer that asks it.
@@ -143,14 +149,19 @@ export class DaemonNode {
         this.#opened.set(meta.id, opening.stamp);
         return opening.prompt;
       },
-      sessionTools: ({ meta }): KernelTool[] => {
+      sessionTools: (input): KernelTool[] => {
+        const { meta } = input;
         const opening = this.#openingOf(meta);
         if (opening === undefined) return [];
-        return proxyTools({
-          session: meta.id,
-          specs: opening.tools,
-          peer: () => this.#peer,
-        });
+        // The product's tools are the primary's; an MCP server starts here, with the session.
+        return [
+          ...proxyTools({
+            session: meta.id,
+            specs: opening.tools,
+            peer: () => this.#peer,
+          }),
+          ...this.#mcp.sessionTools(input),
+        ];
       },
       toolMiddleware: ({ meta, session }) =>
         this.#openingOf(meta) === undefined
@@ -383,6 +394,7 @@ export class DaemonNode {
           await sessions.close(id);
           await sessions.open(id);
         }
+        await this.#mcp.settled(id);
         return { session: id };
       } catch (error) {
         // The row outlived its journal: start over rather than failing every wake.
@@ -401,6 +413,7 @@ export class DaemonNode {
       ...(args.persona === undefined ? {} : { persona: args.persona }),
     });
     await thinking(id);
+    await this.#mcp.settled(id);
     return { session: id };
   }
 }

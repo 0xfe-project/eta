@@ -5,7 +5,7 @@
  * directory of its own that only it uses, so a test can tell which side touched which files.
  */
 import type { MachineView } from "@eta/client-contracts";
-import type { Identity, LinkState } from "@eta/daemon";
+import type { DaemonNodeOptions, Identity, LinkState } from "@eta/daemon";
 import type { Host } from "../../src/host";
 import type { Client } from "./client";
 import { DaemonLink, DaemonNode, enroll } from "@eta/daemon";
@@ -59,6 +59,8 @@ export async function startDaemon(
     warn?: (message: string) => void;
     /** Sees every text frame that crosses the link, both ways. */
     tap?: (direction: "in" | "out", text: string) => void;
+    /** The MCP servers its sessions get. */
+    mcp?: Pick<DaemonNodeOptions, "mcpServers">;
   } = {},
 ): Promise<TestDaemon> {
   const dataDir = options.dataDir ?? (await tempDir("eta-daemon-"));
@@ -68,6 +70,7 @@ export async function startDaemon(
     dataDir,
     version: "test",
     warn: options.warn ?? (() => undefined),
+    ...options.mcp,
   });
   await node.start();
   const states: LinkState[] = [];
