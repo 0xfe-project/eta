@@ -48,7 +48,7 @@ export interface Worktree {
 
 /**
  * Make the worktree of a task, or find the one an earlier run made. `root` is a shell word for the
- * eta data directory of the machine (`'/var/eta'`, or `"$HOME/.eta"`).
+ * eta data directory of the machine: `"$HOME/.eta"`, since that is where it always is.
  */
 export async function prepareWorktree(
   transport: SshTransport,

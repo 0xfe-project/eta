@@ -44,7 +44,7 @@ bun run check     # 提交前的全部检查
 `bun run dev` 同时启动 host 和 vite：
 
 - Web：http://127.0.0.1:3000（`ETA_WEB_PORT` 改端口）
-- host：http://127.0.0.1:8787（`ETA_PORT` 改端口），数据在 `var/eta-dev/`；vite 把 `/ws` 代理给它，host 以 `--allow-origin` 放行 vite 的地址
+- host：http://127.0.0.1:8787（`ETA_PORT` 改端口），数据在 `~/.eta/`（和装好之后是同一份）；vite 把 `/ws` 代理给它，host 以 `--allow-origin` 放行 vite 的地址
 
 打开 Web 后，先在设置的"模型服务"里添加模型服务（填 API key；或在"订阅与密钥"里用设备码绑定 Codex、Grok 订阅，或填 Google AI Studio 的 key），再新建智能体与对话。
 
@@ -56,14 +56,15 @@ bun run check     # 提交前的全部检查
 
 ```sh
 bun run --cwd apps/web build
-bun apps/eta/src/main.ts --data-dir /var/lib/eta --web-dir apps/web/dist --host 0.0.0.0 --port 8787
+HOME=/var/lib/eta bun apps/eta/src/main.ts --web-dir apps/web/dist --host 0.0.0.0 --port 8787
 ```
+
+数据目录固定是 `$HOME/.eta`，没有开关：换位置就换 `HOME`（systemd 里是 `Environment=HOME=/var/lib/eta`）。
 
 host 的 flag（`apps/eta/src/main.ts`）：
 
 | flag                  | 含义                                                                                                    |
 | --------------------- | ------------------------------------------------------------------------------------------------------- |
-| `--data-dir <dir>`    | 数据目录，默认 `~/.eta`：数据库、会话、智能体工作区、产物、模型配置、令牌都在这里                       |
 | `--port <n>`          | 端口，默认 `8787`（0 表示任意空闲端口）                                                                 |
 | `--host <addr>`       | 监听的网卡，默认 `127.0.0.1`。**监听回环以外的地址会自动开启令牌门**                                    |
 | `--web-dir <dir>`     | 构建好的 Web（含 `index.html`）。不给则只提供管道，不提供页面                                           |
@@ -79,10 +80,10 @@ host 的 flag（`apps/eta/src/main.ts`）：
 ```sh
 docker build -f deploy/Dockerfile -t eta .
 docker run -d --name eta -p 8787:8787 -v eta-data:/data eta
-docker exec eta cat /data/access-token      # 令牌
+docker exec eta cat /data/.eta/access-token  # 令牌
 ```
 
-一个镜像（构建 Web，host 用 `--web-dir` 提供），一个卷 `/data` 放全部数据，监听 `0.0.0.0:8787`，所以令牌门默认开启。镜像名后面的参数会追加给 host，例如 `docker run … eta --allow-origin https://eta.example.com --memory-url http://memory:8320`。健康检查是 `/up`。host 和智能体的 bash 以镜像里的非 root 用户 `bun`（uid 1000）运行，新建的卷归它所有；旧镜像（root）留下的卷或绑定挂载需要改一次属主：`docker run --rm -u 0 --entrypoint chown -v eta-data:/data eta -R 1000:1000 /data`。
+一个镜像（构建 Web，host 用 `--web-dir` 提供），一个卷 `/data` 放全部数据（`HOME` 指向它，所以内容在 `/data/.eta/`），监听 `0.0.0.0:8787`，所以令牌门默认开启。镜像名后面的参数会追加给 host，例如 `docker run … eta --allow-origin https://eta.example.com --memory-url http://memory:8320`。健康检查是 `/up`。host 和智能体的 bash 以镜像里的非 root 用户 `bun`（uid 1000）运行，新建的卷归它所有；旧镜像（root）留下的卷或绑定挂载需要改一次属主：`docker run --rm -u 0 --entrypoint chown -v eta-data:/data eta -R 1000:1000 /data`。
 
 `deploy/compose.yaml` 把 host 和（可选的）记忆边车放在一起：
 

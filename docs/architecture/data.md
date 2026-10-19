@@ -1,6 +1,8 @@
 # 数据
 
-产品数据在 SQLite（`bun:sqlite`），会话照上游存成文件。所有东西在**一个数据目录**里：`--data-dir`，默认 `~/.eta`；Docker 镜像里是卷 `/data`，由非 root 用户 `bun`（uid 1000）拥有，host 与会话的 bash 都以它运行。
+产品数据在 SQLite（`bun:sqlite`），会话照上游存成文件。所有东西在**一个数据目录**里：`$HOME/.eta`，不是开关。想要别的位置就换 `HOME`；Docker 镜像里 `HOME=/data`，卷挂在 `/data`，所以内容在 `/data/.eta/`，由非 root 用户 `bun`（uid 1000）拥有，host 与会话的 bash 都以它运行。
+
+这里不许再有第二个根。曾经有过一个 `--data-dir`：它只挪走配置、数据库和会话，persona 卡片仍然从真实的 `~/.eta/persona` 读，于是换一个目录启动的进程看起来像「模型配置丢了」。persona、环境包、MCP 配置这些用户级的东西也跟着 `$HOME` 走之后，一个根就够了。
 
 ## 目录布局
 

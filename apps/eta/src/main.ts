@@ -1,7 +1,7 @@
 /**
  * The entry point: start the host.
  *
- *   bun apps/eta/src/main.ts [--data-dir ~/.eta] [--port 8787] [--host 127.0.0.1]
+ *   bun apps/eta/src/main.ts [--port 8787] [--host 127.0.0.1]
  *                            [--web-dir <built web>] [--token-file <path>]
  *                            [--allow-origin <origin>]... [--memory-url <sidecar>] [--no-llm]
  *                            [--public-url <the address the browser uses>]
@@ -9,6 +9,10 @@
  * A thin shell around `startHost`: flags, a startup summary on one line, and a signal handler.
  * Everything the host serves lives behind the one port; `--web-dir` adds the page, and a host
  * that listens beyond loopback (or is given a `--token-file`) asks for a token first.
+ *
+ * The data directory is `~/.eta` and is not a flag. A second one was a second half: personas went
+ * on being read from the real home while the config came from somewhere else, so a process pointed
+ * at another directory looked like a config that had gone missing. One root, `$HOME` decides it.
  */
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -18,7 +22,6 @@ import { startHost } from "./host";
 
 const { values } = parseArgs({
   options: {
-    "data-dir": { type: "string" },
     port: { type: "string", default: "8787" },
     host: { type: "string", default: "127.0.0.1" },
     "web-dir": { type: "string" },
@@ -41,7 +44,7 @@ const memoryUrl = values["memory-url"] ?? process.env.ETA_MEMORY_URL;
 const publicUrl = values["public-url"] ?? process.env.ETA_PUBLIC_URL;
 
 const host = await startHost({
-  dataDir: resolve(values["data-dir"] ?? join(homedir(), ".eta")),
+  dataDir: join(homedir(), ".eta"),
   port,
   hostname: values.host,
   ...(values["web-dir"] === undefined

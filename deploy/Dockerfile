@@ -48,9 +48,13 @@ COPY --from=gateway /repo/packages/llm-gateway/lib/libllm-gateway.so /repo/packa
 RUN mkdir /data && chown bun:bun /data
 
 # The one volume: the database, the session files, the agents' workspaces, the artifacts, the
-# provider config, the LLM gateway's credentials and the access token all live under it.
+# provider config, the LLM gateway's credentials and the access token all live under it, inside
+# `.eta` — the host writes to `$HOME/.eta` and HOME is /data here, so the volume's contents are
+# `/data/.eta/…`. A volume from before this (files straight in /data) needs one move:
+# `docker run --rm -v eta-data:/data alpine sh -c 'mkdir -p /data/.eta && mv /data/* /data/.eta'`
 VOLUME /data
 USER bun
+ENV HOME=/data
 EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
   CMD curl -fsS http://127.0.0.1:8787/up || exit 1
@@ -58,4 +62,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
 # Listening beyond loopback turns the token gate on; the token is created in the data directory
 # on first start (`docker exec eta cat /data/access-token`). Flags after the image name are
 # appended: `docker run eta --allow-origin https://eta.example.com --memory-url http://memory:8320`.
-ENTRYPOINT ["bun", "apps/eta/src/main.ts", "--data-dir", "/data", "--web-dir", "/srv/web", "--host", "0.0.0.0", "--port", "8787"]
+ENTRYPOINT ["bun", "apps/eta/src/main.ts", "--web-dir", "/srv/web", "--host", "0.0.0.0", "--port", "8787"]

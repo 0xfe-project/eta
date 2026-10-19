@@ -2,7 +2,8 @@
 #
 # The host listens on :8787 (put your proxy in front of it; behind a proxy set
 # ETA_ALLOW_ORIGIN to the page's origin, e.g. https://eta.example.com). The token is in
-# the data volume: `docker compose -f deploy/compose.yaml exec eta cat /data/access-token`,
+# the data volume (`HOME` is /data, so the files are under /data/.eta):
+# `docker compose -f deploy/compose.yaml exec eta cat /data/.eta/access-token`,
 # then open http://<host>:8787/?token=<token> once.
 #
 # The host runs as the image's non-root `bun` user (uid 1000) and so do the sessions' bash. A fresh

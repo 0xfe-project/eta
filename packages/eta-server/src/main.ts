@@ -6,14 +6,15 @@ import { join } from "node:path";
  * A thin shell around `assembleServer` — argument parsing, a signal handler, and the one thing
  * an assembly cannot do for itself: knowing where its data directory is.
  *
- *   bun packages/eta-server/src/main.ts --data-dir ~/.eta --port 8787 [--host 127.0.0.1] [--run-file <path>]
+ *   bun packages/eta-server/src/main.ts --port 8787 [--host 127.0.0.1] [--run-file <path>]
  *
  * `--run-file` makes this process discoverable (service-file.ts): it claims the file before it
  * listens, publishes host/port once it does, and stands down with exit code 3 when a live backend
  * already owns the file — a shell that launches one and finds another running uses that one.
  *
- * Everything else is defaults: `~/.eta/config.json` for providers, `<data-dir>/settings.json`
- * for the defaults new sessions inherit, `<data-dir>/sessions/<id>/` for the sessions themselves.
+ * Everything else is defaults under `~/.eta`: `config.json` for providers, `settings.json` for the
+ * defaults new sessions inherit, `sessions/<id>/` for the sessions themselves. That directory is
+ * `$HOME`'s and is not a flag — see apps/eta/src/main.ts for why.
  */
 import process from "node:process";
 import { SERVICE_PROTOCOL } from "@eta/client-contracts";
@@ -32,7 +33,7 @@ function argument(name: string, fallback: string): string {
   return value ?? fallback;
 }
 
-const dataDir = argument("data-dir", join(homedir(), ".eta"));
+const dataDir = join(homedir(), ".eta");
 const port = Number(argument("port", "8787"));
 // Loopback unless asked otherwise: anything that can reach this port can run commands.
 const hostname = argument("host", "127.0.0.1");
