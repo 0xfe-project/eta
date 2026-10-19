@@ -36,7 +36,7 @@ import {
   MAX_MESSAGE_CHARS,
   plainDraft,
 } from "@/lib/composer";
-import { buildMenu } from "@/lib/composer-menu";
+import { buildMenu, mentionAt } from "@/lib/composer-menu";
 import { translate } from "@/lib/i18n";
 import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { firstVisible } from "@/lib/rail";
@@ -45,6 +45,7 @@ import { readTheme, setTheme } from "@/lib/theme";
 import { ACTIVE_STATUSES, RUNNING_STATUSES } from "@/lib/timeline";
 import { summarizeArgs } from "@/lib/tool-summary";
 import { agentName } from "@/queries/agents";
+import { useProjectFiles } from "@/queries/projects";
 import { useRunBlocks } from "@/queries/sessions";
 import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar } from "./agent-identity";
@@ -887,8 +888,10 @@ export function ChatPanel({
           maxCharacters: MAX_MESSAGE_CHARS,
         })
       : undefined;
-  // One menu, two sources (lib/composer-menu.ts): `@` offers the group's members (the host has no
-  // file listing yet, so no files), `/` offers commands.
+  // The project's files, asked for from its machine once an `@` is being typed.
+  const files = useProjectFiles(group?.projectId, mentionAt(text) !== null);
+  // One menu, three sources (lib/composer-menu.ts): `@` offers the group's members, then the
+  // project's files, and `/` offers commands.
   const menu = buildMenu({
     text,
     members: members.map((member) => ({
@@ -896,7 +899,7 @@ export function ChatPanel({
       name: mentionLabel(member, members),
       busy: member.status !== "idle",
     })),
-    files: [],
+    files,
     commands: SLASH_COMMANDS,
     dismissed: menuDismissed || blocked !== undefined,
   });
@@ -910,9 +913,11 @@ export function ChatPanel({
               : {
                   name: item.value.trim() as `@${string}`,
                   description:
-                    item.kind === "member" && item.hint
-                      ? translateText("mentions.busyHint")
-                      : translateText("mentions.replyHint"),
+                    item.kind === "file"
+                      ? translateText("composer.fileHint")
+                      : item.kind === "member" && item.hint
+                        ? translateText("mentions.busyHint")
+                        : translateText("mentions.replyHint"),
                 },
         );
   const menuOpen = matches.length > 0;

@@ -43,7 +43,7 @@
 | ------------- | ------------------------------------- | ------------------------------------------------------------------------------- |
 | agents        | `agents`（eager）                     | `create` `update` `delete` `direct`                                             |
 | machines      | `machines`（eager）                   | `enroll` `approve` `revoke` `rename`                                            |
-| projects      | `projects`（eager）                   | `create` `update` `setSteward`（归档经 `update`）                               |
+| projects      | `projects`（eager）                   | `create` `update` `setSteward` `files`（归档经 `update`）                       |
 | conversations | `conversations`、`conversations.<id>` | `create` `update` `invite` `remove` `setSteward` `send` `stop` `read` `history` |
 | inbox         | `inbox`                               | `answer` `setApprovals`                                                         |
 | usage         | `usage`                               | 只读                                                                            |

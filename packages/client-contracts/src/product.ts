@@ -326,7 +326,12 @@ export type MachineCall = {
 
 /* ------------------------------------------------------------------ projects */
 
-export const PROJECT_ACTIONS = ["create", "update", "setSteward"] as const;
+export const PROJECT_ACTIONS = [
+  "create",
+  "update",
+  "setSteward",
+  "files",
+] as const;
 export type ProjectAction = (typeof PROJECT_ACTIONS)[number];
 
 export interface ProjectArgs {
@@ -340,12 +345,19 @@ export interface ProjectArgs {
   update: { projectId: string; name?: string; archived?: boolean };
   /** Null clears it. Writes a system row into every conversation that follows the project. */
   setSteward: { projectId: string; agentId: string | null };
+  /**
+   * The project's files, relative to its directory, listed on the project's own machine. Shallow
+   * files come first; `limit` (default 2000, at most 5000) caps the list.
+   */
+  files: { projectId: string; limit?: number };
 }
 export interface ProjectResults {
   /** `existed` when the machine already had a project at that path: that one is returned. */
   create: { project: ProjectView; existed: boolean };
   update: { project: ProjectView };
   setSteward: { project: ProjectView };
+  /** `truncated` when more files exist than were returned. */
+  files: { files: string[]; truncated: boolean };
 }
 export type ProjectCall = {
   [A in ProjectAction]: Omit<CallFrame, "target" | "action" | "args"> & {

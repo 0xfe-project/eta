@@ -32,6 +32,8 @@ interface Pending {
   reject: (error: Error) => void;
 }
 let sends: Pending[] = [];
+// The projects the composer asked for files of.
+let filesAsked: string[] = [];
 
 const row = (fields: Partial<MessageView>): MessageView => {
   seq += 1;
@@ -84,6 +86,13 @@ function start(
       ),
   );
   host.handle("conversations.stop", () => ({ stopped: [] }));
+  host.handle("projects.files", (args) => {
+    filesAsked.push((args as { projectId: string }).projectId);
+    return {
+      files: ["README.md", "src/app.ts", "src/lib/util.ts"],
+      truncated: false,
+    };
+  });
   return mount(<Chat conversationId={CONV} />).then((mounted) => ({
     ...mounted,
     host,
@@ -117,6 +126,7 @@ beforeEach(() => {
   CONV = `chat-delivery-${conversations}`;
   seq = 0;
   sends = [];
+  filesAsked = [];
   useOutbox.setState({ drafts: {}, outgoing: [] });
 });
 afterEach(async () => {
@@ -302,5 +312,36 @@ describe("older rows", () => {
   it("offers the earlier page while the oldest row seen is not the first", async () => {
     const { container: c } = await start([row({ text: "第三条", seq: 3 })]);
     expect(c.textContent).toContain("加载更早的消息");
+  });
+});
+
+describe("the @ menu", () => {
+  const options = (c: HTMLElement) =>
+    [...c.querySelectorAll('[role="option"]')].map((o) => o.textContent);
+
+  it("offers the members first and then the project's files, listed on demand", async () => {
+    const { container: c } = await start();
+    await flush();
+    // Nothing is asked of the project's machine until an @ is typed.
+    expect(filesAsked).toEqual([]);
+    await type("看一下 @");
+    await flush();
+    expect(filesAsked).toEqual(["p1"]);
+    const rows = options(c);
+    expect(rows[0]).toContain("@研究员");
+    expect(rows.slice(1).map((row) => row?.split("文件")[0])).toEqual([
+      "@README.md",
+      "@src/app.ts",
+      "@src/lib/util.ts",
+    ]);
+  });
+
+  it("narrows the files as the person types, and completes the path", async () => {
+    const { container: c } = await start();
+    await type("看 @util");
+    await flush();
+    expect(options(c)).toEqual([expect.stringContaining("@src/lib/util.ts")]);
+    await enter(c);
+    expect(composed(c)).toBe("看 @src/lib/util.ts ");
   });
 });
