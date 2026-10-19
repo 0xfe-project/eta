@@ -4,12 +4,7 @@
 
 ## 任务
 
-看板（`tasks` / `tasks.<id>`，`apps/eta/src/tasks`）。任务有编号（`#12`，表的 `number` 用 AUTOINCREMENT，**删掉最新的任务也不会让编号复用**），标题、描述、状态 `backlog | todo | in_progress | in_review | done | blocked | cancelled`，指派对象 `none | user`（智能体用它把工作交还给用户），创建者（智能体或用户；任务比作者活得久），以及它所属的对话。
-
-- **一个入口，两种来路**：线上的 action（`tasks.create / update / comment / delete / link / confirmDraft`）和智能体的工具是同一组操作（`TaskBoard`）。字段校验、变更与它留下的活动记录是一次写入，任务的所有卡片在同一次写入里刷新，然后才通知看着的人（动了的对话和看板本身）。
-- **活动记录**（`task_activity`）是任务页的时间线，也是卡片摘要的来源。
-- **草稿与卡片**：智能体在对话里用 `draft_task` 提议任务，这是对话时间线上的一行（`task_draft`），带标题和按讨论写成的描述，此时看板上还没有任何东西，也不唤醒谁。用户确认（`tasks.confirmDraft`）后，同一行变成该任务的卡片（`task_card`），此后任务变化时刷新。一行三种状态，对话保留历史，没有第二份会漂移的拷贝。一个任务在一个对话里至多一张卡。
-- 智能体的工具：`draft_task`、`list_tasks`、`get_task`、`create_task`（用户明确要建任务时）、`update_task`、`comment_task`。工具描述承载纪律：草稿是提议，由用户确认。
+看板（`tasks` / `tasks.<id>`，`apps/eta/src/tasks`）：智能体提出任务，用户确认，提出它的智能体在一个全新的会话里去执行，做完交回待验收。完整的说明（草稿与卡片、工作区、运行队列、`finish_task`、daemon 上的运行）在[任务](tasks.md)。
 
 ## 产物
 

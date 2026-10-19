@@ -26,6 +26,7 @@ docs/architecture/   架构说明
 - [访问控制](docs/architecture/access.md)：Origin 检查、令牌门、能力路由
 - [LLM 网关](docs/architecture/llm-gateway.md)：订阅账号（Codex、Grok）与 Gemini key，CLIProxyAPI 经 c-shared 与 bun:ffi 嵌入
 - [记忆](docs/architecture/memory.md)：边车、身份头、host 如何调用它
+- [任务](docs/architecture/tasks.md)：智能体提出、用户确认、同一个智能体在全新会话里执行
 - [任务、产物与定时任务](docs/architecture/tasks-artifacts-routines.md)
 
 界面约定见 [DESIGN.md](DESIGN.md) 与 [apps/web/AGENTS.md](apps/web/AGENTS.md)。
