@@ -43,6 +43,13 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "**/uv.lock"
 
+      # The LLM gateway (packages/llm-gateway) is Go built as a C shared library; its modules
+      # and build cache are cached by this action.
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: packages/llm-gateway/go.mod
+          cache-dependency-path: packages/llm-gateway/go.sum
+
       # Bun's package store; uv's is cached by its setup action above.
       - uses: actions/cache@v6
         with:

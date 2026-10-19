@@ -8,6 +8,7 @@
 <数据目录>/
   eta.sqlite(-wal, -shm)    产品数据库
   config.json               上游设置（模型、provider 等；providers 插件维护）
+  llm/                      LLM 网关的状态：auths/ 凭据、models.json、providers.json（Gemini key）
   sessions/<会话 id>/       上游会话：meta.json + journal.jsonl（本机会话）
   agents/<智能体 id>/       智能体的工作区（它同时是一个 project）
   routines/<定时任务 id>/   定时任务每次运行的工作目录

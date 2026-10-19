@@ -8,7 +8,8 @@ eta 是一个人用来指挥多个智能体的工作台。服务端是**一个 B
    ▼
 主 node  apps/eta                              ← 唯一的进程；SQLite + 文件在一个数据目录里
    ├─ 上游地板  packages/eta-server：sessions、providers、settings、personas
-   ├─ 产品插件  agents machines projects conversations inbox usage tasks artifacts routines [memory]
+   ├─ 产品插件  agents machines projects conversations inbox usage tasks artifacts routines [memory] [llm]
+   ├─ LLM 网关  packages/llm-gateway：嵌入 CLIProxyAPI 的 Go 库，bun:ffi 加载（订阅账号、Gemini key）
    ├─ 本机会话  harness（packages/eta-core、eta-harness…）直接在进程里跑
    │
    ├──── /machines/connect（WSS，daemon 反向拨入）──▶ eta-daemon（别的机器：只跑会话）
@@ -24,7 +25,7 @@ eta 是一个人用来指挥多个智能体的工作台。服务端是**一个 B
 | eta-daemon     | `apps/daemon` | 可选，每台额外的机器一个。`bun build --compile` 出的单文件，不含 Web、数据库、产品插件和模型配置         |
 | 记忆边车       | `apps/memory` | 可选。Python（mem0 + fastembed），自己的 PostgreSQL（pgvector）。没有它，host 不挂载记忆，界面隐藏记忆页 |
 
-没有别的服务：没有控制面、网关、消息队列、容器编排或主库。
+没有别的服务：没有控制面、消息队列、容器编排或主库。LLM 网关不是服务，是加载进 host 进程的一个库（见 [LLM 网关](llm-gateway.md)）。
 
 ## 代码布局
 
@@ -41,6 +42,7 @@ packages/
   eta-server、eta-plugin-sdk     上游服务端地板：WebSocket 管道、注册表、状态推送、sessions 等 bundled 插件
   eta-ssh、eta-plugin-ssh、eta-plugin-git   经 SSH 的执行环境与 git 插件
   client-wire-proto、client-contracts   线上的帧，以及产品 target 的类型（Web 与 host 共用）
+  llm-gateway   Go（CLIProxyAPI）网关，c-shared 库 + bun:ffi 绑定
 deploy/       Dockerfile、memory.Dockerfile、compose.yaml
 ```
 

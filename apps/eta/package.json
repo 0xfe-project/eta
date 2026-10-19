@@ -12,6 +12,7 @@
     "test": "bun --bun vitest --run --passWithNoTests"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "0.85.1",
     "@eta/client-contracts": "*",
     "@eta/client-wire-proto": "*",
     "@eta/core": "*",
@@ -26,7 +27,6 @@
     "typebox": "1.3.34"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "0.85.1",
     "@types/node": "22.19.19",
     "bun-types": "1.4.2",
     "typescript": "5.9.3",

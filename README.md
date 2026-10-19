@@ -9,6 +9,7 @@ apps/
   web/       React 界面，通过那条 WebSocket 读写
   memory/    Python 边车（mem0 + PostgreSQL/pgvector），可选
 packages/
+  llm-gateway  Go 网关（嵌入 CLIProxyAPI），编成 c-shared 库由 host 加载
   eta-*      上游 eta 的内核、harness、服务端地板、SSH 与 git 插件
   client-wire-proto、client-contracts   线上的帧与产品 target 的类型
 deploy/      Dockerfile、memory.Dockerfile、compose.yaml
@@ -23,6 +24,7 @@ docs/architecture/   架构说明
 - [数据](docs/architecture/data.md)：SQLite 与迁移、会话文件、数据目录布局
 - [机器与 daemon](docs/architecture/machines.md)：配对、epoch、模型与工具的代理、远端会话
 - [访问控制](docs/architecture/access.md)：Origin 检查、令牌门、能力路由
+- [LLM 网关](docs/architecture/llm-gateway.md)：订阅账号（Codex、Grok）与 Gemini key，CLIProxyAPI 经 c-shared 与 bun:ffi 嵌入
 - [记忆](docs/architecture/memory.md)：边车、身份头、host 如何调用它
 - [任务、产物与定时任务](docs/architecture/tasks-artifacts-routines.md)
 
@@ -30,10 +32,10 @@ docs/architecture/   架构说明
 
 ## 环境与初始化
 
-需要 Bun 1.3.14 和 uv（Python 3.13，uv 会按 `.python-version` 自动获取）。不需要 Docker、数据库或任何外部服务。
+需要 Bun 1.3.14、uv（Python 3.13，uv 会按 `.python-version` 自动获取）和 Go（LLM 网关；`go.mod` 要求的版本由 `GOTOOLCHAIN=auto` 自动获取，cgo 需要 gcc）。不需要 Docker、数据库或任何外部服务。没有 Go 时 host 仍能运行，只是没有订阅账号与 Gemini key。
 
 ```sh
-bun run setup     # bun install + uv sync（记忆边车的 Python 依赖）
+bun run setup     # bun install + uv sync（记忆边车的 Python 依赖）+ 构建 LLM 网关库（首次约两分钟）
 bun run dev       # host 与 web 开发服务器
 bun run check     # 提交前的全部检查
 ```
@@ -43,7 +45,7 @@ bun run check     # 提交前的全部检查
 - Web：http://127.0.0.1:3000（`ETA_WEB_PORT` 改端口）
 - host：http://127.0.0.1:8787（`ETA_PORT` 改端口），数据在 `var/eta-dev/`；vite 把 `/ws` 代理给它，host 以 `--allow-origin` 放行 vite 的地址
 
-打开 Web 后，先在设置的"模型服务"里添加模型服务（Codex 用设备码登录，或填 API key），再新建智能体与对话。
+打开 Web 后，先在设置的"模型服务"里添加模型服务（填 API key；或在"订阅与密钥"里用设备码绑定 Codex、Grok 订阅，或填 Google AI Studio 的 key），再新建智能体与对话。
 
 `bun run check` 等于 `dprint check`、`bun run lint:repo`（根目录 eslint）和 `turbo run build typecheck lint test knip`。`bun run format` 用 dprint 格式化。CI 与 pre-commit 钩子跑的是同一组检查，turbo 结果走远程缓存。
 
@@ -67,6 +69,7 @@ host 的 flag（`apps/eta/src/main.ts`）：
 | `--token-file <path>` | 开启令牌门并指定令牌文件（不存在时创建，权限 0600）。监听非回环地址而没给时用 `<数据目录>/access-token` |
 | `--allow-origin <o>`  | 额外允许打开 WebSocket 的页面 origin，可重复。放在改写了 `Host` 的反向代理后面时填页面的外部地址        |
 | `--memory-url <url>`  | 记忆边车的地址，也可用环境变量 `ETA_MEMORY_URL`（flag 优先）。不给则没有记忆                            |
+| `--no-llm`            | 不加载 LLM 网关（没有订阅账号与 Gemini key）                                                            |
 
 首次访问带令牌的 host：在浏览器打开 `http://host:8787/?token=<令牌>` 一次，之后用 cookie；脚本用 `Authorization: Bearer <令牌>`。`/up` 是健康检查，不需要令牌。细节见[访问控制](docs/architecture/access.md)。
 
