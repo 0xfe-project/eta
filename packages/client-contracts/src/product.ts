@@ -169,6 +169,22 @@ export type MessageStatus =
   | "stopping"
   | "stopped";
 
+/**
+ * One tool call a reply made, kept on the reply's row when it ends (`data.activity`, oldest
+ * first) so the page can draw the same cards after the run as during it. Everything is short:
+ * `input` is the call's arguments with long values cut, `output` is the head of the result text,
+ * and `details` is what the tool left for the page (`publish_artifact` names its artifact) and is
+ * dropped when it is large. A call the run ended before the result of is `failed`.
+ */
+export interface ToolActivity {
+  id: string;
+  name: string;
+  input?: unknown;
+  output?: string;
+  status: "completed" | "failed";
+  details?: unknown;
+}
+
 /** One row of a conversation's timeline. */
 export interface MessageView {
   id: string;
@@ -195,7 +211,8 @@ export interface MessageView {
    * What the row carries beyond its text. A user row has `woke` (agents given a reply row) and
    * `joined` (agents whose turn it steered); a system row has the `event` it records (`steward`
    * with `from`/`to`, `wake_budget`); a failed reply has the `code` it failed with (`restart`,
-   * `run_failed`, `unavailable`, `gone`); a `task_draft` row has `TaskDraftData` and a
+   * `run_failed`, `unavailable`, `gone`) and, like any reply that ran, the `activity` of its
+   * tool calls (`ToolActivity[]`, absent when it made none); a `task_draft` row has `TaskDraftData` and a
    * `task_card` row has `TaskCardData`.
    */
   data: Record<string, unknown>;

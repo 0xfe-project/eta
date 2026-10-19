@@ -150,6 +150,22 @@ describe("a reply on a remote machine", () => {
     expect(done.text).toContain(r.dir);
   });
 
+  it("its tool calls come back on the reply's row", async () => {
+    const { models } = scriptedModels((request) =>
+      request.lastRole === "toolResult"
+        ? say("ok")
+        : call("bash", { command: "echo over-there" }, "call-remote"),
+    );
+    const r = await remoteWorld({ models });
+    const { group } = await r.agents("Ada");
+    const sent = await r.send(group.id, "do it");
+    const done = await r.settled(group.id, sent.replies[0]!.id);
+    expect(done.data.activity).toMatchObject([
+      { id: "call-remote", name: "bash", status: "completed" },
+    ]);
+    expect(JSON.stringify(done.data.activity)).toContain("over-there");
+  });
+
   it("the second wake finds the same session, still the daemon's", async () => {
     const { models, requests } = scriptedModels(() => say("again"));
     const r = await remoteWorld({ models });

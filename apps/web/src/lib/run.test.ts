@@ -1,6 +1,6 @@
 import type { AgentMessage, ViewMessageRow } from "@eta/client-contracts";
 import { describe, expect, it } from "@rstest/core";
-import { runBlocks } from "./run";
+import { runBlocks, savedTools } from "./run";
 
 let seq = 0;
 const row = (message: object): ViewMessageRow => {
@@ -129,5 +129,50 @@ describe("the run in flight", () => {
     expect(
       runBlocks(committed, growing).map((b) => ("text" in b ? b.text : "")),
     ).toEqual(["one", "two so far"]);
+  });
+});
+
+describe("the tool calls a finished reply kept", () => {
+  it("come back as the blocks the run drew", () => {
+    expect(
+      savedTools({
+        activity: [
+          {
+            id: "c1",
+            name: "publish_artifact",
+            input: { title: "t" },
+            output: "ok",
+            status: "completed",
+            details: { artifactId: "a" },
+          },
+          { id: "c2", name: "bash", status: "failed" },
+        ],
+      }),
+    ).toEqual([
+      {
+        type: "tool",
+        id: "c1",
+        name: "publish_artifact",
+        input: { title: "t" },
+        output: "ok",
+        details: { artifactId: "a" },
+        status: "completed",
+      },
+      {
+        type: "tool",
+        id: "c2",
+        name: "bash",
+        input: undefined,
+        output: undefined,
+        details: undefined,
+        status: "failed",
+      },
+    ]);
+  });
+
+  it("are none when the row kept none or kept rubbish", () => {
+    expect(savedTools({})).toEqual([]);
+    expect(savedTools({ activity: "x" })).toEqual([]);
+    expect(savedTools({ activity: [null, { id: 1 }] })).toEqual([]);
   });
 });

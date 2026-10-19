@@ -1,4 +1,8 @@
-import type { AgentMessage, ViewMessageRow } from "@eta/client-contracts";
+import type {
+  AgentMessage,
+  ToolActivity,
+  ViewMessageRow,
+} from "@eta/client-contracts";
 
 // What a member's session is doing in the run that is in flight, as the blocks a reply is drawn
 // from. The timeline's reply row only gets its text when the run ends, so while it works the
@@ -18,6 +22,33 @@ export type RunBlock =
       details?: unknown;
       status: "running" | "completed" | "failed";
     };
+
+export type ToolBlock = Extract<RunBlock, { type: "tool" }>;
+
+/**
+ * The tool calls a finished reply kept on its row (`data.activity`), as the blocks the run drew
+ * while it was going, so the same cards show after it. A row that kept none, or a malformed one
+ * (the column is JSON), has none.
+ */
+export function savedTools(data: Record<string, unknown>): ToolBlock[] {
+  const saved = data.activity;
+  if (!Array.isArray(saved)) return [];
+  return saved.flatMap((entry: Partial<ToolActivity> | null) =>
+    typeof entry?.id === "string" && typeof entry.name === "string"
+      ? [
+          {
+            type: "tool" as const,
+            id: entry.id,
+            name: entry.name,
+            input: entry.input,
+            output: typeof entry.output === "string" ? entry.output : undefined,
+            details: entry.details,
+            status: entry.status === "completed" ? "completed" : "failed",
+          } satisfies ToolBlock,
+        ]
+      : [],
+  );
+}
 
 interface Part {
   type?: string;

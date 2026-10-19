@@ -26,6 +26,7 @@ project = machine + 目录（同一台机器上同一路径唯一）。`steward_
 - 对话 `kind` 是 `group` 或 `direct`。有 `goal`、`decided` 两段文字（讨论的目标与已定的结论）、`read_seq`（用户读到哪）、`archived`。
 - `participant`：谁参加。`session_id` 是该智能体在这个对话里的会话（首次唤醒时创建，之后一直复用，重启后同样按这行找回），`last_seq` 是它被告知到哪一行。
 - `message`（时间线）：`seq` 在对话内递增，是阅读顺序。`kind` 有 `message`、`mention`、`system`、`task_draft`、`task_card`；`status` 有 `queued`、`working`、`waiting_for_input`、`done`、`failed`、`stopping`、`stopped`。**回复行占着它的位置**：入队时就有 `seq`，文字陆续到达时 `revision` 增长而 `seq` 不变。
+- 回复结束时，这次运行的工具活动存进行的 `data.activity`（`ToolActivity[]`：名称、裁短的输入、输出开头最多 2000 字符、状态，以及工具留给页面的 `details`，如 `publish_artifact` 的产物引用；`details` 超过 4000 字节丢弃，最多 200 条）。回复进行中页面从会话的 transcript 画工具卡，结束后从这里画同样的卡片和产物卡。远端会话由 daemon 的 `run` 随 `RunOutcome.activity` 带回，不需要迁移。
 
 ## 唤醒规则
 

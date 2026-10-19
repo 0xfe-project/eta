@@ -1,3 +1,5 @@
+import type { ToolActivity } from "./product";
+
 /**
  * The link between the primary and a machine that runs the daemon.
  *
@@ -188,6 +190,8 @@ export interface RunOutcome {
   error?: string;
   text: string;
   thinking: string;
+  /** The tool calls the run made, shortened for the reply's row; absent when there were none. */
+  activity?: ToolActivity[];
 }
 
 /** What the daemon asks of the primary (`svc` calls). */

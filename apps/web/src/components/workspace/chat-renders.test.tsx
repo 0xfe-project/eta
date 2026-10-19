@@ -36,6 +36,16 @@ rstest.mock("@/components/markdown", () => ({
   },
 }));
 
+// The ref cards link into the app (a router and a search adapter); here they only say what they
+// point at. Their own rendering is activity-ref.test.tsx.
+rstest.mock("./activity-ref", () => ({
+  ActivityRefCard: ({ value }: { value: { kind: string; title: string } }) => (
+    <span data-testid="ref">
+      {value.kind}:{value.title}
+    </span>
+  ),
+}));
+
 const AGENT = "a1";
 const TURNS = 50;
 // The rows the page has seen outlive a render, so each test has a conversation of its own.
@@ -343,6 +353,45 @@ describe("a reply that is writing", () => {
     ]);
     expect(container.textContent).toContain("看完了");
     expect(container.textContent).not.toContain("我先看看");
+  });
+
+  it("draws the tool calls a finished reply kept, and the artifact one of them published", async () => {
+    const user = row({ text: "发布一个页面" });
+    const reply = row({
+      author: "agent",
+      agentId: AGENT,
+      replyToId: user.id,
+      status: "done",
+      text: "发布好了",
+      data: {
+        activity: [
+          {
+            id: "t1",
+            name: "bash",
+            input: { command: "ls -la" },
+            output: "total 0",
+            status: "completed",
+          },
+          {
+            id: "t2",
+            name: "publish_artifact",
+            input: { title: "报告" },
+            status: "completed",
+            details: { artifactId: "art-1", title: "报告", version: 2 },
+          },
+        ],
+      },
+    });
+    history = [user, reply];
+    const { container } = await start();
+    await flush();
+    expect(container.textContent).toContain("bash · ls -la");
+    expect(container.textContent).toContain("total 0");
+    expect(container.textContent).toContain("publish_artifact");
+    expect(container.querySelector('[data-testid="ref"]')?.textContent).toBe(
+      "artifact:报告",
+    );
+    expect(container.textContent).toContain("发布好了");
   });
 
   it("asks its question in a card and answers on the inbox", async () => {

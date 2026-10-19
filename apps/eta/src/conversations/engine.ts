@@ -660,25 +660,29 @@ export class Engine {
 
     try {
       const result = await handle.run(prompt, () => !this.#closing);
+      // What the run did with tools stays on the row, so the page draws it after the run too.
+      const activity =
+        result.activity === undefined ? {} : { activity: result.activity };
       if (this.#closing && result.status === "aborted") {
         this.#timeline.finish(replyId, {
           status: "failed",
           text: result.text || RESTART_TEXT,
           thinking: result.thinking,
-          data: { ...reply.data, code: "restart" },
+          data: { ...reply.data, ...activity, code: "restart" },
         });
       } else if (result.status === "failed") {
         this.#timeline.finish(replyId, {
           status: "failed",
           text: result.error ?? "The run failed.",
           thinking: result.thinking,
-          data: { ...reply.data, code: "run_failed" },
+          data: { ...reply.data, ...activity, code: "run_failed" },
         });
       } else {
         this.#timeline.finish(replyId, {
           status: result.status === "aborted" ? "stopped" : "done",
           text: result.text,
           thinking: result.thinking,
+          data: { ...reply.data, ...activity },
         });
       }
     } catch (error) {

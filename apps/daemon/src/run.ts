@@ -7,21 +7,24 @@
  * left in the inbox, and what the session said is the text of its last assistant message that
  * had any, with what it thought in the same message (or, failing that, the last thought it had).
  */
-import type { RunOutcome } from "@eta/client-contracts";
+import type { RunOutcome, ToolActivity } from "@eta/client-contracts";
 import type { AgentMessage } from "@eta/core";
 import type { ManagedSession } from "@eta/server";
 import { kernelOn } from "@eta/core";
+import { ActivityRecorder } from "./activity";
 
 /** What a session says during a run; `stop` lets go of the listener. */
 export function listen(managed: ManagedSession): {
-  said: () => { text: string; thinking: string };
+  said: () => { text: string; thinking: string; activity: ToolActivity[] };
   stop: () => void;
 } {
   let text = "";
   let thinking = "";
+  const activity = new ActivityRecorder();
   const off = kernelOn(managed.session.kernel.ctx)(
     "message:end",
     ({ message }: { message: AgentMessage }) => {
+      activity.see(message);
       if (message.role !== "assistant") return;
       const blocks = Array.isArray(message.content) ? message.content : [];
       const spoken = blocks
@@ -37,7 +40,10 @@ export function listen(managed: ManagedSession): {
       if (spoken.trim() !== "") text = spoken;
     },
   );
-  return { said: () => ({ text, thinking }), stop: () => void off() };
+  return {
+    said: () => ({ text, thinking, activity: activity.list() }),
+    stop: () => void off(),
+  };
 }
 
 /**
@@ -74,6 +80,7 @@ export async function runAndWait(
         : {}),
       text: said.text,
       thinking: said.thinking,
+      ...(said.activity.length === 0 ? {} : { activity: said.activity }),
     };
   } finally {
     heard.stop();

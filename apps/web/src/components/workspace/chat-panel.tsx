@@ -4,7 +4,7 @@ import type {
   MessageView,
 } from "@eta/client-contracts";
 import type { Draft } from "@/lib/composer";
-import type { RunBlock } from "@/lib/run";
+import type { ToolBlock } from "@/lib/run";
 import type { Outgoing, SendMode } from "@/queries/outbox";
 import type { Question } from "@/queries/questions";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
@@ -40,6 +40,7 @@ import { buildMenu } from "@/lib/composer-menu";
 import { translate } from "@/lib/i18n";
 import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { firstVisible } from "@/lib/rail";
+import { savedTools } from "@/lib/run";
 import { readTheme, setTheme } from "@/lib/theme";
 import { ACTIVE_STATUSES, RUNNING_STATUSES } from "@/lib/timeline";
 import { summarizeArgs } from "@/lib/tool-summary";
@@ -61,7 +62,6 @@ import { ThinkingBlock } from "./transcript/thinking-block";
 import { ToolCard, ToolCardBlock } from "./transcript/tool-card";
 import { useWorkspaceStore } from "./workspace-store";
 
-type ToolBlock = Extract<RunBlock, { type: "tool" }>;
 type SlashName =
   | "/stop"
   | "/queue"
@@ -606,6 +606,12 @@ const Turn = memo(
               // for reading the answer critically rather than a second answer.
               <ThinkingBlock text={message.thinking} />
             )}
+            {savedTools(message.data).map((block) => (
+              // What it did with tools, as the cards the run showed while it worked.
+              <div key={block.id} className="space-y-1">
+                <ToolActivity block={block} />
+              </div>
+            ))}
             {message.text === "" || message.status === "failed" ? null : (
               <div className="message-content">
                 <Markdown>{message.text}</Markdown>
