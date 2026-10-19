@@ -810,6 +810,25 @@
   .tool-step + .tool-step .tool-card {
     border-top: 0;
   }
+  /* In a group the steps sit in one fixed-height frame that scrolls: the frame carries the border,
+     the steps only the hairlines between them. */
+  .process-box {
+    height: 176px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+  }
+  .process-box:focus-visible {
+    outline: 1px solid var(--ring);
+    outline-offset: -1px;
+  }
+  .process-box .thinking-block,
+  .process-box .tool-card {
+    border-width: 0 0 1px;
+  }
+  .process-box > div > :last-child,
+  .process-box > div > :last-child .tool-card:last-child {
+    border-bottom-width: 0;
+  }
   .thinking-block-header {
     list-style: none;
     display: flex;
