@@ -20,8 +20,11 @@ export function useChatList() {
   const { agents, loaded } = useAgentList();
   const rows = useMemo<ChatRow[]>(() => {
     const open = groups.filter((conversation) => !conversation.archived);
+    // Every agent a private chat exists for, archived or not. Counting only the open ones made
+    // archiving a chat put its agent back in the list as an agent with no chat — the row the
+    // person had just archived, under the same name.
     const talked = new Set(
-      open
+      groups
         .filter((conversation) => conversation.kind === "direct")
         .map((conversation) => conversation.participants[0]?.agentId),
     );

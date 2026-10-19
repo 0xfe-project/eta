@@ -130,6 +130,17 @@ describe("侧边栏的对话列表", () => {
     ]);
   });
 
+  it("leaves nothing behind when a private chat is archived", async () => {
+    const { container } = await tree([
+      group("g1", "装配", "p-eta"),
+      direct("d1", "乐子人", "a1", { archived: true }),
+    ]);
+    // The archived chat is Settings', and its agent is not offered again as one with no chat:
+    // the row that was just archived would come straight back under the same name.
+    expect(rowNames(container)).not.toContain("乐子人");
+    expect(rowNames(container)).toEqual(["装配", "与 装配检查 对话"]);
+  });
+
   it("starts a conversation from the one + on the list heading", async () => {
     const { container } = await tree([group("g1", "装配", "p-eta")]);
     const adds = container.querySelectorAll('button[title="新对话"]');
