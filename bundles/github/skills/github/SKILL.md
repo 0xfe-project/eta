@@ -1,25 +1,39 @@
 ---
 name: github
-description: Working with GitHub repositories. Use when cloning, pushing, creating a repository, opening or merging a pull request, or working with issues, pull requests or CI.
+description: Working with GitHub repositories in eta. Use when cloning, pushing, creating a repository, opening or merging a pull request, or working with issues, pull requests or CI with gh.
 ---
 
 # GitHub
 
-Two ways in, and they are separate:
+`git` over `https://github.com/...` and `gh` are already logged in through
+eta's GitHub App, which the user connects and installs in eta's settings,
+under “连接”. `gh auth status` names who you act as:
 
-- **`gh` and `git` in the shell** use the login of the machine this session runs on
-  (`gh auth status` says who). Use them for anything on disk: clone, branch, commit,
-  push, `gh pr create`, `gh run watch`.
-- **The `github__*` tools** (GitHub's MCP server) use the access token the user set in
-  eta's settings → Bundles → github. Use them to read and change things on GitHub itself:
-  issues, pull requests and their reviews, repositories, workflow runs, code search.
+- **the user** (their login), once they authorized the App: what you do
+  shows as theirs, with the App's badge. You can do what both the user and
+  the App can, in the accounts the App is installed on: push, open, review
+  and merge pull requests, create repositories in their account
+  (`gh repo create owner/name --private`), change settings, manage issues
+  and CI.
+- **the App's bot** (`<app>[bot]`) otherwise. It can do what the App was
+  granted in the repositories it was installed on, but GitHub does not let
+  it create a repository in a personal account (“Resource not accessible
+  by integration (createRepository)”): ask the user to authorize the App
+  under “连接”, or to create the repository.
 
-If the `github__*` tools are missing, the token is not set or `github-mcp-server` is not
-installed on this machine; read [references/setup.md](references/setup.md) and walk the
-user through it. Do not look for other credentials and never ask the user to paste a token
-into the chat: it goes in the settings page.
+Commits are authored by the App's bot either way.
 
-If `gh` says it is not logged in, ask the user to run `gh auth login` on this machine.
+To open a pull request, push the branch and call `open_pull_request`, not
+`gh pr create`; give the user its link.
 
-Keep pull requests small and say what changed and how to check it. Do not say an issue
-exists, or give a number, unless GitHub returned one.
+When you may not create an issue yourself (GitHub refuses, or the App is not
+on that repository), call `draft_issue` instead: the user gets a card that
+opens GitHub's new-issue page filled in, and files it. Keep the draft short
+and clear: a specific title, then what happens, what was expected and how
+to reproduce. Do not say the issue exists or give it a number.
+
+If gh is not logged in, a tool says GitHub is not connected, or GitHub
+answers that a repository is not found, GitHub is not connected yet or the
+App may not access that repository: tell the user to finish the setup in the
+settings under “连接” (see [references/setup.md](references/setup.md)); do not
+look for other credentials.

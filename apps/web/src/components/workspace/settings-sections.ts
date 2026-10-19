@@ -2,6 +2,7 @@ import type { Icon } from "@phosphor-icons/react";
 import type { SettingsSection } from "./workspace-store";
 import { ArchiveIcon } from "@phosphor-icons/react/Archive";
 import { DesktopIcon } from "@phosphor-icons/react/Desktop";
+import { LinkIcon } from "@phosphor-icons/react/Link";
 import { PackageIcon } from "@phosphor-icons/react/Package";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
 import { PlugIcon } from "@phosphor-icons/react/Plug";
@@ -59,6 +60,13 @@ export const settingsSections: {
       return translate("mcp:title");
     },
     icon: PlugIcon,
+  },
+  {
+    value: "connections",
+    get label() {
+      return translate("connections:title");
+    },
+    icon: LinkIcon,
   },
   {
     value: "archived",

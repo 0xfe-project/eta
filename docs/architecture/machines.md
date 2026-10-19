@@ -42,11 +42,11 @@ eta-daemon uninstall-service [--data-dir <dir>]
 
 daemon **只出站**：它反向拨号 `GET /machines/connect`（WebSocket），凭证放在握手的 `Authorization` 头里，从不进地址。一条连接承载三个信道（`packages/client-contracts/src/link.ts`）：
 
-| 信道   | 方向             | 内容                                                                                                                                                   |
-| ------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `pipe` | 主 node → daemon | 普通的 eta 管道协议。daemon 是一个没有自己 socket 的 eta server，主 node 是它的客户端：`sessions.*` 在这里的含义和别处一样                             |
-| `svc`  | daemon → 主 node | daemon 缺的几样东西：生成（`model.stream`）、产品工具（`tool.call`）、审批名单（`tool.gate`）、MCP 凭据（`mcp.credential`）、提问通知（`ask.observe`） |
-| `ctl`  | 双向             | `welcome`（哪台机器、第几个连接、是否已批准）、`approved`、心跳                                                                                        |
+| 信道   | 方向             | 内容                                                                                                                                                                                        |
+| ------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pipe` | 主 node → daemon | 普通的 eta 管道协议。daemon 是一个没有自己 socket 的 eta server，主 node 是它的客户端：`sessions.*` 在这里的含义和别处一样                                                                  |
+| `svc`  | daemon → 主 node | daemon 缺的几样东西：生成（`model.stream`）、产品工具（`tool.call`）、审批名单（`tool.gate`）、MCP 凭据（`mcp.credential`）、GitHub 令牌（`github.credentials`）、提问通知（`ask.observe`） |
+| `ctl`  | 双向             | `welcome`（哪台机器、第几个连接、是否已批准）、`approved`、心跳                                                                                                                             |
 
 因此**模型凭据、OAuth 令牌（含 LLM 网关里的订阅账号）和用量只在主 node**：daemon 要生成时把请求交给主 node，主 node 解析模型、加凭据、向 provider 流式取回再逐事件送回，并计入用量。产品工具（任务、产物、记忆、`mention` 等）在主 node 上为对应的会话运行，它们的执行环境是经链路的 SSH 环境，所以读文件读的是那台机器的文件。每个调用都带会话 id，且**只相信主 node 自己的行**：链路所属的机器必须就是该会话 project 的机器。
 
@@ -60,6 +60,7 @@ daemon **只出站**：它反向拨号 `GET /machines/connect`（WebSocket），
 ## 会话在远端
 
 - 智能体载入的环境包随会话走：`machine.bundleHave` / `machine.bundlePut` 把 daemon 没有的包的文件送过去，`machine.open` 带上包的哈希和配置值（见[环境包](bundles.md#daemon)）；`machine.which` 让 daemon 回答它的 PATH 上有哪些命令。
+- **GitHub 登录**：daemon 机器上的 git 与 gh 登录成 GitHub App（用户授权过就是用户）。daemon 经 `svc` 的 `github.credentials` 向主 node 要令牌（最多一小时，没连接是 `null`），写进自己数据目录的 `github/`，过期前再要；主 node 在 GitHub 连接、授权、断开时发 `machine.githubRefresh` 让它马上再问。App 的私钥、secret 与 refresh token 不出主 node，见 [GitHub](github.md)。
 - 引擎问"位置"（`SessionPlace`）要一个智能体的会话：本机是 `LocalPlace`，远端是 `RemotePlace`：一次 `machine.open` 把会话和智能体对齐，智能体的指令、模型、思考档、persona 卡和产品工具清单随调用送过去（daemon 注册代理工具，调用时回到主 node 执行）。之后一次 run 是一个长调用（`machine.run`），steer/stop 是 daemon 管道上的普通 `sessions.*` 调用。
 - **镜像**：浏览器订阅 `sessions.<id>` 时不需要知道会话在哪台机器。主 node 为远端会话注册同名 target，有人订阅时就订阅 daemon 的同一 target，把它的状态（先整份后 patch）与事件原样再发布；没人看了就取消订阅。链路断开则全部降温，恢复后只重新唤醒仍有人看的。重新订阅时 daemon 会把事件环从头回放一遍；事件帧带 `at`（发生的时刻，毫秒，同一 target 内严格递增，daemon 重启后也不回退），镜像只转发比上次转发的更晚的事件，浏览器不会看到重复的事件。
 - **全局列表**：主 node 在链路在线期间订阅 daemon 自己的 `sessions` 列表，把它的会话并进全局 `sessions` 的 `list`（行上有 `machine`，即机器名）。daemon 不可达时保留最后一次的行，打上 `offline` 标记、去掉 `running`。

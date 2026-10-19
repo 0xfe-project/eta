@@ -14,10 +14,12 @@ import { useTheme } from "@/components/use-theme";
 import { elementPickerDefault, setElementPicker } from "@/lib/element-picker";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useGitHubMounted } from "@/queries/github";
 import { useNeedsAttention } from "@/queries/providers";
 import { AgentSettings } from "./agent-settings";
 import { ApprovalSettings } from "./approval-settings";
 import { BundleSettings } from "./bundle-settings";
+import { ConnectionSettings } from "./connection-settings";
 import { ArchivedGroups } from "./groups";
 import { MachineSettings } from "./machine-settings";
 import { McpSettings } from "./mcp-settings";
@@ -154,6 +156,7 @@ export function SettingsDialog() {
   const settings = useWorkspaceStore((s) => s.settings);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const attention = useSettingsAttention();
+  const githubMounted = useGitHubMounted();
   useSettingsLink();
 
   return (
@@ -174,11 +177,16 @@ export function SettingsDialog() {
         <div className="settings-layout">
           <SettingsNav
             label={translateText("accessibility.sections")}
-            sections={settingsSections.map((section) => ({
-              ...section,
-              attention: attention[section.value],
-              hint: translateText("accessibility.accountsNeedAttention"),
-            }))}
+            sections={settingsSections
+              // No GitHub plugin on the host: nothing to connect.
+              .filter(
+                (section) => section.value !== "connections" || githubMounted,
+              )
+              .map((section) => ({
+                ...section,
+                attention: attention[section.value],
+                hint: translateText("accessibility.accountsNeedAttention"),
+              }))}
             value={settings.section}
             onChange={(section) =>
               setSettings((state) => ({ ...state, section }))
@@ -195,6 +203,8 @@ export function SettingsDialog() {
               <MachineSettings />
             ) : settings.section === "bundles" ? (
               <BundleSettings />
+            ) : settings.section === "connections" ? (
+              <ConnectionSettings />
             ) : settings.section === "mcp" ? (
               <McpSettings />
             ) : settings.section === "archived" ? (

@@ -29,8 +29,9 @@ WebSocket 管道会在这台电脑上以运行 host 的用户身份执行命令�
 - `/share/<token>/…`：公开分享，给不是用户的人，路径里是一个秘密令牌；取消分享后永久失效，再分享会生成新令牌。
 
 - `/mcp/oauth/callback`：MCP 服务器 OAuth 登录结束后，浏览器从授权方跳回来，不带我们的 cookie。凭据是 URL 里的 `state`：只有宿主自己发起、还在等待的登录才认，其余（没有 `state`、`state` 不对、已用过）只回一页提示，什么都不改变；它只放行这一个路径的 GET，见 [MCP](mcp.md)。
+- `/github/manifest/callback`、`/github/authorization/callback`：GitHub App 创建完成、用户授权完成后，浏览器从 github.com 跳回来，同样不带 cookie。凭据是宿主发出的一次性 `state`（创建一小时、授权 15 分钟有效，用一次就作废）：没有、不对、已用过或过期的，什么都不改变，只重定向回“设置 → 连接”并带上原因。装完 App 时 GitHub 带着 `code` 和 `setup_action` 回来、不带 `state`，这一种还要求授权的账号能访问这个 App 的某个安装，且个人 App 只认所有者本人。只放行这两个精确路径的 GET，见 [GitHub](github.md)。
 
-这三类**只读**（GET/HEAD）免令牌门，不为别的原因。其余一切，包括应用自己的 `/artifacts/<id>/<版本>/archive.zip` 下载，仍在令牌门后。预览与分享的每个文件都带 `Content-Security-Policy: sandbox`（不含 `allow-same-origin`），所以别人的 HTML 在不透明 origin 里运行，读不到 cookie 与存储，也不能以用户身份调用 host；另有 `Referrer-Policy: no-referrer`。对无效的能力或令牌，不说明为什么无效。
+这几类**只读**（GET/HEAD）免令牌门，不为别的原因。其余一切，包括应用自己的 `/artifacts/<id>/<版本>/archive.zip` 下载，仍在令牌门后。预览与分享的每个文件都带 `Content-Security-Policy: sandbox`（不含 `allow-same-origin`），所以别人的 HTML 在不透明 origin 里运行，读不到 cookie 与存储，也不能以用户身份调用 host；另有 `Referrer-Policy: no-referrer`。对无效的能力或令牌，不说明为什么无效。
 
 ## daemon 的两个入口
 

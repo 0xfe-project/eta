@@ -45,7 +45,7 @@ packages/
   eta-mcp             MCP 库：代理工具、懒连接、元数据缓存、直接工具、OAuth，见 [MCP](mcp.md)
   client-wire-proto、client-contracts   线上的帧，以及产品 target 的类型（Web 与 host 共用）
   llm-gateway   Go（CLIProxyAPI）网关，c-shared 库 + bun:ffi 绑定
-bundles/      内置的环境包（github、grok、oomol、agenvo），见[环境包](bundles.md)
+bundles/      内置的环境包（github、grok、oomol、agenvo），见[环境包](bundles.md)；github 的 App、令牌与向导见 [GitHub](github.md)
 deploy/       Dockerfile、memory.Dockerfile、compose.yaml
 ```
 

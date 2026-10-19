@@ -10,6 +10,7 @@
 - **活动记录**（`task_activity`）是任务页的时间线，也是卡片摘要的来源。
 - **草稿与卡片**：智能体在对话里用 `draft_task` 提议任务，这是对话时间线上的一行（`task_draft`），带标题和按讨论写成的描述，此时看板上还没有任何东西，也不唤醒谁。用户确认（`tasks.confirmDraft`）后，同一行变成该任务的卡片（`task_card`），此后任务变化时刷新。一行三种状态，对话保留历史，没有第二份会漂移的拷贝。一个任务在一个对话里至多一张卡。
 - 智能体的工具：`draft_task`、`list_tasks`、`get_task`、`create_task`（用户明确要建任务时）、`update_task`、`comment_task`。工具描述承载纪律：草稿是提议，由用户确认。
+- **交付的 PR**：任务板不认识 GitHub；智能体在对话里 `open_pull_request` 后，GitHub 插件把 PR 记在自己的 `task_pull` 表（属于这个对话还在进行的任务），任务页的“交付”一行读它，显示 PR 现在的状态并可以合并。见 [GitHub](github.md)。
 
 ## 产物
 
