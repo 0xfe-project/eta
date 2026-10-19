@@ -4,7 +4,6 @@
  * its sessions touch. Windows goes through WSL.
  */
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -34,12 +33,15 @@ export interface ServiceCommand {
 
 export function serviceDefinition(
   command: ServiceCommand,
-  dataDir: string,
   platform: NodeJS.Platform = process.platform,
   home: string = homedir(),
 ): ServiceDefinition {
-  const name = `io.eta.daemon.${createHash("sha256").update(dataDir).digest("hex").slice(0, 12)}`;
-  const argv = [command.program, ...command.args, "run", "--data-dir", dataDir];
+  // One daemon per user, in one directory: the name says which, and nothing else has to.
+  const name = "io.eta.daemon";
+  // No `--data-dir` in the unit: the daemon's directory is `$HOME/.eta/daemon`, and a user service
+  // (systemd's or launchd's) already runs with that user's HOME. A path baked in here would be a
+  // second way to say where the data is, which is the thing this unit no longer offers.
+  const argv = [command.program, ...command.args, "run"];
   if (platform === "darwin") {
     return {
       name,
@@ -81,9 +83,8 @@ WantedBy=default.target
 
 export async function installService(
   command: ServiceCommand,
-  dataDir: string,
 ): Promise<ServiceDefinition> {
-  const definition = serviceDefinition(command, dataDir);
+  const definition = serviceDefinition(command);
   await mkdir(dirname(definition.path), { recursive: true });
   await writeFile(definition.path, definition.content, { mode: 0o600 });
   if (process.platform === "darwin") {
@@ -106,9 +107,8 @@ export async function installService(
 
 export async function uninstallService(
   command: ServiceCommand,
-  dataDir: string,
 ): Promise<ServiceDefinition> {
-  const definition = serviceDefinition(command, dataDir);
+  const definition = serviceDefinition(command);
   if (process.platform === "darwin") {
     await run("launchctl", [
       "bootout",

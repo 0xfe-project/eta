@@ -16,16 +16,18 @@ project 指向 machine（`project.machine_id`），对话里的会话就在 proj
 
 ## daemon 是什么
 
-`apps/daemon` 用 `bun build --compile` 打成单文件 `eta-daemon`（`bun run --cwd apps/daemon build` → `out/eta-daemon`）。它只含内核、harness、execution、会话存储，以及上游 server 的 SessionManager 与 sessions 插件：**没有 Web、没有 SQLite、没有产品插件、没有 providers 配置**。会话的 kernel 与 journal 都在这台机器上（默认数据目录 `~/.eta-daemon`，或 `ETA_DAEMON_DIR`、`--data-dir`）。
+`apps/daemon` 用 `bun build --compile` 打成单文件 `eta-daemon`（`bun run --cwd apps/daemon build` → `out/eta-daemon`）。它只含内核、harness、execution、会话存储，以及上游 server 的 SessionManager 与 sessions 插件：**没有 Web、没有 SQLite、没有产品插件、没有 providers 配置**。会话的 kernel 与 journal 都在这台机器上，数据目录和宿主一样由 `$HOME` 决定：`~/.eta/daemon`（一个根，宿主占顶层，daemon 占 `daemon/`；`~/.eta/mcp.json` 和 persona 卡片就在同一个根里，不用跨树借用）。没有 `--data-dir`，也没有 `ETA_DAEMON_DIR`。
 
 ```text
-eta-daemon setup <primary-url> <code> [--data-dir <dir>]   用安装码换一个位置，等待批准
-eta-daemon run [--data-dir <dir>]                           连接主 node 并提供服务（默认命令）
-eta-daemon install-service [--data-dir <dir>]               注册成 systemd 用户服务（Linux）或 launchd agent（macOS）
-eta-daemon uninstall-service [--data-dir <dir>]
+eta-daemon setup <primary-url> <code>   用安装码换一个位置，等待批准
+eta-daemon run                           连接主 node 并提供服务（默认命令）
+eta-daemon install-service               注册成 systemd 用户服务（Linux）或 launchd agent（macOS）
+eta-daemon uninstall-service
 ```
 
-首版支持 Linux 与 macOS；Windows 走 WSL。注册的是用户级服务，不需要 root，daemon 以会话要读写文件的同一个用户运行。
+首版支持 Linux 与 macOS；Windows 走 WSL。注册的是用户级服务，不需要 root，daemon 以会话要读写文件的同一个用户运行；服务单元里不写数据目录，用户服务的 `HOME` 就是那个用户的家目录，所以位置只有一处可说。
+
+早于这次改动的版本把数据放在 `~/.eta-daemon`。新版本发现旧目录还在、新目录不在时会**拒绝启动**并打印迁移命令，不会把它当成空目录：那样等于会话还在磁盘上、在主 node 那边却全没了。已经注册过旧服务的话，先用旧版本 `uninstall-service`，再 `mkdir -p "$HOME/.eta" && mv "$HOME/.eta-daemon" "$HOME/.eta/daemon"`，然后用新版本重新 `install-service`。
 
 ## 配对
 

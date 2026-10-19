@@ -21,7 +21,15 @@ export interface Identity {
   secret: string;
 }
 
-export const defaultDataDir = (): string => join(homedir(), ".eta-daemon");
+/**
+ * Where the daemon keeps its own things: inside the one root, in a directory of its own. There is
+ * no flag and no environment variable — `$HOME` decides the root and this is where the daemon
+ * sits in it, next to the host's files rather than in a tree of its own.
+ */
+export const defaultDataDir = (): string => join(homedir(), ".eta", "daemon");
+
+/** Where it kept them while it had a tree of its own. Read only to refuse to start on it. */
+export const legacyDataDir = (): string => join(homedir(), ".eta-daemon");
 
 const identityPath = (dataDir: string): string =>
   join(dataDir, "identity.json");

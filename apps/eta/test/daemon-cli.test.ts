@@ -2,12 +2,13 @@ import type { Buffer } from "node:buffer";
 /**
  * The daemon as a program: `setup` against a host, the approval, and `run` as a separate process.
  *
- * Child processes are started by their pid and stopped by it; each has a data directory of its
- * own.
+ * Child processes are started by their pid and stopped by it; each has a `HOME` of its own, and
+ * the daemon's data is `$HOME/.eta/daemon` inside it — the one root, the same rule it runs by on
+ * a real machine.
  */
 import type { ChildProcess } from "node:child_process";
 import { spawn } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
@@ -35,10 +36,11 @@ afterEach(() => {
   }
 });
 
-/** Start the daemon's command line; `output()` is everything it has printed so far. */
-function daemon(args: string[]) {
+/** Start the daemon's command line as a user whose home is `home`; `output()` is what it printed. */
+function daemon(home: string, args: string[]) {
   const child = spawn(process.execPath, [MAIN, ...args], {
     stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, HOME: home },
   });
   children.push(child);
   let text = "";
@@ -55,10 +57,11 @@ describe("the daemon's command line", () => {
     "setup prints the fingerprint the primary shows, waits for approval, and run then serves",
     async () => {
       const w = await world();
-      const dataDir = await tempDir("eta-daemon-cli-");
+      const home = await tempDir("eta-daemon-cli-");
+      const dataDir = join(home, ".eta", "daemon");
       const { code, url } = await makeCode(w.client, w.host, "from the cli");
 
-      const setup = daemon(["setup", url, code, "--data-dir", dataDir]);
+      const setup = daemon(home, ["setup", url, code]);
       await until(
         () =>
           w.client
@@ -90,7 +93,7 @@ describe("the daemon's command line", () => {
       expect(await setup.exited).toBe(0);
       expect(setup.output()).toContain("Approved.");
 
-      const run = daemon(["run", "--data-dir", dataDir]);
+      const run = daemon(home, ["run"]);
       await until(
         () => machineView(w.client, pending.id)?.status === "online",
         START_MS,
@@ -112,13 +115,12 @@ describe("the daemon's command line", () => {
     "setup with a code the primary refuses says so and leaves no identity",
     async () => {
       const w = await world();
-      const dataDir = await tempDir("eta-daemon-cli-");
-      const setup = daemon([
+      const home = await tempDir("eta-daemon-cli-");
+      const dataDir = join(home, ".eta", "daemon");
+      const setup = daemon(home, [
         "setup",
         `http://127.0.0.1:${w.host.port}`,
         "eta_nonsense",
-        "--data-dir",
-        dataDir,
       ]);
       expect(await setup.exited).not.toBe(0);
       expect(setup.output()).toMatch(/refused the code \(403/);
@@ -130,11 +132,24 @@ describe("the daemon's command line", () => {
   it(
     "run without an identity says what to do",
     async () => {
-      const dataDir = await tempDir("eta-daemon-cli-");
-      const run = daemon(["run", "--data-dir", dataDir]);
+      const home = await tempDir("eta-daemon-cli-");
+      const run = daemon(home, ["run"]);
       expect(await run.exited).toBe(2);
       expect(run.output()).toContain("eta-daemon setup");
     },
     START_MS,
   );
+
+  it("refuses to start on the directory an older daemon used, and says how to move it", async () => {
+    const home = await tempDir("eta-daemon-cli-");
+    mkdirSync(join(home, ".eta-daemon"), { recursive: true });
+    const run = daemon(home, ["run"]);
+    // Not "no identity": the sessions are still in the old directory, and starting empty would
+    // lose them without a word.
+    expect(await run.exited).toBe(2);
+    expect(run.output()).toContain(
+      'mv "$HOME/.eta-daemon" "$HOME/.eta/daemon"',
+    );
+    expect(run.output()).toContain("uninstall-service");
+  });
 });

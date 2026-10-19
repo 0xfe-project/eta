@@ -108,7 +108,7 @@ bun run --cwd apps/daemon build           # 产出 apps/daemon/out/eta-daemon
 3. 在设置页核对指纹一致后批准。
 4. `eta-daemon run` 启动；`eta-daemon install-service` 注册成 systemd 用户服务（Linux）或 launchd agent（macOS）。
 
-daemon 只出站连接主 node，主 node 需要对它可达（经反向代理时要能升级 `/machines/connect`）。数据目录默认 `~/.eta-daemon`（`--data-dir` 或 `ETA_DAEMON_DIR`）。原理见[机器与 daemon](docs/architecture/machines.md)。
+daemon 只出站连接主 node，主 node 需要对它可达（经反向代理时要能升级 `/machines/connect`）。数据目录是 `~/.eta/daemon`，和宿主同一个根，由 `$HOME` 决定（没有开关）。原理见[机器与 daemon](docs/architecture/machines.md)。
 
 ## 记忆边车
 

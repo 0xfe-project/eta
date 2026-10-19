@@ -26,7 +26,7 @@
 
 环境包的目录不在数据目录里：内置的在仓库的 `bundles/`，用户的在 `~/.eta/bundles/<name>/`，来自 git 的在 `~/.eta/bundles/git/<哈希>/`（见[环境包](bundles.md)）。
 
-daemon 有自己的数据目录（默认 `~/.eta-daemon`，见[机器与 daemon](machines.md)；收到的环境包在它的 `bundles/<哈希>/`，GitHub 登录在它的 `github/`）。记忆边车的数据在它自己的 PostgreSQL，不在这里。
+daemon 的数据在同一个根里：`~/.eta/daemon/`（见[机器与 daemon](machines.md)），它收到的环境包在 `daemon/bundles/<哈希>/`，GitHub 登录在 `daemon/github/`，会话在 `daemon/sessions/`。和宿主共用 `$HOME`，各自占一个子目录。记忆边车的数据在它自己的 PostgreSQL，不在这里。
 
 ## SQLite
 

@@ -1,37 +1,67 @@
 /* eslint-disable antfu/no-top-level-await, no-console -- the entry point of a program, not a module */
 import type { ServiceCommand } from "./service";
-import { basename, resolve } from "node:path";
 /**
  * The daemon's command line.
  *
- *   eta-daemon setup <primary-url> <code> [--data-dir <dir>]   trade an install code for a place on the primary
- *   eta-daemon run [--data-dir <dir>]                           serve the primary (the default)
- *   eta-daemon install-service [--data-dir <dir>]               run at login as a systemd user unit or launchd agent
- *   eta-daemon uninstall-service [--data-dir <dir>]
+ *   eta-daemon setup <primary-url> <code>   trade an install code for a place on the primary
+ *   eta-daemon run                           serve the primary (the default)
+ *   eta-daemon install-service               run at login as a systemd user unit or launchd agent
+ *   eta-daemon uninstall-service
  *
  * One file once built (`bun build --compile`): the sessions, their journals and the one
- * credential live in the data directory, `~/.eta-daemon` by default. There is no web, no database
- * and no provider configuration here: models and product tools are the primary's.
+ * credential live in `$HOME/.eta/daemon`. There is no web, no database and no provider
+ * configuration here: models and product tools are the primary's.
+ *
+ * `$HOME` is the only thing that picks the location, on purpose. The daemon used to have a tree of
+ * its own (`~/.eta-daemon`) while reading `~/.eta/mcp.json` and the user's persona cards out of
+ * the other one — two roots on one machine, the shape that keeps making "where did my data go"
+ * questions. It refuses to start on the old directory rather than treat it as empty: a machine
+ * that moved silently would just be a machine with no sessions.
  */
+import { existsSync } from "node:fs";
+import { basename, resolve } from "node:path";
 import process from "node:process";
 import { parseArgs } from "node:util";
 import { DaemonLink } from "./client";
 import { enroll } from "./enroll";
-import { defaultDataDir, groupFingerprint, loadIdentity } from "./identity";
+import {
+  defaultDataDir,
+  groupFingerprint,
+  legacyDataDir,
+  loadIdentity,
+} from "./identity";
 import { DaemonNode } from "./node";
 import { installService, uninstallService } from "./service";
 
 const VERSION = "0.1.0";
 
-const { values, positionals } = parseArgs({
-  options: { "data-dir": { type: "string" } },
+const { positionals } = parseArgs({
+  options: {},
   allowPositionals: true,
   strict: true,
 });
-const dataDir = resolve(
-  values["data-dir"] ?? process.env.ETA_DAEMON_DIR ?? defaultDataDir(),
-);
+const dataDir = resolve(defaultDataDir());
+const legacyDir = resolve(legacyDataDir());
 const [command = "run", ...rest] = positionals;
+
+// An older daemon kept its identity and sessions here. Starting on an empty directory instead
+// would look like a machine that had never been set up — and the sessions would be gone from the
+// primary's point of view while still sitting on disk.
+if (existsSync(legacyDir) && !existsSync(dataDir)) {
+  console.error(
+    [
+      `${legacyDir} is where an older eta-daemon kept its data.`,
+      `This one uses ${dataDir}. Move it before starting:`,
+      "",
+      `  mkdir -p "$HOME/.eta" && mv "$HOME/.eta-daemon" "$HOME/.eta/daemon"`,
+      "",
+      "A service registered by an older version points at the old directory:",
+      "uninstall it with that version first (`eta-daemon uninstall-service`),",
+      "then register again with this one.",
+    ].join("\n"),
+  );
+  process.exit(2);
+}
 
 /** How this process was started, for a service that has to start it again. */
 function selfCommand(): ServiceCommand {
@@ -129,12 +159,12 @@ switch (command) {
     await run();
     break;
   case "install-service": {
-    const definition = await installService(selfCommand(), dataDir);
+    const definition = await installService(selfCommand());
     console.log(`Installed ${definition.name} (${definition.path}).`);
     break;
   }
   case "uninstall-service": {
-    const definition = await uninstallService(selfCommand(), dataDir);
+    const definition = await uninstallService(selfCommand());
     console.log(`Removed ${definition.name}.`);
     break;
   }

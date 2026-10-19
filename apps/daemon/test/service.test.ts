@@ -14,28 +14,20 @@ const command = { program: "/opt/eta daemon/eta-daemon", args: [] };
 
 describe("the service definition", () => {
   it("is a systemd user unit on Linux that runs the daemon on its data directory", () => {
-    const definition = serviceDefinition(
-      command,
-      "/home/u/.eta-daemon",
-      "linux",
-      "/home/u",
-    );
+    const definition = serviceDefinition(command, "linux", "/home/u");
     expect(definition.path).toBe(
       `/home/u/.config/systemd/user/${definition.name}.service`,
     );
+    // The directory is the user's HOME, not a path in the unit: one root, one way to say it.
     expect(definition.content).toContain(
-      'ExecStart="/opt/eta daemon/eta-daemon" "run" "--data-dir" "/home/u/.eta-daemon"',
+      'ExecStart="/opt/eta daemon/eta-daemon" "run"',
     );
+    expect(definition.content).not.toContain("--data-dir");
     expect(definition.content).toContain("WantedBy=default.target");
   });
 
   it("is a launchd agent on macOS", () => {
-    const definition = serviceDefinition(
-      command,
-      "/Users/u/.eta-daemon",
-      "darwin",
-      "/Users/u",
-    );
+    const definition = serviceDefinition(command, "darwin", "/Users/u");
     expect(definition.path).toBe(
       `/Users/u/Library/LaunchAgents/${definition.name}.plist`,
     );
@@ -43,14 +35,14 @@ describe("the service definition", () => {
     expect(definition.content).toContain("<key>RunAtLoad</key><true/>");
   });
 
-  it("names one service per data directory", () => {
-    const one = serviceDefinition(command, "/a", "linux", "/h");
-    const two = serviceDefinition(command, "/b", "linux", "/h");
-    expect(one.name).not.toBe(two.name);
+  it("has one name: one daemon per user, in one directory", () => {
+    expect(serviceDefinition(command, "linux", "/h").name).toBe(
+      "io.eta.daemon",
+    );
   });
 
   it("has no Windows service: that is WSL", () => {
-    expect(() => serviceDefinition(command, "/a", "win32")).toThrow(/WSL/);
+    expect(() => serviceDefinition(command, "win32")).toThrow(/WSL/);
   });
 });
 
