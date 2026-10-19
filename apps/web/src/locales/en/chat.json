@@ -40,6 +40,8 @@
   "process": {
     "label": "{{name}} process",
     "viewAll": "View more",
+    "fold": "Thinking process",
+    "steps": "{{count}} steps",
     "title": "Process"
   },
   "tools": {

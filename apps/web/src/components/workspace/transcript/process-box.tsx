@@ -10,17 +10,18 @@ import {
 } from "@/components/ui/dialog";
 
 /**
- * A reply's process (thinking and tool calls) in a group: the same stacked steps, in a fixed-height
- * frame that scrolls inside itself, so a long run does not push the conversation away.
- *
- * While the reply runs the frame follows its newest step, unless the reader scrolled up inside it;
- * back at the bottom it follows again. "View more" opens the whole process, with the answer, in a
- * near-full-screen dialog.
+ * A reply's process (thinking and tool calls) in a group. While the agent still works it is the
+ * same stacked steps in a fixed-height frame that scrolls inside itself, so a long run does not
+ * push the conversation away; the frame follows its newest step, unless the reader scrolled up
+ * inside it, and follows again back at the bottom. Once the reply reaches its final text (always,
+ * for a finished one) the frame folds into one "thinking process" row that opens in place.
+ * "View more" opens the whole process, with the answer, in a near-full-screen dialog.
  */
 export function ProcessBox({
   steps,
   count,
   running,
+  folded,
   author,
   time,
   answer,
@@ -30,6 +31,8 @@ export function ProcessBox({
   /** How many steps there are: a new one is what the frame follows. */
   count: number;
   running: boolean;
+  /** The reply is at its final text: the process folds into one "thinking process" row. */
+  folded: boolean;
   author?: string | undefined;
   time: string;
   /** The reply's text, shown under the whole process in the dialog. */
@@ -55,35 +58,55 @@ export function ProcessBox({
     return () => observer.disconnect();
   });
 
+  const viewAll = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="xs"
+      className="text-muted-foreground"
+      onClick={() => setOpen(true)}
+    >
+      {translateText("process.viewAll")}
+    </Button>
+  );
+
   return (
     <>
-      <div className="flex flex-col items-end">
-        <div
-          ref={boxRef}
-          role="region"
-          tabIndex={0}
-          aria-label={translateText("process.label", {
-            name: author ?? "",
-          })}
-          className="process-box w-full"
-          onScroll={(event) => {
-            const box = event.currentTarget;
-            pinned.current =
-              box.scrollHeight - box.scrollTop - box.clientHeight < 16;
-          }}
-        >
-          <div ref={contentRef}>{steps}</div>
+      {folded ? (
+        <details className="process-fold">
+          <summary className="thinking-block-header">
+            <span aria-hidden="true" className="thinking-block-chevron">
+              ▶
+            </span>
+            {translateText("process.fold")}
+            <span className="ml-auto">
+              {translateText("process.steps", { count })}
+            </span>
+          </summary>
+          <div className="process-fold-body">{steps}</div>
+          <div className="flex justify-end">{viewAll}</div>
+        </details>
+      ) : (
+        <div className="flex flex-col items-end">
+          <div
+            ref={boxRef}
+            role="region"
+            tabIndex={0}
+            aria-label={translateText("process.label", {
+              name: author ?? "",
+            })}
+            className="process-box w-full"
+            onScroll={(event) => {
+              const box = event.currentTarget;
+              pinned.current =
+                box.scrollHeight - box.scrollTop - box.clientHeight < 16;
+            }}
+          >
+            <div ref={contentRef}>{steps}</div>
+          </div>
+          {viewAll}
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          className="text-muted-foreground"
-          onClick={() => setOpen(true)}
-        >
-          {translateText("process.viewAll")}
-        </Button>
-      </div>
+      )}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="top-[3dvh] left-[3vw] flex h-[94dvh] w-[94vw] max-h-none max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
           <div className="flex shrink-0 items-baseline gap-2 border-b px-3 py-2 pr-11">

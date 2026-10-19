@@ -40,6 +40,8 @@
   "process": {
     "label": "{{name}} 的过程",
     "viewAll": "查看全部",
+    "fold": "思考过程",
+    "steps": "{{count}} 步",
     "title": "过程"
   },
   "tools": {

@@ -822,12 +822,24 @@
     outline-offset: -1px;
   }
   .process-box .thinking-block,
-  .process-box .tool-card {
+  .process-box .tool-card,
+  .process-fold-body .thinking-block,
+  .process-fold-body .tool-card {
     border-width: 0 0 1px;
   }
   .process-box > div > :last-child,
-  .process-box > div > :last-child .tool-card:last-child {
+  .process-box > div > :last-child .tool-card:last-child,
+  .process-fold-body > :last-child,
+  .process-fold-body > :last-child .tool-card:last-child {
     border-bottom-width: 0;
+  }
+  /* Once the reply is at its final text the frame folds into one row; opened, the steps stack
+     under it in the same frame, at their natural height. */
+  .process-fold {
+    border: 1px solid var(--border);
+  }
+  .process-fold-body {
+    border-top: 1px solid var(--border);
   }
   .thinking-block-header {
     list-style: none;

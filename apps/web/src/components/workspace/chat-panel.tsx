@@ -569,6 +569,8 @@ function LiveReply({
           steps={steps.map(step)}
           count={steps.length}
           running
+          // Text after the last tool or thinking block: the final response is being written.
+          folded={blocks.at(-1)?.type === "text"}
           author={author}
           time={time}
           answer={blocks.map(text)}
@@ -696,6 +698,7 @@ const Turn = memo(
                 steps={processSteps}
                 count={tools.length + (message.thinking === "" ? 0 : 1)}
                 running={false}
+                folded
                 author={author}
                 time={when(message.createdAt)}
                 answer={answer}
