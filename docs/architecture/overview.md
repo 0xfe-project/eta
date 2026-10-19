@@ -42,6 +42,7 @@ packages/
   eta-server、eta-plugin-sdk     上游服务端地板：WebSocket 管道、注册表、状态推送、sessions 等 bundled 插件
   eta-ssh、eta-plugin-ssh、eta-plugin-git   经 SSH 的执行环境与 git 插件
   eta-plugin-akhook   声明式规则（akhook 的配置）与流式规则，见 [akhook](akhook.md)
+  eta-mcp             MCP 库：代理工具、懒连接、元数据缓存、直接工具、OAuth，见 [MCP](mcp.md)
   client-wire-proto、client-contracts   线上的帧，以及产品 target 的类型（Web 与 host 共用）
   llm-gateway   Go（CLIProxyAPI）网关，c-shared 库 + bun:ffi 绑定
 bundles/      内置的环境包（github、grok、oomol、agenvo），见[环境包](bundles.md)

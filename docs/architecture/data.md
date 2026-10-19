@@ -46,6 +46,7 @@ daemon 有自己的数据目录（默认 `~/.eta-daemon`，见[机器与 daemon]
 | 0014               | `machine_enrollment`（一次性安装码，只存摘要）                                                                                                       |
 | 0028               | `attachment`（附件：属于哪个对话、名字、类型、大小、被哪条消息认领；未发送的 24 小时后清理）                                                         |
 | 0032               | `bundle_config`（环境包的配置，加密）、`bundle_source`（来自 git 的包：仓库、rev、路径、解析出的提交）、`agent.bundles`（智能体载入的包，JSON 名单） |
+| 0033               | `credential`（外部集成的凭据：`integration`、`key`、`kind`、`value` 加密；目前是 MCP 服务器的 OAuth 状态，见 [MCP](mcp.md)）                         |
 
 外键的取舍：`message.agent_id`、`interaction`、`usage` 里指向智能体和对话的列**没有**外键，因为这些行是历史，比智能体活得久。
 

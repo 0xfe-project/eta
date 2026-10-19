@@ -52,6 +52,7 @@
 | artifacts     | `artifacts`                           | `share` `unshare` `delete` `preview`                                                                |
 | routines      | `routines`、`routines.<id>`           | `create` `update` `delete` `run` `seen` `feedback` `restoreBrief`                                   |
 | bundles       | `bundles`                             | `configure` `add` `remove` `refresh` `recheck`                                                      |
+| mcp           | `mcp`                                 | `connect` `reconnect` `login` `completeLogin` `logout`，见 [MCP](mcp.md)                            |
 | memory        | `memory`（仅有边车时挂载）            | `list` `remember` `forget`                                                                          |
 | llm           | `llm`（eager；仅有网关库时挂载）      | `refresh` `loginStart` `loginPoll` `loginSubmit` `loginCancel` `setEnabled` `remove`                |
 
@@ -67,4 +68,4 @@ eager 的 target 随 `hello` 到达，页面不用先订阅就能画出来。
 
 ## 不在线上的 HTTP
 
-`staticRoutes` 之外只有这些：`/up`（健康）、`/version`（构建 id，页面用它提示"有新版本"）、静态页（路径不是文件时回落到 `index.html`）、artifact 的 `/preview/…`、`/share/…`、`/artifacts/<id>/<version>/archive.zip`，以及 daemon 的两个入口 `/machines/enroll`、`/machines/connect`。没有 REST，没有 OpenAPI。
+`staticRoutes` 之外只有这些：`/up`（健康）、`/version`（构建 id，页面用它提示"有新版本"）、静态页（路径不是文件时回落到 `index.html`）、artifact 的 `/preview/…`、`/share/…`、`/artifacts/<id>/<version>/archive.zip`，MCP 登录的回调 `/mcp/oauth/callback`，以及 daemon 的两个入口 `/machines/enroll`、`/machines/connect`。没有 REST，没有 OpenAPI。

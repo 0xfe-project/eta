@@ -28,7 +28,9 @@ WebSocket 管道会在这台电脑上以运行 host 的用户身份执行命令�
 - `/preview/<capability>/…`：artifact 在沙箱 iframe 里预览，沙箱 iframe 是不透明 origin，不发 cookie，所以**地址本身就是凭据**：`<版本>.<过期>.<签名>`，用只在 host 上的密钥（`artifacts/.preview-key`）签名，只能打开一个版本，一小时后失效。
 - `/share/<token>/…`：公开分享，给不是用户的人，路径里是一个秘密令牌；取消分享后永久失效，再分享会生成新令牌。
 
-这两类**只读**（GET/HEAD）免令牌门，不为别的原因。其余一切，包括应用自己的 `/artifacts/<id>/<版本>/archive.zip` 下载，仍在令牌门后。预览与分享的每个文件都带 `Content-Security-Policy: sandbox`（不含 `allow-same-origin`），所以别人的 HTML 在不透明 origin 里运行，读不到 cookie 与存储，也不能以用户身份调用 host；另有 `Referrer-Policy: no-referrer`。对无效的能力或令牌，不说明为什么无效。
+- `/mcp/oauth/callback`：MCP 服务器 OAuth 登录结束后，浏览器从授权方跳回来，不带我们的 cookie。凭据是 URL 里的 `state`：只有宿主自己发起、还在等待的登录才认，其余（没有 `state`、`state` 不对、已用过）只回一页提示，什么都不改变；它只放行这一个路径的 GET，见 [MCP](mcp.md)。
+
+这三类**只读**（GET/HEAD）免令牌门，不为别的原因。其余一切，包括应用自己的 `/artifacts/<id>/<版本>/archive.zip` 下载，仍在令牌门后。预览与分享的每个文件都带 `Content-Security-Policy: sandbox`（不含 `allow-same-origin`），所以别人的 HTML 在不透明 origin 里运行，读不到 cookie 与存储，也不能以用户身份调用 host；另有 `Referrer-Policy: no-referrer`。对无效的能力或令牌，不说明为什么无效。
 
 ## daemon 的两个入口
 

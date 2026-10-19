@@ -6,6 +6,7 @@ import enCommon from "./en/common.json";
 import enConnections from "./en/connections.json";
 import enLlm from "./en/llm.json";
 import enMachines from "./en/machines.json";
+import enMcp from "./en/mcp.json";
 import enMemory from "./en/memory.json";
 import enNavigation from "./en/navigation.json";
 import enOverview from "./en/overview.json";
@@ -22,6 +23,7 @@ import zhCommon from "./zh/common.json";
 import zhConnections from "./zh/connections.json";
 import zhLlm from "./zh/llm.json";
 import zhMachines from "./zh/machines.json";
+import zhMcp from "./zh/mcp.json";
 import zhMemory from "./zh/memory.json";
 import zhNavigation from "./zh/navigation.json";
 import zhOverview from "./zh/overview.json";
@@ -39,6 +41,7 @@ export const en = {
   chat: enChat,
   llm: enLlm,
   machines: enMachines,
+  mcp: enMcp,
   connections: enConnections,
   memory: enMemory,
   navigation: enNavigation,
@@ -58,6 +61,7 @@ export const zh = {
   chat: zhChat,
   llm: zhLlm,
   machines: zhMachines,
+  mcp: zhMcp,
   connections: zhConnections,
   memory: zhMemory,
   navigation: zhNavigation,
@@ -78,6 +82,7 @@ export const namespaces = [
   "bundles",
   "chat",
   "machines",
+  "mcp",
   "connections",
   "llm",
   "memory",

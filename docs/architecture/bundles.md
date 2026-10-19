@@ -2,14 +2,14 @@
 
 一个环境包（bundle）是一个目录，描述智能体的一种能力：技能、MCP 服务器、hook 规则，可选地还有一个服务。智能体勾选哪些环境包，它在任何一台机器上的会话就带着哪些。不构建镜像，不执行安装脚本。
 
-| 组成       | 实现                                                                                                          |
-| ---------- | ------------------------------------------------------------------------------------------------------------- |
-| 技能       | 包的 `skills/` 加进会话的 skill 目录（`skillsFor`），harness 照常发现和加载                                   |
-| MCP 服务器 | `mcp.json`，经 [MCP client 胶水层](../../apps/daemon/src/mcp.ts) 挂到会话上；stdio 进程在会话所在的机器上启动 |
-| hook 规则  | `akhook.yml`，作为一层 akhook 配置（[akhook](akhook.md)）只对载入它的智能体的会话生效                         |
-| 配置和密钥 | 存进 SQLite，用宿主密钥加密；只交给本包的 MCP 进程、hook 命令和服务，不进智能体的 shell                       |
-| 服务       | 可选，宿主作为回环子进程托管，由宿主代理                                                                      |
-| 安装说明   | 写在包内技能的 `references/` 里。没配置好时智能体按文档指引用户去做；宿主不执行任何安装脚本                   |
+| 组成       | 实现                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------- |
+| 技能       | 包的 `skills/` 加进会话的 skill 目录（`skillsFor`），harness 照常发现和加载                 |
+| MCP 服务器 | `mcp.json`，作为 [MCP](mcp.md) 的一个配置来源；stdio 进程在会话所在的机器上启动             |
+| hook 规则  | `akhook.yml`，作为一层 akhook 配置（[akhook](akhook.md)）只对载入它的智能体的会话生效       |
+| 配置和密钥 | 存进 SQLite，用宿主密钥加密；只交给本包的 MCP 进程、hook 命令和服务，不进智能体的 shell     |
+| 服务       | 可选，宿主作为回环子进程托管，由宿主代理                                                    |
+| 安装说明   | 写在包内技能的 `references/` 里。没配置好时智能体按文档指引用户去做；宿主不执行任何安装脚本 |
 
 ## 目录格式
 
@@ -18,7 +18,7 @@
 ```text
 <name>/
   plugin.json        name、description、requires、config、service（targets、version 被忽略）
-  mcp.json           { "mcpServers": { "<server>": { command, args, env, cwd } | { url, headers } } }
+  mcp.json           { "mcpServers": { "<server>": { command, args, env, cwd } | { url, headers }，加 lifecycle、directTools、approveTools、auth 等 } }
   skills/<n>/SKILL.md   Agent Skills，可带 references/
   akhook.yml         akhook 规则，见 akhook.md
 ```
@@ -65,7 +65,7 @@ mcp.json 里可以写 `${变量}`：`${PLUGIN_ROOT}`（包在这台机器上的�
 智能体的 `agents.bundles` 是包名列表（按勾选顺序）。一个会话打开时：
 
 - **技能**：`skillDirsFor` 把包的 `skills/` 加进 `renderSkillsBlock` 的目录。
-- **MCP**：`bundleMcpServers` 给出该会话的服务器配置，`mcpSessionTools` 在会话打开后连接。连接是异步的，引擎在 `ensure` 之后等 `settled(会话)` 再运行，daemon 的 `machine.open` 同理。
+- **MCP**：`bundleMcpServers` 把每个包的服务器作为一个配置来源（`bundle:<名>`）交给 `McpHost`；会话只拿到 `mcp` 工具和缓存里已有的直接工具，服务器在第一次调用时才连，所以打开会话不等它们。
 - **规则**：包的 akhook 层并进会话的 `additional` 层（`AkhookHost.bundleLayers`），回复前后的 `prompt_submit` / `stop` 经 `LifecycleRun.extra` 带上。
 - **重开**：会话的 stamp 含各包的“文件指纹 + git sha + 配置写入时间”，包被改过、重新配置过、或勾选变了，下一条消息时会话关了重开，重新读这些。
 

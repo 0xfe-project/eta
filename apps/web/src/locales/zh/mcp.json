@@ -1,0 +1,54 @@
+{
+  "title": "MCP 服务器",
+  "description": "智能体经 MCP 使用的工具，来自环境包、~/.eta/mcp.json 和项目里的 .mcp.json。服务器在第一次用到时才启动。",
+  "empty": {
+    "title": "没有 MCP 服务器",
+    "description": "在 ~/.eta/mcp.json、项目的 .mcp.json 或环境包的 mcp.json 里添加。"
+  },
+  "transport": {
+    "stdio": "stdio",
+    "http": "HTTP",
+    "sse": "SSE"
+  },
+  "state": {
+    "connected": "已连接",
+    "cached": "空闲",
+    "notConnected": "空闲",
+    "failed": "失败",
+    "needsAuth": "需要登录",
+    "disabled": "已停用"
+  },
+  "auth": {
+    "signedIn": "已登录",
+    "needsLogin": "未登录"
+  },
+  "summary": {
+    "tools": "{{count}} 个工具",
+    "tools_one": "{{count}} 个工具",
+    "tools_other": "{{count}} 个工具"
+  },
+  "actions": {
+    "connect": "连接",
+    "reconnect": "重新连接",
+    "signIn": "登录",
+    "signOut": "退出登录"
+  },
+  "connect": {
+    "done": "{{server}} 已连接",
+    "failed": "{{server}}：{{message}}"
+  },
+  "login": {
+    "title": "登录 {{server}}",
+    "description": "在新打开的标签页里授权。如果它停在打不开的页面上，或授权是在另一台电脑上完成的，把那个页面的地址粘贴到这里。",
+    "reopen": "重新打开登录页",
+    "redirect": "重定向地址",
+    "redirectPlaceholder": "https://…/mcp/oauth/callback?code=…&state=…",
+    "finish": "完成",
+    "done": "已登录 {{server}}"
+  },
+  "logout": {
+    "confirmTitle": "退出 {{server}} 的登录？",
+    "confirmDescription": "所有用到这个服务器的智能体都会失去这次登录。",
+    "done": "已退出 {{server}}"
+  }
+}

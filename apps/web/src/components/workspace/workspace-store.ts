@@ -29,6 +29,7 @@ export type SettingsSection =
   | "approvals"
   | "machines"
   | "bundles"
+  | "mcp"
   | "archived"
   | "appearance";
 interface SettingsState {

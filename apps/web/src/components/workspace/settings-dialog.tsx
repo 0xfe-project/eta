@@ -20,6 +20,7 @@ import { ApprovalSettings } from "./approval-settings";
 import { BundleSettings } from "./bundle-settings";
 import { ArchivedGroups } from "./groups";
 import { MachineSettings } from "./machine-settings";
+import { McpSettings } from "./mcp-settings";
 import { ProviderSettings } from "./provider-settings";
 import { AttentionDot, SettingsNav } from "./settings-nav";
 import { settingsSections, useSettingsAttention } from "./settings-sections";
@@ -194,6 +195,8 @@ export function SettingsDialog() {
               <MachineSettings />
             ) : settings.section === "bundles" ? (
               <BundleSettings />
+            ) : settings.section === "mcp" ? (
+              <McpSettings />
             ) : settings.section === "archived" ? (
               <ArchivedGroups />
             ) : (
