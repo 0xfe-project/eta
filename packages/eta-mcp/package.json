@@ -1,0 +1,25 @@
+{
+  "name": "@eta/mcp",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP client library: proxy tool, lazy connections, metadata cache, OAuth.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest --run --passWithNoTests",
+    "typecheck": "bun check",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.19",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}
