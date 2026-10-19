@@ -87,6 +87,10 @@
     "title": "智能体库",
     "allReachable": "每个智能体都已经有对话了。"
   },
+  "thinking": {
+    "label": "思考档",
+    "default": "跟随模型默认"
+  },
   "persona": {
     "default": "项目默认",
     "label": "人格"

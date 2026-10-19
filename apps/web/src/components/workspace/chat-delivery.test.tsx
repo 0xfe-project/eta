@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@/queries/chat";
+import type { MessageView, SendResult } from "@eta/client-contracts";
 import {
   afterEach,
   beforeEach,
@@ -7,478 +7,300 @@ import {
   it,
   rstest,
 } from "@rstest/core";
+import { act } from "react";
+import { plainDraft } from "@/lib/composer";
+import { setWire } from "@/lib/wire";
+import { useOutbox } from "@/queries/outbox";
+import { Chat } from "@/test-chat";
 import {
-  QueryClient,
-  QueryClientProvider,
-  useQuery,
-} from "@tanstack/react-query";
-import { act, useMemo } from "react";
-import { createRoot } from "react-dom/client";
-import { EMPTY_DRAFT, plainDraft } from "@/lib/composer";
-import { chatQueryOptions, useGroupMessages } from "@/queries/chat";
-import {
-  useOutbox,
-  useOutboxActions,
-  useOutboxDelivery,
-} from "@/queries/outbox";
-import { ChatPanel } from "./chat-panel";
+  agentView,
+  conversationView,
+  memberView,
+  messageView,
+  productHost,
+} from "@/test-product";
+import { button, cleanup, click, flush, mount } from "@/test-render";
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-// happy-dom has none of these.
-const g = globalThis as Record<string, unknown>;
-g.ResizeObserver ??= class {
-  observe() {}
-  disconnect() {}
-};
-g.IntersectionObserver ??= class {
-  observe() {}
-  disconnect() {}
-};
-g.EventSource ??= class {
-  static CLOSED = 2;
-  addEventListener() {}
-  removeEventListener() {}
-  close() {}
-};
+const AGENT = "a1";
+let conversations = 0;
+let CONV = "";
+let seq = 0;
 
-const AGENT = "00000000-0000-0000-0000-000000000001";
-let n = 0;
-function message(
-  role: ChatMessage["role"],
-  fields: Partial<ChatMessage> & { text?: string } = {},
-): ChatMessage {
-  const { text = "", ...rest } = fields;
-  n++;
-  return {
-    id: `00000000-0000-0000-0001-${String(n).padStart(12, "0")}`,
-    agent_id: AGENT,
-    group_id: AGENT,
-    seq: n,
-    kind: "message",
-    data: {},
-    role,
-    reply_to_id: null,
-    status: role === "user" ? "completed" : "queued",
-    revision: 1,
-    blocks: text ? [{ id: `b${n}`, type: "text", text }] : [],
-    failure: null,
-    created_at: `2026-10-09T00:00:${String(n).padStart(2, "0")}Z`,
-    ...rest,
-  };
+interface Pending {
+  args: Record<string, unknown>;
+  resolve: (result: SendResult) => void;
+  reject: (error: Error) => void;
 }
+let sends: Pending[] = [];
 
-// happy-dom drops a Request's headers, so the Idempotency-Key (the same id)
-// cannot be checked here; the body's id can.
-interface Post {
-  body: {
-    id: string;
-    parts: { type: string; text?: string; attachment_id?: string }[];
-  };
-  resolve: (response: Response) => void;
-  reject: (error: unknown) => void;
-}
-let posts: Post[] = [];
-let client: QueryClient | undefined;
-let reading = 0;
-
-/** The chat as Workspace wires it, for one agent. */
-function Chat({ agentStatus = "idle" }: { agentStatus?: "idle" | "starting" }) {
-  const chat = useQuery(chatQueryOptions());
-  const history = useGroupMessages(chat.data ? AGENT : undefined);
-  const draft = useOutbox((s) => s.drafts[AGENT] ?? EMPTY_DRAFT);
-  const all = useOutbox((s) => s.outgoing);
-  const arrived = useMemo(
-    () => new Set(history.messages.map((m) => m.id)),
-    [history.messages],
-  );
-  useOutboxDelivery(arrived);
-  const outbox = useOutboxActions();
-  return (
-    <ChatPanel
-      groupId={AGENT}
-      groupName="研究员"
-      agents={[
-        {
-          id: AGENT,
-          name: "研究员",
-          description: "",
-          model: "model",
-          persona: "",
-          bundles: [],
-          build_error: null,
-          revision: 1,
-          status: agentStatus,
-        },
-      ]}
-      activeReplies={history.messages}
-      messages={history.messages}
-      hasOlder={false}
-      loadingOlder={false}
-      onLoadOlder={() => {}}
-      interactions={[]}
-      draft={draft}
-      onDraftChange={(next) => useOutbox.getState().setDraft(AGENT, next)}
-      onFiles={() => []}
-      onSend={(parts, mode) => {
-        outbox.send(AGENT, parts, mode, [AGENT]);
-        useOutbox.getState().setDraft(AGENT, []);
-      }}
-      outgoing={all.filter((o) => !arrived.has(o.id))}
-      onRetry={outbox.retry}
-      onEdit={outbox.edit}
-      onDiscard={outbox.discard}
-      onResend={(parts) => outbox.send(AGENT, parts, "queue", [AGENT])}
-      onCompact={() => {}}
-      onStopAll={() => {}}
-      onStop={() => {}}
-      onAnswer={() => {}}
-      onGoal={async () => {}}
-    />
-  );
-}
-
-async function render(
-  history: ChatMessage[] = [],
-  agentStatus?: "idle" | "starting",
-) {
-  rstest
-    .spyOn(globalThis, "fetch")
-    .mockImplementation(async (input: RequestInfo | URL) => {
-      const request = input as Request;
-      if (request.method === "GET" && request.url.endsWith("/api/v1/chat"))
-        return Response.json({
-          agents: [],
-          active_replies: [],
-          interactions: [],
-          event_cursor: "c",
-        });
-      if (request.method === "GET")
-        return Response.json({ items: history, next_cursor: null });
-      reading++;
-      try {
-        const body = await request.json();
-        return new Promise<Response>((resolve, reject) =>
-          posts.push({ body, resolve, reject }),
-        );
-      } finally {
-        reading--;
-      }
-    });
-  const container = document.createElement("div");
-  document.body.append(container);
-  const queryClient = new QueryClient();
-  client = queryClient;
-  await act(async () => {
-    createRoot(container).render(
-      <QueryClientProvider client={queryClient}>
-        <Chat agentStatus={agentStatus} />
-      </QueryClientProvider>,
-    );
+const row = (fields: Partial<MessageView>): MessageView => {
+  seq += 1;
+  return messageView({
+    id: `${CONV}-${seq}`,
+    conversationId: CONV,
+    seq,
+    ...fields,
   });
-  await settle();
-  return container;
+};
+
+/** What the host answers a send with: the user's row, and a queued reply from the agent. */
+const accepted = (args: Record<string, unknown>): SendResult => {
+  const message = row({ id: String(args.clientId), text: String(args.text) });
+  return {
+    message,
+    replies: [
+      row({
+        author: "agent",
+        agentId: AGENT,
+        replyToId: message.id,
+        status: "queued",
+      }),
+    ],
+    joined: [],
+    nobody: false,
+  };
+};
+
+function start(
+  messages: MessageView[] = [],
+  members = [memberView(AGENT, { sessionId: "s1" })],
+) {
+  const summary = conversationView({
+    id: CONV,
+    name: "研究员",
+    participants: members,
+  });
+  const host = productHost({
+    agents: [agentView({ id: AGENT, name: "研究员" })],
+    conversations: [summary],
+    messages: { [CONV]: messages },
+  });
+  // A send waits for the test to answer it, as a slow host would.
+  host.handle(
+    "conversations.send",
+    (args) =>
+      new Promise<SendResult>((resolve, reject) =>
+        sends.push({ args: args as Record<string, unknown>, resolve, reject }),
+      ),
+  );
+  host.handle("conversations.stop", () => ({ stopped: [] }));
+  return mount(<Chat conversationId={CONV} />).then((mounted) => ({
+    ...mounted,
+    host,
+  }));
 }
 
-// What the page is waiting for: its queries, and sends whose request the
-// stand-in server is still reading. A fixed pause alone is not enough when
-// the machine is busy (the whole repository's checks run in parallel).
-async function settle(ms = 10) {
-  const pause = (wait: number) =>
-    act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, wait));
-    });
-  const idle = () => reading === 0 && !client?.isFetching();
-  await pause(ms);
-  // Idle twice in a row, React flushed in between: a query that starts only
-  // once another one's data has rendered (the history after the chat) counts.
-  const deadline = Date.now() + 5000;
-  for (let quiet = 0; quiet < 2 && Date.now() < deadline; ) {
-    await pause(5);
-    quiet = idle() ? quiet + 1 : 0;
-  }
-}
 const editor = (c: HTMLElement) =>
   c.querySelector<HTMLElement>("[contenteditable]")!;
-// What the composer holds, as the user sees it.
 const composed = (c: HTMLElement) => editor(c).textContent;
 // Typing goes through the draft: the composer shows what the draft holds.
-async function type(_c: HTMLElement, value: string) {
-  await act(async () =>
-    useOutbox.getState().setDraft(AGENT, plainDraft(value)),
-  );
-}
-async function enter(c: HTMLElement) {
+const type = (value: string) =>
+  act(async () => useOutbox.getState().setDraft(CONV, plainDraft(value)));
+async function enter(c: HTMLElement, init: KeyboardEventInit = {}) {
   await act(async () => {
     editor(c).dispatchEvent(
       new KeyboardEvent("keydown", {
         key: "Enter",
         bubbles: true,
         cancelable: true,
+        ...init,
       }),
     );
   });
-  await settle();
+  await flush();
 }
 const log = (c: HTMLElement) => c.querySelector('[role="log"]')!.textContent!;
-const button = (c: HTMLElement, text: string) =>
-  [...c.querySelectorAll("button")].find((b) => b.textContent === text);
-function accepted(post: Post) {
-  const user = message("user", {
-    id: post.body.id,
-    text: post.body.parts.map((p) => p.text ?? "").join(""),
-  });
-  const reply = message("assistant", { reply_to_id: user.id });
-  return Response.json({ message: user, replies: [reply] }, { status: 202 });
-}
 const count = (text: string, part: string) => text.split(part).length - 1;
 
-describe("sending a message", () => {
-  beforeEach(() => {
-    useOutbox.setState({ drafts: {}, uploads: {}, outgoing: [] });
-  });
-  afterEach(async () => {
-    // Ends the deliveries still waiting, so none outlives its test.
-    rstest.useRealTimers();
-    useOutbox.setState({ outgoing: [] });
-    for (const post of posts)
-      post.resolve(Response.json({ error: {} }, { status: 400 }));
-    await settle();
-    document.body.innerHTML = "";
-    posts = [];
-    rstest.useRealTimers();
-    rstest.restoreAllMocks();
-  });
+beforeEach(() => {
+  conversations += 1;
+  CONV = `chat-delivery-${conversations}`;
+  seq = 0;
+  sends = [];
+  useOutbox.setState({ drafts: {}, outgoing: [] });
+});
+afterEach(async () => {
+  rstest.useRealTimers();
+  // Ends the deliveries still waiting, so none outlives its test.
+  useOutbox.setState({ outgoing: [] });
+  for (const send of sends) send.reject(new Error("done"));
+  await flush();
+  await cleanup();
+  setWire(undefined);
+});
 
+describe("sending a message", () => {
   it("shows it at once and sends it once, however often Enter is pressed", async () => {
-    const c = await render();
-    await type(c, "你好");
+    const { container: c } = await start();
+    await type("你好");
     await enter(c);
     await enter(c);
     await enter(c);
-    expect(posts).toHaveLength(1);
+    expect(sends).toHaveLength(1);
     expect(composed(c)).toBe("");
     expect(log(c)).toContain("你好");
     expect(log(c)).toContain("发送中");
-    await act(async () => posts[0].resolve(accepted(posts[0])));
-    await settle();
+    // The row's id is the message's id: a retry is the same message, never a second one.
+    expect(sends[0]!.args.clientId).toEqual(expect.any(String));
+    expect(sends[0]!.args).toMatchObject({
+      conversationId: CONV,
+      text: "你好",
+      mode: "queue",
+      mentions: [],
+    });
+
+    await act(async () => sends[0]!.resolve(accepted(sends[0]!.args)));
+    await flush();
     expect(count(log(c), "你好")).toBe(1);
     expect(log(c)).not.toContain("发送中");
   });
 
-  it("leaves the next draft alone when the last message arrives", async () => {
-    const c = await render();
-    await type(c, "第一条");
+  it("shows the reply row the host started, as soon as the send is answered", async () => {
+    const { container: c } = await start();
+    await type("你好");
     await enter(c);
-    await type(c, "正在写第二条");
-    await act(async () => posts[0].resolve(accepted(posts[0])));
-    await settle();
+    const result = accepted(sends[0]!.args);
+    await act(async () => sends[0]!.resolve(result));
+    await flush();
+    // The queued reply is an empty row under the message, before any push of the timeline.
+    const rows = c.querySelectorAll("[data-mid]");
+    expect([...rows].map((r) => r.getAttribute("data-mid"))).toEqual([
+      result.message.id,
+      result.replies[0]!.id,
+    ]);
+  });
+
+  it("names who it is for by @, and leaves a bare message to the host", async () => {
+    const { container: c } = await start();
+    await type("@研究员 看一下");
+    await enter(c);
+    expect(sends[0]!.args.mentions).toEqual([AGENT]);
+    // One conversation's messages go out one at a time.
+    await act(async () => sends[0]!.resolve(accepted(sends[0]!.args)));
+    await flush();
+    await type("没人叫");
+    await enter(c);
+    expect(sends[1]!.args.mentions).toEqual([]);
+  });
+
+  it("leaves the next draft alone when the last message arrives", async () => {
+    const { container: c } = await start();
+    await type("第一条");
+    await enter(c);
+    await type("正在写第二条");
+    await act(async () => sends[0]!.resolve(accepted(sends[0]!.args)));
+    await flush();
     expect(composed(c)).toBe("正在写第二条");
   });
 
-  it("tries again as the same message, then offers a retry", async () => {
-    const c = await render();
-    await type(c, "你好");
-    await enter(c);
-    // The waits between tries pass at once.
-    rstest.useFakeTimers({ toFake: ["setTimeout"] });
-    for (let i = 0; i < 4; i++) {
-      await act(async () => {
-        posts[i].reject(new TypeError("Failed to fetch"));
-        await rstest.advanceTimersByTimeAsync(10_000);
-      });
-    }
-    expect(posts).toHaveLength(4);
-    expect(new Set(posts.map((p) => p.body.id)).size).toBe(1);
-    expect(log(c)).toContain("网络连接失败，消息未送达。");
-    await act(async () => button(c, "重试")!.click());
-    await act(async () => rstest.advanceTimersByTimeAsync(10));
-    expect(posts).toHaveLength(5);
-    expect(posts[4].body.id).toBe(posts[0].body.id);
-    await act(async () => {
-      posts[4].resolve(accepted(posts[4]));
-      await rstest.advanceTimersByTimeAsync(10);
-    });
-    expect(count(log(c), "你好")).toBe(1);
-  });
-
-  it("does not retry what the server refused, and can edit it", async () => {
-    const c = await render();
-    await type(c, "你好");
+  it("does not retry what the host refused, and can edit it", async () => {
+    const { container: c } = await start();
+    await type("你好");
     await enter(c);
     await act(async () =>
-      posts[0].resolve(
-        Response.json(
-          {
-            error: {
-              code: "QUEUE_FULL",
-              message: "该智能体待处理的消息过多。",
-            },
-          },
-          { status: 429 },
-        ),
-      ),
+      sends[0]!.reject(new Error("该智能体待处理的消息过多。")),
     );
-    await settle();
-    expect(posts).toHaveLength(1);
+    await flush();
+    expect(sends).toHaveLength(1);
     expect(log(c)).toContain("该智能体待处理的消息过多。");
-    await act(async () => button(c, "编辑")!.click());
+    await click(button(c, "编辑"));
     expect(composed(c)).toBe("你好");
     expect(log(c)).not.toContain("你好");
   });
+
+  it("tries again as the same message when the connection drops, then offers a retry", async () => {
+    const { container: c, host } = await start();
+    await type("你好");
+    await enter(c);
+    // The waits between tries pass at once.
+    rstest.useFakeTimers({ toFake: ["setTimeout"] });
+    await act(async () => {
+      host.socket.drop();
+      await rstest.advanceTimersByTimeAsync(20_000);
+    });
+    expect(log(c)).toContain("网络连接失败，消息未送达。");
+    expect(sends).toHaveLength(1);
+    const firstId = sends[0]!.args.clientId;
+    sends = [];
+
+    // Back on a connection, the retry is the same message.
+    rstest.useRealTimers();
+    await act(async () => host.hello());
+    await click(button(c, "重试"));
+    await flush();
+    expect(sends).toHaveLength(1);
+    expect(sends[0]!.args.clientId).toBe(firstId);
+    await act(async () => sends[0]!.resolve(accepted(sends[0]!.args)));
+    await flush();
+    expect(count(log(c), "你好")).toBe(1);
+  });
 });
 
-describe("sending blocks", () => {
-  const csv = {
-    id: "a1",
-    name: "data.csv",
-    content_type: "text/csv",
-    size: 8,
-  };
-  const long = "第一行\n".repeat(20);
-  const draft = [
-    { type: "text" as const, text: "看" },
-    {
-      type: "file" as const,
-      id: "f",
-      name: "data.csv",
-      contentType: "text/csv",
-      size: 8,
-    },
-    { type: "paste" as const, id: "p", text: long },
+describe("steering and stopping", () => {
+  const working = () => [
+    row({ text: "做点事" }),
+    row({
+      author: "agent",
+      agentId: AGENT,
+      status: "working",
+    }),
   ];
-  beforeEach(() => {
-    useOutbox.setState({ drafts: {}, uploads: {}, outgoing: [] });
-  });
-  afterEach(async () => {
-    useOutbox.setState({ outgoing: [] });
-    for (const post of posts)
-      post.resolve(Response.json({ error: {} }, { status: 400 }));
-    await settle();
-    document.body.innerHTML = "";
-    posts = [];
-    rstest.restoreAllMocks();
+
+  it("sends into the turn in flight with ⌘Enter", async () => {
+    const { container: c } = await start(working());
+    await type("改个方向");
+    await enter(c, { metaKey: true });
+    expect(sends[0]!.args).toMatchObject({ text: "改个方向", mode: "queue" });
   });
 
-  it("waits for uploads, then sends text, files and pastes in order", async () => {
-    const c = await render();
-    await act(async () => {
-      useOutbox.getState().setUpload("f", { groupId: AGENT });
-      useOutbox.getState().setDraft(AGENT, draft);
-    });
-    expect(composed(c)).toContain("粘贴文本 · 80 字符");
-    expect(composed(c)).toContain("上传中");
+  it("steers with /steer", async () => {
+    const { container: c } = await start(working());
+    await type("/steer 改个方向");
     await enter(c);
-    expect(posts).toHaveLength(0);
-    expect(c.textContent).toContain("附件上传中，完成后才能发送。");
-
-    await act(async () =>
-      useOutbox.getState().setUpload("f", { groupId: AGENT, attachment: csv }),
-    );
-    await enter(c);
-    expect(posts).toHaveLength(1);
-    expect(posts[0].body.parts).toEqual([
-      { type: "text", text: "看" },
-      { type: "attachment", attachment_id: "a1" },
-      { type: "text", text: long },
-    ]);
-    expect(composed(c)).toBe("");
-    // On its way, as written: the paste folded, the file by name.
-    expect(log(c)).toContain("[data.csv · 8 B]");
-    expect(log(c)).toContain("粘贴文本 · 80 字符");
-    expect(log(c)).not.toContain("第一行");
+    expect(sends[0]!.args).toMatchObject({ text: "改个方向", mode: "steer" });
   });
 
-  it("keeps a draft whose upload failed, and says why", async () => {
-    const c = await render();
-    await act(async () => {
-      useOutbox.getState().setUpload("f", {
-        groupId: AGENT,
-        error: "网络连接失败，上传未完成。",
-      });
-      useOutbox.getState().setDraft(AGENT, draft);
-    });
+  it("stops the reply that is running when Enter is pressed on an empty box", async () => {
+    const messages = working();
+    const { container: c, host } = await start(messages);
+    expect(button(c, "停止")).toBeDefined();
     await enter(c);
-    expect(posts).toHaveLength(0);
-    expect(c.textContent).toContain("网络连接失败，上传未完成。");
-    expect(c.textContent).toContain("有附件上传失败：重试或移除后再发送。");
-    expect(useOutbox.getState().drafts[AGENT]).toEqual(draft);
-  });
-});
-
-describe("saved group drafts", () => {
-  it("fail uploads a reload cut off", async () => {
-    localStorage.setItem(
-      "eta.groups.v1",
-      JSON.stringify({
-        drafts: {
-          [AGENT]: [
-            {
-              type: "file",
-              id: "f",
-              name: "a.png",
-              contentType: "image/png",
-              size: 1,
-            },
-          ],
-        },
-        uploads: { f: { groupId: AGENT }, gone: { groupId: AGENT } },
-        outgoing: [],
-      }),
-    );
-    await act(() => useOutbox.persist.rehydrate());
-    expect(useOutbox.getState().uploads).toEqual({
-      f: { groupId: AGENT, error: "上传中断，请移除后重新粘贴。" },
+    expect(host.calls.find((call) => call.action === "stop")?.args).toEqual({
+      conversationId: CONV,
+      messageId: messages[1]!.id,
     });
-    localStorage.clear();
+  });
+
+  it("stops every reply with /stop", async () => {
+    const { container: c, host } = await start(working());
+    await type("/stop");
+    await enter(c);
+    expect(host.calls.find((call) => call.action === "stop")?.args).toEqual({
+      conversationId: CONV,
+    });
   });
 });
 
 describe("waiting replies", () => {
-  afterEach(() => {
-    document.body.innerHTML = "";
-    rstest.restoreAllMocks();
-  });
-
   it("says nothing about a reply that is waiting its turn", async () => {
-    // A reply at work is its own row, and a reply behind it is an empty row: neither is a status
-    // line. eta-old has no "working…" under a message, and the numbers this used to print ("位置
-    // 2", "前面还有 1 条") were a report about the queue, not about the conversation.
-    const a = message("user", { text: "A" });
-    const ra = message("assistant", { reply_to_id: a.id });
-    const b = message("user", { text: "B" });
-    const rb = message("assistant", { reply_to_id: b.id });
-    const c = await render([a, ra, b, rb], "starting");
-    expect(c.textContent).not.toContain("等待中");
-    expect(c.textContent).not.toContain("正在启动智能体");
-    expect(log(c)).not.toContain("前面还有");
+    const user = row({ text: "问题" });
+    const { container: c } = await start([
+      user,
+      row({
+        author: "agent",
+        agentId: AGENT,
+        replyToId: user.id,
+        status: "queued",
+      }),
+    ]);
+    expect(log(c)).not.toContain("排队");
+    expect(log(c)).not.toContain("等待");
   });
+});
 
-  it("says an environment failure once and offers to send again", async () => {
-    const failure = {
-      code: "AGENT_BUILD_FAILED",
-      message: "智能体环境构建失败，此消息未执行。",
-    };
-    const a = message("user", { text: "A" });
-    const ra = message("assistant", {
-      reply_to_id: a.id,
-      status: "failed",
-      failure,
-    });
-    const b = message("user", { text: "B" });
-    const rb = message("assistant", {
-      reply_to_id: b.id,
-      status: "failed",
-      failure,
-    });
-    const c = await render([a, ra, b, rb]);
-    expect(count(log(c), failure.message)).toBe(1);
-    expect(log(c)).toContain("此消息未执行，原因同下。");
-    expect(
-      [...c.querySelectorAll("button")].filter(
-        (x) => x.textContent === "重新发送",
-      ),
-    ).toHaveLength(2);
+describe("older rows", () => {
+  it("offers the earlier page while the oldest row seen is not the first", async () => {
+    const { container: c } = await start([row({ text: "第三条", seq: 3 })]);
+    expect(c.textContent).toContain("加载更早的消息");
   });
 });

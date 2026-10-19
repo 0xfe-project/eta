@@ -2,10 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { NewSessionPage } from "@/pages/new-session";
 
 export const Route = createFileRoute("/new")({
-  // The folder can arrive in the URL: the sidebar's per-folder "+" starts a conversation in that
-  // folder rather than making you type the path again.
+  // The project can arrive in the URL: the sidebar's per-project "+" starts a conversation in that
+  // project rather than making you pick it again.
   validateSearch: (search: Record<string, unknown>) => ({
-    cwd: typeof search.cwd === "string" ? search.cwd : undefined,
+    project: typeof search.project === "string" ? search.project : undefined,
   }),
   component: NewSessionPage,
 });

@@ -2,7 +2,7 @@ import type { RoutineSummary } from "@/queries/routines";
 
 import type { Task } from "@/queries/tasks";
 import { listSeparator, translate } from "@/lib/i18n";
-import { usePendingInteractions } from "@/queries/chat";
+import { useQuestions } from "@/queries/questions";
 import { useRoutines } from "@/queries/routines";
 import { useTasks } from "@/queries/tasks";
 
@@ -45,7 +45,7 @@ function routineReason(routine: RoutineSummary): string | null {
 
 /** The things waiting for the user, and how many in all. */
 export function useAttention() {
-  const interactions = usePendingInteractions().length;
+  const interactions = useQuestions().length;
   const { data: board } = useTasks();
   const { data: routines } = useRoutines();
   const tasks = (board?.tasks ?? []).flatMap((task) => {

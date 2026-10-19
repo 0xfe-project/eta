@@ -9,6 +9,13 @@ import {
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { setWire } from "@/lib/wire";
+import {
+  agentView,
+  conversationView,
+  memberView,
+  productHost,
+} from "@/test-product";
 import { PendingList } from "./attention";
 import { Notifications } from "./notifications";
 
@@ -43,22 +50,35 @@ const routine = (id: string, reports: number, failures: number) => ({
   unseen_failures: failures,
 });
 
-const confirmation = (id: string, status: string) => ({
-  id,
-  agent_id: "a1",
-  message_id: `m-${id}`,
-  kind: "choice",
-  prompt: `tasks 请求确认\n删除${id}？`,
-  options: [
-    { value: "allow", label: "允许" },
-    { value: "deny", label: "拒绝" },
-  ],
-  status,
-  revision: 1,
-  answer: status === "resolved" ? "allow" : null,
-  created_at: "2026-10-09T09:00:00Z",
-  updated_at: "2026-10-09T09:00:00Z",
-});
+/** A member waiting on a question: the conversation list says so, its session holds the question. */
+function waiting(id: string) {
+  const host = productHost({
+    agents: [agentView({ id: "a1", name: "研究员" })],
+    conversations: [
+      conversationView({
+        id: `g-${id}`,
+        name: "群聊",
+        participants: [
+          memberView("a1", {
+            sessionId: `s-${id}`,
+            status: "waiting_for_input",
+          }),
+        ],
+      }),
+    ],
+  });
+  host.target(`sessions.s-${id}`, {
+    core: { session: `s-${id}`, running: true },
+    ask: {
+      pending: {
+        questionId: id,
+        question: `tasks 请求确认\n删除${id}？`,
+        options: ["允许", "拒绝"],
+      },
+    },
+  });
+  return host;
+}
 
 async function mount(
   client: QueryClient,
@@ -91,13 +111,14 @@ describe("what waits for the user", () => {
   afterEach(() => {
     document.body.innerHTML = "";
     rstest.restoreAllMocks();
+    setWire(undefined);
   });
 
   it("lists tasks and routines that need them, and nothing else", async () => {
+    productHost();
     const client = new QueryClient({
       defaultOptions: { queries: { staleTime: Infinity } },
     });
-    client.setQueryData(["chat"], { agents: [], interactions: [] });
     client.setQueryData(["tasks"], {
       assignees: [],
       tasks: [
@@ -152,11 +173,7 @@ describe("what waits for the user", () => {
     const client = new QueryClient({
       defaultOptions: { queries: { staleTime: Infinity, retry: false } },
     });
-    client.setQueryData(["chat"], {
-      groups: [],
-      agents: [{ id: "a1", name: "研究员" }],
-      interactions: [confirmation("i1", "pending")],
-    });
+    waiting("i1");
     client.setQueryData(["tasks"], {
       assignees: [],
       tasks: [task(1, { status: "in_review" })],
@@ -179,32 +196,20 @@ describe("what waits for the user", () => {
     ]);
     expect(container.textContent).toContain("无法加载定时");
     expect(container.querySelector("li")!.textContent).toContain(
-      "删除i1？允许拒绝",
+      "删除i1？允许拒绝放弃",
     );
   });
 
-  it("lists answered confirmations under 全部 only, never the waiting ones twice", async () => {
+  it("is a page of what waits, and nothing about what was answered before", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { staleTime: Infinity } },
     });
-    const pending = confirmation("i1", "pending");
-    const answered = confirmation("i2", "resolved");
-    client.setQueryData(["chat"], { agents: [], interactions: [pending] });
-    client.setQueryData(["chat", "interactions"], [pending, answered]);
+    waiting("i1");
     client.setQueryData(["tasks"], { assignees: [], tasks: [] });
     client.setQueryData(["routines"], []);
-    const all = await mount(client, () => <Notifications />);
-    expect(headings(all)).toContain("已处理的确认");
-    const items = [...all.querySelectorAll("li")].map((li) => li.textContent);
-    expect(items).toHaveLength(2);
-    expect(items[1]).toContain("已选择「允许」");
-    document.body.innerHTML = "";
-    const waiting = await mount(
-      client,
-      () => <Notifications />,
-      "/?filter=pending",
-    );
-    expect(headings(waiting)).not.toContain("已处理的确认");
-    expect(waiting.querySelectorAll("li")).toHaveLength(1);
+    const page = await mount(client, () => <Notifications />);
+    expect(headings(page)).not.toContain("已处理的确认");
+    expect(page.querySelectorAll("li")).toHaveLength(1);
+    expect(page.textContent).toContain("删除i1？");
   });
 });

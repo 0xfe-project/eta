@@ -10,7 +10,6 @@ import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
 import { UserIcon } from "@phosphor-icons/react/User";
-import { useQuery } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -20,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { formatLocale, translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { chatQueryOptions } from "@/queries/chat";
+import { useConversationList } from "@/queries/conversations";
 import { useForget, useMemories, useRemember } from "@/queries/memory";
 import { Select, SelectOption } from "./select-field";
 import { ago } from "./task-format";
@@ -125,12 +124,10 @@ function MemoryRow({ agentId, memory }: { agentId: string; memory: Memory }) {
     "navigation",
   ] as const);
   const forget = useForget(agentId);
-  const { data: groupName } = useQuery({
-    ...chatQueryOptions(),
-    select: (snapshot) =>
-      snapshot.groups?.find((group) => group.id === memory.source_group_id)
-        ?.name,
-  });
+  const { conversations } = useConversationList();
+  const groupName = conversations.find(
+    (group) => group.id === memory.source_group_id,
+  )?.name;
   const textRef = useRef<HTMLParagraphElement>(null);
   const [expanded, setExpanded] = useState(false);
   // Whether the clamped text hides some of it; measured while clamped, so
@@ -300,9 +297,9 @@ export function MemoryView({
     "common",
     "navigation",
   ] as const);
-  const { agents, loaded, error: agentsError, retry, openEditor } = useAgents();
+  const { agents, loaded, error: agentsError, openEditor } = useAgents();
   const current = agents.find((agent) => agent.id === agentId) ?? agents.at(-1);
-  const { data: snapshot } = useQuery(chatQueryOptions());
+  const { conversations } = useConversationList();
   const [groupId, setGroupId] = useState("");
   const [source, setSource] = useState<MemorySource | "">("");
   const [search, setSearch] = useState("");
@@ -319,7 +316,6 @@ export function MemoryView({
       <LoadError
         what={translateText("common:entities.agents")}
         error={agentsError}
-        onRetry={retry}
       />
     );
   if (!loaded) return <Loading />;
@@ -403,7 +399,7 @@ export function MemoryView({
             <SelectOption value="">
               {translateText("filters.allGroups")}
             </SelectOption>
-            {snapshot?.groups?.map((g) => (
+            {conversations.map((g) => (
               <SelectOption key={g.id} value={g.id}>
                 {g.name}
               </SelectOption>

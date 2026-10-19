@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useSessionUsage } from "./session-usage";
+import { useSession } from "@/queries/sessions";
 
 /**
  * A member's spend, as a ring around the member's own avatar.
@@ -19,19 +19,19 @@ export function MemberRing({
   sessionId: string;
   children: ReactNode;
 }) {
-  const { data: usage } = useSessionUsage(sessionId);
+  const usage = useSession(sessionId)?.usage;
   const total =
     (usage?.input ?? 0) +
     (usage?.output ?? 0) +
-    (usage?.cache_read ?? 0) +
-    (usage?.cache_write ?? 0);
+    (usage?.cacheRead ?? 0) +
+    (usage?.cacheWrite ?? 0);
   const share = (part: number) => (total === 0 ? 0 : Math.min(1, part / total));
   // The circle's circumference at r=20 in this 48-unit box: the avatar (32px) sits inside it
   // with a gap, so the ring reads as around the avatar rather than as its border.
   const circumference = 2 * Math.PI * 20;
   const read = share(usage?.input ?? 0) * circumference;
   const written =
-    share((usage?.output ?? 0) + (usage?.cache_write ?? 0)) * circumference;
+    share((usage?.output ?? 0) + (usage?.cacheWrite ?? 0)) * circumference;
   return (
     <span className="relative inline-flex size-12 shrink-0 items-center justify-center">
       <svg

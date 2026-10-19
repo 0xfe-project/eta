@@ -42,7 +42,7 @@ function startOfDay(date: Date) {
 }
 
 /** "今天 08:02", "明天 08:00", "10-11 08:03". */
-export function when(iso: string) {
+export function when(iso: string | number) {
   const date = new Date(iso);
   const time = date.toLocaleTimeString(formatLocale(), {
     hour: "2-digit",

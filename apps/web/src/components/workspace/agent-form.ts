@@ -1,3 +1,4 @@
+import type { AgentFields, ThinkingLevel } from "@eta/client-contracts";
 import { z } from "zod";
 import { formatLocale, translate } from "@/lib/i18n";
 
@@ -20,20 +21,27 @@ export const agentFormSchema = z.object({
   persona: z.string().max(200),
   // "" until a model is chosen.
   model: z.string(),
-  // null: every built-in bundle, the default for new agents.
-  bundles: z.array(z.string()).nullable(),
+  // "" leaves it to the model's own default.
+  thinkingLevel: z.string(),
 });
 export type AgentForm = z.infer<typeof agentFormSchema>;
 
 /**
- * The request's fields. `persona` rides along unconditionally — "" is a real value ("the
- * project's default card"), not an omission. The model and bundles go only once chosen.
+ * The request's fields. Every field rides along: `persona` "" is a real value ("the project's
+ * default card"), and a model or thinking level left empty is `null`, which clears it.
  */
-export function agentDraft({ model, bundles, persona, ...fields }: AgentForm) {
+export function agentDraft({
+  description,
+  model,
+  persona,
+  thinkingLevel,
+  name,
+}: AgentForm): AgentFields {
   return {
-    ...fields,
+    name,
+    instructions: description,
     persona,
-    ...(model ? { model } : {}),
-    ...(bundles ? { bundles } : {}),
+    model: model || null,
+    thinkingLevel: (thinkingLevel || null) as ThinkingLevel | null,
   };
 }

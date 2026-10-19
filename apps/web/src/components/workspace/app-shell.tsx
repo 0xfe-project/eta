@@ -14,7 +14,7 @@ import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
 import { SettingsDialog } from "./settings-dialog";
 import { SidebarPane } from "./sidebar-pane";
-import { FolderTree } from "./sidebar-tree";
+import { ProjectTree } from "./sidebar-tree";
 import { useAgents, useOpenAgent } from "./use-agents";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -115,7 +115,7 @@ export function Sidebar({ width }: { width?: number } = {}) {
           />
         </label>
       </div>
-      <FolderTree query={query} />
+      <ProjectTree query={query} />
       <AgentLibrary />
       {/*
        * eta-old's settings entry: the sidebar's last row, the word 设置, a line above it. The

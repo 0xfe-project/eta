@@ -14,7 +14,6 @@ import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlayIcon } from "@phosphor-icons/react/Play";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -32,7 +31,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { listSeparator, translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { chatQueryOptions } from "@/queries/chat";
+import { useConversationList } from "@/queries/conversations";
 import {
   useDeleteRoutine,
   useMarkRoutineSeen,
@@ -180,12 +179,9 @@ export function RoutineList({
   // list plus the remembered selection are enough to know which section goes first.
   // Names come from the snapshot already on screen: a list of routines should not be the thing
   // that goes and asks for the sidebar's data.
-  const client = useQueryClient();
-  const chat = client.getQueryData(chatQueryOptions().queryKey) as
-    | { groups?: { id: string; name: string }[] }
-    | undefined;
+  const { conversations } = useConversationList();
   const selectedGroupId = useWorkspaceStore((s) => s.workspace.selectedGroupId);
-  const allGroups = chat?.groups ?? [];
+  const allGroups = conversations;
   const group = allGroups.find((candidate) => candidate.id === selectedGroupId);
   // Grouped by the conversation that owns them, because that is the question the overview answers:
   // "which groups have something on a clock, and what". A flat list made you open each one to find

@@ -1,4 +1,8 @@
-import type { Group } from "@/queries/chat";
+import type {
+  ConversationInfo,
+  ConversationSummary,
+  ProjectView,
+} from "@eta/client-contracts";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { CheckIcon } from "@phosphor-icons/react/Check";
@@ -14,10 +18,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { agentName, useAgentList } from "@/queries/agents";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
-import { CwdChip } from "./cwd-chip";
+import { ProjectChip } from "./project-chip";
 import { SettingsButton } from "./settings-dialog";
+import { StewardChip } from "./steward-chip";
 import { useAgents, useOpenAgent } from "./use-agents";
 import { useGroups, useOpenGroup } from "./use-groups";
 import { useHoverMenu } from "./use-hover-menu";
@@ -32,7 +38,7 @@ function AgentSwitch({
   onInfo,
   children,
 }: {
-  group: Group;
+  group: ConversationSummary;
   onInfo: () => void;
   children: (open: string) => React.ReactNode;
 }) {
@@ -46,14 +52,12 @@ function AgentSwitch({
   const openGroup = useOpenGroup();
   const menu = useHoverMenu();
   const direct =
-    group.kind === "direct"
-      ? group.participants.find((p) => p.member)?.agent_id
-      : undefined;
+    group.kind === "direct" ? group.participants[0]?.agentId : undefined;
   const agent = agents.find((a) => a.id === direct);
   const directs = new Map(
     groups
       .filter((g) => g.kind === "direct")
-      .map((g) => [g.participants.find((p) => p.member)?.agent_id, g.id]),
+      .map((g) => [g.participants[0]?.agentId, g.id]),
   );
   const open = agent
     ? translateText("chat:agentSwitcher.currentDirectChat", {
@@ -133,11 +137,16 @@ function AgentSwitch({
  */
 export function ChatHeader({
   group,
+  info,
+  project,
   onInfo,
   onOpenWorkspace,
   workspaceOpen,
 }: {
-  group?: Group;
+  group?: ConversationSummary;
+  /** The conversation's own facts (its steward override); not there until its target arrives. */
+  info?: ConversationInfo | undefined;
+  project?: ProjectView | undefined;
   onInfo: () => void;
   /** Shown only when the panel is folded away (narrow desktop, or collapsed). */
   onOpenWorkspace?: () => void;
@@ -145,7 +154,8 @@ export function ChatHeader({
 }) {
   const { t: translateText } = useTranslation(["chat", "navigation"] as const);
   const openAgent = useOpenAgent();
-  const members = group?.participants.filter((p) => p.member) ?? [];
+  const { agents } = useAgentList();
+  const members = group?.participants ?? [];
   return (
     <header className="band gap-2 px-2">
       <h1 className="flex min-w-0 items-center text-sm font-medium">
@@ -167,19 +177,20 @@ export function ChatHeader({
           </AgentSwitch>
         ) : null}
       </h1>
-      <CwdChip group={group} />
+      <ProjectChip project={project} />
+      <StewardChip info={info} project={project} />
       <span className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         {members.map((member) => (
           <button
-            key={member.agent_id}
+            key={member.agentId}
             type="button"
             title={translateText("chat:groups.members.talkAlone", {
-              name: member.name,
+              name: agentName(agents, member.agentId),
             })}
-            onClick={() => openAgent(member.agent_id)}
+            onClick={() => openAgent(member.agentId)}
             className="shrink-0 outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
-            <AgentAvatar agent={{ id: member.agent_id }} className="size-5" />
+            <AgentAvatar agent={{ id: member.agentId }} className="size-5" />
           </button>
         ))}
       </span>

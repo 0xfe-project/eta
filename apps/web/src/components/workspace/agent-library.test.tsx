@@ -1,12 +1,21 @@
+import type { ConversationSummary } from "@eta/client-contracts";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { setWire } from "@/lib/wire";
+import {
+  agentView,
+  conversationView,
+  memberView,
+  productHost,
+  projectView,
+} from "@/test-product";
 import { Sidebar } from "./app-shell";
 
 const state = rstest.hoisted(() => ({
   agents: [] as { id: string; name: string; status: string }[],
-  groups: [] as unknown[],
+  groups: [] as ConversationSummary[],
   openAgent: rstest.fn(),
 }));
 rstest.mock("./use-agents", () => ({
@@ -48,12 +57,26 @@ async function render(node: React.ReactNode) {
   const client = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
   });
-  client.setQueryData(["chat"], {
-    groups: state.groups,
-    agents: state.agents,
-    active_replies: [],
-    interactions: [],
-    event_cursor: 0,
+  productHost({
+    agents: state.agents.map((a) => agentView({ ...a, status: "idle" })),
+    projects: [
+      projectView({
+        id: "p-eta",
+        name: "eta",
+        path: "/Users/me/Desktop/eta",
+      }),
+      projectView({
+        id: "p-house",
+        name: "house",
+        path: "/Users/me/work/house",
+      }),
+      projectView({
+        id: "p",
+        name: "p",
+        path: "/p",
+      }),
+    ],
+    conversations: state.groups,
   });
   const container = document.createElement("div");
   document.body.append(container);
@@ -73,6 +96,7 @@ async function render(node: React.ReactNode) {
 afterEach(async () => {
   await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
   state.openAgent.mockClear();
+  setWire(undefined);
 });
 
 const agent = (id: string, name: string) => ({ id, name, status: "idle" });
@@ -89,36 +113,26 @@ async function typeInto(input: HTMLInputElement, value: string) {
 }
 
 describe("左栏的搜索框", () => {
-  it("filters the tree by conversation name or folder", async () => {
+  it("filters the tree by conversation name or project", async () => {
     state.agents = [];
     state.groups = [
-      {
+      conversationView({
         id: "g1",
         name: "装配",
-        kind: "group",
-        cwd: "/Users/me/Desktop/eta",
-        archived: false,
-        participants: [],
-        unread: 0,
-        updated_at: "2026-10-17T00:00:00Z",
-        last_message_at: "2026-10-17T00:00:00Z",
-      },
-      {
+        projectId: "p-eta",
+        lastMessageAt: 2,
+      }),
+      conversationView({
         id: "g2",
         name: "装修",
-        kind: "group",
-        cwd: "/Users/me/work/house",
-        archived: false,
-        participants: [],
-        unread: 0,
-        updated_at: "2026-10-16T00:00:00Z",
-        last_message_at: "2026-10-16T00:00:00Z",
-      },
+        projectId: "p-house",
+        lastMessageAt: 1,
+      }),
     ];
     const container = await render(<Sidebar />);
     expect(container.textContent).toContain("装修");
 
-    // A folder name is as good a way to find a conversation as its own name.
+    // A project's path is as good a way to find a conversation as its own name.
     await typeInto(container.querySelector("input")!, "desktop");
     expect(container.textContent).toContain("装配");
     expect(container.textContent).not.toContain("装修");
@@ -129,16 +143,13 @@ describe("智能体库", () => {
   it("lists every agent, whether or not it already has a conversation", async () => {
     state.agents = [agent("a1", "乐子人"), agent("a2", "装配检查")];
     state.groups = [
-      {
+      conversationView({
         id: "g1",
         name: "乐子人",
         kind: "direct",
-        cwd: "",
-        archived: false,
-        participants: [
-          { agent_id: "a1", name: "乐子人", member: true, status: "idle" },
-        ],
-      },
+        projectId: "p",
+        participants: [memberView("a1")],
+      }),
     ];
     const container = await render(<Sidebar />);
     const library = container.querySelector(
@@ -154,16 +165,13 @@ describe("智能体库", () => {
   it("keeps offering an agent after its conversation is open", async () => {
     state.agents = [agent("a1", "乐子人")];
     state.groups = [
-      {
+      conversationView({
         id: "g1",
         name: "乐子人",
         kind: "direct",
-        cwd: "/p",
-        archived: false,
-        participants: [
-          { agent_id: "a1", name: "乐子人", member: true, status: "idle" },
-        ],
-      },
+        projectId: "p",
+        participants: [memberView("a1")],
+      }),
     ];
     const container = await render(<Sidebar />);
     const library = container.querySelector(

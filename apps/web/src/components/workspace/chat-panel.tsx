@@ -1,17 +1,13 @@
-import type { Draft, FilePart, OutgoingPart } from "@/lib/composer";
-
 import type {
-  Agent,
-  Block,
-  ChatMessage,
-  Group,
-  Interaction,
-  SendMode,
-  TextBlock,
-} from "@/queries/chat";
-import type { Outgoing } from "@/queries/outbox";
+  AgentView,
+  ConversationSummary,
+  MessageView,
+} from "@eta/client-contracts";
+import type { Draft } from "@/lib/composer";
+import type { RunBlock } from "@/lib/run";
+import type { Outgoing, SendMode } from "@/queries/outbox";
+import type { Question } from "@/queries/questions";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
   memo,
@@ -31,36 +27,30 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ActivityOperationCards } from "@/components/workspace/activity-operation";
-import { ActivityRefCard } from "@/components/workspace/activity-ref";
 import {
   afterCommand,
   charCount,
   draftText,
   isBlank,
   isLongPaste,
-  MAX_ATTACHMENTS,
   MAX_MESSAGE_CHARS,
-  messageParts,
-  pasteFileName,
   plainDraft,
 } from "@/lib/composer";
-import { buildMenu, mentionAt } from "@/lib/composer-menu";
+import { buildMenu } from "@/lib/composer-menu";
 import { translate } from "@/lib/i18n";
 import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { firstVisible } from "@/lib/rail";
 import { readTheme, setTheme } from "@/lib/theme";
+import { ACTIVE_STATUSES, RUNNING_STATUSES } from "@/lib/timeline";
 import { summarizeArgs } from "@/lib/tool-summary";
-import { ACTIVE_STATUSES } from "@/queries/chat";
-import { upload, useOutbox } from "@/queries/outbox";
+import { agentName } from "@/queries/agents";
+import { useRunBlocks } from "@/queries/sessions";
 import { AgentAvatar } from "./agent-identity";
-import { AttachmentChip, PastedText } from "./composer-block";
 import { ComposerEditor } from "./composer-editor";
 import { ModelChip, ThinkingChip } from "./composer-pickers";
 import { GroupNotice } from "./group-notice";
 import { PendingStrip } from "./pending-strip";
 import { when } from "./routine-format";
-import { TaskMessage } from "./task-message";
 import { TranscriptRail } from "./transcript-rail";
 import { AskBlock } from "./transcript/ask-block";
 import { Message, SystemMessage } from "./transcript/message";
@@ -69,8 +59,7 @@ import { ThinkingBlock } from "./transcript/thinking-block";
 import { ToolCard, ToolCardBlock } from "./transcript/tool-card";
 import { useWorkspaceStore } from "./workspace-store";
 
-type Activity = Extract<Block, { type: "activity" }>;
-type Reply = Exclude<Block, { type: "attachment" }>;
+type ToolBlock = Extract<RunBlock, { type: "tool" }>;
 type SlashName =
   | "/stop"
   | "/queue"
@@ -153,45 +142,37 @@ const activityText = {
     return translate("common:status.failed");
   },
 };
-// A new block of the transcript fades in, rising a little. The user's own
-// message does as it is sent; its copy from the server replaces it in place.
-// Nothing. A message that slides up and fades in is a message you wait to read; eta-old's
-// transcript puts the row where it belongs and moves on.
-const ENTER = "";
-// Failures of the agent's environment, which fail everything waiting at once.
-const ENVIRONMENT_FAILURES = new Set([
-  "AGENT_UNAVAILABLE",
-  "AGENT_RECOVERY_FAILED",
-  "AGENT_EXTENSION_FAILED",
-  "AGENT_BUILD_FAILED",
-]);
+// Failures of the host or the agent's environment, which fail everything waiting at once.
+const ENVIRONMENT_FAILURES = new Set(["restart", "unavailable"]);
+// How the reply codes the host fails a row with are said (chat:reply.codes.*).
+const FAILURE_CODES = {
+  restart: "restart",
+  run_failed: "runFailed",
+  unavailable: "unavailable",
+  gone: "gone",
+} as const;
 
-/** A user message's text and attachments, to send again. */
-function userParts(message: ChatMessage): OutgoingPart[] {
-  return message.blocks.flatMap((block): OutgoingPart[] =>
-    block.type === "text"
-      ? [{ type: "text", text: block.text }]
-      : block.type === "attachment"
-        ? [{ type: "attachment", attachment: block.attachment }]
-        : [],
-  );
-}
-
-/** What the user wrote: text, with long pastes and attachments folded where they stand. */
-function UserParts({ parts }: { parts: OutgoingPart[] }) {
+/**
+ * What the user wrote. A message that is a screenful (a pasted log, a file's contents) is folded
+ * to a dozen lines with the way to open the rest: the box that held it folded it the same way.
+ */
+function UserText({ text }: { text: string }) {
+  const { t: translateText } = useTranslation(["chat"] as const);
+  const [open, setOpen] = useState(false);
+  if (!isLongPaste(text))
+    return <span className="whitespace-pre-wrap">{text}</span>;
   return (
     <span className="whitespace-pre-wrap">
-      {parts.map((part, i) =>
-        part.type === "attachment" ? (
-          // eslint-disable-next-line react/no-array-index-key -- parts never move
-          <AttachmentChip key={i} attachment={part.attachment} />
-        ) : isLongPaste(part.text) ? (
-          // eslint-disable-next-line react/no-array-index-key -- parts never move
-          <PastedText key={i} text={part.text} />
-        ) : (
-          part.text
-        ),
-      )}
+      <span className={open ? undefined : "line-clamp-12 block"}>{text}</span>
+      <button
+        type="button"
+        className="font-mono text-[10px] text-muted-foreground underline-offset-2 hover:underline"
+        onClick={() => setOpen(!open)}
+      >
+        {open
+          ? translateText("messages.collapse")
+          : translateText("messages.expand")}
+      </button>
     </span>
   );
 }
@@ -208,7 +189,7 @@ function MemberPicker({
   mentioned,
   onPick,
 }: {
-  members: readonly { agent_id: string; name: string }[];
+  members: readonly { id: string; name: string }[];
   mentioned: readonly string[];
   onPick: (label: string) => void;
 }) {
@@ -222,7 +203,7 @@ function MemberPicker({
           className="composer-control"
           title={translateText("mentions.notifyTargets", {
             names: members
-              .filter((member) => mentioned.includes(member.agent_id))
+              .filter((member) => mentioned.includes(member.id))
               .map((member) => member.name)
               .join("、"),
           })}
@@ -249,12 +230,12 @@ function MemberPicker({
         </DropdownMenuItem>
         {members.map((member) => (
           <DropdownMenuItem
-            key={member.agent_id}
-            disabled={mentioned.includes(member.agent_id)}
+            key={member.id}
+            disabled={mentioned.includes(member.id)}
             onSelect={() => onPick(member.name)}
           >
             <span className="min-w-0 flex-1 truncate">{member.name}</span>
-            {mentioned.includes(member.agent_id) ? (
+            {mentioned.includes(member.id) ? (
               <span aria-hidden="true">✓</span>
             ) : null}
           </DropdownMenuItem>
@@ -264,13 +245,13 @@ function MemberPicker({
   );
 }
 
-function ToolActivity({ block }: { block: Activity }) {
+function ToolActivity({ block }: { block: ToolBlock }) {
   // The arguments are a JSON object; the header shows what the call is *doing*, which is the first
   // thing worth quoting out of it (lib/tool-summary.ts).
   const summary = summarizeArgs(block.input);
   return (
     <ToolCard
-      tool={block.name || block.label}
+      tool={block.name}
       summary={summary.length > 0 ? summary : undefined}
       status={block.status}
       statusLabel={activityText[block.status]}
@@ -284,7 +265,7 @@ function ToolActivity({ block }: { block: Activity }) {
       )}
       {block.output === undefined ? null : (
         <ToolCardBlock label={translate("chat:tools.result")}>
-          {String(block.output)}
+          {block.output}
         </ToolCardBlock>
       )}
     </ToolCard>
@@ -435,12 +416,11 @@ function useTranscriptScroll({
   };
 }
 
-const NO_INTERACTIONS: Interaction[] = [];
-
 interface TurnActions {
   onStop: (replyId: string) => void;
-  onAnswer: (interactionId: string, value: string) => void;
-  onResend: (parts: OutgoingPart[], agentId?: string) => void;
+  onChoose: (question: Question, selections: string[]) => void;
+  onAbort: (question: Question) => void;
+  onResend: (text: string, agentId?: string) => void;
 }
 
 /**
@@ -454,33 +434,60 @@ interface TurnActions {
 interface ReplyLine {
   /** The next reply failed the same way; this one says so. */
   sameAsNext?: boolean;
-  /** The user message a failed reply answered. */
-  resend?: ChatMessage;
+  /** The text of the user message a failed reply answered. */
+  resend?: string;
 }
 
 /** What each reply's outcome needs from the ones around it. */
-function replyLines(messages: ChatMessage[]) {
+function replyLines(messages: readonly MessageView[]) {
   const replies = messages.filter(
-    (m) => m.role === "assistant" && m.kind === "message",
+    (m) => m.author === "agent" && m.kind === "message",
   );
   const lines = new Map<string, ReplyLine>();
   replies.forEach((message, i) => {
     if (message.status === "failed") {
-      const code = message.failure?.code ?? "";
+      const code = String(message.data.code ?? "");
       const next = replies[i + 1];
+      const trigger = messages.find(
+        (m) => m.id === message.replyToId && m.author === "user",
+      );
       lines.set(message.id, {
         sameAsNext:
           ENVIRONMENT_FAILURES.has(code) &&
-          next?.agent_id === message.agent_id &&
+          next?.agentId === message.agentId &&
           next?.status === "failed" &&
-          next.failure?.code === code,
-        resend: messages.find(
-          (m) => m.id === message.reply_to_id && m.role === "user",
-        ),
+          next.data.code === code,
+        ...(trigger === undefined ? {} : { resend: trigger.text }),
       });
     }
   });
   return lines;
+}
+
+/** The names of the agents a message went into the turns of (`steer`), for the line under it. */
+const joinedNames = (message: MessageView, agents: readonly AgentView[]) =>
+  Array.isArray(message.data.joined)
+    ? (message.data.joined as string[])
+        .map((id) => agentName(agents, id))
+        .join("、")
+    : "";
+
+/** A reply that is writing now: what its session has said and done in this run. */
+function LiveReply({ sessionId }: { sessionId: string }) {
+  const blocks = useRunBlocks(sessionId);
+  return blocks.map((block) =>
+    block.type === "thinking" ? (
+      <ThinkingBlock key={block.id} text={block.text} />
+    ) : block.type === "text" ? (
+      <div key={block.id} className="message-content">
+        <Markdown streaming>{block.text}</Markdown>
+      </div>
+    ) : (
+      <div key={block.id} className="space-y-1">
+        <ToolActivity block={block} />
+      </div>
+    ),
+  );
 }
 
 /**
@@ -490,110 +497,109 @@ function replyLines(messages: ChatMessage[]) {
 const Turn = memo(
   ({
     message,
-    pending,
     author,
+    sessionId,
+    question,
+    nobody,
+    joined,
     actions,
     ...line
   }: {
-    message: ChatMessage;
+    message: MessageView;
     author?: string;
-    /** Its interactions waiting for the user. */
-    pending: Interaction[];
+    /** The session of the member writing this reply, when it is writing. */
+    sessionId?: string | undefined;
+    /** What the reply is waiting on the user for. */
+    question?: Question | undefined;
+    /** The user message woke nobody. */
+    nobody: boolean;
+    /** Who the user message joined the turn of. */
+    joined: string;
     actions: React.RefObject<TurnActions>;
   } & ReplyLine) => {
-    useTranslation([
+    const { t: translateText } = useTranslation([
       "chat",
       "agents",
       "common",
       "navigation",
       "tasks",
     ] as const);
-    if (message.kind === "task_draft" || message.kind === "task_card")
-      return <TaskMessage message={message} />;
     if (message.kind === "system") return <GroupNotice message={message} />;
-    if (message.role === "user")
+    if (message.author === "user")
       return (
-        <Message
-          role="user"
-          footer={
-            <time dateTime={message.created_at}>
-              {when(message.created_at)}
-            </time>
-          }
-        >
-          <UserParts parts={userParts(message)} />
-        </Message>
+        <>
+          <Message
+            role="user"
+            footer={
+              <time dateTime={new Date(message.createdAt).toISOString()}>
+                {when(message.createdAt)}
+              </time>
+            }
+          >
+            <UserText text={message.text} />
+          </Message>
+          {nobody ? (
+            <p role="status" className="text-xs text-state-warning">
+              {translateText("messages.nobody")}
+            </p>
+          ) : null}
+          {joined ? (
+            <p className="font-mono text-[10px] text-muted-foreground">
+              {translateText("messages.joined", { names: joined })}
+            </p>
+          ) : null}
+        </>
       );
     // Only a reply at work still grows; the rest render as finished text.
-    const streaming = ACTIVE_STATUSES.has(message.status);
-    const saidText = message.blocks
-      .filter((block): block is TextBlock => block.type === "text")
-      .map((block) => block.text)
-      .join("\n\n");
+    const running = RUNNING_STATUSES.has(message.status);
     return (
       <div className="message assistant">
         {author === undefined ? null : (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <AgentAvatar agent={{ id: message.agent_id }} className="size-4" />
-            <span>
-              {author}
-              {message.kind === "mention"
-                ? translate("chat:messages.mentionTarget", {
-                    name: String(
-                      message.data.to ?? translate("common:entities.agents"),
-                    ),
-                  })
-                : ""}
-            </span>
+            <AgentAvatar
+              agent={{ id: message.agentId ?? "" }}
+              className="size-4"
+            />
+            <span>{author}</span>
           </div>
         )}
-        {message.blocks
-          .filter((block): block is Reply => block.type !== "attachment")
-          .map((block) =>
-            block.type === "thinking" ? (
+        {running && sessionId !== undefined ? (
+          <LiveReply sessionId={sessionId} />
+        ) : (
+          <>
+            {message.thinking === "" ? null : (
               // What it worked through: folded, with its size on the line, because it is context
               // for reading the answer critically rather than a second answer.
-              <ThinkingBlock
-                key="thinking"
-                text={block.text}
-                {...(block.chars === undefined ? {} : { chars: block.chars })}
-              />
-            ) : block.type === "text" ? (
-              <div key={block.id} className="message-content">
-                <Markdown streaming={streaming}>{block.text}</Markdown>
+              <ThinkingBlock text={message.thinking} />
+            )}
+            {message.text === "" || message.status === "failed" ? null : (
+              <div className="message-content">
+                <Markdown>{message.text}</Markdown>
               </div>
-            ) : (
-              <div key={block.id} className={`space-y-1 ${ENTER}`}>
-                <ToolActivity block={block} />
-                {block.ref && block.status === "completed" ? (
-                  <ActivityRefCard value={block.ref} className="ml-[2ch]" />
-                ) : null}
-                {block.operations?.length && block.status !== "running" ? (
-                  <ActivityOperationCards
-                    operations={block.operations}
-                    className="ml-[2ch]"
-                  />
-                ) : null}
-              </div>
-            ),
-          )}
-        {pending.map((interaction) => (
+            )}
+          </>
+        )}
+        {question === undefined ? null : (
           <AskBlock
-            key={interaction.id}
-            interaction={interaction}
+            question={question}
             who={author}
-            onAnswer={(id, value) => actions.current.onAnswer(id, value)}
+            onChoose={(q, selections) =>
+              actions.current.onChoose(q, selections)
+            }
+            onAbort={(q) => actions.current.onAbort(q)}
           />
-        ))}
+        )}
         <div className="message-footer">
-          <time dateTime={message.created_at}>{when(message.created_at)}</time>
-          <CopyMessage text={saidText} />
+          <time dateTime={new Date(message.createdAt).toISOString()}>
+            {when(message.createdAt)}
+          </time>
+          <CopyMessage text={message.text} />
         </div>
         <ReplyOutcome
           message={message}
           line={line}
-          onResend={(parts) =>
-            actions.current.onResend(parts, message.agent_id)
+          onResend={(text) =>
+            actions.current.onResend(text, message.agentId ?? undefined)
           }
         />
       </div>
@@ -618,9 +624,9 @@ function ReplyOutcome({
   line,
   onResend,
 }: {
-  message: ChatMessage;
+  message: MessageView;
   line: ReplyLine;
-  onResend: (parts: OutgoingPart[], agentId?: string) => void;
+  onResend: (text: string) => void;
 }) {
   const { t: translateText } = useTranslation([
     "chat",
@@ -633,20 +639,30 @@ function ReplyOutcome({
     case "stopped":
       return <Warning>{translateText("common:status.stopped")}</Warning>;
     case "failed": {
-      const parts = line.resend && userParts(line.resend);
+      const code = String(message.data.code ?? "");
+      const known = Object.hasOwn(FAILURE_CODES, code)
+        ? FAILURE_CODES[code as keyof typeof FAILURE_CODES]
+        : undefined;
+      const reason =
+        known === undefined
+          ? translateText("reply.failed")
+          : translateText(`reply.codes.${known}`);
+      // The host's own words say why a run failed; for a restart they only repeat the reason.
+      const detail =
+        code === "restart" || message.text === "" ? "" : ` ${message.text}`;
       return (
         <ComposerNotice
           message={
             line.sameAsNext
               ? translateText("reply.sameFailureAsNext")
-              : (message.failure?.message ?? translateText("reply.failed"))
+              : `${reason}${detail}`
           }
           actions={
-            parts?.length
+            line.resend
               ? [
                   {
                     label: translateText("actions.resend"),
-                    onClick: () => onResend(parts),
+                    onClick: () => onResend(line.resend!),
                   },
                 ]
               : []
@@ -667,15 +683,15 @@ export function ChatPanel({
   hasOlder,
   loadingOlder,
   onLoadOlder,
-  interactions,
+  questions,
   draft,
   onDraftChange: setDraft,
-  onFiles,
   onSend,
   onCompact,
   onStop,
   onStopAll,
-  onAnswer,
+  onChoose,
+  onAbort,
   head,
   error,
   connectionLost,
@@ -683,7 +699,6 @@ export function ChatPanel({
   notice,
   group,
   agents,
-  activeReplies,
   outgoing,
   onRetry,
   onEdit,
@@ -694,25 +709,25 @@ export function ChatPanel({
 }: {
   groupId: string | undefined;
   groupName: string | undefined;
-  /** The conversation with the current agent, as far back as loaded. */
-  messages: ChatMessage[];
+  /** The conversation, as far back as loaded. */
+  messages: readonly MessageView[];
   /** The conversation is still being read. */
   loading?: boolean;
   /** Earlier messages exist; onLoadOlder fetches the next page of them. */
   hasOlder: boolean;
   loadingOlder: boolean;
   onLoadOlder: () => void;
-  interactions: Interaction[];
+  /** Every question waiting for the user, in any conversation. */
+  questions: readonly Question[];
   draft: Draft;
   onDraftChange: (draft: Draft) => void;
-  /** Start uploading files pasted into the draft; their blocks. */
-  onFiles: (files: File[]) => FilePart[];
-  onSend: (parts: OutgoingPart[], mode: SendMode) => void;
+  onSend: (text: string, mode: SendMode) => void;
   onCompact: () => void;
   onStop: (replyId: string) => void;
   /** `/stop`: stops every reply in the group. */
   onStopAll: () => void;
-  onAnswer: (interactionId: string, value: string) => void;
+  onChoose: (question: Question, selections: string[]) => void;
+  onAbort: (question: Question) => void;
   /** Shows and switches the agent being talked to. */
   head?: React.ReactNode;
   error?: string;
@@ -722,16 +737,15 @@ export function ChatPanel({
   blocked?: React.ReactNode;
   /** A warning above the composer that leaves it usable. */
   notice?: React.ReactNode;
-  group?: Group;
-  agents: Agent[];
-  activeReplies: ChatMessage[];
+  group?: ConversationSummary;
+  agents: readonly AgentView[];
   /** The user's messages on their way, after the transcript. */
   outgoing: Outgoing[];
   onRetry: (outgoing: Outgoing) => void;
   onEdit: (outgoing: Outgoing) => void;
   onDiscard: (id: string) => void;
   /** Send a failed reply's message again, as a new message. */
-  onResend: (parts: OutgoingPart[], agentId?: string) => void;
+  onResend: (text: string, agentId?: string) => void;
   /** Ask for the conversation again, when reading it failed. */
   onReload?: () => void;
   /** The goal of this conversation, moved from the composer's `/goal`. */
@@ -751,26 +765,46 @@ export function ChatPanel({
   // The reply in progress; later ones wait behind it.
   const active = messages.find(
     (message) =>
-      message.role === "assistant" &&
+      message.author === "agent" &&
       ACTIVE_STATUSES.has(message.status) &&
       message.status !== "stopping",
   );
   const lines = useMemo(() => replyLines(messages), [messages]);
-  const pendingByMessage = useMemo(() => {
-    const byMessage = new Map<string, Interaction[]>();
-    for (const interaction of interactions)
-      if (interaction.status === "pending")
-        byMessage.set(interaction.message_id, [
-          ...(byMessage.get(interaction.message_id) ?? []),
-          interaction,
-        ]);
-    return byMessage;
-  }, [interactions]);
+  const members = useMemo(
+    () =>
+      (group?.participants ?? []).map((member) => ({
+        ...member,
+        id: member.agentId,
+        name: agentName(agents, member.agentId),
+      })),
+    [group, agents],
+  );
+  const questionByAgent = useMemo(() => {
+    const byAgent = new Map<string, Question>();
+    for (const question of questions)
+      if (question.conversationId === groupId)
+        byAgent.set(question.agentId, question);
+    return byAgent;
+  }, [questions, groupId]);
+  const sessionByAgent = useMemo(
+    () =>
+      new Map(
+        members.flatMap((member) =>
+          member.sessionId === null ? [] : [[member.id, member.sessionId]],
+        ),
+      ),
+    [members],
+  );
   // The rows call the latest handlers without taking them as props, which
   // change on every render and would undo the rows' memo.
-  const actionsRef = useRef<TurnActions>({ onStop, onAnswer, onResend });
+  const actionsRef = useRef<TurnActions>({
+    onStop,
+    onChoose,
+    onAbort,
+    onResend,
+  });
   useLayoutEffect(() => {
-    actionsRef.current = { onStop, onAnswer, onResend };
+    actionsRef.current = { onStop, onChoose, onAbort, onResend };
   });
   const transcript = useTranscriptScroll({
     groupId,
@@ -787,27 +821,15 @@ export function ChatPanel({
   const railReplies = useMemo(
     () =>
       messages
-        .filter((message) => message.role === "assistant")
-        .map((message) => ({
-          id: message.id,
-          text: message.blocks
-            .filter((block): block is TextBlock => block.type === "text")
-            .map((block) => block.text)
-            .join(" "),
-        })),
+        .filter((message) => message.author === "agent")
+        .map((message) => ({ id: message.id, text: message.text })),
     [messages],
   );
   const railPrompts = useMemo(
     () =>
       messages
-        .filter((message) => message.role === "user")
-        .map((message) => ({
-          id: message.id,
-          text: message.blocks
-            .filter((block): block is TextBlock => block.type === "text")
-            .map((block) => block.text)
-            .join(" "),
-        })),
+        .filter((message) => message.author === "user")
+        .map((message) => ({ id: message.id, text: message.text })),
     [messages],
   );
   // Composition state the keydown handler needs but the DOM only reports to other listeners.
@@ -816,61 +838,25 @@ export function ChatPanel({
   const listId = useId();
   const [menuIndex, setMenuIndex] = useState(0);
   const [menuDismissed, setMenuDismissed] = useState(false);
-  const members = group?.participants.filter((p) => p.member) ?? [];
   const text = draftText(draft);
-  // The project's files, fetched the first time the `@` menu opens: a completion list nobody is
-  // looking at is a directory walk nobody asked for.
-  const atOpen = mentionAt(text) !== null;
-  const queryClient = useQueryClient();
-  const projectFiles = useQuery({
-    queryKey: ["files", groupId],
-    enabled: atOpen && groupId !== undefined,
-    staleTime: 30_000,
-    queryFn: async (): Promise<string[]> => {
-      if (groupId === undefined) return [];
-      const response = await fetch(
-        `/api/v1/files?group_id=${encodeURIComponent(groupId)}`,
-      );
-      if (!response.ok) return [];
-      const body = (await response.json()) as { files?: string[] };
-      return body.files ?? [];
-    },
-  });
   const mentioned = mentionedMembers(text, members);
-  // Why the draft cannot go yet: its files' uploads, or the limits.
-  const uploads = useOutbox((s) => s.uploads);
-  const files = draft.filter((part) => part.type === "file");
-  const hold = files.some((f) => uploads[f.id]?.error)
-    ? translateText("composer.errors.failedAttachments")
-    : files.length > MAX_ATTACHMENTS
-      ? translateText("composer.errors.attachmentLimit", {
-          maxAttachments: MAX_ATTACHMENTS,
+  // Why the draft cannot go yet: the limit.
+  const hold =
+    charCount(text) > MAX_MESSAGE_CHARS
+      ? translateText("composer.errors.messageTooLong", {
+          maxCharacters: MAX_MESSAGE_CHARS,
         })
-      : charCount(draftText(draft)) > MAX_MESSAGE_CHARS
-        ? translateText("composer.errors.messageLength", {
-            maxCharacters: MAX_MESSAGE_CHARS,
-          })
-        : undefined;
-  // Still on its way, not *failed*: a file whose upload errored has no attachment either, and
-  // calling that "waiting for uploads" hides the sentence that says what went wrong.
-  const uploading = files.some(
-    (file) =>
-      uploads[file.id] === undefined ||
-      (uploads[file.id]?.attachment === undefined &&
-        uploads[file.id]?.error === undefined),
-  );
-  // One menu, two sources (lib/composer-menu.ts): `@` offers the group's members first and the
-  // project's files after them, `/` offers commands.
+      : undefined;
+  // One menu, two sources (lib/composer-menu.ts): `@` offers the group's members (the host has no
+  // file listing yet, so no files), `/` offers commands.
   const menu = buildMenu({
     text,
-    members: members.map((member: { agent_id: string; name: string }) => ({
-      id: member.agent_id,
+    members: members.map((member) => ({
+      id: member.id,
       name: mentionLabel(member, members),
-      busy:
-        agents.find((agent) => agent.id === member.agent_id)?.status ===
-        "working",
+      busy: member.status !== "idle",
     })),
-    files: projectFiles.data ?? [],
+    files: [],
     commands: SLASH_COMMANDS,
     dismissed: menuDismissed || blocked !== undefined,
   });
@@ -884,17 +870,15 @@ export function ChatPanel({
               : {
                   name: item.value.trim() as `@${string}`,
                   description:
-                    item.kind === "file"
-                      ? translateText("composer.fileHint")
-                      : item.hint
-                        ? translateText("mentions.busyHint")
-                        : translateText("mentions.replyHint"),
+                    item.kind === "member" && item.hint
+                      ? translateText("mentions.busyHint")
+                      : translateText("mentions.replyHint"),
                 },
         );
   const menuOpen = matches.length > 0;
   const menuActive = Math.min(menuIndex, matches.length - 1);
 
-  function run(name: SlashCommand["name"], parts: OutgoingPart[], args = "") {
+  function run(name: SlashCommand["name"], rest: string) {
     if (name === "/stop") {
       onStopAll();
       setDraft([]);
@@ -903,7 +887,7 @@ export function ChatPanel({
     } else if (name === "/goal") {
       // A goal set from the composer is the same goal the right panel shows: it goes through the
       // same route, so the two cannot disagree.
-      if (args.trim().length > 0) void onGoal("set", args.trim());
+      if (rest.length > 0) void onGoal("set", rest);
       setDraft([]);
     } else if (name === "/theme") {
       setTheme(readTheme() === "dark" ? "light" : "dark");
@@ -912,10 +896,10 @@ export function ChatPanel({
       setSettings((state) => ({ ...state, open: true }));
       setDraft([]);
     } else if (name === "/new") {
-      void navigate({ to: "/new", search: { cwd: group?.cwd ?? "" } });
+      void navigate({ to: "/new", search: { project: group?.projectId } });
       setDraft([]);
-    } else if (parts.length) {
-      onSend(parts, name === "/steer" ? "steer" : "queue");
+    } else if (rest.length > 0) {
+      onSend(rest, name === "/steer" ? "steer" : "queue");
     }
   }
   function choose(command: SlashCommand) {
@@ -933,10 +917,10 @@ export function ChatPanel({
     } else if (command.name === "/compact" && members.length > 1)
       setDraft(plainDraft("/compact "));
     else if (command.takesText) setDraft(plainDraft(`${command.name} `));
-    else run(command.name, []);
+    else run(command.name, "");
   }
   function send() {
-    if (blocked !== undefined || hold !== undefined || uploading) return;
+    if (blocked !== undefined || hold !== undefined) return;
     // The button says STOP while a reply runs and the box is empty: eta-old's rule, and the
     // promise has to be kept or the button lies. Saying something with text in it still sends —
     // ⌘/Ctrl+Enter steers into the running turn instead.
@@ -944,25 +928,12 @@ export function ChatPanel({
       if (active !== undefined) onStop(active.id);
       return;
     }
-    const parts = messageParts(draft, (id) => uploads[id]?.attachment);
-    if (!parts) return;
-    const first = parts[0]?.type === "text" ? parts[0].text : "";
+    const first = text.trimStart();
     const space = first.search(/\s/);
     const name = space === -1 ? first : first.slice(0, space);
     const command = SLASH_COMMANDS.find((c) => c.name === name);
-    if (command) {
-      const rest = afterCommand(parts, name);
-      const args = rest
-        .filter((part) => part.type === "text")
-        .map((part) => ("text" in part ? part.text : ""))
-        .join(" ")
-        .trim();
-      run(
-        command.name,
-        rest.some((p) => p.type !== "text" || p.text.trim()) ? rest : [],
-        args,
-      );
-    } else onSend(parts, "queue");
+    if (command) run(command.name, afterCommand(first, name));
+    else onSend(text, "queue");
     // Sending jumps back to the live end, as in a terminal.
     transcript.toBottom();
     formRef.current?.querySelector<HTMLElement>("[contenteditable]")?.focus();
@@ -973,20 +944,6 @@ export function ChatPanel({
       setDraft(next);
       setMenuIndex(0);
       setMenuDismissed(false);
-    },
-    onFiles,
-    onPaste: (id: string, pasted: string) => {
-      if (groupId === undefined) return;
-      void upload(
-        groupId,
-        id,
-        new File([pasted], pasteFileName(), {
-          type: "text/plain;charset=utf-8",
-        }),
-      ).then(() => {
-        // The file list the `@` menu reads is now out of date: a file just appeared in the project.
-        void queryClient.invalidateQueries({ queryKey: ["files", groupId] });
-      });
     },
     disabled: Boolean(blocked),
     onCompositionStart: () => {
@@ -1101,9 +1058,9 @@ export function ChatPanel({
             transcript. The cards inside the turns stay: they are the same questions in their own
             place. */}
           <PendingStrip
-            interactions={interactions}
+            questions={questions}
             agents={agents}
-            onAnswer={onAnswer}
+            onChoose={onChoose}
           />
           <div className="mx-auto max-w-[860px]">
             <div className="min-w-0">
@@ -1182,18 +1139,35 @@ export function ChatPanel({
                         key={message.id}
                         message={message}
                         author={
-                          group?.kind === "group" ||
-                          (group?.participants.length ?? 0) > 1 ||
-                          message.kind === "mention"
-                            ? (agents.find((a) => a.id === message.agent_id)
-                                ?.name ??
-                              group?.participants.find(
-                                (p) => p.agent_id === message.agent_id,
-                              )?.name)
+                          message.author === "agent" &&
+                          (group?.kind === "group" ||
+                            (group?.participants.length ?? 0) > 1 ||
+                            message.kind === "mention")
+                            ? agentName(agents, message.agentId)
                             : undefined
                         }
-                        pending={
-                          pendingByMessage.get(message.id) ?? NO_INTERACTIONS
+                        sessionId={
+                          message.agentId === null
+                            ? undefined
+                            : sessionByAgent.get(message.agentId)
+                        }
+                        question={
+                          message.status === "waiting_for_input" &&
+                          message.agentId !== null
+                            ? questionByAgent.get(message.agentId)
+                            : undefined
+                        }
+                        nobody={
+                          message.author === "user" &&
+                          Array.isArray(message.data.woke) &&
+                          message.data.woke.length === 0 &&
+                          Array.isArray(message.data.joined) &&
+                          message.data.joined.length === 0
+                        }
+                        joined={
+                          message.author === "user"
+                            ? joinedNames(message, agents)
+                            : ""
                         }
                         {...lines.get(message.id)}
                         actions={actionsRef}
@@ -1202,8 +1176,8 @@ export function ChatPanel({
                   ))}
                   {outgoing.map((item) => (
                     <div key={item.id} className="space-y-3 pt-1">
-                      <Message role="user" className={ENTER}>
-                        <UserParts parts={item.parts} />
+                      <Message role="user">
+                        <UserText text={item.text} />
                       </Message>
                       {item.failure ? (
                         <ComposerNotice
@@ -1243,15 +1217,10 @@ export function ChatPanel({
               className="sticky bottom-2 z-10 mx-auto flex items-center gap-1 border border-border-strong bg-background px-2 py-1 text-xs shadow-md"
             >
               ↓ {translateText("chat:rail.newActivity")}
-              {activeReplies.length > 0
+              {members.some((member) => member.status !== "idle")
                 ? ` · ${members
-                    .filter((member: { agent_id: string }) =>
-                      activeReplies.some(
-                        (reply: { agent_id?: string | null }) =>
-                          reply.agent_id === member.agent_id,
-                      ),
-                    )
-                    .map((member: { name: string }) => member.name)
+                    .filter((member) => member.status !== "idle")
+                    .map((member) => member.name)
                     .join("、")}`
                 : ""}
             </button>
@@ -1278,14 +1247,14 @@ export function ChatPanel({
         <div className="input-outer">
           {/*
            * In priority order, and each one is a different sentence: why the box cannot be used
-           * (blocked), why this draft cannot go (hold — a failed upload, too many files), a
-           * warning that leaves it usable (notice). Only the first that applies is shown.
+           * (blocked), why this draft cannot go (hold — too long), a warning that leaves it usable
+           * (notice). Only the first that applies is shown.
            */}
           {blocked !== undefined ? (
             <div className="border-b px-3 py-1.5 text-xs">{blocked}</div>
-          ) : hold !== undefined || uploading ? (
+          ) : hold !== undefined ? (
             <div className="border-b px-3 py-1.5 text-xs text-muted-foreground">
-              {uploading ? translateText("composer.waitForUploads") : hold}
+              {hold}
             </div>
           ) : (
             // Rendered as given, not wrapped: a notice is a component that draws its own box
@@ -1313,13 +1282,13 @@ export function ChatPanel({
               />
               <div className="composer-toolbar">
                 <div className="composer-controls flex min-w-0 items-center gap-2">
-                  {members.length === 1 && members[0] !== undefined ? (
+                  {group?.kind === "direct" && members[0] !== undefined ? (
                     <>
                       <ModelChip
-                        sessionId={members[0].session_id ?? undefined}
+                        sessionId={members[0].sessionId ?? undefined}
                       />
                       <ThinkingChip
-                        sessionId={members[0].session_id ?? undefined}
+                        sessionId={members[0].sessionId ?? undefined}
                       />
                     </>
                   ) : (
@@ -1343,9 +1312,7 @@ export function ChatPanel({
                 <Button
                   type="submit"
                   className="composer-control composer-submit-control"
-                  disabled={
-                    blocked !== undefined || hold !== undefined || uploading
-                  }
+                  disabled={blocked !== undefined || hold !== undefined}
                 >
                   {isBlank(draft) && active !== undefined
                     ? translateText("composer.stopLabel")

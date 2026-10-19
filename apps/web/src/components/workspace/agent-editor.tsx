@@ -1,8 +1,7 @@
+import type { AgentView } from "@eta/client-contracts";
 import type { Icon } from "@phosphor-icons/react";
 import type { AgentForm } from "./agent-form";
-import type { Agent } from "@/queries/chat";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PackageIcon } from "@phosphor-icons/react/Package";
 import { ScrollIcon } from "@phosphor-icons/react/Scroll";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/SlidersHorizontal";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
@@ -31,21 +30,20 @@ import {
 } from "@/components/ui/dialog";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { useBundles, useDeleteAgent, useUpdateAgent } from "@/queries/chat";
+import { useDeleteAgent, useUpdateAgent } from "@/queries/agents";
 import { useModels } from "@/queries/providers";
 import {
-  BundlesField,
   InstructionsField,
   ModelField,
   NameField,
   PersonaField,
+  ThinkingField,
 } from "./agent-fields";
 import { agentDraft, agentFormSchema } from "./agent-form";
 import { AgentAvatar } from "./agent-identity";
 import { CreateAgentWizard } from "./create-agent-wizard";
 import { useReturnFocus } from "./return-focus";
 import { SettingsNav } from "./settings-nav";
-import { UsageLine } from "./usage-line";
 import { useAgents } from "./use-agents";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -55,7 +53,7 @@ export function DeleteAgentDialog({
   onOpenChange,
   onDeleted,
 }: {
-  agent: Agent;
+  agent: AgentView;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDeleted?: () => void;
@@ -84,17 +82,20 @@ export function DeleteAgentDialog({
           <AlertDialogAction
             variant="destructive"
             onClick={() =>
-              remove.mutate(agent.id, {
-                onSuccess: () => {
-                  toast.success(
-                    translateText("common:feedback.deletedItem", {
-                      name: agent.name,
-                    }),
-                  );
-                  onDeleted?.();
+              remove.mutate(
+                { agentId: agent.id },
+                {
+                  onSuccess: () => {
+                    toast.success(
+                      translateText("common:feedback.deletedItem", {
+                        name: agent.name,
+                      }),
+                    );
+                    onDeleted?.();
+                  },
+                  onError: (error) => toast.error(error.message),
                 },
-                onError: (error) => toast.error(error.message),
-              })
+              )
             }
           >
             {translateText("common:actions.delete")}
@@ -105,7 +106,7 @@ export function DeleteAgentDialog({
   );
 }
 
-type Tab = "general" | "instructions" | "environment";
+type Tab = "general" | "instructions";
 // The editor's tabs and the fields on each, to show where errors are.
 const tabs: {
   value: Tab;
@@ -119,7 +120,7 @@ const tabs: {
       return translate("agents:editor.tabs.general");
     },
     icon: SlidersHorizontalIcon,
-    fields: ["name", "model", "persona"],
+    fields: ["name", "model", "thinkingLevel", "persona"],
   },
   {
     value: "instructions",
@@ -129,21 +130,13 @@ const tabs: {
     icon: ScrollIcon,
     fields: ["description"],
   },
-  {
-    value: "environment",
-    get label() {
-      return translate("agents:editor.tabs.environment");
-    },
-    icon: PackageIcon,
-    fields: ["bundles"],
-  },
 ];
 
 function AgentEditorForm({
   agent,
   onDone,
 }: {
-  agent: Agent;
+  agent: AgentView;
   onDone: () => void;
 }) {
   const { t: translateText } = useTranslation([
@@ -154,7 +147,6 @@ function AgentEditorForm({
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const { data: models } = useModels();
-  const { data: bundles } = useBundles();
   const updateAgent = useUpdateAgent();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [tab, setTab] = useState<Tab>("general");
@@ -162,10 +154,10 @@ function AgentEditorForm({
     resolver: zodResolver(agentFormSchema),
     defaultValues: {
       name: agent.name,
-      description: agent.description,
+      description: agent.instructions,
       model: agent.model ?? "",
-      bundles: agent.bundles ?? null,
-      persona: agent.persona ?? "",
+      persona: agent.persona,
+      thinkingLevel: agent.thinkingLevel ?? "",
     },
   });
   // A field with an error, to focus once its tab shows.
@@ -200,7 +192,7 @@ function AgentEditorForm({
         setWorkspace((state) => ({ ...state, lastModel: values.model }));
       }
       updateAgent.mutate(
-        { id: agent.id, ...agentDraft(values) },
+        { agentId: agent.id, ...agentDraft(values) },
         {
           onSuccess: () => {
             toast.success(translateText("common:feedback.saved"));
@@ -223,15 +215,8 @@ function AgentEditorForm({
           label={translateText("editor.sectionsLabel")}
           sections={tabs.map((t) => ({
             ...t,
-            ...(t.value === "environment"
-              ? {
-                  attention: Boolean(agent.build_error),
-                  hint: translateText("environment.buildFailed"),
-                }
-              : {
-                  attention: t.fields.some((name) => errors[name]),
-                  hint: translateText("common:states.hasErrors"),
-                }),
+            attention: t.fields.some((name) => errors[name]),
+            hint: translateText("common:states.hasErrors"),
           }))}
           value={tab}
           onChange={setTab}
@@ -245,33 +230,11 @@ function AgentEditorForm({
                 models={models}
                 onOpenProviders={openProviders}
               />
+              <ThinkingField form={form} />
               <PersonaField form={form} />
-              <UsageLine principal={agent.id} />
             </>
-          ) : tab === "instructions" ? (
-            <InstructionsField form={form} />
           ) : (
-            <>
-              {bundles?.length ? (
-                <BundlesField form={form} bundles={bundles} />
-              ) : null}
-              {agent.build_error ? (
-                <div className="space-y-1.5" role="alert">
-                  <p className="text-xs leading-none text-destructive">
-                    {translateText("environment.buildFailed")}
-                  </p>
-                  <pre
-                    // The build's last lines say what failed: show them first.
-                    ref={(pre) => {
-                      if (pre) pre.scrollTop = pre.scrollHeight;
-                    }}
-                    className="max-h-48 overflow-auto border bg-muted/40 p-2 font-mono text-[11px] leading-snug whitespace-pre-wrap"
-                  >
-                    {agent.build_error}
-                  </pre>
-                </div>
-              ) : null}
-            </>
+            <InstructionsField form={form} />
           )}
         </section>
       </div>

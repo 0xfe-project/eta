@@ -10,7 +10,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { setWire } from "@/lib/wire";
-import { providersHost } from "@/test-wire";
+import { agentView } from "@/test-product";
+import { FakeHost } from "@/test-wire";
 import { AgentEditor } from "./agent-editor";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -31,34 +32,14 @@ const providers = {
   ],
 };
 
-const api = rstest.hoisted(() => ({ update: rstest.fn() }));
-const agent = rstest.hoisted(() => ({
-  id: "a1",
-  name: "审查",
-  description: "只看会出错的地方",
-  model: "c:m1",
-  bundles: null,
-  build_error: "",
-  status: "idle",
-}));
-rstest.mock("@/queries/chat", () => ({
-  useBundles: () => ({
-    data: [{ name: "memory", description: "记忆", builtin: true }],
-  }),
-  useCreateAgent: () => ({ mutate: () => {} }),
-  useDeleteAgent: () => ({ mutate: () => {} }),
-  useUpdateAgent: () => ({ mutate: api.update, isPending: false }),
-}));
-rstest.mock("@/queries/llm", () => ({
-  useAgentUsage: () => ({ isPending: true }),
-}));
-rstest.mock("./use-agents", () => ({
-  useAgents: () => ({ agents: [agent] }),
-}));
 rstest.mock("./agent-identity", () => ({ AgentAvatar: () => <span /> }));
 rstest.mock("sonner", () => ({
   toast: { success: () => {}, error: () => {} },
 }));
+
+let host: FakeHost;
+const updates = () =>
+  host.calls.filter((call) => call.action === "update").map((c) => c.args);
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -97,8 +78,38 @@ const click = async (button: HTMLButtonElement) => {
 const save = () => click(buttons().find((b) => b.textContent === "保存")!);
 
 beforeEach(async () => {
-  providersHost(providers);
-  api.update.mockReset();
+  host = new FakeHost()
+    .target("providers", { config: providers }, { eager: true })
+    .target(
+      "agents",
+      {
+        list: [
+          agentView({
+            id: "a1",
+            name: "审查",
+            instructions: "只看会出错的地方",
+            model: "c:m1",
+          }),
+        ],
+      },
+      { eager: true },
+    )
+    .target(
+      "personas",
+      {
+        cards: [
+          { id: "terse", name: "简短", description: "话少", custom: false },
+        ],
+      },
+      { eager: true },
+    )
+    .plugins([
+      { name: "providers", source: "bundled" },
+      { name: "agents", source: "bundled" },
+    ])
+    .handle("agents.update", () => ({}))
+    .install();
+  host.hello();
   await act(async () =>
     root.render(
       <QueryClientProvider client={new QueryClient()}>
@@ -128,7 +139,6 @@ describe("editing an agent in tabs", () => {
     await click(tab("指令"));
     expect(field("agent-name")).toBeNull();
     await type("agent-description", "只看 PR");
-    await click(tab("环境"));
     await click(tab("常规"));
     expect(field("agent-name")!.value).toBe("代码审查");
     await click(tab("指令"));
@@ -136,14 +146,16 @@ describe("editing an agent in tabs", () => {
 
     // Saved from any tab.
     await save();
-    expect(api.update).toHaveBeenCalledTimes(1);
-    expect(api.update.mock.calls[0][0]).toEqual({
-      id: "a1",
-      name: "代码审查",
-      description: "只看 PR",
-      persona: "",
-      model: "c:m1",
-    });
+    expect(updates()).toEqual([
+      {
+        agentId: "a1",
+        name: "代码审查",
+        instructions: "只看 PR",
+        persona: "",
+        model: "c:m1",
+        thinkingLevel: null,
+      },
+    ]);
   });
 
   it("opens the tab of an error and marks it", async () => {
@@ -152,7 +164,7 @@ describe("editing an agent in tabs", () => {
     await type("agent-description", "改了");
     await save();
 
-    expect(api.update).not.toHaveBeenCalled();
+    expect(updates()).toEqual([]);
     expect(current()).toBe("常规（有错误）");
     expect(document.activeElement).toBe(field("agent-name"));
     expect(
@@ -162,7 +174,31 @@ describe("editing an agent in tabs", () => {
     await type("agent-name", "审查 2");
     expect(current()).toBe("常规");
     await save();
-    expect(api.update).toHaveBeenCalledTimes(1);
+    expect(updates()).toHaveLength(1);
+  });
+
+  it("saves the thinking level and the persona with the rest", async () => {
+    const choose = async (id: string, text: string) => {
+      await click(document.getElementById(id) as HTMLButtonElement);
+      const option = [
+        ...document.querySelectorAll<HTMLElement>('[role="option"]'),
+      ].find((candidate) => candidate.textContent?.includes(text))!;
+      await click(option as unknown as HTMLButtonElement);
+    };
+    await choose("agent-thinking", "high");
+    await choose("agent-persona", "简短");
+    await save();
+    expect(updates()[0]).toMatchObject({
+      agentId: "a1",
+      thinkingLevel: "high",
+      persona: "terse",
+    });
+  });
+
+  it("has no bundles to choose: the host has none", async () => {
+    expect(
+      buttons().some((b) => b.closest("nav") && b.textContent === "环境"),
+    ).toBe(false);
   });
 });
 
@@ -178,9 +214,6 @@ describe("picking a model", () => {
     // anything else happens, not after the next refetch.
     expect(trigger.textContent).toContain("M2");
     await save();
-    expect(api.update.mock.calls[0][0]).toMatchObject({
-      id: "a1",
-      model: "c:m2",
-    });
+    expect(updates()[0]).toMatchObject({ agentId: "a1", model: "c:m2" });
   });
 });

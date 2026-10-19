@@ -1,6 +1,4 @@
-import type { Draft } from "@/lib/composer";
-import type { ChatMessage, Interaction } from "@/queries/chat";
-import { writeFileSync } from "node:fs";
+import type { ConversationSummary, MessageView } from "@eta/client-contracts";
 import {
   afterEach,
   beforeEach,
@@ -9,20 +7,20 @@ import {
   it,
   rstest,
 } from "@rstest/core";
-import {
-  QueryClient,
-  QueryClientProvider,
-  useQuery,
-} from "@tanstack/react-query";
-import { act, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { act } from "react";
 import { plainDraft } from "@/lib/composer";
+import { setWire } from "@/lib/wire";
+import { useOutbox } from "@/queries/outbox";
+import { Chat } from "@/test-chat";
 import {
-  chatQueryOptions,
-  useGroupMessages,
-  useLiveChat,
-} from "@/queries/chat";
-import { ChatPanel } from "./chat-panel";
+  agentView,
+  conversationSections,
+  conversationView,
+  memberView,
+  messageView,
+  productHost,
+} from "@/test-product";
+import { cleanup, click, flush, mount } from "@/test-render";
 
 // Each text block a row renders goes through Markdown: counting its calls
 // counts the rows that rendered.
@@ -34,313 +32,358 @@ rstest.mock("@/components/markdown", () => ({
   },
 }));
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-const g = globalThis as Record<string, unknown>;
-g.ResizeObserver ??= class {
-  observe() {}
-  disconnect() {}
-};
-g.IntersectionObserver ??= class {
-  observe() {}
-  disconnect() {}
-};
-/** The chat stream; `emit` delivers a product event to its listeners. */
-class FakeSource {
-  static CLOSED = 2;
-  static current: FakeSource | undefined;
-  listeners = new Map<string, ((event: MessageEvent) => void)[]>();
-  constructor() {
-    FakeSource.current = this;
-  }
-  addEventListener(type: string, listener: (event: MessageEvent) => void) {
-    this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
-  }
-  removeEventListener() {}
-  close() {}
-  emit(type: string, data: unknown) {
-    for (const listener of this.listeners.get(type) ?? [])
-      listener(new MessageEvent(type, { data: JSON.stringify(data) }));
-  }
-}
-g.EventSource = FakeSource;
-
-const AGENT = "00000000-0000-0000-0000-00000000000a";
-const OTHER = "00000000-0000-0000-0000-00000000000b";
-let n = 0;
-function message(
-  role: ChatMessage["role"],
-  fields: Partial<ChatMessage> & { text?: string } = {},
-): ChatMessage {
-  const { text = "", ...rest } = fields;
-  n++;
-  return {
-    id: `00000000-0000-0000-0001-${String(n).padStart(12, "0")}`,
-    agent_id: AGENT,
-    group_id: AGENT,
-    seq: n,
-    kind: "message",
-    data: {},
-    role,
-    reply_to_id: null,
-    status: role === "user" ? "completed" : "completed",
-    revision: 1,
-    blocks: text ? [{ id: `b${n}`, type: "text", text }] : [],
-    failure: null,
-    created_at: new Date(Date.UTC(2026, 9, 9, 0, 0, n)).toISOString(),
-    ...rest,
-  };
-}
-
+const AGENT = "a1";
 const TURNS = 50;
-let history: ChatMessage[];
-let streaming: ChatMessage;
-let elsewhere: ChatMessage;
-let draft: (text: string) => void;
+// The rows the page has seen outlive a render, so each test has a conversation of its own.
+let CONV = "";
+let conversations = 0;
+let n = 0;
+const fresh = () => {
+  n = 0;
+  conversations += 1;
+  CONV = `chat-renders-${conversations}`;
+};
+const row = (fields: Partial<MessageView>): MessageView => {
+  n += 1;
+  return messageView({
+    id: `${CONV}-${n}`,
+    conversationId: CONV,
+    seq: n,
+    ...fields,
+  });
+};
 
-function Chat() {
-  useLiveChat();
-  const chat = useQuery(chatQueryOptions());
-  const timeline = useGroupMessages(chat.data ? AGENT : undefined);
-  const [text, setText] = useState<Draft>([]);
-  draft = (value) => setText(plainDraft(value));
-  return (
-    <ChatPanel
-      agents={[]}
-      activeReplies={chat.data?.messages ?? []}
-      groupId={AGENT}
-      groupName="研究员"
-      messages={timeline.messages}
-      hasOlder={false}
-      loadingOlder={false}
-      onLoadOlder={() => {}}
-      interactions={chat.data?.interactions ?? []}
-      draft={text}
-      onDraftChange={setText}
-      onFiles={() => []}
-      // Fresh handlers every render, as Workspace passes them.
-      onSend={() => {}}
-      outgoing={[]}
-      onRetry={() => {}}
-      onEdit={() => {}}
-      onDiscard={() => {}}
-      onResend={() => {}}
-      onCompact={() => {}}
-      onStopAll={() => {}}
-      onStop={() => {}}
-      onAnswer={() => {}}
-      onGoal={async () => {}}
-    />
-  );
-}
+let summary: ConversationSummary;
+let history: MessageView[];
+let host: ReturnType<typeof productHost>;
 
 const texts = (c: HTMLElement) =>
   [...c.querySelectorAll('[role="log"] p')].map((p) => p.textContent);
 
-let client: QueryClient;
-async function render() {
-  rstest
-    .spyOn(globalThis, "fetch")
-    .mockImplementation(async (input: RequestInfo | URL) => {
-      const url = (input as Request).url;
-      if (url.endsWith("/api/v1/chat"))
-        return Response.json({
-          agents: [],
-          active_replies: [streaming, elsewhere],
-          interactions: [],
-          event_cursor: "c",
-        });
-      // Newest first, as the control plane pages them.
-      return Response.json({
-        items: [...history].reverse(),
-        next_cursor: null,
-      });
-    });
-  const container = document.createElement("div");
-  document.body.append(container);
-  client = new QueryClient();
-  await act(async () => {
-    createRoot(container).render(
-      <QueryClientProvider client={client}>
-        <Chat />
-      </QueryClientProvider>,
-    );
+function start(
+  members = [memberView(AGENT, { sessionId: "s1" })],
+  prepare?: (host: ReturnType<typeof productHost>) => void,
+) {
+  summary = conversationView({
+    id: CONV,
+    name: "研究员",
+    participants: members,
+    lastSeq: n,
   });
-  // The snapshot, then history.
-  for (let i = 0; i < 50 && texts(container).length <= 1; i++) await settle();
-  return container;
-}
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 10));
+  host = productHost({
+    agents: [
+      agentView({ id: AGENT, name: "研究员" }),
+      agentView({ id: "a2", name: "装配检查" }),
+    ],
+    conversations: [summary],
+    messages: { [CONV]: history },
   });
+  prepare?.(host);
+  return mount(<Chat conversationId={CONV} />);
 }
-async function emit(type: string, data: unknown) {
-  await act(async () => FakeSource.current!.emit(type, data));
-  // Query observers hear of it on the next tick.
-  await settle();
-}
-/** The rows rendered by `action`. */
-async function rendered(action: () => Promise<void>) {
+
+/** Replace the conversation's rows, the way the host pushes a window. */
+const push = async (rows: MessageView[], members = summary.participants) =>
+  act(async () =>
+    host.set(
+      `conversations.${CONV}`,
+      conversationSections({ ...summary, participants: members }, rows),
+    ),
+  );
+const rendered = async (action: () => Promise<void>) => {
   renders.length = 0;
   await action();
   return [...renders];
-}
+};
 
-// Run with RENDER_COUNTS=<file> to write the counts out, e.g. to compare
-// with the code before this change.
-const counts: Record<string, number> = {};
-afterEach(() => {
-  if (process.env.RENDER_COUNTS)
-    writeFileSync(process.env.RENDER_COUNTS, JSON.stringify(counts, null, 2));
+afterEach(async () => {
+  await cleanup();
+  setWire(undefined);
+  useOutbox.setState({ drafts: {}, outgoing: [] });
 });
 
-describe("a streamed update", () => {
+describe("a reply that changes", () => {
+  let streaming: MessageView;
   beforeEach(() => {
-    n = 0;
+    fresh();
     history = [];
     for (let i = 0; i < TURNS; i++) {
-      const user = message("user", { text: `问题 ${i}` });
+      const user = row({ text: `问题 ${i}` });
       history.push(
         user,
-        message("assistant", { reply_to_id: user.id, text: `回复 ${i}` }),
+        row({
+          author: "agent",
+          agentId: AGENT,
+          replyToId: user.id,
+          text: `回复 ${i}`,
+        }),
       );
     }
-    const user = message("user", { text: "最后的问题" });
-    history.push(user);
-    streaming = message("assistant", {
-      reply_to_id: user.id,
-      status: "responding",
-      text: "正在",
+    const user = row({ text: "最后的问题" });
+    streaming = row({
+      author: "agent",
+      agentId: AGENT,
+      replyToId: user.id,
+      status: "working",
+      text: "",
     });
-    elsewhere = message("assistant", {
-      agent_id: OTHER,
-      group_id: OTHER,
-      status: "responding",
-      text: "别处",
-    });
-  });
-  afterEach(() => {
-    document.body.innerHTML = "";
-    rstest.restoreAllMocks();
+    history.push(user, streaming);
   });
 
   it("renders only the message it changed", async () => {
-    const c = await render();
-    expect(texts(c)).toHaveLength(TURNS + 1);
-
-    const once = await rendered(() =>
-      emit("message.updated", {
-        message: {
-          ...streaming,
-          revision: 2,
-          blocks: [{ id: "s", type: "text", text: "正在写" }],
-        },
-      }),
+    const { container } = await start();
+    await flush();
+    expect(texts(container).filter((t) => t?.startsWith("回复"))).toHaveLength(
+      TURNS,
     );
-    counts.streamedUpdate = once.length;
-    expect(once).toEqual(["正在写"]);
-    expect(texts(c).at(-1)).toBe("正在写");
 
-    // Revisions may skip: only a later one counts, an earlier one is stale.
-    const later = await rendered(async () => {
-      await emit("message.updated", {
-        message: {
-          ...streaming,
-          revision: 7,
-          blocks: [{ id: "s", type: "text", text: "正在写完" }],
-        },
-      });
-      await emit("message.updated", {
-        message: {
-          ...streaming,
-          revision: 5,
-          blocks: [{ id: "s", type: "text", text: "旧的" }],
-        },
-      });
-    });
-    expect(later).toEqual(["正在写完"]);
-    expect(texts(c).at(-1)).toBe("正在写完");
-
-    const other = await rendered(() =>
-      emit("message.updated", {
-        message: { ...elsewhere, revision: 2 },
-      }),
-    );
-    counts.otherAgentUpdate = other.length;
-    expect(other).toEqual([]);
-
-    const typing = await rendered(async () => {
-      await act(async () => draft("你好"));
-    });
-    counts.typing = typing.length;
-    expect(typing).toEqual([]);
-
-    const interaction: Interaction = {
-      id: "00000000-0000-0000-0002-000000000001",
-      agent_id: AGENT,
-      group_id: AGENT,
-      message_id: streaming.id,
-      status: "pending",
-      kind: "choice",
-      prompt: "运行命令？",
-      options: [{ label: "允许", value: "accept" }],
-      answer: null,
-      revision: 1,
-      created_at: streaming.created_at,
-      updated_at: streaming.created_at,
+    const finished = {
+      ...streaming,
+      status: "done" as const,
+      text: "写完了",
+      revision: 2,
     };
-    const asked = await rendered(() =>
-      emit("interaction.updated", { interaction }),
+    const once = await rendered(() =>
+      push([...history.slice(0, -1), finished]),
     );
-    counts.interaction = asked.length;
-    expect(asked).toEqual(["正在写完"]);
-    expect(c.textContent).toContain("运行命令？");
+    expect(once).toEqual(["写完了"]);
+
+    // Typing renders no row.
+    const typing = await rendered(async () => {
+      await act(async () =>
+        useOutbox.getState().setDraft(CONV, plainDraft("你好")),
+      );
+    });
+    expect(typing).toEqual([]);
   });
 
-  it("keeps order, and every message, once history covers the live ones", async () => {
-    const c = await render();
-    // A finished reply that history now holds drops out of the live cache,
-    // and still shows, in place.
-    const done = { ...streaming, status: "completed" as const, revision: 2 };
-    await emit("message.updated", { message: done });
-    history.push(done);
-    await act(() =>
-      client.invalidateQueries({ queryKey: ["chat", "messages", AGENT] }),
+  it("keeps rows the window has moved past, in order", async () => {
+    const { container } = await start();
+    await flush();
+    await push(history.slice(-10));
+    expect(texts(container).filter((t) => t?.startsWith("回复"))).toHaveLength(
+      TURNS,
     );
-    await settle();
-    const snapshot = client.getQueryData<{ messages: ChatMessage[] }>([
-      "chat",
-    ])!;
-    expect(snapshot.messages.map((m) => m.id)).toEqual([elsewhere.id]);
-    expect(texts(c)).toHaveLength(TURNS + 1);
-    expect(texts(c).at(-1)).toBe("正在");
+    expect(container.textContent).toContain("问题 0");
+  });
+});
 
-    // A message that lands out of order still goes where it was sent.
-    const early = message("assistant", {
-      text: "补上的",
-      seq: history[1].seq + 0.5,
-      created_at: history[1].created_at.replace(".000Z", ".500Z"),
-    });
-    await emit("message.updated", { message: early });
-    expect(texts(c).slice(0, 2)).toEqual(["回复 0", "补上的"]);
+describe("what the timeline says besides words", () => {
+  beforeEach(() => {
+    fresh();
+    history = [];
   });
 
-  it("never edits the cached snapshot in place", async () => {
-    await render();
-    const before = client.getQueryData<{ messages: ChatMessage[] }>(["chat"])!;
-    const frozen = structuredClone(before.messages);
-    Object.freeze(before.messages);
-    for (const m of before.messages) Object.freeze(m);
-    await emit("message.updated", {
-      message: { ...streaming, revision: 2 },
+  it("says a steward change in the reader's language, from the event and the names", async () => {
+    history = [
+      row({
+        kind: "system",
+        author: "system",
+        text: "A is now the steward.",
+        data: { event: "steward", from: "a2", to: AGENT },
+      }),
+    ];
+    const { container } = await start();
+    await flush();
+    expect(container.textContent).toContain(
+      "研究员 成为主理人，接替 装配检查。",
+    );
+  });
+
+  it("says the wake budget in the reader's language", async () => {
+    history = [
+      row({
+        kind: "system",
+        author: "system",
+        text: "This thread has used its 5 wake-ups",
+        data: { event: "wake_budget", budget: 5 },
+      }),
+    ];
+    const { container } = await start();
+    await flush();
+    expect(container.textContent).toContain("5 次唤醒");
+  });
+
+  it("explains a message that woke nobody, right under it", async () => {
+    history = [row({ text: "有人吗", data: { woke: [], joined: [] } })];
+    const { container } = await start([memberView(AGENT), memberView("a2")]);
+    await flush();
+    expect(container.textContent).toContain("没有叫醒任何人");
+  });
+
+  it("does not, when someone was woken", async () => {
+    history = [row({ text: "你好", data: { woke: [AGENT], joined: [] } })];
+    const { container } = await start();
+    await flush();
+    expect(container.textContent).not.toContain("没有叫醒任何人");
+  });
+
+  it("says who a steered message joined", async () => {
+    history = [row({ text: "改一下", data: { woke: [], joined: [AGENT] } })];
+    const { container } = await start();
+    await flush();
+    expect(container.textContent).toContain("已并入 研究员 正在进行的回复");
+    expect(container.textContent).not.toContain("没有叫醒任何人");
+  });
+
+  it("gives a failed reply its reason, and sends the message again on request", async () => {
+    const user = row({ text: "跑一下" });
+    history = [
+      user,
+      row({
+        author: "agent",
+        agentId: AGENT,
+        replyToId: user.id,
+        status: "failed",
+        text: "model overloaded",
+        data: { code: "run_failed" },
+      }),
+    ];
+    const { container } = await start();
+    await flush();
+    expect(container.textContent).toContain("运行失败。 model overloaded");
+    host.handle("conversations.send", () => ({
+      message: row({ text: "跑一下" }),
+      replies: [],
+      joined: [],
+      nobody: false,
+    }));
+    const resend = [...container.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("重新发送"),
+    );
+    await click(resend);
+    await flush();
+    const sent = host.calls.find((call) => call.action === "send")!;
+    expect(sent.args).toMatchObject({
+      conversationId: CONV,
+      text: "跑一下",
+      mentions: [AGENT],
     });
-    await emit("message.updated", { message: message("user", { text: "新" }) });
-    expect(before.messages).toEqual(frozen);
-    const after = client.getQueryData<{ messages: ChatMessage[] }>(["chat"])!;
-    expect(after.messages).not.toBe(before.messages);
-    // Unchanged messages keep their objects.
-    expect(after.messages).toContain(before.messages[1]);
+  });
+
+  it("says a restart once for replies that all failed that way", async () => {
+    const user = row({ text: "一起问" });
+    const restart = (text: string) =>
+      row({
+        author: "agent",
+        agentId: AGENT,
+        replyToId: user.id,
+        status: "failed",
+        text,
+        data: { code: "restart" },
+      });
+    history = [user, restart("x"), restart("y")];
+    const { container } = await start();
+    await flush();
+    expect(container.textContent).toContain("此消息未执行，原因同下");
+    expect(container.textContent).toContain("宿主重启了");
+  });
+});
+
+describe("a reply that is writing", () => {
+  beforeEach(() => {
+    fresh();
+    history = [];
+  });
+
+  it("shows the session's words and tool calls while it works, then the row's own text", async () => {
+    const user = row({ text: "查一下" });
+    const reply = row({
+      author: "agent",
+      agentId: AGENT,
+      replyToId: user.id,
+      status: "working",
+    });
+    history = [user, reply];
+    const { container } = await start(undefined, (fake) => {
+      fake.target("sessions.s1", {
+        core: { session: "s1", running: true },
+        transcript: { messages: [] },
+      });
+      fake.handle("sessions.resync", () => ({}));
+    });
+    await flush();
+    await act(async () =>
+      host.socket.receive({
+        type: "event",
+        target: "sessions.s1",
+        name: "message:update",
+        data: {
+          message: {
+            role: "assistant",
+            timestamp: 9,
+            content: [
+              { type: "text", text: "我先看看" },
+              {
+                type: "toolCall",
+                id: "t1",
+                name: "bash",
+                arguments: { command: "ls" },
+              },
+            ],
+          },
+        },
+      }),
+    );
+    await flush(80);
+    expect(container.textContent).toContain("我先看看");
+    expect(container.textContent).toContain("bash");
+
+    await push([
+      user,
+      { ...reply, status: "done", text: "看完了", revision: 2 },
+    ]);
+    expect(container.textContent).toContain("看完了");
+    expect(container.textContent).not.toContain("我先看看");
+  });
+
+  it("asks its question in a card and answers on the member's session", async () => {
+    const user = row({ text: "删掉吗" });
+    const reply = row({
+      author: "agent",
+      agentId: AGENT,
+      replyToId: user.id,
+      status: "waiting_for_input",
+    });
+    history = [user, reply];
+    const { container } = await start(
+      [memberView(AGENT, { sessionId: "s1", status: "waiting_for_input" })],
+      (fake) => {
+        fake.target("sessions.s1", {
+          core: { session: "s1", running: true },
+          transcript: { messages: [] },
+          ask: {
+            pending: {
+              questionId: "q1",
+              question: "删掉这个分支？",
+              options: ["删", "留"],
+            },
+          },
+        });
+        fake.handle("sessions.answer", () => ({ answered: true }));
+        fake.handle("sessions.askAbort", () => ({ aborted: true }));
+      },
+    );
+    await flush();
+    const card = container.querySelector(".ask-block")!;
+    expect(card.textContent).toContain("删掉这个分支？");
+    await click(
+      [...card.querySelectorAll("button")].find((b) => b.textContent === "删"),
+    );
+    await flush();
+    expect(host.calls.find((call) => call.action === "answer")?.args).toEqual({
+      session: "s1",
+      questionId: "q1",
+      response: { kind: "selection", selections: ["删"] },
+    });
+    await click(
+      [...card.querySelectorAll("button")].find(
+        (b) => b.textContent === "放弃",
+      ),
+    );
+    await flush();
+    expect(host.calls.find((call) => call.action === "askAbort")?.args).toEqual(
+      { session: "s1", questionId: "q1" },
+    );
   });
 });
