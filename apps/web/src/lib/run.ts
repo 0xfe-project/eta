@@ -94,7 +94,35 @@ export function runBlocks(
   rows.forEach((row, index) => {
     if (row.message.role === "user") start = index + 1;
   });
-  const blocks: RunBlock[] = [];
+  return blocksFrom(rows, streaming, start) as RunBlock[];
+}
+
+/** What a user message said, in a log: the first one is the briefing and is not shown. */
+export interface UserBlock {
+  type: "user";
+  id: string;
+  text: string;
+}
+
+/**
+ * A whole session as blocks: every run it has had, with the user messages that steered it (a task
+ * run's log is its session's transcript). The first user message is the briefing the run began
+ * with; it is the task itself and is left out.
+ */
+export function logBlocks(
+  rows: readonly ViewMessageRow[],
+  streaming: AgentMessage | undefined,
+): (RunBlock | UserBlock)[] {
+  return blocksFrom(rows, streaming, 0, true);
+}
+
+function blocksFrom(
+  rows: readonly ViewMessageRow[],
+  streaming: AgentMessage | undefined,
+  start: number,
+  users = false,
+): (RunBlock | UserBlock)[] {
+  const blocks: (RunBlock | UserBlock)[] = [];
   const tools = new Map<string, Extract<RunBlock, { type: "tool" }>>();
   const add = (id: string, message: AgentMessage) => {
     contentOf(message).forEach((part, index) => {
@@ -117,8 +145,16 @@ export function runBlocks(
     });
   };
   let newest = 0;
+  let briefed = false;
   for (const row of rows.slice(start)) {
-    if (row.message.role === "assistant") {
+    if (row.message.role === "user") {
+      const content = (row.message as { content?: unknown }).content;
+      const text =
+        typeof content === "string" ? content : resultText(row.message);
+      if (users && briefed && text !== "")
+        blocks.push({ type: "user", id: row.entryId, text });
+      briefed = true;
+    } else if (row.message.role === "assistant") {
       newest = Math.max(newest, stampOf(row.message));
       add(row.entryId, row.message);
     } else if (row.message.role === "toolResult") {

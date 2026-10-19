@@ -19,7 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import { actionClass, frameClass, muted } from "./activity-card";
 import { ArtifactButton } from "./artifact-dialog";
-import { assigneeLabel, statusLabel } from "./task-format";
+import { runStatusLabels, statusLabel, workspaceLabel } from "./task-format";
 import { StatusIcon } from "./task-status-icon";
 import { TaskForm } from "./tasks";
 import { useSectionLink } from "./workspace-search";
@@ -46,7 +46,13 @@ export function TaskDraftRow({ message }: { message: MessageView }) {
       <Markdown className="line-clamp-6 text-sm">{draft.description}</Markdown>
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-muted-foreground">
-          {translateText("draft.notCreatedHint")}
+          {translateText("draft.notCreatedHint", {
+            workspace: workspaceLabel({
+              mode: draft.workspace,
+              path: null,
+              branch: null,
+            }),
+          })}
         </span>
         <Button size="sm" onClick={() => setOpen(true)}>
           {translateText("draft.editAndCreate")}
@@ -61,7 +67,6 @@ export function TaskDraftRow({ message }: { message: MessageView }) {
             </DialogDescription>
           </DialogHeader>
           <TaskForm
-            bare
             proposal={{
               conversationId: message.conversationId,
               messageId: message.id,
@@ -96,7 +101,7 @@ export function TaskCardRow({ message }: { message: MessageView }) {
     );
   const label = `${translateText("common:actions.openTask")} #${card.number} ${card.title}`;
   const meta = [
-    card.assignee === "user" ? assigneeLabel("user") : null,
+    card.runStatus === null ? null : runStatusLabels[card.runStatus],
     card.comments > 0
       ? translateText("card.commentCount", { count: card.comments })
       : null,

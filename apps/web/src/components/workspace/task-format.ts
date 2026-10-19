@@ -1,10 +1,10 @@
-import type { AgentView, BoardTaskAssignee } from "@eta/client-contracts";
-import type { TaskDetail, TaskStatus } from "@/queries/tasks";
+import type { AgentView, TaskQueueReason } from "@eta/client-contracts";
+import type { RunStatus, TaskDetail, TaskStatus } from "@/queries/tasks";
 import { translate } from "@/lib/i18n";
 import { agentName } from "@/queries/agents";
 import { when } from "./routine-format";
 
-// How tasks read: their statuses, assignees and times.
+// How tasks read: their statuses, runs and times.
 
 /** The board's order: what needs attention first. */
 export const statuses: { value: TaskStatus; label: string }[] = [
@@ -55,23 +55,51 @@ export const statuses: { value: TaskStatus; label: string }[] = [
 export const statusLabel = (status: TaskStatus) =>
   statuses.find((s) => s.value === status)?.label ?? status;
 
-export const assignees: { value: BoardTaskAssignee; label: string }[] = [
-  {
-    value: "none",
-    get label() {
-      return translate("tasks:assignee.unassigned");
-    },
+export const runStatusLabels: Record<RunStatus, string> = {
+  get queued() {
+    return translate("tasks:runStatus.queued");
   },
-  {
-    value: "user",
-    get label() {
-      return translate("tasks:assignee.me");
-    },
+  get starting() {
+    return translate("common:status.starting");
   },
-];
+  get running() {
+    return translate("tasks:runStatus.running");
+  },
+  get completed() {
+    return translate("tasks:runStatus.completed");
+  },
+  get failed() {
+    return translate("common:status.failed");
+  },
+  get interrupted() {
+    return translate("common:status.stopped");
+  },
+};
 
-export const assigneeLabel = (assignee: BoardTaskAssignee) =>
-  assignees.find((a) => a.value === assignee)?.label ?? assignee;
+export const queueReasonLabels: Record<TaskQueueReason, string> = {
+  get task_busy() {
+    return translate("tasks:queueReason.taskBusy");
+  },
+  get machine_full() {
+    return translate("tasks:queueReason.machineFull");
+  },
+  get machine_offline() {
+    return translate("tasks:queueReason.machineOffline");
+  },
+};
+
+/** Whether a run has not ended. */
+export const isActive = (
+  status: RunStatus | null | undefined,
+): status is "queued" | "starting" | "running" =>
+  status === "queued" || status === "starting" || status === "running";
+
+/** Where the executor works: "git worktree · eta/task-12", or the project's directory. */
+export function workspaceLabel(workspace: TaskDetail["workspace"]) {
+  return workspace.mode === "worktree"
+    ? translate("tasks:workspace.worktree")
+    : translate("tasks:workspace.local");
+}
 
 /** "刚刚", "5 分钟前", "3 小时前", "10-11". */
 export function ago(at: string | number) {

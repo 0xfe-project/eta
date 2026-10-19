@@ -5,7 +5,6 @@
     "awaitingConfirmation": "待确认",
     "awaitingRemoteAssignment": "等你确认交给远程智能体",
     "remoteRunFailed": "远程运行失败",
-    "assignedToYou": "指派给你",
     "newReports": "{{count}} 份新报告",
     "failedRuns": "{{count}} 次失败",
     "newReports_one": "{{count}} 份新报告",

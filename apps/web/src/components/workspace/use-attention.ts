@@ -17,8 +17,6 @@ function taskReason(task: Task): string | null {
   if (closed.has(task.status)) return null;
   if (task.status === "blocked") return translate("tasks:status.blocked");
   if (task.status === "in_review") return translate("tasks:status.inReview");
-  if (task.assignee === "user")
-    return translate("overview:attention.assignedToYou");
   return null;
 }
 

@@ -1,6 +1,6 @@
 import { createStandardSchemaV1, parseAsString, useQueryStates } from "nuqs";
 
-// Where the tasks tab or page is: the list, a task (its id), or "new". How
+// Where the tasks tab or page is: the list, or a task (its id). How
 // the page lays the list out is remembered in the browser (workspace-store).
 const navParsers = {
   task: parseAsString,

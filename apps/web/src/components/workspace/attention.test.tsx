@@ -101,11 +101,11 @@ describe("what waits for the user", () => {
   it("lists tasks and routines that need them, and nothing else", async () => {
     surfaceHost({
       tasks: [
-        task(1, { assignee: "user" }),
+        task(1, { status: "in_progress" }),
         task(2, { status: "in_review" }),
         task(3, { status: "blocked" }),
         task(4),
-        task(5, { status: "done", assignee: "user" }),
+        task(5, { status: "done" }),
       ],
       routines: [routine("a", 2, 0), routine("b", 0, 1), routine("c", 0, 0)],
     });
@@ -114,7 +114,6 @@ describe("what waits for the user", () => {
       (li) => li.textContent,
     );
     expect(rows).toEqual([
-      "#1 任务1指派给你",
       "#2 任务2待验收",
       "#3 任务3受阻",
       "定时a2 份新报告",

@@ -1,8 +1,14 @@
 {
   "assignee": {
-    "unassigned": "未指派",
-    "me": "我",
-    "label": "指派给"
+    "me": "我"
+  },
+  "executor": {
+    "label": "执行者"
+  },
+  "workspace": {
+    "label": "工作区",
+    "worktree": "独立 worktree",
+    "local": "项目目录"
   },
   "status": {
     "inProgress": "进行中",
@@ -14,17 +20,30 @@
     "done": "已完成",
     "cancelled": "已取消"
   },
+  "runStatus": {
+    "queued": "排队中",
+    "running": "正在运行",
+    "completed": "已完成",
+    "failed": "运行失败"
+  },
+  "queueReason": {
+    "taskBusy": "等这个任务上一次运行结束",
+    "machineFull": "这台机器的运行数已满，等空位",
+    "machineOffline": "这台机器不在线，连上后开始"
+  },
+  "runs": {
+    "label": "运行",
+    "never": "还没运行过",
+    "run": "运行",
+    "rerun": "重新运行"
+  },
   "scope": {
-    "mine": "我的",
-    "label": "指派范围",
     "group": "{{name}}",
     "all": "所有群",
     "emptyGroup": "这个群还没有任务"
   },
   "actions": {
-    "createWithStatusLabel": "新建{{status}}任务",
-    "create": "新建任务",
-    "viewAll": "查看全部任务",
+    "createAndStart": "确认并开始",
     "changeTitle": "修改标题",
     "editDescription": "编辑描述",
     "addDescription": "添加描述"
@@ -39,9 +58,7 @@
     "title": "标题",
     "titlePlaceholder": "例如：修复登录页在 Safari 上的布局",
     "description": "描述",
-    "descriptionPlaceholder": "目标、背景、完成的标准……",
-    "optionalGroup": "关联群（可选）",
-    "noGroup": "不关联"
+    "descriptionPlaceholder": "目标、背景、完成的标准……"
   },
   "layout": {
     "label": "布局",
@@ -50,8 +67,7 @@
   },
   "empty": {
     "title": "还没有任务",
-    "description": "把要做的事交给智能体，它会在时间线里记下每一步。",
-    "noUserTasks": "没有指派给你的任务",
+    "description": "智能体在对话里提出任务，你确认后它会自己动手，并在时间线里记下每一步。",
     "deletedTitle": "这个任务已不存在"
   },
   "activity": {
@@ -59,26 +75,37 @@
     "createdByMe": "由我创建",
     "created": "创建了任务",
     "statusChanged": "把状态从「{{from}}」改为「{{to}}」",
-    "assigned": "指派给 {{assignee}}",
     "titleChanged": "把标题改为「{{title}}」",
     "descriptionChanged": "修改了描述",
     "groupLinked": "关联了群",
     "groupUnlinked": "解除了群关联",
     "artifactPublishedPrefix": "发布了 Artifact ",
+    "started": "开始工作",
+    "turnCompleted": "完成了这一轮",
+    "noReplyReminder": "这一轮结束时没有汇报，已提醒一次",
+    "turnFailed": "这一轮失败了{{reason}}",
+    "turnStopped": "这一轮已停止{{reason}}",
     "changeCount": "{{count}} 条变更",
     "changeCount_one": "{{count}} 条变更",
     "changeCount_other": "{{count}} 条变更"
   },
+  "log": {
+    "loading": "正在读取记录…",
+    "empty": "还没有记录。",
+    "title": "执行记录",
+    "workspacePrefix": "工作区 ",
+    "done": "完成",
+    "failed": "失败"
+  },
   "draft": {
     "title": "任务草稿",
-    "editAndCreate": "编辑并创建",
-    "notCreatedHint": "尚未创建任务。",
+    "editAndCreate": "编辑并确认",
+    "notCreatedHint": "确认后创建任务，由提出它的智能体在{{workspace}}里执行。",
     "confirmTitle": "确认任务草稿",
-    "confirmDescription": "编辑内容后创建。"
+    "confirmDescription": "编辑内容后确认，智能体随即开始。"
   },
   "card": {
     "deletedSummary": "#{{number}} {{title}} · 任务已删除",
-    "assignedToYou": "由你执行",
     "commentCount": "{{count}} 条评论",
     "commentCount_one": "{{count}} 条评论",
     "commentCount_other": "{{count}} 条评论"
@@ -89,7 +116,7 @@
     "awaitingYourReply": " 在等你回复",
     "unsupportedAttachments": "{{action}}还不能带图片或文件，{{count}} 个没有加进来。",
     "deliveryFailed": "{{action}}未送达：{{message}}",
-    "placeholder": "写一条评论，支持 Markdown",
+    "placeholder": "写一条评论，支持 Markdown；执行中的任务会直接读到",
     "queuedToSend": "待发送",
     "notDelivered": "未送达：{{message}}"
   }

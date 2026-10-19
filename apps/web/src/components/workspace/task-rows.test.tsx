@@ -50,7 +50,11 @@ beforeEach(() => {
     kind: "task_draft",
     author: "agent",
     agentId: "a1",
-    data: { title: "整理发布说明", description: "## 目标\n\n列出变更" },
+    data: {
+      title: "整理发布说明",
+      description: "## 目标\n\n列出变更",
+      workspace: "worktree",
+    },
   });
 });
 const card = (fields: Partial<TaskCardData> = {}): MessageView => ({
@@ -62,7 +66,7 @@ const card = (fields: Partial<TaskCardData> = {}): MessageView => ({
     number: 9,
     title: "整理发布说明",
     status: "todo",
-    assignee: "none",
+    runStatus: null,
     conversationId: CONV,
     comments: 0,
     summary: "",
@@ -158,11 +162,13 @@ describe("a task an agent proposes", () => {
       }));
     });
     expect(container.textContent).toContain("整理发布说明");
-    expect(container.textContent).toContain("尚未创建任务");
+    // What the user decides on: the agent that proposed it will run it, in a worktree of its own.
+    expect(container.textContent).toContain("确认后创建任务");
+    expect(container.textContent).toContain("独立 worktree");
     expect(link(container)).toBeNull();
 
     const open = [...container.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes("编辑并创建"),
+      b.textContent?.includes("编辑并确认"),
     )!;
     await act(async () => open.click());
     // The form opens on the draft's words; the user edits the title.
@@ -188,12 +194,11 @@ describe("a task an agent proposes", () => {
         title: "整理 Q4 发布说明",
         description: "## 目标\n\n列出变更",
         status: "todo",
-        assignee: "none",
       },
     });
     // The reply carries the row, so the card is there before the timeline's next push.
     expect(link(container)?.getAttribute("href")).toBe("/?view=tasks&task=t9");
-    expect(container.textContent).not.toContain("尚未创建任务");
+    expect(container.textContent).not.toContain("确认后创建任务");
     expect(container.textContent).toContain("待办");
   });
 
@@ -206,7 +211,7 @@ describe("a task an agent proposes", () => {
       {
         ...card({
           status: "done",
-          assignee: "user",
+          runStatus: "completed",
           comments: 2,
           summary: "已经合并了",
           artifacts: [{ artifactId: "art1", title: "季度报告", version: 3 }],
@@ -215,7 +220,7 @@ describe("a task an agent proposes", () => {
       },
     ]);
     expect(link(container)?.textContent).toContain("已完成");
-    expect(container.textContent).toContain("2 条评论");
+    expect(container.textContent).toContain("已完成 · 2 条评论");
     expect(container.textContent).toContain("已经合并了");
     expect(container.textContent).toContain("季度报告 · 第 3 版");
 

@@ -5,7 +5,6 @@
     "awaitingConfirmation": "Awaiting confirmation",
     "awaitingRemoteAssignment": "Awaiting your confirmation to assign to a remote agent",
     "remoteRunFailed": "Remote run failed",
-    "assignedToYou": "Assigned to you",
     "newReports": "{{count}} new reports",
     "failedRuns": "{{count}} failures",
     "newReports_one": "{{count}} new report",

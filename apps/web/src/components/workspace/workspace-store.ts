@@ -14,10 +14,8 @@ const workspaceSchema = z.object({
   selectedAgentId: z.string().max(64).optional(),
   // Preselected model for new agents.
   lastModel: z.string().max(100).optional(),
-  // The task page as last left: rows or a board, and whose tasks.
+  // The task page as last left: rows or a board.
   taskLayout: z.enum(["list", "board"]).optional(),
-  // Agents' tasks are no longer a scope of their own; a saved one reads as unset.
-  taskScope: z.enum(["all", "user"]).optional().catch(undefined),
   // 圈选元素 (lib/element-picker.ts); unset follows the build.
   reactGrab: z.boolean().optional(),
 });
