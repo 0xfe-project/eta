@@ -15,6 +15,7 @@
   "actions": {
     "add": "Add machine",
     "rename": "Rename",
+    "runs": "Runs at once",
     "revoke": "Revoke"
   },
   "fields": {
@@ -41,6 +42,11 @@
   },
   "rename": {
     "title": "Rename {{name}}"
+  },
+  "runs": {
+    "title": "Task runs at once on {{name}}",
+    "label": "Task runs at once (1–20)",
+    "summary": "Task runs at once: {{count}}"
   },
   "revoke": {
     "confirmTitle": "Revoke {{name}}?",

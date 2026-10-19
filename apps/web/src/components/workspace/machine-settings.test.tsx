@@ -224,7 +224,7 @@ describe("机器设置", () => {
       [...document.querySelectorAll('[role="menuitem"]')].map(
         (item) => item.textContent,
       ),
-    ).toEqual(["重命名"]);
+    ).toEqual(["重命名", "同时运行数"]);
     await act(async () => document.body.click());
     await openMenu("笔记本");
     await choose("撤销");
@@ -256,6 +256,24 @@ describe("机器设置", () => {
       target: "machines",
       action: "rename",
       args: { machineId: "m2", name: "书房" },
+    });
+  });
+
+  it("sets how many task runs a machine works on at once", async () => {
+    const fake = productHost({ machines: [primary, laptop] });
+    fake.handle("machines.setMaxActiveRuns", () => ({ machine: laptop }));
+    await mount(<MachineSettings />);
+    await flush();
+    expect(text()).toContain("同时运行 2 个任务");
+    await openMenu("笔记本");
+    await choose("同时运行数");
+    const field = input("同时运行的任务数（1–20）");
+    await type(field, "4");
+    await submit(field.closest("form")!);
+    expect(fake.calls.at(-1)).toMatchObject({
+      target: "machines",
+      action: "setMaxActiveRuns",
+      args: { machineId: "m2", maxActiveRuns: 4 },
     });
   });
 });

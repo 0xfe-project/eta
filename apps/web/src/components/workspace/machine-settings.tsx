@@ -40,6 +40,7 @@ import {
   useEnrollMachine,
   useRenameMachine,
   useRevokeMachine,
+  useSetMaxActiveRuns,
 } from "@/queries/machines";
 import { useMachines } from "@/queries/projects";
 import { wireErrorMessage } from "@/queries/wire";
@@ -375,16 +376,81 @@ function RenameDialog({
   );
 }
 
+/** How many task runs the machine works on at once; the rest wait in the queue. */
+function RunsDialog({
+  machine,
+  onClose,
+}: {
+  machine: MachineView;
+  onClose: () => void;
+}) {
+  const { t: translateText } = useTranslation(["machines", "common"] as const);
+  const set = useSetMaxActiveRuns();
+  const [value, setValue] = useState(String(machine.maxActiveRuns));
+  const runs = Number(value);
+  const valid =
+    Number.isInteger(runs) &&
+    runs >= 1 &&
+    runs <= 20 &&
+    runs !== machine.maxActiveRuns;
+  const submit = () => {
+    if (!valid || set.isPending) return;
+    set.mutate(
+      { machineId: machine.id, maxActiveRuns: runs },
+      { onSuccess: onClose, onError: showError },
+    );
+  };
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[calc(100%-2rem)] gap-4 sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>
+            {translateText("runs.title", { name: machine.name })}
+          </DialogTitle>
+        </DialogHeader>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          <Input
+            type="number"
+            min={1}
+            max={20}
+            aria-label={translateText("runs.label")}
+            autoFocus
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+          />
+        </form>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            {translateText("common:actions.cancel")}
+          </Button>
+          <Button disabled={!valid || set.isPending} onClick={submit}>
+            {translateText("common:actions.save")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function MachineCard({ machine }: { machine: MachineView }) {
   const { t: translateText } = useTranslation(["machines", "common"] as const);
   const revoke = useRevokeMachine();
   const [confirming, setConfirming] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [limiting, setLimiting] = useState(false);
   const status = translateText(`status.${machine.status}`);
   const details = [
     translateText(`kinds.${machine.kind}`),
     machine.os ? (osLabels[machine.os] ?? machine.os) : null,
     machine.home,
+    machine.status === "pending" || machine.status === "revoked"
+      ? null
+      : translateText("runs.summary", { count: machine.maxActiveRuns }),
     machine.status === "offline" && machine.lastSeenAt !== null
       ? translateText("lastSeen", { time: when(machine.lastSeenAt) })
       : null,
@@ -426,6 +492,9 @@ function MachineCard({ machine }: { machine: MachineView }) {
               <DropdownMenuItem onSelect={() => setRenaming(true)}>
                 {translateText("actions.rename")}
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setLimiting(true)}>
+                {translateText("actions.runs")}
+              </DropdownMenuItem>
               {machine.kind === "primary" ? null : (
                 <DropdownMenuItem
                   variant="destructive"
@@ -446,6 +515,9 @@ function MachineCard({ machine }: { machine: MachineView }) {
       {machine.status === "pending" ? <Approval machine={machine} /> : null}
       {renaming ? (
         <RenameDialog machine={machine} onClose={() => setRenaming(false)} />
+      ) : null}
+      {limiting ? (
+        <RunsDialog machine={machine} onClose={() => setLimiting(false)} />
       ) : null}
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>

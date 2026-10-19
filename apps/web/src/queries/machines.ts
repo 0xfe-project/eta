@@ -1,7 +1,7 @@
 import type { MachineArgs, MachineResults } from "@eta/client-contracts";
 import { useWireMutation } from "@/queries/wire";
 
-// The `machines` target's four actions. The list itself is `useMachines` (queries/projects.ts).
+// The `machines` target's actions. The list itself is `useMachines` (queries/projects.ts).
 
 export function useEnrollMachine() {
   return useWireMutation<MachineArgs["enroll"], MachineResults["enroll"]>(
@@ -23,6 +23,14 @@ export function useRevokeMachine() {
     "machines",
     "revoke",
   );
+}
+
+/** How many task runs the machine works on at once. */
+export function useSetMaxActiveRuns() {
+  return useWireMutation<
+    MachineArgs["setMaxActiveRuns"],
+    MachineResults["setMaxActiveRuns"]
+  >("machines", "setMaxActiveRuns");
 }
 
 export function useRenameMachine() {
