@@ -5,7 +5,7 @@
 #
 # Build context: the repository root. The host runs from source (nothing in apps/eta is
 # compiled); the web is built, and so is the LLM gateway, a Go library the host loads.
-ARG BUN_VERSION=1.3.14
+ARG BUN_VERSION=1.4.3
 ARG GO_VERSION=1.26
 
 FROM oven/bun:${BUN_VERSION} AS web

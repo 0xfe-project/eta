@@ -32,7 +32,7 @@ docs/architecture/   架构说明
 
 ## 环境与初始化
 
-需要 Bun 1.3.14、uv（Python 3.13，uv 会按 `.python-version` 自动获取）和 Go（LLM 网关；`go.mod` 要求的版本由 `GOTOOLCHAIN=auto` 自动获取，cgo 需要 gcc）。不需要 Docker、数据库或任何外部服务。没有 Go 时 host 仍能运行，只是没有订阅账号与 Gemini key。
+需要 Bun 1.4.3（各包的类型检查用它自带的 `bun check`）、uv（Python 3.13，uv 会按 `.python-version` 自动获取）和 Go（LLM 网关；`go.mod` 要求的版本由 `GOTOOLCHAIN=auto` 自动获取，cgo 需要 gcc）。不需要 Docker、数据库或任何外部服务。没有 Go 时 host 仍能运行，只是没有订阅账号与 Gemini key。
 
 ```sh
 bun run setup     # bun install + uv sync（记忆边车的 Python 依赖）+ 构建 LLM 网关库（首次约两分钟）

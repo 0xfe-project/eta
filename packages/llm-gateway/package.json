@@ -12,7 +12,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "build": "go build -buildmode=c-shared -o lib/libllm-gateway.so ./ffi",
-    "typecheck": "tsc -p tsconfig.json --noEmit && go vet ./... && test -z \"$(gofmt -l .)\"",
+    "typecheck": "bun check && go vet ./... && test -z \"$(gofmt -l .)\"",
     "lint": "eslint .",
     "test": "go test ./... && bun --bun vitest --run"
   },

@@ -4,7 +4,8 @@ import type { KnipConfig } from "knip";
 // sidecar only uses package.json for Turbo scripts.
 export default {
   // System tools the Turbo scripts call (uv for the Python sidecar, go for the LLM gateway).
-  ignoreBinaries: ["uv", "go", "gofmt"],
+  // `bun check` (Bun's built-in type checker) reads as a binary named `check`.
+  ignoreBinaries: ["uv", "go", "gofmt", "check"],
   // Built-in bundles: scripts the host starts by path (an MCP server, a service), not imports.
   ignore: ["bundles/**"],
   // CSS files are part of the module graph: their @imports reference

@@ -12,7 +12,7 @@
   "scripts": {
     "embed": "bun scripts/embed-presets.ts",
     "test": "bun --bun vitest --run --passWithNoTests",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "bun check",
     "lint": "eslint ."
   },
   "dependencies": {
