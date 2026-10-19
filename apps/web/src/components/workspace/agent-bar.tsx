@@ -22,7 +22,6 @@ import { agentName, useAgentList } from "@/queries/agents";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
 import { ProjectChip } from "./project-chip";
-import { SettingsButton } from "./settings-dialog";
 import { StewardChip } from "./steward-chip";
 import { useAgents, useOpenAgent } from "./use-agents";
 import { useGroups, useOpenGroup } from "./use-groups";
@@ -204,16 +203,6 @@ export function ChatHeader({
           <InfoIcon aria-hidden="true" />
         </Button>
       ) : null}
-      <Button
-        size="icon"
-        variant="ghost"
-        aria-label={translateText("chat:groups.info")}
-        onClick={onInfo}
-      >
-        <InfoIcon aria-hidden="true" />
-      </Button>
-      {/* The header's last control, on every page: settings belong to the app, not to a group. */}
-      <SettingsButton />
     </header>
   );
 }

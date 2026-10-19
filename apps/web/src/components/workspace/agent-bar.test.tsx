@@ -139,11 +139,15 @@ describe("header 里的名称切换", () => {
     expect(
       container.querySelector('[aria-label="主理人：小明"]'),
     ).not.toBeNull();
-    // The last control is settings: it belongs to the app, not to this group, so it is always
-    // the rightmost thing in the row.
+    // No info or settings buttons of its own: both are reached elsewhere (the switcher's menu,
+    // the app's own settings), and a pair of icons after the names read as controls for the group.
     const controls = [...container.querySelectorAll("header button")];
-    const last = controls.at(-1)!;
-    expect(last.getAttribute("title")).toBe("设置");
+    expect(
+      controls.some((button) => button.getAttribute("title") === "设置"),
+    ).toBe(false);
+    expect(
+      controls.some((button) => button.getAttribute("aria-label") === "群信息"),
+    ).toBe(false);
     // Members are navigation: pressing one opens that agent alone.
     const avatars = [...container.querySelectorAll("button")].filter((b) =>
       b.getAttribute("title")?.includes("单独"),
