@@ -1,20 +1,6 @@
 {
   "name": "github",
   "version": "1.0.0",
-  "description": "GitHub: gh and git as the user, plus GitHub's own MCP server for repositories, issues, pull requests and CI.",
-  "requires": ["git", "gh", "github-mcp-server"],
-  "config": {
-    "type": "object",
-    "additionalProperties": false,
-    "required": ["GITHUB_PERSONAL_ACCESS_TOKEN"],
-    "properties": {
-      "GITHUB_PERSONAL_ACCESS_TOKEN": {
-        "type": "string",
-        "title": "Access token",
-        "writeOnly": true,
-        "maxLength": 512,
-        "description": "A [personal access token](https://github.com/settings/personal-access-tokens) with the repositories and permissions the agent may use."
-      }
-    }
-  }
+  "description": "使用 eta 的 GitHub App 获取 git 和 gh 凭据，由 App 创建拉取请求，并起草由用户自己提交的 issue。",
+  "requires": ["git", "gh"]
 }

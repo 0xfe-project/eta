@@ -6,6 +6,8 @@
 
 看板（`tasks` / `tasks.<id>`，`apps/eta/src/tasks`）：智能体提出任务，用户确认，提出它的智能体在一个全新的会话里去执行，做完交回待验收。完整的说明（草稿与卡片、工作区、运行队列、`finish_task`、daemon 上的运行）在[任务](tasks.md)。
 
+- **交付的 PR**：任务板不认识 GitHub；智能体 `open_pull_request` 后，GitHub 插件把 PR 记在自己的 `task_pull` 表，任务页的“交付”一行读它，显示 PR 现在的状态并可以合并。PR 属于哪个任务：任务运行的会话（会话键 `task-run:<id>`）属于那次运行的任务；对话里的会话属于这个对话里最近动过、还没结束的任务（`todo`、`in_progress`、`in_review`、`blocked`）。见 [GitHub](github.md)。
+
 ## 产物
 
 智能体用 `publish_artifact` 发布一个静态站点（根目录有 `index.html` 的目录，可含 CSS、脚本、图片），用户可以预览、分享、下载。

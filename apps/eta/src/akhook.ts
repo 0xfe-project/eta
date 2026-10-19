@@ -3,7 +3,8 @@
  *
  * Where rules come from, in akhook's merge order: the user's file (`<config dir>/akhook/akhook.yml`),
  * the project's `.akhook.yml` found from the session's directory upward, and then the host's own
- * layers, which neither of those can disable or replace: `AKHOOK_ADDITIONAL_CONFIG_PATH`, the
+ * layers, which neither of those can disable or replace: the rules the host itself ships
+ * (`github/akhook.ts`), `AKHOOK_ADDITIONAL_CONFIG_PATH`, the
  * data directory's `akhook.yml`, and whatever the embedding passes in (an environment that ships
  * its own config). They are read again when a file changes.
  *
@@ -22,6 +23,7 @@ import {
   journalTriggerStore,
   lifecycleHooks,
 } from "@eta/plugin-akhook";
+import { GITHUB_AKHOOK } from "./github/akhook";
 
 export interface AkhookHostOptions {
   dataDir: string;
@@ -53,10 +55,11 @@ export class AkhookHost {
     });
   }
 
-  /** The host's layers: from the environment, the data directory, and the embedding. */
+  /** The host's layers: its own rules, the environment's, the data directory's and the embedding's. */
   layers(): ConfigInput[] {
     const file = join(this.#options.dataDir, "akhook.yml");
     return [
+      GITHUB_AKHOOK,
       ...additionalConfigPathsFromEnv(),
       ...(existsSync(file) ? [{ path: file }] : []),
       ...(this.#options.additional ?? []),

@@ -29,6 +29,7 @@ export {
   type LinkState,
 } from "./client";
 export { enroll } from "./enroll";
+export { GitHubKeeper, type GitHubKeeperOptions } from "./github";
 export {
   fingerprintOf,
   groupFingerprint,

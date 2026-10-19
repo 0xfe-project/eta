@@ -58,7 +58,9 @@ describe("activityRecorder", () => {
     recorder.see(answered("c1", "boom", { isError: true }));
     recorder.see(asked("c2", "bash", { command: "sleep 99" }));
     recorder.see(asked("c3", "read", { path: "a" }));
-    recorder.see(answered("c3", "ok", { details: { blob: "y".repeat(5000) } }));
+    recorder.see(
+      answered("c3", "ok", { details: { blob: "y".repeat(80_000) } }),
+    );
     const [one, two, three] = recorder.list();
     expect(one).toMatchObject({ status: "failed", output: "boom" });
     expect(two).toMatchObject({ status: "failed" });

@@ -65,6 +65,7 @@ import {
   workspaceLabel,
 } from "./task-format";
 import { useTaskNav } from "./task-nav";
+import { TaskPulls } from "./task-pulls";
 import { RunLog } from "./task-run-log";
 import { StatusIcon } from "./task-status-icon";
 import { useGroups } from "./use-groups";
@@ -1412,7 +1413,9 @@ function TaskView({ task }: { task: TaskDetail }) {
             #{task.number} · {createdBy(task, agents)}
           </p>
         </header>
-        <TaskProperties task={task} className="bg-muted/50 px-3 py-2" />
+        <TaskProperties task={task} className="bg-muted/50 px-3 py-2">
+          <TaskPulls task={task} />
+        </TaskProperties>
         <Question task={task} />
         <Description key={task.description} task={task} fold />
         <section aria-labelledby="task-activity" className="space-y-3">

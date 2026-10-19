@@ -40,13 +40,12 @@ describe("the bundles that are listed", () => {
     expect(names).toEqual(expect.arrayContaining(["github", "grok", "oomol"]));
     const github = view(w, "github")!;
     expect(github.source).toEqual({ kind: "builtin" });
-    expect(github.requires).toEqual(["git", "gh", "github-mcp-server"]);
+    // Only a skill: the login is the GitHub App's (settings → 连接), the tools are the host's.
+    expect(github.requires).toEqual(["git", "gh"]);
     expect(github.skills).toEqual(["github"]);
-    expect(github.mcpServers).toEqual(["github"]);
-    expect(github.fields).toMatchObject([
-      { name: "GITHUB_PERSONAL_ACCESS_TOKEN", secret: true, set: false },
-    ]);
-    expect(github.configured).toBe(false);
+    expect(github.mcpServers).toEqual([]);
+    expect(github.fields).toEqual([]);
+    expect(github.configured).toBe(true);
     expect(listed(w.client).every((bundle) => bundle.problem === null)).toBe(
       true,
     );

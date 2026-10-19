@@ -58,6 +58,7 @@ import { AgentAvatar } from "./agent-identity";
 import { AttachmentChip } from "./composer-block";
 import { ComposerEditor } from "./composer-editor";
 import { ModelChip, ThinkingChip } from "./composer-pickers";
+import { githubRef } from "./github-ref";
 import { GroupNotice } from "./group-notice";
 import { PendingStrip } from "./pending-strip";
 import { when } from "./routine-format";
@@ -294,6 +295,7 @@ function ToolActivity({ block }: { block: ToolBlock }) {
   // thing worth quoting out of it (lib/tool-summary.ts).
   const summary = summarizeArgs(block.input);
   const artifact = publishedArtifact(block);
+  const github = githubRef(block);
   return (
     <>
       <ToolCard
@@ -325,6 +327,7 @@ function ToolActivity({ block }: { block: ToolBlock }) {
           }}
         />
       )}
+      {github === undefined ? null : <ActivityRefCard value={github} />}
     </>
   );
 }
