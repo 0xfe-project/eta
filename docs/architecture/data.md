@@ -1,6 +1,6 @@
 # 数据
 
-产品数据在 SQLite（`bun:sqlite`），会话照上游存成文件。所有东西在**一个数据目录**里：`--data-dir`，默认 `~/.eta`；Docker 镜像里是卷 `/data`。
+产品数据在 SQLite（`bun:sqlite`），会话照上游存成文件。所有东西在**一个数据目录**里：`--data-dir`，默认 `~/.eta`；Docker 镜像里是卷 `/data`，由非 root 用户 `bun`（uid 1000）拥有，host 与会话的 bash 都以它运行。
 
 ## 目录布局
 

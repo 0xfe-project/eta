@@ -23,9 +23,16 @@ COPY . .
 RUN bun install --frozen-lockfile --production --ignore-scripts
 COPY --from=web /repo/apps/web/dist /srv/web
 
+# The host and the sessions' bash run as the image's unprivileged `bun` user (uid 1000). /data is
+# created and owned by it *before* the VOLUME line, so a fresh named volume inherits that
+# ownership; a bind mount or a volume made by an older (root) image has to be chowned once:
+# `docker run --rm -u 0 --entrypoint chown -v eta-data:/data eta -R 1000:1000 /data`.
+RUN mkdir /data && chown bun:bun /data
+
 # The one volume: the database, the session files, the agents' workspaces, the artifacts, the
 # provider config and the access token all live under it.
 VOLUME /data
+USER bun
 EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
   CMD curl -fsS http://127.0.0.1:8787/up || exit 1
