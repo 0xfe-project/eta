@@ -57,7 +57,6 @@ func (c *Codex) Info() gateway.ConnectorInfo {
 		DisplayName: "Codex",
 		Flow:        gateway.FlowDevice,
 		Provider:    "codex",
-		Hint:        "使用 ChatGPT 账号登录。如果授权页提示不允许设备码登录，请先在 ChatGPT 设置的“安全”中开启 Codex 的设备码授权。",
 	}
 }
 
@@ -91,12 +90,12 @@ func (c *Codex) StartLogin(ctx context.Context, _ gateway.LoginInput) (*gateway.
 	}
 	status, err := c.postJSON(ctx, "/api/accounts/deviceauth/usercode", map[string]string{"client_id": CodexClientID}, &code)
 	if err != nil || status/100 != 2 {
-		return nil, &gateway.UserError{Code: "LOGIN_START_FAILED", Message: "无法发起 Codex 登录，请稍后再试。",
+		return nil, &gateway.UserError{Code: gateway.CodeLoginStartFailed, Message: "Could not start the Codex login.", Params: gateway.Params{"provider": "Codex"},
 			Cause: fmt.Errorf("device code request: status %d: %v", status, err)}
 	}
 	userCode := firstNonEmpty(code.UserCode, code.UserCodeAlt)
 	if userCode == "" || code.DeviceAuthID == "" {
-		return nil, &gateway.UserError{Code: "LOGIN_START_FAILED", Message: "无法发起 Codex 登录，请稍后再试。",
+		return nil, &gateway.UserError{Code: gateway.CodeLoginStartFailed, Message: "Could not start the Codex login.", Params: gateway.Params{"provider": "Codex"},
 			Cause: fmt.Errorf("device code response missing fields")}
 	}
 
@@ -137,7 +136,7 @@ func (c *Codex) complete(ctx context.Context, sess *codexSession, deviceAuthID, 
 		status, err := c.postJSON(ctx, "/api/accounts/deviceauth/token",
 			map[string]string{"device_auth_id": deviceAuthID, "user_code": userCode}, &grant)
 		if ctx.Err() != nil {
-			c.finish(sess, gateway.LoginExpired, "验证码已过期，请重新发起。")
+			c.finish(sess, gateway.LoginExpired, gateway.CodeDeviceCodeTimeout, "The device code expired.")
 			return
 		}
 		if err == nil && status/100 == 2 {
@@ -146,12 +145,12 @@ func (c *Codex) complete(ctx context.Context, sess *codexSession, deviceAuthID, 
 		// 403/404 mean "not approved yet"; anything else is final.
 		if err == nil && status != http.StatusForbidden && status != http.StatusNotFound {
 			c.logger().Warn("codex device polling failed", "status", status)
-			c.finish(sess, gateway.LoginFailed, "登录失败，请重试。")
+			c.finish(sess, gateway.LoginFailed, gateway.CodeLoginFailed, "The provider ended the login with an error.")
 			return
 		}
 		select {
 		case <-ctx.Done():
-			c.finish(sess, gateway.LoginExpired, "验证码已过期，请重新发起。")
+			c.finish(sess, gateway.LoginExpired, gateway.CodeDeviceCodeTimeout, "The device code expired.")
 			return
 		case <-time.After(interval):
 		}
@@ -159,10 +158,10 @@ func (c *Codex) complete(ctx context.Context, sess *codexSession, deviceAuthID, 
 
 	if err := c.exchangeAndStore(ctx, grant.AuthorizationCode, grant.CodeVerifier); err != nil {
 		c.logger().Error("codex login failed", "error", err)
-		c.finish(sess, gateway.LoginFailed, "登录成功但保存凭据失败，请重试。")
+		c.finish(sess, gateway.LoginFailed, gateway.CodeLoginSaveFailed, "The login succeeded but the credential could not be saved.")
 		return
 	}
-	c.finish(sess, gateway.LoginSucceeded, "")
+	c.finish(sess, gateway.LoginSucceeded, "", "")
 }
 
 func (c *Codex) exchangeAndStore(ctx context.Context, code, verifier string) error {
@@ -245,12 +244,14 @@ func CodexCredential(idToken, accessToken, refreshToken string, expiresIn int, n
 	return cred, name + ".json", nil
 }
 
-func (c *Codex) finish(sess *codexSession, status, msg string) {
+func (c *Codex) finish(sess *codexSession, status, code, msg string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if sess.Status == gateway.LoginPending {
 		sess.Status = status
-		sess.Error = msg
+		if code != "" {
+			sess.Error = &gateway.Problem{Code: code, Message: msg}
+		}
 	}
 }
 

@@ -183,7 +183,7 @@ func TestCPAContract(t *testing.T) {
 	}
 	waitFor(t, func() bool { return len(f.m.service.Connections()) == 0 })
 	for _, m := range f.m.service.Models() {
-		if m.Available || m.Status != gateway.ModelUnavailable || m.Reason == nil || m.Reason.Code != "NO_CONNECTION" {
+		if m.Available || m.Status != gateway.ModelUnavailable || m.Reason == nil || m.Reason.Code != gateway.CodeNoConnection {
 			t.Fatalf("model after delete = %+v", m)
 		}
 	}
@@ -433,13 +433,16 @@ func TestGeminiAPIKey(t *testing.T) {
 		raw, _ := io.ReadAll(res.Body)
 		return res.StatusCode, string(raw)
 	}
-	if status, body := submit("AIza-wrong-key"); status != http.StatusFailedDependency || !strings.Contains(body, "INVALID_API_KEY") {
+	if status, body := submit("AIza-wrong-key"); status != http.StatusFailedDependency || !strings.Contains(body, "invalid_api_key") {
 		t.Fatalf("wrong key: %d %s", status, body)
+	}
+	if status, body := submit("  "); status != http.StatusFailedDependency || !strings.Contains(body, `"api_key_required"`) {
+		t.Fatalf("empty key: %d %s", status, body)
 	}
 	if status, body := submit(key); status != http.StatusOK || !strings.Contains(body, `"succeeded"`) {
 		t.Fatalf("key: %d %s", status, body)
 	}
-	if status, body := submit(key); status != http.StatusFailedDependency || !strings.Contains(body, "DUPLICATE_API_KEY") {
+	if status, body := submit(key); status != http.StatusFailedDependency || !strings.Contains(body, "duplicate_api_key") {
 		t.Fatalf("same key again: %d %s", status, body)
 	}
 	providers := f.stateDir + "/providers.json"
@@ -519,7 +522,7 @@ func TestGeminiAPIKey(t *testing.T) {
 	var status gateway.Status
 	postJSON(t, f.srv.URL+"/api/llm/v1/refresh", `{}`, http.StatusOK, &status)
 	conn, _ = gemini()
-	if conn.State != gateway.StateNeedsLogin || conn.Error == nil || conn.Error.Message != "API key 无效，请重新填写。" {
+	if conn.State != gateway.StateNeedsLogin || conn.Error == nil || conn.Error.Code != gateway.CodeInvalidAPIKey {
 		t.Fatalf("connection with a rejected key = %+v %+v", conn, conn.Error)
 	}
 	accepted.Store(true)

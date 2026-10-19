@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useStore } from "zustand";
 import { translate } from "@/lib/i18n";
+import { llmProblemText } from "@/lib/llm-problem";
 import { getWire, WireError } from "@/lib/wire";
 
 // The wire in React: the connection's state, a target's state, and calls. Each target gets a few
@@ -112,6 +113,13 @@ export function wireErrorMessage(error: unknown): string {
     if (error.code === "disconnected")
       return translate("common:errors.disconnected");
     if (error.code === "timeout") return translate("common:errors.timeout");
+    // A failure the host explains with a code is told in the user's language.
+    if (error.problem !== undefined)
+      return llmProblemText({
+        code: error.problem.code,
+        message: error.message,
+        params: error.problem.params,
+      });
     return error.message;
   }
   return error instanceof Error

@@ -7,7 +7,11 @@ import type {
   ProvidersView,
   ServerFrame,
 } from "@eta/client-contracts";
-import type { CallFrame, ClientFrame } from "@eta/client-wire-proto";
+import type {
+  CallFrame,
+  ClientFrame,
+  ErrorProblem,
+} from "@eta/client-wire-proto";
 import type { WireOptions, WireSocket } from "@/lib/wire";
 import { TARGET_MISSING } from "@eta/client-wire-proto";
 import { setWire, Wire } from "@/lib/wire";
@@ -275,6 +279,9 @@ export class FakeHost {
             requestId,
             ok: false,
             error: error instanceof Error ? error.message : String(error),
+            ...(error instanceof Error && "problem" in error
+              ? { problem: error.problem as ErrorProblem }
+              : {}),
           }),
       );
   }

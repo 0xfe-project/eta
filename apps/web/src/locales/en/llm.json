@@ -77,5 +77,41 @@
     "hours_other": "resets in about {{count}} h",
     "days_one": "resets in about {{count}} d",
     "days_other": "resets in about {{count}} d"
+  },
+  "problems": {
+    "loginExpired": "The login has expired. Sign in again.",
+    "invalidApiKey": "The API key is invalid. Enter it again.",
+    "quotaExhausted": "The quota is used up. The account resumes automatically once it recovers.",
+    "rateLimited": "Too many requests. The account recovers shortly.",
+    "upstreamError": "The provider refused this account (HTTP {{status}}). It may lack access or have been suspended.",
+    "upstreamUnstable": "The provider is failing temporarily (HTTP {{status}}). Retrying automatically.",
+    "upstreamUnreachable": "The provider can't be reached right now. Retrying automatically.",
+    "accountDisabled": "The account is disabled.",
+    "modelDisabled": "This model is disabled.",
+    "modelQuotaExhausted": "The {{provider}} account's quota for this model is used up. It can be used again once it recovers.",
+    "modelForbidden": "The {{provider}} account isn't allowed to use this model (HTTP {{status}}).",
+    "modelNotFound": "{{provider}} doesn't offer this model.",
+    "noConnection": "No {{provider}} account is linked yet.",
+    "checkFailed": "Couldn't reach the provider to check the account. The status is unchanged.",
+    "usageUnavailable": "Couldn't read usage right now.",
+    "noToken": "This account has no usable login token.",
+    "loginStartFailed": "Couldn't start the {{provider}} login. Try again later.",
+    "loginTimeout": "Timed out. Enter the key again.",
+    "deviceCodeTimeout": "The code expired. Start again.",
+    "loginFailed": "Login failed. Try again.",
+    "loginSaveFailed": "Logged in, but the credentials couldn't be saved. Try again.",
+    "apiKeyRequired": "Enter an API key.",
+    "duplicateApiKey": "This API key has already been added.",
+    "keyCheckUnavailable": "Couldn't reach {{provider}} to check the API key. Try again later.",
+    "notFound": "Not found.",
+    "invalidRequest": "The request is invalid.",
+    "unsupported": "This connector doesn't support that action.",
+    "gatewayUnavailable": "The model service is unavailable right now. Try again later.",
+    "unknown": "Unknown error ({{code}}): {{message}}"
+  },
+  "connectorHints": {
+    "codex": "Sign in with your ChatGPT account. If the authorization page says device-code login isn't allowed, turn on device code authorization for Codex under Security in ChatGPT settings first.",
+    "xai": "Requires an xAI account that can use the Grok API (for example, a SuperGrok subscription).",
+    "gemini": "Create an API key in Google AI Studio (aistudio.google.com/apikey), then enter it here."
   }
 }

@@ -27,7 +27,7 @@ type Usage struct {
 	ID      string        `json:"id"`
 	Plan    string        `json:"plan,omitempty"`
 	Windows []UsageWindow `json:"windows"`
-	Error   string        `json:"error,omitempty"`
+	Error   *Problem      `json:"error,omitempty"`
 }
 
 // UsageReader is implemented by connectors whose provider reports
@@ -43,7 +43,7 @@ type UsageReader interface {
 // the account's health check.
 type check struct {
 	started, done time.Time
-	err           *ConnectionError
+	err           *Problem
 }
 
 // Usage reads subscription limits of every enabled connection whose
@@ -76,7 +76,7 @@ func (s *Service) Usage(ctx context.Context) []Usage {
 			started := s.now()
 			u, err := j.reader.Usage(ctx, credential(j.auth))
 			// A key cannot be refreshed; a login can, as CPA does on a 401.
-			if userCode(err) == "AUTH_EXPIRED" && !j.apiKey {
+			if rejected(userCode(err)) && !j.apiKey {
 				if refreshed, rerr := s.auths.ForceRefreshAuth(ctx, j.auth.ID); rerr == nil && refreshed != nil {
 					u, err = j.reader.Usage(ctx, refreshed.Metadata)
 				}
@@ -87,10 +87,10 @@ func (s *Service) Usage(ctx context.Context) []Usage {
 				u.Windows = []UsageWindow{}
 			}
 			if err != nil {
-				u.Error = "暂时无法读取用量。"
+				u.Error = problem(CodeUsageUnavailable, "Could not read the usage.")
 				var ue *UserError
 				if errors.As(err, &ue) {
-					u.Error = ue.Message
+					u.Error = &Problem{Code: ue.Code, Message: ue.Message, Params: ue.Params}
 				}
 			}
 			out[i] = u
@@ -98,6 +98,11 @@ func (s *Service) Usage(ctx context.Context) []Usage {
 	}
 	wg.Wait()
 	return out
+}
+
+// rejected reports a code that says the provider does not accept the credential.
+func rejected(code string) bool {
+	return code == CodeLoginExpired || code == CodeInvalidAPIKey
 }
 
 func userCode(err error) string {
@@ -123,16 +128,16 @@ func credential(a *coreauth.Auth) map[string]any {
 	return out
 }
 
-func checkError(err error, apiKey bool) *ConnectionError {
+func checkError(err error, apiKey bool) *Problem {
 	switch {
 	case err == nil:
 		return nil
-	case userCode(err) == "AUTH_EXPIRED" && apiKey:
-		return &ConnectionError{"AUTH_EXPIRED", "上游拒绝了 API key，请重新填写。"}
-	case userCode(err) == "AUTH_EXPIRED":
-		return &ConnectionError{"AUTH_EXPIRED", "上游拒绝了登录令牌，请重新登录。"}
+	case rejected(userCode(err)) && apiKey:
+		return problem(CodeInvalidAPIKey, "The provider rejected the API key.")
+	case rejected(userCode(err)):
+		return problem(CodeLoginExpired, "The provider rejected the login token.")
 	}
-	return &ConnectionError{"CHECK_FAILED", "暂时无法连接上游，未能完成检查；状态保持不变。"}
+	return problem(CodeCheckFailed, "The provider could not be reached to check the account; its status is unchanged.")
 }
 
 // record keeps the newest check per account: one that started earlier and
@@ -157,7 +162,7 @@ func (s *Service) withCheck(c Connection, a *coreauth.Auth) Connection {
 		return c
 	}
 	c.CheckedAt, c.CheckError = &ch.done, ch.err
-	if ch.err != nil && ch.err.Code == "AUTH_EXPIRED" && !a.UpdatedAt.After(ch.done) &&
+	if ch.err != nil && rejected(ch.err.Code) && !a.UpdatedAt.After(ch.done) &&
 		(c.State == StateActive || c.State == StateDegraded) {
 		c.State, c.Error, c.RetryAt = StateNeedsLogin, s.authExpired(c.Connector), nil
 	}

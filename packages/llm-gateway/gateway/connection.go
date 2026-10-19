@@ -24,26 +24,20 @@ const (
 	StateDegraded = "degraded"
 )
 
-// ConnectionError is a product-level explanation; raw upstream errors are only logged.
-type ConnectionError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
 // Connection is a credential as the UI sees it. It never carries tokens.
 type Connection struct {
-	ID        string           `json:"id"`
-	Connector string           `json:"connector"`
-	Label     string           `json:"label"`
-	Plan      string           `json:"plan,omitempty"`
-	State     string           `json:"state"`
-	Error     *ConnectionError `json:"error,omitempty"`
-	RetryAt   *time.Time       `json:"retry_at,omitempty"`
-	CreatedAt time.Time        `json:"created_at"`
+	ID        string     `json:"id"`
+	Connector string     `json:"connector"`
+	Label     string     `json:"label"`
+	Plan      string     `json:"plan,omitempty"`
+	State     string     `json:"state"`
+	Error     *Problem   `json:"error,omitempty"`
+	RetryAt   *time.Time `json:"retry_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
 	// CheckedAt is when the account was last checked against its provider
 	// (see Service.Usage); CheckError is why that check failed.
-	CheckedAt  *time.Time       `json:"checked_at,omitempty"`
-	CheckError *ConnectionError `json:"check_error,omitempty"`
+	CheckedAt  *time.Time `json:"checked_at,omitempty"`
+	CheckError *Problem   `json:"check_error,omitempty"`
 	// fileName is the auth file managed through CPA's management API.
 	fileName string
 }
@@ -84,25 +78,25 @@ func normalize(a *coreauth.Auth, connector string, now time.Time) Connection {
 		c.State = StateDisabled
 	case loginRejected(a, now):
 		c.State = StateNeedsLogin
-		c.Error = &ConnectionError{"AUTH_EXPIRED", "登录已失效，请重新登录。"}
+		c.Error = problem(CodeLoginExpired, "The login is no longer accepted; sign in again.")
 	case a.Quota.Exceeded && a.Quota.NextRecoverAt.After(now) && (!perModel || a.Quota.Reason == "credential_quota"):
 		c.State = StateRateLimited
 		retry(a.Quota.NextRecoverAt)
-		c.Error = &ConnectionError{"QUOTA_EXCEEDED", "额度已用尽，恢复后会自动继续使用。"}
+		c.Error = problem(CodeQuotaExhausted, "The account quota is used up; it recovers by itself.")
 	case perModel || !a.Unavailable || !a.NextRetryAfter.After(now):
 		// Usable; any model's own trouble is on that model (modelStatus).
 	case status == http.StatusTooManyRequests:
 		c.State = StateRateLimited
 		retry(a.NextRetryAfter)
-		c.Error = &ConnectionError{"RATE_LIMITED", "请求过于频繁，稍后会自动恢复。"}
+		c.Error = problem(CodeRateLimited, "Too many requests; the account recovers by itself.")
 	case status == http.StatusPaymentRequired || status == http.StatusForbidden:
 		c.State = StateError
 		retry(a.NextRetryAfter)
-		c.Error = &ConnectionError{"UPSTREAM_ERROR", fmt.Sprintf("上游拒绝了该账号（HTTP %d），可能没有使用权限或已被停用。", status)}
+		c.Error = problem(CodeUpstreamError, fmt.Sprintf("The provider refused the account (HTTP %d).", status), "status", status)
 	default:
 		c.State = StateDegraded
 		retry(a.NextRetryAfter)
-		c.Error = &ConnectionError{"UPSTREAM_UNSTABLE", transientMessage(status)}
+		c.Error = transient(status)
 	}
 	return c
 }
@@ -173,11 +167,13 @@ func loginRejected(a *coreauth.Auth, now time.Time) bool {
 	return false
 }
 
-func transientMessage(status int) string {
+// transient is a failure that clears by itself: a provider error with its
+// HTTP status, or no status when the provider could not be reached.
+func transient(status int) *Problem {
 	if status > 0 {
-		return fmt.Sprintf("上游暂时故障（HTTP %d），稍后会自动重试。", status)
+		return problem(CodeUpstreamUnstable, fmt.Sprintf("The provider failed temporarily (HTTP %d); retrying.", status), "status", status)
 	}
-	return "上游暂时无法连接，稍后会自动重试。"
+	return problem(CodeUpstreamUnreachable, "The provider could not be reached; retrying.")
 }
 
 // Model states. A degraded model still takes requests: the failure was
@@ -191,7 +187,7 @@ const (
 // modelStatus is what one account can do for model now, given the
 // account's own state. name is the provider's display name; apiKey is
 // whether its credentials are API keys.
-func modelStatus(a *coreauth.Auth, conn Connection, model, name string, apiKey bool, now time.Time) (string, *ConnectionError, *time.Time) {
+func modelStatus(a *coreauth.Auth, conn Connection, model, name string, apiKey bool, now time.Time) (string, *Problem, *time.Time) {
 	switch conn.State {
 	case StateActive:
 	case StateDegraded:
@@ -209,43 +205,47 @@ func modelStatus(a *coreauth.Auth, conn Connection, model, name string, apiKey b
 	}
 	retry := &until
 	if ms.Status == coreauth.StatusDisabled {
-		return ModelUnavailable, &ConnectionError{"DISABLED", "该模型已停用。"}, nil
+		return ModelUnavailable, problem(CodeModelDisabled, "The model is disabled."), nil
 	}
 	switch status := modelErrorStatus(ms); status {
 	case http.StatusTooManyRequests:
-		return ModelUnavailable, &ConnectionError{"RATE_LIMITED", name + " 账号的该模型额度已用尽，恢复后可继续使用。"}, retry
+		return ModelUnavailable, problem(CodeModelQuotaExhausted, name+" account: the quota for this model is used up.", "provider", name), retry
 	case http.StatusPaymentRequired, http.StatusForbidden:
-		return ModelUnavailable, &ConnectionError{"FORBIDDEN", fmt.Sprintf("%s 账号无权使用该模型（HTTP %d）。", name, status)}, retry
+		return ModelUnavailable, problem(CodeModelForbidden, fmt.Sprintf("%s account may not use this model (HTTP %d).", name, status), "provider", name, "status", status), retry
 	case http.StatusNotFound:
-		return ModelUnavailable, &ConnectionError{"MODEL_NOT_FOUND", name + " 暂不提供该模型（HTTP 404）。"}, retry
+		return ModelUnavailable, problem(CodeModelNotFound, name+" does not offer this model (HTTP 404).", "provider", name), retry
 	default:
-		return ModelDegraded, &ConnectionError{"UPSTREAM_UNSTABLE", transientMessage(status)}, retry
+		return ModelDegraded, transient(status), retry
 	}
 }
 
 // connectionReason explains a model that is unavailable because of the
 // account serving it.
-func connectionReason(name string, apiKey bool, c Connection) *ConnectionError {
+func connectionReason(name string, apiKey bool, c Connection) *Problem {
 	switch c.State {
 	case StateNeedsLogin:
 		if apiKey {
-			return &ConnectionError{"AUTH_EXPIRED", name + " 的 API key 无效，请重新填写。"}
+			return problem(CodeInvalidAPIKey, name+" API key is invalid.", "provider", name)
 		}
-		return &ConnectionError{"AUTH_EXPIRED", name + " 账号登录已失效，请重新登录。"}
+		return problem(CodeLoginExpired, name+" login is no longer accepted.", "provider", name)
 	case StateRateLimited:
-		return &ConnectionError{"RATE_LIMITED", name + " 账号额度已用尽，恢复后可继续使用。"}
+		return problem(CodeQuotaExhausted, name+" account quota is used up.", "provider", name)
 	case StateError:
-		msg := name + " 账号暂时不可用。"
 		if c.Error != nil {
-			msg = name + " " + c.Error.Message
+			p := *c.Error
+			p.Params = Params{"provider": name}
+			for k, v := range c.Error.Params {
+				p.Params[k] = v
+			}
+			return &p
 		}
-		return &ConnectionError{"UPSTREAM_ERROR", msg}
+		return problem(CodeUpstreamError, name+" account is unavailable.", "provider", name)
 	case StateDisabled:
-		return &ConnectionError{"DISABLED", name + " 账号已停用。"}
+		return problem(CodeAccountDisabled, name+" account is disabled.", "provider", name)
 	case StateDegraded:
 		return c.Error
 	}
-	return &ConnectionError{"NO_CONNECTION", "尚未绑定 " + name + " 账号。"}
+	return problem(CodeNoConnection, "No "+name+" account is linked.", "provider", name)
 }
 
 func looksLikeAuthFailure(msg string) bool {

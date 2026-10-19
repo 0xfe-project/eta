@@ -22,6 +22,7 @@ import type {
 import type {
   CallFrame,
   ClientFrame,
+  ErrorProblem,
   StatePatch,
   StateSnapshot,
 } from "@eta/client-wire-proto";
@@ -71,6 +72,8 @@ export class WireError extends Error {
   constructor(
     readonly code: WireErrorCode,
     message: string,
+    /** For a failure the host explains with a code (see `ErrorProblem`): what to translate. */
+    readonly problem?: ErrorProblem,
   ) {
     super(message);
   }
@@ -403,7 +406,7 @@ export class Wire {
     this.pending.delete(frame.requestId);
     clearTimeout(waiter.timer);
     if (frame.ok) waiter.resolve(frame.result as never);
-    else waiter.reject(new WireError("server", frame.error));
+    else waiter.reject(new WireError("server", frame.error, frame.problem));
   }
 
   private rejectPending(message: string): void {

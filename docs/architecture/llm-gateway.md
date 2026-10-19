@@ -36,13 +36,13 @@ Bun 进程（host）                                    同一个进程里的 Go
 
 - **Codex**：OpenAI 的设备码流程（`/api/accounts/deviceauth/usercode` → 轮询 `/deviceauth/token` → `/oauth/token`），不依赖 localhost 回调。CPA 只在 CLI 里实现了这一流程，所以协议在 Connector 里实现，得到的 token 按 CPA 的 codex 凭据文件格式经 `POST /v0/management/auth-files` 交给 CPA。
 - **Grok（xAI）**：调用管理 API 的 `xai-auth-url` / `get-auth-status` / `oauth-session`，CPA 自己保存凭据。
-- **Google AI Studio**：填 API key。提交时先用 `GET /v1beta/models` 向 Google 校验，重复的 key 报错；key 存在状态目录的 `providers.json`（0600，唯一真源），每次启动渲染进 CPA 的 `gemini-api-key`，运行时的增删和停用先写文件再经管理 API 热生效。无效的 key 判 `needs_login`（“API key 无效，请重新填写”）。
+- **Google AI Studio**：填 API key。提交时先用 `GET /v1beta/models` 向 Google 校验，重复的 key 报错；key 存在状态目录的 `providers.json`（0600，唯一真源），每次启动渲染进 CPA 的 `gemini-api-key`，运行时的增删和停用先写文件再经管理 API 热生效。无效的 key 判 `needs_login`（原因码 `invalid_api_key`）。
 
 上游 eta 自带的 Codex 登录（`providers` 插件，pi-ai 的 OAuth）仍然在，两者互不依赖：那条是上游 provider `openai-codex`，这条是经 CPA 的订阅账号，模型 id 以 `llm:` 开头。
 
 ### 状态
 
-状态以 CPA 实际怎么路由为准（`selector.isAuthBlockedForModel`），读时派生，网关不另存状态、不跑定时任务：`active`、`disabled`、`needs_login`、`rate_limited`、`error`、`degraded`，附中文说明和恢复时间，不含 token。
+状态以 CPA 实际怎么路由为准（`selector.isAuthBlockedForModel`），读时派生，网关不另存状态、不跑定时任务：`active`、`disabled`、`needs_login`、`rate_limited`、`error`、`degraded`，附原因码（见下）和恢复时间，不含 token。
 
 - CPA 把请求失败记在模型上，之后只有该模型被冷却，其他模型照常路由到这个账号。所以只有关于凭据本身的失败才影响整个账号：任一模型收到 401（`needs_login`）、凭据级额度、尚未有模型状态时的账号级失败（429 → `rate_limited`，402/403 → `error`，其余 → `degraded`）。
 - 瞬时失败（超时、5xx）由 CPA 冷却约 1 分钟，期间同一账号同一模型的下一次请求也会被拒；冷却到期即恢复。
@@ -65,7 +65,7 @@ Bun 进程（host）                                    同一个进程里的 Go
 | `models`   | 目录与每个模型当前的可用性和原因                                     |
 | `quota`    | 每个账号的订阅窗口（`kind`：`5h`/`weekly`/`monthly`，`used` 百分比） |
 
-action：`refresh`（检查所有账号并读额度）、`loginStart`、`loginPoll`、`loginSubmit`（API key）、`loginCancel`、`setEnabled`、`remove`。账号与模型每 5 秒读一次（读的是同进程内存），有变化才推送；额度在启动时、登录成功后、`refresh` 和每 10 分钟读一次。错误以网关给出的中文说明原样返回。
+action：`refresh`（检查所有账号并读额度）、`loginStart`、`loginPoll`、`loginSubmit`（API key）、`loginCancel`、`setEnabled`、`remove`。账号与模型每 5 秒读一次（读的是同进程内存），有变化才推送；额度在启动时、登录成功后、`refresh` 和每 10 分钟读一次。失败和不可用的原因都是**码加参数**，不是句子：`packages/llm-gateway/gateway/codes.go` 是封闭的码表（`codes.json` 是同一份给 TypeScript 用，`LLM_CODES` 在 `packages/client-contracts/src/llm.ts`，两边各有测试保证一致）。网关返回 `{code, message, params}`，`message` 是只给日志看的英文诊断，`params` 是 `provider`（显示名）和 `status`（HTTP 状态）。host 的 `llm` 插件原样透传（失败的回复帧带 `problem: {code, params}`），不翻译；网页在 `llm:problems.*` 里把每个码翻成中英文，遇到不认识的码就显示码和诊断。连接方式的登录说明（原先的 `hint`）也不再由网关给出，网页按连接方式 id 取文案。
 
 - **用量**：每次调用的 token 数沿用 `usage` 表：会话的 `turn:end` 里带着 `provider: "llm"`、模型和 token，按智能体记账；旧网关另外的“按主体账本”（`usage.json`）不再保留。订阅的额度窗口属于上面的 `quota` section。
 - **界面**：设置 → 模型服务里，“订阅与密钥”一节按连接方式分组列出账号（状态、套餐、额度条，重新登录、停用/启用、移除），Codex 和 Grok 用设备码弹窗（验证码、授权链接、倒计时、每 1.5 秒轮询），Google AI Studio 用填 key 的弹窗；“刷新状态”按钮调用 `refresh`。需要处理的账号会让设置按钮显示红点。网关的模型进入各处的模型选择器，按连接方式分组，不可用的置灰并给出原因。host 没有网关时整节隐藏。

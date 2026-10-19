@@ -20,7 +20,7 @@ const (
 	grokSettingsURL = "https://cli-chat-proxy.grok.com/v1/settings"
 )
 
-var errNoToken = &gateway.UserError{Code: "NO_TOKEN", Message: "该账号没有可用的登录令牌。"}
+var errNoToken = &gateway.UserError{Code: gateway.CodeNoToken, Message: "The account has no usable token."}
 
 // Usage reads the 5-hour and weekly windows of a ChatGPT subscription.
 func (c *Codex) Usage(ctx context.Context, metadata map[string]any) (gateway.Usage, error) {
@@ -147,18 +147,18 @@ func getUsage(ctx context.Context, client *http.Client, url, token string, heade
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		return &gateway.UserError{Code: "USAGE_UNAVAILABLE", Message: "暂时无法读取用量。", Cause: err}
+		return &gateway.UserError{Code: gateway.CodeUsageUnavailable, Message: "Could not read the usage.", Cause: err}
 	}
 	defer res.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 	switch {
 	case res.StatusCode == http.StatusUnauthorized:
-		return &gateway.UserError{Code: "AUTH_EXPIRED", Message: "登录已失效，无法读取用量。", Cause: fmt.Errorf("usage: status 401")}
+		return &gateway.UserError{Code: gateway.CodeLoginExpired, Message: "The login was rejected (HTTP 401) reading the usage.", Cause: fmt.Errorf("usage: status 401")}
 	case res.StatusCode/100 != 2:
-		return &gateway.UserError{Code: "USAGE_UNAVAILABLE", Message: "暂时无法读取用量。", Cause: fmt.Errorf("usage: status %d", res.StatusCode)}
+		return &gateway.UserError{Code: gateway.CodeUsageUnavailable, Message: "Could not read the usage.", Cause: fmt.Errorf("usage: status %d", res.StatusCode)}
 	}
 	if err := json.Unmarshal(raw, out); err != nil {
-		return &gateway.UserError{Code: "USAGE_UNAVAILABLE", Message: "暂时无法读取用量。", Cause: err}
+		return &gateway.UserError{Code: gateway.CodeUsageUnavailable, Message: "Could not read the usage.", Cause: err}
 	}
 	return nil
 }

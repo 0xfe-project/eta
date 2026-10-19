@@ -20,13 +20,13 @@ func TestNormalize(t *testing.T) {
 		{"active", coreauth.Auth{Status: coreauth.StatusActive}, StateActive, "", false},
 		{"refreshing is usable", coreauth.Auth{Status: coreauth.StatusRefreshing}, StateActive, "", false},
 		{"disabled", coreauth.Auth{Disabled: true, Status: coreauth.StatusDisabled}, StateDisabled, "", false},
-		{"quota", coreauth.Auth{Status: coreauth.StatusError, Quota: coreauth.QuotaState{Exceeded: true, NextRecoverAt: later}}, StateRateLimited, "QUOTA_EXCEEDED", true},
-		{"429 cooldown", coreauth.Auth{Unavailable: true, NextRetryAfter: later, LastError: &coreauth.Error{HTTPStatus: 429}}, StateRateLimited, "RATE_LIMITED", true},
-		{"401", coreauth.Auth{Status: coreauth.StatusError, LastError: &coreauth.Error{HTTPStatus: 401}}, StateNeedsLogin, "AUTH_EXPIRED", false},
-		{"refresh failure", coreauth.Auth{Status: coreauth.StatusError, StatusMessage: "refresh token: invalid_grant"}, StateNeedsLogin, "AUTH_EXPIRED", false},
-		{"403 cooldown", coreauth.Auth{Status: coreauth.StatusError, Unavailable: true, NextRetryAfter: later, LastError: &coreauth.Error{HTTPStatus: 403}}, StateError, "UPSTREAM_ERROR", true},
-		{"5xx cooldown", coreauth.Auth{Unavailable: true, NextRetryAfter: later, LastError: &coreauth.Error{HTTPStatus: 502}}, StateDegraded, "UPSTREAM_UNSTABLE", true},
-		{"timeout cooldown", coreauth.Auth{Unavailable: true, NextRetryAfter: later, LastError: &coreauth.Error{Message: "context deadline exceeded"}}, StateDegraded, "UPSTREAM_UNSTABLE", true},
+		{"quota", coreauth.Auth{Status: coreauth.StatusError, Quota: coreauth.QuotaState{Exceeded: true, NextRecoverAt: later}}, StateRateLimited, CodeQuotaExhausted, true},
+		{"429 cooldown", coreauth.Auth{Unavailable: true, NextRetryAfter: later, LastError: &coreauth.Error{HTTPStatus: 429}}, StateRateLimited, CodeRateLimited, true},
+		{"401", coreauth.Auth{Status: coreauth.StatusError, LastError: &coreauth.Error{HTTPStatus: 401}}, StateNeedsLogin, CodeLoginExpired, false},
+		{"refresh failure", coreauth.Auth{Status: coreauth.StatusError, StatusMessage: "refresh token: invalid_grant"}, StateNeedsLogin, CodeLoginExpired, false},
+		{"403 cooldown", coreauth.Auth{Status: coreauth.StatusError, Unavailable: true, NextRetryAfter: later, LastError: &coreauth.Error{HTTPStatus: 403}}, StateError, CodeUpstreamError, true},
+		{"5xx cooldown", coreauth.Auth{Unavailable: true, NextRetryAfter: later, LastError: &coreauth.Error{HTTPStatus: 502}}, StateDegraded, CodeUpstreamUnstable, true},
+		{"timeout cooldown", coreauth.Auth{Unavailable: true, NextRetryAfter: later, LastError: &coreauth.Error{Message: "context deadline exceeded"}}, StateDegraded, CodeUpstreamUnreachable, true},
 		// CPA leaves StatusError and LastError behind until a request
 		// succeeds; once the cooldown is over the account is usable again.
 		{"ended 5xx cooldown", coreauth.Auth{Status: coreauth.StatusError, Unavailable: true, NextRetryAfter: now.Add(-time.Second), LastError: &coreauth.Error{HTTPStatus: 502}}, StateActive, "", false},
@@ -39,11 +39,11 @@ func TestNormalize(t *testing.T) {
 		}}, StateActive, "", false},
 		{"credential quota", coreauth.Auth{Quota: coreauth.QuotaState{Exceeded: true, Reason: "credential_quota", NextRecoverAt: later}, ModelStates: map[string]*coreauth.ModelState{
 			"gpt": {Unavailable: true, NextRetryAfter: later, LastError: &coreauth.Error{HTTPStatus: 429}},
-		}}, StateRateLimited, "QUOTA_EXCEEDED", true},
+		}}, StateRateLimited, CodeQuotaExhausted, true},
 		{"expired quota is active", coreauth.Auth{Quota: coreauth.QuotaState{Exceeded: true, NextRecoverAt: now.Add(-time.Minute)}}, StateActive, "", false},
 		{"model-level 401", coreauth.Auth{Status: coreauth.StatusActive, ModelStates: map[string]*coreauth.ModelState{
 			"gpt": {Unavailable: true, NextRetryAfter: later, LastError: &coreauth.Error{HTTPStatus: 401}},
-		}}, StateNeedsLogin, "AUTH_EXPIRED", false},
+		}}, StateNeedsLogin, CodeLoginExpired, false},
 		// CPA still routes models with no state of their own to it.
 		{"every tried model rate limited", coreauth.Auth{Status: coreauth.StatusActive, ModelStates: map[string]*coreauth.ModelState{
 			"a": {Unavailable: true, NextRetryAfter: later, LastError: &coreauth.Error{HTTPStatus: 429}},

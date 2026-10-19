@@ -34,8 +34,6 @@ type ConnectorInfo struct {
 	// Provider is the core auth provider key the connector produces
 	// (credentials and models are grouped by it).
 	Provider string `json:"-"`
-	// Hint is optional guidance shown next to the login step.
-	Hint string `json:"hint,omitempty"`
 }
 
 // LoginInput carries user-supplied values for StartLogin/SubmitLogin.
@@ -54,7 +52,7 @@ type LoginSession struct {
 	URL       string    `json:"url,omitempty"`
 	UserCode  string    `json:"user_code,omitempty"`
 	ExpiresAt time.Time `json:"expires_at"`
-	Error     string    `json:"error,omitempty"`
+	Error     *Problem  `json:"error,omitempty"`
 }
 
 // Connector is one way of bringing credentials into the core auth manager:
@@ -87,10 +85,12 @@ var ErrNotFound = errors.New("not found")
 // ErrUnsupported is returned when a connector does not support an operation.
 var ErrUnsupported = errors.New("unsupported")
 
-// UserError carries a message safe to show to the user.
+// UserError is a failure with a problem code (see codes.go). Message is an
+// English diagnostic for logs; the UI translates Code and Params.
 type UserError struct {
 	Code    string
 	Message string
+	Params  Params
 	Cause   error
 }
 

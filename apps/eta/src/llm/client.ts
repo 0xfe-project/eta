@@ -2,8 +2,9 @@
  * The gateway's account API, as the host's code sees it.
  *
  * The gateway speaks snake_case JSON on `/api/llm/v1/*`; this turns that into the camelCase views
- * of `@eta/client-contracts` and its error envelope into `LlmError`, whose `code` the wire passes
- * on as the failure's message.
+ * of `@eta/client-contracts` and its error envelope into `LlmError`, whose `problem` (a code and
+ * its params) the wire passes on to the client unchanged. Nothing here is translated: the web
+ * turns codes into words.
  */
 import type {
   LlmAccounts,
@@ -11,6 +12,7 @@ import type {
   LlmConnector,
   LlmLogin,
   LlmModel,
+  LlmParams,
   LlmProblem,
   LlmQuota,
 } from "@eta/client-contracts";
@@ -20,27 +22,36 @@ export interface GatewayTransport {
   fetch: (path: string, init?: RequestInit) => Promise<Response>;
 }
 
-/** A refusal the gateway explained, with a message safe to show. */
-export class LlmError extends Error {
-  readonly code: string;
+/**
+ * A refusal the gateway explained. `message` is an English diagnostic; `problem` is what the
+ * client translates, and the transport forwards it with the failed reply.
+ */
+class LlmError extends Error {
+  readonly problem: { code: string; params?: LlmParams };
   readonly status: number;
-  constructor(code: string, message: string, status: number) {
-    super(message);
+  constructor(problem: LlmProblem, status: number) {
+    super(problem.message);
     this.name = "LlmError";
-    this.code = code;
+    this.problem = {
+      code: problem.code,
+      ...(problem.params === undefined ? {} : { params: problem.params }),
+    };
     this.status = status;
+  }
+  get code(): string {
+    return this.problem.code;
   }
 }
 
 interface RawProblem {
-  code: string;
+  code: LlmProblem["code"];
   message: string;
+  params?: LlmParams;
 }
 interface RawConnector {
   id: string;
   display_name: string;
   flow: LlmConnector["flow"];
-  hint?: string;
 }
 interface RawConnection {
   id: string;
@@ -75,7 +86,7 @@ interface RawUsage {
     resets_at?: string;
     duration_seconds?: number;
   }[];
-  error?: string;
+  error?: RawProblem;
 }
 interface RawLogin {
   id: string;
@@ -85,7 +96,7 @@ interface RawLogin {
   url?: string;
   user_code?: string;
   expires_at: string;
-  error?: string;
+  error?: RawProblem;
 }
 
 /** A model with the facts the model layer needs beyond the view. */
@@ -95,7 +106,13 @@ export interface CatalogModel extends LlmModel {
 }
 
 const problem = (raw: RawProblem | undefined): LlmProblem | undefined =>
-  raw === undefined ? undefined : { code: raw.code, message: raw.message };
+  raw === undefined
+    ? undefined
+    : {
+        code: raw.code,
+        message: raw.message,
+        ...(raw.params === undefined ? {} : { params: raw.params }),
+      };
 
 function connection(raw: RawConnection): LlmConnection {
   return {
@@ -143,7 +160,7 @@ function quota(raw: RawUsage): LlmQuota {
         ? {}
         : { durationSeconds: window.duration_seconds }),
     })),
-    ...(raw.error === undefined ? {} : { error: raw.error }),
+    ...(raw.error === undefined ? {} : { error: problem(raw.error) }),
   };
 }
 
@@ -156,7 +173,7 @@ function login(raw: RawLogin): LlmLogin {
     ...(raw.url === undefined ? {} : { url: raw.url }),
     ...(raw.user_code === undefined ? {} : { userCode: raw.user_code }),
     expiresAt: raw.expires_at,
-    ...(raw.error === undefined ? {} : { error: raw.error }),
+    ...(raw.error === undefined ? {} : { error: problem(raw.error) }),
   };
 }
 
@@ -184,18 +201,17 @@ export class GatewayClient {
     if (response.status === 204) return undefined;
     const text = await response.text();
     if (!response.ok) {
-      let code = "UPSTREAM_ERROR";
-      let message = "模型服务暂时不可用，请稍后再试。";
+      let failure: LlmProblem = {
+        code: "gateway_unavailable",
+        message: `The gateway answered HTTP ${response.status}.`,
+      };
       try {
         const parsed = JSON.parse(text) as { error?: RawProblem };
-        if (parsed.error !== undefined) {
-          code = parsed.error.code;
-          message = parsed.error.message;
-        }
+        if (parsed.error !== undefined) failure = problem(parsed.error)!;
       } catch {
-        // Not the gateway's envelope (a proxy's page, say): the defaults stand.
+        // Not the gateway's envelope (a proxy's page, say): the default stands.
       }
-      throw new LlmError(code, message, response.status);
+      throw new LlmError(failure, response.status);
     }
     return JSON.parse(text) as T;
   }
@@ -215,9 +231,6 @@ export class GatewayClient {
       id: entry.id,
       name: entry.display_name,
       flow: entry.flow,
-      ...(entry.hint === undefined || entry.hint === ""
-        ? {}
-        : { hint: entry.hint }),
     }));
   }
 

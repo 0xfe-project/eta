@@ -46,7 +46,6 @@ func (g *Gemini) Info() gateway.ConnectorInfo {
 		DisplayName: "Google AI Studio",
 		Flow:        gateway.FlowAPIKey,
 		Provider:    "gemini",
-		Hint:        "在 Google AI Studio（aistudio.google.com/apikey）创建 API key 后填入。",
 	}
 }
 
@@ -96,7 +95,7 @@ func (g *Gemini) PollLogin(_ context.Context, id string) (*gateway.LoginSession,
 		return nil, gateway.ErrNotFound
 	}
 	if sess.Status == gateway.LoginPending && time.Now().After(sess.ExpiresAt) {
-		sess.Status, sess.Error = gateway.LoginExpired, "已超时，请重新填写。"
+		sess.Status, sess.Error = gateway.LoginExpired, &gateway.Problem{Code: gateway.CodeLoginTimeout, Message: "The API key entry timed out."}
 	}
 	copy := *sess
 	return &copy, nil
@@ -110,21 +109,21 @@ func (g *Gemini) SubmitLogin(ctx context.Context, id string, in gateway.LoginInp
 		return err
 	}
 	if sess.Status != gateway.LoginPending {
-		return &gateway.UserError{Code: "LOGIN_EXPIRED", Message: "已超时，请重新填写。"}
+		return &gateway.UserError{Code: gateway.CodeLoginTimeout, Message: "The API key entry timed out."}
 	}
 	key := strings.TrimSpace(in.APIKey)
 	if key == "" {
-		return &gateway.UserError{Code: "INVALID_API_KEY", Message: "请填写 API key。"}
+		return &gateway.UserError{Code: gateway.CodeAPIKeyRequired, Message: "The API key is empty."}
 	}
 	if err := g.checkNew(key); err != nil {
 		return err
 	}
 	if err := g.verify(ctx, key); err != nil {
 		var ue *gateway.UserError
-		if errors.As(err, &ue) && ue.Code == "AUTH_EXPIRED" {
-			return &gateway.UserError{Code: "INVALID_API_KEY", Message: "API key 无效，请检查后重新填写。", Cause: err}
+		if errors.As(err, &ue) && ue.Code == gateway.CodeInvalidAPIKey {
+			return &gateway.UserError{Code: gateway.CodeInvalidAPIKey, Message: "The API key is invalid.", Cause: err}
 		}
-		return &gateway.UserError{Code: "LOGIN_FAILED", Message: "暂时无法连接 Google AI Studio 校验 API key，请稍后再试。", Cause: err}
+		return &gateway.UserError{Code: gateway.CodeKeyCheckUnavailable, Message: "Google AI Studio could not be reached to check the API key.", Params: gateway.Params{"provider": "Google AI Studio"}, Cause: err}
 	}
 	keys, err := g.Keys.UpdateGemini(func(keys []cpa.APIKey) ([]cpa.APIKey, error) {
 		if hasKey(keys, key) {
@@ -150,7 +149,7 @@ func (g *Gemini) SubmitLogin(ctx context.Context, id string, in gateway.LoginInp
 	return nil
 }
 
-var errDuplicateKey = &gateway.UserError{Code: "DUPLICATE_API_KEY", Message: "这个 API key 已经添加过了。"}
+var errDuplicateKey = &gateway.UserError{Code: gateway.CodeDuplicateAPIKey, Message: "This API key was added before."}
 
 func (g *Gemini) checkNew(key string) error {
 	keys, err := g.Keys.Gemini()
@@ -233,7 +232,7 @@ func (g *Gemini) verify(ctx context.Context, key string) error {
 	req.Header.Set("x-goog-api-key", key)
 	res, err := g.client().Do(req)
 	if err != nil {
-		return &gateway.UserError{Code: "USAGE_UNAVAILABLE", Message: "暂时无法连接 Google AI Studio。", Cause: err}
+		return &gateway.UserError{Code: gateway.CodeUsageUnavailable, Message: "Google AI Studio could not be reached.", Cause: err}
 	}
 	defer res.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
@@ -242,9 +241,9 @@ func (g *Gemini) verify(ctx context.Context, key string) error {
 		return nil
 	case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden ||
 		(res.StatusCode == http.StatusBadRequest && strings.Contains(string(raw), "API_KEY_INVALID")):
-		return &gateway.UserError{Code: "AUTH_EXPIRED", Message: "API key 无效，请重新填写。",
+		return &gateway.UserError{Code: gateway.CodeInvalidAPIKey, Message: "Google AI Studio rejected the API key.",
 			Cause: fmt.Errorf("gemini models: status %d", res.StatusCode)}
 	}
-	return &gateway.UserError{Code: "USAGE_UNAVAILABLE", Message: "暂时无法连接 Google AI Studio。",
+	return &gateway.UserError{Code: gateway.CodeUsageUnavailable, Message: "Google AI Studio could not be reached.",
 		Cause: fmt.Errorf("gemini models: status %d", res.StatusCode)}
 }

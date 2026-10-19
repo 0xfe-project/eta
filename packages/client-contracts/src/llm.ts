@@ -33,10 +33,58 @@ export type LlmConnectionState =
   | "error"
   | "degraded";
 
-/** A product-level explanation; raw upstream errors never reach the client. */
+/**
+ * Every code the gateway reports a failure or a reason with. The list is the gateway's
+ * (`packages/llm-gateway/gateway/codes.go`, whose comment table says what each means and which
+ * params it carries); `codes.json` there is the same list, and a test keeps the two equal.
+ */
+export const LLM_CODES = [
+  "login_expired",
+  "invalid_api_key",
+  "quota_exhausted",
+  "rate_limited",
+  "upstream_error",
+  "upstream_unstable",
+  "upstream_unreachable",
+  "account_disabled",
+  "model_disabled",
+  "model_quota_exhausted",
+  "model_forbidden",
+  "model_not_found",
+  "no_connection",
+  "check_failed",
+  "usage_unavailable",
+  "no_token",
+  "login_start_failed",
+  "login_timeout",
+  "device_code_timeout",
+  "login_failed",
+  "login_save_failed",
+  "api_key_required",
+  "duplicate_api_key",
+  "key_check_unavailable",
+  "not_found",
+  "invalid_request",
+  "unsupported",
+  "gateway_unavailable",
+] as const;
+export type LlmCode = (typeof LLM_CODES)[number];
+
+/** What a code may carry: a provider's display name, an HTTP status. */
+export interface LlmParams {
+  provider?: string | undefined;
+  status?: number | undefined;
+}
+
+/**
+ * Why something failed or is unavailable, as a code the client translates. `message` is an
+ * English diagnostic for logs; the UI never shows it unless it does not know the code (a newer
+ * gateway than this client).
+ */
 export interface LlmProblem {
-  code: string;
+  code: LlmCode;
   message: string;
+  params?: LlmParams | undefined;
 }
 
 /** A way to connect an account. `flow` says which form the login takes. */
@@ -44,7 +92,6 @@ export interface LlmConnector {
   id: string;
   name: string;
   flow: "oauth_device" | "oauth_redirect" | "api_key";
-  hint?: string | undefined;
 }
 
 /** One connected account or key. It never carries a token. */
@@ -98,7 +145,7 @@ export interface LlmQuota {
   plan?: string | undefined;
   windows: LlmQuotaWindow[];
   /** Set when the read failed; the windows are then empty. */
-  error?: string | undefined;
+  error?: LlmProblem | undefined;
 }
 
 export interface LlmLogin {
@@ -110,7 +157,8 @@ export interface LlmLogin {
   url?: string | undefined;
   userCode?: string | undefined;
   expiresAt: string;
-  error?: string | undefined;
+  /** Why the login ended without succeeding. */
+  error?: LlmProblem | undefined;
 }
 
 export interface LlmArgs {
