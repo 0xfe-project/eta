@@ -137,6 +137,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       // and, from each of its features, tools, tool middleware and an ear for questions.
       baseSystemPromptFor: product.engine.baseSystemPromptFor,
       ...product.sessionHooks,
+      generated: product.generated,
       ...(options.models === undefined ? {} : { models: options.models }),
       ...(options.llm !== undefined && options.llm !== false
         ? { overlayModels: gatewayModels.overlay }

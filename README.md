@@ -81,7 +81,7 @@ docker run -d --name eta -p 8787:8787 -v eta-data:/data eta
 docker exec eta cat /data/access-token      # 令牌
 ```
 
-一个镜像（构建 Web，host 用 `--web-dir` 提供），一个卷 `/data` 放全部数据，监听 `0.0.0.0:8787`，所以令牌门默认开启。镜像名后面的参数会追加给 host，例如 `docker run … eta --allow-origin https://eta.example.com --memory-url http://memory:8320`。健康检查是 `/up`。
+一个镜像（构建 Web，host 用 `--web-dir` 提供），一个卷 `/data` 放全部数据，监听 `0.0.0.0:8787`，所以令牌门默认开启。镜像名后面的参数会追加给 host，例如 `docker run … eta --allow-origin https://eta.example.com --memory-url http://memory:8320`。健康检查是 `/up`。host 和智能体的 bash 以镜像里的非 root 用户 `bun`（uid 1000）运行，新建的卷归它所有；旧镜像（root）留下的卷或绑定挂载需要改一次属主：`docker run --rm -u 0 --entrypoint chown -v eta-data:/data eta -R 1000:1000 /data`。
 
 `deploy/compose.yaml` 把 host 和（可选的）记忆边车放在一起：
 

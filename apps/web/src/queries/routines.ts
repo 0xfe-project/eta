@@ -11,7 +11,12 @@ import type {
   RunView,
 } from "@eta/client-contracts";
 import { useMemo } from "react";
-import { useListTarget, useTarget, useWireMutation } from "@/queries/wire";
+import {
+  useListTarget,
+  useTarget,
+  useTargetMissing,
+  useWireMutation,
+} from "@/queries/wire";
 
 // Routines on the wire: the `routines` target (an eager `list`, each routine with its latest runs)
 // and one `routines.<id>` target per routine (`info`, `briefs`, `runs` in full, `handoff`).
@@ -33,30 +38,27 @@ export function useRoutines() {
   return { routines: items, loaded, error };
 }
 
-/** A routine's page. `missing`: the eager list has loaded and has no such routine. */
+/** A routine's page. `missing`: the host answered that no such routine exists (or no longer does). */
 export function useRoutine(id: string | null) {
-  const { routines, loaded, error } = useRoutines();
-  const state = useTarget(id === null ? undefined : `routines.${id}`);
+  const { error } = useRoutines();
+  const target = id === null ? undefined : `routines.${id}`;
+  const state = useTarget(target);
+  const missing = useTargetMissing(target);
   const info = state?.sections.info as RoutineInfo | undefined;
   const briefs = state?.sections.briefs as BriefView[] | undefined;
   const runs = state?.sections.runs as RunView[] | undefined;
   const handoff = state?.sections.handoff as Routine["handoff"] | undefined;
   const routine = useMemo<Routine | undefined>(
     () =>
-      info === undefined || briefs === undefined || runs === undefined
+      missing ||
+      info === undefined ||
+      briefs === undefined ||
+      runs === undefined
         ? undefined
         : { ...info, briefs, runs, handoff: handoff ?? null },
-    [info, briefs, runs, handoff],
+    [missing, info, briefs, runs, handoff],
   );
-  return {
-    routine,
-    missing:
-      id !== null &&
-      routine === undefined &&
-      loaded &&
-      !routines.some((item) => item.id === id),
-    error,
-  };
+  return { routine, missing, error };
 }
 
 /**

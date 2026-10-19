@@ -13,7 +13,7 @@
 | 出   | `hello { ops, mounted, state }`                | 连接后的第一帧（重连后再来一次）：所有可调用的 op 及其契约、已挂载的插件、所有 eager target 的状态 |
 | 出   | `reply { requestId, ok, result \| error }`     | 结算一次调用                                                                                       |
 | 出   | `state { target, version, snapshot \| patch }` | 某 target 的状态：整份，或只有 revision 变了的 section                                             |
-| 出   | `event { target, name, data }`                 | 发生了什么（瞬时，不是状态）                                                                       |
+| 出   | `event { target, name, data, at? }`            | 发生了什么（瞬时，不是状态）；`at` 是发生时刻，同一 target 内严格递增，用来识别重放                |
 | 出   | `error { message }`                            | 一帧完全读不懂                                                                                     |
 
 规则：
@@ -23,6 +23,7 @@
 - 状态按 **section** 携带 **revision**；没变的 section 不发。产品 target 的 revision 是 section 内容的哈希（`wire.ts` 的 `publish`），写入方只需说"这个 target 动了"（`wire.pushNow`），线上会算出真正变了什么。
 - 有**帧率预算**：推送只是"标记"，真正发出的是此刻最新的状态，大帧换来更长的静默，流式输出不会把一个标签页淹没；最后一个状态一定会送到。
 - 每个 target 有一个**事件回放环**（512 条）：晚订阅者在快照之后补到最近的事件。重启后环是空的。
+- **找不到的 target**：订阅一个没有注册的名字（不存在的 `tasks.<id>`、`routines.<id>`、`sessions.<id>`），或者一个 target 在被订阅时被拿走（任务被删），服务端回一帧事件 `target:missing`（`data: null`，没有 `at`，不进回放环，只发给那个订阅者）。它是对订阅的回答，不是发生过的事；之后这个名字若注册了、状态到达，就取代它。Web 把它存成 `store.missing[target]`，状态一到、最后一个使用者离开、或重新连接就清掉；任务页和定时任务页的"未找到"由它决定，不再靠列表推断。
 - 断线重连后新连接从零开始：浏览器重新订阅每个仍在使用的 target，host 回整份快照；等不到回复的调用以"未知结果"失败，不重放。
 
 ## target 与 action

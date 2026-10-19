@@ -5,6 +5,10 @@
 # the data volume: `docker compose -f deploy/compose.yaml exec eta cat /data/access-token`,
 # then open http://<host>:8787/?token=<token> once.
 #
+# The host runs as the image's non-root `bun` user (uid 1000) and so do the sessions' bash. A fresh
+# eta-data volume is owned by it; a volume from an older (root) image needs one chown:
+#   docker compose -f deploy/compose.yaml run --rm -u 0 --entrypoint chown eta -R 1000:1000 /data
+#
 # Memory is optional. Turn it on with the profile and the model that extracts facts:
 #   MEMORY_LLM_BASE_URL=https://api.openai.com/v1 MEMORY_LLM_API_KEY=... MEMORY_LLM_MODEL=gpt-5-mini \
 #   ETA_MEMORY_URL=http://memory:8320 docker compose -f deploy/compose.yaml --profile memory up -d --build

@@ -1,4 +1,8 @@
-import type { InboxResponse, InteractionView } from "@eta/client-contracts";
+import type {
+  InboxResponse,
+  InteractionView,
+  SidebarSession,
+} from "@eta/client-contracts";
 /**
  * A conversation in a project on another machine.
  *
@@ -8,16 +12,23 @@ import type { InboxResponse, InteractionView } from "@eta/client-contracts";
  * as it would a local one.
  */
 import type { KernelModels } from "@eta/core";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { DaemonLink, DaemonNode } from "@eta/daemon";
+import { SshEnvironment } from "@eta/ssh";
 import { describe, expect, it } from "vitest";
+import { LinkTransport } from "../src/machines/link-transport";
 import { connect, until } from "./support/client";
 import { machineView } from "./support/daemon";
 import { testHost } from "./support/host";
 import { call, gate, HANG, say, scriptedModels } from "./support/models";
 import { remoteWorld, sessionOf } from "./support/remote";
+
+const sha256 = (bytes: Uint8Array): string =>
+  createHash("sha256").update(bytes).digest("hex");
 
 const SECRET = "sk-only-the-primary-may-know-this";
 
@@ -315,7 +326,14 @@ describe("watching and driving a remote session from the browser", () => {
     );
     const second = await r.send(group.id, "two");
     await r.settled(group.id, second.replies[0]!.id);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // The daemon's state reaches the primary on a paced push, so how soon the mirror finds nobody
+    // looking is not a number of milliseconds: wait for it to have let go.
+    await until(
+      () =>
+        r.host.product.hub
+          .link(r.daemon.machineId)
+          ?.pipe.subscribed(`sessions.${session}`) === false,
+    );
     const afterwards = stateFrames(r, session);
     expect(afterwards - watched).toBeLessThanOrEqual(1);
     const idle = afterwards;
@@ -790,4 +808,97 @@ describe("stopping, steering and a link that fails", () => {
     expect(requests).toHaveLength(1);
     expect(r.row(group.id, reply.id)?.status).toBe("failed");
   });
+});
+
+describe("the global session list and the mirror", () => {
+  const listed = (r: {
+    client: { section: <T>(t: string, n: string) => T | undefined };
+  }) => r.client.section<SidebarSession[]>("sessions", "list") ?? [];
+
+  it("lists a daemon's sessions with the machine they run on, and keeps them when it goes offline", async () => {
+    const { models } = scriptedModels(() => say("noted"));
+    const r = await remoteWorld({ models });
+    const { group } = await r.agents("Ada");
+    r.client.subscribe("sessions");
+    const sent = await r.send(group.id, "one");
+    await r.settled(group.id, sent.replies[0]!.id);
+    const session = sessionOf(r, group.id)!;
+
+    await until(() => listed(r).some((row) => row.id === session));
+    const machine = machineView(r.client, r.daemon.machineId)!;
+    const row = listed(r).find((candidate) => candidate.id === session)!;
+    expect(row.machine).toBe(machine.name);
+    expect(row.badges).not.toContain("offline");
+
+    // The daemon goes away for good: its sessions stay in the list, marked unreachable.
+    await r.daemon.link.stop();
+    await until(
+      () =>
+        listed(r)
+          .find((candidate) => candidate.id === session)
+          ?.badges.includes("offline") === true,
+    );
+  });
+
+  it("does not show the browser an event twice when a mirror warms again", async () => {
+    const { models } = scriptedModels((request) =>
+      say(`answer to ${request.last}`),
+    );
+    const r = await remoteWorld({ models });
+    const { group } = await r.agents("Ada");
+    const first = await r.send(group.id, "one");
+    await r.settled(group.id, first.replies[0]!.id);
+    const session = sessionOf(r, group.id)!;
+    const target = `sessions.${session}`;
+    const runEnds = () =>
+      r.client.frames.filter(
+        (frame) =>
+          frame.type === "event" &&
+          frame.target === target &&
+          frame.name === "turn:run-end",
+      ).length;
+
+    r.client.subscribe(target);
+    // The daemon's ring has the first run in it, replayed to the first subscriber.
+    await until(() => runEnds() === 1);
+
+    // The link drops and returns: the mirror warms again and is replayed the whole ring.
+    r.daemon.link.drop();
+    await until(
+      () => machineView(r.client, r.daemon.machineId)?.status === "offline",
+    );
+    await until(
+      () => machineView(r.client, r.daemon.machineId)?.status === "online",
+    );
+    const second = await r.send(group.id, "two");
+    await r.settled(group.id, second.replies[0]!.id);
+    await until(() => runEnds() === 2);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(runEnds()).toBe(2);
+  });
+});
+
+describe("a big file on the daemon's machine", () => {
+  it("is read through the link in windows, although a frame holds only 8 MiB", async () => {
+    const r = await remoteWorld();
+    const link = r.host.product.hub.link(r.daemon.machineId)!;
+    const env = new SshEnvironment({
+      transport: new LinkTransport(link, homedir()),
+      cwd: r.dir,
+    });
+    // About 20 MB, every byte value in it, so a window that is cut or joined wrongly shows.
+    const bytes = new Uint8Array(20 * 1024 * 1024 + 4_321);
+    for (let i = 0; i < bytes.length; i++)
+      bytes[i] = (i * 131 + (i >> 9)) & 0xff;
+    await writeFile(join(r.dir, "big.bin"), bytes);
+
+    const read = await env.readBinaryFile("big.bin");
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(read.value.length).toBe(bytes.length);
+    expect(sha256(read.value)).toBe(sha256(bytes));
+    // The link carried it all and is still the same one.
+    expect(machineView(r.client, r.daemon.machineId)?.status).toBe("online");
+    expect(r.host.product.hub.link(r.daemon.machineId)).toBe(link);
+  }, 120_000);
 });

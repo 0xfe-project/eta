@@ -1,3 +1,4 @@
+import type { SshRunOptions, SshTransport } from "../src/transport";
 /**
  * The SSH environment against the harness's own ExecutionEnv contract.
  *
@@ -8,12 +9,13 @@
  * connection reuse are `SshCommandTransport`'s, tested in `transport.test.ts`, and
  * the real target check (when `ETA_SSH_TARGET` is set) covers the join.
  */
+import { Buffer } from "node:buffer";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { envContract } from "@eta/execution/testing";
 import { describe, expect, it } from "vitest";
-import { SshEnvironment } from "../src/env";
+import { READ_WINDOW_BYTES, SshEnvironment } from "../src/env";
 import { LocalTransport } from "../src/local-transport";
 
 const roots: string[] = [];
@@ -121,5 +123,80 @@ describe("what the ssh environment decides on its own", () => {
       burst.ok && burst.value.output?.split("\n").filter(Boolean).sort(),
     ).toEqual(["err", "one", "two"]);
     await rm(root, { recursive: true, force: true });
+  });
+});
+
+describe("a file bigger than one window", () => {
+  /** A local transport that counts the scripts it ran and the most one of them printed. */
+  function counting(root: string) {
+    const local = new LocalTransport({ home: root, tempDir: root });
+    const seen = { scripts: 0, largest: 0 };
+    return {
+      seen,
+      transport: {
+        overSsh: local.overSsh,
+        home: local.home,
+        close: () => local.close(),
+        run: async (script: string, options?: SshRunOptions) => {
+          const result = await local.run(script, options);
+          seen.scripts += 1;
+          seen.largest = Math.max(seen.largest, result.stdout.length);
+          return result;
+        },
+      } satisfies SshTransport,
+    };
+  }
+
+  it("is read in windows, byte for byte, and no script prints more than a window's worth", async () => {
+    const root = await home();
+    const { seen, transport } = counting(root);
+    const env = new SshEnvironment({ transport });
+    // Not a multiple of the window, and every byte value in it.
+    const size = READ_WINDOW_BYTES * 2 + 12_345;
+    const bytes = new Uint8Array(size);
+    for (let i = 0; i < size; i++) bytes[i] = (i * 31 + (i >> 8)) & 0xff;
+    expect((await env.writeFile("big.bin", bytes)).ok).toBe(true);
+    seen.scripts = 0;
+
+    const read = await env.readBinaryFile("big.bin");
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(Buffer.compare(Buffer.from(read.value), Buffer.from(bytes))).toBe(0);
+    // The first window says how big the file is; two more bring the rest.
+    expect(seen.scripts).toBe(3);
+    // Base64 wraps lines, so a window is a bit over four thirds of its bytes.
+    expect(seen.largest).toBeLessThan((READ_WINDOW_BYTES * 4 * 1.05) / 3);
+  });
+
+  it("reads text that way too, including a character that falls across a window", async () => {
+    const root = await home();
+    const env = new SshEnvironment({
+      transport: new LocalTransport({ home: root, tempDir: root }),
+    });
+    // Three-byte characters, so some window ends in the middle of one.
+    const text = "字".repeat(Math.ceil((READ_WINDOW_BYTES * 2) / 3) + 7);
+    await env.writeFile("big.txt", text);
+    const read = await env.readTextFile("big.txt");
+    expect(read.ok && read.value === text).toBe(true);
+    const lines = await env.readTextLines("big.txt");
+    expect(lines.ok && lines.value).toEqual([text]);
+  });
+
+  it("is still one script for a small file, and an empty file is empty", async () => {
+    const root = await home();
+    const { seen, transport } = counting(root);
+    const env = new SshEnvironment({ transport });
+    await env.writeFile("small.txt", "hello\n");
+    await env.writeFile("empty.txt", "");
+    seen.scripts = 0;
+    expect(await env.readTextFile("small.txt")).toEqual({
+      ok: true,
+      value: "hello\n",
+    });
+    expect(seen.scripts).toBe(1);
+    expect(await env.readTextFile("empty.txt")).toEqual({
+      ok: true,
+      value: "",
+    });
   });
 });

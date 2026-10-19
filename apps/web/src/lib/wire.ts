@@ -26,7 +26,7 @@ import type {
   StateSnapshot,
 } from "@eta/client-wire-proto";
 import type { StoreApi } from "zustand/vanilla";
-import { SERVER_FRAME_TYPES } from "@eta/client-wire-proto";
+import { SERVER_FRAME_TYPES, TARGET_MISSING } from "@eta/client-wire-proto";
 import { createStore } from "zustand/vanilla";
 
 /** What the client holds for one target. */
@@ -50,6 +50,11 @@ export interface WireState {
   mounted: MountedPlugin[];
   /** Per target: what the client holds. Only targets with users, and the eager ones. */
   targets: Record<string, TargetState>;
+  /**
+   * The targets the host answered `target:missing` for: nothing is registered under the name (or
+   * it was taken away while watched). Cleared when state arrives for it, and by a new connection.
+   */
+  missing: Record<string, true>;
   /** The last frame the host could not read at all. */
   error: string | undefined;
 }
@@ -102,6 +107,7 @@ function createWireStore(): StoreApi<WireState> {
     ops: [],
     mounted: [],
     targets: {},
+    missing: {},
     error: undefined,
   }));
 }
@@ -294,7 +300,8 @@ export class Wire {
       if (this.eager.has(target)) return;
       this.store.setState((state) => {
         const { [target]: _released, ...targets } = state.targets;
-        return { targets };
+        const { [target]: _answered, ...missing } = state.missing;
+        return { targets, missing };
       });
     };
   }
@@ -332,6 +339,12 @@ export class Wire {
         this.state(frame);
         return;
       case "event":
+        if (frame.name === TARGET_MISSING) {
+          this.store.setState((state) => ({
+            missing: { ...state.missing, [frame.target]: true },
+          }));
+          return;
+        }
         for (const listener of [...(this.listeners.get(frame.target) ?? [])])
           listener({ name: frame.name, data: frame.data });
         return;
@@ -365,6 +378,7 @@ export class Wire {
       ops: frame.ops.map((op) => op.name),
       mounted: frame.mounted,
       targets,
+      missing: {},
       error: undefined,
     });
   }
@@ -374,9 +388,13 @@ export class Wire {
     if (!this.users.has(frame.target)) return;
     const next = applyState(this.store.getState().targets[frame.target], frame);
     if (next === undefined) return;
-    this.store.setState((state) => ({
-      targets: { ...state.targets, [frame.target]: next },
-    }));
+    this.store.setState((state) => {
+      const { [frame.target]: _found, ...missing } = state.missing;
+      return {
+        targets: { ...state.targets, [frame.target]: next },
+        missing,
+      };
+    });
   }
 
   private reply(frame: Extract<ServerFrame, { type: "reply" }>): void {

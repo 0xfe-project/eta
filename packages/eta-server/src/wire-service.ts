@@ -30,6 +30,7 @@ import type {
 } from "./registry";
 import type { EventRing } from "./ring";
 import type { StateSender } from "./state-sender";
+import { TARGET_MISSING } from "@eta/client-wire-proto";
 import { Service } from "cordis";
 import {
   BACKGROUND_INTERVAL_MS,
@@ -210,7 +211,26 @@ export class WireService extends Service implements WireApi {
     };
     this.handle = (target, action, handler, meta) =>
       registry.handle(target, action, handler, meta);
-    this.stateOf = (target, projector) => registry.state(target, projector);
+    /** The answer to a subscriber of a target that is not there (see `TARGET_MISSING`). */
+    const missing = (socketId: number, target: string): void => {
+      const frame: EventFrame = {
+        type: "event",
+        target,
+        name: TARGET_MISSING,
+        data: null,
+      };
+      sink?.({ frame, socketId, target });
+    };
+    this.stateOf = (target, projector) => {
+      const off = registry.state(target, projector);
+      return () => {
+        off();
+        // Taken away while someone was watching: they are told, not left with the last state.
+        if (registry.hasState(target)) return;
+        for (const watcher of state.watchersOf(target))
+          missing(watcher.socketId, target);
+      };
+    };
     // A push does not send: it marks. The frame that goes out is the newest state at the
     // moment each subscriber's floor allows one, which is what bounds the wire instead of
     // the session's length (see pacer.ts).
@@ -231,8 +251,12 @@ export class WireService extends Service implements WireApi {
           pacerFor(watcher.socketId, target).relax();
       }
     };
+    const lastAt = new Map<string, number>();
     this.event = (target, name, data) => {
-      const frame: EventFrame = { type: "event", target, name, data };
+      // Strictly increasing per target: the time, or one past the last when two come in a millisecond.
+      const at = Math.max(Date.now(), (lastAt.get(target) ?? 0) + 1);
+      lastAt.set(target, at);
+      const frame: EventFrame = { type: "event", target, name, data, at };
       // The ring keeps it whether or not anyone is listening: an event is a fact that
       // happened, and the client that attaches a second later still needs to know.
       ringFor(target).push(frame);
@@ -259,6 +283,10 @@ export class WireService extends Service implements WireApi {
       for (const owed of state.subscribe(socketId, target, filter)) {
         sink?.({ frame: owed, socketId, target });
         pacerFor(socketId, target).spent(JSON.stringify(owed).length);
+      }
+      if (!registry.hasState(target)) {
+        missing(socketId, target);
+        return;
       }
       // Then the ring: what this target did before the client arrived. State is what is
       // true now, events are what happened — a panel needs the second one to be readable

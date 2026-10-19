@@ -1,4 +1,3 @@
-import type { KernelModels } from "@eta/core";
 /**
  * The router the upstream session host hands foreign session ids to.
  *
@@ -10,6 +9,8 @@ import type { KernelModels } from "@eta/core";
  * "Owns" is a fact about the conversations: a session belongs to the machine of the project of the
  * conversation whose participant holds it, so the answer survives a restart with nothing kept.
  */
+import type { SidebarSession } from "@eta/client-contracts";
+import type { KernelModels } from "@eta/core";
 import type { RemoteSessions } from "@eta/server";
 import type { ConversationStore } from "../conversations/store";
 import type { MachineHub, MachineLink } from "./hub";
@@ -39,7 +40,10 @@ export class RemoteSessionsRouter implements RemoteSessions {
     machines: MachineStore;
     hub: MachineHub;
     models: () => KernelModels | undefined;
+    /** The daemons' sessions, for the global list. */
+    rows: () => SidebarSession[];
   }) {
+    this.rows = options.rows;
     this.#conversations = options.conversations;
     this.#machines = options.machines;
     this.#hub = options.hub;
@@ -53,6 +57,8 @@ export class RemoteSessionsRouter implements RemoteSessions {
     const machine = this.#machines.get(held.machineId);
     return machine?.kind === "daemon" ? machine : undefined;
   }
+
+  readonly rows: () => SidebarSession[];
 
   owns = (id: string): boolean => this.machineOf(id) !== undefined;
 

@@ -13,6 +13,10 @@
  * - **Nothing is read into memory that was not asked for.** A text line reader
  *   pulls the remote file in fixed-size windows (`tail -c +N | head -c N`), so
  *   reading the first line of a gigabyte costs a window, not the file.
+ * - **A file comes in windows.** One script's output has to fit whatever the transport carries (the
+ *   link to a daemon limits a frame to 8 MiB), so a whole-file read pulls `READ_WINDOW_BYTES` at a
+ *   time and joins them. The first window also says how big the file is, so a small file is still
+ *   one round trip.
  * - **Binary is base64 on the wire.** `cat` over a shell is byte-safe in principle
  *   and fatal in practice (the transport decodes UTF-8 at the edges). Reads of
  *   binary go through `base64`, writes go in as stdin to `cat`, which is byte-exact.
@@ -44,6 +48,12 @@ const EXIT_NOT_DIRECTORY = 3;
 const EXIT_PERMISSION = 4;
 /** A script ran and refused: the far side said why on stderr. */
 const EXIT_UNKNOWN = 5;
+/**
+ * How much of a file one window of a whole-file read pulls. Base64 makes it a third bigger on the
+ * wire, and a transport may carry about 8 MiB in one go: 3 MiB leaves a wide margin.
+ */
+export const READ_WINDOW_BYTES = 3 * 1024 * 1024;
+
 /** How much of a text file one reader window pulls. */
 const READER_WINDOW_BYTES = 256 * 1024;
 
@@ -90,36 +100,16 @@ export class SshEnvironment implements ExecutionEnv {
     path: string,
     options: EnvCallOptions = {},
   ): Promise<Result<string, FileError>> {
-    const absolute = this.absolute(path);
-    const result = await this.script(
-      `if [ -d ${quote(absolute)} ]; then exit ${EXIT_IS_DIRECTORY}; fi
-if [ ! -e ${quote(absolute)} ]; then exit ${EXIT_NOT_FOUND}; fi
-if [ ! -r ${quote(absolute)} ]; then exit ${EXIT_PERMISSION}; fi
-cat -- ${quote(absolute)}`,
-      options,
-    );
-    if (!result.ok) return result;
-    return ok(result.value.stdout);
+    const read = await this.readWhole(this.absolute(path), options);
+    if (!read.ok) return read;
+    return ok(Buffer.from(read.value).toString("utf8"));
   }
 
   async readBinaryFile(
     path: string,
     options: EnvCallOptions = {},
   ): Promise<Result<Uint8Array, FileError>> {
-    const absolute = this.absolute(path);
-    const result = await this.script(
-      `if [ -d ${quote(absolute)} ]; then exit ${EXIT_IS_DIRECTORY}; fi
-if [ ! -e ${quote(absolute)} ]; then exit ${EXIT_NOT_FOUND}; fi
-if [ ! -r ${quote(absolute)} ]; then exit ${EXIT_PERMISSION}; fi
-base64 < ${quote(absolute)}`,
-      options,
-    );
-    if (!result.ok) return result;
-    const decoded = Buffer.from(
-      result.value.stdout.replace(/\s+/g, ""),
-      "base64",
-    );
-    return ok(new Uint8Array(decoded));
+    return await this.readWhole(this.absolute(path), options);
   }
 
   async readTextLines(
@@ -128,11 +118,20 @@ base64 < ${quote(absolute)}`,
   ): Promise<Result<string[], FileError>> {
     const absolute = this.absolute(path);
     const maxLines = options.maxLines;
+    if (maxLines === undefined) {
+      const read = await this.readWhole(absolute, options);
+      if (!read.ok) return read;
+      return ok(
+        splitLines(Buffer.from(read.value).toString("utf8")).map(
+          (line) => line.text,
+        ),
+      );
+    }
     const result = await this.script(
       `if [ -d ${quote(absolute)} ]; then exit ${EXIT_IS_DIRECTORY}; fi
 if [ ! -e ${quote(absolute)} ]; then exit ${EXIT_NOT_FOUND}; fi
 if [ ! -r ${quote(absolute)} ]; then exit ${EXIT_PERMISSION}; fi
-${maxLines === undefined ? `cat -- ${quote(absolute)}` : `head -n ${Math.max(0, Math.floor(maxLines))} -- ${quote(absolute)}`}`,
+head -n ${Math.max(0, Math.floor(maxLines))} -- ${quote(absolute)}`,
       options,
     );
     if (!result.ok) return result;
@@ -510,6 +509,51 @@ ${envPrefix}sh -c ${quote(command)}`;
 
   // ------------------------------------------------------------- internals
 
+  /**
+   * A whole file, in windows of `READ_WINDOW_BYTES` (see the header). The first script checks the
+   * path and says how big the file is; the rest pull what is left. A file that grows while it is
+   * read gives what it was when the first window was taken.
+   */
+  private async readWhole(
+    absolute: string,
+    options: EnvCallOptions,
+  ): Promise<Result<Uint8Array, FileError>> {
+    const first = await this.script(
+      `if [ -d ${quote(absolute)} ]; then exit ${EXIT_IS_DIRECTORY}; fi
+if [ ! -e ${quote(absolute)} ]; then exit ${EXIT_NOT_FOUND}; fi
+if [ ! -r ${quote(absolute)} ]; then exit ${EXIT_PERMISSION}; fi
+printf '%s\\n' "$(wc -c < ${quote(absolute)} | tr -d ' ')"
+head -c ${READ_WINDOW_BYTES} ${quote(absolute)} | base64`,
+      options,
+    );
+    if (!first.ok) return first;
+    const newline = first.value.stdout.indexOf("\n");
+    const size = Number(first.value.stdout.slice(0, newline).trim());
+    if (newline < 0 || !Number.isFinite(size)) {
+      return err(
+        fileError(
+          "unknown",
+          `${absolute}: the size of the file did not come back`,
+        ),
+      );
+    }
+    const windows = [decodeBase64(first.value.stdout.slice(newline + 1))];
+    let have = windows[0]!.length;
+    while (have < size) {
+      const next = await this.script(
+        `tail -c +${have + 1} ${quote(absolute)} | head -c ${READ_WINDOW_BYTES} | base64`,
+        options,
+      );
+      if (!next.ok) return next;
+      const window = decodeBase64(next.value.stdout);
+      // The file got shorter under the read: what there is, is what it is.
+      if (window.length === 0) break;
+      windows.push(window);
+      have += window.length;
+    }
+    return ok(windows.length === 1 ? windows[0]! : Buffer.concat(windows));
+  }
+
   /** Read one window of a file from a byte offset, for the line reader. */
   async readWindow(
     path: string,
@@ -552,6 +596,11 @@ ${envPrefix}sh -c ${quote(command)}`;
   private absolute(path: string): string {
     return resolvePath(this.cwd, path, this.transport.home);
   }
+}
+
+/** Bytes from a script's base64 output, which wraps its lines. */
+function decodeBase64(text: string): Uint8Array {
+  return new Uint8Array(Buffer.from(text.replace(/\s+/g, ""), "base64"));
 }
 
 /** Read a remote text file in windows, one line at a time. */
