@@ -1,0 +1,384 @@
+/**
+ * Connections: lazy start, sharing by owner, idle shutdown, lifecycle modes, backoff and the three
+ * transports, against fake servers.
+ */
+import { afterEach, describe, expect, it } from "vitest";
+import { startFakeHttp } from "./helpers/fake-http";
+import { cleanupAll, setup, tool } from "./helpers/harness";
+
+afterEach(cleanupAll);
+
+const spec = { tools: [tool("ping", { behavior: "counter" })] };
+
+function text(result: {
+  content: Array<{ type: string; text?: string }>;
+}): string {
+  return result.content.map((block) => block.text ?? "").join("\n");
+}
+
+describe("lazy connection and sharing", () => {
+  it("starts nothing until the first call, then reuses the connection", async () => {
+    const h = await setup();
+    const scope = h.manager.scope({
+      owner: "a",
+      sources: [h.source({ s: h.stdio(spec) })],
+    });
+    expect(h.starts()).toBe(0);
+
+    const first = await scope.connect("s");
+    expect(first.ok).toBe(true);
+    expect(h.starts()).toBe(1);
+
+    const [ping] = scope.tools("s") ?? [];
+    expect(ping?.name).toBe("ping");
+    const a = await scope.callTool("s", ping!, {});
+    const b = await scope.callTool("s", ping!, {});
+    expect(text(a)).toBe("count 1");
+    expect(text(b)).toBe("count 2");
+    expect(h.starts()).toBe(1);
+  });
+
+  it("shares one connection between scopes of an owner and never between owners", async () => {
+    const h = await setup();
+    const sources = [h.source({ s: h.stdio(spec) })];
+    const one = h.manager.scope({ owner: "agent-1", sources });
+    const two = h.manager.scope({ owner: "agent-1", sources });
+    const other = h.manager.scope({ owner: "agent-2", sources });
+
+    await one.connect("s");
+    await two.connect("s");
+    expect(h.starts()).toBe(1);
+    const [ping] = one.tools("s") ?? [];
+    expect(text(await one.callTool("s", ping!, {}))).toBe("count 1");
+    expect(text(await two.callTool("s", ping!, {}))).toBe("count 2");
+
+    await other.connect("s");
+    expect(h.starts()).toBe(2);
+    expect(text(await other.callTool("s", ping!, {}))).toBe("count 1");
+  });
+
+  it("shares one attempt between concurrent callers", async () => {
+    const h = await setup();
+    const scope = h.manager.scope({
+      owner: "a",
+      sources: [h.source({ s: h.stdio(spec) })],
+    });
+    await Promise.all([
+      scope.connect("s"),
+      scope.connect("s"),
+      scope.connect("s"),
+    ]);
+    expect(h.starts()).toBe(1);
+  });
+
+  it("reconnects with a changed config", async () => {
+    const h = await setup();
+    const scope = h.manager.scope({
+      owner: "a",
+      sources: [h.source({ s: h.stdio(spec) })],
+    });
+    await scope.connect("s");
+    scope.setSources([h.source({ s: h.stdio(spec, {}, { EXTRA: "1" }) })]);
+    await scope.connect("s");
+    expect(h.starts()).toBe(2);
+  });
+});
+
+describe("idle shutdown and lifecycle", () => {
+  it("closes an idle lazy server after 10 minutes and starts it again on the next call", async () => {
+    const h = await setup();
+    const scope = h.manager.scope({
+      owner: "a",
+      sources: [h.source({ s: h.stdio(spec) })],
+    });
+    const [ping] =
+      (await scope.toolsOrConnect("s").then((o) => (o.ok ? o.tools : []))) ??
+      [];
+
+    h.advance(9 * 60_000);
+    await h.manager.sweep();
+    expect(h.manager.servers.get("a", "s")?.status).toBe("connected");
+
+    h.advance(2 * 60_000);
+    await h.manager.sweep();
+    expect(h.manager.servers.get("a", "s")).toBeUndefined();
+    // Still searchable, and the next call starts it again.
+    expect(scope.tools("s")?.map((t) => t.name)).toEqual(["ping"]);
+    expect(text(await scope.callTool("s", ping!, {}))).toBe("count 1");
+    expect(h.starts()).toBe(2);
+  });
+
+  it("does not close a server with a call in flight", async () => {
+    const h = await setup();
+    const slow = { tools: [tool("slow", { behavior: "sleep", ms: 300 })] };
+    const scope = h.manager.scope({
+      owner: "a",
+      sources: [h.source({ s: h.stdio(slow) })],
+    });
+    await scope.connect("s");
+    const [slowTool] = scope.tools("s") ?? [];
+    const running = scope.callTool("s", slowTool!, {});
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    h.advance(20 * 60_000);
+    await h.manager.sweep();
+    expect(h.manager.servers.get("a", "s")?.status).toBe("connected");
+    expect(text(await running)).toBe("slept");
+  });
+
+  it("honours a per-server idleTimeout in minutes, and 0 for never", async () => {
+    const h = await setup();
+    const scope = h.manager.scope({
+      owner: "a",
+      sources: [
+        h.source({
+          short: h.stdio(spec, { idleTimeout: 1 }),
+          never: h.stdio(spec, { idleTimeout: 0 }),
+        }),
+      ],
+    });
+    await scope.connect("short");
+    await scope.connect("never");
+    h.advance(2 * 60_000);
+    await h.manager.sweep();
+    expect(h.manager.servers.get("a", "short")).toBeUndefined();
+    h.advance(24 * 60 * 60_000);
+    await h.manager.sweep();
+    expect(h.manager.servers.get("a", "never")?.status).toBe("connected");
+  });
+
+  it("keep-alive connects at start, never idles out, and reconnects when it drops", async () => {
+    const h = await setup();
+    const scope = h.manager.scope({
+      owner: "a",
+      sources: [
+        h.source({
+          s: h.stdio(
+            { tools: [tool("die", { behavior: "crash" }), tool("ok")] },
+            { lifecycle: "keep-alive" },
+          ),
+        }),
+      ],
+    });
+    expect(h.starts()).toBe(0);
+    await scope.start();
+    expect(h.starts()).toBe(1);
+
+    h.advance(60 * 60_000);
+    await h.manager.sweep();
+    expect(h.manager.servers.get("a", "s")?.status).toBe("connected");
+
+    const die = scope.tools("s")!.find((t) => t.name === "die")!;
+    const result = await scope.callTool("s", die, {});
+    expect(result.isError).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(h.manager.servers.get("a", "s")?.status).not.toBe("connected");
+
+    await h.manager.sweep();
+    expect(h.manager.servers.get("a", "s")?.status).toBe("connected");
+    expect(h.starts()).toBe(2);
+  });
+
+  it("lazy-keep-alive waits for the first use, then stays up and comes back", async () => {
+    const h = await setup();
+    const scope = h.manager.scope({
+      owner: "a",
+      sources: [
+        h.source({
+          s: h.stdio(
+            { tools: [tool("die", { behavior: "crash" })] },
+            { lifecycle: "lazy-keep-alive" },
+          ),
+        }),
+      ],
+    });
+    await scope.start();
+    expect(h.starts()).toBe(0);
+    await scope.connect("s");
+    expect(h.starts()).toBe(1);
+    h.advance(60 * 60_000);
+    await h.manager.sweep();
+    expect(h.manager.servers.get("a", "s")?.status).toBe("connected");
+
+    const die = scope.tools("s")![0]!;
+    await scope.callTool("s", die, {});
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await h.manager.sweep();
+    expect(h.starts()).toBe(2);
+  });
+
+  it("closing an owner stops its servers", async () => {
+    const h = await setup();
+    const scope = h.manager.scope({
+      owner: "a",
+      sources: [h.source({ s: h.stdio(spec) })],
+    });
+    await scope.connect("s");
+    await h.manager.closeOwner("a");
+    expect(h.manager.servers.get("a", "s")).toBeUndefined();
+  });
+});
+
+describe("failure backoff", () => {
+  it("fails fast for a minute after a failed start, then tries again", async () => {
+    const h = await setup();
+    const scope = h.manager.scope({
+      owner: "a",
+      sources: [
+        h.source({
+          s: h.stdio(
+            spec,
+            {},
+            { FAKE_MCP_FAIL: "1", FAKE_MCP_STDERR: "boom: missing key" },
+          ),
+        }),
+      ],
+    });
+    const first = await scope.connect("s");
+    expect(first.ok).toBe(false);
+    expect(first.ok === false && first.message).toContain("boom: missing key");
+    expect(h.starts()).toBe(1);
+
+    const second = await scope.connect("s");
+    expect(second).toMatchObject({ ok: false, error: "server_backoff" });
+    expect(h.starts()).toBe(1);
+    expect(scope.status()[0]).toMatchObject({ state: "failed" });
+
+    // An explicit connect ignores the window.
+    await scope.connect("s", { force: true });
+    expect(h.starts()).toBe(2);
+
+    h.advance(61_000);
+    await scope.connect("s");
+    expect(h.starts()).toBe(3);
+  });
+
+  it("answers a call during backoff without trying again", async () => {
+    const h = await setup();
+    const scope = h.manager.scope({
+      owner: "a",
+      sources: [h.source({ s: h.stdio(spec, {}, { FAKE_MCP_FAIL: "1" }) })],
+    });
+    const fake = {
+      name: "ping",
+      description: "",
+      inputSchema: { type: "object" },
+    };
+    const first = await scope.callTool("s", fake, {});
+    expect(first.details).toMatchObject({
+      error: "connect_failed",
+      delivery: "not_sent",
+    });
+    const second = await scope.callTool("s", fake, {});
+    expect(second.details).toMatchObject({
+      error: "server_backoff",
+      delivery: "not_sent",
+    });
+    expect(h.starts()).toBe(1);
+  });
+});
+
+describe("transports", () => {
+  it("speaks streamable HTTP", async () => {
+    const h = await setup();
+    const http = await startFakeHttp({ spec });
+    try {
+      const scope = h.manager.scope({
+        owner: "a",
+        sources: [h.source({ web: { url: http.url } })],
+      });
+      expect((await scope.connect("web")).ok).toBe(true);
+      const [ping] = scope.tools("web")!;
+      expect(text(await scope.callTool("web", ping!, {}))).toBe("count 1");
+      expect(http.calls).toEqual(["ping"]);
+    } finally {
+      await h.manager.closeAll();
+      await http.close();
+    }
+  });
+
+  it("falls back to legacy SSE when the endpoint is not streamable HTTP", async () => {
+    const h = await setup();
+    const http = await startFakeHttp({ spec, mode: "sse-only" });
+    try {
+      const scope = h.manager.scope({
+        owner: "a",
+        sources: [
+          h.source({ old: { url: http.sseUrl.replace("/sse", "/mcp") } }),
+        ],
+      });
+      // The streamable endpoint answers 404; the SSE endpoint is a different path, so point at it.
+      const sse = h.manager.scope({
+        owner: "b",
+        sources: [h.source({ old: { url: http.sseUrl, type: "sse" } })],
+      });
+      expect((await sse.connect("old")).ok).toBe(true);
+      const [ping] = sse.tools("old")!;
+      expect(text(await sse.callTool("old", ping!, {}))).toBe("count 1");
+      expect((await scope.connect("old")).ok).toBe(false);
+    } finally {
+      await h.manager.closeAll();
+      await http.close();
+    }
+  });
+
+  it("sends configured headers and bearer tokens", async () => {
+    const h = await setup({ env: { TOKEN_VAR: "from-env" } });
+    const http = await startFakeHttp({ spec, bearer: "secret" });
+    try {
+      const scope = h.manager.scope({
+        owner: "a",
+        sources: [
+          h.source({
+            good: {
+              url: http.url,
+              auth: "bearer",
+              bearerToken: "secret",
+              // eslint-disable-next-line no-template-curly-in-string -- the library interpolates this
+              headers: { "x-who": "${TOKEN_VAR}" },
+            },
+            bad: { url: http.url },
+          }),
+        ],
+      });
+      expect((await scope.connect("good")).ok).toBe(true);
+      const sent = http.requests.find(
+        (request) => request.headers["x-who"] !== undefined,
+      );
+      expect(sent?.headers["x-who"]).toBe("from-env");
+      expect(sent?.headers.authorization).toBe("Bearer secret");
+
+      const denied = await scope.connect("bad");
+      expect(denied).toMatchObject({ ok: false, error: "needs_auth" });
+      expect(
+        scope.status().find((status) => status.name === "bad")?.state,
+      ).toBe("needs-auth");
+    } finally {
+      await h.manager.closeAll();
+      await http.close();
+    }
+  });
+
+  it("asks authProviderFor for auth: oauth and reports needs-auth without one", async () => {
+    const asked: string[] = [];
+    const h = await setup({
+      authProviderFor: (key) => {
+        asked.push(key);
+        return undefined;
+      },
+    });
+    const http = await startFakeHttp({ spec });
+    try {
+      const scope = h.manager.scope({
+        owner: "a",
+        sources: [h.source({ remote: { url: http.url, auth: "oauth" } })],
+      });
+      const outcome = await scope.connect("remote");
+      expect(asked).toEqual(["remote"]);
+      expect(outcome).toMatchObject({ ok: false, error: "needs_auth" });
+      expect(http.requests).toHaveLength(0);
+    } finally {
+      await h.manager.closeAll();
+      await http.close();
+    }
+  });
+});
