@@ -103,7 +103,7 @@ function GitHubConnection() {
     }, []),
   );
   // Loading shows what it is for; the wizard shows a failed load in full.
-  const current: Summary = status
+  const current: Summary = status?.checked
     ? githubSummary(status)
     : unavailable
       ? {

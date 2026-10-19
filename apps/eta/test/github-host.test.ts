@@ -391,6 +391,24 @@ describe("the akhook rule", () => {
     expect(done.text).toContain("gh-pr-create");
     expect(done.text).toContain("推送分支后用 open_pull_request 工具开 PR。");
   });
+
+  it("holds on a daemon's sessions too, and neither a project's file nor the user's can lift it", async () => {
+    const { models } = scriptedModels((request) => {
+      if (request.lastRole === "toolResult") return say(`saw: ${request.last}`);
+      return call("bash", { command: "gh pr create --fill" });
+    });
+    const r = await remoteWorld({ models });
+    // A project file that tries to switch the rule off.
+    await writeFile(
+      join(r.dir, ".akhook.yml"),
+      "version: 1\ndisabled_rules: [gh-pr-create]\n",
+    );
+    const { group } = await r.agents("Ada");
+    const sent = await r.send(group.id, "open a pr");
+    const done = await r.settled(group.id, sent.replies[0]!.id);
+    expect(done.text).toContain("gh-pr-create");
+    expect(done.text).toContain("open_pull_request");
+  });
 });
 
 /** Everything under a directory, as `path → text`. */

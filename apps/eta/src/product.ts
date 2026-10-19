@@ -633,6 +633,9 @@ export function createProduct(options: {
       }
       bundles.start();
       githubLogin.start();
+      // Where the App is installed, once, so the first look at the settings is not a guess.
+      if (github.app() !== null)
+        void github.status(false).catch(() => undefined);
     },
   };
 }
