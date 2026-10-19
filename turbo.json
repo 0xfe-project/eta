@@ -17,7 +17,7 @@
   "tasks": {
     "build": {
       "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
-      "outputs": ["dist/**", "out/**"]
+      "outputs": ["dist/**", "out/**", "lib/**"]
     },
     "typecheck": {
       "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
@@ -28,8 +28,10 @@
       "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
       "outputs": []
     },
+    // The LLM gateway's tests (and the host's, which load it) need its library built.
     "test": {
       "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
+      "dependsOn": ["build", "^build"],
       "outputs": []
     },
     // Root-level ESLint for files outside the workspaces (each workspace lints

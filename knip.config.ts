@@ -3,8 +3,8 @@ import type { KnipConfig } from "knip";
 // Dead code check for the TypeScript workspaces (`turbo run knip`). The Python
 // sidecar only uses package.json for Turbo scripts.
 export default {
-  // System tools the Turbo scripts call.
-  ignoreBinaries: ["uv"],
+  // System tools the Turbo scripts call (uv for the Python sidecar, go for the LLM gateway).
+  ignoreBinaries: ["uv", "go", "gofmt"],
   // CSS files are part of the module graph: their @imports reference
   // packages (fonts, tw-animate-css, shadcn) and other stylesheets.
   compilers: {
@@ -36,6 +36,11 @@ export default {
       // A browser-side consumer, typechecked on its own to prove the client
       // contracts need nothing but the wire package; nothing imports it.
       entry: ["test/browser-consumer.ts"],
+    },
+    "packages/llm-gateway": {
+      // Run by path in a process of their own (test/ffi.test.ts): the library loads once per
+      // process, and a crash must fail one test.
+      entry: ["test/scripts/*.ts"],
     },
     "apps/web": {
       // routeTree.gen.ts is gitignored, which knip skips, so the file routes

@@ -8,3 +8,4 @@
 .github
 .claude
 var
+packages/llm-gateway/lib

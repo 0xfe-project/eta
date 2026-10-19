@@ -49,6 +49,7 @@ import {
   useRefreshProvider,
   useStartLogin,
 } from "@/queries/providers";
+import { LlmAccounts } from "./llm-accounts";
 import { ProviderEditor } from "./provider-editor";
 import { useAgents } from "./use-agents";
 
@@ -376,52 +377,55 @@ export function ProviderSettings() {
   );
   if (error) return <LoadError what={translateText("title")} error={error} />;
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold">{translateText("title")}</h2>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!data}
-          onClick={() => setEditing("new")}
-        >
-          <PlusIcon aria-hidden="true" data-icon="inline-start" />
-          {translateText("editor.newTitle")}
-        </Button>
+    <div className="space-y-4">
+      <LlmAccounts />
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">{translateText("title")}</h2>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!data}
+            onClick={() => setEditing("new")}
+          >
+            <PlusIcon aria-hidden="true" data-icon="inline-start" />
+            {translateText("editor.newTitle")}
+          </Button>
+        </div>
+        {!data ? (
+          <Loading rows={2} />
+        ) : data.providers.length === 0 ? (
+          <p className="border border-dashed px-3 py-2.5 text-xs text-muted-foreground">
+            {translateText("editor.empty")}
+          </p>
+        ) : (
+          <ul
+            aria-label={translateText("editor.configured")}
+            className="divide-y border"
+          >
+            {data.providers.map((provider) => (
+              <ProviderRow
+                key={provider.id}
+                provider={provider}
+                onEdit={() => setEditing(provider)}
+              />
+            ))}
+          </ul>
+        )}
+        <ProviderEditor
+          key={editing === "new" ? "new" : (editing?.id ?? "closed")}
+          // The row as it is now, so a save shows in the editor that made it.
+          provider={
+            editing === undefined || editing === "new"
+              ? undefined
+              : (data?.providers.find(
+                  (candidate) => candidate.id === editing.id,
+                ) ?? editing)
+          }
+          open={editing !== undefined}
+          onOpenChange={(open) => !open && setEditing(undefined)}
+        />
       </div>
-      {!data ? (
-        <Loading rows={2} />
-      ) : data.providers.length === 0 ? (
-        <p className="border border-dashed px-3 py-2.5 text-xs text-muted-foreground">
-          {translateText("editor.empty")}
-        </p>
-      ) : (
-        <ul
-          aria-label={translateText("editor.configured")}
-          className="divide-y border"
-        >
-          {data.providers.map((provider) => (
-            <ProviderRow
-              key={provider.id}
-              provider={provider}
-              onEdit={() => setEditing(provider)}
-            />
-          ))}
-        </ul>
-      )}
-      <ProviderEditor
-        key={editing === "new" ? "new" : (editing?.id ?? "closed")}
-        // The row as it is now, so a save shows in the editor that made it.
-        provider={
-          editing === undefined || editing === "new"
-            ? undefined
-            : (data?.providers.find(
-                (candidate) => candidate.id === editing.id,
-              ) ?? editing)
-        }
-        open={editing !== undefined}
-        onOpenChange={(open) => !open && setEditing(undefined)}
-      />
     </div>
   );
 }
