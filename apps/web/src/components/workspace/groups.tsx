@@ -274,7 +274,29 @@ export function GroupList() {
     "common",
     "settings",
   ] as const);
-  const { rows, loaded } = useChatList();
+  const { directories, directs, loaded } = useChatList();
+  // The phone keeps one list — there is no room for two headings on a screen you scroll with a
+  // thumb — so the two sections are flattened back into one, newest activity first.
+  const rows = [
+    ...[
+      ...directories.flatMap((directory) => directory.conversations),
+      ...directs.flatMap((entry) =>
+        entry.conversation === undefined ? [] : [entry.conversation],
+      ),
+    ]
+      .sort(
+        (left, right) =>
+          (right.lastMessageAt ?? right.updatedAt) -
+          (left.lastMessageAt ?? left.updatedAt),
+      )
+      .map((conversation) => ({
+        kind: "conversation" as const,
+        conversation,
+      })),
+    ...directs
+      .filter((entry) => entry.conversation === undefined)
+      .map((entry) => ({ kind: "agent" as const, agent: entry.agent })),
+  ];
   const open = useOpenGroup();
   const openAgent = useOpenAgent();
   const rowClass =

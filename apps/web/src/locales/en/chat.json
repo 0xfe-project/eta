@@ -310,5 +310,12 @@
     "tooldefs": "Tool definitions",
     "tool": "Tool results",
     "ring": "Context {{percent}}%: {{used}} used of a {{window}}k window"
+  },
+  "sections": {
+    "groups": "Groups",
+    "agents": "Agents",
+    "newAgent": "New agent",
+    "noAgents": "No agents yet.",
+    "unknownDirectory": "(directory gone)"
   }
 }

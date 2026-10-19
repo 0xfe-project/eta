@@ -310,5 +310,12 @@
     "tooldefs": "工具定义",
     "tool": "工具结果",
     "ring": "上下文 {{percent}}%：已用 {{used}}，窗口 {{window}}k"
+  },
+  "sections": {
+    "groups": "群聊",
+    "agents": "智能体",
+    "newAgent": "新建智能体",
+    "noAgents": "还没有智能体。",
+    "unknownDirectory": "（目录已不在）"
   }
 }

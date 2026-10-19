@@ -57,16 +57,20 @@ export function Sidebar() {
   return (
     <SidebarRoot
       collapsible="none"
-      className="hidden shrink-0 border-r [--sidebar-width:12rem] md:flex lg:[--sidebar-width:14rem]"
+      className="hidden shrink-0 border-r [--sidebar-width:16rem] md:flex lg:[--sidebar-width:18rem]"
     >
       <SidebarHeader className="band flex-row items-center justify-between p-0 pr-2 pl-4">
-        <Link to="/" className="text-lg font-semibold tracking-tight">
-          eta.
+        {/* BR1's wordmark: uppercase, tracked out, the letterforms doing the work. */}
+        <Link
+          to="/"
+          className="font-mono text-base font-medium tracking-[0.18em]"
+        >
+          ETA
         </Link>
         <SettingsButton />
       </SidebarHeader>
-      <SidebarContent className="gap-0">
-        <SidebarGroup className="pb-0">
+      <SidebarContent className="gap-0 overflow-hidden">
+        <SidebarGroup className="shrink-0 border-b pb-1">
           <SidebarMenu aria-label={translateText("accessibility.sections")}>
             {sections.map(({ to, label, icon: Icon }) => (
               <SidebarMenuItem key={to}>

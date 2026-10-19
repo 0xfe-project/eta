@@ -15,6 +15,7 @@ import {
 import { agentStatusLabels } from "./agent-status";
 import { Sidebar } from "./app-shell";
 import { GroupList } from "./groups";
+import { useWorkspaceStore } from "./workspace-store";
 
 const state = rstest.hoisted(() => ({
   agents: [] as { id: string; name: string; status: string }[],
@@ -121,12 +122,7 @@ const agent = (id: string, name: string, status = "idle") => ({
   status,
 });
 
-const rowNames = (container: HTMLElement) =>
-  [...container.querySelectorAll('[data-sidebar="menu-button"]')]
-    .filter((row) => !row.hasAttribute("data-to"))
-    .map((row) => row.getAttribute("title"));
-
-describe("左栏的一张列表", () => {
+describe("左栏的两块", () => {
   const now = Date.now();
   const lists = () => {
     state.agents = [
@@ -154,23 +150,27 @@ describe("左栏的一张列表", () => {
     ];
   };
 
-  it("holds a group, an agent's direct chat once, and an agent without one", async () => {
+  it("holds the groups above and the agents below", async () => {
     lists();
     const container = await render(<Sidebar />);
-    // 乐子人 appears once, as its direct chat; the two without a chat come after, by creation.
-    expect(rowNames(container)).toEqual([
-      "乐子人",
-      "装配",
-      "与 装配检查 对话",
-      "与 闲着 对话",
-    ]);
+    const section = (id: string) =>
+      container.querySelector(`[aria-labelledby="${id}"]`)!;
+    // Groups: only the one that is not a private chat.
     expect(
-      container.querySelectorAll('[data-sidebar="group-label"]'),
-    ).toHaveLength(1);
-    expect(container.textContent).not.toContain("智能体");
-    expect(
-      container.querySelector('[aria-labelledby="sidebar-agents"]'),
-    ).toBeNull();
+      [
+        ...section("sidebar-groups").querySelectorAll(
+          '[data-sidebar="menu-button"]',
+        ),
+      ].map((row) => row.getAttribute("title")),
+    ).toEqual(["装配"]);
+    // Agents: every agent once. 乐子人 has a chat so it sorts by it; the two without one follow
+    // in the order they were made.
+    const names = [
+      ...section("sidebar-agents").querySelectorAll("[data-slot=agent-name]"),
+    ].map((node) => node.textContent);
+    expect(names).toEqual(["乐子人", "装配检查", "闲着"]);
+    expect(container.textContent).toContain("群聊");
+    expect(container.textContent).toContain("智能体");
   });
 
   it("shows an agent without a chat with its status", async () => {
@@ -192,10 +192,17 @@ describe("左栏的一张列表", () => {
     expect(state.openAgent).toHaveBeenCalledWith("a2");
   });
 
-  it("has no button to create an agent", async () => {
+  it("creates an agent from the agent section's own +", async () => {
     lists();
     const container = await render(<Sidebar />);
-    expect(container.querySelector('[title="新建智能体"]')).toBeNull();
+    const add = container.querySelector<HTMLButtonElement>(
+      'button[title="新建智能体"]',
+    )!;
+    await act(async () => add.click());
+    expect(useWorkspaceStore.getState().agentEditor).toEqual({
+      open: true,
+      agentId: null,
+    });
   });
 
   it("is the same single list on the phone's home", async () => {
@@ -232,7 +239,8 @@ describe("左栏的页眉", () => {
     state.groups = [];
     const container = await render(<Sidebar />);
     const header = container.querySelector('[data-sidebar="header"]')!;
-    expect(header.textContent).toContain("eta.");
+    // BR1's wordmark: the letters, uppercase and tracked out, not a wordmark image.
+    expect(header.textContent).toContain("ETA");
     expect(header.querySelectorAll("button")).toHaveLength(1);
     expect(container.querySelectorAll('button[title="设置"]')).toHaveLength(1);
   });

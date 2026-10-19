@@ -1,43 +1,108 @@
 import type { AgentView, ConversationSummary } from "@eta/client-contracts";
 import { useMemo } from "react";
 import { useAgentList } from "@/queries/agents";
+import { useProjects } from "@/queries/projects";
 import { useGroups } from "./use-groups";
 
-/** One row of the list of everything you can chat with. */
-export type ChatRow =
-  | { kind: "conversation"; conversation: ConversationSummary }
-  | { kind: "agent"; agent: AgentView };
-
 /**
- * Everything you can chat with, as one list: each open group chat and direct chat, then the
- * agents that have no direct chat yet (pressing one makes it).
+ * The sidebar's two sections, as data.
  *
- * Conversations come newest activity first. Agents without a chat have no activity, so they go
- * after, in the order they were created. An agent with a chat shows up once, as that chat.
+ * A group and a private chat are different things and are laid out as such: a group is a place —
+ * a directory, some agents, a piece of work — and a private chat is a relationship with one agent.
+ * One list ordered by activity alone made time the only axis, so the group someone works in all
+ * day kept moving down under the agents they said hello to.
  */
+
+/** The groups that run in one directory, newest activity first. */
+export interface DirectoryGroup {
+  projectId: string;
+  /** The directory, when the project is still there to say. */
+  path: string | undefined;
+  conversations: ConversationSummary[];
+  /** The newest activity inside: what sorts the directories among themselves. */
+  at: number;
+}
+
+/** One agent, with its private chat when it has one. */
+export interface AgentEntry {
+  agent: AgentView;
+  conversation: ConversationSummary | undefined;
+  /** Its chat's activity, else when the agent was made: one nobody has opened sorts by that. */
+  at: number;
+}
+
+const activityOf = (conversation: ConversationSummary) =>
+  conversation.lastMessageAt ?? conversation.updatedAt;
+
 export function useChatList() {
   const { groups, current } = useGroups();
   const { agents, loaded } = useAgentList();
-  const rows = useMemo<ChatRow[]>(() => {
-    const open = groups.filter((conversation) => !conversation.archived);
-    // Every agent a private chat exists for, archived or not. Counting only the open ones made
-    // archiving a chat put its agent back in the list as an agent with no chat — the row the
-    // person had just archived, under the same name.
-    const talked = new Set(
-      groups
-        .filter((conversation) => conversation.kind === "direct")
-        .map((conversation) => conversation.participants[0]?.agentId),
+  const { projects } = useProjects();
+
+  const directories = useMemo<DirectoryGroup[]>(() => {
+    const open = groups.filter(
+      (conversation) =>
+        !conversation.archived && conversation.kind !== "direct",
     );
-    return [
-      ...open.map((conversation) => ({
-        kind: "conversation" as const,
-        conversation,
-      })),
-      ...[...agents]
-        .filter((agent) => !talked.has(agent.id))
-        .sort((a, b) => a.createdAt - b.createdAt)
-        .map((agent) => ({ kind: "agent" as const, agent })),
-    ];
+    const byProject = new Map<string, ConversationSummary[]>();
+    for (const conversation of open) {
+      const list = byProject.get(conversation.projectId);
+      if (list === undefined)
+        byProject.set(conversation.projectId, [conversation]);
+      else list.push(conversation);
+    }
+    return [...byProject.entries()]
+      .map(([projectId, conversations]) => {
+        const sorted = [...conversations].sort(
+          (left, right) => activityOf(right) - activityOf(left),
+        );
+        return {
+          projectId,
+          path: projects.find((project) => project.id === projectId)?.path,
+          conversations: sorted,
+          at: sorted[0] === undefined ? 0 : activityOf(sorted[0]),
+        };
+      })
+      .sort((left, right) => right.at - left.at);
+  }, [groups, projects]);
+
+  const directs = useMemo<AgentEntry[]>(() => {
+    // Every private chat, archived ones included: an agent that has one is represented by it.
+    const chats = new Map<string, ConversationSummary>();
+    for (const conversation of groups) {
+      if (conversation.kind !== "direct") continue;
+      const agentId = conversation.participants[0]?.agentId;
+      if (agentId !== undefined) chats.set(agentId, conversation);
+    }
+    return agents
+      .flatMap((agent): AgentEntry[] => {
+        const conversation = chats.get(agent.id);
+        // A chat that is put away takes the agent with it: the archived list is the only place it
+        // lives, and offering the agent again as one nobody has talked to was the same row twice.
+        if (conversation?.archived === true) return [];
+        return [
+          {
+            agent,
+            conversation,
+            at:
+              conversation === undefined
+                ? agent.createdAt
+                : activityOf(conversation),
+          },
+        ];
+      })
+      .sort((left, right) => {
+        // A chat is a thing that happened; an agent nobody has talked to is not. Those go after
+        // the ones with activity, in the order they were made — a list that reshuffled whenever
+        // someone created an agent would be a list you re-read every time.
+        const leftHas = left.conversation !== undefined;
+        const rightHas = right.conversation !== undefined;
+        if (leftHas !== rightHas) return leftHas ? -1 : 1;
+        return leftHas
+          ? right.at - left.at
+          : left.agent.createdAt - right.agent.createdAt;
+      });
   }, [groups, agents]);
-  return { rows, current, loaded };
+
+  return { directories, directs, current, loaded };
 }
