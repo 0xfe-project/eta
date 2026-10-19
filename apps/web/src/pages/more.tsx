@@ -12,8 +12,8 @@ import {
   useSettingsAttention,
 } from "@/components/workspace/settings-sections";
 import { useWorkspaceStore } from "@/components/workspace/workspace-store";
-import { capabilities } from "@/lib/capabilities";
 import { translate } from "@/lib/i18n";
+import { useMemoryMounted } from "@/queries/memory";
 
 // The phone's way to everything the bottom tabs leave out: the pages the
 // wide sidebar lists, then each settings section, opened in the dialog.
@@ -83,6 +83,7 @@ export function More() {
   ] as const);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const attention = useSettingsAttention();
+  const memory = useMemoryMounted();
   return (
     <>
       <PageHeader title={translateText("sections.more")} />
@@ -92,8 +93,8 @@ export function More() {
             {pages
               .filter(
                 ({ to }) =>
-                  // Hidden until its API is on this host (capabilities.ts says which phase).
-                  !(to === "/workspace/memory" && !capabilities.memory),
+                  // Memory exists only on a host with a memory sidecar.
+                  !(to === "/workspace/memory" && !memory),
               )
               .map(({ to, label, icon }) => (
                 <li key={to}>

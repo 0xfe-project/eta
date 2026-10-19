@@ -14,7 +14,15 @@
     "colorModeHint": "不选就跟随系统。"
   },
   "sections": {
+    "approvals": "需先确认的工具",
     "appearance": "外观"
+  },
+  "approvals": {
+    "description": "列在这里的工具，每次调用前都会在待处理里问你：允许还是拒绝。对所有对话生效。",
+    "toolName": "工具名",
+    "placeholder": "工具名，例如 bash",
+    "add": "添加",
+    "empty": "还没有。所有工具都直接运行。"
   },
   "accessibility": {
     "needsAttention": "设置（有账号需要处理）",

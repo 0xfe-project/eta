@@ -1,4 +1,8 @@
-import type { ConversationSummary, MessageView } from "@eta/client-contracts";
+import type {
+  ConversationSummary,
+  InteractionView,
+  MessageView,
+} from "@eta/client-contracts";
 import {
   afterEach,
   beforeEach,
@@ -12,13 +16,13 @@ import { plainDraft } from "@/lib/composer";
 import { setWire } from "@/lib/wire";
 import { useOutbox } from "@/queries/outbox";
 import { Chat } from "@/test-chat";
+import { interactionView, surfaceHost } from "@/test-inbox";
 import {
   agentView,
   conversationSections,
   conversationView,
   memberView,
   messageView,
-  productHost,
 } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
 
@@ -55,14 +59,16 @@ const row = (fields: Partial<MessageView>): MessageView => {
 
 let summary: ConversationSummary;
 let history: MessageView[];
-let host: ReturnType<typeof productHost>;
+let host: ReturnType<typeof surfaceHost>;
+/** The inbox of the host `start` makes. */
+let pending: InteractionView[] = [];
 
 const texts = (c: HTMLElement) =>
   [...c.querySelectorAll('[role="log"] p')].map((p) => p.textContent);
 
 function start(
   members = [memberView(AGENT, { sessionId: "s1" })],
-  prepare?: (host: ReturnType<typeof productHost>) => void,
+  prepare?: (host: ReturnType<typeof surfaceHost>) => void,
 ) {
   summary = conversationView({
     id: CONV,
@@ -70,7 +76,8 @@ function start(
     participants: members,
     lastSeq: n,
   });
-  host = productHost({
+  host = surfaceHost({
+    interactions: pending,
     agents: [
       agentView({ id: AGENT, name: "研究员" }),
       agentView({ id: "a2", name: "装配检查" }),
@@ -100,6 +107,7 @@ afterEach(async () => {
   await cleanup();
   setWire(undefined);
   useOutbox.setState({ drafts: {}, outgoing: [] });
+  pending = [];
 });
 
 describe("a reply that changes", () => {
@@ -337,7 +345,7 @@ describe("a reply that is writing", () => {
     expect(container.textContent).not.toContain("我先看看");
   });
 
-  it("asks its question in a card and answers on the member's session", async () => {
+  it("asks its question in a card and answers on the inbox", async () => {
     const user = row({ text: "删掉吗" });
     const reply = row({
       author: "agent",
@@ -346,22 +354,23 @@ describe("a reply that is writing", () => {
       status: "waiting_for_input",
     });
     history = [user, reply];
+    pending = [
+      interactionView({
+        id: "i1",
+        agentId: AGENT,
+        conversationId: CONV,
+        prompt: "删掉这个分支？",
+        options: ["删", "留"],
+      }),
+    ];
     const { container } = await start(
       [memberView(AGENT, { sessionId: "s1", status: "waiting_for_input" })],
       (fake) => {
         fake.target("sessions.s1", {
           core: { session: "s1", running: true },
           transcript: { messages: [] },
-          ask: {
-            pending: {
-              questionId: "q1",
-              question: "删掉这个分支？",
-              options: ["删", "留"],
-            },
-          },
         });
-        fake.handle("sessions.answer", () => ({ answered: true }));
-        fake.handle("sessions.askAbort", () => ({ aborted: true }));
+        fake.handle("inbox.answer", () => ({ answered: true }));
       },
     );
     await flush();
@@ -372,8 +381,7 @@ describe("a reply that is writing", () => {
     );
     await flush();
     expect(host.calls.find((call) => call.action === "answer")?.args).toEqual({
-      session: "s1",
-      questionId: "q1",
+      id: "i1",
       response: { kind: "selection", selections: ["删"] },
     });
     await click(
@@ -382,8 +390,9 @@ describe("a reply that is writing", () => {
       ),
     );
     await flush();
-    expect(host.calls.find((call) => call.action === "askAbort")?.args).toEqual(
-      { session: "s1", questionId: "q1" },
-    );
+    expect(host.calls.at(-1)?.args).toEqual({
+      id: "i1",
+      response: { kind: "none" },
+    });
   });
 });
