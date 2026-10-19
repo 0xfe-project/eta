@@ -265,7 +265,11 @@
     "sessionJson": "会话 json · {{size}}",
     "inspect": "Inspect",
     "prompt": "系统提示",
-    "tools": "工具"
+    "tools": "工具",
+    "readFailed": "读不到这个会话的状态",
+    "promptEmpty": "还没有生成过提示词",
+    "toolCount": "{{total}} 个工具",
+    "blockCount": "{{total}} 块"
   },
   "focus": {
     "only": "只看 {{name}}"

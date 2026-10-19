@@ -603,7 +603,7 @@ export function GroupMembers() {
               </button>
               <div className="flex shrink-0 items-start gap-1">
                 {p.sessionId === null ? null : (
-                  <InspectButton sessionId={p.sessionId} />
+                  <InspectButton sessionId={p.sessionId} name={name} />
                 )}
                 {(agent || removable) && (
                   <DropdownMenu>

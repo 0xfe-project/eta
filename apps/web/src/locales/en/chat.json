@@ -265,7 +265,11 @@
     "sessionJson": "session json · {{size}}",
     "inspect": "Inspect",
     "prompt": "System prompt",
-    "tools": "Tools"
+    "tools": "Tools",
+    "readFailed": "This session's state did not arrive",
+    "promptEmpty": "No prompt composed yet",
+    "toolCount": "{{total}} tools",
+    "blockCount": "{{total}} blocks"
   },
   "focus": {
     "only": "Only {{name}}"
