@@ -136,6 +136,7 @@ class LocalHandle implements SessionHandle {
 export class LocalPlace implements SessionPlace {
   readonly #opened: Map<string, string>;
   readonly #warn: (message: string) => void;
+  readonly #settled: ((sessionId: string) => Promise<void>) | undefined;
   #sessions: SessionsService | undefined;
 
   /**
@@ -144,9 +145,12 @@ export class LocalPlace implements SessionPlace {
    */
   constructor(options: {
     opened: Map<string, string>;
+    /** Resolves when the session has all its tools (the MCP servers connect after it opens). */
+    settled?: ((sessionId: string) => Promise<void>) | undefined;
     warn: (message: string) => void;
   }) {
     this.#opened = options.opened;
+    this.#settled = options.settled;
     this.#warn = options.warn;
   }
 
@@ -166,10 +170,12 @@ export class LocalPlace implements SessionPlace {
     if (input.existing !== null) {
       try {
         await this.#sync(sessions, input.existing, agent, input.stamp);
-        return new LocalHandle(
+        const handle = new LocalHandle(
           sessions,
           (await sessions.open(input.existing)).managed,
         );
+        await this.#settled?.(handle.id);
+        return handle;
       } catch (error) {
         // The row outlived its journal: say so, then start over rather than failing every wake.
         if (!messageOf(error).startsWith("no such session")) throw error;
@@ -192,7 +198,9 @@ export class LocalPlace implements SessionPlace {
         .thinkingLevel(id, agent.thinkingLevel)
         .catch((error: unknown) => this.#warn(`[eta] ${messageOf(error)}`));
     }
-    return new LocalHandle(sessions, (await sessions.open(id)).managed);
+    const handle = new LocalHandle(sessions, (await sessions.open(id)).managed);
+    await this.#settled?.(id);
+    return handle;
   }
 
   async configure(

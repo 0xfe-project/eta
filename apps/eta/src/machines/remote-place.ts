@@ -14,6 +14,7 @@
 import type { PromptImage, RunOutcome, ToolSpec } from "@eta/client-contracts";
 import type { KernelModels, KernelTool } from "@eta/core";
 import type { Settings } from "@eta/server";
+import type { Bundles } from "../bundles/bundles";
 import type {
   EnsureInput,
   SessionHandle,
@@ -39,6 +40,8 @@ export interface RemotePlaceDeps {
   hooks: () => Required<SessionHooks> | undefined;
   /** The host's akhook layers, as text: the rules a remote session lives under besides its own. */
   akhook: () => { name: string; text: string }[];
+  /** The bundles; what an agent loads is sent along with its session. */
+  bundles: Bundles;
   /** The primary's home: where the user's own persona cards are. */
   home: string;
   /** A `sessions.*` action on a session of a daemon, the way the browser's are sent. */
@@ -158,6 +161,7 @@ export class RemotePlace implements SessionPlace {
           }),
       tools: this.#tools(conversation.id, agent.id, input.cwd),
       akhook: this.#deps.akhook(),
+      bundles: await this.#deps.bundles.openOn(link, agent.bundles),
     });
     if (session !== input.existing) input.created(session);
     mirrors.register(session, machine.id);

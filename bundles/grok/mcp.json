@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "grok": {
+      "command": "grok-api",
+      "args": ["--non-interactive", "mcp"],
+      "cwd": "${ETA_WORKSPACE_DIR}"
+    }
+  }
+}

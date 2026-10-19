@@ -18,6 +18,12 @@ export type RepeatMode = "once" | "after-gap";
 export interface CommandSpec {
   argv: string[];
   timeout_ms: number;
+  /**
+   * Variables this command gets on top of the process's own. Never written in a file: a host
+   * layer (`ConfigInput` with `env`) sets them, so a secret reaches the commands of its rules
+   * and no others.
+   */
+  env?: Record<string, string>;
 }
 
 /** One position of an `argv` check: a word, or any of several words. */
@@ -63,7 +69,16 @@ export class ConfigError extends Error {
 }
 
 /** One configuration layer handed to the loader: a file to read, or text the host already holds. */
-export type ConfigInput = { path: string } | { name: string; text: string };
+export type ConfigInput =
+  | { path: string }
+  | {
+      name: string;
+      text: string;
+      /** Given to every command the layer's rules run, and to nothing else. */
+      env?: Record<string, string> | undefined;
+      /** Put before the id of each of the layer's rules, so two layers' rules never collide. */
+      idPrefix?: string | undefined;
+    };
 
 export interface LoadedConfig {
   /** The project root: where `.akhook.yml` was found, else the working directory. */

@@ -143,6 +143,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       // What the product adds to every session it owns: the agent's words in the system prompt,
       // and, from each of its features, tools, tool middleware and an ear for questions.
       baseSystemPromptFor: product.engine.baseSystemPromptFor,
+      skillDirsFor: product.skillDirsFor,
       ...product.sessionHooks,
       generated: product.generated,
       ...(options.models === undefined ? {} : { models: options.models }),
@@ -198,7 +199,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
     // Once: a signal and a caller may both ask, and the second has nothing left to close.
     close() {
       closing ??= (async () => {
-        product.close();
+        await product.close();
         await server.close();
         llm?.close();
         db.close();

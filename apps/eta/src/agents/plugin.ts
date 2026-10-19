@@ -58,6 +58,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
       persona: agent.persona,
       model: agent.model,
       thinkingLevel: agent.thinkingLevel,
+      bundles: agent.bundles,
       home,
       homeProjectId: project?.id ?? "",
       status: statuses.get(agent.id) ?? "idle",
@@ -225,6 +226,7 @@ function fieldsOf(
   persona?: string;
   model?: string | null;
   thinkingLevel?: ThinkingLevel | null;
+  bundles?: string[];
 } {
   const args = new Args(call);
   const name = create ? args.string("name") : args.optionalString("name");
@@ -238,7 +240,22 @@ function fieldsOf(
     throw new Error(`unknown thinking level: ${level}`);
   const instructions = args.optionalString("instructions");
   const persona = args.optionalString("persona");
+  const bundles = (call.args as { bundles?: unknown } | undefined)?.bundles;
+  if (
+    bundles !== undefined &&
+    (!Array.isArray(bundles) ||
+      !bundles.every(
+        (name) =>
+          typeof name === "string" && /^[a-z0-9][a-z0-9-]{0,63}$/.test(name),
+      ))
+  )
+    throw new TypeError(
+      `${call.target}.${call.action}: bundles must be a list of bundle names`,
+    );
   return {
+    ...(bundles === undefined
+      ? {}
+      : { bundles: [...new Set(bundles as string[])] }),
     ...(name === undefined ? {} : { name: name.trim() }),
     ...(instructions === undefined ? {} : { instructions }),
     ...(persona === undefined ? {} : { persona }),

@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useNeedsAttention } from "@/queries/providers";
 import { AgentSettings } from "./agent-settings";
 import { ApprovalSettings } from "./approval-settings";
+import { BundleSettings } from "./bundle-settings";
 import { ArchivedGroups } from "./groups";
 import { MachineSettings } from "./machine-settings";
 import { ProviderSettings } from "./provider-settings";
@@ -191,6 +192,8 @@ export function SettingsDialog() {
               <ApprovalSettings />
             ) : settings.section === "machines" ? (
               <MachineSettings />
+            ) : settings.section === "bundles" ? (
+              <BundleSettings />
             ) : settings.section === "archived" ? (
               <ArchivedGroups />
             ) : (

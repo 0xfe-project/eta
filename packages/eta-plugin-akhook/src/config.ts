@@ -201,6 +201,32 @@ function rule(where: string, value: unknown): RuleSpec {
   return spec;
 }
 
+/** A host layer's own touches on what it parsed: its rule id prefix and its commands' variables. */
+function stamped(
+  config: Config,
+  input: {
+    env?: Record<string, string> | undefined;
+    idPrefix?: string | undefined;
+  },
+): Config {
+  const { env, idPrefix } = input;
+  if (env === undefined && idPrefix === undefined) return config;
+  const withEnv = (spec: CommandSpec): CommandSpec =>
+    env === undefined ? spec : { ...spec, env };
+  return {
+    ...config,
+    rules: config.rules.map((spec) => ({
+      ...spec,
+      id: `${idPrefix ?? ""}${spec.id}`,
+      ...(spec.decide === undefined ? {} : { decide: withEnv(spec.decide) }),
+      ...(spec.run === undefined ? {} : { run: withEnv(spec.run) }),
+      checks: spec.checks.map((item) =>
+        "command" in item ? { command: withEnv(item.command) } : item,
+      ),
+    })),
+  };
+}
+
 /** Parse and validate one configuration file's text. */
 export function parseConfig(text: string, source: string): Config {
   let raw: unknown;
@@ -342,7 +368,8 @@ export function loadConfig(options: LoadOptions): LoadedConfig {
   // The project file is looked for on every load, so its absence is remembered too.
   if (options.project !== false) files.push(join(options.cwd, ".akhook.yml"));
   const additional = (options.additional ?? []).map((input) => {
-    if ("text" in input) return parseConfig(input.text, input.name);
+    if ("text" in input)
+      return stamped(parseConfig(input.text, input.name), input);
     files.push(input.path);
     const found = read(input.path);
     if (found === undefined)

@@ -2,6 +2,7 @@ import type { Icon } from "@phosphor-icons/react";
 import type { SettingsSection } from "./workspace-store";
 import { ArchiveIcon } from "@phosphor-icons/react/Archive";
 import { DesktopIcon } from "@phosphor-icons/react/Desktop";
+import { PackageIcon } from "@phosphor-icons/react/Package";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
@@ -43,6 +44,13 @@ export const settingsSections: {
       return translate("machines:title");
     },
     icon: DesktopIcon,
+  },
+  {
+    value: "bundles",
+    get label() {
+      return translate("bundles:title");
+    },
+    icon: PackageIcon,
   },
   {
     value: "archived",

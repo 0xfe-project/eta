@@ -28,6 +28,7 @@ export const agentView = (
   persona: "",
   model: "p:m",
   thinkingLevel: null,
+  bundles: [],
   home: `/data/agents/${fields.id}`,
   homeProjectId: `home-${fields.id}`,
   status: "idle",

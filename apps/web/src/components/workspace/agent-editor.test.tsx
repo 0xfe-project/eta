@@ -1,3 +1,4 @@
+import type { BundleView } from "@eta/client-contracts";
 import {
   afterEach,
   beforeEach,
@@ -154,6 +155,7 @@ describe("editing an agent in tabs", () => {
         persona: "",
         model: "c:m1",
         thinkingLevel: null,
+        bundles: [],
       },
     ]);
   });
@@ -197,8 +199,131 @@ describe("editing an agent in tabs", () => {
 
   it("has no bundles to choose: the host has none", async () => {
     expect(
-      buttons().some((b) => b.closest("nav") && b.textContent === "环境"),
+      buttons().some((b) => b.closest("nav") && b.textContent === "环境包"),
     ).toBe(false);
+  });
+});
+
+describe("choosing bundles", () => {
+  const bundleRow = (
+    name: string,
+    fields: Partial<BundleView> = {},
+  ): BundleView => ({
+    name,
+    description: `${name} 说明`,
+    source: { kind: "builtin" },
+    sha: null,
+    requires: [],
+    skills: [],
+    mcpServers: [],
+    hooks: false,
+    fields: [],
+    configured: true,
+    service: null,
+    machines: [],
+    problem: null,
+    ...fields,
+  });
+
+  async function withBundles(held: string[]) {
+    await act(async () => root.render(null));
+    setWire(undefined);
+    host = new FakeHost()
+      .target("providers", { config: providers }, { eager: true })
+      .target(
+        "agents",
+        {
+          list: [
+            agentView({
+              id: "a1",
+              name: "审查",
+              model: "c:m1",
+              bundles: held,
+            }),
+          ],
+        },
+        { eager: true },
+      )
+      .target("personas", { cards: [] }, { eager: true })
+      .target("bundles", {
+        list: [
+          bundleRow("github", {
+            fields: [
+              {
+                name: "T",
+                title: "T",
+                description: "",
+                secret: true,
+                required: true,
+                maxLength: 9,
+                set: false,
+                value: null,
+              },
+            ],
+            configured: false,
+          }),
+          bundleRow("grok"),
+          bundleRow("broken", { problem: "plugin.json is missing" }),
+        ],
+      })
+      .plugins([
+        { name: "providers", source: "bundled" },
+        { name: "agents", source: "bundled" },
+        { name: "bundles", source: "bundled" },
+      ])
+      .handle("agents.update", () => ({}))
+      .install();
+    host.hello();
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <AgentEditor />
+        </QueryClientProvider>,
+      ),
+    );
+    await settle();
+  }
+
+  const checkbox = (name: string) =>
+    [...document.querySelectorAll<HTMLElement>('[role="checkbox"]')].find(
+      (box) => box.closest("li")?.textContent?.startsWith(name),
+    )!;
+
+  it("lists them in a tab of their own, with what each still needs", async () => {
+    await withBundles(["grok"]);
+    await click(tab("环境包"));
+    expect(checkbox("github").getAttribute("aria-checked")).toBe("false");
+    expect(checkbox("grok").getAttribute("aria-checked")).toBe("true");
+    const github = checkbox("github").closest("li")!.textContent;
+    expect(github).toContain("github 说明");
+    expect(github).toContain("未配置，只有技能生效");
+    // One that does not parse can be seen but not picked.
+    expect(checkbox("broken").hasAttribute("data-disabled")).toBe(true);
+    expect(checkbox("broken").closest("li")!.textContent).toContain(
+      "plugin.json is missing",
+    );
+  });
+
+  it("saves the choice with the rest, in the order it was made", async () => {
+    await withBundles(["grok"]);
+    await click(tab("环境包"));
+    await click(checkbox("github") as unknown as HTMLButtonElement);
+    await save();
+    expect(updates()[0]).toMatchObject({
+      agentId: "a1",
+      bundles: ["grok", "github"],
+    });
+  });
+
+  it("lets one that the host no longer has be taken off", async () => {
+    await withBundles(["grok", "vanished"]);
+    await click(tab("环境包"));
+    expect(checkbox("vanished").closest("li")!.textContent).toContain(
+      "已不存在",
+    );
+    await click(checkbox("vanished") as unknown as HTMLButtonElement);
+    await save();
+    expect(updates()[0]).toMatchObject({ bundles: ["grok"] });
   });
 });
 

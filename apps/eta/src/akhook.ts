@@ -12,7 +12,7 @@
  * generation, and the lifecycle rules run around each reply.
  */
 import type { ConfigInput } from "@eta/plugin-akhook";
-import type { RunHooks } from "./conversations/engine";
+import type { RunHooks, RunInfo } from "./conversations/engine";
 import type { SessionHooks } from "./session-hooks";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -29,6 +29,10 @@ export interface AkhookHostOptions {
   userConfigPath?: string | undefined;
   /** More host layers, after the environment's and the data directory's. */
   additional?: readonly ConfigInput[] | undefined;
+  /** The rules of the bundles an agent loads, as layers for its session or its run. */
+  bundleLayers?:
+    | ((agentId: string | undefined, cwd: string) => readonly ConfigInput[])
+    | undefined;
   /** The tools the user wants to be asked about, read at every call. */
   approvals: () => readonly string[];
   warn: (message: string) => void;
@@ -91,7 +95,13 @@ export class AkhookHost {
         ask: input.session.ask,
         approvals: (name) => this.#options.approvals().includes(name),
         userConfigPath: this.#options.userConfigPath,
-        additional: () => this.layers(),
+        additional: () => [
+          ...this.layers(),
+          ...(this.#options.bundleLayers?.(
+            input.meta.agentId,
+            input.meta.cwd,
+          ) ?? []),
+        ],
         store: journalTriggerStore(input.session),
         warn: this.#options.warn,
       });
@@ -110,17 +120,22 @@ export class AkhookHost {
     await this.#session(input).attach(input.session);
   };
 
+  /** A run as the lifecycle rules see it, with the rules of its agent's bundles. */
+  #run(run: RunInfo) {
+    return {
+      cwd: run.cwd,
+      sessionId: run.sessionId,
+      turnId: run.replyId,
+      extra: this.#options.bundleLayers?.(
+        run.agentId,
+        run.cwd ?? this.#options.dataDir,
+      ),
+    };
+  }
+
   /** `prompt_submit` and `stop` rules around each reply of the engine. */
   readonly runHooks: RunHooks = {
-    beforeRun: (run) =>
-      this.#lifecycle.beforeRun(
-        { cwd: run.cwd, sessionId: run.sessionId, turnId: run.replyId },
-        run.told,
-      ),
-    afterRun: (run) =>
-      this.#lifecycle.afterRun(
-        { cwd: run.cwd, sessionId: run.sessionId, turnId: run.replyId },
-        run.said,
-      ),
+    beforeRun: (run) => this.#lifecycle.beforeRun(this.#run(run), run.told),
+    afterRun: (run) => this.#lifecycle.afterRun(this.#run(run), run.said),
   };
 }

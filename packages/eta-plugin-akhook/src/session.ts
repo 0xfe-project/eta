@@ -104,6 +104,8 @@ export interface LifecycleRun {
   sessionId?: string | undefined;
   turnId?: string | undefined;
   model?: string | undefined;
+  /** Layers for this run alone, after the host's (the rules of the bundles its agent loads). */
+  extra?: readonly ConfigInput[] | undefined;
 }
 
 export interface LifecycleHooksOptions {
@@ -125,7 +127,10 @@ export function lifecycleHooks(options: LifecycleHooksOptions = {}) {
       cwd: run.cwd,
       fallbackRoot: options.fallbackRoot,
       userConfigPath: options.userConfigPath,
-      additional: options.additional,
+      additional: () => [
+        ...(options.additional?.() ?? []),
+        ...(run.extra ?? []),
+      ],
     }).get();
   const data = (run: LifecycleRun, extra: Record<string, unknown>) => ({
     cwd: run.cwd ?? options.fallbackRoot ?? process.cwd(),
