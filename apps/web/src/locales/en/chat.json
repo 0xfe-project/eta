@@ -37,6 +37,11 @@
     "commandsLabel": "commands",
     "noMatches": "nothing matches"
   },
+  "process": {
+    "label": "{{name}} process",
+    "viewAll": "View more",
+    "title": "Process"
+  },
   "tools": {
     "arguments": "arguments",
     "result": "result",

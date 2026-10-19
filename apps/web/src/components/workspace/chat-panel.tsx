@@ -65,6 +65,7 @@ import { TaskCardRow, TaskDraftRow } from "./task-rows";
 import { TranscriptRail } from "./transcript-rail";
 import { AskBlock } from "./transcript/ask-block";
 import { Message, SystemMessage } from "./transcript/message";
+import { ProcessBox } from "./transcript/process-box";
 import { SlashMenu } from "./transcript/slash-menu";
 import { ThinkingBlock } from "./transcript/thinking-block";
 import { ToolCard, ToolCardBlock } from "./transcript/tool-card";
@@ -529,20 +530,52 @@ const joinedNames = (message: MessageView, agents: readonly AgentView[]) =>
     : "";
 
 /** A reply that is writing now: what its session has said and done in this run. */
-function LiveReply({ sessionId }: { sessionId: string }) {
+function LiveReply({
+  sessionId,
+  boxed,
+  author,
+  time,
+}: {
+  sessionId: string;
+  /** In a group the thinking and tools go in a fixed-height box. */
+  boxed: boolean;
+  author?: string | undefined;
+  time: string;
+}) {
   const blocks = useRunBlocks(sessionId);
-  return blocks.map((block) =>
+  const step = (block: (typeof blocks)[number]) =>
     block.type === "thinking" ? (
       <ThinkingBlock key={block.id} text={block.text} />
-    ) : block.type === "text" ? (
-      <div key={block.id} className="message-content">
-        <Markdown streaming>{block.text}</Markdown>
-      </div>
-    ) : (
+    ) : block.type === "tool" ? (
       <div key={block.id} className="tool-step space-y-1">
         <ToolActivity block={block} />
       </div>
-    ),
+    ) : null;
+  const text = (block: (typeof blocks)[number]) =>
+    block.type === "text" ? (
+      <div key={block.id} className="message-content">
+        <Markdown streaming>{block.text}</Markdown>
+      </div>
+    ) : null;
+  if (!boxed)
+    return blocks.map((block) =>
+      block.type === "text" ? text(block) : step(block),
+    );
+  const steps = blocks.filter((block) => block.type !== "text");
+  return (
+    <>
+      {steps.length === 0 ? null : (
+        <ProcessBox
+          steps={steps.map(step)}
+          count={steps.length}
+          running
+          author={author}
+          time={time}
+          answer={blocks.map(text)}
+        />
+      )}
+      {blocks.map(text)}
+    </>
   );
 }
 
@@ -558,6 +591,7 @@ const Turn = memo(
     question,
     nobody,
     joined,
+    boxed,
     actions,
     ...line
   }: {
@@ -571,6 +605,8 @@ const Turn = memo(
     nobody: boolean;
     /** Who the user message joined the turn of. */
     joined: string;
+    /** A group: the process of a reply goes in a fixed-height box. */
+    boxed: boolean;
     actions: React.RefObject<TurnActions>;
   } & ReplyLine) => {
     const { t: translateText } = useTranslation([
@@ -612,6 +648,29 @@ const Turn = memo(
       );
     // Only a reply at work still grows; the rest render as finished text.
     const running = RUNNING_STATUSES.has(message.status);
+    const tools = savedTools(message.data);
+    const processSteps =
+      message.thinking === "" && tools.length === 0 ? null : (
+        <>
+          {message.thinking === "" ? null : (
+            // What it worked through: folded, with its size on the line, because it is context
+            // for reading the answer critically rather than a second answer.
+            <ThinkingBlock text={message.thinking} />
+          )}
+          {tools.map((block) => (
+            // What it did with tools, as the cards the run showed while it worked.
+            <div key={block.id} className="tool-step space-y-1">
+              <ToolActivity block={block} />
+            </div>
+          ))}
+        </>
+      );
+    const answer =
+      message.text === "" || message.status === "failed" ? null : (
+        <div className="message-content">
+          <Markdown>{message.text}</Markdown>
+        </div>
+      );
     return (
       <div className="message assistant">
         {author === undefined ? null : (
@@ -624,25 +683,27 @@ const Turn = memo(
           </div>
         )}
         {running && sessionId !== undefined ? (
-          <LiveReply sessionId={sessionId} />
+          <LiveReply
+            sessionId={sessionId}
+            boxed={boxed}
+            author={author}
+            time={when(message.createdAt)}
+          />
         ) : (
           <>
-            {message.thinking === "" ? null : (
-              // What it worked through: folded, with its size on the line, because it is context
-              // for reading the answer critically rather than a second answer.
-              <ThinkingBlock text={message.thinking} />
+            {processSteps === null ? null : boxed ? (
+              <ProcessBox
+                steps={processSteps}
+                count={tools.length + (message.thinking === "" ? 0 : 1)}
+                running={false}
+                author={author}
+                time={when(message.createdAt)}
+                answer={answer}
+              />
+            ) : (
+              processSteps
             )}
-            {savedTools(message.data).map((block) => (
-              // What it did with tools, as the cards the run showed while it worked.
-              <div key={block.id} className="tool-step space-y-1">
-                <ToolActivity block={block} />
-              </div>
-            ))}
-            {message.text === "" || message.status === "failed" ? null : (
-              <div className="message-content">
-                <Markdown>{message.text}</Markdown>
-              </div>
-            )}
+            {answer}
           </>
         )}
         {question === undefined ? null : (
@@ -1261,6 +1322,7 @@ export function ChatPanel({
                             ? joinedNames(message, agents)
                             : ""
                         }
+                        boxed={group?.kind === "group"}
                         {...lines.get(message.id)}
                         actions={actionsRef}
                       />

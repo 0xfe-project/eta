@@ -37,6 +37,11 @@
     "commandsLabel": "命令",
     "noMatches": "没有匹配的"
   },
+  "process": {
+    "label": "{{name}} 的过程",
+    "viewAll": "查看全部",
+    "title": "过程"
+  },
   "tools": {
     "arguments": "参数",
     "result": "结果",
