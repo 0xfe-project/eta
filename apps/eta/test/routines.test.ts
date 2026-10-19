@@ -245,6 +245,17 @@ describe("the routines actions", () => {
     );
     const ops = (await t.w.client.hello()).state;
     expect(Object.keys(ops)).not.toContain(`routines.${routine.id}`);
+    // The page that was open on it is told it is gone, and so is one opened on a name never made.
+    const missing = (target: string) =>
+      t.w.client.frames.filter(
+        (frame) =>
+          frame.type === "event" &&
+          frame.target === target &&
+          frame.name === "target:missing",
+      ).length;
+    await until(() => missing(`routines.${routine.id}`) === 1);
+    t.w.client.subscribe("routines.nope");
+    await until(() => missing("routines.nope") === 1);
     await expect(t.act("delete", { routineId: routine.id })).rejects.toThrow(
       /no such routine/,
     );

@@ -8,7 +8,12 @@ import type {
 } from "@eta/client-contracts";
 import { useMemo } from "react";
 import { rememberRows } from "@/queries/conversations";
-import { useListTarget, useTarget, useWireMutation } from "@/queries/wire";
+import {
+  useListTarget,
+  useTarget,
+  useTargetMissing,
+  useWireMutation,
+} from "@/queries/wire";
 
 // The task board on the wire: the `tasks` target (one eager `list` of every task) and one
 // `tasks.<id>` target per task (its `task` and its `activity`). Nothing polls: a comment, an
@@ -27,31 +32,25 @@ export function useTasks() {
 }
 
 /**
- * One task. `missing` is a task the board does not have (deleted, or never was): the list is eager,
- * so its absence is known as soon as the board has arrived, without waiting on a target that will
- * never answer.
+ * One task. `missing` is a task the board does not have (deleted, or never was): the host answers
+ * a subscription to `tasks.<id>` with `target:missing`, and says it again when the task is deleted
+ * while its page is open, so there is nothing to infer from the list.
  */
 export function useTask(id: string | null) {
-  const { tasks, loaded, error } = useTasks();
-  const state = useTarget(id === null ? undefined : `tasks.${id}`);
+  const { error } = useTasks();
+  const target = id === null ? undefined : `tasks.${id}`;
+  const state = useTarget(target);
+  const missing = useTargetMissing(target);
   const detail = state?.sections.task as BoardTaskDetail | undefined;
   const activity = state?.sections.activity as TaskActivityView[] | undefined;
   const task = useMemo<TaskDetail | undefined>(
     () =>
-      detail === undefined || activity === undefined
+      missing || detail === undefined || activity === undefined
         ? undefined
         : { ...detail, activity },
-    [detail, activity],
+    [missing, detail, activity],
   );
-  return {
-    task,
-    missing:
-      id !== null &&
-      task === undefined &&
-      loaded &&
-      !tasks.some((item) => item.id === id),
-    error,
-  };
+  return { task, missing, error };
 }
 
 export function useCreateTask() {

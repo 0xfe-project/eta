@@ -155,6 +155,15 @@ export interface EventFrame {
   at?: number;
 }
 
+/**
+ * The event a target answers with when there is nothing behind its name: a subscription to a
+ * target nobody registered (a task that was never made, a session that is gone), and a target
+ * that was taken away while someone watched it. It carries no `at` and is not kept in the ring: it
+ * is an answer to this subscriber, not something that happened. State for the target arriving
+ * later (it was registered after all) supersedes it.
+ */
+export const TARGET_MISSING = "target:missing";
+
 /** A frame the pipe could not read at all: no target, so nothing else can be said. */
 export interface ErrorFrame {
   type: "error";

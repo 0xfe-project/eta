@@ -326,6 +326,52 @@ describe("events", () => {
     expect(seen).toEqual(["tool:start"]);
     expect(other).toEqual([]);
   });
+
+  it("keeps target:missing as a fact about the target, until state for it arrives or the user leaves", () => {
+    connected();
+    const missing = () => wire.store.getState().missing;
+    const release = wire.subscribe("tasks.t1");
+    const heard: string[] = [];
+    wire.onEvent("tasks.t1", (event) => heard.push(event.name));
+    sockets[0].receive({
+      type: "event",
+      target: "tasks.t1",
+      name: "target:missing",
+      data: null,
+    });
+    expect(missing()).toEqual({ "tasks.t1": true });
+    // It is the pipe's answer, not an event a listener is told of.
+    expect(heard).toEqual([]);
+
+    // Registered after all: the state that follows takes the flag away.
+    sockets[0].receive({
+      type: "state",
+      target: "tasks.t1",
+      version: 1,
+      snapshot: snapshot({ task: { id: "t1" } }),
+    });
+    expect(missing()).toEqual({});
+
+    sockets[0].receive({
+      type: "event",
+      target: "tasks.t1",
+      name: "target:missing",
+      data: null,
+    });
+    release();
+    expect(missing()).toEqual({});
+
+    // And a new connection asks again, so it starts without any.
+    wire.subscribe("tasks.t2");
+    sockets[0].receive({
+      type: "event",
+      target: "tasks.t2",
+      name: "target:missing",
+      data: null,
+    });
+    sockets[0].receive(hello());
+    expect(missing()).toEqual({});
+  });
 });
 
 describe("a dropped connection", () => {

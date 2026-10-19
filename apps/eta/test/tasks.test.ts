@@ -275,6 +275,27 @@ describe("the tasks target", () => {
     ).toEqual({ n: 0 });
   });
 
+  it("answers target:missing to a subscription for a task that is not there, and to the page of a task deleted under it", async () => {
+    const w = await world();
+    const missing = (target: string) =>
+      w.client.frames.filter(
+        (frame) =>
+          frame.type === "event" &&
+          frame.target === target &&
+          frame.name === "target:missing",
+      ).length;
+    w.client.subscribe("tasks.nope");
+    await until(() => missing("tasks.nope") === 1);
+
+    const made = await create(w, { title: "Short lived" });
+    const target = `tasks.${made.id}`;
+    w.client.subscribe(target);
+    await until(() => w.client.section(target, "task") !== undefined);
+    expect(missing(target)).toBe(0);
+    await w.client.call("tasks", "delete", { taskId: made.id });
+    await until(() => missing(target) === 1);
+  });
+
   it("orders the board by what was touched last", async () => {
     const w = await world();
     w.client.subscribe("tasks");

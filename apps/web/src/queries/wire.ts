@@ -37,6 +37,17 @@ export function useTarget(target: string | undefined): TargetState | undefined {
 }
 
 /**
+ * Whether the host said there is nothing behind a target's name (`target:missing`): a task or a
+ * routine that does not exist, or was deleted while its page was open. Read it next to
+ * `useTarget`, which is what subscribes.
+ */
+export function useTargetMissing(target: string | undefined): boolean {
+  return useWireState(
+    (state) => target !== undefined && state.missing[target] === true,
+  );
+}
+
+/**
  * Why a plugin's targets will not come: the host does not have the plugin, or it failed to load.
  * Undefined while the connection is still being made, and when all is well.
  */

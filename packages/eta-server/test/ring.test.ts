@@ -103,6 +103,42 @@ describe("the ring on the wire", () => {
     expect(replayed[2]).toBeGreaterThan(replayed[1]!);
   });
 
+  it("answers a subscription to a target nobody registered with target:missing, once, to that socket", () => {
+    const h = harness();
+    h.wire.subscribe(7, "sessions.nope");
+    expect(h.frames).toEqual([
+      {
+        socketId: 7,
+        frame: {
+          type: "event",
+          target: "sessions.nope",
+          name: "target:missing",
+          data: null,
+        },
+        target: "sessions.nope",
+      },
+    ]);
+    // It is an answer, not something that happened: a later subscriber is not replayed it.
+    h.frames.length = 0;
+    h.wire.subscribe(8, "sessions.nope");
+    expect(h.frames).toHaveLength(1);
+    expect(h.wire.ringOf("sessions.nope")).toEqual([]);
+  });
+
+  it("tells the watchers of a target that is taken away", () => {
+    const h = harness();
+    const off = h.wire.stateOf("sessions.s2", {
+      project: () => ({ sections: { a: 1 }, revisions: { a: "1" } }),
+    });
+    h.wire.subscribe(1, "sessions.s2");
+    h.frames.length = 0;
+    off();
+    expect(
+      h.frames.map((entry) => (entry.frame as { name: string }).name),
+    ).toEqual(["target:missing"]);
+    expect(h.frames[0]!.socketId).toBe(1);
+  });
+
   it("sends live events only to subscribers, and only those that asked for them", () => {
     const h = harness();
     h.wire.subscribe(1, "sessions.s1", "tool");
