@@ -319,7 +319,14 @@ describe("watching and driving a remote session from the browser", () => {
     );
     const second = await r.send(group.id, "two");
     await r.settled(group.id, second.replies[0]!.id);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // The daemon's state reaches the primary on a paced push, so how soon the mirror finds nobody
+    // looking is not a number of milliseconds: wait for it to have let go.
+    await until(
+      () =>
+        r.host.product.hub
+          .link(r.daemon.machineId)
+          ?.pipe.subscribed(`sessions.${session}`) === false,
+    );
     const afterwards = stateFrames(r, session);
     expect(afterwards - watched).toBeLessThanOrEqual(1);
     const idle = afterwards;

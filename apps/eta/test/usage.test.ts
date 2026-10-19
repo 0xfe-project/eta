@@ -145,7 +145,8 @@ describe("generations made for an agent", () => {
       total: 455,
       cost: 0.0325,
     };
-    await until(() => sections(w).days?.length === 1);
+    // The sums follow the rows by a paced push: wait for the last generation to be in them.
+    await until(() => sections(w).days?.[0]?.requests === 2);
     const [usage] = sections(w).agents!;
     expect(usage).toMatchObject({ agentId: agent.id });
     for (const window of USAGE_WINDOWS)
