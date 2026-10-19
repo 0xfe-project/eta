@@ -10,9 +10,7 @@
     "newReports_one": "{{count}} new report",
     "newReports_other": "{{count}} new reports",
     "failedRuns_one": "{{count}} failure",
-    "failedRuns_other": "{{count}} failures",
-    "allGroups": "Everything waiting, across all groups",
-    "allGroupsHint": "The ones for the conversation you have open are shown there, above the input. This page is the rest."
+    "failedRuns_other": "{{count}} failures"
   },
   "accounts": {
     "allHealthy": "All healthy",

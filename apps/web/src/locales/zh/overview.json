@@ -10,9 +10,7 @@
     "newReports_one": "{{count}} 份新报告",
     "newReports_other": "{{count}} 份新报告",
     "failedRuns_one": "{{count}} 次失败",
-    "failedRuns_other": "{{count}} 次失败",
-    "allGroups": "所有群在等你的",
-    "allGroupsHint": "你正打开的那个对话里的待处理，显示在那边输入框上方。这一页是剩下的。"
+    "failedRuns_other": "{{count}} 次失败"
   },
   "accounts": {
     "allHealthy": "全部正常",

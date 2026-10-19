@@ -304,20 +304,6 @@ export function PendingList() {
   if (loading && !total) return <Loading rows={3} />;
   return (
     <div>
-      {/*
-       * This page is now the *cross-group* view. The questions that belong to the conversation you
-       * are in are shown there (the strip above the transcript), because that is where they block
-       * something you are looking at; what is left here is everything else — the ones you would
-       * only find by opening every group in turn.
-       */}
-      <div className="mb-2 border-b pb-2">
-        <h2 className="text-sm font-semibold">
-          {String(translateText("attention.allGroups"))}
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          {String(translateText("attention.allGroupsHint"))}
-        </p>
-      </div>
       {failed.length ? (
         <LoadError
           what={failed.map(({ what }) => what).join(listSeparator())}
