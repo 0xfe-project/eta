@@ -97,7 +97,14 @@ export function WorkspacePanel({
           ) : null}
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-0">
+      {/* The context tab's sections draw their own edge-to-edge rules and pad themselves; the
+          other tabs (and the task detail's sticky header, which bleeds back over it) assume p-3. */}
+      <div
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto",
+          view === "context" ? "p-0" : "p-3",
+        )}
+      >
         {tabs.map(({ value }) => (
           <TabsContent key={value} value={value} className="mt-0">
             {/* A group's panel is one column of blocks, not a tab per half of it. */}
