@@ -1,0 +1,27 @@
+{
+  "name": "@eta/compaction",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The compaction summarizer for eta: cuts the history at a turn boundary, folds a summary through the model's own window, and digests what it cannot summarize.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest --run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "smoke": "bun run --cwd ../eta-harness smoke",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@eta/core": "*",
+    "@eta/harness": "*"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.19",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}

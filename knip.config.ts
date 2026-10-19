@@ -19,6 +19,16 @@ export default {
         .map(([, specifier]) => `import "${specifier}";`)
         .join("\n"),
   },
+  // Re-exports and plugin-facing API of the eta packages that nothing in this
+  // repository imports yet; the host and the plugins consume them later.
+  ignoreIssues: {
+    "packages/eta-core/src/types/events.ts": ["types"],
+    "packages/eta-harness/src/skills.ts": ["exports"],
+    "packages/eta-harness/src/tools/edit.ts": ["exports"],
+    "packages/eta-server/src/bundled/providers.ts": ["exports"],
+    "packages/eta-server/src/bundled/sessions.ts": ["types"],
+    "packages/eta-server/src/transport.ts": ["exports"],
+  },
   workspaces: {
     // Plugins' scripts run in agents' images; scripts/dev.sh and
     // deploy/nomad/deploy.sh run rustrak.ts by path.
@@ -34,6 +44,19 @@ export default {
       entry: ["src/main.ts"],
       // Generated from the pinned Codex's app-server schema.
       ignore: ["src/protocol/**"],
+    },
+    // The eta packages are libraries read straight from source (package.json
+    // `exports` and `main` point at src/index.ts and the `testing` subpaths,
+    // which knip takes as entries). What they export beyond that is the
+    // surface later steps consume, so an export used inside its own file is
+    // not dead.
+    "packages/{eta-*,client-*}": {
+      ignoreExportsUsedInFile: true,
+    },
+    "packages/client-contracts": {
+      // A browser-side consumer, typechecked on its own to prove the client
+      // contracts need nothing but the wire package; nothing imports it.
+      entry: ["test/browser-consumer.ts"],
     },
     "apps/web": {
       // routeTree.gen.ts is gitignored, which knip skips, so the file routes

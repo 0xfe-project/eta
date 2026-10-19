@@ -1,0 +1,27 @@
+{
+  "name": "@eta/storage-jsonl",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "JSONL session log storage for eta: fsync'd appends, atomic compactJournal, torn-tail repair.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest --run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "smoke": "ETA_SMOKE_CONFIG=\"${ETA_SMOKE_CONFIG:-$HOME/.eta/config.json}\" vitest --run test/smoke.e2e.test.ts",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@eta/core": "*"
+  },
+  "devDependencies": {
+    "@eta/harness": "*",
+    "@types/node": "22.19.19",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}

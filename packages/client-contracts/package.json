@@ -1,0 +1,25 @@
+{
+  "name": "@eta/client-contracts",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Serializable client views and bundled operation contracts.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest --run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@eta/client-wire-proto": "*"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.19",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}
