@@ -494,10 +494,13 @@ describe("git and gh on a machine", () => {
     await until(() => existsSync(join(dir, "token")));
     const bot = (await readFile(join(dir, "token"), "utf8")).trim();
     expect(bot.startsWith("ghs_")).toBe(true);
-    expect(await readFile(join(dir, "login"), "utf8")).toBe("axp-test[bot]");
-    expect(await readFile(join(dir, "gh", "hosts.yml"), "utf8")).toContain(
-      `oauth_token: ${bot}`,
+    // The files are written one after another, and a refresh may be in between.
+    await until(async () =>
+      (await readFile(join(dir, "gh", "hosts.yml"), "utf8")).includes(
+        `oauth_token: ${(await readFile(join(dir, "token"), "utf8")).trim()}`,
+      ),
     );
+    expect(await readFile(join(dir, "login"), "utf8")).toBe("axp-test[bot]");
     expect(await readFile(join(dir, "git", "github.inc"), "utf8")).toContain(
       "name = axp-test[bot]",
     );
@@ -514,7 +517,9 @@ describe("git and gh on a machine", () => {
       "printf 'protocol=https\\nhost=github.com\\n\\n' | git credential fill",
     );
     expect(filled).toContain("username=axp-test[bot]");
-    expect(filled).toContain(`password=${bot}`);
+    expect(filled).toContain(
+      `password=${(await readFile(join(dir, "token"), "utf8")).trim()}`,
+    );
 
     const { url } = (await w.client.call("github", "authorize", {
       origin: ORIGIN,
