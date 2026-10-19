@@ -215,17 +215,6 @@
   --animate-skeleton-sweep: skeleton-sweep 1.6s linear infinite;
   --animate-upload-pulse: upload-pulse 1.6s linear infinite;
   --animate-copied-check: copied-check 2.5s linear both;
-  /*
-   * Shadows are offsets, not haze (BR1): a solid block of ink displaced by 2–12px, no blur,
-   * no spread. `shadow-md` is the menu/dialog one — 4px, the number BR1 names.
-   */
-  --shadow-2xs: 1px 1px 0 0 var(--shadow-ink);
-  --shadow-xs: 2px 2px 0 0 var(--shadow-ink);
-  --shadow-sm: 2px 2px 0 0 var(--shadow-ink);
-  --shadow-md: 4px 4px 0 0 var(--shadow-ink);
-  --shadow-lg: 6px 6px 0 0 var(--shadow-ink);
-  --shadow-xl: 8px 8px 0 0 var(--shadow-ink);
-  --shadow-2xl: 12px 12px 0 0 var(--shadow-ink);
   --spacing: 0.225rem;
   /* One header height for every column, so the rule under it is one line across the window. */
   --header-band: 40px;
@@ -302,7 +291,7 @@
   /*
    * Light mode keeps the palette the product had before the rewrite: a white page, near-white
    * rails, and greys only where something needs to be told apart. The tokens added later
-   * (surface, overlay, faint, border-strong, the four states, the shadow ink) are derived from
+   * (surface, overlay, faint, border-strong, the four states) are derived from
    * that palette rather than from BR1's darker scale, which read as a large grey field.
    */
   --background: oklch(1 0 0);
@@ -343,8 +332,6 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0px;
-  /* The ink a hard shadow is made of. */
-  --shadow-ink: oklch(0.145 0 0 / 85%);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -358,7 +345,6 @@
 .dark {
   /* The same nine steps, read from the other end: bg is gray-9, fg is gray-0, and the states
      rise in lightness and lose chroma so they stay legible on a dark page. */
-  --shadow-ink: oklch(0 0 0 / 80%);
   --background: oklch(0.1 0 0);
   --surface: oklch(0.14 0 0);
   --foreground: oklch(0.98 0 0);
@@ -994,7 +980,7 @@
 }
 
 @layer components {
-  /* The completion menu, ported: a 2px frame with a hard shadow, sitting above the composer, one
+  /* The completion menu, ported: framed and lifted like the app's other menus, sitting above the composer, one
      row per candidate with the name in mono and the description dimmed beside it. The selected row
      inverts — that is the whole affordance. */
   .skill-slash-menu {
@@ -1007,8 +993,8 @@
     overflow-y: auto;
     margin-bottom: 6px;
     background: var(--background);
-    border: 2px solid var(--border-strong);
-    box-shadow: 4px 4px 0 0 var(--shadow-ink);
+    border: 1px solid color-mix(in oklch, var(--foreground) 10%, transparent);
+    box-shadow: var(--shadow-md);
   }
   .skill-slash-indicator {
     padding: 3px 10px;

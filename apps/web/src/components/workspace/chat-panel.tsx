@@ -9,6 +9,7 @@ import type { ToolBlock } from "@/lib/run";
 import type { Outgoing, SendMode } from "@/queries/outbox";
 import type { Question } from "@/queries/questions";
 import { MAX_ATTACHMENTS } from "@eta/client-contracts";
+import { ArrowDownIcon } from "@phosphor-icons/react/ArrowDown";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { PaperclipIcon } from "@phosphor-icons/react/Paperclip";
 import { useNavigate } from "@tanstack/react-router";
@@ -1307,19 +1308,22 @@ export function ChatPanel({
           {/* Off the live end: say there is more, and who is adding it. Following resumes the
             moment you scroll back down, or here. */}
           {transcript.pinned ? null : (
-            <button
-              type="button"
+            // The same floating control as back-to-top: an outline button lifted off the text.
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => transcript.toBottom()}
-              className="sticky bottom-2 z-10 mx-auto flex items-center gap-1 border border-border-strong bg-background px-2 py-1 text-xs shadow-md"
+              className="sticky bottom-2 z-10 mx-auto flex w-fit shadow-sm dark:bg-background"
             >
-              ↓ {translateText("chat:rail.newActivity")}
+              <ArrowDownIcon aria-hidden="true" data-icon="inline-start" />
+              {translateText("chat:rail.newActivity")}
               {members.some((member) => member.status !== "idle")
                 ? ` · ${members
                     .filter((member) => member.status !== "idle")
                     .map((member) => member.name)
                     .join("、")}`
                 : ""}
-            </button>
+            </Button>
           )}
         </div>
         <div className="absolute top-16 right-1">
