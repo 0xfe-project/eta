@@ -57,7 +57,15 @@ export class RuleSource {
       cwd === undefined ? "" : (projectConfigPath(cwd) ?? ""),
       ...files.map((file) => `${file}:${mtime(file)}`),
       // Text the host holds is part of what was loaded; a file's content is its mtime.
-      ...additional.map((input) => ("text" in input ? input.text : "")),
+      ...additional.map((input) =>
+        "text" in input
+          ? [
+              input.text,
+              input.idPrefix ?? "",
+              JSON.stringify(input.env ?? {}),
+            ].join("\u0001")
+          : "",
+      ),
     ].join("\0");
   }
 

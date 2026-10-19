@@ -3,8 +3,9 @@
  *
  * `echo` answers with its text and a `_meta`, `fail` answers with an error result, `explode`
  * throws, `hang` never answers (and records that it was cancelled), `pid` says which process
- * serves, `ask` asks the client a question and reports what came back.
+ * serves, `env` says whether a variable is set (length and digest), `ask` asks the client a question and reports what came back.
  */
+import { createHash } from "node:crypto";
 import process from "node:process";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
@@ -33,6 +34,7 @@ export function fakeMcpServer(onCancelled: () => void = () => undefined) {
       { name: "explode", inputSchema: object({}) },
       { name: "hang", inputSchema: object({}) },
       { name: "pid", inputSchema: object({}) },
+      { name: "env", inputSchema: object({ name: { type: "string" } }) },
       { name: "ask", inputSchema: object({}) },
     ],
   }));
@@ -47,6 +49,15 @@ export function fakeMcpServer(onCancelled: () => void = () => undefined) {
       if (name === "fail") return say("it failed", { isError: true });
       if (name === "explode") throw new Error("exploded");
       if (name === "pid") return say(String(process.pid));
+      if (name === "env") {
+        // Never the value itself: its length and a digest of it, enough to tell it is the one.
+        const value = process.env[String(args?.name)];
+        return say(
+          value === undefined
+            ? "unset"
+            : `set:${value.length}:${createHash("sha256").update(value).digest("hex").slice(0, 8)}`,
+        );
+      }
       if (name === "ask") {
         const answer = await server.elicitInput({
           message: "name?",

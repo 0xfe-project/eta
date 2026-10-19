@@ -30,6 +30,8 @@ import { ArtifactService } from "./artifacts/service";
 import { DEFAULT_LIMITS } from "./artifacts/site";
 import { ArtifactStore } from "./artifacts/store";
 import { artifactSessionTools } from "./artifacts/tools";
+import { Bundles } from "./bundles/bundles";
+import { bundlesPlugin } from "./bundles/plugin";
 import { AttachmentStore } from "./conversations/attachments";
 import { combineRunHooks, Engine, RESTART_TEXT } from "./conversations/engine";
 import { conversationsPlugin } from "./conversations/plugin";
@@ -98,14 +100,16 @@ export interface Product {
   readonly generated: (meta: SessionMeta, message: AssistantMessage) => void;
   /** Mount the plugins on an assembled server; resolves when every one of them is in place. */
   mount: (server: AssembledServer) => Promise<void>;
+  /** Skill directories an agent's sessions have beyond the ones found in their directories. */
+  readonly skillDirsFor: (meta: SessionMeta) => readonly string[];
   /** The product's own HTTP routes (artifact pages, enrolling a machine); nothing for any other path. */
   fetch: (request: Request) => Promise<Response | undefined>;
   /** Where `sessions.*` actions for sessions on other machines go. */
   readonly remote: RemoteSessions;
   /** The product's own WebSocket routes: the link daemons dial. */
   readonly endpoints: readonly WebSocketEndpoint[];
-  /** Cut the links to other machines (the host is stopping). */
-  close: () => void;
+  /** Cut the links to other machines and stop the bundles' services (the host is stopping). */
+  close: () => Promise<void>;
 }
 
 /** The plugins are applied a moment after they are mounted; this is how long to wait for that. */
@@ -229,6 +233,18 @@ export function createProduct(options: {
       }),
   });
   const mirrors = new SessionMirrors(hub, (id) => machines.get(id)?.name);
+  // The bundles agents load: their files, values, services and the readiness of each machine.
+  const bundles = new Bundles({
+    db,
+    dataDir,
+    home: options.home ?? homedir(),
+    machines,
+    hub,
+    agentBundles: (agentId) =>
+      agentId === undefined ? [] : (agents.get(agentId)?.bundles ?? []),
+    changed: () => wire?.pushNow("bundles"),
+    warn,
+  });
   const router = new RemoteSessionsRouter({
     conversations,
     machines,
@@ -243,6 +259,7 @@ export function createProduct(options: {
     defaults: async () => (await running?.defaults()) ?? {},
     hooks: () => later.hooks,
     akhook: () => later.akhook?.layerTexts() ?? [],
+    bundles,
     home: options.home ?? homedir(),
     forward: (action, args) => router.forward(action, args),
     warn,
@@ -287,6 +304,7 @@ export function createProduct(options: {
     userConfigPath: options.akhook?.userConfigPath,
     additional: options.akhook?.additional,
     approvals: () => inbox.approvals(),
+    bundleLayers: (agentId, cwd) => bundles.layersFor(agentId, cwd),
     warn,
   });
   const attachments = new AttachmentStore(db, dataDir);
@@ -303,6 +321,8 @@ export function createProduct(options: {
     changed,
     warn,
     remote: remotePlace,
+    bundleStamp: (agent) => bundles.stampOf(agent.bundles),
+    settled: bundles.mcp.settled,
     runHooks: combineRunHooks([
       akhook.runHooks,
       ...(memory === undefined ? [] : [memoryRunHooks(memory)]),
@@ -322,7 +342,7 @@ export function createProduct(options: {
 
   // Each feature that adds tools, tool middleware or a question observer to sessions is one entry
   // here; the order is the order its tools and middleware are installed in.
-  const sessionHooks = combineSessionHooks([
+  const productHooks: SessionHooks[] = [
     {
       sessionTools: engine.sessionTools,
       askObserve: engine.askObserve,
@@ -338,9 +358,16 @@ export function createProduct(options: {
     ...(memory === undefined
       ? []
       : [{ sessionTools: memoryTools.bind(undefined, memory) }]),
+  ];
+  // What the product's tools are, as a daemon's sessions get them (specs the daemon calls back).
+  later.hooks = combineSessionHooks(productHooks);
+  // The host's own sessions also get the MCP servers of their agent's bundles. They connect
+  // after the session opens, which the engine waits for; they are not in `later.hooks` because a
+  // daemon starts its own, on its own machine.
+  const sessionHooks = combineSessionHooks([
+    ...productHooks,
+    { sessionTools: bundles.mcp.sessionTools },
   ]);
-
-  later.hooks = sessionHooks;
   later.inbox = inbox;
   later.akhook = akhook;
 
@@ -350,13 +377,17 @@ export function createProduct(options: {
     scheduler,
     sessionHooks,
     generated,
+    skillDirsFor: (meta) => bundles.skillDirsFor(meta),
     fetch: async (request) =>
-      (await hub.enroll(request)) ?? (await artifactRoutes(request)),
+      (await hub.enroll(request)) ??
+      (await bundles.route(request)) ??
+      (await artifactRoutes(request)),
     remote: router,
     endpoints: [hub.endpoint],
-    close: () => {
+    close: async () => {
       hub.close();
       mirrors.detach();
+      await bundles.close();
     },
     async mount(server) {
       running = server;
@@ -383,6 +414,7 @@ export function createProduct(options: {
         "artifacts",
         "inbox",
         "usage",
+        "bundles",
         ...(memory === undefined ? [] : ["memory"]),
       ]);
       let ready!: () => void;
@@ -446,6 +478,19 @@ export function createProduct(options: {
       );
       server.mount("inbox", inboxPlugin({ inbox }, applied("inbox")));
       server.mount("usage", usagePlugin(usage, applied("usage")));
+      server.mount(
+        "bundles",
+        bundlesPlugin(
+          {
+            registry: bundles.registry,
+            rows: bundles.rows,
+            services: bundles.services,
+            readiness: bundles.readiness,
+            changed: () => wire?.pushNow("bundles"),
+          },
+          applied("bundles"),
+        ),
+      );
       if (memory !== undefined)
         server.mount(
           "memory",
@@ -468,6 +513,7 @@ export function createProduct(options: {
       } finally {
         clearTimeout(timer);
       }
+      bundles.start();
     },
   };
 }

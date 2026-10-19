@@ -121,6 +121,15 @@ export interface MachineActionArgs {
   catalog: { models: ModelSpec[] };
   /** What the session is configured with now. */
   config: { session: string };
+  /** Which of these bundle contents (by hash) are not on the machine yet. */
+  bundleHave: { hashes: string[] };
+  /** Keep a bundle's files (path to base64 data) under their hash. */
+  bundlePut: {
+    hash: string;
+    files: Record<string, { data: string; exec?: boolean | undefined }>;
+  };
+  /** Which of these commands are on the machine's PATH. */
+  which: { commands: string[] };
 }
 export interface MachineActionResults {
   info: MachineFacts;
@@ -128,6 +137,9 @@ export interface MachineActionResults {
   open: { session: string };
   catalog: Record<string, never>;
   config: { model: string | undefined; thinkingLevel: string };
+  bundleHave: { missing: string[] };
+  bundlePut: Record<string, never>;
+  which: { found: string[] };
 }
 
 /** What the primary asks of the daemon that may take a while (`svc` calls). */
@@ -190,6 +202,21 @@ export interface OpenSessionArgs {
    * session that is already there at its next wake.
    */
   akhook?: { name: string; text: string }[];
+  /**
+   * The bundles the agent loads, already on the machine (`bundleHave`, `bundlePut`). The config
+   * values are what its MCP servers and hook commands are started with: they go no further, and
+   * the machine does not write them down.
+   */
+  bundles?: OpenedBundle[];
+}
+
+/** A bundle in an `open`: which contents, and the values its processes get. */
+export interface OpenedBundle {
+  name: string;
+  hash: string;
+  config: Record<string, string>;
+  /** Its required values are all there; when not, only its skills load. */
+  configured: boolean;
 }
 
 export interface RunOutcome {

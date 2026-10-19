@@ -42,6 +42,9 @@ export function runCommand(
     // Its own process group, so a timeout takes the command's children with it.
     const child = spawn(resolved, args, {
       cwd: root,
+      ...(spec.env === undefined
+        ? {}
+        : { env: { ...process.env, ...spec.env } }),
       stdio: ["pipe", "pipe", "pipe"],
       detached: true,
     });

@@ -35,6 +35,8 @@ export interface AgentView {
   /** `provider:modelId`; null means whatever the settings choose. */
   model: string | null;
   thinkingLevel: ThinkingLevel | null;
+  /** The bundles it loads, by name. */
+  bundles: string[];
   /** The agent's workspace directory (on the primary machine). */
   home: string;
   homeProjectId: string;
@@ -263,6 +265,8 @@ export interface AgentFields {
   /** `provider:modelId`; null clears it. */
   model?: string | null;
   thinkingLevel?: ThinkingLevel | null;
+  /** The bundles to load, by name. */
+  bundles?: string[];
 }
 
 /** Valid requests from a client. The server still validates untrusted JSON at runtime. */

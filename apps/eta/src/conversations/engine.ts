@@ -109,6 +109,10 @@ export function combineRunHooks(hooks: readonly RunHooks[]): RunHooks {
 
 export interface EngineOptions {
   runHooks?: RunHooks | undefined;
+  /** What an agent's bundles add to the stamp of its sessions: a change reopens them. */
+  bundleStamp?: ((agent: AgentRecord) => string) | undefined;
+  /** Resolves when a session of this process has what it was given besides its own tools (MCP). */
+  settled?: ((sessionId: string) => Promise<void>) | undefined;
   /**
    * Where the sessions of a project on a daemon machine live. Without one, such a project's
    * replies fail as unavailable, which is what a host with no link to other machines should say.
@@ -152,6 +156,7 @@ export class Engine {
   readonly #hooks: RunHooks;
   readonly #local: LocalPlace;
   readonly #remote: SessionPlace | undefined;
+  readonly #bundleStamp: EngineOptions["bundleStamp"];
 
   #closing = false;
   /** Replies waiting their turn on a participant's session, by `conversation:agent`. */
@@ -175,7 +180,12 @@ export class Engine {
     this.#warn = options.warn;
     this.#hooks = options.runHooks ?? {};
     this.#remote = options.remote;
-    this.#local = new LocalPlace({ opened: this.#opened, warn: options.warn });
+    this.#bundleStamp = options.bundleStamp;
+    this.#local = new LocalPlace({
+      opened: this.#opened,
+      settled: options.settled,
+      warn: options.warn,
+    });
   }
 
   /** The session host this engine runs on; set when the conversations plugin is applied. */
@@ -206,9 +216,14 @@ export class Engine {
     if (meta.agentId === undefined) return undefined;
     const agent = this.#agents.get(meta.agentId);
     if (agent === undefined) return undefined;
-    this.#opened.set(meta.id, stampOf(agent));
+    this.#opened.set(meta.id, this.#stamp(agent));
     return promptOf(agent);
   };
+
+  /** What a session's prompt, persona and bundles were read from. */
+  #stamp(agent: AgentRecord): string {
+    return `${stampOf(agent)}${this.#bundleStamp?.(agent) ?? ""}`;
+  }
 
   /** The tools an agent's session has beyond the harness's: reaching the other members. */
   readonly sessionTools = (input: { meta: SessionMeta }): KernelTool[] => {
@@ -690,7 +705,7 @@ export class Engine {
         cwd: project.path,
         existing: participant.sessionId,
         prompt: promptOf(agent),
-        stamp: stampOf(agent),
+        stamp: this.#stamp(agent),
         created: (id) =>
           this.#conversations.setSession(conversation.id, agent.id, id),
       });

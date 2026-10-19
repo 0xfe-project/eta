@@ -5,6 +5,8 @@ import type { KnipConfig } from "knip";
 export default {
   // System tools the Turbo scripts call (uv for the Python sidecar, go for the LLM gateway).
   ignoreBinaries: ["uv", "go", "gofmt"],
+  // Built-in bundles: scripts the host starts by path (an MCP server, a service), not imports.
+  ignore: ["bundles/**"],
   // CSS files are part of the module graph: their @imports reference
   // packages (fonts, tw-animate-css, shadcn) and other stylesheets.
   compilers: {

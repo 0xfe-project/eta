@@ -16,6 +16,8 @@ export interface AgentRecord {
   persona: string;
   model: string | null;
   thinkingLevel: ThinkingLevel | null;
+  /** The bundles it loads, by name, in the order they were chosen. */
+  bundles: string[];
   createdAt: number;
   updatedAt: number;
 }
@@ -26,6 +28,7 @@ export interface AgentInput {
   persona?: string | undefined;
   model?: string | null | undefined;
   thinkingLevel?: ThinkingLevel | null | undefined;
+  bundles?: string[] | undefined;
 }
 
 interface Row {
@@ -35,8 +38,21 @@ interface Row {
   persona: string;
   model: string | null;
   thinking_level: string | null;
+  bundles: string;
   created_at: number;
   updated_at: number;
+}
+
+/** The names in the column; anything else in it is no bundle. */
+function namesOf(text: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 const recordOf = (row: Row): AgentRecord => ({
@@ -46,6 +62,7 @@ const recordOf = (row: Row): AgentRecord => ({
   persona: row.persona,
   model: row.model,
   thinkingLevel: row.thinking_level as ThinkingLevel | null,
+  bundles: namesOf(row.bundles),
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -80,8 +97,8 @@ export class AgentStore {
     const now = Date.now();
     this.#db
       .query(
-        `INSERT INTO agent (id, name, instructions, persona, model, thinking_level, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO agent (id, name, instructions, persona, model, thinking_level, bundles, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -90,6 +107,7 @@ export class AgentStore {
         input.persona ?? "",
         input.model ?? null,
         input.thinkingLevel ?? null,
+        JSON.stringify(input.bundles ?? []),
         now,
         now,
       );
@@ -102,7 +120,7 @@ export class AgentStore {
     if (current === undefined) return undefined;
     this.#db
       .query(
-        `UPDATE agent SET name = ?, instructions = ?, persona = ?, model = ?, thinking_level = ?, updated_at = ?
+        `UPDATE agent SET name = ?, instructions = ?, persona = ?, model = ?, thinking_level = ?, bundles = ?, updated_at = ?
           WHERE id = ?`,
       )
       .run(
@@ -113,6 +131,7 @@ export class AgentStore {
         patch.thinkingLevel === undefined
           ? current.thinkingLevel
           : patch.thinkingLevel,
+        JSON.stringify(patch.bundles ?? current.bundles),
         Date.now(),
         id,
       );

@@ -12,6 +12,7 @@ import type {
 } from "./types";
 
 export * from "./artifacts";
+export * from "./bundles";
 export type * from "./data";
 export * from "./inbox";
 export * from "./link";

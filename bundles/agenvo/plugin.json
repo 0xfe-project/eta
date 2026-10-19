@@ -1,0 +1,25 @@
+{
+  "name": "agenvo",
+  "version": "1.0.0",
+  "description": "Direct control of Paseo and Herdr on the user's remote computers through an agenvo relay that eta runs.",
+  "requires": ["node", "agenvo-server"],
+  "config": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["AGENVO_ADMIN_SECRET"],
+    "properties": {
+      "AGENVO_ADMIN_SECRET": {
+        "type": "string",
+        "title": "Relay secret",
+        "writeOnly": true,
+        "maxLength": 256,
+        "minLength": 16,
+        "description": "A long random string that the relay and its MCP tools share, for example the output of `openssl rand -hex 32`."
+      }
+    }
+  },
+  "service": {
+    "command": ["node", "${PLUGIN_ROOT}/service/start.mjs"],
+    "ready": "/"
+  }
+}
