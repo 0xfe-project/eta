@@ -18,6 +18,7 @@
     "@eta/daemon": "*",
     "@eta/execution-node": "*",
     "@eta/harness": "*",
+    "@eta/llm-gateway": "*",
     "@eta/server": "*",
     "@eta/ssh": "*",
     "croner": "10.0.1",

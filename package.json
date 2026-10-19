@@ -9,7 +9,7 @@
   },
   "scripts": {
     "prepare": "lefthook install",
-    "setup": "bun install && uv sync --project apps/memory --dev",
+    "setup": "bun install && uv sync --project apps/memory --dev && bun run --cwd packages/llm-gateway build",
     "dev": "concurrently --kill-others --names host,web \"bun --watch apps/eta/src/main.ts --data-dir var/eta-dev --port ${ETA_PORT:-8787} --allow-origin http://127.0.0.1:${ETA_WEB_PORT:-3000}\" \"ETA_HOST_ORIGIN=${ETA_HOST_ORIGIN:-http://127.0.0.1:${ETA_PORT:-8787}} bun run --cwd apps/web dev\"",
     "build": "turbo run build",
     "check": "dprint check && bun run lint:repo && turbo run build typecheck lint test knip",

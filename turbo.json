@@ -7,7 +7,7 @@
   "remoteCache": { "teamId": "team_m0cGPvm66wsuOjDpnCrXUDPz" },
   "tasks": {
     "build": {
-      "outputs": ["dist/**", "out/**"]
+      "outputs": ["dist/**", "out/**", "lib/**"]
     },
     "typecheck": {
       "dependsOn": ["build"],
@@ -16,7 +16,9 @@
     "lint": {
       "outputs": []
     },
+    // The LLM gateway's tests (and the host's, which load it) need its library built.
     "test": {
+      "dependsOn": ["build", "^build"],
       "outputs": []
     },
     // Knip reads the whole repository, so it always runs.
