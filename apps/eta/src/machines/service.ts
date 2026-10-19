@@ -13,6 +13,9 @@
  * - **The approval list** (`tool.gate`): does the user want to be asked before this tool runs?
  * - **MCP credentials** (`mcp.credential`): the OAuth tokens of MCP servers are kept here, once
  *   per server URL; a daemon reads them for its connections and saves the ones it refreshes.
+ * - **GitHub credentials** (`github.credentials`): the token for git and gh on the machine, the
+ *   user's once they authorized the GitHub App, else the App's; the App's secrets stay here, and
+ *   the machine asks again before the token (an hour old at most) expires.
  * - **Questions** (`ask.observe`): a session on the daemon asked, was answered or gave up; the
  *   conversation and the inbox hear it exactly as they hear a local session's.
  *
@@ -21,7 +24,10 @@
  * the session works for.
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import type { McpCredentialCall } from "@eta/client-contracts";
+import type {
+  GitHubCredentials,
+  McpCredentialCall,
+} from "@eta/client-contracts";
 import type { KernelModels, KernelTool } from "@eta/core";
 import type { SessionMeta } from "@eta/server";
 import type { ConversationStore } from "../conversations/store";
@@ -52,6 +58,8 @@ export interface LinkServiceDeps {
   approvals: () => readonly string[];
   /** A daemon's read or write of an MCP server's OAuth state; the credentials are the primary's. */
   mcpCredential: (call: McpCredentialCall) => Promise<unknown>;
+  /** The token for git and gh on the daemon's machine; null while GitHub is not connected. */
+  githubCredentials: () => Promise<GitHubCredentials | null>;
   /** A generation ended: count it. */
   generated: (meta: SessionMeta, message: AssistantMessage) => void;
   warn: (message: string) => void;
@@ -144,6 +152,8 @@ export function serveLink(link: MachineLink, deps: LinkServiceDeps): void {
   link.peer.handle("mcp.credential", (raw) =>
     deps.mcpCredential(raw as McpCredentialCall),
   );
+
+  link.peer.handle("github.credentials", () => deps.githubCredentials());
 
   link.peer.handle("tool.call", async (raw, { signal }) => {
     const params = raw as {

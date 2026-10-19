@@ -40,21 +40,22 @@
 
 产品插件（`apps/eta`，都是 cordis 插件，注入 `wire` 与 `sessions`）：
 
-| 插件          | target                                | action                                                                                                     |
-| ------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| agents        | `agents`（eager）                     | `create` `update` `delete` `direct`                                                                        |
-| machines      | `machines`（eager）                   | `enroll` `approve` `revoke` `rename` `setMaxActiveRuns`                                                    |
-| projects      | `projects`（eager）                   | `create` `update` `setSteward` `files`（归档经 `update`）                                                  |
-| conversations | `conversations`、`conversations.<id>` | `create` `update` `invite` `remove` `setSteward` `send` `stop` `read` `history` `attach` `unattach`        |
-| inbox         | `inbox`                               | `answer` `setApprovals`                                                                                    |
-| usage         | `usage`                               | 只读                                                                                                       |
-| tasks         | `tasks`、`tasks.<id>`                 | `update` `comment` `delete` `link` `confirmDraft` `interrupt` `rerun`（没有 `create`，见[任务](tasks.md)） |
-| artifacts     | `artifacts`                           | `share` `unshare` `delete` `preview`                                                                       |
-| routines      | `routines`、`routines.<id>`           | `create` `update` `delete` `run` `seen` `feedback` `restoreBrief`                                          |
-| bundles       | `bundles`                             | `configure` `add` `remove` `refresh` `recheck`                                                             |
-| mcp           | `mcp`                                 | `connect` `reconnect` `login` `completeLogin` `logout`，见 [MCP](mcp.md)                                   |
-| memory        | `memory`（仅有边车时挂载）            | `list` `remember` `forget`                                                                                 |
-| llm           | `llm`（eager；仅有网关库时挂载）      | `refresh` `loginStart` `loginPoll` `loginSubmit` `loginCancel` `setEnabled` `remove`                       |
+| 插件          | target                                | action                                                                                                               |
+| ------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| agents        | `agents`（eager）                     | `create` `update` `delete` `direct`                                                                                  |
+| machines      | `machines`（eager）                   | `enroll` `approve` `revoke` `rename` `setMaxActiveRuns`                                                              |
+| projects      | `projects`（eager）                   | `create` `update` `setSteward` `files`（归档经 `update`）                                                            |
+| conversations | `conversations`、`conversations.<id>` | `create` `update` `invite` `remove` `setSteward` `send` `stop` `read` `history` `attach` `unattach`                  |
+| inbox         | `inbox`                               | `answer` `setApprovals`                                                                                              |
+| usage         | `usage`                               | 只读                                                                                                                 |
+| tasks         | `tasks`、`tasks.<id>`                 | `update` `comment` `delete` `link` `confirmDraft` `interrupt` `rerun`（没有 `create`，见[任务](tasks.md)）           |
+| artifacts     | `artifacts`                           | `share` `unshare` `delete` `preview`                                                                                 |
+| routines      | `routines`、`routines.<id>`           | `create` `update` `delete` `run` `seen` `feedback` `restoreBrief`                                                    |
+| bundles       | `bundles`                             | `configure` `add` `remove` `refresh` `recheck`                                                                       |
+| mcp           | `mcp`                                 | `connect` `reconnect` `login` `completeLogin` `logout`，见 [MCP](mcp.md)                                             |
+| github        | `github`                              | `refresh` `createApp` `setOAuthClient` `authorize` `unauthorize` `disconnect` `pull` `merge`，见 [GitHub](github.md) |
+| memory        | `memory`（仅有边车时挂载）            | `list` `remember` `forget`                                                                                           |
+| llm           | `llm`（eager；仅有网关库时挂载）      | `refresh` `loginStart` `loginPoll` `loginSubmit` `loginCancel` `setEnabled` `remove`                                 |
 
 eager 的 target 随 `hello` 到达，页面不用先订阅就能画出来。
 
@@ -68,4 +69,4 @@ eager 的 target 随 `hello` 到达，页面不用先订阅就能画出来。
 
 ## 不在线上的 HTTP
 
-`staticRoutes` 之外只有这些：`/up`（健康）、`/version`（构建 id，页面用它提示"有新版本"）、静态页（路径不是文件时回落到 `index.html`）、artifact 的 `/preview/…`、`/share/…`、`/artifacts/<id>/<version>/archive.zip`，MCP 登录的回调 `/mcp/oauth/callback`，以及 daemon 的两个入口 `/machines/enroll`、`/machines/connect`。没有 REST，没有 OpenAPI。
+`staticRoutes` 之外只有这些：`/up`（健康）、`/version`（构建 id，页面用它提示"有新版本"）、静态页（路径不是文件时回落到 `index.html`）、artifact 的 `/preview/…`、`/share/…`、`/artifacts/<id>/<version>/archive.zip`，MCP 登录的回调 `/mcp/oauth/callback`，GitHub 回到 host 的两条回调 `/github/manifest/callback`、`/github/authorization/callback`（见 [GitHub](github.md)），以及 daemon 的两个入口 `/machines/enroll`、`/machines/connect`。没有 REST，没有 OpenAPI。

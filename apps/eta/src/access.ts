@@ -30,6 +30,10 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 
+import {
+  GITHUB_AUTHORIZATION_CALLBACK_PATH,
+  GITHUB_MANIFEST_CALLBACK_PATH,
+} from "./github/path";
 import { LLM_ROUTE } from "./llm/route";
 import { MCP_CALLBACK_PATH } from "./mcp/path";
 
@@ -119,8 +123,10 @@ function askedFor(request: Request): { host: string; origin: string } {
  * sandboxed iframe sends no cookie) and its public share (a secret token, for people who are not
  * the user), and the return of an MCP server's OAuth sign-in (the browser comes back from the
  * provider, a site that holds no cookie of ours; the route completes only a sign-in this host is
- * waiting for, found by its unguessable `state`). They are exempt from the token gate for that
- * reason and no other, and only to read: everything else, the app's own `/artifacts/` downloads
+ * waiting for, found by its unguessable `state`), and likewise GitHub's two returns to the host
+ * (the App was created from the manifest the host made; the user authorized the App), which spend a
+ * `state` the host issued and otherwise change nothing. They are exempt from the token gate for
+ * that reason and no other, and only to read: everything else, the app's own `/artifacts/` downloads
  * included, stays behind it.
  */
 function carriesOwnCapability(request: Request, pathname: string): boolean {
@@ -128,7 +134,9 @@ function carriesOwnCapability(request: Request, pathname: string): boolean {
     (request.method === "GET" || request.method === "HEAD") &&
     (pathname.startsWith("/preview/") ||
       pathname.startsWith("/share/") ||
-      pathname === MCP_CALLBACK_PATH)
+      pathname === MCP_CALLBACK_PATH ||
+      pathname === GITHUB_MANIFEST_CALLBACK_PATH ||
+      pathname === GITHUB_AUTHORIZATION_CALLBACK_PATH)
   );
 }
 

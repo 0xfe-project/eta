@@ -15,6 +15,7 @@
  */
 import type {
   DaemonServiceParams,
+  GitHubCredentials,
   MachineActionArgs,
   MachineActionResults,
   OpenSessionArgs,
@@ -61,6 +62,7 @@ import {
   isConfigured,
   readBundle,
 } from "./bundle";
+import { GitHubKeeper } from "./github";
 import { relayAuthProviderFor } from "./mcp-auth";
 import { McpHost } from "./mcp-host";
 import { ModelCatalog, remoteModels } from "./models";
@@ -128,6 +130,8 @@ export class DaemonNode {
   readonly #store: FileSessionStore;
   readonly #catalog = new ModelCatalog();
   readonly #mcp: McpHost;
+  /** git and gh on this machine, logged in as the primary's GitHub App. */
+  readonly #github: GitHubKeeper;
   /** The bundles the primary sent, by contents. */
   readonly #bundles: BundleStore;
   /** The openings the primary sent, by `conversation:agent`; read when a session opens. */
@@ -157,6 +161,21 @@ export class DaemonNode {
     });
     const home = options.home ?? homedir();
     this.#bundles = new BundleStore(join(options.dataDir, "bundles"));
+    // The token is the primary's to give; what stays here is at most an hour old.
+    this.#github = new GitHubKeeper({
+      dir: join(options.dataDir, "github"),
+      credentials: async () => {
+        const peer = this.#peer;
+        // Without the primary the login on disk stays as it is until the link is back.
+        if (peer === undefined || peer.lost) return undefined;
+        return (await peer.call(
+          "github.credentials",
+          {},
+          { timeoutMs: 15_000 },
+        )) as GitHubCredentials | null;
+      },
+      warn,
+    });
     // Credentials are the primary's: a token this machine refreshes is saved there.
     this.#mcp = new McpHost({
       dataDir: options.dataDir,
@@ -176,7 +195,8 @@ export class DaemonNode {
           peer: () => this.#peer,
         }),
       envFor: (meta) => {
-        const env = createLocalEnvironment(meta.cwd);
+        // The shells see GitHub's login the keeper maintains (`./github`).
+        const env = createLocalEnvironment(meta.cwd, this.#github.env);
         return env === undefined ? undefined : { env };
       },
       personasFor: async (meta) => {
@@ -299,6 +319,8 @@ export class DaemonNode {
   /** A link came up: serve the primary on it. */
   attach(peer: Peer): { receive: (frame: unknown) => void; close: () => void } {
     this.#peer = peer;
+    // Back on the link: the login is looked at again (and set up, if the link is new).
+    void this.#github.poke();
     const socket: Socket = {
       id: ++this.#socketIds,
       send: (frame: ServerFrame) => peer.sendPipe(frame),
@@ -343,6 +365,7 @@ export class DaemonNode {
   async close(): Promise<void> {
     for (const fiber of this.#fibers.splice(0).reverse()) await fiber.dispose();
     await this.#manager.closeAll();
+    this.#github.stop();
     await this.#mcp.close();
     await this.#store.close();
   }
@@ -440,6 +463,10 @@ export class DaemonNode {
             Bun.which(command, { PATH: process.env.PATH ?? "" }) !== null,
         ),
       }),
+      githubRefresh: () => {
+        void this.#github.poke();
+        return {};
+      },
       config: async ({ session }) => {
         const { managed } = await this.#service().open(session);
         const config = managed.session.kernel.config;

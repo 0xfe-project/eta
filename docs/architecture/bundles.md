@@ -124,11 +124,11 @@ daemon 把文件放进 `<数据目录>/bundles/<哈希>/`（先写临时目录�
 
 `bundles/` 下：
 
-| 包     | 内容                                                                                                                                         | requires                         |
-| ------ | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| github | 技能 `github`（gh/git 用机器上自己的登录，`github__*` 工具用设置里的 token）；MCP `github-mcp-server stdio`；config 令牌                     | `git`、`gh`、`github-mcp-server` |
-| grok   | 技能 `grok`；MCP `grok-api mcp`（图像、视频、网页和 X 搜索），经 LLM 网关用 Grok 订阅账号，密钥是智能体自己的网关 key；没有 config           | `grok-api`                       |
-| oomol  | 技能 `oomol`；一个零依赖的 stdio MCP（`server/oo-mcp.mjs`）把 `oo` CLI 当一个工具跑，密钥只在它的进程里；config `OO_API_KEY`、`OO_TEAM_NAME` | `node`、`oo`                     |
+| 包     | 内容                                                                                                                                                                    | requires     |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| github | 技能 `github`（gh/git 已由 eta 的 GitHub App 登录，PR 用 `open_pull_request`，issue 用 `draft_issue`；设置在“设置 → 连接”，见 [GitHub](github.md)）；没有 MCP、没有配置 | `git`、`gh`  |
+| grok   | 技能 `grok`；MCP `grok-api mcp`（图像、视频、网页和 X 搜索），经 LLM 网关用 Grok 订阅账号，密钥是智能体自己的网关 key；没有 config                                      | `grok-api`   |
+| oomol  | 技能 `oomol`；一个零依赖的 stdio MCP（`server/oo-mcp.mjs`）把 `oo` CLI 当一个工具跑，密钥只在它的进程里；config `OO_API_KEY`、`OO_TEAM_NAME`                            | `node`、`oo` |
 
 groups、tasks、artifacts、approval、memory、routines 已经是产品功能，不再是环境包。每个包的 `skills/*/references/setup.md` 写着怎么安装和配置，智能体按它指引用户。
 

@@ -7,6 +7,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
  * then. Between the two, the replies a dead process left in flight are failed, so nothing a client
  * is ever shown says `working` without something working.
  */
+import type { GitHubCredentials } from "@eta/client-contracts";
 import type { ConfigInput } from "@eta/plugin-akhook";
 import type {
   AssembledServer,
@@ -18,11 +19,13 @@ import type {
 import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/site";
 import type { GatewayKeys } from "./bundles/bundles";
+import type { GithubTuning } from "./github/service";
 import type { MachineRecord } from "./machines/store";
 import type { McpTuning } from "./mcp/service";
 import type { SessionHooks } from "./session-hooks";
 import { homedir, hostname, platform } from "node:os";
 import { join } from "node:path";
+import { GitHubKeeper } from "@eta/daemon";
 import { agentsPlugin } from "./agents/plugin";
 import { AgentStore } from "./agents/store";
 import { AkhookHost } from "./akhook";
@@ -41,6 +44,11 @@ import { conversationsPlugin } from "./conversations/plugin";
 import { ConversationStore } from "./conversations/store";
 import { ConversationTargets } from "./conversations/targets";
 import { Timeline } from "./conversations/timeline";
+import { GithubError } from "./github/error";
+import { githubPlugin } from "./github/plugin";
+import { githubRoutes } from "./github/routes";
+import { Github } from "./github/service";
+import { githubSessionTools } from "./github/tools";
 import { Inbox } from "./inbox/inbox";
 import { inboxPlugin } from "./inbox/plugin";
 import { SettingStore } from "./inbox/setting";
@@ -120,6 +128,8 @@ export interface Product {
   mount: (server: AssembledServer) => Promise<void>;
   /** Skill directories an agent's sessions have beyond the ones found in their directories. */
   readonly skillDirsFor: (meta: SessionMeta) => readonly string[];
+  /** The environment sessions' shells get beyond the process's: GitHub's login, once connected. */
+  readonly shellEnv: NodeJS.ProcessEnv;
   /** The product's own HTTP routes (artifact pages, enrolling a machine); nothing for any other path. */
   fetch: (request: Request) => Promise<Response | undefined>;
   /** Where `sessions.*` actions for sessions on other machines go. */
@@ -159,6 +169,8 @@ export function createProduct(options: {
   publicUrl?: string | undefined;
   /** The MCP library's manager and fetch, for a test with fake servers. */
   mcp?: McpTuning | undefined;
+  /** Where GitHub is and what time it is, for a test with a fake GitHub. */
+  github?: GithubTuning | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
   const memory =
@@ -266,6 +278,8 @@ export function createProduct(options: {
     inbox?: Inbox;
     akhook?: AkhookHost;
     mcp?: McpService;
+    githubCredentials?: () => Promise<GitHubCredentials | null>;
+    githubLogin?: GitHubKeeper;
   } = {};
   const hub = new MachineHub({
     machines,
@@ -304,6 +318,8 @@ export function createProduct(options: {
           if (later.mcp === undefined) throw new Error("the host is starting");
           return await later.mcp.relay(call);
         },
+        githubCredentials: async () =>
+          (await later.githubCredentials?.()) ?? null,
         generated,
         warn,
       }),
@@ -401,6 +417,42 @@ export function createProduct(options: {
     ...options.mcp,
   });
   later.mcp = mcp;
+  // The GitHub App agents act as, and git and gh on this machine logged in as it (the daemons'
+  // machines ask over their links; see `machines/service.ts`).
+  const github: Github = new Github({
+    db,
+    key: secretKey,
+    publicUrl: options.publicUrl,
+    ...options.github,
+    changed: () => {
+      wire?.pushNow("github");
+      void later.githubLogin?.poke();
+      // The daemons' machines look again too, instead of at their next hourly refresh.
+      for (const machine of machines.list())
+        if (machine.kind === "daemon")
+          void hub
+            .link(machine.id)
+            ?.machine("githubRefresh", {})
+            .catch(() => undefined);
+    },
+    warn,
+  });
+  /** The token a machine's git and gh are set up with; null while GitHub is not connected. */
+  const githubCredentials = async (): Promise<GitHubCredentials | null> => {
+    try {
+      return await github.credentials();
+    } catch (error) {
+      if (error instanceof GithubError) return null;
+      throw error;
+    }
+  };
+  const githubLogin = new GitHubKeeper({
+    dir: join(dataDir, "github"),
+    credentials: githubCredentials,
+    warn,
+  });
+  later.githubCredentials = githubCredentials;
+  later.githubLogin = githubLogin;
   const attachments = new AttachmentStore(db, dataDir);
   const runHooks = combineRunHooks([
     akhook.runHooks,
@@ -455,6 +507,7 @@ export function createProduct(options: {
     changed: () => wire?.pushNow("artifacts"),
   });
   const artifactRoutes = createArtifactRoutes(artifacts);
+  const githubCallbacks = githubRoutes(github, warn);
 
   // Each feature that adds tools, tool middleware or a question observer to sessions is one entry
   // here; the order is the order its tools and middleware are installed in.
@@ -478,6 +531,24 @@ export function createProduct(options: {
       }),
     },
     { sessionTools: artifactSessionTools({ artifacts, board, limits }) },
+    {
+      sessionTools: githubSessionTools({
+        github,
+        opened: (conversationId, pull) => {
+          // A task run's session is held in `task-run:<id>`: its pull request is its task's.
+          const runId = runIdOf(conversationId);
+          const taskId =
+            conversationId === undefined
+              ? undefined
+              : runId === undefined
+                ? github.store.taskOfConversation(conversationId)
+                : github.store.taskOfRun(runId);
+          if (taskId === undefined) return;
+          github.store.linkPull(taskId, pull, Date.now());
+          wire?.pushNow("github");
+        },
+      }),
+    },
     {
       toolMiddleware: akhook.toolMiddleware,
       sessionAttach: akhook.sessionAttach,
@@ -518,9 +589,11 @@ export function createProduct(options: {
     sessionHooks,
     generated,
     skillDirsFor: (meta) => bundles.skillDirsFor(meta),
+    shellEnv: githubLogin.env,
     fetch: async (request) =>
       (await hub.enroll(request)) ??
       (await mcp.route(request)) ??
+      (await githubCallbacks(request)) ??
       (await bundles.route(request)) ??
       (await artifactRoutes(request)),
     remote: router,
@@ -530,6 +603,7 @@ export function createProduct(options: {
       await taskRunner.detach();
       hub.close();
       mirrors.detach();
+      githubLogin.stop();
       await mcp.close();
       await bundles.close();
     },
@@ -561,6 +635,7 @@ export function createProduct(options: {
         "usage",
         "bundles",
         "mcp",
+        "github",
         ...(memory === undefined ? [] : ["memory"]),
       ]);
       let ready!: () => void;
@@ -661,6 +736,7 @@ export function createProduct(options: {
         ),
       );
       server.mount("mcp", mcpPlugin({ service: mcp }, applied("mcp")));
+      server.mount("github", githubPlugin({ github }, applied("github")));
       if (memory !== undefined)
         server.mount(
           "memory",
@@ -686,6 +762,10 @@ export function createProduct(options: {
       bundles.start();
       // Everything the runs need is in place: the queue is looked at now.
       if (options.tasks?.runs !== false) taskRunner.attach();
+      githubLogin.start();
+      // Where the App is installed, once, so the first look at the settings is not a guess.
+      if (github.app() !== null)
+        void github.status(false).catch(() => undefined);
     },
   };
 }

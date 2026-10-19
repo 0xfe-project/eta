@@ -130,6 +130,8 @@ export interface MachineActionArgs {
   };
   /** Which of these commands are on the machine's PATH. */
   which: { commands: string[] };
+  /** GitHub was connected, authorized or disconnected: ask the primary for the token again now. */
+  githubRefresh: Record<string, never>;
 }
 export interface MachineActionResults {
   info: MachineFacts;
@@ -140,6 +142,7 @@ export interface MachineActionResults {
   bundleHave: { missing: string[] };
   bundlePut: Record<string, never>;
   which: { found: string[] };
+  githubRefresh: Record<string, never>;
 }
 
 /** What the primary asks of the daemon that may take a while (`svc` calls). */
@@ -258,6 +261,13 @@ export interface ServiceMethodParams {
    * saves it here. A login's PKCE verifier is not relayed: signing in is the primary's.
    */
   "mcp.credential": McpCredentialCall;
+  /**
+   * The token for git and gh on this machine, and the commit identity: the user's once they
+   * authorized the GitHub App, else the App's installation token. Answers `null` when GitHub is
+   * not connected. The App's key and secrets stay on the primary; the machine keeps the token
+   * (at most an hour old) and asks again before it expires. The result is a `GitHubCredentials`.
+   */
+  "github.credentials": Record<string, never>;
 }
 
 /** The pieces of OAuth state a daemon may ask for. */

@@ -10,6 +10,7 @@ import type { AssembledServer, AssembleOptions } from "@eta/server";
  */
 import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/site";
+import type { GithubTuning } from "./github/service";
 import type { LlmOptions, LlmRuntime } from "./llm/runtime";
 import type { McpTuning } from "./mcp/service";
 import type {
@@ -74,6 +75,8 @@ export interface HostOptions {
   publicUrl?: string;
   /** The MCP library's settings for a test (fake servers, no timers). */
   mcp?: McpTuning;
+  /** Where GitHub is, for a test with a fake one. */
+  github?: GithubTuning;
   /** Whether to apply the config's network settings to the environment. */
   network?: boolean;
   /**
@@ -138,6 +141,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       gateway: () => llm,
       publicUrl: options.publicUrl,
       mcp: options.mcp,
+      github: options.github,
       akhook: options.akhook,
       hostname,
       ...(options.home === undefined ? {} : { home: options.home }),
@@ -151,7 +155,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       // The file and shell tools a session runs: the local adapter, when this runtime can
       // host it. Without one a session still works — it simply has no read/write/edit/bash.
       envFor: (meta) => {
-        const env = createLocalEnvironment(meta.cwd);
+        const env = createLocalEnvironment(meta.cwd, product.shellEnv);
         return env === undefined ? undefined : { env };
       },
       // The product's pages (artifacts) first; they answer for their own paths, found or not.

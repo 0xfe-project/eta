@@ -46,11 +46,34 @@
     "createAndStart": "确认并开始",
     "changeTitle": "修改标题",
     "editDescription": "编辑描述",
+    "complete": "标记任务完成",
     "addDescription": "添加描述"
   },
   "details": {
     "activityTab": "动态",
-    "propertiesTab": "属性"
+    "propertiesTab": "属性",
+    "deliveryTab": "交付"
+  },
+  "pullRequests": {
+    "status": {
+      "draft": "草稿",
+      "merged": "已合并",
+      "closed": "已关闭",
+      "unavailable": "状态暂不可用"
+    },
+    "mergedAndCompleted": "PR 已合并，任务已完成",
+    "mergedTaskIncompleteWithError": "PR 已合并，任务未完成：{{message}}",
+    "mergedTaskIncomplete": "PR 已合并，任务未完成",
+    "mergeResultUnknown": "没有得到合并结果，已重新读取 PR 状态，请确认后再决定是否重试。",
+    "merging": "合并中…",
+    "actions": {
+      "merge": "合并",
+      "moreMergeOptions": "更多合并方式",
+      "mergeAndComplete": "合并并标记任务完成"
+    }
+  },
+  "feedback": {
+    "completed": "任务已完成"
   },
   "fields": {
     "updatedAt": "更新于",

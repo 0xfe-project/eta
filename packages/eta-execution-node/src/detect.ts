@@ -15,9 +15,19 @@ export function supportsNodeExecution(): boolean {
   return isNode;
 }
 
-/** A local execution environment rooted at `cwd`, or `undefined` when the runtime cannot host one. */
+/**
+ * A local execution environment rooted at `cwd`, or `undefined` when the runtime cannot host one.
+ * `shellEnv` is added to the process's environment for every command, and is read again at each
+ * one, so its owner can change it while the environment is in use.
+ */
 export function createLocalEnvironment(
   cwd: string,
+  shellEnv?: NodeJS.ProcessEnv,
 ): NodeEnvironment | undefined {
-  return isNode ? new NodeEnvironment({ cwd }) : undefined;
+  return isNode
+    ? new NodeEnvironment({
+        cwd,
+        ...(shellEnv === undefined ? {} : { shellEnv }),
+      })
+    : undefined;
 }

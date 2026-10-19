@@ -14,6 +14,7 @@ import type {
 export * from "./artifacts";
 export * from "./bundles";
 export type * from "./data";
+export * from "./github";
 export * from "./inbox";
 export * from "./link";
 export * from "./llm";
