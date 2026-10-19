@@ -5,7 +5,8 @@ import type { AssembledServer, AssembleOptions } from "@eta/server";
  * `assembleServer` is the floor (sessions, providers, settings, personas behind one WebSocket).
  * This file puts three things next to it, in one process: the product's SQLite database with its
  * migrations applied, the HTTP side that serves the web, and the access control in front of both.
- * Product plugins mount on the floor later; they get the database from here.
+ * The product (agents, machines, projects, conversations: `product.ts`) is made on that database
+ * before the floor, because the floor's per-session hooks are its, and mounted on the floor after.
  */
 import type { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
@@ -20,6 +21,7 @@ import {
   openDatabase,
 } from "./db";
 import { createWebRoutes } from "./http";
+import { createProduct } from "./product";
 
 export interface HostOptions {
   /** Everything the host owns: the database, the sessions, the providers config. */
@@ -73,6 +75,8 @@ export async function startHost(options: HostOptions): Promise<Host> {
   let server: AssembledServer;
   try {
     applyMigrations(db, loadMigrations());
+    const warn = options.warn ?? ((message: string) => console.warn(message));
+    const product = createProduct({ db, dataDir: options.dataDir, warn });
     server = await assembleServer({
       dataDir: options.dataDir,
       configPath: join(options.dataDir, "config.json"),
@@ -86,11 +90,21 @@ export async function startHost(options: HostOptions): Promise<Host> {
       },
       fetch: createWebRoutes(options.webDir),
       authorize: access.authorize,
+      // What the product adds to every session it owns: the agent's words in the system prompt,
+      // and, from each of its features, tools, tool middleware and an ear for questions.
+      baseSystemPromptFor: product.engine.baseSystemPromptFor,
+      ...product.sessionHooks,
       ...(options.models === undefined ? {} : { models: options.models }),
       ...(options.home === undefined ? {} : { home: options.home }),
       ...(options.network === undefined ? {} : { network: options.network }),
-      ...(options.warn === undefined ? {} : { warn: options.warn }),
+      warn,
     });
+    try {
+      await product.mount(server);
+    } catch (error) {
+      await server.close();
+      throw error;
+    }
   } catch (error) {
     db.close();
     throw error;

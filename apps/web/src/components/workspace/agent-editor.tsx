@@ -32,7 +32,7 @@ import {
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useBundles, useDeleteAgent, useUpdateAgent } from "@/queries/chat";
-import { useModels } from "@/queries/llm";
+import { useModels } from "@/queries/providers";
 import {
   BundlesField,
   InstructionsField,

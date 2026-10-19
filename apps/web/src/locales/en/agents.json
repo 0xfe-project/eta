@@ -32,10 +32,7 @@
     "noneSelected": "No model selected",
     "errors": {
       "deleted": "{{modelName}} no longer exists. Select another model.",
-      "checkAccounts": "Check your accounts in model services.",
-      "unavailable": "{{modelName}} is temporarily unavailable: {{reason}}",
-      "upstreamFailure": "The upstream service is temporarily failing. It will retry automatically.",
-      "degradedSendAllowed": "{{modelName}} {{reason}} You can still send messages."
+      "unavailable": "{{modelName}} is temporarily unavailable: {{reason}}"
     }
   },
   "bundles": {

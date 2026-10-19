@@ -32,10 +32,7 @@
     "noneSelected": "未选择模型",
     "errors": {
       "deleted": "{{modelName}} 已不存在，请更换模型。",
-      "checkAccounts": "请检查模型服务中的账号。",
-      "unavailable": "{{modelName}} 暂不可用：{{reason}}",
-      "upstreamFailure": "上游暂时故障，稍后会自动重试。",
-      "degradedSendAllowed": "{{modelName}} {{reason}}仍可发送。"
+      "unavailable": "{{modelName}} 暂不可用：{{reason}}"
     }
   },
   "bundles": {

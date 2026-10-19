@@ -26,6 +26,13 @@ export interface SessionMeta {
   persona?: string | undefined;
   /** The model it was left on, as `provider:modelId`. */
   model?: string | undefined;
+  /**
+   * The agent whose session this is, and the conversation it is held in. A host that runs one
+   * session per (agent x conversation) names both here, so the mapping survives a restart in the
+   * same file as the rest of the row; a bare session carries neither.
+   */
+  agentId?: string | undefined;
+  conversationId?: string | undefined;
   /** Kept at the top of the sidebar. */
   pinned?: boolean | undefined;
   /** Put out of the way without being deleted. */

@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useRestartAgent } from "@/queries/chat";
-import { useModelAvailability } from "@/queries/llm";
+import { useModelAvailability } from "@/queries/providers";
 import { DeleteAgentDialog } from "./agent-editor";
 import { AgentAvatar, AgentStatus } from "./agent-identity";
 import { useAgents } from "./use-agents";
@@ -35,7 +35,7 @@ function AgentRow({ agent }: { agent: Agent }) {
   const modelName =
     availability.state === "not_set"
       ? translateText("models.noneSelected")
-      : (availability.model?.display_name ?? agent.model);
+      : (availability.model?.name ?? agent.model);
 
   return (
     <li className="flex items-start gap-3 px-3 py-2.5 duration-[60ms] ease-linear hover:bg-muted/60">
@@ -60,13 +60,10 @@ function AgentRow({ agent }: { agent: Agent }) {
               "inline-flex max-w-full items-center gap-1 text-xs",
               availability.state === "ok"
                 ? "text-muted-foreground"
-                : availability.state === "degraded"
-                  ? "text-amber-600 dark:text-amber-500"
-                  : "text-destructive",
+                : "text-destructive",
             )}
             title={
-              availability.state === "unavailable" ||
-              availability.state === "degraded"
+              availability.state === "unavailable"
                 ? availability.message
                 : undefined
             }

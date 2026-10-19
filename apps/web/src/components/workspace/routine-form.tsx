@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { listSeparator, translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { chatQueryOptions } from "@/queries/chat";
-import { useModels } from "@/queries/llm";
+import { useModels } from "@/queries/providers";
 import { useSaveRoutine } from "@/queries/routines";
 import { ModelSelect } from "./agent-fields";
 import { occurrences, when } from "./routine-format";

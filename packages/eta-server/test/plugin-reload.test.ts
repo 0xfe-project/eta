@@ -10,7 +10,7 @@
  * the *new* code is the one running.
  */
 
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context } from "cordis";
@@ -275,12 +275,17 @@ describe("the watch", () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(reloads).toEqual([]);
 
-    await writePlugin(
-      plugins,
-      "watched",
+    // One edit, landed atomically. A plain write truncates the file first, and a 5ms watch can see
+    // the empty file and then the full one: two real changes, two reloads, and not what this test
+    // is about. The temporary name does not end in `.ts`, so the fingerprint ignores it.
+    const entry = join(plugins, "watched", "index.ts");
+    await writeFile(
+      `${entry}.tmp`,
       `export default { name: "watched", apply() { globalThis.__watched = true; } };`,
+      "utf8",
     );
-    const deadline = Date.now() + 2_000;
+    await rename(`${entry}.tmp`, entry);
+    const deadline = Date.now() + 10_000;
     while (reloads.length === 0 && Date.now() < deadline)
       await new Promise((resolve) => setTimeout(resolve, 10));
     manager.stop();

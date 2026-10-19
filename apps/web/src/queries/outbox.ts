@@ -11,7 +11,6 @@ import { ApiError, controlPlane, unwrap } from "@/lib/api";
 import { draftOf, MAX_ATTACHMENT_BYTES } from "@/lib/composer";
 import { translate } from "@/lib/i18n";
 import { addSent } from "@/queries/chat";
-import { refreshLlm } from "@/queries/llm";
 
 // What the user has written and not yet seen arrive: a draft per group, the
 // files pasted into drafts (uploaded to that group at once), and the
@@ -214,8 +213,6 @@ async function attempt(queryClient: QueryClient, outgoing: Outgoing) {
         await sleep(1000 * 2 ** (tries - 1));
         continue;
       }
-      if (error instanceof ApiError && error.code.startsWith("MODEL_"))
-        void refreshLlm(queryClient);
       update(outgoing.id, {
         failure: error instanceof ApiError ? error.message : networkFailure(),
       });

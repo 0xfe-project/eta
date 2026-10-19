@@ -1,38 +1,10 @@
 {
-  "status": {
-    "degradedSuffix": "（暂时故障）",
-    "healthy": "正常",
-    "disabled": "已停用",
-    "needsLogin": "需要重新登录",
-    "quotaExhausted": "额度已用尽",
-    "degraded": "暂时故障"
-  },
   "actions": {
     "openSettings": "前往模型服务",
-    "signInAgain": "重新登录",
     "linkAccount": "绑定账号",
-    "reenterKey": "重新填写",
-    "addKey": "添加 API key"
+    "refreshModels": "刷新模型"
   },
   "title": "模型服务",
-  "recovery": {
-    "minutes": "约 {{count}} 分钟后{{action}}",
-    "hours": "约 {{count}} 小时后{{action}}",
-    "days": "约 {{count}} 天后{{action}}",
-    "available": "恢复",
-    "minutes_one": "约 {{count}} 分钟后{{action}}",
-    "minutes_other": "约 {{count}} 分钟后{{action}}",
-    "hours_one": "约 {{count}} 小时后{{action}}",
-    "hours_other": "约 {{count}} 小时后{{action}}",
-    "days_one": "约 {{count}} 天后{{action}}",
-    "days_other": "约 {{count}} 天后{{action}}"
-  },
-  "usage": {
-    "remainingQuotaLabel": "{{label}}剩余额度",
-    "remainingPercent": "剩余 {{percent}}%",
-    "resets": "重置",
-    "resetsSoon": "即将重置"
-  },
   "login": {
     "linked": "已绑定 {{providerName}} 账号",
     "failed": "登录失败，请重试。",
@@ -40,42 +12,37 @@
     "instructions": "打开授权页面，登录后输入下面的验证码。",
     "codeLabel": "验证码 {{code}}",
     "copyCode": "复制验证码",
-    "waitingWithExpiry": "等待授权… {{minutes}}:{{seconds}} 后过期",
+    "waiting": "等待授权…",
     "loadingCode": "正在获取验证码…",
-    "openAuthorization": "打开授权页面"
-  },
-  "apiKey": {
-    "title": "添加 {{providerName}} API key",
-    "instructions": "填入 API key，保存前会先向服务商校验。",
-    "label": "API key",
-    "submit": "校验并保存",
-    "checking": "正在校验…",
-    "added": "已添加 {{providerName}} API key"
+    "openAuthorization": "打开授权页面",
+    "manualLabel": "授权页给出的代码或地址",
+    "continue": "继续"
   },
   "remove": {
-    "confirmTitle": "移除 {{accountName}}？",
-    "affectedAgents": "{{agents}} 使用的 {{providerName}} 模型将不可用，直到重新绑定账号。",
-    "credentialsNotice": "该 {{providerName}} 账号的登录信息会被删除。",
-    "success": "已移除 {{accountName}}"
+    "confirmTitle": "移除 {{providerName}}？",
+    "affectedAgents": "{{agents}} 使用的 {{providerName}} 模型将不可用，直到重新添加。",
+    "credentialsNotice": "它的 API key 和请求头会从 config.json 里删掉。",
+    "success": "已移除 {{providerName}}"
   },
   "refresh": {
-    "failedWithPreviousStatus": "刷新失败：{{message}}仍显示之前的状态。",
-    "checkedAt": "已于 {{time}} 重新检查",
-    "failedCount": "{{count}} 个账号未能检查",
-    "allReachable": "账号均可连接",
-    "checking": "正在检查…",
-    "checkingLabel": "检查中",
-    "label": "刷新状态",
-    "failedCount_one": "{{count}} 个账号未能检查",
-    "failedCount_other": "{{count}} 个账号未能检查"
+    "done": "{{providerName}}：读到 {{count}} 个模型",
+    "done_one": "{{providerName}}：读到 {{count}} 个模型",
+    "done_other": "{{providerName}}：读到 {{count}} 个模型"
   },
-  "accounts": {
-    "title": "{{providerName}} 账号",
-    "empty": "尚未绑定账号",
-    "loadFailed": "无法加载账号：{{message}}"
+  "models": {
+    "keyMissing": "{{providerName}} 还没有 API key"
   },
-  "grok": {
-    "sharedAccountHelp": "同一账号也供 grok 插件生成图片、视频和搜索，见"
+  "errors": {
+    "unavailable": "宿主没有启用模型服务。",
+    "configChanged": "配置在别处被改过，已重新读取。看一下再保存一次。",
+    "modelsRequired": "至少要有一个模型。",
+    "invalidProviderId": "名字不能留空，也不能太长。",
+    "invalidConfig": "接口地址不对。",
+    "invalidDefaultModel": "默认模型不在已配置的模型里。",
+    "invalidNetwork": "代理地址不对。",
+    "invalidSavedConfig": "config.json 读不出来，先修好这个文件。",
+    "readFailed": "读不了 config.json。",
+    "saveFailed": "写不进 config.json。"
   },
   "editor": {
     "newTitle": "新建 provider",

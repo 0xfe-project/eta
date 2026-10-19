@@ -1,38 +1,10 @@
 {
-  "status": {
-    "degradedSuffix": "(temporarily failing)",
-    "healthy": "Healthy",
-    "disabled": "Disabled",
-    "needsLogin": "Sign in again",
-    "quotaExhausted": "Quota exhausted",
-    "degraded": "Temporary failure"
-  },
   "actions": {
     "openSettings": "Go to model services",
-    "signInAgain": "Sign in again",
     "linkAccount": "Link account",
-    "reenterKey": "Re-enter key",
-    "addKey": "Add API key"
+    "refreshModels": "Refresh models"
   },
   "title": "Model services",
-  "recovery": {
-    "minutes": "{{action}} in about {{count}} minutes",
-    "hours": "{{action}} in about {{count}} hours",
-    "days": "{{action}} in about {{count}} days",
-    "available": "Available",
-    "minutes_one": "{{action}} in about {{count}} minute",
-    "minutes_other": "{{action}} in about {{count}} minutes",
-    "hours_one": "{{action}} in about {{count}} hour",
-    "hours_other": "{{action}} in about {{count}} hours",
-    "days_one": "{{action}} in about {{count}} day",
-    "days_other": "{{action}} in about {{count}} days"
-  },
-  "usage": {
-    "remainingQuotaLabel": "Remaining quota for {{label}}",
-    "remainingPercent": "{{percent}}% remaining",
-    "resets": "Resets",
-    "resetsSoon": "Resets soon"
-  },
   "login": {
     "linked": "Linked {{providerName}} account",
     "failed": "Sign-in failed. Try again.",
@@ -40,42 +12,37 @@
     "instructions": "Open the authorization page, sign in and enter the code below.",
     "codeLabel": "Verification code {{code}}",
     "copyCode": "Copy verification code",
-    "waitingWithExpiry": "Awaiting authorization… Expires in {{minutes}}:{{seconds}}",
+    "waiting": "Awaiting authorization…",
     "loadingCode": "Getting verification code…",
-    "openAuthorization": "Open authorization page"
-  },
-  "apiKey": {
-    "title": "Add {{providerName}} API key",
-    "instructions": "Enter an API key. It is checked with the provider before it is saved.",
-    "label": "API key",
-    "submit": "Check and save",
-    "checking": "Checking…",
-    "added": "Added {{providerName}} API key"
+    "openAuthorization": "Open authorization page",
+    "manualLabel": "Code or address from the authorization page",
+    "continue": "Continue"
   },
   "remove": {
-    "confirmTitle": "Remove {{accountName}}?",
-    "affectedAgents": "{{providerName}} models used by {{agents}} will be unavailable until the account is linked again.",
-    "credentialsNotice": "Sign-in credentials for this {{providerName}} account will be deleted.",
-    "success": "Removed {{accountName}}"
+    "confirmTitle": "Remove {{providerName}}?",
+    "affectedAgents": "{{providerName}} models used by {{agents}} will be unavailable until it is added again.",
+    "credentialsNotice": "Its API key and headers will be deleted from config.json.",
+    "success": "Removed {{providerName}}"
   },
   "refresh": {
-    "failedWithPreviousStatus": "Refresh failed: {{message}}Showing the previous status.",
-    "checkedAt": "Checked again at {{time}}",
-    "failedCount": "Unable to check {{count}} accounts",
-    "allReachable": "All accounts are reachable",
-    "checking": "Checking…",
-    "checkingLabel": "Checking",
-    "label": "Refresh status",
-    "failedCount_one": "Unable to check {{count}} account",
-    "failedCount_other": "Unable to check {{count}} accounts"
+    "done": "{{providerName}}: found {{count}} models",
+    "done_one": "{{providerName}}: found {{count}} model",
+    "done_other": "{{providerName}}: found {{count}} models"
   },
-  "accounts": {
-    "title": "{{providerName}} accounts",
-    "empty": "No accounts linked yet",
-    "loadFailed": "Unable to load accounts: {{message}}"
+  "models": {
+    "keyMissing": "{{providerName}} has no API key"
   },
-  "grok": {
-    "sharedAccountHelp": "The grok plugin also uses this account for images, videos and search. See"
+  "errors": {
+    "unavailable": "The host has no model services.",
+    "configChanged": "The config was changed elsewhere and has been read again. Take a look, then save once more.",
+    "modelsRequired": "Add at least one model.",
+    "invalidProviderId": "The name cannot be empty or too long.",
+    "invalidConfig": "The base URL is not valid.",
+    "invalidDefaultModel": "The default model is not among the configured models.",
+    "invalidNetwork": "The proxy address is not valid.",
+    "invalidSavedConfig": "config.json cannot be read. Fix the file first.",
+    "readFailed": "Cannot read config.json.",
+    "saveFailed": "Cannot write config.json."
   },
   "editor": {
     "newTitle": "New provider",

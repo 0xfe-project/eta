@@ -67,7 +67,6 @@ async function mount(path = "/?group=team&view=memory") {
   client.setQueryData(["tasks"], { tasks: [], assignees: [] });
   client.setQueryData(["artifacts"], { artifacts: [] });
   client.setQueryData(["routines"], []);
-  client.setQueryData(["llm", "connections"], []);
   for (const id of ["a", "b"])
     client.setQueryData(
       ["memory", id, ""],

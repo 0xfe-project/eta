@@ -104,19 +104,11 @@
   "status": {
     "error": "连接出错",
     "notConnected": "未连接",
-    "notLinked": "未绑定",
     "notConfigured": "未配置",
     "connected": "已连接"
   },
   "errors": {
     "loadStatus": "无法加载连接状态"
-  },
-  "grok": {
-    "summary": "生成图片和视频，搜索网页与 X",
-    "usingAccount": "用 {{accountName}} {{summary}}",
-    "accountTitle": "Grok 账号",
-    "sharedAccountPrefix": "与",
-    "sharedAccountSuffix": "里的 Grok 是同一账号，也提供 Grok 模型"
   },
   "configuration": {
     "savedReady": "已保存，载入它的智能体空闲时会重启",

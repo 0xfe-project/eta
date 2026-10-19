@@ -1,256 +1,370 @@
+import type { ProviderSummary, ProvidersView } from "@eta/client-contracts";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { setWire } from "@/lib/wire";
+import { FakeHost, providersHost } from "@/test-wire";
 import { ProviderSettings } from "./provider-settings";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const connection = (extra: object = {}) => ({
-  id: "a",
-  connector: "codex",
-  label: "dev@example.com",
-  state: "active",
-  created_at: "2026-10-01T00:00:00Z",
-  ...extra,
-});
-
-const model = (id: string, status: string, extra: object = {}) => ({
-  id,
-  connector: "codex",
-  display_name: id,
-  status,
-  available: status !== "unavailable",
-  ...extra,
-});
-
-// gpt-1 just got a 502; gpt-2 is fine.
-const before = [
-  model("gpt-1", "degraded", {
-    reason: {
-      code: "UPSTREAM_UNSTABLE",
-      message: "上游暂时故障（HTTP 502），稍后会自动重试。",
-    },
+rstest.mock("./use-agents", () => ({
+  useAgents: () => ({
+    agents: [{ id: "a1", name: "小助手", model: "local:m1" }],
   }),
-  model("gpt-2", "available"),
-];
-const after = {
-  connections: [connection({ checked_at: "2026-10-12T08:00:00Z" })],
-  models: [model("gpt-1", "available"), model("gpt-2", "available")],
-  usage: [],
-};
+}));
+rstest.mock("sonner", () => ({
+  toast: { success: rstest.fn(), error: rstest.fn() },
+}));
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => (resolve = r));
-  return { promise, resolve };
-}
+const provider = (extra: Partial<ProviderSummary> & { id: string }) =>
+  ({
+    kind: "openai-compatible",
+    baseUrl: "http://127.0.0.1:1/v1",
+    hasApiKey: true,
+    models: [{ id: "m1" }, { id: "m2" }],
+    ...extra,
+  }) satisfies ProviderSummary;
 
-let queryClient: QueryClient;
+const config = (providers: ProviderSummary[]): ProvidersView => ({
+  revision: "r1",
+  providers,
+});
 
-const codex = { id: "codex", display_name: "Codex", flow: "oauth_device" };
+const cleanup: (() => void)[] = [];
 
-async function render(connectors: object[] = [codex]) {
-  // Seeded data stays fresh, so only what a test triggers is fetched.
-  queryClient = new QueryClient({
+async function render(fake: FakeHost) {
+  const client = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
   });
-  queryClient.setQueryData(["chat"], {
-    agents: [],
-    active_replies: [],
-    messages: [],
-    interactions: [],
-    event_cursor: "0",
-  });
-  queryClient.setQueryData(["llm", "connectors"], connectors);
-  queryClient.setQueryData(["llm", "connections"], [connection()]);
-  queryClient.setQueryData(["llm", "models"], before);
-  queryClient.setQueryData(["llm", "usage"], []);
   const container = document.createElement("div");
   document.body.append(container);
+  const root = createRoot(container);
   await act(async () =>
-    createRoot(container).render(
-      <QueryClientProvider client={queryClient}>
+    root.render(
+      <QueryClientProvider client={client}>
         <ProviderSettings />
       </QueryClientProvider>,
     ),
   );
+  cleanup.push(() => {
+    root.unmount();
+    container.remove();
+  });
+  return fake;
 }
 
-const settle = () => act(() => new Promise((r) => setTimeout(r, 20)));
-// Settles until done, however slow the machine (CI): at most two seconds.
-async function settleUntil(done: () => boolean) {
-  for (let i = 0; i < 100 && !done(); i++) await settle();
-}
-const refreshButton = () =>
+const settle = () => act(() => new Promise((r) => setTimeout(r, 0)));
+const text = () => document.body.textContent ?? "";
+const button = (label: RegExp) =>
   [...document.querySelectorAll("button")].find((b) =>
-    /刷新状态|检查中/.test(b.textContent ?? ""),
-  )!;
-const status = () => document.querySelector('[role="status"]')?.textContent;
-const models = () => queryClient.getQueryData<typeof before>(["llm", "models"]);
-
-describe("refreshing model status", () => {
-  afterEach(() => {
-    document.body.innerHTML = "";
-    rstest.restoreAllMocks();
+    label.test(`${b.textContent ?? ""}${b.getAttribute("aria-label") ?? ""}`),
+  );
+const press = async (label: RegExp) => {
+  const target = button(label);
+  expect(target, String(label)).toBeDefined();
+  await act(async () => target!.click());
+};
+/** Radix opens a menu on pointer down. */
+const openMenu = async (row = 0) => {
+  const item = document.querySelectorAll("li")[row]!;
+  const trigger = item.querySelector<HTMLElement>('[aria-haspopup="menu"]')!;
+  await act(async () => {
+    trigger.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
   });
+};
+const choose = async (name: RegExp) => {
+  const item = [
+    ...document.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+  ].find((candidate) => name.test(candidate.textContent ?? ""));
+  expect(item, String(name)).toBeDefined();
+  await act(async () => item!.click());
+};
 
-  it("checks again once however often it is pressed, then shows the result", async () => {
-    const response = deferred<Response>();
-    const requests: string[] = [];
-    rstest
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async (input, init) => {
-        const url = String(input);
-        // The provider list is read alongside the page; only the refresh is the deferred one, or
-        // every query on the page would wait on it.
-        if (url.includes("/api/llm/v1/providers")) {
-          return Response.json({ providers: [] });
-        }
-        requests.push(`${init?.method ?? "GET"} ${url}`);
-        return response.promise;
-      });
-    await render();
+afterEach(async () => {
+  await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
+  setWire(undefined);
+  document.body.innerHTML = "";
+  rstest.useRealTimers();
+  rstest.clearAllMocks();
+  rstest.restoreAllMocks();
+});
 
-    await act(async () => refreshButton().click());
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    });
-    expect(refreshButton().disabled).toBe(true);
-    expect(refreshButton().textContent).toContain("检查中");
-    expect(status()).toBe("正在检查…");
-    await act(async () => refreshButton().click());
-
-    response.resolve(Response.json(after));
-    await settleUntil(() => !refreshButton().disabled);
-    expect(requests).toEqual(["POST /api/llm/v1/refresh"]);
-    expect(refreshButton().disabled).toBe(false);
-    expect(status()).toMatch(/^已于 .+ 重新检查，账号均可连接$/);
-    expect(models()?.every((m) => m.status === "available")).toBe(true);
-  });
-
-  it("keeps the status it had when the check fails", async () => {
-    rstest.spyOn(globalThis, "fetch").mockImplementation(async () =>
-      Response.json(
-        {
-          error: {
-            code: "UPSTREAM_ERROR",
-            message: "模型服务暂时不可用，请稍后再试。",
-          },
-        },
-        { status: 424 },
+describe("the providers page", () => {
+  it("lists what the config holds, and what each row can tell", async () => {
+    await render(
+      providersHost(
+        config([
+          provider({ id: "local", name: "Local" }),
+          provider({ id: "ds", kind: "deepseek", hasApiKey: false }),
+          provider({ id: "open", hasApiKey: false }),
+          provider({ id: "codex", kind: "openai-codex", hasApiKey: false }),
+        ]),
       ),
     );
-    await render();
-    await act(async () => refreshButton().click());
-    await settle();
-
-    expect(status()).toBe(
-      "刷新失败：模型服务暂时不可用，请稍后再试。仍显示之前的状态。",
+    const rows = [...document.querySelectorAll("li")].map(
+      (row) => row.textContent ?? "",
     );
-    expect(models()).toEqual(before);
-    expect(models()?.some((m) => m.status === "unavailable")).toBe(false);
+    expect(rows[0]).toContain("local");
+    expect(rows[0]).toContain("2 个模型");
+    expect(rows[0]).not.toContain("还没配");
+    // A key a provider cannot run without is a warning; an open endpoint just has none.
+    expect(rows[1]).toContain("还没配");
+    expect(
+      document.querySelectorAll("li")[1]?.querySelector(".text-destructive"),
+    ).not.toBeNull();
+    expect(rows[2]).toContain("还没配");
+    expect(
+      document.querySelectorAll("li")[2]?.querySelector(".text-destructive"),
+    ).toBeNull();
+    // Codex holds no key; the page does not claim anything about its sign-in.
+    expect(rows[3]).not.toContain("还没配");
+    expect(rows[3]).toContain("绑定账号");
   });
 
-  it("does not let a poll that started earlier land on top of the result", async () => {
-    const poll = deferred<Response>();
-    rstest
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async (input) =>
-        String(input).endsWith("/refresh")
-          ? Response.json(after)
-          : poll.promise,
-      );
-    await render();
-    // The 30-second poll is on its way when the user presses refresh.
-    void queryClient.refetchQueries({ queryKey: ["llm", "models"] });
-    await act(async () => refreshButton().click());
-    await settle();
-    expect(models()).toEqual(after.models);
+  it("waits for the config, and says so when the host has no providers plugin", async () => {
+    const fake = new FakeHost().plugins([]);
+    fake.install();
+    fake.hello();
+    await render(fake);
+    expect(text()).toContain("无法加载模型服务");
+    expect(text()).toContain("宿主没有启用模型服务");
+  });
 
-    // Its answer, from before the check, arrives last.
-    poll.resolve(Response.json(before));
-    await settle();
-    expect(models()).toEqual(after.models);
+  it("follows the config when it changes under it", async () => {
+    const fake = await render(providersHost(config([provider({ id: "a" })])));
+    expect(document.querySelectorAll("li")).toHaveLength(1);
+    await act(async () => {
+      fake.set("providers", {
+        config: {
+          revision: "r2",
+          providers: [provider({ id: "a" }), provider({ id: "b" })],
+        },
+      });
+    });
+    expect(document.querySelectorAll("li")).toHaveLength(2);
   });
 });
 
-const button = (text: string) =>
-  [...document.querySelectorAll("button")].find(
-    (b) => b.textContent?.trim() === text,
-  )!;
+describe("removing a provider", () => {
+  it("names the agents that lose their model, then removes it at the revision it read", async () => {
+    const fake = await render(
+      providersHost(config([provider({ id: "local" })])).handle(
+        "providers.delete",
+        () => ({ revision: "r2" }),
+      ),
+    );
+    await openMenu();
+    await choose(/^移除$/);
+    expect(
+      document.querySelector('[role="alertdialog"]')?.textContent,
+    ).toContain("「小助手」");
+    await act(async () => {
+      document
+        .querySelector<HTMLButtonElement>(
+          '[role="alertdialog"] button:last-child',
+        )!
+        .click();
+    });
+    await settle();
+    expect(fake.calls.find((call) => call.action === "delete")?.args).toEqual({
+      id: "local",
+      revision: "r1",
+    });
+  });
+});
 
-function type(input: HTMLInputElement, value: string) {
-  Object.getOwnPropertyDescriptor(
-    HTMLInputElement.prototype,
-    "value",
-  )!.set!.call(input, value);
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-}
-
-describe("adding an API key", () => {
-  afterEach(() => {
-    document.body.innerHTML = "";
-    rstest.restoreAllMocks();
+describe("refreshing a provider's models", () => {
+  it("asks the provider's endpoint and says what it found", async () => {
+    const { toast } = await import("sonner");
+    const fake = await render(
+      providersHost(config([provider({ id: "local" })])).handle(
+        "providers.refresh",
+        () => ({ revision: "r2", models: 5 }),
+      ),
+    );
+    await openMenu();
+    await choose(/刷新模型/);
+    await settle();
+    expect(fake.calls.find((call) => call.action === "refresh")?.args).toEqual({
+      id: "local",
+    });
+    expect(toast.success).toHaveBeenCalledWith("local：读到 5 个模型");
   });
 
-  it("shows why a key is rejected, and closes once one is kept", async () => {
-    const requests: string[] = [];
-    rstest
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async (input, init) => {
-        const url = String(input);
-        requests.push(`${init?.method ?? "GET"} ${url} ${init?.body ?? ""}`);
-        const login = {
-          id: "gemini-1",
-          connector: "gemini",
-          flow: "api_key",
-          status: "pending",
-          expires_at: "2026-10-16T12:00:00Z",
-        };
-        if (url.endsWith("/logins")) return Response.json(login);
-        if (url.endsWith("/input"))
-          return String(init?.body).includes("bad")
-            ? Response.json(
-                {
-                  error: {
-                    code: "INVALID_API_KEY",
-                    message: "API key 无效，请检查后重新填写。",
-                  },
-                },
-                { status: 424 },
-              )
-            : Response.json({ ...login, status: "succeeded" });
-        return Response.json([]);
-      });
-    await render([
-      codex,
-      { id: "gemini", display_name: "Google AI Studio", flow: "api_key" },
-    ]);
-
-    await act(async () => button("添加 API key").click());
-    const input = document.querySelector<HTMLInputElement>("#api-key-gemini")!;
-    expect(input.type).toBe("password");
-    await act(async () => type(input, " bad "));
-    await act(async () => button("校验并保存").click());
-    await settleUntil(() => Boolean(document.querySelector('[role="alert"]')));
-    expect(document.querySelector('[role="alert"]')?.textContent).toBe(
-      "API key 无效，请检查后重新填写。",
+  it("tells why when the provider would not answer", async () => {
+    const { toast } = await import("sonner");
+    await render(
+      providersHost(config([provider({ id: "local" })])).handle(
+        "providers.refresh",
+        () => {
+          throw new Error("the model list came back 401");
+        },
+      ),
     );
+    await openMenu();
+    await choose(/刷新模型/);
+    await settle();
+    expect(toast.error).toHaveBeenCalledWith("the model list came back 401");
+  });
+});
 
-    await act(async () => type(input, "AIza-good"));
-    expect(document.querySelector('[role="alert"]')).toBeNull();
-    await act(async () => button("校验并保存").click());
-    await settleUntil(() => !document.querySelector("#api-key-gemini"));
-    expect(document.querySelector("#api-key-gemini")).toBeNull();
-    const posts = requests.filter((r) => r.startsWith("POST"));
-    expect(posts).toEqual([
-      'POST /api/llm/v1/logins {"connector":"gemini"}',
-      'POST /api/llm/v1/logins/gemini-1/input {"api_key":"bad"}',
-      'POST /api/llm/v1/logins {"connector":"gemini"}',
-      'POST /api/llm/v1/logins/gemini-1/input {"api_key":"AIza-good"}',
-    ]);
+describe("linking a Codex account", () => {
+  it("shows the code, follows the sign-in, and says when it is done", async () => {
+    rstest.useFakeTimers();
+    const { toast } = await import("sonner");
+    let status = "pending";
+    const fake = await render(
+      providersHost(
+        config([
+          provider({ id: "codex", kind: "openai-codex", hasApiKey: false }),
+        ]),
+      )
+        .handle("providers.codexLogin", () => ({
+          login: {
+            id: "l1",
+            status: "pending",
+            method: "device_code",
+            userCode: "ABCD-1234",
+            url: "https://auth.example.com/device",
+          },
+        }))
+        .handle("providers.codexStatus", () => ({
+          login: {
+            id: "l1",
+            status,
+            userCode: "ABCD-1234",
+            url: "https://auth.example.com/device",
+          },
+        })),
+    );
+    await press(/绑定账号/);
+    await act(async () => {
+      await rstest.advanceTimersByTimeAsync(0);
+    });
+    expect(
+      fake.calls.find((call) => call.action === "codexLogin")?.args,
+    ).toEqual({ method: "device_code" });
+    expect(text()).toContain("ABCD-1234");
+    expect(
+      document.querySelector<HTMLAnchorElement>('a[href^="https://auth"]'),
+    ).not.toBeNull();
+
+    // Still pending after a poll; then it completes.
+    await act(async () => {
+      await rstest.advanceTimersByTimeAsync(1500);
+    });
+    status = "complete";
+    await act(async () => {
+      await rstest.advanceTimersByTimeAsync(1500);
+    });
+    // The reply to that poll is still on its way through the microtasks.
+    await act(async () => {
+      await rstest.advanceTimersByTimeAsync(10);
+    });
+    expect(toast.success).toHaveBeenCalledWith("已绑定 Codex 账号");
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    // No longer pending, so it stops asking.
+    const polls = () =>
+      fake.calls.filter((call) => call.action === "codexStatus").length;
+    const seen = polls();
+    await act(async () => {
+      await rstest.advanceTimersByTimeAsync(10_000);
+    });
+    expect(polls()).toBe(seen);
+  });
+
+  it("cancels a sign-in that is closed while it waits", async () => {
+    const fake = await render(
+      providersHost(
+        config([
+          provider({ id: "codex", kind: "openai-codex", hasApiKey: false }),
+        ]),
+      )
+        .handle("providers.codexLogin", () => ({
+          login: {
+            id: "l1",
+            status: "pending",
+            userCode: "X",
+            url: "https://a",
+          },
+        }))
+        .handle("providers.codexStatus", () => ({
+          login: {
+            id: "l1",
+            status: "pending",
+            userCode: "X",
+            url: "https://a",
+          },
+        }))
+        .handle("providers.codexCancel", () => ({ cancelled: true })),
+    );
+    await press(/绑定账号/);
+    await settle();
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    await act(async () => {
+      dialog.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+    await settle();
+    expect(
+      fake.calls.find((call) => call.action === "codexCancel")?.args,
+    ).toEqual({
+      id: "l1",
+    });
+  });
+
+  it("passes on the code the authorization page asked to have typed back", async () => {
+    const fake = await render(
+      providersHost(
+        config([
+          provider({ id: "codex", kind: "openai-codex", hasApiKey: false }),
+        ]),
+      )
+        .handle("providers.codexLogin", () => ({
+          login: {
+            id: "l1",
+            status: "pending",
+            manualPromptId: "p1",
+            url: "https://a",
+          },
+        }))
+        .handle("providers.codexStatus", () => ({
+          login: {
+            id: "l1",
+            status: "pending",
+            manualPromptId: "p1",
+            url: "https://a",
+          },
+        }))
+        .handle("providers.codexAnswer", () => ({ accepted: true })),
+    );
+    await press(/绑定账号/);
+    await settle();
+    const input = document.querySelector<HTMLInputElement>(
+      'input[aria-label="授权页给出的代码或地址"]',
+    )!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )!.set!.call(input, " http://localhost:1455/cb?code=1 ");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await press(/^继续$/);
+    expect(
+      fake.calls.find((call) => call.action === "codexAnswer")?.args,
+    ).toEqual({
+      id: "l1",
+      promptId: "p1",
+      value: "http://localhost:1455/cb?code=1",
+    });
   });
 });
