@@ -12,16 +12,23 @@ import type {
  * as it would a local one.
  */
 import type { KernelModels } from "@eta/core";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { DaemonLink, DaemonNode } from "@eta/daemon";
+import { SshEnvironment } from "@eta/ssh";
 import { describe, expect, it } from "vitest";
+import { LinkTransport } from "../src/machines/link-transport";
 import { connect, until } from "./support/client";
 import { machineView } from "./support/daemon";
 import { testHost } from "./support/host";
 import { call, gate, HANG, say, scriptedModels } from "./support/models";
 import { remoteWorld, sessionOf } from "./support/remote";
+
+const sha256 = (bytes: Uint8Array): string =>
+  createHash("sha256").update(bytes).digest("hex");
 
 const SECRET = "sk-only-the-primary-may-know-this";
 
@@ -869,4 +876,29 @@ describe("the global session list and the mirror", () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(runEnds()).toBe(2);
   });
+});
+
+describe("a big file on the daemon's machine", () => {
+  it("is read through the link in windows, although a frame holds only 8 MiB", async () => {
+    const r = await remoteWorld();
+    const link = r.host.product.hub.link(r.daemon.machineId)!;
+    const env = new SshEnvironment({
+      transport: new LinkTransport(link, homedir()),
+      cwd: r.dir,
+    });
+    // About 20 MB, every byte value in it, so a window that is cut or joined wrongly shows.
+    const bytes = new Uint8Array(20 * 1024 * 1024 + 4_321);
+    for (let i = 0; i < bytes.length; i++)
+      bytes[i] = (i * 131 + (i >> 9)) & 0xff;
+    await writeFile(join(r.dir, "big.bin"), bytes);
+
+    const read = await env.readBinaryFile("big.bin");
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(read.value.length).toBe(bytes.length);
+    expect(sha256(read.value)).toBe(sha256(bytes));
+    // The link carried it all and is still the same one.
+    expect(machineView(r.client, r.daemon.machineId)?.status).toBe("online");
+    expect(r.host.product.hub.link(r.daemon.machineId)).toBe(link);
+  }, 120_000);
 });
