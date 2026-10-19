@@ -70,12 +70,14 @@ export async function setup(
     stdio: (spec, extra = {}, env = {}) => ({
       command: "bun",
       args: [fixture],
+      ...extra,
+      // `extra.env` adds to the fake's variables rather than replacing them.
       env: {
         FAKE_MCP: JSON.stringify(spec),
         FAKE_MCP_STARTS: startsFile,
         ...env,
+        ...extra.env,
       },
-      ...extra,
     }),
     source: (servers, name = "test") => ({ name, servers }),
     cleanup: async () => {

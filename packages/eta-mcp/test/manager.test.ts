@@ -2,7 +2,11 @@
  * Connections: lazy start, sharing by owner, idle shutdown, lifecycle modes, backoff and the three
  * transports, against fake servers.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import process from "node:process";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { startFakeHttp } from "./helpers/fake-http";
 import { cleanupAll, setup, tool } from "./helpers/harness";
 
@@ -376,6 +380,147 @@ describe("transports", () => {
       expect(asked).toEqual(["remote"]);
       expect(outcome).toMatchObject({ ok: false, error: "needs_auth" });
       expect(http.requests).toHaveLength(0);
+    } finally {
+      await h.manager.closeAll();
+      await http.close();
+    }
+  });
+});
+
+describe("the child process", () => {
+  const probes = {
+    tools: [
+      tool("cwd", { behavior: "cwd" }),
+      tool("env", {
+        behavior: "env",
+        inputSchema: {
+          type: "object",
+          properties: { name: { type: "string" } },
+        },
+      }),
+    ],
+  };
+
+  async function probe(
+    h: Awaited<ReturnType<typeof setup>>,
+    entry: Parameters<typeof h.stdio>[1],
+    cwd?: string,
+  ) {
+    const scope = h.manager.scope({
+      owner: "a",
+      sources: [h.source({ s: h.stdio(probes, entry) })],
+      ...(cwd ? { cwd } : {}),
+    });
+    expect(await scope.connect("s")).toMatchObject({ ok: true });
+    const read = async (name: string, args: Record<string, unknown> = {}) =>
+      text(
+        await scope.callTool(
+          "s",
+          scope.tools("s")!.find((t) => t.name === name)!,
+          args,
+        ),
+      );
+    return { scope, read };
+  }
+
+  it("starts in the session's directory unless the config names one", async () => {
+    const h = await setup();
+    const sessionDir = await mkdtemp(join(tmpdir(), "eta-mcp-cwd-"));
+    const configured = await mkdtemp(join(tmpdir(), "eta-mcp-cwd-"));
+    try {
+      const inSession = await probe(h, {}, sessionDir);
+      expect(await inSession.read("cwd")).toBe(await realpath(sessionDir));
+      await h.manager.closeAll();
+
+      const h2 = await setup();
+      const inConfig = await probe(h2, { cwd: configured }, sessionDir);
+      expect(await inConfig.read("cwd")).toBe(await realpath(configured));
+    } finally {
+      await rm(sessionDir, { recursive: true, force: true });
+      await rm(configured, { recursive: true, force: true });
+    }
+  });
+
+  it("gets only the basic environment plus what the config adds, with variables filled in", async () => {
+    const h = await setup({
+      env: {
+        HOST_SECRET: "leak",
+        FROM_HOST: "hello",
+        PATH: process.env.PATH ?? "",
+      },
+    });
+    // eslint-disable-next-line no-template-curly-in-string -- the library interpolates this
+    const { read } = await probe(h, { env: { ADDED: "${FROM_HOST} there" } });
+    expect(await read("env", { name: "HOST_SECRET" })).toBe("");
+    expect(await read("env", { name: "ADDED" })).toBe("hello there");
+    expect(await read("env", { name: "PATH" })).not.toBe("");
+  });
+
+  it("gets the host's whole environment with inheritEnv", async () => {
+    const h = await setup({
+      env: { HOST_SECRET: "shared", PATH: process.env.PATH ?? "" },
+    });
+    const { read } = await probe(h, { inheritEnv: true });
+    expect(await read("env", { name: "HOST_SECRET" })).toBe("shared");
+  });
+});
+
+describe("timers and recovery", () => {
+  it("closes idle servers on its own timer", async () => {
+    const h = await setup({
+      checkIntervalMs: 25,
+      idleTimeoutMs: 80,
+      now: undefined,
+    });
+    const scope = h.manager.scope({
+      owner: "a",
+      sources: [h.source({ s: h.stdio(spec) })],
+    });
+    await scope.connect("s");
+    expect(h.manager.servers.get("a", "s")?.status).toBe("connected");
+    await vi.waitFor(
+      () => expect(h.manager.servers.get("a", "s")).toBeUndefined(),
+      { timeout: 3000 },
+    );
+    expect(scope.tools("s")).toHaveLength(1);
+  });
+
+  it("starts a new session when the HTTP server forgot the old one, and the call runs once", async () => {
+    const h = await setup();
+    const http = await startFakeHttp({ spec });
+    try {
+      const scope = h.manager.scope({
+        owner: "a",
+        sources: [h.source({ web: { url: http.url } })],
+      });
+      await scope.connect("web");
+      const [ping] = scope.tools("web")!;
+      expect(text(await scope.callTool("web", ping!, {}))).toBe("count 1");
+
+      http.forgetSessions();
+      const result = await scope.callTool("web", ping!, {});
+      expect(result.isError).toBeUndefined();
+      expect(http.sessions()).toBe(2);
+      expect(http.calls).toEqual(["ping", "ping"]);
+    } finally {
+      await h.manager.closeAll();
+      await http.close();
+    }
+  });
+
+  it("reads a bearer token from the environment", async () => {
+    const h = await setup({ env: { MY_TOKEN: "from-env" } });
+    const http = await startFakeHttp({ spec, bearer: "from-env" });
+    try {
+      const scope = h.manager.scope({
+        owner: "a",
+        sources: [
+          h.source({
+            web: { url: http.url, auth: "bearer", bearerTokenEnv: "MY_TOKEN" },
+          }),
+        ],
+      });
+      expect((await scope.connect("web")).ok).toBe(true);
     } finally {
       await h.manager.closeAll();
       await http.close();

@@ -6,6 +6,7 @@
  * arguments, `counter` counts its calls, `elicit` asks the client a question mid-call, `sleep`
  * waits, `crash` kills the server while the call is running, `error` answers with a JSON-RPC error.
  */
+import process from "node:process";
 import { JSONRPCMessageSchema } from "@modelcontextprotocol/core";
 
 export interface FakeTool {
@@ -21,7 +22,10 @@ export interface FakeTool {
     | "elicit"
     | "sleep"
     | "crash"
-    | "error";
+    | "error"
+    | "announce"
+    | "cwd"
+    | "env";
   /** For `static`: the whole result. */
   result?: Record<string, unknown>;
   /** For `sleep`: milliseconds. */
@@ -182,6 +186,24 @@ export class FakeRpc {
       case "sleep":
         await new Promise((resolve) => setTimeout(resolve, tool.ms ?? 100));
         this.reply(id, { content: [{ type: "text", text: "slept" }] });
+        return;
+      case "cwd":
+        this.reply(id, { content: [{ type: "text", text: process.cwd() }] });
+        return;
+      case "env":
+        this.reply(id, {
+          content: [
+            { type: "text", text: process.env[String(args.name)] ?? "" },
+          ],
+        });
+        return;
+      case "announce":
+        // Tells the client the tool list changed, then answers.
+        this.io.send({
+          jsonrpc: "2.0",
+          method: "notifications/tools/list_changed",
+        });
+        this.reply(id, { content: [{ type: "text", text: "announced" }] });
         return;
       case "crash":
         this.io.exit?.();

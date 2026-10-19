@@ -34,6 +34,8 @@ export interface FakeHttp {
   calls: string[];
   /** How many sessions were initialised. */
   sessions: () => number;
+  /** Makes the server forget every streamable HTTP session, as a restart would. */
+  forgetSessions: () => void;
   close: () => Promise<void>;
 }
 
@@ -194,6 +196,7 @@ export async function startFakeHttp(
     requests,
     calls,
     sessions: () => sessions,
+    forgetSessions: () => streamable.clear(),
     close: async () => {
       for (const { response } of legacy.values()) response.end();
       server.closeAllConnections();

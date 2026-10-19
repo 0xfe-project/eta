@@ -118,14 +118,16 @@ function installedVersion(
 ): string | undefined {
   const lib = join(environment, "lib");
   if (!existsSync(lib)) return undefined;
-  const wanted = `${normalize(distribution)}-`;
+  const wanted = normalize(distribution);
   for (const python of readdirSync(lib)) {
     const sitePackages = join(lib, python, "site-packages");
     if (!existsSync(sitePackages)) continue;
     for (const entry of readdirSync(sitePackages)) {
-      if (!entry.endsWith(".dist-info") || !normalize(entry).startsWith(wanted))
-        continue;
-      return entry.slice(wanted.length, -".dist-info".length);
+      // `<name with underscores>-<version>.dist-info`: the first dash ends the name.
+      const dash = entry.indexOf("-");
+      if (!entry.endsWith(".dist-info") || dash < 0) continue;
+      if (normalize(entry.slice(0, dash)) !== wanted) continue;
+      return entry.slice(dash + 1, -".dist-info".length);
     }
   }
   return undefined;

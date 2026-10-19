@@ -303,10 +303,48 @@ export function suggest(
       break;
     }
   }
-  return rankTools(
+  const names = rankTools(
     entries.map((entry) => ({ ...entry, keywords: undefined })),
     bare,
-  )
-    .slice(0, limit)
-    .map((match) => match.tool.name);
+  ).map((match) => match.tool.name);
+  // A typo shares no word with the right name, so ranking finds nothing: add the names that are a
+  // few edits away.
+  const folded = bare.toLowerCase().replace(/-/g, "_");
+  const allowed = Math.max(1, Math.min(3, Math.floor(folded.length / 4)));
+  const near = entries
+    .map((entry) => ({
+      name: entry.tool.name,
+      distance: editDistance(
+        folded,
+        entry.tool.name.toLowerCase().replace(/-/g, "_"),
+        allowed,
+      ),
+    }))
+    .filter((candidate) => candidate.distance <= allowed)
+    .sort((a, b) => a.distance - b.distance)
+    .map((candidate) => candidate.name);
+  return [...new Set([...near, ...names])].slice(0, limit);
+}
+
+/** Levenshtein distance, giving up (returning `max + 1`) once it must exceed `max`. */
+function editDistance(a: string, b: string, max: number): number {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    let smallest = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      const value = Math.min(
+        previous[j]! + 1,
+        row[j - 1]! + 1,
+        previous[j - 1]! + cost,
+      );
+      row.push(value);
+      smallest = Math.min(smallest, value);
+    }
+    if (smallest > max) return max + 1;
+    previous = row;
+  }
+  return previous[b.length]!;
 }

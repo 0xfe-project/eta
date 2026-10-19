@@ -125,26 +125,59 @@ export function guardText(
   };
 }
 
-/** Bounds the text blocks of a result together; image blocks are kept as they are. */
+/**
+ * Bounds the text blocks of a result together. Within the limits the blocks are returned as they
+ * are (with the affixes added to the first and last text block); over them, one text block holds
+ * the head and the notice. Image blocks are always kept.
+ */
 export function guardContent(
   content: ContentBlock[],
   options: OutputGuardOptions = {},
   affixes: { prefix?: string; suffix?: string } = {},
 ): { content: ContentBlock[]; guard?: OutputGuardDetails } {
-  const images = content.filter((block) => block.type === "image");
+  const prefix = affixes.prefix ?? "";
+  const suffix = affixes.suffix ?? "";
   const text = content
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
-  const composed = `${affixes.prefix ?? ""}${text}${affixes.suffix ?? ""}`;
-  const guarded = guardText(composed, "output", options);
-  const blocks: ContentBlock[] = [
-    { type: "text", text: guarded.text },
-    ...images,
-  ];
-  return guarded.guard === undefined
-    ? { content: blocks }
-    : { content: blocks, guard: guarded.guard };
+  const guarded = guardText(`${prefix}${text}${suffix}`, "output", options);
+  if (guarded.guard === undefined) {
+    return { content: addAffixes(content, prefix, suffix) };
+  }
+  const images = content.filter((block) => block.type === "image");
+  return {
+    content: [{ type: "text", text: guarded.text }, ...images],
+    guard: guarded.guard,
+  };
+}
+
+function addAffixes(
+  content: ContentBlock[],
+  prefix: string,
+  suffix: string,
+): ContentBlock[] {
+  if (!prefix && !suffix) return content;
+  const next = [...content];
+  if (prefix) {
+    const index = next.findIndex((block) => block.type === "text");
+    const block = next[index];
+    if (block?.type === "text") {
+      next[index] = { ...block, text: `${prefix}${block.text}` };
+    } else {
+      next.unshift({ type: "text", text: prefix });
+    }
+  }
+  if (suffix) {
+    const index = next.map((block) => block.type).lastIndexOf("text");
+    const block = next[index];
+    if (block?.type === "text") {
+      next[index] = { ...block, text: `${block.text}${suffix}` };
+    } else {
+      next.push({ type: "text", text: suffix });
+    }
+  }
+  return next;
 }
 
 /**

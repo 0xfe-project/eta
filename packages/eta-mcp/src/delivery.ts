@@ -43,6 +43,16 @@ function messageOf(error: unknown): string {
  */
 export function classifyCallError(error: unknown): DeliveryError {
   if (error instanceof DeliveryError) return error;
+  // The SDK checks `structuredContent` against the tool's output schema itself and reports a
+  // failure as a protocol error; that is a bad result, not an answer from the server.
+  if (
+    error instanceof ProtocolError &&
+    /^Structured content does not match|has an output schema but did not return structured content/.test(
+      error.message,
+    )
+  ) {
+    return new DeliveryError("invalid_result", error.message, { cause: error });
+  }
   if (error instanceof ProtocolError) {
     return new DeliveryError("server_error", error.message, {
       cause: error,

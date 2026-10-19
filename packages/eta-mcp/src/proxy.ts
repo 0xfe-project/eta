@@ -10,7 +10,7 @@
  * One call is one action; when several fields are given the first in this order wins:
  * `tool` (call), `connect`, `describe`, `instructions`, `search`, `server` (list), then status.
  */
-import type { OutputGuardOptions } from "./output-guard";
+import type { OutputGuardDetails, OutputGuardOptions } from "./output-guard";
 import type { McpScope } from "./scope";
 import type { SearchEntry } from "./search-ranking";
 import type {
@@ -22,7 +22,11 @@ import type {
 } from "./types";
 import { normalizeToolArguments } from "./json-schema";
 import { findTools, qualifiedToolName } from "./names";
-import { guardText } from "./output-guard";
+import {
+  DEFAULT_MAX_BYTES,
+  DEFAULT_MAX_LINES,
+  guardText,
+} from "./output-guard";
 import { renderOutputShape } from "./output-shape";
 import { requiresApproval } from "./scope";
 import { paginate, rankTools, suggest } from "./search-ranking";
@@ -531,20 +535,36 @@ export class McpProxy {
       ? " (requires approval)"
       : "";
 
+    // Each long part is bounded on its own, so one cannot push another's notice out of the result:
+    // the description gets half of the budget, each schema and shape the whole of it.
+    const guard = this.guard();
+    const half: OutputGuardOptions = {
+      ...guard,
+      maxBytes: Math.floor((guard.maxBytes ?? DEFAULT_MAX_BYTES) / 2),
+      maxLines: Math.floor((guard.maxLines ?? DEFAULT_MAX_LINES) / 2),
+    };
+    const guards: OutputGuardDetails[] = [];
+    const bounded = (
+      value: string,
+      kind: string,
+      options: OutputGuardOptions,
+    ): string => {
+      const guarded = guardText(value, kind, options);
+      if (guarded.guard) guards.push(guarded.guard);
+      return guarded.text;
+    };
+    const json = (value: unknown): string =>
+      `\`\`\`json\n${bounded(JSON.stringify(value, null, 2), "schema", guard)}\n\`\`\``;
+
     let out = `${tool.name}${gated}\nServer: ${resolved.server}\n`;
     const hints = toolHints(tool);
     if (hints) out += `Hints: ${hints}\n`;
-    const described = guardText(
-      tool.description || "(no description)",
-      "description",
-      this.guard(),
-    );
-    out += `\n${described.text}\n`;
+    out += `\n${bounded(tool.description || "(no description)", "description", half)}\n`;
     out += tool.inputSchema
-      ? `\nInput schema (JSON Schema):\n\`\`\`json\n${JSON.stringify(tool.inputSchema, null, 2)}\n\`\`\``
+      ? `\nInput schema (JSON Schema):\n${json(tool.inputSchema)}`
       : "\nNo parameters defined.";
     if (tool.outputSchema !== undefined) {
-      out += `\n\nOutput schema (JSON Schema):\n\`\`\`json\n${JSON.stringify(tool.outputSchema, null, 2)}\n\`\`\``;
+      out += `\n\nOutput schema (JSON Schema):\n${json(tool.outputSchema)}`;
     } else {
       const observed = this.scope.observedFor(resolved.server, tool);
       if (observed) {
@@ -555,13 +575,12 @@ export class McpProxy {
         out += `\n\nObserved output (${source}, from earlier calls, not a contract):\n${renderOutputShape(observed.shape)}`;
       }
     }
-    const guarded = guardText(out.trim(), "output", this.guard());
-    return text(guarded.text, {
+    return text(out.trim(), {
       mode: "describe",
       server: resolved.server,
       tool,
       name: qualifiedToolName(resolved.server, tool.name),
-      ...(guarded.guard ? { outputGuard: guarded.guard } : {}),
+      ...(guards.length > 0 ? { outputGuard: guards } : {}),
     });
   }
 
