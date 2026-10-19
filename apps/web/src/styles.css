@@ -515,7 +515,18 @@
   .message {
     display: flex;
     flex-direction: column;
-    margin-bottom: 16px;
+    /* Turns breathe; the steps inside a turn sit close (thinking, tools, text). */
+    margin-bottom: 28px;
+  }
+  /* Who is speaking: the turn's heading, so it carries the weight a heading should. */
+  .message-author {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--foreground);
   }
   .message.user {
     align-items: flex-end;
@@ -530,10 +541,17 @@
   .message.assistant .message-content {
     max-width: 100%;
     padding: 0 2px;
+    margin-top: 14px;
+    line-height: 1.75;
   }
+  .message.assistant .message-author + .message-content {
+    margin-top: 0;
+  }
+  /* What you said sits on the page as a note with an edge, not as loose words in white space. */
   .message.user .message-content {
-    background: var(--background);
-    color: var(--primary);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--foreground);
     /* What you typed is what you said: the text arrives with its line breaks and is shown as
        plain text, so the one thing the CSS owes the author is to keep them. */
     white-space: pre-wrap;
@@ -541,14 +559,52 @@
   .message.user .message-content a {
     color: inherit;
   }
+  /* Tables and code in a reply speak the same hairline language as the cards around them:
+     header as a quiet mono label, rows ruled across only, numbers in columns. */
+  .message-content .markdown table {
+    margin: 10px 0 12px;
+    font-size: 13px;
+  }
+  .message-content .markdown th,
+  .message-content .markdown td {
+    padding: 5px 14px 5px 10px;
+    border-right: 0;
+    border-left: 0;
+    line-height: 1.45;
+  }
+  .message-content .markdown th {
+    border-top: 0;
+    border-bottom-color: var(--border-strong);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+  .message-content .markdown td {
+    font-variant-numeric: tabular-nums;
+  }
+  .message-content .markdown pre {
+    margin: 10px 0;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .message-content .markdown :not(pre) > code {
+    padding: 1px 5px;
+    font-size: 0.92em;
+  }
   .message-footer {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 4px;
+    margin-top: 6px;
     font-family: var(--font-mono);
     font-size: 10px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--faint);
   }
@@ -573,15 +629,16 @@
 
   .system-message {
     align-self: center;
-    margin: 8px auto 16px;
-    padding: 2px 10px;
+    margin: 4px auto 28px;
+    padding: 3px 12px;
     border: 1px solid var(--border);
     font-family: var(--font-mono);
     font-size: 10px;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--faint);
     text-align: center;
+    width: fit-content;
     max-width: 90%;
   }
 
@@ -759,23 +816,31 @@
    * they are folded, their header says what they are in 10–11px uppercase mono, and the body is
    * the only place that scrolls. */
 
+  /* Thinking and the tool calls after it are one stack of steps: one frame, hairlines between. */
   .thinking-block {
     border: 1px solid var(--border);
-    margin-bottom: 16px;
-    background: var(--overlay);
+  }
+  .thinking-block + .tool-step .tool-card,
+  .tool-step + .tool-step .tool-card {
+    border-top: 0;
   }
   .thinking-block-header {
     list-style: none;
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 4px 10px;
+    padding: 5px 10px;
     font-family: var(--font-mono);
     font-size: 10px;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--muted-foreground);
+    color: var(--faint);
     cursor: pointer;
+  }
+  .thinking-block-header:hover,
+  .tool-card-head:hover {
+    background: var(--overlay-hover);
+    color: var(--foreground);
   }
   .thinking-block-header::-webkit-details-marker,
   .tool-card-head::-webkit-details-marker {
@@ -802,7 +867,6 @@
 
   .tool-card {
     border: 1px solid var(--border);
-    margin-bottom: 12px;
     background: var(--background);
   }
   .tool-card-head {
@@ -811,21 +875,27 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding: 4px 10px;
-    background: var(--overlay);
+    padding: 6px 10px;
     cursor: pointer;
+  }
+  .tool-card[open] > .tool-card-head {
+    border-bottom: 1px solid var(--border);
   }
   .tool-card-label {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    /* The tool and what it was called with, as written: a command upper-cased is a different
+       command. */
     font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
     color: var(--muted-foreground);
+  }
+  .tool-card-head:hover .tool-card-label {
+    color: var(--foreground);
   }
   .tool-card-status {
     flex: none;
@@ -834,8 +904,9 @@
     letter-spacing: 0.14em;
     text-transform: uppercase;
     padding: 0 6px;
-    border: 1px solid var(--border);
-    color: var(--muted-foreground);
+    /* Done is the expected outcome and stays quiet; failed keeps its frame, running its fill. */
+    border: 1px solid transparent;
+    color: var(--faint);
   }
   .tool-card-status.running {
     background: var(--foreground);
@@ -848,7 +919,8 @@
   }
   .tool-card-block {
     margin: 0;
-    padding: 6px 10px;
+    padding: 8px 10px;
+    background: var(--overlay);
   }
   .tool-card-block + .tool-card-block {
     border-top: 1px solid var(--border);

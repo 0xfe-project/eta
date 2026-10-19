@@ -538,7 +538,7 @@ function LiveReply({ sessionId }: { sessionId: string }) {
         <Markdown streaming>{block.text}</Markdown>
       </div>
     ) : (
-      <div key={block.id} className="space-y-1">
+      <div key={block.id} className="tool-step space-y-1">
         <ToolActivity block={block} />
       </div>
     ),
@@ -614,10 +614,10 @@ const Turn = memo(
     return (
       <div className="message assistant">
         {author === undefined ? null : (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="message-author">
             <AgentAvatar
               agent={{ id: message.agentId ?? "" }}
-              className="size-4"
+              className="size-[18px]"
             />
             <span>{author}</span>
           </div>
@@ -633,7 +633,7 @@ const Turn = memo(
             )}
             {savedTools(message.data).map((block) => (
               // What it did with tools, as the cards the run showed while it worked.
-              <div key={block.id} className="space-y-1">
+              <div key={block.id} className="tool-step space-y-1">
                 <ToolActivity block={block} />
               </div>
             ))}
