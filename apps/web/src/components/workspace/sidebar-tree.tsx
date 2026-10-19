@@ -258,7 +258,8 @@ function GroupCard({
   return (
     <SidebarMenuItem
       className={cn(
-        "group/menu-item relative border border-border",
+        "group/menu-item relative border border-border transition-colors duration-75",
+        "hover:bg-sidebar-accent",
         active && "bg-sidebar-accent",
       )}
       data-active={active}
@@ -278,7 +279,8 @@ function GroupCard({
             <span className="sr-only">{conversation.name}</span>
           </button>
           <div className="pointer-events-none relative z-10 px-2 pt-1.5">
-            <div className="flex items-center gap-1.5">
+            {/* The ⋯ is a corner control, not a column: the row ends before it. */}
+            <div className="flex items-center gap-1.5 pr-6">
               <button
                 type="button"
                 aria-label={
@@ -418,7 +420,7 @@ function AgentCard({ agent, unread }: { agent: AgentView; unread: number }) {
     (tag): tag is string => tag !== undefined && tag.length > 0,
   );
   return (
-    <SidebarMenuItem className="border border-border">
+    <SidebarMenuItem className="border border-border transition-colors duration-75">
       <button
         type="button"
         data-sidebar="menu-button"
@@ -426,7 +428,7 @@ function AgentCard({ agent, unread }: { agent: AgentView; unread: number }) {
           name: agent.name,
         })}
         onClick={() => openAgent(agent.id)}
-        className="flex w-full items-center gap-2 px-2 py-1.5 text-left hover:bg-sidebar-accent"
+        className="flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors duration-75 hover:bg-sidebar-accent"
       >
         <AgentAvatar agent={agent} className="size-6" />
         <span className="flex min-w-0 flex-1 flex-col">
