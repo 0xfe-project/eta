@@ -1,15 +1,18 @@
 import type {
   AgentView,
+  LlmModel,
   ProviderArgs,
   ProviderInput,
   ProviderKind,
   ProviderSummary,
   ProvidersView,
 } from "@eta/client-contracts";
+import { LLM_PROVIDER_ID } from "@eta/client-contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { translate } from "@/lib/i18n";
 import { getWire, WireError } from "@/lib/wire";
+import { NEEDS_ACTION, useLlm } from "@/queries/llm";
 import {
   useTarget,
   useWireMutation,
@@ -95,6 +98,8 @@ export interface Model {
   available: boolean;
   /** The model a new chat starts on: the configured default, else the first one. */
   default: boolean;
+  /** Why it cannot be used, when the gateway says (an expired login, an exhausted quota). */
+  unavailableReason?: string | undefined;
 }
 
 export function modelsOf(view: ProvidersView): Model[] {
@@ -127,7 +132,11 @@ export function modelGroups(
 ): { provider: string; label: string; models: Model[] }[] {
   const groups: { provider: string; label: string; models: Model[] }[] = [];
   for (const model of models) {
-    const group = groups.find((entry) => entry.provider === model.provider);
+    // The gateway's models share a provider id but not a name (Codex, Grok, Gemini).
+    const group = groups.find(
+      (entry) =>
+        entry.provider === model.provider && entry.label === model.providerName,
+    );
     if (group) group.models.push(model);
     else
       groups.push({
@@ -139,17 +148,57 @@ export function modelGroups(
   return groups;
 }
 
-/** Every model of every configured provider; undefined until the config has been read. */
+/**
+ * The gateway's models as the picker lists them, under the name of the connector that serves
+ * each (Codex, Grok, Gemini). `llm:<id>` is the id an agent names.
+ */
+export function gatewayModels(
+  models: readonly LlmModel[],
+  connectorNames: ReadonlyMap<string, string>,
+): Model[] {
+  return models.map((model) => ({
+    id: `${LLM_PROVIDER_ID}:${model.id}`,
+    provider: LLM_PROVIDER_ID,
+    providerName: connectorNames.get(model.connector) ?? model.connector,
+    name: model.name,
+    contextWindow: model.contextWindow,
+    available: model.available,
+    default: false,
+    unavailableReason: model.reason?.message,
+  }));
+}
+
+/**
+ * Every model of every configured provider and of the gateway's accounts; undefined until the
+ * config has been read.
+ */
 export function useModels(): { data: Model[] | undefined; isError: boolean } {
   const { data, error } = useProviders();
-  const models = useMemo(() => (data ? modelsOf(data) : undefined), [data]);
+  const llm = useLlm();
+  const models = useMemo(() => {
+    if (!data) return undefined;
+    const configured = modelsOf(data);
+    if (llm.models.length === 0) return configured;
+    const names = new Map(
+      llm.connectors.map((connector) => [connector.id, connector.name]),
+    );
+    const merged = [...configured, ...gatewayModels(llm.models, names)];
+    // The default is the configured one, else the first model there is.
+    const fallback =
+      merged.find((model) => model.id === data.defaultModel) ?? merged[0];
+    return merged.map((model) => ({ ...model, default: model === fallback }));
+  }, [data, llm.models, llm.connectors]);
   return { data: models, isError: error !== undefined };
 }
 
 /** Whether a provider is missing a key it needs: what the settings button's dot marks. */
 export function useNeedsAttention(): boolean {
   const { data } = useProviders();
-  return (data?.providers ?? []).some(keyMissing);
+  const { connections } = useLlm();
+  return (
+    (data?.providers ?? []).some(keyMissing) ||
+    connections.some((connection) => NEEDS_ACTION.has(connection.state))
+  );
 }
 
 export type ModelAvailability =
@@ -181,15 +230,17 @@ export function modelAvailability(
     };
   }
   if (!model.available) {
-    // A provider that needs a key and has none is the one way a model is unavailable.
+    // A provider that needs a key and has none, or an account the gateway says is down.
     return {
       state: "unavailable",
       model,
       message: translate("agents:models.errors.unavailable", {
         modelName: model.name,
-        reason: translate("providers:models.keyMissing", {
-          providerName: model.providerName,
-        }),
+        reason:
+          model.unavailableReason ??
+          translate("providers:models.keyMissing", {
+            providerName: model.providerName,
+          }),
       }),
     };
   }
