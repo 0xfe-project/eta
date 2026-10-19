@@ -1,4 +1,4 @@
-# Everything pre-commit checks (bun run check), for every pull request and
+# Everything pre-commit checks (bun run check:affected), for every pull request and
 # every push to main: squash merges, `--no-verify` and bots skip the hook.
 name: CI
 
@@ -9,7 +9,7 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -24,31 +24,54 @@ jobs:
       CI: "1"
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The full history, for turbo's --affected to compare against.
+          fetch-depth: 0
+          filter: blob:none
 
       # Turborepo's Remote Cache (turbo.json's remoteCache), which development
       # machines fill as they commit: a short-lived token for the Vercel team,
-      # through its OIDC policy for this repository. Without one the run only
-      # goes uncached.
+      # through its OIDC policy for this repository.
       - name: Turborepo Remote Cache
         uses: vercel/setup-turborepo-remote-cache-action@v1.1.0
         continue-on-error: true
         with:
           team: team_m0cGPvm66wsuOjDpnCrXUDPz
 
+      # Fallback and local layer for Turborepo artifacts across CI runs.
+      - name: Cache Turborepo
+        uses: actions/cache@v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
       - uses: astral-sh/setup-uv@v10.2.0
         with:
+          # apps/memory/.python-version.
+          python-version: "3.13"
+          cache-python: true
           enable-cache: true
           cache-dependency-glob: "**/uv.lock"
+          # --affected runs without memory tasks never populate the cache,
+          # and the save step fails on a missing path without this.
+          ignore-nothing-to-cache: true
 
-      # Bun's package store; uv's is cached by its setup action above.
-      - uses: actions/cache@v6
+      # Bun's package store and dprint's compiled WASM plugins; uv's cache is
+      # kept by its setup action above.
+      - name: Cache Bun and dprint
+        uses: actions/cache@v6
         with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
-          restore-keys: bun-${{ runner.os }}-
+          path: |
+            ~/.bun/install/cache
+            ~/.cache/dprint
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock', 'dprint.json') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
 
-      - run: bun install --frozen-lockfile
-      - run: bun run check
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: bun run check:affected

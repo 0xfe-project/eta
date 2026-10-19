@@ -15,7 +15,7 @@
   "scripts": {
     "test": "bun --bun vitest --run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
   },
   "dependencies": {
     "@eta/client-wire-proto": "*",
