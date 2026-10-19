@@ -1,10 +1,9 @@
 import { Outlet } from "@tanstack/react-router";
-import { useEffect, useLayoutEffect } from "react";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageProvider } from "@/components/language-provider";
 import { AppProviders } from "@/components/providers";
 import { LiveChat } from "@/components/workspace/live-chat";
-import { useWorkspaceStore } from "@/components/workspace/workspace-store";
 
 export function RootDocument() {
   return (
@@ -29,15 +28,6 @@ function LocalizedDocument() {
     if (ios && content && !content.includes("maximum-scale"))
       viewport?.setAttribute("content", `${content}, maximum-scale=1`);
   }, []);
-  const fontSans = useWorkspaceStore((s) => s.workspace.fontSans);
-  const fontMono = useWorkspaceStore((s) => s.workspace.fontMono);
-  useLayoutEffect(() => {
-    const root = document.documentElement;
-    if (fontSans) root.style.setProperty("--user-font-sans", fontSans);
-    else root.style.removeProperty("--user-font-sans");
-    if (fontMono) root.style.setProperty("--user-font-mono", fontMono);
-    else root.style.removeProperty("--user-font-mono");
-  }, [fontSans, fontMono]);
   return (
     <AppProviders>
       <a

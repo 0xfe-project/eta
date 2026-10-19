@@ -9,7 +9,7 @@
     "latestSuffix": "（最新）",
     "option": "第 {{version}} 版{{latestLabel}}"
   },
-  "sandboxDescription": "智能体发布的静态网页，在沙箱里运行，不能访问 AXP 的登录状态和接口。",
+  "sandboxDescription": "智能体发布的静态网页，在沙箱里运行，不能访问 Eta 的登录状态和接口。",
   "loadTarget": "这个 Artifact",
   "sharing": {
     "revokeHint": "撤销后链接立即失效，再次分享会生成新链接",

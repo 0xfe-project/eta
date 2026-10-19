@@ -117,9 +117,7 @@ export function ActivityRefCard({
         {number ? (
           <span className={cn("tabular-nums", muted)}>#{number} </span>
         ) : null}
-        <span className="text-[var(--terminal-foreground)]">
-          {value.title || repo}
-        </span>
+        <span className="text-foreground">{value.title || repo}</span>
         {value.title && repo ? <span className={muted}> · {repo}</span> : null}
         {artifact && value.number ? (
           <span className={cn("tabular-nums", muted)}>
@@ -139,7 +137,7 @@ export function ActivityRefCard({
         </span>
       ) : null}
       {draft ? (
-        <span className="shrink-0 text-[var(--terminal-link)]">
+        <span className="shrink-0 text-[var(--state-info)]">
           {translateText("connections:github.createOnGitHub")}
         </span>
       ) : null}
@@ -214,7 +212,7 @@ function CopyBody({ text }: { text: string }) {
       title={hint}
       className={cn(
         actionClass,
-        "shrink-0 border-l border-dashed border-[var(--terminal-muted)]/40",
+        "shrink-0 border-l border-dashed border-[var(--muted-foreground)]/40",
         muted,
       )}
       onClick={() =>

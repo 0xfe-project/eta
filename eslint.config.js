@@ -15,11 +15,8 @@ export default antfu(
     toml: false,
     ignores: [
       "**/*.gen.ts",
-      // Generated from the pinned Codex's app-server schema.
-      "apps/agent-runtime/src/protocol/**",
-      // Generated from the shadcn and brainless registries.
+      // Generated from the shadcn registry.
       "apps/web/src/components/ui/**",
-      "apps/web/src/components/brainless/**",
       "**/.venv/**",
       "**/out/**",
     ],
@@ -42,10 +39,14 @@ export default antfu(
     },
   },
   {
-    // Programs, not modules: the server's entry point and the Bun scripts that
-    // check a package's production imports. They await at the top level and
-    // print to the terminal on purpose.
-    files: ["packages/eta-server/src/main.ts", "packages/*/test/*.smoke.mjs"],
+    // Programs, not modules: the entry points of the server and the host and
+    // the Bun scripts that check a package's production imports. They await at
+    // the top level and print to the terminal on purpose.
+    files: [
+      "packages/eta-server/src/main.ts",
+      "apps/eta/src/main.ts",
+      "packages/*/test/*.smoke.mjs",
+    ],
     rules: { "antfu/no-top-level-await": "off", "no-console": "off" },
   },
   {
@@ -64,11 +65,5 @@ export default antfu(
     files: ["apps/web/public/sw.js"],
     languageOptions: { globals: globals.serviceworker },
     rules: { "no-restricted-globals": "off" },
-  },
-  {
-    // Production server, run by Bun next to the built dist/.
-    files: ["apps/web/server.js"],
-    languageOptions: { globals: globals.bunBuiltin },
-    rules: { "antfu/no-import-dist": "off" },
   },
 );

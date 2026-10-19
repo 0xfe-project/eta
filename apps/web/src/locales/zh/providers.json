@@ -76,5 +76,33 @@
   },
   "grok": {
     "sharedAccountHelp": "同一账号也供 grok 插件生成图片、视频和搜索，见"
+  },
+  "editor": {
+    "newTitle": "新建 provider",
+    "description": "保存进 config.json，重启后生效。",
+    "name": "名字",
+    "kind": "类型",
+    "baseUrl": "接口地址",
+    "key": "API key",
+    "keyConfigured": "已配置——输入即替换",
+    "keyMissing": "还没配",
+    "clearKey": "清除 key",
+    "keepKey": "保留 key",
+    "headers": "请求头",
+    "headerName": "名字",
+    "headerValue": "值",
+    "addHeader": "加一行",
+    "models": "模型",
+    "modelId": "模型 id",
+    "modelName": "显示名",
+    "contextWindow": "上下文窗口",
+    "vision": "支持图片",
+    "addModel": "加一个模型",
+    "restartRequired": "已保存。重启宿主后生效。",
+    "configured": "已配置的 provider",
+    "empty": "还没有 provider。加一个，宿主才有东西可跑。",
+    "modelCount": "{{count}} 个模型",
+    "unsaved": "这个表单有还没保存的改动。",
+    "discard": "放弃改动"
   }
 }

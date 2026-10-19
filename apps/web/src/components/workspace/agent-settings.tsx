@@ -38,7 +38,7 @@ function AgentRow({ agent }: { agent: Agent }) {
       : (availability.model?.display_name ?? agent.model);
 
   return (
-    <li className="flex items-start gap-3 px-3 py-2.5 transition-colors duration-[60ms] ease-linear hover:bg-muted/60">
+    <li className="flex items-start gap-3 px-3 py-2.5 duration-[60ms] ease-linear hover:bg-muted/60">
       <AgentAvatar agent={agent} />
       <button
         type="button"

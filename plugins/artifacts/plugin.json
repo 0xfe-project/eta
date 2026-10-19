@@ -1,6 +1,0 @@
-{
-  "name": "artifacts",
-  "version": "1.0.0",
-  "description": "把静态网页（ZIP 或目录）发布为 Artifact，在聊天和任务里预览、分享。",
-  "targets": ["chat"]
-}

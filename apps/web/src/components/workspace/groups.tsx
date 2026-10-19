@@ -45,6 +45,9 @@ import { useGroupActions } from "@/queries/groups";
 import { useTasks, useUpdateTask } from "@/queries/tasks";
 import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar, AgentStatus } from "./agent-identity";
+import { InspectButton } from "./inspect-button";
+import { MemberRing } from "./member-ring";
+import { MemberStats } from "./member-stats";
 import { useReturnFocus } from "./return-focus";
 import { when } from "./routine-format";
 import { useAgents } from "./use-agents";
@@ -106,6 +109,9 @@ export function CreateGroup({
   const setOpen = onOpenChange ?? setUncontrolled;
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
+  // Where the group works. A text field for now: the folder picker is the desktop's job, and a
+  // typed path is honest about what will be used.
+  const [cwd, setCwd] = useState("");
   const [chosen, setChosen] = useState<string[]>(members);
   const { agents } = useAgents();
   const { create } = useGroupActions();
@@ -149,7 +155,14 @@ export function CreateGroup({
             if (sendingRef.current) return;
             sendingRef.current = true;
             create.mutate(
-              { name: name.trim(), goal, members: chosen },
+              {
+                name: name.trim(),
+                goal,
+                members: chosen,
+                // Omitted when empty: "no folder" is a state the store keeps, not an empty path
+                // pretending to be one.
+                ...(cwd.trim().length === 0 ? {} : { cwd: cwd.trim() }),
+              },
               {
                 onSettled: () => {
                   sendingRef.current = false;
@@ -159,6 +172,7 @@ export function CreateGroup({
                   setOpen(false);
                   setName("");
                   setGoal("");
+                  setCwd("");
                   openGroup(g.id);
                 },
               },
@@ -174,6 +188,19 @@ export function CreateGroup({
               maxLength={100}
               required
             />
+          </label>
+          <label className="grid gap-2 text-sm">
+            {translateText("groups.fields.cwd")}
+            <Input
+              value={cwd}
+              onChange={(e) => setCwd(e.target.value)}
+              placeholder={translateText("groups.fields.cwdPlaceholder")}
+              spellCheck={false}
+              className="font-mono"
+            />
+            <span className="text-xs text-muted-foreground">
+              {translateText("groups.fields.cwdHelp")}
+            </span>
           </label>
           <label className="grid gap-2 text-sm">
             {translateText("groups.fields.optionalGoal")}
@@ -320,7 +347,7 @@ export function GroupList({ compact = false }: { compact?: boolean }) {
               onClick={() => open(g.id)}
               title={g.name}
               className={cn(
-                "flex w-full items-center gap-2 px-2 text-left outline-none transition-colors duration-[60ms] hover:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-ring",
+                "flex w-full items-center gap-2 px-2 text-left outline-none duration-[60ms] hover:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-ring",
                 compact ? "h-9" : "min-h-18 py-3",
                 current?.id === g.id && compact && "bg-sidebar-accent",
               )}
@@ -397,7 +424,7 @@ export function ArchivedGroups() {
                   setSettings((state) => ({ ...state, open: false }));
                   open(g.id);
                 }}
-                className="flex min-w-0 flex-1 items-center gap-2 self-stretch px-2 text-left outline-none transition-colors duration-[60ms] hover:bg-accent focus-visible:ring-1 focus-visible:ring-ring"
+                className="flex min-w-0 flex-1 items-center gap-2 self-stretch px-2 text-left outline-none duration-[60ms] hover:bg-accent focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <GroupAvatars group={g} />
                 <span className="min-w-0 flex-1">
@@ -455,6 +482,8 @@ export function GroupMembers() {
   const [linkTask, setLinkTask] = useState(false);
   const [invite, setInvite] = useState(false);
   const [removing, setRemoving] = useState<Group["participants"][number]>();
+  const focused = useWorkspaceStore((state) => state.focusedAgentId);
+  const setFocusedAgent = useWorkspaceStore((state) => state.setFocusedAgent);
   if (!group) return null;
   const members = group.participants.filter((p) => p.member);
   const linked = board?.tasks.filter((t) => t.group_id === group.id) ?? [];
@@ -515,7 +544,9 @@ export function GroupMembers() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <ul className="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-1">
+      {/* One member per row: a member carries three lines (name, status, its session's numbers),
+          and auto-fill columns turn that into two cramped columns in a 320px panel. */}
+      <ul className="grid grid-cols-1 gap-1">
         {members.map((p) => {
           const agent = agents.find((a) => a.id === p.agent_id);
           const active = chat?.messages.find(
@@ -533,58 +564,90 @@ export function GroupMembers() {
           return (
             <li
               key={p.agent_id}
-              className="flex min-h-12 min-w-0 items-center gap-2"
-            >
-              <AgentAvatar agent={{ id: p.agent_id }} />
-              <div className="min-w-0 flex-1 text-sm">
-                <span className="block truncate" title={p.name}>
-                  {p.name}
-                </span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {elsewhere ? (
-                    translateText("groups.members.replyingElsewhere", {
-                      groupName: elsewhere,
-                    })
-                  ) : agent ? (
-                    <AgentStatus status={agent.status} />
-                  ) : (
-                    translateText("common:status.deleted")
-                  )}
-                </span>
-              </div>
-              {(agent || removable) && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      aria-label={translateText(
-                        "common:accessibility.itemActions",
-                        {
-                          name: p.name,
-                        },
-                      )}
-                    >
-                      <DotsThreeIcon aria-hidden="true" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {agent && (
-                      <DropdownMenuItem onSelect={() => openEditor(agent.id)}>
-                        {translateText("settings:title")}
-                      </DropdownMenuItem>
-                    )}
-                    {removable && (
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onSelect={() => setRemoving(p)}
-                      >
-                        {translateText("common:actions.remove")}
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+              className={cn(
+                "flex min-w-0 items-start gap-2 border px-2 py-1.5",
+                // Focused is a frame around the card, not a different card: the numbers stay where
+                // they were, so comparing two members does not mean re-learning the layout.
+                focused === p.agent_id ? "border-foreground" : "border-border",
               )}
+            >
+              {/* The row's first thing was the member's avatar; the gauge wraps that one instead
+                  of adding a second avatar beside the numbers. A member with no session yet has
+                  nothing to draw a ring around, so it is just the avatar. */}
+              {typeof p.session_id === "string" ? (
+                <MemberRing sessionId={p.session_id}>
+                  <AgentAvatar agent={{ id: p.agent_id }} />
+                </MemberRing>
+              ) : (
+                <AgentAvatar agent={{ id: p.agent_id }} />
+              )}
+              {/* Pressing the member is the same action as pressing its card anywhere else: the
+                  chat narrows to it. The menu beside it is the other thing a member has. */}
+              <button
+                type="button"
+                // Press to focus, press again to let go. The frame is the whole state: white
+                // border = narrowed to this member, and the same press takes it back.
+                onClick={() =>
+                  setFocusedAgent(focused === p.agent_id ? null : p.agent_id)
+                }
+                title={translateText("groups.members.focus", { name: p.name })}
+                className="min-w-0 flex-1 text-left text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <span className="block truncate" title={p.name}>
+                  {p.name}{" "}
+                  <span className="text-xs text-muted-foreground">
+                    {elsewhere ? (
+                      translateText("groups.members.replyingElsewhere", {
+                        groupName: elsewhere,
+                      })
+                    ) : agent ? (
+                      <AgentStatus status={agent.status} />
+                    ) : (
+                      translateText("common:status.deleted")
+                    )}
+                  </span>
+                </span>
+                {/* What this member has spent, is producing, and is chasing. */}
+                <MemberStats sessionId={p.session_id ?? undefined} />
+              </button>
+              <div className="flex shrink-0 items-start gap-1">
+                {typeof p.session_id !== "string" ? null : (
+                  <InspectButton sessionId={p.session_id} />
+                )}
+                {(agent || removable) && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={translateText(
+                          "common:accessibility.itemActions",
+                          {
+                            name: p.name,
+                          },
+                        )}
+                      >
+                        <DotsThreeIcon aria-hidden="true" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {agent && (
+                        <DropdownMenuItem onSelect={() => openEditor(agent.id)}>
+                          {translateText("settings:title")}
+                        </DropdownMenuItem>
+                      )}
+                      {removable && (
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onSelect={() => setRemoving(p)}
+                        >
+                          {translateText("common:actions.remove")}
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
             </li>
           );
         })}

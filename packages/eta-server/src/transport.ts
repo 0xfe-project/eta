@@ -200,8 +200,24 @@ export interface WireServerOptions {
    * puts its own access control in front of), never what a bare start does.
    */
   hostname?: string | undefined;
-  /** Where the UI is served from, when there is one. */
-  staticRoutes?: Record<string, () => Response | Promise<Response>>;
+  /**
+   * Everything on the port that is not the socket: the UI, a health check, whatever the host
+   * serves besides the pipe. The pipe has no routes of its own beyond `/ws`, so the host decides
+   * what else exists and the transport never learns its paths. `undefined` means "not mine", and
+   * is a 404.
+   */
+  fetch?:
+    | ((
+        request: Request,
+      ) => Response | undefined | Promise<Response | undefined>)
+    | undefined;
+  /**
+   * Asked first, for every request on the port — the WebSocket upgrade included, and `/ws` is
+   * the one route that runs commands. A `Response` means "refuse with this" and nothing else
+   * runs; `undefined` lets the request through. It lives here because only the transport sees
+   * the upgrade: a host that guarded only its own routes would leave the pipe open.
+   */
+  authorize?: ((request: Request) => Response | undefined) | undefined;
 }
 
 export interface WireServer {
@@ -245,13 +261,16 @@ export function serveWire(
     port: options.port,
     hostname: options.hostname ?? "127.0.0.1",
     fetch(request, bunServer) {
-      const path = new URL(request.url).pathname;
-      const route = options.staticRoutes?.[path];
-      if (route !== undefined) return route();
-      if (path !== "/ws") return new Response("not found", { status: 404 });
-      if (bunServer.upgrade(request, { data: { socketId: 0 } }))
-        return undefined;
-      return new Response("websocket upgrade failed", { status: 400 });
+      const refused = options.authorize?.(request);
+      if (refused !== undefined) return refused;
+      if (new URL(request.url).pathname === "/ws") {
+        if (bunServer.upgrade(request, { data: { socketId: 0 } }))
+          return undefined;
+        return new Response("websocket upgrade failed", { status: 400 });
+      }
+      return Promise.resolve(options.fetch?.(request)).then(
+        (response) => response ?? new Response("not found", { status: 404 }),
+      );
     },
     websocket: {
       open(raw) {

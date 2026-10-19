@@ -1,7 +1,7 @@
 // Caches only immutable static files. Pages and /api always go to the
 // network, so the app never serves a stale shell or stale data, and the
 // Cloudflare Access login redirect keeps working.
-const CACHE = "axp-static-v1";
+const CACHE = "eta-static-v1";
 
 self.addEventListener("install", () => self.skipWaiting());
 

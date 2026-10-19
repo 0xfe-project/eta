@@ -5,116 +5,23 @@
   // a commit's pre-commit run uploads, so CI mostly replays. Each machine
   // authenticates itself (`turbo login`; CI exchanges its OIDC token).
   "remoteCache": { "teamId": "team_m0cGPvm66wsuOjDpnCrXUDPz" },
-  "cacheMaxAge": "7d",
-  "cacheMaxSize": "2GB",
-  "futureFlags": {
-    "affectedUsingTaskInputs": true,
-    "filterUsingTasks": true,
-    "strictTaskEntrypointSelection": true,
-    "githubActionsRemoteBaseRefFallback": true
-  },
   "tasks": {
     "build": {
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
       "outputs": ["dist/**", "out/**"]
     },
     "typecheck": {
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
+      "dependsOn": ["build"],
       "outputs": []
     },
     "lint": {
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
       "outputs": []
     },
     "test": {
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
       "outputs": []
     },
-    // Per-platform artifacts that images copy. The target platform is part of
-    // the task name, so the cache key and output directory never depend on the
-    // host that builds them. Packages narrow the inputs in their turbo.json.
-    "build:linux-amd64": {
-      "outputs": ["out/linux-amd64/**"]
-    },
-    "build:linux-arm64": {
-      "outputs": ["out/linux-arm64/**"]
-    },
-    // Images from those artifacts, built with this machine's Docker as
-    // AXP_IMAGE (scripts/build/image.sh). Docker's build cache already skips
-    // unchanged work, so they always run.
-    "image:linux-amd64": {
-      "dependsOn": ["build:linux-amd64"],
-      "cache": false,
-      "passThroughEnv": ["AXP_IMAGE"]
-    },
-    "image:linux-arm64": {
-      "dependsOn": ["build:linux-arm64"],
-      "cache": false,
-      "passThroughEnv": ["AXP_IMAGE"]
-    },
-    // The production app image (deploy/Dockerfile) copies these artifacts.
-    "//#image:linux-amd64": {
-      "dependsOn": [
-        "@axp/web#build",
-        "@axp/control-plane#build:linux-amd64",
-        "@axp/plugins-go#build:linux-amd64",
-        "@axp/remote#build",
-        "@axp/agenvo#build"
-      ],
-      "inputs": ["deploy/Dockerfile*", "scripts/build/image.sh"],
-      "cache": false,
-      "passThroughEnv": ["AXP_IMAGE"]
-    },
-    "//#image:linux-arm64": {
-      "dependsOn": [
-        "@axp/web#build",
-        "@axp/control-plane#build:linux-arm64",
-        "@axp/plugins-go#build:linux-arm64",
-        "@axp/remote#build",
-        "@axp/agenvo#build"
-      ],
-      "inputs": ["deploy/Dockerfile*", "scripts/build/image.sh"],
-      "cache": false,
-      "passThroughEnv": ["AXP_IMAGE"]
-    },
-    // Root-level ESLint for files outside the TypeScript app workspaces.
-    "//#lint:repo": {
-      "inputs": [
-        "*.{js,mjs,ts,json,jsonc}",
-        "deploy/**/*.{js,mjs,ts,json,jsonc}",
-        "plugins/**/*.{js,mjs,ts,json,jsonc}",
-        "bundles/**/*.{js,mjs,ts,json,jsonc}",
-        "!bundles/*/service/.venv/**",
-        "!bundles/*/service/out/**",
-        "apps/*/*.{json,jsonc}",
-        "!apps/web/**",
-        "!apps/agent-runtime/**",
-        "packages/*/*.{json,jsonc}"
-      ],
-      "outputs": []
-    },
-    // Knip checks the TypeScript/JavaScript workspaces and root configs.
+    // Knip reads the whole repository, so it always runs.
     "//#knip": {
-      "inputs": [
-        "package.json",
-        "bun.lock",
-        "knip.config.ts",
-        "eslint.config.js",
-        "deploy/*.ts",
-        "plugins/**/*.{js,mjs,ts}",
-        "apps/*/{package,tsconfig}.json",
-        "packages/*/package.json",
-        "bundles/*/service/package.json",
-        "apps/agent-runtime/src/**/*.{ts,js,mjs}",
-        "!apps/agent-runtime/src/protocol/**",
-        "apps/web/{vite,rstest}.config.ts",
-        "apps/web/server.js",
-        "apps/web/public/**/*.js",
-        "apps/web/.storybook/**/*.{ts,tsx}",
-        "apps/web/src/**/*.{ts,tsx,css}",
-        "!apps/web/src/**/*.gen.ts"
-      ],
-      "outputs": []
+      "cache": false
     },
     "dev": {
       "cache": false,

@@ -1,7 +1,6 @@
 import {
   queryOptions,
   useMutation,
-  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -79,24 +78,6 @@ export function useMemories(
   return useQuery({
     ...memoriesQueryOptions(agentId ?? "", query, source, groupId),
     enabled: Boolean(agentId),
-  });
-}
-
-/**
- * How many memories each agent has; undefined until every list loads. Shares
- * the memory tab's cache. The API has no count, so this reads whole lists.
- */
-export function useMemoryCounts(agentIds: string[]) {
-  return useQueries({
-    queries: agentIds.map((id) => memoriesQueryOptions(id, "")),
-    combine: (results) => ({
-      byAgent: new Map(
-        agentIds.map((id, i) => [id, results[i].data?.length] as const),
-      ),
-      total: results.every((result) => result.data)
-        ? results.reduce((sum, result) => sum + result.data!.length, 0)
-        : undefined,
-    }),
   });
 }
 

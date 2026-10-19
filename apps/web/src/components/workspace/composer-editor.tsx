@@ -50,11 +50,20 @@ const sameDraft = (a: Draft, b: Draft) =>
   JSON.stringify(a) === JSON.stringify(b);
 
 /** Folds long pastes and files into blocks; never inserts HTML. */
-function PastePlugin({ onFiles }: { onFiles: (files: File[]) => FilePart[] }) {
+function PastePlugin({
+  onFiles,
+  onPaste,
+}: {
+  onFiles: (files: File[]) => FilePart[];
+  /** A long paste: kept as a block, and also written to the project as a file. */
+  onPaste?: (id: string, text: string) => void;
+}) {
   const [editor] = useLexicalComposerContext();
   const onFilesRef = useRef(onFiles);
+  const onPasteRef = useRef(onPaste);
   useEffect(() => {
     onFilesRef.current = onFiles;
+    onPasteRef.current = onPaste;
   });
   useEffect(
     () =>
@@ -78,8 +87,13 @@ function PastePlugin({ onFiles }: { onFiles: (files: File[]) => FilePart[] }) {
                 type: "text/plain;charset=utf-8",
               }),
             ]);
-          else if (isLongPaste(text))
-            blocks = [{ type: "paste", id: crypto.randomUUID(), text }];
+          else if (isLongPaste(text)) {
+            const id = crypto.randomUUID();
+            blocks = [{ type: "paste", id, text }];
+            // The block is what the composer shows; the file is what the agent can open. Both,
+            // because a 200-line paste in a message body is a message nobody can read.
+            onPasteRef.current?.(id, text);
+          }
           // Short text: the plain text editor inserts text/plain alone.
           else return false;
           event.preventDefault();
@@ -103,6 +117,9 @@ function DraftPlugin({
   value: Draft;
   onChange: (draft: Draft) => void;
   onKeyDown: (event: KeyboardEvent) => void;
+  /** The input method's own events: the keydown handler needs to know a composition happened. */
+  onCompositionStart?: () => void;
+  onCompositionEnd?: () => void;
   disabled: boolean;
 }) {
   const [editor] = useLexicalComposerContext();
@@ -150,7 +167,10 @@ export function ComposerEditor({
   value,
   onChange,
   onKeyDown,
+  onCompositionStart,
+  onCompositionEnd,
   onFiles,
+  onPaste,
   placeholder,
   disabled = false,
   className,
@@ -160,8 +180,13 @@ export function ComposerEditor({
   value: Draft;
   onChange: (draft: Draft) => void;
   onKeyDown: (event: KeyboardEvent) => void;
+  /** The input method's own events: the keydown handler needs to know a composition happened. */
+  onCompositionStart?: () => void;
+  onCompositionEnd?: () => void;
   /** Start uploading pasted files; their blocks. */
   onFiles: (files: File[]) => FilePart[];
+  /** A long paste became a block: also write it into the project as a file. */
+  onPaste?: (id: string, text: string) => void;
   placeholder: string;
   disabled?: boolean;
   className?: string;
@@ -193,13 +218,15 @@ export function ComposerEditor({
                 <div
                   aria-hidden
                   className={cn(
-                    "pointer-events-none absolute inset-0 select-none overflow-hidden text-ellipsis whitespace-nowrap text-[var(--terminal-muted)]",
+                    "pointer-events-none absolute inset-0 select-none overflow-hidden text-ellipsis whitespace-nowrap text-muted-foreground",
                     className,
                   )}
                 >
                   {placeholder}
                 </div>
               }
+              onCompositionStart={onCompositionStart}
+              onCompositionEnd={onCompositionEnd}
               className={cn(
                 "term-input max-h-[40vh] min-h-[1lh] overflow-y-auto whitespace-pre-wrap break-words outline-none",
                 className,
@@ -211,7 +238,7 @@ export function ComposerEditor({
         />
       </div>
       <HistoryPlugin />
-      <PastePlugin onFiles={onFiles} />
+      <PastePlugin onFiles={onFiles} onPaste={onPaste} />
       <DraftPlugin
         value={value}
         onChange={onChange}

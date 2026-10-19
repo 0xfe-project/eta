@@ -76,5 +76,33 @@
   },
   "grok": {
     "sharedAccountHelp": "The grok plugin also uses this account for images, videos and search. See"
+  },
+  "editor": {
+    "newTitle": "New provider",
+    "description": "Saved to config.json; the new provider is used after a restart.",
+    "name": "Name",
+    "kind": "Kind",
+    "baseUrl": "Base URL",
+    "key": "API key",
+    "keyConfigured": "Configured — type to replace",
+    "keyMissing": "Not configured",
+    "clearKey": "Remove the key",
+    "keepKey": "Keep the key",
+    "headers": "Headers",
+    "headerName": "Name",
+    "headerValue": "Value",
+    "addHeader": "Add header",
+    "models": "Models",
+    "modelId": "Model id",
+    "modelName": "Display name",
+    "contextWindow": "Context window",
+    "vision": "Images",
+    "addModel": "Add model",
+    "restartRequired": "Saved. Restart the host for it to take effect.",
+    "configured": "Configured providers",
+    "empty": "No providers yet. Add one to give the host something to run.",
+    "modelCount": "{{count}} models",
+    "unsaved": "This form has changes that would be lost.",
+    "discard": "Discard them"
   }
 }

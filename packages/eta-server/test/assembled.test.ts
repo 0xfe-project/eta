@@ -462,6 +462,35 @@ describe("a server started the way main starts it", () => {
   });
 });
 
+describe("the host's hooks on the port", () => {
+  it("threads fetch and authorize through to the pipe", async () => {
+    const root = await mkdtemp(join(tmpdir(), "eta-hooks-"));
+    roots.push(root);
+    const server = await assembleServer({
+      dataDir: root,
+      configPath: join(root, "no-such-config.json"),
+      models: fakeModels([]) as never,
+      authorize: (request) =>
+        new URL(request.url).pathname === "/private"
+          ? new Response("no", { status: 403 })
+          : undefined,
+      fetch: (request) =>
+        new URL(request.url).pathname === "/up"
+          ? new Response("ok")
+          : undefined,
+    });
+    servers.push(server);
+    const origin = `http://127.0.0.1:${server.server.port}`;
+    expect(await (await fetch(`${origin}/up`)).text()).toBe("ok");
+    expect((await fetch(`${origin}/private`)).status).toBe(403);
+    expect((await fetch(`${origin}/other`)).status).toBe(404);
+    // The pipe is still the pipe.
+    const client = await connect(server.server.port);
+    await until(() => client.frames.some((frame) => frame.type === "hello"));
+    client.close();
+  });
+});
+
 describe("plugins from the user's directories", () => {
   it("loads one at startup, and its target is in hello", async () => {
     const root = await mkdtemp(join(tmpdir(), "eta-scanned-"));

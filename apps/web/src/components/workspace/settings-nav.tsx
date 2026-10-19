@@ -52,7 +52,7 @@ export function SettingsNav<T extends string>({
             }
             onClick={() => onChange(section)}
             className={cn(
-              "flex shrink-0 items-center gap-2 px-2 py-2 text-sm whitespace-nowrap text-muted-foreground transition-colors duration-[60ms] ease-linear outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring",
+              "flex shrink-0 items-center gap-2 px-2 py-2 text-sm whitespace-nowrap text-muted-foreground duration-[60ms] ease-linear outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring",
               value === section &&
                 "bg-accent font-medium text-accent-foreground",
             )}

@@ -1,5 +1,0 @@
-{
-  "name": "approval",
-  "description": "规则拦下的命令先请用户在 AXP 里确认，同意后放行一次。",
-  "plugins": ["approval"]
-}

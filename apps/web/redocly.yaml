@@ -1,13 +1,14 @@
-# The OpenAPI documents the web client's types come from (`bun run
-# generate`, after the control plane's `openapi` task, which writes both:
-# its public API and routines'). Adding one: an entry here, its document in
-# that task, and a client in src/lib/api.ts.
+# The OpenAPI documents the web client's types come from (`bun run generate`).
+# Both are frozen snapshots of the old stack's contract: the web still compiles
+# against these shapes while its data layer moves to the host's WebSocket
+# protocol (@eta/client-contracts) feature by feature. Each snapshot shrinks as
+# its queries are ported, and this file goes with the last one.
 apis:
-  control-plane:
-    root: ../control-plane/out/openapi.json
+  compat:
+    root: ./openapi/compat.json
     x-openapi-ts:
       output: ./src/api/control-plane.gen.ts
   routines:
-    root: ../control-plane/out/routines.openapi.json
+    root: ./openapi/routines.json
     x-openapi-ts:
       output: ./src/api/routines.gen.ts

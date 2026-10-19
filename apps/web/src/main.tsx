@@ -13,14 +13,13 @@ import {
   readLanguagePreference,
   resolveLanguage,
 } from "@/lib/i18n";
-import { installErrorReporting, reportReactError } from "@/lib/report";
+import { applyTheme, readTheme, watchSystemTheme } from "@/lib/theme";
 import { watchForUpdates } from "@/lib/update";
 import { useOutbox } from "@/queries/outbox";
 import { getRouter } from "./router";
 import "@/styles.css";
 
 async function start() {
-  installErrorReporting();
   watchForUpdates();
 
   // Makes the app installable from the browser's own install UI.
@@ -37,17 +36,18 @@ async function start() {
   ]);
   void i18n.changeLanguage(resolveLanguage(readLanguagePreference()));
   applyDocumentLanguage();
+  // index.html painted the mode before the bundle; this is what keeps it true afterwards
+  // (a changed choice in another tab, or the system flipping while the tab is open).
+  applyTheme(readTheme());
+  window.addEventListener("storage", () => applyTheme(readTheme()));
+  watchSystemTheme();
 
   const router = getRouter();
   const root = document.getElementById("root");
   if (!root) throw new Error("missing #root");
 
   startTransition(() => {
-    createRoot(root, {
-      onUncaughtError: reportReactError,
-      onCaughtError: reportReactError,
-      onRecoverableError: reportReactError,
-    }).render(
+    createRoot(root).render(
       <StrictMode>
         <QueryClientProvider client={router.options.context.queryClient}>
           <RouterProvider router={router} />

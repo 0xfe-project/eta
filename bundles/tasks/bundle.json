@@ -1,5 +1,0 @@
-{
-  "name": "tasks",
-  "description": "任务看板：创建、指派和跟进任务，包括远程电脑上的智能体执行的任务。",
-  "plugins": ["tasks"]
-}

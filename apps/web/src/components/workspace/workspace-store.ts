@@ -5,23 +5,18 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { translate } from "@/lib/i18n";
 
-export const storageKey = "axp.workspace.v1";
+export const storageKey = "eta.workspace.v1";
 
 // Local UI state only; everything else lives in the control plane. Zod
 // drops fields this schema does not have.
 const workspaceSchema = z.object({
   selectedGroupId: z.string().max(64).optional(),
   selectedAgentId: z.string().max(64).optional(),
-  // CSS font-family lists for UI and code text; unset uses Geist.
-  fontSans: z.string().max(200).optional(),
-  fontMono: z.string().max(200).optional(),
   // Preselected model for new agents.
   lastModel: z.string().max(100).optional(),
   // The task page as last left: rows or a board, and whose tasks.
   taskLayout: z.enum(["list", "board"]).optional(),
   taskScope: z.enum(["all", "user", "remote"]).optional(),
-  // The chat's side panel folded away on wide screens.
-  panelCollapsed: z.boolean().optional(),
   // 圈选元素 (lib/element-picker.ts); unset follows the build.
   reactGrab: z.boolean().optional(),
 });
@@ -51,6 +46,16 @@ interface WorkspaceStore {
   /** Persisted in this browser. */
   workspace: WorkspaceState;
   mobilePanel: "chat" | "workspace";
+  /**
+   * The member the conversation is narrowed to, or null for everyone.
+   *
+   * Kept here rather than in one component because two panels write it: the member rows in the
+   * sidebar and the member cards in the panel are the same action, and a focus that lives in
+   * either one would be a focus the other cannot see. Not persisted — a reload is not a reason to
+   * still be looking at one agent.
+   */
+  focusedAgentId: string | null;
+  setFocusedAgent: (agentId: string | null) => void;
   settings: SettingsState;
   agentEditor: AgentEditorState;
   setWorkspace: (update: Update<WorkspaceState>) => void;
@@ -98,6 +103,8 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
     (set) => ({
       workspace: {},
       mobilePanel: "chat",
+      focusedAgentId: null,
+      setFocusedAgent: (focusedAgentId) => set({ focusedAgentId }),
       settings: { open: false, section: "agents" },
       agentEditor: { open: false, agentId: null },
       setWorkspace: (update) =>
@@ -106,7 +113,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       showPanel: () =>
         set((s) => ({
           mobilePanel: "workspace",
-          workspace: { ...s.workspace, panelCollapsed: false },
+          workspace: s.workspace,
         })),
       setSettings: (update) =>
         set((s) => ({ settings: apply(update, s.settings) })),

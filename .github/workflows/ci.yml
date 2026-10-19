@@ -9,7 +9,7 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   check:
@@ -22,101 +22,33 @@ jobs:
     env:
       # Tests that need a tool fail instead of skipping without it.
       CI: "1"
-      AXP_TEST_NATS_URL: nats://127.0.0.1:14222
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: true
-          fetch-depth: 0
-          filter: blob:none
 
       # Turborepo's Remote Cache (turbo.json's remoteCache), which development
       # machines fill as they commit: a short-lived token for the Vercel team,
-      # through its OIDC policy for this repository.
+      # through its OIDC policy for this repository. Without one the run only
+      # goes uncached.
       - name: Turborepo Remote Cache
         uses: vercel/setup-turborepo-remote-cache-action@v1.1.0
         continue-on-error: true
         with:
           team: team_m0cGPvm66wsuOjDpnCrXUDPz
 
-      # Fallback and local layer for Turborepo artifacts across CI runs.
-      - name: Cache Turborepo
-        uses: actions/cache@v6
-        with:
-          path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-
-
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: apps/control-plane/go.mod
-          cache: false
       - uses: astral-sh/setup-uv@v10.2.0
         with:
-          # bundles/memory/service/.python-version.
-          python-version: "3.13"
-          cache-python: true
           enable-cache: true
           cache-dependency-glob: "**/uv.lock"
-          # --affected runs without memory-service tasks never populate the
-          # cache, and the save step fails on a missing path without this.
-          ignore-nothing-to-cache: true
-      - uses: Swatinem/rust-cache@v2
+
+      # Bun's package store; uv's is cached by its setup action above.
+      - uses: actions/cache@v6
         with:
-          workspaces: vendor/akhook
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
-      # Separate Go module and build/test caches with restore-keys so a go.sum
-      # update or a source edit still reuses the existing module and build cache.
-      - name: Cache Go modules
-        uses: actions/cache@v6
-        with:
-          path: ~/go/pkg/mod
-          key: go-mod-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            go-mod-${{ runner.os }}-
-      - name: Cache Go build
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/go-build
-          key: go-build-${{ runner.os }}-${{ hashFiles('**/*.go', '**/go.mod', '**/go.sum') }}
-          restore-keys: |
-            go-build-${{ runner.os }}-
-
-      # Bun's package store and dprint's compiled WASM plugins.
-      - name: Cache Bun and dprint
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.bun/install/cache
-            ~/.cache/dprint
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock', 'dprint.json') }}
-          restore-keys: |
-            bun-${{ runner.os }}-
-
-      - run: bun install --frozen-lockfile --ignore-scripts
-
-      # Start NATS and PostgreSQL in parallel, and only when the Go test tasks
-      # that use them are affected by this run.
-      - name: Start test services
-        run: |
-          affected="$(bunx turbo query affected --tasks test --packages @axp/control-plane @axp/service-go)"
-          if [[ "$(jq -r '.data.affectedTasks.length' <<<"$affected")" -eq 0 ]]; then
-            echo "No affected database or queue test tasks; skipping Docker services."
-            exit 0
-          fi
-          pids=()
-          if jq -e '.data.affectedTasks.items[] | select(.package.name == "@axp/control-plane")' <<<"$affected" >/dev/null; then
-            docker run -d --name nats -p 127.0.0.1:14222:4222 nats:2.14-alpine --jetstream &
-            pids+=("$!")
-          fi
-          bash scripts/test-postgres.sh &
-          pids+=("$!")
-          for pid in "${pids[@]}"; do
-            wait "$pid"
-          done
-
-      - run: bun run check:affected
+      - run: bun install --frozen-lockfile
+      - run: bun run check

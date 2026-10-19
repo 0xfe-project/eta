@@ -1,10 +1,13 @@
 import type { Group, GroupChanges } from "@/api/control-plane.gen";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { controlPlane, unwrap } from "@/lib/api";
+import { useNavigate } from "@tanstack/react-router";
+import { useWorkspaceStore } from "@/components/workspace/workspace-store";
+import { ApiError, controlPlane, unwrap } from "@/lib/api";
 import { chatQueryOptions } from "./chat";
 
 export function useGroupActions() {
   const client = useQueryClient();
+  const navigate = useNavigate();
   const onSuccess = (group: Group) => {
     client.setQueryData(chatQueryOptions().queryKey, (s) =>
       s
@@ -21,8 +24,13 @@ export function useGroupActions() {
   };
   return {
     create: useMutation({
-      mutationFn: (body: { name: string; members: string[]; goal?: string }) =>
-        unwrap(controlPlane.POST("/api/v1/groups", { body })),
+      mutationFn: (body: {
+        name: string;
+        members: string[];
+        goal?: string;
+        /** The folder the group works in; left out means "not bound yet". */
+        cwd?: string;
+      }) => unwrap(controlPlane.POST("/api/v1/groups", { body })),
       onSuccess,
     }),
     update: useMutation({
@@ -34,6 +42,59 @@ export function useGroupActions() {
           }),
         ),
       onSuccess,
+    }),
+    /**
+     * The conversation an agent has for itself, created if it does not exist yet.
+     *
+     * Both the sidebar's member rows and its agent library mean "talk to this one alone"; the
+     * host answers with the direct chat, idempotently, so pressing the button again opens the
+     * same conversation instead of making a second one.
+     */
+    direct: useMutation({
+      mutationFn: (input: { agentId: string; cwd?: string }) =>
+        unwrap<Group>(
+          controlPlane.POST("/api/v1/agents/{agent_id}/direct", {
+            params: { path: { agent_id: input.agentId } },
+            body: input.cwd === undefined ? {} : { cwd: input.cwd },
+          }),
+        ),
+      onSuccess,
+    }),
+    /** Deleting a conversation: the timeline goes, the agents' own transcripts stay. */
+    remove: useMutation({
+      mutationFn: async (id: string) => {
+        const response = await fetch(
+          `/api/v1/groups/${encodeURIComponent(id)}`,
+          { method: "DELETE" },
+        );
+        if (!response.ok && response.status !== 204) {
+          const body = (await response.json().catch(() => null)) as {
+            error?: { message?: string };
+          } | null;
+          throw new ApiError(
+            response.status,
+            "DELETE_FAILED",
+            body?.error?.message ?? "删除失败",
+          );
+        }
+      },
+      onSuccess: (_result, id) => {
+        client.setQueryData(chatQueryOptions().queryKey, (s) =>
+          s ? { ...s, groups: s.groups.filter((g) => g.id !== id) } : s,
+        );
+        client.removeQueries({ queryKey: ["chat", "messages", id] });
+        // The deleted conversation may be the one open: the URL still points at a group that no
+        // longer exists, and `?group=` beats the store's selectedGroupId — the tree stops
+        // listing it while the middle column keeps showing its corpse.
+        const open = useWorkspaceStore.getState().workspace.selectedGroupId;
+        if (open === id) {
+          useWorkspaceStore.setState((state) => ({
+            workspace: { ...state.workspace, selectedGroupId: undefined },
+            focusedAgentId: null,
+          }));
+          void navigate({ to: "/", search: {} });
+        }
+      },
     }),
     member: useMutation({
       mutationFn: ({

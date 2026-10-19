@@ -1,5 +1,0 @@
-{
-  "name": "artifacts",
-  "description": "Artifact：把静态网页发布到 AXP，在聊天和任务里预览，可公开分享。",
-  "plugins": ["artifacts"]
-}

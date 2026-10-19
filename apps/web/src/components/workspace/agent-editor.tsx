@@ -38,6 +38,7 @@ import {
   InstructionsField,
   ModelField,
   NameField,
+  PersonaField,
 } from "./agent-fields";
 import { agentDraft, agentFormSchema } from "./agent-form";
 import { AgentAvatar } from "./agent-identity";
@@ -118,7 +119,7 @@ const tabs: {
       return translate("agents:editor.tabs.general");
     },
     icon: SlidersHorizontalIcon,
-    fields: ["name", "model"],
+    fields: ["name", "model", "persona"],
   },
   {
     value: "instructions",
@@ -164,6 +165,7 @@ function AgentEditorForm({
       description: agent.description,
       model: agent.model ?? "",
       bundles: agent.bundles ?? null,
+      persona: agent.persona ?? "",
     },
   });
   // A field with an error, to focus once its tab shows.
@@ -243,6 +245,7 @@ function AgentEditorForm({
                 models={models}
                 onOpenProviders={openProviders}
               />
+              <PersonaField form={form} />
               <UsageLine principal={agent.id} />
             </>
           ) : tab === "instructions" ? (

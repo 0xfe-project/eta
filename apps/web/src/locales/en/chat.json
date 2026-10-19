@@ -24,10 +24,22 @@
     "placeholder": "Message {{agentName}}…",
     "createAgentFirst": "Create an agent first",
     "noAgentSelected": "No agent selected",
-    "waitForUploads": "Wait for attachments to finish uploading before sending."
+    "waitForUploads": "Wait for attachments to finish uploading before sending.",
+    "fileHint": "file",
+    "model": "Model",
+    "modelHint": "The model the next turn runs on",
+    "thinking": "Thinking level",
+    "thinkingHint": "How hard it thinks before answering",
+    "sendHint": "Enter to send · Shift+Enter for a new line · ⌘Enter to steer",
+    "workingHint": "a reply is running · ⌘Enter to say something now",
+    "stopLabel": "STOP",
+    "commandsLabel": "commands",
+    "noMatches": "nothing matches"
   },
   "tools": {
-    "expandHint": "(click to expand)"
+    "arguments": "arguments",
+    "result": "result",
+    "refused": "refused"
   },
   "agentSwitcher": {
     "currentDirectChat": "Chatting with {{agentName}} ({{status}}); switch agent",
@@ -48,7 +60,8 @@
       "invite": "Invite",
       "editInfo": "Edit group info",
       "archive": "Archive",
-      "viewInfo": "View group info"
+      "viewInfo": "View group info",
+      "rename": "Rename"
     },
     "createDescription": "Choose a few agents to discuss something together.",
     "fields": {
@@ -56,7 +69,10 @@
       "optionalGoal": "Goal (optional)",
       "goalHelp": "Record the current goal and decisions made so far.",
       "goal": "Goal",
-      "decisions": "Decisions"
+      "decisions": "Decisions",
+      "cwd": "Folder (optional)",
+      "cwdPlaceholder": "/path/to/project",
+      "cwdHelp": "Where this group works: its members run here, the project's notes are read here, and what it produces belongs here. Leave it empty and the group is unbound."
     },
     "members": {
       "title": "Members",
@@ -67,7 +83,16 @@
       "inviteTitle": "Invite agents",
       "inviteDescription": "Members can read the group chat and reply when @mentioned.",
       "count_one": "{{count}} member",
-      "count_other": "{{count}} members"
+      "count_other": "{{count}} members",
+      "collapse": "Collapse members",
+      "expand": "Show members",
+      "talkAlone": "Talk to {{name}} alone",
+      "focus": "Focus {{name}}",
+      "noSession": "no conversation with it in this group yet",
+      "remove": "Remove from group",
+      "removeDescription": "{{name}} leaves this conversation. What it said stays; what it would have said next does not happen.",
+      "turns": "{{count}} turns",
+      "refused": "refused"
     },
     "title": "Groups",
     "archived": {
@@ -82,6 +107,23 @@
       "help": "Each task belongs to one group. Linking it replaces its previous group.",
       "unlink": "Unlink",
       "linkLabel": "Link #{{number}} {{title}}"
+    },
+    "header": {
+      "cwdBound": "Working in {{path}}",
+      "cwdUnbound": "no folder",
+      "unboundNotice": "This group has no folder yet — its agents run in the host's directory and project notes are read from there.",
+      "bindFolder": "Set folder"
+    },
+    "search": {
+      "empty": "Nothing matches that search.",
+      "placeholder": "Search conversations or folders"
+    },
+    "empty": {
+      "title": "No conversations yet."
+    },
+    "delete": {
+      "title": "Delete this conversation",
+      "description": "{{name}} and its timeline are deleted. What each agent said stays in its own transcript."
     }
   },
   "confirmations": {
@@ -101,7 +143,11 @@
   "commands": {
     "stopAllDescription": "Stop all replies in the group",
     "compactDescription": "Compact context",
-    "compactRequiresMention": "@mention the agent whose context you want to compact first."
+    "compactRequiresMention": "@mention the agent whose context you want to compact first.",
+    "goalDescription": "Set what this conversation is trying to achieve",
+    "themeDescription": "Switch light and dark",
+    "settingsDescription": "Open settings",
+    "newDescription": "Start a new conversation"
   },
   "sendModes": {
     "afterReply": "Send after the current reply",
@@ -125,20 +171,22 @@
     "resend": "Resend"
   },
   "mentions": {
-    "everyoneCommand": "@everyone",
+    "everyoneCommand": "everyone",
     "notifyEveryone": "Notify all group members",
     "busyHint": "Busy · Message will be queued",
     "replyHint": "Ask for a reply",
     "notifyTargets": "Will notify {{names}}",
     "noTargetsHint": "Messages without @mentions are only saved to the group",
-    "everyoneLabel": "Everyone"
+    "everyoneLabel": "Everyone",
+    "pickTargets": "@ who"
   },
   "history": {
     "loadEarlier": "Load earlier messages…",
     "loading": "Loading conversation…",
     "recentChats": "Recent chats",
     "noMessages": "No messages yet",
-    "noConversations": "No conversations yet"
+    "noConversations": "No conversations yet",
+    "empty": "Nothing said here yet. Say something to start."
   },
   "connection": {
     "reconnecting": "Connection lost, reconnecting… Status may be out of date."
@@ -181,7 +229,8 @@
       "percolating": "Percolating",
       "noodling": "Noodling",
       "conjuring": "Conjuring"
-    }
+    },
+    "fold": "thought · {{count}} chars"
   },
   "diff": {
     "addedLabel": "added: ",
@@ -189,5 +238,33 @@
   },
   "effort": {
     "ultracodeHelp": "ultracode · xhigh effort + dynamic workflows for maximum thoroughness"
-  }
+  },
+  "rail": {
+    "replies": "Agent replies",
+    "prompts": "Your messages",
+    "skipped": "{{count}} skipped",
+    "newActivity": "New activity"
+  },
+  "panel": {
+    "sessionJson": "session json · {{size}}",
+    "inspect": "Inspect",
+    "prompt": "System prompt",
+    "tools": "Tools"
+  },
+  "focus": {
+    "only": "Only {{name}}"
+  },
+  "pending": {
+    "title": "Waiting for you",
+    "more": "and {{count}} more waiting"
+  },
+  "new": {
+    "title": "New conversation",
+    "hint": "Pick an agent and a folder. The conversation appears under that folder in the sidebar.",
+    "folder": "Folder",
+    "folderHint": "Where the agent works: commands run here, project notes are read here.",
+    "agent": "Agent",
+    "start": "Start"
+  },
+  "chat": {}
 }

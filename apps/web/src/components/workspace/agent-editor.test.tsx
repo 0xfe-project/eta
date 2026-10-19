@@ -40,6 +40,13 @@ rstest.mock("@/queries/llm", () => ({
         status: "available",
         available: true,
       },
+      {
+        id: "m2",
+        display_name: "M2",
+        connector: "c",
+        status: "available",
+        available: true,
+      },
     ],
   }),
   useConnectors: () => ({ data: [{ id: "c", display_name: "C" }] }),
@@ -132,6 +139,7 @@ describe("editing an agent in tabs", () => {
       id: "a1",
       name: "代码审查",
       description: "只看 PR",
+      persona: "",
       model: "m1",
     });
   });
@@ -153,5 +161,24 @@ describe("editing an agent in tabs", () => {
     expect(current()).toBe("常规");
     await save();
     expect(api.update).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("picking a model", () => {
+  it("shows the new model at once and saves it", async () => {
+    const trigger = document.getElementById("agent-model")!;
+    await click(trigger as HTMLButtonElement);
+    const option = [
+      ...document.querySelectorAll<HTMLElement>('[role="option"]'),
+    ].find((candidate) => candidate.textContent?.includes("M2"))!;
+    await click(option as unknown as HTMLButtonElement);
+    // The reading of the trigger is the whole complaint: the pick has to be visible before
+    // anything else happens, not after the next refetch.
+    expect(trigger.textContent).toContain("M2");
+    await save();
+    expect(api.update.mock.calls[0][0]).toMatchObject({
+      id: "a1",
+      model: "m2",
+    });
   });
 });

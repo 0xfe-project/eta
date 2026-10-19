@@ -13,7 +13,7 @@ import { ComputerSettings } from "./computer-settings";
 // Two devices asked to pair under the laptop's label.
 const computers = {
   relay_configured: true,
-  relay_url: "https://axp.test/remote/relay",
+  relay_url: "https://eta.test/remote/relay",
   relay_error: null,
   computers: [
     {
@@ -104,7 +104,7 @@ describe("approving a computer's runtime", () => {
   });
 });
 
-// The laptop's Paseo connector runs agenvo 0.1.0; AXP serves 0.2.0.
+// The laptop's Paseo connector runs agenvo 0.1.0; eta serves 0.2.0.
 const outdated = {
   ...computers,
   connector_version: "0.2.0",
@@ -141,7 +141,7 @@ describe("updating a computer's connector", () => {
         return Response.json({
           computer: outdated.computers[0],
           command:
-            "curl -fsSL https://axp.test/remote/install.sh | sh -s -- axpe_new",
+            "curl -fsSL https://eta.test/remote/install.sh | sh -s -- etae_new",
         });
       }
       return Response.json(outdated);
@@ -149,13 +149,13 @@ describe("updating a computer's connector", () => {
     await renderSettings();
     await act(settle);
     expect(document.body.textContent).toContain("connector 0.1.0，需要更新");
-    expect(document.body.textContent).toContain("AXP 提供的版本 0.2.0");
+    expect(document.body.textContent).toContain("Eta 提供的版本 0.2.0");
     await act(async () => {
       buttons("更新")[0].click();
       await settle();
     });
     expect(posted).toEqual(["/api/v1/computers/c1/install"]);
-    expect(document.body.textContent).toContain("axpe_new");
+    expect(document.body.textContent).toContain("etae_new");
     expect(document.body.textContent).toContain("（0.2.0）");
     expect(document.body.textContent).toContain("不需要重新配对");
     expect(document.body.textContent).toContain("connector 0.1.0，需要更新");

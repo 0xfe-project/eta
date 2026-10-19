@@ -16,6 +16,8 @@ export const agentFormSchema = z.object({
         maxCharacters: DESCRIPTION_MAX.toLocaleString(formatLocale()),
       }),
   }),
+  // Which persona card the agent wears; "" is the project's default, which is a card too.
+  persona: z.string().max(200),
   // "" until a model is chosen.
   model: z.string(),
   // null: every built-in bundle, the default for new agents.
@@ -23,10 +25,14 @@ export const agentFormSchema = z.object({
 });
 export type AgentForm = z.infer<typeof agentFormSchema>;
 
-/** The request's fields: the model and bundles only once chosen. */
-export function agentDraft({ model, bundles, ...fields }: AgentForm) {
+/**
+ * The request's fields. `persona` rides along unconditionally — "" is a real value ("the
+ * project's default card"), not an omission. The model and bundles go only once chosen.
+ */
+export function agentDraft({ model, bundles, persona, ...fields }: AgentForm) {
   return {
     ...fields,
+    persona,
     ...(model ? { model } : {}),
     ...(bundles ? { bundles } : {}),
   };

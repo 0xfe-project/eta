@@ -67,7 +67,8 @@
     "expandFullText": "Expand full text",
     "reply": "Reply",
     "change": "Change",
-    "yes": "Yes"
+    "yes": "Yes",
+    "settings": "Settings"
   },
   "status": {
     "created": "Created",
@@ -171,6 +172,6 @@
     "mayBeDeleted": "It may have been deleted."
   },
   "updates": {
-    "available": "AXP updated"
+    "available": "Eta updated"
   }
 }

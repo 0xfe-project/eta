@@ -206,7 +206,7 @@ function RuntimeSummary({ runtimes }: { runtimes: ComputerRuntime[] }) {
 /**
  * A runtime that asked to pair: approve once the fingerprints match. Each
  * request under its label is listed; more than one means someone else asked
- * too, and only the one `axp setup` printed is to be approved.
+ * too, and only the one `eta setup` printed is to be approved.
  */
 function Approval({
   computer,

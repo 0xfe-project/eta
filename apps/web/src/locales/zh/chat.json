@@ -24,10 +24,22 @@
     "placeholder": "发消息给 {{agentName}}…",
     "createAgentFirst": "先创建智能体",
     "noAgentSelected": "未选择智能体",
-    "waitForUploads": "附件上传中，完成后才能发送。"
+    "waitForUploads": "附件上传中，完成后才能发送。",
+    "fileHint": "文件",
+    "model": "模型",
+    "modelHint": "下一回合跑的模型",
+    "thinking": "思考档",
+    "thinkingHint": "回答之前想多深",
+    "sendHint": "Enter 发送 · Shift+Enter 换行 · ⌘Enter 插话",
+    "workingHint": "有人在说话 · ⌘Enter 现在就插一句",
+    "stopLabel": "停止",
+    "commandsLabel": "命令",
+    "noMatches": "没有匹配的"
   },
   "tools": {
-    "expandHint": "（点击展开）"
+    "arguments": "参数",
+    "result": "结果",
+    "refused": "被拦"
   },
   "agentSwitcher": {
     "currentDirectChat": "正在与 {{agentName}} 私聊（{{status}}），切换智能体",
@@ -48,7 +60,8 @@
       "invite": "邀请",
       "editInfo": "编辑群信息",
       "archive": "归档",
-      "viewInfo": "查看群信息"
+      "viewInfo": "查看群信息",
+      "rename": "改名"
     },
     "createDescription": "选几位智能体，一起讨论一件事。",
     "fields": {
@@ -56,7 +69,10 @@
       "optionalGoal": "目标（可选）",
       "goalHelp": "记录当前目标和已经达成的决定。",
       "goal": "目标",
-      "decisions": "已决定"
+      "decisions": "已决定",
+      "cwd": "工作目录（可选）",
+      "cwdPlaceholder": "/path/to/project",
+      "cwdHelp": "这个群在哪儿干活：成员在这里跑，项目笔记从这里读，产出的东西也归这里。留空就是还没绑目录。"
     },
     "members": {
       "title": "成员",
@@ -67,7 +83,16 @@
       "inviteTitle": "邀请智能体",
       "inviteDescription": "加入后可以查看群聊，并在被 @ 时回复。",
       "count_one": "{{count}} 位成员",
-      "count_other": "{{count}} 位成员"
+      "count_other": "{{count}} 位成员",
+      "collapse": "收起成员",
+      "expand": "展开成员",
+      "talkAlone": "单独和 {{name}} 说",
+      "focus": "聚焦 {{name}}",
+      "noSession": "在这个群里还没和它说过话",
+      "remove": "移出群",
+      "removeDescription": "{{name}} 离开这个对话。它说过的话留着，它本来要说的下一句不会发生。",
+      "turns": "{{count}} 回合",
+      "refused": "被拦"
     },
     "title": "群",
     "archived": {
@@ -82,6 +107,23 @@
       "help": "任务只关联一个群，重新关联会替换之前的群。",
       "unlink": "解除关联",
       "linkLabel": "关联 #{{number}} {{title}}"
+    },
+    "header": {
+      "cwdBound": "工作目录 {{path}}",
+      "cwdUnbound": "未绑定目录",
+      "unboundNotice": "这个群还没绑目录：成员跑在宿主启动的目录里，项目笔记也从那里读。",
+      "bindFolder": "绑定目录"
+    },
+    "search": {
+      "empty": "没有匹配的对话。",
+      "placeholder": "搜索对话或目录"
+    },
+    "empty": {
+      "title": "还没有对话。"
+    },
+    "delete": {
+      "title": "删除这个对话",
+      "description": "「{{name}}」和它的时间线会被删除。每个智能体说过的话仍留在它自己的会话里。"
     }
   },
   "confirmations": {
@@ -101,7 +143,11 @@
   "commands": {
     "stopAllDescription": "停止群内全部回复",
     "compactDescription": "压缩上下文",
-    "compactRequiresMention": "先 @ 要压缩上下文的智能体。"
+    "compactRequiresMention": "先 @ 要压缩上下文的智能体。",
+    "goalDescription": "设定这段对话要达成什么",
+    "themeDescription": "切换明暗",
+    "settingsDescription": "打开设置",
+    "newDescription": "开一个新对话"
   },
   "sendModes": {
     "afterReply": "当前回复结束后发送",
@@ -125,20 +171,22 @@
     "resend": "重新发送"
   },
   "mentions": {
-    "everyoneCommand": "@所有人",
+    "everyoneCommand": "所有人",
     "notifyEveryone": "唤醒所有群成员",
     "busyHint": "忙碌 · 消息会排队",
     "replyHint": "请他回复",
     "notifyTargets": "将唤醒 {{names}}",
     "noTargetsHint": "没 @ 的消息只记入群聊",
-    "everyoneLabel": "所有人"
+    "everyoneLabel": "所有人",
+    "pickTargets": "@ 说给谁"
   },
   "history": {
     "loadEarlier": "加载更早的消息…",
     "loading": "正在读取对话…",
     "recentChats": "最近对话",
     "noMessages": "还没有消息",
-    "noConversations": "还没有对话"
+    "noConversations": "还没有对话",
+    "empty": "这里还没说过话。说一句就开始。"
   },
   "connection": {
     "reconnecting": "连接中断，正在重连…显示的状态可能不是最新的。"
@@ -181,7 +229,8 @@
       "percolating": "琢磨中",
       "noodling": "推敲中",
       "conjuring": "构思中"
-    }
+    },
+    "fold": "想的过程 · {{count}} 字"
   },
   "diff": {
     "addedLabel": "新增：",
@@ -189,5 +238,33 @@
   },
   "effort": {
     "ultracodeHelp": "ultracode · xhigh 推理强度 + 动态工作流，尽可能全面"
-  }
+  },
+  "rail": {
+    "replies": "智能体的回复",
+    "prompts": "你发的消息",
+    "skipped": "跳过 {{count}} 条",
+    "newActivity": "新活动"
+  },
+  "panel": {
+    "sessionJson": "会话 json · {{size}}",
+    "inspect": "Inspect",
+    "prompt": "系统提示",
+    "tools": "工具"
+  },
+  "focus": {
+    "only": "只看 {{name}}"
+  },
+  "pending": {
+    "title": "等你处理",
+    "more": "还有 {{count}} 条在等你"
+  },
+  "new": {
+    "title": "新对话",
+    "hint": "选一个智能体和目录。对话会出现在左栏那个目录下面。",
+    "folder": "目录",
+    "folderHint": "agent 在这儿干活：命令在这里跑，项目笔记从这里读。",
+    "agent": "智能体",
+    "start": "开始"
+  },
+  "chat": {}
 }

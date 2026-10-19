@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "github": {
-      "url": "${AXP_GATEWAY_URL}/forge/mcp",
-      "headers": { "Authorization": "Bearer ${AXP_AGENT_KEY}" }
-    }
-  }
-}

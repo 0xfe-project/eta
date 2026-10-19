@@ -2,19 +2,62 @@
 @import "tw-animate-css";
 @import "blobatar/motion.css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
-@import "@fontsource-variable/geist-mono";
-@import "./components/brainless/theme.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @layer base {
+  /* ---- what is not text ---- */
+  /* Chrome — buttons, labels, rails, dividers — is not a document, and watching it rubber-band
+   * blue is how an app admits it is a web page. Selection is handed back everywhere it is a
+   * feature: message bodies, code, inputs, and anything that opts in with data-selectable.
+   * Ported from eta-old's graphite.css, JS half included in the same file there. */
+  body {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .message-content,
+  .markdown,
+  pre,
+  code,
+  input,
+  textarea,
+  select,
+  [contenteditable="true"],
+  [data-selectable],
+  .selectable {
+    user-select: text;
+    -webkit-user-select: text;
+    -webkit-touch-callout: default;
+  }
+  button,
+  [role="button"],
+  [role="separator"],
+  .markdown button,
+  .markdown [role="button"],
+  .message-content button {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  html,
+  body {
+    /* The shipped face carries ligatures, and they are on by default: the standard property
+       first, the OpenType knobs behind it for engines that only listen to font-feature-settings.
+       Losing them turns `->`, `=>`, `<=` and `!=` in messages back into three characters. */
+    font-variant-ligatures: common-ligatures discretionary-ligatures contextual;
+    font-feature-settings: "liga" 1, "dlig" 1, "calt" 1;
+  }
   body {
     @apply font-sans antialiased bg-background text-foreground;
     line-height: 1.6;
   }
   button:not(:disabled) {
     cursor: pointer;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
   }
   * {
     @apply border-border outline-ring/50;
@@ -33,6 +76,73 @@
 }
 
 @layer components {
+  /*
+   * The divider between two panes you can drag (BR1-WEB, draggable sidebar divider).
+   *
+   * At rest it is 1px of border: a divider, not a control. Under the pointer it becomes 2px of
+   * foreground instantly — it announces itself without ceremony — and the cursor turns into
+   * `col-resize`. The visual is 1px; the hit target is 6px, centered on it. That difference is
+   * deliberate: a 1px line is a miserable thing to grab, and a 6px line is a heavy divider.
+   *
+   * `touch-action: none` is what lets a finger drag it instead of scrolling the page, and
+   * `data-dragging` keeps the 2px look while the drag is in progress (the pointer is often
+   * not over the 1px line while the pane follows it).
+   */
+  .pane-divider {
+    position: relative;
+    flex: none;
+    width: 1px;
+    touch-action: none;
+    /*
+     * A gutter has to draw the same three things a column does, at the same offsets: the header
+     * band, the 1px rule under it, and the content field below. Painting it with one colour was
+     * not enough — each column draws its own rule inside its own box, so a gutter that wore the
+     * band but drew no rule left a 4px hole in the line under the headers, and a broken rule
+     * reads as a broken band however well the fills line up.
+     */
+    background-image:
+      linear-gradient(
+        to bottom,
+        transparent 0 calc(var(--header-band) - 1px),
+        var(--border) calc(var(--header-band) - 1px) var(--header-band),
+        transparent var(--header-band)
+      ),
+      linear-gradient(
+        to bottom,
+        var(--surface) 0 var(--header-band),
+        transparent var(--header-band)
+      );
+    background-color: var(--background);
+  }
+  .pane-divider::after {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    left: -3px;
+    width: 6px;
+  }
+  .pane-divider:hover,
+  .pane-divider[data-dragging="true"] {
+    width: 2px;
+    background: var(--foreground);
+    cursor: col-resize;
+  }
+
+  /*
+   * The one header band every column wears: same height, same field, same rule underneath.
+   * Without it three headers at three heights read as three separate bars, and the window stops
+   * looking like one object.
+   */
+  .band {
+    display: flex;
+    height: var(--header-band);
+    flex: none;
+    align-items: center;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
   .markdown {
     @apply space-y-3 break-words text-sm leading-7;
   }
@@ -88,21 +198,51 @@
   --container-content: 60rem;
   --default-transition-duration: 60ms;
   --default-transition-timing-function: linear;
-  --ease-in: linear;
-  --ease-out: linear;
-  --ease-in-out: linear;
-  --animate-in: enter 60ms linear;
-  --animate-out: exit 60ms linear;
+  --ease-in: ease-in;
+  --ease-out: ease-out;
+  --ease-in-out: ease-in-out;
+  /* The one spring in the system: a pane snapping to a breakpoint on release. */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /*
+   * Menus and dialogs: no fade-in, no scale. They arrive at full opacity where they belong and
+   * the last 4px settle in 60ms — enough to say which way it came from, short enough that the
+   * click lands before the animation does. Leaving is 80ms and does fade (BR1-WEB, menus).
+   */
+  /* No enter or exit animation anywhere: a menu is there when you press, gone when you let go.
+     The 4px settle this used to have was a second thing to wait for. */
+  --animate-in: none;
+  --animate-out: none;
   --animate-skeleton-sweep: skeleton-sweep 1.6s linear infinite;
   --animate-upload-pulse: upload-pulse 1.6s linear infinite;
   --animate-copied-check: copied-check 2.5s linear both;
+  /*
+   * Shadows are offsets, not haze (BR1): a solid block of ink displaced by 2–12px, no blur,
+   * no spread. `shadow-md` is the menu/dialog one — 4px, the number BR1 names.
+   */
+  --shadow-2xs: 1px 1px 0 0 var(--shadow-ink);
+  --shadow-xs: 2px 2px 0 0 var(--shadow-ink);
+  --shadow-sm: 2px 2px 0 0 var(--shadow-ink);
+  --shadow-md: 4px 4px 0 0 var(--shadow-ink);
+  --shadow-lg: 6px 6px 0 0 var(--shadow-ink);
+  --shadow-xl: 8px 8px 0 0 var(--shadow-ink);
+  --shadow-2xl: 12px 12px 0 0 var(--shadow-ink);
   --spacing: 0.225rem;
+  /* One header height for every column, so the rule under it is one line across the window. */
+  --header-band: 40px;
   --font-heading: var(--font-sans);
+  /* The app ships one face (public/AKRDWGSCNFM-Regular.woff2, declared in index.html) and uses it
+     for everything it says: interface, message text, everything. There is deliberately no setting
+     that swaps it — the previous build let a person type a font name into settings, and the result
+     was two people looking at two different products while reporting the same bug. */
   --font-sans:
-    var(--user-font-sans, "Geist Variable"), ui-sans-serif, system-ui,
-    sans-serif;
-  --font-mono: var(--user-font-mono, "Geist Mono Variable"), ui-monospace,
-    monospace;
+    "Eta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
+    "PingFang SC", sans-serif;
+  /* One face for everything, including the surfaces that are "mono" in the layout sense — times,
+     tool-card heads, rail numbers, chips, hints, code. No system mono stack: a typographic grid
+     drawn in another typeface is a second typeface in the product, which is what the shipped face
+     exists to avoid. Numbers that must line up say so per element (`tabular-nums`). */
+  --font-mono: "Eta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Noto Sans SC", "PingFang SC", sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -119,6 +259,14 @@
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-overlay: var(--overlay);
+  --color-overlay-hover: var(--overlay-hover);
+  --color-faint: var(--faint);
+  --color-state-error: var(--state-error);
+  --color-state-warning: var(--state-warning);
+  --color-state-success: var(--state-success);
+  --color-state-info: var(--state-info);
   --color-destructive: var(--destructive);
   --color-success: var(--success);
   --color-accent-foreground: var(--accent-foreground);
@@ -135,6 +283,7 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
+  --color-surface: var(--surface);
   --radius-xs: 0px;
   --radius-full: 0px;
   --radius-sm: 0px;
@@ -144,11 +293,22 @@
   --radius-2xl: 0px;
   --radius-3xl: 0px;
   --radius-4xl: 0px;
+  /* The name shadcn's own components compute from (`calc(var(--radius) - 2px)` and so on):
+     zero here means every one of those expressions is zero too, without touching the files. */
+  --radius: 0px;
 }
 
 :root {
+  /*
+   * Light mode keeps the palette the product had before the rewrite: a white page, near-white
+   * rails, and greys only where something needs to be told apart. The tokens added later
+   * (surface, overlay, faint, border-strong, the four states, the shadow ink) are derived from
+   * that palette rather than from BR1's darker scale, which read as a large grey field.
+   */
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
+  /* The rails' own field: a step off the page, so the columns read as structure. */
+  --surface: oklch(0.985 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
@@ -164,6 +324,17 @@
   --destructive: oklch(0.577 0.245 27.325);
   --success: oklch(0.527 0.154 150.069);
   --border: oklch(0.922 0 0);
+  /* The border that has to be seen: menu frames, inputs, dividers you can grab. */
+  --border-strong: oklch(0.85 0 0);
+  /* Wash for hovered rows and pressed states. */
+  --overlay: oklch(0.145 0 0 / 3%);
+  --overlay-hover: oklch(0.145 0 0 / 6%);
+  /* Text that is there but not asking to be read: timestamps, counts, "—". */
+  --faint: oklch(0.708 0 0);
+  --state-error: oklch(0.577 0.245 27.325);
+  --state-warning: oklch(0.62 0.18 75);
+  --state-success: oklch(0.527 0.154 150.069);
+  --state-info: oklch(0.52 0.18 240);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.87 0 0);
@@ -172,6 +343,8 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0px;
+  /* The ink a hard shadow is made of. */
+  --shadow-ink: oklch(0.145 0 0 / 85%);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -183,41 +356,59 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --success: oklch(0.723 0.219 149.579);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
+  /* The same nine steps, read from the other end: bg is gray-9, fg is gray-0, and the states
+     rise in lightness and lose chroma so they stay legible on a dark page. */
+  --shadow-ink: oklch(0 0 0 / 80%);
+  --background: oklch(0.1 0 0);
+  --surface: oklch(0.14 0 0);
+  --foreground: oklch(0.98 0 0);
+  --card: oklch(0.14 0 0);
+  --card-foreground: oklch(0.98 0 0);
+  --popover: oklch(0.14 0 0);
+  --popover-foreground: oklch(0.98 0 0);
+  --primary: oklch(0.98 0 0);
+  --primary-foreground: oklch(0.1 0 0);
+  --secondary: oklch(0.2 0 0);
+  --secondary-foreground: oklch(0.98 0 0);
+  --muted: oklch(0.2 0 0);
+  --muted-foreground: oklch(0.72 0 0);
+  --accent: oklch(0.2 0 0);
+  --accent-foreground: oklch(0.98 0 0);
+  --destructive: oklch(0.68 0.19 25);
+  --success: oklch(0.65 0.16 150);
+  --border: oklch(0.98 0 0 / 10%);
+  --border-strong: oklch(0.98 0 0 / 28%);
+  --overlay: oklch(0.98 0 0 / 5%);
+  --overlay-hover: oklch(0.98 0 0 / 10%);
+  --faint: oklch(0.98 0 0 / 38%);
+  --state-error: oklch(0.68 0.19 25);
+  --state-warning: oklch(0.72 0.16 75);
+  --state-success: oklch(0.65 0.16 150);
+  --state-info: oklch(0.65 0.16 240);
+  --input: oklch(0.98 0 0 / 28%);
+  --ring: oklch(0.72 0 0);
+  --chart-1: oklch(0.86 0 0);
+  --chart-2: oklch(0.72 0 0);
+  --chart-3: oklch(0.56 0 0);
+  --chart-4: oklch(0.4 0 0);
+  --chart-5: oklch(0.28 0 0);
+  --sidebar: oklch(0.14 0 0);
+  --sidebar-foreground: oklch(0.98 0 0);
   --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.2 0 0);
+  --sidebar-accent-foreground: oklch(0.98 0 0);
+  --sidebar-border: oklch(0.98 0 0 / 10%);
+  --sidebar-ring: oklch(0.72 0 0);
 }
 
-/* Product rule: all corners stay square, including portals and inline styles. */
+/*
+ * Corners are square at the root: the `--radius-*` tokens above are all 0, so every
+ * `rounded-md`/`rounded-lg`/`rounded-full` in the app and in shadcn's components already
+ * resolves to 0. This rule is the fallback for the corners no token reaches — third-party
+ * widgets that ship their own CSS (Streamdown's tables and code blocks, Lexical's popovers),
+ * and inline styles. It is deliberately last-resort, not the mechanism.
+ */
 *,
 *::before,
 *::after {
@@ -244,6 +435,19 @@
 
 /* Animates `translate`, which -translate-x-full sets to keep it out of view
    when it doesn't run. */
+@keyframes br1-enter {
+  from {
+    translate: 0 -4px;
+  }
+}
+
+@keyframes br1-exit {
+  to {
+    translate: 0 -4px;
+    opacity: 0;
+  }
+}
+
 @keyframes skeleton-sweep {
   from {
     translate: -100%;
@@ -292,4 +496,610 @@
 [data-sd-animate-marker]::marker {
   animation: sd-marker-in var(--sd-marker-duration, 90ms)
     var(--sd-marker-easing, linear) var(--sd-marker-delay, 0ms) both;
+}
+
+/* ==========================================================================
+ * Ported from eta-old (`packages/eta-client/src/styles/graphite.css`).
+ *
+ * Not "inspired by": the numbers, paddings and class names are its. The two
+ * surfaces this app is read on — the transcript and the composer — were
+ * improvised here once and came out worse than the thing they replaced, so they
+ * are now a copy that can be compared line by line. Token names are the only
+ * translation (--fg → --foreground, --fg-faint → --faint, --bg-solid →
+ * --background, --border-hover → --border-strong).
+ * ========================================================================== */
+
+@layer components {
+  /* ---- transcript ---- */
+
+  .message {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 16px;
+  }
+  .message.user {
+    align-items: flex-end;
+  }
+  .message .message-content {
+    max-width: 72%;
+    padding: 8px 12px;
+    font-size: 14px;
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+  }
+  .message.assistant .message-content {
+    max-width: 100%;
+    padding: 0 2px;
+  }
+  .message.user .message-content {
+    background: var(--background);
+    color: var(--primary);
+    /* What you typed is what you said: the text arrives with its line breaks and is shown as
+       plain text, so the one thing the CSS owes the author is to keep them. */
+    white-space: pre-wrap;
+  }
+  .message.user .message-content a {
+    color: inherit;
+  }
+  .message-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+  .message.user .message-footer {
+    justify-content: flex-end;
+  }
+
+  /* Copy, on the message it copies: invisible until the message is hovered, because a row of
+   * buttons nobody is pressing is a row of noise. Copied keeps it up for its beat. */
+  .message:hover .message-copy-btn,
+  .message-copy-btn[data-copied="true"] {
+    opacity: 1;
+  }
+  .message-copy-btn {
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    color: var(--muted-foreground);
+    background: transparent;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .system-message {
+    align-self: center;
+    margin: 8px auto 16px;
+    padding: 2px 10px;
+    border: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--faint);
+    text-align: center;
+    max-width: 90%;
+  }
+
+  /*
+   * A task draft: what the agent proposes, and the two sections a person scans before deciding.
+   *
+   * BR1 rather than the markdown defaults it used to inherit: the label is 10px uppercase mono, the
+   * title is 14px sans on the same line, and `目标` / `已决定` are labels rather than headings —
+   * hierarchy by weight and case, not by spending a line of 18px type on each word. The frame is
+   * 1px solid; the dashed border it had before was decoration, and the only dashed border in this
+   * app is the one that means "not bound yet".
+   */
+  .draft-card {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    font-family: var(--font-sans);
+  }
+  .draft-card .markdown {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--foreground);
+  }
+  .draft-card .markdown > * + * {
+    margin-top: 10px;
+  }
+  .draft-card .markdown h2 {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+  .draft-card .markdown h2 + p {
+    margin-top: 2px;
+  }
+  .draft-card .markdown p {
+    margin: 0;
+  }
+
+  /* ---- composer ---- */
+
+  .input-area {
+    flex: 0 0 auto;
+    padding: 6px 16px 14px;
+  }
+  .input-outer {
+    position: relative;
+    width: 100%;
+    max-width: 860px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+  }
+  .composer-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--background);
+  }
+  .composer-card:focus-within {
+    border-color: var(--primary);
+  }
+  .composer-card.drag-over {
+    border-color: var(--primary);
+    background: var(--overlay);
+  }
+  .composer-editor {
+    width: 100%;
+    resize: none;
+    background: transparent;
+    padding: 10px 12px;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 44px;
+    max-height: 200px;
+    color: var(--foreground);
+  }
+  .composer-editor::placeholder {
+    color: var(--faint);
+  }
+  .composer-editor:focus-visible {
+    outline: none;
+  }
+  .composer-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 8px;
+    border-top: 1px solid var(--border);
+  }
+  .composer-toolbar-hints {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--faint);
+  }
+
+  /* Composer controls share one height; menus live in a fixed portal above them. */
+  .composer-control {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 28px;
+    min-height: 28px;
+    padding: 0 8px;
+    border: 1px solid var(--border-strong);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--foreground);
+    background: transparent;
+    cursor: pointer;
+  }
+  .composer-control:hover {
+    background: var(--overlay-hover);
+  }
+  .composer-control:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .composer-control svg {
+    flex-shrink: 0;
+  }
+  .composer-control-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .composer-control-icon {
+    width: 28px;
+    flex-shrink: 0;
+    padding: 0;
+  }
+  .composer-model-container {
+    display: inline-flex;
+    min-width: 0;
+    max-width: 220px;
+  }
+  .composer-model-control {
+    min-width: 0;
+    max-width: 100%;
+    flex-shrink: 1;
+  }
+  .composer-thinking-control {
+    min-width: 0;
+    max-width: 180px;
+    flex-shrink: 1;
+    text-transform: uppercase;
+  }
+  .composer-submit-control {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+  .composer-submit-control:hover {
+    background: transparent;
+    color: var(--foreground);
+  }
+  .composer-controls {
+    flex: 1;
+  }
+  .composer-controls .composer-toolbar-hints {
+    flex: 1 1 0;
+  }
+}
+
+@layer components {
+  /* ---- thinking, tool cards, asks: the three things a turn can contain besides text ----
+   * Ported from graphite.css with the token names translated. The point of all three is the same:
+   * they are folded, their header says what they are in 10–11px uppercase mono, and the body is
+   * the only place that scrolls. */
+
+  .thinking-block {
+    border: 1px solid var(--border);
+    margin-bottom: 16px;
+    background: var(--overlay);
+  }
+  .thinking-block-header {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+    cursor: pointer;
+  }
+  .thinking-block-header::-webkit-details-marker,
+  .tool-card-head::-webkit-details-marker {
+    display: none;
+  }
+  .thinking-block-chevron {
+    font-size: 8px;
+  }
+  details[open] > .thinking-block-header .thinking-block-chevron,
+  details[open] > .tool-card-head .thinking-block-chevron {
+    transform: rotate(90deg);
+  }
+  .thinking-block-content {
+    margin: 0;
+    padding: 8px 10px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    color: var(--muted-foreground);
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  .tool-card {
+    border: 1px solid var(--border);
+    margin-bottom: 12px;
+    background: var(--background);
+  }
+  .tool-card-head {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 10px;
+    background: var(--overlay);
+    cursor: pointer;
+  }
+  .tool-card-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+  .tool-card-status {
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 0 6px;
+    border: 1px solid var(--border);
+    color: var(--muted-foreground);
+  }
+  .tool-card-status.running {
+    background: var(--foreground);
+    color: var(--background);
+    border-color: var(--foreground);
+  }
+  .tool-card-status.failed {
+    color: var(--state-error);
+    border-color: var(--state-error);
+  }
+  .tool-card-block {
+    margin: 0;
+    padding: 6px 10px;
+  }
+  .tool-card-block + .tool-card-block {
+    border-top: 1px solid var(--border);
+  }
+  .tool-card-block-label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin-bottom: 2px;
+  }
+  .tool-card-block-content {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--foreground);
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  /* An ask: the run is standing still on an answer. One line for the question, its options as
+     bordered controls under it — the same grammar as the composer's toolbar. */
+  .ask-block {
+    border: 1px solid var(--state-warning);
+    margin-bottom: 12px;
+  }
+  .ask-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 4px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--overlay);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--state-warning);
+  }
+  .ask-body {
+    padding: 8px 10px;
+    font-size: 14px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+  }
+  .ask-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 10px 10px;
+  }
+  .ask-option {
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--border-strong);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--foreground);
+    background: transparent;
+    cursor: pointer;
+  }
+  .ask-option:hover {
+    background: var(--overlay-hover);
+  }
+}
+
+@layer components {
+  /* The completion menu, ported: a 2px frame with a hard shadow, sitting above the composer, one
+     row per candidate with the name in mono and the description dimmed beside it. The selected row
+     inverts — that is the whole affordance. */
+  .skill-slash-menu {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    z-index: 40;
+    max-height: 300px;
+    min-width: 300px;
+    overflow-y: auto;
+    margin-bottom: 6px;
+    background: var(--background);
+    border: 2px solid var(--border-strong);
+    box-shadow: 4px 4px 0 0 var(--shadow-ink);
+  }
+  .skill-slash-indicator {
+    padding: 3px 10px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--faint);
+    border-bottom: 1px solid var(--border);
+  }
+  .skill-slash-empty {
+    padding: 6px 10px;
+    font-size: 12px;
+    color: var(--faint);
+  }
+  .skill-slash-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 5px 10px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .skill-slash-option.selected {
+    background: var(--foreground);
+    color: var(--background);
+  }
+  .skill-slash-option-name {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .skill-slash-option-desc {
+    font-size: 11px;
+    opacity: 0.65;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@layer components {
+  /* ---- settings, ported from eta-old's settings.css (numbers included) ----
+   * A 196px rail of sections with a 2px current marker, and a content column of rows that are a
+   * label on the left and its control on the right, separated by 1px lines. No cards, no groups of
+   * boxes: a settings page is a list of decisions. */
+
+  .settings-layout {
+    display: grid;
+    grid-template-columns: 196px minmax(0, 1fr);
+    min-height: 0;
+    flex: 1;
+  }
+  .settings-layout nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    padding: 10px 8px;
+  }
+  .settings-layout nav button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-left: 2px solid transparent;
+    padding: 7px 10px;
+    text-align: left;
+    font-size: 12px;
+    color: var(--muted-foreground);
+  }
+  .settings-layout nav button:hover {
+    background: var(--overlay);
+    color: var(--foreground);
+  }
+  .settings-layout nav button[aria-current="page"] {
+    border-left-color: var(--foreground);
+    background: var(--overlay-hover);
+    color: var(--foreground);
+  }
+
+  .settings-content {
+    min-width: 0;
+    overflow-y: auto;
+    padding: 16px 20px;
+  }
+  .settings-heading {
+    margin-bottom: 12px;
+  }
+  .settings-heading h2 {
+    margin: 0 0 4px;
+    font-size: 16px;
+    font-weight: 500;
+  }
+  .settings-heading p,
+  .settings-hint {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--muted-foreground);
+  }
+  .settings-hint {
+    margin: 10px 0 0;
+  }
+  .settings-section-label {
+    margin: 16px 0 2px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 0;
+    font-size: 13px;
+  }
+  .settings-row-label {
+    display: flex;
+    flex-direction: column;
+    align-self: stretch;
+    justify-content: center;
+    gap: 4px;
+    min-height: 26px;
+    line-height: 18px;
+  }
+  .settings-row-label p {
+    margin: 0;
+    font-size: 11px;
+    line-height: 18px;
+    color: var(--muted-foreground);
+  }
+  .settings-control {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    max-width: 55%;
+  }
+  .settings-control button,
+  .settings-row select,
+  .settings-row input:not([type="checkbox"]) {
+    max-width: 100%;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    padding: 5px 8px;
+    font-size: 12px;
+    color: var(--foreground);
+  }
+  /* The chosen one is marked by the marker, not by colour: a settings row is a decision, and a
+     filled button in a row of three says "pressed" rather than "selected". */
+  .settings-control button[aria-pressed="true"] {
+    border-color: var(--foreground);
+    color: var(--foreground);
+  }
+  .settings-inline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
 }

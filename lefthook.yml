@@ -14,25 +14,19 @@ rc: ./scripts/lefthook-rc.sh
 pre-commit:
   piped: true
   jobs:
-    - name: fix
-      group:
-        parallel: true
-        jobs:
-          - name: eslint
-            glob: "*.{js,jsx,ts,tsx,json,jsonc}"
-            run: bunx eslint --cache --cache-location node_modules/.cache/eslint/staged --fix --no-warn-ignored {staged_files}
-            stage_fixed: true
+    - name: eslint
+      glob: "*.{js,jsx,ts,tsx,json,jsonc}"
+      run: bunx eslint --fix --no-warn-ignored {staged_files}
+      stage_fixed: true
 
-          - name: ruff
-            glob: "*.py"
-            run: uv run --project bundles/memory/service ruff check --fix --force-exclude {staged_files}
-            stage_fixed: true
+    - name: ruff
+      glob: "*.py"
+      run: uv run --project apps/memory ruff check --fix --force-exclude {staged_files}
+      stage_fixed: true
 
     - name: format
       run: bunx dprint fmt --allow-no-files {staged_files}
       stage_fixed: true
 
     - name: verify
-      env:
-        TURBO_SCM_BASE: HEAD
-      run: bunx turbo run build typecheck lint //#lint:repo test //#knip --affected --output-logs=errors-only
+      run: bunx turbo run build typecheck lint test knip --output-logs=errors-only

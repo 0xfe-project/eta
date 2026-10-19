@@ -105,13 +105,13 @@ function Chat({ agentStatus = "idle" }: { agentStatus?: "idle" | "starting" }) {
           name: "研究员",
           description: "",
           model: "model",
+          persona: "",
           bundles: [],
           build_error: null,
           revision: 1,
           status: agentStatus,
         },
       ]}
-      groups={[]}
       activeReplies={history.messages}
       messages={history.messages}
       hasOlder={false}
@@ -134,6 +134,7 @@ function Chat({ agentStatus = "idle" }: { agentStatus?: "idle" | "starting" }) {
       onStopAll={() => {}}
       onStop={() => {}}
       onAnswer={() => {}}
+      onGoal={async () => {}}
     />
   );
 }
@@ -409,7 +410,7 @@ describe("sending blocks", () => {
 describe("saved group drafts", () => {
   it("fail uploads a reload cut off", async () => {
     localStorage.setItem(
-      "axp.groups.v1",
+      "eta.groups.v1",
       JSON.stringify({
         drafts: {
           [AGENT]: [
@@ -440,18 +441,18 @@ describe("waiting replies", () => {
     rstest.restoreAllMocks();
   });
 
-  it("moves only the first and numbers the rest", async () => {
+  it("says nothing about a reply that is waiting its turn", async () => {
+    // A reply at work is its own row, and a reply behind it is an empty row: neither is a status
+    // line. eta-old has no "working…" under a message, and the numbers this used to print ("位置
+    // 2", "前面还有 1 条") were a report about the queue, not about the conversation.
     const a = message("user", { text: "A" });
     const ra = message("assistant", { reply_to_id: a.id });
     const b = message("user", { text: "B" });
     const rb = message("assistant", { reply_to_id: b.id });
     const c = await render([a, ra, b, rb], "starting");
-    const moving = [...c.querySelectorAll('[role="status"]')].map(
-      (s) => s.textContent,
-    );
-    expect(moving).toHaveLength(1);
-    expect(moving[0]).toContain("正在启动智能体");
-    expect(log(c)).toContain("等待中 · 前面还有 1 条");
+    expect(c.textContent).not.toContain("等待中");
+    expect(c.textContent).not.toContain("正在启动智能体");
+    expect(log(c)).not.toContain("前面还有");
   });
 
   it("says an environment failure once and offers to send again", async () => {

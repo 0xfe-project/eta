@@ -9,7 +9,9 @@
     "colorMode": "Color mode",
     "language": "Language",
     "elementPicker": "Element picker",
-    "elementPickerHint": "When on, you can pick an element on the page and copy its component and source location."
+    "elementPickerHint": "When on, you can pick an element on the page and copy its component and source location.",
+    "description": "One face, three colour modes, one language. Nothing here changes what the agents do.",
+    "colorModeHint": "Follows the system until you pick one."
   },
   "sections": {
     "appearance": "Appearance"

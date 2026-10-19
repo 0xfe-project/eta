@@ -1,8 +1,9 @@
 import type { Group } from "@/queries/chat";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { AgentBar, AgentTitle } from "./agent-bar";
+import { ChatHeader, MobileChatHeader } from "./agent-bar";
 
 const opened: string[] = [];
 const direct = (id: string, agent: string, name: string) =>
@@ -31,7 +32,10 @@ rstest.mock("./use-groups", () => ({
   useGroups: () => ({ groups }),
   useOpenGroup: () => (id: string) => opened.push(id),
 }));
+const openAgentCalls: string[] = [];
 rstest.mock("./use-agents", () => ({
+  // The header's avatars open an agent's own conversation; the switch menu reuses the router.
+  useOpenAgent: () => (id: string) => openAgentCalls.push(id),
   useAgents: () => ({
     agents: [
       { id: "a1", name: "小明", status: "idle" },
@@ -51,10 +55,18 @@ rstest.mock("./use-agents", () => ({
 
 const cleanup: (() => void)[] = [];
 async function render(node: React.ReactNode) {
+  // The header carries the settings button, which reads a query.
+  const client = new QueryClient({
+    defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+  });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-  await act(async () => root.render(node));
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={client}>{node}</QueryClientProvider>,
+    ),
+  );
   cleanup.push(() => {
     root.unmount();
     container.remove();
@@ -76,13 +88,60 @@ const items = () => [
 
 afterEach(async () => {
   opened.length = 0;
+  openAgentCalls.length = 0;
   await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
 });
 
-describe("顶部名称切换智能体", () => {
+describe("手机上的 header", () => {
+  it("is three controls: back, the name, and the way to what it is", async () => {
+    const container = await render(
+      <MobileChatHeader
+        name="发布讨论"
+        onBack={() => {}}
+        backLabel="返回对话列表"
+        onInfo={() => {}}
+        infoLabel="群信息"
+      />,
+    );
+    const controls = [...container.querySelectorAll("button")];
+    expect(controls).toHaveLength(2);
+    expect(container.querySelector("h1")!.textContent).toBe("发布讨论");
+    // No avatar row and no folder chip: those belong to the panel and the chat.
+    expect(container.querySelectorAll("img")).toHaveLength(0);
+    expect(container.textContent).not.toContain("未绑定目录");
+  });
+});
+
+describe("header 里的名称切换", () => {
+  it("keeps the name, the folder and the members in one row", async () => {
+    const withCwd = {
+      ...groups[2],
+      cwd: "/Users/me/Desktop/eta",
+    } as unknown as Group;
+    const container = await render(
+      <ChatHeader group={withCwd} onInfo={() => {}} />,
+    );
+    expect(container.querySelector("header")).not.toBeNull();
+    expect(container.textContent).toContain("发布讨论");
+    // The folder is the second thing the header answers, and it is in the same row.
+    expect(container.textContent).toContain("eta");
+    // The last control is settings: it belongs to the app, not to this group, so it is always
+    // the rightmost thing in the row.
+    const controls = [...container.querySelectorAll("header button")];
+    const last = controls.at(-1)!;
+    expect(last.getAttribute("title")).toBe("设置");
+    // Members are navigation: pressing one opens that agent alone.
+    const avatars = [...container.querySelectorAll("button")].filter((b) =>
+      b.getAttribute("title")?.includes("单独"),
+    );
+    expect(avatars).toHaveLength(2);
+    await act(async () => avatars[0]!.click());
+    expect(openAgentCalls).toEqual(["a1"]);
+  });
+
   it("lists the agents, marks the current one and opens the other's direct chat", async () => {
     const container = await render(
-      <AgentBar group={groups[0]} onInfo={() => {}} />,
+      <ChatHeader group={groups[0]} onInfo={() => {}} />,
     );
     const trigger = await openMenu(container);
     expect(trigger.getAttribute("aria-label")).toBe(
@@ -98,7 +157,7 @@ describe("顶部名称切换智能体", () => {
 
   it("shows the group as current and only navigates from it", async () => {
     const container = await render(
-      <AgentTitle group={groups[2]} onInfo={() => {}} />,
+      <ChatHeader group={groups[2]} onInfo={() => {}} />,
     );
     await openMenu(container);
     const [current, ...rest] = items();

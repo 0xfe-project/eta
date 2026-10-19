@@ -26,7 +26,7 @@ import type { CompactionSummarizer, KernelModels } from "@eta/core";
 import type { SessionManagerOptions } from "./manager";
 import type { EtaConfig } from "./providers/config-types";
 import type { Settings } from "./settings";
-import type { WireServer } from "./transport";
+import type { WireServer, WireServerOptions } from "./transport";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -59,6 +59,10 @@ export interface AssembleOptions {
   port?: number;
   /** The interface to listen on. Defaults to loopback (see `WireServerOptions.hostname`). */
   hostname?: string | undefined;
+  /** Everything on the port that is not the socket (see `WireServerOptions.fetch`). */
+  fetch?: WireServerOptions["fetch"];
+  /** Asked before every request, the WebSocket upgrade included (see `WireServerOptions.authorize`). */
+  authorize?: WireServerOptions["authorize"];
   /**
    * Whether to apply the config's network settings to the environment at startup. `false` leaves
    * the environment exactly as the process was started with — what a test wants, and what a
@@ -378,6 +382,8 @@ export async function assembleServer(
     {
       port: options.port ?? 0,
       ...(options.hostname === undefined ? {} : { hostname: options.hostname }),
+      fetch: options.fetch,
+      authorize: options.authorize,
     },
   );
 

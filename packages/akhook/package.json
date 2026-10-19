@@ -1,7 +1,0 @@
-{
-  "name": "@axp/akhook",
-  "private": true,
-  "scripts": {
-    "build": "bash ../../scripts/build/akhook.sh"
-  }
-}

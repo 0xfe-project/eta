@@ -1,4 +1,4 @@
-import { afterEach, expect, it, rstest } from "@rstest/core";
+import { afterEach, expect, it } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   createMemoryHistory,
@@ -88,11 +88,12 @@ async function mount(path = "/?group=team&view=memory") {
         path: "/",
         validateSearch: validateWorkspaceSearch,
         component: function Home() {
-          const [view, setView] = useWorkspaceView();
+          const [, setLinked] = useWorkspaceView();
+          const view = "context";
           return (
             <WorkspacePanel
               view={view}
-              onViewChange={(value) => void setView(value)}
+              onViewChange={(value) => void setLinked(value)}
             />
           );
         },
@@ -125,127 +126,29 @@ async function mount(path = "/?group=team&view=memory") {
   return { container, router };
 }
 
-const selectAgent = (id: string) =>
-  useWorkspaceStore.getState().setWorkspace((workspace) => ({
-    ...workspace,
-    selectedAgentId: id,
-  }));
-
 const tabs = (container: HTMLElement) =>
   [...container.querySelectorAll('[aria-label="工作区标签"] [role="tab"]')].map(
     (tab) => [tab.textContent, tab.getAttribute("aria-selected")],
   );
 
-it("gives a group chat 成员 and Artifacts, falling back to 成员", async () => {
-  // memory was never a tab; group, overview, tasks, routines and inbox were
-  // a group chat's before.
-  for (const view of ["memory", "group", "overview", "tasks", "routines"]) {
-    const { container } = await mount(`/?group=team&view=${view}`);
-    expect(tabs(container)).toEqual([
-      ["成员", "true"],
-      ["Artifacts", "false"],
-    ]);
-  }
-  const { container } = await mount("/?group=team&view=artifacts");
-  expect(tabs(container)[1]).toEqual(["Artifacts", "true"]);
-  expect(container.textContent).toContain("还没有 Artifacts");
-});
-
-it("leaves memory out of a direct chat's side panel", async () => {
-  const { container } = await mount("/?group=dm&view=memory");
-  expect(tabs(container)).toEqual([
-    ["概览", "true"],
-    ["任务", "false"],
-    ["定时", "false"],
-    ["待处理", "false"],
+it("gives every conversation the same five tabs", async () => {
+  // Tasks, routines and pending used to be four sidebar destinations that each asked "but which
+  // group?". They belong to the conversation you are in, so they are here — on every one of them,
+  // group or direct — and 概览 stays the single global page.
+  const { container } = await mount("/?group=team");
+  expect(tabs(container).map(([label]) => label)).toEqual([
+    "上下文",
+    "任务",
+    "定时",
+    "待处理",
+    "产物",
   ]);
-  expect(container.textContent).not.toContain("的专属记忆");
-  expect(
-    container
-      .querySelector('a[aria-label="在全窗口中打开"]')
-      ?.getAttribute("href"),
-  ).toBe("/workspace");
 });
 
-it("opens a direct chat's overview for a group chat's tab", async () => {
-  for (const view of ["group", "members", "artifacts"]) {
-    const { container } = await mount(`/?group=dm&view=${view}`);
-    expect(tabs(container)[0]).toEqual(["概览", "true"]);
+it("opens 上下文 when a link asks for the tab a group used to call 成员", async () => {
+  // Old links: `?view=members` is `context` now, and anything unknown opens the first tab.
+  for (const view of ["members", "group"]) {
+    const { container } = await mount(`/?group=team&view=${view}`);
+    expect(tabs(container)[0]).toEqual(["上下文", "true"]);
   }
-  for (const id of ["solo", "team"]) {
-    const { container } = await mount(`/?group=${id}`);
-    expect(tabs(container)[0]).toEqual(["成员", "true"]);
-  }
-});
-
-it("keeps the full-window memory page at the agent in its URL", async () => {
-  // A direct load must use the URL even if this browser's chat selected B.
-  selectAgent("b");
-  const { container } = await mount("/workspace/memory?agent=a");
-  expect(
-    container.querySelector('[aria-label="智能体"]')?.textContent,
-  ).toContain("研究员 A");
-  expect(container.textContent).toContain("a 的专属记忆");
-  expect(container.textContent).not.toContain("b 的专属记忆");
-});
-
-it("removes a member from its menu only after confirming", async () => {
-  const puts: string[] = [];
-  rstest.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    const request = input as Request;
-    if (request.method === "PUT") puts.push(new URL(request.url).pathname);
-    return new Promise<Response>(() => {});
-  });
-  cleanup.push(() => rstest.restoreAllMocks());
-  const { container } = await mount("/?group=team");
-  const press = (element: Element) =>
-    act(async () =>
-      element.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-      ),
-    );
-  await press(container.querySelector('[aria-label="b 的操作"]')!);
-  const items = [...document.querySelectorAll('[role="menuitem"]')];
-  expect(items.map((item) => item.textContent)).toEqual(["设置", "移除"]);
-  await press(items[1]!);
-  const dialog = document.querySelector('[role="alertdialog"]')!;
-  expect(dialog.textContent).toContain("把「b」移出群？");
-  expect(puts).toEqual([]);
-  const confirm = [...dialog.querySelectorAll("button")].find(
-    (button) => button.textContent === "移除",
-  )!;
-  await act(async () => confirm.click());
-  expect(puts).toEqual(["/api/v1/groups/team/members/b"]);
-});
-
-it("offers no removal in a group of one", async () => {
-  const { container } = await mount("/?group=solo");
-  await act(async () =>
-    container
-      .querySelector('[aria-label="a 的操作"]')!
-      .dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-      ),
-  );
-  expect(
-    [...document.querySelectorAll('[role="menuitem"]')].map(
-      (item) => item.textContent,
-    ),
-  ).toEqual(["设置"]);
-});
-
-it("keeps the group's own actions in its menu", async () => {
-  const { container } = await mount("/?group=team");
-  await act(async () =>
-    container
-      .querySelector('[aria-label="群操作"]')!
-      .dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-      ),
-  );
-  expect(
-    [...document.querySelectorAll('[role="menuitem"]')].map(
-      (item) => item.textContent,
-    ),
-  ).toEqual(["编辑群信息", "相关任务", "归档"]);
 });

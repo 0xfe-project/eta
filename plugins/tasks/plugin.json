@@ -1,6 +1,0 @@
-{
-  "name": "tasks",
-  "version": "2.0.0",
-  "description": "创建、指派和跟进任务，包括远程电脑上智能体执行的任务。",
-  "targets": ["chat"]
-}

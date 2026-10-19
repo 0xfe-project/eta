@@ -8,7 +8,6 @@ import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
 import { webApiMiddleware } from "./src/server/http.ts";
-import { browserSentryMeta } from "./src/server/sentry-meta.ts";
 
 // Long-lived vendor chunks for the browser, so the entry stays small and
 // dependency upgrades do not invalidate app code (and vice versa).
@@ -29,12 +28,12 @@ const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 
 // One per build, shared by the browser bundle and GET /version.
 // The config is evaluated once per environment, so it is kept in the process.
-const build = (process.env.AXP_WEB_BUILD ||= Date.now().toString(36));
+const build = (process.env.ETA_WEB_BUILD ||= Date.now().toString(36));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   return {
-    define: { __AXP_BUILD__: JSON.stringify(build) },
+    define: { __ETA_BUILD__: JSON.stringify(build) },
     resolve: {
       alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
     },
@@ -48,15 +47,7 @@ export default defineConfig(({ mode }) => {
       react(),
       babel({ presets: [reactCompilerPreset()] }),
       {
-        // The browser's Sentry settings, which the Bun server adds in
-        // production (server.js).
-        name: "axp-sentry-meta",
-        apply: "serve",
-        transformIndexHtml: (html) =>
-          html.replace("</head>", `${browserSentryMeta()}</head>`),
-      },
-      {
-        name: "axp-web-api",
+        name: "eta-web-api",
         generateBundle() {
           this.emitFile({ type: "asset", fileName: "BUILD", source: build });
         },
@@ -74,10 +65,7 @@ export default defineConfig(({ mode }) => {
     ],
     build: {
       // Public, so React Grab (圈选元素, lib/element-picker.ts) can map the
-      // production bundle back to source files and component names. The
-      // build then gives each file and its map a debug id (sentry sourcemap
-      // inject), so Rustrak maps errors' stacks with the maps
-      // deploy/k3s/deploy.sh uploads.
+      // production bundle back to source files and component names.
       sourcemap: true,
       rolldownOptions: {
         output: {
@@ -95,13 +83,33 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      port: Number(env.AXP_WEB_PORT || 3000),
+      // Loopback by name, so the address vite prints is the address that answers.
+      host: env.ETA_WEB_HOST || "127.0.0.1",
+      port: Number(env.ETA_WEB_PORT || 3000),
       strictPort: true,
-      // /api is served through the edge gateway (apps/gateway), which is the
-      // address to open in development as well.
+      // Development is two processes: this one owns the page and its HMR, the host
+      // owns the data. The page talks to the host over exactly one WebSocket, at
+      // /ws, so that is all that crosses over and nothing in the SPA needs to
+      // know a second port exists. The browser still sends vite's origin, which
+      // the host is started to allow (--allow-origin, see the root dev script).
+      //
+      // `/up` and `/version` stay here on purpose. They answer "is this page
+      // alive" and "which build of this page am I", so the server that serves
+      // the page answers them: vite here, the host in production, and both give
+      // a build id the tab can compare with its own (src/lib/update.ts).
+      // Forwarding them would hand the browser the host's id in one deployment
+      // and the bundle's in another, which is how every tab ends up claiming an
+      // update is waiting.
+      proxy: {
+        "/ws": {
+          target: env.ETA_HOST_ORIGIN || "http://127.0.0.1:8787",
+          ws: true,
+          changeOrigin: false,
+        },
+      },
     },
     preview: {
-      port: Number(env.AXP_WEB_PORT || 3000),
+      port: Number(env.ETA_WEB_PORT || 3000),
       strictPort: true,
     },
   };

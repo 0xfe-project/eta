@@ -15,6 +15,7 @@ import type {
   MessageUpdated,
   Sent,
   TextBlock,
+  ThinkingBlock,
 } from "@/api/control-plane.gen";
 import {
   infiniteQueryOptions,
@@ -26,7 +27,7 @@ import {
 } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
 import { create } from "zustand";
-import { controlPlane, unwrap } from "@/lib/api";
+import { ApiError, controlPlane, fallbackMessage, unwrap } from "@/lib/api";
 
 // The control plane's chat API; every type comes from its OpenAPI document.
 
@@ -38,7 +39,8 @@ export type AgentDraft = Pick<Agent, "name" | "description"> & {
   bundles?: string[];
 };
 export type ChatMessage = Message;
-export type Block = TextBlock | AttachmentBlock | ActivityBlock;
+export type { TextBlock } from "@/api/control-plane.gen";
+export type Block = TextBlock | ThinkingBlock | AttachmentBlock | ActivityBlock;
 /**
  * The snapshot plus `messages`: every message seen since it was taken (over
  * SSE or from our own writes), starting with the active replies. History
@@ -377,8 +379,8 @@ export type BundleDraft = Pick<
   Bundle,
   "name" | "description" | "script" | "plugins"
 > & {
-  // The service's Nomad job (HCL); empty for none.
-  jobspec: string;
+  // The service's Kubernetes objects; empty for none.
+  manifests: string;
   usesModels: boolean;
   database: boolean;
 };
@@ -388,7 +390,7 @@ export const bundleDraft = (bundle: Bundle): BundleDraft => ({
   description: bundle.description,
   script: bundle.script,
   plugins: bundle.plugins,
-  jobspec: bundle.service?.jobspec ?? "",
+  manifests: bundle.service?.manifests ?? "",
   usesModels: bundle.service?.uses?.includes("llm") ?? false,
   database: bundle.service?.database ?? false,
 });
@@ -405,7 +407,7 @@ export function useUpdateBundle() {
             script: draft.script,
             plugins: draft.plugins,
             service: {
-              jobspec: draft.jobspec,
+              manifests: draft.manifests,
               uses: draft.usesModels ? ["llm"] : [],
               database: draft.database,
             },
@@ -465,6 +467,77 @@ export function useCompact() {
         }),
       ),
     onSuccess: (sent) => addSent(queryClient, sent),
+  });
+}
+
+export interface GoalState {
+  objective: string;
+  status: "active" | "paused" | "achieved";
+  rounds: number;
+}
+
+/**
+ * The goal of one session.
+ *
+ * The kernel has had the whole machine all along (active / paused / achieved, an anti-spin limit,
+ * a continuation cap); these two calls are the way in. Read and written per session, because a
+ * goal belongs to one conversation — a group with three members has three possible goals, and
+ * each is about what *that* member is chasing.
+ */
+export function useGoal(sessionId: string | undefined) {
+  return useQuery({
+    queryKey: ["goal", sessionId],
+    enabled: sessionId !== undefined,
+    staleTime: 5_000,
+    queryFn: async (): Promise<GoalState | null> => {
+      if (sessionId === undefined) return null;
+      const response = await fetch(
+        `/sessions/${encodeURIComponent(sessionId)}/goal`,
+      );
+      if (!response.ok) return null;
+      const body = (await response.json()) as { goal: GoalState | null };
+      return body.goal;
+    },
+  });
+}
+
+export function useSetGoal() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      sessionId: string | undefined;
+      action: "set" | "pause" | "resume" | "clear";
+      objective?: string;
+    }): Promise<GoalState | null> => {
+      if (input.sessionId === undefined) return null;
+      const response = await fetch(
+        `/sessions/${encodeURIComponent(input.sessionId)}/goal`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: input.action,
+            ...(input.objective === undefined
+              ? {}
+              : { objective: input.objective }),
+          }),
+        },
+      );
+      const body = (await response.json().catch(() => null)) as {
+        goal?: GoalState | null;
+        error?: { message?: string };
+      } | null;
+      if (!response.ok)
+        throw new ApiError(
+          response.status,
+          "GOAL_FAILED",
+          body?.error?.message ?? fallbackMessage(),
+        );
+      return body?.goal ?? null;
+    },
+    onSuccess: (_goal, input) => {
+      void client.invalidateQueries({ queryKey: ["goal", input.sessionId] });
+    },
   });
 }
 

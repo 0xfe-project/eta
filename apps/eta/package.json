@@ -1,0 +1,27 @@
+{
+  "name": "@eta/app",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The eta host: one Bun process that serves the web, the product database and the upstream WebSocket server.",
+  "scripts": {
+    "dev": "bun --watch src/main.ts --data-dir ../../var/eta-dev --allow-origin http://127.0.0.1:${ETA_WEB_PORT:-3000}",
+    "start": "bun src/main.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "test": "bun --bun vitest --run --passWithNoTests"
+  },
+  "dependencies": {
+    "@eta/client-contracts": "*",
+    "@eta/execution-node": "*",
+    "@eta/server": "*"
+  },
+  "devDependencies": {
+    "@eta/client-wire-proto": "*",
+    "@eta/core": "*",
+    "@types/node": "22.19.19",
+    "bun-types": "1.4.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}

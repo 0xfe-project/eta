@@ -23,11 +23,11 @@ import {
 // stands for.
 
 const CHIP =
-  "inline-flex max-w-full items-center gap-[0.5ch] align-bottom text-[var(--terminal-muted)]";
+  "inline-flex max-w-full items-center gap-[0.5ch] align-bottom text-muted-foreground";
 const LINK =
   "min-w-0 truncate underline-offset-2 outline-none hover:underline focus-visible:ring-1 focus-visible:ring-ring";
 const ACTION =
-  "shrink-0 underline-offset-2 outline-none hover:text-[var(--terminal-foreground)] hover:underline focus-visible:ring-1 focus-visible:ring-ring";
+  "shrink-0 underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-1 focus-visible:ring-ring";
 
 function Thumbnail({ src }: { src: string | undefined }) {
   return src ? (
@@ -136,9 +136,7 @@ function FileBlock({
   const failure = upload?.error;
   const uploading = !attachment && !failure;
   return (
-    <span
-      className={`${CHIP} motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-90`}
-    >
+    <span className={CHIP}>
       <AttachmentLink
         attachment={attachment}
         name={part.name}
@@ -151,10 +149,7 @@ function FileBlock({
         <span role="status">{translateText("common:states.uploading")}</span>
       ) : null}
       {failure ? (
-        <span
-          role="alert"
-          className="min-w-0 truncate text-[var(--terminal-warning)]"
-        >
+        <span role="alert" className="min-w-0 truncate text-state-warning">
           {failure}
         </span>
       ) : null}

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Connection, Connector, Usage } from "@/queries/llm";
 
+import type { ProviderView } from "@/queries/providers";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { CopyIcon } from "@phosphor-icons/react/Copy";
@@ -59,7 +60,9 @@ import {
   useSubmitApiKey,
   useUsage,
 } from "@/queries/llm";
+import { useProviders } from "@/queries/providers";
 import { connectionStateLabels, untilText } from "./connection-state";
+import { ProviderEditor } from "./provider-editor";
 import { useAgents } from "./use-agents";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -547,8 +550,11 @@ export function RefreshStatus({ className }: { className?: string }) {
     "connections",
   ] as const);
   const refresh = useRefreshLlmStatus();
-  // Another settings page may be checking: one round at a time.
-  const busy = useIsMutating({ mutationKey: ["llm", "refresh"] }) > 0;
+  // Two sources, and both matter: this button's own request (`isPending`, which flips with the
+  // render it belongs to), and any other settings page checking at the same time — one round at a
+  // time, whichever one started it.
+  const elsewhere = useIsMutating({ mutationKey: ["llm", "refresh"] }) > 0;
+  const busy = refresh.isPending || elsewhere;
   const result = refresh.data;
   const failedChecks = result?.connections.filter(
     (connection) => connection.check_error,
@@ -744,6 +750,7 @@ export function ProviderSettings() {
         <h2 className="text-sm font-semibold">{translateText("title")}</h2>
         <RefreshStatus />
       </div>
+      <ProviderRows />
       {connections.error ? (
         <p role="alert" className="text-xs text-destructive">
           {translateText("accounts.loadFailed", {
@@ -780,5 +787,75 @@ export function ProviderSettings() {
         />
       ))}
     </div>
+  );
+}
+
+/**
+ * The providers as rows you can edit.
+ *
+ * The list above this (accounts per connector) answers "what can I sign into"; this answers "what
+ * is configured", which is the half a person needs when a key rot or an endpoint moved. One row,
+ * one editor: no nesting, because a provider is one object in the file and the form is that object.
+ */
+function ProviderRows() {
+  const { t: translateText } = useTranslation(["providers", "common"] as const);
+  const { data: providers } = useProviders();
+  const [editing, setEditing] = useState<ProviderView | "new" | undefined>(
+    undefined,
+  );
+  return (
+    <section aria-labelledby="providers-configured" className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <h3 id="providers-configured" className="text-sm font-medium">
+          {translateText("editor.configured")}
+        </h3>
+        <Button size="sm" variant="outline" onClick={() => setEditing("new")}>
+          <PlusIcon aria-hidden="true" data-icon="inline-start" />
+          {translateText("editor.newTitle")}
+        </Button>
+      </div>
+      {(providers ?? []).length === 0 ? (
+        <p className="border border-dashed px-3 py-2.5 text-xs text-muted-foreground">
+          {translateText("editor.empty")}
+        </p>
+      ) : (
+        <ul className="divide-y border">
+          {(providers ?? []).map((provider) => (
+            <li
+              key={provider.id}
+              className="flex min-w-0 items-center gap-2 px-3 py-1.5"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-mono text-xs">
+                  {provider.id}
+                </span>
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  {provider.kind} · {provider.baseUrl} ·{" "}
+                  {translateText("editor.modelCount", {
+                    count: provider.models.length,
+                  })}
+                  {provider.has_key
+                    ? ""
+                    : ` · ${translateText("editor.keyMissing")}`}
+                </span>
+              </span>
+              <Button
+                size="xs"
+                variant="ghost"
+                onClick={() => setEditing(provider)}
+              >
+                {translateText("common:actions.edit")}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <ProviderEditor
+        key={editing === "new" ? "new" : (editing?.id ?? "closed")}
+        provider={editing === "new" ? undefined : editing}
+        open={editing !== undefined}
+        onOpenChange={(open) => !open && setEditing(undefined)}
+      />
+    </section>
   );
 }
