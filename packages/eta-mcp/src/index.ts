@@ -35,6 +35,7 @@ export type { LaunchCommand, ResolverEnv } from "./launch";
 export { McpManager } from "./manager";
 export type { McpManagerOptions } from "./manager";
 export { directToolName, qualifiedToolName } from "./names";
+export * from "./oauth";
 export { PROXY_TOOL_NAME } from "./proxy";
 export { McpScope, requiresApproval } from "./scope";
 export type {

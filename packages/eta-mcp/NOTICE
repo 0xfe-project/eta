@@ -1,12 +1,14 @@
-@eta/mcp contains code ported from pi-mcp-adapter
-(https://github.com/nicobailon/pi-mcp-adapter). Files that were ported say so in
-their first line, naming the upstream file.
+@eta/mcp includes code adapted from the following MIT-licensed projects.
 
-pi-mcp-adapter is distributed under the following license:
+pi-mcp-adapter (https://github.com/nicobailon/pi-mcp-adapter)
+opencode (https://github.com/anomalyco/opencode)
+
+Both are distributed under the MIT License below, each under its own copyright:
+
+  Copyright (c) 2026 Nico Bailon (pi-mcp-adapter)
+  Copyright (c) 2025 opencode (opencode)
 
 MIT License
-
-Copyright (c) 2026 Nico Bailon
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
