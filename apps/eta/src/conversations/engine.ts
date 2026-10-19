@@ -53,6 +53,10 @@ export interface RunInfo {
   conversationId: string;
   agentId: string;
   replyId: string;
+  /** The session that runs it. */
+  sessionId: string;
+  /** The project's directory, when it is on this machine; a project elsewhere has none to read. */
+  cwd: string | undefined;
   /** What the agent is told: the briefing. */
   told: string;
   /** The message that woke it. */
@@ -72,6 +76,30 @@ export interface RunHooks {
   afterRun?: (
     run: RunInfo & { status: MessageStatus; said: string },
   ) => void | Promise<void>;
+}
+
+/**
+ * Several features' hooks as one. Words from every `beforeRun` go ahead of the briefing, in list
+ * order; every `afterRun` is told, and one that fails does not keep the others from hearing it.
+ */
+export function combineRunHooks(hooks: readonly RunHooks[]): RunHooks {
+  return {
+    beforeRun: async (run) => {
+      const words = (
+        await Promise.all(hooks.map((hook) => hook.beforeRun?.(run)))
+      ).filter(
+        (text): text is string => text !== undefined && text.trim() !== "",
+      );
+      return words.length === 0 ? undefined : words.join("\n\n");
+    },
+    afterRun: async (run) => {
+      const settled = await Promise.allSettled(
+        hooks.map((hook) => hook.afterRun?.(run)),
+      );
+      const failed = settled.find((result) => result.status === "rejected");
+      if (failed !== undefined) throw failed.reason;
+    },
+  };
 }
 
 export interface EngineOptions {
@@ -645,6 +673,8 @@ export class Engine {
       conversationId,
       agentId: agent.id,
       replyId,
+      sessionId: handle.id,
+      cwd: machine.kind === "primary" ? project.path : undefined,
       told: told.text,
       trigger,
     };

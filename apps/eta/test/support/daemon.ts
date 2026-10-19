@@ -8,6 +8,7 @@ import type { MachineView } from "@eta/client-contracts";
 import type { Identity, LinkState } from "@eta/daemon";
 import type { Host } from "../../src/host";
 import type { Client } from "./client";
+import { join } from "node:path";
 import { DaemonLink, DaemonNode, enroll } from "@eta/daemon";
 import { afterEach } from "vitest";
 import { until } from "./client";
@@ -67,6 +68,8 @@ export async function startDaemon(
   const node = new DaemonNode({
     dataDir,
     version: "test",
+    // The real user's akhook file is not this test's business.
+    akhookUserConfig: join(dataDir, "no-user-akhook.yml"),
     warn: options.warn ?? (() => undefined),
   });
   await node.start();

@@ -22,7 +22,7 @@ import type {
 } from "@eta/client-contracts";
 import type { CallFrame, ServerFrame } from "@eta/client-wire-proto";
 import type { KernelTool, PersonaCard, ThinkingLevel } from "@eta/core";
-import type { AskObserver } from "@eta/harness";
+import type { AskObserver, OpenSession } from "@eta/harness";
 import type { SessionMeta, SessionsService, Socket } from "@eta/server";
 import type { Peer } from "./link/peer";
 import { Buffer } from "node:buffer";
@@ -31,6 +31,11 @@ import { stat } from "node:fs/promises";
 import { homedir, hostname, platform } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { createLocalEnvironment } from "@eta/execution-node";
+import {
+  additionalConfigPathsFromEnv,
+  AkhookSession,
+  journalTriggerStore,
+} from "@eta/plugin-akhook";
 import {
   createConnection,
   discoverPersonas,
@@ -43,7 +48,6 @@ import {
 } from "@eta/server";
 import { LocalTransport } from "@eta/ssh";
 import { Context } from "cordis";
-import { approvalMiddleware } from "./approval";
 import { ModelCatalog, remoteModels } from "./models";
 import { runAndWait } from "./run";
 import { proxyTools } from "./tools";
@@ -52,6 +56,8 @@ export interface DaemonNodeOptions {
   /** Where sessions live: `<dataDir>/sessions`. */
   dataDir: string;
   version: string;
+  /** The user-level akhook file on this machine; defaults to akhook's own path. */
+  akhookUserConfig?: string | undefined;
   warn?: ((message: string) => void) | undefined;
 }
 
@@ -61,6 +67,8 @@ interface Opening {
   stamp: string;
   tools: readonly ToolSpec[];
   cards: PersonaCard[];
+  /** The primary's akhook layers, as text. */
+  akhook: { name: string; text: string }[];
 }
 
 const keyOf = (conversationId: string, agentId: string): string =>
@@ -89,6 +97,7 @@ export class DaemonNode {
   readonly #openings = new Map<string, Opening>();
   /** What each open session's prompt was read from, to know when it has to be opened again. */
   readonly #opened = new Map<string, string>();
+  readonly #akhookSessions = new WeakMap<object, AkhookSession>();
   readonly #fibers: { dispose: () => Promise<void> }[] = [];
   #sessions: SessionsService | undefined;
   #peer: Peer | undefined;
@@ -152,15 +161,17 @@ export class DaemonNode {
           peer: () => this.#peer,
         });
       },
-      toolMiddleware: ({ meta, session }) =>
-        this.#openingOf(meta) === undefined
+      // The rules of the machine the session runs on (the user's file, the project's
+      // `.akhook.yml` here), then the primary's: the same rules the primary's own sessions have.
+      // A tool on the primary's approval list is asked about through the same question.
+      toolMiddleware: (input) =>
+        this.#openingOf(input.meta) === undefined
           ? []
-          : [
-              approvalMiddleware({
-                needsApproval: (name) => this.#needsApproval(meta.id, name),
-                ask: session.ask,
-              }),
-            ],
+          : [this.#akhook(input).middleware],
+      sessionAttach: async (input) => {
+        if (this.#openingOf(input.meta) === undefined) return;
+        await this.#akhook(input).attach(input.session);
+      },
       askObserve: (meta): AskObserver | undefined => {
         if (this.#openingOf(meta) === undefined) return undefined;
         return (action, payload) => {
@@ -278,6 +289,27 @@ export class DaemonNode {
     await this.#store.close();
   }
 
+  #akhook(input: { meta: SessionMeta; session: OpenSession }): AkhookSession {
+    let made = this.#akhookSessions.get(input.session);
+    if (made === undefined) {
+      const { meta, session } = input;
+      made = new AkhookSession({
+        cwd: meta.cwd,
+        ask: session.ask,
+        approvals: (name) => this.#needsApproval(meta.id, name),
+        userConfigPath: this.#options.akhookUserConfig,
+        additional: () => [
+          ...additionalConfigPathsFromEnv(),
+          ...(this.#openingOf(meta)?.akhook ?? []),
+        ],
+        store: journalTriggerStore(session),
+        warn: this.#warn,
+      });
+      this.#akhookSessions.set(session, made);
+    }
+    return made;
+  }
+
   #openingOf(meta: SessionMeta): Opening | undefined {
     if (meta.agentId === undefined || meta.conversationId === undefined)
       return undefined;
@@ -362,6 +394,7 @@ export class DaemonNode {
       stamp: args.stamp,
       tools: args.tools,
       cards: (args.personaCards ?? []) as PersonaCard[],
+      akhook: args.akhook ?? [],
     });
     const thinking = (id: string): Promise<unknown> =>
       args.thinkingLevel === undefined

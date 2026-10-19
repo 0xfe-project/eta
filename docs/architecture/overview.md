@@ -40,6 +40,7 @@ packages/
   eta-core、eta-harness、eta-compaction、eta-execution(-node)、eta-storage-jsonl   内核与会话的运行
   eta-server、eta-plugin-sdk     上游服务端地板：WebSocket 管道、注册表、状态推送、sessions 等 bundled 插件
   eta-ssh、eta-plugin-ssh、eta-plugin-git   经 SSH 的执行环境与 git 插件
+  eta-plugin-akhook   声明式规则（akhook 的配置）与流式规则，见 [akhook](akhook.md)
   client-wire-proto、client-contracts   线上的帧，以及产品 target 的类型（Web 与 host 共用）
 deploy/       Dockerfile、memory.Dockerfile、compose.yaml
 ```

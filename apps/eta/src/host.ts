@@ -10,7 +10,7 @@ import type { AssembledServer, AssembleOptions } from "@eta/server";
  */
 import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/site";
-import type { Product, RoutinesOptions } from "./product";
+import type { AkhookOptions, Product, RoutinesOptions } from "./product";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createLocalEnvironment } from "@eta/execution-node";
@@ -51,6 +51,12 @@ export interface HostOptions {
   artifactLimits?: Partial<SiteLimits> | undefined;
   /** Whether to apply the config's network settings to the environment. */
   network?: boolean;
+  /**
+   * akhook beyond the user's and the project's files: the user-level file's path (a test points
+   * it somewhere else), and host layers that those cannot disable or replace. The data
+   * directory's `akhook.yml` and `AKHOOK_ADDITIONAL_CONFIG_PATH` are host layers too.
+   */
+  akhook?: AkhookOptions;
   /** The routines' clock and limits, for a caller that moves time by hand (a test). */
   routines?: RoutinesOptions;
   warn?: (message: string) => void;
@@ -97,6 +103,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       ...(options.routines === undefined ? {} : { routines: options.routines }),
       artifactLimits: options.artifactLimits,
       memoryUrl: options.memoryUrl,
+      akhook: options.akhook,
       hostname,
       ...(options.home === undefined ? {} : { home: options.home }),
     });

@@ -107,6 +107,7 @@ export interface AssembleOptions {
   sessionTools?: SessionManagerOptions["sessionTools"] | undefined;
   toolMiddleware?: SessionManagerOptions["toolMiddleware"] | undefined;
   askObserve?: SessionManagerOptions["askObserve"] | undefined;
+  sessionAttach?: SessionManagerOptions["sessionAttach"] | undefined;
   warn?: ((message: string) => void) | undefined;
 }
 
@@ -406,6 +407,9 @@ export async function assembleServer(
     ...(options.askObserve === undefined
       ? {}
       : { askObserve: options.askObserve }),
+    ...(options.sessionAttach === undefined
+      ? {}
+      : { sessionAttach: options.sessionAttach }),
     warn,
   });
 
