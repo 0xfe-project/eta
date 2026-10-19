@@ -7,8 +7,9 @@
   "remoteCache": { "teamId": "team_m0cGPvm66wsuOjDpnCrXUDPz" },
   "cacheMaxAge": "7d",
   "cacheMaxSize": "2GB",
+  // --affected stays package-level (affectedUsingTaskInputs off): the libraries
+  // are read from source, so a change must reach every dependent package.
   "futureFlags": {
-    "affectedUsingTaskInputs": true,
     "filterUsingTasks": true,
     "strictTaskEntrypointSelection": true,
     "githubActionsRemoteBaseRefFallback": true
