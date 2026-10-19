@@ -10,8 +10,8 @@
  *
  * Three details are load-bearing:
  *
- * - **The child inherits what the parent was left on**: its cwd, its persona, and (unless
- *   the spec names one) its model. `openSession` does the rest.
+ * - **The child inherits what the parent was left on**: its cwd, its persona, the agent and
+ *   conversation it works for, and (unless the spec names one) its model. `openSession` does the rest.
  * - **The child's own pool knows whose child it is.** The runner passes its record id as
  *   the child's `subagentOwner`, so a grandchild is filed under it — a nested subagent
  *   cannot reach across the tree, and the depth cap counts real depth instead of
@@ -66,6 +66,14 @@ async function runChild(
     ...(parentMeta.persona === undefined
       ? {}
       : { persona: parentMeta.persona }),
+    // Whose work this is: a child's requests are counted for the agent and conversation that
+    // spawned it, and a host that routes by either sees the child as part of the same work.
+    ...(parentMeta.agentId === undefined
+      ? {}
+      : { agentId: parentMeta.agentId }),
+    ...(parentMeta.conversationId === undefined
+      ? {}
+      : { conversationId: parentMeta.conversationId }),
     ...(record.spec.model === undefined && parentMeta.model === undefined
       ? {}
       : { model: record.spec.model ?? parentMeta.model }),

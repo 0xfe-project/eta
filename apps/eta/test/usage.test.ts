@@ -272,6 +272,82 @@ describe("generations made for an agent", () => {
   });
 });
 
+describe("requests that are not a turn's one answer", () => {
+  it("count every attempt of a turn that was retried, each with its outcome", async () => {
+    const { models } = scriptedModels((request) =>
+      request.index === 0
+        ? {
+            ...billed(say(""), { input: 7 }),
+            stopReason: "error",
+            errorMessage: "503 service unavailable, overloaded",
+          }
+        : billed(say("there"), { input: 9, output: 1 }),
+    );
+    const w = await world({ models });
+    const { agent, group } = await ada(w);
+    const sent = await w.send(group.id, "hello");
+    const done = await w.settled(group.id, sent.replies[0]!.id);
+    expect(done.status).toBe("done");
+    expect(rows(w)).toMatchObject([
+      { agent_id: agent.id, status: "error", error: expect.any(String) },
+      { agent_id: agent.id, status: "ok", input: 9, output: 1 },
+    ]);
+  });
+
+  it("count what a subagent asked of the model for the agent that spawned it", async () => {
+    const { models } = scriptedModels((request) => {
+      if (request.last.includes("dig into it"))
+        return billed(say("found it"), { input: 30, output: 3 });
+      return request.lastRole === "toolResult"
+        ? billed(say("all done"), { input: 20 })
+        : billed(call("Agent", { task: "dig into it" }), { input: 10 });
+    });
+    const w = await world({ models });
+    const { agent, group } = await ada(w);
+    const sent = await w.send(group.id, "please delegate");
+    await w.settled(group.id, sent.replies[0]!.id);
+    expect(rows(w)).toHaveLength(3);
+    for (const row of rows(w)) {
+      expect(row).toMatchObject({
+        agent_id: agent.id,
+        conversation_id: group.id,
+      });
+    }
+    // Three sessions' worth of requests, two sessions: the agent's and its child's.
+    expect(new Set(rows(w).map((row) => row.session_id)).size).toBe(2);
+    expect(rows(w).reduce((sum, row) => sum + Number(row.input), 0)).toBe(60);
+  });
+
+  it("count a side question to the session it was asked in", async () => {
+    const { models } = scriptedModels(() =>
+      billed(say("a quick answer"), { input: 4, output: 2 }),
+    );
+    const w = await world({ models });
+    const { agent, group } = await ada(w);
+    const sent = await w.send(group.id, "hello");
+    await w.settled(group.id, sent.replies[0]!.id);
+    const before = rows(w).length;
+    const { session_id: session } = rows(w)[0] as { session_id: string };
+    const opened = (await w.client.call("sessions", "btwOpen", {
+      session,
+      kind: "contextual",
+    })) as { thread: { id: string } };
+    await w.client.call("sessions", "btwAsk", {
+      session,
+      threadId: opened.thread.id,
+      question: "what is this?",
+    });
+    await until(() => rows(w).length > before);
+    expect(rows(w).at(-1)).toMatchObject({
+      session_id: session,
+      agent_id: agent.id,
+      conversation_id: group.id,
+      status: "ok",
+      input: 4,
+    });
+  });
+});
+
 describe("generations made for no agent", () => {
   it("are counted under no agent and no conversation", async () => {
     const w = await world();

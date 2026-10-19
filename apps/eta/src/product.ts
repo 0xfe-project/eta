@@ -1,6 +1,8 @@
+import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type {
   AssembledServer,
   RemoteSessions,
+  SessionMeta,
   WebSocketEndpoint,
   WireService,
 } from "@eta/server";
@@ -81,6 +83,8 @@ export interface Product {
   readonly scheduler: Scheduler;
   /** Every feature's per-session hooks, combined into the one set the session manager takes. */
   readonly sessionHooks: Required<SessionHooks>;
+  /** Count a model request that ended; the server tells it for every session it holds. */
+  readonly generated: (meta: SessionMeta, message: AssistantMessage) => void;
   /** Mount the plugins on an assembled server; resolves when every one of them is in place. */
   mount: (server: AssembledServer) => Promise<void>;
   /** The product's own HTTP routes (artifact pages, enrolling a machine); nothing for any other path. */
@@ -169,6 +173,16 @@ export function createProduct(options: {
     posted: (conversationId) => changed([conversationId]),
     warn,
   });
+  // A model request ended, for a session of this host or of a daemon: count it.
+  const generated = (meta: SessionMeta, message: AssistantMessage): void => {
+    try {
+      usage.record(entryOf(meta, message, runner.routineOf(meta) ?? null));
+      // Run traffic, not a click: the paced push, so a busy agent costs a bounded number of frames.
+      wire?.push("usage");
+    } catch (error) {
+      warn(`[eta] could not record a generation: ${String(error)}`);
+    }
+  };
   const scheduler = new Scheduler({
     store: routines,
     fire: (routineId) => runner.start(routineId, "schedule") !== undefined,
@@ -196,14 +210,7 @@ export function createProduct(options: {
         models: () => running?.models,
         hooks: () => later.hooks,
         approvals: () => later.inbox?.approvals() ?? [],
-        generated: (meta, message) => {
-          try {
-            usage.record(entryOf(meta, message));
-            wire?.push("usage");
-          } catch (error) {
-            warn(`[eta] could not record a generation: ${String(error)}`);
-          }
-        },
+        generated,
         warn,
       }),
   });
@@ -305,6 +312,7 @@ export function createProduct(options: {
     hub,
     scheduler,
     sessionHooks,
+    generated,
     fetch: async (request) =>
       (await hub.enroll(request)) ?? (await artifactRoutes(request)),
     remote: router,
@@ -400,13 +408,7 @@ export function createProduct(options: {
         artifactsPlugin({ artifacts, board }, applied("artifacts")),
       );
       server.mount("inbox", inboxPlugin({ inbox }, applied("inbox")));
-      server.mount(
-        "usage",
-        usagePlugin(
-          { usage, routineOf: runner.routineOf, warn },
-          applied("usage"),
-        ),
-      );
+      server.mount("usage", usagePlugin(usage, applied("usage")));
       if (memory !== undefined)
         server.mount(
           "memory",

@@ -21,12 +21,14 @@
  * that the floor is a floor and not a session host with plugins bolted on.
  */
 
+import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { MountedPlugin } from "@eta/client-contracts";
 import type { CompactionSummarizer, KernelModels } from "@eta/core";
 import type { RemoteSessions } from "./bundled/sessions";
 import type { SessionManagerOptions } from "./manager";
 import type { EtaConfig } from "./providers/config-types";
 import type { Settings } from "./settings";
+import type { SessionMeta } from "./store";
 import type { WireServer, WireServerOptions } from "./transport";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -40,6 +42,7 @@ import { FileSessionStore } from "./file-store";
 import { SessionManager } from "./manager";
 import { formatModelId, parseModelId } from "./model-id";
 import { initializeNetwork } from "./network";
+import { observedModels } from "./observed-models";
 import { discoverPersonas } from "./personas";
 import { PluginManager } from "./plugins";
 import { configDefaultModel } from "./providers/config-types";
@@ -107,6 +110,14 @@ export interface AssembleOptions {
   sessionTools?: SessionManagerOptions["sessionTools"] | undefined;
   toolMiddleware?: SessionManagerOptions["toolMiddleware"] | undefined;
   askObserve?: SessionManagerOptions["askObserve"] | undefined;
+  /**
+   * Told how every model request a session makes ended: its turns, each retry of a turn, a
+   * compaction's summary, a side question, a memory extraction and the turns of the subagents it
+   * spawned. The session is named by its meta, so the host can say who it was made for.
+   */
+  generated?:
+    | ((meta: SessionMeta, message: AssistantMessage) => void)
+    | undefined;
   warn?: ((message: string) => void) | undefined;
 }
 
@@ -316,10 +327,17 @@ export async function assembleServer(
     warn,
   });
   const envFor = options.envFor;
+  // The model layer one session talks to: the shared one, watched for the host when it asked to be.
+  const modelsOf = (meta: SessionMeta): KernelModels => {
+    const generated = options.generated;
+    return generated === undefined
+      ? kernelModels
+      : observedModels(kernelModels, (message) => generated(meta, message));
+  };
   const sessions = new SessionManager({
     ...(envFor === undefined ? {} : { envFor }),
     store,
-    modelsFor: () => kernelModels,
+    modelsFor: modelsOf,
     settings: defaults,
     // The cards that apply to a session's directory, read when it opens: a card written by hand
     // is picked up by the next session, and a card that is gone resolves to the fallback.
@@ -365,16 +383,17 @@ export async function assembleServer(
       call: async (systemPrompt, prompt) => {
         const identity =
           meta.model === undefined ? undefined : parseModelId(meta.model);
+        const models = modelsOf(meta);
         const model =
           identity === undefined
             ? undefined
-            : kernelModels.getModel(identity.provider, identity.modelId);
+            : models.getModel(identity.provider, identity.modelId);
         if (model === undefined) {
           // No model to ask: a throw here is a declined extraction, which is the honest
           // outcome — inventing notes would be worse.
           throw new Error(`model_unavailable: ${meta.model ?? "unknown"}`);
         }
-        const reply = await kernelModels.completeSimple(
+        const reply = await models.completeSimple(
           model,
           {
             systemPrompt,

@@ -1,8 +1,10 @@
 /**
  * The `usage` target: what the models were used for, and by whom.
  *
- * Every generation a session makes is counted (tokens, cost, the model, whether the provider
- * answered or failed) with the agent and the conversation it was made for. Rows are kept for
+ * Every request a session makes to a model is counted (tokens, cost, the model, whether the
+ * provider answered or failed) with the agent and the conversation it was made for: a turn, each
+ * retry of a turn (the failed attempt and the next one are two requests), a compaction's summary,
+ * a side question, and the turns of the subagents it spawned. Rows are kept for
  * `USAGE_RETENTION_DAYS` days; the sections are sums over them, so they carry no history beyond it.
  *
  * `agents` is what an agent's usage line needs: its rolling windows and its models. `models` and
@@ -20,7 +22,7 @@ export type UsageWindow = (typeof USAGE_WINDOWS)[number];
 
 /** Counted, not measured: every generation adds one request and its tokens. */
 export interface UsageTotals {
-  /** Generations made, the failed and the stopped ones included. */
+  /** Requests made, the failed and the stopped ones and every retry attempt included. */
   requests: number;
   /** Of those, the ones the provider answered with an error. */
   failed: number;
