@@ -19,6 +19,7 @@ const state = rstest.hoisted(() => ({
   agents: [] as { id: string; name: string; status: string }[],
   groups: [] as ConversationSummary[],
   openAgent: rstest.fn(),
+  pathname: "/",
 }));
 rstest.mock("./use-agents", () => ({
   useAgents: () => ({
@@ -36,9 +37,6 @@ rstest.mock("./use-groups", () => ({
   useGroups: () => ({ groups: state.groups, current: undefined }),
   useOpenGroup: () => () => undefined,
 }));
-rstest.mock("./use-attention", () => ({
-  useAttention: () => ({ total: 0 }),
-}));
 // The sidebar links through the router; this test is about the list, so the link is a plain one.
 rstest.mock("@tanstack/react-router", () => ({
   Link: ({
@@ -54,8 +52,7 @@ rstest.mock("@tanstack/react-router", () => ({
     </a>
   ),
   useRouterState: ({ select }: { select: (s: unknown) => unknown }) =>
-    select({ location: { pathname: "/" } }),
-  // The folder header's "+" navigates to /new with a cwd.
+    select({ location: { pathname: state.pathname } }),
   useNavigate: () => () => undefined,
 }));
 
@@ -109,6 +106,7 @@ async function render(node: React.ReactNode) {
 afterEach(async () => {
   await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
   state.openAgent.mockClear();
+  state.pathname = "/";
   setWire(undefined);
 });
 
@@ -209,21 +207,23 @@ describe("左栏的页眉", () => {
   });
 
   it("links the sections and marks the current one", async () => {
+    state.pathname = "/workspace/routines";
     state.agents = [];
     state.groups = [];
     const container = await render(<Sidebar />);
     const links = [...container.querySelectorAll("a[data-to]")].filter((a) =>
       a.hasAttribute("data-active"),
     );
+    // Only the two pages that remain; chat, pending and memory have no button.
     expect(links.map((a) => a.getAttribute("data-to"))).toEqual([
-      "/",
-      "/workspace/inbox",
       "/workspace/tasks",
       "/workspace/routines",
-      "/workspace/memory",
     ]);
+    expect(links.map((a) => a.textContent)).toEqual(["任务", "定时"]);
     expect(
-      links.filter((a) => a.getAttribute("data-active") === "true"),
-    ).toHaveLength(1);
+      links
+        .filter((a) => a.getAttribute("data-active") === "true")
+        .map((a) => a.getAttribute("data-to")),
+    ).toEqual(["/workspace/routines"]);
   });
 });

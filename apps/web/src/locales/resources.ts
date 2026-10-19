@@ -7,7 +7,6 @@ import enConnections from "./en/connections.json";
 import enLlm from "./en/llm.json";
 import enMachines from "./en/machines.json";
 import enMcp from "./en/mcp.json";
-import enMemory from "./en/memory.json";
 import enNavigation from "./en/navigation.json";
 import enOverview from "./en/overview.json";
 import enProviders from "./en/providers.json";
@@ -24,7 +23,6 @@ import zhConnections from "./zh/connections.json";
 import zhLlm from "./zh/llm.json";
 import zhMachines from "./zh/machines.json";
 import zhMcp from "./zh/mcp.json";
-import zhMemory from "./zh/memory.json";
 import zhNavigation from "./zh/navigation.json";
 import zhOverview from "./zh/overview.json";
 import zhProviders from "./zh/providers.json";
@@ -43,7 +41,6 @@ export const en = {
   machines: enMachines,
   mcp: enMcp,
   connections: enConnections,
-  memory: enMemory,
   navigation: enNavigation,
   overview: enOverview,
   providers: enProviders,
@@ -63,7 +60,6 @@ export const zh = {
   machines: zhMachines,
   mcp: zhMcp,
   connections: zhConnections,
-  memory: zhMemory,
   navigation: zhNavigation,
   overview: zhOverview,
   providers: zhProviders,
@@ -85,7 +81,6 @@ export const namespaces = [
   "mcp",
   "connections",
   "llm",
-  "memory",
   "navigation",
   "overview",
   "providers",

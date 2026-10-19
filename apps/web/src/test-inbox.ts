@@ -68,18 +68,15 @@ export interface SurfaceSeed extends ProductSeed {
   approvals?: string[];
   /** Left out, the host has no usage plugin. */
   usage?: AgentUsage[];
-  /** The host runs with a memory sidecar. */
-  memory?: boolean;
 }
 
 /**
- * A host with the product plugins and the inbox (always, it is eager) mounted, plus usage and
- * memory when seeded; installed as the page's connection and connected.
+ * A host with the product plugins and the inbox (always, it is eager) mounted, plus usage when
+ * seeded; installed as the page's connection and connected.
  */
 export function surfaceHost(seed: SurfaceSeed = {}): FakeHost {
   const mounted = ["inbox"];
   if (seed.usage !== undefined) mounted.push("usage");
-  if (seed.memory === true) mounted.push("memory");
   const host = buildProductHost(seed, mounted).target(
     "inbox",
     {

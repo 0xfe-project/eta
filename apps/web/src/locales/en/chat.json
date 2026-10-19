@@ -133,9 +133,6 @@
     "requestLabel": "Confirmation request",
     "required": "Confirmation needed",
     "continueQuestion": "Continue?",
-    "historyTitle": "Past confirmations",
-    "historyLabel": "Confirmation history",
-    "emptyHistory": "No past confirmations yet",
     "bashCommand": "Bash command",
     "allowForSession": "Yes, and don’t ask again this session",
     "denyAndExplain": "No, tell Claude what to do next (esc)"

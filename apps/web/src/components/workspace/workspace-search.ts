@@ -21,7 +21,6 @@ import { useWorkspaceStore } from "./workspace-store";
 export const sectionPaths = {
   tasks: "/workspace/tasks",
   routines: "/workspace/routines",
-  inbox: "/workspace/inbox",
 } as const satisfies Partial<Record<WorkspaceView, string>>;
 
 /**

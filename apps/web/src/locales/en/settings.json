@@ -27,7 +27,6 @@
   "accessibility": {
     "needsAttention": "Settings (accounts need attention)",
     "sections": "Settings sections",
-    "accountsNeedAttention": "Accounts need attention",
-    "accountAttentionSuffix": "(accounts need attention)"
+    "accountsNeedAttention": "Accounts need attention"
   }
 }

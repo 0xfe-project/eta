@@ -93,7 +93,7 @@ describe("pending navigation", () => {
   it("opens them on their pages in the full-window workspace", async () => {
     const { container } = await mount(
       () => <PendingList />,
-      "/workspace/inbox",
+      "/workspace/tasks",
     );
     expect(links(container)).toEqual([
       "/workspace/tasks?task=t1",

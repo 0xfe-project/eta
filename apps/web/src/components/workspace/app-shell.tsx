@@ -1,9 +1,6 @@
 import type { ReactNode } from "react";
-import { BellIcon } from "@phosphor-icons/react/Bell";
-import { BrainIcon } from "@phosphor-icons/react/Brain";
 import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
-import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { Link, useRouterState } from "@tanstack/react-router";
@@ -24,34 +21,18 @@ import {
   Sidebar as SidebarRoot,
 } from "@/components/ui/sidebar";
 import { translate } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
 import { useTasks } from "@/queries/tasks";
 import { AgentEditor } from "./agent-editor";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
-import { ProjectTree } from "./sidebar-tree";
+import { ConversationList } from "./sidebar-tree";
 import { useAgents, useOpenAgent } from "./use-agents";
-import { useAttention } from "./use-attention";
 
 // Shared navigation: the full-window sidebar on wide screens and three
-// bottom tabs on mobile. Conversation lists are the mobile home screen.
+// bottom tabs on mobile. The conversation list is the mobile home screen.
 
 const sections = [
-  {
-    to: "/",
-    get label() {
-      return translate("navigation:sections.chat");
-    },
-    icon: ChatsCircleIcon,
-  },
-  {
-    to: "/workspace/inbox",
-    get label() {
-      return translate("navigation:sections.pending");
-    },
-    icon: BellIcon,
-  },
   {
     to: "/workspace/tasks",
     get label() {
@@ -66,24 +47,14 @@ const sections = [
     },
     icon: ClockIcon,
   },
-  {
-    to: "/workspace/memory",
-    get label() {
-      return translate("navigation:sections.memory");
-    },
-    icon: BrainIcon,
-  },
 ] as const;
 
-/**
- * What each section holds for the user: everything waiting for them, and
- * tasks to accept.
- */
+/** What each section holds for the user: tasks to accept. */
 function useBadges(): Partial<Record<(typeof sections)[number]["to"], number>> {
-  const { total } = useAttention();
   const { tasks } = useTasks();
-  const review = tasks.filter((t) => t.status === "in_review").length;
-  return { "/workspace/tasks": review, "/workspace/inbox": total };
+  return {
+    "/workspace/tasks": tasks.filter((t) => t.status === "in_review").length,
+  };
 }
 
 const groupLabel = "text-xs font-medium text-muted-foreground";
@@ -117,9 +88,7 @@ export function Sidebar() {
               <SidebarMenuItem key={to}>
                 <SidebarMenuButton
                   asChild
-                  isActive={
-                    to === "/" ? pathname === "/" : pathname.startsWith(to)
-                  }
+                  isActive={pathname.startsWith(to)}
                   className="text-sm"
                 >
                   <Link to={to}>
@@ -134,7 +103,7 @@ export function Sidebar() {
             ))}
           </SidebarMenu>
         </SidebarGroup>
-        <ProjectTree />
+        <ConversationList />
         <SidebarGroup aria-labelledby="sidebar-agents">
           <SidebarGroupLabel id="sidebar-agents" className={groupLabel}>
             {translateText("common:entities.agents")}
@@ -194,55 +163,36 @@ export function Sidebar() {
 }
 
 /**
- * Mobile A: lists first, with a persistent bottom navigation outside a
- * conversation. 更多 stays lit on the pages it leads to.
+ * Mobile: the conversation list first, with a persistent bottom navigation outside a
+ * conversation.
  */
 export function BottomNav() {
-  const { t: translateText } = useTranslation([
-    "navigation",
-    "agents",
-    "common",
-  ] as const);
+  const { t: translateText } = useTranslation(["navigation"] as const);
   const badges = useBadges();
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  // Three tabs, written out instead of picked from `sections` by index: the sidebar's list is
-  // about looking across everything, the phone's is about the three things a thumb reaches for.
-  // Indexing one list for both is how a tab silently starts leading somewhere else.
+  // Written out instead of picked from `sections`: the sidebar lists the pages, the phone adds
+  // its home (the conversation list) in front. Indexing one list for both is how a tab silently
+  // starts leading somewhere else.
   const tabs = [
-    {
-      to: "/",
-      label: translateText("sections.chat"),
-      icon: ChatsCircleIcon,
-      also: [] as string[],
-    },
-    {
-      to: "/workspace/tasks",
-      label: translateText("sections.tasks"),
-      icon: ListChecksIcon,
-      also: [] as string[],
-    },
-    {
-      to: "/workspace/more",
-      label: translateText("sections.more"),
-      icon: DotsThreeIcon,
-      also: ["/workspace/routines", "/workspace/memory", "/workspace/inbox"],
-    },
+    { to: "/", label: translateText("sections.chat"), icon: ChatsCircleIcon },
+    ...sections.map(({ to, icon }) => ({
+      to,
+      label: translateText(
+        to === "/workspace/tasks" ? "sections.tasks" : "sections.routines",
+      ),
+      icon,
+    })),
   ] as const;
   return (
     <nav
       aria-label={translateText("accessibility.sections")}
       className="flex shrink-0 border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden"
     >
-      {tabs.map(({ to, label, icon: Icon, also }) => (
+      {tabs.map(({ to, label, icon: Icon }) => (
         <Link
           key={to}
           to={to}
           search={{}}
-          className={cn(
-            "flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-xs text-muted-foreground",
-            (also as readonly string[]).includes(pathname) &&
-              "bg-muted/50 text-foreground",
-          )}
+          className="flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-xs text-muted-foreground"
           activeOptions={{ exact: true, includeSearch: false }}
           activeProps={{ className: "text-foreground bg-muted/50" }}
         >

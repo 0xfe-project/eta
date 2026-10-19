@@ -133,9 +133,6 @@
     "reply": "回答",
     "required": "需要确认",
     "continueQuestion": "是否继续？",
-    "historyTitle": "已处理的确认",
-    "historyLabel": "确认记录",
-    "emptyHistory": "还没有处理过的确认",
     "bashCommand": "Bash 命令",
     "allowForSession": "是，本次会话不再询问",
     "denyAndExplain": "否，告诉 Claude 接下来怎么做（esc）"

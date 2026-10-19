@@ -52,11 +52,7 @@ function outcome(interaction: InteractionView) {
 }
 
 /** A question: who asked, where, what, and its answers, or how it ended. */
-export function Confirmation({
-  interaction,
-}: {
-  interaction: InteractionView;
-}) {
+function Confirmation({ interaction }: { interaction: InteractionView }) {
   const { t: translateText } = useTranslation([
     "overview",
     "agents",

@@ -79,7 +79,7 @@ describe("activity ref cards", () => {
 
   it("opens it on its page in the full-window workspace", async () => {
     const { container, router } = await mount([task], {
-      path: "/workspace/inbox",
+      path: "/workspace/tasks",
     });
     expect(cards(container)[0].href).toBe("/workspace/tasks?task=t1");
     await act(async () => {

@@ -22,7 +22,6 @@ import {
   taskDetail,
 } from "@/test-product";
 import { PendingList } from "./attention";
-import { Notifications } from "./notifications";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -141,70 +140,5 @@ describe("what waits for the user", () => {
     expect(container.querySelector("li")!.textContent).toContain(
       "删除i1？允许拒绝放弃",
     );
-  });
-
-  describe("the page", () => {
-    const history = () => {
-      const now = Date.now();
-      surfaceHost({
-        agents: [agentView({ id: "a1", name: "研究员" })],
-        conversations: [conversationView({ id: "g1", name: "群聊" })],
-        interactions: [
-          interactionView({ id: "i1", prompt: "tasks 请求确认\n删除i1？" }),
-          interactionView({
-            id: "i2",
-            prompt: "tasks 请求确认\n删除i2？",
-            status: "answered",
-            answer: { kind: "selection", selections: ["允许"] },
-            updatedAt: now,
-          }),
-          interactionView({
-            id: "i3",
-            prompt: "tasks 请求确认\n删除i3？",
-            status: "canceled",
-            answer: { kind: "none" },
-            updatedAt: now,
-          }),
-          interactionView({
-            id: "i4",
-            prompt: "tasks 请求确认\n删除i4？",
-            status: "expired",
-            updatedAt: now - 2 * 86_400_000,
-          }),
-        ],
-      });
-      const client = new QueryClient({
-        defaultOptions: { queries: { staleTime: Infinity } },
-      });
-      return client;
-    };
-
-    it("lists what waits, then what was answered before, by day", async () => {
-      const page = await mount(history(), () => <Notifications />);
-      expect(headings(page)).toContain("已处理的确认");
-      const sections = [...page.querySelectorAll("section[aria-label]")];
-      const rows = sections.map((section) => [
-        section.getAttribute("aria-label"),
-        [...section.querySelectorAll("li")].map((li) => li.textContent),
-      ]);
-      expect(rows[0]?.[0]).toBe("确认请求");
-      expect(page.textContent).toContain("已选择「允许」");
-      expect(page.textContent).toContain("已拒绝，没有答复");
-      expect(page.textContent).toContain("已过期，没有答复");
-      expect(
-        page.querySelectorAll("section[aria-label='今天'] li"),
-      ).toHaveLength(2);
-    });
-
-    it("shows only what waits under 待处理", async () => {
-      const page = await mount(
-        history(),
-        () => <Notifications />,
-        "/?filter=pending",
-      );
-      expect(headings(page)).not.toContain("已处理的确认");
-      expect(page.querySelectorAll("li")).toHaveLength(1);
-      expect(page.textContent).toContain("删除i1？");
-    });
   });
 });
