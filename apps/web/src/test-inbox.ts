@@ -9,8 +9,8 @@ import type {
   UsageWindow,
 } from "@eta/client-contracts";
 import type { ProductSeed } from "@/test-product";
-import { conversationSections } from "@/test-product";
-import { FakeHost } from "@/test-wire";
+import type { FakeHost } from "@/test-wire";
+import { buildProductHost } from "@/test-product";
 
 export const interactionView = (
   fields: Partial<InteractionView> & { id: string },
@@ -68,45 +68,25 @@ export interface SurfaceSeed extends ProductSeed {
   approvals?: string[];
   /** Left out, the host has no usage plugin. */
   usage?: AgentUsage[];
-  /** The host runs with a memory sidecar. */
-  memory?: boolean;
 }
 
 /**
- * A host with the product plugins and the inbox (always, it is eager) mounted, plus usage and
- * memory when seeded; installed as the page's connection and connected.
+ * A host with the product plugins and the inbox (always, it is eager) mounted, plus usage when
+ * seeded; installed as the page's connection and connected.
  */
 export function surfaceHost(seed: SurfaceSeed = {}): FakeHost {
-  const mounted = ["agents", "machines", "projects", "conversations", "inbox"];
-  const host = new FakeHost()
-    .target("agents", { list: seed.agents ?? [] }, { eager: true })
-    .target("machines", { list: seed.machines ?? [] }, { eager: true })
-    .target("projects", { list: seed.projects ?? [] }, { eager: true })
-    .target(
-      "conversations",
-      { list: seed.conversations ?? [] },
-      { eager: true },
-    )
-    .target(
-      "inbox",
-      {
-        list: seed.interactions ?? [],
-        approvals: { tools: seed.approvals ?? [] },
-      },
-      { eager: true },
-    );
-  if (seed.usage !== undefined) {
-    mounted.push("usage");
+  const mounted = ["inbox"];
+  if (seed.usage !== undefined) mounted.push("usage");
+  const host = buildProductHost(seed, mounted).target(
+    "inbox",
+    {
+      list: seed.interactions ?? [],
+      approvals: { tools: seed.approvals ?? [] },
+    },
+    { eager: true },
+  );
+  if (seed.usage !== undefined)
     host.target("usage", { agents: seed.usage, models: [], days: [] });
-  }
-  if (seed.memory === true) mounted.push("memory");
-  host.plugins(mounted.map((name) => ({ name, source: "bundled" as const })));
-  for (const summary of seed.conversations ?? []) {
-    host.target(
-      `conversations.${summary.id}`,
-      conversationSections(summary, seed.messages?.[summary.id]),
-    );
-  }
   host.install();
   host.hello();
   return host;

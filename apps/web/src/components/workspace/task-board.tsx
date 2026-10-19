@@ -7,18 +7,11 @@ import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { KanbanIcon } from "@phosphor-icons/react/Kanban";
 import { ListIcon } from "@phosphor-icons/react/List";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
-import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,21 +19,21 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useAgentList } from "@/queries/agents";
 import {
   useDeleteTask,
   useTask,
   useTasks,
   useUpdateTask,
 } from "@/queries/tasks";
+import { wireErrorMessage } from "@/queries/wire";
 import { PageHeader } from "./app-shell";
 import { BackToTop } from "./back-to-top";
-import { RefreshButton } from "./refresh-button";
 import { when } from "./routine-format";
 import {
+  actorName,
   ago,
-  assigneeLabel,
   createdBy,
   statuses,
   statusLabel,
@@ -54,7 +47,6 @@ import {
   EditableTitle,
   Question,
   RunState,
-  TaskForm,
   TaskMissing,
   TaskProperties,
   Timeline,
@@ -65,7 +57,7 @@ import { useWorkspaceStore } from "./workspace-store";
 // or as a board to drag them across, or one open task in their place. The
 // task lays itself out by its own width (container queries), not the window's.
 
-const showError = (error: Error) => toast.error(error.message);
+const showError = (error: Error) => toast.error(wireErrorMessage(error));
 
 /** The board reads left to right the way work moves. */
 const flow: TaskStatus[] = [
@@ -77,27 +69,6 @@ const flow: TaskStatus[] = [
   "done",
   "cancelled",
 ];
-
-const scopes = [
-  {
-    value: "all",
-    get label() {
-      return translate("common:labels.all");
-    },
-  },
-  {
-    value: "user",
-    get label() {
-      return translate("tasks:scope.mine");
-    },
-  },
-  {
-    value: "remote",
-    get label() {
-      return translate("common:entities.agents");
-    },
-  },
-] as const;
 
 /** The status icon as a menu: change a task's status without opening it. */
 function StatusMenu({ task }: { task: Task }) {
@@ -127,7 +98,7 @@ function StatusMenu({ task }: { task: Task }) {
             disabled={s.value === task.status}
             onSelect={() =>
               update.mutate(
-                { id: task.id, changes: { status: s.value } },
+                { taskId: task.id, status: s.value },
                 { onError: showError },
               )
             }
@@ -147,20 +118,15 @@ function ListView({
   tasks,
   selected,
   hidden,
-  onCreate,
 }: {
-  tasks: Task[];
+  tasks: readonly Task[];
   /** The task last open, marked so the list reads as left. */
   selected: string | null;
   hidden: boolean;
-  onCreate: (status: TaskStatus) => void;
 }) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "common",
-    "navigation",
-  ] as const);
+  useTranslation(["tasks", "common", "navigation"] as const);
   const [, setNav] = useTaskNav();
+  const { agents } = useAgentList();
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const selectedRef = useRef<HTMLButtonElement>(null);
   // Back from a task, focus returns to its row.
@@ -194,17 +160,6 @@ function ListView({
                   {group.length}
                 </span>
               </button>
-              <Button
-                size="icon-xs"
-                variant="ghost"
-                aria-label={translateText("actions.createWithStatusLabel", {
-                  status: label,
-                })}
-                title={translateText("common:actions.new")}
-                onClick={() => onCreate(value)}
-              >
-                <PlusIcon aria-hidden="true" />
-              </Button>
             </div>
             {isOpen(value) ? (
               <ul>
@@ -233,10 +188,10 @@ function ListView({
                         <Comments count={task.comments} />
                       </span>
                       <span className="hidden truncate text-xs text-muted-foreground @lg:block">
-                        {assigneeLabel(task.assignee)}
+                        {actorName(task.createdBy, agents)}
                       </span>
                       <span className="hidden text-right text-xs text-muted-foreground tabular-nums @lg:block">
-                        {ago(task.updated_at)}
+                        {ago(task.updatedAt)}
                       </span>
                     </button>
                   </li>
@@ -257,6 +212,7 @@ const dragType = "application/x-eta-task";
 function Card({ task }: { task: Task }) {
   useTranslation(["tasks", "common", "navigation"] as const);
   const [, setNav] = useTaskNav();
+  const { agents } = useAgentList();
   return (
     <li>
       <button
@@ -278,26 +234,16 @@ function Card({ task }: { task: Task }) {
         </span>
         <span className="line-clamp-3 text-sm">{task.title}</span>
         <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground tabular-nums">
-          <span className="truncate">{assigneeLabel(task.assignee)}</span>
-          <span className="shrink-0">{ago(task.updated_at)}</span>
+          <span className="truncate">{actorName(task.createdBy, agents)}</span>
+          <span className="shrink-0">{ago(task.updatedAt)}</span>
         </span>
       </button>
     </li>
   );
 }
 
-function BoardView({
-  tasks,
-  onCreate,
-}: {
-  tasks: Task[];
-  onCreate: (status: TaskStatus) => void;
-}) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "common",
-    "navigation",
-  ] as const);
+function BoardView({ tasks }: { tasks: readonly Task[] }) {
+  useTranslation(["tasks", "common", "navigation"] as const);
   const update = useUpdateTask();
   const [over, setOver] = useState<TaskStatus | null>(null);
   const columns = flow.filter(
@@ -328,10 +274,7 @@ function BoardView({
               const id = e.dataTransfer.getData(dragType);
               const task = tasks.find((t) => t.id === id);
               if (task && task.status !== status)
-                update.mutate(
-                  { id, changes: { status } },
-                  { onError: showError },
-                );
+                update.mutate({ taskId: id, status }, { onError: showError });
             }}
             className={cn(
               "flex w-72 shrink-0 flex-col bg-muted/50 outline-offset-[-1px] duration-[60ms] ease-linear",
@@ -344,18 +287,6 @@ function BoardView({
               <span className="text-muted-foreground tabular-nums">
                 {group.length}
               </span>
-              <Button
-                size="icon-xs"
-                variant="ghost"
-                className="ml-auto"
-                aria-label={translateText("actions.createWithStatusLabel", {
-                  status: label,
-                })}
-                title={translateText("common:actions.new")}
-                onClick={() => onCreate(status)}
-              >
-                <PlusIcon aria-hidden="true" />
-              </Button>
             </div>
             <ul className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-1.5 pb-1.5">
               {group.map((task) => (
@@ -378,7 +309,8 @@ function TaskPage({ id }: { id: string }) {
     "navigation",
   ] as const);
   const [, setNav] = useTaskNav();
-  const { data: task, isPending, error, refetch } = useTask(id);
+  const { task, missing, error } = useTask(id);
+  const { agents } = useAgentList();
   const remove = useDeleteTask();
   const back = () => void setNav({ task: null });
   const crumbs = (
@@ -399,25 +331,18 @@ function TaskPage({ id }: { id: string }) {
   if (!task)
     return (
       <>
-        <PageHeader title={crumbs}>
-          <RefreshButton resource="tasks" />
-        </PageHeader>
+        <PageHeader title={crumbs} />
         <main
           id="main"
           className="mx-auto w-full max-w-content px-4 py-6 sm:px-8"
         >
-          <TaskMissing
-            isPending={isPending}
-            error={error}
-            onRetry={() => void refetch()}
-          />
+          <TaskMissing missing={missing} error={error} />
         </main>
       </>
     );
   return (
     <>
       <PageHeader title={crumbs}>
-        <RefreshButton resource="tasks" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -432,7 +357,10 @@ function TaskPage({ id }: { id: string }) {
             <DropdownMenuItem
               variant="destructive"
               onSelect={() =>
-                remove.mutate(task.id, { onSuccess: back, onError: showError })
+                remove.mutate(
+                  { taskId: task.id },
+                  { onSuccess: back, onError: showError },
+                )
               }
             >
               {translateText("common:actions.delete")}
@@ -450,7 +378,7 @@ function TaskPage({ id }: { id: string }) {
             <div className="sticky top-0 z-10 mb-3 space-y-1 bg-background pt-4 pb-3">
               <EditableTitle key={task.title} task={task} className="text-xl" />
               <p className="text-xs text-muted-foreground tabular-nums">
-                {createdBy(task)}
+                {createdBy(task, agents)}
               </p>
             </div>
             <Question task={task} />
@@ -469,14 +397,11 @@ function TaskPage({ id }: { id: string }) {
           aria-label={translateText("details.propertiesTab")}
           className="border-t px-4 py-5 text-xs sm:px-8 @2xl:overflow-y-auto @2xl:border-t-0 @2xl:border-l @2xl:px-4"
         >
-          <TaskProperties
-            task={task}
-            onDone={() => void setNav({ task: null }, { history: "replace" })}
-          >
+          <TaskProperties task={task}>
             <dt className="text-xs leading-8 text-muted-foreground">
               {translateText("fields.updatedAt")}
             </dt>
-            <dd className="leading-8 tabular-nums">{when(task.updated_at)}</dd>
+            <dd className="leading-8 tabular-nums">{when(task.updatedAt)}</dd>
           </TaskProperties>
         </aside>
       </main>
@@ -492,26 +417,17 @@ export function TaskBoard() {
     "common",
     "navigation",
   ] as const);
-  const [nav, setNav] = useTaskNav();
-  const { data, error, refetch } = useTasks();
-  const [newStatus, setNewStatus] = useState<TaskStatus>("todo");
+  const [nav] = useTaskNav();
+  const { tasks, loaded, error } = useTasks();
   // Remembered in this browser, so the page opens as it was left.
   const layout = useWorkspaceStore((s) => s.workspace.taskLayout ?? "list");
-  const scope = useWorkspaceStore((s) => s.workspace.taskScope ?? "all");
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
-  const setView = (changes: Pick<WorkspaceState, "taskLayout" | "taskScope">) =>
+  const setView = (changes: Pick<WorkspaceState, "taskLayout">) =>
     setWorkspace((workspace) => ({ ...workspace, ...changes }));
-  const id = nav.task && nav.task !== "new" ? nav.task : null;
+  const id = nav.task ?? null;
   const [last, setLast] = useState(id);
   if (id && id !== last) setLast(id);
-  const tasks = (data?.tasks ?? []).filter(
-    (task) => scope === "all" || task.assignee.kind === scope,
-  );
   const board = layout === "board";
-  const create = (status: TaskStatus = "todo") => {
-    setNewStatus(status);
-    void setNav({ task: "new" });
-  };
   // An open task takes the page; the list stays behind it, laid out but
   // unseen, so going back finds it scrolled and folded as it was left.
   return (
@@ -527,7 +443,7 @@ export function TaskBoard() {
           title={
             <>
               {translateText("navigation:sections.tasks")}
-              {data ? (
+              {loaded ? (
                 <span className="font-normal text-muted-foreground tabular-nums">
                   {tasks.length}
                 </span>
@@ -535,29 +451,6 @@ export function TaskBoard() {
             </>
           }
         >
-          <RefreshButton resource="tasks" />
-          <Tabs
-            value={scope}
-            onValueChange={(value) =>
-              setView({ taskScope: value as typeof scope })
-            }
-            className="hidden @md:flex"
-          >
-            <TabsList
-              aria-label={translateText("scope.label")}
-              className="gap-1"
-            >
-              {scopes.map((s) => (
-                <TabsTrigger
-                  key={s.value}
-                  value={s.value}
-                  className="px-2 text-xs"
-                >
-                  {s.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
           <Tabs
             value={layout}
             onValueChange={(value) =>
@@ -583,15 +476,6 @@ export function TaskBoard() {
               </TabsTrigger>
             </TabsList>
           </Tabs>
-          <Button size="sm" onClick={() => create()}>
-            <PlusIcon aria-hidden="true" />
-            <span className="hidden @md:inline">
-              {translateText("actions.create")}
-            </span>
-            <span className="sr-only @md:hidden">
-              {translateText("actions.create")}
-            </span>
-          </Button>
         </PageHeader>
         {/* The page's main until a task takes the page; the same element
             either way, so the list keeps its place behind the task. */}
@@ -603,63 +487,28 @@ export function TaskBoard() {
             board ? "overflow-hidden" : "overflow-y-auto",
           )}
         >
-          {error && !data ? (
+          {error ? (
             <div className="mx-auto max-w-md px-4 py-16">
               <LoadError
                 what={translateText("navigation:sections.tasks")}
                 error={error}
-                onRetry={() => void refetch()}
               />
             </div>
-          ) : !data ? (
+          ) : !loaded ? (
             <Loading
               rows={6}
               className="mx-auto max-w-content px-2 py-3 sm:px-4"
             />
           ) : tasks.length === 0 ? (
             <div className="mx-auto max-w-md px-4 py-16">
-              {data.tasks.length === 0 ? (
-                <Empty
-                  icon={ListChecksIcon}
-                  title={translateText("empty.title")}
-                  action={
-                    <Button size="sm" onClick={() => create()}>
-                      <PlusIcon aria-hidden="true" data-icon="inline-start" />
-                      {translateText("actions.create")}
-                    </Button>
-                  }
-                >
-                  {translateText("empty.description")}
-                </Empty>
-              ) : (
-                <Empty
-                  icon={ListChecksIcon}
-                  title={
-                    scope === "user"
-                      ? translateText("empty.noUserTasks")
-                      : translateText("empty.noAgentTasks")
-                  }
-                  action={
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setView({ taskScope: "all" })}
-                    >
-                      {translateText("actions.viewAll")}
-                    </Button>
-                  }
-                />
-              )}
+              <Empty icon={ListChecksIcon} title={translateText("empty.title")}>
+                {translateText("empty.description")}
+              </Empty>
             </div>
           ) : board ? (
-            <BoardView tasks={tasks} onCreate={create} />
+            <BoardView tasks={tasks} />
           ) : (
-            <ListView
-              tasks={tasks}
-              selected={last}
-              hidden={Boolean(id)}
-              onCreate={create}
-            />
+            <ListView tasks={tasks} selected={last} hidden={Boolean(id)} />
           )}
         </section>
       </div>
@@ -668,22 +517,6 @@ export function TaskBoard() {
           <TaskPage key={id} id={id} />
         </div>
       ) : null}
-      <Dialog
-        open={nav.task === "new"}
-        onOpenChange={(open) => !open && void setNav({ task: null })}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{translateText("actions.create")}</DialogTitle>
-          </DialogHeader>
-          <TaskForm
-            key={newStatus}
-            bare
-            initialStatus={newStatus}
-            onDone={(created) => void setNav({ task: created ?? null })}
-          />
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

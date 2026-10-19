@@ -16,7 +16,7 @@ import { assistantMessage, fakeModels } from "@eta/core/testing";
 export const HANG = Symbol("hang");
 
 export interface Request {
-  /** The agent asking, from "In this conversation you are <name>" in its system prompt. */
+  /** The agent asking, from "In this conversation (or task) you are <name>" in its system prompt. */
   agent: string | undefined;
   system: string;
   /** The text of every message the request carries, oldest first, as `role: text`. */
@@ -28,6 +28,8 @@ export interface Request {
   index: number;
   /** The names of the tools it offers. */
   tools: string[];
+  /** How many images the messages carry, in all. */
+  images: number;
 }
 
 export type Answer = AssistantMessage | typeof HANG;
@@ -84,11 +86,17 @@ function waiting(signal: AbortSignal | undefined): unknown {
 
 export function scriptedModels(
   respond: (request: Request) => Answer | Promise<Answer>,
+  options: { vision?: boolean } = {},
 ): { models: KernelModels; requests: Request[] } {
   const requests: Request[] = [];
   const base = fakeModels([]);
   const models: KernelModels = {
-    getModel: (provider, id) => base.getModel(provider, id),
+    getModel: (provider, id) => {
+      const model = base.getModel(provider, id);
+      return options.vision === true && model !== undefined
+        ? ({ ...model, input: ["text", "image"] } as typeof model)
+        : model;
+    },
     streamSimple: (model, context, options) => {
       const system = context.systemPrompt ?? "";
       const messages = context.messages as {
@@ -97,7 +105,9 @@ export function scriptedModels(
       }[];
       const last = messages.at(-1);
       const request: Request = {
-        agent: /In this conversation you are ([^.]+)\./.exec(system)?.[1],
+        agent: /In this (?:conversation|task) you are ([^.]+)\./.exec(
+          system,
+        )?.[1],
         system,
         transcript: messages.map(
           (message) => `${message.role}: ${textOf(message.content)}`,
@@ -106,6 +116,16 @@ export function scriptedModels(
         lastRole: last?.role ?? "",
         index: requests.length,
         tools: (context.tools ?? []).map((tool) => tool.name),
+        images: messages.reduce(
+          (count, message) =>
+            count +
+            (Array.isArray(message.content)
+              ? message.content.filter(
+                  (block: { type?: string }) => block.type === "image",
+                ).length
+              : 0),
+          0,
+        ),
       };
       requests.push(request);
       const answer = respond(request);
@@ -133,6 +153,7 @@ export function scriptedModels(
         lastRole: "",
         index: requests.length,
         tools: [],
+        images: 0,
       });
       if (settled === HANG) throw new Error("hang");
       return fakeModels([settled]).completeSimple(model, context, options);

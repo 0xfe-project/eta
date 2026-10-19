@@ -9,33 +9,46 @@
  * machine that runs the daemon (`machines/remote-place.ts`, over the link). The engine's rows,
  * chains, steering, stopping and recovery are the same for both.
  */
-import type { RunOutcome } from "@eta/client-contracts";
+import type {
+  PromptImage,
+  RunOutcome,
+  ThinkingLevel,
+} from "@eta/client-contracts";
 import type { ManagedSession, SessionsService } from "@eta/server";
 import type { AgentRecord } from "../agents/store";
 import type { MachineRecord } from "../machines/store";
-import type { ConversationRecord } from "./store";
 import { runAndWait } from "@eta/daemon";
-import { formatModelId, parseModelId } from "@eta/server";
+import { formatModelId } from "@eta/server";
 
 /** One session, as the engine drives it. */
 export interface SessionHandle {
   readonly id: string;
   /** Whether a turn is in flight, which a steer can join. */
   readonly running: boolean;
-  /** Put words into the turn in flight; they arrive at its next boundary. */
-  steer: (text: string) => Promise<void>;
+  /** Put words (and images) into the turn in flight; they arrive at its next boundary. */
+  steer: (text: string, images?: PromptImage[]) => Promise<void>;
+  /** The model the session runs on now, as `provider:modelId`; undefined when it cannot say. */
+  model: () => Promise<string | undefined>;
   /**
    * Give the session these words as its next run and wait until it is quiet. `keepGoing` lets a
    * caller that is shutting down end the wait between two runs of the same reply.
    */
-  run: (prompt: string, keepGoing: () => boolean) => Promise<RunOutcome>;
+  run: (
+    prompt: string,
+    keepGoing: () => boolean,
+    images?: PromptImage[],
+  ) => Promise<RunOutcome>;
   /** Ask the run in flight to stop. */
   abort: () => void;
 }
 
 /** What a place needs to find or make an agent's session in a conversation. */
 export interface EnsureInput {
-  conversation: ConversationRecord;
+  /**
+   * What the session is held in: a conversation, or a task run (`tasks/run-key.ts`). Its id is the
+   * session's `conversationId`; its name is the session's title.
+   */
+  conversation: { id: string; name: string };
   agent: AgentRecord;
   /** The machine the project is on. */
   machine: MachineRecord;
@@ -57,6 +70,21 @@ export interface SessionPlace {
    * with the agent as it is now, or a new one made on the spot.
    */
   ensure: (input: EnsureInput) => Promise<SessionHandle>;
+  /**
+   * Put these settings on a session that exists (an agent was edited). A session that cannot be
+   * reached or is busy throws; the caller makes a warning of it.
+   */
+  configure: (
+    sessionId: string,
+    machine: MachineRecord,
+    settings: SessionSettings,
+  ) => Promise<void>;
+}
+
+/** The settings of an agent that its sessions carry as their own. */
+export interface SessionSettings {
+  model?: string;
+  thinkingLevel?: ThinkingLevel;
 }
 
 export const messageOf = (error: unknown): string =>
@@ -80,12 +108,26 @@ class LocalHandle implements SessionHandle {
     return this.#managed.session.runner.running;
   }
 
-  steer(text: string): Promise<void> {
-    return this.#sessions.prompt(this.id, { text, mode: "steer" });
+  steer(text: string, images?: PromptImage[]): Promise<void> {
+    return this.#sessions.prompt(this.id, {
+      text,
+      mode: "steer",
+      ...(images === undefined || images.length === 0 ? {} : { images }),
+    });
   }
 
-  run(prompt: string, keepGoing: () => boolean): Promise<RunOutcome> {
-    return runAndWait(this.#managed, prompt, keepGoing);
+  model(): Promise<string | undefined> {
+    return Promise.resolve(
+      formatModelId(this.#managed.session.kernel.config.read("model")),
+    );
+  }
+
+  run(
+    prompt: string,
+    keepGoing: () => boolean,
+    images?: PromptImage[],
+  ): Promise<RunOutcome> {
+    return runAndWait(this.#managed, prompt, keepGoing, images);
   }
 
   abort(): void {
@@ -127,10 +169,11 @@ export class LocalPlace implements SessionPlace {
     if (input.existing !== null) {
       try {
         await this.#sync(sessions, input.existing, agent, input.stamp);
-        return new LocalHandle(
+        const handle = new LocalHandle(
           sessions,
           (await sessions.open(input.existing)).managed,
         );
+        return handle;
       } catch (error) {
         // The row outlived its journal: say so, then start over rather than failing every wake.
         if (!messageOf(error).startsWith("no such session")) throw error;
@@ -153,15 +196,31 @@ export class LocalPlace implements SessionPlace {
         .thinkingLevel(id, agent.thinkingLevel)
         .catch((error: unknown) => this.#warn(`[eta] ${messageOf(error)}`));
     }
-    return new LocalHandle(sessions, (await sessions.open(id)).managed);
+    const handle = new LocalHandle(sessions, (await sessions.open(id)).managed);
+    return handle;
+  }
+
+  async configure(
+    sessionId: string,
+    _machine: MachineRecord,
+    settings: SessionSettings,
+  ): Promise<void> {
+    const sessions = this.#sessions;
+    if (sessions === undefined)
+      throw new Error("the session host is not running");
+    if (settings.model !== undefined)
+      await sessions.modelSet(sessionId, settings.model);
+    if (settings.thinkingLevel !== undefined)
+      await sessions.thinkingLevel(sessionId, settings.thinkingLevel);
   }
 
   /**
-   * An agent can be edited after its sessions exist. The model and the thinking level are the
-   * session's own settings and are changed in place; the instructions and the persona are read
-   * when a session opens, so a session that was opened with other ones is closed here and the
-   * open that follows reads the new ones. Never while it is running: wakes are serial, so by the
-   * time one starts its session is idle.
+   * An agent can be edited after its sessions exist. The model and the thinking level are given
+   * to a session when it is made and are its own after that (the user may change them with the
+   * composer's controls; `configure` is how an edit of the agent overrides them). The
+   * instructions and the persona are read when a session opens, so a session that was opened with
+   * other ones is closed here and the open that follows reads the new ones. Never while it is
+   * running: wakes are serial, so by the time one starts its session is idle.
    */
   async #sync(
     sessions: SessionsService,
@@ -169,25 +228,7 @@ export class LocalPlace implements SessionPlace {
     agent: AgentRecord,
     stamp: string,
   ): Promise<void> {
-    const { managed } = await sessions.open(id);
-    const config = managed.session.kernel.config;
-    if (
-      agent.model !== null &&
-      formatModelId(config.read("model")) !==
-        formatModelId(parseModelId(agent.model))
-    ) {
-      await sessions
-        .modelSet(id, agent.model)
-        .catch((error: unknown) => this.#warn(`[eta] ${messageOf(error)}`));
-    }
-    if (
-      agent.thinkingLevel !== null &&
-      config.read("thinkingLevel") !== agent.thinkingLevel
-    ) {
-      await sessions
-        .thinkingLevel(id, agent.thinkingLevel)
-        .catch((error: unknown) => this.#warn(`[eta] ${messageOf(error)}`));
-    }
+    await sessions.open(id);
     if (this.#opened.get(id) !== stamp) {
       await sessions.setMeta(id, {
         persona: agent.persona === "" ? undefined : agent.persona,

@@ -1,9 +1,27 @@
+export {
+  type ActiveBundle,
+  type Bundle,
+  BUNDLE_LIMITS,
+  BundleError,
+  type BundleField,
+  type BundleFiles,
+  bundleHookLayer,
+  type BundleManifest,
+  bundleMcpServers,
+  type BundleServiceSpec,
+  bundleSkillDirs,
+  BundleStore,
+  checkValue,
+  hashBundle,
+  isConfigured,
+  readBundle,
+  snapshotBundle,
+} from "./bundle";
 /**
  * The daemon as a library: what the primary shares with it, so the two ends cannot disagree (the
- * link's peer, the approval policy, the run of a session, a model definition fit to leave the
+ * link's peer, the run of a session, a model definition fit to leave the
  * primary), and the daemon's own parts, for a test that runs one in process.
  */
-export { approvalMiddleware, type ApprovalOptions } from "./approval";
 export {
   DaemonLink,
   type DaemonLinkOptions,
@@ -11,6 +29,7 @@ export {
   type LinkState,
 } from "./client";
 export { enroll } from "./enroll";
+export { GitHubKeeper, type GitHubKeeperOptions } from "./github";
 export {
   fingerprintOf,
   groupFingerprint,
@@ -25,6 +44,18 @@ export {
   type ServeContext,
   type ServeHandler,
 } from "./link/peer";
+export {
+  mcpServerKey,
+  relayAuthProviderFor,
+  relayCredentialStore,
+  RELAYED_KINDS,
+} from "./mcp-auth";
+export {
+  McpHost,
+  type McpHostOptions,
+  type McpSessionInput,
+  mcpSources,
+} from "./mcp-host";
 export { forwardedOptions, modelSpecOf } from "./models";
 export { DaemonNode, type DaemonNodeOptions } from "./node";
 export { listen, runAndWait } from "./run";

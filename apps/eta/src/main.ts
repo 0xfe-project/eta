@@ -3,7 +3,8 @@
  *
  *   bun apps/eta/src/main.ts [--data-dir ~/.eta] [--port 8787] [--host 127.0.0.1]
  *                            [--web-dir <built web>] [--token-file <path>]
- *                            [--allow-origin <origin>]... [--memory-url <sidecar>]
+ *                            [--allow-origin <origin>]... [--memory-url <sidecar>] [--no-llm]
+ *                            [--public-url <the address the browser uses>]
  *
  * A thin shell around `startHost`: flags, a startup summary on one line, and a signal handler.
  * Everything the host serves lives behind the one port; `--web-dir` adds the page, and a host
@@ -24,6 +25,8 @@ const { values } = parseArgs({
     "token-file": { type: "string" },
     "allow-origin": { type: "string", multiple: true },
     "memory-url": { type: "string" },
+    "public-url": { type: "string" },
+    "no-llm": { type: "boolean", default: false },
   },
   strict: true,
 });
@@ -35,6 +38,7 @@ if (!Number.isInteger(port) || port < 0 || port > 65_535) {
 }
 
 const memoryUrl = values["memory-url"] ?? process.env.ETA_MEMORY_URL;
+const publicUrl = values["public-url"] ?? process.env.ETA_PUBLIC_URL;
 
 const host = await startHost({
   dataDir: resolve(values["data-dir"] ?? join(homedir(), ".eta")),
@@ -47,8 +51,11 @@ const host = await startHost({
     ? {}
     : { tokenFile: resolve(values["token-file"]) }),
   allowOrigins: values["allow-origin"] ?? [],
+  // Subscriptions and Gemini keys, through the in-process LLM gateway.
+  llm: values["no-llm"] !== true,
   // The flag wins over the environment; an empty value means none.
   ...(memoryUrl === undefined || memoryUrl === "" ? {} : { memoryUrl }),
+  ...(publicUrl === undefined || publicUrl === "" ? {} : { publicUrl }),
 });
 
 console.log(

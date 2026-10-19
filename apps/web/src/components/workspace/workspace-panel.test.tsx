@@ -11,8 +11,6 @@ import {
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { MemoryPage } from "@/pages/memory";
-import { validateMemorySearch } from "./memory-nav";
 import { WorkspacePanel } from "./workspace-panel";
 import { useWorkspaceView, validateWorkspaceSearch } from "./workspace-search";
 import { useWorkspaceStore } from "./workspace-store";
@@ -67,11 +65,6 @@ async function mount(path = "/?group=team&view=memory") {
   client.setQueryData(["tasks"], { tasks: [], assignees: [] });
   client.setQueryData(["artifacts"], { artifacts: [] });
   client.setQueryData(["routines"], []);
-  for (const id of ["a", "b"])
-    client.setQueryData(
-      ["memory", id, ""],
-      [{ id: `memory-${id}`, text: `${id} 的专属记忆`, source: "user" }],
-    );
 
   const route = createRootRoute({
     component: () => (
@@ -96,12 +89,6 @@ async function mount(path = "/?group=team&view=memory") {
             />
           );
         },
-      }),
-      createRoute({
-        getParentRoute: () => route,
-        path: "workspace/memory",
-        validateSearch: validateMemorySearch,
-        component: MemoryPage,
       }),
     ]),
     history: createMemoryHistory({ initialEntries: [path] }),

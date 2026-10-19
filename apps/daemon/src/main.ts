@@ -86,7 +86,11 @@ async function run(): Promise<void> {
     );
     process.exit(2);
   }
-  const node = new DaemonNode({ dataDir, version: VERSION });
+  const node = new DaemonNode({
+    dataDir,
+    version: VERSION,
+    primaryUrl: identity.url,
+  });
   await node.start();
   const link = new DaemonLink({
     identity,

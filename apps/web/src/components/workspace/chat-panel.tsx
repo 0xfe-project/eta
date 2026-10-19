@@ -1,13 +1,17 @@
 import type {
   AgentView,
+  AttachmentView,
   ConversationSummary,
   MessageView,
 } from "@eta/client-contracts";
-import type { Draft } from "@/lib/composer";
-import type { RunBlock } from "@/lib/run";
+import type { Draft, FilePart } from "@/lib/composer";
+import type { ToolBlock } from "@/lib/run";
 import type { Outgoing, SendMode } from "@/queries/outbox";
 import type { Question } from "@/queries/questions";
+import { MAX_ATTACHMENTS } from "@eta/client-contracts";
+import { ArrowDownIcon } from "@phosphor-icons/react/ArrowDown";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
+import { PaperclipIcon } from "@phosphor-icons/react/Paperclip";
 import { useNavigate } from "@tanstack/react-router";
 import {
   memo,
@@ -30,36 +34,44 @@ import {
 import {
   afterCommand,
   charCount,
+  draftFiles,
   draftText,
   isBlank,
   isLongPaste,
   MAX_MESSAGE_CHARS,
   plainDraft,
 } from "@/lib/composer";
-import { buildMenu } from "@/lib/composer-menu";
+import { buildMenu, mentionAt } from "@/lib/composer-menu";
 import { translate } from "@/lib/i18n";
 import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { firstVisible } from "@/lib/rail";
+import { savedTools } from "@/lib/run";
 import { readTheme, setTheme } from "@/lib/theme";
 import { ACTIVE_STATUSES, RUNNING_STATUSES } from "@/lib/timeline";
 import { summarizeArgs } from "@/lib/tool-summary";
 import { agentName } from "@/queries/agents";
+import { beginUpload, useOutbox } from "@/queries/outbox";
+import { useProjectFiles } from "@/queries/projects";
 import { useRunBlocks } from "@/queries/sessions";
+import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar } from "./agent-identity";
+import { AttachmentChip } from "./composer-block";
 import { ComposerEditor } from "./composer-editor";
 import { ModelChip, ThinkingChip } from "./composer-pickers";
+import { githubRef } from "./github-ref";
 import { GroupNotice } from "./group-notice";
 import { PendingStrip } from "./pending-strip";
 import { when } from "./routine-format";
+import { TaskCardRow, TaskDraftRow } from "./task-rows";
 import { TranscriptRail } from "./transcript-rail";
 import { AskBlock } from "./transcript/ask-block";
 import { Message, SystemMessage } from "./transcript/message";
+import { ProcessBox } from "./transcript/process-box";
 import { SlashMenu } from "./transcript/slash-menu";
 import { ThinkingBlock } from "./transcript/thinking-block";
 import { ToolCard, ToolCardBlock } from "./transcript/tool-card";
 import { useWorkspaceStore } from "./workspace-store";
 
-type ToolBlock = Extract<RunBlock, { type: "tool" }>;
 type SlashName =
   | "/stop"
   | "/queue"
@@ -151,6 +163,23 @@ const FAILURE_CODES = {
   unavailable: "unavailable",
   gone: "gone",
 } as const;
+
+/** The files a message came with (`data.attachments`), under its text. */
+function MessageFiles({ data }: { data: Record<string, unknown> }) {
+  const files = Array.isArray(data.attachments)
+    ? (data.attachments as Partial<AttachmentView>[]).filter(
+        (file): file is AttachmentView =>
+          typeof file?.id === "string" && typeof file.name === "string",
+      )
+    : [];
+  return files.length === 0 ? null : (
+    <div className="flex flex-col items-start">
+      {files.map((file) => (
+        <AttachmentChip key={file.id} attachment={file} />
+      ))}
+    </div>
+  );
+}
 
 /**
  * What the user wrote. A message that is a screenful (a pasted log, a file's contents) is folded
@@ -245,30 +274,61 @@ function MemberPicker({
   );
 }
 
+/** What `publish_artifact` returns in its result's `details`. */
+function publishedArtifact(block: ToolBlock) {
+  if (block.name !== "publish_artifact" || block.status !== "completed")
+    return undefined;
+  const { artifactId, title, version } = (block.details ?? {}) as {
+    artifactId?: unknown;
+    title?: unknown;
+    version?: unknown;
+  };
+  return typeof artifactId === "string" &&
+    typeof title === "string" &&
+    typeof version === "number"
+    ? { artifactId, title, version }
+    : undefined;
+}
+
 function ToolActivity({ block }: { block: ToolBlock }) {
   // The arguments are a JSON object; the header shows what the call is *doing*, which is the first
   // thing worth quoting out of it (lib/tool-summary.ts).
   const summary = summarizeArgs(block.input);
+  const artifact = publishedArtifact(block);
+  const github = githubRef(block);
   return (
-    <ToolCard
-      tool={block.name}
-      summary={summary.length > 0 ? summary : undefined}
-      status={block.status}
-      statusLabel={activityText[block.status]}
-    >
-      {block.input === undefined || block.input === null ? null : (
-        <ToolCardBlock label={translate("chat:tools.arguments")}>
-          {typeof block.input === "string"
-            ? block.input
-            : JSON.stringify(block.input, null, 2)}
-        </ToolCardBlock>
+    <>
+      <ToolCard
+        tool={block.name}
+        summary={summary.length > 0 ? summary : undefined}
+        status={block.status}
+        statusLabel={activityText[block.status]}
+      >
+        {block.input === undefined || block.input === null ? null : (
+          <ToolCardBlock label={translate("chat:tools.arguments")}>
+            {typeof block.input === "string"
+              ? block.input
+              : JSON.stringify(block.input, null, 2)}
+          </ToolCardBlock>
+        )}
+        {block.output === undefined ? null : (
+          <ToolCardBlock label={translate("chat:tools.result")}>
+            {block.output}
+          </ToolCardBlock>
+        )}
+      </ToolCard>
+      {artifact === undefined ? null : (
+        <ActivityRefCard
+          value={{
+            kind: "artifact",
+            id: artifact.artifactId,
+            title: artifact.title,
+            number: artifact.version,
+          }}
+        />
       )}
-      {block.output === undefined ? null : (
-        <ToolCardBlock label={translate("chat:tools.result")}>
-          {block.output}
-        </ToolCardBlock>
-      )}
-    </ToolCard>
+      {github === undefined ? null : <ActivityRefCard value={github} />}
+    </>
   );
 }
 
@@ -473,20 +533,54 @@ const joinedNames = (message: MessageView, agents: readonly AgentView[]) =>
     : "";
 
 /** A reply that is writing now: what its session has said and done in this run. */
-function LiveReply({ sessionId }: { sessionId: string }) {
+function LiveReply({
+  sessionId,
+  boxed,
+  author,
+  time,
+}: {
+  sessionId: string;
+  /** In a group the thinking and tools go in a fixed-height box. */
+  boxed: boolean;
+  author?: string | undefined;
+  time: string;
+}) {
   const blocks = useRunBlocks(sessionId);
-  return blocks.map((block) =>
+  const step = (block: (typeof blocks)[number]) =>
     block.type === "thinking" ? (
       <ThinkingBlock key={block.id} text={block.text} />
-    ) : block.type === "text" ? (
+    ) : block.type === "tool" ? (
+      <div key={block.id} className="tool-step space-y-1">
+        <ToolActivity block={block} />
+      </div>
+    ) : null;
+  const text = (block: (typeof blocks)[number]) =>
+    block.type === "text" ? (
       <div key={block.id} className="message-content">
         <Markdown streaming>{block.text}</Markdown>
       </div>
-    ) : (
-      <div key={block.id} className="space-y-1">
-        <ToolActivity block={block} />
-      </div>
-    ),
+    ) : null;
+  if (!boxed)
+    return blocks.map((block) =>
+      block.type === "text" ? text(block) : step(block),
+    );
+  const steps = blocks.filter((block) => block.type !== "text");
+  return (
+    <>
+      {steps.length === 0 ? null : (
+        <ProcessBox
+          steps={steps.map(step)}
+          count={steps.length}
+          running
+          // Text after the last tool or thinking block: the final response is being written.
+          folded={blocks.at(-1)?.type === "text"}
+          author={author}
+          time={time}
+          answer={blocks.map(text)}
+        />
+      )}
+      {blocks.map(text)}
+    </>
   );
 }
 
@@ -502,6 +596,7 @@ const Turn = memo(
     question,
     nobody,
     joined,
+    boxed,
     actions,
     ...line
   }: {
@@ -515,6 +610,8 @@ const Turn = memo(
     nobody: boolean;
     /** Who the user message joined the turn of. */
     joined: string;
+    /** A group: the process of a reply goes in a fixed-height box. */
+    boxed: boolean;
     actions: React.RefObject<TurnActions>;
   } & ReplyLine) => {
     const { t: translateText } = useTranslation([
@@ -525,6 +622,9 @@ const Turn = memo(
       "tasks",
     ] as const);
     if (message.kind === "system") return <GroupNotice message={message} />;
+    if (message.kind === "task_draft")
+      return <TaskDraftRow message={message} />;
+    if (message.kind === "task_card") return <TaskCardRow message={message} />;
     if (message.author === "user")
       return (
         <>
@@ -537,6 +637,7 @@ const Turn = memo(
             }
           >
             <UserText text={message.text} />
+            <MessageFiles data={message.data} />
           </Message>
           {nobody ? (
             <p role="status" className="text-xs text-state-warning">
@@ -552,31 +653,63 @@ const Turn = memo(
       );
     // Only a reply at work still grows; the rest render as finished text.
     const running = RUNNING_STATUSES.has(message.status);
+    const tools = savedTools(message.data);
+    const processSteps =
+      message.thinking === "" && tools.length === 0 ? null : (
+        <>
+          {message.thinking === "" ? null : (
+            // What it worked through: folded, with its size on the line, because it is context
+            // for reading the answer critically rather than a second answer.
+            <ThinkingBlock text={message.thinking} />
+          )}
+          {tools.map((block) => (
+            // What it did with tools, as the cards the run showed while it worked.
+            <div key={block.id} className="tool-step space-y-1">
+              <ToolActivity block={block} />
+            </div>
+          ))}
+        </>
+      );
+    const answer =
+      message.text === "" || message.status === "failed" ? null : (
+        <div className="message-content">
+          <Markdown>{message.text}</Markdown>
+        </div>
+      );
     return (
       <div className="message assistant">
         {author === undefined ? null : (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="message-author">
             <AgentAvatar
               agent={{ id: message.agentId ?? "" }}
-              className="size-4"
+              className="size-[18px]"
             />
             <span>{author}</span>
           </div>
         )}
         {running && sessionId !== undefined ? (
-          <LiveReply sessionId={sessionId} />
+          <LiveReply
+            sessionId={sessionId}
+            boxed={boxed}
+            author={author}
+            time={when(message.createdAt)}
+          />
         ) : (
           <>
-            {message.thinking === "" ? null : (
-              // What it worked through: folded, with its size on the line, because it is context
-              // for reading the answer critically rather than a second answer.
-              <ThinkingBlock text={message.thinking} />
+            {processSteps === null ? null : boxed ? (
+              <ProcessBox
+                steps={processSteps}
+                count={tools.length + (message.thinking === "" ? 0 : 1)}
+                running={false}
+                folded
+                author={author}
+                time={when(message.createdAt)}
+                answer={answer}
+              />
+            ) : (
+              processSteps
             )}
-            {message.text === "" || message.status === "failed" ? null : (
-              <div className="message-content">
-                <Markdown>{message.text}</Markdown>
-              </div>
-            )}
+            {answer}
           </>
         )}
         {question === undefined ? null : (
@@ -721,7 +854,7 @@ export function ChatPanel({
   questions: readonly Question[];
   draft: Draft;
   onDraftChange: (draft: Draft) => void;
-  onSend: (text: string, mode: SendMode) => void;
+  onSend: (text: string, mode: SendMode, files?: AttachmentView[]) => void;
   onCompact: () => void;
   onStop: (replyId: string) => void;
   /** `/stop`: stops every reply in the group. */
@@ -840,15 +973,32 @@ export function ChatPanel({
   const [menuDismissed, setMenuDismissed] = useState(false);
   const text = draftText(draft);
   const mentioned = mentionedMembers(text, members);
-  // Why the draft cannot go yet: the limit.
+  // The files in the draft, and how far each upload has got.
+  const uploads = useOutbox((state) => state.uploads);
+  const fileParts = draftFiles(draft);
+  const uploaded = fileParts.flatMap((part) => {
+    const attachment = uploads[part.id]?.attachment;
+    return attachment === undefined ? [] : [attachment];
+  });
+  // Why the draft cannot go yet: the limits, and files that are not up.
   const hold =
     charCount(text) > MAX_MESSAGE_CHARS
       ? translateText("composer.errors.messageTooLong", {
           maxCharacters: MAX_MESSAGE_CHARS,
         })
-      : undefined;
-  // One menu, two sources (lib/composer-menu.ts): `@` offers the group's members (the host has no
-  // file listing yet, so no files), `/` offers commands.
+      : fileParts.length > MAX_ATTACHMENTS
+        ? translateText("composer.errors.attachmentLimit", {
+            maxAttachments: MAX_ATTACHMENTS,
+          })
+        : fileParts.some((part) => uploads[part.id]?.error !== undefined)
+          ? translateText("composer.errors.failedAttachments")
+          : uploaded.length < fileParts.length
+            ? translateText("composer.waitForUploads")
+            : undefined;
+  // The project's files, asked for from its machine once an `@` is being typed.
+  const files = useProjectFiles(group?.projectId, mentionAt(text) !== null);
+  // One menu, three sources (lib/composer-menu.ts): `@` offers the group's members, then the
+  // project's files, and `/` offers commands.
   const menu = buildMenu({
     text,
     members: members.map((member) => ({
@@ -856,7 +1006,7 @@ export function ChatPanel({
       name: mentionLabel(member, members),
       busy: member.status !== "idle",
     })),
-    files: [],
+    files,
     commands: SLASH_COMMANDS,
     dismissed: menuDismissed || blocked !== undefined,
   });
@@ -870,9 +1020,11 @@ export function ChatPanel({
               : {
                   name: item.value.trim() as `@${string}`,
                   description:
-                    item.kind === "member" && item.hint
-                      ? translateText("mentions.busyHint")
-                      : translateText("mentions.replyHint"),
+                    item.kind === "file"
+                      ? translateText("composer.fileHint")
+                      : item.kind === "member" && item.hint
+                        ? translateText("mentions.busyHint")
+                        : translateText("mentions.replyHint"),
                 },
         );
   const menuOpen = matches.length > 0;
@@ -933,13 +1085,20 @@ export function ChatPanel({
     const name = space === -1 ? first : first.slice(0, space);
     const command = SLASH_COMMANDS.find((c) => c.name === name);
     if (command) run(command.name, afterCommand(first, name));
-    else onSend(text, "queue");
+    else onSend(text, "queue", uploaded);
     // Sending jumps back to the live end, as in a terminal.
     transcript.toBottom();
     formRef.current?.querySelector<HTMLElement>("[contenteditable]")?.focus();
   }
+  // Files pasted into the box or picked with the paperclip: uploading before they are sent.
+  const attach = (files: File[]): FilePart[] =>
+    groupId === undefined
+      ? []
+      : files.map((file) => beginUpload(groupId, file));
+  const pick = useRef<HTMLInputElement>(null);
   const editorProps = {
     value: draft,
+    onFiles: attach,
     onChange: (next: Draft) => {
       setDraft(next);
       setMenuIndex(0);
@@ -1169,6 +1328,7 @@ export function ChatPanel({
                             ? joinedNames(message, agents)
                             : ""
                         }
+                        boxed={group?.kind === "group"}
                         {...lines.get(message.id)}
                         actions={actionsRef}
                       />
@@ -1178,6 +1338,11 @@ export function ChatPanel({
                     <div key={item.id} className="space-y-3 pt-1">
                       <Message role="user">
                         <UserText text={item.text} />
+                        {item.attachments.map((file) => (
+                          <div key={file.id}>
+                            <AttachmentChip attachment={file} />
+                          </div>
+                        ))}
                       </Message>
                       {item.failure ? (
                         <ComposerNotice
@@ -1211,19 +1376,22 @@ export function ChatPanel({
           {/* Off the live end: say there is more, and who is adding it. Following resumes the
             moment you scroll back down, or here. */}
           {transcript.pinned ? null : (
-            <button
-              type="button"
+            // The same floating control as back-to-top: an outline button lifted off the text.
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => transcript.toBottom()}
-              className="sticky bottom-2 z-10 mx-auto flex items-center gap-1 border border-border-strong bg-background px-2 py-1 text-xs shadow-md"
+              className="sticky bottom-2 z-10 mx-auto flex w-fit shadow-sm dark:bg-background"
             >
-              ↓ {translateText("chat:rail.newActivity")}
+              <ArrowDownIcon aria-hidden="true" data-icon="inline-start" />
+              {translateText("chat:rail.newActivity")}
               {members.some((member) => member.status !== "idle")
                 ? ` · ${members
                     .filter((member) => member.status !== "idle")
                     .map((member) => member.name)
                     .join("、")}`
                 : ""}
-            </button>
+            </Button>
           )}
         </div>
         <div className="absolute top-16 right-1">
@@ -1303,6 +1471,29 @@ export function ChatPanel({
                       }
                     />
                   )}
+                  <button
+                    type="button"
+                    className="composer-control"
+                    aria-label={translateText("attachments.pick")}
+                    title={translateText("attachments.pick")}
+                    disabled={groupId === undefined}
+                    onClick={() => pick.current?.click()}
+                  >
+                    <PaperclipIcon aria-hidden="true" className="size-3.5" />
+                  </button>
+                  <input
+                    ref={pick}
+                    type="file"
+                    multiple
+                    hidden
+                    data-testid="composer-pick"
+                    onChange={(event) => {
+                      const picked = [...(event.target.files ?? [])];
+                      event.target.value = "";
+                      if (picked.length)
+                        setDraft([...draft, ...attach(picked)]);
+                    }}
+                  />
                   <span className="composer-toolbar-hints min-w-0 truncate">
                     {active === undefined
                       ? translateText("composer.sendHint")

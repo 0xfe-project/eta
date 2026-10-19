@@ -7,8 +7,13 @@ import type {
   ProvidersView,
   ServerFrame,
 } from "@eta/client-contracts";
-import type { CallFrame, ClientFrame } from "@eta/client-wire-proto";
+import type {
+  CallFrame,
+  ClientFrame,
+  ErrorProblem,
+} from "@eta/client-wire-proto";
 import type { WireOptions, WireSocket } from "@/lib/wire";
+import { TARGET_MISSING } from "@eta/client-wire-proto";
 import { setWire, Wire } from "@/lib/wire";
 
 type Listener = (event: { data?: unknown }) => void;
@@ -220,6 +225,14 @@ export class FakeHost {
             version: 1,
             snapshot: snapshotOf(target),
           });
+        } else {
+          // The pipe's answer to a name nobody registered.
+          socket.receive({
+            type: "event",
+            target: frame.target,
+            name: TARGET_MISSING,
+            data: null,
+          });
         }
       } else if (frame.op === "unsubscribe") {
         this.subscribed.delete(frame.target);
@@ -266,6 +279,9 @@ export class FakeHost {
             requestId,
             ok: false,
             error: error instanceof Error ? error.message : String(error),
+            ...(error instanceof Error && "problem" in error
+              ? { problem: error.problem as ErrorProblem }
+              : {}),
           }),
       );
   }

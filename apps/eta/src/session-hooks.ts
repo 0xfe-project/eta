@@ -14,6 +14,7 @@ export interface SessionHooks {
   sessionTools?: NonNullable<SessionManagerOptions["sessionTools"]>;
   toolMiddleware?: NonNullable<SessionManagerOptions["toolMiddleware"]>;
   askObserve?: NonNullable<SessionManagerOptions["askObserve"]>;
+  sessionAttach?: NonNullable<SessionManagerOptions["sessionAttach"]>;
 }
 
 /**
@@ -29,6 +30,9 @@ export function combineSessionHooks(
       parts.flatMap((part) => part.sessionTools?.(input) ?? []),
     toolMiddleware: (input) =>
       parts.flatMap((part) => part.toolMiddleware?.(input) ?? []),
+    sessionAttach: async (input) => {
+      for (const part of parts) await part.sessionAttach?.(input);
+    },
     askObserve: (meta) => {
       const observers = parts
         .map((part) => part.askObserve?.(meta))

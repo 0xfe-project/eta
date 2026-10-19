@@ -5,7 +5,7 @@ import type {
 } from "@eta/client-contracts";
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "zustand";
-import { runBlocks } from "@/lib/run";
+import { logBlocks, runBlocks } from "@/lib/run";
 import { getWire } from "@/lib/wire";
 import { useWireMutation } from "@/queries/wire";
 
@@ -99,7 +99,11 @@ function useStreamedMessage(
     const off = getWire().onEvent(sessionTarget(sessionId), (event) => {
       if (event.name === "message:update")
         latest = (event.data as { message?: AgentMessage }).message;
-      else if (event.name === "turn:run-start" || event.name === "turn:run-end")
+      else if (
+        event.name === "turn:run-start" ||
+        event.name === "turn:run-end" ||
+        event.name === "generation:interrupted"
+      )
         latest = undefined;
       else return;
       // A token is an event; the page draws a few times a second, not per token.
@@ -123,6 +127,21 @@ export function useRunBlocks(sessionId: string | undefined) {
   const rows = session?.transcript?.messages;
   const streaming = streamed ?? session?.core?.streaming;
   return useMemo(() => runBlocks(rows ?? [], streaming), [rows, streaming]);
+}
+
+/**
+ * A whole session as blocks, for a task run's log; undefined until the session's view arrives (a
+ * run that has not started has no session).
+ */
+export function useLogBlocks(sessionId: string | null | undefined) {
+  const session = useSession(sessionId);
+  const streamed = useStreamedMessage(sessionId ?? undefined);
+  const rows = session?.transcript?.messages;
+  const streaming = streamed ?? session?.core?.streaming;
+  return useMemo(
+    () => (rows === undefined ? undefined : logBlocks(rows, streaming)),
+    [rows, streaming],
+  );
 }
 
 /** The actions on a session, each as a mutation. */

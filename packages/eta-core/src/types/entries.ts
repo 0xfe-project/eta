@@ -27,7 +27,8 @@ export type EntryType =
   | "ask"
   | "answer"
   | "btw"
-  | "run_failed";
+  | "run_failed"
+  | "interrupt";
 
 export interface EntryBase {
   id: string;
@@ -140,6 +141,26 @@ export interface RunFailedEntry extends EntryBase {
   payload: RunFailedPayload;
 }
 
+/**
+ * A generation that was stopped and regenerated (a streaming rule fired). The
+ * discarded output is not recorded anywhere; this entry is the fact that it
+ * existed, and `source`/`reason` say who stopped it and why. The reminder the
+ * interrupt injected is the ordinary message entry that follows. No transcript
+ * message is projected from it.
+ */
+export interface InterruptPayload {
+  runId: string;
+  turnId: string;
+  reason: string;
+  source?: string;
+  discardedChars: number;
+}
+
+export interface InterruptEntry extends EntryBase {
+  type: "interrupt";
+  payload: InterruptPayload;
+}
+
 export type Entry =
   | MessageEntry
   | CompactionEntry
@@ -149,7 +170,8 @@ export type Entry =
   | AskEntry
   | AnswerEntry
   | BtwEntry
-  | RunFailedEntry;
+  | RunFailedEntry
+  | InterruptEntry;
 
 /** Entry supplied before storage assigns sequence and timestamp. */
 export type NewEntry<TEntry extends Entry = Entry> = TEntry extends Entry

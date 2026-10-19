@@ -2,7 +2,7 @@
  * A reply's life, through a real socket: joining a turn that is running, waiting behind one,
  * being stopped, asking the user something, and what a restart does to the ones in flight.
  */
-import type { MessageView } from "@eta/client-contracts";
+import type { MessageView, ToolActivity } from "@eta/client-contracts";
 import type { World } from "./support/world";
 import { describe, expect, it } from "vitest";
 import { until } from "./support/client";
@@ -354,5 +354,41 @@ describe("a restart", () => {
     ]);
     expect(replies.map((row) => row.status)).toEqual(["failed", "failed"]);
     expect(replies.every((row) => row.data.code === "restart")).toBe(true);
+  });
+});
+
+describe("the tool calls of a reply", () => {
+  it("stay on the row after it ends, shortened", async () => {
+    const long = "x".repeat(5000);
+    const { models } = scriptedModels((request) =>
+      request.lastRole === "toolResult"
+        ? say("done")
+        : call("bash", { command: `echo ${long}` }, "call-one"),
+    );
+    const w = await world({ models });
+    const { group } = await ada(w);
+    const sent = await w.send(group.id, "run it");
+    const done = await w.settled(group.id, sent.replies[0]!.id);
+    expect(done.status).toBe("done");
+    const activity = done.data.activity as ToolActivity[];
+    expect(activity).toHaveLength(1);
+    expect(activity[0]).toMatchObject({
+      id: "call-one",
+      name: "bash",
+      status: "completed",
+    });
+    expect(
+      (activity[0]!.input as { command: string }).command.length,
+    ).toBeLessThan(500);
+    expect(activity[0]!.output!.length).toBeLessThanOrEqual(2001);
+  });
+
+  it("are absent from a reply that made none", async () => {
+    const { models } = scriptedModels(() => say("just words"));
+    const w = await world({ models });
+    const { group } = await ada(w);
+    const sent = await w.send(group.id, "talk");
+    const done = await w.settled(group.id, sent.replies[0]!.id);
+    expect(done.data).not.toHaveProperty("activity");
   });
 });

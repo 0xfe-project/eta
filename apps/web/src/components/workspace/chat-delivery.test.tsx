@@ -32,6 +32,11 @@ interface Pending {
   reject: (error: Error) => void;
 }
 let sends: Pending[] = [];
+// The projects the composer asked for files of.
+let filesAsked: string[] = [];
+// The upload chunks the host got, and a gate to hold the last one.
+let chunks: Record<string, unknown>[] = [];
+let uploadGate: Promise<void> | undefined;
 
 const row = (fields: Partial<MessageView>): MessageView => {
   seq += 1;
@@ -84,6 +89,29 @@ function start(
       ),
   );
   host.handle("conversations.stop", () => ({ stopped: [] }));
+  host.handle("conversations.attach", async (args) => {
+    const chunk = args as Record<string, unknown>;
+    chunks.push(chunk);
+    await uploadGate;
+    return {
+      attachment: chunk.last
+        ? {
+            id: chunk.uploadId,
+            name: chunk.name,
+            contentType: chunk.contentType,
+            size: 3,
+          }
+        : null,
+    };
+  });
+  host.handle("conversations.unattach", () => ({ removed: true }));
+  host.handle("projects.files", (args) => {
+    filesAsked.push((args as { projectId: string }).projectId);
+    return {
+      files: ["README.md", "src/app.ts", "src/lib/util.ts"],
+      truncated: false,
+    };
+  });
   return mount(<Chat conversationId={CONV} />).then((mounted) => ({
     ...mounted,
     host,
@@ -117,7 +145,10 @@ beforeEach(() => {
   CONV = `chat-delivery-${conversations}`;
   seq = 0;
   sends = [];
-  useOutbox.setState({ drafts: {}, outgoing: [] });
+  filesAsked = [];
+  chunks = [];
+  uploadGate = undefined;
+  useOutbox.setState({ drafts: {}, uploads: {}, outgoing: [] });
 });
 afterEach(async () => {
   rstest.useRealTimers();
@@ -302,5 +333,126 @@ describe("older rows", () => {
   it("offers the earlier page while the oldest row seen is not the first", async () => {
     const { container: c } = await start([row({ text: "第三条", seq: 3 })]);
     expect(c.textContent).toContain("加载更早的消息");
+  });
+});
+
+describe("the @ menu", () => {
+  const options = (c: HTMLElement) =>
+    [...c.querySelectorAll('[role="option"]')].map((o) => o.textContent);
+
+  it("offers the members first and then the project's files, listed on demand", async () => {
+    const { container: c } = await start();
+    await flush();
+    // Nothing is asked of the project's machine until an @ is typed.
+    expect(filesAsked).toEqual([]);
+    await type("看一下 @");
+    await flush();
+    expect(filesAsked).toEqual(["p1"]);
+    const rows = options(c);
+    expect(rows[0]).toContain("@研究员");
+    expect(rows.slice(1).map((row) => row?.split("文件")[0])).toEqual([
+      "@README.md",
+      "@src/app.ts",
+      "@src/lib/util.ts",
+    ]);
+  });
+
+  it("narrows the files as the person types, and completes the path", async () => {
+    const { container: c } = await start();
+    await type("看 @util");
+    await flush();
+    expect(options(c)).toEqual([expect.stringContaining("@src/lib/util.ts")]);
+    await enter(c);
+    expect(composed(c)).toBe("看 @src/lib/util.ts ");
+  });
+});
+
+describe("attaching files", () => {
+  const pick = async (c: HTMLElement, ...files: File[]) => {
+    const input = c.querySelector<HTMLInputElement>(
+      '[data-testid="composer-pick"]',
+    )!;
+    Object.defineProperty(input, "files", { value: files, configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await flush(20);
+  };
+  const note = () => new File(["abc"], "notes.txt", { type: "text/plain" });
+
+  it("uploads a picked file at once and sends it with the message", async () => {
+    const { container: c } = await start();
+    await pick(c, note());
+    expect(c.textContent).toContain("[notes.txt · 3 B]");
+    expect(chunks).toHaveLength(1);
+    expect(useOutbox.getState().drafts[CONV]).toMatchObject([
+      { type: "file", name: "notes.txt", contentType: "text/plain", size: 3 },
+    ]);
+  });
+
+  it("sends the attachment ids with the message, and clears the draft", async () => {
+    const { container: c } = await start();
+    await pick(c, note());
+    const block = useOutbox
+      .getState()
+      .drafts[CONV]!.find((part) => part.type === "file")!;
+    await act(async () =>
+      useOutbox
+        .getState()
+        .setDraft(CONV, [{ type: "text", text: "看看" }, block]),
+    );
+    await enter(c);
+    expect(sends).toHaveLength(1);
+    expect(sends[0]!.args).toMatchObject({
+      text: "看看",
+      attachments: [block.id],
+    });
+    expect(useOutbox.getState().drafts[CONV]).toBeUndefined();
+    // On its way, the message shows its file.
+    expect(c.querySelector('[role="log"]')!.textContent).toContain(
+      "[notes.txt · 3 B]",
+    );
+  });
+
+  it("can send a file with no words", async () => {
+    const { container: c } = await start();
+    await pick(c, note());
+    await enter(c);
+    expect(sends[0]!.args).toMatchObject({ text: "" });
+    expect((sends[0]!.args.attachments as string[]).length).toBe(1);
+  });
+
+  it("waits for an upload that is not done, and says so", async () => {
+    let release!: () => void;
+    uploadGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { container: c } = await start();
+    await pick(c, note());
+    const block = useOutbox.getState().drafts[CONV]![0]!;
+    await act(async () =>
+      useOutbox
+        .getState()
+        .setDraft(CONV, [{ type: "text", text: "好了吗" }, block]),
+    );
+    await enter(c);
+    expect(sends).toHaveLength(0);
+    expect(c.textContent).toContain("附件上传中，完成后才能发送");
+    await act(async () => release());
+    await flush(20);
+    await enter(c);
+    expect(sends).toHaveLength(1);
+  });
+
+  it("takes a removed file back from the host", async () => {
+    const { container: c, host } = await start();
+    await pick(c, note());
+    await click(c.querySelector('button[aria-label*="notes.txt"]'));
+    await flush(20);
+    expect(host.calls.at(-1)).toMatchObject({
+      action: "unattach",
+      args: { conversationId: CONV },
+    });
+    expect(c.textContent).not.toContain("[notes.txt");
   });
 });

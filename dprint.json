@@ -18,6 +18,7 @@
     "**/.tanstack",
     "**/.turbo",
     "**/*.gen.ts",
+    "packages/eta-plugin-akhook/presets",
     "**/*-lock.json",
     "bun.lock",
     "**/uv.lock",

@@ -1,0 +1,26 @@
+{
+  "name": "oomol",
+  "version": "1.0.0",
+  "description": "OOMOL: the oo CLI for the apps connected in OOMOL (mail, calendar, documents) and its hosted capabilities, run with the user's key.",
+  "requires": ["node", "oo"],
+  "config": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["OO_API_KEY", "OO_TEAM_NAME"],
+    "properties": {
+      "OO_API_KEY": {
+        "type": "string",
+        "title": "API key",
+        "writeOnly": true,
+        "maxLength": 512,
+        "description": "Generated on [OOMOL's MCP page](https://oomol.com/install/mcp/); replace it here when OOMOL resets it."
+      },
+      "OO_TEAM_NAME": {
+        "type": "string",
+        "title": "Team name",
+        "maxLength": 200,
+        "description": "The team in OOMOL: the `x-oo-team-name` of the configuration shown there."
+      }
+    }
+  }
+}

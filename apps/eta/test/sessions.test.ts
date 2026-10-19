@@ -140,4 +140,66 @@ describe("an agent's session in a conversation", () => {
     );
     await until(() => w.rows(group.id).length === 4);
   });
+
+  it("keeps what the user chose on the session across wakes, until the agent is edited", async () => {
+    const { models } = scriptedModels(() => say("ok"));
+    const w = await world({ models });
+    const ada = await w.agent("Ada", {
+      model: "fake:first",
+      thinkingLevel: "low",
+    });
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id]);
+    await w.watch(group.id);
+    const talk = async (text: string) => {
+      const sent = await w.send(group.id, text);
+      await w.settled(group.id, sent.replies[0]!.id);
+    };
+    await talk("one");
+    const sessionId = w.client.section<{ sessionId: string }[]>(
+      `conversations.${group.id}`,
+      "members",
+    )![0]!.sessionId;
+    const config = () =>
+      w.host.server.sessions
+        .openSessions()
+        .find((open) => open.meta.id === sessionId)!.session.kernel.config;
+    expect(config().read("thinkingLevel")).toBe("low");
+
+    // The composer's chips.
+    await w.client.call("sessions", "modelSet", {
+      session: sessionId,
+      model: "fake:chosen",
+    });
+    await w.client.call("sessions", "thinkingLevel", {
+      session: sessionId,
+      level: "high",
+    });
+    await talk("two");
+    expect(config().read("model")).toEqual({
+      provider: "fake",
+      modelId: "chosen",
+    });
+    expect(config().read("thinkingLevel")).toBe("high");
+
+    // Editing something else leaves them alone; editing the model or level overrides.
+    await w.client.call("agents", "update", {
+      agentId: ada.id,
+      name: "Ada L.",
+    });
+    expect(config().read("model")).toEqual({
+      provider: "fake",
+      modelId: "chosen",
+    });
+    await w.client.call("agents", "update", {
+      agentId: ada.id,
+      model: "fake:second",
+      thinkingLevel: "medium",
+    });
+    expect(config().read("model")).toEqual({
+      provider: "fake",
+      modelId: "second",
+    });
+    expect(config().read("thinkingLevel")).toBe("medium");
+  });
 });

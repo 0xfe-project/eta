@@ -1,11 +1,4 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  rstest,
-} from "@rstest/core";
+import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act } from "react";
 import { setWire } from "@/lib/wire";
 import {
@@ -19,13 +12,10 @@ import { NewSessionPage } from "./new-session";
 
 const state = rstest.hoisted(() => ({
   navigate: rstest.fn(),
-  search: {} as { project?: string },
 }));
 
 rstest.mock("@tanstack/react-router", () => ({
   useNavigate: () => state.navigate,
-  // The project can arrive in the URL (the sidebar's per-project "+").
-  useSearch: () => state.search,
 }));
 
 let host: ReturnType<typeof productHost>;
@@ -52,9 +42,6 @@ function start(
   return mount(<NewSessionPage />);
 }
 
-beforeEach(() => {
-  state.search = {};
-});
 afterEach(async () => {
   await cleanup();
   setWire(undefined);
@@ -69,7 +56,6 @@ const calls = () => host.calls.map((c) => [`${c.target}.${c.action}`, c.args]);
 
 describe("/new", () => {
   it("选了人和项目就直接开一个对话，不用先建群", async () => {
-    state.search = { project: "p2" };
     const { container } = await start();
     await click(
       [...container.querySelectorAll("button")].find((button) =>
@@ -80,7 +66,7 @@ describe("/new", () => {
     await flush();
     // An existing project is not added again.
     expect(calls()).toEqual([
-      ["conversations.create", { projectId: "p2", agentIds: ["a2"] }],
+      ["conversations.create", { projectId: "p1", agentIds: ["a2"] }],
     ]);
     expect(state.navigate).toHaveBeenCalledWith({
       to: "/",

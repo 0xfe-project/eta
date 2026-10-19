@@ -36,7 +36,7 @@
       "git": "Clone, commit and push branches in authorized repositories",
       "gh": "Use gh to handle PRs, issues, releases and CI"
     },
-    "introduction": "Eta creates a dedicated App on your GitHub account. Agents use its identity to:",
+    "introduction": "eta creates a dedicated App on your GitHub account. Agents use its identity to:",
     "fields": {
       "ownerLabel": "Create under",
       "personalAccount": "My personal account",
@@ -46,7 +46,7 @@
       "organizationName": "Organization name",
       "organizationPlaceholder": "e.g. acme",
       "appName": "App name",
-      "appNamePlaceholder": "Leave blank to generate a name, e.g. Eta 3f2a",
+      "appNamePlaceholder": "Leave blank to generate a name, e.g. eta 3f2a",
       "appNameHint": "Must be unique on GitHub"
     },
     "createApp": {
@@ -78,7 +78,7 @@
       "open": "Authorize on GitHub"
     },
     "oauth": {
-      "legacyAppHelp": "This older App has no client secret saved in Eta. In ",
+      "legacyAppHelp": "This older App has no client secret saved in eta. In ",
       "callbackPrefix": ", set the Callback URL to ",
       "appSettings": "App settings",
       "clientSecretHelp": ", generate a new client secret, and enter it here:",
@@ -87,7 +87,7 @@
     },
     "disconnect": {
       "confirmTitle": "Disconnect GitHub?",
-      "confirmDescription": "Eta will delete the saved App credentials. Agents will lose access to private repositories and cannot push or open PRs. The GitHub App {{appName}} will remain.",
+      "confirmDescription": "eta will delete the saved App credentials. Agents will lose access to private repositories and cannot push or open PRs. The GitHub App {{appName}} will remain.",
       "success": "GitHub disconnected",
       "deleteApp": "Delete App on GitHub"
     },
@@ -104,21 +104,10 @@
   "status": {
     "error": "Connection error",
     "notConnected": "Not connected",
-    "notConfigured": "Not configured",
     "connected": "Connected"
   },
   "errors": {
     "loadStatus": "Unable to load connection status"
-  },
-  "configuration": {
-    "savedReady": "Saved; agents using it will restart when idle",
-    "savedIncomplete": "Saved; required fields are still missing",
-    "secretPlaceholder": "Already set; leave blank to keep it",
-    "encryptionHelp": "Eta encrypts these values and passes them as environment variables to agents using the “{{bundleName}}” bundle.",
-    "clear": "Clear configuration",
-    "clearConfirmTitle": "Clear configuration for {{bundleName}}?",
-    "clearConfirmDescription": "Eta will delete the saved values. Agents using this bundle restart when idle and will no longer have its plugins.",
-    "cleared": "Configuration cleared"
   },
   "title": "Connections",
   "actions": {

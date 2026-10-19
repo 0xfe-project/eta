@@ -1,94 +1,137 @@
 # 环境包
 
-智能体的环境由它选择的环境包（bundle）构建：一个环境包是一段在构建时运行的脚本，加上它带来的[插件](plugins.md)。一个智能体可以载入任意多个环境包；载入的结果是一个 Docker 镜像，智能体的容器从它运行（见[聊天与运行时架构](chat-runtime.md)）。
+一个环境包（bundle）是一个目录，描述智能体的一种能力：技能、MCP 服务器、hook 规则，可选地还有一个服务。智能体勾选哪些环境包，它在任何一台机器上的会话就带着哪些。不构建镜像，不执行安装脚本。
 
-## 两种来源
+| 组成       | 实现                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------- |
+| 技能       | 包的 `skills/` 加进会话的 skill 目录（`skillsFor`），harness 照常发现和加载                 |
+| MCP 服务器 | `mcp.json`，作为 [MCP](mcp.md) 的一个配置来源；stdio 进程在会话所在的机器上启动             |
+| hook 规则  | `akhook.yml`，作为一层 akhook 配置（[akhook](akhook.md)）只对载入它的智能体的会话生效       |
+| 配置和密钥 | 存进 SQLite，用宿主密钥加密；只交给本包的 MCP 进程、hook 命令和服务，不进智能体的 shell     |
+| 服务       | 可选，宿主作为回环子进程托管，由宿主代理                                                    |
+| 安装说明   | 写在包内技能的 `references/` 里。没配置好时智能体按文档指引用户去做；宿主不执行任何安装脚本 |
 
-| 来源   | 位置                                  | 内容                                                                                     |
-| ------ | ------------------------------------- | ---------------------------------------------------------------------------------------- |
-| 内置   | `bundles/<name>/`                     | `bundle.json`（`name`、`description`、`plugins`），可选 `setup` 脚本和它用到的文件；只读 |
-| 自定义 | 表 `bundle`，设置里的“环境包”页面编辑 | 名称（小写字母、数字和连字符）、说明、脚本、插件                                         |
+## 目录格式
 
-内置的环境包现在各带一个插件（agenvo、approval、artifacts、github、grok、groups、memory、oomol、routines、tasks），所以按插件选择的方式不变。新建智能体时默认载入全部内置环境包。
+沿用旧插件的写法，旧环境包改一改就能用：
 
-脚本以 root 在镜像里运行，有网络：可以 `apt-get install`、下载工具。不以 `#!` 开头的自定义脚本按 `sh -eu` 执行。脚本运行时的当前目录是环境包在镜像里的目录（`/opt/axp/bundles/<name>`，即 `BUNDLE_ROOT`），`TARGETARCH` 是目标架构。
-
-## 配置
-
-内置环境包可以在 `bundle.json` 里用 `config` 声明需要用户填写的值，例如某个服务的 API key。这样接入一个服务只需要新增环境包目录（脚本安装 CLI，插件带 skill），不用改任何服务：
-
-```json
-"config": {
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["EXAMPLE_API_KEY"],
-  "properties": {
-    "EXAMPLE_API_KEY": { "type": "string", "title": "API key", "writeOnly": true, "maxLength": 256, "description": "在 [控制台](https://example.com) 生成" },
-    "EXAMPLE_REGION": { "type": "string", "title": "区域", "maxLength": 32 }
-  }
-}
+```text
+<name>/
+  plugin.json        name、description、requires、config、service（targets、version 被忽略）
+  mcp.json           { "mcpServers": { "<server>": { command, args, env, cwd } | { url, headers }，加 lifecycle、directTools、approveTools、auth 等 } }
+  skills/<n>/SKILL.md   Agent Skills，可带 references/
+  akhook.yml         akhook 规则，见 akhook.md
 ```
 
-- 它是标准的 JSON Schema（2020-12）。能写什么由 `apps/control-plane/internal/bundles/config.schema.json` 这个元 schema 规定：`type: object`，`additionalProperties: false`，属性只能是字符串且必须写 `maxLength`（不超过 4096），另外可选 `title`、`description`（Markdown）、`writeOnly`（机密值）、`minLength`、`pattern`。属性名就是环境变量名（大写字母、数字和下划线），不能以 `AXP_`、`SENTRY_`、`CODEX_`、`AKHOOK_`、`NODE_`、`LD_` 开头，也不能是 `PATH`、`HOME` 这类系统变量。校验全部由 [jsonschema-go](https://github.com/google/jsonschema-go) 完成：读取环境包时用元 schema 校验它的 `config`（不合法则控制面启动失败）；保存时用环境包自己的 schema 校验值（必填项除外，允许分次填写）；必填项都有值并通过完整校验时为 `ready`。库的报错会引用值，值里可能有机密，所以 422 `CONFIG_INVALID` 只列出不合格的项名。
-- 设置 →「连接」为每个声明了配置的内置环境包生成一张卡片和表单。机密值只写不读，留空表示不替换。值属于环境包，全局只有一份，不分智能体。
-- 接口：`GET /api/v1/bundles/{name}/config` 返回非机密的值、已设置的项和 `ready`（必填项都有值）；`PATCH` 的 `values` 里写字符串表示设置，`null` 表示清除，没写的项保持不变；`DELETE` 清除全部。值以 JSON 存在表 `bundle_config` 中，用 AES-256-GCM 加密（密钥由 `AXP_SECRET_KEY` 派生，`auth.Seal`）。`AXP_SECRET_KEY` 换了以后解不开，按未设置处理。
-- controller 把 `ready` 的环境包的值作为环境变量放进载入它的智能体的容器。不 `ready` 的环境包，它的插件写进 `AXP_DISABLED_PLUGINS`（其他载入的环境包也带这个插件时除外），runtime 安装插件时跳过它们，智能体看不到用不了的 skill 和工具。值也是容器 spec 的一部分，所以设置、修改或清除之后，容器会在两轮之间被替换。
-- 这些值在智能体的容器里，智能体执行的命令也读得到（Codex 0.162.1 默认的 `shell_environment_policy` 会透传名字带 `KEY`、`TOKEN` 的变量，已实测）。所以只适合交给智能体自己使用的凭据。需要对智能体隐藏的凭据，仍然应该像 GitHub、LLM 那样放在服务端，经 runtime 网关代理。
+- `name`：小写字母、数字和连字符；本地和内置的包，目录名必须等于它。
+- `requires`：需要在 PATH 上的命令（`["git", "gh"]`）。宿主在每台机器上检查，设置页提示“这台机器还缺什么”，只提示，不执行，缺命令也照常载入。
+- `config`：JSON Schema 的子集，`type: object`，属性都是字符串；`required`、`title`、`description`（Markdown）、`writeOnly`（机密）、`minLength`、`maxLength`（默认并最多 4096）、`pattern`。属性名就是环境变量名，大写字母、数字和下划线，不能是 `PATH`、`HOME` 这类系统变量，也不能以 `ETA_`、`LD_`、`NODE_` 开头。
+- `service`：`{ "command": [...], "env": {...}, "ready": "/" }`，见下。
 
-## 镜像
+mcp.json 里可以写 `${变量}`：`${PLUGIN_ROOT}`（包在这台机器上的目录）、`${ETA_WORKSPACE_DIR}`（会话的工作目录）、`${ETA_SERVICE_URL}`（包的服务地址，只在主机器上有）、`${ETA_GATEWAY_URL}` 与 `${ETA_AGENT_KEY}`（LLM 网关的地址和这个智能体的 key，见下）和 `config` 里声明的任何一项。用到本机没有的变量，这个服务器被丢掉并记一条警告，其他照常。akhook.yml 只展开 `${PLUGIN_ROOT}` 和 `${ETA_WORKSPACE_DIR}`，配置值不进文本。
 
-controller 为每个智能体算出它的镜像：
+规则 id 归在包名下（`<name>/<id>`），所以两个包的规则不会撞。`prompt_submit` 和 `stop` 属于一次回复，由主 node 执行，对远端机器上的会话也一样；工具调用规则（`file_change`、`shell_exec`、`tool_call`、`stream`）在会话所在的机器上执行。
 
-```dockerfile
-FROM axp-agent-runtime:<环境>          # apps/agent-runtime 的基础镜像
-ARG TARGETARCH
-COPY bundles/<a> /opt/axp/bundles/<a> # 每个环境包，按目录顺序
-RUN cd /opt/axp/bundles/<a> && BUNDLE_ROOT=... ./setup
-...
-COPY plugins /opt/axp/plugins # 这些环境包的插件
-RUN axp-plugins chat /opt/axp/plugins /etc/codex /opt/axp/plugins
-```
+## 来源
 
-最后一步运行插件自己的 `setup`、把插件编译成 Codex plugin 的本地 marketplace、在 `/etc/codex/config.toml` 里免除插件工具的确认，并把插件的 hook 合成一份 akhook 配置（[插件](plugins.md#chat-目标编译成-codex-plugin)）。
+后面的盖住前面的同名包：
 
-镜像的标签是内容的摘要：基础镜像的 ID、Dockerfile、每个环境包的文件（或脚本）和每个插件的文件。所以环境包相同的智能体共用一个镜像；改一个环境包、一个插件，或部署了新的 runtime，摘要就变，controller 构建新镜像，再在智能体空闲时替换它的容器。构建在后台一次一个，用本机的 Docker（`docker build`，controller 挂着它的 socket），镜像留在本机，Nomad 从那里运行（没有镜像仓库）；没有智能体在用的旧镜像每 10 分钟删除。环境包目录里的 `service/` 不进智能体的镜像。
+| 来源 | 位置                                                   | 说明                                                 |
+| ---- | ------------------------------------------------------ | ---------------------------------------------------- |
+| 内置 | 仓库的 `bundles/<name>/`                               | 只读                                                 |
+| git  | `~/.eta/bundles/git/<哈希>/`，来源记在 `bundle_source` | `{ repo, rev, path }`，由主 node 拉取，只检出 `path` |
+| 本地 | `~/.eta/bundles/<name>/`                               | 用户自己的；和内置同名就替换它。改了就生效，不用重启 |
 
-构建失败时，智能体显示为不可用，编辑器里显示构建输出的末尾。修改环境包、修改智能体或重启智能体后再构建。
+**热重载**：每次读包之前先看文件的大小和修改时间，变了就重读清单；对 `~/.eta/bundles` 的监听只是更早地通知 wire。已经打开的会话在它的下一条消息时重开（见“会话”）。
 
-## 接口
+**git 来源**：
 
-| 接口                            | 说明                                                 |
-| ------------------------------- | ---------------------------------------------------- |
-| `GET /api/v1/bundles`           | 全部环境包：内置的在前，各按名称                     |
-| `POST /api/v1/bundles`          | 新建自定义环境包；与内置的重名时 `409 BUNDLE_EXISTS` |
-| `PATCH /api/v1/bundles/{name}`  | 修改说明、脚本或插件；载入它的智能体的插件立即更新   |
-| `DELETE /api/v1/bundles/{name}` | 删除；还有智能体载入时 `409 BUNDLE_IN_USE`           |
-| `GET /api/v1/plugins`           | 环境包可以带的插件                                   |
+- `rev` 是分支、tag 或提交。`add` 用 `git ls-remote` 把它解析成提交 sha（tag 取它指向的提交），记在 `bundle_source`，之后每次都装到同一份；分支往前走了也不动，更新是显式的 `refresh`。
+- 拉取：`git fetch --depth 1 <repo> <sha>`（服务器不给出裸 sha 时退回分支或 tag 名并核对 sha），再 `git archive <sha>:<path>` 解出 `path`，换进 `git/<哈希>/`，旁边的 `.sha` 记着它是哪个提交。目录不见了或在别的提交上，启动时按记录的 sha 重拉，不管远端后来变成了什么。
+- 私有仓库用主 node 上 git 自己的配置（ssh 密钥、credential helper），宿主不存凭据，也从不等输入（`GIT_TERMINAL_PROMPT=0`）。
+- 远端机器不拉：见“daemon”。
 
-智能体的 `bundles` 在 `POST /api/v1/agents` 和 `PATCH /api/v1/agents/{id}` 里设置，按目录顺序保存。
+## 配置和密钥
 
-## 必选环境包
+`bundle_config` 表，每个包一行，值是一个 JSON，用 AES-256-GCM 加密（密钥是数据目录里的 `secret.key`，0600，第一次用时生成）。单拷数据库读不出值；换了密钥读不出来，按没设置处理。
 
-内置的 `groups` 和 `memory` 在 `bundle.json` 中声明 `required: true`，没有用户必填配置。`POST/PATCH /agents` 保存选择时自动包含必选项，编辑器把它们显示为已选且不可取消。必选只约束智能体的选择，不另建启用状态。旧智能体的补齐属于 #237 的手工迁移，controller 启动时不改数据库。
+- `bundles.configure` 写入：`values` 里字符串是设置，`null` 或空串是清除，没写的项不变。校验 `maxLength`、`minLength`、`pattern`；报错只列项名，不带值。
+- 读：`bundles` 的 `list` 只有 `set`（有没有值）；非机密项另带 `value` 供编辑，机密项永远是 `null`。没有任何路径把机密送到 wire 上。
+- **只给这几类进程**：包的 MCP stdio 服务器（作为环境变量，以及 URL 和 header 里的 `${NAME}`）、包的 hook 命令（akhook 的 `ConfigInput.env`，只对那一层的规则命令生效）、包的服务（环境变量）。不进智能体的 bash 环境，不写进 akhook 文本，不落盘（daemon 也不写）。
+- 必填项没填全时（`configured: false`）只载入技能，MCP 和 hook 不启动，技能的 reference 指引用户去设置页。
+
+## 会话
+
+智能体的 `agents.bundles` 是包名列表（按勾选顺序）。一个会话打开时：
+
+- **技能**：`skillDirsFor` 把包的 `skills/` 加进 `renderSkillsBlock` 的目录。
+- **MCP**：`bundleMcpServers` 把每个包的服务器作为一个配置来源（`bundle:<名>`）交给 `McpHost`；会话只拿到 `mcp` 工具和缓存里已有的直接工具，服务器在第一次调用时才连，所以打开会话不等它们。
+- **规则**：包的 akhook 层并进会话的 `additional` 层（`AkhookHost.bundleLayers`），回复前后的 `prompt_submit` / `stop` 经 `LifecycleRun.extra` 带上。
+- **重开**：会话的 stamp 含各包的“文件指纹 + git sha + 配置写入时间”，包被改过、重新配置过、或勾选变了，下一条消息时会话关了重开，重新读这些。
+
+主机器上的会话由宿主进程里的 session manager 打开；远端的由 daemon 打开。宿主给两边的是同一份东西，只是方式不同。
+
+## daemon
+
+daemon 不拉 git，也不需要 git 凭据。主 node 在每次 `machine.open` 之前：
+
+1. `machine.bundleHave { hashes }`：包的内容（排序后的路径、可执行位、内容）的哈希；daemon 回答它没有哪些；
+2. `machine.bundlePut { hash, files }`：缺的才发，文件是 base64。一个包最多 400 个文件、2 MiB（一帧里发完）；超了这个包被丢掉并记警告；
+3. `machine.open` 带 `bundles: [{ name, hash, config, configured }]`。
+
+daemon 把文件放进 `<数据目录>/bundles/<哈希>/`（先写临时目录再改名，写前核对哈希，拒绝跳出目录的路径），在自己机器上读包，启动 MCP 服务器、组 akhook 层、加技能目录。**配置值随 `open` 走 WSS 链路到 daemon，只存在于它内存里的 opening 和它启动的进程的环境里，不写盘**；daemon 重启后，下一次唤醒时主 node 再发。
+
+`${ETA_SERVICE_URL}` 在 daemon 上没有（服务只在回环上），用它的 MCP 服务器在 daemon 的会话里被丢掉。
+
+## LLM 网关的 key
+
+包的 MCP 服务器要用模型订阅（例如 grok：Grok Imagine 和搜索走网关里的 Grok 账号）时，用 `${ETA_GATEWAY_URL}`（`/v1` 挂在它下面）和 `${ETA_AGENT_KEY}`，用户什么都不用填。
+
+- **key**：宿主为每个智能体派生一把只开 `/v1` 的 key（`etak.<智能体 id>.<HMAC>`，HMAC 以宿主本次启动的随机 key 为密钥），不存表；网关校验时重算。删除智能体时宿主让网关吊销这个 id 的 key；网关重启换了宿主 key，旧的全部失效。它进不了账号 API（`/api/llm`）和别的路径。
+- **主机器**的会话：`${ETA_GATEWAY_URL}` 是回环 `http://127.0.0.1:<端口>`。
+- **daemon** 的会话：回环不通，所以是 `<主 node 地址>/llm`。主 node 在自己的端口上挂了 `/llm/v1/*`，不走令牌门（daemon 没有 cookie），只认 `etak.` 开头的智能体 key，转给网关的 `/v1`，请求体和响应都是流。`machine.open` 的 `gatewayKey` 把 key 带给 daemon，只存在内存里，和配置值一样。
+- 没有网关（库没构建）时两个变量都没有，用它们的 MCP 服务器被丢掉并记警告。
+
+## 就绪（`requires`）
+
+`machine.which { commands }` 让 daemon 在它的 PATH 上找命令；主机器直接找。主 node 在启动、daemon 连上、包变了、`bundles.recheck` 时问一遍，结果缓存；主机器每次生成列表时现查。`list` 里每个包带 `machines: [{ machineId, name, ready, missing, checked }]`，离线的机器 `checked: false`。
 
 ## 服务
 
-环境包可以带一个和 AXP 一起运行的服务，供载入它的智能体使用（[#243](https://github.com/AkaraChen/axp/issues/243)）。内置的 `memory`（[记忆](memory.md)）和 `agenvo`（远程电脑的中继，见[任务与远程电脑](tasks.md)）就是这样：它们必选，没有关闭开关。
+包的 `service` 照记忆边车的做法：宿主起一个子进程，在包目录里，环境是 `PORT`（宿主选的回环空闲端口）、`HOST=127.0.0.1`、`ETA_BUNDLE_DATA`（`<数据目录>/bundles/<name>/`，服务自己的数据）、包的配置值、`service.env`。`${PLUGIN_ROOT}` 在命令里展开。等 `ready` 路径应答（< 500）后状态是 `ready`，超时或退出是 `error`，附 stderr 最后一行。
 
-```json
-"service": { "protocol": "axp.memory/1", "uses": ["llm"], "database": true }
-```
+- 只在包配置完整、`requires` 的命令都在主机器上时运行；包的文件或值变了就重启；退出了不自己重启，等下一次变化或 `recheck`。
+- 用户经 `/bundles/<name>/service/*` 访问：在 host 的访问控制之后，去掉 Cookie 和 Authorization，非 GET 带跨站 Origin 的拒绝。
+- 主机器上的会话经 `${ETA_SERVICE_URL}` 访问。
 
-- **jobspec** 是一份普通的 Nomad job（HCL）：内置环境包的在 `service/job.nomad.hcl`，自定义环境包的在 `POST/PATCH /api/v1/bundles` 的 `service.jobspec`。它必须是 `service` 类型；job 的 ID 和命名空间由 controller 改成 `bundle-<name>` 和 AXP 的命名空间（前缀让环境包的名字占不到 AXP 自己的 job，如 `axp`、`infra`），jobspec 里写什么都不算。
-- **约定**：有一个与环境包同名的 `service`（`provider = "nomad"`），指向它的 HTTP 端口；用 `address_mode = "alloc"` 注册容器在 bridge 网络上的地址，就不会在宿主上发布端口。网关从 Nomad 的服务发现拿到地址（job 里的 template 按服务渲染路由，变了就热重载），不用为新服务改配置。智能体经 runtime 网关的 `/bundles/<name>/x` 访问它（服务收到 `/<name>/x`，只有载入了这个环境包的智能体能访问，身份在 `X-AXP-Agent-Id`），用户经公共网关的 `/api/bundles/<name>/x`（服务收到 `/api/<name>/x`）。服务按路径前缀区分两者。
-- **AXP 给它的**放进每个 task 的环境变量（jobspec 自己写的同名变量会被覆盖）：`AXP_GATEWAY_URL`（runtime 网关）、配置了 Sentry 时的 `SENTRY_DSN`（控制面的项目，经 runtime 网关的 `/sentry`，只有公钥）、`AXP_PUBLIC_URL`、`AXP_VERSION`、`AXP_BUNDLE_SECRET`（它自己的密钥，控制面也能派生）、声明了 `uses` 时的 `AXP_BUNDLE_TOKEN`、`database: true` 时的 `DATABASE_URL`（AXP 在自己的 PostgreSQL 上建的库 `<主库>_bundle_<name>` 和同名账号，带 pgvector，地址是容器看到的宿主 `172.26.64.1`），以及环境包配置（`config`）完整时的值。
-- **令牌**只能用 `uses` 里声明的：`llm`（模型的 `/v1`）和其他环境包的服务（按名字）。它碰不到插件路由、GitHub 凭据和管理接口。
-- **镜像**：名字是 `axp-<x>`、没有仓库和标签的镜像是 AXP 自己构建的，换成本机 Docker 里本次部署的版本；其他镜像原样使用（Nomad 会拉取）。
-- **日志**：controller 关掉每个 task 的 Nomad 日志收集（`logs { disabled = true }`，见 `deploy/README.md`），输出用 `docker logs` 看，错误和日志发到 Rustrak（`SENTRY_DSN`）。
-- **卷**：jobspec 里 `type = "host"` 的 `volume`，controller 先在命名空间里创建同名的 host volume（`mkdir` 插件，任何用户可写），再运行 job。
-- **共享**：每个 AXP 只有一份，所有载入它的智能体共用，服务自己按智能体隔离数据。
-- **发现**：`protocol` 写了时，服务就绪后 controller 读一次它的 `/.well-known/axp-service`（`{"protocol", "version"}`），协议不同就是 `incompatible`。
+## wire：`bundles` target
 
-controller 每 5 秒按环境包目录调谐一次（`internal/bundlesvc`）：算出修订（jobspec、镜像版本和环境变量的摘要），与 job 的 meta 里记的不同时，请 Nomad 解析 jobspec（`/v1/jobs/parse`），改成环境包的，注册它（Nomad 开一次 deployment，滚动替换）；相同时看 deployment 的状态。状态（`deploying`、`ready`、`incompatible`、`error`，加上解析和校验的错误）记在表 `bundle_service`，`GET /api/v1/bundles` 的 `service_status` 就是它；`nomad job status -namespace <ns>` 看 job 本身。环境包或它的服务没了，就停掉并清除 job；**卷和数据库保留**。
+`list` 一个 section，每项（`BundleView`）：`name`、`description`、`source`（`builtin` | `local` | `git {repo, rev, path}`）、`sha`、`requires`、`skills`、`mcpServers`、`hooks`、`fields`（`set`，非机密的 `value`）、`configured`、`service`、`machines`、`problem`。
 
-服务不就绪时，载入它的智能体照常运行，访问它的路由返回网关的 503；控制面的就绪不依赖任何环境包的服务。
+| 动作        | 说明                                                      |
+| ----------- | --------------------------------------------------------- |
+| `configure` | 写配置，见上                                              |
+| `add`       | `{ repo, rev?, path? }`：从 git 添加，名字取清单的 `name` |
+| `refresh`   | `{ name? }`：重新解析 git 来源的 `rev`，变了就重拉        |
+| `remove`    | `{ name }`：忘记一个 git 来源，删它的文件和配置           |
+| `recheck`   | 重新问各机器                                              |
+
+## 界面
+
+设置 → 环境包：每个包的来源、sha、是否配置、缺什么命令、服务状态；设置表单（机密项是 password 输入，留空保持不变）、从 git 添加、更新、移除。智能体编辑器的“环境包”页签：勾选，未配置的提示“只有技能生效”，主机已没有的名字可以取消勾选。没有 `bundles` 插件的主机隐藏页签。
+
+## 内置的环境包
+
+`bundles/` 下：
+
+| 包     | 内容                                                                                                                                                                    | requires     |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| github | 技能 `github`（gh/git 已由 eta 的 GitHub App 登录，PR 用 `open_pull_request`，issue 用 `draft_issue`；设置在“设置 → 连接”，见 [GitHub](github.md)）；没有 MCP、没有配置 | `git`、`gh`  |
+| grok   | 技能 `grok`；MCP `grok-api mcp`（图像、视频、网页和 X 搜索），经 LLM 网关用 Grok 订阅账号，密钥是智能体自己的网关 key；没有 config                                      | `grok-api`   |
+| oomol  | 技能 `oomol`；一个零依赖的 stdio MCP（`server/oo-mcp.mjs`）把 `oo` CLI 当一个工具跑，密钥只在它的进程里；config `OO_API_KEY`、`OO_TEAM_NAME`                            | `node`、`oo` |
+
+groups、tasks、artifacts、approval、memory、routines 已经是产品功能，不再是环境包。每个包的 `skills/*/references/setup.md` 写着怎么安装和配置，智能体按它指引用户。
+
+## 隔离
+
+包里的东西以用户身份跑在真实机器上。这一版靠两点收住风险：不执行安装脚本；密钥只给对应的进程。用 bubblewrap 之类给每个人格的工具进程再套一层，之后另开 issue。

@@ -31,3 +31,7 @@
 ## 8. 代码结构
 
 页面、组件和共享状态分离。全窗口等独立页面使用真实路由，支持直接访问、刷新和浏览器历史导航；共享界面复用组件。
+
+## 9. 数据只走 wire
+
+界面读写 host 只通过 `src/lib/wire.ts` 的那一条 WebSocket：状态来自 `hello` 与 `state` 帧，操作是 `target.action` 调用。不要为一个功能另开 `fetch` 或轮询；host 没挂载的插件（`hello.mounted`），对应入口隐藏。

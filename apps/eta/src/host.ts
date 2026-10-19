@@ -10,7 +10,15 @@ import type { AssembledServer, AssembleOptions } from "@eta/server";
  */
 import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/site";
-import type { Product, RoutinesOptions } from "./product";
+import type { GithubTuning } from "./github/service";
+import type { LlmOptions, LlmRuntime } from "./llm/runtime";
+import type { McpTuning } from "./mcp/service";
+import type {
+  AkhookOptions,
+  Product,
+  RoutinesOptions,
+  TasksOptions,
+} from "./product";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createLocalEnvironment } from "@eta/execution-node";
@@ -23,6 +31,10 @@ import {
   openDatabase,
 } from "./db";
 import { createWebRoutes } from "./http";
+import { GatewayModels } from "./llm/models";
+import { llmPlugin } from "./llm/plugin";
+import { LLM_ROUTE } from "./llm/route";
+import { openLlm } from "./llm/runtime";
 import { createProduct } from "./product";
 
 export interface HostOptions {
@@ -43,16 +55,40 @@ export interface HostOptions {
    * memory tools, and nothing is ever sent to a sidecar.
    */
   memoryUrl?: string;
+  /**
+   * Whether to load the LLM gateway: subscription accounts (Codex, Grok) and Gemini API keys,
+   * served as the `llm` provider. Off by default so a host made for a test does not load a
+   * native library; `main.ts` turns it on. A host whose gateway library is not built runs
+   * without one and says so. The object form is for tests, which point an upstream at a fake.
+   */
+  llm?: boolean | LlmOptions;
   /** The model layer, when the caller has its own (a test with scripted answers). */
   models?: AssembleOptions["models"];
   /** Where the agent's home is, for personas. Defaults to the real one. */
   home?: string;
   /** What a published site may hold; the defaults are for real use, a test makes them small. */
   artifactLimits?: Partial<SiteLimits> | undefined;
+  /**
+   * The address the user's browser reaches the host at (`https://eta.example.com`), when it is not
+   * the one the web page was opened at: where an MCP server's OAuth sign-in returns to.
+   */
+  publicUrl?: string;
+  /** The MCP library's settings for a test (fake servers, no timers). */
+  mcp?: McpTuning;
+  /** Where GitHub is, for a test with a fake one. */
+  github?: GithubTuning;
   /** Whether to apply the config's network settings to the environment. */
   network?: boolean;
+  /**
+   * akhook beyond the user's and the project's files: the user-level file's path (a test points
+   * it somewhere else), and host layers that those cannot disable or replace. The data
+   * directory's `akhook.yml` and `AKHOOK_ADDITIONAL_CONFIG_PATH` are host layers too.
+   */
+  akhook?: AkhookOptions;
   /** The routines' clock and limits, for a caller that moves time by hand (a test). */
   routines?: RoutinesOptions;
+  /** Whether tasks run; a test that is about the board and not the runs turns them off. */
+  tasks?: TasksOptions;
   warn?: (message: string) => void;
 }
 
@@ -68,6 +104,8 @@ export interface Host {
   readonly product: Product;
   /** The upstream server: its sessions, wire service and plugin manager. */
   readonly server: AssembledServer;
+  /** The gateway's account API, when it is loaded. */
+  readonly llm: LlmRuntime | undefined;
   /** Stop listening, close the sessions and the database. */
   close: () => Promise<void>;
 }
@@ -87,6 +125,8 @@ export async function startHost(options: HostOptions): Promise<Host> {
   const db = openDatabase(databasePath(options.dataDir));
   let server: AssembledServer;
   let product: Product;
+  let llm: LlmRuntime | undefined;
+  const gatewayModels = new GatewayModels();
   try {
     applyMigrations(db, loadMigrations());
     const warn = options.warn ?? ((message: string) => console.warn(message));
@@ -95,8 +135,14 @@ export async function startHost(options: HostOptions): Promise<Host> {
       dataDir: options.dataDir,
       warn,
       ...(options.routines === undefined ? {} : { routines: options.routines }),
+      ...(options.tasks === undefined ? {} : { tasks: options.tasks }),
       artifactLimits: options.artifactLimits,
       memoryUrl: options.memoryUrl,
+      gateway: () => llm,
+      publicUrl: options.publicUrl,
+      mcp: options.mcp,
+      github: options.github,
+      akhook: options.akhook,
       hostname,
       ...(options.home === undefined ? {} : { home: options.home }),
     });
@@ -109,27 +155,57 @@ export async function startHost(options: HostOptions): Promise<Host> {
       // The file and shell tools a session runs: the local adapter, when this runtime can
       // host it. Without one a session still works — it simply has no read/write/edit/bash.
       envFor: (meta) => {
-        const env = createLocalEnvironment(meta.cwd);
+        const env = createLocalEnvironment(meta.cwd, product.shellEnv);
         return env === undefined ? undefined : { env };
       },
       // The product's pages (artifacts) first; they answer for their own paths, found or not.
       fetch: async (request) =>
-        (await product.fetch(request)) ?? (await web(request)),
+        (llm !== undefined &&
+        new URL(request.url).pathname.startsWith(LLM_ROUTE)
+          ? await llm.forward(request)
+          : undefined) ??
+        (await product.fetch(request)) ??
+        (await web(request)),
       authorize: access.authorize,
       endpoints: product.endpoints,
       remoteSessions: product.remote,
       // What the product adds to every session it owns: the agent's words in the system prompt,
       // and, from each of its features, tools, tool middleware and an ear for questions.
       baseSystemPromptFor: product.engine.baseSystemPromptFor,
+      skillDirsFor: product.skillDirsFor,
       ...product.sessionHooks,
+      generated: product.generated,
       ...(options.models === undefined ? {} : { models: options.models }),
+      ...(options.llm !== undefined && options.llm !== false
+        ? { overlayModels: gatewayModels.overlay }
+        : {}),
       ...(options.home === undefined ? {} : { home: options.home }),
       ...(options.network === undefined ? {} : { network: options.network }),
       warn,
     });
     try {
       await product.mount(server);
+      // After the server: it has applied the network settings, which the gateway's own
+      // requests to the providers then inherit.
+      if (options.llm !== undefined && options.llm !== false) {
+        llm = await openLlm({
+          ...(options.llm === true ? {} : options.llm),
+          dataDir: options.dataDir,
+          models: gatewayModels,
+          warn,
+        });
+        if (llm !== undefined) {
+          const { client } = llm;
+          await new Promise<void>((resolve) => {
+            server.mount(
+              "llm",
+              llmPlugin({ client, models: gatewayModels, warn }, resolve),
+            );
+          });
+        }
+      }
     } catch (error) {
+      llm?.close();
       await server.close();
       throw error;
     }
@@ -148,11 +224,13 @@ export async function startHost(options: HostOptions): Promise<Host> {
     db,
     product,
     server,
+    llm,
     // Once: a signal and a caller may both ask, and the second has nothing left to close.
     close() {
       closing ??= (async () => {
-        product.close();
+        await product.close();
         await server.close();
+        llm?.close();
         db.close();
       })();
       return closing;

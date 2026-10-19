@@ -2,7 +2,7 @@
  * What the primary does for a daemon.
  *
  * The daemon holds no provider keys, no database and no product plugins, so over its link it asks
- * the primary for the four things it lacks:
+ * the primary for the things it lacks:
  *
  * - **Generation** (`model.stream`). The primary resolves the model, adds the credentials, streams
  *   from the provider and sends each event back. Keys and Codex tokens never leave this process,
@@ -11,13 +11,23 @@
  *   execution environment whose scripts run on the daemon (the SSH environment over the link), so
  *   a tool that reads the session's files reads the machine's.
  * - **The approval list** (`tool.gate`): does the user want to be asked before this tool runs?
+ * - **MCP credentials** (`mcp.credential`): the OAuth tokens of MCP servers are kept here, once
+ *   per server URL; a daemon reads them for its connections and saves the ones it refreshes.
+ * - **GitHub credentials** (`github.credentials`): the token for git and gh on the machine, the
+ *   user's once they authorized the GitHub App, else the App's; the App's secrets stay here, and
+ *   the machine asks again before the token (an hour old at most) expires.
  * - **Questions** (`ask.observe`): a session on the daemon asked, was answered or gave up; the
  *   conversation and the inbox hear it exactly as they hear a local session's.
  *
  * Every call names a session, and a session is only believed to be what the primary's own rows say
- * it is: the machine on the link must be the machine of the session's project.
+ * it is: the machine on the link must be the machine of the session's project, or of the task run
+ * the session works for.
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type {
+  GitHubCredentials,
+  McpCredentialCall,
+} from "@eta/client-contracts";
 import type { KernelModels, KernelTool } from "@eta/core";
 import type { SessionMeta } from "@eta/server";
 import type { ConversationStore } from "../conversations/store";
@@ -27,10 +37,17 @@ import type { MachineLink } from "./hub";
 import type { MachineStore } from "./store";
 import { forwardedOptions } from "@eta/daemon";
 import { SshEnvironment } from "@eta/ssh";
+import { runKey } from "../tasks/run-key";
 import { LinkTransport } from "./link-transport";
 
 export interface LinkServiceDeps {
   conversations: ConversationStore;
+  /** The task run a session works for, as the primary's rows know it. */
+  taskRun: (
+    session: string,
+  ) =>
+    | { runId: string; agentId: string; machineId: string; cwd: string }
+    | undefined;
   projects: ProjectStore;
   machines: MachineStore;
   /** The model layer; not there until the server is up. */
@@ -39,6 +56,10 @@ export interface LinkServiceDeps {
   hooks: () => Required<SessionHooks> | undefined;
   /** The tools the user wants to be asked about. */
   approvals: () => readonly string[];
+  /** A daemon's read or write of an MCP server's OAuth state; the credentials are the primary's. */
+  mcpCredential: (call: McpCredentialCall) => Promise<unknown>;
+  /** The token for git and gh on the daemon's machine; null while GitHub is not connected. */
+  githubCredentials: () => Promise<GitHubCredentials | null>;
   /** A generation ended: count it. */
   generated: (meta: SessionMeta, message: AssistantMessage) => void;
   warn: (message: string) => void;
@@ -56,6 +77,20 @@ export function serveLink(link: MachineLink, deps: LinkServiceDeps): void {
   /** The primary's own idea of a session, or nothing for one that is not this machine's. */
   const held = (session: unknown): Held | undefined => {
     if (typeof session !== "string") return undefined;
+    const run = deps.taskRun(session);
+    if (run !== undefined) {
+      if (run.machineId !== link.machineId) return undefined;
+      return {
+        cwd: run.cwd,
+        meta: {
+          id: session,
+          createdAt: 0,
+          cwd: run.cwd,
+          agentId: run.agentId,
+          conversationId: runKey(run.runId),
+        },
+      };
+    }
     const found = deps.conversations.ofSession(session);
     if (found === undefined || found.machineId !== link.machineId)
       return undefined;
@@ -114,6 +149,12 @@ export function serveLink(link: MachineLink, deps: LinkServiceDeps): void {
     return { ask: deps.approvals().includes(name) };
   });
 
+  link.peer.handle("mcp.credential", (raw) =>
+    deps.mcpCredential(raw as McpCredentialCall),
+  );
+
+  link.peer.handle("github.credentials", () => deps.githubCredentials());
+
   link.peer.handle("tool.call", async (raw, { signal }) => {
     const params = raw as {
       session: string;
@@ -125,14 +166,14 @@ export function serveLink(link: MachineLink, deps: LinkServiceDeps): void {
     const hooks = deps.hooks();
     if (found === undefined || hooks === undefined)
       throw new Error(`unknown session: ${params.session}`);
-    const key = `${found.meta.conversationId}:${found.meta.agentId}`;
-    let set = tools.get(key);
+    // A session's tools are made once; runs of one agent are sessions of their own.
+    let set = tools.get(params.session);
     if (set === undefined) {
       set = hooks.sessionTools({
         meta: found.meta,
         session: undefined as never,
       });
-      tools.set(key, set);
+      tools.set(params.session, set);
     }
     const tool = set.find((candidate) => candidate.name === params.name);
     if (tool === undefined) throw new Error(`no such tool: ${params.name}`);

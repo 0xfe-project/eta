@@ -16,7 +16,9 @@ import type { ProjectRecord, ProjectStore } from "./store";
 import { stat } from "node:fs/promises";
 import { basename, isAbsolute, resolve } from "node:path";
 import { announceSteward } from "../conversations/steward";
+import { transportOn } from "../machines/shell";
 import { Args, productPlugin, publish } from "../wire";
+import { DEFAULT_FILE_LIMIT, listProjectFiles } from "./files";
 
 export interface ProjectsDeps {
   agents: AgentStore;
@@ -129,6 +131,20 @@ export function projectsPlugin(deps: ProjectsDeps, applied: () => void) {
           })!;
           deps.changed();
           return { result: { project: viewOf(project) } };
+        }),
+
+        wire.handle("projects", "files", async (call) => {
+          const args = new Args(call);
+          const project = existing(args.string("projectId"));
+          const machine = machines.get(project.machineId);
+          if (machine === undefined) throw new Error("no such machine");
+          return {
+            result: await listProjectFiles(
+              transportOn(machine, deps.hub),
+              project.path,
+              args.optionalInteger("limit") ?? DEFAULT_FILE_LIMIT,
+            ),
+          };
         }),
 
         wire.handle("projects", "setSteward", (call) => {

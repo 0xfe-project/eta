@@ -46,6 +46,16 @@ export function machinesPlugin(deps: MachinesDeps, applied: () => void) {
           deps.changed();
           return { result: { machine: viewOf(machine) } };
         }),
+        wire.handle("machines", "setMaxActiveRuns", (call) => {
+          const args = new Args(call);
+          const machine = deps.machines.setMaxActiveRuns(
+            args.string("machineId"),
+            args.integer("maxActiveRuns"),
+          );
+          if (machine === undefined) throw new Error("no such machine");
+          deps.changed();
+          return { result: { machine: viewOf(machine) } };
+        }),
         wire.handle("machines", "enroll", (call) => {
           const args = new Args(call);
           const asked = args.optionalString("url")?.trim();

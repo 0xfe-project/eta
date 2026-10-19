@@ -27,7 +27,6 @@
   "accessibility": {
     "needsAttention": "设置（有账号需要处理）",
     "sections": "设置分类",
-    "accountsNeedAttention": "有账号需要处理",
-    "accountAttentionSuffix": "（有账号需要处理）"
+    "accountsNeedAttention": "有账号需要处理"
   }
 }

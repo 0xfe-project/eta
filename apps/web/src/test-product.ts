@@ -1,16 +1,22 @@
 // The product's targets for component tests: fixtures for what the host publishes (agents,
-// machines, projects, conversations and their messages) and a fake host that has the four plugins
-// mounted and their lists as its first state. Tests add the calls they expect with
-// `host.handle("conversations.send", ...)` and a conversation's own target with `conversation()`.
+// machines, projects, conversations and their messages, the task board, artifacts and routines)
+// and a fake host that has the plugins mounted and their lists as its first state. Tests add the
+// calls they expect with `host.handle("conversations.send", ...)`.
 
 import type {
   AgentView,
+  ArtifactView,
+  BoardTaskDetail,
   ConversationInfo,
   ConversationSummary,
   MachineView,
   MemberView,
   MessageView,
   ProjectView,
+  RoutineInfo,
+  RoutineSections,
+  RoutineSummary,
+  TaskActivityView,
 } from "@eta/client-contracts";
 import { FakeHost } from "@/test-wire";
 
@@ -22,6 +28,7 @@ export const agentView = (
   persona: "",
   model: "p:m",
   thinkingLevel: null,
+  bundles: [],
   home: `/data/agents/${fields.id}`,
   homeProjectId: `home-${fields.id}`,
   status: "idle",
@@ -39,6 +46,7 @@ export const machineView = (
   fingerprint: null,
   home: "/home/me",
   os: "linux",
+  maxActiveRuns: 2,
   createdAt: 1,
   lastSeenAt: null,
   ...fields,
@@ -113,6 +121,98 @@ export const messageView = (
   };
 };
 
+export const taskDetail = (
+  fields: Partial<BoardTaskDetail> & { id: string },
+): BoardTaskDetail => ({
+  number: 1,
+  title: fields.id,
+  status: "todo",
+  createdBy: { kind: "user", agentId: null },
+  conversationId: null,
+  runStatus: null,
+  comments: 0,
+  createdAt: 1000,
+  updatedAt: 1000,
+  description: "",
+  artifacts: [],
+  projectId: null,
+  workspace: { mode: "local", path: null, branch: null },
+  originConversationId: null,
+  runs: [],
+  ...fields,
+});
+
+export const taskActivity = (
+  fields: Partial<TaskActivityView> & { id: string },
+): TaskActivityView => ({
+  kind: "comment",
+  runId: null,
+  actor: { kind: "user", agentId: null },
+  body: null,
+  data: {},
+  createdAt: 1000,
+  ...fields,
+});
+
+export const artifactView = (
+  fields: Partial<ArtifactView> & { id: string },
+): ArtifactView => ({
+  title: fields.id,
+  publisherAgentId: null,
+  taskId: null,
+  conversationId: null,
+  versions: [
+    {
+      number: 1,
+      files: 1,
+      bytes: 10,
+      size: 10,
+      createdAt: 1000,
+      archiveUrl: `/artifacts/${fields.id}/1/archive.zip`,
+      shareUrl: null,
+      sharedAt: null,
+    },
+  ],
+  createdAt: 1000,
+  updatedAt: 1000,
+  ...fields,
+});
+
+export const routineInfo = (
+  fields: Partial<RoutineInfo> & { id: string },
+): RoutineInfo => ({
+  name: fields.id,
+  conversationId: null,
+  model: null,
+  schedule: { kind: "daily", time: "08:00" },
+  timezone: "Asia/Shanghai",
+  enabled: true,
+  nextRunAt: null,
+  revising: false,
+  unseenReports: 0,
+  unseenFailures: 0,
+  createdAt: 1000,
+  updatedAt: 1000,
+  ...fields,
+});
+
+/** The sections of `routines.<id>`; its row in the list is `routineSummary` of the same info. */
+export const routineSections = (
+  info: RoutineInfo,
+  rest: Partial<Omit<RoutineSections, "info">> = {},
+): RoutineSections => ({
+  info,
+  briefs: [{ version: 1, text: "说点什么", createdAt: 1000, feedback: null }],
+  runs: [],
+  handoff: null,
+  ...rest,
+});
+
+const routineSummary = (
+  info: RoutineInfo,
+  runs: RoutineSummary["runs"] = [],
+): RoutineSummary => ({ ...info, runs });
+
 /** The sections of `conversations.<id>`, from a summary and the rows. */
 export function conversationSections(
   summary: ConversationSummary,
@@ -149,13 +249,37 @@ export interface ProductSeed {
   conversations?: ConversationSummary[];
   /** The rows of each conversation, by its id; a conversation target is made for each. */
   messages?: Record<string, MessageView[]>;
+  /** The board; a `tasks.<id>` target is made for each, with its activity. */
+  tasks?: { task: BoardTaskDetail; activity?: TaskActivityView[] }[];
+  artifacts?: ArtifactView[];
+  /** Each routine's sections; the list is made from them. A `routines.<id>` target for each. */
+  routines?: RoutineSections[];
+  /** Plugins the host does not have: no target and no mount, so reading them fails. */
+  absent?: ("tasks" | "artifacts" | "routines")[];
+}
+
+/** A task as the board lists it: the detail without what only its own page needs. */
+function listedTask(task: BoardTaskDetail) {
+  const { description: _description, artifacts: _artifacts, ...listed } = task;
+  return listed;
 }
 
 /**
- * A host with the four product plugins mounted and their lists as the first state, installed as
+ * A host with the product plugins mounted and their lists as the first state, installed as
  * the page's connection and connected. Each seeded conversation also gets its own target.
  */
 export function productHost(seed: ProductSeed = {}): FakeHost {
+  const host = buildProductHost(seed);
+  host.install();
+  host.hello();
+  return host;
+}
+
+/** The same host, not yet connected, with `plugins` mounted beside the product's. */
+export function buildProductHost(
+  seed: ProductSeed = {},
+  plugins: string[] = [],
+): FakeHost {
   const host = new FakeHost()
     .target("agents", { list: seed.agents ?? [] }, { eager: true })
     .target("machines", { list: seed.machines ?? [] }, { eager: true })
@@ -166,18 +290,50 @@ export function productHost(seed: ProductSeed = {}): FakeHost {
       { eager: true },
     )
     .plugins(
-      ["agents", "machines", "projects", "conversations"].map((name) => ({
-        name,
-        source: "bundled" as const,
-      })),
+      [
+        "agents",
+        "machines",
+        "projects",
+        "conversations",
+        "tasks",
+        "artifacts",
+        "routines",
+        ...plugins,
+      ]
+        .filter(
+          (name) => !(seed.absent as string[] | undefined)?.includes(name),
+        )
+        .map((name) => ({ name, source: "bundled" as const })),
     );
+  const present = (name: "tasks" | "artifacts" | "routines") =>
+    !seed.absent?.includes(name);
+  if (present("tasks"))
+    host.target(
+      "tasks",
+      { list: (seed.tasks ?? []).map(({ task }) => listedTask(task)) },
+      { eager: true },
+    );
+  if (present("artifacts"))
+    host.target("artifacts", { list: seed.artifacts ?? [] });
+  if (present("routines"))
+    host.target(
+      "routines",
+      {
+        list: (seed.routines ?? []).map((sections) =>
+          routineSummary(sections.info, sections.runs),
+        ),
+      },
+      { eager: true },
+    );
+  for (const { task, activity } of seed.tasks ?? [])
+    host.target(`tasks.${task.id}`, { task, activity: activity ?? [] });
+  for (const sections of seed.routines ?? [])
+    host.target(`routines.${sections.info.id}`, { ...sections });
   for (const summary of seed.conversations ?? []) {
     host.target(
       `conversations.${summary.id}`,
       conversationSections(summary, seed.messages?.[summary.id]),
     );
   }
-  host.install();
-  host.hello();
   return host;
 }

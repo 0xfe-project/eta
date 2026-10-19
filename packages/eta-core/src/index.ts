@@ -6,6 +6,9 @@
 export {
   type AssistantStreamObserver,
   consumeAssistantStream,
+  consumeInterruptibleStream,
+  type InterruptibleStreamObserver,
+  STOP_STREAM,
 } from "./kernel/assistant";
 export type {
   CompactionDriver,
@@ -31,8 +34,10 @@ export {
   type GateControl,
 } from "./kernel/effect-gate";
 export {
+  DEFAULT_MAX_INTERRUPTS,
   type GenerateOptions,
   generateWithRetry,
+  type GenerationInterrupt,
   type GenerationObserver,
 } from "./kernel/generation";
 export {
@@ -80,6 +85,8 @@ export {
   waitUntil,
 } from "./kernel/retry";
 export {
+  type GenerationFrame,
+  type GenerationVerdict,
   isEmptyStop,
   type RequestState,
   Runner,

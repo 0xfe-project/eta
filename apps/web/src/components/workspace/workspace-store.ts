@@ -14,9 +14,8 @@ const workspaceSchema = z.object({
   selectedAgentId: z.string().max(64).optional(),
   // Preselected model for new agents.
   lastModel: z.string().max(100).optional(),
-  // The task page as last left: rows or a board, and whose tasks.
+  // The task page as last left: rows or a board.
   taskLayout: z.enum(["list", "board"]).optional(),
-  taskScope: z.enum(["all", "user", "remote"]).optional(),
   // 圈选元素 (lib/element-picker.ts); unset follows the build.
   reactGrab: z.boolean().optional(),
 });
@@ -24,11 +23,12 @@ const workspaceSchema = z.object({
 export type WorkspaceState = z.infer<typeof workspaceSchema>;
 export type SettingsSection =
   | "agents"
-  | "bundles"
   | "providers"
   | "approvals"
+  | "machines"
+  | "bundles"
+  | "mcp"
   | "connections"
-  | "computers"
   | "archived"
   | "appearance";
 interface SettingsState {

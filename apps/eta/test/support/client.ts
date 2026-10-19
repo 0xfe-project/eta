@@ -15,7 +15,9 @@ export interface Client {
 
 export async function until(
   predicate: () => boolean | Promise<boolean>,
-  timeoutMs = 5_000,
+  // Long enough for a loaded machine (every package's tests run at once); a wait that is
+  // going to succeed does not wait for it.
+  timeoutMs = 15_000,
 ): Promise<void> {
   const started = Date.now();
   while (!(await predicate())) {

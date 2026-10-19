@@ -14,13 +14,15 @@ import { useTheme } from "@/components/use-theme";
 import { elementPickerDefault, setElementPicker } from "@/lib/element-picker";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useGitHubMounted } from "@/queries/github";
 import { useNeedsAttention } from "@/queries/providers";
 import { AgentSettings } from "./agent-settings";
 import { ApprovalSettings } from "./approval-settings";
 import { BundleSettings } from "./bundle-settings";
-import { ComputerSettings } from "./computer-settings";
 import { ConnectionSettings } from "./connection-settings";
 import { ArchivedGroups } from "./groups";
+import { MachineSettings } from "./machine-settings";
+import { McpSettings } from "./mcp-settings";
 import { ProviderSettings } from "./provider-settings";
 import { AttentionDot, SettingsNav } from "./settings-nav";
 import { settingsSections, useSettingsAttention } from "./settings-sections";
@@ -132,8 +134,8 @@ export function SettingsButton({ className }: { className?: string }) {
 }
 
 /**
- * `?settings=<section>` opens settings there, once: how GitHub's redirects
- * and old links reach 连接. The parameter is dropped from the address.
+ * `?settings=<section>` opens settings there, once: how links into a
+ * settings section work. The parameter is dropped from the address.
  */
 function useSettingsLink() {
   const setSettings = useWorkspaceStore((s) => s.setSettings);
@@ -154,6 +156,7 @@ export function SettingsDialog() {
   const settings = useWorkspaceStore((s) => s.settings);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const attention = useSettingsAttention();
+  const githubMounted = useGitHubMounted();
   useSettingsLink();
 
   return (
@@ -174,11 +177,16 @@ export function SettingsDialog() {
         <div className="settings-layout">
           <SettingsNav
             label={translateText("accessibility.sections")}
-            sections={settingsSections.map((section) => ({
-              ...section,
-              attention: attention[section.value],
-              hint: translateText("accessibility.accountsNeedAttention"),
-            }))}
+            sections={settingsSections
+              // No GitHub plugin on the host: nothing to connect.
+              .filter(
+                (section) => section.value !== "connections" || githubMounted,
+              )
+              .map((section) => ({
+                ...section,
+                attention: attention[section.value],
+                hint: translateText("accessibility.accountsNeedAttention"),
+              }))}
             value={settings.section}
             onChange={(section) =>
               setSettings((state) => ({ ...state, section }))
@@ -187,16 +195,18 @@ export function SettingsDialog() {
           <section className="settings-content">
             {settings.section === "agents" ? (
               <AgentSettings />
-            ) : settings.section === "bundles" ? (
-              <BundleSettings />
             ) : settings.section === "providers" ? (
               <ProviderSettings />
             ) : settings.section === "approvals" ? (
               <ApprovalSettings />
+            ) : settings.section === "machines" ? (
+              <MachineSettings />
+            ) : settings.section === "bundles" ? (
+              <BundleSettings />
             ) : settings.section === "connections" ? (
               <ConnectionSettings />
-            ) : settings.section === "computers" ? (
-              <ComputerSettings />
+            ) : settings.section === "mcp" ? (
+              <McpSettings />
             ) : settings.section === "archived" ? (
               <ArchivedGroups />
             ) : (

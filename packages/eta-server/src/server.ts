@@ -21,12 +21,14 @@
  * that the floor is a floor and not a session host with plugins bolted on.
  */
 
+import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { MountedPlugin } from "@eta/client-contracts";
 import type { CompactionSummarizer, KernelModels } from "@eta/core";
 import type { RemoteSessions } from "./bundled/sessions";
 import type { SessionManagerOptions } from "./manager";
 import type { EtaConfig } from "./providers/config-types";
 import type { Settings } from "./settings";
+import type { SessionMeta } from "./store";
 import type { WireServer, WireServerOptions } from "./transport";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -40,6 +42,7 @@ import { FileSessionStore } from "./file-store";
 import { SessionManager } from "./manager";
 import { formatModelId, parseModelId } from "./model-id";
 import { initializeNetwork } from "./network";
+import { observedModels } from "./observed-models";
 import { discoverPersonas } from "./personas";
 import { PluginManager } from "./plugins";
 import { configDefaultModel } from "./providers/config-types";
@@ -85,6 +88,12 @@ export interface AssembleOptions {
    * config — which is what a normal start does.
    */
   models?: KernelModels | undefined;
+  /**
+   * Wraps the model layer once it is known, however it was made. A host that serves models of its
+   * own beside the configured providers (the LLM gateway's) answers for those and hands the rest
+   * to `base`.
+   */
+  overlayModels?: ((base: KernelModels) => KernelModels) | undefined;
   /** Which bundled plugins to mount. Default: all of them. */
   plugins?: readonly BundledPluginName[];
   /** How often to check the user's plugin directory for edits. Zero disables watching. */
@@ -105,8 +114,19 @@ export interface AssembleOptions {
     | SessionManagerOptions["baseSystemPromptFor"]
     | undefined;
   sessionTools?: SessionManagerOptions["sessionTools"] | undefined;
+  /** Skill directories a session has beyond the ones found by walking its directory. */
+  skillDirsFor?: ((meta: SessionMeta) => readonly string[]) | undefined;
   toolMiddleware?: SessionManagerOptions["toolMiddleware"] | undefined;
   askObserve?: SessionManagerOptions["askObserve"] | undefined;
+  /**
+   * Told how every model request a session makes ended: its turns, each retry of a turn, a
+   * compaction's summary, a side question, a memory extraction and the turns of the subagents it
+   * spawned. The session is named by its meta, so the host can say who it was made for.
+   */
+  generated?:
+    | ((meta: SessionMeta, message: AssistantMessage) => void)
+    | undefined;
+  sessionAttach?: SessionManagerOptions["sessionAttach"] | undefined;
   warn?: ((message: string) => void) | undefined;
 }
 
@@ -266,7 +286,7 @@ export async function assembleServer(
       warn(`[eta-server] could not build the model layer: ${String(error)}`);
     }
   }
-  const kernelModels: KernelModels = models ?? {
+  const configuredModels: KernelModels = models ?? {
     // No providers configured: every model resolution fails, which is exactly what
     // `model_unavailable` means. A keyless fake here would make the failure look like a
     // provider problem much later, at request time.
@@ -278,6 +298,8 @@ export async function assembleServer(
       throw new Error("model_unavailable: no providers are configured");
     },
   };
+  const kernelModels: KernelModels =
+    options.overlayModels?.(configuredModels) ?? configuredModels;
 
   // The network settings in force, put into the environment *before* anything builds a client:
   // whatever the provider layer uses later picks them up the way any Node process would. The
@@ -316,10 +338,17 @@ export async function assembleServer(
     warn,
   });
   const envFor = options.envFor;
+  // The model layer one session talks to: the shared one, watched for the host when it asked to be.
+  const modelsOf = (meta: SessionMeta): KernelModels => {
+    const generated = options.generated;
+    return generated === undefined
+      ? kernelModels
+      : observedModels(kernelModels, (message) => generated(meta, message));
+  };
   const sessions = new SessionManager({
     ...(envFor === undefined ? {} : { envFor }),
     store,
-    modelsFor: () => kernelModels,
+    modelsFor: modelsOf,
     settings: defaults,
     // The cards that apply to a session's directory, read when it opens: a card written by hand
     // is picked up by the next session, and a card that is gone resolves to the fallback.
@@ -339,6 +368,9 @@ export async function assembleServer(
         env: environment.env,
         cwd: meta.cwd,
         home: options.home ?? homedir(),
+        ...(options.skillDirsFor === undefined
+          ? {}
+          : { extraDirs: options.skillDirsFor(meta) }),
         warn,
       });
     },
@@ -365,16 +397,17 @@ export async function assembleServer(
       call: async (systemPrompt, prompt) => {
         const identity =
           meta.model === undefined ? undefined : parseModelId(meta.model);
+        const models = modelsOf(meta);
         const model =
           identity === undefined
             ? undefined
-            : kernelModels.getModel(identity.provider, identity.modelId);
+            : models.getModel(identity.provider, identity.modelId);
         if (model === undefined) {
           // No model to ask: a throw here is a declined extraction, which is the honest
           // outcome — inventing notes would be worse.
           throw new Error(`model_unavailable: ${meta.model ?? "unknown"}`);
         }
-        const reply = await kernelModels.completeSimple(
+        const reply = await models.completeSimple(
           model,
           {
             systemPrompt,
@@ -406,6 +439,9 @@ export async function assembleServer(
     ...(options.askObserve === undefined
       ? {}
       : { askObserve: options.askObserve }),
+    ...(options.sessionAttach === undefined
+      ? {}
+      : { sessionAttach: options.sessionAttach }),
     warn,
   });
 

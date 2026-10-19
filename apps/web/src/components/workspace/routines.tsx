@@ -40,7 +40,7 @@ import {
   useRoutines,
   useRunRoutineNow,
   useSendFeedback,
-  useSetRoutineEnabled,
+  useUpdateRoutine,
 } from "@/queries/routines";
 import { RoutineForm } from "./routine-form";
 import { describeSchedule, when } from "./routine-format";
@@ -54,7 +54,7 @@ const runStatusLabels: Record<RunStatus, string> = {
   get sent() {
     return translate("routines:runStatus.sent");
   },
-  get nothing_new() {
+  get no_news() {
     return translate("routines:runStatus.nothingNew");
   },
   get failed() {
@@ -65,11 +65,8 @@ const runStatusLabels: Record<RunStatus, string> = {
 const showError = (error: Error) => toast.error(error.message);
 
 function took(run: Run) {
-  if (!run.finished_at) return null;
-  const seconds = Math.round(
-    (new Date(run.finished_at).getTime() - new Date(run.started_at).getTime()) /
-      1000,
-  );
+  if (!run.finishedAt) return null;
+  const seconds = Math.round((run.finishedAt - run.startedAt) / 1000);
   return seconds < 60
     ? translate("common:time.durationSeconds", { seconds })
     : translate("common:time.durationMinutesSeconds", {
@@ -86,7 +83,7 @@ function RunMark({ status }: { status: RunStatus }) {
       className={cn(
         "inline-block size-2 shrink-0",
         status === "sent" && "bg-foreground",
-        status === "nothing_new" && "border border-muted-foreground/50",
+        status === "no_news" && "border border-muted-foreground/50",
         status === "failed" && "bg-destructive",
         status === "running" &&
           "border border-foreground motion-safe:animate-pulse",
@@ -153,7 +150,7 @@ function NextRun({ routine }: { routine: RoutineSummary }) {
       </span>
     );
   if (!routine.enabled) return translateText("common:status.paused");
-  return routine.next_run_at ? when(routine.next_run_at) : "—";
+  return routine.nextRunAt ? when(routine.nextRunAt) : "—";
 }
 
 /**
@@ -173,7 +170,7 @@ export function RoutineList({
     "navigation",
   ] as const);
   const [, setNav] = useRoutineNav();
-  const { data, error, refetch } = useRoutines();
+  const { routines, loaded, error } = useRoutines();
   // No nuqs here: this list is also rendered by tests and by the full-window page, and the group
   // list plus the remembered selection are enough to know which section goes first.
   // Names come from the snapshot already on screen: a list of routines should not be the thing
@@ -190,8 +187,8 @@ export function RoutineList({
       string,
       { name: string; items: RoutineSummary[] }
     >();
-    for (const routine of data ?? []) {
-      const id = routine.group_id ?? "";
+    for (const routine of routines) {
+      const id = routine.conversationId ?? "";
       const name =
         id.length === 0
           ? translateText("scope.noGroup")
@@ -205,7 +202,7 @@ export function RoutineList({
         left === (group?.id ?? "") ? -1 : right === (group?.id ?? "") ? 1 : 0,
       )
       .map(([id, bucket]) => ({ id, ...bucket }));
-  }, [data, allGroups, group, translateText]);
+  }, [routines, allGroups, group, translateText]);
   return (
     <div className="space-y-2">
       <div
@@ -222,15 +219,11 @@ export function RoutineList({
           <PlusIcon aria-hidden="true" />
         </Button>
       </div>
-      {error && !data ? (
-        <LoadError
-          what={translateText("title")}
-          error={error}
-          onRetry={() => void refetch()}
-        />
-      ) : !data ? (
+      {error ? (
+        <LoadError what={translateText("title")} error={error} />
+      ) : !loaded ? (
         <Loading />
-      ) : data.length === 0 ? (
+      ) : routines.length === 0 ? (
         <Empty
           icon={ClockIcon}
           title={translateText("empty.title")}
@@ -301,27 +294,27 @@ export function RoutineList({
 // --- detail ---------------------------------------------------------------------
 
 type Moment =
-  | { kind: "next"; at: string }
-  | { kind: "run"; at: string; run: Run }
-  | { kind: "brief"; at: string; brief: BriefVersion };
+  | { kind: "next"; at: number }
+  | { kind: "run"; at: number; run: Run }
+  | { kind: "brief"; at: number; brief: BriefVersion };
 
 /** The next run, then runs and brief revisions, newest first. */
 function moments(routine: Routine): Moment[] {
   const past: Moment[] = [
     ...routine.runs.map((run) => ({
       kind: "run" as const,
-      at: run.started_at,
+      at: run.startedAt,
       run,
     })),
     ...routine.briefs.map((brief) => ({
       kind: "brief" as const,
-      at: brief.created_at,
+      at: brief.createdAt,
       brief,
     })),
-  ].sort((a, b) => b.at.localeCompare(a.at));
+  ].sort((a, b) => b.at - a.at);
   const idle = routine.runs[0]?.status !== "running";
-  return routine.enabled && routine.next_run_at && idle
-    ? [{ kind: "next", at: routine.next_run_at }, ...past]
+  return routine.enabled && routine.nextRunAt && idle
+    ? [{ kind: "next", at: routine.nextRunAt }, ...past]
     : past;
 }
 
@@ -333,7 +326,7 @@ function Entry({
   children,
 }: {
   mark: React.ReactNode;
-  at: string;
+  at: number;
   last: boolean;
   children: React.ReactNode;
 }) {
@@ -376,7 +369,7 @@ function RunMoment({
   return (
     <Entry
       mark={<RunMark status={run.status} />}
-      at={run.started_at}
+      at={run.startedAt}
       last={last}
     >
       {run.status === "sent" ? (
@@ -385,7 +378,7 @@ function RunMoment({
           onClick={open}
           className="block max-w-full truncate text-left underline-offset-4 outline-none hover:underline focus-visible:underline"
         >
-          {run.title}
+          {run.title ?? runStatusLabels.sent}
         </button>
       ) : (
         <p
@@ -447,7 +440,7 @@ function BriefMoment({
           className="size-[7px] rotate-45 border border-foreground bg-card"
         />
       }
-      at={brief.created_at}
+      at={brief.createdAt}
       last={last}
     >
       <div className="group flex items-center gap-2">
@@ -469,7 +462,7 @@ function BriefMoment({
             disabled={restore.isPending}
             onClick={() =>
               restore.mutate(
-                { id: routine.id, version: brief.version },
+                { routineId: routine.id, version: brief.version },
                 {
                   onSuccess: () =>
                     toast(
@@ -554,18 +547,19 @@ export function RoutineDetail({
     "navigation",
   ] as const);
   const [, setNav] = useRoutineNav();
-  const setEnabled = useSetRoutineEnabled();
+  const update = useUpdateRoutine();
   const runNow = useRunRoutineNow();
   const remove = useDeleteRoutine();
   const [brief] = routine.briefs;
   const [expanded, setExpanded] = useState(false);
   const running = routine.runs[0]?.status === "running";
   // Opened: its reports and failures so far are seen.
-  const finished = routine.runs.find((run) => run.finished_at)?.id;
+  const finished = routine.runs.find((run) => run.finishedAt)?.id;
+  const waiting = routine.unseenReports + routine.unseenFailures > 0;
   const { mutate: markSeen } = useMarkRoutineSeen();
   useEffect(() => {
-    if (finished) markSeen(routine.id);
-  }, [routine.id, finished, markSeen]);
+    if (finished && waiting) markSeen({ routineId: routine.id });
+  }, [routine.id, finished, waiting, markSeen]);
   return (
     <div className="space-y-4">
       <div>
@@ -592,8 +586,8 @@ export function RoutineDetail({
                 : translateText("common:actions.enable")
             }
             onCheckedChange={(enabled) =>
-              setEnabled.mutate(
-                { id: routine.id, enabled },
+              update.mutate(
+                { routineId: routine.id, enabled },
                 { onError: showError },
               )
             }
@@ -604,7 +598,9 @@ export function RoutineDetail({
             aria-label={translateText("actions.runNow")}
             title={translateText("actions.runNow")}
             disabled={running || runNow.isPending}
-            onClick={() => runNow.mutate(routine.id, { onError: showError })}
+            onClick={() =>
+              runNow.mutate({ routineId: routine.id }, { onError: showError })
+            }
           >
             <PlayIcon aria-hidden="true" />
           </Button>
@@ -628,10 +624,13 @@ export function RoutineDetail({
               <DropdownMenuItem
                 variant="destructive"
                 onSelect={() =>
-                  remove.mutate(routine.id, {
-                    onSuccess: () => void setNav({ routine: null }),
-                    onError: showError,
-                  })
+                  remove.mutate(
+                    { routineId: routine.id },
+                    {
+                      onSuccess: () => void setNav({ routine: null }),
+                      onError: showError,
+                    },
+                  )
                 }
               >
                 {translateText("common:actions.delete")}
@@ -640,8 +639,9 @@ export function RoutineDetail({
           </DropdownMenu>
         </div>
         <p className="text-xs text-muted-foreground tabular-nums">
-          {describeSchedule(routine.schedule)} · {routine.timezone} ·{" "}
-          {routine.model}
+          {[describeSchedule(routine.schedule), routine.timezone, routine.model]
+            .filter(Boolean)
+            .join(" · ")}
         </p>
       </div>
 
@@ -683,7 +683,7 @@ function FeedbackForm({ routine, run }: { routine: Routine; run: Run }) {
     const value = text.trim();
     if (!value || send.isPending) return;
     send.mutate(
-      { id: routine.id, runId: run.id, text: value },
+      { routineId: routine.id, runId: run.id, text: value },
       { onSuccess: () => setText(""), onError: showError },
     );
   };
@@ -734,7 +734,7 @@ export function RunView({ routine, run }: { routine: Routine; run: Run }) {
       <div className="flex items-center gap-2">
         <Back label={routine.name} onClick={() => void setNav({ run: null })} />
         <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-          {when(run.started_at)}
+          {when(run.startedAt)}
           {duration ? ` · ${duration}` : ""}
         </span>
         <span className="flex">
@@ -773,12 +773,12 @@ export function RunView({ routine, run }: { routine: Routine; run: Run }) {
           <div key={feedback.id} className="border-l-2 border-foreground pl-3">
             <p className="text-sm">{feedback.text}</p>
             <p className="text-xs text-muted-foreground tabular-nums">
-              {when(feedback.created_at)} ·{" "}
-              {feedback.revision_failed ? (
+              {when(feedback.createdAt)} ·{" "}
+              {feedback.revisionFailed ? (
                 <span className="text-destructive">
                   {translateText("feedback.revisionFailed")}
                 </span>
-              ) : feedback.brief_version === null ? (
+              ) : feedback.briefVersion === null ? (
                 <span className="motion-safe:animate-pulse">
                   {translateText("feedback.revising")}
                 </span>
@@ -789,7 +789,7 @@ export function RunView({ routine, run }: { routine: Routine; run: Run }) {
                   onClick={() => void setNav({ run: null })}
                 >
                   {translateText("feedback.briefUpdated", {
-                    version: feedback.brief_version,
+                    version: feedback.briefVersion,
                   })}
                 </button>
               )}
@@ -806,28 +806,19 @@ export function RunView({ routine, run }: { routine: Routine; run: Run }) {
 
 /** Where a routine would be: loading, failed, or gone. */
 export function RoutineMissing({
-  isPending,
+  missing,
   error,
-  onRetry,
 }: {
-  isPending: boolean;
-  error: Error | null;
-  onRetry: () => void;
+  missing: boolean;
+  error: Error | undefined;
 }) {
   const { t: translateText } = useTranslation([
     "routines",
     "common",
     "navigation",
   ] as const);
-  if (error)
-    return (
-      <LoadError
-        what={translateText("title")}
-        error={error}
-        onRetry={onRetry}
-      />
-    );
-  if (isPending) return <Loading layout="detail" />;
+  if (error) return <LoadError what={translateText("title")} error={error} />;
+  if (!missing) return <Loading layout="detail" />;
   return (
     <Empty icon={ClockIcon} title={translateText("empty.deletedTitle")}>
       {translateText("common:empty.mayBeDeleted")}
@@ -844,12 +835,7 @@ export function Routines() {
   ] as const);
   const [nav, setNav] = useRoutineNav();
   const editing = nav.edit && nav.edit !== "new" ? nav.edit : null;
-  const {
-    data: routine,
-    isPending,
-    error,
-    refetch,
-  } = useRoutine(nav.routine ?? editing);
+  const { routine, missing, error } = useRoutine(nav.routine ?? editing);
 
   if (nav.edit === "new")
     return (
@@ -873,11 +859,7 @@ export function Routines() {
           label={translateText("title")}
           onClick={() => void setNav({ edit: null, routine: null, run: null })}
         />
-        <RoutineMissing
-          isPending={isPending}
-          error={error}
-          onRetry={() => void refetch()}
-        />
+        <RoutineMissing missing={missing} error={error} />
       </div>
     );
   const run = routine.runs.find((r) => r.id === nav.run);

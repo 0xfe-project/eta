@@ -45,6 +45,32 @@ describe("the container", () => {
     expect(service.names()).toEqual(["core", "one", "two"]);
   });
 
+  it("moves the core's revision as the streamed message grows", () => {
+    const text = (value: string) =>
+      ({
+        role: "assistant",
+        content: [{ type: "text", text: value }],
+      }) as never;
+    let streaming: ReturnType<typeof text> | undefined;
+    const service = new ViewService(new Context(), {
+      core: () => ({ session: "s1", running: true, streaming }),
+    });
+    const revision = () => service.snapshot().revisions.core;
+    const idle = revision();
+    streaming = text("");
+    const started = revision();
+    streaming = text("Hel");
+    const partial = revision();
+    streaming = text("Hello");
+    const longer = revision();
+    expect(new Set([idle, started, partial, longer]).size).toBe(4);
+    // Unchanged text is an unchanged revision: nothing is re-sent for nothing.
+    streaming = text("Hello");
+    expect(revision()).toBe(longer);
+    streaming = undefined;
+    expect(revision()).toBe(idle);
+  });
+
   it("refuses two contributions with one name, the core included", () => {
     const service = new ViewService(new Context(), {
       core: () => ({ session: "s1", running: false }),

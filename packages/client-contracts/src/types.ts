@@ -171,6 +171,8 @@ export interface SidebarSession {
   personas: string[];
   /** Why this session cannot be read, when it cannot (the store keeps the row). */
   broken?: string | undefined;
+  /** The machine it runs on, when that is not the one serving the list. */
+  machine?: string | undefined;
 }
 
 /* ------------------------------------------------------------------ providers */

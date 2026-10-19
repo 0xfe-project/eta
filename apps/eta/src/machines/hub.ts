@@ -70,7 +70,8 @@ export interface MachineHubOptions {
   now?: (() => number) | undefined;
   /**
    * What the primary does for a machine whose link has come up: it answers the machine's calls.
-   * Called once per connection, after the machine is let in and before it is reported ready.
+   * Called once per connection, as soon as the machine is let in: before it is reported ready, and
+   * before it has said anything.
    */
   serve?: ((link: MachineLink) => void) | undefined;
 }
@@ -227,6 +228,9 @@ export class MachineHub {
   /** The pipe came up and the machine is let in: it says who it is, and it is online. */
   async #activate(connection: Connection): Promise<void> {
     const { machines } = this.#options;
+    // Answering the machine starts now, not when it is reported ready: what a daemon says the
+    // moment it is let in (a question asked while the link was down) must find a listener.
+    this.#options.serve?.(connection);
     try {
       let timer: ReturnType<typeof setTimeout> | undefined;
       await Promise.race([
@@ -246,7 +250,6 @@ export class MachineHub {
         os: facts.os,
       });
       machines.setStatus(connection.machineId, "online", Date.now());
-      this.#options.serve?.(connection);
       connection.ready = true;
       this.#options.changed();
       for (const listener of this.#ready) listener(connection);

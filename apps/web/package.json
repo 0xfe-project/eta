@@ -3,11 +3,10 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "generate": "openapi-typescript --root-types --root-types-no-schema-prefix --default-non-nullable false && bun -e 'import { tanstackRouterGenerator } from \"@tanstack/router-plugin/vite\"; await tanstackRouterGenerator({ target: \"react\", autoCodeSplitting: true, quoteStyle: \"double\" }).configResolved({ root: process.cwd() })'",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --port 3000",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "bun check",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
     "test": "rstest run"
   },
@@ -28,7 +27,6 @@
     "i18next": "^26.4.4",
     "lexical": "^0.52.0",
     "nuqs": "^2.10.1",
-    "openapi-fetch": "^0.17.0",
     "radix-ui": "^1.7.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -54,7 +52,6 @@
     "@vitejs/plugin-react": "^6.1.2",
     "babel-plugin-react-compiler": "^1.0.0",
     "happy-dom": "^20.14.5",
-    "openapi-typescript": "^7.13.0",
     "react-grab": "^0.2.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.0",

@@ -23,5 +23,6 @@
   "empty": {
     "title": "No Artifacts yet",
     "description": "Pages published by agents in this group appear here."
-  }
+  },
+  "gone": "This artifact no longer exists"
 }

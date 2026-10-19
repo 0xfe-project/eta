@@ -215,17 +215,6 @@
   --animate-skeleton-sweep: skeleton-sweep 1.6s linear infinite;
   --animate-upload-pulse: upload-pulse 1.6s linear infinite;
   --animate-copied-check: copied-check 2.5s linear both;
-  /*
-   * Shadows are offsets, not haze (BR1): a solid block of ink displaced by 2–12px, no blur,
-   * no spread. `shadow-md` is the menu/dialog one — 4px, the number BR1 names.
-   */
-  --shadow-2xs: 1px 1px 0 0 var(--shadow-ink);
-  --shadow-xs: 2px 2px 0 0 var(--shadow-ink);
-  --shadow-sm: 2px 2px 0 0 var(--shadow-ink);
-  --shadow-md: 4px 4px 0 0 var(--shadow-ink);
-  --shadow-lg: 6px 6px 0 0 var(--shadow-ink);
-  --shadow-xl: 8px 8px 0 0 var(--shadow-ink);
-  --shadow-2xl: 12px 12px 0 0 var(--shadow-ink);
   --spacing: 0.225rem;
   /* One header height for every column, so the rule under it is one line across the window. */
   --header-band: 40px;
@@ -302,7 +291,7 @@
   /*
    * Light mode keeps the palette the product had before the rewrite: a white page, near-white
    * rails, and greys only where something needs to be told apart. The tokens added later
-   * (surface, overlay, faint, border-strong, the four states, the shadow ink) are derived from
+   * (surface, overlay, faint, border-strong, the four states) are derived from
    * that palette rather than from BR1's darker scale, which read as a large grey field.
    */
   --background: oklch(1 0 0);
@@ -343,8 +332,6 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0px;
-  /* The ink a hard shadow is made of. */
-  --shadow-ink: oklch(0.145 0 0 / 85%);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -358,7 +345,6 @@
 .dark {
   /* The same nine steps, read from the other end: bg is gray-9, fg is gray-0, and the states
      rise in lightness and lose chroma so they stay legible on a dark page. */
-  --shadow-ink: oklch(0 0 0 / 80%);
   --background: oklch(0.1 0 0);
   --surface: oklch(0.14 0 0);
   --foreground: oklch(0.98 0 0);
@@ -515,7 +501,18 @@
   .message {
     display: flex;
     flex-direction: column;
-    margin-bottom: 16px;
+    /* Turns breathe; the steps inside a turn sit close (thinking, tools, text). */
+    margin-bottom: 28px;
+  }
+  /* Who is speaking: the turn's heading, so it carries the weight a heading should. */
+  .message-author {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--foreground);
   }
   .message.user {
     align-items: flex-end;
@@ -530,10 +527,17 @@
   .message.assistant .message-content {
     max-width: 100%;
     padding: 0 2px;
+    margin-top: 14px;
+    line-height: 1.75;
   }
+  .message.assistant .message-author + .message-content {
+    margin-top: 0;
+  }
+  /* What you said sits on the page as a note with an edge, not as loose words in white space. */
   .message.user .message-content {
-    background: var(--background);
-    color: var(--primary);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--foreground);
     /* What you typed is what you said: the text arrives with its line breaks and is shown as
        plain text, so the one thing the CSS owes the author is to keep them. */
     white-space: pre-wrap;
@@ -541,14 +545,52 @@
   .message.user .message-content a {
     color: inherit;
   }
+  /* Tables and code in a reply speak the same hairline language as the cards around them:
+     header as a quiet mono label, rows ruled across only, numbers in columns. */
+  .message-content .markdown table {
+    margin: 10px 0 12px;
+    font-size: 13px;
+  }
+  .message-content .markdown th,
+  .message-content .markdown td {
+    padding: 5px 14px 5px 10px;
+    border-right: 0;
+    border-left: 0;
+    line-height: 1.45;
+  }
+  .message-content .markdown th {
+    border-top: 0;
+    border-bottom-color: var(--border-strong);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+  .message-content .markdown td {
+    font-variant-numeric: tabular-nums;
+  }
+  .message-content .markdown pre {
+    margin: 10px 0;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .message-content .markdown :not(pre) > code {
+    padding: 1px 5px;
+    font-size: 0.92em;
+  }
   .message-footer {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 4px;
+    margin-top: 6px;
     font-family: var(--font-mono);
     font-size: 10px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--faint);
   }
@@ -573,15 +615,16 @@
 
   .system-message {
     align-self: center;
-    margin: 8px auto 16px;
-    padding: 2px 10px;
+    margin: 4px auto 28px;
+    padding: 3px 12px;
     border: 1px solid var(--border);
     font-family: var(--font-mono);
     font-size: 10px;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--faint);
     text-align: center;
+    width: fit-content;
     max-width: 90%;
   }
 
@@ -759,23 +802,62 @@
    * they are folded, their header says what they are in 10–11px uppercase mono, and the body is
    * the only place that scrolls. */
 
+  /* Thinking and the tool calls after it are one stack of steps: one frame, hairlines between. */
   .thinking-block {
     border: 1px solid var(--border);
-    margin-bottom: 16px;
-    background: var(--overlay);
+  }
+  .thinking-block + .tool-step .tool-card,
+  .tool-step + .tool-step .tool-card {
+    border-top: 0;
+  }
+  /* In a group the steps sit in one fixed-height frame that scrolls: the frame carries the border,
+     the steps only the hairlines between them. */
+  .process-box {
+    height: 176px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+  }
+  .process-box:focus-visible {
+    outline: 1px solid var(--ring);
+    outline-offset: -1px;
+  }
+  .process-box .thinking-block,
+  .process-box .tool-card,
+  .process-fold-body .thinking-block,
+  .process-fold-body .tool-card {
+    border-width: 0 0 1px;
+  }
+  .process-box > div > :last-child,
+  .process-box > div > :last-child .tool-card:last-child,
+  .process-fold-body > :last-child,
+  .process-fold-body > :last-child .tool-card:last-child {
+    border-bottom-width: 0;
+  }
+  /* Once the reply is at its final text the frame folds into one row; opened, the steps stack
+     under it in the same frame, at their natural height. */
+  .process-fold {
+    border: 1px solid var(--border);
+  }
+  .process-fold-body {
+    border-top: 1px solid var(--border);
   }
   .thinking-block-header {
     list-style: none;
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 4px 10px;
+    padding: 5px 10px;
     font-family: var(--font-mono);
     font-size: 10px;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--muted-foreground);
+    color: var(--faint);
     cursor: pointer;
+  }
+  .thinking-block-header:hover,
+  .tool-card-head:hover {
+    background: var(--overlay-hover);
+    color: var(--foreground);
   }
   .thinking-block-header::-webkit-details-marker,
   .tool-card-head::-webkit-details-marker {
@@ -802,7 +884,6 @@
 
   .tool-card {
     border: 1px solid var(--border);
-    margin-bottom: 12px;
     background: var(--background);
   }
   .tool-card-head {
@@ -811,21 +892,27 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding: 4px 10px;
-    background: var(--overlay);
+    padding: 6px 10px;
     cursor: pointer;
+  }
+  .tool-card[open] > .tool-card-head {
+    border-bottom: 1px solid var(--border);
   }
   .tool-card-label {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    /* The tool and what it was called with, as written: a command upper-cased is a different
+       command. */
     font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
     color: var(--muted-foreground);
+  }
+  .tool-card-head:hover .tool-card-label {
+    color: var(--foreground);
   }
   .tool-card-status {
     flex: none;
@@ -834,8 +921,9 @@
     letter-spacing: 0.14em;
     text-transform: uppercase;
     padding: 0 6px;
-    border: 1px solid var(--border);
-    color: var(--muted-foreground);
+    /* Done is the expected outcome and stays quiet; failed keeps its frame, running its fill. */
+    border: 1px solid transparent;
+    color: var(--faint);
   }
   .tool-card-status.running {
     background: var(--foreground);
@@ -848,7 +936,8 @@
   }
   .tool-card-block {
     margin: 0;
-    padding: 6px 10px;
+    padding: 8px 10px;
+    background: var(--overlay);
   }
   .tool-card-block + .tool-card-block {
     border-top: 1px solid var(--border);
@@ -922,7 +1011,7 @@
 }
 
 @layer components {
-  /* The completion menu, ported: a 2px frame with a hard shadow, sitting above the composer, one
+  /* The completion menu, ported: framed and lifted like the app's other menus, sitting above the composer, one
      row per candidate with the name in mono and the description dimmed beside it. The selected row
      inverts — that is the whole affordance. */
   .skill-slash-menu {
@@ -935,8 +1024,8 @@
     overflow-y: auto;
     margin-bottom: 6px;
     background: var(--background);
-    border: 2px solid var(--border-strong);
-    box-shadow: 4px 4px 0 0 var(--shadow-ink);
+    border: 1px solid color-mix(in oklch, var(--foreground) 10%, transparent);
+    box-shadow: var(--shadow-md);
   }
   .skill-slash-indicator {
     padding: 3px 10px;

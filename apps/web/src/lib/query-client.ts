@@ -1,5 +1,4 @@
 import { QueryClient } from "@tanstack/react-query";
-import { ApiError } from "./api";
 
 // Called once per router instance so tests and the app do not share a cache.
 export function createQueryClient() {
@@ -7,9 +6,7 @@ export function createQueryClient() {
     defaultOptions: {
       queries: {
         staleTime: 30_000,
-        // Once more, unless the request itself was wrong (a 404 stays one).
-        retry: (failures, error) =>
-          failures < 1 && !(error instanceof ApiError && error.status < 500),
+        retry: 1,
       },
       mutations: { retry: false },
     },

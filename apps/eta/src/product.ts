@@ -1,9 +1,4 @@
-import type {
-  AssembledServer,
-  RemoteSessions,
-  WebSocketEndpoint,
-  WireService,
-} from "@eta/server";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
 /**
  * The product: the stores, the engine, and the plugins that put them on the wire.
  *
@@ -12,13 +7,28 @@ import type {
  * then. Between the two, the replies a dead process left in flight are failed, so nothing a client
  * is ever shown says `working` without something working.
  */
+import type { GitHubCredentials } from "@eta/client-contracts";
+import type { ConfigInput } from "@eta/plugin-akhook";
+import type {
+  AssembledServer,
+  RemoteSessions,
+  SessionMeta,
+  WebSocketEndpoint,
+  WireService,
+} from "@eta/server";
 import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/site";
+import type { GatewayKeys } from "./bundles/bundles";
+import type { GithubTuning } from "./github/service";
+import type { MachineRecord } from "./machines/store";
+import type { McpTuning } from "./mcp/service";
 import type { SessionHooks } from "./session-hooks";
 import { homedir, hostname, platform } from "node:os";
 import { join } from "node:path";
+import { GitHubKeeper } from "@eta/daemon";
 import { agentsPlugin } from "./agents/plugin";
 import { AgentStore } from "./agents/store";
+import { AkhookHost } from "./akhook";
 import { loadKey } from "./artifacts/capability";
 import { artifactsPlugin } from "./artifacts/plugin";
 import { createArtifactRoutes } from "./artifacts/routes";
@@ -26,11 +36,19 @@ import { ArtifactService } from "./artifacts/service";
 import { DEFAULT_LIMITS } from "./artifacts/site";
 import { ArtifactStore } from "./artifacts/store";
 import { artifactSessionTools } from "./artifacts/tools";
-import { Engine, RESTART_TEXT } from "./conversations/engine";
+import { Bundles } from "./bundles/bundles";
+import { bundlesPlugin } from "./bundles/plugin";
+import { AttachmentStore } from "./conversations/attachments";
+import { combineRunHooks, Engine, RESTART_TEXT } from "./conversations/engine";
 import { conversationsPlugin } from "./conversations/plugin";
 import { ConversationStore } from "./conversations/store";
 import { ConversationTargets } from "./conversations/targets";
 import { Timeline } from "./conversations/timeline";
+import { GithubError } from "./github/error";
+import { githubPlugin } from "./github/plugin";
+import { githubRoutes } from "./github/routes";
+import { Github } from "./github/service";
+import { githubSessionTools } from "./github/tools";
 import { Inbox } from "./inbox/inbox";
 import { inboxPlugin } from "./inbox/plugin";
 import { SettingStore } from "./inbox/setting";
@@ -41,7 +59,10 @@ import { machinesPlugin } from "./machines/plugin";
 import { RemotePlace } from "./machines/remote-place";
 import { RemoteSessionsRouter } from "./machines/remote-sessions";
 import { serveLink } from "./machines/service";
+import { transportOn } from "./machines/shell";
 import { MachineStore } from "./machines/store";
+import { mcpPlugin } from "./mcp/plugin";
+import { McpService } from "./mcp/service";
 import { MemoryClient } from "./memory/client";
 import { memoryRunHooks, memoryTools } from "./memory/hooks";
 import { memoryPlugin } from "./memory/plugin";
@@ -51,15 +72,27 @@ import { routinesPlugin } from "./routines/plugin";
 import { INTERRUPTED, RoutineRunner } from "./routines/runner";
 import { Scheduler } from "./routines/scheduler";
 import { RoutineStore } from "./routines/store";
+import { loadSecretKey } from "./secret";
 import { combineSessionHooks } from "./session-hooks";
 import { TaskBoard } from "./tasks/board";
 import { TaskCards } from "./tasks/cards";
 import { tasksPlugin } from "./tasks/plugin";
+import { runIdOf } from "./tasks/run-key";
+import { TaskRunner } from "./tasks/runner";
+import { TaskRunStore } from "./tasks/runs";
 import { TaskStore } from "./tasks/store";
 import { taskSessionTools } from "./tasks/tools";
+import { workspaceChooser } from "./tasks/workspace";
 import { usagePlugin } from "./usage/plugin";
 import { entryOf } from "./usage/recorder";
 import { UsageStore } from "./usage/store";
+
+export interface AkhookOptions {
+  /** The user-level configuration file; defaults to akhook's own path. */
+  userConfigPath?: string | undefined;
+  /** Host layers that neither the user's nor a project's file can disable or replace. */
+  additional?: readonly ConfigInput[] | undefined;
+}
 
 /** What a test sets to move time by hand; a real host leaves all of it alone. */
 export interface RoutinesOptions {
@@ -73,24 +106,38 @@ export interface RoutinesOptions {
   timer?: boolean;
 }
 
+/** What a test sets to keep tasks from running; a real host leaves all of it alone. */
+export interface TasksOptions {
+  /** False keeps the runner from taking runs: a task is made and confirmed, and nothing starts. */
+  runs?: boolean;
+}
+
 export interface Product {
   readonly engine: Engine;
+  /** The task board: what a test makes tasks with, since only agents' tools do in use. */
+  readonly board: TaskBoard;
   /** The links to other machines. */
   readonly hub: MachineHub;
   /** The routines' clock; `tick()` makes it look. */
   readonly scheduler: Scheduler;
   /** Every feature's per-session hooks, combined into the one set the session manager takes. */
   readonly sessionHooks: Required<SessionHooks>;
+  /** Count a model request that ended; the server tells it for every session it holds. */
+  readonly generated: (meta: SessionMeta, message: AssistantMessage) => void;
   /** Mount the plugins on an assembled server; resolves when every one of them is in place. */
   mount: (server: AssembledServer) => Promise<void>;
+  /** Skill directories an agent's sessions have beyond the ones found in their directories. */
+  readonly skillDirsFor: (meta: SessionMeta) => readonly string[];
+  /** The environment sessions' shells get beyond the process's: GitHub's login, once connected. */
+  readonly shellEnv: NodeJS.ProcessEnv;
   /** The product's own HTTP routes (artifact pages, enrolling a machine); nothing for any other path. */
   fetch: (request: Request) => Promise<Response | undefined>;
   /** Where `sessions.*` actions for sessions on other machines go. */
   readonly remote: RemoteSessions;
   /** The product's own WebSocket routes: the link daemons dial. */
   readonly endpoints: readonly WebSocketEndpoint[];
-  /** Cut the links to other machines (the host is stopping). */
-  close: () => void;
+  /** Cut the links to other machines and stop the bundles' services (the host is stopping). */
+  close: () => Promise<void>;
 }
 
 /** The plugins are applied a moment after they are mounted; this is how long to wait for that. */
@@ -101,14 +148,29 @@ export function createProduct(options: {
   dataDir: string;
   /** The memory sidecar's address. Without one there is no memory: no plugin, no tools, no calls. */
   memoryUrl?: string | undefined;
+  /** The LLM gateway, once it is up (it starts after the product): bundles hand agents keys for it. */
+  gateway?:
+    | (() =>
+        | (GatewayKeys & { revoke: (agentId: string) => Promise<void> })
+        | undefined)
+    | undefined;
+  /** akhook: the user-level file, and host layers beyond the environment's and the data directory's. */
+  akhook?: AkhookOptions | undefined;
   warn: (message: string) => void;
   /** The interface the host listens on, for the address a new machine is told to dial. */
   hostname?: string | undefined;
   /** The agent's home, where the user's own persona cards are. Defaults to the real one. */
   home?: string | undefined;
   routines?: RoutinesOptions;
+  tasks?: TasksOptions;
   /** Overrides of what a published site may hold. */
   artifactLimits?: Partial<SiteLimits> | undefined;
+  /** The address the user's browser reaches the host at, for MCP sign-in callbacks. */
+  publicUrl?: string | undefined;
+  /** The MCP library's manager and fetch, for a test with fake servers. */
+  mcp?: McpTuning | undefined;
+  /** Where GitHub is and what time it is, for a test with a fake GitHub. */
+  github?: GithubTuning | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
   const memory =
@@ -131,6 +193,8 @@ export function createProduct(options: {
   timeline.failInterrupted(RESTART_TEXT);
   const interactions = new InteractionStore(db);
   interactions.expirePending();
+  // Settled questions are kept for 30 days, like usage; the ones just expired above are new.
+  interactions.prune();
   // Usage is kept for 30 days; what is older goes now, and again once a day while the host runs.
   const usage = new UsageStore(db);
   usage.prune();
@@ -138,7 +202,14 @@ export function createProduct(options: {
   /** Say that product state moved, to whoever is looking at it. */
   const changed = (touched?: readonly string[] | "all"): void => {
     if (wire === undefined) return;
-    for (const target of ["agents", "machines", "projects", "conversations"])
+    // `mcp` lists each agent's servers, so it moves with the agents.
+    for (const target of [
+      "agents",
+      "machines",
+      "projects",
+      "conversations",
+      "mcp",
+    ])
       wire.pushNow(target);
     const ids =
       touched === "all"
@@ -167,6 +238,29 @@ export function createProduct(options: {
     posted: (conversationId) => changed([conversationId]),
     warn,
   });
+  // The task board's rows. A task run's session is held in `task-run:<id>` (`tasks/run-key.ts`);
+  // what counts it, asks about it or remembers it knows it by the conversation the task came from.
+  const taskRows = new TaskStore(db);
+  const runRows = new TaskRunStore(db);
+  const originOf = (meta: SessionMeta): SessionMeta => {
+    const runId = runIdOf(meta.conversationId);
+    if (runId === undefined) return meta;
+    const run = runRows.get(runId);
+    const task = run === undefined ? undefined : taskRows.get(run.taskId);
+    return { ...meta, conversationId: task?.originConversationId ?? undefined };
+  };
+  // A model request ended, for a session of this host or of a daemon: count it.
+  const generated = (meta: SessionMeta, message: AssistantMessage): void => {
+    try {
+      usage.record(
+        entryOf(originOf(meta), message, runner.routineOf(meta) ?? null),
+      );
+      // Run traffic, not a click: the paced push, so a busy agent costs a bounded number of frames.
+      wire?.push("usage");
+    } catch (error) {
+      warn(`[eta] could not record a generation: ${String(error)}`);
+    }
+  };
   const scheduler = new Scheduler({
     store: routines,
     fire: (routineId) => runner.start(routineId, "schedule") !== undefined,
@@ -179,40 +273,71 @@ export function createProduct(options: {
   // product's own hooks and tables, none of which exist yet, so it reads them when asked.
   let running: AssembledServer | undefined;
   const later: {
+    taskRunner?: TaskRunner;
     hooks?: Required<SessionHooks>;
     inbox?: Inbox;
+    akhook?: AkhookHost;
+    mcp?: McpService;
+    githubCredentials?: () => Promise<GitHubCredentials | null>;
+    githubLogin?: GitHubKeeper;
   } = {};
   const hub = new MachineHub({
     machines,
-    changed: () => wire?.pushNow("machines"),
+    changed: () => {
+      wire?.pushNow("machines");
+      // A machine that came up may be the one a run was waiting for.
+      later.taskRunner?.pump();
+    },
     warn,
     serve: (link) =>
       serveLink(link, {
+        taskRun: (session) => {
+          const run = runRows.bySession(session);
+          const task = run === undefined ? undefined : taskRows.get(run.taskId);
+          if (
+            run === undefined ||
+            task?.createdBy.agentId == null ||
+            run.machineId === null ||
+            run.workspace === null
+          )
+            return undefined;
+          return {
+            runId: run.id,
+            agentId: task.createdBy.agentId,
+            machineId: run.machineId,
+            cwd: run.workspace,
+          };
+        },
         conversations,
         projects,
         machines,
         models: () => running?.models,
         hooks: () => later.hooks,
         approvals: () => later.inbox?.approvals() ?? [],
-        generated: (meta, message) => {
-          try {
-            usage.record(entryOf(meta, message));
-            wire?.push("usage");
-          } catch (error) {
-            warn(`[eta] could not record a generation: ${String(error)}`);
-          }
+        mcpCredential: async (call) => {
+          if (later.mcp === undefined) throw new Error("the host is starting");
+          return await later.mcp.relay(call);
         },
+        githubCredentials: async () =>
+          (await later.githubCredentials?.()) ?? null,
+        generated,
         warn,
       }),
   });
-  const mirrors = new SessionMirrors(hub);
-  const remotePlace = new RemotePlace({
-    hub,
-    mirrors,
-    models: () => running?.models,
-    defaults: async () => (await running?.defaults()) ?? {},
-    hooks: () => later.hooks,
+  const mirrors = new SessionMirrors(hub, (id) => machines.get(id)?.name);
+  // The bundles agents load: their files, values, services and the readiness of each machine.
+  const secretKey = loadSecretKey(dataDir);
+  const bundles = new Bundles({
+    db,
+    dataDir,
+    key: secretKey,
     home: options.home ?? homedir(),
+    machines,
+    hub,
+    agentBundles: (agentId) =>
+      agentId === undefined ? [] : (agents.get(agentId)?.bundles ?? []),
+    gateway: options.gateway,
+    changed: () => wire?.pushNow("bundles"),
     warn,
   });
   const router = new RemoteSessionsRouter({
@@ -220,6 +345,19 @@ export function createProduct(options: {
     machines,
     hub,
     models: () => running?.models,
+    rows: () => mirrors.rows(),
+  });
+  const remotePlace = new RemotePlace({
+    hub,
+    mirrors,
+    models: () => running?.models,
+    defaults: async () => (await running?.defaults()) ?? {},
+    hooks: () => later.hooks,
+    akhook: () => later.akhook?.layerTexts() ?? [],
+    bundles,
+    home: options.home ?? homedir(),
+    forward: (action, args) => router.forward(action, args),
+    warn,
   });
 
   const targets = new ConversationTargets({
@@ -230,12 +368,12 @@ export function createProduct(options: {
   const created = (id: string): void => targets.add(id);
 
   // The task board, and the artifacts its cards list.
-  const taskRows = new TaskStore(db);
   const artifactRows = new ArtifactStore(db);
   const artifactsOf = (taskId: string) => artifactRows.latestOfTask(taskId);
   const board = new TaskBoard({
     db,
     tasks: taskRows,
+    runs: runRows,
     cards: new TaskCards({
       db,
       tasks: taskRows,
@@ -254,8 +392,77 @@ export function createProduct(options: {
     changed: () => wire?.pushNow("inbox"),
     warn,
   });
+  // The rules of the user's akhook files and the host's own, and the approval list: one set of
+  // tool-call checks per session, one question when several of them want to ask.
+  const akhook = new AkhookHost({
+    dataDir,
+    userConfigPath: options.akhook?.userConfigPath,
+    additional: options.akhook?.additional,
+    approvals: () => inbox.approvals(),
+    bundleLayers: (agentId, cwd) => bundles.layersFor(agentId, cwd),
+    warn,
+  });
+  // MCP: the servers of the agents' bundles, the user's files and the projects, started on this
+  // machine; OAuth credentials sealed in the database; the sign-in callback.
+  const mcp = new McpService({
+    db,
+    key: secretKey,
+    dataDir,
+    home: options.home ?? homedir(),
+    agents: () => agents.list().map(({ id, name }) => ({ id, name })),
+    bundleSources: (agentId, cwd) => bundles.mcpSourcesFor(agentId, cwd),
+    publicUrl: options.publicUrl,
+    changed: () => wire?.pushNow("mcp"),
+    warn,
+    ...options.mcp,
+  });
+  later.mcp = mcp;
+  // The GitHub App agents act as, and git and gh on this machine logged in as it (the daemons'
+  // machines ask over their links; see `machines/service.ts`).
+  const github: Github = new Github({
+    db,
+    key: secretKey,
+    publicUrl: options.publicUrl,
+    ...options.github,
+    changed: () => {
+      wire?.pushNow("github");
+      void later.githubLogin?.poke();
+      // The daemons' machines look again too, instead of at their next hourly refresh.
+      for (const machine of machines.list())
+        if (machine.kind === "daemon")
+          void hub
+            .link(machine.id)
+            ?.machine("githubRefresh", {})
+            .catch(() => undefined);
+    },
+    warn,
+  });
+  /** The token a machine's git and gh are set up with; null while GitHub is not connected. */
+  const githubCredentials = async (): Promise<GitHubCredentials | null> => {
+    try {
+      return await github.credentials();
+    } catch (error) {
+      if (error instanceof GithubError) return null;
+      throw error;
+    }
+  };
+  const githubLogin = new GitHubKeeper({
+    dir: join(dataDir, "github"),
+    credentials: githubCredentials,
+    warn,
+  });
+  later.githubCredentials = githubCredentials;
+  later.githubLogin = githubLogin;
+  const attachments = new AttachmentStore(db, dataDir);
+  const runHooks = combineRunHooks([
+    akhook.runHooks,
+    ...(memory === undefined ? [] : [memoryRunHooks(memory)]),
+  ]);
   const engine = new Engine({
     db,
+    attachments,
+    shell: (machine) => transportOn(machine, hub),
+    models: () => running?.models,
     agents,
     machines,
     projects,
@@ -264,8 +471,31 @@ export function createProduct(options: {
     changed,
     warn,
     remote: remotePlace,
-    ...(memory === undefined ? {} : { runHooks: memoryRunHooks(memory) }),
+    bundleStamp: (agent) => bundles.stampOf(agent.bundles),
+    runHooks,
   });
+  // The executors of tasks: a fresh session of the agent that made a task for each run, on the
+  // machine of the task's project.
+  const transport = (machine: MachineRecord) => transportOn(machine, hub);
+  const taskRunner = new TaskRunner({
+    board,
+    tasks: taskRows,
+    runs: runRows,
+    agents,
+    machines,
+    projects,
+    conversations,
+    timeline,
+    engine,
+    transport,
+    dataDir,
+    hooks: runHooks,
+    changed: (touched) => changed(touched),
+    warn,
+  });
+  later.taskRunner = taskRunner;
+  // Nothing is running yet, so the runs the last process left going cannot be.
+  taskRunner.recover();
 
   const limits = { ...DEFAULT_LIMITS, ...options.artifactLimits };
   const artifactsRoot = join(dataDir, "artifacts");
@@ -277,38 +507,105 @@ export function createProduct(options: {
     changed: () => wire?.pushNow("artifacts"),
   });
   const artifactRoutes = createArtifactRoutes(artifacts);
+  const githubCallbacks = githubRoutes(github, warn);
 
   // Each feature that adds tools, tool middleware or a question observer to sessions is one entry
   // here; the order is the order its tools and middleware are installed in.
-  const sessionHooks = combineSessionHooks([
+  const productHooks: SessionHooks[] = [
     {
       sessionTools: engine.sessionTools,
       askObserve: engine.askObserve,
     },
     { sessionTools: runner.sessionTools },
-    { sessionTools: taskSessionTools({ board, agents }) },
+    {
+      sessionTools: taskSessionTools({
+        board,
+        agents,
+        runner: taskRunner,
+        workspaceFor: workspaceChooser({
+          conversations,
+          projects,
+          machines,
+          transport,
+        }),
+      }),
+    },
     { sessionTools: artifactSessionTools({ artifacts, board, limits }) },
-    { toolMiddleware: inbox.toolMiddleware, askObserve: inbox.askObserve },
+    {
+      sessionTools: githubSessionTools({
+        github,
+        opened: (conversationId, pull) => {
+          // A task run's session is held in `task-run:<id>`: its pull request is its task's.
+          const runId = runIdOf(conversationId);
+          const taskId =
+            conversationId === undefined
+              ? undefined
+              : runId === undefined
+                ? github.store.taskOfConversation(conversationId)
+                : github.store.taskOfRun(runId);
+          if (taskId === undefined) return;
+          github.store.linkPull(taskId, pull, Date.now());
+          wire?.pushNow("github");
+        },
+      }),
+    },
+    {
+      toolMiddleware: akhook.toolMiddleware,
+      sessionAttach: akhook.sessionAttach,
+      askObserve: (meta: SessionMeta) => inbox.askObserve(originOf(meta)),
+    },
     ...(memory === undefined
       ? []
-      : [{ sessionTools: memoryTools.bind(undefined, memory) }]),
+      : [
+          {
+            sessionTools: (input: Parameters<typeof memoryTools>[1]) =>
+              memoryTools(memory, { ...input, meta: originOf(input.meta) }),
+          },
+        ]),
+  ];
+  // What the product's tools are, as a daemon's sessions get them (specs the daemon calls back).
+  later.hooks = combineSessionHooks(productHooks);
+  // The host's own sessions also get MCP: the proxy tool and the direct tools of their agent's
+  // servers, with akhook asked about each call. They are not in `later.hooks` because a daemon
+  // starts its own, on its own machine.
+  const sessionHooks = combineSessionHooks([
+    ...productHooks,
+    {
+      sessionTools: (input) =>
+        mcp.sessionTools({
+          ...input,
+          akhook: akhook.toolMiddleware(input)[0],
+        }),
+    },
   ]);
-
-  later.hooks = sessionHooks;
   later.inbox = inbox;
+  later.akhook = akhook;
 
   return {
     engine,
+    board,
     hub,
     scheduler,
     sessionHooks,
+    generated,
+    skillDirsFor: (meta) => bundles.skillDirsFor(meta),
+    shellEnv: githubLogin.env,
     fetch: async (request) =>
-      (await hub.enroll(request)) ?? (await artifactRoutes(request)),
+      (await hub.enroll(request)) ??
+      (await mcp.route(request)) ??
+      (await githubCallbacks(request)) ??
+      (await bundles.route(request)) ??
+      (await artifactRoutes(request)),
     remote: router,
     endpoints: [hub.endpoint],
-    close: () => {
+    close: async () => {
+      // The runs stop first: they work through the links and the session host.
+      await taskRunner.detach();
       hub.close();
       mirrors.detach();
+      githubLogin.stop();
+      await mcp.close();
+      await bundles.close();
     },
     async mount(server) {
       running = server;
@@ -320,9 +617,10 @@ export function createProduct(options: {
           .list()
           .filter((machine) => machine.kind === "daemon")
           .flatMap((machine) =>
-            conversations
-              .sessionsOn(machine.id)
-              .map((session) => ({ session, machineId: machine.id })),
+            [
+              ...conversations.sessionsOn(machine.id),
+              ...runRows.sessionsOn(machine.id),
+            ].map((session) => ({ session, machineId: machine.id })),
           ),
       );
       const pending = new Set([
@@ -335,6 +633,9 @@ export function createProduct(options: {
         "artifacts",
         "inbox",
         "usage",
+        "bundles",
+        "mcp",
+        "github",
         ...(memory === undefined ? [] : ["memory"]),
       ]);
       let ready!: () => void;
@@ -349,7 +650,23 @@ export function createProduct(options: {
       server.mount(
         "agents",
         agentsPlugin(
-          { ...shared, dataDir, db, engine, changed, created },
+          {
+            ...shared,
+            dataDir,
+            db,
+            engine,
+            changed,
+            created,
+            removed: (agentId) =>
+              void options
+                .gateway?.()
+                ?.revoke(agentId)
+                .catch((error) =>
+                  warn(
+                    `[eta] llm: could not end the keys of ${agentId}: ${String(error)}`,
+                  ),
+                ),
+          },
           applied("agents"),
         ),
       );
@@ -359,7 +676,11 @@ export function createProduct(options: {
           {
             machines,
             hub,
-            changed,
+            changed: () => {
+              changed();
+              // The limit may have moved: runs that were waiting for a slot can start.
+              taskRunner.pump();
+            },
             defaultUrl: () =>
               `http://${options.hostname ?? "127.0.0.1"}:${server.server.port}`,
           },
@@ -373,7 +694,7 @@ export function createProduct(options: {
       server.mount(
         "conversations",
         conversationsPlugin(
-          { ...shared, engine, targets, changed, created },
+          { ...shared, engine, attachments, targets, changed, created },
           applied("conversations"),
         ),
       );
@@ -391,13 +712,31 @@ export function createProduct(options: {
           applied("routines"),
         ),
       );
-      server.mount("tasks", tasksPlugin({ board }, applied("tasks")));
+      server.mount(
+        "tasks",
+        tasksPlugin({ board, runner: taskRunner }, applied("tasks")),
+      );
       server.mount(
         "artifacts",
         artifactsPlugin({ artifacts, board }, applied("artifacts")),
       );
       server.mount("inbox", inboxPlugin({ inbox }, applied("inbox")));
-      server.mount("usage", usagePlugin({ usage, warn }, applied("usage")));
+      server.mount("usage", usagePlugin(usage, applied("usage")));
+      server.mount(
+        "bundles",
+        bundlesPlugin(
+          {
+            registry: bundles.registry,
+            rows: bundles.rows,
+            services: bundles.services,
+            readiness: bundles.readiness,
+            changed: () => wire?.pushNow("bundles"),
+          },
+          applied("bundles"),
+        ),
+      );
+      server.mount("mcp", mcpPlugin({ service: mcp }, applied("mcp")));
+      server.mount("github", githubPlugin({ github }, applied("github")));
       if (memory !== undefined)
         server.mount(
           "memory",
@@ -420,6 +759,13 @@ export function createProduct(options: {
       } finally {
         clearTimeout(timer);
       }
+      bundles.start();
+      // Everything the runs need is in place: the queue is looked at now.
+      if (options.tasks?.runs !== false) taskRunner.attach();
+      githubLogin.start();
+      // Where the App is installed, once, so the first look at the settings is not a guess.
+      if (github.app() !== null)
+        void github.status(false).catch(() => undefined);
     },
   };
 }

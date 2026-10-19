@@ -30,6 +30,13 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 
+import {
+  GITHUB_AUTHORIZATION_CALLBACK_PATH,
+  GITHUB_MANIFEST_CALLBACK_PATH,
+} from "./github/path";
+import { LLM_ROUTE } from "./llm/route";
+import { MCP_CALLBACK_PATH } from "./mcp/path";
+
 const COOKIE = "eta_session";
 /** Thirty days: a browser that was let in once should not be asked again on Monday. */
 const COOKIE_MAX_AGE = 30 * 24 * 60 * 60;
@@ -114,13 +121,22 @@ function askedFor(request: Request): { host: string; origin: string } {
 /**
  * The pages that carry their own capability: an artifact's preview (a signed address, because a
  * sandboxed iframe sends no cookie) and its public share (a secret token, for people who are not
- * the user). They are exempt from the token gate for that reason and no other, and only to read:
- * everything else, the app's own `/artifacts/` downloads included, stays behind it.
+ * the user), and the return of an MCP server's OAuth sign-in (the browser comes back from the
+ * provider, a site that holds no cookie of ours; the route completes only a sign-in this host is
+ * waiting for, found by its unguessable `state`), and likewise GitHub's two returns to the host
+ * (the App was created from the manifest the host made; the user authorized the App), which spend a
+ * `state` the host issued and otherwise change nothing. They are exempt from the token gate for
+ * that reason and no other, and only to read: everything else, the app's own `/artifacts/` downloads
+ * included, stays behind it.
  */
 function carriesOwnCapability(request: Request, pathname: string): boolean {
   return (
     (request.method === "GET" || request.method === "HEAD") &&
-    (pathname.startsWith("/preview/") || pathname.startsWith("/share/"))
+    (pathname.startsWith("/preview/") ||
+      pathname.startsWith("/share/") ||
+      pathname === MCP_CALLBACK_PATH ||
+      pathname === GITHUB_MANIFEST_CALLBACK_PATH ||
+      pathname === GITHUB_AUTHORIZATION_CALLBACK_PATH)
   );
 }
 
@@ -131,6 +147,15 @@ function carriesOwnCapability(request: Request, pathname: string): boolean {
  */
 function isMachineRoute(pathname: string): boolean {
   return pathname === "/machines/enroll" || pathname === "/machines/connect";
+}
+
+/**
+ * The gateway route a daemon's sessions use for their bundles' tools. It is not a browser's and
+ * carries no cookie, so the token gate cannot say anything about it; the route admits an agent's
+ * scoped key and nothing else (see `llm/runtime.ts`).
+ */
+function isGatewayRoute(pathname: string): boolean {
+  return pathname.startsWith(LLM_ROUTE);
 }
 
 const refuse = (status: number, message: string): Response =>
@@ -179,7 +204,11 @@ export function createAccess(options: AccessOptions): Access {
     tokenFile,
     authorize(request) {
       const url = new URL(request.url);
-      if (url.pathname === "/up" || isMachineRoute(url.pathname))
+      if (
+        url.pathname === "/up" ||
+        isMachineRoute(url.pathname) ||
+        isGatewayRoute(url.pathname)
+      )
         return undefined;
 
       if (url.pathname === "/ws" && !originAllowed(request)) {

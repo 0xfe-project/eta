@@ -1,58 +1,75 @@
 {
   "title": "环境包",
-  "service": {
-    "status": {
-      "deploying": "部署中",
-      "incompatibleProtocol": "协议不兼容"
-    },
-    "summary": "服务：{{runtime}}{{status}}{{details}}"
-  },
-  "editor": {
-    "scriptHelp": "脚本在构建智能体环境时以 root 运行；用到它的智能体会重新构建。",
-    "descriptionLabel": "说明",
-    "scriptLabel": "脚本",
-    "serviceLabel": "服务",
-    "manifestsPlaceholder": "# 可选：在集群里运行的 Kubernetes 对象，载入它的智能体经 /bundles/{{bundleName}}/ 访问\n# 需要一个名为 {{serviceName}}、端口名 http 的 Service",
-    "callableModels": "可调用模型",
-    "separateDatabase": "独立数据库",
-    "pluginsLabel": "插件"
-  },
-  "description": "智能体的环境由它选择的环境包构建：脚本装好工具，插件带来 MCP、技能和钩子。",
+  "description": "环境包给智能体接入外部工具：技能、MCP 工具和规则。在智能体的设置里勾选。",
   "empty": {
-    "title": "还没有环境包"
+    "title": "没有环境包",
+    "description": "把环境包目录放进 ~/.eta/bundles，或从 git 添加。"
   },
-  "plugins": {
-    "summary": "插件：{{plugins}}"
+  "sources": {
+    "builtin": "内置",
+    "local": "本地",
+    "git": "git"
   },
-  "configuration": {
-    "oomol": {
-      "apiKeyHelp": "登录 [OOMOL 的 MCP 配置页](https://oomol.com/install/mcp/) 生成；在 OOMOL 重置后这里要换新的。",
-      "teamNameLabel": "团队名",
-      "teamNameHelp": "OOMOL 里的团队，即那里给出的配置中的 `x-oo-team-name`。"
-    }
+  "status": {
+    "configured": "已配置",
+    "notConfigured": "未配置",
+    "problem": "无法使用"
   },
-  "descriptions": {
-    "agenvo": "操作用户远程电脑上的 Paseo 和 Herdr：工作区、智能体、输入、历史和终端。",
-    "approval": "规则拦下的命令先请用户在 Eta 里确认，同意后放行一次。",
-    "artifacts": "Artifact：把静态网页发布到 Eta，在聊天和任务里预览，可公开分享。",
-    "github": "以 Eta 的 GitHub App 身份使用 git、gh，并开 PR。",
-    "grok": "Grok Imagine 生成图片和视频，网页和 X 搜索。",
-    "groups": "群聊：读取前情、点名协作、整理简报和任务草稿。",
-    "memory": "跨对话的长期记忆：每轮开始时回忆，结束时记下。",
-    "oomol": "OOMOL：用 oo CLI 使用在 OOMOL 里连接的应用（邮件、日历、文档等）和托管能力。",
-    "routines": "定时任务：查看、新建和修改定时任务及其报告。",
-    "tasks": "任务看板：创建、指派和跟进任务，包括远程电脑上的智能体执行的任务。"
+  "summary": {
+    "requires": "需要命令：{{commands}}",
+    "missing": "{{machine}} 缺少 {{commands}}",
+    "unchecked": "{{machine}} 离线，未检查",
+    "contents": "{{skills}} 个技能 · {{servers}} 个 MCP 服务器{{hooks}}",
+    "hooks": " · 规则"
   },
-  "pluginDescriptions": {
-    "agenvo": "通过 agenvo 操作远程电脑上的 Paseo 和 Herdr：管理工作区与智能体，发送输入，查看历史，打断运行及使用终端。",
-    "approval": "请用户确认被 Eta 规则拦下的命令。",
-    "artifacts": "把静态网页（ZIP 或目录）发布为 Artifact，在聊天和任务里预览、分享。",
-    "github": "使用 Eta 的 GitHub App 获取 git 和 gh 凭据，由 App 创建拉取请求，并起草由用户自己提交的 issue。",
-    "grok": "通过 LLM 网关的 Grok 账号使用 Grok Imagine 生成图像和视频，搜索网页及 X。",
-    "groups": "在当前群内检索、协作和整理决定。",
-    "memory": "由记忆服务保存跨对话的长期记忆。",
-    "oomol": "OOMOL 的 oo CLI 和它自带的 skill；凭据来自 oomol 环境包的配置（OO_API_KEY、OO_TEAM_NAME）。",
-    "routines": "列出和查看定时智能体及其报告，创建和修改定时任务。",
-    "tasks": "创建、指派和跟进任务，包括远程电脑上智能体执行的任务。"
+  "service": {
+    "stopped": "服务未运行",
+    "starting": "服务启动中",
+    "ready": "服务运行中",
+    "error": "服务出错"
+  },
+  "actions": {
+    "configure": "设置",
+    "add": "从 git 添加",
+    "refresh": "更新",
+    "refreshAll": "更新全部 git 来源",
+    "remove": "移除",
+    "recheck": "重新检查机器"
+  },
+  "configure": {
+    "title": "设置 {{name}}",
+    "secretPlaceholder": "已设置；留空则保持不变",
+    "encryptionHelp": "值加密后存放在这台主机上，只交给 {{name}} 自己的进程，不会出现在智能体的命令行环境里，也不会再显示出来。",
+    "savedReady": "已保存",
+    "savedIncomplete": "已保存，还有必填项没填",
+    "clear": "清除全部",
+    "cleared": "已清除",
+    "clearConfirmTitle": "清除 {{name}} 的全部设置？",
+    "clearConfirmDescription": "使用它的智能体会失去它的 MCP 工具和规则，直到重新设置。"
+  },
+  "add": {
+    "title": "从 git 添加环境包",
+    "repo": "仓库",
+    "repoPlaceholder": "https://github.com/…，或本机路径",
+    "rev": "分支、标签或提交",
+    "revPlaceholder": "默认 HEAD",
+    "path": "仓库里的目录",
+    "pathPlaceholder": "默认仓库根目录",
+    "hint": "解析成提交并记住，之后每次都是同一份；要更新点「更新」。私有仓库用这台主机上的 git 凭据。",
+    "added": "已添加 {{name}}"
+  },
+  "refresh": {
+    "done": "已更新 {{names}}"
+  },
+  "remove": {
+    "confirmTitle": "移除 {{name}}？",
+    "confirmDescription": "它的文件和设置会从这台主机上删掉。载入它的智能体不再有它。",
+    "done": "已移除 {{name}}"
+  },
+  "picker": {
+    "help": "勾选后，这个智能体的会话带上环境包的技能、MCP 工具和规则；在它的下一条消息生效。",
+    "empty": "没有可选的环境包。",
+    "gone": "已不存在",
+    "notConfigured": "未配置，只有技能生效"
   }
 }

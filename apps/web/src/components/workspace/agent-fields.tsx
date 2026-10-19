@@ -3,11 +3,13 @@ import type { AgentForm } from "./agent-form";
 import type { Model } from "@/queries/providers";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatLocale } from "@/lib/i18n";
 import { THINKING_LEVELS } from "@/lib/thinking";
+import { useBundles } from "@/queries/bundles";
 import { usePersonas } from "@/queries/personas";
 import { modelGroups } from "@/queries/providers";
 import { DESCRIPTION_MAX } from "./agent-form";
@@ -20,12 +22,15 @@ export function ModelSelect({
   value,
   models,
   invalid,
+  defaultLabel,
   ...props
 }: Omit<React.ComponentProps<typeof Select>, "children"> & {
   value: string;
   /** Undefined while they load. */
   models: Model[] | undefined;
   invalid?: boolean;
+  /** Offers "no model of its own" (the empty value) under this name, instead of asking to pick. */
+  defaultLabel?: string;
 }) {
   const { t: translateText } = useTranslation([
     "agents",
@@ -43,10 +48,11 @@ export function ModelSelect({
       {...props}
       disabled={loading || props.disabled}
     >
-      <SelectOption value="" disabled>
-        {loading
-          ? translateText("models.loading")
-          : translateText("models.select")}
+      <SelectOption value="" disabled={defaultLabel === undefined}>
+        {defaultLabel ??
+          (loading
+            ? translateText("models.loading")
+            : translateText("models.select"))}
       </SelectOption>
       {value && !known ? (
         <SelectOption value={value} disabled>
@@ -324,6 +330,84 @@ export function PersonaField({ form }: { form: Form }) {
         }
         invalid={Boolean(form.formState.errors.persona)}
       />
+    </div>
+  );
+}
+
+/**
+ * Which bundles the agent loads. The names it already holds stay listed even when the host no
+ * longer has them, so they can be unchecked.
+ */
+export function BundlesField({ form }: { form: Form }) {
+  const { t: translateText } = useTranslation(["bundles", "common"] as const);
+  const { bundles } = useBundles();
+  const chosen = form.watch("bundles") ?? [];
+  const gone = chosen.filter(
+    (name) => !bundles.some((bundle) => bundle.name === name),
+  );
+  const toggle = (name: string, on: boolean) =>
+    form.setValue(
+      "bundles",
+      on ? [...chosen, name] : chosen.filter((item) => item !== name),
+      { shouldDirty: true },
+    );
+  return (
+    <div role="group" aria-labelledby="agent-bundles" className="space-y-1.5">
+      <p id="agent-bundles" className="text-xs text-muted-foreground">
+        {translateText("picker.help")}
+      </p>
+      {bundles.length + gone.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {translateText("picker.empty")}
+        </p>
+      ) : (
+        <ul className="divide-y border">
+          {bundles.map((bundle) => (
+            <li key={bundle.name}>
+              <Label className="items-start gap-3 p-2.5 leading-snug">
+                <Checkbox
+                  className="mt-px"
+                  checked={chosen.includes(bundle.name)}
+                  disabled={
+                    bundle.problem !== null && !chosen.includes(bundle.name)
+                  }
+                  onCheckedChange={(on) => toggle(bundle.name, on === true)}
+                />
+                <span className="min-w-0 space-y-0.5">
+                  <span className="block font-medium">{bundle.name}</span>
+                  <span className="block text-muted-foreground">
+                    {bundle.problem ?? bundle.description}
+                  </span>
+                  {bundle.problem === null &&
+                  bundle.fields.length > 0 &&
+                  !bundle.configured ? (
+                    <span className="block text-xs text-muted-foreground">
+                      {translateText("picker.notConfigured")}
+                    </span>
+                  ) : null}
+                </span>
+              </Label>
+            </li>
+          ))}
+          {gone.map((name) => (
+            <li key={name}>
+              <Label className="items-start gap-3 p-2.5 leading-snug">
+                <Checkbox
+                  className="mt-px"
+                  checked
+                  onCheckedChange={() => toggle(name, false)}
+                />
+                <span className="min-w-0 space-y-0.5">
+                  <span className="block font-medium">{name}</span>
+                  <span className="block text-muted-foreground">
+                    {translateText("picker.gone")}
+                  </span>
+                </span>
+              </Label>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

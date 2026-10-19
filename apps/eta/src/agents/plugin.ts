@@ -38,6 +38,8 @@ export interface AgentsDeps {
   changed: (conversations?: readonly string[] | "all") => void;
   /** A conversation exists now: its target has to be published. */
   created: (conversationId: string) => void;
+  /** An agent is gone: whatever it was given outside the database goes with it. */
+  removed: (agentId: string) => void;
 }
 
 export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
@@ -58,6 +60,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
       persona: agent.persona,
       model: agent.model,
       thinkingLevel: agent.thinkingLevel,
+      bundles: agent.bundles,
       home,
       homeProjectId: project?.id ?? "",
       status: statuses.get(agent.id) ?? "idle",
@@ -117,13 +120,24 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
           return { result: { agent: viewOf(existing(id)) } };
         }),
 
-        wire.handle("agents", "update", (call) => {
+        wire.handle("agents", "update", async (call) => {
           const args = new Args(call);
           const id = args.string("agentId");
           const before = existing(id);
           const fields = fieldsOf(call, false);
           const agent = agents.update(id, fields)!;
           if (agent.name !== before.name) renameHome(agent);
+          // The model and thinking level belong to a session once it exists; an edit of the agent
+          // is the one thing that overrides what the user chose there.
+          await deps.engine.applySettings(id, {
+            ...(agent.model !== null && agent.model !== before.model
+              ? { model: agent.model }
+              : {}),
+            ...(agent.thinkingLevel !== null &&
+            agent.thinkingLevel !== before.thinkingLevel
+              ? { thinkingLevel: agent.thinkingLevel }
+              : {}),
+          });
           deps.changed("all");
           return { result: { agent: viewOf(agent) } };
         }),
@@ -145,6 +159,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             // Stewards and memberships go with the row (ON DELETE SET NULL / CASCADE).
             agents.remove(agent.id);
           })();
+          deps.removed(id);
           deps.changed("all");
           return { result: { agentId: id } };
         }),
@@ -214,6 +229,7 @@ function fieldsOf(
   persona?: string;
   model?: string | null;
   thinkingLevel?: ThinkingLevel | null;
+  bundles?: string[];
 } {
   const args = new Args(call);
   const name = create ? args.string("name") : args.optionalString("name");
@@ -227,7 +243,22 @@ function fieldsOf(
     throw new Error(`unknown thinking level: ${level}`);
   const instructions = args.optionalString("instructions");
   const persona = args.optionalString("persona");
+  const bundles = (call.args as { bundles?: unknown } | undefined)?.bundles;
+  if (
+    bundles !== undefined &&
+    (!Array.isArray(bundles) ||
+      !bundles.every(
+        (name) =>
+          typeof name === "string" && /^[a-z0-9][a-z0-9-]{0,63}$/.test(name),
+      ))
+  )
+    throw new TypeError(
+      `${call.target}.${call.action}: bundles must be a list of bundle names`,
+    );
   return {
+    ...(bundles === undefined
+      ? {}
+      : { bundles: [...new Set(bundles as string[])] }),
     ...(name === undefined ? {} : { name: name.trim() }),
     ...(instructions === undefined ? {} : { instructions }),
     ...(persona === undefined ? {} : { persona }),

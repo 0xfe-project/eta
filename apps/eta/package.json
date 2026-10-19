@@ -7,17 +7,21 @@
   "scripts": {
     "dev": "bun --watch src/main.ts --data-dir ../../var/eta-dev --allow-origin http://127.0.0.1:${ETA_WEB_PORT:-3000}",
     "start": "bun src/main.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint .",
+    "typecheck": "bun check",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
     "test": "bun --bun vitest --run --passWithNoTests"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "0.85.1",
     "@eta/client-contracts": "*",
     "@eta/client-wire-proto": "*",
     "@eta/core": "*",
     "@eta/daemon": "*",
     "@eta/execution-node": "*",
     "@eta/harness": "*",
+    "@eta/llm-gateway": "*",
+    "@eta/mcp": "*",
+    "@eta/plugin-akhook": "*",
     "@eta/server": "*",
     "@eta/ssh": "*",
     "croner": "10.0.1",
@@ -25,7 +29,6 @@
     "typebox": "1.3.34"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "0.85.1",
     "@types/node": "22.19.19",
     "bun-types": "1.4.2",
     "typescript": "5.9.3",

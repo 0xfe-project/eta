@@ -5,16 +5,16 @@ import { DesktopIcon } from "@phosphor-icons/react/Desktop";
 import { LinkIcon } from "@phosphor-icons/react/Link";
 import { PackageIcon } from "@phosphor-icons/react/Package";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
+import { PlugIcon } from "@phosphor-icons/react/Plug";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
 import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { ShieldCheckIcon } from "@phosphor-icons/react/ShieldCheck";
-import { capabilities } from "@/lib/capabilities";
 import { translate } from "@/lib/i18n";
 import { useNeedsAttention } from "@/queries/providers";
 
 // Settings' sections, listed by the dialog and by the phone's 更多 page.
 
-const everySection: {
+export const settingsSections: {
   value: SettingsSection;
   label: string;
   icon: Icon;
@@ -25,13 +25,6 @@ const everySection: {
       return translate("common:entities.agents");
     },
     icon: RobotIcon,
-  },
-  {
-    value: "bundles",
-    get label() {
-      return translate("bundles:title");
-    },
-    icon: PackageIcon,
   },
   {
     value: "providers",
@@ -48,18 +41,32 @@ const everySection: {
     icon: ShieldCheckIcon,
   },
   {
+    value: "machines",
+    get label() {
+      return translate("machines:title");
+    },
+    icon: DesktopIcon,
+  },
+  {
+    value: "bundles",
+    get label() {
+      return translate("bundles:title");
+    },
+    icon: PackageIcon,
+  },
+  {
+    value: "mcp",
+    get label() {
+      return translate("mcp:title");
+    },
+    icon: PlugIcon,
+  },
+  {
     value: "connections",
     get label() {
       return translate("connections:title");
     },
     icon: LinkIcon,
-  },
-  {
-    value: "computers",
-    get label() {
-      return translate("computers:title");
-    },
-    icon: DesktopIcon,
   },
   {
     value: "archived",
@@ -76,20 +83,6 @@ const everySection: {
     icon: PaletteIcon,
   },
 ];
-
-/**
- * What this host offers, minus the surfaces whose API is not on it yet (capabilities.ts names the
- * phase for each). Hidden here rather than broken there: a section that cannot load is a bug the
- * user found, not a setting.
- */
-export const settingsSections = everySection.filter(
-  ({ value }) =>
-    !(
-      (value === "bundles" && !capabilities.bundles) ||
-      (value === "connections" && !capabilities.connections) ||
-      (value === "computers" && !capabilities.computers)
-    ),
-);
 
 /** The sections with something the user has to act on. */
 export function useSettingsAttention(): Partial<

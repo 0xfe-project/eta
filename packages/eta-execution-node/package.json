@@ -11,8 +11,8 @@
   "types": "./src/index.ts",
   "scripts": {
     "test": "vitest --run",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint ."
+    "typecheck": "bun check",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
   },
   "dependencies": {
     "@eta/execution": "*",

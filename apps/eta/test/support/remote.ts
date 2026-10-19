@@ -33,10 +33,12 @@ export interface RemoteWorld extends World {
 
 export async function remoteWorld(
   options: Partial<HostOptions> = {},
+  daemonOptions: Parameters<typeof startDaemon>[2] = {},
 ): Promise<RemoteWorld> {
   const w = await world(options);
   const traffic = { in: [] as string[], out: [] as string[] };
   const daemon = await startDaemon(w.host, w.client, {
+    ...daemonOptions,
     tap: (direction, text) => traffic[direction].push(text),
   });
   await approve(w.client, daemon);

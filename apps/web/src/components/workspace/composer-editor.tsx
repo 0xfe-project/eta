@@ -1,4 +1,5 @@
-import type { Draft } from "@/lib/composer";
+import type { BlockPart } from "./composer-nodes";
+import type { Draft, FilePart } from "@/lib/composer";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
@@ -14,7 +15,7 @@ import {
 } from "lexical";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { isLongPaste } from "@/lib/composer";
+import { isLongPaste, MAX_MESSAGE_CHARS, pasteFileName } from "@/lib/composer";
 import { cn } from "@/lib/utils";
 import { $readDraft, $writeDraft, BlockNode } from "./composer-nodes";
 
@@ -23,12 +24,41 @@ import { $readDraft, $writeDraft, BlockNode } from "./composer-nodes";
 // file only says how pastes become blocks and keeps the editor and the
 // draft the same.
 
+/** The clipboard's files, unless it holds rich text with a picture of it. */
+function pastedFiles(data: DataTransfer): File[] {
+  const files = [...data.files];
+  if (!files.length) {
+    for (const item of data.items ?? []) {
+      const file = item.kind === "file" ? item.getAsFile() : null;
+      if (file) files.push(file);
+    }
+  }
+  // Office and web pages put a rendered image beside copied text: the text is what was copied.
+  const rich =
+    data.types.includes("text/html") || data.types.includes("text/rtf");
+  if (
+    rich &&
+    data.getData("text/plain").trim() &&
+    files.every((f) => f.type.startsWith("image/"))
+  )
+    return [];
+  return files;
+}
+
 const sameDraft = (a: Draft, b: Draft) =>
   JSON.stringify(a) === JSON.stringify(b);
 
-/** Folds long pastes into blocks; never inserts HTML. */
-function PastePlugin() {
+/** Folds long pastes and files into blocks; never inserts HTML. */
+function PastePlugin({
+  onFiles,
+}: {
+  onFiles?: ((files: File[]) => FilePart[]) | undefined;
+}) {
   const [editor] = useLexicalComposerContext();
+  const onFilesRef = useRef(onFiles);
+  useEffect(() => {
+    onFilesRef.current = onFiles;
+  });
   useEffect(
     () =>
       editor.registerCommand(
@@ -41,13 +71,27 @@ function PastePlugin() {
                 ? event.clipboardData
                 : event.dataTransfer;
           if (!data) return false;
+          const files =
+            onFilesRef.current === undefined ? [] : pastedFiles(data);
           const text = data.getData("text/plain").replace(/\r\n?/g, "\n");
+          let blocks: BlockPart[];
+          if (files.length) blocks = onFilesRef.current!(files);
+          // Text too long for a message goes as a file the agent can open.
+          else if (
+            onFilesRef.current !== undefined &&
+            text.length > MAX_MESSAGE_CHARS
+          )
+            blocks = onFilesRef.current([
+              new File([text], pasteFileName(), {
+                type: "text/plain;charset=utf-8",
+              }),
+            ]);
+          else if (isLongPaste(text))
+            blocks = [{ type: "paste", id: crypto.randomUUID(), text }];
           // Short text: the plain text editor inserts text/plain alone.
-          if (!isLongPaste(text)) return false;
+          else return false;
           event.preventDefault();
-          $insertNodes([
-            new BlockNode({ type: "paste", id: crypto.randomUUID(), text }),
-          ]);
+          $insertNodes(blocks.map((part) => new BlockNode(part)));
           return true;
         },
         COMMAND_PRIORITY_HIGH,
@@ -116,6 +160,7 @@ function DraftPlugin({
 export function ComposerEditor({
   value,
   onChange,
+  onFiles,
   onKeyDown,
   onCompositionStart,
   onCompositionEnd,
@@ -127,6 +172,8 @@ export function ComposerEditor({
 }: {
   value: Draft;
   onChange: (draft: Draft) => void;
+  /** Files pasted into the box: uploaded, and the blocks that stand for them. Without it, files are not taken. */
+  onFiles?: (files: File[]) => FilePart[];
   onKeyDown: (event: KeyboardEvent) => void;
   /** The input method's own events: the keydown handler needs to know a composition happened. */
   onCompositionStart?: () => void;
@@ -182,7 +229,7 @@ export function ComposerEditor({
         />
       </div>
       <HistoryPlugin />
-      <PastePlugin />
+      <PastePlugin onFiles={onFiles} />
       <DraftPlugin
         value={value}
         onChange={onChange}

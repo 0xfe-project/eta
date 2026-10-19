@@ -1,112 +1,68 @@
-import type { TaskDetail } from "@/queries/tasks";
+import type { BoardTaskDetail } from "@eta/client-contracts";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
-import {
-  QueryClient,
-  QueryClientProvider,
-  useQuery,
-} from "@tanstack/react-query";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { toast } from "sonner";
+import { setWire } from "@/lib/wire";
+import { useTask } from "@/queries/tasks";
+import { productHost, taskActivity, taskDetail } from "@/test-product";
+import { cleanup, flush, mount } from "@/test-render";
 import { CommentBox, Timeline } from "./tasks";
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
+rstest.mock("./use-groups", () => ({
+  useGroups: () => ({ groups: [], current: undefined, groupId: null }),
+  useOpenGroup: () => () => {},
+}));
 
-const at = "2026-10-11T00:00:00Z";
-const detail = {
-  id: "t1",
-  number: 1,
-  title: "测试任务",
-  status: "in_progress",
-  assignee: {
-    kind: "remote",
-    computer_id: "c1",
-    computer_name: "工作站",
-    runtime: "paseo",
-    provider: "codex",
-  },
-  comments: 0,
-  run_status: null,
-  updated_at: at,
-  description: "",
-  created_by: { kind: "user" },
-  created_at: at,
-  activity: [],
-  runs: [],
-  assists: [],
-  loops: [],
-} as unknown as TaskDetail;
+const task = taskDetail({ id: "t1", title: "测试任务", status: "in_progress" });
 
-const commented = (task: TaskDetail, body: string): TaskDetail => ({
-  ...task,
-  activity: [
-    ...task.activity,
-    {
-      id: `a${task.activity.length + 1}`,
-      kind: "comment",
-      actor: { kind: "user" },
-      run_id: null,
-      body,
-      data: {},
-      created_at: at,
-    } as TaskDetail["activity"][number],
-  ],
-});
-
-/** The detail's timeline and its box, both on the cached task, as the views wire them. */
+/** The detail's timeline and its box, on the task's own target, as the views wire them. */
 function Detail() {
-  const { data } = useQuery<TaskDetail>({
-    queryKey: ["tasks", "t1"],
-    queryFn: () => new Promise(() => {}),
-    staleTime: Infinity,
-  });
-  return data ? (
+  const { task } = useTask("t1");
+  return task ? (
     <>
-      <Timeline task={data} />
-      <CommentBox task={data} />
+      <Timeline task={task} />
+      <CommentBox task={task} />
     </>
   ) : null;
 }
 
-// happy-dom drops a Request's headers, so the retry's Idempotency-Key (the
-// first try's) is checked in a browser, not here.
-interface Post {
-  body: { body: string };
-  resolve: (response: Response) => void;
+interface Call {
+  args: { taskId: string; body: string };
+  resolve: () => void;
+  reject: (error: Error) => void;
 }
-let posts: Post[] = [];
+let calls: Call[] = [];
 
-const cleanup: (() => void)[] = [];
+/** A host whose comment calls wait for the test to answer them. */
 async function render() {
-  rstest.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-    const request = input as Request;
-    if (request.method !== "POST") return new Promise<Response>(() => {}); // Refreshes never settle here.
-    const body = await request.json();
-    return new Promise<Response>((resolve) => posts.push({ body, resolve }));
-  });
-  const client = new QueryClient({
-    defaultOptions: { queries: { staleTime: Infinity, retry: false } },
-  });
-  client.setQueryData(["tasks", "t1"], detail);
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () =>
-    root.render(
-      <QueryClientProvider client={client}>
-        <Detail />
-      </QueryClientProvider>,
-    ),
+  const host = productHost({ tasks: [{ task, activity: [] }] });
+  host.handle(
+    "tasks.comment",
+    (args) =>
+      new Promise((resolve, reject) =>
+        calls.push({
+          args: args as Call["args"],
+          resolve: () => resolve({ task, activity: taskActivity({ id: "x" }) }),
+          reject,
+        }),
+      ),
   );
-  cleanup.push(() => {
-    root.unmount();
-    client.clear();
-    container.remove();
-  });
-  return { container, client };
+  host.hello();
+  const view = await mount(<Detail />);
+  await flush();
+  return { ...view, host };
 }
+
+/** The comment as the host would record it, pushed to everyone watching the task. */
+const record = (host: ReturnType<typeof productHost>, ...bodies: string[]) =>
+  act(async () => {
+    host.set("tasks.t1", {
+      task: { ...task, comments: bodies.length } satisfies BoardTaskDetail,
+      activity: bodies.map((body, i) =>
+        taskActivity({ id: `a${i + 1}`, body, createdAt: 2000 + i }),
+      ),
+    });
+  });
 
 const box = (c: HTMLElement) =>
   c.querySelector<HTMLTextAreaElement>("textarea")!;
@@ -136,35 +92,19 @@ const send = (c: HTMLElement) =>
       new Event("submit", { bubbles: true, cancelable: true }),
     ),
   );
-/** Lets the fetch mock read the request. */
-const settle = () => act(() => new Promise((r) => setTimeout(r, 10)));
 
-async function respond(post: Post, response: Response) {
-  await act(async () => {
-    post.resolve(response);
-    await new Promise((r) => setTimeout(r, 10));
-  });
-}
-const ok = (body: string) =>
-  new Response(JSON.stringify(commented(detail, body)), { status: 201 });
-const failed = () =>
-  new Response(
-    JSON.stringify({ error: { code: "CONFLICT", message: "任务已结束" } }),
-    { status: 409 },
-  );
-
-describe("follow-up comments", () => {
+describe("comments on a task", () => {
   afterEach(async () => {
-    await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
-    rstest.restoreAllMocks();
-    posts = [];
+    await cleanup();
+    setWire(undefined);
+    calls = [];
   });
 
   it("moves the comment out of the box when sent and into the timeline when it arrives", async () => {
-    const { container } = await render();
+    const { container, host } = await render();
     await type(container, "再看一下日志");
     await send(container);
-    await settle();
+    await flush();
     // Sending: never in the box and the timeline at once.
     expect(box(container).value).toBe("");
     expect(outgoing(container)).toContain("再看一下日志");
@@ -174,11 +114,13 @@ describe("follow-up comments", () => {
 
     // The user writes on while it is on its way.
     await type(container, "还有一件事");
-    await respond(posts[0]!, ok("再看一下日志"));
+    await record(host, "再看一下日志");
+    await act(async () => calls[0]!.resolve());
+    await flush();
     expect(timeline(container)).toContain("再看一下日志");
     expect(outgoing(container)).toBeNull();
     expect(box(container).value).toBe("还有一件事");
-    expect(button(container, "发送追问").disabled).toBe(false);
+    expect(button(container, "评论").disabled).toBe(false);
   });
 
   it("sends a comment once however often it is submitted", async () => {
@@ -198,28 +140,31 @@ describe("follow-up comments", () => {
     // Nor does a new draft go out while the first is on its way.
     await type(container, "第二条");
     await send(container);
-    await settle();
-    expect(posts).toHaveLength(1);
-    expect(posts[0]!.body).toEqual({ body: "只发一次" });
+    await flush();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.args).toEqual({ taskId: "t1", body: "只发一次" });
   });
 
   it("keeps a failed comment to retry beside a new draft", async () => {
-    const { container } = await render();
+    const { container, host } = await render();
     await type(container, "部署好了吗");
     await send(container);
-    await settle();
+    await flush();
     await type(container, "新的草稿");
-    await respond(posts[0]!, failed());
+    await act(async () => calls[0]!.reject(new Error("任务已结束")));
+    await flush();
     expect(outgoing(container)).toContain("部署好了吗");
     expect(outgoing(container)).toContain("未送达：任务已结束");
     expect(box(container).value).toBe("新的草稿");
 
     await act(async () => button(container, "重试").click());
-    await settle();
+    await flush();
     expect(outgoing(container)).toContain("发送中…");
-    expect(posts).toHaveLength(2);
-    expect(posts[1]!.body).toEqual({ body: "部署好了吗" });
-    await respond(posts[1]!, ok("部署好了吗"));
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.args).toEqual({ taskId: "t1", body: "部署好了吗" });
+    await record(host, "部署好了吗");
+    await act(async () => calls[1]!.resolve());
+    await flush();
     expect(timeline(container)).toContain("部署好了吗");
     expect(outgoing(container)).toBeNull();
     expect(box(container).value).toBe("新的草稿");
@@ -229,28 +174,28 @@ describe("follow-up comments", () => {
     const { container } = await render();
     await type(container, "第一句");
     await send(container);
-    await settle();
+    await flush();
     await type(container, "第二句");
-    await respond(posts[0]!, failed());
+    await act(async () => calls[0]!.reject(new Error("任务已结束")));
+    await flush();
     await act(async () => button(container, "编辑").click());
     expect(outgoing(container)).toBeNull();
     expect(box(container).value).toBe("第一句\n第二句");
   });
 
-  it("stops showing the comment as soon as a refresh has it", async () => {
-    const { container, client } = await render();
+  it("stops showing the comment as soon as the task's push has it", async () => {
+    const { container, host } = await render();
     await type(container, "看看进度");
     await send(container);
-    await settle();
-    // The task polls; its comment can land before the response does.
-    await act(async () =>
-      client.setQueryData(["tasks", "t1"], commented(detail, "看看进度")),
-    );
-    await settle();
+    await flush();
+    // The comment can land as state before the reply does.
+    await record(host, "看看进度");
+    await flush();
     expect(timeline(container)).toContain("看看进度");
     expect(outgoing(container)).toBeNull();
-    // A late failure (the response was lost) changes nothing.
-    await respond(posts[0]!, failed());
+    // A late failure (the reply was lost) changes nothing.
+    await act(async () => calls[0]!.reject(new Error("连接断开")));
+    await flush();
     expect(outgoing(container)).toBeNull();
   });
 
@@ -264,13 +209,8 @@ describe("follow-up comments", () => {
     });
     await act(async () => box(container).dispatchEvent(paste));
     expect(warn).toHaveBeenCalledWith(
-      "追问还不能带图片或文件，2 个没有加进来。",
+      "评论还不能带图片或文件，2 个没有加进来。",
     );
     expect(paste.defaultPrevented).toBe(false);
   });
 });
-
-rstest.mock("./use-groups", () => ({
-  useGroups: () => ({ groups: [], current: undefined, groupId: null }),
-  useOpenGroup: () => () => {},
-}));

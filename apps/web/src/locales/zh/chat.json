@@ -37,6 +37,13 @@
     "commandsLabel": "命令",
     "noMatches": "没有匹配的"
   },
+  "process": {
+    "label": "{{name}} 的过程",
+    "viewAll": "查看全部",
+    "fold": "思考过程",
+    "steps": "{{count}} 步",
+    "title": "过程"
+  },
   "tools": {
     "arguments": "参数",
     "result": "结果",
@@ -115,10 +122,6 @@
       "unboundNotice": "这个群还没绑目录：成员跑在宿主启动的目录里，项目笔记也从那里读。",
       "bindFolder": "绑定目录"
     },
-    "search": {
-      "empty": "没有匹配的对话。",
-      "placeholder": "搜索对话或目录"
-    },
     "empty": {
       "title": "还没有对话。"
     },
@@ -137,9 +140,6 @@
     "reply": "回答",
     "required": "需要确认",
     "continueQuestion": "是否继续？",
-    "historyTitle": "已处理的确认",
-    "historyLabel": "确认记录",
-    "emptyHistory": "还没有处理过的确认",
     "bashCommand": "Bash 命令",
     "allowForSession": "是，本次会话不再询问",
     "denyAndExplain": "否，告诉 Claude 接下来怎么做（esc）"
@@ -214,6 +214,7 @@
     "pastedTextSummary": "粘贴文本 · {{characterCount}} 字符",
     "removePastedText": "移除粘贴文本",
     "expandText": "展开为文本",
+    "pick": "添加附件",
     "pastedFile": "粘贴的文件",
     "pastedFileName": "粘贴文本.txt",
     "errors": {
@@ -281,7 +282,8 @@
     "project": "项目",
     "addPath": "添加目录…",
     "path": "目录路径",
-    "pathHint": "在主机器上的绝对路径，必须是已存在的目录。成员在这里干活。"
+    "machine": "机器",
+    "pathHint": "在所选机器上的绝对路径，必须是已存在的目录。成员在这里干活。"
   },
   "chat": {},
   "steward": {
@@ -296,6 +298,8 @@
     "stewardChanged": "{{to}} 成为主理人，接替 {{from}}。",
     "stewardSet": "{{to}} 成为主理人。",
     "stewardCleared": "{{from}} 不再是主理人。",
-    "wakeBudget": "这条消息已经用完 {{budget}} 次唤醒；之后的 @ 只记入对话，等你再发言才会唤醒。"
+    "wakeBudget": "这条消息已经用完 {{budget}} 次唤醒；之后的 @ 只记入对话，等你再发言才会唤醒。",
+    "routineReport": "例行任务「{{name}}」发来报告：{{title}}",
+    "routineReportUntitled": "例行任务「{{name}}」发来报告"
   }
 }

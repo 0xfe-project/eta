@@ -1,0 +1,6 @@
+{
+  "name": "grok",
+  "version": "1.0.0",
+  "description": "Grok Imagine for images and video, and web and X search, through the LLM gateway's Grok account.",
+  "requires": ["grok-api"]
+}

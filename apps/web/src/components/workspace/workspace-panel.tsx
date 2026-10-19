@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import { GroupPanel } from "./group-panel";
 import { GroupArtifacts } from "./groups";
 import { Inbox } from "./inbox";
-import { RefreshButton } from "./refresh-button";
 import { Routines } from "./routines";
 import { Tasks } from "./tasks";
 import { useAttention } from "./use-attention";
@@ -59,11 +58,7 @@ export function WorkspacePanel({
       )}
     >
       <div className="band grid grid-cols-[1fr_auto_1fr] gap-2 px-3">
-        <div className="flex justify-self-start">
-          {view === "tasks" || view === "routines" ? (
-            <RefreshButton resource={view} />
-          ) : null}
-        </div>
+        <div aria-hidden="true" />
         <TabsList
           variant="default"
           aria-label={translateText("accessibility.workspaceTabs")}

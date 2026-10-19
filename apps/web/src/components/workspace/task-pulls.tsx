@@ -1,4 +1,4 @@
-import type { PullRequest } from "@/queries/forge";
+import type { GitHubPull } from "@eta/client-contracts";
 import type { TaskDetail } from "@/queries/tasks";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { GitPullRequestIcon } from "@phosphor-icons/react/GitPullRequest";
@@ -12,12 +12,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ApiError } from "@/lib/api";
 import { translate } from "@/lib/i18n";
-import { useMergePullRequest, usePullRequest } from "@/queries/forge";
+import { WireError } from "@/lib/wire";
+import {
+  useMergePullRequest,
+  usePullRequest,
+  useTaskPulls,
+} from "@/queries/github";
 import { useUpdateTask } from "@/queries/tasks";
+import { wireErrorMessage } from "@/queries/wire";
 
-const stateLabels: Record<PullRequest["state"], string> = {
+const stateLabels: Record<GitHubPull["state"], string> = {
   get open() {
     return translate("common:actions.open");
   },
@@ -34,7 +39,10 @@ const stateLabels: Record<PullRequest["state"], string> = {
 
 /** A merge that got no answer at all (the pull request is read again). */
 function unanswered(error: Error) {
-  return !(error instanceof ApiError) || error.code === "UNKNOWN";
+  return (
+    error instanceof WireError &&
+    (error.code === "timeout" || error.code === "disconnected")
+  );
 }
 
 /**
@@ -55,8 +63,8 @@ export function DeliveredPull({
   onDone: () => void;
 }) {
   const { t: translateText } = useTranslation(["tasks", "common"] as const);
-  const pull = usePullRequest(task.id, url);
-  const merge = useMergePullRequest(task.id);
+  const pull = usePullRequest(url);
+  const merge = useMergePullRequest();
   const update = useUpdateTask();
   const [unfinished, setUnfinished] = useState<string | null>(null);
   // Set at once, before isPending: a second click in the same tick is not
@@ -71,7 +79,7 @@ export function DeliveredPull({
     if (completingRef.current || finished) return;
     completingRef.current = true;
     void update
-      .mutateAsync({ id: task.id, changes: { status: "done" } })
+      .mutateAsync({ taskId: task.id, status: "done" })
       .then(
         () => {
           setUnfinished(null);
@@ -86,7 +94,7 @@ export function DeliveredPull({
         (error: Error) => {
           setUnfinished(
             translateText("pullRequests.mergedTaskIncompleteWithError", {
-              message: error.message,
+              message: wireErrorMessage(error),
             }),
           );
           toast.error(translateText("pullRequests.mergedTaskIncomplete"));
@@ -106,7 +114,7 @@ export function DeliveredPull({
       return;
     mergingRef.current = true;
     merge.mutate(
-      { url, headSha: data.head_sha },
+      { url, headSha: data.headSha },
       {
         onSettled: () => {
           mergingRef.current = false;
@@ -120,7 +128,7 @@ export function DeliveredPull({
         onError: (error) => {
           const message = unanswered(error)
             ? translateText("pullRequests.mergeResultUnknown")
-            : error.message;
+            : wireErrorMessage(error);
           setUnfinished(message);
           toast.error(message);
         },
@@ -155,7 +163,7 @@ export function DeliveredPull({
           ) : pull.isPending ? (
             translateText("common:states.reading")
           ) : (
-            <span title={pull.error?.message}>
+            <span title={pull.error ? wireErrorMessage(pull.error) : undefined}>
               {translateText("pullRequests.status.unavailable")}
             </span>
           )}
@@ -215,5 +223,36 @@ export function DeliveredPull({
         <p className="pl-6 text-xs text-muted-foreground">{data.reason}</p>
       ) : null}
     </li>
+  );
+}
+
+/** What a property's name looks like in the task's properties (`TaskProperties`). */
+const propertyLabel = "text-xs leading-8 text-muted-foreground";
+
+/**
+ * The pull requests the task delivered, as a row of its properties: a link to each, its state on
+ * GitHub, and merging it. Nothing when the task has none, or the host has no GitHub.
+ */
+export function TaskPulls({ task }: { task: TaskDetail }) {
+  const { t: translateText } = useTranslation(["tasks"] as const);
+  const pulls = useTaskPulls(task.id);
+  if (pulls.length === 0) return null;
+  return (
+    <>
+      <dt className={propertyLabel}>{translateText("details.deliveryTab")}</dt>
+      <dd className="min-w-0">
+        <ul>
+          {pulls.map((pull) => (
+            <DeliveredPull
+              key={pull.url}
+              task={task}
+              url={pull.url}
+              title={pull.title}
+              onDone={() => undefined}
+            />
+          ))}
+        </ul>
+      </dd>
+    </>
   );
 }

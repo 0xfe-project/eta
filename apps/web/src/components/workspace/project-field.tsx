@@ -2,7 +2,11 @@ import type { ProjectChoice } from "./use-project-choice";
 import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Select, SelectOption } from "./select-field";
-import { useChoosable, useChosenProject } from "./use-project-choice";
+import {
+  useChoosable,
+  useChosenProject,
+  useUsableMachines,
+} from "./use-project-choice";
 
 const ADD = "__add__";
 
@@ -16,6 +20,9 @@ export function ProjectField({
   const { t: translateText } = useTranslation(["chat", "common"] as const);
   const projects = useChoosable();
   const { project, adding } = useChosenProject(choice);
+  const machines = useUsableMachines();
+  const primary = machines.find((machine) => machine.kind === "primary");
+  const machineId = choice.machineId ?? primary?.id ?? "";
   return (
     <div className="grid gap-1 text-sm">
       <label htmlFor="new-project">{translateText("chat:new.project")}</label>
@@ -43,6 +50,25 @@ export function ProjectField({
       ) : null}
       {adding ? (
         <>
+          {machines.length > 1 ? (
+            <Select
+              aria-label={translateText("chat:new.machine")}
+              className="w-full"
+              value={machineId}
+              onValueChange={(value) =>
+                onChange({
+                  ...choice,
+                  machineId: value === primary?.id ? undefined : value,
+                })
+              }
+            >
+              {machines.map((machine) => (
+                <SelectOption key={machine.id} value={machine.id}>
+                  {machine.name}
+                </SelectOption>
+              ))}
+            </Select>
+          ) : null}
           <Input
             id={projects.length > 0 ? undefined : "new-project"}
             aria-label={translateText("chat:new.path")}

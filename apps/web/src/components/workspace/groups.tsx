@@ -7,8 +7,6 @@ import type { ProjectChoice } from "./use-project-choice";
 import { AppWindowIcon } from "@phosphor-icons/react/AppWindow";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { RobotIcon } from "@phosphor-icons/react/Robot";
-import { UsersThreeIcon } from "@phosphor-icons/react/UsersThree";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -49,21 +47,24 @@ import {
   useConversation,
   useConversationActions,
 } from "@/queries/conversations";
-import { useTasks, useUpdateTask } from "@/queries/tasks";
+import { useLinkTask, useTasks } from "@/queries/tasks";
+import { wireErrorMessage } from "@/queries/wire";
 import { ActivityRefCard } from "./activity-ref";
-import { AgentAvatar, AgentStatus } from "./agent-identity";
+import { AgentAvatar, AgentStatus, AgentStatusDot } from "./agent-identity";
+import { agentStatusLabels } from "./agent-status";
 import { InspectButton } from "./inspect-button";
 import { MemberRing } from "./member-ring";
 import { MemberStats } from "./member-stats";
 import { ProjectField } from "./project-field";
 import { useReturnFocus } from "./return-focus";
 import { when } from "./routine-format";
-import { useAgents } from "./use-agents";
+import { useAgents, useOpenAgent } from "./use-agents";
+import { useChatList } from "./use-chat-list";
 import { useGroups, useOpenGroup } from "./use-groups";
 import { useChosenProject, useResolveProject } from "./use-project-choice";
 import { useWorkspaceStore } from "./workspace-store";
 
-const onError = (error: Error) => toast.error(error.message);
+const onError = (error: Error) => toast.error(wireErrorMessage(error));
 
 /** What a member is doing, in the vocabulary of an agent's status. */
 function memberStatus(status: MemberStatus): AgentStatusName {
@@ -264,8 +265,8 @@ export function CreateGroup({
   );
 }
 
-/** The conversation list's plus on mobile: a new group or a new agent. */
-function CreateMenu() {
+/** The phone's home: the one list of everything you can chat with, newest activity first. */
+export function GroupList() {
   const { t: translateText } = useTranslation([
     "chat",
     "agents",
@@ -273,136 +274,98 @@ function CreateMenu() {
     "common",
     "settings",
   ] as const);
-  const [group, setGroup] = useState(false);
-  const { openEditor } = useAgents();
-  // Opened once the menu has given focus back to the plus, so that closing
-  // the dialog returns there rather than to the removed menu item.
-  const choiceRef = useRef<() => void>(undefined);
+  const { rows, loaded } = useChatList();
+  const open = useOpenGroup();
+  const openAgent = useOpenAgent();
+  const rowClass =
+    "flex w-full min-h-18 items-center gap-2 px-2 py-3 text-left outline-none duration-[60ms] hover:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-ring";
   return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+    <section className="min-h-0 flex-1 overflow-y-auto px-3">
+      <div className="sticky top-0 z-10 flex h-11 items-center justify-between bg-background px-2">
+        <h2 className="text-xs font-medium text-muted-foreground">
+          {translateText("history.recentChats")}
+        </h2>
+        <CreateGroup>
           <Button
             variant="ghost"
             size="icon-lg"
-            aria-label={translateText("common:actions.new")}
+            aria-label={translateText("groups.actions.create")}
             className="-mr-2 size-11"
           >
             <PlusIcon />
           </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          collisionPadding={8}
-          className="w-auto"
-          onCloseAutoFocus={() => {
-            choiceRef.current?.();
-            choiceRef.current = undefined;
-          }}
-        >
-          <DropdownMenuItem
-            className="min-h-11 text-sm"
-            onSelect={() => (choiceRef.current = () => setGroup(true))}
-          >
-            <UsersThreeIcon aria-hidden="true" />
-            {translateText("groups.actions.create")}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="min-h-11 text-sm"
-            onSelect={() => (choiceRef.current = () => openEditor())}
-          >
-            <RobotIcon aria-hidden="true" />
-            {translateText("agents:actions.create")}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <CreateGroup open={group} onOpenChange={setGroup} />
-    </>
-  );
-}
-
-export function GroupList({ compact = false }: { compact?: boolean }) {
-  const { t: translateText } = useTranslation([
-    "chat",
-    "agents",
-    "artifacts",
-    "common",
-    "settings",
-  ] as const);
-  const { groups, current } = useGroups();
-  const open = useOpenGroup();
-  const shown = groups.filter(
-    (g) => !g.archived && (!compact || g.kind === "group"),
-  );
-  return (
-    <section
-      className={cn(
-        "min-h-0",
-        compact ? "mt-5 px-2" : "flex-1 overflow-y-auto px-3",
-      )}
-    >
-      <div
-        className={cn(
-          "flex items-center justify-between px-2",
-          // The list scrolls under its plus, which stays in reach.
-          compact ? "h-9" : "sticky top-0 z-10 h-11 bg-background",
-        )}
-      >
-        <h2 className="text-xs font-medium text-muted-foreground">
-          {compact
-            ? translateText("groups.title")
-            : translateText("history.recentChats")}
-        </h2>
-        {compact ? <CreateGroup /> : <CreateMenu />}
+        </CreateGroup>
       </div>
       <ul className="space-y-px">
-        {shown.map((g) => (
-          <li key={g.id}>
-            <button
-              type="button"
-              onClick={() => open(g.id)}
-              title={g.name}
-              className={cn(
-                "flex w-full items-center gap-2 px-2 text-left outline-none duration-[60ms] hover:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-ring",
-                compact ? "h-9" : "min-h-18 py-3",
-                current?.id === g.id && compact && "bg-sidebar-accent",
-              )}
-            >
-              <GroupAvatars group={g} />
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 truncate text-sm">{g.name}</span>
-                  {!compact && g.lastMessageAt !== null && (
-                    <time
-                      dateTime={new Date(g.lastMessageAt).toISOString()}
-                      className="shrink-0 text-xs text-muted-foreground tabular-nums"
-                    >
-                      {when(g.lastMessageAt).replace(
-                        `${translateText("common:time.today")} `,
-                        "",
-                      )}
-                    </time>
-                  )}
-                </span>
-                {!compact && (
+        {rows.map((row) =>
+          row.kind === "agent" ? (
+            <li key={row.agent.id}>
+              <button
+                type="button"
+                onClick={() => openAgent(row.agent.id)}
+                title={translateText("agents:actions.chatWith", {
+                  name: row.agent.name,
+                })}
+                className={rowClass}
+              >
+                <AgentAvatar agent={row.agent} className="size-6" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm">
+                    {row.agent.name}
+                  </span>
                   <span className="mt-1 block truncate text-xs text-muted-foreground">
-                    {g.preview ||
-                      (g.kind === "direct"
+                    {agentStatusLabels[row.agent.status]}
+                  </span>
+                </span>
+                <AgentStatusDot status={row.agent.status} />
+              </button>
+            </li>
+          ) : (
+            <li key={row.conversation.id}>
+              <button
+                type="button"
+                onClick={() => open(row.conversation.id)}
+                title={row.conversation.name}
+                className={rowClass}
+              >
+                <GroupAvatars group={row.conversation} />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-sm">
+                      {row.conversation.name}
+                    </span>
+                    {row.conversation.lastMessageAt !== null && (
+                      <time
+                        dateTime={new Date(
+                          row.conversation.lastMessageAt,
+                        ).toISOString()}
+                        className="shrink-0 text-xs text-muted-foreground tabular-nums"
+                      >
+                        {when(row.conversation.lastMessageAt).replace(
+                          `${translateText("common:time.today")} `,
+                          "",
+                        )}
+                      </time>
+                    )}
+                  </span>
+                  <span className="mt-1 block truncate text-xs text-muted-foreground">
+                    {row.conversation.preview ||
+                      (row.conversation.kind === "direct"
                         ? translateText("groups.directChat")
                         : translateText("history.noMessages"))}
                   </span>
-                )}
-              </span>
-              {g.unread > 0 && (
-                <span className="shrink-0 text-xs tabular-nums">
-                  {g.unread}
                 </span>
-              )}
-            </button>
-          </li>
-        ))}
+                {row.conversation.unread > 0 && (
+                  <span className="shrink-0 text-xs tabular-nums">
+                    {row.conversation.unread}
+                  </span>
+                )}
+              </button>
+            </li>
+          ),
+        )}
       </ul>
-      {!shown.length && (
+      {loaded && !rows.length && (
         <p className="px-2 py-6 text-xs text-muted-foreground">
           {translateText("history.noConversations")}
         </p>
@@ -497,8 +460,8 @@ export function GroupMembers() {
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
   const [decided, setDecided] = useState("");
-  const { data: board } = useTasks();
-  const updateTask = useUpdateTask();
+  const { tasks: board } = useTasks();
+  const linkTaskCall = useLinkTask();
   const [linkTask, setLinkTask] = useState(false);
   const [invite, setInvite] = useState(false);
   const [removing, setRemoving] = useState<string>();
@@ -506,7 +469,7 @@ export function GroupMembers() {
   const setFocusedAgent = useWorkspaceStore((state) => state.setFocusedAgent);
   if (!group) return null;
   const members = group.participants;
-  const linked = board?.tasks.filter((t) => t.group_id === group.id) ?? [];
+  const linked = board.filter((t) => t.conversationId === group.id);
   return (
     <section aria-label={translateText("groups.members.title")}>
       <div className="mb-2 flex items-center gap-1">
@@ -719,10 +682,10 @@ export function GroupMembers() {
                 <Button
                   size="xs"
                   variant="ghost"
-                  disabled={updateTask.isPending}
+                  disabled={linkTaskCall.isPending}
                   onClick={() =>
-                    updateTask.mutate(
-                      { id: t.id, changes: { group_id: "" } },
+                    linkTaskCall.mutate(
+                      { taskId: t.id, conversationId: null },
                       { onError },
                     )
                   }
@@ -731,21 +694,21 @@ export function GroupMembers() {
                 </Button>
               </div>
             ))}
-            {board?.tasks
-              .filter((t) => t.group_id !== group.id)
+            {board
+              .filter((t) => t.conversationId !== group.id)
               .map((t) => (
                 <Button
                   key={t.id}
                   variant="ghost"
                   className="justify-start truncate"
-                  disabled={updateTask.isPending || group.archived}
+                  disabled={linkTaskCall.isPending || group.archived}
                   aria-label={translateText("groups.relatedTasks.linkLabel", {
                     number: t.number,
                     title: t.title,
                   })}
                   onClick={() =>
-                    updateTask.mutate(
-                      { id: t.id, changes: { group_id: group.id } },
+                    linkTaskCall.mutate(
+                      { taskId: t.id, conversationId: group.id },
                       { onError },
                     )
                   }
@@ -863,11 +826,11 @@ export function GroupArtifacts() {
     "settings",
   ] as const);
   const { current: group } = useGroups();
-  const { data } = useArtifacts();
+  const { artifacts: all, loaded } = useArtifacts();
   if (!group) return null;
-  const artifacts = data?.artifacts.filter((a) => a.group_id === group.id);
-  if (!data) return <Loading rows={2} />;
-  if (!artifacts?.length)
+  const artifacts = all.filter((a) => a.conversationId === group.id);
+  if (!loaded) return <Loading rows={2} />;
+  if (!artifacts.length)
     return (
       <Empty
         icon={AppWindowIcon}

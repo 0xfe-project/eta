@@ -169,6 +169,14 @@ export interface SessionManagerOptions {
     | ((input: { meta: SessionMeta; session: OpenSession }) => KernelTool[])
     | undefined;
   /**
+   * What a host does with a session once it is assembled, before anything can run: the part of a
+   * feature that needs the runner or the bus rather than the toolset (a plugin that watches the
+   * generation, for one). Awaited, so a session never runs before its features are in place.
+   */
+  sessionAttach?:
+    | ((input: { meta: SessionMeta; session: OpenSession }) => Promise<void>)
+    | undefined;
+  /**
    * How a session's questions are surfaced: told when one is asked, answered, canceled or
    * expired. Per session, because the answer is the session's own (who asked, in which
    * conversation). Absent means nobody is told.
@@ -232,6 +240,7 @@ export class SessionManager {
   private readonly baseSystemPromptFor: SessionManagerOptions["baseSystemPromptFor"];
   private readonly toolMiddleware: SessionManagerOptions["toolMiddleware"];
   private readonly sessionTools: SessionManagerOptions["sessionTools"];
+  private readonly sessionAttach: SessionManagerOptions["sessionAttach"];
   private readonly askObserve: SessionManagerOptions["askObserve"];
   private readonly subagents: SessionManagerOptions["subagents"];
   private readonly warn: (message: string) => void;
@@ -252,6 +261,7 @@ export class SessionManager {
     this.baseSystemPromptFor = options.baseSystemPromptFor;
     this.toolMiddleware = options.toolMiddleware;
     this.sessionTools = options.sessionTools;
+    this.sessionAttach = options.sessionAttach;
     this.askObserve = options.askObserve;
     this.warn = options.warn ?? (() => undefined);
   }
@@ -531,6 +541,7 @@ export class SessionManager {
       session.kernel.tools.use(middleware);
     }
     registerSessionTools(session, this.sessionTools?.({ meta, session }) ?? []);
+    await this.sessionAttach?.({ meta, session });
     // A session the host opened is a session whose inbox becomes runs: the pump is what
     // decides that, and leaving it off would make "prompt a session nobody attached yet"
     // (a subagent's own run, a session from the store) quietly do nothing.

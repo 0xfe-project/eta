@@ -1,0 +1,54 @@
+{
+  "title": "MCP servers",
+  "description": "The tools agents reach through MCP, from their bundles, ~/.eta/mcp.json and project .mcp.json files. Servers start on first use.",
+  "empty": {
+    "title": "No MCP servers",
+    "description": "Add servers to ~/.eta/mcp.json, a project’s .mcp.json or a bundle’s mcp.json."
+  },
+  "transport": {
+    "stdio": "stdio",
+    "http": "HTTP",
+    "sse": "SSE"
+  },
+  "state": {
+    "connected": "Connected",
+    "cached": "Idle",
+    "notConnected": "Idle",
+    "failed": "Failed",
+    "needsAuth": "Needs sign-in",
+    "disabled": "Disabled"
+  },
+  "auth": {
+    "signedIn": "Signed in",
+    "needsLogin": "Not signed in"
+  },
+  "summary": {
+    "tools": "{{count}} tools",
+    "tools_one": "{{count}} tool",
+    "tools_other": "{{count}} tools"
+  },
+  "actions": {
+    "connect": "Connect",
+    "reconnect": "Reconnect",
+    "signIn": "Sign in",
+    "signOut": "Sign out"
+  },
+  "connect": {
+    "done": "{{server}} connected",
+    "failed": "{{server}}: {{message}}"
+  },
+  "login": {
+    "title": "Sign in to {{server}}",
+    "description": "Approve access in the tab that opened. If it ends on a page that does not load, or on another computer, paste its address here.",
+    "reopen": "Open the sign-in page again",
+    "redirect": "Redirect URL",
+    "redirectPlaceholder": "https://…/mcp/oauth/callback?code=…&state=…",
+    "finish": "Finish",
+    "done": "Signed in to {{server}}"
+  },
+  "logout": {
+    "confirmTitle": "Sign out of {{server}}?",
+    "confirmDescription": "Every agent that reaches this server loses the sign-in.",
+    "done": "Signed out of {{server}}"
+  }
+}

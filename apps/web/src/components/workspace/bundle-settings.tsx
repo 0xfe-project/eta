@@ -1,12 +1,24 @@
-import type { Bundle, BundleDraft } from "@/queries/bundles";
-
+import type { BundleField, BundleView } from "@eta/client-contracts";
+import { ArrowsClockwiseIcon } from "@phosphor-icons/react/ArrowsClockwise";
 import { PackageIcon } from "@phosphor-icons/react/Package";
-import { useState } from "react";
+import { PlusIcon } from "@phosphor-icons/react/Plus";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { Markdown } from "@/components/markdown";
 import { Empty, LoadError, Loading } from "@/components/states";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -16,211 +28,261 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { listSeparator, translate } from "@/lib/i18n";
 import {
-  translateBundleDescription,
-  translatePluginDescription,
-} from "@/lib/i18n-metadata";
-import {
-  bundleDraft,
+  useAddBundle,
   useBundles,
-  useDeleteBundle,
-  usePlugins,
-  useUpdateBundle,
+  useConfigureBundle,
+  useRecheckBundles,
+  useRefreshBundles,
+  useRemoveBundle,
 } from "@/queries/bundles";
+import { wireErrorMessage } from "@/queries/wire";
 
-// Bundles are what agents are built from: a script run into the agent's
-// image and the plugins it adds, and a service some run in the cluster
-// (the services' own manifests). eta's own are read only; the user's
-// are edited here, and every agent that loads one is rebuilt.
+// Settings → 环境包: what bundles there are and where each came from, whether it is set up, what
+// it needs from each machine, and the form for its values. A secret is typed here once and is
+// never shown again.
 
-const serviceStates: Record<string, string> = {
-  get applying() {
-    return translate("bundles:service.status.deploying");
-  },
-  get ready() {
-    return translate("common:status.running");
-  },
-  get incompatible() {
-    return translate("bundles:service.status.incompatibleProtocol");
-  },
-  get error() {
-    return translate("common:status.error");
-  },
-};
+const showError = (error: Error) => toast.error(wireErrorMessage(error));
 
-function ServiceStatus({ bundle }: { bundle: Bundle }) {
+/** One bundle's values as a form: a field each, secrets blank (the saved one stays). */
+function ConfigureDialog({
+  bundle,
+  onClose,
+}: {
+  bundle: BundleView;
+  onClose: () => void;
+}) {
   const { t: translateText } = useTranslation(["bundles", "common"] as const);
-  if (!bundle.service) return null;
-  const status = bundle.service_status;
-  const state = status
-    ? (serviceStates[status.state] ?? status.state)
-    : translateText("common:status.unknown");
+  const configure = useConfigureBundle();
+  const id = useId();
+  const [draft, setDraft] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      bundle.fields.map((field) => [field.name, field.value ?? ""]),
+    ),
+  );
+  const [clearing, setClearing] = useState(false);
+
+  /** What changed: a typed secret, an edited value; a value emptied is cleared. */
+  const changes = (): Record<string, string | null> => {
+    const out: Record<string, string | null> = {};
+    for (const field of bundle.fields) {
+      const value = (draft[field.name] ?? "").trim();
+      if (field.secret) {
+        if (value !== "") out[field.name] = value;
+      } else if (value !== (field.value ?? "")) {
+        out[field.name] = value === "" ? null : value;
+      }
+    }
+    return out;
+  };
+  const requiredMissing = bundle.fields.some(
+    (field) =>
+      field.required && !field.set && (draft[field.name] ?? "").trim() === "",
+  );
+
   return (
-    <p className="text-xs text-muted-foreground">
-      {translateText("service.summary", {
-        runtime: state,
-        status: status?.version ? ` · ${status.version}` : "",
-        details: status?.message ? ` · ${status.message}` : "",
-      })}
-    </p>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        aria-describedby={undefined}
+        className="max-w-[calc(100%-2rem)] sm:max-w-lg"
+      >
+        <DialogHeader>
+          <DialogTitle>
+            {translateText("configure.title", { name: bundle.name })}
+          </DialogTitle>
+        </DialogHeader>
+        <form
+          className="space-y-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            configure.mutate(
+              { name: bundle.name, values: changes() },
+              {
+                onSuccess: () => {
+                  toast.success(
+                    requiredMissing
+                      ? translateText("configure.savedIncomplete")
+                      : translateText("configure.savedReady"),
+                  );
+                  onClose();
+                },
+                onError: showError,
+              },
+            );
+          }}
+        >
+          {bundle.fields.map((field: BundleField) => (
+            <div key={field.name} className="space-y-1">
+              <label
+                htmlFor={`${id}-${field.name}`}
+                className="text-xs font-medium"
+              >
+                {field.title}
+                {field.required ? null : (
+                  <span className="font-normal text-muted-foreground">
+                    {translateText("common:labels.optionalSuffix")}
+                  </span>
+                )}
+              </label>
+              <Input
+                id={`${id}-${field.name}`}
+                type={field.secret ? "password" : "text"}
+                value={draft[field.name] ?? ""}
+                maxLength={field.maxLength}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={
+                  field.secret && field.set
+                    ? translateText("configure.secretPlaceholder")
+                    : undefined
+                }
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    [field.name]: event.target.value,
+                  }))
+                }
+              />
+              {field.description ? (
+                <Markdown className="text-xs text-muted-foreground">
+                  {field.description}
+                </Markdown>
+              ) : null}
+            </div>
+          ))}
+          <p className="text-xs text-muted-foreground">
+            {translateText("configure.encryptionHelp", { name: bundle.name })}
+          </p>
+          <DialogFooter className="gap-2 sm:justify-end">
+            {bundle.fields.some((field) => field.set) ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-muted-foreground sm:mr-auto"
+                onClick={() => setClearing(true)}
+              >
+                {translateText("configure.clear")}
+              </Button>
+            ) : null}
+            <Button type="submit" disabled={configure.isPending}>
+              {translateText("common:actions.save")}
+            </Button>
+          </DialogFooter>
+        </form>
+        <AlertDialog open={clearing} onOpenChange={setClearing}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {translateText("configure.clearConfirmTitle", {
+                  name: bundle.name,
+                })}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {translateText("configure.clearConfirmDescription")}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>
+                {translateText("common:actions.cancel")}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={() =>
+                  configure.mutate(
+                    {
+                      name: bundle.name,
+                      values: Object.fromEntries(
+                        bundle.fields.map((field) => [field.name, null]),
+                      ),
+                    },
+                    {
+                      onSuccess: () => {
+                        toast.success(translateText("configure.cleared"));
+                        onClose();
+                      },
+                      onError: showError,
+                    },
+                  )
+                }
+              >
+                {translateText("common:actions.clear")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-const showError = (error: Error) => toast.error(error.message);
-
-function BundleDialog({
-  bundle,
-  open,
-  onOpenChange,
-}: {
-  bundle: Bundle;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
+/** A bundle from git: where, which branch, tag or commit, and which directory of it. */
+function AddDialog({ onClose }: { onClose: () => void }) {
   const { t: translateText } = useTranslation(["bundles", "common"] as const);
-  const { data: plugins } = usePlugins();
-  const save = useUpdateBundle();
-  const [draft, setDraft] = useState<BundleDraft>(() => bundleDraft(bundle));
-  const toggle = (name: string, on: boolean) =>
-    setDraft((d) => ({
-      ...d,
-      plugins: on
-        ? [...d.plugins, name]
-        : d.plugins.filter((plugin) => plugin !== name),
-    }));
+  const add = useAddBundle();
+  const [repo, setRepo] = useState("");
+  const [rev, setRev] = useState("");
+  const [path, setPath] = useState("");
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{bundle.name}</DialogTitle>
-          <DialogDescription>
-            {translateText("editor.scriptHelp")}
-          </DialogDescription>
+          <DialogTitle>{translateText("add.title")}</DialogTitle>
+          <DialogDescription>{translateText("add.hint")}</DialogDescription>
         </DialogHeader>
         <form
-          className="space-y-4"
+          className="space-y-3"
           onSubmit={(event) => {
             event.preventDefault();
-            save.mutate(draft, {
-              onSuccess: () => {
-                toast.success(translateText("common:feedback.saved"));
-                onOpenChange(false);
+            if (repo.trim() === "" || add.isPending) return;
+            add.mutate(
+              {
+                repo: repo.trim(),
+                ...(rev.trim() === "" ? {} : { rev: rev.trim() }),
+                ...(path.trim() === "" ? {} : { path: path.trim() }),
               },
-              onError: showError,
-            });
+              {
+                onSuccess: ({ name }) => {
+                  toast.success(translateText("add.added", { name }));
+                  onClose();
+                },
+                onError: showError,
+              },
+            );
           }}
         >
-          <div className="space-y-1.5">
-            <Label htmlFor="bundle-description">
-              {translateText("editor.descriptionLabel")}
-            </Label>
+          <Input
+            aria-label={translateText("add.repo")}
+            placeholder={translateText("add.repoPlaceholder")}
+            autoFocus
+            spellCheck={false}
+            value={repo}
+            onChange={(event) => setRepo(event.target.value)}
+          />
+          <div className="grid gap-2 sm:grid-cols-2">
             <Input
-              id="bundle-description"
-              value={draft.description}
-              maxLength={500}
-              onChange={(e) =>
-                setDraft((d) => ({ ...d, description: e.target.value }))
-              }
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="bundle-script">
-              {translateText("editor.scriptLabel")}
-            </Label>
-            <Textarea
-              id="bundle-script"
-              rows={8}
+              aria-label={translateText("add.rev")}
+              placeholder={translateText("add.revPlaceholder")}
               spellCheck={false}
-              className="max-h-[40dvh] min-h-32 font-mono text-xs leading-relaxed"
-              placeholder={
-                "apt-get update\napt-get install -y --no-install-recommends python3"
-              }
-              value={draft.script}
-              onChange={(e) =>
-                setDraft((d) => ({ ...d, script: e.target.value }))
-              }
+              value={rev}
+              onChange={(event) => setRev(event.target.value)}
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="bundle-service">
-              {translateText("editor.serviceLabel")}
-            </Label>
-            <Textarea
-              id="bundle-service"
-              rows={6}
+            <Input
+              aria-label={translateText("add.path")}
+              placeholder={translateText("add.pathPlaceholder")}
               spellCheck={false}
-              className="max-h-[40dvh] min-h-24 font-mono text-xs leading-relaxed"
-              placeholder={translateText("editor.manifestsPlaceholder", {
-                bundleName: bundle.name,
-                serviceName: bundle.name,
-              })}
-              value={draft.manifests}
-              onChange={(e) =>
-                setDraft((d) => ({ ...d, manifests: e.target.value }))
-              }
+              value={path}
+              onChange={(event) => setPath(event.target.value)}
             />
-            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-              <Label className="gap-2">
-                <Checkbox
-                  checked={draft.usesModels}
-                  onCheckedChange={(on) =>
-                    setDraft((d) => ({ ...d, usesModels: on === true }))
-                  }
-                />
-                {translateText("editor.callableModels")}
-              </Label>
-              <Label className="gap-2">
-                <Checkbox
-                  checked={draft.database}
-                  onCheckedChange={(on) =>
-                    setDraft((d) => ({ ...d, database: on === true }))
-                  }
-                />
-                {translateText("editor.separateDatabase")}
-              </Label>
-            </div>
           </div>
-          {plugins?.length ? (
-            <div
-              role="group"
-              aria-labelledby="bundle-plugins"
-              className="space-y-1.5"
-            >
-              <p id="bundle-plugins" className="text-xs leading-none">
-                {translateText("editor.pluginsLabel")}
-              </p>
-              <ul className="divide-y border">
-                {plugins.map((plugin) => (
-                  <li key={plugin.name}>
-                    <Label className="items-start gap-3 p-2.5 leading-snug">
-                      <Checkbox
-                        className="mt-px"
-                        checked={draft.plugins.includes(plugin.name)}
-                        onCheckedChange={(on) =>
-                          toggle(plugin.name, on === true)
-                        }
-                      />
-                      <span className="min-w-0 space-y-0.5">
-                        <span className="block font-medium">{plugin.name}</span>
-                        <span className="block text-muted-foreground">
-                          {translatePluginDescription(
-                            plugin.name,
-                            plugin.description,
-                          )}
-                        </span>
-                      </span>
-                    </Label>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
           <DialogFooter>
-            <Button type="submit" disabled={save.isPending}>
-              {translateText("common:actions.save")}
+            <Button type="button" variant="outline" onClick={onClose}>
+              {translateText("common:actions.cancel")}
+            </Button>
+            <Button
+              type="submit"
+              disabled={repo.trim() === "" || add.isPending}
+            >
+              {translateText("add.title")}
             </Button>
           </DialogFooter>
         </form>
@@ -229,103 +291,255 @@ function BundleDialog({
   );
 }
 
+/** What the user has to know about a bundle: what it needs from machines, how its service is. */
+function Notes({ bundle }: { bundle: BundleView }) {
+  const { t: translateText } = useTranslation(["bundles", "common"] as const);
+  const machines = bundle.machines.filter(
+    (machine) => machine.missing.length > 0 || !machine.checked,
+  );
+  const lines = [
+    bundle.requires.length > 0
+      ? translateText("summary.requires", {
+          commands: bundle.requires.join(", "),
+        })
+      : null,
+    ...machines.map((machine) =>
+      machine.checked
+        ? translateText("summary.missing", {
+            machine: machine.name,
+            commands: machine.missing.join(", "),
+          })
+        : translateText("summary.unchecked", { machine: machine.name }),
+    ),
+    bundle.service === null
+      ? null
+      : [
+          translateText(`service.${bundle.service.state}`),
+          bundle.service.message,
+        ]
+          .filter(Boolean)
+          .join(": "),
+  ].filter((line): line is string => line !== null);
+  return (
+    <>
+      <p className="text-xs text-muted-foreground">
+        {translateText("summary.contents", {
+          skills: bundle.skills.length,
+          servers: bundle.mcpServers.length,
+          hooks: bundle.hooks ? translateText("summary.hooks") : "",
+        })}
+      </p>
+      {lines.map((line) => (
+        <p key={line} className="text-xs text-muted-foreground">
+          {line}
+        </p>
+      ))}
+    </>
+  );
+}
+
+function BundleCard({ bundle }: { bundle: BundleView }) {
+  const { t: translateText } = useTranslation(["bundles", "common"] as const);
+  const refresh = useRefreshBundles();
+  const remove = useRemoveBundle();
+  const [configuring, setConfiguring] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const git = bundle.source.kind === "git";
+  const source = git
+    ? `git · ${bundle.sha?.slice(0, 7) ?? ""}`
+    : translateText(`sources.${bundle.source.kind}`);
+  return (
+    <li className="flex items-start gap-3 p-3 text-sm">
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
+          {bundle.name}
+          <span className="text-xs font-normal text-muted-foreground">
+            {source}
+          </span>
+          {bundle.problem !== null ? (
+            <Badge variant="destructive">
+              {translateText("status.problem")}
+            </Badge>
+          ) : bundle.fields.length > 0 ? (
+            <Badge variant="outline">
+              {bundle.configured
+                ? translateText("status.configured")
+                : translateText("status.notConfigured")}
+            </Badge>
+          ) : null}
+        </p>
+        {bundle.problem !== null ? (
+          <p className="text-xs text-destructive">{bundle.problem}</p>
+        ) : (
+          <>
+            {bundle.description ? (
+              <p className="text-muted-foreground">{bundle.description}</p>
+            ) : null}
+            <Notes bundle={bundle} />
+          </>
+        )}
+      </div>
+      <div className="flex shrink-0 flex-wrap justify-end gap-1">
+        {bundle.fields.length > 0 ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label={`${translateText("actions.configure")} ${bundle.name}`}
+            onClick={() => setConfiguring(true)}
+          >
+            {translateText("actions.configure")}
+          </Button>
+        ) : null}
+        {git ? (
+          <>
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={`${translateText("actions.refresh")} ${bundle.name}`}
+              disabled={refresh.isPending}
+              onClick={() =>
+                refresh.mutate(
+                  { name: bundle.name },
+                  {
+                    onSuccess: ({ names }) =>
+                      toast(
+                        translateText("refresh.done", {
+                          names: names.join(", "),
+                        }),
+                      ),
+                    onError: showError,
+                  },
+                )
+              }
+            >
+              {translateText("actions.refresh")}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={`${translateText("actions.remove")} ${bundle.name}`}
+              onClick={() => setRemoving(true)}
+            >
+              {translateText("actions.remove")}
+            </Button>
+          </>
+        ) : null}
+      </div>
+      {configuring ? (
+        <ConfigureDialog
+          bundle={bundle}
+          onClose={() => setConfiguring(false)}
+        />
+      ) : null}
+      <AlertDialog open={removing} onOpenChange={setRemoving}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {translateText("remove.confirmTitle", { name: bundle.name })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {translateText("remove.confirmDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>
+              {translateText("common:actions.cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() =>
+                remove.mutate(
+                  { name: bundle.name },
+                  {
+                    onSuccess: () =>
+                      toast(
+                        translateText("remove.done", { name: bundle.name }),
+                      ),
+                    onError: showError,
+                  },
+                )
+              }
+            >
+              {translateText("actions.remove")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </li>
+  );
+}
+
+/** Settings → 环境包. */
 export function BundleSettings() {
   const { t: translateText } = useTranslation(["bundles", "common"] as const);
-  const { data: bundles, isPending, error, refetch } = useBundles();
-  const remove = useDeleteBundle();
-  const [editing, setEditing] = useState<Bundle | null>(null);
+  const { bundles, loaded, error } = useBundles();
+  const recheck = useRecheckBundles();
+  const refreshAll = useRefreshBundles();
+  const [adding, setAdding] = useState(false);
+  const hasGit = bundles.some((bundle) => bundle.source.kind === "git");
   return (
     <div className="space-y-3">
-      <h2 className="text-sm font-semibold">{translateText("title")}</h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold">{translateText("title")}</h2>
+        <div className="flex gap-1">
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label={translateText("actions.recheck")}
+            title={translateText("actions.recheck")}
+            disabled={recheck.isPending}
+            onClick={() => recheck.mutate({}, { onError: showError })}
+          >
+            <ArrowsClockwiseIcon aria-hidden="true" />
+          </Button>
+          {hasGit ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={refreshAll.isPending}
+              onClick={() =>
+                refreshAll.mutate(
+                  {},
+                  {
+                    onSuccess: ({ names }) =>
+                      toast(
+                        translateText("refresh.done", {
+                          names: names.join(", "),
+                        }),
+                      ),
+                    onError: showError,
+                  },
+                )
+              }
+            >
+              {translateText("actions.refreshAll")}
+            </Button>
+          ) : null}
+          <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+            <PlusIcon aria-hidden="true" data-icon="inline-start" />
+            {translateText("actions.add")}
+          </Button>
+        </div>
+      </div>
       <p className="text-xs text-muted-foreground">
         {translateText("description")}
       </p>
       {error ? (
-        <LoadError
-          what={translateText("title")}
-          error={error}
-          onRetry={() => void refetch()}
-        />
-      ) : isPending ? (
-        <Loading rows={4} />
-      ) : !bundles.length ? (
-        <Empty icon={PackageIcon} title={translateText("empty.title")} />
+        <LoadError what={translateText("title")} error={error} />
+      ) : !loaded ? (
+        <Loading rows={3} />
+      ) : bundles.length === 0 ? (
+        <Empty icon={PackageIcon} title={translateText("empty.title")}>
+          {translateText("empty.description")}
+        </Empty>
       ) : (
-        <ul className="divide-y border">
+        <ul aria-label={translateText("title")} className="divide-y border">
           {bundles.map((bundle) => (
-            <li
-              key={bundle.name}
-              className="flex items-start gap-3 p-2.5 text-sm"
-            >
-              <div className="min-w-0 flex-1 space-y-0.5">
-                <p className="font-medium">
-                  {bundle.name}
-                  <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                    {bundle.builtin
-                      ? translateText("common:labels.builtIn")
-                      : translateText("common:labels.custom")}
-                  </span>
-                </p>
-                {bundle.description ? (
-                  <p className="text-muted-foreground">
-                    {translateBundleDescription(
-                      bundle.name,
-                      bundle.description,
-                    )}
-                  </p>
-                ) : null}
-                {bundle.plugins.length ? (
-                  <p className="text-xs text-muted-foreground">
-                    {translateText("plugins.summary", {
-                      plugins: bundle.plugins.join(listSeparator()),
-                    })}
-                  </p>
-                ) : null}
-                <ServiceStatus bundle={bundle} />
-              </div>
-              {bundle.builtin ? null : (
-                <div className="flex shrink-0 gap-1">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setEditing(bundle)}
-                  >
-                    {translateText("common:actions.edit")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={remove.isPending}
-                    onClick={() =>
-                      remove.mutate(bundle.name, {
-                        onSuccess: () =>
-                          toast.success(
-                            translateText("common:feedback.deletedItem", {
-                              name: bundle.name,
-                            }),
-                          ),
-                        onError: showError,
-                      })
-                    }
-                  >
-                    {translateText("common:actions.delete")}
-                  </Button>
-                </div>
-              )}
-            </li>
+            <BundleCard key={bundle.name} bundle={bundle} />
           ))}
         </ul>
       )}
-      {editing !== null ? (
-        <BundleDialog
-          key={editing.name}
-          bundle={editing}
-          open
-          onOpenChange={(open) => {
-            if (!open) setEditing(null);
-          }}
-        />
-      ) : null}
+      {adding ? <AddDialog onClose={() => setAdding(false)} /> : null}
     </div>
   );
 }

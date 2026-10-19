@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import { draftText, EMPTY_DRAFT } from "@/lib/composer";
 import { mentionedMembers } from "@/lib/mentions";
 import { cn } from "@/lib/utils";
@@ -23,12 +24,11 @@ import { useSessionActions } from "@/queries/sessions";
 import { useConnectionLost } from "@/queries/wire";
 import { ChatHeader, MobileChatHeader } from "./agent-bar";
 import { AgentEditor } from "./agent-editor";
-import { BottomNav } from "./app-shell";
+import { BottomNav, Sidebar } from "./app-shell";
 import { ChatPanel, ComposerNotice } from "./chat-panel";
 import { GroupList } from "./groups";
 import { usePaneWidth } from "./pane";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
-import { SidebarPane } from "./sidebar-pane";
 import { useAgents } from "./use-agents";
 import { useGroups } from "./use-groups";
 import { WorkspacePanel } from "./workspace-panel";
@@ -190,8 +190,8 @@ export function Workspace({
     return () => window.removeEventListener("keydown", close);
   }, [drawerOpen, setMobilePanel]);
   return (
-    <div className="flex h-dvh min-h-0 bg-background">
-      <SidebarPane />
+    <SidebarProvider className="h-dvh min-h-0 bg-background">
+      <Sidebar />
       <div
         className={cn(
           "min-h-0 min-w-0 flex-1 flex-col md:hidden",
@@ -308,9 +308,9 @@ export function Workspace({
               }
               draft={draft}
               onDraftChange={setDraft}
-              onSend={(text, mode) => {
+              onSend={(text, mode, files) => {
                 if (!group) return openEditor();
-                outbox.send(group.id, text, mode, targets(text));
+                outbox.send(group.id, text, mode, targets(text), files);
                 setDraft([]);
               }}
               onCompact={() => {
@@ -380,6 +380,6 @@ export function Workspace({
       </div>
       <SettingsDialog />
       <AgentEditor />
-    </div>
+    </SidebarProvider>
   );
 }

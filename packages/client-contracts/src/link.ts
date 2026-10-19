@@ -1,3 +1,6 @@
+import type { PromptImage } from "./operations";
+import type { ToolActivity } from "./product";
+
 /**
  * The link between the primary and a machine that runs the daemon.
  *
@@ -118,6 +121,17 @@ export interface MachineActionArgs {
   catalog: { models: ModelSpec[] };
   /** What the session is configured with now. */
   config: { session: string };
+  /** Which of these bundle contents (by hash) are not on the machine yet. */
+  bundleHave: { hashes: string[] };
+  /** Keep a bundle's files (path to base64 data) under their hash. */
+  bundlePut: {
+    hash: string;
+    files: Record<string, { data: string; exec?: boolean | undefined }>;
+  };
+  /** Which of these commands are on the machine's PATH. */
+  which: { commands: string[] };
+  /** GitHub was connected, authorized or disconnected: ask the primary for the token again now. */
+  githubRefresh: Record<string, never>;
 }
 export interface MachineActionResults {
   info: MachineFacts;
@@ -125,12 +139,16 @@ export interface MachineActionResults {
   open: { session: string };
   catalog: Record<string, never>;
   config: { model: string | undefined; thinkingLevel: string };
+  bundleHave: { missing: string[] };
+  bundlePut: Record<string, never>;
+  which: { found: string[] };
+  githubRefresh: Record<string, never>;
 }
 
 /** What the primary asks of the daemon that may take a while (`svc` calls). */
 export interface DaemonServiceParams {
   /** Give the session some words as its next run and wait until it is quiet. */
-  run: { session: string; text: string };
+  run: { session: string; text: string; images?: PromptImage[] };
   /** Run a script on the machine, the way the SSH transport does. */
   exec: { script: string; inputBase64?: string; timeoutMs?: number };
 }
@@ -181,6 +199,33 @@ export interface OpenSessionArgs {
   /** The model's definition, so the daemon can resolve it without a catalog. */
   modelSpec?: ModelSpec;
   tools: ToolSpec[];
+  /**
+   * The primary's akhook layers, as text: rules the daemon applies after its own user and project
+   * files, which cannot disable or replace them. Sent with every open, so a change reaches a
+   * session that is already there at its next wake.
+   */
+  akhook?: { name: string; text: string }[];
+  /**
+   * The bundles the agent loads, already on the machine (`bundleHave`, `bundlePut`). The config
+   * values are what its MCP servers and hook commands are started with: they go no further, and
+   * the machine does not write them down.
+   */
+  bundles?: OpenedBundle[];
+  /**
+   * The agent's key for the primary's LLM gateway (`/llm/v1` on the primary's address), when it
+   * has one. It opens `/v1` and nothing else; the bundles' MCP servers get it as
+   * `${ETA_AGENT_KEY}`, held in memory like the config values.
+   */
+  gatewayKey?: string;
+}
+
+/** A bundle in an `open`: which contents, and the values its processes get. */
+export interface OpenedBundle {
+  name: string;
+  hash: string;
+  config: Record<string, string>;
+  /** Its required values are all there; when not, only its skills load. */
+  configured: boolean;
 }
 
 export interface RunOutcome {
@@ -188,6 +233,8 @@ export interface RunOutcome {
   error?: string;
   text: string;
   thinking: string;
+  /** The tool calls the run made, shortened for the reply's row; absent when there were none. */
+  activity?: ToolActivity[];
 }
 
 /** What the daemon asks of the primary (`svc` calls). */
@@ -208,7 +255,28 @@ export interface ServiceMethodParams {
   };
   /** Does the user want to be asked before this tool runs? */
   "tool.gate": { session: string; name: string };
+  /**
+   * Read, write or forget a piece of an MCP server's OAuth state. The credentials are the
+   * primary's, one set per server URL (`serverKey` is a hash of it); a daemon refreshing a token
+   * saves it here. A login's PKCE verifier is not relayed: signing in is the primary's.
+   */
+  "mcp.credential": McpCredentialCall;
+  /**
+   * The token for git and gh on this machine, and the commit identity: the user's once they
+   * authorized the GitHub App, else the App's installation token. Answers `null` when GitHub is
+   * not connected. The App's key and secrets stay on the primary; the machine keeps the token
+   * (at most an hour old) and asks again before it expires. The result is a `GitHubCredentials`.
+   */
+  "github.credentials": Record<string, never>;
 }
+
+/** The pieces of OAuth state a daemon may ask for. */
+export type McpRelayedKind = "tokens" | "clientInformation" | "discoveryState";
+
+export type McpCredentialCall =
+  | { op: "get"; serverKey: string; kind: McpRelayedKind }
+  | { op: "set"; serverKey: string; kind: McpRelayedKind; value: unknown }
+  | { op: "delete"; serverKey: string; kind: McpRelayedKind };
 
 /** What the daemon tells the primary without waiting (`svc` notifications). */
 export interface ServiceNotifyParams {

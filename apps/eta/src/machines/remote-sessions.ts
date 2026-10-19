@@ -1,4 +1,3 @@
-import type { KernelModels } from "@eta/core";
 /**
  * The router the upstream session host hands foreign session ids to.
  *
@@ -10,6 +9,8 @@ import type { KernelModels } from "@eta/core";
  * "Owns" is a fact about the conversations: a session belongs to the machine of the project of the
  * conversation whose participant holds it, so the answer survives a restart with nothing kept.
  */
+import type { SidebarSession } from "@eta/client-contracts";
+import type { KernelModels } from "@eta/core";
 import type { RemoteSessions } from "@eta/server";
 import type { ConversationStore } from "../conversations/store";
 import type { MachineHub, MachineLink } from "./hub";
@@ -22,6 +23,12 @@ const LONG_ACTIONS = new Set(["btwAsk", "compact", "goal", "fork"]);
 const LONG_MS = 10 * 60 * 1000;
 const SHORT_MS = 60 * 1000;
 
+interface ForwardArgs {
+  session?: string;
+  model?: string;
+  [key: string]: unknown;
+}
+
 export class RemoteSessionsRouter implements RemoteSessions {
   readonly #conversations: ConversationStore;
   readonly #machines: MachineStore;
@@ -33,7 +40,10 @@ export class RemoteSessionsRouter implements RemoteSessions {
     machines: MachineStore;
     hub: MachineHub;
     models: () => KernelModels | undefined;
+    /** The daemons' sessions, for the global list. */
+    rows: () => SidebarSession[];
   }) {
+    this.rows = options.rows;
     this.#conversations = options.conversations;
     this.#machines = options.machines;
     this.#hub = options.hub;
@@ -48,10 +58,16 @@ export class RemoteSessionsRouter implements RemoteSessions {
     return machine?.kind === "daemon" ? machine : undefined;
   }
 
+  readonly rows: () => SidebarSession[];
+
   owns = (id: string): boolean => this.machineOf(id) !== undefined;
 
-  call: RemoteSessions["call"] = async (action, call) => {
-    const args = (call.args ?? {}) as { session?: string; model?: string };
+  call: RemoteSessions["call"] = async (action, call) => ({
+    result: await this.forward(action, (call.args ?? {}) as ForwardArgs),
+  });
+
+  /** One `sessions.*` action on the daemon that holds the session; what the browser's call does. */
+  async forward(action: string, args: ForwardArgs): Promise<unknown> {
     const machine = this.machineOf(args.session ?? "");
     if (machine === undefined)
       throw new Error(`no such session: ${args.session}`);
@@ -64,11 +80,10 @@ export class RemoteSessionsRouter implements RemoteSessions {
     // A model the user picks in the session's own controls has to be known to the daemon first.
     if (action === "modelSet" && typeof args.model === "string")
       await this.#teach(link, args.model);
-    const result = await link.pipe.call("sessions", action, call.args, {
+    return await link.pipe.call("sessions", action, args, {
       timeoutMs: LONG_ACTIONS.has(action) ? LONG_MS : SHORT_MS,
     });
-    return { result };
-  };
+  }
 
   async #teach(link: MachineLink, model: string): Promise<void> {
     const identity = parseModelId(model);

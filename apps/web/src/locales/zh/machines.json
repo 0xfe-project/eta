@@ -1,0 +1,60 @@
+{
+  "title": "机器",
+  "status": {
+    "online": "在线",
+    "offline": "离线",
+    "pending": "待批准",
+    "revoked": "已撤销"
+  },
+  "kinds": {
+    "primary": "主机器",
+    "daemon": "Daemon",
+    "ssh": "SSH"
+  },
+  "lastSeen": "上次在线 {{time}}",
+  "actions": {
+    "add": "添加机器",
+    "rename": "重命名",
+    "runs": "同时运行数",
+    "revoke": "撤销"
+  },
+  "fields": {
+    "nameLabel": "机器名称",
+    "namePlaceholder": "例如：家里的 Mac mini"
+  },
+  "install": {
+    "title": "接入机器",
+    "permissionsNotice": "智能体会在那台机器上以完全权限运行，请只接入专门用来干活的机器。",
+    "chooseName": "起个名字",
+    "generateCommand": "生成安装命令",
+    "runCommand": "在那台机器的终端里运行",
+    "copyCommand": "复制安装命令",
+    "commandExpiry": "命令只能用一次，{{time}} 前有效。",
+    "waitingForCommand": "等待那台机器运行命令…"
+  },
+  "approval": {
+    "title": "核对指纹，批准连接",
+    "help": "命令运行后，那台机器的终端会打印一个指纹。把它粘贴到这里，一致才会批准。",
+    "request": "{{name}} 请求接入：粘贴它终端里打印的指纹。",
+    "label": "{{name}} 的指纹",
+    "placeholder": "粘贴终端里打印的指纹",
+    "approved": "已批准 {{name}}"
+  },
+  "rename": {
+    "title": "重命名 {{name}}"
+  },
+  "runs": {
+    "title": "{{name}} 同时运行的任务数",
+    "label": "同时运行的任务数（1–20）",
+    "summary": "同时运行 {{count}} 个任务"
+  },
+  "revoke": {
+    "confirmTitle": "撤销 {{name}}？",
+    "confirmDescription": "它不能再连接。已在它上面运行的会话不会被停止。要再接入，需要重新添加。",
+    "success": "已撤销 {{name}}"
+  },
+  "empty": {
+    "title": "还没有接入其他机器",
+    "description": "接入后，项目和对话可以在它上面干活。"
+  }
+}

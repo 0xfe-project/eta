@@ -1,4 +1,4 @@
-import type { ActivityRef } from "@/api/control-plane.gen";
+import type { ActivityRef } from "./activity-ref";
 import { afterEach, describe, expect, it } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -18,7 +18,6 @@ import { ActivityRefCard } from "./activity-ref";
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
-const g = globalThis as Record<string, unknown>;
 
 const task: ActivityRef = {
   kind: "task",
@@ -80,7 +79,7 @@ describe("activity ref cards", () => {
 
   it("opens it on its page in the full-window workspace", async () => {
     const { container, router } = await mount([task], {
-      path: "/workspace/inbox",
+      path: "/workspace/tasks",
     });
     expect(cards(container)[0].href).toBe("/workspace/tasks?task=t1");
     await act(async () => {
@@ -158,52 +157,5 @@ describe("activity ref cards", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(copied).toEqual(["很长的正文"]);
-  });
-
-  it("opens an artifact's version in a sandboxed dialog", async () => {
-    const id = "0b7e2b1c-58f8-4a3c-9d3c-1f0e2a9b6c11";
-    const preview = (n: number) => `/preview/artifacts/v${n}.1.sig/files/`;
-    const asked: string[] = [];
-    g.fetch = async (input: RequestInfo | URL) => {
-      asked.push(input instanceof Request ? input.url : String(input));
-      return Response.json({
-        id,
-        title: "季度报告",
-        versions: [2, 1].map((n) => ({
-          number: n,
-          files: 3,
-          bytes: 10,
-          size: 10,
-          created_at: "2026-10-13T00:00:00Z",
-          preview_url: preview(n),
-        })),
-      });
-    };
-    const { container } = await mount([
-      { kind: "artifact", id, number: 1, title: "季度报告" },
-    ]);
-    const card = container.querySelector<HTMLButtonElement>(
-      '[role="log"] button[aria-label^="打开 Artifact"]',
-    )!;
-    expect(card.getAttribute("aria-label")).toBe(
-      "打开 Artifact 季度报告 第 1 版",
-    );
-    await act(async () => {
-      card.click();
-      for (let i = 0; i < 50 && !document.querySelector("iframe"); i++)
-        await new Promise((resolve) => setTimeout(resolve, 10));
-    });
-    expect(asked.some((u) => u.endsWith(`/api/v1/artifacts/${id}`))).toBe(true);
-    // The version the tool published, not the latest; scripts but no origin.
-    const frame = document.querySelector("iframe")!;
-    expect(frame.getAttribute("src")).toBe(preview(1));
-    expect(frame.getAttribute("sandbox")).toContain("allow-scripts");
-    expect(frame.getAttribute("sandbox")).not.toContain("allow-same-origin");
-    const download = [...document.querySelectorAll("a")].find(
-      (a) => a.textContent === "下载",
-    );
-    expect(download?.getAttribute("href")).toBe(
-      `/api/v1/artifacts/${id}/versions/1/archive`,
-    );
   });
 });

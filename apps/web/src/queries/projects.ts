@@ -4,6 +4,8 @@ import type {
   ProjectResults,
   ProjectView,
 } from "@eta/client-contracts";
+import { useQuery } from "@tanstack/react-query";
+import { getWire } from "@/lib/wire";
 import { useListTarget, useWireMutation } from "@/queries/wire";
 
 // Projects and the machines they live on: a project is `machine + absolute path` with a steward
@@ -32,4 +34,31 @@ export function useSetProjectSteward() {
     ProjectArgs["setSteward"],
     ProjectResults["setSteward"]
   >("projects", "setSteward");
+}
+
+const NO_FILES: readonly string[] = [];
+
+/**
+ * The project's files for the composer's `@` menu, listed on the project's own machine. Asked for
+ * only once `wanted` (the person typed an `@`), and kept for half a minute so the next `@` is
+ * instant. A project whose machine cannot answer has no files rather than an error in the menu.
+ */
+export function useProjectFiles(
+  projectId: string | undefined,
+  wanted: boolean,
+): readonly string[] {
+  const { data } = useQuery({
+    queryKey: ["project-files", projectId],
+    queryFn: () =>
+      getWire().call<ProjectResults["files"]>(
+        "projects",
+        "files",
+        { projectId },
+        { timeoutMs: 20_000 },
+      ),
+    enabled: wanted && projectId !== undefined,
+    staleTime: 30_000,
+    retry: false,
+  });
+  return data?.files ?? NO_FILES;
 }

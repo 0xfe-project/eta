@@ -58,21 +58,11 @@ afterEach(async () => {
 });
 
 describe("手机底部栏", () => {
-  it("has three tabs, each of them a page that exists", async () => {
+  it("has three tabs: the list, tasks and routines", async () => {
     const container = await render();
     const targets = [...container.querySelectorAll("a")].map((a) =>
       a.getAttribute("data-to"),
     );
-    expect(targets).toEqual(["/", "/workspace/tasks", "/workspace/more"]);
-  });
-
-  it("lights the tab a detail page belongs to, not just an exact match", async () => {
-    state.pathname = "/workspace/routines";
-    const container = await render();
-    const lit = [...container.querySelectorAll("a")].find((a) =>
-      a.className.includes("bg-muted/50"),
-    );
-    // Routines has no tab of its own; it lives behind 更多.
-    expect(lit?.getAttribute("data-to")).toBe("/workspace/more");
+    expect(targets).toEqual(["/", "/workspace/tasks", "/workspace/routines"]);
   });
 });

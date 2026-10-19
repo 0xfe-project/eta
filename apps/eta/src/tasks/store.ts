@@ -1,15 +1,16 @@
 import type {
-  BoardTaskAssignee,
   BoardTaskStatus,
   BoardTaskView,
   TaskActivityKind,
   TaskActivityView,
   TaskActor,
+  TaskRunStatus,
+  TaskWorkspaceMode,
 } from "@eta/client-contracts";
 /**
  * The task board's rows.
  *
- * A task is a number, a title, a status, an assignee and a timeline. The timeline is the record:
+ * A task is a number, a title, a status, an executor and a timeline. The timeline is the record:
  * every change writes its activity in the same transaction as the change, so "what happened to
  * this" is a read and not a reconstruction, and a card can show the last thing that happened
  * without asking anyone.
@@ -19,16 +20,23 @@ import type { Database } from "bun:sqlite";
 /** A task as stored: the view, and the description only its own page shows. */
 export interface TaskRecord extends BoardTaskView {
   description: string;
+  projectId: string | null;
+  workspaceMode: TaskWorkspaceMode;
+  worktreePath: string | null;
+  worktreeBranch: string | null;
+  originConversationId: string | null;
 }
 
 export interface NewTask {
   title: string;
   description?: string | undefined;
   status?: BoardTaskStatus | undefined;
-  assignee?: BoardTaskAssignee | undefined;
-  /** The agent that makes it; absent is the user. */
+  /** The agent that makes it, and executes it; absent is the user (a task that cannot run). */
   createdByAgent?: string | undefined;
+  /** Where it is discussed, and, for good, where it came from. */
   conversationId?: string | undefined;
+  projectId?: string | undefined;
+  workspaceMode?: TaskWorkspaceMode | undefined;
   /** More for the `created` entry, e.g. the draft this task was confirmed from. */
   origin?: Record<string, unknown> | undefined;
 }
@@ -37,7 +45,6 @@ export interface TaskChanges {
   title?: string | undefined;
   description?: string | undefined;
   status?: BoardTaskStatus | undefined;
-  assignee?: BoardTaskAssignee | undefined;
   /** Null unlinks. */
   conversationId?: string | null | undefined;
 }
@@ -48,17 +55,23 @@ interface TaskRow {
   title: string;
   description: string;
   status: string;
-  assignee: string;
   created_by_agent: string | null;
   conversation_id: string | null;
+  project_id: string | null;
+  workspace_mode: string;
+  worktree_path: string | null;
+  worktree_branch: string | null;
+  origin_conversation_id: string | null;
   created_at: number;
   updated_at: number;
   comments: number;
+  run_status: string | null;
 }
 
 interface ActivityRow {
   id: string;
   task_id: string;
+  run_id: string | null;
   kind: string;
   actor: string;
   actor_agent: string | null;
@@ -73,7 +86,12 @@ const recordOf = (row: TaskRow): TaskRecord => ({
   title: row.title,
   description: row.description,
   status: row.status as BoardTaskStatus,
-  assignee: row.assignee as BoardTaskAssignee,
+  projectId: row.project_id,
+  workspaceMode: row.workspace_mode as TaskWorkspaceMode,
+  worktreePath: row.worktree_path,
+  worktreeBranch: row.worktree_branch,
+  originConversationId: row.origin_conversation_id,
+  runStatus: row.run_status as TaskRunStatus | null,
   createdBy:
     row.created_by_agent === null
       ? { kind: "user", agentId: null }
@@ -101,6 +119,7 @@ const activityOf = (row: ActivityRow): TaskActivityView => {
   return {
     id: row.id,
     kind: row.kind as TaskActivityKind,
+    runId: row.run_id,
     actor: { kind: row.actor as TaskActor["kind"], agentId: row.actor_agent },
     body: row.body,
     data,
@@ -108,10 +127,11 @@ const activityOf = (row: ActivityRow): TaskActivityView => {
   };
 };
 
-/** A task with its comment count, which the board and every card show. */
+/** A task with its comment count and its newest run's status, which the board and every card show. */
 const SELECT_TASK = `
   SELECT t.*,
-         (SELECT COUNT(*) FROM task_activity a WHERE a.task_id = t.id AND a.kind = 'comment') AS comments
+         (SELECT COUNT(*) FROM task_activity a WHERE a.task_id = t.id AND a.kind = 'comment') AS comments,
+         (SELECT r.status FROM task_run r WHERE r.task_id = t.id ORDER BY r.created_at DESC, r.rowid DESC LIMIT 1) AS run_status
     FROM task t`;
 
 export class TaskStore {
@@ -129,22 +149,24 @@ export class TaskStore {
     const id = crypto.randomUUID();
     const now = Date.now();
     const status = input.status ?? "todo";
-    const assignee = input.assignee ?? "none";
     this.#db.transaction(() => {
       this.#db
         .query(
           `INSERT INTO task
-             (id, title, description, status, assignee, created_by_agent, conversation_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             (id, title, description, status, created_by_agent, conversation_id, origin_conversation_id,
+              project_id, workspace_mode, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           id,
           input.title,
           input.description ?? "",
           status,
-          assignee,
           input.createdByAgent ?? null,
           input.conversationId ?? null,
+          input.conversationId ?? null,
+          input.projectId ?? null,
+          input.workspaceMode ?? "local",
           now,
           now,
         );
@@ -154,7 +176,7 @@ export class TaskStore {
         input.createdByAgent === undefined
           ? { kind: "user", agentId: null }
           : { kind: "agent", agentId: input.createdByAgent },
-        { data: { status, assignee, ...input.origin } },
+        { data: { status, ...input.origin } },
       );
     })();
     return this.get(id)!;
@@ -204,7 +226,6 @@ export class TaskStore {
       title: changes.title ?? before.title,
       description: changes.description ?? before.description,
       status: changes.status ?? before.status,
-      assignee: changes.assignee ?? before.assignee,
       conversationId:
         changes.conversationId === undefined
           ? before.conversationId
@@ -217,8 +238,6 @@ export class TaskStore {
       entries.push(["description", {}]);
     if (next.status !== before.status)
       entries.push(["status", { from: before.status, to: next.status }]);
-    if (next.assignee !== before.assignee)
-      entries.push(["assignee", { from: before.assignee, to: next.assignee }]);
     if (next.conversationId !== before.conversationId) {
       entries.push([
         "conversation",
@@ -230,14 +249,13 @@ export class TaskStore {
       this.#db
         .query(
           `UPDATE task
-              SET title = ?, description = ?, status = ?, assignee = ?, conversation_id = ?, updated_at = ?
+              SET title = ?, description = ?, status = ?, conversation_id = ?, updated_at = ?
             WHERE id = ?`,
         )
         .run(
           next.title,
           next.description,
           next.status,
-          next.assignee,
           next.conversationId,
           Date.now(),
           id,
@@ -247,12 +265,25 @@ export class TaskStore {
     return this.get(id);
   }
 
+  /** The worktree a run made for the task: kept for the next run, and shown on the task. */
+  setWorktree(id: string, path: string, branch: string): void {
+    this.#db
+      .query(
+        "UPDATE task SET worktree_path = ?, worktree_branch = ?, updated_at = ? WHERE id = ?",
+      )
+      .run(path, branch, Date.now(), id);
+  }
+
   /** Something that happened to a task besides a change to its fields; it counts as touching it. */
   record(
     taskId: string,
     kind: TaskActivityKind,
     actor: TaskActor,
-    detail: { body?: string; data?: Record<string, unknown> } = {},
+    detail: {
+      body?: string;
+      data?: Record<string, unknown>;
+      runId?: string;
+    } = {},
   ): TaskActivityView | undefined {
     if (this.get(taskId) === undefined) return undefined;
     return this.#db.transaction(() => {
@@ -261,6 +292,20 @@ export class TaskStore {
         .run(Date.now(), taskId);
       return this.#log(taskId, kind, actor, detail);
     })();
+  }
+
+  /** The comment a client already sent under `clientId` on this task, if any (a retry's twin). */
+  commentByClientId(
+    taskId: string,
+    clientId: string,
+  ): TaskActivityView | undefined {
+    const row = this.#db
+      .query<ActivityRow, [string, string]>(
+        `SELECT * FROM task_activity
+          WHERE task_id = ? AND kind = 'comment' AND json_extract(data, '$.clientId') = ?`,
+      )
+      .get(taskId, clientId);
+    return row === null ? undefined : activityOf(row);
   }
 
   /** Remove a task and, with it, its timeline. */
@@ -295,17 +340,22 @@ export class TaskStore {
     taskId: string,
     kind: TaskActivityKind,
     actor: TaskActor,
-    detail: { body?: string | undefined; data?: Record<string, unknown> },
+    detail: {
+      body?: string | undefined;
+      data?: Record<string, unknown>;
+      runId?: string | undefined;
+    },
   ): TaskActivityView {
     const id = crypto.randomUUID();
     this.#db
       .query(
-        `INSERT INTO task_activity (id, task_id, kind, actor, actor_agent, body, data, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO task_activity (id, task_id, run_id, kind, actor, actor_agent, body, data, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
         taskId,
+        detail.runId ?? null,
         kind,
         actor.kind,
         actor.agentId,

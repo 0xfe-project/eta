@@ -11,17 +11,20 @@
  * session is quiet, a steer and a stop are ordinary `sessions.*` calls on the daemon's pipe, and a
  * link that dies under any of them fails them as an unknown outcome. Nothing is replayed.
  */
-import type { RunOutcome, ToolSpec } from "@eta/client-contracts";
+import type { PromptImage, RunOutcome, ToolSpec } from "@eta/client-contracts";
 import type { KernelModels, KernelTool } from "@eta/core";
 import type { Settings } from "@eta/server";
+import type { Bundles } from "../bundles/bundles";
 import type {
   EnsureInput,
   SessionHandle,
   SessionPlace,
+  SessionSettings,
 } from "../conversations/places";
 import type { SessionHooks } from "../session-hooks";
 import type { MachineHub, MachineLink } from "./hub";
 import type { SessionMirrors } from "./mirror";
+import type { MachineRecord } from "./store";
 import { LINK_LIMITS } from "@eta/client-contracts";
 import { modelSpecOf } from "@eta/daemon";
 import { builtinPersonas } from "@eta/harness";
@@ -35,8 +38,17 @@ export interface RemotePlaceDeps {
   defaults: () => Promise<Settings>;
   /** The product's per-session hooks; not there until the product is made. */
   hooks: () => Required<SessionHooks> | undefined;
+  /** The host's akhook layers, as text: the rules a remote session lives under besides its own. */
+  akhook: () => { name: string; text: string }[];
+  /** The bundles; what an agent loads is sent along with its session. */
+  bundles: Bundles;
   /** The primary's home: where the user's own persona cards are. */
   home: string;
+  /** A `sessions.*` action on a session of a daemon, the way the browser's are sent. */
+  forward: (
+    action: string,
+    args: { session: string; [key: string]: unknown },
+  ) => Promise<unknown>;
   warn: (message: string) => void;
 }
 
@@ -56,20 +68,33 @@ class RemoteHandle implements SessionHandle {
     return this.#running;
   }
 
-  async steer(text: string): Promise<void> {
+  async steer(text: string, images?: PromptImage[]): Promise<void> {
     await this.#link.pipe.call("sessions", "prompt", {
       session: this.id,
       text,
       mode: "steer",
+      ...(images === undefined || images.length === 0 ? {} : { images }),
     });
   }
 
-  async run(prompt: string): Promise<RunOutcome> {
+  async model(): Promise<string | undefined> {
+    return (await this.#link.machine("config", { session: this.id })).model;
+  }
+
+  async run(
+    prompt: string,
+    _keepGoing?: () => boolean,
+    images?: PromptImage[],
+  ): Promise<RunOutcome> {
     this.#running = true;
     try {
       return await this.#link.daemon(
         "run",
-        { session: this.id, text: prompt },
+        {
+          session: this.id,
+          text: prompt,
+          ...(images === undefined || images.length === 0 ? {} : { images }),
+        },
         { timeoutMs: LINK_LIMITS.runTimeoutMs },
       );
     } finally {
@@ -114,6 +139,7 @@ export class RemotePlace implements SessionPlace {
     const known = this.#deps
       .models()
       ?.getModel(identity.provider, identity.modelId);
+    const gatewayKey = this.#deps.bundles.gatewayKey(agent.id);
     const { session } = await link.machine("open", {
       ...(input.existing === null ? {} : { session: input.existing }),
       cwd: input.cwd,
@@ -135,10 +161,32 @@ export class RemotePlace implements SessionPlace {
             }),
           }),
       tools: this.#tools(conversation.id, agent.id, input.cwd),
+      akhook: this.#deps.akhook(),
+      bundles: await this.#deps.bundles.openOn(link, agent.bundles),
+      ...(gatewayKey === undefined ? {} : { gatewayKey }),
     });
     if (session !== input.existing) input.created(session);
     mirrors.register(session, machine.id);
     return new RemoteHandle(session, link, this.#deps.warn);
+  }
+
+  async configure(
+    sessionId: string,
+    machine: MachineRecord,
+    settings: SessionSettings,
+  ): Promise<void> {
+    if (this.#deps.hub.link(machine.id) === undefined)
+      throw new Error(`${machine.name} is ${machine.status}`);
+    if (settings.model !== undefined)
+      await this.#deps.forward("modelSet", {
+        session: sessionId,
+        model: settings.model,
+      });
+    if (settings.thinkingLevel !== undefined)
+      await this.#deps.forward("thinkingLevel", {
+        session: sessionId,
+        level: settings.thinkingLevel,
+      });
   }
 
   /** What the product adds to this agent's sessions, as the daemon needs to know it. */

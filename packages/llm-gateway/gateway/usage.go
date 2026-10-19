@@ -1,0 +1,224 @@
+package gateway
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"sync"
+	"time"
+
+	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
+)
+
+const usageTimeout = 15 * time.Second
+
+// UsageWindow is one subscription rate-limit window. Used is the percent
+// already consumed, 0–100.
+type UsageWindow struct {
+	Kind            string     `json:"kind"` // "5h", "weekly" or "monthly"
+	Used            float64    `json:"used"`
+	ResetsAt        *time.Time `json:"resets_at,omitempty"`
+	DurationSeconds int64      `json:"duration_seconds,omitempty"`
+}
+
+// Usage is what the provider reports about one connection's subscription.
+// A failed read carries Error instead of failing the whole list.
+type Usage struct {
+	ID      string        `json:"id"`
+	Plan    string        `json:"plan,omitempty"`
+	Windows []UsageWindow `json:"windows"`
+	Error   *Problem      `json:"error,omitempty"`
+}
+
+// UsageReader is implemented by connectors whose provider reports
+// subscription limits, or at least can tell whether it accepts the
+// credential (no windows then). metadata is the credential CPA keeps for
+// the account; for an API key, "api_key" is the key.
+type UsageReader interface {
+	Usage(ctx context.Context, metadata map[string]any) (Usage, error)
+}
+
+// check is the outcome of reading an account's usage: a request to the
+// provider with the account's token that costs no quota, so it doubles as
+// the account's health check.
+type check struct {
+	started, done time.Time
+	err           *Problem
+}
+
+// Usage reads subscription limits of every enabled connection whose
+// connector can report them, concurrently, and records each read as the
+// account's latest check. A token the provider rejects is refreshed once
+// (as CPA does when a request gets a 401) before the check says so.
+func (s *Service) Usage(ctx context.Context) []Usage {
+	type job struct {
+		auth   *coreauth.Auth
+		reader UsageReader
+		apiKey bool
+	}
+	var jobs []job
+	for _, a := range s.auths.List() {
+		connector := s.byProvider[strings.ToLower(a.Provider)]
+		reader, ok := s.byID[connector].(UsageReader)
+		if !ok || disabled(a) {
+			continue
+		}
+		jobs = append(jobs, job{a, reader, s.apiKey(connector)})
+	}
+	out := make([]Usage, len(jobs))
+	var wg sync.WaitGroup
+	for i, j := range jobs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(ctx, usageTimeout)
+			defer cancel()
+			started := s.now()
+			u, err := j.reader.Usage(ctx, credential(j.auth))
+			// A key cannot be refreshed; a login can, as CPA does on a 401.
+			if rejected(userCode(err)) && !j.apiKey {
+				if refreshed, rerr := s.auths.ForceRefreshAuth(ctx, j.auth.ID); rerr == nil && refreshed != nil {
+					u, err = j.reader.Usage(ctx, refreshed.Metadata)
+				}
+			}
+			s.record(j.auth.ID, check{started: started, done: s.now(), err: checkError(err, j.apiKey)})
+			u.ID = j.auth.ID
+			if u.Windows == nil {
+				u.Windows = []UsageWindow{}
+			}
+			if err != nil {
+				u.Error = problem(CodeUsageUnavailable, "Could not read the usage.")
+				var ue *UserError
+				if errors.As(err, &ue) {
+					u.Error = &Problem{Code: ue.Code, Message: ue.Message, Params: ue.Params}
+				}
+			}
+			out[i] = u
+		}()
+	}
+	wg.Wait()
+	return out
+}
+
+// rejected reports a code that says the provider does not accept the credential.
+func rejected(code string) bool {
+	return code == CodeLoginExpired || code == CodeInvalidAPIKey
+}
+
+func userCode(err error) string {
+	var ue *UserError
+	if errors.As(err, &ue) {
+		return ue.Code
+	}
+	return ""
+}
+
+// credential is what a UsageReader reads: CPA's metadata for the account,
+// and the key of an API key (CPA keeps it in the attributes).
+func credential(a *coreauth.Auth) map[string]any {
+	key := a.Attributes["api_key"]
+	if key == "" {
+		return a.Metadata
+	}
+	out := make(map[string]any, len(a.Metadata)+1)
+	for k, v := range a.Metadata {
+		out[k] = v
+	}
+	out["api_key"] = key
+	return out
+}
+
+func checkError(err error, apiKey bool) *Problem {
+	switch {
+	case err == nil:
+		return nil
+	case rejected(userCode(err)) && apiKey:
+		return problem(CodeInvalidAPIKey, "The provider rejected the API key.")
+	case rejected(userCode(err)):
+		return problem(CodeLoginExpired, "The provider rejected the login token.")
+	}
+	return problem(CodeCheckFailed, "The provider could not be reached to check the account; its status is unchanged.")
+}
+
+// record keeps the newest check per account: one that started earlier and
+// finished later says less than the one already there.
+func (s *Service) record(id string, c check) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if old, ok := s.checks[id]; ok && old.started.After(c.started) {
+		return
+	}
+	s.checks[id] = c
+}
+
+// withCheck adds the account's latest check to its connection. A check
+// only reports, except that a login the provider rejected even after a
+// refresh needs the user, unless CPA has heard from the account since.
+func (s *Service) withCheck(c Connection, a *coreauth.Auth) Connection {
+	s.mu.Lock()
+	ch, ok := s.checks[a.ID]
+	s.mu.Unlock()
+	if !ok {
+		return c
+	}
+	c.CheckedAt, c.CheckError = &ch.done, ch.err
+	if ch.err != nil && rejected(ch.err.Code) && !a.UpdatedAt.After(ch.done) &&
+		(c.State == StateActive || c.State == StateDegraded) {
+		c.State, c.Error, c.RetryAt = StateNeedsLogin, s.authExpired(c.Connector), nil
+	}
+	return c
+}
+
+// Status is everything the UI shows about the model services, at once.
+type Status struct {
+	Connections []Connection `json:"connections"`
+	Models      []Model      `json:"models"`
+	Usage       []Usage      `json:"usage"`
+}
+
+type refreshCall struct {
+	done   chan struct{}
+	status Status
+}
+
+// Refresh checks every account against its provider now and returns the
+// result. Concurrent calls share one round of checks, so pressing refresh
+// repeatedly sends one request per account; the round outlives a caller
+// that gives up, since others may be waiting on it.
+func (s *Service) Refresh(ctx context.Context) (Status, error) {
+	s.mu.Lock()
+	call := s.refreshing
+	if call == nil {
+		call = &refreshCall{done: make(chan struct{})}
+		s.refreshing = call
+		go func() {
+			usage := s.Usage(context.WithoutCancel(ctx))
+			call.status = Status{Connections: nonNil(s.Connections()), Models: nonNil(s.Models()), Usage: nonNil(usage)}
+			s.mu.Lock()
+			s.refreshing = nil
+			s.mu.Unlock()
+			close(call.done)
+		}()
+	}
+	s.mu.Unlock()
+	select {
+	case <-call.done:
+		return call.status, nil
+	case <-ctx.Done():
+		return Status{}, ctx.Err()
+	}
+}
+
+// WindowKind names a window by its length.
+func WindowKind(seconds int64, fallback string) string {
+	switch {
+	case seconds <= 0:
+		return fallback
+	case seconds <= 6*3600:
+		return "5h"
+	case seconds >= 27*24*3600:
+		return "monthly"
+	default:
+		return "weekly"
+	}
+}

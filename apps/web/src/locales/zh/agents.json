@@ -17,16 +17,14 @@
     "tabs": {
       "general": "常规",
       "instructions": "指令",
-      "environment": "环境"
+      "environment": "环境包"
     },
     "sectionsLabel": "智能体设置分类"
-  },
-  "environment": {
-    "buildFailed": "环境构建失败"
   },
   "models": {
     "loading": "正在加载模型…",
     "select": "选择模型",
+    "default": "默认模型",
     "deletedOption": "{{modelName}}（已不存在）",
     "noneAvailable": "暂无可用模型。",
     "noneSelected": "未选择模型",
@@ -34,10 +32,6 @@
       "deleted": "{{modelName}} 已不存在，请更换模型。",
       "unavailable": "{{modelName}} 暂不可用：{{reason}}"
     }
-  },
-  "bundles": {
-    "requiredSuffix": " · 必选",
-    "help": "智能体的环境由这些环境包构建：安装的工具、可用的插件。修改后重新构建，在空闲时生效。"
   },
   "fields": {
     "namePlaceholder": "例如：代码审查",
@@ -61,9 +55,6 @@
     "working": "工作中",
     "awaitingConfirmation": "等待确认"
   },
-  "errors": {
-    "loadFailed": "无法加载智能体"
-  },
   "labels": {
     "deletedAgent": "已删除的智能体"
   },
@@ -71,7 +62,6 @@
     "nameAndModel": "名称与模型",
     "stepsLabel": "新建步骤",
     "failed": "创建失败：{{message}}",
-    "noBundles": "还没有环境包，智能体使用默认环境。",
     "retry": "重试创建"
   },
   "usage": {
@@ -82,10 +72,6 @@
     "summary": "模型用量：{{usage}}",
     "tokensAndRequests_one": "{{tokens}} tokens（7 天 {{count}} 次请求）",
     "tokensAndRequests_other": "{{tokens}} tokens（7 天 {{count}} 次请求）"
-  },
-  "library": {
-    "title": "智能体库",
-    "allReachable": "每个智能体都已经有对话了。"
   },
   "thinking": {
     "label": "思考档",

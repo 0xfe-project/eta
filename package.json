@@ -2,22 +2,23 @@
   "name": "eta",
   "type": "module",
   "private": true,
-  "packageManager": "bun@1.3.14",
+  "packageManager": "bun@1.4.3",
   "workspaces": ["apps/*", "packages/*"],
   "engines": {
     "node": ">=22.12.0"
   },
   "scripts": {
     "prepare": "lefthook install",
-    "setup": "bun install && uv sync --project apps/memory --dev",
+    "setup": "bun install && uv sync --project apps/memory --dev && bun run --cwd packages/llm-gateway build",
     "dev": "concurrently --kill-others --names host,web \"bun --watch apps/eta/src/main.ts --data-dir var/eta-dev --port ${ETA_PORT:-8787} --allow-origin http://127.0.0.1:${ETA_WEB_PORT:-3000}\" \"ETA_HOST_ORIGIN=${ETA_HOST_ORIGIN:-http://127.0.0.1:${ETA_PORT:-8787}} bun run --cwd apps/web dev\"",
     "build": "turbo run build",
-    "check": "dprint check && bun run lint:repo && turbo run build typecheck lint test knip",
+    "check": "dprint check && turbo run build typecheck lint //#lint:repo test //#knip",
+    "check:affected": "dprint check && turbo run build typecheck lint //#lint:repo test //#knip --affected",
     "test": "turbo run test",
-    "lint": "turbo run lint && bun run lint:repo",
+    "lint": "turbo run lint //#lint:repo",
     "format": "dprint fmt",
     "knip": "knip",
-    "lint:repo": "eslint . --ignore-pattern 'apps/web/**'"
+    "lint:repo": "eslint --cache --cache-location node_modules/.cache/eslint/repo . --ignore-pattern 'apps/**' --ignore-pattern 'packages/**'"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^9.5.1",

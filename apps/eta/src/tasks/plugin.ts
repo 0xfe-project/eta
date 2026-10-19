@@ -6,13 +6,16 @@ import type { CallFrame } from "@eta/client-wire-proto";
  * `tasks` is eager, the whole board as one list; every task is a target of its own (`tasks.<id>`)
  * with its detail and its activity, made when the task is and taken away when it is deleted. What
  * the actions do is the board's (`board.ts`); this file reads the arguments and publishes. Every
- * action here is the user's: an agent changes the board with its tools.
+ * action here is the user's: an agent changes the board with its tools. There is no action that
+ * makes a task: tasks are made by agents and confirmed by the user (`confirmDraft`).
  */
 import type { FieldsInput, TaskBoard } from "./board";
+import type { TaskRunner } from "./runner";
 import { Args, productPlugin, publish } from "../wire";
 
 export interface TasksDeps {
   board: TaskBoard;
+  runner: TaskRunner;
 }
 
 const USER: TaskActor = { kind: "user", agentId: null };
@@ -23,7 +26,6 @@ function fieldsOf(args: Args): FieldsInput {
     title: args.optionalString("title"),
     description: args.optionalString("description"),
     status: args.optionalString("status"),
-    assignee: args.optionalString("assignee"),
   };
 }
 
@@ -37,7 +39,7 @@ function editsOf(call: CallFrame): FieldsInput {
 }
 
 export function tasksPlugin(deps: TasksDeps, applied: () => void) {
-  const { board } = deps;
+  const { board, runner } = deps;
 
   return productPlugin(
     "tasks",
@@ -69,19 +71,6 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
           if (kind !== "removed") wire.pushNow(`tasks.${taskId}`);
         }),
 
-        wire.handle("tasks", "create", (call) => {
-          const args = new Args(call);
-          const task = board.create(
-            {
-              ...fieldsOf(args),
-              title: args.string("title"),
-              conversationId: args.optionalString("conversationId"),
-            },
-            USER,
-          );
-          return { result: { task } };
-        }),
-
         wire.handle("tasks", "update", (call) => {
           const args = new Args(call);
           const task = board.update(
@@ -99,6 +88,7 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
               args.string("taskId"),
               args.string("body"),
               USER,
+              { clientId: args.optionalString("clientId") },
             ),
           };
         }),
@@ -116,6 +106,24 @@ export function tasksPlugin(deps: TasksDeps, applied: () => void) {
             throw new Error("tasks.link needs conversationId (or null)");
           const task = board.link(args.string("taskId"), conversationId, USER);
           return { result: { task } };
+        }),
+
+        wire.handle("tasks", "interrupt", (call) => {
+          const args = new Args(call);
+          return {
+            result: {
+              task: runner.interrupt(
+                args.string("taskId"),
+                args.string("runId"),
+              ),
+            },
+          };
+        }),
+
+        wire.handle("tasks", "rerun", (call) => {
+          const { task, run } = runner.rerun(new Args(call).string("taskId"));
+          const { taskId: _, ...view } = run;
+          return { result: { task, run: view } };
         }),
 
         wire.handle("tasks", "confirmDraft", (call) => {

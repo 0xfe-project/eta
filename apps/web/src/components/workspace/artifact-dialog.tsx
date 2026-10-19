@@ -4,10 +4,10 @@ import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { CopyIcon } from "@phosphor-icons/react/Copy";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/DownloadSimple";
 import { GlobeIcon } from "@phosphor-icons/react/Globe";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { LoadError, Loading } from "@/components/states";
+import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,14 +16,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { archiveURL, useArtifact, useShareArtifact } from "@/queries/artifacts";
+import {
+  useArtifacts,
+  usePreview,
+  useShareArtifact,
+  useUnshareArtifact,
+} from "@/queries/artifacts";
+import { wireErrorMessage } from "@/queries/wire";
 
 /**
  * An artifact's page in a dialog: large on a desktop, nearly the whole
  * screen on a phone. The site runs in a sandboxed frame (an opaque origin:
- * no cookies, storage or eta API), loaded from its version's preview
- * address, which works without cookies; the same policy holds when it is
- * opened in a new window.
+ * no cookies, storage or eta API), loaded from a preview address the host
+ * hands out for the version; it works without cookies for an hour, and the
+ * same policy holds when it is opened in a new window.
  */
 const SANDBOX =
   "allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads";
@@ -41,11 +47,19 @@ function ArtifactDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const { t: translateText } = useTranslation(["artifacts", "common"] as const);
-  const artifact = useArtifact(id, open);
+  const { artifacts, loaded, error } = useArtifacts();
+  const artifact = artifacts.find((item) => item.id === id);
   const [chosen, setChosen] = useState<number | undefined>(version);
-  const versions = artifact.data?.versions ?? [];
+  const versions = artifact?.versions ?? [];
   const current =
     versions.find((v) => v.number === chosen) ?? versions.at(0) ?? null;
+  // The address the frame loads from carries a capability that works for an hour, so it is asked
+  // for each time a version is shown and kept nowhere but here.
+  const { mutate: ask, data: preview, error: previewError } = usePreview();
+  const shown = current?.number;
+  useEffect(() => {
+    if (open && shown !== undefined) ask({ artifactId: id, version: shown });
+  }, [open, id, shown, ask]);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[calc(100dvh-1rem)] max-w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden p-0 sm:h-[calc(100dvh-4rem)] sm:max-w-[min(96rem,calc(100%-4rem))]">
@@ -55,12 +69,12 @@ function ArtifactDialog({
             className="size-4 shrink-0 text-muted-foreground"
           />
           <DialogTitle className="min-w-0 flex-1 truncate">
-            {artifact.data?.title ?? "Artifact"}
+            {artifact?.title ?? "Artifact"}
           </DialogTitle>
           <DialogDescription className="sr-only">
             {translateText("sandboxDescription")}
           </DialogDescription>
-          {current && artifact.data ? (
+          {current && artifact ? (
             <div className="flex w-full items-center gap-1 sm:w-auto">
               {versions.length > 1 ? (
                 <select
@@ -90,9 +104,14 @@ function ArtifactDialog({
               )}
               <span className="flex-1 sm:hidden" />
               <ShareControl id={id} version={current} />
-              <Button variant="ghost" size="sm" asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={preview === undefined}
+                asChild
+              >
                 <a
-                  href={current.preview_url}
+                  href={preview?.url}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -103,7 +122,7 @@ function ArtifactDialog({
                 </a>
               </Button>
               <Button variant="ghost" size="sm" asChild>
-                <a href={archiveURL(id, current.number)} download>
+                <a href={current.archiveUrl} download>
                   <DownloadSimpleIcon aria-hidden="true" />
                   <span className="max-sm:sr-only">
                     {translateText("common:actions.download")}
@@ -113,30 +132,36 @@ function ArtifactDialog({
             </div>
           ) : null}
         </div>
-        {current?.share ? <ShareLink url={current.share.url} /> : null}
+        {current?.shareUrl ? <ShareLink url={current.shareUrl} /> : null}
         <div className="relative min-h-0 flex-1 bg-white">
-          {artifact.isPending ? (
+          {error || previewError ? (
+            <LoadError
+              what={translateText("loadTarget")}
+              error={(error ?? previewError)!}
+              onRetry={
+                current
+                  ? () => ask({ artifactId: id, version: current.number })
+                  : undefined
+              }
+            />
+          ) : !loaded || (current && preview === undefined) ? (
             <Loading
               layout="detail"
               className="p-6"
               label={translateText("common:states.opening")}
             />
-          ) : artifact.error ? (
-            <LoadError
-              what={translateText("loadTarget")}
-              error={artifact.error}
-              onRetry={() => void artifact.refetch()}
-            />
-          ) : current ? (
+          ) : current && preview && artifact ? (
             <iframe
-              key={current.number}
-              title={artifact.data.title}
-              src={current.preview_url}
+              key={`${current.number}:${preview.url}`}
+              title={artifact.title}
+              src={preview.url}
               sandbox={SANDBOX}
               referrerPolicy="no-referrer"
               className="absolute inset-0 size-full border-0"
             />
-          ) : null}
+          ) : (
+            <Empty icon={AppWindowIcon} title={translateText("gone")} />
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -152,31 +177,31 @@ function ShareControl({
   version: ArtifactVersion;
 }) {
   const { t: translateText } = useTranslation(["artifacts", "common"] as const);
-  const share = useShareArtifact(id);
-  const shared = Boolean(version.share);
+  const share = useShareArtifact();
+  const unshare = useUnshareArtifact();
+  const shared = version.shareUrl !== null;
+  const call = { artifactId: id, version: version.number };
+  const onError = (error: Error) => toast.error(wireErrorMessage(error));
   return (
     <Button
       variant={shared ? "secondary" : "ghost"}
       size="sm"
-      disabled={share.isPending}
+      disabled={share.isPending || unshare.isPending}
       title={
         shared
           ? translateText("sharing.revokeHint")
           : translateText("sharing.createHint")
       }
       onClick={() =>
-        share.mutate(
-          { version: version.number, share: !shared },
-          {
-            onSuccess: () =>
-              toast(
-                shared
-                  ? translateText("sharing.revoked")
-                  : translateText("sharing.created"),
-              ),
-            onError: (error) => toast.error(error.message),
-          },
-        )
+        shared
+          ? unshare.mutate(call, {
+              onSuccess: () => toast(translateText("sharing.revoked")),
+              onError,
+            })
+          : share.mutate(call, {
+              onSuccess: () => toast(translateText("sharing.created")),
+              onError,
+            })
       }
     >
       <GlobeIcon aria-hidden="true" />

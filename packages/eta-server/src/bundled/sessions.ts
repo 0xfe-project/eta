@@ -77,6 +77,11 @@ export {
 export interface RemoteSessions {
   /** Whether this session lives elsewhere. Asked on every action, so it must be cheap. */
   owns: (id: string) => boolean;
+  /**
+   * The sessions on other machines, as rows of the global list. Read whenever the list is
+   * projected, so it is the router's job to say (`wire.push("sessions")`) when it changes.
+   */
+  rows?: (() => SidebarSession[]) | undefined;
   call: (
     action: string,
     call: CallFrame,
@@ -111,6 +116,7 @@ const FORWARDED_EVENTS = [
   "message:start",
   "message:update",
   "message:end",
+  "generation:interrupted",
   "entry:added",
   "tool:start",
   "tool:update",
@@ -188,7 +194,13 @@ export class SessionsService extends Service implements SessionsApi {
 
   /** The sidebar as it stands: cached metadata, live status. */
   sidebar(): SidebarSession[] {
-    return this.cached.map((entry) => this.row(entry));
+    const local = this.cached.map((entry) => this.row(entry));
+    const remote = this.remote?.rows?.() ?? [];
+    if (remote.length === 0) return local;
+    // Newest first, as the store lists them; a row without a date goes last.
+    return [...local, ...remote].sort(
+      (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0),
+    );
   }
 
   /**

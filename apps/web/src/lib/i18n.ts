@@ -1,5 +1,3 @@
-import type { ParseKeys } from "i18next";
-import type { TranslationNamespace } from "@/locales/resources";
 import { createInstance } from "i18next";
 import { initReactI18next } from "react-i18next";
 import { z } from "zod";
@@ -34,10 +32,6 @@ export const i18n = createI18n();
 
 /** Utilities and event handlers translate at call time, never at module load. */
 export const translate = i18n.getFixedT(null, namespaces);
-export type TranslationKey = Extract<
-  ParseKeys<typeof namespaces>,
-  `${TranslationNamespace}:${string}`
->;
 
 export function detectLanguage(languages: readonly string[]): Language {
   for (const language of languages) {

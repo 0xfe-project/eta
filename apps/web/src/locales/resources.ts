@@ -3,9 +3,10 @@ import enArtifacts from "./en/artifacts.json";
 import enBundles from "./en/bundles.json";
 import enChat from "./en/chat.json";
 import enCommon from "./en/common.json";
-import enComputers from "./en/computers.json";
 import enConnections from "./en/connections.json";
-import enMemory from "./en/memory.json";
+import enLlm from "./en/llm.json";
+import enMachines from "./en/machines.json";
+import enMcp from "./en/mcp.json";
 import enNavigation from "./en/navigation.json";
 import enOverview from "./en/overview.json";
 import enProviders from "./en/providers.json";
@@ -18,9 +19,10 @@ import zhArtifacts from "./zh/artifacts.json";
 import zhBundles from "./zh/bundles.json";
 import zhChat from "./zh/chat.json";
 import zhCommon from "./zh/common.json";
-import zhComputers from "./zh/computers.json";
 import zhConnections from "./zh/connections.json";
-import zhMemory from "./zh/memory.json";
+import zhLlm from "./zh/llm.json";
+import zhMachines from "./zh/machines.json";
+import zhMcp from "./zh/mcp.json";
 import zhNavigation from "./zh/navigation.json";
 import zhOverview from "./zh/overview.json";
 import zhProviders from "./zh/providers.json";
@@ -35,9 +37,10 @@ export const en = {
   artifacts: enArtifacts,
   bundles: enBundles,
   chat: enChat,
-  computers: enComputers,
+  llm: enLlm,
+  machines: enMachines,
+  mcp: enMcp,
   connections: enConnections,
-  memory: enMemory,
   navigation: enNavigation,
   overview: enOverview,
   providers: enProviders,
@@ -53,9 +56,10 @@ export const zh = {
   artifacts: zhArtifacts,
   bundles: zhBundles,
   chat: zhChat,
-  computers: zhComputers,
+  llm: zhLlm,
+  machines: zhMachines,
+  mcp: zhMcp,
   connections: zhConnections,
-  memory: zhMemory,
   navigation: zhNavigation,
   overview: zhOverview,
   providers: zhProviders,
@@ -73,9 +77,10 @@ export const namespaces = [
   "artifacts",
   "bundles",
   "chat",
-  "computers",
+  "machines",
+  "mcp",
   "connections",
-  "memory",
+  "llm",
   "navigation",
   "overview",
   "providers",
@@ -84,4 +89,3 @@ export const namespaces = [
   "tasks",
   "validation",
 ] as const;
-export type TranslationNamespace = (typeof namespaces)[number];

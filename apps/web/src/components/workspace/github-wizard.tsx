@@ -1,4 +1,7 @@
-import type { GitHubStatus, Installation } from "@/queries/forge";
+import type {
+  GitHubInstallationView,
+  GitHubStatus,
+} from "@eta/client-contracts";
 
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/ArrowSquareOut";
 import { CheckCircleIcon } from "@phosphor-icons/react/CheckCircle";
@@ -38,10 +41,10 @@ import {
   useCreateGitHubApp,
   useDisconnectGitHub,
   useGitHubStatus,
-  useRefreshGitHub,
   useSetGitHubOAuthClient,
   useUnauthorizeGitHub,
-} from "@/queries/forge";
+} from "@/queries/github";
+import { wireErrorMessage } from "@/queries/wire";
 import { Stepper } from "./stepper";
 
 const steps = [
@@ -142,7 +145,7 @@ function CreateForm({
             <label
               key={value}
               className={cn(
-                "flex cursor-pointer flex-col gap-0.5 border p-3 hover:bg-muted/50 has-focus-visible:ring-1 has-focus-visible:ring-ring",
+                "flex cursor-pointer flex-col gap-0.5 border p-3 transition-colors hover:bg-muted/50 has-focus-visible:ring-1 has-focus-visible:ring-ring",
                 owner === value && "border-foreground bg-muted/50",
               )}
             >
@@ -226,7 +229,7 @@ function Install({ status }: { status: GitHubStatus }) {
       <p className="text-sm">
         {translateText("common:entities.app")}{" "}
         <a
-          href={app.html_url}
+          href={app.htmlUrl}
           target="_blank"
           rel="noreferrer"
           className="font-medium underline underline-offset-2"
@@ -256,18 +259,18 @@ function Install({ status }: { status: GitHubStatus }) {
   );
 }
 
-function repositoriesText(installation: Installation) {
-  if (installation.repository_selection === "all")
+function repositoriesText(installation: GitHubInstallationView) {
+  if (installation.repositorySelection === "all")
     return translate("connections:github.repositories.all");
   const shown = installation.repositories
     .slice(0, 3)
     .map((name) => name.split("/")[1]);
   if (!shown.length) return translate("connections:github.repositories.none");
-  const more = installation.total_repositories - shown.length;
+  const more = installation.totalRepositories - shown.length;
   return more > 0
     ? translate("connections:github.repositories.more", {
         names: shown.join(listSeparator()),
-        count: installation.total_repositories,
+        count: installation.totalRepositories,
       })
     : shown.join(listSeparator());
 }
@@ -298,7 +301,7 @@ function Done({ status }: { status: GitHubStatus }) {
                 })
               : translateText("github.identity.appPrefix")}
             <a
-              href={app.html_url}
+              href={app.htmlUrl}
               target="_blank"
               rel="noreferrer"
               className="font-medium text-foreground underline underline-offset-2"
@@ -325,7 +328,7 @@ function Done({ status }: { status: GitHubStatus }) {
                 <p className="text-sm font-medium">
                   {installation.account}
                   <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                    {installation.account_type === "Organization"
+                    {installation.accountType === "Organization"
                       ? translateText("github.accountType.organization")
                       : translateText("github.accountType.personal")}
                   </span>
@@ -334,10 +337,10 @@ function Done({ status }: { status: GitHubStatus }) {
                   {repositoriesText(installation)}
                 </p>
               </div>
-              {installation.manage_url ? (
+              {installation.manageUrl ? (
                 <Button asChild variant="ghost" size="sm">
                   <a
-                    href={installation.manage_url}
+                    href={installation.manageUrl}
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -350,7 +353,7 @@ function Done({ status }: { status: GitHubStatus }) {
           ))}
         </ul>
         <Button asChild variant="link" size="sm" className="h-auto px-0">
-          <a href={app.install_url}>
+          <a href={app.installUrl}>
             {translateText("github.install.otherAccount")}
           </a>
         </Button>
@@ -374,7 +377,7 @@ function Authorization({ status }: { status: GitHubStatus }) {
   ] as const);
   const authorize = useAuthorizeGitHub();
   const unauthorize = useUnauthorizeGitHub();
-  const onError = (error: Error) => toast.error(error.message);
+  const onError = (error: Error) => toast.error(wireErrorMessage(error));
   if (status.user) {
     return (
       <section className="flex items-center gap-3 border px-3 py-2.5">
@@ -392,7 +395,7 @@ function Authorization({ status }: { status: GitHubStatus }) {
           variant="ghost"
           size="sm"
           disabled={unauthorize.isPending}
-          onClick={() => unauthorize.mutate(undefined, { onError })}
+          onClick={() => unauthorize.mutate({}, { onError })}
         >
           {translateText("github.authorization.revoke")}
         </Button>
@@ -410,7 +413,7 @@ function Authorization({ status }: { status: GitHubStatus }) {
         </p>
       </div>
       {status.oauth ? null : (
-        <OAuthClientForm settingsURL={status.app!.settings_url} />
+        <OAuthClientForm settingsURL={status.app!.settingsUrl} />
       )}
       <Button
         size="sm"
@@ -443,8 +446,8 @@ function OAuthClientForm({ settingsURL }: { settingsURL: string }) {
       onSubmit={(e) => {
         e.preventDefault();
         save.mutate(
-          { client_id: clientID.trim(), client_secret: secret.trim() },
-          { onError: (error) => toast.error(error.message) },
+          { clientId: clientID.trim(), clientSecret: secret.trim() },
+          { onError: (error) => toast.error(wireErrorMessage(error)) },
         );
       }}
     >
@@ -548,16 +551,19 @@ function Disconnect({ status }: { status: GitHubStatus }) {
           <AlertDialogAction
             variant="destructive"
             onClick={() =>
-              disconnect.mutate(undefined, {
-                onSuccess: () =>
-                  toast.success(translateText("github.disconnect.success"), {
-                    action: {
-                      label: translateText("github.disconnect.deleteApp"),
-                      onClick: () => window.open(app.settings_url, "_blank"),
-                    },
-                  }),
-                onError: (error) => toast.error(error.message),
-              })
+              disconnect.mutate(
+                {},
+                {
+                  onSuccess: () =>
+                    toast.success(translateText("github.disconnect.success"), {
+                      action: {
+                        label: translateText("github.disconnect.deleteApp"),
+                        onClick: () => window.open(app.settingsUrl, "_blank"),
+                      },
+                    }),
+                  onError: (error) => toast.error(wireErrorMessage(error)),
+                },
+              )
             }
           >
             {translateText("common:actions.disconnect")}
@@ -587,26 +593,21 @@ export function GitHubWizard({
     "common",
     "validation",
   ] as const);
-  const {
-    data: status,
-    error,
-    isPending,
-    refetch,
-    isFetching,
-  } = useGitHubStatus();
-  const refresh = useRefreshGitHub();
+  const { status, unavailable, isFetching, refresh } = useGitHubStatus();
   const create = useCreateGitHubApp();
   const reached = serverStep(status);
   // Before the App exists the user moves between the first two steps; a
   // failed creation returns to the second (the parent remounts on errors).
   const [local, setLocal] = useState<0 | 1>(returnError ? 1 : 0);
   const step: Step = reached === 0 ? local : reached;
+  // Until the host has asked GitHub where the App is installed, the step is not known.
+  const isPending = status === undefined || !status.checked;
 
-  const body = error ? (
+  const body = unavailable ? (
     <LoadError
       what={translateText("github.status.label")}
-      error={error}
-      onRetry={() => void refetch()}
+      error={new Error(translateText("errors.loadStatus"))}
+      onRetry={refresh}
     />
   ) : isPending ? (
     <Loading layout="lines" />
@@ -621,7 +622,7 @@ export function GitHubWizard({
       error={returnError}
       onSubmit={(input) =>
         create.mutate(input, {
-          onError: (failure) => toast.error(failure.message),
+          onError: (failure) => toast.error(wireErrorMessage(failure)),
         })
       }
     />
@@ -636,7 +637,7 @@ export function GitHubWizard({
     footer = (
       <>
         <Disconnect status={status} />
-        <Button onClick={() => void refetch()} disabled={isFetching}>
+        <Button onClick={refresh} disabled={isFetching}>
           {translateText("common:actions.retry")}
         </Button>
       </>
@@ -669,15 +670,11 @@ export function GitHubWizard({
     footer = (
       <>
         <Disconnect status={status} />
-        <Button
-          variant="outline"
-          disabled={isFetching}
-          onClick={() => void refresh()}
-        >
+        <Button variant="outline" disabled={isFetching} onClick={refresh}>
           {translateText("github.actions.confirmInstalled")}
         </Button>
         <Button asChild>
-          <a href={status.app!.install_url}>
+          <a href={status.app!.installUrl}>
             <GithubLogoIcon aria-hidden="true" data-icon="inline-start" />
             {translateText("github.actions.install")}
           </a>

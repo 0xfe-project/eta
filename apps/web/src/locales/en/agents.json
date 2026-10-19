@@ -17,16 +17,14 @@
     "tabs": {
       "general": "General",
       "instructions": "Instructions",
-      "environment": "Environment"
+      "environment": "Bundles"
     },
     "sectionsLabel": "Agent settings sections"
-  },
-  "environment": {
-    "buildFailed": "Environment build failed"
   },
   "models": {
     "loading": "Loading models…",
     "select": "Select model",
+    "default": "Default model",
     "deletedOption": "{{modelName}} (no longer exists)",
     "noneAvailable": "No models available.",
     "noneSelected": "No model selected",
@@ -34,10 +32,6 @@
       "deleted": "{{modelName}} no longer exists. Select another model.",
       "unavailable": "{{modelName}} is temporarily unavailable: {{reason}}"
     }
-  },
-  "bundles": {
-    "requiredSuffix": " · Required",
-    "help": "These bundles build the agent’s environment, including tools and plugins. Changes rebuild the environment and take effect when the agent is idle."
   },
   "fields": {
     "namePlaceholder": "e.g. Code review",
@@ -61,9 +55,6 @@
     "working": "Working",
     "awaitingConfirmation": "Awaiting confirmation"
   },
-  "errors": {
-    "loadFailed": "Unable to load agents"
-  },
   "labels": {
     "deletedAgent": "Deleted agent"
   },
@@ -71,7 +62,6 @@
     "nameAndModel": "Name and model",
     "stepsLabel": "Creation steps",
     "failed": "Creation failed: {{message}}",
-    "noBundles": "No bundles yet; the agent uses the default environment.",
     "retry": "Retry creation"
   },
   "usage": {
@@ -82,10 +72,6 @@
     "summary": "Model usage: {{usage}}",
     "tokensAndRequests_one": "{{tokens}} tokens ({{count}} request in 7 days)",
     "tokensAndRequests_other": "{{tokens}} tokens ({{count}} requests in 7 days)"
-  },
-  "library": {
-    "title": "Agents",
-    "allReachable": "Every agent has a conversation."
   },
   "thinking": {
     "label": "Thinking level",

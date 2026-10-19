@@ -1,5 +1,5 @@
 import type { ProjectChoice } from "@/components/workspace/use-project-choice";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -18,10 +18,10 @@ import { useConversationActions } from "@/queries/conversations";
  * The project is one of the existing ones, or a path to add (adding a path that is already a
  * project returns that project, so the form never asks twice). A project made here takes the agent
  * as its steward, because a conversation with nobody to take its first message is a room nobody
- * answers in. The result shows up in the sidebar under its project like any other.
+ * answers in. The result shows up in the sidebar like any other.
  *
- * Nothing is asked that has a reasonable default: the project is the one the sidebar's "+" was
- * pressed on, else the first, and the agent list is the same one the sidebar shows.
+ * Nothing is asked that has a reasonable default: the project is the first, and the agent list
+ * is the same one the sidebar shows.
  */
 export function NewSessionPage() {
   const { t: translateText } = useTranslation([
@@ -33,11 +33,9 @@ export function NewSessionPage() {
   const { agents, loaded } = useAgents();
   const { create } = useConversationActions();
   const resolver = useResolveProject();
-  // The sidebar's per-project "+" hands the project over in the URL.
-  const search = useSearch({ strict: false }) as { project?: string };
   const [agentId, setAgentId] = useState<string | undefined>(undefined);
   const [choice, setChoice] = useState<ProjectChoice>({
-    projectId: search.project,
+    projectId: undefined,
     path: "",
   });
   const { project, adding } = useChosenProject(choice);

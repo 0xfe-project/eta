@@ -137,6 +137,26 @@ export interface MessageEvents {
     event: AssistantMessageEvent;
   };
   /**
+   * The generation in flight was stopped and its partial output thrown away;
+   * a new attempt follows in the same turn. Anything showing the half-written
+   * message must drop it. The discarded text is never journaled — only this
+   * fact and the messages the interrupt injected (as ordinary `message:end`).
+   */
+  "generation:interrupted": {
+    runId: string;
+    turnId: string;
+    reason: string;
+    source?: string;
+    /** Which interruption of this turn's generation this is (1-based). */
+    count: number;
+    /** Characters of text, thinking and tool arguments that were thrown away. */
+    discardedChars: number;
+    /** What the discarded attempt had cost so far. */
+    usage: Usage;
+    /** How many messages the interrupt added to the transcript. */
+    injected: number;
+  };
+  /**
    * A message became part of the transcript. The entry id does not exist yet:
    * the journaling subscriber assigns it and announces `entry:added`.
    */
@@ -362,6 +382,7 @@ export const KERNEL_EVENT_NAMES = [
   "compaction:end",
   "compaction:start",
   "entry:added",
+  "generation:interrupted",
   "goal:changed",
   "goal:cleared",
   "inject:received",

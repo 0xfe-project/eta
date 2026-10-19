@@ -18,7 +18,7 @@ import { LinkError } from "@eta/daemon";
 export interface PipeListener {
   /** The daemon's state for the target: whole, or what changed. */
   state: (frame: { snapshot?: StateSnapshot; patch?: StatePatch }) => void;
-  event: (name: string, data: unknown) => void;
+  event: (name: string, data: unknown, at: number | undefined) => void;
 }
 
 interface Pending {
@@ -77,7 +77,9 @@ export class PipeClient {
         return;
       }
       case "event":
-        this.#listeners.get(server.target)?.event(server.name, server.data);
+        this.#listeners
+          .get(server.target)
+          ?.event(server.name, server.data, server.at);
         break;
       default:
     }

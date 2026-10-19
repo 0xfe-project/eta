@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useStore } from "zustand";
 import { translate } from "@/lib/i18n";
+import { llmProblemText } from "@/lib/llm-problem";
 import { getWire, WireError } from "@/lib/wire";
 
 // The wire in React: the connection's state, a target's state, and calls. Each target gets a few
@@ -33,6 +34,17 @@ export function useTarget(target: string | undefined): TargetState | undefined {
   );
   return useStore(wire.store, (state) =>
     target === undefined ? undefined : state.targets[target],
+  );
+}
+
+/**
+ * Whether the host said there is nothing behind a target's name (`target:missing`): a task or a
+ * routine that does not exist, or was deleted while its page was open. Read it next to
+ * `useTarget`, which is what subscribes.
+ */
+export function useTargetMissing(target: string | undefined): boolean {
+  return useWireState(
+    (state) => target !== undefined && state.missing[target] === true,
   );
 }
 
@@ -101,6 +113,13 @@ export function wireErrorMessage(error: unknown): string {
     if (error.code === "disconnected")
       return translate("common:errors.disconnected");
     if (error.code === "timeout") return translate("common:errors.timeout");
+    // A failure the host explains with a code is told in the user's language.
+    if (error.problem !== undefined)
+      return llmProblemText({
+        code: error.problem.code,
+        message: error.message,
+        params: error.problem.params,
+      });
     return error.message;
   }
   return error instanceof Error

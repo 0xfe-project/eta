@@ -1,58 +1,75 @@
 {
   "title": "Bundles",
-  "service": {
-    "status": {
-      "deploying": "Deploying",
-      "incompatibleProtocol": "Incompatible protocol"
-    },
-    "summary": "Service: {{runtime}}{{status}}{{details}}"
-  },
-  "editor": {
-    "scriptHelp": "The script runs as root while building the agent’s environment. Agents using it will rebuild.",
-    "descriptionLabel": "Notes",
-    "scriptLabel": "Script",
-    "serviceLabel": "Service",
-    "manifestsPlaceholder": "# Optional: Kubernetes objects running in the cluster, accessed by agents at /bundles/{{bundleName}}/\n# Requires a Service named {{serviceName}} with a port named http",
-    "callableModels": "Callable models",
-    "separateDatabase": "Separate database",
-    "pluginsLabel": "Plugins"
-  },
-  "description": "Selected bundles build the agent’s environment: scripts install tools; plugins provide MCP, skills and hooks.",
+  "description": "Bundles connect agents to outside tools: skills, MCP tools and rules. Pick them in an agent’s settings.",
   "empty": {
-    "title": "No bundles yet"
+    "title": "No bundles",
+    "description": "Put a bundle directory in ~/.eta/bundles, or add one from git."
   },
-  "plugins": {
-    "summary": "Plugins: {{plugins}}"
+  "sources": {
+    "builtin": "Built in",
+    "local": "Local",
+    "git": "git"
   },
-  "configuration": {
-    "oomol": {
-      "apiKeyHelp": "Sign in to [OOMOL’s MCP configuration page](https://oomol.com/install/mcp/) to generate a key. Replace it here after resetting it in OOMOL.",
-      "teamNameLabel": "Team name",
-      "teamNameHelp": "Your OOMOL team, given as `x-oo-team-name` in its configuration."
-    }
+  "status": {
+    "configured": "Configured",
+    "notConfigured": "Not configured",
+    "problem": "Unusable"
   },
-  "descriptions": {
-    "agenvo": "Operate Paseo and Herdr on remote computers: workspaces, agents, input, history and terminals.",
-    "approval": "Ask the user to confirm commands blocked by rules in Eta, then allow them once approved.",
-    "artifacts": "Artifact: Publish static pages to Eta, preview them in chats and tasks, and share them publicly.",
-    "github": "Use git and gh and open PRs as Eta’s GitHub App.",
-    "grok": "Generate images and videos with Grok Imagine; search the web and X.",
-    "groups": "Group chat: Read context, invite collaboration with mentions, and organize briefs and task drafts.",
-    "memory": "Long-term memory across conversations: recall at the start of each turn and save at the end.",
-    "oomol": "OOMOL: Use oo CLI to access connected apps (email, calendars, documents and more) and hosted capabilities.",
-    "routines": "Routines: View, create and edit scheduled tasks and their reports.",
-    "tasks": "Task board: Create, assign and track tasks, including tasks executed by agents on remote computers."
+  "summary": {
+    "requires": "Needs: {{commands}}",
+    "missing": "{{machine}} lacks {{commands}}",
+    "unchecked": "{{machine}} is offline, not checked",
+    "contents": "{{skills}} skills · {{servers}} MCP servers{{hooks}}",
+    "hooks": " · rules"
   },
-  "pluginDescriptions": {
-    "agenvo": "Use agenvo to operate Paseo and Herdr on remote computers: manage workspaces and agents, send input, view history, interrupt runs and use terminals.",
-    "approval": "Ask the user to confirm commands blocked by Eta rules.",
-    "artifacts": "Publish static pages (ZIP or directory) as Artifacts to preview and share in chats and tasks.",
-    "github": "Get git and gh credentials using Eta’s GitHub App, create pull requests as the App, and draft issues for users to submit.",
-    "grok": "Use the LLM gateway’s Grok account with Grok Imagine to generate images and videos and search the web and X.",
-    "groups": "Search, collaborate and organize decisions in the current group.",
-    "memory": "Save long-term memory across conversations using the memory service.",
-    "oomol": "OOMOL’s oo CLI and its bundled skills. Credentials come from the oomol bundle configuration (OO_API_KEY, OO_TEAM_NAME).",
-    "routines": "List and view scheduled agents and their reports; create and edit routines.",
-    "tasks": "Create, assign and track tasks, including tasks executed by agents on remote computers."
+  "service": {
+    "stopped": "Service stopped",
+    "starting": "Service starting",
+    "ready": "Service running",
+    "error": "Service failed"
+  },
+  "actions": {
+    "configure": "Configure",
+    "add": "Add from git",
+    "refresh": "Update",
+    "refreshAll": "Update all git sources",
+    "remove": "Remove",
+    "recheck": "Check machines again"
+  },
+  "configure": {
+    "title": "Configure {{name}}",
+    "secretPlaceholder": "Set; leave empty to keep it",
+    "encryptionHelp": "Values are stored encrypted on this host and given only to {{name}}’s own processes. They never reach the agent’s shell and are not shown again.",
+    "savedReady": "Saved",
+    "savedIncomplete": "Saved; a required value is still missing",
+    "clear": "Clear all",
+    "cleared": "Cleared",
+    "clearConfirmTitle": "Clear all settings of {{name}}?",
+    "clearConfirmDescription": "Agents that use it lose its MCP tools and rules until it is set up again."
+  },
+  "add": {
+    "title": "Add a bundle from git",
+    "repo": "Repository",
+    "repoPlaceholder": "https://github.com/… or a local path",
+    "rev": "Branch, tag or commit",
+    "revPlaceholder": "HEAD by default",
+    "path": "Directory in the repository",
+    "pathPlaceholder": "The repository root by default",
+    "hint": "It is resolved to a commit and kept at it, so every install is the same files; use Update to move. Private repositories use this host’s git credentials.",
+    "added": "Added {{name}}"
+  },
+  "refresh": {
+    "done": "Updated {{names}}"
+  },
+  "remove": {
+    "confirmTitle": "Remove {{name}}?",
+    "confirmDescription": "Its files and settings are deleted from this host. Agents that load it lose it.",
+    "done": "Removed {{name}}"
+  },
+  "picker": {
+    "help": "Checked bundles give this agent’s sessions their skills, MCP tools and rules, from its next message.",
+    "empty": "No bundles to choose from.",
+    "gone": "no longer exists",
+    "notConfigured": "Not configured: only the skills apply"
   }
 }

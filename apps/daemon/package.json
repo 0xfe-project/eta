@@ -9,8 +9,8 @@
   },
   "scripts": {
     "build": "bun build --compile --target=bun src/main.ts --outfile out/eta-daemon",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint .",
+    "typecheck": "bun check",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
     "test": "bun --bun vitest --run --passWithNoTests"
   },
   "dependencies": {
@@ -20,6 +20,8 @@
     "@eta/core": "*",
     "@eta/execution-node": "*",
     "@eta/harness": "*",
+    "@eta/mcp": "*",
+    "@eta/plugin-akhook": "*",
     "@eta/server": "*",
     "@eta/ssh": "*",
     "cordis": "4.0.0-rc.10"
