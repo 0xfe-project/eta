@@ -111,6 +111,19 @@ function askedFor(request: Request): { host: string; origin: string } {
   return { host, origin: `${scheme}://${host}` };
 }
 
+/**
+ * The pages that carry their own capability: an artifact's preview (a signed address, because a
+ * sandboxed iframe sends no cookie) and its public share (a secret token, for people who are not
+ * the user). They are exempt from the token gate for that reason and no other, and only to read:
+ * everything else, the app's own `/artifacts/` downloads included, stays behind it.
+ */
+function carriesOwnCapability(request: Request, pathname: string): boolean {
+  return (
+    (request.method === "GET" || request.method === "HEAD") &&
+    (pathname.startsWith("/preview/") || pathname.startsWith("/share/"))
+  );
+}
+
 const refuse = (status: number, message: string): Response =>
   new Response(message, {
     status,
@@ -163,6 +176,7 @@ export function createAccess(options: AccessOptions): Access {
         return refuse(403, "origin not allowed");
       }
       if (gate === undefined) return undefined;
+      if (carriesOwnCapability(request, url.pathname)) return undefined;
 
       // `/?token=…`: trade the token for the cookie and leave a URL without it behind. A socket
       // cannot follow a redirect, so this is for pages; a socket brings the cookie or a bearer.

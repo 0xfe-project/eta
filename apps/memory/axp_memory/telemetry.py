@@ -5,10 +5,9 @@ readable line on stderr, in the format of AXP's Go and JS services:
 
     15:04:05.000 INFO  message key=value
 
-(times in UTC, like the containers) and, when SENTRY_DSN is set (AXP sets it
-to the runtime gateway's /sentry), a Sentry log; errors and uncaught
-exceptions are Sentry events, requests transactions. Without SENTRY_DSN
-nothing is sent.
+(times in UTC) and, when SENTRY_DSN is set, a Sentry log; errors and
+uncaught exceptions are Sentry events, requests transactions. Without
+SENTRY_DSN nothing is sent.
 """
 
 import fnmatch
@@ -35,7 +34,6 @@ def setup(service: str, quiet: tuple[str, ...] = ()) -> None:
     global _quiet
     _quiet = quiet
     sentry_sdk.init(
-        # deploy/k3s sets the deployed version (its git commit) as AXP_VERSION.
         release=os.environ.get("SENTRY_RELEASE") or os.environ.get("AXP_VERSION"),
         enable_logs=True,
         traces_sampler=_sample,
@@ -50,7 +48,7 @@ def setup(service: str, quiet: tuple[str, ...] = ()) -> None:
     root.setLevel(logging.INFO)
     # On the logger, so the record reaches neither stderr nor Sentry.
     logging.getLogger("uvicorn.access").addFilter(_skip_successful_reads)
-    # One record per outgoing request (the LLM gateway's calls) says nothing
+    # One record per outgoing request (the model API's calls) says nothing
     # the caller does not log itself.
     logging.getLogger("httpx").setLevel(logging.WARNING)
 

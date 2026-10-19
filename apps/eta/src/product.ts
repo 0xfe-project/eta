@@ -8,27 +8,70 @@ import type { AssembledServer, WireService } from "@eta/server";
  * is ever shown says `working` without something working.
  */
 import type { Database } from "bun:sqlite";
+import type { SiteLimits } from "./artifacts/site";
 import type { SessionHooks } from "./session-hooks";
 import { homedir, hostname, platform } from "node:os";
+import { join } from "node:path";
 import { agentsPlugin } from "./agents/plugin";
 import { AgentStore } from "./agents/store";
+import { loadKey } from "./artifacts/capability";
+import { artifactsPlugin } from "./artifacts/plugin";
+import { createArtifactRoutes } from "./artifacts/routes";
+import { ArtifactService } from "./artifacts/service";
+import { DEFAULT_LIMITS } from "./artifacts/site";
+import { ArtifactStore } from "./artifacts/store";
+import { artifactSessionTools } from "./artifacts/tools";
 import { Engine, RESTART_TEXT } from "./conversations/engine";
 import { conversationsPlugin } from "./conversations/plugin";
 import { ConversationStore } from "./conversations/store";
 import { ConversationTargets } from "./conversations/targets";
 import { Timeline } from "./conversations/timeline";
+import { Inbox } from "./inbox/inbox";
+import { inboxPlugin } from "./inbox/plugin";
+import { SettingStore } from "./inbox/setting";
+import { InteractionStore } from "./inbox/store";
 import { machinesPlugin } from "./machines/plugin";
 import { MachineStore } from "./machines/store";
+import { MemoryClient } from "./memory/client";
+import { memoryRunHooks, memoryTools } from "./memory/hooks";
+import { memoryPlugin } from "./memory/plugin";
 import { projectsPlugin } from "./projects/plugin";
 import { ProjectStore } from "./projects/store";
+import { routinesPlugin } from "./routines/plugin";
+import { INTERRUPTED, RoutineRunner } from "./routines/runner";
+import { Scheduler } from "./routines/scheduler";
+import { RoutineStore } from "./routines/store";
 import { combineSessionHooks } from "./session-hooks";
+import { TaskBoard } from "./tasks/board";
+import { TaskCards } from "./tasks/cards";
+import { tasksPlugin } from "./tasks/plugin";
+import { TaskStore } from "./tasks/store";
+import { taskSessionTools } from "./tasks/tools";
+import { usagePlugin } from "./usage/plugin";
+import { UsageStore } from "./usage/store";
+
+/** What a test sets to move time by hand; a real host leaves all of it alone. */
+export interface RoutinesOptions {
+  /** The clock, in epoch milliseconds. Everything the routines record or compute reads it. */
+  now?: () => number;
+  /** How long a run may take. */
+  timeoutMs?: number;
+  /** How long a revision of a brief from feedback may take. */
+  reviseTimeoutMs?: number;
+  /** False leaves the timer off, and the scheduler looks at the clock only when told to. */
+  timer?: boolean;
+}
 
 export interface Product {
   readonly engine: Engine;
+  /** The routines' clock; `tick()` makes it look. */
+  readonly scheduler: Scheduler;
   /** Every feature's per-session hooks, combined into the one set the session manager takes. */
   readonly sessionHooks: Required<SessionHooks>;
   /** Mount the plugins on an assembled server; resolves when every one of them is in place. */
   mount: (server: AssembledServer) => Promise<void>;
+  /** The product's own HTTP routes (artifact pages); nothing for a path that is not theirs. */
+  fetch: (request: Request) => Promise<Response | undefined>;
 }
 
 /** The plugins are applied a moment after they are mounted; this is how long to wait for that. */
@@ -37,9 +80,18 @@ const MOUNT_TIMEOUT_MS = 10_000;
 export function createProduct(options: {
   db: Database;
   dataDir: string;
+  /** The memory sidecar's address. Without one there is no memory: no plugin, no tools, no calls. */
+  memoryUrl?: string | undefined;
   warn: (message: string) => void;
+  routines?: RoutinesOptions;
+  /** Overrides of what a published site may hold. */
+  artifactLimits?: Partial<SiteLimits> | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
+  const memory =
+    options.memoryUrl === undefined || options.memoryUrl === ""
+      ? undefined
+      : new MemoryClient(options.memoryUrl);
   const agents = new AgentStore(db);
   const machines = new MachineStore(db);
   const projects = new ProjectStore(db);
@@ -49,8 +101,14 @@ export function createProduct(options: {
 
   // This computer is a machine like any other, and the first thing a project can name.
   machines.ensurePrimary({ name: hostname(), home: homedir(), os: platform() });
-  // Nothing is running yet, so whatever the last process left in flight cannot be.
+  // Nothing is running yet, so whatever the last process left in flight cannot be, and no
+  // question it asked can still be answered.
   timeline.failInterrupted(RESTART_TEXT);
+  const interactions = new InteractionStore(db);
+  interactions.expirePending();
+  // Usage is kept for 30 days; what is older goes now, and again once a day while the host runs.
+  const usage = new UsageStore(db);
+  usage.prune();
 
   /** Say that product state moved, to whoever is looking at it. */
   const changed = (touched?: readonly string[] | "all"): void => {
@@ -64,12 +122,66 @@ export function createProduct(options: {
     for (const id of ids) wire.pushNow(`conversations.${id}`);
   };
 
+  // The routines: their rows, the runs that carry them out and the clock that starts the runs.
+  const now = options.routines?.now ?? Date.now;
+  const routines = new RoutineStore(db, now);
+  // A run the last process left going is not going now.
+  routines.recover(INTERRUPTED);
+  const routinesChanged = (routineId: string): void => {
+    wire?.pushNow("routines");
+    wire?.pushNow(`routines.${routineId}`);
+  };
+  const runner = new RoutineRunner({
+    store: routines,
+    timeline,
+    dataDir,
+    now,
+    timeoutMs: options.routines?.timeoutMs,
+    reviseTimeoutMs: options.routines?.reviseTimeoutMs,
+    changed: routinesChanged,
+    posted: (conversationId) => changed([conversationId]),
+    warn,
+  });
+  const scheduler = new Scheduler({
+    store: routines,
+    fire: (routineId) => runner.start(routineId, "schedule") !== undefined,
+    now,
+    timer: options.routines?.timer ?? true,
+    warn,
+  });
+
   const targets = new ConversationTargets({
     conversations,
     projects,
     timeline,
   });
   const created = (id: string): void => targets.add(id);
+
+  // The task board, and the artifacts its cards list.
+  const taskRows = new TaskStore(db);
+  const artifactRows = new ArtifactStore(db);
+  const artifactsOf = (taskId: string) => artifactRows.latestOfTask(taskId);
+  const board = new TaskBoard({
+    db,
+    tasks: taskRows,
+    cards: new TaskCards({
+      db,
+      tasks: taskRows,
+      timeline,
+      conversations,
+      artifactsOf,
+    }),
+    conversations,
+    artifactsOf,
+    changed,
+  });
+  const inbox = new Inbox({
+    interactions,
+    settings: new SettingStore(db),
+    timeline,
+    changed: () => wire?.pushNow("inbox"),
+    warn,
+  });
   const engine = new Engine({
     db,
     agents,
@@ -79,7 +191,19 @@ export function createProduct(options: {
     timeline,
     changed,
     warn,
+    ...(memory === undefined ? {} : { runHooks: memoryRunHooks(memory) }),
   });
+
+  const limits = { ...DEFAULT_LIMITS, ...options.artifactLimits };
+  const artifactsRoot = join(dataDir, "artifacts");
+  const artifacts = new ArtifactService({
+    store: artifactRows,
+    root: artifactsRoot,
+    limits,
+    key: loadKey(join(artifactsRoot, ".preview-key")),
+    changed: () => wire?.pushNow("artifacts"),
+  });
+  const routes = createArtifactRoutes(artifacts);
 
   // Each feature that adds tools, tool middleware or a question observer to sessions is one entry
   // here; the order is the order its tools and middleware are installed in.
@@ -88,11 +212,20 @@ export function createProduct(options: {
       sessionTools: engine.sessionTools,
       askObserve: engine.askObserve,
     },
+    { sessionTools: runner.sessionTools },
+    { sessionTools: taskSessionTools({ board, agents }) },
+    { sessionTools: artifactSessionTools({ artifacts, board, limits }) },
+    { toolMiddleware: inbox.toolMiddleware, askObserve: inbox.askObserve },
+    ...(memory === undefined
+      ? []
+      : [{ sessionTools: memoryTools.bind(undefined, memory) }]),
   ]);
 
   return {
     engine,
+    scheduler,
     sessionHooks,
+    fetch: routes,
     async mount(server) {
       wire = server.wire;
       const pending = new Set([
@@ -100,6 +233,12 @@ export function createProduct(options: {
         "machines",
         "projects",
         "conversations",
+        "routines",
+        "tasks",
+        "artifacts",
+        "inbox",
+        "usage",
+        ...(memory === undefined ? [] : ["memory"]),
       ]);
       let ready!: () => void;
       const everyone = new Promise<void>((resolve) => {
@@ -132,6 +271,32 @@ export function createProduct(options: {
           applied("conversations"),
         ),
       );
+      server.mount(
+        "routines",
+        routinesPlugin(
+          {
+            store: routines,
+            runner,
+            scheduler,
+            conversations,
+            now,
+            changed: routinesChanged,
+          },
+          applied("routines"),
+        ),
+      );
+      server.mount("tasks", tasksPlugin({ board }, applied("tasks")));
+      server.mount(
+        "artifacts",
+        artifactsPlugin({ artifacts, board }, applied("artifacts")),
+      );
+      server.mount("inbox", inboxPlugin({ inbox }, applied("inbox")));
+      server.mount("usage", usagePlugin({ usage, warn }, applied("usage")));
+      if (memory !== undefined)
+        server.mount(
+          "memory",
+          memoryPlugin({ client: memory }, applied("memory")),
+        );
       let timer: ReturnType<typeof setTimeout> | undefined;
       const late = new Promise<never>((_, reject) => {
         timer = setTimeout(

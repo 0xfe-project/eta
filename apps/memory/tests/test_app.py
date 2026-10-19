@@ -17,7 +17,7 @@ class FakeProvider:
         self.memories: dict[str, tuple[str, str]] = {}
         self.created: dict[str, str] = {}
         self.sources: dict[str, str] = {}
-        self.extractions: list[tuple[str, list, str | None]] = []
+        self.extractions: list[tuple[str, list]] = []
         self.scores: dict[str, float] = {}
         self.groups = {}
         self.clock = itertools.count()
@@ -29,11 +29,10 @@ class FakeProvider:
         *,
         source,
         infer,
-        model=None,
         group_id=None,
     ):
         if infer:
-            self.extractions.append((agent_id, messages, model))
+            self.extractions.append((agent_id, messages))
             texts = [f"fact: {m['content']}" for m in messages if m["role"] == "user"]
         else:
             texts = [m["content"] for m in messages]
@@ -147,7 +146,7 @@ class TestTools:
         call_tool(client, "a", "forget", memory_id=memory_id)
         assert provider.memories == {}
 
-    def test_tools_need_the_gateway_header(self, client):
+    def test_tools_need_the_agent_header(self, client):
         response = client.post(
             "/memory/mcp",
             headers={"Accept": "application/json, text/event-stream"},
@@ -180,7 +179,6 @@ class TestHooks:
             "/memory/capture",
             headers=as_agent("a"),
             json={
-                "model": "gpt-x",
                 "messages": [
                     {"role": "user", "content": "I like Go"},
                     {"role": "assistant", "content": "Noted"},
@@ -197,11 +195,10 @@ class TestHooks:
                     {"role": "user", "content": "I like Go"},
                     {"role": "assistant", "content": "Noted"},
                 ],
-                "gpt-x",
             )
         ]
 
-    def test_hooks_need_the_gateway_header(self, client):
+    def test_hooks_need_the_agent_header(self, client):
         assert client.post("/memory/recall", json={"query": "x"}).status_code == 401
         assert client.post("/memory/capture", json={"messages": []}).status_code == 401
 
@@ -361,7 +358,6 @@ def test_group_source_survives_capture_and_cross_group_recall(client, provider):
             "X-AXP-Group-Id": "g1",
         },
         json={
-            "model": "test",
             "group_id": "forged",
             "messages": [{"role": "user", "content": "偏好 简洁"}],
         },
@@ -389,7 +385,7 @@ def test_group_source_survives_capture_and_cross_group_recall(client, provider):
     )
 
 
-def test_remember_uses_gateway_group_metadata(client):
+def test_remember_uses_group_header_metadata(client):
     response = client.post(
         "/memory/mcp",
         headers={
@@ -413,7 +409,7 @@ def test_remember_uses_gateway_group_metadata(client):
 
 @pytest.mark.parametrize("route", ["hook", "mcp"])
 @pytest.mark.parametrize("current_group", ["g1", "g2", None])
-def test_recall_marks_group_context_from_gateway_header(
+def test_recall_marks_group_context_from_group_header(
     client, provider, route, current_group
 ):
     for group in ["g1", "g2", None]:

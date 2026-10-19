@@ -11,11 +11,17 @@ import type {
   ViewDiagnostics,
 } from "./types";
 
+export * from "./artifacts";
 export type * from "./data";
+export * from "./inbox";
+export * from "./memory";
 export * from "./operations";
 export * from "./product";
+export * from "./routines";
+export * from "./tasks";
 export type * from "./types";
 export { SERVICE_PROTOCOL } from "./types";
+export * from "./usage";
 
 /** The existing hello payload, specialized without coupling the pipe to business types. */
 export type HelloFrame = WireHelloFrame<MountedPlugin, ViewDiagnostics>;

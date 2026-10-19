@@ -9,6 +9,8 @@ import type { AssembledServer, AssembleOptions } from "@eta/server";
  * before the floor, because the floor's per-session hooks are its, and mounted on the floor after.
  */
 import type { Database } from "bun:sqlite";
+import type { SiteLimits } from "./artifacts/site";
+import type { Product, RoutinesOptions } from "./product";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createLocalEnvironment } from "@eta/execution-node";
@@ -36,12 +38,21 @@ export interface HostOptions {
   tokenFile?: string;
   /** Other origins that may open the socket, for a page served elsewhere (the dev server). */
   allowOrigins?: readonly string[];
+  /**
+   * The memory sidecar's address. Without one the host has no memory: no `memory` target, no
+   * memory tools, and nothing is ever sent to a sidecar.
+   */
+  memoryUrl?: string;
   /** The model layer, when the caller has its own (a test with scripted answers). */
   models?: AssembleOptions["models"];
   /** Where the agent's home is, for personas. Defaults to the real one. */
   home?: string;
+  /** What a published site may hold; the defaults are for real use, a test makes them small. */
+  artifactLimits?: Partial<SiteLimits> | undefined;
   /** Whether to apply the config's network settings to the environment. */
   network?: boolean;
+  /** The routines' clock and limits, for a caller that moves time by hand (a test). */
+  routines?: RoutinesOptions;
   warn?: (message: string) => void;
 }
 
@@ -53,6 +64,8 @@ export interface Host {
   /** The token file, when the gate is on. */
   readonly tokenFile: string | undefined;
   readonly db: Database;
+  /** What the product made on the database: its engine and the routines' clock. */
+  readonly product: Product;
   /** The upstream server: its sessions, wire service and plugin manager. */
   readonly server: AssembledServer;
   /** Stop listening, close the sessions and the database. */
@@ -73,10 +86,19 @@ export async function startHost(options: HostOptions): Promise<Host> {
 
   const db = openDatabase(databasePath(options.dataDir));
   let server: AssembledServer;
+  let product: Product;
   try {
     applyMigrations(db, loadMigrations());
     const warn = options.warn ?? ((message: string) => console.warn(message));
-    const product = createProduct({ db, dataDir: options.dataDir, warn });
+    product = createProduct({
+      db,
+      dataDir: options.dataDir,
+      warn,
+      ...(options.routines === undefined ? {} : { routines: options.routines }),
+      artifactLimits: options.artifactLimits,
+      memoryUrl: options.memoryUrl,
+    });
+    const web = createWebRoutes(options.webDir);
     server = await assembleServer({
       dataDir: options.dataDir,
       configPath: join(options.dataDir, "config.json"),
@@ -88,7 +110,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
         const env = createLocalEnvironment(meta.cwd);
         return env === undefined ? undefined : { env };
       },
-      fetch: createWebRoutes(options.webDir),
+      // The product's pages (artifacts) first; they answer for their own paths, found or not.
+      fetch: async (request) =>
+        (await product.fetch(request)) ?? (await web(request)),
       authorize: access.authorize,
       // What the product adds to every session it owns: the agent's words in the system prompt,
       // and, from each of its features, tools, tool middleware and an ear for questions.
@@ -118,6 +142,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
     webDir: options.webDir,
     tokenFile: access.tokenFile,
     db,
+    product,
     server,
     // Once: a signal and a caller may both ask, and the second has nothing left to close.
     close() {

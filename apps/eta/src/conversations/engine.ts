@@ -1,4 +1,8 @@
-import type { MessageView, SendResult } from "@eta/client-contracts";
+import type {
+  MessageStatus,
+  MessageView,
+  SendResult,
+} from "@eta/client-contracts";
 import type { AgentMessage, KernelTool } from "@eta/core";
 import type { AskObserver } from "@eta/harness";
 import type { ManagedSession, SessionMeta, SessionsService } from "@eta/server";
@@ -43,7 +47,34 @@ import { effectiveSteward } from "./views";
 /** What a reply says when the process died under it. */
 export const RESTART_TEXT = "The server restarted before this reply finished.";
 
+/** One wake, as a feature that wants to act around its run sees it. */
+export interface RunInfo {
+  conversationId: string;
+  agentId: string;
+  replyId: string;
+  /** What the agent is told: the briefing. */
+  told: string;
+  /** The message that woke it. */
+  trigger: MessageView;
+}
+
+/**
+ * What a feature may do around a wake's run (memory is the first). Both are optional, and neither
+ * can fail a reply: an error is reported and the run goes on as if the hook had nothing to say.
+ */
+export interface RunHooks {
+  /** Words put ahead of the briefing for this run. Waited for, so it must be quick. */
+  beforeRun?: (
+    run: RunInfo,
+  ) => string | undefined | Promise<string | undefined>;
+  /** The reply ended `done`, `failed` or `stopped` with this text. Not waited for. */
+  afterRun?: (
+    run: RunInfo & { status: MessageStatus; said: string },
+  ) => void | Promise<void>;
+}
+
 export interface EngineOptions {
+  runHooks?: RunHooks | undefined;
   db: Database;
   agents: AgentStore;
   machines: MachineStore;
@@ -70,6 +101,7 @@ export class Engine {
   readonly #timeline: Timeline;
   readonly #changed: EngineOptions["changed"];
   readonly #warn: (message: string) => void;
+  readonly #hooks: RunHooks;
 
   #sessions: SessionsService | undefined;
   #closing = false;
@@ -89,6 +121,7 @@ export class Engine {
     this.#timeline = options.timeline;
     this.#changed = options.changed;
     this.#warn = options.warn;
+    this.#hooks = options.runHooks ?? {};
   }
 
   /** The session host this engine runs on; set when the conversations plugin is applied. */
@@ -566,6 +599,17 @@ export class Engine {
       this.#conversations.participant(conversationId, agent.id) ?? participant,
       trigger,
     );
+    const info: RunInfo = {
+      conversationId,
+      agentId: agent.id,
+      replyId,
+      told: told.text,
+      trigger,
+    };
+    const extra = await this.#beforeRun(info);
+    // A stop that arrived while the hook was asking.
+    if (this.#timeline.get(replyId)?.status !== "queued") return;
+    const prompt = extra === undefined ? told.text : `${extra}\n\n${told.text}`;
     this.#conversations.setSeen(conversationId, agent.id, told.seen);
     const key = keyOf(conversationId, agent.id);
     this.#running.set(key, { replyId, managed });
@@ -578,7 +622,7 @@ export class Engine {
       kernel.nextRun({
         role: "user",
         timestamp: Date.now(),
-        content: [{ type: "text", text: told.text }],
+        content: [{ type: "text", text: prompt }],
       });
       let result = await runner.run();
       // Words that reached the inbox after the run's last look (a steer that lost the race) are
@@ -624,6 +668,30 @@ export class Engine {
       this.#running.delete(key);
       this.#changed([conversationId]);
     }
+    this.#afterRun(info);
+  }
+
+  /** The hook's words for this run; a hook that fails or says nothing leaves the run as it was. */
+  async #beforeRun(info: RunInfo): Promise<string | undefined> {
+    try {
+      const extra = await this.#hooks.beforeRun?.(info);
+      return extra === undefined || extra.trim() === "" ? undefined : extra;
+    } catch (error) {
+      this.#warn(`[eta] beforeRun failed: ${messageOf(error)}`);
+      return undefined;
+    }
+  }
+
+  /** Tell the hook how the reply ended, without waiting for it or letting it fail the reply. */
+  #afterRun(info: RunInfo): void {
+    const ended = this.#timeline.get(info.replyId);
+    if (ended === undefined || this.#hooks.afterRun === undefined) return;
+    const hook = this.#hooks.afterRun;
+    void Promise.resolve()
+      .then(() => hook({ ...info, status: ended.status, said: ended.text }))
+      .catch((error: unknown) =>
+        this.#warn(`[eta] afterRun failed: ${messageOf(error)}`),
+      );
   }
 
   /** What the agent is told for this wake, and how far that brings it. */
