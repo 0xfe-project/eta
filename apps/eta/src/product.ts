@@ -214,12 +214,13 @@ export function createProduct(options: {
         warn,
       }),
   });
-  const mirrors = new SessionMirrors(hub);
+  const mirrors = new SessionMirrors(hub, (id) => machines.get(id)?.name);
   const router = new RemoteSessionsRouter({
     conversations,
     machines,
     hub,
     models: () => running?.models,
+    rows: () => mirrors.rows(),
   });
   const remotePlace = new RemotePlace({
     hub,

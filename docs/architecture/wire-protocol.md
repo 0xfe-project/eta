@@ -13,7 +13,7 @@
 | 出   | `hello { ops, mounted, state }`                | 连接后的第一帧（重连后再来一次）：所有可调用的 op 及其契约、已挂载的插件、所有 eager target 的状态 |
 | 出   | `reply { requestId, ok, result \| error }`     | 结算一次调用                                                                                       |
 | 出   | `state { target, version, snapshot \| patch }` | 某 target 的状态：整份，或只有 revision 变了的 section                                             |
-| 出   | `event { target, name, data }`                 | 发生了什么（瞬时，不是状态）                                                                       |
+| 出   | `event { target, name, data, at? }`            | 发生了什么（瞬时，不是状态）；`at` 是发生时刻，同一 target 内严格递增，用来识别重放                |
 | 出   | `error { message }`                            | 一帧完全读不懂                                                                                     |
 
 规则：

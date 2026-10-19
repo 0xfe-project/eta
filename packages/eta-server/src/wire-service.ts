@@ -231,8 +231,12 @@ export class WireService extends Service implements WireApi {
           pacerFor(watcher.socketId, target).relax();
       }
     };
+    const lastAt = new Map<string, number>();
     this.event = (target, name, data) => {
-      const frame: EventFrame = { type: "event", target, name, data };
+      // Strictly increasing per target: the time, or one past the last when two come in a millisecond.
+      const at = Math.max(Date.now(), (lastAt.get(target) ?? 0) + 1);
+      lastAt.set(target, at);
+      const frame: EventFrame = { type: "event", target, name, data, at };
       // The ring keeps it whether or not anyone is listening: an event is a fact that
       // happened, and the client that attaches a second later still needs to know.
       ringFor(target).push(frame);

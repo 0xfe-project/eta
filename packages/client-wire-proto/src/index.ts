@@ -147,6 +147,12 @@ export interface EventFrame {
   target: string;
   name: string;
   data: unknown;
+  /**
+   * When it happened (epoch milliseconds), strictly increasing within a target, even across a
+   * restart of the process. It is the event's identity: a client that is shown the replay ring
+   * again (it re-subscribed) drops what is not later than the last event it already has.
+   */
+  at?: number;
 }
 
 /** A frame the pipe could not read at all: no target, so nothing else can be said. */

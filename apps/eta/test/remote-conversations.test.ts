@@ -1,4 +1,8 @@
-import type { InboxResponse, InteractionView } from "@eta/client-contracts";
+import type {
+  InboxResponse,
+  InteractionView,
+  SidebarSession,
+} from "@eta/client-contracts";
 /**
  * A conversation in a project on another machine.
  *
@@ -789,5 +793,73 @@ describe("stopping, steering and a link that fails", () => {
     await new Promise((resolve) => setTimeout(resolve, 150));
     expect(requests).toHaveLength(1);
     expect(r.row(group.id, reply.id)?.status).toBe("failed");
+  });
+});
+
+describe("the global session list and the mirror", () => {
+  const listed = (r: {
+    client: { section: <T>(t: string, n: string) => T | undefined };
+  }) => r.client.section<SidebarSession[]>("sessions", "list") ?? [];
+
+  it("lists a daemon's sessions with the machine they run on, and keeps them when it goes offline", async () => {
+    const { models } = scriptedModels(() => say("noted"));
+    const r = await remoteWorld({ models });
+    const { group } = await r.agents("Ada");
+    r.client.subscribe("sessions");
+    const sent = await r.send(group.id, "one");
+    await r.settled(group.id, sent.replies[0]!.id);
+    const session = sessionOf(r, group.id)!;
+
+    await until(() => listed(r).some((row) => row.id === session));
+    const machine = machineView(r.client, r.daemon.machineId)!;
+    const row = listed(r).find((candidate) => candidate.id === session)!;
+    expect(row.machine).toBe(machine.name);
+    expect(row.badges).not.toContain("offline");
+
+    // The daemon goes away for good: its sessions stay in the list, marked unreachable.
+    await r.daemon.link.stop();
+    await until(
+      () =>
+        listed(r)
+          .find((candidate) => candidate.id === session)
+          ?.badges.includes("offline") === true,
+    );
+  });
+
+  it("does not show the browser an event twice when a mirror warms again", async () => {
+    const { models } = scriptedModels((request) =>
+      say(`answer to ${request.last}`),
+    );
+    const r = await remoteWorld({ models });
+    const { group } = await r.agents("Ada");
+    const first = await r.send(group.id, "one");
+    await r.settled(group.id, first.replies[0]!.id);
+    const session = sessionOf(r, group.id)!;
+    const target = `sessions.${session}`;
+    const runEnds = () =>
+      r.client.frames.filter(
+        (frame) =>
+          frame.type === "event" &&
+          frame.target === target &&
+          frame.name === "turn:run-end",
+      ).length;
+
+    r.client.subscribe(target);
+    // The daemon's ring has the first run in it, replayed to the first subscriber.
+    await until(() => runEnds() === 1);
+
+    // The link drops and returns: the mirror warms again and is replayed the whole ring.
+    r.daemon.link.drop();
+    await until(
+      () => machineView(r.client, r.daemon.machineId)?.status === "offline",
+    );
+    await until(
+      () => machineView(r.client, r.daemon.machineId)?.status === "online",
+    );
+    const second = await r.send(group.id, "two");
+    await r.settled(group.id, second.replies[0]!.id);
+    await until(() => runEnds() === 2);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(runEnds()).toBe(2);
   });
 });

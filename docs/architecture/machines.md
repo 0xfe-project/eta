@@ -59,6 +59,8 @@ daemon **只出站**：它反向拨号 `GET /machines/connect`（WebSocket），
 ## 会话在远端
 
 - 引擎问"位置"（`SessionPlace`）要一个智能体的会话：本机是 `LocalPlace`，远端是 `RemotePlace`：一次 `machine.open` 把会话和智能体对齐，智能体的指令、模型、思考档、persona 卡和产品工具清单随调用送过去（daemon 注册代理工具，调用时回到主 node 执行）。之后一次 run 是一个长调用（`machine.run`），steer/stop 是 daemon 管道上的普通 `sessions.*` 调用。
-- **镜像**：浏览器订阅 `sessions.<id>` 时不需要知道会话在哪台机器。主 node 为远端会话注册同名 target，有人订阅时就订阅 daemon 的同一 target，把它的状态（先整份后 patch）与事件原样再发布；没人看了就取消订阅。链路断开则全部降温，恢复后只重新唤醒仍有人看的。
+- **镜像**：浏览器订阅 `sessions.<id>` 时不需要知道会话在哪台机器。主 node 为远端会话注册同名 target，有人订阅时就订阅 daemon 的同一 target，把它的状态（先整份后 patch）与事件原样再发布；没人看了就取消订阅。链路断开则全部降温，恢复后只重新唤醒仍有人看的。重新订阅时 daemon 会把事件环从头回放一遍；事件帧带 `at`（发生的时刻，毫秒，同一 target 内严格递增，daemon 重启后也不回退），镜像只转发比上次转发的更晚的事件，浏览器不会看到重复的事件。
+- **全局列表**：主 node 在链路在线期间订阅 daemon 自己的 `sessions` 列表，把它的会话并进全局 `sessions` 的 `list`（行上有 `machine`，即机器名）。daemon 不可达时保留最后一次的行，打上 `offline` 标记、去掉 `running`。
+- **断线期间的提问**：daemon 上的提问、回答、取消通过 `ask.observe` 通知主 node；链路不在时这些通知排队（至多 256 条，最旧的先丢），下一条链路接上后按顺序补发，主 node 在接入后立刻开始应答（不必等机器被报告为就绪）。
 - 主 node 重启后，从 `participant` 行得知哪些会话在哪台机器，重新挂上；daemon 重启时从 journal 读回会话。
 - `sessions.*` 的调用按会话所在的机器路由（`RemoteSessionsRouter`），一般调用 1 分钟、长调用 10 分钟的上限。

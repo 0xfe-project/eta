@@ -45,6 +45,7 @@ import { LocalTransport } from "@eta/ssh";
 import { Context } from "cordis";
 import { approvalMiddleware } from "./approval";
 import { ModelCatalog, remoteModels } from "./models";
+import { Reports } from "./reports";
 import { runAndWait } from "./run";
 import { proxyTools } from "./tools";
 
@@ -77,6 +78,13 @@ function argsOf<T>(call: CallFrame): T {
   return value as T;
 }
 
+/** One thing that happened to a question, as the primary is told (`ask.observe`). */
+interface QuestionReport {
+  session: string;
+  action: Parameters<AskObserver>[0];
+  payload: Parameters<AskObserver>[1];
+}
+
 export class DaemonNode {
   readonly #options: DaemonNodeOptions;
   readonly #warn: (message: string) => void;
@@ -87,6 +95,8 @@ export class DaemonNode {
   readonly #catalog = new ModelCatalog();
   /** The openings the primary sent, by `conversation:agent`; read when a session opens. */
   readonly #openings = new Map<string, Opening>();
+  /** What happened to the questions; kept for the next link when there is none. */
+  readonly #reports: Reports<QuestionReport>;
   /** What each open session's prompt was read from, to know when it has to be opened again. */
   readonly #opened = new Map<string, string>();
   readonly #fibers: { dispose: () => Promise<void> }[] = [];
@@ -100,6 +110,7 @@ export class DaemonNode {
   constructor(options: DaemonNodeOptions) {
     this.#options = options;
     this.#warn = options.warn ?? ((message) => console.warn(message));
+    this.#reports = new Reports("ask.observe", this.#warn);
     const warn = this.#warn;
     this.#wire = new WireService(this.#ctx, { warn });
     this.#store = new FileSessionStore({
@@ -164,15 +175,7 @@ export class DaemonNode {
       askObserve: (meta): AskObserver | undefined => {
         if (this.#openingOf(meta) === undefined) return undefined;
         return (action, payload) => {
-          try {
-            this.#peer?.notify("ask.observe", {
-              session: meta.id,
-              action,
-              payload,
-            });
-          } catch (error) {
-            warn(`[eta-daemon] could not report a question: ${String(error)}`);
-          }
+          this.#reports.send({ session: meta.id, action, payload });
         };
       },
       warn,
@@ -261,12 +264,15 @@ export class DaemonNode {
         signal,
       });
     });
+    // What the questions did while nobody was listening.
+    this.#reports.attach(peer);
     return {
       receive: (frame) => void connection.handle(JSON.stringify(frame)),
       close: () => {
         connection.close();
         if (this.#current?.socket === socket) this.#current = undefined;
         if (this.#peer === peer) this.#peer = undefined;
+        this.#reports.detach(peer);
       },
     };
   }

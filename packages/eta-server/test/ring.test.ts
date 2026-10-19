@@ -88,6 +88,21 @@ describe("the ring on the wire", () => {
     expect(h.frames.every((entry) => entry.socketId === 1)).toBe(true);
   });
 
+  it("stamps every event with a time that only goes up, replays included", () => {
+    const h = harness();
+    // Several in one millisecond: the stamps still differ, and they come back the same on replay.
+    for (const name of ["a", "b", "c"]) h.wire.event("sessions.s1", name, null);
+    h.wire.subscribe(1, "sessions.s1");
+    const replayed = h.frames
+      .map((entry) => entry.frame as { type: string; at?: number })
+      .filter((frame) => frame.type === "event")
+      .map((frame) => frame.at!);
+    expect(replayed).toHaveLength(3);
+    expect(replayed[0]).toBeGreaterThan(0);
+    expect(replayed[1]).toBeGreaterThan(replayed[0]!);
+    expect(replayed[2]).toBeGreaterThan(replayed[1]!);
+  });
+
   it("sends live events only to subscribers, and only those that asked for them", () => {
     const h = harness();
     h.wire.subscribe(1, "sessions.s1", "tool");
