@@ -335,5 +335,10 @@
       "completed": "完成",
       "cancelled": "取消"
     }
+  },
+  "queue": {
+    "followUp": "排队",
+    "steer": "插话",
+    "drop": "丢掉这条：{{text}}"
   }
 }

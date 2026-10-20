@@ -335,5 +335,10 @@
       "completed": "Done",
       "cancelled": "Cancelled"
     }
+  },
+  "queue": {
+    "followUp": "Queued",
+    "steer": "Steering",
+    "drop": "Drop this one: {{text}}"
   }
 }

@@ -60,6 +60,7 @@ import { ModelChip, ThinkingChip } from "./composer-pickers";
 import { githubRef } from "./github-ref";
 import { GroupNotice } from "./group-notice";
 import { PendingStrip } from "./pending-strip";
+import { QueueChips } from "./queue-chips";
 import { when } from "./routine-format";
 import { TaskCardRow, TaskDraftRow } from "./task-rows";
 import { TranscriptRail } from "./transcript-rail";
@@ -1432,6 +1433,8 @@ export function ChatPanel({
             // nothing to say, which is most of the time.
             notice
           )}
+          {/* What is waiting behind the run in flight, over the box that would send it. */}
+          <QueueChips members={members} />
           <form
             ref={formRef}
             className="composer-card"

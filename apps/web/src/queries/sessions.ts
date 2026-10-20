@@ -29,6 +29,7 @@ export type SessionSections = Partial<
     | "ask"
     | "metrics"
     | "tasks"
+    | "queue"
   >
 >;
 
