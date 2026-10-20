@@ -338,9 +338,6 @@
   },
   "queue": {
     "followUp": "Queued",
-    "steer": "Steering",
-    "steerAction": "Steer",
-    "steerOne": "Send as a steer: {{text}}",
     "pullBackAction": "Pull back",
     "pullBack": "Pull back into the box: {{text}}",
     "drop": "Drop this one: {{text}}"
