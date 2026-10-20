@@ -122,6 +122,11 @@ export interface SessionArgs {
   askAbort: Session & { questionId: string };
   modelSet: Session & { model: string };
   thinkingLevel: Session & { level: ThinkingLevel };
+  /**
+   * Take one queued input back out of the lane. The answer says whether it was still there: a run
+   * drains the queue at tool boundaries, so "the chip is gone" proves nothing and the caller has to
+   * be told. Removed: false means a run took it first and the message is already on its way.
+   */
   queueRemove: Session & { entryId: string };
 }
 

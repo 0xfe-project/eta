@@ -193,5 +193,17 @@ export function useSessionActions() {
     compact: useWireMutation<SessionArgs["compact"]>("sessions", "compact", {
       timeoutMs: 120_000,
     }),
+    /**
+     * Take one queued message back. The answer is the ack: `already_consumed` means a run reached
+     * its tool boundary first and the message is on its way, so the caller must not remove the chip
+     * or send it again.
+     */
+    queueRemove: useWireMutation<
+      SessionArgs["queueRemove"],
+      {
+        entryId: string;
+        outcome: "cancelled" | "already_consumed" | "not_found";
+      }
+    >("sessions", "queueRemove"),
   };
 }
