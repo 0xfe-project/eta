@@ -339,6 +339,10 @@
   "queue": {
     "followUp": "排队",
     "steer": "插话",
+    "steerAction": "插话",
+    "steerOne": "转为插话：{{text}}",
+    "pullBackAction": "拉回",
+    "pullBack": "拉回输入框：{{text}}",
     "drop": "丢掉这条：{{text}}"
   }
 }

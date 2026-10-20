@@ -1434,7 +1434,23 @@ export function ChatPanel({
             notice
           )}
           {/* What is waiting behind the run in flight, over the box that would send it. */}
-          <QueueChips members={members} />
+          <QueueChips
+            members={members}
+            // Back above the draft, blank line between: pulling one in must never swallow the
+            // half sentence someone was writing, and two pulls land newest-first.
+            onPullBack={(text) =>
+              setDraft(
+                draft.length === 0
+                  ? [{ type: "text", text }]
+                  : [
+                      { type: "text", text },
+                      { type: "text", text: "\n\n" },
+                      ...draft,
+                    ],
+              )
+            }
+            onSend={(text) => onSend(text, "steer")}
+          />
           <form
             ref={formRef}
             className="composer-card"
