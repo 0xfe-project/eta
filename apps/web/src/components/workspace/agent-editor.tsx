@@ -317,10 +317,11 @@ export function AgentEditor() {
         onCloseAutoFocus={returnFocus}
         className={cn(
           "flex max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0",
-          // Editing is laid out as settings are; creating is a short wizard.
+          // Editing is laid out as settings are; creating is a short wizard,
+          // capped to its own width at every viewport, not full-width by default.
           agent
             ? "h-[min(36rem,calc(100dvh-2rem))] sm:max-w-3xl"
-            : "max-h-[calc(100dvh-2rem)] sm:max-w-xl",
+            : "max-h-[calc(100dvh-2rem)] max-w-[min(28rem,calc(100%-2rem))]",
         )}
       >
         <DialogHeader className="shrink-0 flex-row items-center gap-3 border-b p-3 pr-12">
