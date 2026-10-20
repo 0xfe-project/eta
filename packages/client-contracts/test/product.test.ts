@@ -129,7 +129,7 @@ describe("the product's targets on the generic pipe", () => {
         updatedAt: 2,
       },
       members: summary.participants,
-      timeline: { messages: [reply], hasMore: false },
+      timeline: { messages: [reply], hasMore: false, held: [] },
     };
     const snapshot: StateSnapshot = {
       sections: { ...sections },
