@@ -85,6 +85,10 @@ export function MemberTasksPanel({ sessionId }: { sessionId: string }) {
     "sessions",
     "taskUpdate",
   );
+  const remove = useWireMutation<SessionArgs["taskRemove"]>(
+    "sessions",
+    "taskRemove",
+  );
 
   if (tasks.length === 0)
     return (
@@ -121,6 +125,21 @@ export function MemberTasksPanel({ sessionId }: { sessionId: string }) {
               className="min-w-0 flex-1 truncate text-left text-xs hover:underline"
             >
               {task.content}
+            </button>
+            {/* Taking a task away is the one thing here that cannot be undone by clicking again,
+                so it is the one thing drawn in the colour of a warning. */}
+            <button
+              type="button"
+              aria-label={translateText("chat:tasks.remove", {
+                content: task.content,
+              })}
+              title={translateText("chat:tasks.remove", {
+                content: task.content,
+              })}
+              onClick={() => remove.mutate({ session: sessionId, id: task.id })}
+              className="flex size-4 shrink-0 items-center justify-center font-mono text-[10px] text-destructive hover:bg-destructive/10"
+            >
+              ×
             </button>
           </li>
         ))}

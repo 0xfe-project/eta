@@ -333,6 +333,7 @@
       "completed": "Done",
       "cancelled": "Cancelled",
       "inProgress": "In progress"
-    }
+    },
+    "remove": "Remove task: {{content}}"
   }
 }
