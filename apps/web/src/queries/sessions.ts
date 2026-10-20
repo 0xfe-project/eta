@@ -28,6 +28,7 @@ export type SessionSections = Partial<
     | "prompt"
     | "ask"
     | "metrics"
+    | "tasks"
   >
 >;
 

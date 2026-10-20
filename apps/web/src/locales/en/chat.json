@@ -321,5 +321,18 @@
     "newAgent": "New agent",
     "noAgents": "No agents yet.",
     "unknownDirectory": "(directory gone)"
+  },
+  "tasks": {
+    "short": "Tasks",
+    "count": "Tasks {{done}}/{{total}}",
+    "empty": "No tasks yet.",
+    "edit": "Edit task",
+    "content": "Content",
+    "status": {
+      "pending": "To do",
+      "completed": "Done",
+      "cancelled": "Cancelled",
+      "inProgress": "In progress"
+    }
   }
 }

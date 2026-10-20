@@ -321,5 +321,18 @@
     "newAgent": "新建智能体",
     "noAgents": "还没有智能体。",
     "unknownDirectory": "（目录已不在）"
+  },
+  "tasks": {
+    "short": "任务",
+    "count": "任务 {{done}}/{{total}}",
+    "empty": "还没有任务。",
+    "edit": "编辑任务",
+    "content": "内容",
+    "status": {
+      "pending": "待办",
+      "completed": "完成",
+      "cancelled": "取消",
+      "inProgress": "进行中"
+    }
   }
 }

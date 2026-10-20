@@ -55,6 +55,7 @@ import { agentStatusLabels } from "./agent-status";
 import { InspectButton } from "./inspect-button";
 import { MemberRing } from "./member-ring";
 import { MemberStats } from "./member-stats";
+import { MemberTasksButton, MemberTasksPanel } from "./member-tasks";
 import { ProjectField } from "./project-field";
 import { useReturnFocus } from "./return-focus";
 import { when } from "./routine-format";
@@ -487,6 +488,8 @@ export function GroupMembers() {
   const [linkTask, setLinkTask] = useState(false);
   const [invite, setInvite] = useState(false);
   const [removing, setRemoving] = useState<string>();
+  /** Whose tasks are open under its card: one at a time, and the same press closes it. */
+  const [tasksFor, setTasksFor] = useState<string | null>(null);
   const focused = useWorkspaceStore((state) => state.focusedAgentId);
   const setFocusedAgent = useWorkspaceStore((state) => state.setFocusedAgent);
   if (!group) return null;
@@ -560,85 +563,103 @@ export function GroupMembers() {
             <li
               key={p.agentId}
               className={cn(
-                "flex min-w-0 items-start gap-2 border px-2 py-1.5",
+                "min-w-0 border",
                 // Focused is a frame around the card, not a different card: the numbers stay where
                 // they were, so comparing two members does not mean re-learning the layout.
                 focused === p.agentId ? "border-foreground" : "border-border",
               )}
             >
-              {/* The row's first thing was the member's avatar; the gauge wraps that one instead
+              <div className="flex min-w-0 items-start gap-2 px-2 py-1.5">
+                {/* The row's first thing was the member's avatar; the gauge wraps that one instead
                   of adding a second avatar beside the numbers. A member with no session yet has
                   nothing to draw a ring around, so it is just the avatar. */}
-              {p.sessionId === null ? (
-                <AgentAvatar agent={{ id: p.agentId }} />
-              ) : (
-                <MemberRing sessionId={p.sessionId}>
+                {p.sessionId === null ? (
                   <AgentAvatar agent={{ id: p.agentId }} />
-                </MemberRing>
-              )}
-              {/* Pressing the member is the same action as pressing its card anywhere else: the
+                ) : (
+                  <MemberRing sessionId={p.sessionId}>
+                    <AgentAvatar agent={{ id: p.agentId }} />
+                  </MemberRing>
+                )}
+                {/* Pressing the member is the same action as pressing its card anywhere else: the
                   chat narrows to it. The menu beside it is the other thing a member has. */}
-              <button
-                type="button"
-                // Press to focus, press again to let go. The frame is the whole state: white
-                // border = narrowed to this member, and the same press takes it back.
-                onClick={() =>
-                  setFocusedAgent(focused === p.agentId ? null : p.agentId)
-                }
-                title={translateText("groups.members.focus", { name })}
-                className="min-w-0 flex-1 text-left text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
-                <span className="block truncate" title={name}>
-                  {name}{" "}
-                  <span className="text-xs text-muted-foreground">
-                    {agent ? (
-                      <AgentStatus status={memberStatus(p.status)} />
-                    ) : (
-                      translateText("common:status.deleted")
-                    )}
+                <button
+                  type="button"
+                  // Press to focus, press again to let go. The frame is the whole state: white
+                  // border = narrowed to this member, and the same press takes it back.
+                  onClick={() =>
+                    setFocusedAgent(focused === p.agentId ? null : p.agentId)
+                  }
+                  title={translateText("groups.members.focus", { name })}
+                  className="min-w-0 flex-1 text-left text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <span className="block truncate" title={name}>
+                    {name}{" "}
+                    <span className="text-xs text-muted-foreground">
+                      {agent ? (
+                        <AgentStatus status={memberStatus(p.status)} />
+                      ) : (
+                        translateText("common:status.deleted")
+                      )}
+                    </span>
                   </span>
-                </span>
-                {/* What this member has spent, is producing, and is chasing. */}
-                <MemberStats sessionId={p.sessionId ?? undefined} />
-              </button>
-              <div className="flex shrink-0 items-start gap-1">
-                {p.sessionId === null ? null : (
-                  <InspectButton sessionId={p.sessionId} name={name} />
-                )}
-                {(agent || removable) && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        aria-label={translateText(
-                          "common:accessibility.itemActions",
-                          {
-                            name,
-                          },
-                        )}
-                      >
-                        <DotsThreeIcon aria-hidden="true" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {agent && (
-                        <DropdownMenuItem onSelect={() => openEditor(agent.id)}>
-                          {translateText("settings:title")}
-                        </DropdownMenuItem>
-                      )}
-                      {removable && (
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onSelect={() => setRemoving(p.agentId)}
+                  {/* What this member has spent, is producing, and is chasing. */}
+                  <MemberStats sessionId={p.sessionId ?? undefined} />
+                </button>
+                <div className="flex shrink-0 items-center gap-1">
+                  {p.sessionId === null ? null : (
+                    <MemberTasksButton
+                      sessionId={p.sessionId}
+                      open={tasksFor === p.sessionId}
+                      onToggle={() =>
+                        setTasksFor(
+                          tasksFor === p.sessionId ? null : p.sessionId,
+                        )
+                      }
+                    />
+                  )}
+                  {p.sessionId === null ? null : (
+                    <InspectButton sessionId={p.sessionId} name={name} />
+                  )}
+                  {(agent || removable) && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={translateText(
+                            "common:accessibility.itemActions",
+                            {
+                              name,
+                            },
+                          )}
                         >
-                          {translateText("common:actions.remove")}
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
+                          <DotsThreeIcon aria-hidden="true" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {agent && (
+                          <DropdownMenuItem
+                            onSelect={() => openEditor(agent.id)}
+                          >
+                            {translateText("settings:title")}
+                          </DropdownMenuItem>
+                        )}
+                        {removable && (
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onSelect={() => setRemoving(p.agentId)}
+                          >
+                            {translateText("common:actions.remove")}
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </div>
               </div>
+              {p.sessionId !== null && tasksFor === p.sessionId ? (
+                <MemberTasksPanel sessionId={p.sessionId} />
+              ) : null}
             </li>
           );
         })}
