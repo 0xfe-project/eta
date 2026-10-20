@@ -216,8 +216,8 @@ export class LocalPlace implements SessionPlace {
 
   /**
    * An agent can be edited after its sessions exist. The model and the thinking level are given
-   * to a session when it is made and are its own after that (the user may change them with the
-   * composer's controls; `configure` is how an edit of the agent overrides them). The
+   * to a session when it is made and are its own after that (`configure` is how an edit of the
+   * agent overrides them). The
    * instructions and the persona are read when a session opens, so a session that was opened with
    * other ones is closed here and the open that follows reads the new ones. Never while it is
    * running: wakes are serial, so by the time one starts its session is idle.

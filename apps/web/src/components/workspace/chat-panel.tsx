@@ -56,7 +56,6 @@ import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar } from "./agent-identity";
 import { AttachmentChip } from "./composer-block";
 import { ComposerEditor } from "./composer-editor";
-import { ModelChip, ThinkingChip } from "./composer-pickers";
 import { githubRef } from "./github-ref";
 import { GroupNotice } from "./group-notice";
 import { HeldMessages } from "./held-messages";
@@ -207,11 +206,9 @@ function UserText({ text }: { text: string }) {
 }
 
 /**
- * Who a message is for, as a composer control.
- *
- * In a group the model chip has no single answer — the members can be on different models — so the
- * control in that slot picks the *people* instead. 所有人 comes first because it is a real choice,
- * not a convenience.
+ * Who a message is for, as a composer control. Groups only: a direct conversation wakes its
+ * one member without an @, so there is no second person to pick. 所有人 comes first because it
+ * is a real choice, not a convenience.
  */
 function MemberPicker({
   members,
@@ -1477,16 +1474,7 @@ export function ChatPanel({
               />
               <div className="composer-toolbar">
                 <div className="composer-controls flex min-w-0 items-center gap-2">
-                  {group?.kind === "direct" && members[0] !== undefined ? (
-                    <>
-                      <ModelChip
-                        sessionId={members[0].sessionId ?? undefined}
-                      />
-                      <ThinkingChip
-                        sessionId={members[0].sessionId ?? undefined}
-                      />
-                    </>
-                  ) : (
+                  {group?.kind === "direct" ? null : (
                     <MemberPicker
                       members={members}
                       mentioned={mentioned}
