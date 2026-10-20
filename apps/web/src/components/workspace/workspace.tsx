@@ -269,6 +269,7 @@ export function Workspace({
                         message.agentId === focusAgent,
                     )
               }
+              held={conversation.held}
               loading={!conversation.loaded}
               hasOlder={conversation.hasOlder}
               loadingOlder={conversation.loadingOlder}

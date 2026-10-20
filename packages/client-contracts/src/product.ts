@@ -230,6 +230,12 @@ export interface TimelineSection {
   messages: MessageView[];
   /** Older rows exist; `conversations.history` pages back to them. */
   hasMore: boolean;
+  /**
+   * Messages written but not in the conversation yet: every lane that would have answered them was
+   * busy when they were sent. The composer draws them above its box, and `recall` takes one back
+   * out — it never became a message, so nothing is lost from the record.
+   */
+  held: MessageView[];
 }
 
 /* ------------------------------------------------------------------ sections */
@@ -382,6 +388,7 @@ export type ProjectCall = {
 
 export const CONVERSATION_ACTIONS = [
   "create",
+  "recall",
   "update",
   "invite",
   "remove",
@@ -397,6 +404,11 @@ export type ConversationAction = (typeof CONVERSATION_ACTIONS)[number];
 
 export interface ConversationArgs {
   create: { projectId: string; name?: string; agentIds?: string[] };
+  /**
+   * Take back a message that is still waiting for a lane. False when it is no longer held: a lane
+   * picked it up, and the words are in the conversation now.
+   */
+  recall: { conversationId: string; messageId: string };
   update: {
     conversationId: string;
     name?: string;

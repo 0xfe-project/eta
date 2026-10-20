@@ -39,6 +39,8 @@ export interface World {
     agentIds: string[],
     name?: string,
   ) => Promise<ConversationSummary>;
+  /** Messages written but not in the conversation yet. */
+  held: (conversationId: string) => MessageView[];
   send: (
     conversationId: string,
     text: string,
@@ -81,6 +83,13 @@ export async function world(
 
   const row = (conversationId: string, id: string) =>
     rows(conversationId).find((message) => message.id === id);
+
+  /** Messages written but not in the conversation yet: every lane was busy when they were sent. */
+  const held = (conversationId: string): MessageView[] =>
+    client.section<TimelineSection>(
+      `conversations.${conversationId}`,
+      "timeline",
+    )?.held ?? [];
 
   return {
     host,
@@ -135,6 +144,7 @@ export async function world(
       );
     },
     rows,
+    held,
     row,
     async settled(
       conversationId,

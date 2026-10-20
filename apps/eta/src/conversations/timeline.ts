@@ -302,7 +302,7 @@ export class Timeline {
   window(
     conversationId: string,
     limit: number,
-  ): { messages: MessageView[]; hasMore: boolean } {
+  ): { messages: MessageView[]; hasMore: boolean; held: MessageView[] } {
     return this.page(conversationId, undefined, limit);
   }
 
@@ -311,24 +311,87 @@ export class Timeline {
     conversationId: string,
     beforeSeq: number | undefined,
     limit: number,
-  ): { messages: MessageView[]; hasMore: boolean } {
+  ): { messages: MessageView[]; hasMore: boolean; held: MessageView[] } {
     const rows = this.#db
       .query<Row, [string, number, number]>(
         `SELECT * FROM message WHERE conversation_id = ? AND seq < ?
+          AND json_extract(data, '$.held') IS NULL
           ORDER BY seq DESC LIMIT ?`,
       )
       .all(conversationId, beforeSeq ?? Number.MAX_SAFE_INTEGER, limit + 1);
     return {
       messages: rows.slice(0, limit).reverse().map(viewOf),
       hasMore: rows.length > limit,
+      // Written, but not in the conversation yet: the composer draws these above its box.
+      held: this.held(conversationId),
     };
+  }
+
+  /**
+   * A message that was held because every lane was busy has reached one: it is no longer waiting,
+   * so it becomes a message of the conversation. Idempotent — a replay calls it again.
+   */
+  deliver(id: string): void {
+    this.#db
+      .query(
+        "UPDATE message SET data = json_remove(data, '$.held'), updated_at = ? WHERE id = ? AND json_extract(data, '$.held') IS NOT NULL",
+      )
+      .run(Date.now(), id);
+  }
+
+  /**
+   * Take a held message back out. It was never a message of the conversation, so this is not a
+   * deletion from the record: the reply that was waiting on it goes too, or it would answer words
+   * nobody says any more.
+   */
+  recall(id: string): boolean {
+    return this.#db.transaction(() => {
+      const held = this.#db
+        .query<Row, [string]>(
+          "SELECT * FROM message WHERE id = ? AND json_extract(data, '$.held') IS NOT NULL",
+        )
+        .get(id);
+      if (held === null) return false;
+      this.#db
+        .query(
+          "DELETE FROM message WHERE reply_to_id = ? AND status = 'queued'",
+        )
+        .run(id);
+      this.#db.query("DELETE FROM message WHERE id = ?").run(id);
+      return true;
+    })();
+  }
+
+  /**
+   * Nothing is running in a process that has just started, so nothing is going to pick a held
+   * message up: it stops waiting and becomes a message. Its reply was failed by the restart, which
+   * is what says why it never got an answer.
+   */
+  releaseHeld(): void {
+    this.#db
+      .query(
+        "UPDATE message SET data = json_remove(data, '$.held') WHERE json_extract(data, '$.held') IS NOT NULL",
+      )
+      .run();
+  }
+
+  /** The messages still waiting for a lane, oldest first: what the composer shows above the box. */
+  held(conversationId: string): MessageView[] {
+    const rows = this.#db
+      .query<Row, [string]>(
+        `SELECT * FROM message WHERE conversation_id = ? AND json_extract(data, '$.held') IS NOT NULL ORDER BY seq`,
+      )
+      .all(conversationId)
+      .map(viewOf);
+    return rows;
   }
 
   /** Everything past `seq`, oldest first. */
   after(conversationId: string, seq: number): MessageView[] {
     return this.#db
       .query<Row, [string, number]>(
-        "SELECT * FROM message WHERE conversation_id = ? AND seq > ? ORDER BY seq",
+        `SELECT * FROM message WHERE conversation_id = ? AND seq > ?
+          AND json_extract(data, '$.held') IS NULL ORDER BY seq`,
       )
       .all(conversationId, seq)
       .map(viewOf);

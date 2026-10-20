@@ -97,6 +97,15 @@ export function conversationsPlugin(
           return { result: { conversation: summary(conversation) } };
         }),
 
+        wire.handle("conversations", "recall", (call) => {
+          const args = new Args(call);
+          const id = args.string("conversationId");
+          existing(id);
+          const recalled = engine.recall(id, args.string("messageId"));
+          deps.changed([id]);
+          return { result: { conversationId: id, recalled } };
+        }),
+
         wire.handle("conversations", "update", (call) => {
           const args = new Args(call);
           const id = args.string("conversationId");

@@ -191,6 +191,8 @@ export function createProduct(options: {
   // Nothing is running yet, so whatever the last process left in flight cannot be, and no
   // question it asked can still be answered.
   timeline.failInterrupted(RESTART_TEXT);
+  // And a message whose lane was in that run is not waiting for anything any more.
+  timeline.releaseHeld();
   const interactions = new InteractionStore(db);
   interactions.expirePending();
   // Settled questions are kept for 30 days, like usage; the ones just expired above are new.

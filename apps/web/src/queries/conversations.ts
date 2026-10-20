@@ -54,6 +54,8 @@ export interface ConversationState {
   info: ConversationInfo | undefined;
   /** Everything seen, oldest first. */
   messages: readonly MessageView[];
+  /** Written, but waiting for a lane: not in the conversation yet. */
+  held: readonly MessageView[];
   /** Rows before the oldest one seen exist (seqs are dense from 1). */
   hasOlder: boolean;
   loadingOlder: boolean;
@@ -75,8 +77,8 @@ export function useConversation(
       : `conversations.${conversationId}`,
   );
   const info = state?.sections.info as ConversationInfo | undefined;
-  const window = (state?.sections.timeline as TimelineSection | undefined)
-    ?.messages;
+  const timeline = state?.sections.timeline as TimelineSection | undefined;
+  const window = timeline?.messages;
   const known = useRows((rows) =>
     conversationId === undefined ? NONE : (rows.rows[conversationId] ?? NONE),
   );
@@ -102,6 +104,7 @@ export function useConversation(
     loaded: state !== undefined,
     info,
     messages,
+    held: timeline?.held ?? NONE,
     hasOlder: oldest !== undefined && oldest > 1,
     loadingOlder: isPending,
     loadOlder: () => {
@@ -136,6 +139,14 @@ export function useConversationActions() {
       ConversationArgs["setSteward"],
       ConversationResults["setSteward"]
     >("conversations", "setSteward"),
+    /**
+     * Take back a message that is still waiting for a lane. `recalled: false` means a lane took it:
+     * the words are in the conversation now and putting them back in the box would say them twice.
+     */
+    recall: useWireMutation<
+      ConversationArgs["recall"],
+      { conversationId: string; recalled: boolean }
+    >("conversations", "recall"),
     read: useWireMutation<
       ConversationArgs["read"],
       ConversationResults["read"]

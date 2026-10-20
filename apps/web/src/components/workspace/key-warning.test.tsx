@@ -131,6 +131,7 @@ describe("chat 页里成排出现的东西", () => {
         <ChatPanel
           groupId="g1"
           groupName="装配"
+          held={[]}
           group={conversationView({
             id: "g1",
             name: "装配",

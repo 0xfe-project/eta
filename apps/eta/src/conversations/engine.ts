@@ -301,6 +301,17 @@ export class Engine {
    * the runs happen after it. A `steer` joins an agent that is already answering instead of
    * starting a second reply, and a retry with the same `clientId` is the same message.
    */
+  /**
+   * Take back a held message. False when it is no longer waiting: a lane took it, and it is a
+   * message of the conversation now — recalling then would be deleting what was already said.
+   */
+  recall(conversationId: string, messageId: string): boolean {
+    this.#requireConversation(conversationId);
+    const recalled = this.#timeline.recall(messageId);
+    if (recalled) this.#changed([conversationId]);
+    return recalled;
+  }
+
   async send(input: {
     conversationId: string;
     text: string;
@@ -359,6 +370,20 @@ export class Engine {
             input.mode === "steer" && this.#joinable(conversation.id, agentId),
         });
       }
+      /*
+       * A message nobody can take yet is not a message of the conversation yet: every target still
+       * has a reply of its own in flight, so nothing would read it until one of them finished. It
+       * is written as `queued` — the same status a reply waits in — and the lane that picks it up
+       * turns it into a message. Sending two in a row while the first is unanswered used to put
+       * both in the transcript and leave the second one unrecallable.
+       */
+      const held =
+        planned.length > 0 &&
+        planned.every(
+          (target) =>
+            !target.join &&
+            this.#chains.has(keyOf(conversation.id, target.agentId)),
+        );
       message = this.#timeline.append({
         id,
         conversationId: conversation.id,
@@ -368,6 +393,10 @@ export class Engine {
         mentions: routing.named,
         rootMessageId: id,
         data: {
+          // Held: written, but not a message of the conversation yet — see `held` above. `status`
+          // is left alone on purpose: `queued` means "a reply waiting to run", and every in-flight
+          // query in the store would pick a user row up as one.
+          ...(held ? { held: true } : {}),
           woke: planned.filter((p) => !p.join).map((p) => p.agentId),
           joined: planned.filter((p) => p.join).map((p) => p.agentId),
           ...(files.length === 0
@@ -689,6 +718,10 @@ export class Engine {
     const reply = this.#timeline.get(replyId);
     // Stopped before its turn, or gone with its conversation: nothing to run.
     if (reply === undefined || reply.status !== "queued") return;
+    // The message this reply answers reached its lane, so it is a message now. Idempotent: a
+    // message that was never held is not `queued` and this touches nothing.
+    if (reply.rootMessageId !== null)
+      this.#timeline.deliver(reply.rootMessageId);
     const { conversationId } = reply;
     const fail = (code: string, text: string): void => {
       this.#timeline.finish(replyId, {

@@ -275,6 +275,7 @@ describe("conversations", () => {
     expect(w.client.section(`conversations.${named.id}`, "timeline")).toEqual({
       messages: [],
       hasMore: false,
+      held: [],
     });
   });
 

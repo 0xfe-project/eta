@@ -59,8 +59,8 @@ import { ComposerEditor } from "./composer-editor";
 import { ModelChip, ThinkingChip } from "./composer-pickers";
 import { githubRef } from "./github-ref";
 import { GroupNotice } from "./group-notice";
+import { HeldMessages } from "./held-messages";
 import { PendingStrip } from "./pending-strip";
-import { QueueChips } from "./queue-chips";
 import { when } from "./routine-format";
 import { TaskCardRow, TaskDraftRow } from "./task-rows";
 import { TranscriptRail } from "./transcript-rail";
@@ -812,6 +812,7 @@ export function ChatPanel({
   groupId,
   groupName,
   messages,
+  held,
   loading,
   hasOlder,
   loadingOlder,
@@ -844,6 +845,8 @@ export function ChatPanel({
   groupName: string | undefined;
   /** The conversation, as far back as loaded. */
   messages: readonly MessageView[];
+  /** Written, but waiting for a lane: drawn above the box, not in the transcript. */
+  held: readonly MessageView[];
   /** The conversation is still being read. */
   loading?: boolean;
   /** Earlier messages exist; onLoadOlder fetches the next page of them. */
@@ -1434,8 +1437,9 @@ export function ChatPanel({
             notice
           )}
           {/* What is waiting behind the run in flight, over the box that would send it. */}
-          <QueueChips
-            members={members}
+          <HeldMessages
+            conversationId={groupId ?? ""}
+            held={held}
             // Back above the draft, blank line between: pulling one in must never swallow the
             // half sentence someone was writing, and two pulls land newest-first.
             onPullBack={(text) =>
@@ -1449,7 +1453,6 @@ export function ChatPanel({
                     ],
               )
             }
-            onSend={(text) => onSend(text, "steer")}
           />
           <form
             ref={formRef}
