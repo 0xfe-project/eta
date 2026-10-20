@@ -3,7 +3,6 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageProvider } from "@/components/language-provider";
 import { AppProviders } from "@/components/providers";
-import { LiveChat } from "@/components/workspace/live-chat";
 
 export function RootDocument() {
   return (
@@ -36,7 +35,6 @@ function LocalizedDocument() {
       >
         {translateText("accessibility.skipToContent")}
       </a>
-      <LiveChat />
       <Outlet />
     </AppProviders>
   );
