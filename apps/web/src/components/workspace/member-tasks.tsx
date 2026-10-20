@@ -18,10 +18,14 @@ import { useSession } from "@/queries/sessions";
 import { useWireMutation } from "@/queries/wire";
 
 /**
- * A member's task list, seen from its card in the panel.
+ * A member's steps, seen from its card in the panel.
  *
- * The tasks are the session's own — the same rows the task page draws, filtered to this agent by
- * being this agent's session. Nothing is copied: `taskUpdate` writes one row and both views follow.
+ * These are the session's own — the list the agent keeps for itself while it works, not the board's
+ * cards: a board task is a work item with a number, an assignee and a run; this is what the agent
+ * decided to do first. Two different things, and the panel says 步骤 for this one so that 任务 keeps
+ * meaning the board.
+ *
+ * Nothing is copied: `taskUpdate` writes one row and the session's own view follows.
  *
  * A status is a position in a cycle, not a dropdown in a row: click the chip, it moves on. The
  * dialog is for what a click cannot say — the text — and it carries the status as well, because

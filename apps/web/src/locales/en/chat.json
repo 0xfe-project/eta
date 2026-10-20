@@ -323,17 +323,17 @@
     "unknownDirectory": "(directory gone)"
   },
   "tasks": {
-    "short": "Tasks",
-    "count": "Tasks {{done}}/{{total}}",
-    "empty": "No tasks yet.",
-    "edit": "Edit task",
+    "short": "Steps",
+    "count": "Steps {{done}}/{{total}}",
+    "empty": "No steps yet.",
+    "edit": "Edit step",
     "content": "Content",
+    "remove": "Remove step: {{content}}",
     "status": {
       "pending": "To do",
+      "inProgress": "In progress",
       "completed": "Done",
-      "cancelled": "Cancelled",
-      "inProgress": "In progress"
-    },
-    "remove": "Remove task: {{content}}"
+      "cancelled": "Cancelled"
+    }
   }
 }

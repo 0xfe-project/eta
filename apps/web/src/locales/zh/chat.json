@@ -323,17 +323,17 @@
     "unknownDirectory": "（目录已不在）"
   },
   "tasks": {
-    "short": "任务",
-    "count": "任务 {{done}}/{{total}}",
-    "empty": "还没有任务。",
-    "edit": "编辑任务",
+    "short": "步骤",
+    "count": "步骤 {{done}}/{{total}}",
+    "empty": "还没有步骤。",
+    "edit": "编辑步骤",
     "content": "内容",
+    "remove": "删除步骤：{{content}}",
     "status": {
       "pending": "待办",
+      "inProgress": "进行中",
       "completed": "完成",
-      "cancelled": "取消",
-      "inProgress": "进行中"
-    },
-    "remove": "删除任务：{{content}}"
+      "cancelled": "取消"
+    }
   }
 }
