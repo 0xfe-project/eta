@@ -1417,6 +1417,28 @@ export function ChatPanel({
        * came out worse than the thing it replaced.
        */}
       <footer className="input-area">
+        {/* Its own strip above the frame, not a row inside it: the frame is one thing — a notice,
+            the box, the toolbar — and a message that has not been sent yet is not part of it. */}
+        <div className="mx-auto w-full max-w-[860px] px-1 pb-1.5">
+          {/* What is waiting behind the run in flight, over the box that would send it. */}
+          <HeldMessages
+            conversationId={groupId ?? ""}
+            held={held}
+            // Back above the draft, blank line between: pulling one in must never swallow the
+            // half sentence someone was writing, and two pulls land newest-first.
+            onPullBack={(text) =>
+              setDraft(
+                draft.length === 0
+                  ? [{ type: "text", text }]
+                  : [
+                      { type: "text", text },
+                      { type: "text", text: "\n\n" },
+                      ...draft,
+                    ],
+              )
+            }
+          />
+        </div>
         <div className="input-outer">
           {/*
            * In priority order, and each one is a different sentence: why the box cannot be used
@@ -1436,24 +1458,6 @@ export function ChatPanel({
             // nothing to say, which is most of the time.
             notice
           )}
-          {/* What is waiting behind the run in flight, over the box that would send it. */}
-          <HeldMessages
-            conversationId={groupId ?? ""}
-            held={held}
-            // Back above the draft, blank line between: pulling one in must never swallow the
-            // half sentence someone was writing, and two pulls land newest-first.
-            onPullBack={(text) =>
-              setDraft(
-                draft.length === 0
-                  ? [{ type: "text", text }]
-                  : [
-                      { type: "text", text },
-                      { type: "text", text: "\n\n" },
-                      ...draft,
-                    ],
-              )
-            }
-          />
           <form
             ref={formRef}
             className="composer-card"
