@@ -112,6 +112,8 @@
   "connectorHints": {
     "codex": "使用 ChatGPT 账号登录。如果授权页提示不允许设备码登录，请先在 ChatGPT 设置的“安全”中开启 Codex 的设备码授权。",
     "xai": "需要可以使用 Grok API 的 xAI 账号（例如 SuperGrok 订阅）。",
-    "gemini": "在 Google AI Studio（aistudio.google.com/apikey）创建 API key 后填入。"
+    "geminiPrefix": "在 ",
+    "geminiLink": "Google AI Studio",
+    "geminiSuffix": " 创建 API key 后填入。"
   }
 }

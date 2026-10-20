@@ -23,6 +23,16 @@ export const connectionStateLabels: Record<LlmConnectionState, string> = {
   },
 };
 
+/** The page where the user creates a key, for connectors that take one; none for the rest. */
+export function connectorKeyUrl(id: string): string | undefined {
+  switch (id) {
+    case "gemini":
+      return "https://aistudio.google.com/apikey";
+    default:
+      return undefined;
+  }
+}
+
 /** The guidance shown with a connector's login, by connector id; none for one we don't know. */
 export function connectorHint(id: string): string | undefined {
   switch (id) {
@@ -30,8 +40,6 @@ export function connectorHint(id: string): string | undefined {
       return translate("llm:connectorHints.codex");
     case "xai":
       return translate("llm:connectorHints.xai");
-    case "gemini":
-      return translate("llm:connectorHints.gemini");
     default:
       return undefined;
   }

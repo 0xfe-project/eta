@@ -60,6 +60,7 @@ import { wireErrorMessage } from "@/queries/wire";
 import {
   connectionStateLabels,
   connectorHint,
+  connectorKeyUrl,
   recoveryText,
   windowLabel,
 } from "./llm-state";
@@ -169,6 +170,7 @@ function ApiKeyDialog({ connector, open, onOpenChange }: LoginDialogProps) {
   const [apiKey, setApiKey] = useState("");
   const inputId = `api-key-${connector.id}`;
   const key = apiKey.trim();
+  const keyUrl = connectorKeyUrl(connector.id);
 
   const save = () => {
     if (!key || submit.isPending) return;
@@ -210,8 +212,23 @@ function ApiKeyDialog({ connector, open, onOpenChange }: LoginDialogProps) {
               {translateText("apiKey.title", { name: connector.name })}
             </DialogTitle>
             <DialogDescription>
-              {connectorHint(connector.id) ??
-                translateText("apiKey.instructions")}
+              {keyUrl ? (
+                <>
+                  {translateText("connectorHints.geminiPrefix")}
+                  <a
+                    href={keyUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium underline underline-offset-2"
+                  >
+                    {translateText("connectorHints.geminiLink")}
+                  </a>
+                  {translateText("connectorHints.geminiSuffix")}
+                </>
+              ) : (
+                (connectorHint(connector.id) ??
+                translateText("apiKey.instructions"))
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1">
