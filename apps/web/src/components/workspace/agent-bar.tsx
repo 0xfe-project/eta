@@ -176,7 +176,9 @@ export function ChatHeader({
           </AgentSwitch>
         ) : null}
       </h1>
-      <ProjectChip project={project} />
+      {/* A direct conversation has one agent and one fixed folder: the chip would only
+          restate the project the sidebar already has open. Groups show where they work. */}
+      {group?.kind === "direct" ? null : <ProjectChip project={project} />}
       <StewardChip info={info} project={project} />
       <span className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         {members.map((member) => (
