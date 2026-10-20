@@ -18,7 +18,6 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   SidebarGroup,
-  SidebarGroupAction,
   SidebarMenu,
   SidebarMenuAction,
   SidebarMenuItem,
@@ -149,40 +148,45 @@ export function ConversationList() {
         aria-labelledby="sidebar-agents"
         className="mt-auto shrink-0 border-t pb-0"
       >
-        <button
-          type="button"
-          aria-expanded={!collapsed}
-          onClick={() =>
-            setWorkspace((state) => ({
-              ...state,
-              agentsCollapsed: !collapsed,
-            }))
-          }
-          className="flex w-full items-center gap-1.5 border-b px-2 py-1.5 text-left"
-        >
-          {/* Up when folded away, because unfolding grows upwards from the bottom of the column. */}
-          <CaretDownIcon
-            aria-hidden="true"
-            className={cn(
-              "size-3.5 shrink-0 text-muted-foreground transition-transform",
-              collapsed ? "rotate-180" : undefined,
-            )}
-          />
-          <span
-            id="sidebar-agents"
-            className="flex-1 font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase"
+        <div className="flex items-center justify-between border-b pr-1 pb-1 pl-1">
+          <button
+            type="button"
+            aria-expanded={!collapsed}
+            onClick={() =>
+              setWorkspace((state) => ({
+                ...state,
+                agentsCollapsed: !collapsed,
+              }))
+            }
+            className="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pl-1 text-left"
           >
-            {translateText("chat:sections.agents")}
-          </span>
-        </button>
-        <SidebarGroupAction
-          aria-label={translateText("chat:sections.newAgent")}
-          title={translateText("chat:sections.newAgent")}
-          className="top-1 right-1"
-          onClick={() => setAgentEditor({ open: true, agentId: null })}
-        >
-          <PlusIcon aria-hidden="true" className="size-3.5" />
-        </SidebarGroupAction>
+            {/* Up when folded away, because unfolding grows upwards from the bottom of the column. */}
+            <CaretDownIcon
+              aria-hidden="true"
+              className={cn(
+                "size-3.5 shrink-0 text-muted-foreground transition-transform",
+                collapsed ? "rotate-180" : undefined,
+              )}
+            />
+            <span
+              id="sidebar-agents"
+              className="min-w-0 flex-1 truncate font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase"
+            >
+              {translateText("chat:sections.agents")}
+            </span>
+          </button>
+          {/* The same control as the groups' one, in the same place: two pluses in one column that
+              looked and behaved differently read as two different kinds of thing. */}
+          <button
+            type="button"
+            aria-label={translateText("chat:sections.newAgent")}
+            title={translateText("chat:sections.newAgent")}
+            onClick={() => setAgentEditor({ open: true, agentId: null })}
+            className="flex size-6 items-center justify-center border border-border text-muted-foreground hover:text-foreground"
+          >
+            <PlusIcon aria-hidden="true" className="size-3.5" />
+          </button>
+        </div>
         {collapsed ? null : (
           // Never more than two fifths of the screen: the agents are who you can talk to, the
           // groups are the work, and the work keeps the room.
