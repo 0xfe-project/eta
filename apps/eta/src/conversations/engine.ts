@@ -643,7 +643,7 @@ export class Engine {
 
   /**
    * An agent's model or thinking level was edited: its sessions take the new ones, wherever they
-   * run, replacing what the user chose on them with the composer's controls. A session that
+   * run, replacing whatever those sessions had been running on. A session that
    * cannot be reached (its machine is offline) or is in the middle of a run is a warning: it
    * keeps what it has.
    */

@@ -166,7 +166,7 @@ describe("an agent's session in a conversation", () => {
         .find((open) => open.meta.id === sessionId)!.session.kernel.config;
     expect(config().read("thinkingLevel")).toBe("low");
 
-    // The composer's chips.
+    // Changed on the session itself, as an agent edit pushes.
     await w.client.call("sessions", "modelSet", {
       session: sessionId,
       model: "fake:chosen",

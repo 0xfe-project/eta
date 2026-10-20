@@ -185,11 +185,6 @@ export function useLogBlocks(sessionId: string | null | undefined) {
 /** The actions on a session, each as a mutation. */
 export function useSessionActions() {
   return {
-    modelSet: useWireMutation<SessionArgs["modelSet"]>("sessions", "modelSet"),
-    thinkingLevel: useWireMutation<SessionArgs["thinkingLevel"]>(
-      "sessions",
-      "thinkingLevel",
-    ),
     goal: useWireMutation<SessionArgs["goal"]>("sessions", "goal"),
     compact: useWireMutation<SessionArgs["compact"]>("sessions", "compact", {
       timeoutMs: 120_000,
