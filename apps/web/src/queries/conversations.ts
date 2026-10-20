@@ -31,6 +31,30 @@ const useRows = create<{ rows: Record<string, readonly MessageView[]> }>(
   () => ({ rows: {} }),
 );
 
+/**
+ * Forget rows, and the replies that belong to them. What a recall takes out: the message was never
+ * a message, so the page is not losing anything it was shown.
+ */
+export function forgetRows(
+  conversationId: string,
+  ids: readonly string[],
+): void {
+  const gone = new Set(ids);
+  useRows.setState((state) => {
+    const known = state.rows[conversationId];
+    if (known === undefined) return state;
+    const kept = known.filter(
+      (row) =>
+        !gone.has(row.id) &&
+        !gone.has(row.rootMessageId ?? "") &&
+        !gone.has(row.replyToId ?? ""),
+    );
+    return kept.length === known.length
+      ? state
+      : { rows: { ...state.rows, [conversationId]: kept } };
+  });
+}
+
 /** Keep rows the page learned of outside the target: an older page, what a `send` answered. */
 export function rememberRows(
   conversationId: string,
@@ -87,8 +111,32 @@ export function useConversation(
     [known, window],
   );
   useEffect(() => {
-    if (conversationId !== undefined && window !== undefined)
-      rememberRows(conversationId, window);
+    if (conversationId === undefined || window === undefined) return;
+    rememberRows(conversationId, window);
+    if (window.length === 0) return;
+    /*
+     * Inside the span the window covers, the window is the whole truth: it is the newest rows the
+     * host has, and a row missing from it is not a message — it is waiting for a lane, or it was
+     * recalled, or a compaction dropped it. Union alone kept those alive forever: the same words
+     * as a message and as a chip, or a reply row with nothing in it.
+     *
+     * Outside the span nothing is dropped: rows the page pulled in from an older page are below
+     * it, and a message sent a moment ago can be above it until the next window arrives.
+     */
+    const seqs = window.map((row) => row.seq);
+    const from = Math.min(...seqs);
+    const to = Math.max(...seqs);
+    const present = new Set(window.map((row) => row.id));
+    useRows.setState((state) => {
+      const known = state.rows[conversationId];
+      if (known === undefined) return state;
+      const kept = known.filter(
+        (row) => row.seq < from || row.seq > to || present.has(row.id),
+      );
+      return kept.length === known.length
+        ? state
+        : { rows: { ...state.rows, [conversationId]: kept } };
+    });
   }, [conversationId, window]);
 
   const history = useWireMutation<ConversationArgs["history"], HistoryResult>(
@@ -146,7 +194,13 @@ export function useConversationActions() {
     recall: useWireMutation<
       ConversationArgs["recall"],
       { conversationId: string; recalled: boolean }
-    >("conversations", "recall"),
+    >("conversations", "recall", {
+      // The message and the reply that was waiting on it are gone from the host. Forgetting them
+      // here is what keeps the transcript from leaving a row with nothing in it.
+      onSuccess: (result, args) => {
+        if (result.recalled) forgetRows(args.conversationId, [args.messageId]);
+      },
+    }),
     read: useWireMutation<
       ConversationArgs["read"],
       ConversationResults["read"]

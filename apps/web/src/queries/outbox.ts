@@ -197,8 +197,12 @@ async function attempt(outgoing: Outgoing) {
         },
         { timeoutMs: TRY_TIMEOUT },
       );
-      // The rows as the host wrote them, so the message does not wait for the next push.
-      rememberRows(outgoing.conversationId, [sent.message, ...sent.replies]);
+      // The rows as the host wrote them, so the message does not wait for the next push. A held
+      // message is not one the transcript should show: the next window will not carry it, and the
+      // chip above the composer is where it belongs until a lane takes it.
+      if (sent.message.data?.held !== true)
+        rememberRows(outgoing.conversationId, [sent.message]);
+      rememberRows(outgoing.conversationId, sent.replies);
       remove(outgoing.id);
       return;
     } catch (error) {
