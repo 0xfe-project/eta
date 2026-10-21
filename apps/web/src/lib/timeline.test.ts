@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 import { messageView } from "@/test-product";
-import { mergeRows } from "./timeline";
+import { mergeRows, taskRowsByTurn } from "./timeline";
 
 const row = (seq: number, revision = 1, text = "") =>
   messageView({ id: `r${seq}`, conversationId: "c", seq, revision, text });
@@ -29,5 +29,71 @@ describe("folding rows into a timeline", () => {
     const merged = mergeRows(known, [row(3)]);
     expect(merged[0]).toBe(known[0]);
     expect(merged[1]).toBe(known[1]);
+  });
+});
+
+const reply = (id: string, seq: number) =>
+  messageView({
+    id,
+    conversationId: "c",
+    seq,
+    author: "agent",
+    agentId: "a1",
+    status: "done",
+  });
+const draft = (seq: number, turnMessageId?: string) =>
+  messageView({
+    id: `draft-${seq}`,
+    conversationId: "c",
+    seq,
+    kind: "task_draft",
+    author: "agent",
+    agentId: "a1",
+    data: turnMessageId === undefined ? {} : { turnMessageId },
+  });
+
+describe("gathering the task rows under the reply that wrote them", () => {
+  it("takes a draft naming a reply that is here, and leaves the rest alone", () => {
+    const split = taskRowsByTurn([
+      reply("t1", 1),
+      draft(2),
+      draft(3, "t1"),
+      draft(4, "not-here"),
+    ]);
+    // The words stay where they are; a draft that names no turn, or one this page is not showing,
+    // stays on the timeline too.
+    expect(split.rows.map((row) => row.id)).toEqual([
+      "t1",
+      "draft-2",
+      "draft-4",
+    ]);
+    expect(split.under.get("t1")?.map((row) => row.id)).toEqual(["draft-3"]);
+  });
+
+  it("keeps several drafts under their turn in order, and each turn's own", () => {
+    const split = taskRowsByTurn([
+      reply("t1", 1),
+      reply("t2", 2),
+      draft(3, "t2"),
+      draft(4, "t1"),
+      draft(5, "t1"),
+    ]);
+    expect(split.rows.map((row) => row.id)).toEqual(["t1", "t2"]);
+    expect(split.under.get("t1")?.map((row) => row.id)).toEqual([
+      "draft-4",
+      "draft-5",
+    ]);
+    expect(split.under.get("t2")?.map((row) => row.id)).toEqual(["draft-3"]);
+  });
+
+  it("refuses a turn that is not an agent's reply", () => {
+    // A row of someone else's, or of the system's, is not a turn a draft came out of: the draft
+    // stays where the timeline put it rather than disappearing into it.
+    const split = taskRowsByTurn([
+      messageView({ id: "u1", conversationId: "c", seq: 1 }),
+      draft(2, "u1"),
+    ]);
+    expect(split.rows.map((row) => row.id)).toEqual(["u1", "draft-2"]);
+    expect(split.under.size).toBe(0);
   });
 });

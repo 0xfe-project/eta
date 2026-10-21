@@ -122,12 +122,14 @@
   },
   "draft": {
     "title": "Task draft",
+    "awaitingConfirm": "Needs confirming",
     "editAndCreate": "Edit and confirm",
     "notCreatedHint": "Confirming creates the task; the agent that proposed it runs it in {{workspace}}.",
     "confirmTitle": "Confirm task draft",
     "confirmDescription": "Edit the content, then confirm; the agent starts right away."
   },
   "card": {
+    "title": "Task card",
     "deletedSummary": "#{{number}} {{title}} · Task deleted",
     "commentCount": "{{count}} comments",
     "commentCount_one": "{{count}} comment",

@@ -34,7 +34,7 @@ async function drafted() {
   const sent = await w.send(group.id, "we should fix login");
   await w.settled(group.id, sent.replies[0]!.id);
   const draft = w.rows(group.id).find((row) => row.kind === "task_draft")!;
-  return { w, ada, project, group, draft };
+  return { w, ada, project, group, draft, reply: sent.replies[0]! };
 }
 
 const confirm = async (
@@ -58,7 +58,7 @@ const revisionOf = (w: World, id: string): number =>
 
 describe("a task draft", () => {
   it("is a row of the conversation, composed by the board, and makes no task", async () => {
-    const { w, ada, group, draft } = await drafted();
+    const { w, ada, group, draft, reply } = await drafted();
     expect(draft).toMatchObject({
       author: "agent",
       agentId: ada.id,
@@ -66,6 +66,9 @@ describe("a task draft", () => {
       text: "",
       data: { title: "Fix login" },
     });
+    // It names the reply it came out of, so the page can draw it inside that turn instead of
+    // guessing at the order, and that row is the one Ada was writing when she drafted.
+    expect(draft.data.turnMessageId).toBe(reply.id);
     const { description } = draft.data as { description: string };
     expect(description).toContain("## 目标\n\nUsers can sign in again");
     expect(description).toContain("## 已决定\n\nKeep the existing form");
@@ -85,7 +88,7 @@ describe("a task draft", () => {
   });
 
   it("becomes a task and a card on confirm, and keeps its place in the timeline", async () => {
-    const { w, ada, project, group, draft } = await drafted();
+    const { w, ada, project, group, draft, reply } = await drafted();
     const { task, message } = await confirm(w, group.id, draft.id, {
       title: "  Fix the login form ",
       status: "in_review",
@@ -120,6 +123,8 @@ describe("a task draft", () => {
       comments: 0,
       summary: "",
       artifacts: [],
+      // The card keeps the turn the draft was written in: it stays where the proposal was.
+      turnMessageId: reply.id,
     });
     // The client's timeline has the card where the draft was.
     await until(() => w.row(group.id, draft.id)?.kind === "task_card");
@@ -191,9 +196,11 @@ describe("a task card", () => {
     w.row(conversationId, id)!.data as unknown as TaskCardData;
 
   it("says what the task says, and moves its revision when the task changes", async () => {
-    const { w, ada, project, group, draft } = await drafted();
+    const { w, ada, project, group, draft, reply } = await drafted();
     const { task } = await confirm(w, group.id, draft.id);
     const other = await w.group(project.id, [ada.id], "elsewhere");
+    // Refreshing a card rewrites its facts and keeps the turn it belongs to.
+    expect(card(w, group.id, draft.id).turnMessageId).toBe(reply.id);
     let revision = revisionOf(w, draft.id);
 
     await w.client.call("tasks", "update", {
