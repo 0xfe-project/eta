@@ -31,6 +31,12 @@ export interface AkhookHostOptions {
   userConfigPath?: string | undefined;
   /** More host layers, after the environment's and the data directory's. */
   additional?: readonly ConfigInput[] | undefined;
+  /**
+   * Whether this host loads GitHub. The host's own `eta:github` layer is part of that chain, so it
+   * is a host layer only when GitHub is loaded; without it an agent is told to use the `gh` it has
+   * rather than a tool the host does not offer.
+   */
+  github?: boolean | undefined;
   /** The rules of the bundles an agent loads, as layers for its session or its run. */
   bundleLayers?:
     | ((agentId: string | undefined, cwd: string) => readonly ConfigInput[])
@@ -59,7 +65,7 @@ export class AkhookHost {
   layers(): ConfigInput[] {
     const file = join(this.#options.dataDir, "akhook.yml");
     return [
-      GITHUB_AKHOOK,
+      ...(this.#options.github === true ? [GITHUB_AKHOOK] : []),
       ...additionalConfigPathsFromEnv(),
       ...(existsSync(file) ? [{ path: file }] : []),
       ...(this.#options.additional ?? []),

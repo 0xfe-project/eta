@@ -1,6 +1,6 @@
 # eta
 
-一个人用来指挥多个智能体的工作台。服务端是**一个 Bun 进程**：Web、产品数据（SQLite）、会话的运行和模型凭据都在里面。其他电脑上可以跑精简的 daemon，让会话在那里运行；记忆是一个可选的边车。
+一个人用来指挥多个智能体的工作台。服务端是**一个 Bun 进程**：Web、产品数据（SQLite）、会话的运行和模型凭据都在里面。其他电脑上可以跑精简的 daemon，让会话在那里运行；记忆是一个可选的边车，GitHub 那条链（App、`open_pull_request` / `draft_issue` 工具、机器上的 git/gh 登录）默认也不加载，`--github` 才挂上。
 
 ```text
 apps/
@@ -63,15 +63,16 @@ HOME=/var/lib/eta bun apps/eta/src/main.ts --web-dir apps/web/dist --host 0.0.0.
 
 host 的 flag（`apps/eta/src/main.ts`）：
 
-| flag                  | 含义                                                                                                    |
-| --------------------- | ------------------------------------------------------------------------------------------------------- |
-| `--port <n>`          | 端口，默认 `8787`（0 表示任意空闲端口）                                                                 |
-| `--host <addr>`       | 监听的网卡，默认 `127.0.0.1`。**监听回环以外的地址会自动开启令牌门**                                    |
-| `--web-dir <dir>`     | 构建好的 Web（含 `index.html`）。不给则只提供管道，不提供页面                                           |
-| `--token-file <path>` | 开启令牌门并指定令牌文件（不存在时创建，权限 0600）。监听非回环地址而没给时用 `<数据目录>/access-token` |
-| `--allow-origin <o>`  | 额外允许打开 WebSocket 的页面 origin，可重复。放在改写了 `Host` 的反向代理后面时填页面的外部地址        |
-| `--memory-url <url>`  | 记忆边车的地址，也可用环境变量 `ETA_MEMORY_URL`（flag 优先）。不给则没有记忆                            |
-| `--no-llm`            | 不加载 LLM 网关（没有订阅账号与 Gemini key）                                                            |
+| flag                  | 含义                                                                                                                                                                                                                                                                                                            |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--port <n>`          | 端口，默认 `8787`（0 表示任意空闲端口）                                                                                                                                                                                                                                                                         |
+| `--host <addr>`       | 监听的网卡，默认 `127.0.0.1`。**监听回环以外的地址会自动开启令牌门**                                                                                                                                                                                                                                            |
+| `--web-dir <dir>`     | 构建好的 Web（含 `index.html`）。不给则只提供管道，不提供页面                                                                                                                                                                                                                                                   |
+| `--token-file <path>` | 开启令牌门并指定令牌文件（不存在时创建，权限 0600）。监听非回环地址而没给时用 `<数据目录>/access-token`                                                                                                                                                                                                         |
+| `--allow-origin <o>`  | 额外允许打开 WebSocket 的页面 origin，可重复。放在改写了 `Host` 的反向代理后面时填页面的外部地址                                                                                                                                                                                                                |
+| `--memory-url <url>`  | 记忆边车的地址，也可用环境变量 `ETA_MEMORY_URL`（flag 优先）。不给则没有记忆                                                                                                                                                                                                                                    |
+| `--github`            | 加载 GitHub 那条链（App 与向导、`github` target、`open_pull_request` / `draft_issue` 工具、回调路由、机器上的 git/gh 登录）。默认**不加载**：环境里没它就不建不挂不问，界面也不出任何 GitHub 入口。环境变量 `ETA_GITHUB=1` 同样算数，`--no-github` 顶掉环境里的那份（见 [GitHub](docs/architecture/github.md)） |
+| `--no-llm`            | 不加载 LLM 网关（没有订阅账号与 Gemini key）                                                                                                                                                                                                                                                                    |
 
 首次访问带令牌的 host：在浏览器打开 `http://host:8787/?token=<令牌>` 一次，之后用 cookie；脚本用 `Authorization: Bearer <令牌>`。`/up` 是健康检查，不需要令牌。细节见[访问控制](docs/architecture/access.md)。
 
@@ -83,7 +84,7 @@ docker run -d --name eta -p 8787:8787 -v eta-data:/data eta
 docker exec eta cat /data/.eta/access-token  # 令牌
 ```
 
-一个镜像（构建 Web，host 用 `--web-dir` 提供），一个卷 `/data` 放全部数据（`HOME` 指向它，所以内容在 `/data/.eta/`），监听 `0.0.0.0:8787`，所以令牌门默认开启。镜像名后面的参数会追加给 host，例如 `docker run … eta --allow-origin https://eta.example.com --memory-url http://memory:8320`。健康检查是 `/up`。host 和智能体的 bash 以镜像里的非 root 用户 `bun`（uid 1000）运行，新建的卷归它所有；旧镜像（root）留下的卷或绑定挂载需要改一次属主：`docker run --rm -u 0 --entrypoint chown -v eta-data:/data eta -R 1000:1000 /data`。
+一个镜像（构建 Web，host 用 `--web-dir` 提供），一个卷 `/data` 放全部数据（`HOME` 指向它，所以内容在 `/data/.eta/`），监听 `0.0.0.0:8787`，所以令牌门默认开启。镜像名后面的参数会追加给 host，例如 `docker run … eta --allow-origin https://eta.example.com --memory-url http://memory:8320`。GitHub 默认不加载，需要它就在镜像名后面加 `--github`（或给容器设 `ETA_GITHUB=1`）。健康检查是 `/up`。host 和智能体的 bash 以镜像里的非 root 用户 `bun`（uid 1000）运行，新建的卷归它所有；旧镜像（root）留下的卷或绑定挂载需要改一次属主：`docker run --rm -u 0 --entrypoint chown -v eta-data:/data eta -R 1000:1000 /data`。
 
 `deploy/compose.yaml` 把 host 和（可选的）记忆边车放在一起：
 

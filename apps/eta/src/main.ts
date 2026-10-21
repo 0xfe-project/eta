@@ -4,7 +4,7 @@
  *   bun apps/eta/src/main.ts [--port 8787] [--host 127.0.0.1]
  *                            [--web-dir <built web>] [--token-file <path>]
  *                            [--allow-origin <origin>]... [--memory-url <sidecar>] [--no-llm]
- *                            [--public-url <the address the browser uses>]
+ *                            [--github] [--public-url <the address the browser uses>]
  *
  * A thin shell around `startHost`: flags, a startup summary on one line, and a signal handler.
  * Everything the host serves lives behind the one port; `--web-dir` adds the page, and a host
@@ -30,6 +30,9 @@ const { values } = parseArgs({
     "memory-url": { type: "string" },
     "public-url": { type: "string" },
     "no-llm": { type: "boolean", default: false },
+    // The GitHub chain is opt-in; `--no-github` overrides an environment that turns it on.
+    github: { type: "boolean", default: false },
+    "no-github": { type: "boolean", default: false },
   },
   strict: true,
 });
@@ -42,6 +45,17 @@ if (!Number.isInteger(port) || port < 0 || port > 65_535) {
 
 const memoryUrl = values["memory-url"] ?? process.env.ETA_MEMORY_URL;
 const publicUrl = values["public-url"] ?? process.env.ETA_PUBLIC_URL;
+
+/** An environment switch: on for `1`, `true`, `yes`, `on`; anything else (or nothing) is off. */
+const envOn = (value: string | undefined): boolean =>
+  ["1", "true", "yes", "on"].includes((value ?? "").trim().toLowerCase());
+
+// Off unless a host asked for it: the flag, or an environment that says so. `--no-github` wins,
+// so an operator can switch one off for a single start without editing the environment.
+const github =
+  values["no-github"] === true
+    ? false
+    : values.github === true || envOn(process.env.ETA_GITHUB);
 
 const host = await startHost({
   dataDir: join(homedir(), ".eta"),
@@ -56,6 +70,8 @@ const host = await startHost({
   allowOrigins: values["allow-origin"] ?? [],
   // Subscriptions and Gemini keys, through the in-process LLM gateway.
   llm: values["no-llm"] !== true,
+  // The whole GitHub chain, or none of it.
+  github,
   // The flag wins over the environment; an empty value means none.
   ...(memoryUrl === undefined || memoryUrl === "" ? {} : { memoryUrl }),
   ...(publicUrl === undefined || publicUrl === "" ? {} : { publicUrl }),

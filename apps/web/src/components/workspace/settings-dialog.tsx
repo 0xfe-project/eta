@@ -178,7 +178,9 @@ export function SettingsDialog() {
           <SettingsNav
             label={translateText("accessibility.sections")}
             sections={settingsSections
-              // No GitHub plugin on the host: nothing to connect.
+              // No GitHub plugin on the host: nothing to connect, so the section is not offered
+              // and not rendered below either — a page of settings that is not there would be a
+              // feature shown as half present. The host says what it has in `hello.mounted`.
               .filter(
                 (section) => section.value !== "connections" || githubMounted,
               )
@@ -203,7 +205,7 @@ export function SettingsDialog() {
               <MachineSettings />
             ) : settings.section === "bundles" ? (
               <BundleSettings />
-            ) : settings.section === "connections" ? (
+            ) : settings.section === "connections" && githubMounted ? (
               <ConnectionSettings />
             ) : settings.section === "mcp" ? (
               <McpSettings />

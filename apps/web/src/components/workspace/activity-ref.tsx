@@ -25,6 +25,10 @@ import { useSectionLink } from "./workspace-search";
  * dashed, is the action that files it on GitHub. An artifact's card opens
  * the version the tool published in a dialog. The tool line above keeps
  * the call's details.
+ *
+ * The two GitHub kinds (`pull_request`, `issue_draft`) are drawn by a page that has the plugin:
+ * `useGitHubRef` withholds them from a host which has no GitHub, so a ref an agent left there
+ * years ago draws nothing here. This component itself just draws what it is handed.
  */
 const kinds = {
   task: {

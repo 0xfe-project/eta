@@ -61,7 +61,7 @@ import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar } from "./agent-identity";
 import { AttachmentChip, PasteChip } from "./composer-block";
 import { ComposerEditor } from "./composer-editor";
-import { githubRef } from "./github-ref";
+import { useGitHubRef } from "./github-ref";
 import { GroupNotice } from "./group-notice";
 import { HeldMessages } from "./held-messages";
 import { PendingStrip } from "./pending-strip";
@@ -310,7 +310,7 @@ function ToolActivity({ block }: { block: ToolBlock }) {
   // thing worth quoting out of it (lib/tool-summary.ts).
   const summary = summarizeArgs(block.input);
   const artifact = publishedArtifact(block);
-  const github = githubRef(block);
+  const github = useGitHubRef(block);
   return (
     <>
       <ToolCard
