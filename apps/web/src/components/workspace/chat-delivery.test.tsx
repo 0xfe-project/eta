@@ -265,6 +265,28 @@ describe("sending a message", () => {
     await flush();
     expect(count(log(c), "你好")).toBe(1);
   });
+
+  it("sends a folded paste with the ranges it sits in", async () => {
+    const { container: c } = await start();
+    const pasted = "很长的粘贴内容\n".repeat(100); // 800 characters
+    await act(async () =>
+      useOutbox.getState().setDraft(CONV, [
+        { type: "text", text: "先看：" },
+        { type: "paste", id: "p1", text: pasted },
+        { type: "text", text: "\n就这些" },
+      ]),
+    );
+    await enter(c);
+    expect(sends).toHaveLength(1);
+    expect(sends[0]!.args).toMatchObject({
+      text: `先看：${pasted}\n就这些`,
+      blocks: [[3, 3 + pasted.length]],
+    });
+    // On its way out, the transcript row shows the chip — not the paste, and not a clamped
+    // wall of text.
+    expect(log(c)).toContain(`[粘贴文本 · 800 字符]`);
+    expect(log(c)).not.toContain("很长的粘贴内容");
+  });
 });
 
 describe("steering and stopping", () => {

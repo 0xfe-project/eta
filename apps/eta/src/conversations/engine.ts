@@ -315,6 +315,12 @@ export class Engine {
   async send(input: {
     conversationId: string;
     text: string;
+    /**
+     * Where the sender folded pastes inside `text` (`ConversationArgs["send"]["blocks"]`). Not
+     * looked at: written verbatim into the row's `data.blocks`, for renderers. The prompt the
+     * agents read is `text` alone, with the blocks in it as the plain text they stand for.
+     */
+    blocks?: readonly (readonly [number, number])[] | undefined;
     mentions: readonly string[];
     mode: "queue" | "steer";
     clientId?: string | undefined;
@@ -399,6 +405,10 @@ export class Engine {
           ...(held ? { held: true } : {}),
           woke: planned.filter((p) => !p.join).map((p) => p.agentId),
           joined: planned.filter((p) => p.join).map((p) => p.agentId),
+          // Where the sender's folded pastes sit in `text`, kept as sent (see `send`'s input).
+          ...(input.blocks && input.blocks.length > 0
+            ? { blocks: input.blocks }
+            : {}),
           ...(files.length === 0
             ? {}
             : { attachments: files.map(attachmentView) }),

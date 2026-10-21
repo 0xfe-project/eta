@@ -60,48 +60,61 @@ export interface BlockActions {
   expand: () => void;
 }
 
-function PasteBlock({
-  part,
-  remove,
-  expand,
+/**
+ * A folded paste: one bracketed line that opens the whole text it stands for. The composer
+ * passes the actions its block has (take it out, put the text back); the transcript passes
+ * none, where a message's paste is only read.
+ */
+export function PasteChip({
+  text,
+  actions,
 }: {
-  part: Extract<DraftPart, { type: "paste" }>;
-} & BlockActions) {
+  text: string;
+  actions?: Partial<BlockActions>;
+}) {
   const { t: translateText } = useTranslation(["chat", "common"] as const);
   const [open, setOpen] = useState(false);
   const title = translateText("attachments.pastedTextSummary", {
-    characterCount: charCount(part.text),
+    characterCount: charCount(text),
   });
   return (
     <span className={CHIP}>
       <button type="button" className={LINK} onClick={() => setOpen(true)}>
         [{title}]
       </button>
-      <button
-        type="button"
-        className={ACTION}
-        aria-label={translateText("attachments.removePastedText")}
-        onClick={remove}
-      >
-        ×
-      </button>
+      {actions?.remove ? (
+        <button
+          type="button"
+          className={ACTION}
+          aria-label={translateText("attachments.removePastedText")}
+          onClick={actions.remove}
+        >
+          ×
+        </button>
+      ) : null}
       <Viewer
         open={open}
         onOpenChange={setOpen}
         title={title}
         actions={
-          <>
-            <Button variant="outline" onClick={expand}>
-              {translateText("attachments.expandText")}
-            </Button>
-            <Button variant="outline" onClick={remove}>
-              {translateText("common:actions.remove")}
-            </Button>
-          </>
+          actions && (actions.remove || actions.expand) ? (
+            <>
+              {actions.expand ? (
+                <Button variant="outline" onClick={actions.expand}>
+                  {translateText("attachments.expandText")}
+                </Button>
+              ) : null}
+              {actions.remove ? (
+                <Button variant="outline" onClick={actions.remove}>
+                  {translateText("common:actions.remove")}
+                </Button>
+              ) : null}
+            </>
+          ) : undefined
         }
       >
         <pre className="whitespace-pre-wrap break-words font-mono text-[12px] leading-[1.6]">
-          {part.text}
+          {text}
         </pre>
       </Viewer>
     </span>
@@ -113,7 +126,8 @@ function FileBlock({
   remove,
 }: {
   part: Extract<DraftPart, { type: "file" }>;
-} & BlockActions) {
+  remove: () => void;
+}) {
   const { t: translateText } = useTranslation(["chat", "common"] as const);
   const upload = useOutbox((s) => s.uploads[part.id]);
   const failure = upload?.error;
@@ -169,8 +183,10 @@ export function ComposerBlock({
 }: {
   part: DraftPart;
 } & BlockActions) {
-  if (part.type === "paste") return <PasteBlock part={part} {...actions} />;
-  if (part.type === "file") return <FileBlock part={part} {...actions} />;
+  if (part.type === "paste")
+    return <PasteChip text={part.text} actions={actions} />;
+  if (part.type === "file")
+    return <FileBlock part={part} remove={actions.remove} />;
   return null;
 }
 

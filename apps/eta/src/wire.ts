@@ -139,4 +139,23 @@ export class Args {
       throw new TypeError(`${this.#call}: ${key} must be a list of strings`);
     return value as string[];
   }
+
+  /** A list of `[start, end]` integer pairs; absent is empty. */
+  integerPairs(key: string): [number, number][] {
+    const value = this.#values[key];
+    if (value === undefined) return [];
+    if (
+      !Array.isArray(value) ||
+      !value.every(
+        (item) =>
+          Array.isArray(item) &&
+          item.length === 2 &&
+          item.every((n) => typeof n === "number" && Number.isInteger(n)),
+      )
+    )
+      throw new TypeError(
+        `${this.#call}: ${key} must be a list of [start, end] integer pairs`,
+      );
+    return value as [number, number][];
+  }
 }

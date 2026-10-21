@@ -61,8 +61,8 @@ export function Chat({ conversationId }: { conversationId: string }) {
         useOutbox.getState().setDraft(conversationId, next)
       }
       // Fresh handlers every render, as Workspace passes them.
-      onSend={(text, mode, files) => {
-        outbox.send(conversationId, text, mode, targets(text), files);
+      onSend={(text, mode, files, blocks) => {
+        outbox.send(conversationId, text, mode, targets(text), files, blocks);
         useOutbox.getState().setDraft(conversationId, []);
       }}
       outgoing={all.filter(
