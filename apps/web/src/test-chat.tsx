@@ -48,7 +48,7 @@ export function Chat({ conversationId }: { conversationId: string }) {
       groupId={conversationId}
       groupName={group?.name}
       group={group}
-      held={[]}
+      held={conversation.held}
       agents={agents}
       messages={conversation.messages}
       loading={!conversation.loaded}

@@ -218,6 +218,7 @@ export function conversationSections(
   summary: ConversationSummary,
   messages: MessageView[] = [],
   extra: Partial<ConversationInfo> = {},
+  held: MessageView[] = [],
 ) {
   const info: ConversationInfo = {
     id: summary.id,
@@ -238,7 +239,7 @@ export function conversationSections(
   return {
     info,
     members: summary.participants,
-    timeline: { messages, hasMore: false },
+    timeline: { messages, hasMore: false, held },
   };
 }
 
@@ -249,6 +250,8 @@ export interface ProductSeed {
   conversations?: ConversationSummary[];
   /** The rows of each conversation, by its id; a conversation target is made for each. */
   messages?: Record<string, MessageView[]>;
+  /** The rows still waiting for a lane, by conversation; the composer shows these, not the transcript. */
+  held?: Record<string, MessageView[]>;
   /** The board; a `tasks.<id>` target is made for each, with its activity. */
   tasks?: { task: BoardTaskDetail; activity?: TaskActivityView[] }[];
   artifacts?: ArtifactView[];
@@ -332,7 +335,12 @@ export function buildProductHost(
   for (const summary of seed.conversations ?? []) {
     host.target(
       `conversations.${summary.id}`,
-      conversationSections(summary, seed.messages?.[summary.id]),
+      conversationSections(
+        summary,
+        seed.messages?.[summary.id],
+        {},
+        seed.held?.[summary.id],
+      ),
     );
   }
   return host;

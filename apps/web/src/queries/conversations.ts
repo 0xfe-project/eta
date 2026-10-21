@@ -103,13 +103,32 @@ export function useConversation(
   const info = state?.sections.info as ConversationInfo | undefined;
   const timeline = state?.sections.timeline as TimelineSection | undefined;
   const window = timeline?.messages;
+  const held = timeline?.held ?? NONE;
   const known = useRows((rows) =>
     conversationId === undefined ? NONE : (rows.rows[conversationId] ?? NONE),
   );
-  const messages = useMemo(
-    () => (window === undefined ? known : mergeRows(known, window)),
-    [known, window],
-  );
+  /*
+   * A message that is waiting for a lane is not in the conversation yet, and the reply queued for
+   * it is not either: the chip above the composer is where the whole thing belongs until a lane
+   * takes it. The host leaves the message out of its window, but not the reply rows waiting under
+   * it (they carry no `held` of their own), and a `send` answers with both, so the filtering has to
+   * happen here rather than on the way in — otherwise the transcript draws a turn with nothing in
+   * it, and one after a reload that the `send` never came through to explain.
+   *
+   * Only a reply whose message is the one waiting is hidden. A message already in the transcript
+   * with a member still busy keeps its waiting line: that turn happened, and the queue behind it is
+   * part of it.
+   */
+  const waitingOn = useMemo(() => new Set(held.map((row) => row.id)), [held]);
+  const messages = useMemo(() => {
+    const seen = window === undefined ? known : mergeRows(known, window);
+    if (waitingOn.size === 0) return seen;
+    const shown = seen.filter(
+      (row) =>
+        row.author !== "agent" || !waitingOn.has(row.rootMessageId ?? ""),
+    );
+    return shown.length === seen.length ? seen : shown;
+  }, [known, window, waitingOn]);
   useEffect(() => {
     if (conversationId === undefined || window === undefined) return;
     rememberRows(conversationId, window);
@@ -152,7 +171,7 @@ export function useConversation(
     loaded: state !== undefined,
     info,
     messages,
-    held: timeline?.held ?? NONE,
+    held,
     hasOlder: oldest !== undefined && oldest > 1,
     loadingOlder: isPending,
     loadOlder: () => {
