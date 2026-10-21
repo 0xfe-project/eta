@@ -178,9 +178,14 @@ export function SettingsDialog() {
           <SettingsNav
             label={translateText("accessibility.sections")}
             sections={settingsSections
-              // No GitHub plugin on the host: nothing to connect.
+              // Entries the rail does not offer: no GitHub plugin on the host,
+              // so nothing to connect; the approval list, whose editor is hidden
+              // while the list itself stays in force. Both sections still render
+              // when opened as `?settings=<section>`.
               .filter(
-                (section) => section.value !== "connections" || githubMounted,
+                (section) =>
+                  (section.value !== "connections" || githubMounted) &&
+                  section.value !== "approvals",
               )
               .map((section) => ({
                 ...section,
