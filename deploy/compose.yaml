@@ -31,9 +31,8 @@ services:
       # Empty means no memory; the host reads it when --memory-url is not given.
       ETA_MEMORY_URL: ${ETA_MEMORY_URL:-}
       # GitHub is off unless this says otherwise (1/true/yes/on) — see docs/architecture/github.md.
-      # A `--github` in the command below does the same and wins over this.
-      ETA_GITHUB: ${ETA_GITHUB:-}
-      # Anything but 1/true/yes/on means GitHub is not loaded at all.
+      # A `--github` in the command below does the same and wins over this; anything else (or
+      # nothing) leaves the whole chain unloaded, so nothing GitHub is ever asked for.
       ETA_GITHUB: ${ETA_GITHUB:-}
     command: ["--allow-origin", "${ETA_ALLOW_ORIGIN:-http://localhost:8787}"]
 
