@@ -861,6 +861,11 @@ function RunControls({ task, run }: { task: TaskDetail; run: TaskRun }) {
           {queueReasonLabels[run.queueReason]}
         </p>
       ) : null}
+      {run.continuesRunId === null ? null : (
+        <p className="text-xs text-muted-foreground">
+          {translateText("runs.continued")}
+        </p>
+      )}
       {run.workspace && open ? (
         <p className="text-xs text-muted-foreground wrap-anywhere">
           {translateText("log.workspacePrefix")}
@@ -872,29 +877,11 @@ function RunControls({ task, run }: { task: TaskDetail; run: TaskRun }) {
   );
 }
 
-/** A run where it started: who, how it went, and its log on demand. */
-function RunEntry({
-  task,
-  run,
-  activity,
-}: {
-  task: TaskDetail;
-  run: TaskRun;
-  activity: TaskActivity;
-}) {
-  return (
-    <div className="space-y-1">
-      {activity.kind === "run_queued" ? null : (
-        <EventLine a={activity} task={task} />
-      )}
-      <RunControls task={task} run={run} />
-    </div>
-  );
-}
-
 /**
- * The run row of the task's properties: how the latest run is going, and a new run, in a fresh
- * session, once none is going.
+ * The run row of the task's properties: how the latest run is going, and — once none is going — a
+ * run that starts over. Only its own wording says how that differs from a comment, which leaves the
+ * executor its session and everything it did in it, so the hint is said where the two could be
+ * mistaken for each other: beside the button that forgets.
  */
 function RunRow({ task }: { task: TaskDetail }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
@@ -927,8 +914,33 @@ function RunRow({ task }: { task: TaskDetail }) {
             {latest ? translateText("runs.rerun") : translateText("runs.run")}
           </Button>
         )}
+        {latest === undefined || open ? null : (
+          <p className="w-full text-xs leading-5 text-muted-foreground">
+            {translateText("runs.fromScratchHint")}
+          </p>
+        )}
       </dd>
     </>
+  );
+}
+
+/** A run where it started: who, how it went, and its log on demand. */
+function RunEntry({
+  task,
+  run,
+  activity,
+}: {
+  task: TaskDetail;
+  run: TaskRun;
+  activity: TaskActivity;
+}) {
+  return (
+    <div className="space-y-1">
+      {activity.kind === "run_queued" ? null : (
+        <EventLine a={activity} task={task} />
+      )}
+      <RunControls task={task} run={run} />
+    </div>
   );
 }
 

@@ -24,12 +24,20 @@ import type { SshTransport } from "@eta/ssh";
  *   review (or `blocked`), its summary is a comment, and the same words are posted in the
  *   conversation the task came from, as the agent. A run that goes quiet without it is reminded
  *   once, then fails.
- * - **A comment on a task reaches the run that is going**: the session gets it as a user message
- *   and carries on. Between two turns it waits in the run and goes in with the next.
+ * - **A comment is always read.** A run that is going gets it as a user message and carries on;
+ *   between two turns it waits in the run and goes in with the next. With no run going the comment
+ *   is a prompt: it wakes the executor with another run, in the session the task already has, so it
+ *   carries on from what it did rather than learning the project again. A task that is not worked
+ *   on any more (`backlog`, `done`, `cancelled`) only records the comment.
  * - **Stopping.** Interrupting a run stops its session; so does moving the task to done or
  *   cancelled. A restart ends the runs it interrupted as failures that say so; queued runs wait.
  * - **The worktree stays.** What a run left in its worktree is the work under review, and the next
  *   run of the task finds it again.
+ *
+ * One session per task is the price of an executor that remembers: its context grows with every
+ * comment and every run, and it is `packages/eta-compaction` that keeps that bounded. Starting over
+ * with the memory of what was learned is a different thing again, and is not what a comment does:
+ * a comment continues, `tasks.rerun` forgets.
  */
 import type { AgentStore } from "../agents/store";
 import type { RunHooks, RunInfo } from "../conversations/engine";
@@ -43,7 +51,8 @@ import type { RunRecord, TaskRunStore } from "./runs";
 import type { TaskRecord, TaskStore } from "./store";
 import { LinkError } from "@eta/daemon";
 import { shellQuote } from "@eta/ssh";
-import { runKey } from "./run-key";
+import { workable } from "./board";
+import { sessionKeyOf, taskKey } from "./session-key";
 import { prepareWorktree } from "./workspace";
 
 /** What a run says when the process died under it. */
@@ -61,7 +70,10 @@ export interface TaskRunnerDeps {
   /** Where sessions are made; the engine knows the places. */
   engine: {
     openRunSession: (input: {
-      runId: string;
+      /** What the session is held in (`session-key.ts`). */
+      key: string;
+      /** The session to carry on in; null opens a new one. */
+      existing: string | null;
       title: string;
       agent: NonNullable<ReturnType<AgentStore["get"]>>;
       machine: MachineRecord;
@@ -93,6 +105,8 @@ interface Live {
   inFlight: boolean;
   /** Comments that arrived when no turn was in flight; they go in with the next. */
   pending: string[];
+  /** The run has been told what was said on the task; anything said later waits for it or for the next. */
+  read: boolean;
   /** The executor called `finish_task`. */
   reported: boolean;
   /** Why the session was stopped from outside, if it was. */
@@ -110,12 +124,26 @@ const NUDGE =
   "You stopped without calling finish_task. If the task is done, or you cannot go on without " +
   "the user, call finish_task now with a summary of where it stands; otherwise carry on.";
 
+/**
+ * How many comments wait for a run that has not started. A comment is a turn of the task, not a
+ * queue with no end: what a run that finally starts is told is what people said lately.
+ */
+const PARK_LIMIT = 20;
+
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+/** Where a run works, in the words it is told. */
+const workingIn = (cwd: string, branch: string | null): string =>
+  branch === null
+    ? `You work in the project's directory, ${cwd}, itself: your changes are made in place.`
+    : `You work in ${cwd}, a git worktree of the project on the branch ${branch}. Commit your work there; the worktree stays after you finish, for the user to review.`;
 
 export class TaskRunner implements TaskRuns {
   readonly #deps: TaskRunnerDeps;
   readonly #live = new Map<string, Live>();
+  /** Comments waiting for the next run of a task to read, oldest first. */
+  readonly #waiting = new Map<string, string[]>();
   readonly #work = new Set<Promise<void>>();
   #attached = false;
   #closing = false;
@@ -172,7 +200,11 @@ export class TaskRunner implements TaskRuns {
     }
   }
 
-  /** A new run of a task, in a fresh session. Refused while the task has a run that has not ended. */
+  /**
+   * A new run of a task, in a session of its own that remembers nothing. Refused while the task has
+   * a run that has not ended. What was said on the task and never got read still goes: a rerun
+   * forgets what the executor did, not what was asked of it.
+   */
   rerun(taskId: string): { task: BoardTaskDetail; run: RunRecord } {
     const task = this.#task(taskId);
     if (this.#deps.runs.openOf(task.id).length > 0)
@@ -197,8 +229,9 @@ export class TaskRunner implements TaskRuns {
     return this.#deps.board.detail(task.id)!;
   }
 
-  /** The task is done or cancelled: its runs stop. */
+  /** The task is done or cancelled: its runs stop, and so does anything waiting to wake one. */
   stop(taskId: string, why: string): void {
+    this.#waiting.delete(taskId);
     for (const run of this.#deps.runs.openOf(taskId)) this.#stop(run, why);
   }
 
@@ -209,35 +242,102 @@ export class TaskRunner implements TaskRuns {
   }
 
   /**
-   * A comment arrived on the task. The run that is going gets it as a user message and carries on;
-   * a task with no run going takes it as a comment and nothing more (a rerun starts afresh).
+   * A comment arrived on the task, and it is read: a run that is going gets it as a user message
+   * and carries on; a task with no run going is woken by it, and the comment is what the run that
+   * wakes it is asked to work on. Nothing is running that could read it and the task is not worked
+   * on any more (`backlog`, `done`, `cancelled`) — then it is a line on the timeline and nothing
+   * more.
    */
   deliver(taskId: string, activity: TaskActivityView): void {
     if (activity.body === null || activity.actor.kind === "system") return;
-    const run = this.#deps.runs
-      .openOf(taskId)
-      .find((open) => open.status === "starting" || open.status === "running");
-    const live = run === undefined ? undefined : this.#live.get(run.id);
     const task = this.#deps.tasks.get(taskId);
-    if (run === undefined || live === undefined || task === undefined) return;
+    if (task === undefined) return;
+    const open = this.#deps.runs.openOf(taskId);
+    const going = open.find(
+      (run) => run.status === "starting" || run.status === "running",
+    );
+    const live = going === undefined ? undefined : this.#live.get(going.id);
     const who =
       activity.actor.kind === "user"
         ? "the user"
         : (this.#deps.agents.get(activity.actor.agentId ?? "")?.name ??
           "another agent");
     const text = `A comment from ${who} on task #${task.number}:\n\n${activity.body}`;
-    const handle = live.handle;
-    if (live.inFlight && handle !== undefined) {
-      handle.steer(text).catch((error: unknown) => {
-        // It could not join the turn (the turn ended under it): it goes in with the next.
-        this.#deps.warn(
-          `[eta] could not steer run ${run.id}: ${messageOf(error)}`,
-        );
+    if (going !== undefined && live !== undefined) {
+      const handle = live.handle;
+      if (live.inFlight && handle !== undefined) {
+        handle.steer(text).catch((error: unknown) => {
+          // It could not join the turn (the turn ended under it): it goes in with the next.
+          this.#deps.warn(
+            `[eta] could not steer run ${going.id}: ${messageOf(error)}`,
+          );
+          live.pending.push(text);
+        });
+      } else {
         live.pending.push(text);
-      });
-    } else {
-      live.pending.push(text);
+      }
+      return;
     }
+    // Nobody is reading it now. Leave it with the task and let the queue decide who reads it: the
+    // run already waiting there, or one this comment has to ask for. Words left with a task that
+    // will not be worked on again are none business of the runner's.
+    if (!workable(task.status)) return;
+    this.#park(task.id, text);
+    // A continuation, not a restart: the task's session holds what the executor did, and the
+    // comment usually reads as an answer to it. It waits its turn like any run (offline machine, a
+    // full machine) and the comment waits with it; a task that has a run in the queue already will
+    // have that run read it instead. `pump` is where a parked comment turns into a run.
+    this.pump();
+  }
+
+  /**
+   * Ask for a run of each task whose comments found nobody to read them. Part of `pump` because
+   * that is where the answer to "should something run?" is worked out, and because there are
+   * moments other than a comment that change it: a run ending, a machine coming back.
+   */
+  #wakeWaiting(): void {
+    for (const taskId of [...this.#waiting.keys()]) {
+      if ((this.#waiting.get(taskId)?.length ?? 0) === 0) {
+        this.#waiting.delete(taskId);
+        continue;
+      }
+      // A run of the task is in the queue or going: it will read what is waiting.
+      if (this.#deps.runs.openOf(taskId).length > 0) continue;
+      const task = this.#deps.tasks.get(taskId);
+      if (task === undefined || !workable(task.status)) {
+        this.#waiting.delete(taskId);
+        continue;
+      }
+      try {
+        // The words stay parked for that run to be told, so a wake that got as far as queueing has
+        // its answer in the table and survives a restart; only a refusal empties the park.
+        this.#queue(taskId, { continues: true });
+      } catch (error) {
+        this.#waiting.delete(taskId);
+        this.#deps.warn(
+          `[eta] task ${taskId} was not woken by a comment: ${messageOf(error)}`,
+        );
+      }
+    }
+  }
+
+  /** Leave a comment for the next run of the task to be told. */
+  #park(taskId: string, text: string): void {
+    this.#parkAll(taskId, [text]);
+  }
+
+  /** Leave several, in order, for the next run of the task to be told. Nothing to tell is nothing to leave. */
+  #parkAll(taskId: string, texts: string[]): void {
+    if (texts.length === 0) return;
+    const waiting = [...(this.#waiting.get(taskId) ?? []), ...texts];
+    this.#waiting.set(taskId, waiting.slice(-PARK_LIMIT));
+  }
+
+  /** The comments a run takes over as it starts. */
+  #unpark(taskId: string): string[] {
+    const waiting = this.#waiting.get(taskId);
+    this.#waiting.delete(taskId);
+    return waiting ?? [];
   }
 
   /* ---------------------------------------------------------------- the executor's tools */
@@ -245,6 +345,17 @@ export class TaskRunner implements TaskRuns {
   /** The run a session works in, when it works in one. */
   runOf(runId: string): RunRecord | undefined {
     return this.#deps.runs.get(runId);
+  }
+
+  /**
+   * The run of this task that is going now, which is what a session's tools speak for. A session is
+   * the task's and outlives a run, so the tools of a session that was opened by an earlier run are
+   * asked again each time, and answer with the run that is reading them.
+   */
+  workingRunOf(taskId: string): RunRecord | undefined {
+    return this.#deps.runs
+      .openOf(taskId)
+      .find((run) => run.status === "starting" || run.status === "running");
   }
 
   /**
@@ -304,8 +415,11 @@ export class TaskRunner implements TaskRuns {
     return task;
   }
 
-  /** Queue a run of a task, or say why it cannot have one. */
-  #queue(taskId: string): RunRecord {
+  /**
+   * Queue a run of a task, or say why it cannot have one. A run that continues the task carries on
+   * in the session of the newest run that made one; a rerun and a task's first run open their own.
+   */
+  #queue(taskId: string, options: { continues?: boolean } = {}): RunRecord {
     const { runs, board, projects, agents } = this.#deps;
     const task = this.#task(taskId);
     if (task.createdBy.kind !== "agent" || task.createdBy.agentId === null)
@@ -316,7 +430,9 @@ export class TaskRunner implements TaskRuns {
       task.projectId === null ? undefined : projects.get(task.projectId);
     if (project === undefined)
       throw new Error("this task's project is gone, so it has nowhere to run");
-    const run = runs.create(task.id, project.machineId);
+    const continued =
+      options.continues === true ? runs.lastSessionOf(task.id) : undefined;
+    const run = runs.create(task.id, project.machineId, continued?.id ?? null);
     board.runEvent(task.id, { kind: "run_queued", runId: run.id });
     this.pump();
     return runs.get(run.id)!;
@@ -325,6 +441,8 @@ export class TaskRunner implements TaskRuns {
   /** Start the runs that can start. Cheap, and safe to call whenever anything may have changed. */
   pump(): void {
     if (!this.#attached || this.#closing) return;
+    // A comment is such a moment: it is a request for the executor to look at the task again.
+    this.#wakeWaiting();
     const { runs, machines, board } = this.#deps;
     for (const run of runs.queued()) {
       const machine =
@@ -355,7 +473,9 @@ export class TaskRunner implements TaskRuns {
   #stop(run: RunRecord, why: string): void {
     const live = this.#live.get(run.id);
     if (live === undefined) {
-      // It never started: it never will.
+      // It never started: it never will. Nothing is going to read what was left for it, and the
+      // user asked for the task to stop, so the words stay on the timeline and the queue is clear.
+      this.#waiting.delete(run.taskId);
       if (this.#deps.runs.finish(run.id, "interrupted", why) !== undefined) {
         this.#deps.board.runEvent(run.taskId, {
           kind: "run_interrupted",
@@ -376,6 +496,7 @@ export class TaskRunner implements TaskRuns {
     const live: Live = {
       inFlight: false,
       pending: [],
+      read: false,
       reported: false,
       stopped: undefined,
       said: "",
@@ -418,7 +539,15 @@ export class TaskRunner implements TaskRuns {
           : { body: ended.error }),
       });
     }
+    // What was said on the task and this run never told to anyone. A stop is a full stop, and a run
+    // that died before it was briefed is not asked again by the same comment — a task that cannot
+    // start would else wake itself forever. The words are on the task's timeline either way, and a
+    // comment that arrives later asks again.
+    if (live.stopped === undefined && live.read)
+      this.#parkAll(run.taskId, live.pending.splice(0));
+    else this.#waiting.delete(run.taskId);
     this.#after(info, ended, live.said);
+    // A comment left unread, a run that has now ended, a task still being worked on: that is a run.
     this.pump();
   }
 
@@ -470,15 +599,31 @@ export class TaskRunner implements TaskRuns {
     }
     if (live.stopped !== undefined) return { ended: { status: "interrupted" } };
 
-    // A fresh session of the agent: none of what it said in the conversation.
+    // The session: the one this run continues, or a new one of the agent — none of what it said in
+    // the conversation. A session is the task's, so a continuation is told the key the session was
+    // made under, which is what the machine holding it files its journal, prompt and tools under.
+    const continued =
+      run.continuesRunId === null ? undefined : runs.get(run.continuesRunId);
+    // The session lives on the machine it was made on; a task whose project moved does not reach
+    // for one that is no longer there — it starts afresh.
+    const reused =
+      continued?.sessionId == null || continued.machineId !== run.machineId
+        ? undefined
+        : continued;
+    const key = reused === undefined ? taskKey(task.id) : sessionKeyOf(reused);
     const handle = await this.#deps.engine.openRunSession({
-      runId: run.id,
+      key,
+      existing: reused?.sessionId ?? null,
       title: `#${task.number} ${task.title}`,
       agent,
       machine,
       cwd,
-      created: (sessionId) => runs.setSession(run.id, sessionId, cwd),
+      created: (sessionId) => runs.setSession(run.id, sessionId, cwd, key),
     });
+    runs.setSession(run.id, handle.id, cwd, key);
+    // Whether there is something to carry on from: a session whose journal was lost comes back as a
+    // new one, and a run with nothing above it is told the whole brief again.
+    const carriesOn = reused !== undefined && handle.id === reused.sessionId;
     live.handle = handle;
     if (live.stopped !== undefined) return { ended: { status: "interrupted" } };
 
@@ -495,8 +640,16 @@ export class TaskRunner implements TaskRuns {
       data: { workspace: cwd },
     });
 
-    const told = this.#promptOf(task, cwd, branch);
-    const conversationId = task.originConversationId ?? runKey(run.id);
+    // What was said on the task: while the session was being made, and (for a run woken by a
+    // comment, or queued while comments arrived) whatever waited for this run to start. From here
+    // on, anything said is this run's to read or the next one's.
+    const words = [...this.#unpark(task.id), ...live.pending.splice(0)];
+    live.read = true;
+    const told =
+      carriesOn === true
+        ? this.#carryOnOf(task, cwd, branch, words.length > 0)
+        : this.#promptOf(task, cwd, branch);
+    const conversationId = task.originConversationId ?? key;
     const info: RunInfo = {
       conversationId,
       agentId: agent.id,
@@ -525,9 +678,7 @@ export class TaskRunner implements TaskRuns {
     };
     const extra = await this.#before(info);
     let prompt = extra === undefined ? told : `${extra}\n\n${told}`;
-    // Comments that came while the session was being made.
-    if (live.pending.length > 0)
-      prompt = `${prompt}\n\n${live.pending.splice(0).join("\n\n")}`;
+    if (words.length > 0) prompt = `${prompt}\n\n${words.join("\n\n")}`;
 
     for (;;) {
       if (live.stopped !== undefined)
@@ -582,15 +733,46 @@ export class TaskRunner implements TaskRuns {
       conversation === undefined
         ? undefined
         : `It came from the conversation "${conversation.name}" (id ${conversation.id}); your result is posted there.`,
-      `## Where you work\n\n${
-        branch === null
-          ? `You work in the project's directory, ${cwd}, itself: your changes are made in place.`
-          : `You work in ${cwd}, a git worktree of the project on the branch ${branch}. Commit your work there; the worktree stays after you finish, for the user to review.`
-      }`,
-      `## Reporting\n\n- comment_task posts a progress note or a question on the task.\n- When the work is done, or you cannot go on without the user, call finish_task with a summary: what you did, the result, and what the user should check. It moves the task to review and posts the summary in the conversation. A run that stops without calling it is reminded once, then fails.\n- The user may comment on the task while you work; their comments reach you as messages.\n- Merging (opening a pull request) is decided after review: do not merge into the main branch unless the task says to.\n- get_task shows the whole task with its timeline.`,
+      `## Where you work\n\n${workingIn(cwd, branch)}`,
+      `## Reporting\n\n- comment_task posts a progress note or a question on the task.\n- When the work is done, or you cannot go on without the user, call finish_task with a summary: what you did, the result, and what the user should check. It moves the task to review and posts the summary in the conversation. A run that stops without calling it is reminded once, then fails.\n- The user may comment on the task while you work; their comments reach you as messages, and a comment left once this run has ended wakes another one, in this session.\n- Merging (opening a pull request) is decided after review: do not merge into the main branch unless the task says to.\n- get_task shows the whole task with its timeline.`,
     ]
       .filter((part) => part !== undefined)
       .join("\n\n");
+  }
+
+  /**
+   * What a run that continues the task's session is told instead of the brief: the task and the
+   * project are already above it, so it is told where the task stands now, that what was said on it
+   * follows below, and how to report again. Repeating the brief would only bury the comment it is
+   * here for. Nothing below it happens when the host was restarted between the comment and this
+   * run — what is left to read is on the task, and it is told to look.
+   */
+  #carryOnOf(
+    task: TaskRecord,
+    cwd: string,
+    branch: string | null,
+    hasWords: boolean,
+  ): string {
+    const standing: Record<string, string> = {
+      in_review:
+        "It is in review: you reported it, and what follows is the user's answer to that — a change " +
+        "they want on top of what you did, or the thing you asked them for.",
+      blocked:
+        "You stopped because you needed the user. What follows is what they said, which may be the " +
+        "answer you were waiting for.",
+    };
+    return [
+      `You are the executor of task #${task.number}, "${task.title}", again. This is the session your earlier run worked in: what you read, changed and reported above is your own work, and the task came back to you because something was said on it.`,
+      `## Where the task stands\n\n${
+        standing[task.status] ??
+        `It is [${task.status}] and being worked on: what follows is what people on the task want of it now.`
+      }\n\nRead what is above before you read the project again, and do not redo what you already did. get_task shows the whole task with its timeline, including anything changed since you were first briefed.`,
+      `## Where you work\n\n${workingIn(cwd, branch)}`,
+      `## Reporting\n\n- comment_task posts a progress note or a question on the task.\n- When this round is done, or you cannot go on without the user, call finish_task with a summary: what you did, the result, and what the user should check. It moves the task to review and posts the summary in the conversation. A run that stops without calling it is reminded once, then fails.\n- Merging (opening a pull request) is decided after review: do not merge into the main branch unless the task says to.`,
+      hasWords
+        ? "What was said on the task is below."
+        : "Nothing was left for you to read below it: open get_task, and answer what its timeline last asked of the task.",
+    ].join("\n\n");
   }
 
   async #before(info: RunInfo): Promise<string | undefined> {

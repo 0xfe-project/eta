@@ -12,7 +12,10 @@ import type { ToolResult } from "@eta/harness";
  * Registered on each session when it opens, so a tool knows which agent it speaks for and where
  * without being told. An agent in a conversation proposes work (`draft_task`) or, when asked to,
  * makes it (`create_task`); the agent that made a task executes it, in a session of its own
- * (`task-run:` in `run-key.ts`), and that session reports with `comment_task` and `finish_task`.
+ * (`task:` in `session-key.ts`), and that session reports with `comment_task` and `finish_task`.
+ * Which run of the task that session is working on is asked when a tool is called, not when the
+ * session opened: a session outlives its runs, since a comment that arrives later wakes another one
+ * in the same session.
  * The tools are thin: the rules are the board's (`board.ts`), these only read what a model sends
  * and say, in words, what happened. What a model reads is the description and nothing else, so the
  * descriptions carry the discipline: a draft is a proposal the user confirms, and `create_task`
@@ -22,11 +25,12 @@ import type { AgentStore } from "../agents/store";
 import type { SessionHooks } from "../session-hooks";
 import type { TaskBoard } from "./board";
 import type { TaskRunner } from "./runner";
+import type { RunRecord } from "./runs";
 import type { TaskRecord } from "./store";
 import { TASK_WORKSPACE_MODES } from "@eta/client-contracts";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
-import { runIdOf } from "./run-key";
+import { taskOfKey } from "./session-key";
 
 /** A failure the model can act on, from anything the board refused. */
 function failure(error: unknown): ToolResult {
@@ -60,13 +64,16 @@ export function taskSessionTools(
   return ({ meta }) => {
     if (meta.agentId === undefined || meta.conversationId === undefined)
       return [];
-    const runId = runIdOf(meta.conversationId);
-    return runId === undefined
+    const taskId = taskOfKey(
+      meta.conversationId,
+      (runId) => deps.runner.runOf(runId)?.taskId,
+    );
+    return taskId === undefined
       ? conversationTools(deps, {
           agentId: meta.agentId,
           conversationId: meta.conversationId,
         })
-      : runTools(deps, { agentId: meta.agentId, runId });
+      : runTools(deps, { agentId: meta.agentId, taskId });
   };
 }
 
@@ -352,16 +359,26 @@ function conversationTools(
 /** The executor's tools: read the board, say how it is going, and finish. */
 function runTools(
   deps: TaskToolDeps,
-  who: { agentId: string; runId: string },
+  who: { agentId: string; taskId: string },
 ): KernelTool[] {
   const { board, runner } = deps;
   const actor: TaskActor = { kind: "agent", agentId: who.agentId };
   const { taskOf, list, get } = reading(deps);
 
-  const taskOfRun = (): TaskRecord => {
-    const run = runner.runOf(who.runId);
-    if (run === undefined) throw new Error("this run is gone");
-    return taskOf(run.taskId);
+  const task = (): TaskRecord => taskOf(who.taskId);
+
+  /**
+   * The run this session is working on, asked each time: the session is the task's and outlives a
+   * run, so the tools made when it was opened are still there when a later run of the same task is
+   * called upon them.
+   */
+  const workingRun = (): RunRecord => {
+    const run = runner.workingRunOf(who.taskId);
+    if (run === undefined)
+      throw new Error(
+        "no run of this task is going, so there is nothing to report to",
+      );
+    return run;
   };
 
   const update = defineTool({
@@ -392,10 +409,10 @@ function runTools(
               ? "use finish_task to move the task to review"
               : `moving the task to ${args.status} is for the user to decide`,
           );
-        const task = board.update(taskOfRun().id, args, actor);
+        const updated = board.update(task().id, args, actor);
         return text(
-          `#${task.number} is now [${task.status}] "${task.title}".`,
-          { id: task.id, status: task.status },
+          `#${updated.number} is now [${updated.status}] "${updated.title}".`,
+          { id: updated.id, status: updated.status },
         );
       } catch (error) {
         return failure(error);
@@ -414,10 +431,12 @@ function runTools(
     }),
     execute(args) {
       try {
-        const task = taskOfRun();
-        // Your own comment is not sent back to you.
-        board.comment(task.id, args.body, actor, { deliver: false });
-        return text(`Commented on #${task.number}.`, { id: task.id });
+        workingRun();
+        // Your own comment is not sent back to you, and does not wake the task either.
+        board.comment(task().id, args.body, actor, { deliver: false });
+        return text(`Commented on #${taskOf(who.taskId).number}.`, {
+          id: who.taskId,
+        });
       } catch (error) {
         return failure(error);
       }
@@ -447,7 +466,7 @@ function runTools(
     execute(args) {
       try {
         return text(
-          runner.submit(who.runId, {
+          runner.submit(workingRun().id, {
             summary: args.summary,
             status: args.status ?? "in_review",
           }),

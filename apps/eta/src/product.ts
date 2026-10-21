@@ -77,9 +77,9 @@ import { combineSessionHooks } from "./session-hooks";
 import { TaskBoard } from "./tasks/board";
 import { TaskCards } from "./tasks/cards";
 import { tasksPlugin } from "./tasks/plugin";
-import { runIdOf } from "./tasks/run-key";
 import { TaskRunner } from "./tasks/runner";
 import { TaskRunStore } from "./tasks/runs";
+import { sessionKeyOf, taskOfKey } from "./tasks/session-key";
 import { TaskStore } from "./tasks/store";
 import { taskSessionTools } from "./tasks/tools";
 import { workspaceChooser } from "./tasks/workspace";
@@ -240,16 +240,21 @@ export function createProduct(options: {
     posted: (conversationId) => changed([conversationId]),
     warn,
   });
-  // The task board's rows. A task run's session is held in `task-run:<id>` (`tasks/run-key.ts`);
-  // what counts it, asks about it or remembers it knows it by the conversation the task came from.
+  // The task board's rows. A task's session is held in `task:<id>` (`tasks/session-key.ts`), which
+  // its runs share; what counts it, asks about it or remembers it knows it by the conversation the
+  // task came from.
   const taskRows = new TaskStore(db);
   const runRows = new TaskRunStore(db);
   const originOf = (meta: SessionMeta): SessionMeta => {
-    const runId = runIdOf(meta.conversationId);
-    if (runId === undefined) return meta;
-    const run = runRows.get(runId);
-    const task = run === undefined ? undefined : taskRows.get(run.taskId);
-    return { ...meta, conversationId: task?.originConversationId ?? undefined };
+    const taskId = taskOfKey(
+      meta.conversationId,
+      (runId) => runRows.get(runId)?.taskId,
+    );
+    if (taskId === undefined) return meta;
+    return {
+      ...meta,
+      conversationId: taskRows.get(taskId)?.originConversationId ?? undefined,
+    };
   };
   // A model request ended, for a session of this host or of a daemon: count it.
   const generated = (meta: SessionMeta, message: AssistantMessage): void => {
@@ -304,7 +309,9 @@ export function createProduct(options: {
           )
             return undefined;
           return {
-            runId: run.id,
+            // What the session is held in: the key it was made with, which is what the daemon
+            // files its prompt and tools under, whatever run is working in it now.
+            key: sessionKeyOf(run),
             agentId: task.createdBy.agentId,
             machineId: run.machineId,
             cwd: run.workspace,
@@ -537,14 +544,15 @@ export function createProduct(options: {
       sessionTools: githubSessionTools({
         github,
         opened: (conversationId, pull) => {
-          // A task run's session is held in `task-run:<id>`: its pull request is its task's.
-          const runId = runIdOf(conversationId);
+          // A task's session is held in its task's key (`tasks/session-key.ts`): its pull request
+          // is that task's, whatever else the conversation or the board holds.
           const taskId =
-            conversationId === undefined
+            taskOfKey(conversationId, (runId) =>
+              github.store.taskOfRun(runId),
+            ) ??
+            (conversationId === undefined
               ? undefined
-              : runId === undefined
-                ? github.store.taskOfConversation(conversationId)
-                : github.store.taskOfRun(runId);
+              : github.store.taskOfConversation(conversationId));
           if (taskId === undefined) return;
           github.store.linkPull(taskId, pull, Date.now());
           wire?.pushNow("github");

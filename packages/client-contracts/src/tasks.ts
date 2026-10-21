@@ -6,10 +6,11 @@
  * the product's board, not the session's own todo list (`Task` in `data.ts`): the two have nothing
  * in common but the word.
  *
- * Only agents make tasks, and the agent that made one executes it: every run is a fresh session
- * of that agent in a workspace of the task's project (`TaskWorkspace`). The user confirms the
- * draft that starts it, moves it between statuses, comments (a comment reaches a run that is
- * going), interrupts a run, and reruns the task.
+ * Only agents make tasks, and the agent that made one executes it: every run is a session of that
+ * agent in a workspace of the task's project (`TaskWorkspace`). The user confirms the draft that
+ * starts it, moves it between statuses, comments (a comment reaches the executor: it steers the run
+ * that is going, or wakes the task into another run in the same session when none is), interrupts a
+ * run, and reruns the task from scratch.
  *
  * `tasks` is eager and publishes the whole board as one `list`. Every task is a target of its own
  * (`tasks.<id>`) with its `task` and its `activity`, so a comment moves one section of one target
@@ -99,7 +100,7 @@ export interface TaskWorkspace {
   branch: string | null;
 }
 
-/** One attempt of the executor at the task: a fresh session, whose transcript is the run's log. */
+/** One attempt of the executor at the task, in the task's session; its transcript is its log. */
 export interface TaskRunView {
   id: string;
   status: TaskRunStatus;
@@ -108,6 +109,12 @@ export interface TaskRunView {
   machineId: string | null;
   /** The session it works in (`sessions.<id>` is its live transcript); null until it has started. */
   sessionId: string | null;
+  /**
+   * The run whose session this one carries on, when it was woken by a comment instead of opening a
+   * session of its own. Two runs with one session read as one line of work: the second knows what
+   * the first did. `tasks.rerun` never sets it — a rerun forgets.
+   */
+  continuesRunId: string | null;
   /** The directory the session works in. */
   workspace: string | null;
   /** It was reminded once that a run ends with `finish_task`. */
@@ -236,9 +243,12 @@ export interface TaskArgs {
    */
   update: TaskFields & { taskId: string };
   /**
-   * A comment on a task whose run is going is delivered to that run's session, which carries on
-   * with it. A retry with the same `clientId` returns the comment already added instead of adding
-   * another.
+   * A comment on a task is always read. A run of the task is going: it goes into that run's session
+   * and steers it. None is going and the task is one an executor works on (`todo`, `in_progress`,
+   * `in_review`, `blocked`): the comment queues a run that carries on in the task's session, so the
+   * executor reads it with what it already did. `backlog`, `done` and `cancelled` are not worked on
+   * any more, so their comments are only recorded. A retry with the same `clientId` returns the
+   * comment already added instead of adding another, and so wakes nobody twice.
    */
   comment: { taskId: string; body: string; clientId?: string };
   /**
@@ -259,7 +269,10 @@ export interface TaskArgs {
   };
   /** Stop a run: a queued one never starts, a going one is told to stop and ends `interrupted`. */
   interrupt: { taskId: string; runId: string };
-  /** A new run of the task, in a fresh session with no memory of the earlier ones. */
+  /**
+   * A new run of the task, in a session of its own that remembers nothing of the earlier runs. To
+   * carry on where the executor left off, comment instead.
+   */
   rerun: { taskId: string };
 }
 export interface TaskResults {
