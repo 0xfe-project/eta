@@ -27,9 +27,10 @@ import { useGroups, useOpenGroup } from "./use-groups";
 import { useSectionLink } from "./workspace-search";
 
 // Everything waiting for the user, the same in the side panel and on the
-// full-window page: confirmations to answer in place, then tasks and
-// routines to open in the same mode (the panel's tab beside the chat, or the
-// full-window page). Each row says what it is, why it waits and what to do.
+// full-window page: confirmations to answer in place, then tasks and routines to
+// open where that section lives — `useSectionLink` picks the panel's tab beside
+// the chat when the section has one, and the page when it does not (定时 has no
+// tab). Each row says what it is, why it waits and what to do.
 
 function clock(epoch: number) {
   return new Date(epoch).toLocaleTimeString(formatLocale(), {

@@ -102,7 +102,7 @@ describe("activity ref cards", () => {
     ]);
     expect(cards(container)).toEqual([
       {
-        href: "/?view=routines&routine=r1",
+        href: "/workspace/routines?routine=r1",
         label: "打开定时 日报",
         text: "日报",
       },

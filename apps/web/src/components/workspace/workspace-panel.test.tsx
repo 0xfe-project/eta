@@ -117,15 +117,15 @@ const tabs = (container: HTMLElement) =>
     (tab) => [tab.textContent, tab.getAttribute("aria-selected")],
   );
 
-it("gives every conversation the same five tabs", async () => {
-  // Tasks, routines and pending used to be four sidebar destinations that each asked "but which
-  // group?". They belong to the conversation you are in, so they are here — on every one of them,
-  // group or direct — and 概览 stays the single global page.
+it("gives every conversation the same four tabs", async () => {
+  // Tasks and pending used to be sidebar destinations that each asked "but which group?". They
+  // belong to the conversation you are in, so they are here — on every one of them, group or
+  // direct. 概览 stays the single global page, and 定时 its own page: a clock is not a fact about
+  // the conversation you happen to be reading.
   const { container } = await mount("/?group=team");
   expect(tabs(container).map(([label]) => label)).toEqual([
     "上下文",
     "任务",
-    "定时",
     "待处理",
     "产物",
   ]);

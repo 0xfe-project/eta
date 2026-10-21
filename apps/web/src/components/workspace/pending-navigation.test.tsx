@@ -82,11 +82,13 @@ describe("pending navigation", () => {
     setWire(undefined);
   });
 
-  it("opens tasks and routines in the side panel beside the chat", async () => {
+  it("opens a task beside the chat, a routine on its own page", async () => {
+    // The panel has a tasks tab; routines left the panel, so useSectionLink sends that row to the
+    // page even from the chat.
     const { container } = await mount(() => <PendingList />, "/?view=inbox");
     expect(links(container)).toEqual([
       "/?view=tasks&task=t1",
-      "/?view=routines&routine=r1",
+      "/workspace/routines?routine=r1",
     ]);
   });
 

@@ -36,13 +36,11 @@ import {
   useDeleteRoutine,
   useMarkRoutineSeen,
   useRestoreBrief,
-  useRoutine,
   useRoutines,
   useRunRoutineNow,
   useSendFeedback,
   useUpdateRoutine,
 } from "@/queries/routines";
-import { RoutineForm } from "./routine-form";
 import { describeSchedule, when } from "./routine-format";
 import { useRoutineNav } from "./routine-nav";
 import { useWorkspaceStore } from "./workspace-store";
@@ -802,7 +800,7 @@ export function RunView({ routine, run }: { routine: Routine; run: Run }) {
   );
 }
 
-// --- tab --------------------------------------------------------------------------
+// --- not there ------------------------------------------------------------------
 
 /** Where a routine would be: loading, failed, or gone. */
 export function RoutineMissing({
@@ -823,49 +821,5 @@ export function RoutineMissing({
     <Empty icon={ClockIcon} title={translateText("empty.deletedTitle")}>
       {translateText("common:empty.mayBeDeleted")}
     </Empty>
-  );
-}
-
-/** Routines: agents that run on a schedule and leave reports. */
-export function Routines() {
-  const { t: translateText } = useTranslation([
-    "routines",
-    "common",
-    "navigation",
-  ] as const);
-  const [nav, setNav] = useRoutineNav();
-  const editing = nav.edit && nav.edit !== "new" ? nav.edit : null;
-  const { routine, missing, error } = useRoutine(nav.routine ?? editing);
-
-  if (nav.edit === "new")
-    return (
-      <RoutineForm
-        routine={null}
-        onDone={(id) => void setNav({ edit: null, routine: id ?? null })}
-      />
-    );
-  if (editing && routine)
-    return (
-      <RoutineForm
-        routine={routine}
-        onDone={() => void setNav({ edit: null })}
-      />
-    );
-  if (!nav.routine && !editing) return <RoutineList />;
-  if (!routine)
-    return (
-      <div className="space-y-3">
-        <Back
-          label={translateText("title")}
-          onClick={() => void setNav({ edit: null, routine: null, run: null })}
-        />
-        <RoutineMissing missing={missing} error={error} />
-      </div>
-    );
-  const run = routine.runs.find((r) => r.id === nav.run);
-  return run ? (
-    <RunView routine={routine} run={run} />
-  ) : (
-    <RoutineDetail routine={routine} />
   );
 }

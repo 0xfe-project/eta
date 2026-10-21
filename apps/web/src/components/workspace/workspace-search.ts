@@ -2,7 +2,6 @@ import type { Icon } from "@phosphor-icons/react";
 import type { WorkspaceView } from "./types";
 import { BellIcon } from "@phosphor-icons/react/Bell";
 import { BrowsersIcon } from "@phosphor-icons/react/Browsers";
-import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { UsersThreeIcon } from "@phosphor-icons/react/UsersThree";
 import { useLocation } from "@tanstack/react-router";
@@ -51,9 +50,11 @@ export function useSectionLink() {
  *
  * The workspace's pages used to be four destinations in the sidebar, each of which then asked
  * "but which group?" — the question the conversation you are in has already answered. So they
- * moved here: tasks, routines and what is waiting belong to *this* group, and the panel beside it
- * says so. 概览 stays the one global page, because "across every group" is not a fact about this
- * one.
+ * moved here: tasks and what is waiting belong to *this* group, and the panel beside it says so.
+ * 概览 stays the one global page, because "across every group" is not a fact about this one.
+ * 定时 went the other way: a clock is not a fact about the conversation you happen to be reading,
+ * so it keeps its page and its sidebar entry and has no tab here. A link that wants it gets the
+ * page — `useSectionLink` sends a section this panel has no tab for there.
  */
 const panelViews = [
   {
@@ -68,13 +69,6 @@ const panelViews = [
     icon: ListChecksIcon,
     get label() {
       return translate("navigation:sections.tasks");
-    },
-  },
-  {
-    value: "routines",
-    icon: ClockIcon,
-    get label() {
-      return translate("navigation:sections.routines");
     },
   },
   {
@@ -93,7 +87,7 @@ const panelViews = [
   },
 ] as const;
 
-/** The side panel's tabs beside the current chat: the same five, every conversation. */
+/** The side panel's tabs beside the current chat: the same four, every conversation. */
 export function usePanelViews(): readonly {
   value: WorkspaceView;
   icon: Icon;
@@ -102,6 +96,8 @@ export function usePanelViews(): readonly {
   return panelViews;
 }
 
+// The panel's tabs, plus the old `members` and the `routines` that used to be one of them: a link
+// may still ask for a view the panel has no tab for, and the panel answers with its first tab.
 const linkedViewParser = parseAsStringLiteral([
   "context",
   "members",
@@ -114,7 +110,7 @@ const linkedViewParser = parseAsStringLiteral([
 // failing the route.
 const viewParser = createParser({
   // `members` and `artifacts` are old links: `members` became `context`, and `artifacts` is a tab
-  // that still exists. Anything else opens the first tab.
+  // that still exists. Anything else (including `routines`, whose tab is gone) opens the first tab.
   parse: (value) => {
     const parsed = linkedViewParser.parse(value);
     return parsed === "members" ? "context" : (parsed ?? "context");

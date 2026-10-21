@@ -4,7 +4,7 @@ import { act } from "react";
 import { setWire } from "@/lib/wire";
 import { productHost, routineInfo, routineSections } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
-import { Routines } from "./routines";
+import { RoutineBoard } from "./routine-board";
 
 const navigation = rstest.hoisted(() => ({
   routine: null as string | null,
@@ -100,7 +100,7 @@ describe("creating and editing a routine", () => {
   it("creates one with no model of its own, and opens it", async () => {
     navigation.edit = "new";
     const host = open();
-    const { container } = await mount(<Routines />);
+    const { container } = await mount(<RoutineBoard />);
     await flush();
     // The model is optional: the settings' own choice is the default.
     expect(container.querySelector("#routine-model")?.textContent).toContain(
@@ -125,7 +125,7 @@ describe("creating and editing a routine", () => {
   it("edits one: a new brief is sent with the rest, in the routine's own words", async () => {
     navigation.edit = "r1";
     const host = open();
-    const { container } = await mount(<Routines />);
+    const { container } = await mount(<RoutineBoard />);
     await flush();
     expect(
       container.querySelector<HTMLInputElement>("#routine-name")!.value,
@@ -154,7 +154,7 @@ describe("a routine's page", () => {
   it("runs now and pauses", async () => {
     navigation.routine = "r1";
     const host = open();
-    const { container } = await mount(<Routines />);
+    const { container } = await mount(<RoutineBoard />);
     await flush();
     await click(container.querySelector('button[aria-label="立即运行"]'));
     await click(container.querySelector('button[role="switch"]'));
@@ -172,7 +172,7 @@ describe("a routine's page", () => {
         runs: [run({ id: "run1", status: "running", finishedAt: null })],
       }),
     );
-    const { container } = await mount(<Routines />);
+    const { container } = await mount(<RoutineBoard />);
     await flush();
     expect(
       container.querySelector<HTMLButtonElement>(
@@ -189,7 +189,7 @@ describe("a routine's page", () => {
         { runs: [run({ id: "run1" })] },
       ),
     );
-    const { container } = await mount(<Routines />);
+    const { container } = await mount(<RoutineBoard />);
     await flush();
     expect(callsOf(host, "seen")).toEqual([{ routineId: "r1" }]);
     // The host pushes the cleared counts; the page does not ask again.
@@ -212,7 +212,7 @@ describe("a routine's page", () => {
         ],
       }),
     );
-    const { container } = await mount(<Routines />);
+    const { container } = await mount(<RoutineBoard />);
     await flush();
     expect(container.textContent).toContain("没有新内容");
   });
@@ -227,7 +227,7 @@ describe("a routine's page", () => {
         ],
       }),
     );
-    const { container } = await mount(<Routines />);
+    const { container } = await mount(<RoutineBoard />);
     await flush();
     expect(container.textContent).toContain("新的");
     await click(button(container, "恢复"));
@@ -243,7 +243,7 @@ describe("a routine's report", () => {
     navigation.routine = "r1";
     navigation.run = "run1";
     const host = open();
-    const { container } = await mount(<Routines />);
+    const { container } = await mount(<RoutineBoard />);
     await flush();
     expect(container.textContent).toContain("三条新闻");
     await write(container.querySelector("textarea")!, "少一点");

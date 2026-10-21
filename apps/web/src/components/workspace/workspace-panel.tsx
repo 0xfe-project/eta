@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import { GroupPanel } from "./group-panel";
 import { GroupArtifacts } from "./groups";
 import { Inbox } from "./inbox";
-import { Routines } from "./routines";
 import { Tasks } from "./tasks";
 import { useAttention } from "./use-attention";
 import { useGroups } from "./use-groups";
@@ -111,7 +110,6 @@ export function WorkspacePanel({
             {value === "context" ? <GroupPanel group={group} /> : null}
             {value === "artifacts" ? <GroupArtifacts /> : null}
             {value === "tasks" ? <Tasks /> : null}
-            {value === "routines" ? <Routines /> : null}
             {value === "inbox" ? <Inbox /> : null}
           </TabsContent>
         ))}

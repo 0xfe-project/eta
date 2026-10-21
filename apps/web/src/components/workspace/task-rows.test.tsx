@@ -250,7 +250,7 @@ describe("a routine's report", () => {
       container.querySelector<HTMLAnchorElement>(".system-message a")!;
     expect(opened.textContent).toBe("例行任务「日报」发来报告：今日要闻");
     expect(opened.getAttribute("href")).toBe(
-      "/?view=routines&routine=r1&run=run1",
+      "/workspace/routines?routine=r1&run=run1",
     );
   });
 
