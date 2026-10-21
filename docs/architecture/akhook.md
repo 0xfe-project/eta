@@ -6,7 +6,7 @@
 
 合并顺序同 akhook：preset，用户级文件（`<配置目录>/akhook/akhook.yml`），项目文件（从会话的工作目录向上找最近的 `.akhook.yml`），然后是宿主的附加配置。同 ID 的后者覆盖前者，`disabled_rules` 在合并后关掉对应规则；附加配置的规则，用户级和项目文件关不掉也盖不掉，只有附加配置自己或更靠后的附加配置可以。
 
-宿主自己带一层规则，排在最前，用户的与项目的文件关不掉也盖不掉：`eta:github`（`apps/eta/src/github/akhook.ts`），其中 `gh-pr-create` 拦下 `gh pr create`，提示改用 `open_pull_request` 工具（见 [GitHub](github.md)）。
+宿主自己带一层规则，排在最前，用户的与项目的文件关不掉也盖不掉：`eta:github`（`apps/eta/src/github/akhook.ts`），其中 `gh-pr-create` 拦下 `gh pr create`，提示改用 `open_pull_request` 工具（见 [GitHub](github.md)）。这一层属于 GitHub 那条链，所以只有 host 加载了它（`--github`，默认关）才注册：没加载时智能体手里只有 `gh`，提示它用一个不存在的工具反而是干扰。
 
 宿主的附加配置有三处，按此顺序；之后还有智能体载入的[环境包](bundles.md)各自的一层（`akhook.yml`，规则 id 前缀是包名，规则的命令带上包的配置作为环境变量，只对载入它的智能体的会话有效）：环境变量 `AKHOOK_ADDITIONAL_CONFIG_PATH`（路径列表，文件不存在算配置错误）、数据目录里的 `akhook.yml`（有才读）、嵌入方传给 `startHost({ akhook: { additional } })` 的文本（环境包带的那份就走这里）。文件改了，下一次工具调用就生效，不用重开会话。
 

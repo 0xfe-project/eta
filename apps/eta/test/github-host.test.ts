@@ -424,7 +424,7 @@ describe("the tools", () => {
       if (request.lastRole === "toolResult") results.push(request.last);
       return calls[results.length] ?? say("done");
     });
-    const w = await world({ models });
+    const w = await world({ models, github: true });
     const ada = await w.agent("Ada");
     const project = await w.project({ stewardId: ada.id });
     const group = await w.group(project.id, [ada.id]);
@@ -442,7 +442,9 @@ describe("the akhook rule", () => {
       if (request.lastRole === "toolResult") return say(`saw: ${request.last}`);
       return call("bash", { command: "gh pr create --title x --body y" });
     });
-    const w = await world({ models });
+    // The rule is a host layer of the GitHub chain, so this host asks for that chain (with no
+    // App in its database: the rule stands whether or not GitHub is connected).
+    const w = await world({ models, github: true });
     const ada = await w.agent("Ada");
     const project = await w.project({ stewardId: ada.id });
     const group = await w.group(project.id, [ada.id]);
@@ -458,7 +460,7 @@ describe("the akhook rule", () => {
       if (request.lastRole === "toolResult") return say(`saw: ${request.last}`);
       return call("bash", { command: "gh pr create --fill" });
     });
-    const r = await remoteWorld({ models });
+    const r = await remoteWorld({ models, github: true });
     // A project file that tries to switch the rule off.
     await writeFile(
       join(r.dir, ".akhook.yml"),
@@ -613,5 +615,81 @@ describe("git and gh on a machine", () => {
     const done = await r.settled(group.id, sent.replies[0]!.id);
     expect(done.text).toContain("username=axp-test[bot]");
     expect(done.text).toContain(`password=${token}`);
+  });
+});
+
+/**
+ * What starting without GitHub (`--github` not given, so the default) does to a host: nothing is
+ * built, so there is nothing to mount, nothing to register, no tool to offer, no login to keep and
+ * not one request to make. What it does not do is slow the start down — a plugin which is never
+ * mounted must not be one of the ones the startup waits for.
+ */
+describe("a host started without GitHub", () => {
+  it("mounts no plugin, registers no calls, offers no tools and leaves gh alone", async () => {
+    const { models, requests } = scriptedModels((request) => {
+      if (request.lastRole === "toolResult") return say(`saw: ${request.last}`);
+      return call("bash", { command: "gh pr create --fill" });
+    });
+    const since = Date.now();
+    const w = await world({ models, publicUrl: ORIGIN });
+    // `MOUNT_TIMEOUT_MS` is 10s: waiting for a github that is never mounted would take all of it.
+    expect(Date.now() - since).toBeLessThan(9_000);
+
+    const hello = await w.client.hello();
+    const mounted = hello.mounted.map((plugin) => plugin.name);
+    expect(mounted).not.toContain("github");
+    // The server's own list: `mount("github", …)` was never called, so nothing to be found there.
+    expect(w.host.server.mounted().map((plugin) => plugin.name)).not.toContain(
+      "github",
+    );
+    expect(
+      hello.ops
+        .map((op) => op.name)
+        .filter((name) => name.startsWith("github.")),
+    ).toEqual([]);
+    await expect(w.client.call("github", "refresh", {})).rejects.toThrow();
+
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id]);
+    await w.watch(group.id);
+    const sent = await w.send(group.id, "open a pr");
+    const done = await w.settled(group.id, sent.replies[0]!.id);
+    expect(requests[0]!.tools).not.toContain("open_pull_request");
+    expect(requests[0]!.tools).not.toContain("draft_issue");
+    // The `eta:github` layer went with the chain, so nothing points the agent at a tool it lacks.
+    expect(done.text).not.toContain("gh-pr-create");
+    // And this machine's git and gh are its own: no keeper, so no login files and no environment.
+    expect(w.host.product.shellEnv.GH_CONFIG_DIR).toBeUndefined();
+    expect(existsSync(join(w.host.dataDir, "github"))).toBe(false);
+  });
+
+  it("asks GitHub for nothing and does not touch the login a loaded host left", async () => {
+    const fake = fakeGitHub();
+    const loaded = await connectedWorld(fake);
+    const dir = join(loaded.w.host.dataDir, "github");
+    await until(() => existsSync(join(dir, "token")));
+    expect(fake.requests.length).toBeGreaterThan(0);
+    const left = await filesUnder(dir);
+    await loaded.w.host.close();
+    const asked = fake.requests.length;
+
+    // The same data directory, with the App still stored: an App to act as, and a login to keep,
+    // and no chain to use either.
+    const w = await world({ dataDir: loaded.w.host.dataDir });
+    w.client.subscribe("github");
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id]);
+    await w.watch(group.id);
+    await w.send(group.id, "how is github?");
+    // A keeper starts by looking at once, so a few hundred milliseconds is long enough to see one.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(w.client.section("github", "state")).toBeUndefined();
+    expect(fake.requests).toHaveLength(asked);
+    // The keeper was never started, so it neither renewed the token nor cleared the login.
+    expect(await filesUnder(dir)).toEqual(left);
+    expect(w.host.product.shellEnv.GH_CONFIG_DIR).toBeUndefined();
   });
 });

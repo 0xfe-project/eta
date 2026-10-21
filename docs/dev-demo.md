@@ -40,12 +40,14 @@ https://<随机词>.trycloudflare.com/?token=<access-token 的内容>
 
 只需要带一次令牌：host 会把它换成 cookie，之后访问根地址即可。
 
-## 可选：OAuth 回调
+## 可选：GitHub 与 OAuth 回调
 
-要在这个实例上登录 MCP 的 OAuth 或者连接 GitHub App，启动 host 时加上公网地址，让回调落回隧道：
+GitHub 那条链默认不加载（见 [GitHub](docs/architecture/github.md)）。要在这台 host 上试连接向导、`open_pull_request`、任务页的 PR，启动时加 `--github`（或 `ETA_GITHUB=1`）。两个开发脚本（根目录的 `dev` 与 `apps/eta` 的 `dev`）都带着 `--github`；要看默认（没 GitHub）的样子，就自己起一个不加它的 host：`bun apps/eta/src/main.ts --allow-origin http://127.0.0.1:3000`（或给它 `--no-github`）。
+
+要在这个实例上登录 MCP 的 OAuth 或者连接 GitHub App，启动 host 时还要加上公网地址，让回调落回隧道：
 
 ```sh
-ETA_PUBLIC_URL=https://<随机词>.trycloudflare.com bun apps/eta/src/main.ts ...
+ETA_PUBLIC_URL=https://<随机词>.trycloudflare.com bun apps/eta/src/main.ts --github ...
 ```
 
 ## 更新和停止

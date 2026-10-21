@@ -4,6 +4,16 @@
 
 这是主分支 AXP 的 forge 服务（`apps/control-plane/internal/{github,forge}`）移植进单进程 host：规则、提示语、工具名、技能文字都沿用，只有管道变了——Go 控制面 + Postgres + REST + 卷上的文件，变成 host 里的 TypeScript 插件 + SQLite + wire target。代码在 `apps/eta/src/github/`。
 
+## 开关：默认不加载
+
+这条链是**选择性加入**的，默认关：`--github`，或环境变量 `ETA_GITHUB=1`（`--no-github` 顶掉环境变量里的那份）。和 `--memory-url` 那一组一样，开关在 `apps/eta/src/main.ts`，往下是 `startHost({ github })` / `createProduct({ github })`；测试同样直接给（`github: true`，或指向假 GitHub 的 `{ endpoints }`）。
+
+关着的时候整条都不建：不 `new Github`、不建 `GitHubKeeper`、不 `mount("github")`、不注册 `githubSessionTools`（智能体的工具列表里没有 `open_pull_request`、`draft_issue`）、不注册回调路由（`/github/manifest/callback`、`/github/authorization/callback` 谁也不答）、不派发 `githubRefresh`、会话 shell 的环境里没有 GitHub 凭据，宿主自己的 `eta:github` akhook 层也不注册。等插件起来的集合里不算它，所以启动不会白等一次 `MOUNT_TIMEOUT_MS`。**一次 GitHub API 请求也不发**（不是“发了但失败”）。
+
+界面按 `hello.mounted` 里有没有 `github` 隐藏（`useGitHubMounted`），不再多问一次配置：设置里没有「连接」，任务详情没有交付那一行，旧时间线里带 PR / issue draft 引用的工具活动不画卡片（只剩工具调用本身），也不订阅 `github`。旧行一律不画而不是画个空框：一条通向别的系统、来源又不在这台宿主上的卡片，会让人以为功能还在。
+
+这是**藏起来，不是删掉**：表、行、迁移、文案、代码都留着，带旗标开回来时行为与今天一致。
+
 ## 谁以谁的身份
 
 | 场景                        | 身份                                                                                              |

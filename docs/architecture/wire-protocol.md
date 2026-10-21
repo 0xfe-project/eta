@@ -53,7 +53,7 @@
 | routines      | `routines`、`routines.<id>`           | `create` `update` `delete` `run` `seen` `feedback` `restoreBrief`                                                    |
 | bundles       | `bundles`                             | `configure` `add` `remove` `refresh` `recheck`                                                                       |
 | mcp           | `mcp`                                 | `connect` `reconnect` `login` `completeLogin` `logout`，见 [MCP](mcp.md)                                             |
-| github        | `github`                              | `refresh` `createApp` `setOAuthClient` `authorize` `unauthorize` `disconnect` `pull` `merge`，见 [GitHub](github.md) |
+| github        | `github`（仅加载时挂载，默认不加载）  | `refresh` `createApp` `setOAuthClient` `authorize` `unauthorize` `disconnect` `pull` `merge`，见 [GitHub](github.md) |
 | memory        | `memory`（仅有边车时挂载）            | `list` `remember` `forget`                                                                                           |
 | llm           | `llm`（eager；仅有网关库时挂载）      | `refresh` `loginStart` `loginPoll` `loginSubmit` `loginCancel` `setEnabled` `remove`                                 |
 

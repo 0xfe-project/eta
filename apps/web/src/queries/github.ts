@@ -19,10 +19,12 @@ const TARGET = "github";
 /** Where GitHub sends the browser back after the user authorized the App (the host's route). */
 export const authorizationCallbackPath = "/github/authorization/callback";
 
-/** How often the status is read again while the App waits for its first installation. */
-const INSTALL_POLL_MS = 5000;
-
-/** Whether the host has the plugin; without it GitHub's settings and the task's pull requests hide. */
+/**
+ * Whether the host has the plugin. GitHub is one chain and the page learns of it from this one
+ * fact: with no `github` in `hello.mounted` there is no settings → 连接, no pull-request section
+ * on a task, no card under a pull request or an issue an agent once opened, and no subscription or
+ * call aimed at the target. The host was started without it (`--github`, `ETA_GITHUB`).
+ */
 export function useGitHubMounted(): boolean {
   return useWireState((state) =>
     state.mounted.some(
@@ -30,6 +32,9 @@ export function useGitHubMounted(): boolean {
     ),
   );
 }
+
+/** How often the status is read again while the App waits for its first installation. */
+const INSTALL_POLL_MS = 5000;
 
 /** Ask GitHub where the App is installed; the answer also lands in the target's state. */
 function useRefreshGitHub() {
@@ -194,8 +199,11 @@ export function useTaskPulls(taskId: string): readonly TaskPullView[] {
 const pullKey = (url: string) => ["github", "pull", url] as const;
 
 export function usePullRequest(url: string) {
+  // No plugin, no reading: the query stays off, so nothing is called and nothing spins.
+  const mounted = useGitHubMounted();
   return useQuery({
     queryKey: pullKey(url),
+    enabled: mounted,
     queryFn: () =>
       getWire().call<GitHubResults["pull"]>(
         TARGET,

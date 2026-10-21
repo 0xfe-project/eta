@@ -231,7 +231,9 @@ const propertyLabel = "text-xs leading-8 text-muted-foreground";
 
 /**
  * The pull requests the task delivered, as a row of its properties: a link to each, its state on
- * GitHub, and merging it. Nothing when the task has none, or the host has no GitHub.
+ * GitHub, and merging it. Nothing when the task has none, or the host has no GitHub: the whole row
+ * (its label with it) is left out, so a task of a host without GitHub does not show an empty
+ * "delivery" property waiting for a pull request.
  */
 export function TaskPulls({ task }: { task: TaskDetail }) {
   const { t: translateText } = useTranslation(["tasks"] as const);

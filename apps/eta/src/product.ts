@@ -128,7 +128,10 @@ export interface Product {
   mount: (server: AssembledServer) => Promise<void>;
   /** Skill directories an agent's sessions have beyond the ones found in their directories. */
   readonly skillDirsFor: (meta: SessionMeta) => readonly string[];
-  /** The environment sessions' shells get beyond the process's: GitHub's login, once connected. */
+  /**
+   * The environment sessions' shells get beyond the process's: GitHub's login, once connected.
+   * Empty when the host has no GitHub.
+   */
   readonly shellEnv: NodeJS.ProcessEnv;
   /** The product's own HTTP routes (artifact pages, enrolling a machine); nothing for any other path. */
   fetch: (request: Request) => Promise<Response | undefined>;
@@ -169,14 +172,27 @@ export function createProduct(options: {
   publicUrl?: string | undefined;
   /** The MCP library's manager and fetch, for a test with fake servers. */
   mcp?: McpTuning | undefined;
-  /** Where GitHub is and what time it is, for a test with a fake GitHub. */
-  github?: GithubTuning | undefined;
+  /**
+   * The GitHub chain: `true` loads it, and a `GithubTuning` (where GitHub is and what time it is,
+   * for a test with a fake GitHub) loads it pointed at that. Absent or false means none of it:
+   * no plugin, no tools, no callbacks, no login, and nothing asked of GitHub.
+   */
+  github?: boolean | GithubTuning | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
   const memory =
     options.memoryUrl === undefined || options.memoryUrl === ""
       ? undefined
       : new MemoryClient(options.memoryUrl);
+  // GitHub is one chain — the App, its plugin, its tools, the callbacks, the login on this machine
+  // — so it is taken whole or left whole, and left by default. A host that wants it says so
+  // (`--github`, `ETA_GITHUB`); a test says the same by handing over its fake, or plain `true`.
+  // Leaving it also means not waiting for it: a plugin that is never mounted cannot be one of the
+  // ones `mount` holds the startup up for.
+  const githubOn =
+    options.github === true || typeof options.github === "object";
+  const githubTuning =
+    typeof options.github === "object" ? options.github : undefined;
   const agents = new AgentStore(db);
   const machines = new MachineStore(db);
   const projects = new ProjectStore(db);
@@ -407,6 +423,9 @@ export function createProduct(options: {
     dataDir,
     userConfigPath: options.akhook?.userConfigPath,
     additional: options.akhook?.additional,
+    // The host's own `eta:github` layer belongs to the GitHub chain: with the chain left out, an
+    // agent is told to use `gh pr create` again instead of a tool it does not have.
+    github: githubOn,
     approvals: () => inbox.approvals(),
     bundleLayers: (agentId, cwd) => bundles.layersFor(agentId, cwd),
     warn,
@@ -427,27 +446,34 @@ export function createProduct(options: {
   });
   later.mcp = mcp;
   // The GitHub App agents act as, and git and gh on this machine logged in as it (the daemons'
-  // machines ask over their links; see `machines/service.ts`).
-  const github: Github = new Github({
-    db,
-    key: secretKey,
-    publicUrl: options.publicUrl,
-    ...options.github,
-    changed: () => {
-      wire?.pushNow("github");
-      void later.githubLogin?.poke();
-      // The daemons' machines look again too, instead of at their next hourly refresh.
-      for (const machine of machines.list())
-        if (machine.kind === "daemon")
-          void hub
-            .link(machine.id)
-            ?.machine("githubRefresh", {})
-            .catch(() => undefined);
-    },
-    warn,
-  });
-  /** The token a machine's git and gh are set up with; null while GitHub is not connected. */
+  // machines ask over their links; see `machines/service.ts`). None of it is there when the host
+  // was started without GitHub: no App to act as, so no token to hand a machine either.
+  const github: Github | undefined = githubOn
+    ? new Github({
+        db,
+        key: secretKey,
+        publicUrl: options.publicUrl,
+        ...(githubTuning ?? {}),
+        changed: () => {
+          wire?.pushNow("github");
+          void later.githubLogin?.poke();
+          // The daemons' machines look again too, instead of at their next hourly refresh.
+          for (const machine of machines.list())
+            if (machine.kind === "daemon")
+              void hub
+                .link(machine.id)
+                ?.machine("githubRefresh", {})
+                .catch(() => undefined);
+        },
+        warn,
+      })
+    : undefined;
+  /**
+   * The token a machine's git and gh are set up with; null while GitHub is not connected, and
+   * without a single request to GitHub while the host has no GitHub at all.
+   */
   const githubCredentials = async (): Promise<GitHubCredentials | null> => {
+    if (github === undefined) return null;
     try {
       return await github.credentials();
     } catch (error) {
@@ -455,11 +481,14 @@ export function createProduct(options: {
       throw error;
     }
   };
-  const githubLogin = new GitHubKeeper({
-    dir: join(dataDir, "github"),
-    credentials: githubCredentials,
-    warn,
-  });
+  const githubLogin =
+    github === undefined
+      ? undefined
+      : new GitHubKeeper({
+          dir: join(dataDir, "github"),
+          credentials: githubCredentials,
+          warn,
+        });
   later.githubCredentials = githubCredentials;
   later.githubLogin = githubLogin;
   const attachments = new AttachmentStore(db, dataDir);
@@ -516,7 +545,10 @@ export function createProduct(options: {
     changed: () => wire?.pushNow("artifacts"),
   });
   const artifactRoutes = createArtifactRoutes(artifacts);
-  const githubCallbacks = githubRoutes(github, warn);
+  /** GitHub's two returns to the host; with no GitHub, no path of its own answers. */
+  const noRoutes = async (): Promise<Response | undefined> => undefined;
+  const githubCallbacks =
+    github === undefined ? noRoutes : githubRoutes(github, warn);
 
   // Each feature that adds tools, tool middleware or a question observer to sessions is one entry
   // here; the order is the order its tools and middleware are installed in.
@@ -540,25 +572,30 @@ export function createProduct(options: {
       }),
     },
     { sessionTools: artifactSessionTools({ artifacts, board, limits }) },
-    {
-      sessionTools: githubSessionTools({
-        github,
-        opened: (conversationId, pull) => {
-          // A task's session is held in its task's key (`tasks/session-key.ts`): its pull request
-          // is that task's, whatever else the conversation or the board holds.
-          const taskId =
-            taskOfKey(conversationId, (runId) =>
-              github.store.taskOfRun(runId),
-            ) ??
-            (conversationId === undefined
-              ? undefined
-              : github.store.taskOfConversation(conversationId));
-          if (taskId === undefined) return;
-          github.store.linkPull(taskId, pull, Date.now());
-          wire?.pushNow("github");
-        },
-      }),
-    },
+    // Without GitHub the tools are not there to offer: an agent's list does not mention them.
+    ...(github === undefined
+      ? []
+      : [
+          {
+            sessionTools: githubSessionTools({
+              github,
+              opened: (conversationId, pull) => {
+                // A task's session is held in its task's key (`tasks/session-key.ts`): its pull
+                // request is that task's, whatever else the conversation or the board holds.
+                const taskId =
+                  taskOfKey(conversationId, (runId) =>
+                    github.store.taskOfRun(runId),
+                  ) ??
+                  (conversationId === undefined
+                    ? undefined
+                    : github.store.taskOfConversation(conversationId));
+                if (taskId === undefined) return;
+                github.store.linkPull(taskId, pull, Date.now());
+                wire?.pushNow("github");
+              },
+            }),
+          },
+        ]),
     {
       toolMiddleware: akhook.toolMiddleware,
       sessionAttach: akhook.sessionAttach,
@@ -599,7 +636,7 @@ export function createProduct(options: {
     sessionHooks,
     generated,
     skillDirsFor: (meta) => bundles.skillDirsFor(meta),
-    shellEnv: githubLogin.env,
+    shellEnv: githubLogin?.env ?? {},
     fetch: async (request) =>
       (await hub.enroll(request)) ??
       (await mcp.route(request)) ??
@@ -613,7 +650,7 @@ export function createProduct(options: {
       await taskRunner.detach();
       hub.close();
       mirrors.detach();
-      githubLogin.stop();
+      githubLogin?.stop();
       await mcp.close();
       await bundles.close();
     },
@@ -645,7 +682,9 @@ export function createProduct(options: {
         "usage",
         "bundles",
         "mcp",
-        "github",
+        // Not mounted, so not waited for: github would otherwise cost the startup one
+        // `MOUNT_TIMEOUT_MS` and then a failure.
+        ...(github === undefined ? [] : ["github"]),
         ...(memory === undefined ? [] : ["memory"]),
       ]);
       let ready!: () => void;
@@ -746,7 +785,8 @@ export function createProduct(options: {
         ),
       );
       server.mount("mcp", mcpPlugin({ service: mcp }, applied("mcp")));
-      server.mount("github", githubPlugin({ github }, applied("github")));
+      if (github !== undefined)
+        server.mount("github", githubPlugin({ github }, applied("github")));
       if (memory !== undefined)
         server.mount(
           "memory",
@@ -772,9 +812,9 @@ export function createProduct(options: {
       bundles.start();
       // Everything the runs need is in place: the queue is looked at now.
       if (options.tasks?.runs !== false) taskRunner.attach();
-      githubLogin.start();
+      githubLogin?.start();
       // Where the App is installed, once, so the first look at the settings is not a guess.
-      if (github.app() !== null)
+      if (github !== undefined && github.app() !== null)
         void github.status(false).catch(() => undefined);
     },
   };

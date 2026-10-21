@@ -75,8 +75,13 @@ export interface HostOptions {
   publicUrl?: string;
   /** The MCP library's settings for a test (fake servers, no timers). */
   mcp?: McpTuning;
-  /** Where GitHub is, for a test with a fake one. */
-  github?: GithubTuning;
+  /**
+   * The GitHub chain: `true` loads it, a `GithubTuning` (where GitHub is, for a test with a fake
+   * one) loads it pointed at that. Off by default, and off means none of it: no `github` target,
+   * no GitHub tools, no callback routes, no login on this machine, nothing asked of GitHub. The
+   * web hides every GitHub face as soon as `hello` says the plugin is not there.
+   */
+  github?: boolean | GithubTuning;
   /** Whether to apply the config's network settings to the environment. */
   network?: boolean;
   /**

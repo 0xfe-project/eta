@@ -5,7 +5,7 @@
   "private": true,
   "description": "The eta host: one Bun process that serves the web, the product database and the upstream WebSocket server.",
   "scripts": {
-    "dev": "bun --watch src/main.ts --allow-origin http://127.0.0.1:${ETA_WEB_PORT:-3000}",
+    "dev": "bun --watch src/main.ts --allow-origin http://127.0.0.1:${ETA_WEB_PORT:-3000} --github",
     "start": "bun src/main.ts",
     "typecheck": "bun check",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
