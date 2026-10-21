@@ -122,12 +122,14 @@
   },
   "draft": {
     "title": "任务草稿",
+    "awaitingConfirm": "待确认",
     "editAndCreate": "编辑并确认",
     "notCreatedHint": "确认后创建任务，由提出它的智能体在{{workspace}}里执行。",
     "confirmTitle": "确认任务草稿",
     "confirmDescription": "编辑内容后确认，智能体随即开始。"
   },
   "card": {
+    "title": "任务卡片",
     "deletedSummary": "#{{number}} {{title}} · 任务已删除",
     "commentCount": "{{count}} 条评论",
     "commentCount_one": "{{count}} 条评论",

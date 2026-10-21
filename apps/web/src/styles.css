@@ -629,20 +629,66 @@
   }
 
   /*
-   * A task draft: what the agent proposes, and the two sections a person scans before deciding.
+   * A task draft, and the card it becomes: the two task rows a conversation carries, folded the way
+   * a turn's thinking and tool calls are. They belong to the turn that wrote them, so they are drawn
+   * inside that turn's box, indented behind a hairline that says whose turn is asking to be decided
+   * with. A row that names no turn (any draft written before a draft knew its turn, or one whose turn
+   * is on an earlier page) is the same frame with nothing beside it: the same row, less certain of
+   * where it came from, and no worse for that.
    *
-   * BR1 rather than the markdown defaults it used to inherit: the label is 10px uppercase mono, the
-   * title is 14px sans on the same line, and `目标` / `已决定` are labels rather than headings —
-   * hierarchy by weight and case, not by spending a line of 18px type on each word. The frame is
-   * 1px solid; the dashed border it had before was decoration, and the only dashed border in this
-   * app is the one that means "not bound yet".
+   * The fold line is `.thinking-block-header` with two additions: the title in the reader's type
+   * rather than in the mono label's (an uppercase-cased sentence is a different sentence), and the
+   * mark of what the row is still waiting for, which stays on the line when everything else on it is
+   * folded away. `目标` / `已决定` are labels rather than headings, as everywhere else here.
    */
-  .draft-card {
+  .turn-tasks {
     display: flex;
     flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+    margin-left: 9px;
+    padding-left: 11px;
+    border-left: 1px solid var(--border);
+  }
+  .task-fold {
+    max-width: 28rem;
     border: 1px solid var(--border);
-    padding: 10px 12px;
     font-family: var(--font-sans);
+  }
+  .task-fold-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 10px;
+    border-top: 1px solid var(--border);
+  }
+  .task-fold-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--foreground);
+  }
+  /* The title of a card is the way to the task, and it is a line of the fold as well: quiet until
+     the line is hovered, where it says so the way the rest of the fold lines do. */
+  .task-fold-title a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .task-fold-head:hover .task-fold-title a {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .task-fold-waiting {
+    flex: none;
+    border: 1px solid var(--state-warning);
+    padding: 0 5px;
+    color: var(--state-warning);
   }
   .draft-card .markdown {
     font-size: 13px;

@@ -55,11 +55,12 @@ export interface TaskCardsDeps {
   artifactsOf: (taskId: string) => TaskArtifactRef[];
 }
 
-/** What a card carries: the task's facts. */
+/** What a card carries: the task's facts, and the turn the proposal came out of. */
 function cardData(
   task: TaskRecord,
   summary: string,
   artifacts: TaskArtifactRef[],
+  turnMessageId?: string | undefined,
 ): TaskCardData {
   return {
     taskId: task.id,
@@ -71,6 +72,7 @@ function cardData(
     comments: task.comments,
     summary,
     artifacts,
+    ...(turnMessageId === undefined ? {} : { turnMessageId }),
   };
 }
 
@@ -99,9 +101,11 @@ export class TaskCards {
       throw new Error(`no such conversation: ${input.conversationId}`);
     const title = input.draft.title.trim();
     if (title === "") throw new Error("a task needs a title");
+    // The draft belongs to the turn that is writing it: that row says both where the draft came
+    // from (the range of messages below) and where the page should draw it.
+    const turn = this.#turnOf(input.conversationId, input.agentId);
     const source =
-      input.draft.source?.trim() ||
-      this.#sourceOf(input.conversationId, input.agentId);
+      input.draft.source?.trim() || this.#sourceOf(input.conversationId, turn);
     const data: TaskDraftData = {
       title,
       description: [
@@ -111,6 +115,7 @@ export class TaskCards {
         `来源：对话《${conversation.name}》${source}。`,
       ].join("\n\n"),
       workspace: input.draft.workspace,
+      ...(turn === undefined ? {} : { turnMessageId: turn.id }),
     };
     return timeline.append({
       conversationId: input.conversationId,
@@ -163,8 +168,14 @@ export class TaskCards {
         conversationId: input.conversationId,
         origin: { draftId: row.id },
       });
+      // The card keeps the draft's place in the conversation, including the turn it belongs to.
       const message = timeline.retype(row.id, "task_card", {
-        ...cardData(task, "", this.#deps.artifactsOf(task.id)),
+        ...cardData(
+          task,
+          "",
+          this.#deps.artifactsOf(task.id),
+          draft.turnMessageId,
+        ),
       })!;
       return { task, message, created: true };
     })();
@@ -181,16 +192,18 @@ export class TaskCards {
     const cards = timeline.cardsOf(taskId);
     if (cards.length === 0) return [];
     const task = tasks.get(taskId);
-    const fresh =
-      task === undefined
-        ? undefined
-        : cardData(
-            task,
-            tasks.lastComment(taskId),
-            this.#deps.artifactsOf(taskId),
-          );
     const touched = new Set<string>();
     for (const card of cards) {
+      const turnMessageId = card.data.turnMessageId as string | undefined;
+      const fresh =
+        task === undefined
+          ? undefined
+          : cardData(
+              task,
+              tasks.lastComment(taskId),
+              this.#deps.artifactsOf(taskId),
+              turnMessageId,
+            );
       // A deleted task: the card stays as the record of what was proposed, and says so rather
       // than pointing at nothing.
       const next =
@@ -202,16 +215,20 @@ export class TaskCards {
     return [...touched];
   }
 
+  /** The reply this agent is writing right now, when it is writing one. */
+  #turnOf(conversationId: string, agentId: string): MessageView | undefined {
+    return this.#deps.timeline
+      .active(conversationId)
+      .find((row) => row.agentId === agentId);
+  }
+
   /** The range of the conversation a draft by this agent covers, when it did not say. */
-  #sourceOf(conversationId: string, agentId: string): string {
+  #sourceOf(conversationId: string, turn: MessageView | undefined): string {
     const { conversations, timeline } = this.#deps;
     const last = conversations.get(conversationId)?.lastSeq ?? 0;
     // The row that woke the agent is where the discussion it is summing up begins.
-    const reply = timeline
-      .active(conversationId)
-      .find((row) => row.agentId === agentId);
     const trigger =
-      reply?.replyToId == null ? undefined : timeline.get(reply.replyToId);
+      turn?.replyToId == null ? undefined : timeline.get(turn.replyToId);
     const first = trigger?.seq ?? last;
     return first >= last ? `第 ${last} 条` : `第 ${first}–${last} 条`;
   }

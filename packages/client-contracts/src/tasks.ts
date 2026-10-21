@@ -174,6 +174,14 @@ export interface TaskDraftData {
   description: string;
   /** Where the executor will work, as the agent chose it. */
   workspace: TaskWorkspaceMode;
+  /**
+   * The reply row this draft came out of — the row the agent was writing when it proposed the
+   * work. The page draws the draft inside that turn rather than as a block of its own on the
+   * timeline, because that is what it is: a request the turn is making of the reader. Absent on
+   * rows written before a draft belonged to a turn (and on any row whose turn is not known);
+   * those are drawn on their own, as they always were.
+   */
+  turnMessageId?: string | undefined;
 }
 
 /**
@@ -193,6 +201,12 @@ export interface TaskCardData {
   /** The latest comment, or empty. */
   summary: string;
   artifacts: TaskArtifactRef[];
+  /**
+   * The reply row that proposed the task, carried over from the draft so the card stays in the
+   * turn that wrote it once the draft has become a card. Absent the same way it is absent on a
+   * draft, with the same meaning.
+   */
+  turnMessageId?: string | undefined;
   deleted?: true;
 }
 

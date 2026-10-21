@@ -46,7 +46,11 @@ import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { firstVisible } from "@/lib/rail";
 import { savedTools } from "@/lib/run";
 import { readTheme, setTheme } from "@/lib/theme";
-import { ACTIVE_STATUSES, RUNNING_STATUSES } from "@/lib/timeline";
+import {
+  ACTIVE_STATUSES,
+  RUNNING_STATUSES,
+  taskRowsByTurn,
+} from "@/lib/timeline";
 import { summarizeArgs } from "@/lib/tool-summary";
 import { agentName } from "@/queries/agents";
 import { beginUpload, useOutbox } from "@/queries/outbox";
@@ -594,6 +598,7 @@ const Turn = memo(
     nobody,
     joined,
     boxed,
+    taskRowsOf,
     actions,
     ...line
   }: {
@@ -609,6 +614,8 @@ const Turn = memo(
     joined: string;
     /** A group: the process of a reply goes in a fixed-height box. */
     boxed: boolean;
+    /** The task rows this reply wrote, and which are drawn here rather than on the timeline. */
+    taskRowsOf?: readonly MessageView[] | undefined;
     actions: React.RefObject<TurnActions>;
   } & ReplyLine) => {
     const { t: translateText } = useTranslation([
@@ -622,6 +629,24 @@ const Turn = memo(
     if (message.kind === "task_draft")
       return <TaskDraftRow message={message} />;
     if (message.kind === "task_card") return <TaskCardRow message={message} />;
+    // A draft is the turn asking the reader to decide something, so it is drawn inside the turn's
+    // own frame — its author and its time are the turn's — behind a hairline that says where it came
+    // from. It stays out of the folded process: a proposal is not a step the agent took. It goes
+    // beside the answer, which is the other thing this turn leaves behind.
+    const cards =
+      taskRowsOf === undefined || taskRowsOf.length === 0 ? null : (
+        <div className="turn-tasks">
+          {taskRowsOf.map((row) => (
+            <div key={row.id} id={`msg-${row.id}`} data-mid={row.id}>
+              {row.kind === "task_draft" ? (
+                <TaskDraftRow message={row} turn={message} />
+              ) : (
+                <TaskCardRow message={row} />
+              )}
+            </div>
+          ))}
+        </div>
+      );
     if (message.author === "user")
       return (
         <>
@@ -719,6 +744,7 @@ const Turn = memo(
             onAbort={(q) => actions.current.onAbort(q)}
           />
         )}
+        {cards}
         <div className="message-footer">
           <time dateTime={new Date(message.createdAt).toISOString()}>
             {when(message.createdAt)}
@@ -903,6 +929,9 @@ export function ChatPanel({
       message.status !== "stopping",
   );
   const lines = useMemo(() => replyLines(messages), [messages]);
+  // The task rows that say which reply wrote them are drawn inside it, so the timeline proper is
+  // what is left; both lists come from one pass, in the order the rows came in.
+  const { rows, under } = useMemo(() => taskRowsByTurn(messages), [messages]);
   const members = useMemo(
     () =>
       (group?.participants ?? []).map((member) => ({
@@ -949,20 +978,21 @@ export function ChatPanel({
 
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
   // What the rail numbers: the agent's replies (squares) and your own messages (circles). A
-  // conversation with one of each has nothing to jump between, and the rail draws nothing.
+  // conversation with one of each has nothing to jump between, and the rail draws nothing. A task
+  // row drawn inside a turn is not one of its own numbers, so it is not on the rail either.
   const railReplies = useMemo(
     () =>
-      messages
+      rows
         .filter((message) => message.author === "agent")
         .map((message) => ({ id: message.id, text: message.text })),
-    [messages],
+    [rows],
   );
   const railPrompts = useMemo(
     () =>
-      messages
+      rows
         .filter((message) => message.author === "user")
         .map((message) => ({ id: message.id, text: message.text })),
-    [messages],
+    [rows],
   );
   // Composition state the keydown handler needs but the DOM only reports to other listeners.
   const ime = useRef({ composing: false, endedAt: 0 });
@@ -1290,7 +1320,7 @@ export function ChatPanel({
                   aria-label={translateText("accessibility.messages")}
                   aria-live="polite"
                 >
-                  {messages.map((message) => (
+                  {rows.map((message) => (
                     <div
                       key={message.id}
                       id={`msg-${message.id}`}
@@ -1299,6 +1329,7 @@ export function ChatPanel({
                       <Turn
                         key={message.id}
                         message={message}
+                        taskRowsOf={under.get(message.id)}
                         author={
                           message.author === "agent" &&
                           (group?.kind === "group" ||

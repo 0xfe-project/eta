@@ -204,7 +204,10 @@ describe("a task an agent proposes", () => {
 
   it("refreshes the card when the task moves, and marks it when the task is deleted", async () => {
     const { container, host } = await chat([card()]);
-    expect(link(container)?.textContent).toContain("待办");
+    // The folded line is the card: it carries the number, the title, and where the task stands.
+    expect(container.querySelector(".task-fold-head")?.textContent).toContain(
+      "待办",
+    );
     expect(container.textContent).not.toContain("评论");
 
     await push(host, [
@@ -219,7 +222,9 @@ describe("a task an agent proposes", () => {
         revision: 3,
       },
     ]);
-    expect(link(container)?.textContent).toContain("已完成");
+    expect(container.querySelector(".task-fold-head")?.textContent).toContain(
+      "已完成",
+    );
     expect(container.textContent).toContain("已完成 · 2 条评论");
     expect(container.textContent).toContain("已经合并了");
     expect(container.textContent).toContain("季度报告 · 第 3 版");
@@ -227,6 +232,188 @@ describe("a task an agent proposes", () => {
     await push(host, [{ ...card({ deleted: true }), revision: 4 }]);
     expect(link(container)).toBeNull();
     expect(container.textContent).toContain("任务已删除");
+  });
+});
+
+describe("a draft belongs to the turn that wrote it", () => {
+  // The reply an agent is writing when it drafts: the row the draft names, and the box it is drawn in.
+  const turn = (fields: Partial<MessageView> = {}): MessageView =>
+    messageView({
+      conversationId: CONV,
+      author: "agent",
+      agentId: "a1",
+      text: "我来起草",
+      status: "queued",
+      ...fields,
+    });
+  const within = (
+    reply: MessageView | string,
+    fields: Record<string, unknown> = {},
+  ) =>
+    messageView({
+      conversationId: CONV,
+      kind: "task_draft",
+      author: "agent",
+      agentId: "a1",
+      data: {
+        title: "整理发布说明",
+        description: "## 目标\n\n列出变更",
+        workspace: "worktree",
+        turnMessageId: typeof reply === "string" ? reply : reply.id,
+        ...fields,
+      },
+    });
+
+  it("draws the draft inside that reply, and only one of them per turn", async () => {
+    const reply = turn();
+    const first = within(reply, { title: "整理发布说明" });
+    const second = within(reply, { title: "补一份变更日志" });
+    const { container } = await chat([reply, first, second]);
+    // The turn's own box: the draft is in it, not a block of its own further down the timeline.
+    const turnBox = container.querySelector(
+      `#msg-${reply.id} .message.assistant`,
+    );
+    expect(turnBox).not.toBeNull();
+    const folds = [...turnBox!.querySelectorAll("details.task-fold")];
+    expect(folds).toHaveLength(2);
+    expect(folds[0]?.textContent).toContain("整理发布说明");
+    expect(folds[1]?.textContent).toContain("补一份变更日志");
+    // Indentation says whose turn it came from; the draft is not a row of the timeline any more.
+    expect(turnBox!.querySelector(".turn-tasks")).not.toBeNull();
+    expect(
+      container.querySelector(`#msg-${first.id}`)?.parentElement?.parentElement,
+    ).toBe(turnBox);
+  });
+
+  it("keeps each draft in the turn that wrote it when the turns cross", async () => {
+    const firstTurn = turn({ text: "先说发布说明" });
+    const firstDraft = within(firstTurn, { title: "整理发布说明" });
+    const secondTurn = turn({ text: "再说变更日志" });
+    const secondDraft = within(secondTurn, { title: "补一份变更日志" });
+    // A second agent was woken before the first had drafted, so the rows interleave.
+    const { container } = await chat([
+      firstTurn,
+      secondTurn,
+      firstDraft,
+      secondDraft,
+    ]);
+    expect(
+      container.querySelector(`#msg-${firstTurn.id} .task-fold`)?.textContent,
+    ).toContain("整理发布说明");
+    expect(
+      container.querySelector(`#msg-${secondTurn.id} .task-fold`)?.textContent,
+    ).toContain("补一份变更日志");
+  });
+
+  it("is open while the turn works, folded once it settles, and still asks then", async () => {
+    const reply = turn();
+    const row = within(reply);
+    const { container, host } = await chat([reply, row]);
+    const fold = container.querySelector(`#msg-${reply.id} .task-fold`);
+    expect(fold?.hasAttribute("open")).toBe(true);
+
+    // The turn ends. The draft is no longer news, so it becomes one line — and the one line still
+    // says what it is, what it proposes, and how to confirm it.
+    await push(host, [{ ...reply, status: "done", revision: 2 }]);
+    expect(fold?.hasAttribute("open")).toBe(false);
+    // The default moved, so the reader never said anything: the page remembers nothing about this
+    // row, and a card with no choice of its own is free to follow the next default too.
+    expect(
+      JSON.parse(localStorage.getItem("eta.card-folds.v1") ?? "{}"),
+    ).not.toHaveProperty(row.id);
+    const head = container.querySelector(
+      `#msg-${reply.id} .task-fold summary`,
+    )!;
+    expect(head.textContent).toContain("任务草稿");
+    expect(head.textContent).toContain("整理发布说明");
+    expect(head.textContent).toContain("待确认");
+    // One click on the folded line reaches the form: the reader is not made to open the card first
+    // to find the button, and the card stays out of the way while the form is answered.
+    const confirm = [...head.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("编辑并确认"),
+    )!;
+    expect(fold?.hasAttribute("open")).toBe(false);
+    await act(async () => confirm.click());
+    expect(document.querySelector<HTMLInputElement>("#task-title")?.value).toBe(
+      "整理发布说明",
+    );
+    // The button is the line's other purpose; it does not also throw the card open.
+    expect(fold?.hasAttribute("open")).toBe(false);
+  });
+
+  it("draws a draft on its own when the turn it names is not on this page", async () => {
+    // The reply is on an earlier page of the conversation. A card the reader can neither place nor
+    // lose beats a card that vanished at the page boundary, so it stays where the timeline put it.
+    const { container } = await chat([within("turn-not-loaded")]);
+    const fold = container.querySelector("details.task-fold")!;
+    expect(fold.textContent).toContain("整理发布说明");
+    // A row of the timeline, where the timeline put it, with the same frame it always had.
+    expect(fold.closest(".message.assistant")).toBeNull();
+    expect(container.querySelector(".turn-tasks")).toBeNull();
+  });
+
+  it("keeps the fold the reader chose, through the turn settling and the reload", async () => {
+    const reply = turn();
+    const row = within(reply);
+    const { container, host } = await chat([reply, row]);
+    const fold = container.querySelector(`#msg-${reply.id} .task-fold`)!;
+    // It is open because the turn is at work; the reader folds it themselves.
+    await act(async () => {
+      fold
+        .querySelector("summary")!
+        .dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+    });
+    expect(fold.hasAttribute("open")).toBe(false);
+
+    // The turn settling would fold it anyway; what the reader said is what stands, and it is the
+    // same after the page is rebuilt.
+    await push(host, [{ ...reply, status: "done", revision: 2 }]);
+    expect(fold.hasAttribute("open")).toBe(false);
+    await act(async () => {
+      host.set(`conversations.${CONV}`, conversationSections(summary, []));
+    });
+    const again = await chat([reply, row]);
+    expect(
+      again.container
+        .querySelector(`#msg-${reply.id} .task-fold`)
+        ?.hasAttribute("open"),
+    ).toBe(false);
+  });
+
+  it("draws a card in that turn too, open, and folds when told", async () => {
+    const reply = turn({ status: "done" });
+    const row = {
+      ...within(reply),
+      kind: "task_card" as const,
+      data: {
+        taskId: "t9",
+        number: 9,
+        title: "整理发布说明",
+        status: "todo",
+        runStatus: null,
+        conversationId: CONV,
+        comments: 0,
+        summary: "",
+        artifacts: [],
+        turnMessageId: reply.id,
+      },
+    };
+    const { container } = await chat([reply, row]);
+    const fold = container.querySelector(`#msg-${reply.id} .task-fold`)!;
+    // A card is here because the reader confirmed it, so it is open until they say otherwise.
+    expect(fold.hasAttribute("open")).toBe(true);
+    expect(fold.querySelector("summary")?.textContent).toContain("待办");
+    await act(async () => {
+      fold
+        .querySelector("summary")!
+        .dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+    });
+    expect(fold.hasAttribute("open")).toBe(false);
+    expect(link(container)?.getAttribute("href")).toBe("/?view=tasks&task=t9");
   });
 });
 
