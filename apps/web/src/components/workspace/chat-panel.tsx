@@ -37,7 +37,6 @@ import {
   draftText,
   draftWithBlocks,
   isBlank,
-  isLongPaste,
   MAX_MESSAGE_CHARS,
   pasteBlocksOf,
   plainDraft,
@@ -70,6 +69,7 @@ import { when } from "./routine-format";
 import { TaskCardRow, TaskDraftRow } from "./task-rows";
 import { TranscriptRail } from "./transcript-rail";
 import { AskBlock } from "./transcript/ask-block";
+import { FoldedText } from "./transcript/folded-text";
 import { Message, SystemMessage } from "./transcript/message";
 import { ProcessBox } from "./transcript/process-box";
 import { SlashMenu } from "./transcript/slash-menu";
@@ -190,18 +190,19 @@ function MessageFiles({ data }: { data: Record<string, unknown> }) {
  * What the user wrote. Where the message carries folded pastes (`data.blocks`, or the blocks
  * of a message still on its way out), those stretches render as the chip the composer showed,
  * and the typing around them as itself. A long message with no blocks — everything typed, or
- * older than blocks — is folded to a dozen lines with the way to open the rest, as before:
- * the box that held it folded it the same way.
+ * older than blocks — is folded by the same piece that folds a long answer, so one "show all"
+ * means one thing wherever it appears in the transcript.
  */
 function UserText({
+  id,
   text,
   blocks,
 }: {
+  /** The row these words are. An in-flight message's id is the id of the row it becomes. */
+  id: string;
   text: string;
   blocks?: PasteRange[] | undefined;
 }) {
-  const { t: translateText } = useTranslation(["chat"] as const);
-  const [open, setOpen] = useState(false);
   if (blocks !== undefined && blocks.length > 0) {
     const parts: React.ReactNode[] = [];
     let at = 0;
@@ -215,21 +216,10 @@ function UserText({
     if (at < text.length) parts.push(text.slice(at));
     return <span className="whitespace-pre-wrap">{parts}</span>;
   }
-  if (!isLongPaste(text))
-    return <span className="whitespace-pre-wrap">{text}</span>;
   return (
-    <span className="whitespace-pre-wrap">
-      <span className={open ? undefined : "line-clamp-12 block"}>{text}</span>
-      <button
-        type="button"
-        className="font-mono text-[10px] text-muted-foreground underline-offset-2 hover:underline"
-        onClick={() => setOpen(!open)}
-      >
-        {open
-          ? translateText("messages.collapse")
-          : translateText("messages.expand")}
-      </button>
-    </span>
+    <FoldedText id={id} text={text} className="whitespace-pre-wrap">
+      {text}
+    </FoldedText>
   );
 }
 
@@ -683,6 +673,7 @@ const Turn = memo(
             }
           >
             <UserText
+              id={message.id}
               text={message.text}
               blocks={pasteBlocksOf(message.data, message.text)}
             />
@@ -719,11 +710,18 @@ const Turn = memo(
           ))}
         </>
       );
+    // What it settled on: folded to a dozen lines when it is long, the same fold as the message
+    // above it. The one element is what both render paths show — in place, and (in a group) under
+    // the whole process in the dialog — and the fold is one choice, not one per copy.
     const answer =
       message.text === "" || message.status === "failed" ? null : (
-        <div className="message-content">
+        <FoldedText
+          id={message.id}
+          text={message.text}
+          className="message-content"
+        >
           <Markdown>{message.text}</Markdown>
-        </div>
+        </FoldedText>
       );
     return (
       <div className="message assistant">
@@ -1407,7 +1405,11 @@ export function ChatPanel({
                   {outgoing.map((item) => (
                     <div key={item.id} className="space-y-3 pt-1">
                       <Message role="user">
-                        <UserText text={item.text} blocks={item.blocks} />
+                        <UserText
+                          id={item.id}
+                          text={item.text}
+                          blocks={item.blocks}
+                        />
                         {item.attachments.map((file) => (
                           <div key={file.id}>
                             <AttachmentChip attachment={file} />
