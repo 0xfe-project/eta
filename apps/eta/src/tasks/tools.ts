@@ -15,8 +15,9 @@ import type { ToolResult } from "@eta/harness";
  * (`task-run:` in `run-key.ts`), and that session reports with `comment_task` and `finish_task`.
  * The tools are thin: the rules are the board's (`board.ts`), these only read what a model sends
  * and say, in words, what happened. What a model reads is the description and nothing else, so the
- * descriptions carry the discipline: a draft is a proposal the user confirms, and `create_task`
- * is for when the user asked for a task.
+ * descriptions carry the discipline, and `draft_task` leads with the conditions that oblige a
+ * model to use it rather than with what it is: work that leaves the conversation goes to the
+ * board, where the user confirms it, and `create_task` is for when the user asked for a task.
  */
 import type { AgentStore } from "../agents/store";
 import type { SessionHooks } from "../session-hooks";
@@ -189,17 +190,27 @@ function conversationTools(
   const actor: TaskActor = { kind: "agent", agentId: who.agentId };
   const { taskOf, list, get } = reading(deps);
 
+  // Debt, not settled here: `DEFAULT_SYSTEM_PROMPT` (packages/eta-harness/src/prompts/base.ts)
+  // points the other way — "the moment you feel something is bigger than one step, you open the
+  // todo" sends work that has outgrown a reply to the session's own list instead of to the board,
+  // which is where the user can see it. Fixing that means touching the base prompt, so it waits
+  // for its own change. It is easy to miss because the two things are called the same word: the
+  // session's todo items are `Task` in `client-contracts/src/data.ts`, and the board's are `Task`
+  // in `client-contracts/src/tasks.ts`, whose own comment says the two "have nothing in common
+  // but the word".
   const draft = defineTool({
     name: "draft_task",
     label: "draft_task",
     description:
-      "Propose executable work in this conversation as an editable task draft: a title, the goal, " +
-      "what has already been decided, how it will be judged done, and where in the conversation it " +
-      "came from. This is the board's draft, not your own step list: the user reviews it as a card " +
-      "in the conversation and confirms it, and only then is a task made on the board, and you " +
-      "start on it: you execute the tasks you propose, in a fresh session of your own that does " +
-      "not see this conversation, so write the draft for a reader who knows nothing else. A draft " +
-      "creates no task and wakes nobody. In a discussion, prefer it to create_task.",
+      "Work that leaves this conversation. Do not do it in chat if it will change files in the " +
+      "repo, run a build or tests, need the user to accept a result, or take more than a couple of " +
+      "tool rounds — draft it; the user decides. What stays in chat: reading, looking things up, " +
+      "explaining, asking, taking a position, checking a command or two. `mention` is handing work " +
+      "to a person; this tool hands it to the board. A draft is not your step list: it is the " +
+      "board's proposal. The user edits and confirms it, then you do it yourself in a fresh " +
+      "session that cannot see this conversation — so write the goal and acceptance for a reader " +
+      "who knows nothing else, and put what you have established in `decided`. In a discussion, " +
+      "prefer it to `create_task`.",
     parameters: Type.Object({
       title: Type.String({
         description: "A short title for this piece of work",
@@ -248,7 +259,7 @@ function conversationTools(
       "Create a task on the board at once, linked to this conversation, and start on it: you " +
       "execute the tasks you make, in a fresh session of your own that does not see this " +
       "conversation. Only when the user explicitly asked for a task: otherwise propose it with " +
-      "draft_task and let them decide.",
+      "`draft_task` and let the user decide.",
     parameters: Type.Object({
       title: Type.String({ description: "A short title" }),
       description: Type.Optional(

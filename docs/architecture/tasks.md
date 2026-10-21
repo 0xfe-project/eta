@@ -74,4 +74,4 @@
 
 ## 智能体的工具
 
-对话里的智能体：`draft_task`、`list_tasks`、`get_task`、`create_task`、`update_task`、`comment_task`。运行里的执行者：`list_tasks`、`get_task`、`update_task`（不能直接移到 `done`/`cancelled`/`in_review`）、`comment_task`（作用在自己的任务上）、`finish_task`。工具描述承载纪律：草稿是提议，由用户确认。
+对话里的智能体：`draft_task`、`list_tasks`、`get_task`、`create_task`、`update_task`、`comment_task`。运行里的执行者：`list_tasks`、`get_task`、`update_task`（不能直接移到 `done`/`cancelled`/`in_review`）、`comment_task`（作用在自己的任务上）、`finish_task`。工具描述承载纪律：`draft_task` 的描述开头是可自检的触发条件（改仓库里的文件、跑构建或测试、结果要人验收、你知道会转好几轮工具），命中任一条就别在聊天里做；留在聊天区的是读、查、解释、问答、表态和一两条命令的验证。`mention` 是把话交给人，`draft_task` 是让工作离开这一轮：它是看板的提案，由用户确认后成为任务，由提出它的智能体在一个看不见这段对话的新会话里执行。
