@@ -417,6 +417,74 @@ describe("a reply that is writing", () => {
     expect(container.textContent).toContain("[图.png · 10 B]");
   });
 
+  // A long paste folds into a chip in the composer; the sent message keeps it that way, with
+  // the typing around it rendered as itself. The chip opens the whole text.
+  const PASTE = "日志行\n".repeat(300); // 1200 characters, over LONG_PASTE.chars
+  const chips = (c: ParentNode, chars: number) =>
+    [...c.querySelectorAll("button")].filter(
+      (b) => b.textContent === `[粘贴文本 · ${chars} 字符]`,
+    );
+  const chipCount = (c: ParentNode, chars: number) => chips(c, chars).length;
+  const chipAt = (c: ParentNode, chars: number) => chips(c, chars)[0]!;
+
+  it("folds a paste back into the composer's chip, the typing around it intact", async () => {
+    const at = "先看：".length;
+    const user = row({
+      text: `先看：\n${PASTE}\n就这些`,
+      data: { blocks: [[at + 1, at + 1 + PASTE.length]] },
+    });
+    history = [user];
+    const { container } = await start();
+    await flush();
+    const log = container.querySelector('[role="log"]')!;
+    expect(log.textContent).toContain("先看：");
+    expect(log.textContent).toContain("就这些");
+    expect(chipCount(log, [...PASTE].length)).toBe(1);
+    // Folded means the paste's own lines are not sitting in the transcript.
+    expect(log.textContent).not.toContain("日志行");
+
+    // The chip opens the whole text, and the dialog closes again.
+    await click(chipAt(log, [...PASTE].length));
+    await flush();
+    expect(document.body.textContent).toContain("日志行");
+    await click(document.querySelector('[data-slot="dialog-close"]')!);
+    await flush();
+    expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull();
+  });
+
+  it("folds a block at the start and a block at the end of one message", async () => {
+    const user = row({
+      text: `${PASTE}中间的手打${PASTE}`,
+      data: {
+        blocks: [
+          [0, PASTE.length],
+          [
+            PASTE.length + "中间的手打".length,
+            PASTE.length + "中间的手打".length + PASTE.length,
+          ],
+        ],
+      },
+    });
+    history = [user];
+    const { container } = await start();
+    await flush();
+    const log = container.querySelector('[role="log"]')!;
+    expect(chipCount(log, [...PASTE].length)).toBe(2);
+    expect(log.textContent).toContain("中间的手打");
+    expect(log.textContent).not.toContain("日志行");
+  });
+
+  it("folds a long typed message the old way when the row carries no blocks", async () => {
+    const typed = `${"手写的很长一段\n".repeat(30)}`;
+    const user = row({ text: typed });
+    history = [user];
+    const { container } = await start();
+    await flush();
+    const log = container.querySelector('[role="log"]')!;
+    expect(log.textContent).toContain("展开全文");
+    expect(chipCount(log, [...typed].length)).toBe(0);
+  });
+
   it("asks its question in a card and answers on the inbox", async () => {
     const user = row({ text: "删掉吗" });
     const reply = row({

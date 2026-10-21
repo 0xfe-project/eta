@@ -214,11 +214,12 @@ export interface MessageView {
   /**
    * What the row carries beyond its text. A user row has `woke` (agents given a reply row) and
    * `joined` (agents whose turn it steered) and, when files came with it, `attachments`
-   * (`AttachmentView[]`); a system row has the `event` it records (`steward`
-   * with `from`/`to`, `wake_budget`); a failed reply has the `code` it failed with (`restart`,
-   * `run_failed`, `unavailable`, `gone`) and, like any reply that ran, the `activity` of its
-   * tool calls (`ToolActivity[]`, absent when it made none); a `task_draft` row has `TaskDraftData` and a
-   * `task_card` row has `TaskCardData`.
+   * (`AttachmentView[]`) and, when the sender folded pastes in it, `blocks` (the
+   * `ConversationArgs["send"]["blocks"]` pairs it sent, verbatim); a system row has the `event`
+   * it records (`steward` with `from`/`to`, `wake_budget`); a failed reply has the `code` it
+   * failed with (`restart`, `run_failed`, `unavailable`, `gone`) and, like any reply that ran,
+   * the `activity` of its tool calls (`ToolActivity[]`, absent when it made none); a
+   * `task_draft` row has `TaskDraftData` and a `task_card` row has `TaskCardData`.
    */
   data: Record<string, unknown>;
   createdAt: number;
@@ -433,6 +434,13 @@ export interface ConversationArgs {
     mentions?: string[];
     mode?: "queue" | "steer";
     clientId?: string;
+    /**
+     * Where the sender folded a paste inside `text`: pairs of integers `[start, end)`, counted
+     * in UTF-16 offsets (the unit `String.prototype.slice` uses). Recorded on the row as
+     * `data.blocks` for renderers to fold back into a chip; the agent reads `text` alone, so
+     * they change nothing the agent is told. The host stores them without looking at them.
+     */
+    blocks?: [number, number][];
     /**
      * Files uploaded with `attach`, by id (at most `MAX_ATTACHMENTS`). The text may be empty when
      * there are some. They are handed to every agent the message wakes, as files it can open.

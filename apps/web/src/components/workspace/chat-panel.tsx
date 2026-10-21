@@ -4,7 +4,7 @@ import type {
   ConversationSummary,
   MessageView,
 } from "@eta/client-contracts";
-import type { Draft, FilePart } from "@/lib/composer";
+import type { Draft, FilePart, PasteRange } from "@/lib/composer";
 import type { ToolBlock } from "@/lib/run";
 import type { Outgoing, SendMode } from "@/queries/outbox";
 import type { Question } from "@/queries/questions";
@@ -35,9 +35,11 @@ import {
   charCount,
   draftFiles,
   draftText,
+  draftWithBlocks,
   isBlank,
   isLongPaste,
   MAX_MESSAGE_CHARS,
+  pasteBlocksOf,
   plainDraft,
 } from "@/lib/composer";
 import { buildMenu, mentionAt } from "@/lib/composer-menu";
@@ -54,7 +56,7 @@ import { useProjectFiles } from "@/queries/projects";
 import { useRunBlocks } from "@/queries/sessions";
 import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar } from "./agent-identity";
-import { AttachmentChip } from "./composer-block";
+import { AttachmentChip, PasteChip } from "./composer-block";
 import { ComposerEditor } from "./composer-editor";
 import { githubRef } from "./github-ref";
 import { GroupNotice } from "./group-notice";
@@ -181,12 +183,34 @@ function MessageFiles({ data }: { data: Record<string, unknown> }) {
 }
 
 /**
- * What the user wrote. A message that is a screenful (a pasted log, a file's contents) is folded
- * to a dozen lines with the way to open the rest: the box that held it folded it the same way.
+ * What the user wrote. Where the message carries folded pastes (`data.blocks`, or the blocks
+ * of a message still on its way out), those stretches render as the chip the composer showed,
+ * and the typing around them as itself. A long message with no blocks — everything typed, or
+ * older than blocks — is folded to a dozen lines with the way to open the rest, as before:
+ * the box that held it folded it the same way.
  */
-function UserText({ text }: { text: string }) {
+function UserText({
+  text,
+  blocks,
+}: {
+  text: string;
+  blocks?: PasteRange[] | undefined;
+}) {
   const { t: translateText } = useTranslation(["chat"] as const);
   const [open, setOpen] = useState(false);
+  if (blocks !== undefined && blocks.length > 0) {
+    const parts: React.ReactNode[] = [];
+    let at = 0;
+    for (const [start, end] of blocks) {
+      if (start > at) parts.push(text.slice(at, start));
+      parts.push(
+        <PasteChip key={`${start}-${end}`} text={text.slice(start, end)} />,
+      );
+      at = end;
+    }
+    if (at < text.length) parts.push(text.slice(at));
+    return <span className="whitespace-pre-wrap">{parts}</span>;
+  }
   if (!isLongPaste(text))
     return <span className="whitespace-pre-wrap">{text}</span>;
   return (
@@ -633,7 +657,10 @@ const Turn = memo(
               </time>
             }
           >
-            <UserText text={message.text} />
+            <UserText
+              text={message.text}
+              blocks={pasteBlocksOf(message.data, message.text)}
+            />
             <MessageFiles data={message.data} />
           </Message>
           {nobody ? (
@@ -854,7 +881,12 @@ export function ChatPanel({
   questions: readonly Question[];
   draft: Draft;
   onDraftChange: (draft: Draft) => void;
-  onSend: (text: string, mode: SendMode, files?: AttachmentView[]) => void;
+  onSend: (
+    text: string,
+    mode: SendMode,
+    files?: AttachmentView[],
+    blocks?: PasteRange[],
+  ) => void;
   onCompact: () => void;
   onStop: (replyId: string) => void;
   /** `/stop`: stops every reply in the group. */
@@ -1087,7 +1119,12 @@ export function ChatPanel({
     const name = space === -1 ? first : first.slice(0, space);
     const command = SLASH_COMMANDS.find((c) => c.name === name);
     if (command) run(command.name, afterCommand(first, name));
-    else onSend(text, "queue", uploaded);
+    else {
+      // The paste blocks go with the text as the ranges they occupy in it, so the transcript
+      // can fold them back into chips; a slash command's words carry none.
+      const sent = draftWithBlocks(draft);
+      onSend(sent.text, "queue", uploaded, sent.blocks);
+    }
     // Sending jumps back to the live end, as in a terminal.
     transcript.toBottom();
     formRef.current?.querySelector<HTMLElement>("[contenteditable]")?.focus();
@@ -1339,7 +1376,7 @@ export function ChatPanel({
                   {outgoing.map((item) => (
                     <div key={item.id} className="space-y-3 pt-1">
                       <Message role="user">
-                        <UserText text={item.text} />
+                        <UserText text={item.text} blocks={item.blocks} />
                         {item.attachments.map((file) => (
                           <div key={file.id}>
                             <AttachmentChip attachment={file} />

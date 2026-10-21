@@ -180,6 +180,7 @@ export function conversationsPlugin(
           const result = await engine.send({
             conversationId: args.string("conversationId"),
             text: args.optionalString("text") ?? "",
+            blocks: args.integerPairs("blocks"),
             mentions: args.strings("mentions"),
             mode,
             clientId: args.optionalString("clientId"),

@@ -56,6 +56,72 @@ export function draftText(draft: Draft) {
   return draft.map((p) => (p.type === "file" ? "" : p.text)).join("");
 }
 
+/**
+ * Where a folded paste sits in the text that goes out: `[start, end)` as **UTF-16 offsets**
+ * into that text — the unit `String.prototype.slice` counts in, so a renderer holding the
+ * same text can cut each block out and show the chip the composer showed. The same pairs go
+ * out on the wire (`conversations.send`'s `blocks`) and come back on the row (`data.blocks`);
+ * the host records them without looking at them.
+ */
+export type PasteRange = [start: number, end: number];
+
+/**
+ * `draftText` with the place of every paste block in it, for the message's `data.blocks`.
+ * The text comes out trimmed — the host trims what it stores, and the row is what a renderer
+ * slices — so the ranges are cut from the leading whitespace with it and agree with the row
+ * on every index. (Leading whitespace only exists when a typed part comes first, so no range
+ * overlaps it; trailing whitespace only exists after the last block, so no range is clipped.)
+ */
+export function draftWithBlocks(draft: Draft): {
+  text: string;
+  blocks: PasteRange[];
+} {
+  let text = "";
+  const blocks: PasteRange[] = [];
+  for (const part of draft) {
+    if (part.type === "file") continue;
+    if (part.type === "paste")
+      blocks.push([text.length, text.length + part.text.length]);
+    text += part.text;
+  }
+  const trimmed = text.trim();
+  const lead = text.length - text.trimStart().length;
+  return {
+    text: trimmed,
+    blocks: blocks.map(
+      ([start, end]) => [start - lead, end - lead] as PasteRange,
+    ),
+  };
+}
+
+/**
+ * The ranges to fold back in a rendered message: `data.blocks` validated against the text —
+ * integer pairs, ascending, disjoint, inside the text. Anything else (an old row, a hand-made
+ * one) reads as no blocks, and the message renders the old way.
+ */
+export function pasteBlocksOf(
+  data: Record<string, unknown>,
+  text: string,
+): PasteRange[] | undefined {
+  const raw = data.blocks;
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const blocks: PasteRange[] = [];
+  let end = 0;
+  for (const item of raw) {
+    if (
+      !Array.isArray(item) ||
+      item.length !== 2 ||
+      !item.every((n) => Number.isInteger(n))
+    )
+      return undefined;
+    const [start, stop] = item as number[];
+    if (start < end || start >= stop || stop > text.length) return undefined;
+    blocks.push([start, stop]);
+    end = stop;
+  }
+  return blocks;
+}
+
 /** The files in a draft, in order. */
 export function draftFiles(draft: Draft): FilePart[] {
   return draft.filter((p): p is FilePart => p.type === "file");

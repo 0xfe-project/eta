@@ -1,6 +1,6 @@
 import type { AttachmentView, SendResult } from "@eta/client-contracts";
 import type { PersistStorage, StorageValue } from "zustand/middleware";
-import type { Draft, FilePart } from "@/lib/composer";
+import type { Draft, FilePart, PasteRange } from "@/lib/composer";
 import {
   ATTACH_CHUNK_BYTES,
   MAX_ATTACHMENT_BYTES,
@@ -45,6 +45,8 @@ const outgoingSchema = z.object({
   id: z.uuid(),
   conversationId: z.string().max(64),
   text: z.string(),
+  /** Where the folded pastes sit in `text` (`draftWithBlocks`); sent as `blocks`, kept for retries. */
+  blocks: z.array(z.tuple([z.number().int(), z.number().int()])).default([]),
   mentions: z.array(z.string()),
   mode: z.enum(["queue", "steer"]),
   attachments: z.array(attachmentSchema).max(10).default([]),
@@ -188,6 +190,7 @@ async function attempt(outgoing: Outgoing) {
         {
           conversationId: outgoing.conversationId,
           text: outgoing.text,
+          ...(outgoing.blocks.length === 0 ? {} : { blocks: outgoing.blocks }),
           mentions: outgoing.mentions,
           mode: outgoing.mode,
           clientId: outgoing.id,
@@ -233,11 +236,13 @@ export function useOutboxActions() {
       mode: SendMode,
       mentions: string[],
       attachments: AttachmentView[] = [],
+      blocks: PasteRange[] = [],
     ) {
       const outgoing = {
         id: crypto.randomUUID(),
         conversationId,
         text,
+        blocks,
         mode,
         mentions,
         attachments,
