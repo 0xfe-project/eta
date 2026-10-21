@@ -142,7 +142,7 @@ function ListView({
         if (!group.length) return null;
         return (
           <section key={value} aria-label={label}>
-            <div className="sticky top-0 z-10 flex h-9 items-center border-b bg-muted px-2 sm:px-4">
+            <div className="sticky top-0 z-10 flex h-9 items-center border-b bg-muted">
               <button
                 type="button"
                 aria-expanded={isOpen(value)}
@@ -167,7 +167,7 @@ function ListView({
                   <li
                     key={task.id}
                     className={cn(
-                      "flex h-10 items-center gap-1 border-b px-2 duration-[60ms] ease-linear hover:bg-muted/40 sm:px-4",
+                      "flex h-10 items-center gap-1 border-b duration-[60ms] ease-linear hover:bg-muted/40",
                       task.id === selected && "bg-muted hover:bg-muted",
                     )}
                   >
@@ -251,7 +251,7 @@ function BoardView({ tasks }: { tasks: readonly Task[] }) {
       status !== "cancelled" || tasks.some((t) => t.status === status),
   );
   return (
-    <div className="flex h-full gap-3 overflow-x-auto p-4 sm:px-6">
+    <div className="flex h-full gap-3 overflow-x-auto py-4">
       {columns.map((status) => {
         const group = tasks.filter((t) => t.status === status);
         const label = statusLabel(status);
@@ -488,19 +488,16 @@ export function TaskBoard() {
           )}
         >
           {error ? (
-            <div className="mx-auto max-w-md px-4 py-16">
+            <div className="mx-auto max-w-md py-16">
               <LoadError
                 what={translateText("navigation:sections.tasks")}
                 error={error}
               />
             </div>
           ) : !loaded ? (
-            <Loading
-              rows={6}
-              className="mx-auto max-w-content px-2 py-3 sm:px-4"
-            />
+            <Loading rows={6} className="mx-auto max-w-content py-3" />
           ) : tasks.length === 0 ? (
-            <div className="mx-auto max-w-md px-4 py-16">
+            <div className="mx-auto max-w-md py-16">
               <Empty icon={ListChecksIcon} title={translateText("empty.title")}>
                 {translateText("empty.description")}
               </Empty>
