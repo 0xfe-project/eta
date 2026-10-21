@@ -60,8 +60,13 @@ export interface TaskRuns {
   deliver: (taskId: string, activity: TaskActivityView) => void;
 }
 
-/** Whether a task in this status is one an executor works on. */
-const workable = (status: BoardTaskStatus): boolean =>
+/**
+ * Whether a task in this status is one an executor works on. It answers two questions at once: does
+ * a change to this task set a run going, and does a comment on it wake one. A task in the backlog is
+ * not claimed yet, and one that is done or cancelled has nothing more to do with it: those comments
+ * are recorded and read by whoever looks.
+ */
+export const workable = (status: BoardTaskStatus): boolean =>
   status !== "backlog" && status !== "done" && status !== "cancelled";
 
 export interface TaskBoardDeps {

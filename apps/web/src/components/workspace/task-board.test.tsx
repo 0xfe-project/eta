@@ -42,6 +42,7 @@ const first = taskDetail({
       queueReason: null,
       machineId: "m1",
       sessionId: "s1",
+      continuesRunId: null,
       workspace: "/data/worktrees/p1/task-1",
       nudged: false,
       error: null,
@@ -258,13 +259,50 @@ describe("task board", () => {
     const { container } = await mount(<TaskBoard />);
     await flush();
     const rerun = [...container.querySelectorAll("button")].find(
-      (b) => b.textContent === "重新运行",
+      (b) => b.textContent === "从头重跑",
     )!;
     await click(rerun);
     await flush();
     expect(host.calls.find((c) => c.action === "rerun")?.args).toEqual({
       taskId: "t2",
     });
+    // Its own words say what a comment would have done instead: carry on, not start over.
+    expect(container.textContent).toContain("评论会让执行者接着上次往下做");
+  });
+
+  it("says when a run carries on the session of the run before it", async () => {
+    navigation.task = "t2";
+    const host = board();
+    host.set("tasks.t2", {
+      task: taskDetail({
+        id: "t2",
+        number: 2,
+        title: "另一个任务",
+        status: "in_progress",
+        createdBy: { kind: "agent", agentId: "a1" },
+        runStatus: "running",
+        runs: [
+          { ...first.runs[0]!, id: "r2", status: "completed" },
+          {
+            ...first.runs[0]!,
+            id: "r3",
+            status: "running",
+            continuesRunId: "r2",
+          },
+        ],
+      }),
+      activity: [
+        taskActivity({
+          id: "a3",
+          kind: "run_started",
+          runId: "r3",
+          actor: { kind: "system", agentId: null },
+        }),
+      ],
+    });
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    expect(container.textContent).toContain("它接着上一次运行的会话继续");
   });
 
   it("draws a run's log from its session's transcript", async () => {

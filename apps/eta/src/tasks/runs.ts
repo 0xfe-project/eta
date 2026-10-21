@@ -17,6 +17,8 @@ import type { Database } from "bun:sqlite";
 
 export interface RunRecord extends TaskRunView {
   taskId: string;
+  /** What the session is held in (`session-key.ts`); null until the run has a session. */
+  sessionKey: string | null;
 }
 
 interface Row {
@@ -26,6 +28,8 @@ interface Row {
   status: string;
   queue_reason: string | null;
   session_id: string | null;
+  continues_run_id: string | null;
+  session_key: string | null;
   workspace: string | null;
   nudged: number;
   error: string | null;
@@ -41,6 +45,8 @@ const recordOf = (row: Row): RunRecord => ({
   queueReason: row.queue_reason as TaskQueueReason | null,
   machineId: row.machine_id,
   sessionId: row.session_id,
+  continuesRunId: row.continues_run_id,
+  sessionKey: row.session_key,
   workspace: row.workspace,
   nudged: row.nudged === 1,
   error: row.error,
@@ -59,14 +65,23 @@ export class TaskRunStore {
     this.#db = db;
   }
 
-  /** A run, queued, on the machine the task's project is on. */
-  create(taskId: string, machineId: string | null): RunRecord {
+  /**
+   * A run, queued, on the machine the task's project is on. A run that continues another one works
+   * in the session the other one made, and says so with `continuesRunId` (`tasks.rerun` leaves it
+   * null: a rerun starts afresh and remembers nothing).
+   */
+  create(
+    taskId: string,
+    machineId: string | null,
+    continuesRunId: string | null = null,
+  ): RunRecord {
     const id = crypto.randomUUID();
     this.#db
       .query(
-        "INSERT INTO task_run (id, task_id, machine_id, created_at) VALUES (?, ?, ?, ?)",
+        `INSERT INTO task_run (id, task_id, machine_id, continues_run_id, created_at)
+          VALUES (?, ?, ?, ?, ?)`,
       )
-      .run(id, taskId, machineId, Date.now());
+      .run(id, taskId, machineId, continuesRunId, Date.now());
     return this.get(id)!;
   }
 
@@ -87,11 +102,31 @@ export class TaskRunStore {
       .map(recordOf);
   }
 
-  /** The run that works in this session, if one does. */
+  /**
+   * The run that works in this session, if one does. Several runs hold one session, since a
+   * continuation works in the session of the run before it: the one going now answers, and after
+   * it the last one that did.
+   */
   bySession(sessionId: string): RunRecord | undefined {
     const row = this.#db
-      .query<Row, [string]>("SELECT * FROM task_run WHERE session_id = ?")
+      .query<Row, [string]>(
+        `SELECT * FROM task_run WHERE session_id = ?
+          ORDER BY status IN ('queued', 'starting', 'running') DESC, created_at DESC, rowid DESC
+          LIMIT 1`,
+      )
       .get(sessionId);
+    return row === null ? undefined : recordOf(row);
+  }
+
+  /** The run whose session a continuation carries on: this task's newest session, if it has one. */
+  lastSessionOf(taskId: string): RunRecord | undefined {
+    const row = this.#db
+      .query<Row, [string]>(
+        `SELECT * FROM task_run
+          WHERE task_id = ? AND session_id IS NOT NULL
+          ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+      )
+      .get(taskId);
     return row === null ? undefined : recordOf(row);
   }
 
@@ -99,7 +134,8 @@ export class TaskRunStore {
   sessionsOn(machineId: string): string[] {
     return this.#db
       .query<{ session_id: string }, [string]>(
-        "SELECT session_id FROM task_run WHERE machine_id = ? AND session_id IS NOT NULL",
+        `SELECT DISTINCT session_id FROM task_run
+          WHERE machine_id = ? AND session_id IS NOT NULL`,
       )
       .all(machineId)
       .map((row) => row.session_id);
@@ -168,11 +204,21 @@ export class TaskRunStore {
     );
   }
 
-  /** The session the run works in, and the directory it works in. */
-  setSession(id: string, sessionId: string, workspace: string): void {
+  /**
+   * The session the run works in, what it is held in, and the directory it works in. A
+   * continuation writes the session and the key it inherited, not ones it made.
+   */
+  setSession(
+    id: string,
+    sessionId: string,
+    workspace: string,
+    sessionKey: string,
+  ): void {
     this.#db
-      .query("UPDATE task_run SET session_id = ?, workspace = ? WHERE id = ?")
-      .run(sessionId, workspace, id);
+      .query(
+        "UPDATE task_run SET session_id = ?, workspace = ?, session_key = ? WHERE id = ?",
+      )
+      .run(sessionId, workspace, sessionKey, id);
   }
 
   /** starting -> running. */

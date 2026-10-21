@@ -37,16 +37,19 @@ import type { MachineLink } from "./hub";
 import type { MachineStore } from "./store";
 import { forwardedOptions } from "@eta/daemon";
 import { SshEnvironment } from "@eta/ssh";
-import { runKey } from "../tasks/run-key";
 import { LinkTransport } from "./link-transport";
 
 export interface LinkServiceDeps {
   conversations: ConversationStore;
-  /** The task run a session works for, as the primary's rows know it. */
+  /**
+   * The task run a session works in now (a task's session outlives the run that made it), as the
+   * primary's rows know it: whose agent and machine it is, what directory it works in, and what the
+   * session is held in (`tasks/session-key.ts`, which the daemon files its prompt and tools under).
+   */
   taskRun: (
     session: string,
   ) =>
-    | { runId: string; agentId: string; machineId: string; cwd: string }
+    | { key: string; agentId: string; machineId: string; cwd: string }
     | undefined;
   projects: ProjectStore;
   machines: MachineStore;
@@ -87,7 +90,7 @@ export function serveLink(link: MachineLink, deps: LinkServiceDeps): void {
           createdAt: 0,
           cwd: run.cwd,
           agentId: run.agentId,
-          conversationId: runKey(run.runId),
+          conversationId: run.key,
         },
       };
     }

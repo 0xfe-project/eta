@@ -35,7 +35,9 @@
     "label": "Run",
     "never": "Never run",
     "run": "Run",
-    "rerun": "Run again"
+    "rerun": "Start over",
+    "continued": "It carries on in the earlier run's session, so it remembers what it did.",
+    "fromScratchHint": "A comment lets the executor carry on where it stopped; this opens a session that remembers nothing."
   },
   "scope": {
     "group": "{{name}}",

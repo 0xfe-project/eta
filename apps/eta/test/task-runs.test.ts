@@ -111,6 +111,7 @@ const runsOf = (w: World, taskId: string): TaskRunView[] =>
         status: TaskRunView["status"];
         queue_reason: TaskRunView["queueReason"];
         session_id: string | null;
+        continues_run_id: string | null;
         workspace: string | null;
         error: string | null;
       },
@@ -122,6 +123,7 @@ const runsOf = (w: World, taskId: string): TaskRunView[] =>
       status: row.status,
       queueReason: row.queue_reason,
       sessionId: row.session_id,
+      continuesRunId: row.continues_run_id,
       workspace: row.workspace,
       error: row.error,
     })) as TaskRunView[];
@@ -152,6 +154,14 @@ const activityKinds = (w: World, id: string): string[] =>
 
 const runStatuses = (w: World, id: string) =>
   runsOf(w, id).map((run) => run.status);
+
+/** A host, an agent, a group, and a daemon's machine the project lives on. */
+async function remote(respond: Parameters<typeof room>[0]) {
+  const { models, requests } = scriptedModels(respond);
+  const r = await remoteWorld({ models });
+  const { agents, group } = await r.agents("Ada");
+  return { r, requests, ada: agents[0]!, group };
+}
 
 describe("a task run", () => {
   it("starts when the user confirms an agent's draft, in a fresh session with the agent's persona and none of its conversation", async () => {
@@ -497,10 +507,14 @@ describe("talking to a run", () => {
     ).toEqual(["use the staging db", "Used the staging db."]);
   });
 
-  it("takes a comment on a task with no run going as a comment and nothing more", async () => {
+  it("records a comment that has no run to read it, on a task nobody is working on", async () => {
     const r = await room(finishes());
     const task = make(r, "Done already");
     await until(() => reviewed(r.w, task.id));
+    await r.w.client.call("tasks", "update", {
+      taskId: task.id,
+      status: "done",
+    });
     const before = r.requests.length;
     await r.w.client.call("tasks", "comment", {
       taskId: task.id,
@@ -509,6 +523,330 @@ describe("talking to a run", () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(r.requests.length).toBe(before);
     expect(runStatuses(r.w, task.id)).toEqual(["completed"]);
+    // It is still a line on the timeline, for whoever reads the task next.
+    expect(
+      activityKinds(r.w, task.id).filter((kind) => kind === "comment"),
+    ).toHaveLength(2);
+  });
+});
+
+describe("a comment that wakes the task", () => {
+  /**
+   * A task that was reported, and a comment answering that report: the executor is woken again in
+   * the session it already worked in, so what it read and did is above it and the comment is the
+   * next thing said to it, not a new brief.
+   */
+  async function woken(
+    first: string,
+    comment: string,
+    options: { status?: "in_review" | "blocked" } = {},
+  ) {
+    const r = await room((request) => {
+      if (!isRun(request)) return say("ok");
+      const carried = request.transcript
+        .join("\n")
+        .includes("your earlier run worked in");
+      if (request.lastRole === "toolResult")
+        return say(carried ? "done" : first);
+      // The comment, and what it asks for, is what the second run is here for.
+      return request.transcript.join("\n").includes(comment)
+        ? call("finish_task", { summary: "Did the extra bit." })
+        : call("finish_task", {
+            summary: first,
+            ...(options.status === undefined ? {} : { status: options.status }),
+          });
+    });
+    // The conversation's own reply is request 0.
+    await r.w.send(r.group.id, "hello");
+    const task = make(r, "Carry on");
+    await until(() => runStatuses(r.w, task.id).join() === "completed");
+    return { ...r, task };
+  }
+
+  it("is another run of the task, in the same session, told the comment and not the whole brief", async () => {
+    const r = await woken(
+      "I moved the check into validate().",
+      "also cover the empty case",
+    );
+    const before = r.requests.length;
+    await r.w.client.call("tasks", "comment", {
+      taskId: r.task.id,
+      body: "also cover the empty case",
+    });
+    await until(
+      () => runStatuses(r.w, r.task.id).join() === "completed,completed",
+    );
+
+    const [first, second] = runsOf(r.w, r.task.id);
+    // It is a new run, and not a new session: it continues the one that reported.
+    expect(second!.continuesRunId).toBe(first!.id);
+    expect(first!.continuesRunId).toBeNull();
+    expect(second!.sessionId).toBe(first!.sessionId);
+    // The task was pulled back into being worked on, and the timeline says so.
+    expect(activityKinds(r.w, r.task.id)).toEqual(
+      expect.arrayContaining([
+        "run_queued",
+        "run_started",
+        "run_completed",
+        "status",
+        "comment",
+      ]),
+    );
+    expect(
+      r.w.host.product.board
+        .activity(r.task.id)
+        .filter((entry) => entry.kind === "status")
+        .map((entry) => entry.data),
+    ).toContainEqual({ from: "in_review", to: "in_progress" });
+    expect(taskOf(r.w, r.task.id).status).toBe("in_review");
+
+    const again = r.requests.slice(before).filter(isRun);
+    const told = again[0]!.transcript;
+    // It remembers: the briefing it was first given, and its own report, are still above it.
+    expect(told[0]).toContain("Do Carry on");
+    expect(told.join("\n")).toContain("I moved the check into validate().");
+    // The comment is what it is asked, and the brief is not repeated on top of it.
+    expect(again[0]!.last).toContain(
+      "A comment from the user on task #1:\n\nalso cover the empty case",
+    );
+    expect(again[0]!.last).toContain("again");
+    expect(again[0]!.last).toContain("in review");
+    expect(again[0]!.last).not.toContain(
+      'You are the executor of task #1, "Carry on". This',
+    );
+    // What it costs: the second run reads the whole exchange, not just the comment.
+    expect(told.length).toBeGreaterThan(2);
+  });
+
+  it("is the answer to what the executor asked for, and it carries on without reading the project again", async () => {
+    const r = await woken(
+      "I need the staging credentials to go on.",
+      "they are in /etc/staging.env",
+      { status: "blocked" },
+    );
+    expect(taskOf(r.w, r.task.id).status).toBe("blocked");
+    const before = r.requests.length;
+    await r.w.client.call("tasks", "comment", {
+      taskId: r.task.id,
+      body: "they are in /etc/staging.env",
+    });
+    await until(
+      () => runStatuses(r.w, r.task.id).join() === "completed,completed",
+    );
+
+    const [first, second] = runsOf(r.w, r.task.id);
+    expect(second!.sessionId).toBe(first!.sessionId);
+    const asked = r.requests.slice(before).filter(isRun);
+    // It was told the answer, where it stopped, and not a new brief to go and find out again.
+    expect(asked[0]!.last).toContain("You stopped because you needed the user");
+    expect(asked[0]!.last).toContain("they are in /etc/staging.env");
+    // The first thing above it is still its own first briefing: it did not start over.
+    expect(asked[0]!.transcript[0]).toContain("Do Carry on");
+    expect(taskOf(r.w, r.task.id).status).toBe("in_review");
+  });
+
+  it("files the woken run's model requests and its questions under the task's own conversation", async () => {
+    let questionAsked = false;
+    let wokenReported = false;
+    const { models, requests } = scriptedModels((request) => {
+      if (!isRun(request)) return say("ok");
+      const told = request.transcript.join("\n");
+      // The run that was woken by the comment is the one whose journal carries the carry-on note.
+      const carried = told.includes("your earlier run worked in");
+      if (request.lastRole === "toolResult") {
+        if (!carried) return say("Read the config, changed two lines.");
+        if (wokenReported) return say("done");
+        // It asked, was answered, and now reports what it did with the answer.
+        wokenReported = true;
+        return call("finish_task", { summary: "Staging, then." });
+      }
+      if (!carried)
+        return call("finish_task", {
+          summary: "Read the config, changed two lines.",
+        });
+      if (questionAsked) return say("nothing more");
+      questionAsked = true;
+      return call(
+        "ask_user",
+        { question: "Which env, staging or prod?" },
+        "q-1",
+      );
+    });
+    const w = await world({ models });
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id], "login");
+    await w.watch(group.id);
+    await w.send(group.id, "hello");
+    const task = make({ w, ada, group }, "Carry on");
+    await until(() => runStatuses(w, task.id).join() === "completed");
+    await w.client.call("tasks", "comment", {
+      taskId: task.id,
+      body: "ship it",
+    });
+    await until(() => runStatuses(w, task.id).join() === "completed,running");
+    const [first, second] = runsOf(w, task.id);
+    expect(second!.sessionId).toBe(first!.sessionId);
+
+    /** The questions the woken run has asked, as the inbox filed them. */
+    const asked = () =>
+      w.host.db
+        .query<Record<string, unknown>, []>(
+          "SELECT conversation_id, session_id, reply_id, status FROM interaction",
+        )
+        .all();
+    await until(() => asked().length === 1);
+    // An executor woken in its old session can still ask the user something.
+    expect(requests.at(-1)!.tools).toContain("ask_user");
+    // The question reached the conversation the task came from, not the key the session is held in
+    // and not the run that first opened it.
+    expect(asked()).toEqual([
+      {
+        conversation_id: group.id,
+        session_id: first!.sessionId,
+        reply_id: null,
+        status: "pending",
+      },
+    ]);
+    await w.client.call("inbox", "answer", {
+      id: `${second!.sessionId}:q-1`,
+      response: { kind: "freeform", text: "staging" },
+    });
+    await until(() => runStatuses(w, task.id).join() === "completed,completed");
+
+    // Both runs of the session are counted for that conversation, and neither leaves a `task:`
+    // or `task-run:` key behind in the usage it wrote.
+    const rows = w.host.db
+      .query<{ conversation_id: string | null; session_id: string }, []>(
+        "SELECT conversation_id, session_id FROM usage",
+      )
+      .all();
+    const ofTask = rows.filter((row) => row.session_id === first!.sessionId);
+    expect(ofTask.length).toBeGreaterThan(1);
+    expect([...new Set(ofTask.map((row) => row.conversation_id))]).toEqual([
+      group.id,
+    ]);
+  });
+
+  it("wakes a task once, however often the same client sends the same comment", async () => {
+    const r = await woken("Ready for you.", "one more thing");
+    for (const _ of [1, 2]) {
+      await r.w.client.call("tasks", "comment", {
+        taskId: r.task.id,
+        body: "one more thing",
+        clientId: "retry-me",
+      });
+    }
+    await until(
+      () => runStatuses(r.w, r.task.id).join() === "completed,completed",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(runStatuses(r.w, r.task.id)).toEqual(["completed", "completed"]);
+    expect(
+      r.w.host.product.board
+        .activity(r.task.id)
+        .filter(
+          (entry) =>
+            entry.kind === "comment" && entry.body === "one more thing",
+        ),
+    ).toHaveLength(1);
+  });
+
+  it("leaves a task alone once it is done or cancelled, and a task in the backlog was never claimed", async () => {
+    for (const status of ["done", "cancelled"] as const) {
+      const r = await woken("Reported.", "changed my mind", {
+        status: "in_review",
+      });
+      await r.w.client.call("tasks", "update", { taskId: r.task.id, status });
+      const before = r.requests.length;
+      await r.w.client.call("tasks", "comment", {
+        taskId: r.task.id,
+        body: "changed my mind",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(r.requests.length).toBe(before);
+      expect(runStatuses(r.w, r.task.id)).toEqual(["completed"]);
+      // The words are kept, where a person reading the task will find them.
+      expect(
+        r.w.host.product.board
+          .activity(r.task.id)
+          .some(
+            (entry) =>
+              entry.kind === "comment" && entry.body === "changed my mind",
+          ),
+      ).toBe(true);
+    }
+
+    const r = await room(finishes());
+    const task = r.w.host.product.board.create(
+      {
+        title: "Not claimed",
+        description: "Someday",
+        status: "backlog",
+        conversationId: r.group.id,
+        workspace: "local",
+      },
+      { kind: "agent", agentId: r.ada.id },
+    );
+    await r.w.client.call("tasks", "comment", {
+      taskId: task.id,
+      body: "while you're there",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(r.requests.filter(isRun)).toHaveLength(0);
+    expect(runsOf(r.w, task.id)).toEqual([]);
+  });
+
+  it("does not wake a task that has a run going, and does not tell it the same thing twice", async () => {
+    const hold = gate();
+    let reported = false;
+    const r = await room(async (request) => {
+      if (!isRun(request)) return say("ok");
+      if (reported) return say("finished");
+      if (request.index === 1) await hold.opened;
+      reported = true;
+      return call("finish_task", { summary: "ok" });
+    });
+    await r.w.send(r.group.id, "hello");
+    const task = make(r, "Busy");
+    await until(() => runStatuses(r.w, task.id)[0] === "running");
+    await r.w.client.call("tasks", "comment", {
+      taskId: task.id,
+      body: "use the staging db",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    // The comment went into the run that was going: it did not ask for another one.
+    expect(runsOf(r.w, task.id)).toHaveLength(1);
+    hold.open();
+    await until(() => reviewed(r.w, task.id));
+    expect(runStatuses(r.w, task.id)).toEqual(["completed"]);
+    const told = r.requests.filter(isRun).at(-1)!.transcript.join("\n");
+    expect(told).toContain("use the staging db");
+    // Steered once, and not again by the wake that a comment would otherwise have asked for.
+    expect(told.split("use the staging db").length - 1).toBe(1);
+  });
+
+  it("waits its turn like any run when the machine it belongs to is offline", async () => {
+    const { r, ada, group } = await remote(
+      finishes("Reported from over there."),
+    );
+    const task = make({ w: r, ada, group }, "Over there, twice");
+    await until(() => reviewed(r, task.id));
+    await r.daemon.stop();
+    await until(
+      () => machineView(r.client, r.daemon.machineId)?.status === "offline",
+    );
+    await r.client.call("tasks", "comment", {
+      taskId: task.id,
+      body: "and add the screenshot",
+    });
+    // The wake is a run in the queue, held by the same reason as a first run would be.
+    await until(() => runsOf(r, task.id).length === 2);
+    expect(runsOf(r, task.id)[1]).toMatchObject({
+      status: "queued",
+      queueReason: "machine_offline",
+      continuesRunId: runsOf(r, task.id)[0]!.id,
+    });
   });
 });
 
@@ -637,13 +975,6 @@ describe("stopping and running again", () => {
 });
 
 describe("a task run on a daemon's machine", () => {
-  async function remote(respond: Parameters<typeof room>[0]) {
-    const { models, requests } = scriptedModels(respond);
-    const r = await remoteWorld({ models });
-    const { agents, group } = await r.agents("Ada");
-    return { r, requests, ada: agents[0]!, group };
-  }
-
   it("works on the machine the project is on, through the link, and reports back", async () => {
     const { r, ada, group } = await remote(finishes("Done over there."));
     const task = make({ w: r, ada, group }, "Over there");
@@ -694,6 +1025,33 @@ describe("a task run on a daemon's machine", () => {
       if (saved === undefined) delete process.env.HOME;
       else process.env.HOME = saved;
     }
+  });
+
+  it("carries a comment's wake into the same session on the other machine", async () => {
+    const { r, ada, group } = await remote(
+      finishes("Reported from over there."),
+    );
+    const task = make({ w: r, ada, group }, "Over there, twice");
+    await until(() => reviewed(r, task.id));
+    const [first] = runsOf(r, task.id);
+    const journals = await readdir(join(r.daemon.dataDir, "sessions"));
+
+    await r.client.call("tasks", "comment", {
+      taskId: task.id,
+      body: "and add the screenshot",
+    });
+    await until(() => runStatuses(r, task.id).join() === "completed,completed");
+
+    const second = runsOf(r, task.id)[1]!;
+    expect(second.continuesRunId).toBe(first!.id);
+    expect(second.sessionId).toBe(first!.sessionId);
+    // No second session was made on that machine: the wake carried on in the one it had, and every
+    // request it made was still accepted as that machine's own.
+    expect(await readdir(join(r.daemon.dataDir, "sessions"))).toEqual(journals);
+    const results = r
+      .rows(group.id)
+      .filter((row) => row.data.event === "task_result");
+    expect(results).toHaveLength(2);
   });
 
   it("waits while the machine is offline and starts when it is back", async () => {

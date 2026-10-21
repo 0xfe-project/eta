@@ -38,7 +38,7 @@ import type { Timeline } from "./timeline";
 import { LinkError } from "@eta/daemon";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/harness";
 import { parseModelId } from "@eta/server";
-import { runIdOf, runKey } from "../tasks/run-key";
+import { isTaskSession } from "../tasks/session-key";
 import { viewOf as attachmentView } from "./attachments";
 import { briefing } from "./briefing";
 import { LocalPlace, messageOf } from "./places";
@@ -215,7 +215,7 @@ export class Engine {
     const agent = this.#agents.get(meta.agentId);
     if (agent === undefined) return undefined;
     this.#opened.set(meta.id, this.#stamp(agent));
-    return promptOf(agent, runIdOf(meta.conversationId) !== undefined);
+    return promptOf(agent, isTaskSession(meta.conversationId));
   };
 
   /** What a session's prompt, persona and bundles were read from. */
@@ -227,8 +227,8 @@ export class Engine {
   readonly sessionTools = (input: { meta: SessionMeta }): KernelTool[] => {
     const { agentId, conversationId } = input.meta;
     if (agentId === undefined || conversationId === undefined) return [];
-    // A task run's session is held in no conversation: it has no members to reach.
-    if (runIdOf(conversationId) !== undefined) return [];
+    // A task's session is held in no conversation: it has no members to reach.
+    if (isTaskSession(conversationId)) return [];
     return conversationTools(this, conversationId, agentId);
   };
 
@@ -256,14 +256,20 @@ export class Engine {
   };
 
   /**
-   * A fresh session of an agent for one run of a task, on the machine and in the directory the
-   * task works in. It is what a conversation's session is made of (the agent's model, persona,
-   * instructions, skills, MCP servers, bundles and memory) and nothing of what that session
-   * remembers: no history, no participant row. Where it lives is the machine's: this process, or
-   * a daemon over the link.
+   * The task's session, on the machine and in the directory the task works in: the one this run
+   * continues, or a new one made the way a conversation's session is made (the agent's model,
+   * persona, instructions, skills, MCP servers, bundles and memory) and nothing of what that
+   * session remembers: no history, no participant row. Where it lives is the machine's: this
+   * process, or a daemon over the link.
+   *
+   * `key` is what the session is held in and `existing` the session to carry on in
+   * (`tasks/session-key.ts`): a run that continues another one passes the key that session was made
+   * with, since that is what the machine holding it files its journal, prompt and tools under.
    */
   async openRunSession(input: {
-    runId: string;
+    key: string;
+    /** The session to carry on in; null opens a new one. */
+    existing: string | null;
     title: string;
     agent: AgentRecord;
     machine: MachineRecord;
@@ -275,11 +281,11 @@ export class Engine {
     if (place === undefined)
       throw new Error(`Sessions cannot run on ${input.machine.name} yet.`);
     return await place.ensure({
-      conversation: { id: runKey(input.runId), name: input.title },
+      conversation: { id: input.key, name: input.title },
       agent: input.agent,
       machine: input.machine,
       cwd: input.cwd,
-      existing: null,
+      existing: input.existing,
       prompt: promptOf(input.agent, true),
       stamp: this.#stamp(input.agent),
       created: input.created,
