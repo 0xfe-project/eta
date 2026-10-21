@@ -3,14 +3,15 @@ import { useAgentList, useDirectChat } from "@/queries/agents";
 import { useOpenGroup } from "./use-groups";
 import { useWorkspaceStore } from "./workspace-store";
 
-/** Agents plus the locally remembered current one (newest by default). */
+/** Agents plus the locally remembered current one (the first by default). */
 export function useAgents() {
   const { agents, loaded, error } = useAgentList();
   const selectedAgentId = useWorkspaceStore((s) => s.workspace.selectedAgentId);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setAgentEditor = useWorkspaceStore((s) => s.setAgentEditor);
+  // Nothing selected, or a selection whose agent is gone: open the first one.
   const current =
-    agents.find((agent) => agent.id === selectedAgentId) ?? agents.at(-1);
+    agents.find((agent) => agent.id === selectedAgentId) ?? agents[0];
   return {
     agents,
     current,

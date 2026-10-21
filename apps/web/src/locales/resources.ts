@@ -8,6 +8,7 @@ import enLlm from "./en/llm.json";
 import enMachines from "./en/machines.json";
 import enMcp from "./en/mcp.json";
 import enNavigation from "./en/navigation.json";
+import enOnboard from "./en/onboard.json";
 import enOverview from "./en/overview.json";
 import enProviders from "./en/providers.json";
 import enRoutines from "./en/routines.json";
@@ -24,6 +25,7 @@ import zhLlm from "./zh/llm.json";
 import zhMachines from "./zh/machines.json";
 import zhMcp from "./zh/mcp.json";
 import zhNavigation from "./zh/navigation.json";
+import zhOnboard from "./zh/onboard.json";
 import zhOverview from "./zh/overview.json";
 import zhProviders from "./zh/providers.json";
 import zhRoutines from "./zh/routines.json";
@@ -42,6 +44,7 @@ export const en = {
   mcp: enMcp,
   connections: enConnections,
   navigation: enNavigation,
+  onboard: enOnboard,
   overview: enOverview,
   providers: enProviders,
   routines: enRoutines,
@@ -61,6 +64,7 @@ export const zh = {
   mcp: zhMcp,
   connections: zhConnections,
   navigation: zhNavigation,
+  onboard: zhOnboard,
   overview: zhOverview,
   providers: zhProviders,
   routines: zhRoutines,
@@ -82,6 +86,7 @@ export const namespaces = [
   "connections",
   "llm",
   "navigation",
+  "onboard",
   "overview",
   "providers",
   "routines",

@@ -1,0 +1,16 @@
+{
+  "stepsLabel": "初始化步骤",
+  "steps": {
+    "providers": "绑定模型",
+    "agents": "安装智能体"
+  },
+  "states": {
+    "installing": "正在安装…"
+  },
+  "agents": {
+    "what": "智能体",
+    "installed": "已安装",
+    "failed": "安装失败：{{message}}",
+    "retry": "重试安装"
+  }
+}
