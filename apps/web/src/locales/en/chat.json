@@ -274,6 +274,10 @@
     "title": "Waiting for you",
     "more": "and {{count}} more waiting"
   },
+  "context": {
+    "awaitingYou": "Waiting for you",
+    "openPending": "Open Pending"
+  },
   "new": {
     "title": "New conversation",
     "hint": "Pick a project and an agent. The conversation appears under that project in the sidebar.",
