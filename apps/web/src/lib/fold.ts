@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 /**
  * Which cards the reader has opened and folded, kept by the row they were drawn from.
@@ -51,6 +51,20 @@ function choices(): Record<string, 0 | 1> {
   return parsed;
 }
 
+/**
+ * Who is drawing a fold. One row can be drawn twice at once — a boxed reply's answer sits under the
+ * process and again in the dialog that opens the whole process — and the reader expects the two to
+ * be one fold. Every hook listening hears about every choice made, and re-reads its own row's.
+ */
+const listeners = new Set<() => void>();
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 /** Whether the reader left this card open, or `undefined` when they never said. */
 export function foldChoice(id: string): boolean | undefined {
   const choice = choices()[id];
@@ -68,6 +82,7 @@ export function rememberFold(id: string, open: boolean): void {
   } catch {
     // Not persisted; the choice still holds for this visit, in what `known` now holds.
   }
+  for (const listener of listeners) listener();
 }
 
 /**
@@ -75,21 +90,19 @@ export function rememberFold(id: string, open: boolean): void {
  * `defaultOpen` until they do, and `fold` both applies the choice and remembers it.
  *
  * `defaultOpen` moves — a draft folds when the turn that wrote it ends — and a card that has heard no
- * opinion follows it. One that has does not.
+ * opinion follows it. One that has does not. Nothing is held in the component: the store is the
+ * answer, so the same row drawn in two places shows one fold and changes as one.
  */
+const nothingSaid = () => undefined;
+
 export function useFold(
   id: string,
   defaultOpen: boolean,
 ): [boolean, (open: boolean) => void] {
-  const [open, setOpen] = useState(() => foldChoice(id) ?? defaultOpen);
-  useEffect(() => {
-    if (foldChoice(id) === undefined) setOpen(defaultOpen);
-  }, [id, defaultOpen]);
-  return [
-    open,
-    (next: boolean) => {
-      setOpen(next);
-      rememberFold(id, next);
-    },
-  ];
+  const choice = useSyncExternalStore(
+    subscribe,
+    () => foldChoice(id),
+    nothingSaid,
+  );
+  return [choice ?? defaultOpen, (next: boolean) => rememberFold(id, next)];
 }
