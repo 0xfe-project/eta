@@ -274,6 +274,10 @@
     "title": "等你处理",
     "more": "还有 {{count}} 条在等你"
   },
+  "context": {
+    "awaitingYou": "等你",
+    "openPending": "去待处理"
+  },
   "new": {
     "title": "新对话",
     "hint": "选一个项目和一位智能体。对话会出现在左栏那个项目下面。",
