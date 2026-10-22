@@ -108,7 +108,12 @@ export function Sidebar() {
               <SidebarMenuItem>
                 <SidebarTrigger
                   aria-label={translateText("accessibility.toggleSidebar")}
-                  className="mx-auto size-6"
+                  className={
+                    // Same trap as the gear below: the button's own class is `inline-flex`, and an
+                    // inline box does not take auto margins — so `mx-auto` alone leaves the icon
+                    // hugging the rail's left edge. `flex` makes it a block flex row first.
+                    "mx-auto flex size-6"
+                  }
                 />
               </SidebarMenuItem>
             ) : null}

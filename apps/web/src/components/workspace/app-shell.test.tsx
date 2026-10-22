@@ -365,6 +365,15 @@ describe("折叠成图标栏", () => {
     const header = rail.querySelector('[data-sidebar="header"]')!;
     expect(header.textContent).toContain("ETA");
     expect(header.querySelectorAll("button")).toHaveLength(0);
+    // 图标栏里的两个控件居中靠的是 auto margin，而按钮自带 `inline-flex`——inline 盒
+    // 不吃 auto margin。所以它们得先是块级 flex；少了那个 `flex`，图标会贴左。
+    for (const control of [
+      rail.querySelector('[data-sidebar="trigger"]')!,
+      rail.querySelector('button[title="设置"]')!,
+    ]) {
+      expect(control.className).toContain("mx-auto");
+      expect(control.className).not.toContain("inline-flex");
+    }
   });
 
   it("开关能折叠也能展开，刷新后还记着", async () => {
