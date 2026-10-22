@@ -1,15 +1,18 @@
 import { useTranslation } from "react-i18next";
 
-import { isLongPaste } from "@/lib/composer";
+import { isLongMessage } from "@/lib/composer";
 import { useFold } from "@/lib/fold";
 
 /**
  * The words of a message row, folded to a dozen lines when they are long.
  *
  * What you sent and what the agent wrote are folded by the same piece, on the same judgement
- * (`isLongPaste`) and with the same one-line control under them, because to the person skimming the
+ * (`isLongMessage`) and with the same one-line control under them, because to the person skimming the
  * transcript they are one problem: a message longer than the exchange around it. Two sets of clamp
  * classes, one per author, is how the two start drifting apart.
+ *
+ * That judgement is deliberately not the one that folds a paste (`isLongPaste`, a third of the
+ * lines): a paste is a lump the sender knows they pasted, a reply is the thing being read.
  *
  * The choice is the reader's, kept by the row's id (see `lib/fold.ts`): a reply they opened stays
  * open through a reload, and a row drawn twice — a boxed reply's answer, in place and again inside
@@ -37,7 +40,7 @@ export function FoldedText({
 }) {
   const { t: translateText } = useTranslation("chat");
   const [open, fold] = useFold(id, false);
-  if (!isLongPaste(text)) return <div className={className}>{children}</div>;
+  if (!isLongMessage(text)) return <div className={className}>{children}</div>;
   return (
     <div className={className}>
       <div className={open ? undefined : "line-clamp-12"}>{children}</div>

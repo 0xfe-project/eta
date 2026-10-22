@@ -31,7 +31,7 @@ const KEY = "eta.card-folds.v1";
 const EXPAND = "展开全文";
 const COLLAPSE = "收起";
 
-/** Forty lines of answer: over both of the thresholds `isLongPaste` weighs. */
+/** Forty lines of answer: over both of the thresholds `isLongMessage` weighs. */
 const LONG = Array.from(
   { length: 40 },
   (_, i) => `第 ${i + 1} 段：这一行是回复里的一行。`,

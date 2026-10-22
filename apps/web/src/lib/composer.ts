@@ -7,11 +7,20 @@ import { translate } from "@/lib/i18n";
 
 /**
  * A paste longer than this (in characters, counted as Unicode code points,
- * or in lines) folds into a block. The composer grows to 40% of the
- * window's height, about 12 lines on a phone; 1000 characters is about a
- * screenful of code or log, past which editing it in place stops helping.
+ * or in lines) folds into a block. What you paste you already know is a lump —
+ * a few lines of log or someone else's paragraph is not something to type into
+ * the middle of a sentence — so the bar is low: more than three lines and it
+ * becomes the chip. 1000 characters is where a single-line paste stops being
+ * something you can see the shape of while editing it.
  */
-export const LONG_PASTE = { chars: 1000, lines: 12 };
+export const LONG_PASTE = { chars: 1000, lines: 3 };
+/**
+ * How long a message's own words have to be before they are folded to a dozen lines. Higher on
+ * purpose than a paste: the answer beside it is written to be read in place, and a row of four
+ * lines with an “展开” under it is a row that apologises for nothing. One threshold for both is
+ * how every short reply starts wearing a control.
+ */
+export const LONG_MESSAGE = { chars: 1000, lines: 12 };
 /** A message's text at most. */
 export const MAX_MESSAGE_CHARS = 100_000;
 /** A paste too long to send as text goes as a file of this name. */
@@ -44,6 +53,14 @@ export function isLongPaste(text: string) {
   return (
     text.split("\n").length > LONG_PASTE.lines ||
     charCount(text) > LONG_PASTE.chars
+  );
+}
+
+/** Whether a message's words are long enough to fold; see `LONG_MESSAGE`. */
+export function isLongMessage(text: string) {
+  return (
+    text.split("\n").length > LONG_MESSAGE.lines ||
+    charCount(text) > LONG_MESSAGE.chars
   );
 }
 
