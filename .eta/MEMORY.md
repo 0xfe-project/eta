@@ -24,6 +24,8 @@
 - [99] Eta chat: publish_artifact/ref cards must render outside ProcessBox in the turn-tasks card layer, same position as draft_task/task_card, on both streaming and persisted message paths.
 - [100] Eta 侧栏折叠布局：折叠后任务/定时导航只展示图标；群聊/agent 卡片改为上方图标+下方小字名称（竖向排列），折叠 rail 宽度要刚好容纳图标+小字；折叠态 SidebarHeader 只显示紧凑 logo（点击可展开），不要把 logo 和折叠按钮硬塞在同一行；折叠/展开按钮移到分区列表最上方，顺序为 折叠→设置→任务→定时。展开态保持页眉右侧折叠按钮，设置仍排在任务/定时之前。
 - [102] Eta ActivityRefCard/artifact/task reference cards in sidebar/workspace panel must fill the available card area and must not impose a local max-width (e.g. max-w-md).
+- [105] Eta 任务页 #13：只有任务详情/信息页聊天化（一次运行=带头像发言，日志折进发言，状态/系统事件细行，需要人动作按钮卡，底部输入框常驻且发送即续跑；标题下用 chip 替代右侧属性 aside/四格，去掉活动 tab，长描述收成第一条折叠块）；任务列表/看板/面板任务列表保持原样且行内不加验收按钮；整页与面板详情共用一个 TaskThread 组件。
+- [108] Eta collapsed sidebar rail controls (e.g. SidebarTrigger/settings) must be horizontally centered in the rail.
 
 ## preference
 
@@ -50,8 +52,8 @@
 - [76] When the user asks to merge all open Eta tasks if they look fine, the agent should merge/close/verify them autonomously instead of asking for per-task confirmation.
 - [92] 当用户说"这是一个任务"时，应建 task 而非在聊天区直接执行。
 - [94] For significant Eta UI redesigns, user prefers reviewing a visual HTML artifact/prototype first before implementation.
-- [98] Eta 任务页重设计（#13 定稿）：只有任务「详情/信息页」做成聊天式（一次运行=一条带头像的发言、日志折在发言里、状态改动=细系统行、需要人的是带按钮的卡、底部输入框常驻且**发送即续跑**、属性四格/右侧 aside 换成标题下一行 chip、去掉「活动」小标题与 tab、长描述收成流里第一条折叠块）；任务列表保持列表页原样（状态分节+计数、行式、行内**不加**验收按钮），整页列表/看板与右侧栏 Tasks tab 的列表都不动，详情改造抽一个组件给整页与面板共用。
 - [103] For Eta ref-card width issues, remove arbitrary card caps and rely on outer layout bounds instead of adding a new cap or resizing the sidebar.
+- [110] Eta 任务详情/TaskThread 的线程区应使用固定高度、盒内自滚动，底部留言条在滚动框外；优先复用聊天 ProcessBox/共用固定高滚动框，面板与整页高度用 CSS 变量分档，避免双层纵向滚动。
 
 ## lesson
 
@@ -89,3 +91,7 @@
 - [96] Eta web 聊天里 tool call 自带的卡（ActivityRefCard：artifact / PR）由 ToolActivity 画在固定高度的 ProcessBox 过程盒内，会被一起折走；draft_task / task_card 不在过程盒里，它们走 Turn 的 `turn-tasks` 卡片层（画在答案旁边）。要让 tool 的产物卡常驻可见，就必须画进 turn-tasks 那一层，而不是留在过程盒里。
 - [101] Eta 折叠侧栏不要为保住固定 40px header/分隔线而把 logo 和控件挤成一行；折叠态页眉应只留 logo，把交互控件移到导航列表。
 - [104] Eta shared activity-card `frameClass` can hide width bugs: `max-w-md` looked like sidebar default width but was arbitrary; check shared style strings and both `<div>` vs `<a>/<button>` variants, and pin card fill behavior with tests.
+- [106] 修 Eta 聊天/侧栏 ActivityRefCard 宽度时，同步检查同一 turn-tasks 列里的 .task-fold max-width，避免 ref 卡铺满而 draft_task/task_card 折叠行仍限宽造成视觉错位。
+- [107] 合并 Eta 任务分支前检查工作区是否干净；若有未提交的本地改动，先单独提交或清理，避免脏工作区影响合并或把无关改动卷入。
+- [111] Eta 聊天里「多长算长」拆成两个阈值：`LONG_PASTE`（粘贴折成块的门槛，3 行 / 1000 字，用户嫌 12 行太高）与 `LONG_MESSAGE`（发言与回复折到 12 行的门槛，保持 12 行 / 1000 字）。别把它们合回一个判断——合回去等于每条四行的回复都挂一个「展开」。
+- [109] Eta collapsed sidebar rail: Button base is inline-flex, so mx-auto alone does not center it; use `mx-auto flex` or equivalent block flex, and test that the trigger has mx-auto and no residual inline-flex.
