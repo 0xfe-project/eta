@@ -84,7 +84,10 @@ const direct = (
     ...extra,
   });
 
-async function tree(conversations: ConversationSummary[]) {
+async function tree(
+  conversations: ConversationSummary[],
+  { open = true }: { open?: boolean } = {},
+) {
   const host = productHost({
     agents,
     projects,
@@ -111,7 +114,7 @@ async function tree(conversations: ConversationSummary[]) {
     { eager: true },
   );
   const mounted = await mount(
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={open}>
       <ConversationList />
     </SidebarProvider>,
   );
@@ -284,6 +287,98 @@ describe("侧边栏的两块", () => {
     expect(useWorkspaceStore.getState().agentEditor).toEqual({
       open: true,
       agentId: null,
+    });
+  });
+});
+
+describe("折叠成图标栏", () => {
+  it("群卡片是成员头像上面、小字名称下面，点它还是打开那个群", async () => {
+    const { container } = await tree([group("g1", "装配", "p-eta")], {
+      open: false,
+    });
+    const section = groupsSection(container)!;
+    const card = section.querySelector<HTMLElement>(
+      '[data-sidebar="menu-button"]',
+    )!;
+    const name = card.querySelector("[data-slot=conversation-name]")!;
+    // The rail keeps two things off the wide card: who is in the group, and its name.
+    expect(name.textContent).toBe("装配");
+    expect(name.className).toContain("text-[10px]");
+    expect(name.className).toContain("truncate");
+    expect(card.querySelectorAll("img").length).toBeGreaterThan(0);
+    // 成员行和 ⋯ 菜单在 rail 上没有地方，也就不在了：卡片就是一个按钮。
+    expect(card.querySelectorAll("button")).toHaveLength(0);
+    expect(section.querySelectorAll("[data-slot=member-row]")).toHaveLength(0);
+    // 「●」只是颜字，不该读进按钮名里。
+    expect(card.textContent).not.toContain("●");
+    await click(card);
+    expect(navigation.navigate).toHaveBeenCalledWith({
+      to: "/",
+      search: { group: "g1", view: "context" },
+    });
+  });
+
+  it("智能体卡片也是头像加小字名称，点它还是进那个智能体", async () => {
+    const { container } = await tree([group("g1", "装配", "p-eta")], {
+      open: false,
+    });
+    const section = agentsSection(container)!;
+    const names = [
+      ...section.querySelectorAll("[data-slot=agent-name]"),
+    ] as HTMLElement[];
+    expect(names.map((node) => node.textContent)).toEqual([
+      "乐子人",
+      "装配检查",
+    ]);
+    expect(names[0]?.className).toContain("text-[10px]");
+    // 没读的用角标，读过的是状态点：两种都不会在 rail 上静默消失。
+    const corner = (id: string) =>
+      [...section.querySelectorAll("[data-sidebar=menu-item]")].find(
+        (item) =>
+          item.querySelector(`[data-slot=agent-name]`)?.textContent === id,
+      )!;
+    expect(
+      corner("乐子人").querySelector("[data-slot=agent-unread]"),
+    ).toBeNull();
+    expect(
+      [...corner("乐子人").children].filter(
+        (child) => child.tagName !== "BUTTON",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("有未读时 rail 卡片角上是数字", async () => {
+    const { container } = await tree([direct("d1", "a1", { unread: 3 })], {
+      open: false,
+    });
+    expect(
+      agentsSection(container)!.querySelector("[data-slot=agent-unread]")
+        ?.textContent,
+    ).toBe("3");
+    // 数字画在卡角（按钮外），所以按钮名里也得写一份，不让它只活在视觉上。
+    expect(
+      agentsSection(container)!.querySelector("[data-sidebar=menu-button]")
+        ?.textContent,
+    ).toContain("3");
+  });
+
+  it("折叠成 rail 时组头不写字，新建的 + 还在", async () => {
+    const { container } = await tree([group("g1", "装配", "p-eta")], {
+      open: false,
+    });
+    expect(
+      groupsSection(container)!.querySelector("#sidebar-groups"),
+    ).not.toBeNull();
+    // 分区名还在，只是不画出来。
+    expect(
+      groupsSection(container)!.querySelector<HTMLElement>("#sidebar-groups")
+        ?.className,
+    ).toContain("sr-only");
+    await click(
+      groupsSection(container)!.querySelector('button[title="新对话"]'),
+    );
+    expect(useWorkspaceStore.getState().newConversation).toEqual({
+      open: true,
     });
   });
 });

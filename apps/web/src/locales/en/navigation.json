@@ -14,7 +14,8 @@
     "sections": "Sections",
     "workspaceTabs": "Workspace tabs",
     "skipToContent": "Skip to content",
-    "resizePanel": "Resize the panel"
+    "resizePanel": "Resize the panel",
+    "toggleSidebar": "Collapse or expand the sidebar"
   },
   "actions": {
     "openFullWindow": "Open in full window",
