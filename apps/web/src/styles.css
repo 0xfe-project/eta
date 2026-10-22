@@ -129,6 +129,20 @@
   }
 
   /*
+   * The wide sidebar: 18rem from `lg` up.
+   *
+   * The provider writes the width inline on the wrapper, and the gap that holds the page content
+   * back belongs to that wrapper too. Carried on the sidebar element instead, the override moves
+   * the sidebar and forgets the gap, and the content ends up 2rem under a sidebar that can fold
+   * over it. `!important` because that inline default is otherwise the last word.
+   */
+  @media (min-width: 64rem) {
+    [data-slot="sidebar-wrapper"] {
+      --sidebar-width: 18rem !important;
+    }
+  }
+
+  /*
    * The one header band every column wears: same height, same field, same rule underneath.
    * Without it three headers at three heights read as three separate bars, and the window stops
    * looking like one object.

@@ -14,7 +14,8 @@
     "sections": "分区",
     "workspaceTabs": "工作区标签",
     "skipToContent": "跳转到内容",
-    "resizePanel": "调整右栏宽度"
+    "resizePanel": "调整右栏宽度",
+    "toggleSidebar": "折叠或展开侧栏"
   },
   "actions": {
     "openFullWindow": "在全窗口中打开",

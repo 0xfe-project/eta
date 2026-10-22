@@ -108,7 +108,14 @@ function AppearanceSettings() {
 }
 
 /** Opens settings; the dot marks accounts the user has to act on. */
-export function SettingsButton({ className }: { className?: string }) {
+export function SettingsButton({
+  className,
+  withLabel = false,
+}: {
+  className?: string;
+  /** The word beside the gear, for a place that lists what things are. */
+  withLabel?: boolean;
+}) {
   const { t: translateText } = useTranslation(["settings", "common"] as const);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const attention = useNeedsAttention();
@@ -126,6 +133,9 @@ export function SettingsButton({ className }: { className?: string }) {
       onClick={() => setSettings((state) => ({ ...state, open: true }))}
     >
       <GearSixIcon aria-hidden="true" />
+      {withLabel ? (
+        <span className="truncate">{translateText("title")}</span>
+      ) : null}
       {attention ? (
         <AttentionDot className="absolute top-1.5 right-1.5" />
       ) : null}

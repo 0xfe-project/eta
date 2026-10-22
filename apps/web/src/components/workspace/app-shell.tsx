@@ -14,8 +14,11 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   Sidebar as SidebarRoot,
+  SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { translate } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import { useTasks } from "@/queries/tasks";
 import { AgentEditor } from "./agent-editor";
 import { NewConversationDialog } from "./new-conversation-dialog";
@@ -52,43 +55,98 @@ function useBadges(): Partial<Record<(typeof sections)[number]["to"], number>> {
 
 export function Sidebar() {
   const { t: translateText } = useTranslation(["navigation"] as const);
+  const { state, isMobile } = useSidebar();
   const badges = useBadges();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // The rail: the width 4rem of icons, and the same tree in it. Not the agent shelf's fold — that
+  // one is the workspace store's, and the two never meet.
+  const rail = state === "collapsed" && !isMobile;
   return (
     <SidebarRoot
-      collapsible="none"
-      className="hidden shrink-0 border-r [--sidebar-width:16rem] md:flex lg:[--sidebar-width:18rem]"
+      collapsible="icon"
+      className="hidden shrink-0 border-r md:flex"
     >
-      <SidebarHeader className="band flex-row items-center justify-between p-0 pr-2 pl-4">
-        {/* BR1's wordmark: uppercase, tracked out, the letterforms doing the work. */}
+      <SidebarHeader
+        className={cn(
+          "band flex-row items-center p-0",
+          rail ? "justify-center gap-0.5 px-1" : "justify-between pr-2 pl-4",
+        )}
+      >
+        {/* BR1's wordmark: uppercase, tracked out, the letterforms doing the work. The rail keeps
+            the same three letters, set to a size the rail can hold. */}
         <Link
           to="/"
-          className="font-mono text-base font-medium tracking-[0.18em]"
+          className={cn(
+            "shrink-0 font-mono font-medium",
+            rail
+              ? "text-[10px] tracking-[0.08em] text-muted-foreground"
+              : "text-base tracking-[0.18em]",
+          )}
         >
           ETA
         </Link>
-        <SettingsButton />
+        <SidebarTrigger
+          aria-label={translateText("accessibility.toggleSidebar")}
+          className={rail ? "size-6" : undefined}
+        />
       </SidebarHeader>
       <SidebarContent className="gap-0 overflow-hidden">
         <SidebarGroup className="shrink-0 border-b pb-1">
           <SidebarMenu aria-label={translateText("accessibility.sections")}>
-            {sections.map(({ to, label, icon: Icon }) => (
-              <SidebarMenuItem key={to}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname.startsWith(to)}
-                  className="text-sm"
-                >
-                  <Link to={to}>
-                    <Icon aria-hidden="true" />
-                    <span>{label}</span>
-                  </Link>
-                </SidebarMenuButton>
-                {badges[to] ? (
-                  <SidebarMenuBadge>{badges[to]}</SidebarMenuBadge>
-                ) : null}
-              </SidebarMenuItem>
-            ))}
+            {/* Settings first, in both states: a control that moves when the rail folds is a
+                control you have to look for twice. */}
+            <SidebarMenuItem>
+              <SettingsButton
+                withLabel={!rail}
+                className={cn(
+                  "relative",
+                  rail
+                    ? // `inline-flex` will not take an auto margin, so the gear is made a block flex
+                      // row first: at 4rem the rail's centre is the only place it can sit.
+                      "mx-auto flex"
+                    : "w-full justify-start gap-2 px-2 font-normal",
+                )}
+              />
+            </SidebarMenuItem>
+            {sections.map(({ to, label, icon: Icon }) => {
+              const count = badges[to];
+              return (
+                <SidebarMenuItem key={to}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname.startsWith(to)}
+                    tooltip={label}
+                    className={cn(
+                      "relative overflow-visible text-sm",
+                      rail && "mx-auto",
+                    )}
+                  >
+                    <Link
+                      to={to}
+                      aria-label={count ? `${label} · ${count}` : label}
+                    >
+                      <Icon aria-hidden="true" />
+                      {rail ? null : <span>{label}</span>}
+                      {/* The badge the menu hides in the rail, as a corner mark on the icon:
+                          folded away is not a reason to lose a count. The number is drawn here and
+                          carried in the link's name, so it is neither silent nor said twice. */}
+                      {rail && count ? (
+                        <span
+                          data-slot="menu-badge-dot"
+                          aria-hidden="true"
+                          className="absolute -top-0.5 -right-1 border border-border bg-sidebar px-0.5 font-mono text-[9px] leading-3 text-foreground tabular-nums"
+                        >
+                          {count}
+                        </span>
+                      ) : null}
+                    </Link>
+                  </SidebarMenuButton>
+                  {!rail && count ? (
+                    <SidebarMenuBadge>{count}</SidebarMenuBadge>
+                  ) : null}
+                </SidebarMenuItem>
+              );
+            })}
           </SidebarMenu>
         </SidebarGroup>
         <ConversationList />

@@ -4,6 +4,7 @@ import type {
   MemberView,
 } from "@eta/client-contracts";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
+import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { useState } from "react";
@@ -21,6 +22,7 @@ import {
   SidebarMenu,
   SidebarMenuAction,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { agentName, useAgentList } from "@/queries/agents";
@@ -80,6 +82,10 @@ export function ConversationList() {
   const focusedAgentId = useWorkspaceStore((state) => state.focusedAgentId);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const home = machines.find((machine) => machine.kind === "primary")?.home;
+  const { state, isMobile } = useSidebar();
+  // The sidebar's own fold, not the agent shelf's: on the rail every card is a glyph with its
+  // name under it, and both halves of the list keep the same shape.
+  const rail = state === "collapsed" && !isMobile;
 
   return (
     <>
@@ -87,10 +93,19 @@ export function ConversationList() {
         aria-labelledby="sidebar-groups"
         className="min-h-0 flex-1 overflow-y-auto pb-0"
       >
-        <div className="flex items-center justify-between border-b px-2 pr-1 pb-1">
+        <div
+          className={cn(
+            "flex items-center border-b pb-1",
+            rail ? "justify-center" : "justify-between px-2 pr-1",
+          )}
+        >
           <span
             id="sidebar-groups"
-            className="font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase"
+            className={cn(
+              "font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase",
+              // Still the section's name, just not drawn: a heading cannot fit in a rail.
+              rail && "sr-only",
+            )}
           >
             {translateText("chat:sections.groups")}
           </span>
@@ -107,7 +122,11 @@ export function ConversationList() {
         <SidebarMenu className="gap-1.5 py-1.5">
           {directories.length === 0 ? (
             loaded ? (
-              <p className="px-2 py-1 text-xs text-muted-foreground">
+              <p
+                className={
+                  rail ? "sr-only" : "px-2 py-1 text-xs text-muted-foreground"
+                }
+              >
                 {translateText("chat:groups.empty.title")}
               </p>
             ) : null
@@ -132,6 +151,7 @@ export function ConversationList() {
                     }
                     onOpen={() => open(conversation.id)}
                     focusedAgentId={focusedAgentId}
+                    rail={rail}
                     onOpenAgent={(agentId) =>
                       setFocusedAgent(
                         focusedAgentId === agentId ? null : agentId,
@@ -148,7 +168,12 @@ export function ConversationList() {
         aria-labelledby="sidebar-agents"
         className="mt-auto shrink-0 border-t pb-0"
       >
-        <div className="flex items-center justify-between border-b pr-1 pb-1 pl-1">
+        <div
+          className={cn(
+            "flex items-center border-b pb-1",
+            rail ? "justify-center gap-1" : "justify-between pr-1 pl-1",
+          )}
+        >
           <button
             type="button"
             aria-expanded={!collapsed}
@@ -158,7 +183,10 @@ export function ConversationList() {
                 agentsCollapsed: !collapsed,
               }))
             }
-            className="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pl-1 text-left"
+            className={cn(
+              "flex min-w-0 items-center gap-1.5 py-0.5 text-left",
+              rail ? "pl-0" : "flex-1 pl-1",
+            )}
           >
             {/* Up when folded away, because unfolding grows upwards from the bottom of the column. */}
             <CaretDownIcon
@@ -170,7 +198,10 @@ export function ConversationList() {
             />
             <span
               id="sidebar-agents"
-              className="min-w-0 flex-1 truncate font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase"
+              className={cn(
+                "min-w-0 flex-1 truncate font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase",
+                rail && "sr-only",
+              )}
             >
               {translateText("chat:sections.agents")}
             </span>
@@ -189,12 +220,20 @@ export function ConversationList() {
         </div>
         {collapsed ? null : (
           // Never more than two fifths of the screen: the agents are who you can talk to, the
-          // groups are the work, and the work keeps the room.
-          <div className="max-h-[40dvh] overflow-y-auto">
+          // groups are the work, and the work keeps the room. On the rail the shelf gets a hair of
+          // horizontal padding, which is where a card's corner count sits: without it the count
+          // overhangs the scroll box and the rail grows a horizontal scrollbar.
+          <div className={cn("max-h-[40dvh] overflow-y-auto", rail && "px-1")}>
             <SidebarMenu className="gap-1.5 py-1.5">
               {directs.length === 0 ? (
                 loaded ? (
-                  <p className="px-2 py-1 text-xs text-muted-foreground">
+                  <p
+                    className={
+                      rail
+                        ? "sr-only"
+                        : "px-2 py-1 text-xs text-muted-foreground"
+                    }
+                  >
                     {translateText("chat:sections.noAgents")}
                   </p>
                 ) : null
@@ -204,6 +243,7 @@ export function ConversationList() {
                     key={entry.agent.id}
                     agent={entry.agent}
                     unread={entry.conversation?.unread ?? 0}
+                    rail={rail}
                   />
                 ))
               )}
@@ -232,6 +272,7 @@ function GroupCard({
   onOpen,
   onOpenAgent,
   focusedAgentId,
+  rail,
 }: {
   conversation: ConversationSummary;
   path: string | undefined;
@@ -242,6 +283,7 @@ function GroupCard({
   onOpen: () => void;
   onOpenAgent: (agentId: string) => void;
   focusedAgentId: string | null;
+  rail: boolean;
 }) {
   const { t: translateText } = useTranslation(["chat", "common"] as const);
   const { update } = useConversationActions();
@@ -258,6 +300,62 @@ function GroupCard({
   const nameOf = (agentId: string) => agentName(agents, agentId);
   const busy = members.filter((member) => member.status !== "idle");
   const directory = path ?? translateText("chat:sections.unknownDirectory");
+
+  // On the rail a group is a glyph with its name under it: the member stack says who is in it,
+  // the name says which one it is. Everything the wide card writes out has nowhere to go here, so
+  // the card keeps the two things a rail can carry and drops the rest rather than clipping it.
+  if (rail)
+    return (
+      <SidebarMenuItem
+        className={cn(
+          "group/menu-item relative border border-border transition-colors duration-75",
+          "hover:bg-sidebar-accent",
+          active && "bg-sidebar-accent",
+        )}
+        data-active={active}
+      >
+        <button
+          type="button"
+          data-sidebar="menu-button"
+          data-active={active}
+          title={conversation.name}
+          onClick={onOpen}
+          className="relative flex w-full flex-col items-center gap-1 px-1 py-1.5 hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+        >
+          {members.length === 0 ? (
+            <ChatsCircleIcon
+              aria-hidden="true"
+              className="size-5 text-muted-foreground"
+            />
+          ) : (
+            <MemberStack members={members} compact />
+          )}
+          <span
+            data-slot="conversation-name"
+            className="w-full truncate text-center text-[10px] leading-tight"
+          >
+            {conversation.name}
+          </span>
+          {busy.length > 0 ? (
+            <span
+              aria-hidden="true"
+              className="absolute top-0.5 left-0.5 font-mono text-[10px] text-state-success"
+              title={busy.map((member) => nameOf(member.agentId)).join("、")}
+            >
+              ●
+            </span>
+          ) : null}
+          {conversation.unread > 0 ? (
+            <span
+              data-slot="conversation-unread"
+              className="pointer-events-none absolute -top-1 -right-1 border border-border bg-sidebar px-0.5 font-mono text-[9px] leading-3 tabular-nums"
+            >
+              {conversation.unread}
+            </span>
+          ) : null}
+        </button>
+      </SidebarMenuItem>
+    );
 
   return (
     <SidebarMenuItem
@@ -410,7 +508,15 @@ function GroupCard({
 }
 
 /** One agent as a card: its name, and what it is wearing and running. */
-function AgentCard({ agent, unread }: { agent: AgentView; unread: number }) {
+function AgentCard({
+  agent,
+  unread,
+  rail,
+}: {
+  agent: AgentView;
+  unread: number;
+  rail: boolean;
+}) {
   const { t: translateText } = useTranslation(["chat"] as const);
   const openAgent = useOpenAgent();
   const { data: models } = useModels();
@@ -423,6 +529,47 @@ function AgentCard({ agent, unread }: { agent: AgentView; unread: number }) {
   const tags = [agent.persona, modelName].filter(
     (tag): tag is string => tag !== undefined && tag.length > 0,
   );
+  // The rail's card: the avatar, its name under it in the smallest type the column has, and the
+  // count or the status in the corner. Same button, same destination as the wide card.
+  if (rail)
+    return (
+      <SidebarMenuItem className="relative border border-border transition-colors duration-75">
+        <button
+          type="button"
+          data-sidebar="menu-button"
+          title={translateText("chat:groups.members.talkAlone", {
+            name: agent.name,
+          })}
+          onClick={() => openAgent(agent.id)}
+          className="flex w-full flex-col items-center gap-1 px-1 py-1.5 transition-colors duration-75 hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+        >
+          <AgentAvatar agent={agent} className="size-6" />
+          <span
+            data-slot="agent-name"
+            className="w-full truncate text-center text-[10px] leading-tight"
+          >
+            {agent.name}
+          </span>
+          {/* The count is drawn on the item's corner, outside this button, so it has to be written
+              here as well for the name to carry it. */}
+          {unread > 0 ? <span className="sr-only">{unread}</span> : null}
+          <span className="sr-only">{agentStatusLabels[agent.status]}</span>
+        </button>
+        {unread > 0 ? (
+          <span
+            data-slot="agent-unread"
+            className="pointer-events-none absolute -top-1 -right-1 border border-border bg-sidebar px-0.5 font-mono text-[9px] leading-3 tabular-nums"
+          >
+            {unread}
+          </span>
+        ) : (
+          <AgentStatusDot
+            status={agent.status}
+            className="pointer-events-none absolute top-0.5 right-0.5"
+          />
+        )}
+      </SidebarMenuItem>
+    );
   return (
     <SidebarMenuItem className="border border-border transition-colors duration-75">
       <button
@@ -463,21 +610,28 @@ function AgentCard({ agent, unread }: { agent: AgentView; unread: number }) {
   );
 }
 
-/** The card's member avatars: as many as fit, then a count. */
-function MemberStack({ members }: { members: readonly MemberView[] }) {
+/** The card's member avatars: as many as fit, then a count. On the rail they are all the room there
+ * is, so they shrink and the count goes: three faces say more than a number in a 4rem column. */
+function MemberStack({
+  members,
+  compact = false,
+}: {
+  members: readonly MemberView[];
+  compact?: boolean;
+}) {
   const shown = members.slice(0, 3);
-  const rest = members.length - shown.length;
+  const rest = compact ? 0 : members.length - shown.length;
   if (members.length === 0) return null;
   return (
     <span className="flex shrink-0 items-center" aria-hidden="true">
       {/* No box behind them: a blob avatar is a filled shape with transparent surroundings, so a
        * wrapper is a dark frame in a dark theme — the frame is the bug, not the overlap. */}
-      <span className="flex -space-x-1">
+      <span className={cn("flex", compact ? "-space-x-1.5" : "-space-x-1")}>
         {shown.map((member) => (
           <AgentAvatar
             key={member.agentId}
             agent={{ id: member.agentId }}
-            className="size-5"
+            className={compact ? "size-4" : "size-5"}
           />
         ))}
       </span>
