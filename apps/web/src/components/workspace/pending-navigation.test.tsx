@@ -17,7 +17,7 @@ import { useShowLinkedView } from "./workspace-search";
 import { useWorkspaceStore } from "./workspace-store";
 
 // The pending list opens what it lists in the mode it is shown in: beside
-// the chat, the side panel's tabs; in the full-window workspace, its pages.
+// the chat, the side panel's tabs; on its own page, that page.
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -88,18 +88,15 @@ describe("pending navigation", () => {
     const { container } = await mount(() => <PendingList />, "/?view=inbox");
     expect(links(container)).toEqual([
       "/?view=tasks&task=t1",
-      "/workspace/routines?routine=r1",
+      "/routines?routine=r1",
     ]);
   });
 
-  it("opens them on their pages in the full-window workspace", async () => {
-    const { container } = await mount(
-      () => <PendingList />,
-      "/workspace/tasks",
-    );
+  it("opens them on their own pages", async () => {
+    const { container } = await mount(() => <PendingList />, "/tasks");
     expect(links(container)).toEqual([
-      "/workspace/tasks?task=t1",
-      "/workspace/routines?routine=r1",
+      "/tasks?task=t1",
+      "/routines?routine=r1",
     ]);
   });
 

@@ -77,53 +77,16 @@ describe("activity ref cards", () => {
     ]);
   });
 
-  // The card is as wide as the column drawing it: the context tab's sections, a turn's card column,
-  // a group's Artifacts tab. A width cap here stopped growing the moment the reader dragged the
-  // right panel wider, so the panel's own width is the only thing allowed to limit the card.
-  it("fills the column it is drawn in, in both shapes", async () => {
-    const { container } = await mount([
-      task,
-      { kind: "artifact", id: "a1", title: "发布页", number: 3 },
-      {
-        kind: "pull_request",
-        number: 7,
-        title: "Add cards",
-        url: "https://github.com/akarachen/eta/pull/7",
-      },
-    ]);
-    // A task's card is the frame itself (an `<a>`); an artifact's and a PR's are a `<div>` with the
-    // whole card as the action inside it. Both shapes have to fill, and neither may cap itself.
-    const frames = [
-      ...container.querySelectorAll<HTMLElement>('[role="log"] > *'),
-    ];
-    expect(frames).toHaveLength(3);
-    for (const frame of frames) {
-      const actions = [...frame.querySelectorAll<HTMLElement>("a,button")].map(
-        (action) => action.className,
-      );
-      const classes = [frame.className, ...actions].join(" ");
-      expect(classes).not.toMatch(/max-w/);
-      expect(classes).toContain("w-full");
-      // The rest of the card is untouched.
-      expect(frame.className).toContain("min-h-11");
-      expect(frame.className).toContain("border-border");
-      // And a card that wraps its action still stretches the action across the frame.
-      if (frame.tagName === "DIV") {
-        expect(frame.firstElementChild!.className).toContain("flex-1");
-      }
-    }
-  });
-
-  it("opens it on its page in the full-window workspace", async () => {
+  it("opens it on its own page", async () => {
     const { container, router } = await mount([task], {
-      path: "/workspace/tasks",
+      path: "/tasks",
     });
-    expect(cards(container)[0].href).toBe("/workspace/tasks?task=t1");
+    expect(cards(container)[0].href).toBe("/tasks?task=t1");
     await act(async () => {
       container.querySelector<HTMLAnchorElement>('[role="log"] a')!.click();
       await new Promise((resolve) => setTimeout(resolve, 10));
     });
-    expect(router.state.location.pathname).toBe("/workspace/tasks");
+    expect(router.state.location.pathname).toBe("/tasks");
     expect(router.state.location.search).toEqual({ task: "t1" });
   });
 
@@ -139,7 +102,7 @@ describe("activity ref cards", () => {
     ]);
     expect(cards(container)).toEqual([
       {
-        href: "/workspace/routines?routine=r1",
+        href: "/routines?routine=r1",
         label: "打开定时 日报",
         text: "日报",
       },

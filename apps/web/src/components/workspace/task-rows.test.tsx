@@ -436,9 +436,7 @@ describe("a routine's report", () => {
     const opened =
       container.querySelector<HTMLAnchorElement>(".system-message a")!;
     expect(opened.textContent).toBe("例行任务「日报」发来报告：今日要闻");
-    expect(opened.getAttribute("href")).toBe(
-      "/workspace/routines?routine=r1&run=run1",
-    );
+    expect(opened.getAttribute("href")).toBe("/routines?routine=r1&run=run1");
   });
 
   it("falls back to the name alone for a report with no title", async () => {

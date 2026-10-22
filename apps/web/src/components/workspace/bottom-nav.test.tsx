@@ -63,6 +63,6 @@ describe("手机底部栏", () => {
     const targets = [...container.querySelectorAll("a")].map((a) =>
       a.getAttribute("data-to"),
     );
-    expect(targets).toEqual(["/", "/workspace/tasks", "/workspace/routines"]);
+    expect(targets).toEqual(["/", "/tasks", "/routines"]);
   });
 });

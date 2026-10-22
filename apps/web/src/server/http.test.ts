@@ -16,7 +16,7 @@ it("answers health and the current build id", async () => {
 
 it("leaves page and asset requests to the static / SPA server", async () => {
   expect(
-    await handleWebApi(new Request("http://web/workspace/tasks"), "build-1"),
+    await handleWebApi(new Request("http://web/tasks"), "build-1"),
   ).toBeNull();
   expect(
     await handleWebApi(new Request("http://web/assets/app.js"), "build-1"),

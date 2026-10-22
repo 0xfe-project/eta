@@ -5,20 +5,20 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { Route as unknownWorkspacePage } from "@/routes/workspace/$";
+import { Route as unknownPath } from "@/routes/$";
 
-// The route the file defines, mounted beside the two pages that remain.
+// The route the file defines, mounted beside the pages that remain.
 async function open(path: string) {
   const root = createRootRoute();
   const router = createRouter({
     routeTree: root.addChildren([
       createRoute({ getParentRoute: () => root, path: "/" }),
-      createRoute({ getParentRoute: () => root, path: "workspace/tasks" }),
-      createRoute({ getParentRoute: () => root, path: "workspace/routines" }),
+      createRoute({ getParentRoute: () => root, path: "tasks" }),
+      createRoute({ getParentRoute: () => root, path: "routines" }),
       createRoute({
         getParentRoute: () => root,
-        path: "workspace/$",
-        beforeLoad: unknownWorkspacePage.options.beforeLoad as () => void,
+        path: "$",
+        beforeLoad: unknownPath.options.beforeLoad as () => void,
       }),
     ]),
     history: createMemoryHistory({ initialEntries: [path] }),
@@ -28,15 +28,20 @@ async function open(path: string) {
 }
 
 describe("removed pages", () => {
-  it.each(["/workspace/inbox", "/workspace/memory", "/workspace/more"])(
-    "%s redirects to the conversation list",
-    async (path) => {
-      expect(await open(path)).toBe("/");
-    },
-  );
+  it.each([
+    // The old workspace prefix, which tasks and routines have left.
+    "/workspace/tasks",
+    "/workspace/routines",
+    "/workspace/inbox",
+    "/workspace/memory",
+    // A path that never was one.
+    "/nope",
+  ])("%s redirects to the conversation list", async (path) => {
+    expect(await open(path)).toBe("/");
+  });
 
-  it("keeps tasks and routines", async () => {
-    expect(await open("/workspace/tasks")).toBe("/workspace/tasks");
-    expect(await open("/workspace/routines")).toBe("/workspace/routines");
+  it("keeps the pages that remain", async () => {
+    expect(await open("/tasks")).toBe("/tasks");
+    expect(await open("/routines")).toBe("/routines");
   });
 });

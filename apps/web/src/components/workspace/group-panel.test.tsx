@@ -163,7 +163,7 @@ it("puts what waits for the user above everything else", async () => {
   ]);
   expect(linksOf(container, "等你")).toEqual([
     "/?group=g1&view=tasks&task=t1",
-    "/workspace/routines?routine=r1",
+    "/routines?routine=r1",
     "/?group=g1&view=inbox",
   ]);
   // The count is the badge's number, from the same hook: the other group's

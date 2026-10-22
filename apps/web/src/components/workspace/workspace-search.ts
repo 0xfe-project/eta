@@ -16,22 +16,23 @@ import { useEffect, useRef } from "react";
 import { translate } from "@/lib/i18n";
 import { useWorkspaceStore } from "./workspace-store";
 
-/** The side panel's tabs that have a page in the full-window workspace. */
+/** The side panel's tabs that have a page of their own, beside the chat. */
 export const sectionPaths = {
-  tasks: "/workspace/tasks",
-  routines: "/workspace/routines",
+  tasks: "/tasks",
+  routines: "/routines",
 } as const satisfies Partial<Record<WorkspaceView, string>>;
 
 /**
- * Where a section opens from the current mode: its page in the full-window
- * workspace, or its tab of the side panel beside the chat, which keeps the
- * chat (the agent is remembered in the browser, not in the URL).
+ * Where a section opens from the current mode: its own page, or its tab of the
+ * side panel beside the chat, which keeps the chat (the agent is remembered in
+ * the browser, not in the URL).
  */
 export function useSectionLink() {
   const [group] = useQueryState("group", parseAsString);
   const tabs = usePanelViews();
+  // Every page but the chat is a full-window one: `/` is the only place the panel is drawn.
   const fullWindow = useLocation({
-    select: (location) => location.pathname.startsWith("/workspace"),
+    select: (location) => location.pathname !== "/",
   });
   return (
     view: keyof typeof sectionPaths,
@@ -51,7 +52,6 @@ export function useSectionLink() {
  * The workspace's pages used to be four destinations in the sidebar, each of which then asked
  * "but which group?" — the question the conversation you are in has already answered. So they
  * moved here: tasks and what is waiting belong to *this* group, and the panel beside it says so.
- * 概览 stays the one global page, because "across every group" is not a fact about this one.
  * 定时 went the other way: a clock is not a fact about the conversation you happen to be reading,
  * so it keeps its page and its sidebar entry and has no tab here. A link that wants it gets the
  * page — `useSectionLink` sends a section this panel has no tab for there.

@@ -272,7 +272,7 @@ describe("左栏的页眉", () => {
   });
 
   it("links the sections and marks the current one", async () => {
-    state.pathname = "/workspace/routines";
+    state.pathname = "/routines";
     state.agents = [];
     state.groups = [];
     const container = await render(<Sidebar />);
@@ -281,15 +281,15 @@ describe("左栏的页眉", () => {
     );
     // Only the two pages that remain; chat, pending and memory have no button.
     expect(links.map((a) => a.getAttribute("data-to"))).toEqual([
-      "/workspace/tasks",
-      "/workspace/routines",
+      "/tasks",
+      "/routines",
     ]);
     expect(links.map((a) => a.textContent)).toEqual(["任务", "定时"]);
     expect(
       links
         .filter((a) => a.getAttribute("data-active") === "true")
         .map((a) => a.getAttribute("data-to")),
-    ).toEqual(["/workspace/routines"]);
+    ).toEqual(["/routines"]);
   });
 });
 

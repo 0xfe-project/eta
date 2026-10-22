@@ -30,14 +30,14 @@ import { ConversationList } from "./sidebar-tree";
 
 const sections = [
   {
-    to: "/workspace/tasks",
+    to: "/tasks",
     get label() {
       return translate("navigation:sections.tasks");
     },
     icon: ListChecksIcon,
   },
   {
-    to: "/workspace/routines",
+    to: "/routines",
     get label() {
       return translate("navigation:sections.routines");
     },
@@ -49,7 +49,7 @@ const sections = [
 function useBadges(): Partial<Record<(typeof sections)[number]["to"], number>> {
   const { tasks } = useTasks();
   return {
-    "/workspace/tasks": tasks.filter((t) => t.status === "in_review").length,
+    "/tasks": tasks.filter((t) => t.status === "in_review").length,
   };
 }
 
@@ -194,7 +194,7 @@ export function BottomNav() {
     ...sections.map(({ to, icon }) => ({
       to,
       label: translateText(
-        to === "/workspace/tasks" ? "sections.tasks" : "sections.routines",
+        to === "/tasks" ? "sections.tasks" : "sections.routines",
       ),
       icon,
     })),
