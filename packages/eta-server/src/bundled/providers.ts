@@ -7,8 +7,10 @@
  * overwrite each other; a refused write comes back as `config_changed` and the client re-reads.
  *
  * The file is watched, and a change made *outside* this process pushes the new state to whoever
- * is subscribed. That is the whole of "reload": the config is read per turn by whoever needs it,
- * so a new provider takes effect on the next request without anything being restarted.
+ * is subscribed — and tells the host through `onModelsChanged`, which is what makes a provider
+ * added by hand (or by the settings page) generatable without a restart. The config itself is
+ * read per turn by whoever needs it; what a restart used to be required for is the model layer,
+ * and that is rebuilt here.
  *
  * Like every bundled plugin, it is only mounted by default: unmount it and `providers.*` becomes
  * "unknown op" while the rest of the server keeps running (sessions then run on whatever models
@@ -39,6 +41,17 @@ export interface ProvidersPluginOptions {
   fetch?: typeof fetch | undefined;
   /** Diagnostics. */
   warn?: ((message: string) => void) | undefined;
+  /**
+   * What to tell the host when the config moved, however it moved — written by a settings page
+   * through this plugin, or by an editor beside it. The host rebuilds the model layer from the
+   * file; this plugin does not read the keys back, so it hands over no view and the host reads
+   * what it needs.
+   *
+   * Without this the config's hot reload is half a reload: the settings page would show a
+   * provider the sessions cannot generate through, and the failure would land much later as
+   * `model_unavailable`.
+   */
+  onModelsChanged?: (() => void | Promise<void>) | undefined;
 }
 
 /**
@@ -269,9 +282,14 @@ export function providersPlugin(options: ProvidersPluginOptions) {
           }),
           wire.handle("providers", "reload", async () => {
             // A client asking "did anything change?" — the answer is the state, and the
-            // revision in it is what says whether anything did.
+            // revision in it is what says whether anything did. When it did, the host hears
+            // about it here too: a reload that re-renders the page but leaves the sessions on
+            // the old provider answers the question with half the truth.
+            const before = latest?.revision;
             const view = await refresh();
             wire.pushNow("providers");
+            if (before !== undefined && before !== view.revision)
+              await options.onModelsChanged?.();
             return { result: { revision: view.revision } };
           }),
         ];
@@ -280,9 +298,20 @@ export function providersPlugin(options: ProvidersPluginOptions) {
         // the same way a change made through an action does: the state moved. Starting the
         // watch without saying who to tell is a watch nobody hears — which is what this
         // was until the test that writes the file directly failed.
+        //
+        // The host is told through the same door: the model layer is built from this config, so
+        // a hand-edited provider becomes generatable as soon as it becomes visible. The store
+        // notifies for its own writes as well, so a provider saved from the settings page takes
+        // the same path.
         options.store.watch((view) => {
           latest = view;
           wire.pushNow("providers");
+          void Promise.resolve(options.onModelsChanged?.()).catch(
+            (error: unknown) =>
+              options.warn?.(
+                `[eta-server] providers: model layer not rebuilt: ${String(error)}`,
+              ),
+          );
         });
         const stopWatching = (): void => options.store.stop();
         return () => {

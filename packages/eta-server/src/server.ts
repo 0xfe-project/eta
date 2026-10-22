@@ -215,6 +215,8 @@ function mountBundled(
     settings: SettingsStore;
     home: string;
     fetch?: typeof fetch;
+    /** Handed to the providers plugin: the config moved, so the model layer must follow. */
+    onModelsChanged?: (() => void | Promise<void>) | undefined;
   },
 ): void {
   if (names.includes("sessions"))
@@ -231,6 +233,9 @@ function mountBundled(
       providersPlugin({
         store: deps.providers,
         ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
+        ...(deps.onModelsChanged === undefined
+          ? {}
+          : { onModelsChanged: deps.onModelsChanged }),
       }),
     );
   }
@@ -253,8 +258,9 @@ export async function assembleServer(
   const providers = new ProviderConfigStore({
     path: configPath,
     warn,
-    // The config file is shared with an editor, so the server watches it: a provider added by
-    // hand takes effect on the next request without anything being restarted.
+    // The config file is shared with an editor, so the server watches it. The tick is what makes
+    // a provider added by hand real: the settings page sees it, and so does the model layer
+    // (below, `reloadModels`), so no restart is involved on either side.
     watchIntervalMs: 2_000,
   });
   const settings = new SettingsStore({
@@ -262,31 +268,20 @@ export async function assembleServer(
     warn,
   });
 
-  // The config as it stands at startup. The model layer is built from it, and so is the default
-  // model a session inherits when nothing else chose one.
-  const readConfig = async (): Promise<EtaConfig> => {
+  // The config and the model layer built from it, both live. The file is shared with an editor
+  // and with the settings page, and the store reports every change it sees. Which model a
+  // session uses is the session's own configuration, but *how* to reach a provider is the
+  // server's, and that has to follow the file: a provider added by hand is listed to the UI
+  // within the watch tick, and must be generatable within it too, rather than after a restart.
+  const readConfig = async (): Promise<EtaConfig | undefined> => {
     try {
       return (await providers.read()).config;
     } catch (error) {
       warn(`[eta-server] ${String(error)}`);
-      return {};
+      return undefined;
     }
   };
-  const config = await readConfig();
-
-  // The model layer, from the config as it stands. Built once here and handed to every session:
-  // which model a session uses is the session's own configuration, but *how* to reach a
-  // provider is the server's.
-  let models: KernelModels | undefined = options.models;
-  if (models === undefined) {
-    try {
-      const built = await buildModels(config.providers ?? [], { warn });
-      models = built.models;
-    } catch (error) {
-      warn(`[eta-server] could not build the model layer: ${String(error)}`);
-    }
-  }
-  const configuredModels: KernelModels = models ?? {
+  const noProviders: KernelModels = {
     // No providers configured: every model resolution fails, which is exactly what
     // `model_unavailable` means. A keyless fake here would make the failure look like a
     // provider problem much later, at request time.
@@ -297,6 +292,58 @@ export async function assembleServer(
     completeSimple: async () => {
       throw new Error("model_unavailable: no providers are configured");
     },
+  };
+  /** The layer for one reading of the config. A failed build serves nothing, not something stale. */
+  const buildLayer = async (source: EtaConfig): Promise<KernelModels> => {
+    try {
+      const built = await buildModels(source.providers ?? [], { warn });
+      return built.models ?? noProviders;
+    } catch (error) {
+      warn(`[eta-server] could not build the model layer: ${String(error)}`);
+      return noProviders;
+    }
+  };
+
+  // A host that injects the layer (a test, or an embedding that builds providers differently)
+  // owns it, and this server does not rebuild what it does not own.
+  const injected = options.models;
+  const ownsModelLayer = injected === undefined;
+  /** The config as it now stands, and the layer built from it. Both move when the file does. */
+  let live: EtaConfig = (await readConfig()) ?? {};
+  let currentModels: KernelModels = injected ?? (await buildLayer(live));
+  /**
+   * The layer every session, the gateway overlay and the observing wrapper hold. It never
+   * changes; what it delegates to does — so a rebuilt provider list reaches a session that has
+   * been open since before the edit, on its very next turn. A layer the host injected is handed
+   * over as it came (identity included): this server does not rebuild what it does not own, so
+   * there is nothing for a delegate to do.
+   */
+  const configuredModels: KernelModels = injected ?? {
+    getModel: (provider, id) => currentModels.getModel(provider, id),
+    streamSimple: (model, context, callOptions) =>
+      currentModels.streamSimple(model, context, callOptions),
+    completeSimple: async (model, context, callOptions) =>
+      await currentModels.completeSimple(model, context, callOptions),
+  };
+  /**
+   * Re-read the config and rebuild the layer behind `configuredModels`. Serialised, so two saves
+   * back to back cannot let the older layer land last.
+   *
+   * A config that no longer parses is reported and skipped: a typo made in an editor must not
+   * take away the providers that were working a moment ago. An empty provider list, on the other
+   * hand, is an answer and not a failure — it serves nothing, on purpose.
+   */
+  let reloadTail: Promise<unknown> = Promise.resolve();
+  const reloadModels = (): Promise<void> => {
+    if (!ownsModelLayer) return Promise.resolve();
+    const run = reloadTail.then(async () => {
+      const fresh = await readConfig();
+      if (fresh === undefined) return;
+      live = fresh;
+      currentModels = await buildLayer(fresh);
+    });
+    reloadTail = run.catch(() => undefined);
+    return run;
   };
   const kernelModels: KernelModels =
     options.overlayModels?.(configuredModels) ?? configuredModels;
@@ -309,7 +356,7 @@ export async function assembleServer(
   if (options.network !== false) {
     try {
       const status = await initializeNetwork(
-        config.network ?? { mode: "system" },
+        live.network ?? { mode: "system" },
       );
       if (status.warning !== undefined)
         warn(
@@ -327,7 +374,7 @@ export async function assembleServer(
   const defaults = async (): Promise<Settings> => {
     const chosen = await settings.read();
     if (chosen.model !== undefined) return chosen;
-    const fallback = configDefaultModel(config);
+    const fallback = configDefaultModel(live);
     return fallback === undefined
       ? chosen
       : { ...chosen, model: formatModelId(fallback) };
@@ -455,6 +502,7 @@ export async function assembleServer(
     providers,
     settings,
     home: options.home ?? homedir(),
+    onModelsChanged: reloadModels,
   });
 
   // The scanned plugins: official ones from `modules/`, the user's from `plugins/`. Loaded

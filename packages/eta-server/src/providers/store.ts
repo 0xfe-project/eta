@@ -63,7 +63,8 @@ export function revisionOf(raw: string): string {
 
 export class ProviderConfigStore {
   readonly path: string;
-  private onChange: ((view: ProvidersView) => void) | undefined;
+  /** Everyone who cares that the config moved (see `watch`). */
+  private readonly listeners = new Set<(view: ProvidersView) => void>();
   private readonly warn: (message: string) => void;
   private readonly watchIntervalMs: number;
   private tail: Promise<unknown> = Promise.resolve();
@@ -80,9 +81,16 @@ export class ProviderConfigStore {
    * Start noticing changes made outside this process (an editor, another tool). The callback
    * is per watch, because "who cares" is the caller's business — the store only knows that the
    * bytes changed.
+   *
+   * More than one listener may register, and each hears every change: a file written by an
+   * editor, and a file the store itself just wrote through `save`/`delete`/`markRefreshed`. The
+   * server needs the second kind as much as the first — the model layer a session generates
+   * through is built from this config, and a provider added from the settings page is of no use
+   * until that layer knows about it. `stop` drops every listener, which is what lets the plugin
+   * that owns this store decide the lifetime of all of them at once.
    */
   watch(onChange?: (view: ProvidersView) => void): void {
-    if (onChange !== undefined) this.onChange = onChange;
+    if (onChange !== undefined) this.listeners.add(onChange);
     if (this.watchIntervalMs <= 0 || this.watcher !== undefined) return;
     this.watcher = setInterval(() => {
       void this.poll().catch((error: unknown) =>
@@ -94,9 +102,28 @@ export class ProviderConfigStore {
   }
 
   stop(): void {
+    this.listeners.clear();
     if (this.watcher === undefined) return;
     clearInterval(this.watcher);
     this.watcher = undefined;
+  }
+
+  /**
+   * Tell every listener the config moved. Not awaited: a listener that rebuilds the model layer
+   * loads provider code lazily, and a settings page's reply must not wait on that. A listener
+   * that throws (or rejects) is reported and does not stop the others, and does not undo the
+   * write that caused the notice — the file is still the source of truth.
+   */
+  private notify(view: ProvidersView): void {
+    for (const listener of [...this.listeners]) {
+      try {
+        void Promise.resolve(listener(view)).catch((error: unknown) =>
+          this.warn(`[eta-server] config listener: ${String(error)}`),
+        );
+      } catch (error) {
+        this.warn(`[eta-server] config listener: ${String(error)}`);
+      }
+    }
   }
 
   /** What a settings page renders: providers, network, default, and the revision. */
@@ -281,6 +308,7 @@ export class ProviderConfigStore {
       }
       const view = publicView(state.config, revisionOf(raw));
       this.lastRevision = view.revision;
+      this.notify(view);
       return view;
     });
     // The chain must survive a failed write, or one refusal would stop every later one.
@@ -288,7 +316,7 @@ export class ProviderConfigStore {
     return run;
   }
 
-  /** Notice an external change and tell the host, which is what pushes `models_changed`. */
+  /** Notice an external change and tell the listeners: the UI push and the model-layer rebuild. */
   private async poll(): Promise<void> {
     let raw: string;
     try {
@@ -301,13 +329,13 @@ export class ProviderConfigStore {
       )
         return;
       this.lastRevision = revisionOf("");
-      this.onChange?.(await this.view());
+      this.notify(await this.view());
       return;
     }
     const revision = revisionOf(raw);
     if (revision === this.lastRevision) return;
     this.lastRevision = revision;
-    this.onChange?.(await this.view());
+    this.notify(await this.view());
   }
 
   private removeStaleDefault(config: EtaConfig): void {
