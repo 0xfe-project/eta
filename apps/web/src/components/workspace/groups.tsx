@@ -210,8 +210,8 @@ export function CreateGroup({
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
+              placeholder={translateText("groups.fields.namePlaceholder")}
               maxLength={100}
-              required
             />
           </label>
           <ProjectField choice={choice} onChange={setChoice} />
@@ -251,7 +251,6 @@ export function CreateGroup({
             <Button
               type="submit"
               disabled={
-                !name.trim() ||
                 !chosen.length ||
                 create.isPending ||
                 (adding && choice.path.trim().length === 0)

@@ -16,7 +16,7 @@ import type { ConversationTargets } from "./targets";
 import type { Timeline } from "./timeline";
 import { Args, productPlugin, publish } from "../wire";
 import { announceSteward } from "./steward";
-import { effectiveSteward, summaryOf } from "./views";
+import { defaultGroupName, effectiveSteward, summaryOf } from "./views";
 
 export interface ConversationsDeps {
   agents: AgentStore;
@@ -79,12 +79,13 @@ export function conversationsPlugin(
           if (members.length === 0 && project.stewardId !== null)
             members = [project.stewardId];
           const given = args.optionalString("name")?.trim();
+          // A group nobody named takes the project's name, not the names of who is in it.
           const name =
             given === undefined || given === ""
-              ? members
-                  .map((id) => agents.get(id)?.name)
-                  .filter((n) => n !== undefined)
-                  .join(", ") || project.name
+              ? defaultGroupName(
+                  project.name,
+                  members.map((id) => agents.get(id)?.name),
+                )
               : given;
           const conversation = conversations.create({
             projectId: project.id,

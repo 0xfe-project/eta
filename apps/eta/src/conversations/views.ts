@@ -17,6 +17,19 @@ export interface ViewDeps {
   timeline: Timeline;
 }
 
+/**
+ * What a group is called when nobody named it: the project it lives in, so a second group in the
+ * same project is a second row with the same name. Only a project with no name at all falls back
+ * to its members, because a group with an empty name is a row nobody can tell apart.
+ */
+export function defaultGroupName(
+  projectName: string,
+  memberNames: readonly (string | undefined)[],
+): string {
+  if (projectName !== "") return projectName;
+  return memberNames.filter((name) => name !== undefined).join(", ");
+}
+
 /** Who takes a message that names nobody: the conversation's own pick, else its project's. */
 export function effectiveSteward(
   projects: ProjectStore,

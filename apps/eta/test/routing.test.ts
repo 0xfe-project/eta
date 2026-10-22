@@ -257,7 +257,7 @@ describe("conversations", () => {
     expect(named.participants.map((m) => m.agentId)).toEqual([bob.id]);
     const unnamed = await w.group(project.id, []);
     expect(unnamed.participants.map((m) => m.agentId)).toEqual([ada.id]);
-    expect(unnamed.name).toBe("Ada");
+    expect(unnamed.name).toBe(project.name);
     expect(named).toMatchObject({
       kind: "group",
       projectId: project.id,
@@ -277,6 +277,28 @@ describe("conversations", () => {
       hasMore: false,
       held: [],
     });
+  });
+
+  it("take the project's name unless someone names them", async () => {
+    const w = await world({ models: replying() });
+    const ada = await w.agent("Ada");
+    const bob = await w.agent("Bob");
+    const project = await w.project({ name: "roadmap", stewardId: ada.id });
+
+    // Two ways of saying nothing: the new-conversation dialog sends no name, the group page
+    // sends the trimmed input, which is the empty string when the field is left alone.
+    expect((await w.group(project.id, [ada.id, bob.id])).name).toBe("roadmap");
+    expect((await w.group(project.id, [ada.id, bob.id], "")).name).toBe(
+      "roadmap",
+    );
+    expect((await w.group(project.id, [ada.id, bob.id], "   ")).name).toBe(
+      "roadmap",
+    );
+    expect((await w.group(project.id, [], "")).name).toBe("roadmap");
+    // A name someone typed is theirs, trimmed.
+    expect((await w.group(project.id, [ada.id, bob.id], "  装配 ")).name).toBe(
+      "装配",
+    );
   });
 
   it("take members in and out, and the removed member stops answering", async () => {

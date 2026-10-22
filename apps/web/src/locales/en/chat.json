@@ -70,6 +70,7 @@
     "createDescription": "Choose a few agents to discuss something together.",
     "fields": {
       "name": "Group name",
+      "namePlaceholder": "Left empty, the project's name",
       "optionalGoal": "Goal (optional)",
       "goalHelp": "Record the current goal and decisions made so far.",
       "goal": "Goal",
