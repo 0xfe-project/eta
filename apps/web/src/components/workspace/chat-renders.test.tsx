@@ -37,11 +37,17 @@ rstest.mock("@/components/markdown", () => ({
 }));
 
 // The ref cards link into the app (a router and a search adapter); here they only say what they
-// point at. Their own rendering is activity-ref.test.tsx.
+// point at, and which version of it. Their own rendering is activity-ref.test.tsx.
 rstest.mock("./activity-ref", () => ({
-  ActivityRefCard: ({ value }: { value: { kind: string; title: string } }) => (
+  ActivityRefCard: ({
+    value,
+  }: {
+    value: { kind: string; title: string; number?: number };
+  }) => (
     <span data-testid="ref">
       {value.kind}:{value.title}
+      {/* An artifact's number is its version: publishing twice has to read as that. */}
+      {value.number === undefined ? "" : ` #${value.number}`}
     </span>
   ),
 }));
@@ -52,8 +58,12 @@ const TURNS = 50;
 let CONV = "";
 let conversations = 0;
 let n = 0;
+// A group folds a reply's process into a box; a direct conversation does not. Both draw the cards
+// the turn leaves beside its answer the same way.
+let kind: "group" | "direct" = "group";
 const fresh = () => {
   n = 0;
+  kind = "group";
   conversations += 1;
   CONV = `chat-renders-${conversations}`;
 };
@@ -82,6 +92,7 @@ function start(
 ) {
   summary = conversationView({
     id: CONV,
+    kind,
     name: "研究员",
     participants: members,
     lastSeq: n,
@@ -355,7 +366,7 @@ describe("a reply that is writing", () => {
     expect(container.textContent).not.toContain("我先看看");
   });
 
-  it("draws the tool calls a finished reply kept, and the artifact one of them published", async () => {
+  it("draws the tool calls a finished reply kept, and the artifacts it published", async () => {
     const user = row({ text: "发布一个页面" });
     const reply = row({
       author: "agent",
@@ -379,6 +390,13 @@ describe("a reply that is writing", () => {
             status: "completed",
             details: { artifactId: "art-1", title: "报告", version: 2 },
           },
+          {
+            id: "t3",
+            name: "publish_artifact",
+            input: { title: "看板" },
+            status: "completed",
+            details: { artifactId: "art-1", title: "看板", version: 4 },
+          },
         ],
       },
     });
@@ -387,11 +405,174 @@ describe("a reply that is writing", () => {
     await flush();
     expect(container.textContent).toContain("bash · ls -la");
     expect(container.textContent).toContain("total 0");
-    expect(container.textContent).toContain("publish_artifact");
-    expect(container.querySelector('[data-testid="ref"]')?.textContent).toBe(
-      "artifact:报告",
-    );
     expect(container.textContent).toContain("发布好了");
+
+    // A group folds the process once the answer is written, so the cards of what the reply produced
+    // cannot live in it: they are drawn beside the answer, in the turn's own card layer, in the
+    // order they were published and each saying which version it opens.
+    const fold = container.querySelector(".process-fold")!;
+    const cards = [...container.querySelectorAll('[data-testid="ref"]')];
+    expect(cards.map((c) => c.textContent)).toEqual([
+      "artifact:报告 #2",
+      "artifact:看板 #4",
+    ]);
+    for (const card of cards) {
+      expect(card.closest(".turn-tasks")).not.toBeNull();
+      expect(card.closest(".process-fold")).toBeNull();
+    }
+    // After the answer it belongs to, not before it.
+    const answer = container.querySelector(
+      ".message.assistant .message-content",
+    )!;
+    expect(
+      answer.compareDocumentPosition(cards[0]!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // The calls themselves stay in the process, with their arguments and result; the card is not
+    // repeated there.
+    expect(fold.textContent).toContain("publish_artifact");
+    expect(fold.querySelectorAll('[data-testid="ref"]')).toHaveLength(0);
+  });
+
+  it("draws a publish's card beside the answer while the reply is still writing", async () => {
+    const user = row({ text: "发布一个页面" });
+    const reply = row({
+      author: "agent",
+      agentId: AGENT,
+      replyToId: user.id,
+      status: "working",
+    });
+    history = [user, reply];
+    const published = {
+      id: "t2",
+      name: "publish_artifact",
+      input: { title: "报告" },
+      status: "completed",
+      details: { artifactId: "art-1", title: "报告", version: 2 },
+    };
+    const { container } = await start(undefined, (fake) => {
+      fake.target("sessions.s1", {
+        core: { session: "s1", running: true },
+        transcript: {
+          messages: [
+            {
+              entryId: "e1",
+              seq: 1,
+              at: 1,
+              message: { role: "user", content: "发布一个页面", timestamp: 1 },
+            },
+            {
+              entryId: "e2",
+              seq: 2,
+              at: 2,
+              message: {
+                role: "assistant",
+                timestamp: 2,
+                content: [
+                  {
+                    type: "toolCall",
+                    id: "t2",
+                    name: "publish_artifact",
+                    arguments: { title: "报告" },
+                  },
+                ],
+              },
+            },
+            {
+              entryId: "e3",
+              seq: 3,
+              at: 3,
+              message: {
+                role: "toolResult",
+                toolCallId: "t2",
+                toolName: "publish_artifact",
+                content: [{ type: "text", text: "published" }],
+                details: published.details,
+                isError: false,
+                timestamp: 3,
+              },
+            },
+            {
+              entryId: "e4",
+              seq: 4,
+              at: 4,
+              message: {
+                role: "assistant",
+                timestamp: 4,
+                content: [{ type: "text", text: "发布好了" }],
+              },
+            },
+          ],
+        },
+      });
+      fake.handle("sessions.resync", () => ({}));
+    });
+    await flush(80);
+    // Its last text is written, so the box has folded while the row still reads as working.
+    const fold = container.querySelector(".process-fold")!;
+    expect(fold.textContent).toContain("publish_artifact");
+    expect(fold.querySelectorAll('[data-testid="ref"]')).toHaveLength(0);
+    const card = container.querySelector('[data-testid="ref"]')!;
+    expect(card.textContent).toBe("artifact:报告 #2");
+    expect(card.closest(".turn-tasks")).not.toBeNull();
+
+    // The row settling, or the page reloading, does not move it or change its version: the same
+    // cards, in the same layer, from the run's blocks or from the row that kept them.
+    await push([
+      user,
+      {
+        ...reply,
+        status: "done",
+        text: "发布好了",
+        revision: 2,
+        data: { activity: [published] },
+      },
+    ]);
+    const settled = container.querySelector('[data-testid="ref"]')!;
+    expect(settled.textContent).toBe("artifact:报告 #2");
+    expect(settled.closest(".turn-tasks")).not.toBeNull();
+    expect(
+      container
+        .querySelector(".process-fold")!
+        .querySelectorAll('[data-testid="ref"]'),
+    ).toHaveLength(0);
+  });
+
+  // A direct conversation has no process box to fold, and the card does not move because of one:
+  // the same layer, beside the answer, in both.
+  it("draws a publish's card in that same layer where there is no process box", async () => {
+    kind = "direct";
+    const user = row({ text: "发布一个页面" });
+    history = [
+      user,
+      row({
+        author: "agent",
+        agentId: AGENT,
+        replyToId: user.id,
+        status: "done",
+        text: "发布好了",
+        data: {
+          activity: [
+            {
+              id: "t2",
+              name: "publish_artifact",
+              input: { title: "报告" },
+              status: "completed",
+              details: { artifactId: "art-1", title: "报告", version: 2 },
+            },
+          ],
+        },
+      }),
+    ];
+    const { container } = await start();
+    await flush();
+    expect(container.querySelector(".process-fold")).toBeNull();
+    const card = container.querySelector('[data-testid="ref"]')!;
+    expect(card.textContent).toBe("artifact:报告 #2");
+    expect(card.closest(".turn-tasks")).not.toBeNull();
+    // Not under the tool line it came from, which stays where the process is drawn.
+    expect(card.closest(".tool-step")).toBeNull();
+    expect(container.textContent).toContain("publish_artifact");
   });
 
   it("shows the files a message came with under its words", async () => {
