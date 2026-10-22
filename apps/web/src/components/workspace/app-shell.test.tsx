@@ -349,16 +349,22 @@ describe("折叠成图标栏", () => {
   });
 
   it("设置排在任务和定时前面，展开和折叠都是", async () => {
-    for (const open of [true, false]) {
-      const container = await render(<Sidebar />, { open });
+    // 折叠时开关从页眉搬到分区列表的最上面：4rem 的页眉只放得下标，两个控件挤在一行是怪的。
+    const rows = (container: HTMLElement) => {
       const nav = container.querySelector('ul[aria-label="分区"]')!;
-      expect(
-        [...nav.querySelectorAll("li")].map((item) => {
-          const control = item.querySelector("button, a")!;
-          return control.getAttribute("aria-label") ?? control.textContent;
-        }),
-      ).toEqual(["设置", "任务", "定时"]);
-    }
+      return [...nav.querySelectorAll("li")].map((item) => {
+        const control = item.querySelector("button, a")!;
+        return control.getAttribute("aria-label") ?? control.textContent;
+      });
+    };
+    const open = await render(<Sidebar />, { open: true });
+    expect(rows(open)).toEqual(["设置", "任务", "定时"]);
+    const rail = await render(<Sidebar />, { open: false });
+    expect(rows(rail)).toEqual(["折叠或展开侧栏", "设置", "任务", "定时"]);
+    // The rail's band is the wordmark alone: no control shares those 40px with it.
+    const header = rail.querySelector('[data-sidebar="header"]')!;
+    expect(header.textContent).toContain("ETA");
+    expect(header.querySelectorAll("button")).toHaveLength(0);
   });
 
   it("开关能折叠也能展开，刷新后还记着", async () => {

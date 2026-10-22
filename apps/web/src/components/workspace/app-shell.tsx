@@ -55,7 +55,7 @@ function useBadges(): Partial<Record<(typeof sections)[number]["to"], number>> {
 
 export function Sidebar() {
   const { t: translateText } = useTranslation(["navigation"] as const);
-  const { state, isMobile } = useSidebar();
+  const { state, isMobile, toggleSidebar } = useSidebar();
   const badges = useBadges();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   // The rail: the width 4rem of icons, and the same tree in it. Not the agent shelf's fold — that
@@ -69,13 +69,20 @@ export function Sidebar() {
       <SidebarHeader
         className={cn(
           "band flex-row items-center p-0",
-          rail ? "justify-center gap-0.5 px-1" : "justify-between pr-2 pl-4",
+          rail ? "justify-center px-1" : "justify-between pr-2 pl-4",
         )}
       >
         {/* BR1's wordmark: uppercase, tracked out, the letterforms doing the work. The rail keeps
-            the same three letters, set to a size the rail can hold. */}
+            the same three letters, set to a size the rail can hold — and holds nothing beside
+            them: 4rem of band is one element, not a wordmark and a control dividing it up. The
+            band is a fixed 40px (the gutter paints its rule at that height), so stacking the two
+            would break the line, not fit them. Folding the rail from its own name is what the
+            click is for. */}
         <Link
           to="/"
+          onClick={() => {
+            if (rail) toggleSidebar();
+          }}
           className={cn(
             "shrink-0 font-mono font-medium",
             rail
@@ -85,14 +92,26 @@ export function Sidebar() {
         >
           ETA
         </Link>
-        <SidebarTrigger
-          aria-label={translateText("accessibility.toggleSidebar")}
-          className={rail ? "size-6" : undefined}
-        />
+        {rail ? null : (
+          <SidebarTrigger
+            aria-label={translateText("accessibility.toggleSidebar")}
+          />
+        )}
       </SidebarHeader>
       <SidebarContent className="gap-0 overflow-hidden">
         <SidebarGroup className="shrink-0 border-b pb-1">
           <SidebarMenu aria-label={translateText("accessibility.sections")}>
+            {/* The fold, in the rail, at the head of the list it folds away with: the band above
+                holds the wordmark alone, and this is where the eye already is when the rail is
+                open. Expanded keeps the trigger in the header, where it has always been. */}
+            {rail ? (
+              <SidebarMenuItem>
+                <SidebarTrigger
+                  aria-label={translateText("accessibility.toggleSidebar")}
+                  className="mx-auto size-6"
+                />
+              </SidebarMenuItem>
+            ) : null}
             {/* Settings first, in both states: a control that moves when the rail folds is a
                 control you have to look for twice. */}
             <SidebarMenuItem>
