@@ -434,7 +434,9 @@ function AgentCard({ agent, unread }: { agent: AgentView; unread: number }) {
         onClick={() => openAgent(agent.id)}
         className="flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors duration-75 hover:bg-sidebar-accent"
       >
-        <AgentAvatar agent={agent} className="size-6" />
+        {/* Top-aligned, not centred: the avatar lines up with the name, so a card with tags
+         * underneath still reads as avatar-then-name rather than a block floating mid-row. */}
+        <AgentAvatar agent={agent} className="size-6 self-start" />
         <span className="flex min-w-0 flex-1 flex-col">
           <span data-slot="agent-name" className="truncate text-sm">
             {agent.name}
