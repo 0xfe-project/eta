@@ -77,6 +77,17 @@ describe("activity ref cards", () => {
     ]);
   });
 
+  it("keeps a real group, and drops the word null", async () => {
+    const { container: named } = await mount([task], {
+      path: "/?group=g1",
+    });
+    expect(cards(named)[0].href).toBe("/?group=g1&view=tasks&task=t1");
+    // `?group=null` reached this link once, and then every card the panel drew carried the word
+    // on: the conversation "null" does not exist, so the URL should simply name none.
+    const { container: bogus } = await mount([task], { path: "/?group=null" });
+    expect(cards(bogus)[0].href).toBe("/?view=tasks&task=t1");
+  });
+
   it("opens it on its own page", async () => {
     const { container, router } = await mount([task], {
       path: "/tasks",

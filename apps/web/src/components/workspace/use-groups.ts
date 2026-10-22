@@ -1,13 +1,14 @@
 import { useNavigate } from "@tanstack/react-router";
-import { parseAsString, useQueryState } from "nuqs";
+import { useQueryState } from "nuqs";
 import { useEffect, useMemo } from "react";
 import { useConversationList } from "@/queries/conversations";
+import { idParam } from "./id-param";
 import { useWorkspaceStore } from "./workspace-store";
 
 /** The conversations, newest activity first, and the one open (`?group=`, else the last one). */
 export function useGroups() {
   const { conversations } = useConversationList();
-  const [groupId] = useQueryState("group", parseAsString);
+  const [groupId] = useQueryState("group", idParam);
   const recent = useMemo(
     () =>
       [...conversations].sort(

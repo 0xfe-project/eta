@@ -15,10 +15,22 @@ import { ConversationList } from "./sidebar-tree";
 import { useWorkspaceStore } from "./workspace-store";
 
 const navigation = rstest.hoisted(() => ({ navigate: rstest.fn() }));
-rstest.mock("nuqs", () => ({
-  parseAsString: {},
-  useQueryState: () => [null],
-}));
+rstest.mock("nuqs", () => {
+  const parser = ({ parse }: { parse: (value: string | null) => unknown }) => {
+    const self = {
+      parse,
+      serialize: (value: unknown) => value,
+      withDefault: () => self,
+      withOptions: () => self,
+    };
+    return self;
+  };
+  return {
+    createParser: parser,
+    parseAsString: {},
+    useQueryState: () => [null],
+  };
+});
 rstest.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigation.navigate,
 }));

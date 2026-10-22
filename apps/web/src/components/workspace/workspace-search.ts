@@ -8,12 +8,12 @@ import { useLocation } from "@tanstack/react-router";
 import {
   createParser,
   createStandardSchemaV1,
-  parseAsString,
   parseAsStringLiteral,
   useQueryState,
 } from "nuqs";
 import { useEffect, useRef } from "react";
 import { translate } from "@/lib/i18n";
+import { idParam } from "./id-param";
 import { useWorkspaceStore } from "./workspace-store";
 
 /** The side panel's tabs that have a page of their own, beside the chat. */
@@ -28,7 +28,7 @@ export const sectionPaths = {
  * the browser, not in the URL).
  */
 export function useSectionLink() {
-  const [group] = useQueryState("group", parseAsString);
+  const [group] = useQueryState("group", idParam);
   const tabs = usePanelViews();
   // Every page but the chat is a full-window one: `/` is the only place the panel is drawn.
   const fullWindow = useLocation({
@@ -124,11 +124,11 @@ export const validateWorkspaceSearch = createStandardSchemaV1(
   // the tasks tab's: a task or "new".
   {
     view: viewParser,
-    group: parseAsString,
-    task: parseAsString,
-    routine: parseAsString,
-    run: parseAsString,
-    edit: parseAsString,
+    group: idParam,
+    task: idParam,
+    routine: idParam,
+    run: idParam,
+    edit: idParam,
   },
   { partialOutput: true },
 );

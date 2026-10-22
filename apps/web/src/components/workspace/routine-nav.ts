@@ -1,11 +1,12 @@
-import { createStandardSchemaV1, parseAsString, useQueryStates } from "nuqs";
+import { createStandardSchemaV1, useQueryStates } from "nuqs";
+import { idParam } from "./id-param";
 
 // Where the routines tab or page is: a routine, one of its runs, or an editor.
 const navParsers = {
-  routine: parseAsString,
-  run: parseAsString,
+  routine: idParam,
+  run: idParam,
   // "new", or the id of the routine being edited.
-  edit: parseAsString,
+  edit: idParam,
 };
 
 export const validateRoutineSearch = createStandardSchemaV1(navParsers, {
