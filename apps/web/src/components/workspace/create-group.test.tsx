@@ -104,6 +104,22 @@ describe("新建群的项目", () => {
     expect(navigation.open).toHaveBeenCalledWith("c-new");
   });
 
+  it("群名留空就交空串，名字由后端按项目定", async () => {
+    const fake = host();
+    await mount(<CreateGroup open members={["a1"]} onOpenChange={() => {}} />);
+    await submit();
+    // The project's name is the host's to decide, so the page says nothing rather than guess.
+    expect(fake.calls.map((c) => `${c.target}.${c.action}`)).toEqual([
+      "conversations.create",
+    ]);
+    expect(fake.calls[0]!.args).toEqual({
+      projectId: "p1",
+      name: "",
+      agentIds: ["a1"],
+    });
+    expect(navigation.open).toHaveBeenCalledWith("c-new");
+  });
+
   it("adds a typed path as a project first, trimmed, with the first member as its steward", async () => {
     const fake = host([]);
     await mount(<CreateGroup open members={["a1"]} onOpenChange={() => {}} />);

@@ -70,6 +70,7 @@
     "createDescription": "选几位智能体，一起讨论一件事。",
     "fields": {
       "name": "群名",
+      "namePlaceholder": "留空就用项目名",
       "optionalGoal": "目标（可选）",
       "goalHelp": "记录当前目标和已经达成的决定。",
       "goal": "目标",
