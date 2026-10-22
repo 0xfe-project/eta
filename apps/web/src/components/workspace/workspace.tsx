@@ -171,9 +171,9 @@ export function Workspace({
     onViewChange("context");
     showPanel();
   };
-  // Between md and lg the panel is a drawer over the chat, open while
-  // mobilePanel is "workspace"; Escape closes it unless a menu or dialog
-  // has the key.
+  // The panel is a mode of its own on a phone, a drawer over the chat between md and lg, and a
+  // column from lg up; open while mobilePanel is "workspace". Escape closes the drawer unless a
+  // menu or dialog has the key.
   const drawerOpen = mobilePanel === "workspace";
   useEffect(() => {
     if (!drawerOpen) return;
@@ -368,14 +368,21 @@ export function Workspace({
             view={view}
             onViewChange={onViewChange}
             onClose={() => setMobilePanel("chat")}
-            style={{ width: panel.width }}
+            style={
+              { "--panel-width": `${panel.width}px` } as React.CSSProperties
+            }
             className={cn(
-              // Between md and lg the panel is a drawer over the chat; from lg up it is a column
-              // of its own, sized by the gutter beside it.
+              // Three shapes for one state. On a phone the panel is the screen: the chat column
+              // has stood down, so the panel is what `main` holds. Between md and lg it is a
+              // drawer over the chat; from lg up it is a column of its own, sized by the gutter
+              // beside it.
               drawerOpen
-                ? "md:max-lg:fixed md:max-lg:inset-y-0 md:max-lg:right-0 md:max-lg:z-50 md:max-lg:flex md:max-lg:w-[min(28rem,calc(100vw-3rem))] md:max-lg:border-y-0 md:max-lg:border-r-0"
+                ? "max-md:flex max-md:w-full max-md:border-l-0 md:max-lg:fixed md:max-lg:inset-y-0 md:max-lg:right-0 md:max-lg:z-50 md:max-lg:flex md:max-lg:w-[min(28rem,calc(100vw-3rem))] md:max-lg:border-y-0 md:max-lg:border-r-0"
                 : "md:max-lg:hidden",
-              "hidden shrink-0 lg:flex",
+              // The dragged width is a variable rather than an inline width: an inline one wins
+              // over every class, which would leave the phone and the drawer at the wide
+              // column's width.
+              "hidden shrink-0 lg:flex lg:w-[var(--panel-width)]",
             )}
           />
         </main>

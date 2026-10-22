@@ -27,7 +27,8 @@ export function WorkspacePanel({
   view: WorkspaceView;
   onViewChange: (view: WorkspaceView) => void;
   className?: string;
-  /** The width the gutter settled on; the panel's own axis is vertical. */
+  /** The width the gutter settled on, as a variable the panel's own classes apply: the phone
+   * and the drawer size themselves, only the widest layout reads it. */
   style?: React.CSSProperties;
   /** Closes the drawer it is between md and lg. */
   onClose?: () => void;
