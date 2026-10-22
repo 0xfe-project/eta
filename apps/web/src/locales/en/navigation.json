@@ -8,7 +8,8 @@
     "overview": "Overview",
     "workspace": "Workspace",
     "context": "Context",
-    "artifacts": "Artifacts"
+    "artifacts": "Artifacts",
+    "settings": "Settings"
   },
   "accessibility": {
     "sections": "Sections",
@@ -23,6 +24,10 @@
     "backToConversations": "Back to conversations",
     "openWorkspace": "Open workspace",
     "closeWorkspace": "Close workspace",
-    "collapseWorkspace": "Collapse workspace"
+    "collapseWorkspace": "Collapse workspace",
+    "back": "Back",
+    "new": "New",
+    "newConversation": "New chat",
+    "newGroup": "New group"
   }
 }

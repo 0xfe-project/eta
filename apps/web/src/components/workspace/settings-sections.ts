@@ -12,7 +12,7 @@ import { ShieldCheckIcon } from "@phosphor-icons/react/ShieldCheck";
 import { translate } from "@/lib/i18n";
 import { useNeedsAttention } from "@/queries/providers";
 
-// Settings' sections, listed by the dialog and by the phone's 更多 page.
+// Settings' sections, listed by the wide window's dialog and by the phone's settings page.
 
 export const settingsSections: {
   value: SettingsSection;

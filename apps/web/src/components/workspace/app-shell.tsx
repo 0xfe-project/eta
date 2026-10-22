@@ -1,9 +1,19 @@
+import type { Icon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
+import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
+import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   SidebarContent,
   SidebarGroup,
@@ -21,12 +31,14 @@ import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useTasks } from "@/queries/tasks";
 import { AgentEditor } from "./agent-editor";
+import { CreateGroup } from "./groups";
 import { NewConversationDialog } from "./new-conversation-dialog";
 import { SettingsButton, SettingsDialog } from "./settings-dialog";
 import { ConversationList } from "./sidebar-tree";
+import { useWorkspaceStore } from "./workspace-store";
 
-// Shared navigation: the full-window sidebar on wide screens and three
-// bottom tabs on mobile. The conversation list is the mobile home screen.
+// Shared navigation: the full-window sidebar on wide screens and four destinations plus the main
+// action in the middle on the phone. The conversation list is the mobile home screen.
 
 const sections = [
   {
@@ -186,43 +198,113 @@ export function Sidebar() {
 export function BottomNav() {
   const { t: translateText } = useTranslation(["navigation"] as const);
   const badges = useBadges();
-  // Written out instead of picked from `sections`: the sidebar lists the pages, the phone adds
-  // its home (the conversation list) in front. Indexing one list for both is how a tab silently
-  // starts leading somewhere else.
-  const tabs = [
-    { to: "/", label: translateText("sections.chat"), icon: ChatsCircleIcon },
-    ...sections.map(({ to, icon }) => ({
-      to,
-      label: translateText(
-        to === "/tasks" ? "sections.tasks" : "sections.routines",
-      ),
-      icon,
-    })),
-  ] as const;
   return (
     <nav
       aria-label={translateText("accessibility.sections")}
-      className="flex shrink-0 border-t bg-background pb-[env(safe-area-inset-bottom)] md:hidden"
+      // Still flush with the edges: the floating board is a later task. What is here is the blank
+      // a safe-area inset will take, and the bar's own height above it, so content never ends on
+      // the last row of pixels of the screen.
+      className="shrink-0 border-t bg-background pb-[var(--bottom-inset)] md:hidden"
     >
-      {tabs.map(({ to, label, icon: Icon }) => (
-        <Link
-          key={to}
-          to={to}
-          search={{}}
-          className="flex min-h-14 flex-1 flex-col items-center justify-center gap-1 text-xs text-muted-foreground"
-          activeOptions={{ exact: true, includeSearch: false }}
-          activeProps={{ className: "text-foreground bg-muted/50" }}
-        >
-          <Icon className="size-5" aria-hidden="true" />
-          <span>
-            {label}
-            {badges[to as keyof typeof badges]
-              ? ` · ${badges[to as keyof typeof badges]}`
-              : ""}
-          </span>
-        </Link>
-      ))}
+      {/* Four destinations of one width, the plus holding the middle cell: the solid square is
+          the axis the two pairs are read against, which is what keeps five cells from reading as
+          a symmetric board broken in half. */}
+      <div className="grid h-[44px] grid-cols-5">
+        <Tab
+          to="/"
+          label={translateText("sections.chat")}
+          icon={ChatsCircleIcon}
+        />
+        <Tab
+          to="/tasks"
+          label={translateText("sections.tasks")}
+          icon={ListChecksIcon}
+          badge={badges["/tasks"]}
+        />
+        <div className="flex items-center justify-center">
+          <NewAction />
+        </div>
+        <Tab
+          to="/routines"
+          label={translateText("sections.routines")}
+          icon={ClockIcon}
+        />
+        <Tab
+          to="/settings"
+          label={translateText("sections.settings")}
+          icon={GearSixIcon}
+        />
+      </div>
     </nav>
+  );
+}
+
+/** One destination in the phone's bottom bar. */
+function Tab({
+  to,
+  label,
+  icon: Icon,
+  badge,
+}: {
+  to: "/" | "/tasks" | "/routines" | "/settings";
+  label: string;
+  icon: Icon;
+  badge?: number | undefined;
+}) {
+  return (
+    <Link
+      to={to}
+      search={{}}
+      className="flex min-w-0 flex-col items-center justify-center gap-1 text-xs text-muted-foreground"
+      activeOptions={{ exact: true, includeSearch: false }}
+      activeProps={{ className: "text-foreground bg-muted/50" }}
+    >
+      <Icon className="size-5" aria-hidden="true" />
+      <span className="max-w-full truncate px-1">
+        {badge ? `${label} · ${badge}` : label}
+      </span>
+    </Link>
+  );
+}
+
+/**
+ * The phone's main action, in the middle cell: the two things one starts from here. The desktop
+ * has a plus above each column — a conversation on the sidebar, a group on the list — and the
+ * phone has one bar, so the plus asks which of the two it is rather than picking one for good.
+ *
+ * A solid square in the theme's inverse (`bg-foreground text-background`): the theme flips those
+ * two, so the axis stays an axis in both themes without a second set of colours.
+ */
+function NewAction() {
+  const { t: translateText } = useTranslation(["navigation"] as const);
+  const setNewConversation = useWorkspaceStore((s) => s.setNewConversation);
+  const [group, setGroup] = useState(false);
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label={translateText("actions.new")}
+            title={translateText("actions.new")}
+            className="flex size-[44px] items-center justify-center bg-foreground text-background outline-none hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <PlusIcon aria-hidden="true" className="size-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="top" align="center" className="w-40">
+          <DropdownMenuItem onSelect={() => setNewConversation({ open: true })}>
+            {translateText("actions.newConversation")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setGroup(true)}>
+            {translateText("actions.newGroup")}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {/* Mounted on open, like the conversation dialog: a form left half filled in is not what the
+          next open should show. */}
+      {group ? <CreateGroup open onOpenChange={setGroup} /> : null}
+    </>
   );
 }
 

@@ -232,6 +232,9 @@
   --spacing: 0.225rem;
   /* One header height for every column, so the rule under it is one line across the window. */
   --header-band: 40px;
+  /* The blank under the phone's bottom bar: the room a safe-area inset takes, 34px being an
+     iPhone's home indicator. The real inset is a later task, and it changes this one line. */
+  --bottom-inset: 34px;
   --font-heading: var(--font-sans);
   /* The app ships one face (public/AKRDWGSCNFM-Regular.woff2, declared in index.html) and uses it
      for everything it says: interface, message text, everything. There is deliberately no setting
@@ -1177,6 +1180,7 @@
     background: var(--surface);
     padding: 10px 8px;
   }
+
   .settings-layout nav button {
     display: flex;
     align-items: center;
@@ -1195,6 +1199,30 @@
     border-left-color: var(--foreground);
     background: var(--overlay-hover);
     color: var(--foreground);
+  }
+
+  /* The page on a phone: 196px of rail beside the rows leaves too little of 390 for the rows, so
+   * the sections become a row above them and scroll sideways. The row is a row and not half the
+   * window: `auto` for it, the rest for the panel under it. */
+  @media (width < 48rem) {
+    .settings-page {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .settings-page nav {
+      flex-direction: row;
+      overflow-y: hidden;
+      border-right: 0;
+    }
+    /* The marker turns with the rail: a rule under the current section instead of beside it. */
+    .settings-page nav button {
+      min-height: 44px;
+      border-left: 0;
+      border-bottom: 2px solid transparent;
+    }
+    .settings-page nav button[aria-current="page"] {
+      border-bottom-color: var(--foreground);
+    }
   }
 
   .settings-content {

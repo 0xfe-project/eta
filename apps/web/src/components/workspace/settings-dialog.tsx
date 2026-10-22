@@ -1,7 +1,6 @@
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { LanguageSettings } from "@/components/language-settings";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,103 +8,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
-import { useTheme } from "@/components/use-theme";
-import { elementPickerDefault, setElementPicker } from "@/lib/element-picker";
-import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { useGitHubMounted } from "@/queries/github";
 import { useNeedsAttention } from "@/queries/providers";
-import { AgentSettings } from "./agent-settings";
-import { ApprovalSettings } from "./approval-settings";
-import { BundleSettings } from "./bundle-settings";
-import { ConnectionSettings } from "./connection-settings";
-import { ArchivedGroups } from "./groups";
-import { MachineSettings } from "./machine-settings";
-import { McpSettings } from "./mcp-settings";
-import { ProviderSettings } from "./provider-settings";
-import { AttentionDot, SettingsNav } from "./settings-nav";
-import { settingsSections, useSettingsAttention } from "./settings-sections";
+import { AttentionDot } from "./settings-nav";
+import { SettingsPanels } from "./settings-panels";
+import { settingsSections } from "./settings-sections";
 import { useWorkspaceStore } from "./workspace-store";
-
-const colorModes = [
-  {
-    value: "system",
-    get label() {
-      return translate("settings:appearance.system");
-    },
-  },
-  {
-    value: "light",
-    get label() {
-      return translate("settings:appearance.light");
-    },
-  },
-  {
-    value: "dark",
-    get label() {
-      return translate("settings:appearance.dark");
-    },
-  },
-] as const;
-function AppearanceSettings() {
-  const { t: translateText } = useTranslation(["settings", "common"] as const);
-  const workspace = useWorkspaceStore((s) => s.workspace);
-  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
-  const { theme, setTheme } = useTheme();
-  return (
-    <div>
-      <div className="settings-heading">
-        <h2>{translateText("sections.appearance")}</h2>
-        <p>{translateText("appearance.description")}</p>
-      </div>
-      {/* Rows, not cards: a label on the left, its control on the right, one decision per line. */}
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div>{translateText("appearance.colorMode")}</div>
-          <p>{translateText("appearance.colorModeHint")}</p>
-        </div>
-        <div className="settings-control settings-inline">
-          {colorModes.map((choice) => (
-            <button
-              key={choice.value}
-              type="button"
-              aria-pressed={theme === choice.value}
-              onClick={() => setTheme(choice.value)}
-            >
-              {choice.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div>{translateText("appearance.language")}</div>
-        </div>
-        <div className="settings-control">
-          <LanguageSettings />
-        </div>
-      </div>
-      <div className="settings-row">
-        <div className="settings-row-label">
-          <div>{translateText("appearance.elementPicker")}</div>
-          <p>{translateText("appearance.elementPickerHint")}</p>
-        </div>
-        <div className="settings-control">
-          <Switch
-            id="react-grab"
-            aria-label={translateText("appearance.elementPicker")}
-            checked={workspace.reactGrab ?? elementPickerDefault()}
-            onCheckedChange={(reactGrab) => {
-              setWorkspace((state) => ({ ...state, reactGrab }));
-              void setElementPicker(reactGrab);
-            }}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /** Opens settings; the dot marks accounts the user has to act on. */
 export function SettingsButton({
@@ -161,12 +69,15 @@ function useSettingsLink() {
   }, [setSettings]);
 }
 
+/**
+ * Settings over whatever is on screen, opened by the wide window's gear. On a phone the fourth
+ * tab goes to the page instead (`/settings`): a dialog covering the whole screen is a page with a
+ * shadow, and the phone had no way back out of it that the browser knows about.
+ */
 export function SettingsDialog() {
   const { t: translateText } = useTranslation(["settings", "common"] as const);
   const settings = useWorkspaceStore((s) => s.settings);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
-  const attention = useSettingsAttention();
-  const githubMounted = useGitHubMounted();
   useSettingsLink();
 
   return (
@@ -184,54 +95,12 @@ export function SettingsDialog() {
           </DialogTitle>
         </DialogHeader>
         {/* eta-old's settings: a 196px rail of sections and a column of rows beside it. */}
-        <div className="settings-layout">
-          <SettingsNav
-            label={translateText("accessibility.sections")}
-            sections={settingsSections
-              // The two entries the rail does not offer, for two different reasons.
-              // `connections`: the host has no GitHub plugin, so there is nothing to
-              // connect and its page is not drawn either — a page of settings for a
-              // feature that is not there reads as one shown half present. The host
-              // says what it has in `hello.mounted`. `approvals`: hidden by choice,
-              // the editor only — the list stays in force, and `?settings=approvals`
-              // still opens it.
-              .filter(
-                (section) =>
-                  (section.value !== "connections" || githubMounted) &&
-                  section.value !== "approvals",
-              )
-              .map((section) => ({
-                ...section,
-                attention: attention[section.value],
-                hint: translateText("accessibility.accountsNeedAttention"),
-              }))}
-            value={settings.section}
-            onChange={(section) =>
-              setSettings((state) => ({ ...state, section }))
-            }
-          />
-          <section className="settings-content">
-            {settings.section === "agents" ? (
-              <AgentSettings />
-            ) : settings.section === "providers" ? (
-              <ProviderSettings />
-            ) : settings.section === "approvals" ? (
-              <ApprovalSettings />
-            ) : settings.section === "machines" ? (
-              <MachineSettings />
-            ) : settings.section === "bundles" ? (
-              <BundleSettings />
-            ) : settings.section === "connections" && githubMounted ? (
-              <ConnectionSettings />
-            ) : settings.section === "mcp" ? (
-              <McpSettings />
-            ) : settings.section === "archived" ? (
-              <ArchivedGroups />
-            ) : (
-              <AppearanceSettings />
-            )}
-          </section>
-        </div>
+        <SettingsPanels
+          value={settings.section}
+          onChange={(section) =>
+            setSettings((state) => ({ ...state, section }))
+          }
+        />
       </DialogContent>
     </Dialog>
   );

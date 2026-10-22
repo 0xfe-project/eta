@@ -29,7 +29,7 @@ import { ChatPanel, ComposerNotice } from "./chat-panel";
 import { GroupList } from "./groups";
 import { NewConversationDialog } from "./new-conversation-dialog";
 import { usePaneWidth } from "./pane";
-import { SettingsButton, SettingsDialog } from "./settings-dialog";
+import { SettingsDialog } from "./settings-dialog";
 import { useAgents } from "./use-agents";
 import { useGroups } from "./use-groups";
 import { WorkspacePanel } from "./workspace-panel";
@@ -199,11 +199,13 @@ export function Workspace({
           groupId ? "hidden" : "flex",
         )}
       >
-        <header className="flex h-14 shrink-0 items-center justify-between px-5">
+        {/* No gear beside the title any more: the bar's fourth cell is the way into settings on a
+            phone now, and a second entry that opened a different frame was two answers to one
+            question. */}
+        <header className="flex h-14 shrink-0 items-center px-5">
           <h1 className="text-lg font-semibold">
             {translateText("sections.chat")}
           </h1>
-          <SettingsButton />
         </header>
         <GroupList />
         <BottomNav />

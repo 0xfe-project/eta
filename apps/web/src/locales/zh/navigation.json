@@ -8,7 +8,8 @@
     "overview": "概览",
     "workspace": "工作区",
     "context": "上下文",
-    "artifacts": "产物"
+    "artifacts": "产物",
+    "settings": "设置"
   },
   "accessibility": {
     "sections": "分区",
@@ -23,6 +24,10 @@
     "backToConversations": "返回对话列表",
     "openWorkspace": "打开工作区",
     "closeWorkspace": "关闭工作区",
-    "collapseWorkspace": "收起工作区"
+    "collapseWorkspace": "收起工作区",
+    "back": "返回",
+    "new": "新建",
+    "newConversation": "新建对话",
+    "newGroup": "新建群"
   }
 }
