@@ -5,7 +5,7 @@ import type {
   MessageView,
 } from "@eta/client-contracts";
 import type { Draft, FilePart, PasteRange } from "@/lib/composer";
-import type { ToolBlock } from "@/lib/run";
+import type { RunBlock, ToolBlock } from "@/lib/run";
 import type { Outgoing, SendMode } from "@/queries/outbox";
 import type { Question } from "@/queries/questions";
 import { MAX_ATTACHMENTS } from "@eta/client-contracts";
@@ -305,11 +305,83 @@ function publishedArtifact(block: ToolBlock) {
     : undefined;
 }
 
+/** What a reply's tool calls published, as the card values they turn into: one per publish, in the
+ *  order it published them. A call that has not finished publishing (or failed) has no artifact to
+ *  point at. */
+function publishedRefs(blocks: readonly RunBlock[]) {
+  return blocks.flatMap((block) => {
+    const artifact =
+      block.type === "tool" ? publishedArtifact(block) : undefined;
+    return artifact === undefined
+      ? []
+      : [
+          {
+            id: block.id,
+            ref: {
+              kind: "artifact" as const,
+              id: artifact.artifactId,
+              title: artifact.title,
+              // The card says which version it opens, so a reply that published the same thing
+              // twice reads as that.
+              number: artifact.version,
+            },
+          },
+        ];
+  });
+}
+
+/**
+ * The cards a turn leaves beside its answer, in one column: the artifacts it published, in the
+ * order it published them, then the task rows it wrote.
+ *
+ * Neither is a step the agent took, so neither is drawn in the process — a group folds that away as
+ * soon as the text is written, which used to take an artifact's card out of the conversation with
+ * it, leaving only the tool line that no one scrolls to. Both are things the reader is meant to
+ * open, so they are drawn where the answer is, inside the turn's own frame and behind the hairline
+ * that says where they came from. The `publish_artifact` call itself stays in the process, with the
+ * arguments and result that go with it; its card is not repeated there.
+ */
+function TurnCards({
+  turn,
+  saved,
+  sessionId,
+  taskRows,
+}: {
+  /** The turn drawing these: a draft names the agent that proposed it and when. */
+  turn: MessageView;
+  /** The tool calls a finished reply kept on its row. */
+  saved: readonly ToolBlock[];
+  /** The session of a reply that is at work: its publishes come from the run, not from the row. */
+  sessionId?: string | undefined;
+  /** The task rows this turn wrote, and which are drawn here rather than on the timeline. */
+  taskRows: readonly MessageView[] | undefined;
+}) {
+  const live = useRunBlocks(sessionId);
+  const published = publishedRefs(sessionId === undefined ? saved : live);
+  const rows = taskRows ?? [];
+  if (published.length === 0 && rows.length === 0) return null;
+  return (
+    <div className="turn-tasks">
+      {published.map(({ id, ref }) => (
+        <ActivityRefCard key={id} value={ref} />
+      ))}
+      {rows.map((row) => (
+        <div key={row.id} id={`msg-${row.id}`} data-mid={row.id}>
+          {row.kind === "task_draft" ? (
+            <TaskDraftRow message={row} turn={turn} />
+          ) : (
+            <TaskCardRow message={row} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ToolActivity({ block }: { block: ToolBlock }) {
   // The arguments are a JSON object; the header shows what the call is *doing*, which is the first
   // thing worth quoting out of it (lib/tool-summary.ts).
   const summary = summarizeArgs(block.input);
-  const artifact = publishedArtifact(block);
   const github = useGitHubRef(block);
   return (
     <>
@@ -332,16 +404,6 @@ function ToolActivity({ block }: { block: ToolBlock }) {
           </ToolCardBlock>
         )}
       </ToolCard>
-      {artifact === undefined ? null : (
-        <ActivityRefCard
-          value={{
-            kind: "artifact",
-            id: artifact.artifactId,
-            title: artifact.title,
-            number: artifact.version,
-          }}
-        />
-      )}
       {github === undefined ? null : <ActivityRefCard value={github} />}
     </>
   );
@@ -643,24 +705,6 @@ const Turn = memo(
     if (message.kind === "task_draft")
       return <TaskDraftRow message={message} />;
     if (message.kind === "task_card") return <TaskCardRow message={message} />;
-    // A draft is the turn asking the reader to decide something, so it is drawn inside the turn's
-    // own frame — its author and its time are the turn's — behind a hairline that says where it came
-    // from. It stays out of the folded process: a proposal is not a step the agent took. It goes
-    // beside the answer, which is the other thing this turn leaves behind.
-    const cards =
-      taskRowsOf === undefined || taskRowsOf.length === 0 ? null : (
-        <div className="turn-tasks">
-          {taskRowsOf.map((row) => (
-            <div key={row.id} id={`msg-${row.id}`} data-mid={row.id}>
-              {row.kind === "task_draft" ? (
-                <TaskDraftRow message={row} turn={message} />
-              ) : (
-                <TaskCardRow message={row} />
-              )}
-            </div>
-          ))}
-        </div>
-      );
     if (message.author === "user")
       return (
         <>
@@ -769,7 +813,14 @@ const Turn = memo(
             onAbort={(q) => actions.current.onAbort(q)}
           />
         )}
-        {cards}
+        {/* The turn's own card layer: what it left for the reader to open, outside the process
+            (see `TurnCards`). Inside the turn's frame, so its author and its time are the turn's. */}
+        <TurnCards
+          turn={message}
+          saved={tools}
+          sessionId={running ? sessionId : undefined}
+          taskRows={taskRowsOf}
+        />
         <div className="message-footer">
           <time dateTime={new Date(message.createdAt).toISOString()}>
             {when(message.createdAt)}

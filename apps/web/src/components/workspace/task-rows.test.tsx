@@ -462,7 +462,7 @@ describe("a routine's report", () => {
 });
 
 describe("an artifact an agent publishes", () => {
-  it("shows its card under the tool call, and opens the version", async () => {
+  it("shows its card beside the answer, and opens the version", async () => {
     const user = messageView({ conversationId: CONV, text: "做个页面" });
     const reply = messageView({
       conversationId: CONV,
@@ -530,6 +530,14 @@ describe("an artifact an agent publishes", () => {
     expect(open.getAttribute("aria-label")).toBe(
       "打开 Artifact 季度报告 第 3 版",
     );
+    // Beside the answer, in the turn's own card layer, and not in the process frame the call is
+    // drawn in: a group folds that away as soon as the reply writes its text, and the card of what
+    // the reply produced is not something to fold away.
+    expect(open.closest(".turn-tasks")).not.toBeNull();
+    expect(open.closest(".process-box")).toBeNull();
+    expect(open.closest(".process-fold")).toBeNull();
+    const process = container.querySelector(".process-box, .process-fold")!;
+    expect(process.textContent).toContain("publish_artifact");
     await act(async () => open.click());
     await flush();
     expect(host.calls.find((c) => c.action === "preview")?.args).toEqual({
