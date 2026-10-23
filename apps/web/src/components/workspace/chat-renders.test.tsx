@@ -655,14 +655,17 @@ describe("a reply that is writing", () => {
     expect(log.textContent).not.toContain("日志行");
   });
 
-  it("folds a long typed message the old way when the row carries no blocks", async () => {
+  it("reads a long typed message whole, with no fold in the way", async () => {
     const typed = `${"手写的很长一段\n".repeat(30)}`;
     const user = row({ text: typed });
     history = [user];
     const { container } = await start();
     await flush();
     const log = container.querySelector('[role="log"]')!;
-    expect(log.textContent).toContain("展开全文");
+    // Every line of it, including the last, and nothing standing between the reader and it.
+    expect(log.textContent).toContain(typed.trimEnd());
+    expect(log.textContent).not.toContain("展开全文");
+    expect(log.querySelector(".line-clamp-12")).toBeNull();
     expect(chipCount(log, [...typed].length)).toBe(0);
   });
 

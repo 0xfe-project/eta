@@ -159,9 +159,7 @@
   "messages": {
     "mentionTarget": " → {{name}}",
     "nobody": "This message woke nobody: the conversation has no steward and more than one member. @mention a member, or set a steward.",
-    "joined": "Joined the reply {{names}} is already writing",
-    "expand": "Show all",
-    "collapse": "Show less"
+    "joined": "Joined the reply {{names}} is already writing"
   },
   "reply": {
     "stopping": "Stopping",

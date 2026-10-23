@@ -159,9 +159,7 @@
   "messages": {
     "mentionTarget": " → {{name}}",
     "nobody": "这条消息没有叫醒任何人：对话没有主理人，成员不止一位。@ 一位成员，或设一位主理人。",
-    "joined": "已并入 {{names}} 正在进行的回复",
-    "expand": "展开全文",
-    "collapse": "收起"
+    "joined": "已并入 {{names}} 正在进行的回复"
   },
   "reply": {
     "stopping": "正在停止",
