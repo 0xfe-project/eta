@@ -48,6 +48,7 @@
         "@earendil-works/pi-ai": "0.85.1",
         "@eta/client-contracts": "*",
         "@eta/client-wire-proto": "*",
+        "@eta/compaction": "*",
         "@eta/core": "*",
         "@eta/daemon": "*",
         "@eta/execution-node": "*",

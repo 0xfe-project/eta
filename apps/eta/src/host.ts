@@ -21,6 +21,7 @@ import type {
 } from "./product";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { etaCompaction } from "@eta/compaction";
 import { createLocalEnvironment } from "@eta/execution-node";
 import { assembleServer } from "@eta/server";
 import { createAccess } from "./access";
@@ -174,6 +175,13 @@ export async function startHost(options: HostOptions): Promise<Host> {
       authorize: access.authorize,
       endpoints: product.endpoints,
       remoteSessions: product.remote,
+      // The one place this host hands sessions a way to bound their own context. Wired here and
+      // nowhere else, so chat turns, task runs and sessions on a remote machine (which runs a
+      // host of its own) all get it: without it every session runs unbound, growing past the
+      // provider's window instead of compacting. The threshold is the harness's arithmetic — the
+      // smaller of `window − reserve` and the 64k ceiling (`DEFAULT_MAX_CONTEXT_TOKENS`), which
+      // is what the session's kernel config carries by default.
+      compaction: etaCompaction(),
       // What the product adds to every session it owns: the agent's words in the system prompt,
       // and, from each of its features, tools, tool middleware and an ear for questions.
       baseSystemPromptFor: product.engine.baseSystemPromptFor,
