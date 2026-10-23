@@ -4,10 +4,12 @@ import type {
   ConversationSummary,
   MessageView,
 } from "@eta/client-contracts";
+import type { ReactNode } from "react";
 import type { Draft, FilePart, PasteRange } from "@/lib/composer";
 import type { RunBlock, ToolBlock } from "@/lib/run";
 import type { Outgoing, SendMode } from "@/queries/outbox";
 import type { Question } from "@/queries/questions";
+import type { TaskStatus } from "@/queries/tasks";
 import { MAX_ATTACHMENTS } from "@eta/client-contracts";
 import { ArrowDownIcon } from "@phosphor-icons/react/ArrowDown";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
@@ -41,7 +43,7 @@ import {
   pasteBlocksOf,
   plainDraft,
 } from "@/lib/composer";
-import { buildMenu, mentionAt } from "@/lib/composer-menu";
+import { buildMenu, hashAt, mentionAt } from "@/lib/composer-menu";
 import { translate } from "@/lib/i18n";
 import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { firstVisible } from "@/lib/rail";
@@ -57,6 +59,7 @@ import { agentName } from "@/queries/agents";
 import { beginUpload, useOutbox } from "@/queries/outbox";
 import { useProjectFiles } from "@/queries/projects";
 import { useRunBlocks } from "@/queries/sessions";
+import { useTasks } from "@/queries/tasks";
 import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar } from "./agent-identity";
 import { AttachmentChip, PasteChip } from "./composer-block";
@@ -66,7 +69,9 @@ import { GroupNotice } from "./group-notice";
 import { HeldMessages } from "./held-messages";
 import { PendingStrip } from "./pending-strip";
 import { when } from "./routine-format";
+import { statusLabel } from "./task-format";
 import { TaskCardRow, TaskDraftRow } from "./task-rows";
+import { StatusIcon } from "./task-status-icon";
 import { TranscriptRail } from "./transcript-rail";
 import { AskBlock } from "./transcript/ask-block";
 import { FoldedText } from "./transcript/folded-text";
@@ -87,10 +92,14 @@ type SlashName =
   | "/settings"
   | "/new";
 interface SlashCommand {
-  name: SlashName | `@${string}`;
+  name: SlashName | `@${string}` | `#${string}`;
   description: string;
   /** Completes to `name ` for the message to follow. */
   takesText?: boolean;
+  /** The three fields below are the row's own, for the menu that shows it (slash-menu.tsx). */
+  icon?: ReactNode;
+  status?: string;
+  ariaLabel?: string;
 }
 const SLASH_COMMANDS: SlashCommand[] = [
   {
@@ -1110,8 +1119,10 @@ export function ChatPanel({
             : undefined;
   // The project's files, asked for from its machine once an `@` is being typed.
   const files = useProjectFiles(group?.projectId, mentionAt(text) !== null);
-  // One menu, three sources (lib/composer-menu.ts): `@` offers the group's members, then the
-  // project's files, and `/` offers commands.
+  // The board, for `#` — the same list the task page reads, so no second query.
+  const { tasks: board } = useTasks();
+  // One menu, four sources (lib/composer-menu.ts): `@` offers the group's members, then the
+  // project's files, `/` offers commands, and `#` offers tasks, this group's first.
   const menu = buildMenu({
     text,
     members: members.map((member) => ({
@@ -1121,25 +1132,46 @@ export function ChatPanel({
     })),
     files,
     commands: SLASH_COMMANDS,
+    tasks: board,
+    groupId,
     dismissed: menuDismissed || blocked !== undefined,
   });
   const matches: SlashCommand[] =
     menu === null
       ? []
-      : menu.items.map(
-          (item): SlashCommand =>
-            item.kind === "command"
-              ? { name: item.value as SlashName, description: item.description }
-              : {
-                  name: item.value.trim() as `@${string}`,
-                  description:
-                    item.kind === "file"
-                      ? translateText("composer.fileHint")
-                      : item.kind === "member" && item.hint
-                        ? translateText("mentions.busyHint")
-                        : translateText("mentions.replyHint"),
-                },
-        );
+      : menu.items.map((item): SlashCommand => {
+          if (item.kind === "command")
+            return {
+              name: item.value as SlashName,
+              description: item.description,
+            };
+          if (item.kind === "task") {
+            // `#10`, the title, and the status it is in — picking a task that already finished is
+            // a mistake worth showing. The status comes off the board, so it is one of the ones
+            // StatusIcon draws.
+            const status = statusLabel(item.status as TaskStatus);
+            return {
+              name: item.value.trim() as `#${string}`,
+              description: item.label,
+              icon: <StatusIcon status={item.status as TaskStatus} />,
+              status,
+              ariaLabel: translateText("composer.taskOption", {
+                ref: `#${item.number}`,
+                title: item.label,
+                status,
+              }),
+            };
+          }
+          return {
+            name: item.value.trim() as `@${string}`,
+            description:
+              item.kind === "file"
+                ? translateText("composer.fileHint")
+                : item.hint
+                  ? translateText("mentions.busyHint")
+                  : translateText("mentions.replyHint"),
+          };
+        });
   const menuOpen = matches.length > 0;
   const menuActive = Math.min(menuIndex, matches.length - 1);
 
@@ -1175,6 +1207,20 @@ export function ChatPanel({
         next[next.length - 1] = {
           ...last,
           text: last.text.replace(/@[^@\n]*$/, `${command.name} `),
+        };
+      setDraft(next);
+      setMenuIndex(0);
+      setMenuDismissed(true);
+    } else if (command.name.startsWith("#")) {
+      // A task number: replace exactly the `#…` being typed, which is the range hashAt reported,
+      // and end with the space that closes the reference, as `@name ` does.
+      const next = [...draft];
+      const last = next.at(-1);
+      const at = last?.type === "text" ? hashAt(last.text) : null;
+      if (last?.type === "text" && at !== null)
+        next[next.length - 1] = {
+          ...last,
+          text: `${last.text.slice(0, at.start)}${command.name} `,
         };
       setDraft(next);
       setMenuIndex(0);
@@ -1298,6 +1344,9 @@ export function ChatPanel({
       id={listId}
       rows={matches}
       active={menuActive}
+      label={
+        menu?.kind === "hash" ? translateText("composer.tasksLabel") : undefined
+      }
       onHover={setMenuIndex}
       onChoose={(row) => choose(row as SlashCommand)}
     />

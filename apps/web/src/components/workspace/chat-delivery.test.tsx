@@ -1,4 +1,8 @@
-import type { MessageView, SendResult } from "@eta/client-contracts";
+import type {
+  BoardTaskDetail,
+  MessageView,
+  SendResult,
+} from "@eta/client-contracts";
 import {
   afterEach,
   beforeEach,
@@ -18,6 +22,7 @@ import {
   memberView,
   messageView,
   productHost,
+  taskDetail,
 } from "@/test-product";
 import { button, cleanup, click, flush, mount } from "@/test-render";
 
@@ -69,6 +74,7 @@ const accepted = (args: Record<string, unknown>): SendResult => {
 function start(
   messages: MessageView[] = [],
   members = [memberView(AGENT, { sessionId: "s1" })],
+  board: BoardTaskDetail[] = [],
 ) {
   const summary = conversationView({
     id: CONV,
@@ -79,6 +85,7 @@ function start(
     agents: [agentView({ id: AGENT, name: "研究员" })],
     conversations: [summary],
     messages: { [CONV]: messages },
+    tasks: board.map((task) => ({ task })),
   });
   // A send waits for the test to answer it, as a slow host would.
   host.handle(
@@ -386,6 +393,96 @@ describe("the @ menu", () => {
     expect(options(c)).toEqual([expect.stringContaining("@src/lib/util.ts")]);
     await enter(c);
     expect(composed(c)).toBe("看 @src/lib/util.ts ");
+  });
+});
+
+describe("the # menu", () => {
+  const options = (c: HTMLElement) =>
+    [...c.querySelectorAll('[role="option"]')].map((option) => ({
+      text: option.textContent,
+      label: option.getAttribute("aria-label"),
+    }));
+  const rows = (c: HTMLElement) => [
+    ...c.querySelectorAll<HTMLElement>('[role="option"]'),
+  ];
+  const selected = (c: HTMLElement) =>
+    rows(c).findIndex(
+      (option) => option.getAttribute("aria-selected") === "true",
+    );
+  const press = (c: HTMLElement, key: string) =>
+    act(async () => {
+      editor(c).dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+  // One task of this group, one of another and newer: the group's own comes first.
+  const board = (): BoardTaskDetail[] => [
+    taskDetail({
+      id: "t10",
+      number: 10,
+      title: "整理发布说明",
+      status: "in_progress",
+      conversationId: CONV,
+      updatedAt: 3000,
+    }),
+    taskDetail({
+      id: "t12",
+      number: 12,
+      title: "重建站点",
+      conversationId: "another",
+      updatedAt: 9000,
+    }),
+  ];
+
+  it("lists the board's tasks, this group's first, with the status", async () => {
+    const { container: c } = await start([], undefined, board());
+    await flush();
+    await type("#");
+    await flush();
+    // Files are an `@` thing: a `#` asks the project's machine for none.
+    expect(filesAsked).toEqual([]);
+    expect(options(c)).toEqual([
+      { text: "#10整理发布说明进行中", label: "#10 整理发布说明 · 进行中" },
+      { text: "#12重建站点待办", label: "#12 重建站点 · 待办" },
+    ]);
+  });
+
+  it("narrows by number and by title, and completes with a space", async () => {
+    const { container: c } = await start([], undefined, board());
+    await flush();
+    await type("#发布");
+    await flush();
+    expect(options(c).map((option) => option.text)).toEqual([
+      "#10整理发布说明进行中",
+    ]);
+    await enter(c);
+    expect(composed(c)).toBe("#10 ");
+    expect(rows(c)).toHaveLength(0);
+  });
+
+  it("wraps over the rows with the arrows, and Escape closes it for this draft", async () => {
+    const { container: c } = await start([], undefined, board());
+    await flush();
+    await type("#");
+    await flush();
+    expect(selected(c)).toBe(0);
+    await press(c, "ArrowUp");
+    await flush();
+    expect(selected(c)).toBe(1);
+    await press(c, "ArrowDown");
+    await flush();
+    expect(selected(c)).toBe(0);
+    await press(c, "Escape");
+    await flush();
+    expect(rows(c)).toHaveLength(0);
+    // Same draft, no new keystroke: it stays shut, as it does for `@`.
+    await type("#1");
+    await flush();
+    expect(rows(c)).toHaveLength(0);
   });
 });
 

@@ -31,6 +31,8 @@
     "workingHint": "有人在说话 · ⌘Enter 现在就插一句",
     "stopLabel": "停止",
     "commandsLabel": "命令",
+    "tasksLabel": "任务",
+    "taskOption": "{{ref}} {{title}} · {{status}}",
     "noMatches": "没有匹配的"
   },
   "process": {

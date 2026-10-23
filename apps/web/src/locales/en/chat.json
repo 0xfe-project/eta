@@ -31,6 +31,8 @@
     "workingHint": "a reply is running · ⌘Enter to say something now",
     "stopLabel": "STOP",
     "commandsLabel": "commands",
+    "tasksLabel": "tasks",
+    "taskOption": "{{ref}} {{title}} · {{status}}",
     "noMatches": "nothing matches"
   },
   "process": {
