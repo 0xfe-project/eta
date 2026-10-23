@@ -26,6 +26,10 @@
 - [102] Eta ActivityRefCard/artifact/task reference cards in sidebar/workspace panel must fill the available card area and must not impose a local max-width (e.g. max-w-md).
 - [105] Eta 任务页 #13：只有任务详情/信息页聊天化（一次运行=带头像发言，日志折进发言，状态/系统事件细行，需要人动作按钮卡，底部输入框常驻且发送即续跑；标题下用 chip 替代右侧属性 aside/四格，去掉活动 tab，长描述收成第一条折叠块）；任务列表/看板/面板任务列表保持原样且行内不加验收按钮；整页与面板详情共用一个 TaskThread 组件。
 - [108] Eta collapsed sidebar rail controls (e.g. SidebarTrigger/settings) must be horizontally centered in the rail.
+- [112] In Eta composer autocomplete, `#` is a hard-scope task-only trigger reusing the existing `@`/`/` menu; files and group chats must stay out of `#`, and existing `@`/`/` behavior/ordering must not change.
+- [113] Eta `#` task completion must use mention-style boundary rules (trigger after whitespace/CJK punctuation, stop at whitespace or another `#`) and must not false-trigger on `C#`, `F#`, or sentence-mid `#` followed by a space.
+- [114] Eta `#` task menu must sort current-group tasks before other tasks, then by `updatedAt` newest; support `#number`/numeric prefix and title fuzzyScore; cap at 8; inserting a task must replace only the detected token with `#number ` including a trailing space.
+- [115] Eta `#` task menu must reuse the existing keyboard/a11y combobox/listbox behavior and localized option text, not duplicate the menu or hard-code Chinese.
 
 ## preference
 
@@ -54,6 +58,7 @@
 - [94] For significant Eta UI redesigns, user prefers reviewing a visual HTML artifact/prototype first before implementation.
 - [103] For Eta ref-card width issues, remove arbitrary card caps and rely on outer layout bounds instead of adding a new cap or resizing the sidebar.
 - [110] Eta 任务详情/TaskThread 的线程区应使用固定高度、盒内自滚动，底部留言条在滚动框外；优先复用聊天 ProcessBox/共用固定高滚动框，面板与整页高度用 CSS 变量分档，避免双层纵向滚动。
+- [116] For narrow Eta composer changes, do not opportunistically extend adjacent inputs (e.g. task-detail textarea); instead report the cost unless explicitly approved.
 
 ## lesson
 
@@ -95,3 +100,4 @@
 - [107] 合并 Eta 任务分支前检查工作区是否干净；若有未提交的本地改动，先单独提交或清理，避免脏工作区影响合并或把无关改动卷入。
 - [111] Eta 聊天里「多长算长」拆成两个阈值：`LONG_PASTE`（粘贴折成块的门槛，3 行 / 1000 字，用户嫌 12 行太高）与 `LONG_MESSAGE`（发言与回复折到 12 行的门槛，保持 12 行 / 1000 字）。别把它们合回一个判断——合回去等于每条四行的回复都挂一个「展开」。
 - [109] Eta collapsed sidebar rail: Button base is inline-flex, so mx-auto alone does not center it; use `mx-auto flex` or equivalent block flex, and test that the trigger has mx-auto and no residual inline-flex.
+- [117] When changing Eta chat-panel while another branch is modifying its detail side, merge only the smallest conflict-relevant change and do not absorb or refactor detail conversation structure.
