@@ -26,10 +26,12 @@
 - [102] Eta ActivityRefCard/artifact/task reference cards in sidebar/workspace panel must fill the available card area and must not impose a local max-width (e.g. max-w-md).
 - [105] Eta 任务页 #13：只有任务详情/信息页聊天化（一次运行=带头像发言，日志折进发言，状态/系统事件细行，需要人动作按钮卡，底部输入框常驻且发送即续跑；标题下用 chip 替代右侧属性 aside/四格，去掉活动 tab，长描述收成第一条折叠块）；任务列表/看板/面板任务列表保持原样且行内不加验收按钮；整页与面板详情共用一个 TaskThread 组件。
 - [108] Eta collapsed sidebar rail controls (e.g. SidebarTrigger/settings) must be horizontally centered in the rail.
-- [112] In Eta composer autocomplete, `#` is a hard-scope task-only trigger reusing the existing `@`/`/` menu; files and group chats must stay out of `#`, and existing `@`/`/` behavior/ordering must not change.
-- [113] Eta `#` task completion must use mention-style boundary rules (trigger after whitespace/CJK punctuation, stop at whitespace or another `#`) and must not false-trigger on `C#`, `F#`, or sentence-mid `#` followed by a space.
-- [114] Eta `#` task menu must sort current-group tasks before other tasks, then by `updatedAt` newest; support `#number`/numeric prefix and title fuzzyScore; cap at 8; inserting a task must replace only the detected token with `#number ` including a trailing space.
-- [115] Eta `#` task menu must reuse the existing keyboard/a11y combobox/listbox behavior and localized option text, not duplicate the menu or hard-code Chinese.
+- [123] In Eta composer autocomplete, `#` is a hard-scope task-only trigger reusing the existing `@`/`/` menu; files and group chats must stay out of `#`, and existing `@`/`/` behavior/ordering must not change.
+- [112] Eta chat long-text folding: keep LONG_PASTE and LONG_MESSAGE separate. LONG_PASTE folds pasted text only after >3 lines (4+ lines) or >1000 chars; LONG_MESSAGE stays 12 lines / 1000 chars. Do not merge thresholds or every short reply will show an expand control.
+- [116] Eta composer # autocomplete lists tasks only, current group first then recent, inserts #ID with trailing space, and does not include files or group chats.
+- [124] Eta `#` task completion must use mention-style boundary rules (trigger after whitespace/CJK punctuation, stop at whitespace or another `#`) and must not false-trigger on `C#`, `F#`, or sentence-mid `#` followed by a space.
+- [125] Eta `#` task menu must sort current-group tasks before other tasks, then by `updatedAt` newest; support `#number`/numeric prefix and title fuzzyScore; cap at 8; inserting a task must replace only the detected token with `#number ` including a trailing space.
+- [126] Eta `#` task menu must reuse the existing keyboard/a11y combobox/listbox behavior and localized option text, not duplicate the menu or hard-code Chinese.
 
 ## preference
 
@@ -54,16 +56,17 @@
 - [70] When hiding an optional Eta integration, hide the whole related surface/flow rather than leaving partially disabled or stale-looking UI.
 - [75] Eta 隐藏可选设置 tab 时，优先做展示层过滤并保留旧状态/深链的可渲染路径，避免把数据或后端确认机制一起藏掉。
 - [76] When the user asks to merge all open Eta tasks if they look fine, the agent should merge/close/verify them autonomously instead of asking for per-task confirmation.
-- [92] 当用户说"这是一个任务"时，应建 task 而非在聊天区直接执行。
 - [94] For significant Eta UI redesigns, user prefers reviewing a visual HTML artifact/prototype first before implementation.
 - [103] For Eta ref-card width issues, remove arbitrary card caps and rely on outer layout bounds instead of adding a new cap or resizing the sidebar.
 - [110] Eta 任务详情/TaskThread 的线程区应使用固定高度、盒内自滚动，底部留言条在滚动框外；优先复用聊天 ProcessBox/共用固定高滚动框，面板与整页高度用 CSS 变量分档，避免双层纵向滚动。
-- [116] For narrow Eta composer changes, do not opportunistically extend adjacent inputs (e.g. task-detail textarea); instead report the cost unless explicitly approved.
+- [127] For narrow Eta composer changes, do not opportunistically extend adjacent inputs (e.g. task-detail textarea); instead report the cost unless explicitly approved.
+- [113] In Eta, when user says '这是一个任务', '新建任务', or '新建一个任务' about a change, create a board task rather than directly implementing the change in chat.
+- [117] When adding Eta composer autocomplete triggers, reuse existing composer-menu and keyboard selection logic instead of building a parallel menu; keep @ and / behavior/order unchanged.
+- [119] Eta default group names using the project name may duplicate for multiple groups in one project; do not auto-add subtitles/sequence disambiguation unless requested.
 
 ## lesson
 
 - [3] Knip in Eta flags exports used only internally; make internal helpers non-exported (e.g., onboardedStorageKey).
-- [4] In Eta, untracked .eta/MEMORY.md can create noisy git status and make bun run check fail via dprint formatting; gitignore, format, or commit it if needed.
 - [11] Do not conflate Eta's product mechanism with implementation details: the user's 'subagent' meant task-as-subagent in human workflow, while opaque internal Agent execution may be fine.
 - [14] Before proposing new Eta task/promotion behavior, check whether existing draft_task already covers it; a request to make a card 'in the turn' may mean visual grouping/folding, not a change to execution timing or task semantics.
 - [20] In Eta, tool descriptions are sent in every request, so agent underuse of draft_task is not a visibility problem; check competing prompts and decision-point policy first.
@@ -98,6 +101,12 @@
 - [104] Eta shared activity-card `frameClass` can hide width bugs: `max-w-md` looked like sidebar default width but was arbitrary; check shared style strings and both `<div>` vs `<a>/<button>` variants, and pin card fill behavior with tests.
 - [106] 修 Eta 聊天/侧栏 ActivityRefCard 宽度时，同步检查同一 turn-tasks 列里的 .task-fold max-width，避免 ref 卡铺满而 draft_task/task_card 折叠行仍限宽造成视觉错位。
 - [107] 合并 Eta 任务分支前检查工作区是否干净；若有未提交的本地改动，先单独提交或清理，避免脏工作区影响合并或把无关改动卷入。
-- [111] Eta 聊天里「多长算长」拆成两个阈值：`LONG_PASTE`（粘贴折成块的门槛，3 行 / 1000 字，用户嫌 12 行太高）与 `LONG_MESSAGE`（发言与回复折到 12 行的门槛，保持 12 行 / 1000 字）。别把它们合回一个判断——合回去等于每条四行的回复都挂一个「展开」。
 - [109] Eta collapsed sidebar rail: Button base is inline-flex, so mx-auto alone does not center it; use `mx-auto flex` or equivalent block flex, and test that the trigger has mx-auto and no residual inline-flex.
-- [117] When changing Eta chat-panel while another branch is modifying its detail side, merge only the smallest conflict-relevant change and do not absorb or refactor detail conversation structure.
+- [128] When changing Eta chat-panel while another branch is modifying its detail side, merge only the smallest conflict-relevant change and do not absorb or refactor detail conversation structure.
+- [114] .eta/MEMORY.md is now tracked in Eta; keep it dprint-formatted and commit/clean dirty MEMORY.md before merges.
+- [118] If Eta UI changes from whole-page scrolling to fixed inner scrolling, delete now-dead back-to-top components and update tests/knip.
+- [120] Eta long runs can end as empty successful responses after large context (e.g., input >250k, output 1), appearing as missing finish_task; inspect provider usage and assistant turns before rerunning or blaming the agent.
+- [121] Eta compaction may fail to reduce the main request input even with a ~64k threshold; check shouldCompact call sites, token estimates, and summary replacement before attributing the failure to agent behavior.
+- [122] If an Eta task died dirty without finish_task, first classify the cause; if it looks like context overflow but the code/tests are otherwise sound, finish small gaps manually rather than blindly rerunning.
+- [129] Eta 的上下文压缩从来没装配：summarizer 是以插件形式进会话的（eta-harness/src/open.ts 里 `options.compaction === undefined ? undefined : new CompactionService(...)`，注释即「runs unbound」），而 apps/eta 从不传 summarizer、也不依赖 @eta/compaction（eta-server 的 server.ts / manager.ts 只转发）。后果：会话 journal 里零条 compaction 条目、上下文单调涨到 provider 窗口（实测 123k–260k），64k 天花板（DEFAULT_MAX_CONTEXT_TOKENS）根本没机会生效。见 #16。
+- [130] Eta 长会话在窗口边界的典型死法：provider 回「成功但空」补全（usage output=1、content 里无 toolCall 无 text、thinking 只剩 1–3 字符），kernel/generation.ts 因 stopReason 既非 error 也非 length 而正常结束回合，runner 只会 nudge 一次然后把失败写成「The run ended without calling finish_task.」——是上下文事故，不是执行者忘了汇报。见 #17。
