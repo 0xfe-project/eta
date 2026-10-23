@@ -5,15 +5,16 @@ import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
+import { UsersThreeIcon } from "@phosphor-icons/react/UsersThree";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   SidebarContent,
   SidebarGroup,
@@ -201,39 +202,43 @@ export function BottomNav() {
   return (
     <nav
       aria-label={translateText("accessibility.sections")}
-      // Still flush with the edges: the floating board is a later task. What is here is the blank
-      // a safe-area inset will take, and the bar's own height above it, so content never ends on
-      // the last row of pixels of the screen.
-      className="shrink-0 border-t bg-background pb-[var(--bottom-inset)] md:hidden"
+      // A board, not an edge. The bar is a bordered plate inset from the screen on every side, and
+      // what is left under it is the safe area's floor — empty, and outside the plate rather than
+      // padding inside it, so a change of inset moves the floor and not the bar.
+      className="shrink-0 px-[8px] pb-[var(--bottom-inset)] md:hidden"
     >
       {/* Four destinations of one width, the plus holding the middle cell: the solid square is
           the axis the two pairs are read against, which is what keeps five cells from reading as
-          a symmetric board broken in half. */}
-      <div className="grid h-[44px] grid-cols-5">
-        <Tab
-          to="/"
-          label={translateText("sections.chat")}
-          icon={ChatsCircleIcon}
-        />
-        <Tab
-          to="/tasks"
-          label={translateText("sections.tasks")}
-          icon={ListChecksIcon}
-          badge={badges["/tasks"]}
-        />
-        <div className="flex items-center justify-center">
+          a symmetric board broken in half. It breaks the plate's edge above and below, which is
+          what makes it a bigger thing than the four beside it rather than a fifth one. */}
+      <div className="relative h-[52px] border bg-background">
+        <div className="grid h-full grid-cols-[1fr_1fr_68px_1fr_1fr]">
+          <Tab
+            to="/"
+            label={translateText("sections.chat")}
+            icon={ChatsCircleIcon}
+          />
+          <Tab
+            to="/tasks"
+            label={translateText("sections.tasks")}
+            icon={ListChecksIcon}
+            badge={badges["/tasks"]}
+          />
+          <div aria-hidden="true" />
+          <Tab
+            to="/routines"
+            label={translateText("sections.routines")}
+            icon={ClockIcon}
+          />
+          <Tab
+            to="/settings"
+            label={translateText("sections.settings")}
+            icon={GearSixIcon}
+          />
+        </div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
           <NewAction />
         </div>
-        <Tab
-          to="/routines"
-          label={translateText("sections.routines")}
-          icon={ClockIcon}
-        />
-        <Tab
-          to="/settings"
-          label={translateText("sections.settings")}
-          icon={GearSixIcon}
-        />
       </div>
     </nav>
   );
@@ -278,29 +283,57 @@ function Tab({
 function NewAction() {
   const { t: translateText } = useTranslation(["navigation"] as const);
   const setNewConversation = useWorkspaceStore((s) => s.setNewConversation);
+  const [choosing, setChoosing] = useState(false);
   const [group, setGroup] = useState(false);
+  // Two rows the size of a thumb, not a menu the size of a cursor: a pointer picks from a menu,
+  // a thumb needs a target it cannot miss. So the choice opens as a dialog, like every other
+  // question the app asks.
+  const rowClass =
+    "flex h-[52px] w-full items-center gap-2 border px-3 text-sm outline-none transition-colors hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring";
+  const pick = (next: () => void) => {
+    setChoosing(false);
+    // After this dialog is gone: opening the next one in the same frame leaves its overlay
+    // holding the pointer.
+    requestAnimationFrame(next);
+  };
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label={translateText("actions.new")}
-            title={translateText("actions.new")}
-            className="flex size-[44px] items-center justify-center bg-foreground text-background outline-none hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <PlusIcon aria-hidden="true" className="size-4" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent side="top" align="center" className="w-40">
-          <DropdownMenuItem onSelect={() => setNewConversation({ open: true })}>
-            {translateText("actions.newConversation")}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setGroup(true)}>
-            {translateText("actions.newGroup")}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <button
+        type="button"
+        aria-label={translateText("actions.new")}
+        title={translateText("actions.new")}
+        aria-haspopup="dialog"
+        aria-expanded={choosing}
+        onClick={() => setChoosing(true)}
+        className="flex size-[68px] items-center justify-center bg-foreground text-background outline-none hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <PlusIcon aria-hidden="true" weight="bold" className="size-7" />
+      </button>
+      <Dialog open={choosing} onOpenChange={setChoosing}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{translateText("actions.new")}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <button
+              type="button"
+              className={rowClass}
+              onClick={() => pick(() => setNewConversation({ open: true }))}
+            >
+              <ChatsCircleIcon aria-hidden="true" className="size-4" />
+              {translateText("actions.newConversation")}
+            </button>
+            <button
+              type="button"
+              className={rowClass}
+              onClick={() => pick(() => setGroup(true))}
+            >
+              <UsersThreeIcon aria-hidden="true" className="size-4" />
+              {translateText("actions.newGroup")}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
       {/* Mounted on open, like the conversation dialog: a form left half filled in is not what the
           next open should show. */}
       {group ? <CreateGroup open onOpenChange={setGroup} /> : null}
