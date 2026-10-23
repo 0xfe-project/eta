@@ -1091,6 +1091,9 @@
     z-index: 40;
     max-height: 300px;
     min-width: 300px;
+    /* A task title is a sentence, not a path: the menu stays the width of the composer rather
+       than growing with the longest title on the board. */
+    max-width: min(30rem, 100%);
     overflow-y: auto;
     margin-bottom: 6px;
     background: var(--background);
@@ -1124,17 +1127,32 @@
     background: var(--foreground);
     color: var(--background);
   }
+  /* A task row carries a status icon, and the icon's own dim colour would not invert with the
+     row: on the selected one it takes the row's. */
+  .skill-slash-option.selected svg {
+    color: inherit;
+  }
   .skill-slash-option-name {
     font-family: var(--font-mono);
     font-size: 12px;
     font-weight: 700;
   }
   .skill-slash-option-desc {
+    min-width: 0;
+    flex: 1;
     font-size: 11px;
     opacity: 0.65;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  /* The task's status, kept whole on the right: it is the reason not to pick the row. */
+  .skill-slash-option-status {
+    flex-shrink: 0;
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    opacity: 0.55;
   }
 }
 

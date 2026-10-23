@@ -2,9 +2,10 @@
  * What the composer's one menu offers, and why.
  *
  * There is a single menu because there is a single thing to be completed — "who or what am I
- * referring to". Two keys open it: `/` for commands (the whole draft has to be `/name`, which is
- * what makes a slash at the start of a sentence not a command) and `@` for references, which can
- * mix two kinds:
+ * referring to". Three keys open it: `/` for commands (the whole draft has to be `/name`, which is
+ * what makes a slash at the start of a sentence not a command) and `#` for tasks (`#10` reads as a
+ * task number, so `#` offers nothing but the board's tasks), and `@` for references, which can mix
+ * two kinds:
  *
  * - members of this group, first, because in a group "who" is the question the message answers.
  *   eta-old had only files here; a group needs people, and putting them below a file list would
@@ -33,10 +34,29 @@ export type MenuItem =
       memberId: string;
     }
   | { kind: "file"; value: string; label: string }
-  | { kind: "command"; value: string; label: string; description: string };
+  | { kind: "command"; value: string; label: string; description: string }
+  | {
+      kind: "task";
+      value: string;
+      /** The title: the row shows the number, then this, then the status. */
+      label: string;
+      number: number;
+      /** One of the board's statuses, kept a plain string so this file stays wire-free. */
+      status: string;
+    };
+
+/** A task the `#` menu can complete to: what a row needs, and nothing else of the board's. */
+export interface MenuTask {
+  number: number;
+  title: string;
+  status: string;
+  /** The group it is discussed in, which decides whether the row sorts first. */
+  conversationId: string | null;
+  updatedAt: number;
+}
 
 export interface MenuState {
-  kind: "slash" | "at";
+  kind: "slash" | "at" | "hash";
   query: string;
   /** Where the query starts in the draft, so a pick can replace exactly that. */
   start: number;
@@ -47,6 +67,7 @@ export interface MenuState {
 const MAX_MEMBERS = 8;
 const MAX_FILES = 8;
 const MAX_COMMANDS = 8;
+const MAX_TASKS = 8;
 
 /**
  * eta-old's scoring, kept as it was: consecutive hits and word boundaries are what make one
@@ -86,6 +107,20 @@ export function mentionAt(
   return { query, start: text.length - query.length - 1 };
 }
 
+/**
+ * The `#` being typed, if the caret is in one.
+ *
+ * The same boundary as `@`, and for the same reason: `C#`, `F#` and a `#` that follows a word are
+ * prose. The query runs to the next space or `#`, so typing a second hash starts a fresh query
+ * instead of joining the first (`##` is nobody's task number, so it opens nothing).
+ */
+export function hashAt(text: string): { query: string; start: number } | null {
+  const match = /(?:^|[\s，。！？、；：,.!?;:])#([^\s#]*)$/.exec(text);
+  if (match === null) return null;
+  const query = match[1] ?? "";
+  return { query, start: text.length - query.length - 1 };
+}
+
 /** `/name` — the whole draft, no spaces: a slash inside a sentence is a slash. */
 export function slashAt(text: string): { query: string; start: number } | null {
   if (!text.startsWith("/") || text.startsWith("//")) return null;
@@ -93,11 +128,30 @@ export function slashAt(text: string): { query: string; start: number } | null {
   return { query: text.slice(1).toLowerCase(), start: 0 };
 }
 
+/**
+ * Whether two tasks differ by "is this the group being written in": 0 when they agree, negative or
+ * positive when one of them is. A task with no group is `null` on the wire, so it cannot rank first
+ * by accident.
+ */
+function groupFirst(
+  a: MenuTask,
+  b: MenuTask,
+  groupId: string | undefined,
+): number {
+  const near = (task: MenuTask) =>
+    groupId !== undefined && task.conversationId === groupId ? 0 : 1;
+  return near(a) - near(b);
+}
+
 export function buildMenu(input: {
   text: string;
   members: readonly MenuMember[];
   files: readonly string[];
   commands: readonly { name: string; description: string }[];
+  /** The board, for `#`. */
+  tasks: readonly MenuTask[];
+  /** The group the composer is writing in: its tasks are the ones in reach, so they come first. */
+  groupId?: string;
   dismissed: boolean;
 }): MenuState | null {
   if (input.dismissed) return null;
@@ -134,6 +188,37 @@ export function buildMenu(input: {
       : { kind: "at", query: mention.query, start: mention.start, items };
   }
 
+  const hash = hashAt(input.text);
+  if (hash !== null) {
+    const query = hash.query.toLowerCase();
+    const byNumber = /^\d+$/.test(query);
+    const items: MenuItem[] = input.tasks
+      .filter(
+        (task) =>
+          // `#1` finishes the numbers that begin with it, and any other query the same fuzzy rule
+          // that reads file paths applies to the title.
+          (byNumber && String(task.number).startsWith(query)) ||
+          fuzzyScore(query, task.title) >= 0,
+      )
+      // This group's tasks, then everything else, each newest first: the number is what a person
+      // types when they already know it, and the title is what they type when they do not.
+      .sort(
+        (a, b) => groupFirst(a, b, input.groupId) || b.updatedAt - a.updatedAt,
+      )
+      .slice(0, MAX_TASKS)
+      .map((task) => ({
+        kind: "task" as const,
+        // A trailing space, as with `@name `: the pick is a whole reference, not a prefix.
+        value: `#${task.number} `,
+        label: task.title,
+        number: task.number,
+        status: task.status,
+      }));
+    return items.length === 0
+      ? null
+      : { kind: "hash", query: hash.query, start: hash.start, items };
+  }
+
   const slash = slashAt(input.text);
   if (slash === null) return null;
   const items: MenuItem[] = input.commands
@@ -150,7 +235,7 @@ export function buildMenu(input: {
     : { kind: "slash", query: slash.query, start: slash.start, items };
 }
 
-/** Replace the completed range with the pick. Commands take the whole draft; mentions do not. */
+/** Replace the completed range with the pick. Commands take the whole draft; references do not. */
 export function applyItem(
   text: string,
   menu: MenuState,
