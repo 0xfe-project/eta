@@ -98,6 +98,7 @@ import { createSubagentTools } from "./tools/subagents";
 import { createTaskTools } from "./tools/tasks";
 import { toKernelTool } from "./tools/tool";
 import { createWriteTool } from "./tools/write";
+import { describeRepair, repairTranscript } from "./transcript-repair";
 import {
   builtinViewContributions,
   signatureOf,
@@ -318,6 +319,17 @@ export async function openSession(
   options: OpenSessionOptions,
 ): Promise<OpenSession> {
   const log = await SessionLog.load(options.storage);
+
+  // A transcript with a broken tool call/result pair is a transcript no provider
+  // will accept, and the failure reads as silence: the request is refused at the
+  // door, so there is no assistant message and no error the user can act on.
+  // Repair it before anything reads the branch — and say so, because a session
+  // that healed itself is a fact the operator needs to see, not a secret.
+  const repaired = await repairTranscript(log);
+  if (repaired !== undefined)
+    options.kernel?.warn?.(
+      `[eta-harness] transcript repaired: ${describeRepair(repaired)}`,
+    );
 
   // The journal's own words win; a caller's default is for a session that has
   // never been configured.

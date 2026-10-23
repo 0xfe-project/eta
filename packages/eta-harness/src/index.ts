@@ -232,6 +232,11 @@ export {
   type WriteToolInput,
 } from "./tools/write";
 export {
+  describeRepair,
+  repairTranscript,
+  type TranscriptRepair,
+} from "./transcript-repair";
+export {
   builtinViewContributions,
   queuedText,
   signatureOf,
