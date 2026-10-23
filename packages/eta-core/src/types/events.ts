@@ -15,6 +15,7 @@
  *   retry, and compaction events land with their runner machinery.
  */
 import type { Context } from "cordis";
+import type { RunFailure } from "../kernel/failure";
 import type { GoalStatus } from "../kernel/goal";
 import type { UsageRow } from "../storage/types";
 import type { Entry, GoalPayload } from "./entries";
@@ -115,7 +116,13 @@ export interface TurnEvents {
    * flush lands it: by the time `turn:run-end` reports `failed`, the record is
    * on disk. A cancelled run is `aborted`, never this.
    */
-  "turn:run-failed": { runId: string; error: string; failedAt: number };
+  "turn:run-failed": {
+    runId: string;
+    error: string;
+    failedAt: number;
+    /** The classified failure, when the run failed on one (never on a cancel). */
+    failure?: RunFailure | undefined;
+  };
   /** The run ended: a clean stop, a failure, or the caller cancelling it. */
   "turn:run-end": {
     runId: string;
@@ -239,10 +246,18 @@ export interface RetryEvents {
     delayMs: number;
     notBefore: number;
     errorMessage: string;
+    /**
+     * Why another attempt is being made: a transient failure after a backoff,
+     * or a request that was refused and whose transcript was just repaired.
+     */
+    reason?: "transient" | "repair" | undefined;
   };
   /** The backoff elapsed and the retried call is starting. */
-  "retry:start": { runId: string; step: string; attempt: number };
-  /** A retried call finished: success, or the failure that ended the run. */
+  "retry:start": {
+    runId: string;
+    step: string;
+    attempt: number;
+  } /** A retried call finished: success, or the failure that ended the run. */;
   "retry:end": {
     runId: string;
     step: string;

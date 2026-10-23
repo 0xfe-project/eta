@@ -26,14 +26,19 @@ import type {
 } from "@earendil-works/pi-ai";
 import type { Emit } from "../types/events";
 import type { AgentMessage, ThinkingLevel } from "../types/messages";
+import type { RunFailure } from "./failure";
 import type { KernelModels } from "./providers";
 import type { AgentRetryPolicy } from "./retry";
 import {
   isContextOverflow,
   isRecoverableLength,
-  isRetryableAssistantError,
 } from "@earendil-works/pi-ai";
-import { consumeInterruptibleStream, STOP_STREAM } from "./assistant";
+import {
+  AssistantStreamError,
+  consumeInterruptibleStream,
+  STOP_STREAM,
+} from "./assistant";
+import { classifyFailure, describeFailure } from "./failure";
 import {
   normalizedRetryPolicy,
   retryDelayMs,
@@ -113,6 +118,23 @@ export interface GenerateOptions {
   ) => void;
   /** Interrupts honoured per call; later ones are ignored. Default `DEFAULT_MAX_INTERRUPTS`. */
   maxInterrupts?: number;
+  /**
+   * Make the transcript a request the provider will accept, and say whether it
+   * changed anything. Wired by the owner of the transcript: an orphaned tool
+   * result or a tool call with no answer is refused with a 400, so the retry
+   * after a refused request is worth making only if this repaired something.
+   *
+   * Called at most once per generation: a repair that changed nothing, retried,
+   * is the same refused request again, and burning attempts on it is burning
+   * money.
+   */
+  repairTranscript?: (() => Promise<boolean>) | undefined;
+  /**
+   * The failure the loop settled on, when it settled on one. The caller needs it
+   * to say what happened: the message's own `errorMessage` is the provider's
+   * raw text, and this is that text turned into a fact.
+   */
+  onFailure?: ((failure: RunFailure) => void) | undefined;
 }
 
 /**
@@ -128,6 +150,8 @@ export async function generateWithRetry(
   const policy = normalizedRetryPolicy(options.retryPolicy);
   let attempt = 1;
   let interrupts = 0;
+  /** Whether the transcript has already been repaired for this generation. */
+  let repaired = false;
   const maxInterrupts = options.maxInterrupts ?? DEFAULT_MAX_INTERRUPTS;
   for (;;) {
     const context = options.contextFor();
@@ -156,23 +180,32 @@ export async function generateWithRetry(
     );
     let interrupt = undefined as GenerationInterrupt | undefined;
     let partial = undefined as AssistantMessage | undefined;
-    const assistant = await consumeInterruptibleStream(stream, {
-      start: () => {
-        options.emit("message:start", {
-          runId: options.runId,
-          turnId: options.turnId,
-        });
-      },
-      update: async (message, event) => {
-        partial = message;
-        const verdict = await options.observer.update(message, event);
-        if (verdict === undefined || interrupts >= maxInterrupts) return;
-        interrupt = verdict;
-        attemptStop.abort();
-        return STOP_STREAM;
-      },
-      end: () => undefined,
-    });
+    // A request the provider refused before the stream opened still has a
+    // message: the `error` event carries it. Reading it is what turns "error
+    // before start" into "HTTP 400, and here is what the provider said".
+    let assistant = undefined as AssistantMessage | undefined;
+    try {
+      assistant = await consumeInterruptibleStream(stream, {
+        start: () => {
+          options.emit("message:start", {
+            runId: options.runId,
+            turnId: options.turnId,
+          });
+        },
+        update: async (message, event) => {
+          partial = message;
+          const verdict = await options.observer.update(message, event);
+          if (verdict === undefined || interrupts >= maxInterrupts) return;
+          interrupt = verdict;
+          attemptStop.abort();
+          return STOP_STREAM;
+        },
+        end: () => undefined,
+      });
+    } catch (caught) {
+      if (!(caught instanceof AssistantStreamError)) throw caught;
+      assistant = caught.assistant;
+    }
 
     if (assistant === undefined && interrupt !== undefined && partial) {
       // The attempt is over and nothing it produced is history. The interrupt
@@ -196,36 +229,73 @@ export async function generateWithRetry(
       return assistant;
     }
 
-    // Context overflow: the same request cannot fit until the history shrinks,
-    // so waiting would not help. The recovery is one-shot (the service owns
-    // that budget) and a declined recovery ends the attempt.
-    const overflow =
-      isContextOverflow(assistant, options.model.contextWindow) ||
-      isRecoverableLength(assistant, options.intendedOutputLimit);
-    if (overflow) {
-      if (await options.recoverOverflow()) continue;
-      return assistant;
-    }
-
-    if (assistant.stopReason !== "error") return assistant;
-
-    // A transport failure gets another attempt; a deterministic one (auth,
-    // quota, a bad request) ends here rather than burning the budget.
-    const retryable = isRetryableAssistantError(assistant);
-    if (!retryable || attempt >= policy.maxAttempts) {
+    // One classification for every kind of failure, so the decision to retry and
+    // the facts the caller shows come from the same reading of the same message.
+    const failure = classifyFailure(assistant, {
+      provider: options.model.provider,
+      modelId: options.model.id,
+      attempt,
+    });
+    const settle = (): AssistantMessage => {
       if (attempt > 1) {
         options.emit("retry:end", {
           runId: options.runId,
           step: options.turnId,
           attempt,
           success: false,
-          finalError:
-            assistant.errorMessage ??
-            `Assistant request ended with ${assistant.stopReason}`,
+          finalError: assistant.errorMessage ?? describeFailure(failure),
         });
       }
+      options.onFailure?.(failure);
       return assistant;
+    };
+
+    // Context overflow: the same request cannot fit until the history shrinks,
+    // so waiting would not help. The recovery is one-shot (the service owns
+    // that budget) and a declined recovery ends the attempt.
+    const overflow =
+      isContextOverflow(assistant, options.model.contextWindow) ||
+      isRecoverableLength(assistant, options.intendedOutputLimit) ||
+      failure.code === "context_overflow";
+    if (overflow) {
+      if (await options.recoverOverflow()) continue;
+      return settle();
     }
+
+    if (assistant.stopReason !== "error") return assistant;
+
+    // A refused request shape is repaired, not waited out: the transcript is
+    // made valid, and if that changed anything the same request is worth one
+    // more try. A repair that changed nothing ends here — retrying it would be
+    // the same 400 until the budget ran out.
+    if (failure.code === "invalid_request" && !repaired) {
+      repaired = true;
+      const changed = (await options.repairTranscript?.()) === true;
+      if (changed && attempt < policy.maxAttempts) {
+        attempt += 1;
+        options.emit("retry:scheduled", {
+          runId: options.runId,
+          step: options.turnId,
+          attempt,
+          maxAttempts: policy.maxAttempts,
+          delayMs: 0,
+          notBefore: Date.now(),
+          errorMessage: assistant.errorMessage ?? describeFailure(failure),
+          reason: "repair",
+        });
+        options.emit("retry:start", {
+          runId: options.runId,
+          step: options.turnId,
+          attempt,
+        });
+        continue;
+      }
+      return settle();
+    }
+
+    // A transport failure gets another attempt; a deterministic one (auth,
+    // quota, a missing model) ends here rather than burning the budget.
+    if (!failure.retryable || attempt >= policy.maxAttempts) return settle();
 
     const notBefore = retryNotBefore(policy, attempt);
     options.emit("retry:scheduled", {
@@ -235,7 +305,8 @@ export async function generateWithRetry(
       maxAttempts: policy.maxAttempts,
       delayMs: retryDelayMs(policy, attempt),
       notBefore,
-      errorMessage: assistant.errorMessage ?? "Assistant request failed",
+      errorMessage: assistant.errorMessage ?? describeFailure(failure),
+      reason: "transient",
     });
     await waitUntil(notBefore, options.signal);
     attempt += 1;

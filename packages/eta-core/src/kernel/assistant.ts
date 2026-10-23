@@ -56,6 +56,32 @@ export async function consumeAssistantStream(
 /** Returned by an interruptible observer's `update` to stop reading the stream. */
 export const STOP_STREAM = Symbol("stop-stream");
 
+/**
+ * A stream that ended before it ever started.
+ *
+ * pi-ai pushes `start` only after the HTTP request succeeded, so any failure at
+ * the transport layer (a refused request, a 401, a dead socket) arrives as an
+ * `error` event with no `start` before it. That event carries the whole story —
+ * the status, the provider's own words — and dropping it is how a 400 about
+ * tool calls became the sentence "the stream emitted error before start".
+ *
+ * So the failure keeps the message it came from, and the text this class
+ * throws with is the provider's, not a paraphrase of ours.
+ */
+export class AssistantStreamError extends Error {
+  /** The failed message the provider's `error` event carried. */
+  readonly assistant: AssistantMessage;
+
+  constructor(assistant: AssistantMessage) {
+    const said = assistant.errorMessage ?? "no reason given";
+    super(`Assistant message stream emitted error before start: ${said}`, {
+      cause: assistant,
+    });
+    this.name = "AssistantStreamError";
+    this.assistant = assistant;
+  }
+}
+
 /** An observer that may cut the stream short by returning `STOP_STREAM` from `update`. */
 export interface InterruptibleStreamObserver
   extends Omit<AssistantStreamObserver, "update"> {
@@ -96,6 +122,11 @@ export async function consumeInterruptibleStream(
       const verdict = await observer.update({ ...event.partial }, event);
       if (verdict === STOP_STREAM) return undefined;
       continue;
+    }
+    if (event.type === "error" && !started) {
+      // Not a contract break: the provider refused the request before it could
+      // open a message, and what it said is the only useful thing there is.
+      throw new AssistantStreamError(event.error);
     }
     if (!started)
       throw new Error(
