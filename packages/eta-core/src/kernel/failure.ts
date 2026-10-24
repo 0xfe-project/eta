@@ -131,7 +131,10 @@ export function httpStatusOf(text: string): number | undefined {
  * JSON body, else the text with the status prefix taken off. Truncated, because
  * a gateway may send a whole HTML page.
  */
-export function providerMessageOf(text: string, status?: number): string | undefined {
+export function providerMessageOf(
+  text: string,
+  status?: number,
+): string | undefined {
   const body = jsonBody(text);
   if (body !== undefined) {
     const message = body.error?.message ?? body.message ?? body.error?.code;
@@ -191,7 +194,10 @@ const PATTERNS: readonly (readonly [FailureCode, RegExp])[] = [
     "auth",
     /invalid[_ ]?api[_ ]?key|incorrect api key|authentication|unauthorized|not authorized|api key|api[_ ]?key[_ ]?invalid|permission denied/i,
   ],
-  ["rate_limit", /rate.?limit|too many requests|requests per (?:min|second|day)|429/i],
+  [
+    "rate_limit",
+    /rate.?limit|too many requests|requests per (?:min|second|day)|429/i,
+  ],
   [
     "model_not_found",
     /model[_ ]not[_ ](?:exist|found)|no such model|unknown model|invalid model|not a valid model|model .{0,40}does not exist/i,
@@ -216,7 +222,10 @@ const PATTERNS: readonly (readonly [FailureCode, RegExp])[] = [
  * reason to end a conversation.
  */
 export function classifyFailure(
-  message: Pick<AssistantMessage, "stopReason" | "errorMessage" | "provider" | "model">,
+  message: Pick<
+    AssistantMessage,
+    "stopReason" | "errorMessage" | "provider" | "model"
+  >,
   context: FailureContext = {},
 ): RunFailure {
   const attempt = context.attempt ?? 1;
@@ -227,9 +236,7 @@ export function classifyFailure(
   const providerMessage = providerMessageOf(text, httpStatus);
 
   const code =
-    message.stopReason === "aborted"
-      ? "aborted"
-      : codeOf(text, httpStatus);
+    message.stopReason === "aborted" ? "aborted" : codeOf(text, httpStatus);
 
   return {
     code,
@@ -302,9 +309,7 @@ export function describeFailure(failure: RunFailure): string {
     .join("/");
   const at = who === "" ? "" : ` (${who})`;
   const said =
-    failure.providerMessage === undefined
-      ? ""
-      : `: ${failure.providerMessage}`;
+    failure.providerMessage === undefined ? "" : `: ${failure.providerMessage}`;
   const status =
     failure.httpStatus === undefined ? "" : ` HTTP ${failure.httpStatus}`;
   const head = `${headline(failure.code)}${at}${status}${said}`;
@@ -336,14 +341,4 @@ function headline(code: FailureCode): string {
     case "unknown":
       return "The request failed";
   }
-}
-
-/** The failure a restarted process leaves behind: a fact, not a provider's word. */
-export function restartFailure(attempt = 1): RunFailure {
-  return {
-    code: "restart",
-    attempt,
-    retryable: false,
-    remedy: "Send the message again; nothing was run twice.",
-  };
 }
