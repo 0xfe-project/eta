@@ -175,5 +175,10 @@
   },
   "updates": {
     "available": "Eta 已更新"
+  },
+  "window": {
+    "close": "关闭窗口",
+    "minimize": "最小化窗口",
+    "maximize": "最大化或还原窗口"
   }
 }

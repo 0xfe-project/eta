@@ -57,7 +57,12 @@ export function WorkspacePanel({
         className,
       )}
     >
-      <div className="band grid grid-cols-[1fr_auto_1fr] gap-2 px-3">
+      {/* The band is the window's drag strip on every column but this one: three tabs and a close
+          button fill it edge to edge, and a press on a drag region is eaten by the window before
+          the page hears it. A strip you must click is a strip you must not drag, so `tabstrip`
+          says so in `styles.css` instead of leaving the gaps between tabs as the only place a
+          drag lands. */}
+      <div className="band tabstrip grid grid-cols-[1fr_auto_1fr] gap-2 px-3">
         <div aria-hidden="true" />
         <TabsList
           variant="default"

@@ -410,4 +410,21 @@ describe("折叠成图标栏", () => {
     await press(agents.querySelector('[data-sidebar="menu-button"]')!);
     expect(state.openAgent).toHaveBeenCalledWith("a1");
   });
+
+  it("页眉先把窗口红绿灯的位置留出来，字标才不会被压在灯下面", async () => {
+    const container = await render(<Sidebar />);
+    const band = container.querySelector('[data-sidebar="header"]')!;
+    const slot = band.querySelector(".lights-slot")!;
+    // 槽位在字标之前，而且本身就是空的：红绿灯是窗口画的，这块地方只管把宽度留出来。
+    expect(slot.nextElementSibling?.textContent).toBe("ETA");
+    expect(slot.querySelectorAll("button, a")).toHaveLength(0);
+    expect(band.getAttribute("data-rail")).toBe("false");
+    // 折叠时也一样，只是那里由 CSS 把字标让开（4rem 的栏没有灯旁边的位置）。
+    const rail = await render(<Sidebar />, { open: false });
+    expect(
+      rail.querySelector('[data-sidebar="header"]')?.getAttribute("data-rail"),
+    ).toBe("true");
+    // 浏览器里没有 data-host，槽位不占位：外观和改动前一模一样。
+    expect(document.documentElement.hasAttribute("data-host")).toBe(false);
+  });
 });
