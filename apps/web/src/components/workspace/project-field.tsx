@@ -1,6 +1,8 @@
 import type { ProjectChoice } from "./use-project-choice";
 import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { host, pickFolder } from "@/lib/native";
 import { Select, SelectOption } from "./select-field";
 import {
   useChoosable,
@@ -23,6 +25,15 @@ export function ProjectField({
   const machines = useUsableMachines();
   const primary = machines.find((machine) => machine.kind === "primary");
   const machineId = choice.machineId ?? primary?.id ?? "";
+  // A folder dialog sees this machine's disk, so it is offered only while the path would be added
+  // on this machine. A path on a daemon is still typed by hand — and that is not a gap: the folder
+  // being picked is not on the disk in front of the user.
+  const canPick =
+    host().kind === "desktop" && machineId === (primary?.id ?? "");
+  const choose = async () => {
+    const picked = await pickFolder(choice.path.trim() || undefined);
+    if (picked !== null) onChange({ ...choice, path: picked });
+  };
   return (
     <div className="grid gap-1 text-sm">
       <label htmlFor="new-project">{translateText("chat:new.project")}</label>
@@ -80,6 +91,17 @@ export function ProjectField({
             spellCheck={false}
             className="font-mono"
           />
+          {canPick ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="justify-self-start"
+              onClick={() => void choose()}
+            >
+              {translateText("chat:new.chooseFolder")}
+            </Button>
+          ) : null}
           <span className="text-xs text-muted-foreground">
             {translateText("chat:new.pathHint")}
           </span>

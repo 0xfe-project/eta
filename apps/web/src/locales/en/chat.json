@@ -288,7 +288,8 @@
     "addPath": "Add a directory…",
     "path": "Directory path",
     "machine": "Machine",
-    "pathHint": "An absolute path on the chosen machine; it must be an existing directory. The members work here."
+    "pathHint": "An absolute path on the chosen machine; it must be an existing directory. The members work here.",
+    "chooseFolder": "Choose a folder…"
   },
   "chat": {},
   "steward": {

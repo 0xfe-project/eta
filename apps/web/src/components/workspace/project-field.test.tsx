@@ -1,5 +1,5 @@
 import type { ProjectChoice } from "./use-project-choice";
-import { afterEach, describe, expect, it } from "@rstest/core";
+import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { act, useState } from "react";
 import { setWire } from "@/lib/wire";
 import { machineView, productHost, projectView } from "@/test-product";
@@ -115,5 +115,85 @@ describe("添加目录时选机器", () => {
       await resolve!(current!, undefined, null);
     });
     expect(fake.calls.at(-1)!.args).toEqual({ path: "/srv/app" });
+  });
+});
+
+const chooseFolder = () =>
+  [...document.querySelectorAll<HTMLElement>("button")].find(
+    (button) => button.textContent === "选择目录…",
+  );
+
+describe("在桌面壳里选目录", () => {
+  afterEach(() => {
+    delete window.__ETA_HOST__;
+  });
+
+  /** A shell around the page, and a window that says `answer` to the folder dialog. */
+  function shell(answer: { path: string | null } | "refused") {
+    window.__ETA_HOST__ = {
+      native: true,
+      nativeApiBase: "http://127.0.0.1:5001",
+      nativeToken: "launch-token",
+    };
+    globalThis.fetch = rstest.fn(async () =>
+      answer === "refused"
+        ? new Response("authentication_failed", { status: 401 })
+        : new Response(JSON.stringify(answer)),
+    ) as unknown as typeof globalThis.fetch;
+  }
+
+  it("fills the path the system dialog brought back", async () => {
+    productHost({ machines: [primary] });
+    shell({ path: "/Users/me/code/eta" });
+    await mount(<Harness />);
+    await flush();
+    expect(chooseFolder()).toBeDefined();
+    await act(async () => {
+      chooseFolder()!.click();
+      await flush();
+    });
+    expect(current!.path).toBe("/Users/me/code/eta");
+  });
+
+  it("leaves the typed path alone when the dialog is cancelled", async () => {
+    productHost({ machines: [primary] });
+    shell({ path: null });
+    await mount(<Harness />);
+    await flush();
+    await act(async () => {
+      chooseFolder()!.click();
+      await flush();
+    });
+    expect(current!.path).toBe("/srv/app");
+  });
+
+  it("keeps the typed path working when the window refuses the call", async () => {
+    productHost({ machines: [primary] });
+    shell("refused");
+    await mount(<Harness />);
+    await flush();
+    await act(async () => {
+      chooseFolder()!.click();
+      await flush();
+    });
+    expect(current!.path).toBe("/srv/app");
+  });
+
+  it("is not offered in a browser", async () => {
+    productHost({ machines: [primary] });
+    await mount(<Harness />);
+    await flush();
+    expect(chooseFolder()).toBeUndefined();
+  });
+
+  it("is not offered while the path would be added on another machine", async () => {
+    productHost({ machines: [primary, machine("m2", "online")] });
+    shell({ path: "/srv/elsewhere" });
+    await mount(<Harness />);
+    await flush();
+    await pickMachine("m2");
+    expect(chooseFolder()).toBeUndefined();
+    await pickMachine("主机");
+    expect(chooseFolder()).toBeDefined();
   });
 });

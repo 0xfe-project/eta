@@ -13,6 +13,7 @@ import {
   readLanguagePreference,
   resolveLanguage,
 } from "@/lib/i18n";
+import { markHost, watchExternalLinks } from "@/lib/native";
 import { applyTheme, readTheme, watchSystemTheme } from "@/lib/theme";
 import { watchForUpdates } from "@/lib/update";
 import { getWire } from "@/lib/wire";
@@ -21,6 +22,10 @@ import { getRouter } from "./router";
 import "@/styles.css";
 
 async function start() {
+  // Where we are: the shell's preload says so, if there is a shell. Before anything paints a
+  // window's own chrome, and before a click on a link can mean "leave".
+  markHost();
+  watchExternalLinks();
   watchForUpdates();
   // The one connection to the host, open before anything asks for data over it.
   getWire();
