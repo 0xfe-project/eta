@@ -175,5 +175,10 @@
   },
   "updates": {
     "available": "Eta updated"
+  },
+  "window": {
+    "close": "Close window",
+    "minimize": "Minimize window",
+    "maximize": "Maximize or restore window"
   }
 }

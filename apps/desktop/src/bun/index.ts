@@ -8,6 +8,12 @@
  *
  * The host lives as long as the app, not as long as a window: closing the window is closing a
  * window (Dock click brings it back), and quitting the app is what stops the host.
+ *
+ * The window is the app's own, not a browser's: it has no system title bar, and the 40px band the
+ * page draws across its top *is* the title bar — the page's band carries the drag region and, on
+ * macOS, the three lights are inset into it. The platform that keeps native corner buttons
+ * (macOS) and the one that has to have them painted by the page (Windows) differ only in that;
+ * see `platform/windows/index.ts` for what a frameless window costs there.
  */
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
@@ -16,6 +22,7 @@ import { dirname, join } from "node:path";
 import process from "node:process";
 import Electrobun, { BrowserWindow } from "electrobun/main";
 import { HOST_WRAPPER } from "./host";
+import { configureWindowsWindow } from "./platform/windows";
 
 /** The repository root: the directory holding `apps/eta` and `apps/web`, found by walking up. */
 function repoRoot(): string {
@@ -112,12 +119,59 @@ try {
 
 const url = built ? `http://127.0.0.1:${port}` : "views://mainview/index.html";
 
+const isMac = process.platform === "darwin";
+
+/**
+ * What the window is called.
+ *
+ * Nothing on macOS depends on it, and three things on Windows do: a frameless window cannot be
+ * resized by, squared off, or given an icon through Electrobun's API, so each of those patches
+ * (`platform/windows/`) reaches the native handle the only way it can — `FindWindowA(null, title)`.
+ * Rename the window and all three go looking for a window that is not there. Keep this string and
+ * those patches in step.
+ */
+const WINDOW_TITLE = "eta";
+
+/**
+ * Where the three lights sit inside our 40px band.
+ *
+ * `x` is the band's own inset, fixed: the lights have to start where the page's lights slot
+ * starts, and the slot is 68px wide (`apps/web/src/styles.css`). `y` is tunable from the
+ * environment because the light's diameter is AppKit's choice, not ours — the band's height is
+ * ours, and the two only line up by eye (`ETA_LIGHT_Y=7` for a deeper seat).
+ */
+const LIGHT_INSET_X = 14;
+const lightInsetY = (): number => {
+  // Destructured rather than read as a property: `process.env` is an index signature, and the
+  // dot-notation that reads nicer here is exactly what the type system refuses.
+  const { ETA_LIGHT_Y } = process.env;
+  const value = Number(ETA_LIGHT_Y ?? 5);
+  return Number.isFinite(value) ? value : 5;
+};
+
+/**
+ * The window, and the only place its chrome is decided.
+ *
+ * `titleBarStyle`: macOS keeps its own lights but hides the bar they came in (`hiddenInset`), so
+ * the page starts at the top of the window and there is one band rather than a system bar above
+ * ours. Everywhere else the bar is hidden outright (`hidden`) — Windows has no inset controls to
+ * keep, so the page draws all three buttons itself.
+ */
 function open(): BrowserWindow {
-  return new BrowserWindow({
-    title: "eta",
+  const created = new BrowserWindow({
+    title: WINDOW_TITLE,
     url,
     frame: { width: 1280, height: 800 },
+    // A window opened by the app is the app's window: bring it forward, do not open it behind.
+    activate: true,
+    titleBarStyle: isMac ? "hiddenInset" : "hidden",
+    ...(isMac
+      ? { trafficLightOffset: { x: LIGHT_INSET_X, y: lightInsetY() } }
+      : {}),
   });
+  // Windows pays for the missing title bar in three places; none of them are Electrobun's.
+  if (process.platform === "win32") void configureWindowsWindow(created);
+  return created;
 }
 
 let window = open();

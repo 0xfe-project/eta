@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageProvider } from "@/components/language-provider";
 import { AppProviders } from "@/components/providers";
+import { WindowControls } from "@/components/window-controls";
 
 export function RootDocument() {
   return (
@@ -35,6 +36,9 @@ function LocalizedDocument() {
       >
         {translateText("accessibility.skipToContent")}
       </a>
+      {/* The window's buttons sit outside the routed page: they belong to the window, so no page
+          can mount them twice or forget them. On macOS and in a browser this draws nothing. */}
+      <WindowControls />
       <Outlet />
     </AppProviders>
   );

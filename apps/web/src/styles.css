@@ -157,6 +157,100 @@
     background: var(--surface);
   }
 
+  /*
+   * The window's top edge.
+   *
+   * In the shell the band is not a header with a system title bar above it — it *is* the title bar:
+   * a press on it moves the window. Written three times because there are three readers: WebKit and
+   * Chromium read `-webkit-app-region`, the standard name is `app-region`, and Electrobun mirrors
+   * the property into `--electrobun-app-region` and reads that one first, so declaring it keeps us
+   * on its fast path instead of its stylesheet rewrite.
+   *
+   * A drag region answers the press itself, before the page sees it, so everything clickable inside
+   * a band is handed back with `no-drag`. A control you have to click cannot be something the
+   * window takes first. In a browser `app-region` means nothing and none of this does anything.
+   */
+  .band {
+    -webkit-app-region: drag;
+    app-region: drag;
+    --electrobun-app-region: drag;
+  }
+  .band :is(button, a, input, select, textarea, [data-no-drag]) {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+    --electrobun-app-region: no-drag;
+  }
+  /*
+   * The workspace panel's band is a row of tabs and almost nothing else, so it opts out and stays
+   * still: a strip you must be able to click cannot be a strip you drag the window with. The press
+   * that would start the drag is the press the tab needed.
+   */
+  .band[data-drag="none"] {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+    --electrobun-app-region: no-drag;
+  }
+
+  /*
+   * The room the macOS traffic lights take, and only in the shell.
+   *
+   * The window paints them over the page's top-left corner, so whatever starts the sidebar band has
+   * to start after them or the wordmark sits under the close button. 68px is the lights' own width
+   * — a 14px inset, three 12px lights, two 8px gaps — plus the breath a real title bar leaves. A
+   * browser tab has no lights, so the slot is not there at all and nothing moves.
+   */
+  .lights-slot {
+    display: none;
+    flex: none;
+  }
+  html[data-host="desktop"] .lights-slot {
+    display: inline-block;
+    width: 68px;
+  }
+
+  /*
+   * Windows, where the shell has no frame and the page draws the three buttons.
+   *
+   * Same corner, same sizes, same colours as the macOS lights: a person moving between machines
+   * should not have to learn a second window. They sit in the title bar's corner rather than in a
+   * toolbar on the right, because this is eta's window that happens to be on Windows, not a Windows
+   * app with eta in it. Two hover conventions meet here — the lights are round and change tone —
+   * and nothing else about them is native.
+   */
+  .window-controls {
+    position: fixed;
+    top: 14px;
+    left: 14px;
+    z-index: 45;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+    --electrobun-app-region: no-drag;
+  }
+  .window-controls button {
+    width: 12px;
+    height: 12px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    /* The hairline on the inside: a saturated dot on a dark band has no edge without it. */
+    box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 18%);
+  }
+  .window-controls button:hover {
+    filter: brightness(1.08);
+  }
+  .window-controls [data-control="close"] {
+    background: #ff5f57;
+  }
+  .window-controls [data-control="minimize"] {
+    background: #febc2e;
+  }
+  .window-controls [data-control="maximize"] {
+    background: #28c840;
+  }
+
   .markdown {
     @apply space-y-3 break-words text-sm leading-7;
   }
@@ -1471,4 +1565,104 @@
   .settings-save > .settings-primary {
     margin-left: auto;
   }
+}
+
+/*
+ * ---- the window's own chrome (apps/desktop) ----
+ *
+ * In the shell the window hides its title bar, so the 40px band the page already draws across
+ * every column *is* the title bar: a press on it moves the window. It is written three times on
+ * purpose — `-webkit-app-region` is what WebKit reads, `app-region` is the standard name, and
+ * `--electrobun-app-region` is the mirror Electrobun checks first (it mirrors stylesheets that
+ * declare the standard property, and declaring it here keeps the drag on that fast path instead
+ * of a stylesheet walk).
+ *
+ * A press inside a drag region is taken by the window before the page sees it, so everything you
+ * have to click has to say so — a button on a drag region is a button that eats the click. In a
+ * browser none of this is read at all.
+ */
+.band {
+  -webkit-app-region: drag;
+  app-region: drag;
+  --electrobun-app-region: drag;
+}
+.band :is(button, a, input, select, textarea, [role="tab"], [data-no-drag]) {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  --electrobun-app-region: no-drag;
+}
+
+/*
+ * A band whose width is all controls is not a drag strip: the third column's band is three tabs
+ * and a close button, and the only draggable pixels left would be the gaps between them. Drag
+ * windows by the other two bands instead.
+ */
+.tabstrip {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  --electrobun-app-region: no-drag;
+}
+
+/*
+ * The three lights are the window's: macOS paints them over this corner, Windows has its buttons
+ * drawn there by the page. Either way the slot holds their width so the wordmark starts clear of
+ * them. A browser has no lights, so the slot is not there at all — same page, and the sidebar's
+ * left edge is exactly where it was.
+ */
+.lights-slot {
+  display: none;
+  flex: none;
+}
+html[data-host="desktop"] .lights-slot {
+  display: inline-block;
+  width: 68px;
+}
+
+/*
+ * A collapsed rail is 4rem wide, which is where the lights are: no wordmark-sized space is left
+ * beside them, so on a desktop the corner belongs to the window and the rail's own controls (the
+ * fold, at the head of the section list) do the work the wordmark did. The whole brand group
+ * steps aside — the slot with it, since 68px of slot does not fit in a 64px rail either.
+ */
+html[data-host="desktop"] [data-sidebar="header"][data-rail="true"] [data-brand] {
+  display: none;
+}
+
+/*
+ * The Windows window buttons, in the corner the window would have put them. Fixed, because they
+ * belong to the window and not to whatever the page has in its top-left column; the same three
+ * colours every Windows and macOS user already reads as "close, minimise, maximise".
+ */
+.window-controls {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  --electrobun-app-region: no-drag;
+}
+.window-controls button {
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  /* A hairline of shade is what keeps the yellow from vanishing on a light band. */
+  box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 18%);
+}
+.window-controls button:hover {
+  filter: brightness(1.08);
+}
+.window-controls .window-control-close {
+  background: #ff5f57;
+}
+.window-controls .window-control-minimize {
+  background: #febc2e;
+}
+.window-controls .window-control-maximize {
+  background: #28c840;
 }

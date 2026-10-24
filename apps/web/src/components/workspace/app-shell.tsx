@@ -80,31 +80,42 @@ export function Sidebar() {
       className="hidden shrink-0 border-r md:flex"
     >
       <SidebarHeader
+        // Only the CSS reads this: a collapsed rail is 4rem wide, which on a desktop is where the
+        // window's lights are, so the corner is theirs and the wordmark steps aside there.
+        data-rail={rail ? "true" : "false"}
         className={cn(
           "band flex-row items-center p-0",
           rail ? "justify-center px-1" : "justify-between pr-2 pl-4",
         )}
       >
-        {/* BR1's wordmark: uppercase, tracked out, the letterforms doing the work. The rail keeps
-            the same three letters, set to a size the rail can hold — and holds nothing beside
-            them: 4rem of band is one element, not a wordmark and a control dividing it up. The
-            band is a fixed 40px (the gutter paints its rule at that height), so stacking the two
-            would break the line, not fit them. Folding the rail from its own name is what the
-            click is for. */}
-        <Link
-          to="/"
-          onClick={() => {
-            if (rail) toggleSidebar();
-          }}
-          className={cn(
-            "shrink-0 font-mono font-medium",
-            rail
-              ? "text-[10px] tracking-[0.08em] text-muted-foreground"
-              : "text-base tracking-[0.18em]",
-          )}
-        >
-          ETA
-        </Link>
+        <div className="flex min-w-0 items-center" data-brand>
+          {/* In the shell the window paints its three lights over this corner (macOS) or the page
+              paints them (Windows), so the slot holds their width and the wordmark starts clear
+              of them. A browser tab has no lights, so the slot is not there at all — and the two
+              have to stay in one group: `justify-between` would otherwise put the wordmark in
+              the middle of the band. */}
+          <span className="lights-slot" aria-hidden="true" />
+          {/* BR1's wordmark: uppercase, tracked out, the letterforms doing the work. The rail
+              keeps the same three letters, set to a size the rail can hold — and holds nothing
+              beside them: 4rem of band is one element, not a wordmark and a control dividing it
+              up. The band is a fixed 40px (the gutter paints its rule at that height), so
+              stacking the two would break the line, not fit them. Folding the rail from its own
+              name is what the click is for. */}
+          <Link
+            to="/"
+            onClick={() => {
+              if (rail) toggleSidebar();
+            }}
+            className={cn(
+              "shrink-0 font-mono font-medium",
+              rail
+                ? "text-[10px] tracking-[0.08em] text-muted-foreground"
+                : "text-base tracking-[0.18em]",
+            )}
+          >
+            ETA
+          </Link>
+        </div>
         {rail ? null : (
           <SidebarTrigger
             aria-label={translateText("accessibility.toggleSidebar")}
