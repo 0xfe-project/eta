@@ -28,13 +28,23 @@
  * macOS, the three lights are inset into it. The platform that keeps native corner buttons
  * (macOS) and the one that has to have them painted by the page (Windows) differ only in that;
  * see `platform/windows/index.ts` for what a frameless window costs there.
+ *
+ * The menu bar is this process's too, and on macOS it is input before it is decoration: ⌘C/⌘V and
+ * their neighbours are main-menu key equivalents, so a shell with no Edit menu has no copy and
+ * paste anywhere in the app. The menu is installed below, all of it roles.
  */
+import type { ApplicationMenuItemConfig } from "electrobun/main";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import process from "node:process";
-import Electrobun, { BrowserWindow, ContextMenu, Utils } from "electrobun/main";
+import Electrobun, {
+  ApplicationMenu,
+  BrowserWindow,
+  ContextMenu,
+  Utils,
+} from "electrobun/main";
 import { failurePage } from "./failure";
 import { HOST_WRAPPER } from "./host";
 import { startNativeBridge } from "./native";
@@ -42,6 +52,94 @@ import { configureWindowsWindow } from "./platform/windows";
 
 /** Kept in step with package.json and electrobun.config.ts; the page may show it. */
 const APP_VERSION = "0.1.0";
+
+/**
+ * The menu bar, which on macOS is the input system rather than decoration.
+ *
+ * ⌘A/⌘C/⌘V/⌘X/⌘Z in the composer are not keydowns first: AppKit dispatches them as main-menu key
+ * equivalents into the responder chain (`selectAll:`, `copy:`, `paste:`, `cut:`, `undo:`). With no
+ * Edit menu there is no chain, so the web content never sees a keydown and nothing on the page can
+ * catch them — which is why ⌘C/⌘V died in the composer and no JS could bring them back.
+ *
+ * Electrobun only supplies the role → selector mapping; installing the menu is this file's job.
+ * Every item below is a `role`, so every click has a native answer waiting on the other side.
+ * An item with an `action` would be a button that does nothing: a menu click fires in *this*
+ * process, and nothing yet carries it into the page — the bridge runs the other way (the page
+ * asks, this process answers). New session, toggle sidebar, command palette, abort and compact
+ * wait for a channel that runs main → page.
+ *
+ * Two things deliberately absent:
+ * - no ⌘↵ item: Cocoa binds it to `insertNewlineIgnoringFieldEditor:`, and the composer needs that
+ *   keydown to steer mid-turn;
+ * - no ⌘R: reloading is the page's own cmd+R, and a menu item would take it away from a build
+ *   whose devtools are how it gets debugged.
+ */
+const APP_MENU: ApplicationMenuItemConfig[] = [
+  {
+    label: "eta",
+    submenu: [
+      { role: "about", label: "关于 eta", accelerator: "" },
+      { type: "divider" },
+      { role: "hide", label: "隐藏 eta", accelerator: "CommandOrControl+H" },
+      {
+        role: "hideOthers",
+        label: "隐藏其他",
+        accelerator: "CommandOrControl+Option+H",
+      },
+      { role: "showAll", label: "全部显示", accelerator: "" },
+      { type: "divider" },
+      { role: "quit", label: "退出 eta", accelerator: "CommandOrControl+Q" },
+    ],
+  },
+  {
+    label: "编辑",
+    submenu: [
+      { role: "undo", label: "撤销", accelerator: "CommandOrControl+Z" },
+      { role: "redo", label: "重做", accelerator: "CommandOrControl+Shift+Z" },
+      { type: "divider" },
+      { role: "cut", label: "剪切", accelerator: "CommandOrControl+X" },
+      { role: "copy", label: "拷贝", accelerator: "CommandOrControl+C" },
+      { role: "paste", label: "粘贴", accelerator: "CommandOrControl+V" },
+      {
+        role: "pasteAndMatchStyle",
+        label: "粘贴并匹配样式",
+        accelerator: "CommandOrControl+Shift+Option+V",
+      },
+      {
+        role: "delete",
+        label: "删除",
+        accelerator: "CommandOrControl+Backspace",
+      },
+      { type: "divider" },
+      { role: "selectAll", label: "全选", accelerator: "CommandOrControl+A" },
+    ],
+  },
+  {
+    label: "视图",
+    // Only full screen: anything else here would need an action the page cannot hear yet.
+    submenu: [
+      {
+        role: "toggleFullScreen",
+        label: "全屏幕",
+        accelerator: "Control+Command+F",
+      },
+    ],
+  },
+  {
+    label: "窗口",
+    submenu: [
+      { role: "minimize", label: "最小化", accelerator: "CommandOrControl+M" },
+      { role: "zoom", label: "缩放", accelerator: "" },
+      { type: "divider" },
+      { role: "close", label: "关闭", accelerator: "CommandOrControl+W" },
+      { role: "bringAllToFront", label: "全部置于前端", accelerator: "" },
+    ],
+  },
+];
+
+// Windows keeps its default: WebView2 handles Ctrl+C/V itself, and a menu with no responder chain
+// behind it would only be decoration that claims accelerators.
+if (process.platform === "darwin") ApplicationMenu.setApplicationMenu(APP_MENU);
 
 /** The repository root: the directory holding `apps/eta` and `apps/web`, found by walking up. */
 function repoRoot(): string {
