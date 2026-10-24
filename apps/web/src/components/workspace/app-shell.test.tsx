@@ -343,7 +343,7 @@ describe("折叠成图标栏", () => {
     // cannot hear is a count the fold took away.
     expect(
       container
-        .querySelector('a[data-to="/workspace/tasks"]')
+        .querySelector('a[data-to="/tasks"]')
         ?.getAttribute("aria-label"),
     ).toBe("任务 · 2");
   });
@@ -386,9 +386,7 @@ describe("折叠成图标栏", () => {
     const again = await render(<Sidebar />);
     expect(root(again).getAttribute("data-state")).toBe("collapsed");
     expect(
-      again
-        .querySelector('a[data-to="/workspace/tasks"]')
-        ?.getAttribute("aria-label"),
+      again.querySelector('a[data-to="/tasks"]')?.getAttribute("aria-label"),
     ).toBe("任务");
     // And back: the same button unfolds it.
     await press(again.querySelector('[data-slot="sidebar-trigger"]')!);

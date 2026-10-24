@@ -62,18 +62,19 @@ const links = (container: HTMLElement) =>
 /** The plus: the one button in the bar that is not a link. */
 const plus = () => document.querySelector<HTMLElement>("nav button")!;
 
-/** Radix opens a menu on pointer down. */
+/** The plus asks which of the two it is in a dialog, not in a menu: a thumb needs a big target. */
+const settled = () => new Promise((resolve) => setTimeout(resolve, 30));
+
 async function openPanel() {
   await act(async () => {
-    plus().dispatchEvent(
-      new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
-    );
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    plus().click();
+    await settled();
   });
 }
 
+/** One of the two things one starts from the phone. */
 const item = (label: string) =>
-  [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+  [...document.querySelectorAll<HTMLElement>('[role="dialog"] button')].find(
     (candidate) => candidate.textContent === label,
   );
 
@@ -88,16 +89,18 @@ describe("手机底部栏", () => {
   it("has four destinations with the plus holding the middle cell", async () => {
     const container = await render();
     expect(links(container)).toEqual(["/", "/tasks", "/routines", "/settings"]);
-    // Four destinations, five cells: the solid square sits between the two pairs.
-    const cells = container.querySelector("nav > div")!.children;
+    // Four destinations, five cells: the middle one is empty, and the solid square is laid over
+    // it — bigger than the row, which is what makes it an axis and not a fifth destination.
+    const cells = container.querySelector("nav > div > div")!.children;
     expect(cells).toHaveLength(5);
-    expect(cells[2].contains(plus())).toBe(true);
+    expect(cells[2].hasAttribute("aria-hidden")).toBe(true);
+    expect([...cells].some((cell) => cell.contains(plus()))).toBe(false);
   });
 
   it("the plus is a hit target of its own, not a mode of one of the tabs", async () => {
     await render();
     expect(plus().getAttribute("aria-label")).toBe("新建");
-    expect(plus().className).toContain("size-[44px]");
+    expect(plus().className).toContain("size-[68px]");
   });
 
   it("offers the two things one starts from the phone", async () => {
@@ -114,7 +117,12 @@ describe("手机底部栏", () => {
   it("新建对话 opens the conversation dialog", async () => {
     await render();
     await openPanel();
-    await act(async () => item("新建对话")!.click());
+    await act(async () => {
+      item("新建对话")!.click();
+      // The next dialog opens a frame later: opening it in the same frame leaves the first
+      // one's overlay holding the pointer.
+      await settled();
+    });
     expect(useWorkspaceStore.getState().newConversation.open).toBe(true);
   });
 
@@ -127,7 +135,10 @@ describe("手机底部栏", () => {
     fake.hello();
     await render();
     await openPanel();
-    await act(async () => item("新建群")!.click());
+    await act(async () => {
+      item("新建群")!.click();
+      await settled();
+    });
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
   });
 });
