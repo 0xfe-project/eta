@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <title>eta</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        margin: 0;
+        height: 100vh;
+        display: grid;
+        place-items: center;
+        font: 14px/1.5 ui-sans-serif, system-ui, sans-serif;
+        background: #f4f4f5;
+        color: #3f3f46;
+      }
+      @media (prefers-color-scheme: dark) {
+        body { background: #18181b; color: #d4d4d8; }
+      }
+      main { text-align: center; }
+      h1 { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
+      p { margin: 0; }
+      code { font-family: ui-monospace, monospace; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>eta 还没有页面</h1>
+      <p>先构建前端：<code>bun run --cwd apps/web build</code>，然后重新打开。</p>
+      <p>开发时用 <code>bun run dev</code>，页面在 <code>http://127.0.0.1:3000</code>。</p>
+    </main>
+  </body>
+</html>

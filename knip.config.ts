@@ -5,7 +5,7 @@ import type { KnipConfig } from "knip";
 export default {
   // System tools the Turbo scripts call (uv for the Python sidecar, go for the LLM gateway).
   // `bun check` (Bun's built-in type checker) reads as a binary named `check`.
-  ignoreBinaries: ["uv", "go", "gofmt", "check"],
+  ignoreBinaries: ["uv", "go", "gofmt", "check", "hutch"],
   // Built-in bundles: scripts the host starts by path (an MCP server, a service), not imports.
   // `.eta` is the session's own directory (memory, scratch copies of packages), not source.
   ignore: ["bundles/**", ".eta/**"],
@@ -54,6 +54,16 @@ export default {
       // Generated from the shadcn registry; unused exports there are
       // expected.
       ignore: ["src/components/ui/**"],
+    },
+    "apps/desktop": {
+      // Electrobun reads the configs by path and bundles both processes from
+      // their entrypoints; nothing imports them.
+      entry: [
+        "electrobun.config.ts",
+        "hutch.config.ts",
+        "src/bun/index.ts",
+        "src/mainview/index.ts",
+      ],
     },
   },
 } satisfies KnipConfig;
