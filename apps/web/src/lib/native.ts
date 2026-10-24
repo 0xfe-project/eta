@@ -139,6 +139,38 @@ export async function openExternal(url: string): Promise<void> {
   await call("open-external", { url });
 }
 
+/**
+ * The window buttons a page has to draw, and the way it asks the window to act.
+ *
+ * A macOS window keeps its own three lights, inset into our band; a Windows window whose title bar
+ * was hidden (`titleBarStyle: "hidden"`) has no caption buttons at all, so the page paints them
+ * (`components/window-controls.tsx`) — and a painted button can only close a window by asking the
+ * process that owns it. That one capability is `window-action` on the bridge above.
+ */
+export type WindowAction = "close" | "minimize" | "toggle-maximize";
+
+/**
+ * Whether the three buttons are ours to draw.
+ *
+ * Windows, because the frame it hides them with is the one that draws them. macOS keeps its own
+ * lights, and a browser has no window to close — both answer no, and the buttons do not exist
+ * there rather than existing and doing nothing.
+ */
+export function drawsOwnWindowControls(): boolean {
+  return host().platform === "win32";
+}
+
+/**
+ * Ask the window to close, minimise or toggle its maximised state.
+ *
+ * Fire and forget: the answer is the window doing the thing, not a response body. Without a bridge
+ * to ask (a browser, or a shell that failed to start) this is nothing at all, which is the correct
+ * amount of window closing a web page can do.
+ */
+export async function windowAction(action: WindowAction): Promise<void> {
+  await call("window-action", { action });
+}
+
 /** Links that mean "somewhere else": a new window, or another origin. Same-page links stay here. */
 function leavesTheApp(anchor: HTMLAnchorElement): boolean {
   if (anchor.target === "_blank") return true;

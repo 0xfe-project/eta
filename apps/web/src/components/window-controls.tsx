@@ -15,9 +15,12 @@
  * Its own labels go through `common`, because a screen reader hears the window's controls, not the
  * page's.
  */
-import type { WindowAction } from "@/lib/window-actions";
+import {
+  drawsOwnWindowControls,
+  type WindowAction,
+  windowAction,
+} from "@/lib/native";
 import { useTranslation } from "react-i18next";
-import { drawsOwnWindowControls, windowAction } from "@/lib/window-actions";
 
 const BUTTONS: readonly {
   action: WindowAction;
