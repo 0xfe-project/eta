@@ -261,7 +261,9 @@ describe("左栏的页眉", () => {
     const header = container.querySelector('[data-sidebar="header"]')!;
     // BR1's wordmark: the letters, uppercase and tracked out, not a wordmark image.
     expect(header.textContent).toContain("ETA");
-    // 设置 moved down to the pages it sits beside; the header holds the wordmark and the fold.
+    // BR1's wordmark: the letters, uppercase and tracked out, not a wordmark image. 设置 is not
+    // here any more — it is its own group at the foot of the rail — so the band holds the wordmark
+    // and the fold and nothing else.
     expect(header.querySelectorAll("button")).toHaveLength(1);
     expect(
       header
@@ -348,8 +350,8 @@ describe("折叠成图标栏", () => {
     ).toBe("任务 · 2");
   });
 
-  it("设置排在任务和定时前面，展开和折叠都是", async () => {
-    // 折叠时开关从页眉搬到分区列表的最上面：4rem 的页眉只放得下标，两个控件挤在一行是怪的。
+  it("设置单独成组，排在侧栏最下方", async () => {
+    // 分区列表里只剩能在页面间移动的两个去处；设置是离开它们的门，所以单独一组、贴在最下面。
     const rows = (container: HTMLElement) => {
       const nav = container.querySelector('ul[aria-label="分区"]')!;
       return [...nav.querySelectorAll("li")].map((item) => {
@@ -358,22 +360,37 @@ describe("折叠成图标栏", () => {
       });
     };
     const open = await render(<Sidebar />, { open: true });
-    expect(rows(open)).toEqual(["设置", "任务", "定时"]);
+    expect(rows(open)).toEqual(["任务", "定时"]);
     const rail = await render(<Sidebar />, { open: false });
-    expect(rows(rail)).toEqual(["折叠或展开侧栏", "设置", "任务", "定时"]);
-    // The rail's band is the wordmark alone: no control shares those 40px with it.
-    const header = rail.querySelector('[data-sidebar="header"]')!;
-    expect(header.textContent).toContain("ETA");
-    expect(header.querySelectorAll("button")).toHaveLength(0);
-    // 图标栏里的两个控件居中靠的是 auto margin，而按钮自带 `inline-flex`——inline 盒
-    // 不吃 auto margin。所以它们得先是块级 flex；少了那个 `flex`，图标会贴左。
-    for (const control of [
-      rail.querySelector('[data-sidebar="trigger"]')!,
-      rail.querySelector('button[title="设置"]')!,
-    ]) {
-      expect(control.className).toContain("mx-auto");
-      expect(control.className).not.toContain("inline-flex");
+    expect(rows(rail)).toEqual(["折叠或展开侧栏", "任务", "定时"]);
+
+    // 它自己那一组：页脚里一条，不在分区列表里。
+    for (const [container, isRail] of [
+      [open, false],
+      [rail, true],
+    ] as const) {
+      const footer = container.querySelector('[data-slot="sidebar-footer"]')!;
+      expect(footer).not.toBeNull();
+      const row = footer.querySelector('button[title="设置"]')!;
+      expect(row).not.toBeNull();
+      expect(
+        container.querySelector('ul[aria-label="分区"]')?.contains(row),
+      ).toBe(false);
+      // 和任务/定时同一行：同一个字号，而不是图标按钮里塞一段更大的字。
+      expect(row.getAttribute("data-sidebar")).toBe("menu-button");
+      expect(row.className).toContain("text-sm");
+      if (isRail) {
+        // 图标栏里居中靠的是 auto margin，而按钮自带 `flex`（不是 `inline-flex`，inline 盒不吃
+        // auto margin）——少了那一半，齿轮会贴左。
+        expect(row.className).toContain("mx-auto");
+        expect(row.className).not.toContain("inline-flex");
+      }
     }
+
+    // The rail's band is the wordmark alone: no control shares those 40px with it, and the shell
+    // hides even that group (a 4rem rail is narrower than the lights' corridor).
+    const header = rail.querySelector('[data-sidebar="header"]')!;
+    expect(header.querySelectorAll("button")).toHaveLength(0);
   });
 
   it("开关能折叠也能展开，刷新后还记着", async () => {

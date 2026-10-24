@@ -201,8 +201,13 @@ export function Workspace({
       >
         {/* No gear beside the title any more: the bar's fourth cell is the way into settings on a
             phone now, and a second entry that opened a different frame was two answers to one
-            question. */}
-        <header className="flex h-14 shrink-0 items-center px-5">
+            question. The header itself is the phone's top rail, so it grabs the window and keeps
+            clear of the lights the shell paints in that corner. */}
+        <header
+          className="flex h-14 shrink-0 items-center px-5"
+          data-window-drag
+          data-lights-corridor
+        >
           <h1 className="text-lg font-semibold">
             {translateText("sections.chat")}
           </h1>

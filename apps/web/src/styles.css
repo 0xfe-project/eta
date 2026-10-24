@@ -1490,51 +1490,98 @@
  * Outside the layers on purpose: the collapsed rail's rule below has to hide a group the markup
  * makes `flex`, and a `display` in `@layer components` loses that argument to the utility.
  */
-.band {
+.band,
+/*
+ * The two headers that are not 40px and so are not bands — the phone's list header and the phone's
+ * conversation header — still grab the window. Any top rail is a place a person tries to drag, and
+ * a rail that is the only one that does nothing reads as broken rather than as deliberate.
+ */
+[data-window-drag] {
   -webkit-app-region: drag;
   app-region: drag;
   --electrobun-app-region: drag;
 }
-.band :is(button, a, input, select, textarea, [role="tab"], [data-no-drag]) {
+.band :is(button, a, input, select, textarea, [role="tab"], [data-no-drag]),
+[data-window-drag]
+  :is(button, a, input, select, textarea, [role="tab"], [data-no-drag]) {
   -webkit-app-region: no-drag;
   app-region: no-drag;
   --electrobun-app-region: no-drag;
 }
 
-/*
- * A band whose width is all controls is not a drag strip: the third column's band is three tabs
- * and a close button, and the only draggable pixels left would be the gaps between them. Drag
- * windows by the other two bands instead.
- */
-.tabstrip {
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-  --electrobun-app-region: no-drag;
-}
+/* No band opts out: the third column's `tabstrip` used to, on the argument that a strip of tabs
+   has no pixels left to drag. The whole top rail is the window's here, and the `no-drag` list
+   above is what protects the clicks — so it drags like the other two. */
 
 /*
- * The three lights are the window's: macOS paints them over this corner, Windows has its buttons
- * drawn there by the page. Either way the slot holds their width so the wordmark starts clear of
- * them. A browser has no lights, so the slot is not there at all — same page, and the sidebar's
- * left edge is exactly where it was.
+ * The lights are the window's: macOS paints them over this corner, Windows has its buttons drawn
+ * there by the page. Their footprint is fixed — they start 14px in and the third one ends at
+ * 66px — so the corridor they own is 82px, and it is one number read by every place that has to
+ * keep out of their way. A browser has no lights, so the corridor is 0 wide and the page is
+ * exactly where it was.
  */
+html[data-host="desktop"] {
+  --window-lights: 82px;
+}
 .lights-slot {
   display: none;
   flex: none;
 }
 html[data-host="desktop"] .lights-slot {
   display: inline-block;
-  width: 68px;
+  /* 82px of corridor, less the 14px the first light starts at. */
+  width: calc(var(--window-lights) - 0.875rem);
 }
 
 /*
- * A collapsed rail is 4rem wide, which is where the lights are: no wordmark-sized space is left
- * beside them, so on a desktop the corner belongs to the window and the rail's own controls (the
- * fold, at the head of the section list) do the work the wordmark did. The whole brand group
- * steps aside — the slot with it, since 68px of slot does not fit in a 64px rail either.
+ * A collapsed rail is 4rem wide, which is narrower than the corridor: no wordmark-sized space is
+ * left beside the lights, so on a desktop the corner belongs to the window and the rail's own
+ * controls (the fold, at the head of the section list) do the work the wordmark did. The whole
+ * brand group steps aside — the slot with it, since not even the slot fits in a 64px rail.
  */
 html[data-host="desktop"] [data-sidebar="header"][data-rail="true"] [data-brand] {
   display: none;
+}
+
+/*
+ * …and because the rail is narrower than the corridor, the lights overhang it and land on the next
+ * column's band. Widening the rail to 82px would give the same page two rail widths, one in the
+ * shell and one in a tab, so instead the corridor continues into that band: its title steps past
+ * the last light, and every column still lines up below the band where nothing overhangs.
+ */
+html[data-host="desktop"]
+  [data-slot="sidebar-wrapper"]:has([data-rail="true"])
+  [data-lights-shift] {
+  padding-left: calc(var(--window-lights) - 4rem);
+}
+
+/*
+ * A header that sits flush against the window's edge keeps clear of the lights by the corridor's
+ * whole width, not by the slot: the slot's arithmetic starts from the sidebar's own inset, and the
+ * phone's two headers have no inset to start from.
+ */
+html[data-host="desktop"] [data-lights-corridor] {
+  padding-left: var(--window-lights);
+}
+
+/*
+ * The rule down the sidebar's right edge starts under the band, not at the top of the window. The
+ * band is one horizontal strip across every column — that is what makes three headers read as one
+ * bar — and a vertical rule inside it cuts the bar in two, in exactly the corner the lights sit in
+ * once the rail folds. The sidebar draws it itself so the line lands inside its own box.
+ */
+.sidebar-rule {
+  position: relative;
+}
+.sidebar-rule::after {
+  content: "";
+  position: absolute;
+  top: var(--header-band);
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border);
+  pointer-events: none;
 }
 
 /*

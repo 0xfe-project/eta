@@ -156,7 +156,9 @@ export function ChatHeader({
   const { agents } = useAgentList();
   const members = group?.participants ?? [];
   return (
-    <header className="band gap-2 px-2">
+    // The band clears the window's lights: a folded rail is narrower than they are, so in that
+    // state their corridor continues into this column and the group's name starts past them.
+    <header className="band gap-2 px-2" data-lights-shift>
       <h1 className="flex min-w-0 items-center text-sm font-medium">
         {group ? (
           <AgentSwitch group={group} onInfo={onInfo}>
@@ -230,7 +232,13 @@ export function MobileChatHeader({
   infoLabel: string;
 }) {
   return (
-    <header className="flex h-11 shrink-0 items-center gap-2 md:hidden">
+    // `data-window-drag` and the corridor: this header is the top rail on a phone — the place a
+    // person grabs, and the corner the lights sit in.
+    <header
+      className="flex h-11 shrink-0 items-center gap-2 md:hidden"
+      data-window-drag
+      data-lights-corridor
+    >
       <Button
         size="icon"
         variant="ghost"

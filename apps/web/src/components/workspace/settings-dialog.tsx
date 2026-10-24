@@ -1,13 +1,13 @@
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { SidebarMenuButton } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { useNeedsAttention } from "@/queries/providers";
 import { AttentionDot } from "./settings-nav";
@@ -15,39 +15,39 @@ import { SettingsPanels } from "./settings-panels";
 import { settingsSections } from "./settings-sections";
 import { useWorkspaceStore } from "./workspace-store";
 
-/** Opens settings; the dot marks accounts the user has to act on. */
-export function SettingsButton({
-  className,
-  withLabel = false,
-}: {
-  className?: string;
-  /** The word beside the gear, for a place that lists what things are. */
-  withLabel?: boolean;
-}) {
-  const { t: translateText } = useTranslation(["settings", "common"] as const);
+/**
+ * The sidebar's settings row: the same gear, in the same row every section wears.
+ *
+ * It used to be a `size="icon"` button with a label pushed into it, which is how 设置 ended up at a
+ * different type size from 任务 right beside it: an icon button's square is not a menu row's height,
+ * inset or type. This is the menu row itself, so the two read as two of one thing and only their
+ * order — the sections, then the door out of them — says which is which.
+ */
+export function SettingsMenuItem({ rail }: { rail: boolean }) {
+  const { t: translateText } = useTranslation(["settings"] as const);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
   const attention = useNeedsAttention();
+  const label = translateText("title");
   return (
-    <Button
-      variant="ghost"
-      size="icon"
+    <SidebarMenuButton
       aria-label={
         attention
-          ? translateText("accessibility.needsAttention")
-          : translateText("title")
+          ? `${label} · ${translateText("accessibility.needsAttention")}`
+          : label
       }
-      title={translateText("title")}
-      className={cn("relative", className)}
+      title={label}
+      className={cn("relative overflow-visible text-sm", rail && "mx-auto")}
       onClick={() => setSettings((state) => ({ ...state, open: true }))}
     >
       <GearSixIcon aria-hidden="true" />
-      {withLabel ? (
-        <span className="truncate">{translateText("title")}</span>
-      ) : null}
+      {rail ? null : <span>{label}</span>}
       {attention ? (
-        <AttentionDot className="absolute top-1.5 right-1.5" />
+        // In the rail the dot rides the gear's corner, exactly like the sections' counts do.
+        <AttentionDot
+          className={rail ? "absolute -top-0.5 -right-1" : "ml-auto"}
+        />
       ) : null}
-    </Button>
+    </SidebarMenuButton>
   );
 }
 

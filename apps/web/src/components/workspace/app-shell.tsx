@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarHeader,
   SidebarMenu,
@@ -34,7 +35,7 @@ import { useTasks } from "@/queries/tasks";
 import { AgentEditor } from "./agent-editor";
 import { CreateGroup } from "./groups";
 import { NewConversationDialog } from "./new-conversation-dialog";
-import { SettingsButton, SettingsDialog } from "./settings-dialog";
+import { SettingsDialog, SettingsMenuItem } from "./settings-dialog";
 import { ConversationList } from "./sidebar-tree";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -77,7 +78,9 @@ export function Sidebar() {
   return (
     <SidebarRoot
       collapsible="icon"
-      className="hidden shrink-0 border-r md:flex"
+      // `sidebar-rule`, not `border-r`: the rule down this edge starts under the band, so it never
+      // runs through the window's lights inside the band. See `styles.css`.
+      className="sidebar-rule hidden shrink-0 md:flex"
     >
       <SidebarHeader
         // Only the CSS reads this: a collapsed rail is 4rem wide, which on a desktop is where the
@@ -141,21 +144,6 @@ export function Sidebar() {
                 />
               </SidebarMenuItem>
             ) : null}
-            {/* Settings first, in both states: a control that moves when the rail folds is a
-                control you have to look for twice. */}
-            <SidebarMenuItem>
-              <SettingsButton
-                withLabel={!rail}
-                className={cn(
-                  "relative",
-                  rail
-                    ? // `inline-flex` will not take an auto margin, so the gear is made a block flex
-                      // row first: at 4rem the rail's centre is the only place it can sit.
-                      "mx-auto flex"
-                    : "w-full justify-start gap-2 px-2 font-normal",
-                )}
-              />
-            </SidebarMenuItem>
             {sections.map(({ to, label, icon: Icon }) => {
               const count = badges[to];
               return (
@@ -199,6 +187,19 @@ export function Sidebar() {
         </SidebarGroup>
         <ConversationList />
       </SidebarContent>
+      {/* Settings last, as its own group at the foot of the rail: it is not one of the destinations
+          a person moves between, it is the door out of them — and a row at the end of a list is
+          found by the eye that ran to the end. The rule above it is the group's, not a separator:
+          the list above scrolls, this row does not. */}
+      <SidebarFooter
+        className={cn("shrink-0 border-t", rail ? "px-1 py-1" : "p-1")}
+      >
+        <SidebarMenu aria-label={translateText("accessibility.settings")}>
+          <SidebarMenuItem>
+            <SettingsMenuItem rail={rail} />
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
     </SidebarRoot>
   );
 }
