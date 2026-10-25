@@ -34,7 +34,12 @@ function scopedKeyOf(hostKey: string, scope: string): string {
 export function libraryPath(): string {
   const configured = process.env.ETA_LLM_LIB;
   if (configured !== undefined && configured !== "") return configured;
-  const extension = process.platform === "darwin" ? "dylib" : "so";
+  const extension =
+    process.platform === "darwin"
+      ? "dylib"
+      : process.platform === "win32"
+        ? "dll"
+        : "so";
   return join(import.meta.dirname, "..", "lib", `libllm-gateway.${extension}`);
 }
 
@@ -97,6 +102,10 @@ let running = false;
  * synchronous signals, which it chains to Bun's, SIGPIPE and SIGURG) are left alone.
  */
 function snapshotSignals(): () => void {
+  // Windows does not expose the POSIX sigaction structure or the JSC signals
+  // this workaround repairs.
+  if (process.platform === "win32") return () => {};
+
   const libc = dlopen(
     process.platform === "darwin" ? "libSystem.B.dylib" : "libc.so.6",
     {

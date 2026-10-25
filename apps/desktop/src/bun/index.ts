@@ -191,7 +191,7 @@ async function boundPort(file: string, child: Bun.Subprocess): Promise<number> {
 
 /** What the window has to show, or why it has nothing to show. */
 type Launch =
-  | { ready: true; page: string; port: number }
+  | { ready: true; page: string; port?: number }
   | { ready: false; reason: string };
 
 let current: BrowserWindow | undefined;
@@ -209,6 +209,22 @@ const reasonOf = (error: unknown): string =>
  * app that flashed and vanished.
  */
 async function startHost(): Promise<Launch> {
+  const { ETA_DESKTOP_WEB_URL } = process.env;
+  const devPage = ETA_DESKTOP_WEB_URL?.trim();
+  if (devPage !== undefined && devPage !== "") {
+    try {
+      const url = new URL(devPage);
+      if (url.protocol !== "http:" && url.protocol !== "https:")
+        throw new Error("only http(s) pages are supported");
+      return { ready: true, page: url.href };
+    } catch (error) {
+      return {
+        ready: false,
+        reason: `ETA_DESKTOP_WEB_URL is not a usable page: ${reasonOf(error)}`,
+      };
+    }
+  }
+
   let root: string;
   try {
     root = repoRoot();
@@ -358,7 +374,10 @@ const bridge = startNativeBridge({
  * never put it in a message.
  */
 const preload = `window.__ETA_HOST__=${JSON.stringify({
-  apiBase: launch.ready ? `http://127.0.0.1:${String(launch.port)}` : undefined,
+  apiBase:
+    launch.ready && launch.port !== undefined
+      ? `http://127.0.0.1:${String(launch.port)}`
+      : undefined,
   platform: process.platform,
   appVersion: APP_VERSION,
   native: true,

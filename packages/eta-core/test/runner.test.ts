@@ -182,11 +182,11 @@ describe("runner turn loop", () => {
 
   it("a provider error ends the run with the error surfaced", async () => {
     const { kernel, runner, dispose } = setup([
-      assistantMessage({ stopReason: "error", errorMessage: "530 no body" }),
+      assistantMessage({ stopReason: "error", errorMessage: "400: no body" }),
     ]);
     kernel.inject(userMsg("go"));
     const result = await runner.run();
-    expect(result.error).toBe("530 no body");
+    expect(result.error).toBe("400: no body");
     dispose();
   });
 

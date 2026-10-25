@@ -77,7 +77,7 @@ action：`refresh`（检查所有账号并读额度）、`loginStart`、`loginPo
 ## 构建与测试
 
 ```sh
-bun run --cwd packages/llm-gateway build      # go build -buildmode=c-shared → lib/libllm-gateway.so
+bun run --cwd packages/llm-gateway build      # go build -buildmode=c-shared → lib/libllm-gateway.{so,dylib,dll}
 bun run --cwd packages/llm-gateway test       # go test ./... + vitest
 ```
 

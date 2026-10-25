@@ -11,10 +11,10 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "build": "go build -buildmode=c-shared -o lib/libllm-gateway.so ./ffi",
-    "typecheck": "bun check && go vet ./... && test -z \"$(gofmt -l .)\"",
+    "build": "bun scripts/build.ts",
+    "typecheck": "bun check && bun scripts/check.ts",
     "lint": "eslint .",
-    "test": "go test ./... && bun --bun vitest --run"
+    "test": "bun scripts/test.ts"
   },
   "devDependencies": {
     "@types/node": "22.19.19",

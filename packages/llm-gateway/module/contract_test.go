@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -446,7 +447,8 @@ func TestGeminiAPIKey(t *testing.T) {
 		t.Fatalf("same key again: %d %s", status, body)
 	}
 	providers := f.stateDir + "/providers.json"
-	if info, err := os.Stat(providers); err != nil || info.Mode().Perm() != 0o600 {
+	if info, err := os.Stat(providers); err != nil ||
+		(runtime.GOOS != "windows" && info.Mode().Perm() != 0o600) {
 		t.Fatalf("providers.json: %v %v", info, err)
 	}
 

@@ -4,7 +4,7 @@
   "private": true,
   "description": "The eta desktop shell: an Electrobun window that starts the host.",
   "scripts": {
-    "dev": "hutch run dev",
+    "dev": "bun ../../scripts/dev.ts --desktop",
     "start": "hutch run start",
     "typecheck": "tsc --noEmit",
     "//": "Not `build`: turbo would run it, and a distributable app is not part of a source build.",

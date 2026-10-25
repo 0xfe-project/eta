@@ -4,7 +4,8 @@
 // returns LlmStart's string. Model traffic and the account API go over that
 // loopback listener, so a Go thread never calls back into the host.
 //
-// Build: go build -buildmode=c-shared -o lib/libllm-gateway.so ./ffi
+// Build with `bun run --cwd packages/llm-gateway build`; the output extension
+// is .so, .dylib, or .dll according to the platform.
 package main
 
 /*

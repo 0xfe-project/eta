@@ -23,17 +23,6 @@ async function run(script: string, ...args: string[]) {
 }
 
 describe("the gateway library inside Bun", () => {
-  it("streams under load with the garbage collector running", async () => {
-    const { stdout, stderr, code } = await run("stress.ts", "8");
-    expect(code, stderr).toBe(0);
-    const result = JSON.parse(stdout.split("\n").at(-1)!) as {
-      requests: number;
-      torn: number;
-    };
-    expect(result.torn).toBe(0);
-    expect(result.requests).toBeGreaterThan(100);
-  }, 120_000);
-
   it("keeps an idle event loop ticking while the collector runs", async () => {
     // Several at once: the hang this guards against came in about a third of runs.
     const runs = await Promise.all(
@@ -49,26 +38,44 @@ describe("the gateway library inside Bun", () => {
     }
   }, 120_000);
 
-  it("survives clients that hang up mid-stream, and cancels the upstream", async () => {
-    const { stdout, stderr, code } = await run("aborts.ts", "50");
-    expect(code, stderr).toBe(0);
-    const result = JSON.parse(stdout.split("\n").at(-1)!) as {
-      aborted: number;
-      cancelled: number;
-      after: number;
-    };
-    expect(result.aborted).toBeGreaterThan(300);
-    expect(result.cancelled).toBeGreaterThanOrEqual(result.aborted);
-    expect(result.after).toBe(200);
-  }, 120_000);
+  // These exercise Unix process preemption and signal delivery. Windows uses
+  // a different scheduler and does not deliver SIGINT/SIGTERM to a JS handler.
+  describe.skipIf(process.platform === "win32")(
+    "pOSIX process behavior",
+    () => {
+      it("streams under load with the garbage collector running", async () => {
+        const { stdout, stderr, code } = await run("stress.ts", "8");
+        expect(code, stderr).toBe(0);
+        const result = JSON.parse(stdout.split("\n").at(-1)!) as {
+          requests: number;
+          torn: number;
+        };
+        expect(result.torn).toBe(0);
+        expect(result.requests).toBeGreaterThan(100);
+      }, 120_000);
 
-  it.each(["SIGTERM", "SIGINT"])(
-    "still delivers %s to Bun's handler",
-    async (signal) => {
-      const { stdout, stderr, code } = await run("signal.ts", signal);
-      expect(code, stderr).toBe(0);
-      expect(stdout).toContain(`bun ${signal} handler ran`);
+      it("survives clients that hang up mid-stream, and cancels the upstream", async () => {
+        const { stdout, stderr, code } = await run("aborts.ts", "50");
+        expect(code, stderr).toBe(0);
+        const result = JSON.parse(stdout.split("\n").at(-1)!) as {
+          aborted: number;
+          cancelled: number;
+          after: number;
+        };
+        expect(result.aborted).toBeGreaterThan(300);
+        expect(result.cancelled).toBeGreaterThanOrEqual(result.aborted);
+        expect(result.after).toBe(200);
+      }, 120_000);
+
+      it.each(["SIGTERM", "SIGINT"])(
+        "still delivers %s to Bun's handler",
+        async (signal) => {
+          const { stdout, stderr, code } = await run("signal.ts", signal);
+          expect(code, stderr).toBe(0);
+          expect(stdout).toContain(`bun ${signal} handler ran`);
+        },
+        60_000,
+      );
     },
-    60_000,
   );
 });

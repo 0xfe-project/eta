@@ -139,7 +139,7 @@ describe("context overflow", () => {
   it("gives up after one recovery: a second overflow is a failure", async () => {
     const { kernel, runner, fake, driver, dispose } = setup([
       overflowError(),
-      overflowError("still too long"),
+      overflowError("prompt is too long: still too long"),
     ]);
     kernel.inject(userMsg("go"));
     const result = await runner.run();

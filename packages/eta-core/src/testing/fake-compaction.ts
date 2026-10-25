@@ -51,10 +51,17 @@ export function fakeCompaction(
   const signals: CompactionSignal[] = [];
   const compactions: CompactionSignal[] = [];
   let host: CompactionHost | undefined;
+  let overflowUsed = false;
 
   const ask = (reason: CompactionSignal): boolean => {
     signals.push(reason);
-    if (host === undefined || !compacts[reason]) return false;
+    if (
+      host === undefined ||
+      !compacts[reason] ||
+      (reason === "overflow" && overflowUsed)
+    )
+      return false;
+    if (reason === "overflow") overflowUsed = true;
     compactions.push(reason);
     options.onCompact?.(reason, host);
     host.replaceContext(summary, {
