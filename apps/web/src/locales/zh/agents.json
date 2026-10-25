@@ -52,8 +52,10 @@
   },
   "status": {
     "idle": "空闲",
+    "queued": "排队中",
     "working": "工作中",
-    "awaitingConfirmation": "等待确认"
+    "awaitingConfirmation": "等待确认",
+    "stopping": "停止中"
   },
   "labels": {
     "deletedAgent": "已删除的智能体"

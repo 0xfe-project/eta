@@ -52,8 +52,10 @@
   },
   "status": {
     "idle": "Idle",
+    "queued": "Queued",
     "working": "Working",
-    "awaitingConfirmation": "Awaiting confirmation"
+    "awaitingConfirmation": "Awaiting confirmation",
+    "stopping": "Stopping"
   },
   "labels": {
     "deletedAgent": "Deleted agent"

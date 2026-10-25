@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { agentName } from "@/queries/agents";
 import { useArtifacts } from "@/queries/artifacts";
@@ -51,7 +52,7 @@ import { useLinkTask, useTasks } from "@/queries/tasks";
 import { wireErrorMessage } from "@/queries/wire";
 import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar, AgentStatus, AgentStatusDot } from "./agent-identity";
-import { agentStatusLabels } from "./agent-status";
+import { agentStatusLabels, memberStatusLabels } from "./agent-status";
 import { InspectButton } from "./inspect-button";
 import { MemberRing } from "./member-ring";
 import { MemberStats } from "./member-stats";
@@ -265,6 +266,34 @@ export function CreateGroup({
   );
 }
 
+/**
+ * The line under a name.
+ *
+ * It is the row's content slot, not its type slot. A direct chat and a group are already told
+ * apart by their avatars — one face, or a stack — so 「私聊」 and 「无消息」 were words that carried
+ * nothing: the first restated the row's shape, the second restated its emptiness. What is left to
+ * say is what actually differs between two rows at a glance: whether that agent is busy, what was
+ * last said, and — for a group that has said nothing yet — how many are in it.
+ *
+ * A busy agent wins over the preview: it is the one fact on the row that changes on its own while
+ * the list sits still, and the preview of a conversation someone is working in is stale by design.
+ */
+function conversationLine(conversation: ConversationSummary): string | null {
+  if (conversation.kind === "direct") {
+    const status = conversation.participants[0]?.status;
+    if (status !== undefined && status !== "idle") {
+      return memberStatusLabels[status];
+    }
+    return conversation.preview || null;
+  }
+  return (
+    conversation.preview ||
+    translate("chat:groups.members.count", {
+      count: conversation.participants.length,
+    })
+  );
+}
+
 /** The phone's home: the one list of everything you can chat with, newest activity first. */
 export function GroupList() {
   const { t: translateText } = useTranslation([
@@ -365,10 +394,7 @@ export function GroupList() {
                     )}
                   </span>
                   <span className="mt-1 block truncate text-xs text-muted-foreground">
-                    {row.conversation.preview ||
-                      (row.conversation.kind === "direct"
-                        ? translateText("groups.directChat")
-                        : translateText("history.noMessages"))}
+                    {conversationLine(row.conversation)}
                   </span>
                 </span>
                 {row.conversation.unread > 0 && (
@@ -425,11 +451,12 @@ export function ArchivedGroups() {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm">{g.name}</span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {g.lastMessageAt !== null && `${when(g.lastMessageAt)} · `}
-                    {g.preview ||
-                      (g.kind === "direct"
-                        ? translateText("groups.directChat")
-                        : translateText("history.noMessages"))}
+                    {[
+                      g.lastMessageAt !== null ? when(g.lastMessageAt) : null,
+                      conversationLine(g),
+                    ]
+                      .filter((part) => part !== null && part !== "")
+                      .join(" · ")}
                   </span>
                 </span>
               </button>
