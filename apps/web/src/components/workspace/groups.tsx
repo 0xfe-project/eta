@@ -329,18 +329,13 @@ export function GroupList() {
   const open = useOpenGroup();
   const openAgent = useOpenAgent();
   const rowClass =
-    "flex w-full min-h-18 items-center gap-2 px-2 py-3 text-left outline-none duration-[60ms] hover:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-ring";
+    "flex w-full min-h-18 items-center gap-2 px-2 py-3 text-left outline-none duration-[60ms] hover:bg-sidebar-accent active:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-ring";
   return (
+    // No band of its own at the top of the list. The page's own header already says what this
+    // screen is, and a second title under it spent a hundred pixels of a phone saying it twice —
+    // the room is better spent on a row. Its rows carry their own padding, so the list can start
+    // straight under the header.
     <section className="min-h-0 flex-1 overflow-y-auto px-3">
-      {/* The band is the sidebar's, on a narrower screen: mono and tracked out, a rule under it.
-          It carries no button. One screen has one primary action, and on a phone that action is
-          the middle of the bottom bar, where a thumb already is — the band keeps only the name
-          of what the list below holds. */}
-      <div className="sticky top-0 z-10 flex h-11 items-center border-b bg-background px-2">
-        <h2 className="font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase">
-          {translateText("history.recentChats")}
-        </h2>
-      </div>
       <ul className="space-y-px">
         {rows.map((row) =>
           row.kind === "agent" ? (

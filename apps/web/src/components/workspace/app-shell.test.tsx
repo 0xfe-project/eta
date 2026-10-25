@@ -237,7 +237,9 @@ describe("左栏的两块", () => {
       "与 装配检查 对话",
       "与 闲着 对话",
     ]);
-    expect(container.querySelectorAll("h2")).toHaveLength(1);
+    // One title, and it is the screen's: the list carries no heading of its own, so a phone does
+    // not spend its first hundred pixels saying 「对话列表」 twice.
+    expect(container.querySelectorAll("h2")).toHaveLength(0);
     const row = [...container.querySelectorAll<HTMLElement>("li button")].find(
       (b) => b.textContent?.includes("闲着"),
     )!;
