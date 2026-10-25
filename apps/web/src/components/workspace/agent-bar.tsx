@@ -8,6 +8,7 @@ import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { CheckIcon } from "@phosphor-icons/react/Check";
 import { InfoIcon } from "@phosphor-icons/react/Info";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
+import { SidebarIcon } from "@phosphor-icons/react/Sidebar";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -147,8 +148,12 @@ export function ChatHeader({
   info?: ConversationInfo | undefined;
   project?: ProjectView | undefined;
   onInfo: () => void;
-  /** Shown only when the panel is folded away (narrow desktop, or collapsed). */
+  /**
+   * Where the panel comes from, on the screens where it can be away: between md and lg it is a
+   * drawer over the chat, and this is the only thing in the header that brings it back.
+   */
   onOpenWorkspace?: () => void;
+  /** The drawer's state. Not asked above lg, where the panel is a column that is always there. */
   workspaceOpen?: boolean;
 }) {
   const { t: translateText } = useTranslation(["chat", "navigation"] as const);
@@ -197,14 +202,31 @@ export function ChatHeader({
           </button>
         ))}
       </span>
+      {/*
+        The way into the panel, on the edge the panel itself comes from.
+
+        Between md and lg the panel is a drawer, so it starts away and can be sent away — and the
+        only door to it used to be inside the group's dropdown, one level below a menu that is
+        about the conversation. A drawer you reopen through a menu about something else is a
+        drawer people stop using: the toggle belongs in the header, where the panel is, not in the
+        conversation's own menu.
+
+        Two breakpoints leave it with nothing to do. Below md the phone's header carries it (there
+        the panel is the screen, not a drawer beside it); from lg up the panel is a column that is
+        always open, so a toggle would have no closed state to return from.
+       */}
       {workspaceOpen === false && onOpenWorkspace !== undefined ? (
         <Button
           size="icon"
           variant="ghost"
+          className="hidden md:inline-flex lg:hidden"
           aria-label={translateText("navigation:actions.openWorkspace")}
           onClick={onOpenWorkspace}
         >
-          <InfoIcon aria-hidden="true" />
+          {/* The left rail's own glyph, facing the other way: the right column is the left
+              sidebar mirrored, and one symbol for "a panel folds here" is worth more than a
+              second drawing for the same idea. */}
+          <SidebarIcon aria-hidden="true" className="-scale-x-100" />
         </Button>
       ) : null}
     </header>

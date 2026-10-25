@@ -258,7 +258,10 @@ export function Workspace({
               info={conversation.info}
               project={project}
               onInfo={showInfo}
-              workspaceOpen
+              // The drawer's state, not "is a panel on screen": from lg up the panel is a column
+              // and the header's toggle is hidden by its own breakpoints, so this only ever
+              // answers the one question the button asks — is the drawer away?
+              workspaceOpen={drawerOpen}
               onOpenWorkspace={showPanel}
             />
             <ChatPanel
