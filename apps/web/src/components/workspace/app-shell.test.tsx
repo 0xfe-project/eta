@@ -276,24 +276,22 @@ describe("左栏的页眉", () => {
   });
 
   it("links the sections and marks the current one", async () => {
-    state.pathname = "/routines";
+    state.pathname = "/tasks";
     state.agents = [];
     state.groups = [];
     const container = await render(<Sidebar />);
     const links = [...container.querySelectorAll("a[data-to]")].filter((a) =>
       a.hasAttribute("data-active"),
     );
-    // Only the two pages that remain; chat, pending and memory have no button.
-    expect(links.map((a) => a.getAttribute("data-to"))).toEqual([
-      "/tasks",
-      "/routines",
-    ]);
-    expect(links.map((a) => a.textContent)).toEqual(["任务", "定时"]);
+    // Only the page that remains; 定时 is off in this build, and chat, pending
+    // and memory have no button.
+    expect(links.map((a) => a.getAttribute("data-to"))).toEqual(["/tasks"]);
+    expect(links.map((a) => a.textContent)).toEqual(["任务"]);
     expect(
       links
         .filter((a) => a.getAttribute("data-active") === "true")
         .map((a) => a.getAttribute("data-to")),
-    ).toEqual(["/routines"]);
+    ).toEqual(["/tasks"]);
   });
 });
 
@@ -324,12 +322,9 @@ describe("折叠成图标栏", () => {
     expect(root(container).getAttribute("data-state")).toBe("collapsed");
     expect(root(container).getAttribute("data-collapsible")).toBe("icon");
     const links = [...container.querySelectorAll("a[data-to][aria-label]")];
-    expect(links.map((a) => a.getAttribute("aria-label"))).toEqual([
-      "任务",
-      "定时",
-    ]);
+    expect(links.map((a) => a.getAttribute("aria-label"))).toEqual(["任务"]);
     // No text in the rail: the name a link lost is the name it has to carry for the reader.
-    expect(links.map((a) => a.textContent)).toEqual(["", ""]);
+    expect(links.map((a) => a.textContent)).toEqual([""]);
     expect(links[0]?.querySelector("svg")).not.toBeNull();
   });
 
@@ -353,7 +348,7 @@ describe("折叠成图标栏", () => {
   });
 
   it("设置单独成组，排在侧栏最下方", async () => {
-    // 分区列表里只剩能在页面间移动的两个去处；设置是离开它们的门，所以单独一组、贴在最下面。
+    // 分区列表里只剩能在页面间移动的去处；设置是离开它们的门，所以单独一组、贴在最下面。
     const rows = (container: HTMLElement) => {
       const nav = container.querySelector('ul[aria-label="分区"]')!;
       return [...nav.querySelectorAll("li")].map((item) => {
@@ -362,9 +357,9 @@ describe("折叠成图标栏", () => {
       });
     };
     const open = await render(<Sidebar />, { open: true });
-    expect(rows(open)).toEqual(["任务", "定时"]);
+    expect(rows(open)).toEqual(["任务"]);
     const rail = await render(<Sidebar />, { open: false });
-    expect(rows(rail)).toEqual(["折叠或展开侧栏", "任务", "定时"]);
+    expect(rows(rail)).toEqual(["折叠或展开侧栏", "任务"]);
 
     // 它自己那一组：页脚里一条，不在分区列表里。
     for (const [container, isRail] of [
@@ -378,7 +373,7 @@ describe("折叠成图标栏", () => {
       expect(
         container.querySelector('ul[aria-label="分区"]')?.contains(row),
       ).toBe(false);
-      // 和任务/定时同一行：同一个字号，而不是图标按钮里塞一段更大的字。
+      // 和任务同一行：同一个字号，而不是图标按钮里塞一段更大的字。
       expect(row.getAttribute("data-sidebar")).toBe("menu-button");
       expect(row.className).toContain("text-sm");
       if (isRail) {

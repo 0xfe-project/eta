@@ -86,15 +86,14 @@ afterEach(async () => {
 });
 
 describe("手机底部栏", () => {
-  it("has four destinations with the plus holding the middle cell", async () => {
+  it("has three destinations with the plus between them", async () => {
     const container = await render();
-    expect(links(container)).toEqual(["/", "/tasks", "/routines", "/settings"]);
-    // Four destinations, five cells: the middle one is empty, and the solid square is laid over
-    // it — bigger than the row, which is what makes it an axis and not a fifth destination.
-    const cells = container.querySelector("nav > div > div")!.children;
-    expect(cells).toHaveLength(5);
-    expect(cells[2].hasAttribute("aria-hidden")).toBe(true);
-    expect([...cells].some((cell) => cell.contains(plus()))).toBe(false);
+    expect(links(container)).toEqual(["/", "/tasks", "/settings"]);
+    // Three destinations, four cells: the solid square sits between the two
+    // sides. 定时 is off in this build, so it has no cell of its own.
+    const cells = container.querySelector("nav > div > div.grid")!.children;
+    expect(cells).toHaveLength(4);
+    expect(cells[2].contains(plus())).toBe(true);
   });
 
   it("the plus is a hit target of its own, not a mode of one of the tabs", async () => {

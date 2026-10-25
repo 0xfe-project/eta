@@ -98,7 +98,7 @@ describe("what waits for the user", () => {
     setWire(undefined);
   });
 
-  it("lists tasks and routines that need them, and nothing else", async () => {
+  it("lists the tasks that need them, and nothing else", async () => {
     surfaceHost({
       tasks: [
         task(1, { status: "in_progress" }),
@@ -107,22 +107,19 @@ describe("what waits for the user", () => {
         task(4),
         task(5, { status: "done" }),
       ],
+      // 定时 is off in this build: its reports must not reach the list or its count.
       routines: [routine("a", 2, 0), routine("b", 0, 1), routine("c", 0, 0)],
     });
     const container = await mount(new QueryClient(), () => <PendingList />);
     const rows = [...container.querySelectorAll("li")].map(
       (li) => li.textContent,
     );
-    expect(rows).toEqual([
-      "#2 任务2待验收",
-      "#3 任务3受阻",
-      "定时a2 份新报告",
-      "定时b1 次失败",
-    ]);
+    expect(rows).toEqual(["#2 任务2待验收", "#3 任务3受阻"]);
   });
 
-  it("groups confirmations, tasks and routines, and says which failed to load", async () => {
-    // The host has no routines plugin, so the routines never load.
+  it("groups confirmations and tasks, and says which failed to load", async () => {
+    // The host has no routines plugin, but with 定时 off its absence is not a
+    // failure the reader is told about.
     waiting(
       "i1",
       {},
@@ -131,7 +128,8 @@ describe("what waits for the user", () => {
     const container = await mount(new QueryClient(), () => <PendingList />);
     await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
     expect(headings(container)).toEqual(["确认请求1", "任务1"]);
-    expect(container.textContent).toContain("无法加载定时");
+    expect(container.textContent).not.toContain("定时");
+    expect(container.textContent).not.toContain("无法加载");
     expect(container.querySelector("li")!.textContent).toContain(
       "删除i1？允许拒绝放弃",
     );

@@ -6,6 +6,7 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { Route as unknownPath } from "@/routes/$";
+import { Route as routinesPath } from "@/routes/_app/routines";
 
 // The route the file defines, mounted beside the pages that remain.
 async function open(path: string) {
@@ -14,7 +15,11 @@ async function open(path: string) {
     routeTree: root.addChildren([
       createRoute({ getParentRoute: () => root, path: "/" }),
       createRoute({ getParentRoute: () => root, path: "tasks" }),
-      createRoute({ getParentRoute: () => root, path: "routines" }),
+      createRoute({
+        getParentRoute: () => root,
+        path: "routines",
+        beforeLoad: routinesPath.options.beforeLoad as () => void,
+      }),
       createRoute({
         getParentRoute: () => root,
         path: "$",
@@ -34,6 +39,8 @@ describe("removed pages", () => {
     "/workspace/routines",
     "/workspace/inbox",
     "/workspace/memory",
+    // 定时 is off in this build: the page it kept is not served.
+    "/routines",
     // A path that never was one.
     "/nope",
   ])("%s redirects to the conversation list", async (path) => {
@@ -42,6 +49,5 @@ describe("removed pages", () => {
 
   it("keeps the pages that remain", async () => {
     expect(await open("/tasks")).toBe("/tasks");
-    expect(await open("/routines")).toBe("/routines");
   });
 });

@@ -1,6 +1,7 @@
 import type { RoutineSummary } from "@/queries/routines";
 
 import type { Task } from "@/queries/tasks";
+import { ROUTINES_VISIBLE } from "@/lib/features";
 import { listSeparator, translate } from "@/lib/i18n";
 import { usePendingInteractions } from "@/queries/inbox";
 import { useRoutines } from "@/queries/routines";
@@ -55,11 +56,15 @@ export function useAttention() {
     const alert = task.status === "blocked";
     return reason ? [{ task, reason, alert }] : [];
   });
-  const waiting = routines.flatMap((routine) => {
-    const reason = routineReason(routine);
-    const alert = routine.unseenFailures > 0;
-    return reason ? [{ routine, reason, alert }] : [];
-  });
+  // 定时 is not offered in this build: a report the reader cannot open is not something waiting
+  // for them, and counting it would leave a badge no page can clear.
+  const waiting = ROUTINES_VISIBLE
+    ? routines.flatMap((routine) => {
+        const reason = routineReason(routine);
+        const alert = routine.unseenFailures > 0;
+        return reason ? [{ routine, reason, alert }] : [];
+      })
+    : [];
   return {
     interactions,
     tasks,

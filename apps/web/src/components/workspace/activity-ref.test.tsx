@@ -101,7 +101,7 @@ describe("activity ref cards", () => {
     expect(router.state.location.search).toEqual({ task: "t1" });
   });
 
-  it("links routines and pull requests", async () => {
+  it("links pull requests, and draws nothing for a routine", async () => {
     const { container } = await mount([
       { kind: "routine", id: "r1", title: "日报" },
       {
@@ -111,12 +111,8 @@ describe("activity ref cards", () => {
         url: "https://github.com/akarachen/eta/pull/7",
       },
     ]);
+    // 定时 is off in this build: its card would be a dead link, so it draws nothing.
     expect(cards(container)).toEqual([
-      {
-        href: "/routines?routine=r1",
-        label: "打开定时 日报",
-        text: "日报",
-      },
       {
         href: "https://github.com/akarachen/eta/pull/7",
         label: "打开 PR #7 Add cards",

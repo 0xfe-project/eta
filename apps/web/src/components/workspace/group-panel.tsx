@@ -2,6 +2,7 @@ import type { ConversationSummary } from "@eta/client-contracts";
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
+import { ROUTINES_VISIBLE } from "@/lib/features";
 import { cn } from "@/lib/utils";
 import { useArtifacts } from "@/queries/artifacts";
 import { useConversation } from "@/queries/conversations";
@@ -202,32 +203,36 @@ export function GroupPanel({
           )}
         </Section>
 
-        <Section
-          title={translateText("navigation:sections.routines")}
-          count={groupRoutines.length}
-        >
-          {groupRoutines.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              {translateText("routines:empty.title")}
-            </p>
-          ) : (
-            <ul className="space-y-1">
-              {groupRoutines.map((routine) => (
-                <li
-                  key={routine.id}
-                  className="flex min-w-0 items-baseline gap-2"
-                >
-                  <span className="min-w-0 flex-1 truncate text-xs">
-                    {routine.name}
-                  </span>
-                  <span className="shrink-0 font-mono text-[10px] text-faint tabular-nums">
-                    {routine.nextRunAt === null ? "—" : when(routine.nextRunAt)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+        {ROUTINES_VISIBLE ? (
+          <Section
+            title={translateText("navigation:sections.routines")}
+            count={groupRoutines.length}
+          >
+            {groupRoutines.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {translateText("routines:empty.title")}
+              </p>
+            ) : (
+              <ul className="space-y-1">
+                {groupRoutines.map((routine) => (
+                  <li
+                    key={routine.id}
+                    className="flex min-w-0 items-baseline gap-2"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-xs">
+                      {routine.name}
+                    </span>
+                    <span className="shrink-0 font-mono text-[10px] text-faint tabular-nums">
+                      {routine.nextRunAt === null
+                        ? "—"
+                        : when(routine.nextRunAt)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
+        ) : null}
 
         <div className="px-3 py-2">
           <GroupMembers />

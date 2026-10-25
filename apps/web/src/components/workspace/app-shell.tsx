@@ -29,6 +29,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { ROUTINES_VISIBLE } from "@/lib/features";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useTasks } from "@/queries/tasks";
@@ -39,7 +40,7 @@ import { SettingsDialog, SettingsMenuItem } from "./settings-dialog";
 import { ConversationList } from "./sidebar-tree";
 import { useWorkspaceStore } from "./workspace-store";
 
-// Shared navigation: the full-window sidebar on wide screens and four destinations plus the main
+// Shared navigation: the full-window sidebar on wide screens and the destinations plus the main
 // action in the middle on the phone. The conversation list is the mobile home screen.
 
 const sections = [
@@ -58,6 +59,11 @@ const sections = [
     icon: ClockIcon,
   },
 ] as const;
+
+/** The sections this build offers: 定时 keeps its entry only where the feature is on. */
+const shownSections = sections.filter(
+  (section) => ROUTINES_VISIBLE || section.to !== "/routines",
+);
 
 /** What each section holds for the user: tasks to accept. */
 function useBadges(): Partial<Record<(typeof sections)[number]["to"], number>> {
@@ -144,7 +150,7 @@ export function Sidebar() {
                 />
               </SidebarMenuItem>
             ) : null}
-            {sections.map(({ to, label, icon: Icon }) => {
+            {shownSections.map(({ to, label, icon: Icon }) => {
               const count = badges[to];
               return (
                 <SidebarMenuItem key={to}>
@@ -219,12 +225,19 @@ export function BottomNav() {
       // padding inside it, so a change of inset moves the floor and not the bar.
       className="shrink-0 px-[8px] pb-[var(--bottom-inset)] md:hidden"
     >
-      {/* Four destinations of one width, the plus holding the middle cell: the solid square is
-          the axis the two pairs are read against, which is what keeps five cells from reading as
-          a symmetric board broken in half. It breaks the plate's edge above and below, which is
-          what makes it a bigger thing than the four beside it rather than a fifth one. */}
+      {/* Destinations of one width, the plus in a cell of its own: the solid square is the axis
+          the tabs are read against, and it breaks the plate's edge above and below, which is what
+          makes it a bigger thing than the tabs beside it rather than one of them. 定时 keeps a
+          cell only where the feature is on; with three destinations the four cells are equal. */}
       <div className="relative h-[52px] border bg-background">
-        <div className="grid h-full grid-cols-[1fr_1fr_68px_1fr_1fr]">
+        <div
+          className={cn(
+            "grid h-full",
+            ROUTINES_VISIBLE
+              ? "grid-cols-[1fr_1fr_68px_1fr_1fr]"
+              : "grid-cols-4",
+          )}
+        >
           <Tab
             to="/"
             label={translateText("sections.chat")}
@@ -236,20 +249,21 @@ export function BottomNav() {
             icon={ListChecksIcon}
             badge={badges["/tasks"]}
           />
-          <div aria-hidden="true" />
-          <Tab
-            to="/routines"
-            label={translateText("sections.routines")}
-            icon={ClockIcon}
-          />
+          <div className="flex items-center justify-center">
+            <NewAction />
+          </div>
+          {ROUTINES_VISIBLE ? (
+            <Tab
+              to="/routines"
+              label={translateText("sections.routines")}
+              icon={ClockIcon}
+            />
+          ) : null}
           <Tab
             to="/settings"
             label={translateText("sections.settings")}
             icon={GearSixIcon}
           />
-        </div>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-          <NewAction />
         </div>
       </div>
     </nav>

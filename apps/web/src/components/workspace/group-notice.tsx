@@ -1,6 +1,7 @@
 import type { MessageView } from "@eta/client-contracts";
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
+import { ROUTINES_VISIBLE } from "@/lib/features";
 import { agentName, useAgentList } from "@/queries/agents";
 import { useSectionLink } from "./workspace-search";
 
@@ -43,19 +44,27 @@ export function GroupNotice({ message }: { message: MessageView }) {
   } else if (event === "wake_budget" && typeof budget === "number") {
     text = translateText("chat:system.wakeBudget", { budget });
   }
-  if (
-    event === "routine_report" &&
-    typeof routineId === "string" &&
-    typeof routineName === "string"
-  )
-    return (
-      <RoutineReport
-        routineId={routineId}
-        name={routineName}
-        runId={runId}
-        title={title}
-      />
-    );
+  if (event === "routine_report" && typeof routineName === "string") {
+    if (ROUTINES_VISIBLE && typeof routineId === "string")
+      return (
+        <RoutineReport
+          routineId={routineId}
+          name={routineName}
+          runId={runId}
+          title={title}
+        />
+      );
+    // 定时 is off in this build: the report is still news, so its line stays, in the reader's
+    // language; the way to the page it belongs to does not.
+    text = title
+      ? translateText("chat:system.routineReport", {
+          name: routineName,
+          title,
+        })
+      : translateText("chat:system.routineReportUntitled", {
+          name: routineName,
+        });
+  }
   return (
     <div className="system-message">
       <p>{text}</p>

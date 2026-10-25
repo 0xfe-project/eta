@@ -110,7 +110,7 @@ afterEach(() => {
 
 it("puts what waits for the user above everything else", async () => {
   // The goal and the members used to be the first screen, and the two tasks
-  // waiting for the user and the failed routine run were below the fold.
+  // waiting for the user were below the fold.
   const host = surfaceHost({
     conversations: [group, other],
     tasks: [
@@ -146,30 +146,22 @@ it("puts what waits for the user above everything else", async () => {
     conversationSections(group, [], { goal: "本周上线" }),
   );
   const container = await mount();
-  expect(sections(container)).toEqual([
-    "等你",
-    "任务",
-    "产物",
-    "定时",
-    "成员",
-    "目标",
-  ]);
+  expect(sections(container)).toEqual(["等你", "任务", "产物", "成员", "目标"]);
   // What waits, saying why in the 待处理 tab's own words; the confirmation is
-  // not drawn again, only the way to the tab that holds it.
+  // not drawn again, only the way to the tab that holds it. 定时 is off in this
+  // build, so its failed run is neither a row nor part of the count.
   expect(rowsOf(container, "等你")).toEqual([
     "#1 任务1待验收",
-    "日报1 次失败",
     "确认请求1去待处理",
   ]);
   expect(linksOf(container, "等你")).toEqual([
     "/?group=g1&view=tasks&task=t1",
-    "/routines?routine=r1",
     "/?group=g1&view=inbox",
   ]);
   // The count is the badge's number, from the same hook: the other group's
   // blocked task counts toward it too, while the rows listed stay this group's.
-  expect(countOf(container, "等你")).toBe("等你4");
-  expect(container.querySelector("[data-badge]")!.textContent).toBe("4");
+  expect(countOf(container, "等你")).toBe("等你3");
+  expect(container.querySelector("[data-badge]")!.textContent).toBe("3");
   // The background is still here, at the bottom.
   expect(container.textContent).toContain("本周上线");
 });
@@ -189,7 +181,7 @@ it("does not spend a heading on an empty「等你」", async () => {
     conversationSections(group, [], { goal: "本周上线" }),
   );
   const container = await mount();
-  expect(sections(container)).toEqual(["任务", "产物", "定时", "成员", "目标"]);
+  expect(sections(container)).toEqual(["任务", "产物", "成员", "目标"]);
   expect(container.textContent).not.toContain("等你");
 });
 

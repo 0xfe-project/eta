@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ROUTINES_VISIBLE } from "@/lib/features";
 import { formatLocale, listSeparator, translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { agentName } from "@/queries/agents";
@@ -283,17 +284,23 @@ export function PendingList() {
   // Only their state: the items come from usePendingInteractions and
   // useAttention.
   const { loaded: inboxLoaded, error: inboxError } = useInbox();
+  const tasksSource = useTasks();
+  const routinesSource = useRoutines();
   const sources = [
     {
       what: translateText("chat:confirmations.requestLabel"),
       loaded: inboxLoaded,
       error: inboxError,
     },
-    { what: translateText("navigation:sections.tasks"), ...useTasks() },
-    {
-      what: translateText("navigation:sections.routines"),
-      ...useRoutines(),
-    },
+    { what: translateText("navigation:sections.tasks"), ...tasksSource },
+    ...(ROUTINES_VISIBLE
+      ? [
+          {
+            what: translateText("navigation:sections.routines"),
+            ...routinesSource,
+          },
+        ]
+      : []),
   ];
   const confirmations = usePendingInteractions();
   const { tasks, routines } = useAttention();
@@ -353,27 +360,29 @@ export function PendingList() {
           </li>
         ))}
       </Group>
-      <Group
-        label={translateText("navigation:sections.routines")}
-        count={routines.length}
-      >
-        {routines.map(({ routine, reason, alert }) => (
-          <li key={routine.id}>
-            <Link
-              {...sectionLink("routines", { routine: routine.id })}
-              title={routine.name}
-              className={linkRow}
-            >
-              <LinkRowBody
-                icon={ClockIcon}
+      {ROUTINES_VISIBLE ? (
+        <Group
+          label={translateText("navigation:sections.routines")}
+          count={routines.length}
+        >
+          {routines.map(({ routine, reason, alert }) => (
+            <li key={routine.id}>
+              <Link
+                {...sectionLink("routines", { routine: routine.id })}
                 title={routine.name}
-                reason={reason}
-                alert={alert}
-              />
-            </Link>
-          </li>
-        ))}
-      </Group>
+                className={linkRow}
+              >
+                <LinkRowBody
+                  icon={ClockIcon}
+                  title={routine.name}
+                  reason={reason}
+                  alert={alert}
+                />
+              </Link>
+            </li>
+          ))}
+        </Group>
+      ) : null}
     </div>
   );
 }

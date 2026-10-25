@@ -94,22 +94,16 @@ describe("pending navigation", () => {
     setWire(undefined);
   });
 
-  it("opens a task beside the chat, a routine on its own page", async () => {
-    // The panel has a tasks tab; routines left the panel, so useSectionLink sends that row to the
-    // page even from the chat.
+  it("opens a task beside the chat", async () => {
+    // The panel has a tasks tab. 定时 is off in this build, so the routine the
+    // host holds is not a row here — and would have no page to open if it were.
     const { container } = await mount(() => <PendingList />, "/?view=inbox");
-    expect(links(container)).toEqual([
-      "/?view=tasks&task=t1",
-      "/routines?routine=r1",
-    ]);
+    expect(links(container)).toEqual(["/?view=tasks&task=t1"]);
   });
 
   it("opens them on their own pages", async () => {
     const { container } = await mount(() => <PendingList />, "/tasks");
-    expect(links(container)).toEqual([
-      "/tasks?task=t1",
-      "/routines?routine=r1",
-    ]);
+    expect(links(container)).toEqual(["/tasks?task=t1"]);
   });
 
   it("stays beside the chat when a row is followed", async () => {

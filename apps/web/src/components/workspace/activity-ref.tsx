@@ -10,6 +10,7 @@ import { NotePencilIcon } from "@phosphor-icons/react/NotePencil";
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { ROUTINES_VISIBLE } from "@/lib/features";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { actionClass, frameClass, muted } from "./activity-card";
@@ -104,6 +105,9 @@ export function ActivityRefCard({
     "connections",
   ] as const);
   const sectionLink = useSectionLink();
+  // A routine's card is the way to its page; with 定时 off there is no page to open, so the
+  // result of a call that touched one draws nothing rather than a dead link.
+  if (!ROUTINES_VISIBLE && value.kind === "routine") return null;
   const { icon: Icon, open } = kinds[value.kind];
   const status = value.kind === "task" ? taskStatus(value.status) : undefined;
   const repo = value.url ? repository(value.url) : undefined;
