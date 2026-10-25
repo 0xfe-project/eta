@@ -319,9 +319,9 @@ describe("the same host with GitHub loaded", () => {
     expect(errors).toEqual([]);
   });
 
-  it("offers the 连接 section, which is what the section list is for", async () => {
+  it("still offers no 连接 section: it is off in this build, GitHub loaded or not", async () => {
     await settings(true);
-    expect(sectionLabels()).toContain("连接");
+    expect(sectionLabels()).not.toContain("连接");
     expect(errors).toEqual([]);
   });
 });

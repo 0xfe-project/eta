@@ -23,6 +23,18 @@ import { useWorkspaceStore } from "./workspace-store";
 // over whatever is on screen on a wide window and a page of its own on a phone, so the list, its
 // hiding rules and the panels themselves are written once, here.
 
+/**
+ * The sections the rail does not offer, by choice: 机器, 环境包 and 连接 are off in this build,
+ * and 审批 is the editor's only. The settings stay in force — `?settings=machines` still opens
+ * one — because hiding the door is not the same as turning the feature off.
+ */
+const hiddenSettings = new Set<SettingsSection>([
+  "approvals",
+  "machines",
+  "bundles",
+  "connections",
+]);
+
 const colorModes = [
   {
     value: "system",
@@ -149,18 +161,7 @@ export function SettingsPanels({
       <SettingsNav
         label={translateText("accessibility.sections")}
         sections={settingsSections
-          // The two entries the rail does not offer, for two different reasons.
-          // `connections`: the host has no GitHub plugin, so there is nothing to
-          // connect and its page is not drawn either — a page of settings for a
-          // feature that is not there reads as one shown half present. The host
-          // says what it has in `hello.mounted`. `approvals`: hidden by choice,
-          // the editor only — the list stays in force, and `?settings=approvals`
-          // still opens it.
-          .filter(
-            (section) =>
-              (section.value !== "connections" || githubMounted) &&
-              section.value !== "approvals",
-          )
+          .filter((section) => !hiddenSettings.has(section.value))
           .map((section) => ({
             ...section,
             attention: attention[section.value],

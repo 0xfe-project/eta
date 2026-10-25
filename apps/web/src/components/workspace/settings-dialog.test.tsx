@@ -56,7 +56,7 @@ afterEach(async () => {
 });
 
 describe("设置左侧那一列", () => {
-  it("没有「需先确认的工具」，其余条目的顺序不变", async () => {
+  it("没有「需先确认的工具」，也没有已关掉的条目，其余顺序不变", async () => {
     host();
     useWorkspaceStore
       .getState()
@@ -64,16 +64,7 @@ describe("设置左侧那一列", () => {
     await mount(<Dialog />);
     await flush();
     expect(rail()).toEqual(
-      labelsOf(
-        "agents",
-        "providers",
-        "machines",
-        "bundles",
-        "mcp",
-        "connections",
-        "archived",
-        "appearance",
-      ),
+      labelsOf("agents", "providers", "mcp", "archived", "appearance"),
     );
     expect(rail().join("")).not.toContain("需先确认的工具");
   });
