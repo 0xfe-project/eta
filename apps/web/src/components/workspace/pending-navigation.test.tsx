@@ -13,6 +13,7 @@ import { setWire } from "@/lib/wire";
 import { surfaceHost } from "@/test-inbox";
 import { routineInfo, routineSections, taskDetail } from "@/test-product";
 import { PendingList } from "./attention";
+import { useOpenGroup } from "./use-groups";
 import { useShowLinkedView } from "./workspace-search";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -67,6 +68,17 @@ async function mount(ui: () => React.ReactNode, path: string) {
 function ShowLinkedView() {
   useShowLinkedView();
   return null;
+}
+
+/** The phone's way in: a row that opens a conversation, beside the same URL watcher the app has. */
+function OpenRow() {
+  const open = useOpenGroup();
+  useShowLinkedView();
+  return (
+    <button type="button" onClick={() => open("g1")}>
+      装配
+    </button>
+  );
 }
 
 const links = (container: HTMLElement) =>
@@ -128,5 +140,23 @@ describe("pending navigation", () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
     });
     expect(useWorkspaceStore.getState().mobilePanel).toBe("workspace");
+  });
+
+  it("a conversation row opens the chat, even from inside the panel", async () => {
+    // The panel is on screen, the URL asked for its inbox tab; then the thumb goes to a row. The
+    // row asks for a conversation and nothing else, so the panel has nothing to stay open for —
+    // it used to, because every open also carried `view: "context"`, which the URL watcher above
+    // reads as "open my tab", and the chat you just tapped arrived behind the panel.
+    const { container, router } = await mount(
+      () => <OpenRow />,
+      "/?group=g9&view=inbox",
+    );
+    expect(useWorkspaceStore.getState().mobilePanel).toBe("workspace");
+    await act(async () => {
+      container.querySelector("button")!.click();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(router.state.location.search).toEqual({ group: "g1" });
+    expect(useWorkspaceStore.getState().mobilePanel).toBe("chat");
   });
 });

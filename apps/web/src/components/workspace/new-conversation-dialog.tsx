@@ -91,10 +91,10 @@ function NewConversationForm({
         agentIds: [chosen],
       });
       onDone();
-      void navigate({
-        to: "/",
-        search: { group: conversation.id, view: "context" },
-      });
+      useWorkspaceStore.getState().setMobilePanel("chat");
+      // The conversation you just made, on itself — same rule as opening a row: no `view`, so the
+      // phone lands in the chat it asked for instead of on the panel over it.
+      void navigate({ to: "/", search: { group: conversation.id } });
     } catch (error) {
       setFailed((error as Error).message);
     }

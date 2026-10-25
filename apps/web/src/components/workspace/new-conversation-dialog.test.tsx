@@ -80,7 +80,7 @@ describe("新对话", () => {
     ]);
     expect(state.navigate).toHaveBeenCalledWith({
       to: "/",
-      search: { group: "c-new", view: "context" },
+      search: { group: "c-new" },
     });
   });
 

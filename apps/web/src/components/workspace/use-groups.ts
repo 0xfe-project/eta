@@ -32,8 +32,15 @@ export function useGroups() {
 }
 export function useOpenGroup() {
   const navigate = useNavigate();
+  // Opening a conversation is not asking for a tab. It used to carry `view: "context"` — the
+  // panel's first tab — and on a phone that was read as "the URL wants this tab", which opened the
+  // panel over the chat you had just asked for: 点一行会话，先看到右侧边栏。
+  //
+  // Nothing is lost by dropping it: `view` falls back to `context` on its own, so the panel still
+  // shows the same tab wherever it is drawn, a stale `view=tasks` from the last place still clears,
+  // and the one thing that changes is the one thing that should — a conversation opens on itself.
   return (group: string) => {
     useWorkspaceStore.getState().setMobilePanel("chat");
-    void navigate({ to: "/", search: { group, view: "context" } });
+    void navigate({ to: "/", search: { group } });
   };
 }

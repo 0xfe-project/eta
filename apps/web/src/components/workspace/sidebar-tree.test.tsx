@@ -274,7 +274,7 @@ describe("侧边栏的两块", () => {
     );
     expect(navigation.navigate).toHaveBeenCalledWith({
       to: "/",
-      search: { group: "g1", view: "context" },
+      search: { group: "g1" },
     });
   });
 
@@ -326,7 +326,7 @@ describe("折叠成图标栏", () => {
     await click(card);
     expect(navigation.navigate).toHaveBeenCalledWith({
       to: "/",
-      search: { group: "g1", view: "context" },
+      search: { group: "g1" },
     });
   });
 
