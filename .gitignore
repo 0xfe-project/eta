@@ -21,3 +21,6 @@ out/
 # Turborepo
 .turbo
 packages/llm-gateway/lib/
+packages/eta-computer/lib/
+packages/eta-computer/models/
+packages/eta-computer/native/target/

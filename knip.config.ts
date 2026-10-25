@@ -46,6 +46,9 @@ export default {
       // process, and a crash must fail one test.
       entry: ["test/scripts/*.ts"],
     },
+    "packages/eta-computer": {
+      entry: ["scripts/*.ts"],
+    },
     "apps/web": {
       // routeTree.gen.ts is gitignored, which knip skips, so the file routes
       // are entries themselves. public/sw.js is registered by URL in

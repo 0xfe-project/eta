@@ -1,0 +1,24 @@
+{
+  "name": "@eta/computer",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Low-latency computer-use perception and speculative decision triad: Rust ort + UI-JEPA forward predictor + OpenJev System-1 calibrated decision engine.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
+    "test": "bun --bun vitest --run",
+    "typecheck": "bun check"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.19",
+    "bun-types": "1.4.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}

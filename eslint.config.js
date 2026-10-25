@@ -47,6 +47,7 @@ export default antfu(
       "apps/eta/src/main.ts",
       // The desktop shell: it starts the host, then opens the window.
       "apps/desktop/src/bun/index.ts",
+      "packages/eta-computer/scripts/*.ts",
       "packages/*/test/*.smoke.mjs",
     ],
     rules: { "antfu/no-top-level-await": "off", "no-console": "off" },
