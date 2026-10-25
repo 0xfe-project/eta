@@ -21,6 +21,8 @@ import type {
  * told to look again before saving once more.
  */
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
+import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
+import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -52,6 +54,7 @@ import {
   providerErrorMessage,
   providerLabel,
   useDeleteProvider,
+  useDiscoverModels,
   useProviders,
   useSaveProvider,
 } from "@/queries/providers";
@@ -360,6 +363,9 @@ export function ProviderEditor({
     (provider?.models ?? []).map(rowOf),
   );
   const [saved, setSaved] = useState(false);
+  // Open by default; a provider with a long list can be folded away to reach 保存 without
+  // scrolling through every model.
+  const [modelsOpen, setModelsOpen] = useState(true);
   const [changedElsewhere, setChangedElsewhere] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   // The config this form was read from: what a save has to be made against.
@@ -399,6 +405,50 @@ export function ProviderEditor({
     );
   const custom = isCustomKind(kind);
   const save = useSaveProvider();
+  const discovered = useDiscoverModels();
+  // Read the endpoint's list into the form. Rows already here keep whatever the person set on
+  // them — a rename or a thinking level is a choice, and discovery only fills gaps.
+  const fetchModels = () =>
+    discovered.mutate(
+      {
+        kind,
+        baseUrl: baseUrl.trim(),
+        headers: Object.fromEntries(
+          headers
+            .map((row) => [row.name.trim(), row.value.trim()] as const)
+            .filter(([header]) => header.length > 0)
+            .map(([header, value]) => [
+              header,
+              value.length === 0 ? null : value,
+            ]),
+        ),
+        ...(clearKey
+          ? { apiKey: null }
+          : key.trim().length > 0
+            ? { apiKey: key.trim() }
+            : {}),
+        ...(provider === undefined ? {} : { id: provider.id }),
+      },
+      {
+        onSuccess: ({ models: found }) => {
+          const known = new Set(
+            models.flatMap((row) => (row.id.trim() ? [row.id.trim()] : [])),
+          );
+          const added = found.filter((model) => !known.has(model.id));
+          if (added.length === 0) {
+            toast.info(translateText("editor.fetchEmpty"));
+            return;
+          }
+          setModels((current) => [...current, ...added.map(rowOf)]);
+          // The list was just given something to look at; a collapsed section would hide it.
+          setModelsOpen(true);
+          toast.success(
+            translateText("editor.fetchDone", { count: added.length }),
+          );
+        },
+        onError: (error) => toast.error(providerErrorMessage(error)),
+      },
+    );
   const submit = () =>
     save.mutate(
       {
@@ -613,47 +663,81 @@ export function ProviderEditor({
           </button>
           <p className="settings-hint">{translateText("editor.headersHint")}</p>
         </details>
-        <div className="settings-section-label">
-          {translateText("editor.models")}
-        </div>
-        {models.length === 0 ? (
-          <p className="settings-hint">{translateText("editor.noModels")}</p>
-        ) : null}
-        {models.map((row, at) => (
-          <ModelCard
-            // Rows have no identity of their own until they have an id; the position is what the
-            // person is looking at, and editing a field must not remount the card under the hand.
-            key={at}
-            index={at}
-            row={row}
-            custom={custom}
-            onUpdate={(patch) => patchModel(at, patch)}
-            onRemove={() =>
-              setModels((current) => current.filter((_, index) => index !== at))
-            }
-          />
-        ))}
-        {custom ? (
+        <div className="settings-section-head">
           <button
             type="button"
-            className="settings-add-model"
-            onClick={() =>
-              setModels((current) => [
-                ...current,
-                {
-                  id: "",
-                  name: "",
-                  contextWindow: "",
-                  vision: false,
-                  reasoning: false,
-                  defaultThinking: undefined,
-                },
-              ])
-            }
+            className="settings-section-toggle"
+            aria-expanded={modelsOpen}
+            aria-controls="provider-models"
+            onClick={() => setModelsOpen(!modelsOpen)}
           >
-            ＋ {translateText("editor.addModel")}
+            {modelsOpen ? (
+              <CaretDownIcon aria-hidden="true" className="size-3 shrink-0" />
+            ) : (
+              <CaretRightIcon aria-hidden="true" className="size-3 shrink-0" />
+            )}
+            <span className="settings-section-label">
+              {translateText("editor.models")}
+            </span>
+            <span className="settings-section-count tabular-nums">
+              {models.length}
+            </span>
           </button>
-        ) : null}
+          {kind === "openai-codex" ? null : (
+            <button
+              type="button"
+              className="settings-text-button"
+              disabled={discovered.isPending || baseUrl.trim().length === 0}
+              onClick={fetchModels}
+            >
+              {discovered.isPending
+                ? translateText("editor.fetchingModels")
+                : translateText("editor.fetchModels")}
+            </button>
+          )}
+        </div>
+        <div id="provider-models" className={modelsOpen ? undefined : "hidden"}>
+          {models.length === 0 ? (
+            <p className="settings-hint">{translateText("editor.noModels")}</p>
+          ) : null}
+          {models.map((row, at) => (
+            <ModelCard
+              // Rows have no identity of their own until they have an id; the position is what the
+              // person is looking at, and editing a field must not remount the card under the hand.
+              key={at}
+              index={at}
+              row={row}
+              custom={custom}
+              onUpdate={(patch) => patchModel(at, patch)}
+              onRemove={() =>
+                setModels((current) =>
+                  current.filter((_, index) => index !== at),
+                )
+              }
+            />
+          ))}
+          {custom ? (
+            <button
+              type="button"
+              className="settings-add-model"
+              onClick={() =>
+                setModels((current) => [
+                  ...current,
+                  {
+                    id: "",
+                    name: "",
+                    contextWindow: "",
+                    vision: false,
+                    reasoning: false,
+                    defaultThinking: undefined,
+                  },
+                ])
+              }
+            >
+              ＋ {translateText("editor.addModel")}
+            </button>
+          ) : null}
+        </div>
       </fieldset>
       <div className="settings-provider-actions">
         {changedElsewhere ? (

@@ -6,7 +6,7 @@
  * load it the way a loader would and check only through the pipe's doors.
  */
 
-import type { ProvidersView } from "@eta/client-contracts";
+import type { EtaModelConfig, ProvidersView } from "@eta/client-contracts";
 import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -36,7 +36,7 @@ interface Harness {
 }
 
 async function harness(
-  options: { watchIntervalMs?: number } = {},
+  options: { watchIntervalMs?: number; fetch?: typeof fetch } = {},
 ): Promise<Harness> {
   const root = await mkdtemp(join(tmpdir(), "eta-providers-plugin-"));
   roots.push(root);
@@ -56,7 +56,10 @@ async function harness(
     store,
     async load() {
       const fiber = ctx.plugin(
-        providersPlugin({ store }) as never,
+        providersPlugin({
+          store,
+          ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+        }) as never,
         undefined as never,
       );
       await fiber;
@@ -382,6 +385,114 @@ describe("refreshing a provider's model list", () => {
       ),
     ).rejects.toThrow(/no such provider/);
     await (fiber as unknown as { dispose: () => Promise<void> }).dispose();
+  });
+});
+
+describe("reading a provider's model list before it is saved", () => {
+  const answer = (sent: { url: string; authorization: string | null }[]) =>
+    (async (url: string, init?: RequestInit) => {
+      sent.push({
+        url: String(url),
+        authorization: new Headers(init?.headers).get("Authorization"),
+      });
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: "deepseek/deepseek-flash",
+              display_name: "DeepSeek Flash",
+              context_window: 1_048_576,
+              max_output_tokens: 393_216,
+              modalities: { input: ["text", "image"] },
+              reasoning: true,
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+
+  it("asks with what the form carries and writes nothing", async () => {
+    const sent: { url: string; authorization: string | null }[] = [];
+    const h = await harness({ fetch: answer(sent) });
+    await h.load();
+    await until(() => h.config() !== undefined);
+    const before = h.config()!.revision;
+
+    const outcome = await callResult(h, "discover", {
+      kind: "openai-responses",
+      baseUrl: "http://127.0.0.1:3425/v1",
+      apiKey: "magpie",
+    });
+    expect(outcome.ok).toBe(true);
+    const models = (outcome.result as { models: EtaModelConfig[] }).models;
+    // What the endpoint knows about a model rides along: the form fills those fields in.
+    expect(models[0]).toMatchObject({
+      id: "deepseek/deepseek-flash",
+      name: "DeepSeek Flash",
+      contextWindow: 1_048_576,
+      maxTokens: 393_216,
+      input: ["text", "image"],
+      reasoning: true,
+    });
+    expect(sent).toEqual([
+      {
+        url: "http://127.0.0.1:3425/v1/models",
+        authorization: "Bearer magpie",
+      },
+    ]);
+    // Discovery is a read: the config file is exactly where it was.
+    expect(h.config()?.revision).toBe(before);
+    await h.unload();
+  });
+
+  it("borrows the saved key when the form carries none", async () => {
+    const sent: { url: string; authorization: string | null }[] = [];
+    const h = await harness({ fetch: answer(sent) });
+    await h.load();
+    await until(() => h.config() !== undefined);
+    const saved = await callResult(h, "save", {
+      revision: h.config()!.revision,
+      provider: {
+        id: "local",
+        kind: "openai-compatible",
+        baseUrl: "https://local.example/v1",
+        apiKey: "sk-saved",
+        models: [{ id: "m1" }],
+      },
+    });
+    expect(saved.error).toBeUndefined();
+
+    const borrowed = await callResult(h, "discover", {
+      id: "local",
+      baseUrl: "https://local.example/v1",
+    });
+    expect(borrowed.ok).toBe(true);
+    expect(sent.at(-1)?.authorization).toBe("Bearer sk-saved");
+
+    // A key typed into the form wins over the saved one.
+    await callResult(h, "discover", {
+      id: "local",
+      baseUrl: "https://local.example/v1",
+      apiKey: "sk-typed",
+    });
+    expect(sent.at(-1)?.authorization).toBe("Bearer sk-typed");
+    await h.unload();
+  });
+
+  it("answers a checked-in list without asking the endpoint", async () => {
+    const h = await harness();
+    await h.load();
+    await until(() => h.config() !== undefined);
+    const outcome = await callResult(h, "discover", {
+      kind: "openai-codex",
+      baseUrl: "https://chatgpt.com/backend-api",
+    });
+    expect(outcome.ok).toBe(true);
+    expect(
+      (outcome.result as { models: EtaModelConfig[] }).models.length,
+    ).toBeGreaterThan(0);
+    await h.unload();
   });
 });
 

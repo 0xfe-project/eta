@@ -17,7 +17,7 @@
  */
 import type { ProviderHeaders } from "@eta/client-contracts";
 import type { ProviderReference } from "./catalog";
-import type { EtaModelConfig } from "./config-types";
+import type { EtaModelConfig, ModelInput } from "./config-types";
 import { providerDefinitionForKind, resolveConfiguredModels } from "./catalog";
 import { sanitizeProviderHeaders } from "./config-types";
 
@@ -120,19 +120,33 @@ export async function discoverModels(
   for (const raw of entries) {
     const entry = raw as {
       id?: unknown;
+      name?: unknown;
+      display_name?: unknown;
       context_window?: unknown;
       contextWindow?: unknown;
+      context_length?: unknown;
       max_tokens?: unknown;
+      max_output_tokens?: unknown;
+      reasoning?: unknown;
+      modalities?: unknown;
     };
     if (typeof entry?.id !== "string" || entry.id.trim().length === 0) continue;
     const contextWindow =
-      numberOr(entry.context_window) ?? numberOr(entry.contextWindow);
-    const maxTokens = numberOr(entry.max_tokens);
+      numberOr(entry.context_window) ??
+      numberOr(entry.contextWindow) ??
+      numberOr(entry.context_length);
+    const maxTokens =
+      numberOr(entry.max_tokens) ?? numberOr(entry.max_output_tokens);
     if (contextWindow === undefined && requiresWindow) continue;
+    const name = textOf(entry.display_name) ?? textOf(entry.name);
+    const input = inputsOf(entry.modalities);
     discovered.push({
       id: entry.id.trim(),
+      ...(name === undefined ? {} : { name }),
       ...(contextWindow === undefined ? {} : { contextWindow }),
       ...(maxTokens === undefined ? {} : { maxTokens }),
+      ...(input === undefined ? {} : { input }),
+      ...(entry.reasoning === true ? { reasoning: true } : {}),
     });
   }
   // What the catalog knows about these models is merged in, and the user's own entries keep
@@ -145,4 +159,20 @@ function numberOr(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0
     ? value
     : undefined;
+}
+
+function textOf(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const text = value.trim();
+  return text.length === 0 ? undefined : text;
+}
+
+/** The input kinds, when the endpoint names them (`modalities.input`). */
+function inputsOf(modalities: unknown): ModelInput[] | undefined {
+  const values = (modalities as { input?: unknown } | null | undefined)?.input;
+  if (!Array.isArray(values)) return undefined;
+  const inputs = values.filter(
+    (value): value is ModelInput => value === "text" || value === "image",
+  );
+  return inputs.length === 0 ? undefined : [...new Set(inputs)];
 }

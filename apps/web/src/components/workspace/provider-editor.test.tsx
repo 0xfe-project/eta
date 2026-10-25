@@ -192,6 +192,113 @@ describe("provider 编辑表单", () => {
   });
 });
 
+describe("自动添加模型", () => {
+  const discoverButton = () =>
+    [...document.querySelectorAll("button")].find(
+      (candidate) => candidate.textContent === "自动获取模型",
+    )!;
+
+  it("问表单里的地址，新模型加进来，已有的行不动", async () => {
+    const fake = providersHost(config).handle("providers.discover", () => ({
+      models: [
+        {
+          id: "m2",
+          name: "Two",
+          contextWindow: 64_000,
+          input: ["text", "image"],
+          reasoning: true,
+        },
+        // Already here: the endpoint's name must not overwrite the person's.
+        { id: "m1", name: "Renamed" },
+      ],
+    }));
+    await render(<ProviderEditor provider={provider} onClose={() => {}} />);
+    await act(async () => discoverButton().click());
+    await act(async () => {});
+
+    const call = fake.calls.find((entry) => entry.action === "discover");
+    expect(call?.args).toMatchObject({
+      kind: "openai-compatible",
+      baseUrl: "http://127.0.0.1:1/v1",
+      id: "local",
+      headers: { "x-test": "1" },
+    });
+    // The key was never shown by the form, so it is not sent back either.
+    expect("apiKey" in (call!.args as object)).toBe(false);
+    expect(document.body.textContent).toContain("Two");
+    expect(document.body.textContent).toContain("One");
+    expect(document.body.textContent).not.toContain("Renamed");
+    // What came back is saved with the rest of the form, not written behind its back.
+    expect(fake.calls.filter((entry) => entry.action === "save")).toHaveLength(
+      0,
+    );
+  });
+
+  it("新建时用表单里刚填的地址和 key", async () => {
+    const fake = providersHost(config).handle("providers.discover", () => ({
+      models: [{ id: "m9" }],
+    }));
+    await render(<ProviderEditor provider={undefined} onClose={() => {}} />);
+    const base = document.querySelector<HTMLInputElement>("#provider-base")!;
+    const key = document.querySelector<HTMLInputElement>("#provider-key")!;
+    await act(async () => type(base, "http://127.0.0.1:3425/v1"));
+    await act(async () => type(key, "magpie"));
+    await act(async () => discoverButton().click());
+    await act(async () => {});
+
+    const call = fake.calls.find((entry) => entry.action === "discover");
+    expect(call?.args).toMatchObject({
+      baseUrl: "http://127.0.0.1:3425/v1",
+      apiKey: "magpie",
+    });
+    expect(document.body.textContent).toContain("m9");
+  });
+});
+
+describe("折叠模型列表", () => {
+  const toggle = () =>
+    document.querySelector<HTMLButtonElement>(
+      '[aria-controls="provider-models"]',
+    )!;
+  const list = () => document.getElementById("provider-models")!;
+
+  it("点标题折叠与展开，模型行跟着收起", async () => {
+    providersHost(config);
+    await render(<ProviderEditor provider={provider} onClose={() => {}} />);
+    // Open to begin with: a form that hides what it is editing is a puzzle.
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    expect(list().classList.contains("hidden")).toBe(false);
+
+    await act(async () => toggle().click());
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+    expect(list().classList.contains("hidden")).toBe(true);
+    // The count stays on the header, so a folded list still says how much is in it.
+    expect(toggle().textContent).toContain("1");
+
+    await act(async () => toggle().click());
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    expect(list().classList.contains("hidden")).toBe(false);
+  });
+
+  it("折叠时获取模型，自动展开给回结果", async () => {
+    providersHost(config).handle("providers.discover", () => ({
+      models: [{ id: "m2", name: "Two" }],
+    }));
+    await render(<ProviderEditor provider={provider} onClose={() => {}} />);
+    await act(async () => toggle().click());
+    expect(list().classList.contains("hidden")).toBe(true);
+
+    await act(async () =>
+      [...document.querySelectorAll("button")]
+        .find((candidate) => candidate.textContent === "自动获取模型")!
+        .click(),
+    );
+    await act(async () => {});
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    expect(list().classList.contains("hidden")).toBe(false);
+  });
+});
+
 describe("改了一半就走", () => {
   it("先问，不直接丢掉", async () => {
     providersHost(config);

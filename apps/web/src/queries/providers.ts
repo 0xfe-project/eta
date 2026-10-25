@@ -1,5 +1,6 @@
 import type {
   AgentView,
+  EtaModelConfig,
   LlmModel,
   ProviderArgs,
   ProviderInput,
@@ -347,6 +348,18 @@ export function useRefreshProvider() {
     ProviderArgs["refresh"],
     { revision: string; models: number }
   >(TARGET, "refresh", { timeoutMs: 60_000 });
+}
+
+/**
+ * Ask an endpoint which models it serves without writing anything: a form knows its base URL
+ * and key before it has a config entry, and the list it gets back is what its model rows are
+ * filled from.
+ */
+export function useDiscoverModels() {
+  return useWireMutation<
+    ProviderArgs["discover"],
+    { models: EtaModelConfig[] }
+  >(TARGET, "discover", { timeoutMs: 60_000 });
 }
 
 // ---------------------------------------------------------------------- Codex sign-in

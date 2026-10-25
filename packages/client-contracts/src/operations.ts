@@ -59,6 +59,7 @@ export const PROVIDER_ACTIONS = [
   "setNetwork",
   "reload",
   "refresh",
+  "discover",
   "codexLogin",
   "codexAnswer",
   "codexStatus",
@@ -157,6 +158,18 @@ export interface ProviderArgs {
   setNetwork: { revision: string } & import("./types").NetworkConfig;
   reload: Record<string, never>;
   refresh: { id: string };
+  /**
+   * Ask an endpoint which models it serves, for a provider that may not be saved yet — a form
+   * filling its model list has a base URL and a key before it has a config entry.
+   */
+  discover: {
+    baseUrl: string;
+    kind?: import("./types").ProviderKind;
+    /** A saved provider to take the key and headers from when the form carries none. */
+    id?: string;
+    apiKey?: string | null;
+    headers?: import("./types").ProviderHeaders | null;
+  };
   codexLogin: { method?: "browser" | "device_code" };
   codexAnswer: { id: string; promptId: string; value: string };
   codexStatus: { id: string };

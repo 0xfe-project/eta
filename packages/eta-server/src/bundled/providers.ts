@@ -26,7 +26,8 @@ import {
   CodexLogin,
   piCodexLogin,
 } from "../codex-auth";
-import { discoverModels } from "../providers/discovery";
+import { catalogModelsFor } from "../providers/catalog";
+import { discoverModels, discoversModels } from "../providers/discovery";
 
 export { PROVIDER_ACTIONS } from "@eta/client-contracts";
 
@@ -225,6 +226,54 @@ export function providersPlugin(options: ProvidersPluginOptions) {
                 models: discovered.models.length,
               },
             };
+          }),
+          wire.handle("providers", "discover", async (call) => {
+            const args = (call.args ?? {}) as Partial<ProviderArgs["discover"]>;
+            const baseUrl =
+              typeof args.baseUrl === "string" ? args.baseUrl.trim() : "";
+            if (baseUrl.length === 0)
+              throw new Error("providers.discover needs a baseUrl");
+            // A form that is not saved yet carries its own key and headers; one that edits a
+            // saved provider may leave them out, and the saved ones then stand in — the form
+            // was never shown the secret, so it cannot be asked to send it back.
+            const saved =
+              typeof args.id !== "string"
+                ? undefined
+                : (await options.store.read()).config.providers?.find(
+                    (entry) => entry.id === args.id,
+                  );
+            const kind = args.kind ?? saved?.kind;
+            const reference = {
+              ...(kind === undefined ? {} : { kind }),
+              baseUrl,
+            };
+            const apiKey =
+              args.apiKey === undefined
+                ? saved?.apiKey
+                : (args.apiKey ?? undefined);
+            const headers =
+              args.headers === undefined
+                ? saved?.headers
+                : (args.headers ?? undefined);
+            // A kind whose list is checked in (Codex) answers from the catalog: asking its
+            // endpoint would be asking a question it does not answer.
+            if (!discoversModels(reference)) {
+              const catalog = catalogModelsFor(reference);
+              if (catalog.length === 0)
+                throw new Error("this provider does not publish a model list");
+              return { result: { models: catalog } };
+            }
+            const discovered = await discoverModels({
+              reference,
+              ...(apiKey === undefined ? {} : { apiKey }),
+              ...(headers === undefined ? {} : { headers }),
+              ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+            });
+            if (discovered.error !== undefined)
+              throw new Error(discovered.error);
+            // Discovery is read-only: the list goes back to the form, which decides what to
+            // keep before anything is written.
+            return { result: { models: discovered.models } };
           }),
           wire.handle("providers", "codexLogin", (call) => {
             const { method } = (call.args ?? {}) as Partial<
