@@ -217,20 +217,30 @@ fn runtime_version() -> String {
     }
 }
 
-/// ORT intra-op threads. Swept on the i7-13700K used for the current measurements (24 logical
-/// cores): the encoder lands at 18.7 ms with 6 threads, 17.3 ms with 8 and 15.8 ms with 12, and OCR
-/// at batch 8 goes 50 ms -> 38 ms -> 31 ms, so the default is half the logical cores. The cap keeps
-/// a many-core box from oversubscribing; `ETA_COMPUTER_THREADS` overrides it either way, which
-/// matters because the previous benchmark machine (Intel 285H) fell off a cliff above 6 threads.
+/// ORT intra-op threads.
+///
+/// More threads is not more throughput: past the point where the intra-op pool stops fitting in
+/// real cores, barrier and cache-thrash costs dominate. The cliff is machine-specific and sharp:
+///
+/// | machine (Bun process)   | 2      | 4      | 6      | 8      |
+/// | ----------------------- | ------ | ------ | ------ | ------ |
+/// | 285H, 16 cores, detector| 83.2ms | 54.4ms | 62.6ms | 94.6ms |
+/// | 13700K, encoder         |        |        | 18.7ms | 17.3ms |
+///
+/// `cores / 3` lands at 5 on the 285H and 8 on the 13700K: both inside the good zone, without a
+/// startup probe whose result would depend on whatever else the machine was doing at the time.
+/// `ETA_COMPUTER_THREADS` overrides it, because this is a per-machine parameter and a new box may
+/// want its own sweep.
 fn cpu_threads() -> usize {
     std::env::var("ETA_COMPUTER_THREADS")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
+        .filter(|v| *v > 0)
         .unwrap_or_else(|| {
             let cores = std::thread::available_parallelism()
                 .map(|n| n.get())
-                .unwrap_or(8);
-            (cores / 2).clamp(2, 12)
+                .unwrap_or(6);
+            (cores / 3).clamp(2, 8)
         })
 }
 
