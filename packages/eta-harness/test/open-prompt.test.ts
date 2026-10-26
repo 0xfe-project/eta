@@ -49,7 +49,7 @@ describe("the default system prompt", () => {
     session.stop();
   });
 
-  it("assembles base → persona → skills → platform, then goal → tasks → memory", async () => {
+  it("assembles base → persona → skills → platform (agent, then app), then goal → tasks → memory", async () => {
     const models = fakeModels([
       assistantMessage({ content: [{ type: "text", text: "ok" }] }),
     ]);
@@ -64,6 +64,7 @@ describe("the default system prompt", () => {
         memoryExists: true,
       },
       skillsSection: "<skills>catalog-marker</skills>",
+      agentPrompt: "In this conversation you are Ada.",
       memorySource: () => "<memory>KUMQUAT-9 was decided</memory>",
     });
     session.kernel.persona.loadCards([
@@ -80,9 +81,10 @@ describe("the default system prompt", () => {
     // `<current_tasks>` (it tells the agent to read that list), so the task block
     // is identified by the task, not by the tag.
     const order = [
-      "You are Eta",
+      "You came here to help",
       "Ship it.",
       "catalog-marker",
+      "<agent>\nIn this conversation you are Ada.\n</agent>",
       "Config: /home/u/.eta/config.json",
       "land the port",
       "keep the harness green",

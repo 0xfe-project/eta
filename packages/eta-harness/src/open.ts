@@ -82,6 +82,7 @@ import {
   etaPromptBlockChars,
   etaPromptSectionsDetailed,
   renderActivePersona,
+  renderAgentBlock,
   renderPlatformBlock,
   taskReminderMessage,
 } from "./prompts";
@@ -141,6 +142,13 @@ export interface OpenSessionOptions {
    * learns something new about the session (memory now exists) can say so.
    */
   platform?: PlatformPromptInfo | undefined;
+  /**
+   * Who the agent is in this deployment — its name, its place, its standing
+   * instructions. The app's words, not the harness's: it is rendered into the
+   * platform section (`renderAgentBlock`), not the base prompt, so the base stays
+   * the same for every agent and a product's agents differ only past it.
+   */
+  agentPrompt?: string | undefined;
   /**
    * The rendered `<skills>` catalog block. Skill *discovery* is the app's (it knows
    * the cwd, the home directory and the git roots); this is the block a session
@@ -578,6 +586,18 @@ export async function openSession(
   // overrides the whole thing — the harness supplies a default, not a policy.
   const base = options.baseSystemPrompt ?? DEFAULT_SYSTEM_PROMPT;
   const promptState = async (): Promise<EtaPromptState> => {
+    // The platform section: who this agent is here, then where the app's files live.
+    // Both describe the deployment rather than the conversation, so it stays stable.
+    const platformText = [
+      ...(options.agentPrompt === undefined
+        ? []
+        : [renderAgentBlock(options.agentPrompt)]),
+      ...(options.platform === undefined
+        ? []
+        : [renderPlatformBlock(options.platform)]),
+    ]
+      .filter((part) => part.length > 0)
+      .join("\n\n");
     const persona = renderActivePersona(kernel.persona).text;
     const memoryBlock =
       memory === undefined
@@ -603,9 +623,7 @@ export async function openSession(
       options.skillsSection.length === 0
         ? {}
         : { skills: options.skillsSection }),
-      ...(options.platform === undefined
-        ? {}
-        : { platform: renderPlatformBlock(options.platform) }),
+      ...(platformText.length === 0 ? {} : { platform: platformText }),
       ...(memoryBlock === undefined || memoryBlock.length === 0
         ? {}
         : { memory: memoryBlock }),

@@ -107,12 +107,10 @@ export interface AssembleOptions {
   envFor?: SessionManagerOptions["envFor"] | undefined;
   /**
    * The per-session hooks a host product wires into the manager (see `SessionManagerOptions`):
-   * what is added to a session's base prompt and toolset, the policy on its tool calls, and who
+   * who the agent in a session is, what is added to its toolset, the policy on its tool calls, and who
    * hears about its questions. Passed straight through; the server never decides any of them.
    */
-  baseSystemPromptFor?:
-    | SessionManagerOptions["baseSystemPromptFor"]
-    | undefined;
+  agentPromptFor?: SessionManagerOptions["agentPromptFor"] | undefined;
   sessionTools?: SessionManagerOptions["sessionTools"] | undefined;
   /** Skill directories a session has beyond the ones found by walking its directory. */
   skillDirsFor?: ((meta: SessionMeta) => readonly string[]) | undefined;
@@ -474,9 +472,9 @@ export async function assembleServer(
     ...(options.compaction === undefined
       ? {}
       : { compaction: options.compaction }),
-    ...(options.baseSystemPromptFor === undefined
+    ...(options.agentPromptFor === undefined
       ? {}
-      : { baseSystemPromptFor: options.baseSystemPromptFor }),
+      : { agentPromptFor: options.agentPromptFor }),
     ...(options.sessionTools === undefined
       ? {}
       : { sessionTools: options.sessionTools }),

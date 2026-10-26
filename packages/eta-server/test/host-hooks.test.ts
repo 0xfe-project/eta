@@ -13,6 +13,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
+import { DEFAULT_SYSTEM_PROMPT } from "@eta/harness";
 import { afterEach, describe, expect, it } from "vitest";
 import { FileSessionStore } from "../src/file-store";
 import { registerSessionTools, SessionManager } from "../src/manager";
@@ -127,13 +128,13 @@ describe("whose session it is", () => {
   });
 });
 
-describe("baseSystemPromptFor", () => {
-  it("starts one session's prompt from what the host says, and leaves the others alone", async () => {
+describe("agentPromptFor", () => {
+  it("puts what the host says about one session's agent in its platform section, and leaves the others alone", async () => {
     const models = fakeModels([answer("one"), answer("two")]);
     const sessions = new SessionManager({
       store: new MemorySessionStore(),
       modelsFor: () => models as never,
-      baseSystemPromptFor: (meta) =>
+      agentPromptFor: (meta) =>
         meta.agentId === undefined
           ? undefined
           : `You are the reviewer. (${meta.agentId})`,
@@ -148,7 +149,12 @@ describe("baseSystemPromptFor", () => {
 
     const prompts = models.calls.map((call) => call.context.systemPrompt ?? "");
     expect(prompts[0]).not.toContain("You are the reviewer.");
-    expect(prompts[1]).toContain("You are the reviewer. (rev)");
+    expect(prompts[1]).toContain(
+      "<agent>\nYou are the reviewer. (rev)\n</agent>",
+    );
+    // The base prompt is the harness's own either way: the agent is added, not swapped in.
+    expect(prompts[1].startsWith(DEFAULT_SYSTEM_PROMPT)).toBe(true);
+    expect(prompts[0].startsWith(DEFAULT_SYSTEM_PROMPT)).toBe(true);
     await sessions.closeAll();
   });
 });
@@ -342,7 +348,7 @@ describe("assembleServer", () => {
       home: root,
       network: false,
       models: models as never,
-      baseSystemPromptFor: () => "HOST PROMPT",
+      agentPromptFor: () => "HOST PROMPT",
       sessionTools: () => [recordingTool("mention", calls)],
       askObserve: () => (action) => {
         asked.push(action);
