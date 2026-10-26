@@ -751,7 +751,16 @@ pub unsafe extern "C" fn EtaComputerGroundWeVisOne(
     } else {
         None
     };
-    let max_visual_tokens: usize = parts.get(8).and_then(|s| s.parse().ok()).unwrap_or(32);
+    // 512 visual tokens is native resolution for a 1920x1080 frame at 64px patches.
+    // At the old default of 32 the screenshot was downsampled past readability and
+    // grounding collapsed (ScreenSpot desktop: 0/12 vs 7/12 at 512).
+    // 0 means "the caller has no opinion"; a literal 32 from the TS layer used to shadow the
+    // default, which is why the budget silently stayed tiny.
+    let max_visual_tokens: usize = parts
+        .get(8)
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(512);
     let foveated_refine: bool = parts.get(9).map(|&s| s == "1").unwrap_or(false);
 
     let oga = match eng.ensure_wevisone_oga() {

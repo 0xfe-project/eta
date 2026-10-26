@@ -71,8 +71,10 @@ const flag = (name: string, fallback: string): string => {
   return i >= 0 && args[i + 1] !== undefined ? args[i + 1]! : fallback;
 };
 const split = flag("split", "all");
+const engineKind = flag("engine", "triad") as "triad" | "wevisone";
+const isWeVisOne = engineKind === "wevisone";
 const limit = Number(flag("limit", "0"));
-const outPath = flag("out", "/tmp/ss/report.json");
+const outPath = flag("out", `/tmp/ss/report-${engineKind}.json`);
 
 const manifest = JSON.parse(readFileSync(MANIFEST, "utf8")) as Record<
   string,
@@ -96,6 +98,10 @@ interface Row {
   confidenceHit: boolean;
   /** Baseline: the proposal whose label overlaps the instruction most, ignoring confidence. */
   labelHit: boolean;
+  /** WeVisOne declined to answer (its abstention slot won). */
+  rejected?: boolean;
+  /** WeVisOne ran the two-stage foveated refinement. */
+  foveated?: boolean;
   totalMs: number;
   detectorMs: number;
   jevMs: number;
@@ -140,6 +146,43 @@ try {
       };
 
       try {
+        if (isWeVisOne) {
+          const g = engine.groundWeVisOne({
+            currRgb: rgb,
+            width: entry.w,
+            height: entry.h,
+            task: "point",
+            query: item.instruction,
+          });
+          row.totalMs = g.timingsMs.total;
+          row.detectorMs = g.timingsMs.visionAndPrefill;
+          row.jevMs = g.timingsMs.decode;
+          row.anchors = 1;
+          row.chosenProb = g.rejected ? 0 : 1;
+          row.rejected = g.rejected;
+          row.foveated = g.foveatedRefined;
+          if (g.point !== null) {
+            row.chosen = { x: g.point[0], y: g.point[1], w: 1, h: 1 };
+            // A point is the answer itself: either it lands in the GT box or it does not.
+            row.pointHit =
+              g.point[0] >= gt.x &&
+              g.point[0] <= gt.x + gt.w &&
+              g.point[1] >= gt.y &&
+              g.point[1] <= gt.y + gt.h;
+            row.iou = row.pointHit ? 1 : 0;
+            row.hit = row.pointHit;
+          }
+          rows.push(row);
+          if ((i + 1) % 25 === 0) {
+            const done = rows.filter((r) => r.split === s);
+            const acc = done.filter((r) => r.pointHit).length / done.length;
+            process.stderr.write(
+              `  ${i + 1}/${items.length}  point-acc=${(acc * 100).toFixed(1)}%\n`,
+            );
+          }
+          continue;
+        }
+
         const out = engine.step({
           currRgb: rgb,
           width: entry.w,
@@ -257,10 +300,15 @@ console.log(line("ALL", overall));
 // Where it fails is more useful than the rate: group misses by instruction wording and by size.
 const misses = rows.filter((r) => !r.pointHit && r.error === undefined);
 const tiny = misses.filter((r) => r.gt.w * r.gt.h < 32 * 32).length;
-const noProposal = misses.filter((r) => !r.hit).length;
-console.log(
-  `\nmisses: ${misses.length}  of which no proposal at all: ${noProposal}  target <32x32: ${tiny}`,
-);
+console.log(`\nmisses: ${misses.length}  target <32x32: ${tiny}`);
+if (isWeVisOne) {
+  const rejected = rows.filter((r) => r.rejected === true).length;
+  const foveated = rows.filter((r) => r.foveated === true).length;
+  console.log(`abstained: ${rejected}  foveated-refined: ${foveated}`);
+} else {
+  const noProposal = misses.filter((r) => !r.hit).length;
+  console.log(`of which no proposal at all: ${noProposal}`);
+}
 const errors = rows.filter((r) => r.error !== undefined);
 if (errors.length > 0)
   console.log(`errors: ${errors.length}, first: ${errors[0]!.error}`);

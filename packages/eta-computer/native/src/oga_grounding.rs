@@ -301,10 +301,19 @@ impl WeVisOneOgaEngine {
                 c_do_sample.as_ptr(),
                 false,
             ));
+            // `max_length` caps the *total* sequence: visual tokens + prompt + decoded
+            // coordinates. A desktop screenshot needs ~510 visual tokens at native resolution
+            // (1920x1080 / 64px patches), so a 512 cap left no room and the prefill was refused.
+            // The prepared model's RoPE cache covers 4096 positions.
+            let max_len = std::env::var("ETA_WEVISONE_MAX_LEN")
+                .ok()
+                .and_then(|v| v.parse::<f64>().ok())
+                .filter(|v| *v >= 512.0)
+                .unwrap_or(2048.0);
             let _ = check_oga(OgaGeneratorParamsSetSearchNumber(
                 params,
                 c_max_len.as_ptr(),
-                512.0,
+                max_len,
             ));
 
             Ok(Self {
@@ -368,7 +377,7 @@ impl WeVisOneOgaEngine {
     /// Run pure-vision grounding (`task` = `"point"` | `"referring"` | `"ocr_grounding"`) on an
     /// RGB frame `[width * height * 3]`, supporting:
     ///   1. **Aspect-Ratio-Preserving Smart Resize**: When `target_w == 0` or `target_h == 0`,
-    ///      automatically computes `(tw, th)` from `(cw, ch)` and `max_visual_tokens` (default 36).
+    ///      automatically computes `(tw, th)` from `(cw, ch)` and `max_visual_tokens` (default 512).
     ///   2. **Two-Stage Coarse-to-Fine Foveated Zoom**: When `foveated_refine` is enabled and the
     ///      source crop is high-resolution (`max(cw, ch) > max(tw, th) * 2`, e.g. 1080p / 1440p / 4K),
     ///      first runs a coarse global localization, then crops a native-resolution 1:1 foveated

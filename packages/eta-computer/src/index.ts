@@ -59,7 +59,7 @@ export interface WeVisOneGroundInput {
   query: string;
   /**
    * Optional explicit resize width. When omitted or `0`, `smart_resize_qwen3_vl` computes
-   * aspect-ratio-preserving multiples of 32 bounded by `maxVisualTokens` (default 32).
+   * aspect-ratio-preserving multiples of 32 bounded by `maxVisualTokens` (default 512).
    */
   targetWidth?: number | undefined;
   /**
@@ -493,7 +493,9 @@ export class ComputerTriadEngine {
       String(input.roi?.y ?? 0),
       String(input.roi?.w ?? 0),
       String(input.roi?.h ?? 0),
-      String(input.maxVisualTokens ?? 32),
+      // 0 = "use the native default". Sending a literal here would silently override it,
+      // which is how the budget stayed at 32 long after the native side stopped defaulting to it.
+      String(input.maxVisualTokens ?? 0),
       autoFoveated ? "1" : "0",
     ].join("\t");
     const specBuf = Buffer.from(`${specLine}\0`, "utf8");
