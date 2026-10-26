@@ -1,6 +1,6 @@
 # @eta/computer：低延迟 Computer Use
 
-本文记录这套端侧感知与投机执行的**技术选型理由**与**实测结论**。数字都是在本机（Intel Core Ultra 9 285H / 16 核 / 无独显 / ONNX Runtime 1.30.0 CPU EP）实测出来的，不是估算。
+本文记录这套端侧感知与投机执行的**技术选型理由**与**实测结论**。性能测试分两台机器完成：早期选型在 Intel Core Ultra 9 285H / 16 核 / 无独显 上跑（ONNX Runtime 1.30.0 CPU EP），当前的 Provider 适配结论在 Intel Core i7-13700K / 24 线程 / NVIDIA RTX 3080 上重测（ONNX Runtime 1.22.0，CUDA 12.9 + cuDNN 9）。两台机器读数不同，下文表格都标注了机器。
 
 ---
 
@@ -37,15 +37,44 @@
 
 沿用仓库既有的 `packages/llm-gateway`（Go cdylib + `bun:ffi`）与 `@ast-grep/napi` 先例。子进程方案要在每一步付 IPC 序列化 + Base64 或 stdio 拷贝；`bun:ffi` 能直接把 Rust 侧帧缓冲与结构化结果的指针交给 JS。
 
-### 3.2 直接绑 ONNX Runtime C-API，**没有**用 `pykeio/ort`
+### 3.2 用 `ort` crate 绑定 ONNX Runtime，把「用哪个 Provider」变成运行时可判定的事
 
-原计划是用 `ort` crate，实际实现时改为直接绑定 `libonnxruntime` 的 C-API 虚表（`OrtGetApiBase()` → `GetApi(17)` → 按槽位取函数指针）。理由：
+第一版是自己按槽位号手绑 C-API 虚表（`OrtGetApiBase()` → `GetApi(n)` → 取函数指针）。它确实快：零 crate 依赖、编译 3 秒。但它只能有一个 Provider 故事：**CPU**。槽位号一旦写错是段错误而不是报错，且要在 Windows 上挂 CUDA 时，还得自己 dlopen provider DLL、自己拼 EP options 结构体。机器换成有独显的之后这条路不再划算，于是换回 `ort` crate（`2.0.0-rc.15`，对齐 ONNX Runtime 1.22 / `api-22`）。
 
-- **零 crate 依赖**，编译 2.8 秒，不需要下载和链接 ORT 的构建产物；
-- 能复用系统中已有的 `libonnxruntime.so.1.30.0`（Python 侧 `onnxruntime` 包自带的那个），跨平台只需换 `dlopen` 的路径；
-- **输入输出张量在启动时绑定一次**，每步推理零堆分配（`ort` 的常规用法每步会创建 `Tensor`）。
+`ort` 带来的不是「更少代码」，而是三件原来做不了的事：
 
-代价是要自己维护槽位序号（`CreateSession` = 7、`Run` = 9、`CreateTensorWithDataAsOrtValue` = 49、`ReleaseSessionOptions` = **100** 而不是 99）。这几个数字是用 `dladdr` + `objdump` 对着真实 .so 逐个验证出来的；写错一个不是报错而是段错误，所以 `native/src/ort_ffi.rs` 里每个槽位都标注了含义。
+1. **Provider 是一等公民**，`ep::CUDA` / `ep::DirectML` / `ep::CoreML` / `ep::CPU` 各自有类型化的配置项，不用手拼 `provider_options` 字符串；
+2. **注册失败是可捕获的错误**，而不是静默回退，于是可以「先探测、再决定」；
+3. **输入仍是零拷贝**：`TensorRef::from_array_view` 借我们的 `Vec<f32>` 建 `OrtValue`，只有输出侧付一次 `memcpy` 回到预分配缓冲（GPU 上这条路径本来就要 D2H，省不掉）。
+
+#### Provider 链：逐模型探测，按模型落位
+
+`EdgeModelTriad::load()` 里对每个模型跑一条候选链（默认 Windows = `cuda → directml → cpu`，macOS = `coreml → cpu`，Linux = `cuda → cpu`）。每个候选都以 `error_on_failure()` 提交会话——提交会话才是真正加载 provider DLL 的时刻，所以缺 CUDA/cuDNN 就在这一步暴露，而不是在第一帧崩。失败原因会被原样带进 `providerChain`：
+
+```json
+"provider": "cpu",
+"providerChain": ["cuda", "cpu",
+  "cuda: ... CUDA failure 100: no CUDA-capable device is detected ..."]
+```
+
+这带来一个反直觉但很重要的结论：**三个模型不该跑在同一个 Provider 上**。检测器与 OCR 是卷积/矩阵密集型，GPU 上快 2–4.5 倍；而 151M 的 INT8 决策编码器只有 48 个 token，GPU 上反而慢 1.6 倍（kernel launch 与量化/反量化开销盖过了 GEMM 收益，见 §9⑤）。因此编码器默认被钉在 CPU，除非 `ETA_COMPUTER_ENCODER_PROVIDER` 明确要求 GPU：
+
+| 变量                            | 作用                                                           |
+| ------------------------------- | -------------------------------------------------------------- |
+| `ETA_COMPUTER_PROVIDER`         | 感知链（检测器 + OCR）的候选，逗号分隔，如 `cuda,directml,cpu` |
+| `ETA_COMPUTER_ENCODER_PROVIDER` | 决策编码器单独的候选；GPU 机器默认 `cpu`                       |
+| `ETA_COMPUTER_DEVICE_ID`        | CUDA/DirectML 设备号，默认 0                                   |
+| `ETA_COMPUTER_THREADS`          | ORT intra-op 线程数，默认逻辑核数的一半（上限 12）             |
+| `ETA_COMPUTER_ORT_VARIANT`      | `gpu` / `cpu`，覆盖构建时的显卡探测                            |
+| `ETA_ORT_RUNTIME_DIR`           | 用现成的 ONNX Runtime 目录（其下须有 `lib/`），跳过下载        |
+
+#### 运行时从哪来
+
+`scripts/build.ts` 按「有没有 `nvidia-smi`」决定下载 CPU 还是 CUDA 版 ONNX Runtime 1.22（Windows/Linux 有 CUDA 版，macOS 只有 CoreML 版），解到 `native/target/ort-runtime/`，用 `ORT_LIB_LOCATION` + `ORT_PREFER_DYNAMIC_LINK=1` 让 `ort-sys` **只链 import lib**，再把 `onnxruntime.dll` 与各 provider DLL 复制到 `lib/` 一起发布。
+
+为什么不用 `ort-sys` 自带的 `download-binaries`：它给 Windows 提供的是**静态** ORT（`onnxruntime.lib` 383 MB），静态库里的 MSVC STL 符号要求 VS 17.14+，在 VS 17.10 上链接直接报一堆 `__std_search_1` 未解析；而且那份构建固定 CUDA 13，而本机是 CUDA 12.9。改成链运行时 DLL 后，工具链要求归零，Provider 组合也由「换哪个 ORT 构建」决定——这正是 Provider 适配应有的边界。
+
+代价是首次构建要下 ~310 MB 的 GPU 运行时（只下一次，之后命中 `native/target/ort-runtime/` 缓存），且 CUDA 版运行时要求机器上有 CUDA 12.x + cuDNN 9；缺了不报错，只是探测把 `cuda` 记进 `providerChain` 并落到 CPU。
 
 ### 3.3 三个模型，而不是一个端到端 VLM
 
@@ -151,16 +180,54 @@ E = 0.45·结构误差 + 0.35·脏矩形逃逸度 + 0.20·潜空间残差
 
 ## 8. 实测数据
 
-四种档位，各 9 次取中位数（1280×720 合成界面，4 线程）：
+### 8.1 单模型延迟：一台机器上的两种 Provider
 
-| 档位                       |    检测 |    决策 |    单步总计 |     p95 |
-| -------------------------- | ------: | ------: | ----------: | ------: |
-| 冷启动（空缓存）           | 37.0 ms | 23.6 ms | **60.5 ms** | 62.8 ms |
-| 控件集合变化（需重检测）   | 35.6 ms | 22.9 ms | **59.7 ms** | 63.7 ms |
-| 结构未变（跳过检测）       |       0 | 24.0 ms | **24.0 ms** | 24.8 ms |
-| 同一决策重复（跳过编码器） |       0 |       0 |  **0.6 ms** |  0.6 ms |
+i7-13700K / RTX 3080 / ONNX Runtime 1.22.0，各 21 次取中位数。CPU 列为 12 线程：
 
-真实 Eta 页面（1244×1631 截图 + 20 个实时 DOM 节点）：
+| 模型（输入形状）       |    CUDA |         CPU | 比值 |
+| ---------------------- | ------: | ----------: | ---: |
+| 检测器 `[1,3,640,640]` |  6.5 ms |     22.4 ms | 3.5× |
+| OCR `[1,3,48,320]`     |  2.6 ms |      6.4 ms | 2.5× |
+| OCR `[4,3,48,320]`     |  3.6 ms |     17.4 ms | 4.8× |
+| OCR `[8,3,48,320]`     |  6.9 ms |     30.8 ms | 4.5× |
+| 决策 `[1,32]`          | 19.4 ms | **11.9 ms** | 0.6× |
+| 决策 `[1,48]`          | 24.8 ms | **15.8 ms** | 0.6× |
+| 决策 `[1,64]`          | 32.6 ms | **19.3 ms** | 0.6× |
+
+`cargo run --release --example provider-bench` 可复现（见 `native/examples/provider-bench.rs`）。
+
+### 8.2 整步延迟：三种 Provider 策略
+
+1280×720 合成界面，`bun run bench`，各 9 次取中位数：
+
+| 策略                                            |  首帧 |      冷启动 |     p95 |        热态 |   重复决策 |
+| ----------------------------------------------- | ----: | ----------: | ------: | ----------: | ---------: |
+| 默认（检测+OCR 走 CUDA，编码器留 CPU）          | 50 ms | **22.4 ms** | 25.0 ms | **15.1 ms** | **0.6 ms** |
+| 全 CUDA（`ETA_COMPUTER_ENCODER_PROVIDER=cuda`） | 58 ms |     30.4 ms | 32.0 ms |     26.1 ms |     0.6 ms |
+| 全 CPU（`ETA_COMPUTER_PROVIDER=cpu`）           | 66 ms |     47.5 ms | 61.7 ms |     16.5 ms |     0.6 ms |
+
+三档对应的口径：**冷启动**是每步都要重跑检测与新决策；**热态**是控件集合未变、检测被跳过，只重算决策；**重复决策**是同一 token 序列命中缓存。
+
+两个跨机器对比的结论：
+
+- 与 285H（无独显）的 60.5 ms 冷启动相比，GPU 只把冷启动压到 22.4 ms——**瓶颈已经从检测器转到了编码器**（22.4 ms 里 15–16 ms 是编码器）。要继续降，方向是编码器本身（更短 prompt、蒸馏、或专门的 INT8 GPU kernel），而不是换更强的 GPU。
+- 热态在三种策略下几乎一样（15–17 ms；全 CUDA 是 26 ms），因为热态本来就只剩编码器在跑。
+
+首帧比冷启动多 25–30 ms，且只多一次：Bun 进程内首次 OCR 前向会额外付一次开销（与是否预热无关，重复调用不复现）。加载时的预热已经把 3 个模型、OCR 的 1–8 各档 batch、编码器的 32/64 两种长度都跑过一遍，所以这一项只影响第一帧。
+
+缺 CUDA / cuDNN 时不会崩，探测会把原因原样记进 `providerChain`（本机去掉 CUDA 与 cuDNN 的 PATH 后实测）：
+
+```json
+"providerChain": [
+  "cuda", "directml", "cpu",
+  "cuda: … Error loading \"…onnxruntime_providers_cuda.dll\" which depends on \"cublasLt64_12.dll\" which is missing. (Error 126)",
+  "directml: DirectML is not supported in this build of ONNX Runtime"
+]
+```
+
+### 8.3 真实 Eta 页面（285H，ONNX Runtime 1.30 CPU EP）
+
+1244×1631 截图 + 20 个实时 DOM 节点：
 
 | 场景                    |   单步总计 | 判定                             |
 | ----------------------- | ---------: | -------------------------------- |
@@ -168,15 +235,50 @@ E = 0.45·结构误差 + 0.35·脏矩形逃逸度 + 0.20·潜空间残差
 | 热态（结构未变）        |  **19 ms** | `type:#14 Message Input` p=0.995 |
 | 重复决策                | **1.0 ms** | 同上                             |
 
-## 9. 四个反直觉的实测发现
+### 8.4 纯视觉桌面 Grounding 层：`WeVisOne-VL-2B`（`onnxruntime-genai` 0.17 + ORT 1.30 CPU EP）
+
+针对完全无 A11y/DOM 树的纯视觉桌面控制（远程桌面、Canvas、中文复杂软件），在 `scripts/prepare-wevisone-oga.py` 与 `native/src/oga_grounding.rs` 中将 `tencent/WeVisOne-VL-2B`（原始 BF16 **4.69 GB**）裁剪并量化为 **1.44 GB** 的 `onnxruntime-genai` 三阶段模型包（`models/wevisone_vl_2b_oga/`）：
+
+| 优化项                                                        | 原始体积 / 形态           | 瘦身/量化后                                | 收益                                                                                                                |
+| ------------------------------------------------------------- | ------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| 1. 剥离 `mask_decoder.pt` + 1024×1024 CNN 二次前向            | 36.4 MB + Teacher-Forcing | **0 MB**（直接移除）                       | 省去二次前向与高分辨率分割分支                                                                                      |
+| 2. 24 层 Qwen3-VL ViT + 3 层 DeepStack Merger (`vision.onnx`) | 1,552.7 MB (FP32)         | **400.9 MB** (Dynamic INT8)                | 单图无分支导出，输出 8192 维 `[pooler, ds_0, ds_1, ds_2]`                                                           |
+| 3. 输入词表查表 + 视觉特征散布 (`embedding.onnx`)             | 625.4 MB (BF16)           | **186.4 MB** (INT4 `GatherBlockQuantized`) | 复用量化词表（原模型 `embed_tokens` 与 `lm_head` 余弦相似度 0.9999）                                                |
+| 4. 28 层 Qwen3-VL Decoder + RoPE 截断 + `lm_head` 1012 类裁剪 | ~3,080 MB (BF16)          | **844.3 MB** (INT4 `MatMulNBits`)          | RoPE 缓存从 262K 截断至 4096（-126 MB）；`lm_head` 仅保留 `<0>`..`<1000>` 坐标与 `none` 等 1012 个 token（-185 MB） |
+| **总计**                                                      | **4,693.7 MB**            | **1,443.0 MB**                             | **体积缩小 3.25×**，天然语法约束解码（只输出合法坐标或 `none`）                                                     |
+
+#### CPU 实测延迟（i7-13700K，8 P-Core 线程，224×128 / 28 视觉 Token）
+
+通过 `OgaGenerator_RewindTo` 跨查询复用视觉 Prefix KV Cache（同一屏幕或 ROI 多次查询无需重跑 ViT 与视觉 Prefill），并结合前缀强制解码（`<ref>{query}</ref><point>` 仅需解码 2 个坐标 token）：
+
+| 场景                                                        | ViT + 视觉 Prefill | Query Prefill |     Decode | **端到端总耗时** | 输出示例                                                                     |
+| ----------------------------------------------------------- | -----------------: | ------------: | ---------: | ---------------: | ---------------------------------------------------------------------------- |
+| **冷启动 Point**（首帧新画面 + 定位点击坐标）               |           351.4 ms |      140.8 ms |    30.6 ms |     **523.1 ms** | `<ref>the blue button...</ref><point><289><413>` → `(185, 149)`              |
+| **热缓存 Point**（同画面二次查询，`OgaGenerator_RewindTo`） |         **0.0 ms** |      126.8 ms |    27.1 ms |     **154.0 ms** | `<ref>the blue button...</ref><point><289><413>` → `(185, 149)`              |
+| **热缓存 Box**（同画面框选目标，4 个坐标 token）            |         **0.0 ms** |      192.1 ms |    82.9 ms |     **275.0 ms** | `<box><537><353><784><460>` → `{x:344, y:127, w:158, h:39}`                  |
+| **热缓存 Reject**（目标不存在，1 个 `none` token 即停）     |         **0.0 ms** |      201.2 ms | **0.1 ms** |     **201.3 ms** | `<box>none` → `rejected: true`（零幻觉拒识）                                 |
+| **4K 两阶段中央凹精修**（3840×2160 全局 28t + 局部 24t）    |           325.7 ms |      213.9 ms |   478.5 ms |   **1,018.1 ms** | 粗定位 `(2903, 1509)` → 1:1 精修 **`(2890.8, 1530.6)`**（真值 `2890, 1528`） |
+| **System-1 接力追踪**（WeVisOne 注入持久锚点后的下一帧）    |             0.0 ms |        0.0 ms |     0.0 ms |      **17.9 ms** | `PersistentAnchorTracker` 继承语义标签，回到 15ms 投机闭环                   |
+
+#### 多分辨率与 4K 中央凹（Foveated）自适应策略
+
+为避免真实屏幕（从 1366×768、21:9 带鱼屏到 4K 3840×2160）因固定尺寸下采样丢失小字号/小图标细节，同时避免 4K 全量送入 ViT 产生 ~8,100 个视觉 Token（CPU >20s），采用三级自适应路由：
+
+1. **保长宽比 Smart-Resize（`smart_resize_qwen3_vl`）**：按输入画面或 ROI 的真实长宽比计算最接近的 `32` 倍数网格（`patch_size=16 × merge=2`），在 `maxVisualTokens` 预算内保持比例无畸变；OmniParser YOLOv8 同步改为等比例 Letterbox 缩放。
+2. **脏矩形 1:1 原生裁剪（Dirty-ROI Native Crop）**：当 `dirtyAreaRatio` 位于 `(0.002, 0.35)`（如弹出菜单、对话框、悬停提示）时，直接裁剪 `dirty.union_dirty`（外扩 48px）以 1:1 原生像素送入 `WeVisOne-VL-2B`。
+3. **两阶段粗到细中央凹放大（Coarse-to-Fine Foveated Zoom）**：高分屏（`>=1600×900`）全屏查找时，Stage 1 先用 28 个视觉 Token 全局粗定位（~325ms），Stage 2 以粗定位点为中心从 4K 原图裁剪 1:1 高清窗口（24 个视觉 Token，~478ms）精修坐标，并在精修后自动恢复 Stage 1 的全局 KV Cache。
+
+## 9. 五个反直觉的实测发现
 
 **① INT8 量化是决定性的。** ModernBERT 151M：FP32 578MB → FP16 290MB → QInt8 146MB；seq_len 32 时 27.7ms → **12.4ms**，三类判例判定完全不变（正常匹配 0.998→0.9965、越界弃权 0.913→0.669、歧义 0.9938→0.9765）。弃权概率从 0.913 降到 0.669 是唯一可见变化，仍远高于阈值。
 
-**② ORT 线程不是越多越好。** 同一模型在 Bun 进程内：4 线程 24.6ms、6 线程 19.8ms、8 线程 70ms、16 线程 236ms。默认改为 `cores/4`（上限 6），可用 `ETA_COMPUTER_THREADS` 覆盖。这个反直觉现象是早期 84ms/171ms 延迟的根因。
+**② ORT 线程不是越多越好，但「拐点」是机器相关的。** 285H 上（Bun 进程内）4 线程编码器 24.6ms、6 线程 19.8ms、8 线程 70ms、16 线程 236ms，于是默认取 `cores/4` 且上限 6。13700K 上重测却是单调变好：编码器 [1,48] 在 6/8/12 线程下是 18.7/17.3/15.8 ms，OCR batch 8 是 50/38/31 ms。默认因此改成「逻辑核数的一半、上限 12」，`ETA_COMPUTER_THREADS` 保留为逃生口——线程数是本机专属参数，不该硬编码。
 
-**③ 64d 视觉分支几乎免费。** 在 OmniParser 图上嫁接 64d L2 归一化分支后，检测器 17.69ms vs 原始 17.81ms——它复用 Neck 的同一份特征图，不是新增一次前向。做法是直接对 ONNX ModelProto 做 protobuf wire 编辑，追加 `Conv → Add → LpNormalization` 三个节点与一个新输出。
+**③ 64d 视觉分支几乎免费。** 在 OmniParser 图上嫁接 64d L2 归一化分支后，检测器 17.69ms vs 原始 17.81ms（285H CPU）——它复用 Neck 的同一份特征图，不是新增一次前向。做法是直接对 ONNX ModelProto 做 protobuf wire 编辑，追加 `Conv → Add → LpNormalization` 三个节点与一个新输出。
 
 **④ DPI 坑在真实环境复现了。** 实测浏览器截图 1244×1631（含 DPR 与整页高度），而 `getBoundingClientRect()` 返回 1038×858 CSS px。不做 `CSS px → device px` 变换就融合，A11y 标签整体错位，OCR 跳过逻辑随之失效。接真实采集层时这是第一件要处理的事。
+
+**⑤ 小模型搬上 GPU 会更慢，「全 GPU」不是目标。** 151M 的 INT8 编码器在 RTX 3080 上是 24.8 ms（[1,48]），CPU 上是 15.8 ms。原因是它每个 token 的算量太小：kernel launch、量化/反量化的开销超过了 GEMM 省下的时间，而且 INT8 权重在 CUDA 上要过 `QuantizeLinear`/`DequantizeLinear`（ORT 的 CUDA INT8 GEMM 覆盖不到这个形状）。这就是「按模型选 Provider」的来源——三个模型的硬件最优解并不一致，引擎必须允许它们分道。
 
 ## 10. 尚未落地
 
@@ -184,6 +286,8 @@ E = 0.45·结构误差 + 0.35·脏矩形逃逸度 + 0.20·潜空间残差
 - **Harness 工具与插件**：`computer_act` / `computer_observe`，以及 `@eta/plugin-computer`。
 - **物理熔断**：全局热键与鼠标晃动监听。
 - **A11y 采集**：目前结构节点由调用方传入，影子树尚未实现。
+- **DirectML / CoreML 只到「能被探测」的程度。** 探测与回退路径都有，但只有 CUDA 在有显卡的机器上真跑过；DirectML 需要一份带 DML provider 的 ONNX Runtime（官方 GPU 包不含），CoreML 需要 Apple 硬件。
+- **Provider 组合是「换哪个 ORT 构建」决定的**，不是插拔的。同一进程里只能有一份 `onnxruntime.dll`，所以 CUDA 与 DirectML 不能同时可用；要测 DirectML 得换运行时。
 
 ## 参考文献
 

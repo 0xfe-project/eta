@@ -10,10 +10,11 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
+    "bench": "bun scripts/bench-providers.ts",
     "build": "bun scripts/build.ts",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
     "test": "bun --bun vitest --run",
-    "typecheck": "bun check"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "22.19.19",

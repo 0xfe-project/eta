@@ -1,7 +1,7 @@
 import type { Pointer } from "bun:ffi";
 import { Buffer } from "node:buffer";
-import { existsSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { delimiter, dirname, join } from "node:path";
 import process from "node:process";
 import { CString, dlopen, FFIType, ptr } from "bun:ffi";
 
@@ -40,8 +40,65 @@ export interface ComputerStepInput {
   nowMs?: number | undefined;
   maxAnchors?: number | undefined;
   resetDelta?: boolean | undefined;
+  /**
+   * When true, automatically invokes the local quantized `WeVisOne-VL-2B` (`onnxruntime-genai`)
+   * pure-vision grounding engine whenever System-1 returns `slow_escalation` (e.g. when A11y
+   * nodes are absent or an icon/Chinese label is unrecognized), injecting the grounded target
+   * into `PersistentAnchorTracker` so subsequent frames track it at ~15ms.
+   */
+  enableWeVisOneFallback?: boolean | undefined;
   nextHint?: PlannedActionHint | undefined;
   structuralNodes?: readonly StructuralNode[] | undefined;
+}
+
+export interface WeVisOneGroundInput {
+  currRgb: Uint8Array;
+  width: number;
+  height: number;
+  task?: "point" | "referring" | "ocr_grounding" | undefined;
+  query: string;
+  /**
+   * Optional explicit resize width. When omitted or `0`, `smart_resize_qwen3_vl` computes
+   * aspect-ratio-preserving multiples of 32 bounded by `maxVisualTokens` (default 32).
+   */
+  targetWidth?: number | undefined;
+  /**
+   * Optional explicit resize height. When omitted or `0`, `smart_resize_qwen3_vl` computes
+   * aspect-ratio-preserving multiples of 32 bounded by `maxVisualTokens` (default 32).
+   */
+  targetHeight?: number | undefined;
+  roi?: Rect | undefined;
+  /** Maximum visual token budget for dynamic aspect-ratio-preserving smart resize (default 32). */
+  maxVisualTokens?: number | undefined;
+  /**
+   * When true (or omitted on high-res frames `>= 1600px`), runs a 2-stage coarse-to-fine
+   * foveated zoom: Stage 1 locates the coarse region globally, then Stage 2 crops a 1:1
+   * native-resolution window around the coarse point so tiny 4K icons/text are never lost.
+   */
+  foveatedRefine?: boolean | undefined;
+}
+
+export interface WeVisOneGroundingOutcome {
+  task: string;
+  query: string;
+  rejected: boolean;
+  point: [number, number] | null;
+  bbox: Rect | null;
+  normCoords: number[];
+  rawResponse: string;
+  visualTokens: number;
+  kvCacheReused: boolean;
+  foveatedRefined: boolean;
+  coarsePoint: [number, number] | null;
+  refinedRoi: Rect | null;
+  timingsMs: {
+    preprocess: number;
+    visionAndPrefill: number;
+    queryPrefill: number;
+    decode: number;
+    refine: number;
+    total: number;
+  };
 }
 
 export type DecisionGate =
@@ -72,6 +129,17 @@ export interface ComputerStepOutcome {
   ok: boolean;
   error?: string | undefined;
   ortVersion: string;
+  /** Execution provider the sessions actually run on: `cuda`, `directml`, `coreml` or `cpu`. */
+  provider: "cuda" | "directml" | "coreml" | "cpu";
+  /** Execution provider for the OCR head (it probes the same chain as the detector). */
+  ocrProvider: "cuda" | "directml" | "coreml" | "cpu";
+  /**
+   * Execution provider for the calibrated verdict encoder. Stays on `cpu` even on a GPU machine
+   * unless `ETA_COMPUTER_ENCODER_PROVIDER` overrides it — a 48-token INT8 forward is faster there.
+   */
+  encoderProvider: "cuda" | "directml" | "coreml" | "cpu";
+  /** Preference chain that was attempted, with the probe failure inlined for rejected providers. */
+  providerChain: string[];
   gate: DecisionGate;
   chosenAction: string;
   chosenAnchorId: number | null;
@@ -119,6 +187,7 @@ export interface ComputerStepOutcome {
   };
   activeAnchors: FusedAnchorView[];
   collapsedRegions: CollapsedRegionView[];
+  wevisoneGrounding: WeVisOneGroundingOutcome | null;
   timingsMs: {
     dirtyDiff: number;
     atlasPack: number;
@@ -127,6 +196,7 @@ export interface ComputerStepOutcome {
     ocrOrt: number;
     fusion: number;
     jevOrt: number;
+    wevisoneOga: number;
     forwardPred: number;
     totalStep: number;
   };
@@ -157,34 +227,48 @@ export function modelsDirPath(): string {
   return join(import.meta.dirname, "..", "models");
 }
 
-/** Locate `libonnxruntime` shared library on the host machine. */
-export function resolveOrtLibraryPath(): string {
-  const configured = process.env.ETA_ORT_LIB;
-  if (configured !== undefined && configured !== "") return configured;
+/**
+ * ONNX Runtime is shipped beside the cdylib (see `scripts/build.ts`). Windows searches a DLL's
+ * imports in the executable's directory and `PATH` — never the importing DLL's own directory — so
+ * the runtime is loaded by absolute path first, and its directory is pushed onto `PATH` for the
+ * provider DLLs (and the CUDA/cuDNN libraries they pull in) that ONNX Runtime loads later.
+ */
+let runtimeLoaded = false;
+// Retained for the process lifetime: the cdylib's import table resolves against this module.
+const preloadedLibraries: unknown[] = [];
 
-  const repoRoot = join(import.meta.dirname, "..", "..", "..");
-  const capiDir = join(
-    repoRoot,
-    "apps",
-    "memory",
-    ".venv",
-    "lib",
-    "python3.13",
-    "site-packages",
-    "onnxruntime",
-    "capi",
+function ensureOrtRuntime(libPath: string): void {
+  if (runtimeLoaded) return;
+  runtimeLoaded = true;
+  const libDir = dirname(libPath);
+  const pathKey = Object.keys(process.env).find(
+    (key) => key.toUpperCase() === "PATH",
   );
-  if (existsSync(capiDir)) {
-    const entry = readdirSync(capiDir).find((f) =>
-      f.startsWith("libonnxruntime.so."),
-    );
-    if (entry !== undefined) return join(capiDir, entry);
+  if (pathKey !== undefined) {
+    process.env[pathKey] = `${libDir}${delimiter}${process.env[pathKey] ?? ""}`;
   }
-  return "libonnxruntime.so";
+  if (process.platform !== "win32") return;
+  const runtime = join(libDir, "onnxruntime.dll");
+  if (existsSync(runtime)) {
+    preloadedLibraries.push(
+      dlopen(runtime, { OrtGetApiBase: { args: [], returns: FFIType.ptr } }),
+    );
+  }
+  const genaiRuntime = join(libDir, "onnxruntime-genai.dll");
+  if (existsSync(genaiRuntime)) {
+    preloadedLibraries.push(
+      dlopen(genaiRuntime, {
+        OgaShutdown: { args: [], returns: FFIType.void },
+      }),
+    );
+  }
 }
 
 interface NativeSymbols {
-  EtaComputerCreate: (ortLibPath: Buffer, modelsDir: Buffer) => Pointer | null;
+  EtaComputerCreate: (
+    modelsDir: Buffer,
+    providerSpec: Buffer,
+  ) => Pointer | null;
   EtaComputerMarkClicked: (
     engine: Pointer,
     anchorId: number,
@@ -193,6 +277,14 @@ interface NativeSymbols {
   EtaComputerStep: (
     engine: Pointer,
     prevRgb: Pointer | null,
+    currRgb: Pointer,
+    rgbLen: bigint,
+    width: number,
+    height: number,
+    spec: Buffer,
+  ) => Pointer | null;
+  EtaComputerGroundWeVisOne: (
+    engine: Pointer,
     currRgb: Pointer,
     rgbLen: bigint,
     width: number,
@@ -213,6 +305,7 @@ function loadNativeSymbols(): NativeSymbols {
       `eta-computer native library not built at ${path}; run 'bun run --cwd packages/eta-computer build'`,
     );
   }
+  ensureOrtRuntime(path);
   const lib = dlopen(path, {
     EtaComputerCreate: {
       args: [FFIType.ptr, FFIType.ptr],
@@ -225,6 +318,17 @@ function loadNativeSymbols(): NativeSymbols {
     EtaComputerStep: {
       args: [
         FFIType.ptr,
+        FFIType.ptr,
+        FFIType.ptr,
+        FFIType.u64,
+        FFIType.u32,
+        FFIType.u32,
+        FFIType.ptr,
+      ],
+      returns: FFIType.ptr,
+    },
+    EtaComputerGroundWeVisOne: {
+      args: [
         FFIType.ptr,
         FFIType.ptr,
         FFIType.u64,
@@ -260,6 +364,7 @@ function serializeStepSpec(input: ComputerStepInput): Buffer {
       String(input.nowMs ?? 1000),
       String(input.maxAnchors ?? 32),
       input.resetDelta === true ? "1" : "0",
+      input.enableWeVisOneFallback === true ? "1" : "0",
     ].join("\t"),
   );
 
@@ -306,17 +411,22 @@ export class ComputerTriadEngine {
   private handle: Pointer | null;
   private readonly symbols: NativeSymbols;
 
-  constructor(options?: { ortLibPath?: string; modelsDir?: string }) {
+  /**
+   * `providers` is an explicit execution-provider preference for **all three** models, e.g.
+   * `"cuda,directml,cpu"`. Leaving it out keeps the defaults: `ETA_COMPUTER_PROVIDER` for the
+   * perception chain (detector + OCR), and `ETA_COMPUTER_ENCODER_PROVIDER` for the verdict encoder,
+   * which stays on the CPU on GPU machines because it is measurably faster there. Providers the
+   * shipped ONNX Runtime cannot register are skipped and reported in
+   * {@link ComputerStepOutcome.providerChain}.
+   */
+  constructor(options?: { providers?: string; modelsDir?: string }) {
     this.symbols = loadNativeSymbols();
-    const ortPath = Buffer.from(
-      `${options?.ortLibPath ?? resolveOrtLibraryPath()}\0`,
-      "utf8",
-    );
+    const providerSpec = Buffer.from(`${options?.providers ?? ""}\0`, "utf8");
     const modelsDir = Buffer.from(
       `${options?.modelsDir ?? modelsDirPath()}\0`,
       "utf8",
     );
-    this.handle = this.symbols.EtaComputerCreate(ortPath, modelsDir);
+    this.handle = this.symbols.EtaComputerCreate(modelsDir, providerSpec);
     if (this.handle === null) {
       throw new Error("Failed to initialize EtaComputer native triad engine");
     }
@@ -361,6 +471,57 @@ export class ComputerTriadEngine {
   markClicked(anchorId: number, nowMs: number): void {
     if (this.handle === null) return;
     this.symbols.EtaComputerMarkClicked(this.handle, anchorId, BigInt(nowMs));
+  }
+
+  /**
+   * Run pure-vision grounding via the slimmed/quantized `WeVisOne-VL-2B` (`onnxruntime-genai`).
+   * Reuses the visual KV cache (`OgaGenerator_RewindTo`) when called repeatedly on the same frame.
+   */
+  groundWeVisOne(input: WeVisOneGroundInput): WeVisOneGroundingOutcome {
+    if (this.handle === null) {
+      throw new Error("ComputerTriadEngine is already closed");
+    }
+    const autoFoveated =
+      input.foveatedRefine ??
+      (input.roi === undefined && (input.width >= 1600 || input.height >= 900));
+    const specLine = [
+      cleanTab(input.task ?? "referring"),
+      cleanTab(input.query),
+      String(input.targetWidth ?? 0),
+      String(input.targetHeight ?? 0),
+      String(input.roi?.x ?? 0),
+      String(input.roi?.y ?? 0),
+      String(input.roi?.w ?? 0),
+      String(input.roi?.h ?? 0),
+      String(input.maxVisualTokens ?? 32),
+      autoFoveated ? "1" : "0",
+    ].join("\t");
+    const specBuf = Buffer.from(`${specLine}\0`, "utf8");
+    const outPtr = this.symbols.EtaComputerGroundWeVisOne(
+      this.handle,
+      ptr(input.currRgb),
+      BigInt(input.currRgb.byteLength),
+      input.width,
+      input.height,
+      specBuf,
+    );
+    if (outPtr === null) {
+      throw new Error("EtaComputerGroundWeVisOne returned null pointer");
+    }
+    try {
+      const jsonText = new CString(outPtr).toString();
+      const parsed = JSON.parse(jsonText) as {
+        ok: boolean;
+        error?: string;
+        grounding?: WeVisOneGroundingOutcome;
+      };
+      if (!parsed.ok || parsed.grounding === undefined) {
+        throw new Error(parsed.error ?? "EtaComputerGroundWeVisOne failed");
+      }
+      return parsed.grounding;
+    } finally {
+      this.symbols.EtaComputerFreeString(outPtr);
+    }
   }
 
   close(): void {

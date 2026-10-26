@@ -307,6 +307,25 @@ impl PersistentAnchorTracker {
             }
         }
 
+        // Inherit semantic labels grounded previously on the same persistent anchor ID
+        // when the current visual-only pass produced only a generic class name.
+        for cand in &mut raw_fused {
+            if let Some(prev) = self.registry.get(&cand.persistent_id) {
+                let is_generic = cand.label.is_empty()
+                    || cand.label.eq_ignore_ascii_case(&cand.role)
+                    || cand.label == "icon_generic"
+                    || cand.label == "button"
+                    || cand.label == "input";
+                let prev_has_semantic = !prev.label.is_empty()
+                    && !prev.label.eq_ignore_ascii_case(&prev.role)
+                    && prev.label != "icon_generic";
+                if is_generic && prev_has_semantic {
+                    cand.label = prev.label.clone();
+                    cand.semantic_hash = prev.semantic_hash;
+                }
+            }
+        }
+
         // Update registry with latest anchor coordinates
         for cand in &raw_fused {
             self.registry.insert(cand.persistent_id, cand.clone());
@@ -406,6 +425,79 @@ impl PersistentAnchorTracker {
             newly_added_count,
             retained_id_count,
         }
+    }
+
+    /// Inject or enrich a persistent anchor from a WeVisOne-VL-2B pure-vision grounding result
+    /// so subsequent System-1 steps track it at ~15ms via its 64d visual embedding and spatial IoU.
+    pub fn upsert_grounded_anchor(
+        &mut self,
+        fusion: &mut FusionSnapshot,
+        label: &str,
+        bbox: Rect,
+        point: (f32, f32),
+    ) -> FusedAnchor {
+        let mut best_idx: Option<usize> = None;
+        let mut best_score = 0.15f32;
+        for (idx, a) in fusion.active_anchors.iter().enumerate() {
+            let iou = a.bbox.iou(&bbox);
+            let contains = point.0 >= a.bbox.x
+                && point.0 <= a.bbox.x + a.bbox.w
+                && point.1 >= a.bbox.y
+                && point.1 <= a.bbox.y + a.bbox.h;
+            let score = if contains { iou.max(0.75) } else { iou };
+            if score > best_score {
+                best_score = score;
+                best_idx = Some(idx);
+            }
+        }
+
+        let sem_hash = fnv1a_str(&format!("grounded:{}", label.trim().to_ascii_lowercase()));
+
+        if let Some(idx) = best_idx {
+            let anchor = &mut fusion.active_anchors[idx];
+            anchor.label = label.to_string();
+            anchor.semantic_hash = sem_hash;
+            anchor.confidence = anchor.confidence.max(0.95);
+            if bbox.w > 8.0 && bbox.h > 8.0 && best_score < 0.80 {
+                anchor.bbox = bbox;
+            }
+            let updated = anchor.clone();
+            self.registry.insert(updated.persistent_id, updated.clone());
+            return updated;
+        }
+
+        let pid = self.next_id;
+        self.next_id += 1;
+        let mut synth = [0.0f32; 64];
+        let mut norm_sq = 0.0f32;
+        for i in 0..64 {
+            let bit = ((sem_hash.rotate_left(i as u32)) & 0xff) as f32 / 255.0 - 0.5;
+            synth[i] = bit;
+            norm_sq += bit * bit;
+        }
+        let inv = 1.0 / (norm_sq + 1e-8).sqrt();
+        for i in 0..64 {
+            synth[i] *= inv;
+        }
+
+        let created = FusedAnchor {
+            persistent_id: pid,
+            role: "button".to_string(),
+            label: label.to_string(),
+            bbox,
+            region: "main".to_string(),
+            focused: false,
+            enabled: true,
+            z_layer: 0,
+            confidence: 0.96,
+            embedding: synth,
+            semantic_hash: sem_hash,
+            last_clicked_ms: 0,
+            moved_delta: (0.0, 0.0),
+        };
+        self.registry.insert(pid, created.clone());
+        fusion.active_anchors.push(created.clone());
+        created
     }
 }
 

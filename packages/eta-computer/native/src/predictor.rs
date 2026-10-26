@@ -2,7 +2,7 @@
 //! and OpenJev System-1 Calibrated Decision Engine.
 
 use crate::fusion::{cosine_sim_64, token_overlap_score, FusionSnapshot};
-use crate::ort_ffi::EdgeModelTriad;
+use crate::ort_backend::EdgeModelTriad;
 use crate::vision::{DirtyDiffResult, Rect};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

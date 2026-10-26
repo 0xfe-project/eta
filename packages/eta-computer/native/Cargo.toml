@@ -6,10 +6,44 @@ publish = false
 
 [lib]
 name = "eta_computer"
-crate-type = ["cdylib"]
+# `rlib` exists so the provider benchmark in `examples/` can drive the same code the cdylib runs.
+crate-type = ["cdylib", "rlib"]
 
 [profile.release]
 opt-level = 3
 lto = "thin"
 codegen-units = 1
 strip = "debuginfo"
+
+# ONNX Runtime comes from a runtime directory that `scripts/build.ts` provisions and points at via
+# `ORT_LIB_LOCATION` + `ORT_PREFER_DYNAMIC_LINK=1`, so the crate links the import library only and
+# never embeds a static ONNX Runtime. `api-22` matches the 1.22 release, the newest one Microsoft
+# ships with a Windows CUDA build.
+#
+# Execution-provider features are declared per target because they decide which `ort::ep` bindings
+# exist; availability itself is probed at runtime, since a CPU-only ONNX Runtime build registers no
+# accelerator and the session falls back.
+[target.'cfg(target_os = "windows")'.dependencies]
+ort = { version = "=2.0.0-rc.15", default-features = false, features = [
+  "std",
+  "copy-dylibs",
+  "api-22",
+  "cuda",
+  "directml",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+ort = { version = "=2.0.0-rc.15", default-features = false, features = [
+  "std",
+  "copy-dylibs",
+  "api-22",
+  "coreml",
+] }
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+ort = { version = "=2.0.0-rc.15", default-features = false, features = [
+  "std",
+  "copy-dylibs",
+  "api-22",
+  "cuda",
+] }

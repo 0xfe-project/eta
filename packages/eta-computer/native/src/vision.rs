@@ -5,7 +5,7 @@
 //!   - 64-bit xxHash-style crop caching + Batch-8 OCR recognition
 
 use std::collections::HashMap;
-use crate::ort_ffi::EdgeModelTriad;
+use crate::ort_backend::EdgeModelTriad;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Rect {
@@ -255,13 +255,19 @@ fn pack_rois_into_atlas(
     let plane_stride = 640 * 640;
 
     if dirty_rects.is_empty() || dirty_area_ratio > 0.45 {
-        // Full-frame resize into 640x640
-        for ay in 0..640 {
-            let sy = (ay * height / 640).min(height.saturating_sub(1));
-            for ax in 0..640 {
-                let sx = (ax * width / 640).min(width.saturating_sub(1));
+        // Aspect-ratio-preserving letterbox resize into 640x640 so wide/4K screens do not distort icons
+        let scale = (640.0 / (width.max(1) as f32)).min(640.0 / (height.max(1) as f32));
+        let dst_w = (((width as f32 * scale).round() as usize + 7) / 8 * 8).clamp(32, 640);
+        let dst_h = (((height as f32 * scale).round() as usize + 7) / 8 * 8).clamp(32, 640);
+        let pad_x = (640 - dst_w) / 2;
+        let pad_y = (640 - dst_h) / 2;
+
+        for ay in 0..dst_h {
+            let sy = (ay * height / dst_h).min(height.saturating_sub(1));
+            for ax in 0..dst_w {
+                let sx = (ax * width / dst_w).min(width.saturating_sub(1));
                 let s_idx = (sy * width + sx) * 3;
-                let d_idx = ay * 640 + ax;
+                let d_idx = (pad_y + ay) * 640 + (pad_x + ax);
                 if s_idx + 2 < rgb.len() {
                     atlas_tensor[d_idx] = rgb[s_idx] as f32 / 255.0;
                     atlas_tensor[plane_stride + d_idx] = rgb[s_idx + 1] as f32 / 255.0;
@@ -276,10 +282,10 @@ fn pack_rois_into_atlas(
                 w: width as f32,
                 h: height as f32,
             },
-            atlas_x: 0,
-            atlas_y: 0,
-            atlas_w: 640,
-            atlas_h: 640,
+            atlas_x: pad_x,
+            atlas_y: pad_y,
+            atlas_w: dst_w,
+            atlas_h: dst_h,
         }];
     }
 

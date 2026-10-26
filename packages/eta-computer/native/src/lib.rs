@@ -2,25 +2,30 @@
 
 pub mod bpe;
 pub mod fusion;
-pub mod ort_ffi;
+pub mod oga_grounding;
+pub mod ort_backend;
 pub mod predictor;
 pub mod vision;
 
 use std::collections::HashMap;
 use std::ffi::{c_char, CStr, CString};
+use std::path::Path;
 use std::ptr;
 use std::slice;
 use std::time::Instant;
 
 use fusion::{FusionSnapshot, PersistentAnchorTracker, StructuralNodeInput};
-use ort_ffi::EdgeModelTriad;
+use oga_grounding::{WeVisOneGroundOutcome, WeVisOneOgaEngine};
+use ort_backend::EdgeModelTriad;
 use predictor::{
     evaluate_and_decide, predict_forward_delta, ExpectedStateDelta, PlannedAction,
 };
 use vision::{compute_dirty_rects, run_vision_pipeline, Rect};
 
 pub struct ComputerEngine {
+    pub models_dir: String,
     pub triad: EdgeModelTriad,
+    pub wevisone_oga: Option<WeVisOneOgaEngine>,
     pub tracker: PersistentAnchorTracker,
     pub ocr_cache: HashMap<u64, String>,
     pub last_expected_delta: Option<ExpectedStateDelta>,
@@ -58,6 +63,7 @@ struct ParsedStepInput {
     now_ms: u64,
     max_anchors: usize,
     reset_delta: bool,
+    enable_wevisone_fallback: bool,
     next_hint: Option<PlannedAction>,
     nodes: Vec<StructuralNodeInput>,
 }
@@ -69,6 +75,7 @@ fn parse_step_spec(spec: &str) -> ParsedStepInput {
     let mut now_ms = 1000u64;
     let mut max_anchors = 32usize;
     let mut reset_delta = false;
+    let mut enable_wevisone_fallback = false;
     let mut next_hint: Option<PlannedAction> = None;
     let mut nodes: Vec<StructuralNodeInput> = Vec::new();
 
@@ -85,6 +92,9 @@ fn parse_step_spec(spec: &str) -> ParsedStepInput {
                 now_ms = parts[4].parse().unwrap_or(1000);
                 max_anchors = parts[5].parse().unwrap_or(32);
                 reset_delta = parts[6] == "1";
+                if parts.len() >= 8 {
+                    enable_wevisone_fallback = parts[7] == "1";
+                }
             }
             "NEXT" if parts.len() >= 5 => {
                 let act = parts[1].to_string();
@@ -129,24 +139,58 @@ fn parse_step_spec(spec: &str) -> ParsedStepInput {
         now_ms,
         max_anchors,
         reset_delta,
+        enable_wevisone_fallback,
         next_hint,
         nodes,
     }
 }
 
+impl ComputerEngine {
+    pub fn ensure_wevisone_oga(&mut self) -> Result<&mut WeVisOneOgaEngine, String> {
+        if self.wevisone_oga.is_none() {
+            let oga_dir = std::env::var("ETA_WEVISONE_OGA_DIR")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| {
+                    Path::new(&self.models_dir)
+                        .join("wevisone_vl_2b_oga")
+                        .to_string_lossy()
+                        .into_owned()
+                });
+            let oga_ep = std::env::var("ETA_WEVISONE_PROVIDER").ok();
+            let engine = WeVisOneOgaEngine::load(&oga_dir, oga_ep.as_deref())?;
+            self.wevisone_oga = Some(engine);
+        }
+        Ok(self.wevisone_oga.as_mut().unwrap())
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn EtaComputerCreate(
-    ort_lib_path: *const c_char,
     models_dir: *const c_char,
+    provider_spec: *const c_char,
 ) -> *mut ComputerEngine {
-    if ort_lib_path.is_null() || models_dir.is_null() {
+    if models_dir.is_null() {
         return ptr::null_mut();
     }
-    let ort_str = CStr::from_ptr(ort_lib_path).to_string_lossy();
-    let dir_str = CStr::from_ptr(models_dir).to_string_lossy();
-    match EdgeModelTriad::load(&ort_str, &dir_str) {
+    let dir_str = CStr::from_ptr(models_dir).to_string_lossy().into_owned();
+    // The provider preference is normally already in the environment; the argument exists so one
+    // process can build engines on different accelerators (tests, benchmarks).
+    let spec = if provider_spec.is_null() {
+        None
+    } else {
+        Some(
+            CStr::from_ptr(provider_spec)
+                .to_string_lossy()
+                .into_owned(),
+        )
+    }
+    .filter(|s| !s.trim().is_empty());
+    match EdgeModelTriad::load(&dir_str, spec.as_deref()) {
         Ok(triad) => Box::into_raw(Box::new(ComputerEngine {
+            models_dir: dir_str,
             triad,
+            wevisone_oga: None,
             tracker: PersistentAnchorTracker::new(),
             ocr_cache: HashMap::new(),
             last_expected_delta: None,
@@ -285,7 +329,7 @@ pub unsafe extern "C" fn EtaComputerStep(
 
     // Stage 4: Multi-Modal IoU Fusion + Rigid-Body Scroll Compensation + Persistent Tracking + Foveated Folding
     let t_fuse = Instant::now();
-    let fusion = eng.tracker.fuse_and_track(
+    let mut fusion = eng.tracker.fuse_and_track(
         &parsed.nodes,
         &visual_landmarks,
         &parsed.subgoal,
@@ -294,7 +338,7 @@ pub unsafe extern "C" fn EtaComputerStep(
     let fusion_ms = t_fuse.elapsed().as_secs_f64() * 1000.0;
 
     // Stage 5 & 6: UI-JEPA Surprise Evaluation + OpenJev System-1 Single-Pass Calibrated Decision
-    let decision = match evaluate_and_decide(
+    let mut decision = match evaluate_and_decide(
         &mut eng.triad,
         &parsed.subgoal,
         parsed.next_hint.as_ref(),
@@ -311,6 +355,114 @@ pub unsafe extern "C" fn EtaComputerStep(
             return CString::new(err_json).unwrap().into_raw();
         }
     };
+
+    // Optional Stage 6.5: Pure-Vision Medium Path (`WeVisOne-VL-2B` via `onnxruntime-genai`)
+    // Triggered when `enable_wevisone_fallback` is true and either:
+    //   1. System-1 returned `slow_escalation`, OR
+    //   2. No structural A11y nodes were supplied (`parsed.nodes.is_empty()`), no explicit
+    //      `target_anchor_id` was pinned, and the chosen anchor has generic/unmatched text.
+    let mut wevisone_outcome: Option<WeVisOneGroundOutcome> = None;
+    let mut wevisone_ms = 0.0f64;
+    let query_str = parsed
+        .next_hint
+        .as_ref()
+        .map(|h| h.target_label_hint.trim())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| parsed.subgoal.trim())
+        .to_string();
+    let has_explicit_id = parsed
+        .next_hint
+        .as_ref()
+        .and_then(|h| h.target_anchor_id)
+        .is_some();
+    let chosen_is_unmatched = decision.chosen_anchor_id.map_or(true, |cid| {
+        fusion
+            .active_anchors
+            .iter()
+            .find(|a| a.persistent_id == cid)
+            .map_or(true, |a| {
+                a.label.is_empty()
+                    || a.label.eq_ignore_ascii_case(&a.role)
+                    || !a
+                        .label
+                        .to_ascii_lowercase()
+                        .contains(&query_str.to_ascii_lowercase())
+            })
+    });
+    let should_run_wevisone = parsed.enable_wevisone_fallback
+        && !query_str.is_empty()
+        && (decision.gate == "slow_escalation"
+            || (parsed.nodes.is_empty() && !has_explicit_id && chosen_is_unmatched));
+
+    if should_run_wevisone {
+        let act_type = parsed
+            .next_hint
+            .as_ref()
+            .map(|h| h.action_type.as_str())
+            .unwrap_or("click")
+            .to_string();
+
+        if let Ok(oga) = eng.ensure_wevisone_oga() {
+            // If dirty area is localized (e.g. a newly popped-up dropdown or dialog < 35% of screen),
+            // crop around `dirty.union_dirty` (padded by 48px) for 1:1 native detail; otherwise
+            // enable 2-stage coarse-to-fine foveated refinement when the screen exceeds 1080p.
+            let localized_roi = if dirty.dirty_area_ratio > 0.002 && dirty.dirty_area_ratio < 0.35 {
+                dirty.union_dirty.map(|u| {
+                    let rx = (u.x - 48.0).max(0.0);
+                    let ry = (u.y - 48.0).max(0.0);
+                    let rw = (u.w + 96.0).min(width as f32 - rx);
+                    let rh = (u.h + 96.0).min(height as f32 - ry);
+                    Rect {
+                        x: rx,
+                        y: ry,
+                        w: rw,
+                        h: rh,
+                    }
+                })
+            } else {
+                None
+            };
+            let auto_foveated = localized_roi.is_none() && (width >= 1600 || height >= 900);
+
+            if let Ok(grounded) = oga.ground_with_options(
+                curr_rgb,
+                width as usize,
+                height as usize,
+                "referring",
+                &query_str,
+                0,
+                0,
+                localized_roi,
+                32,
+                auto_foveated,
+            ) {
+                wevisone_ms = grounded.total_ms;
+                if !grounded.rejected {
+                    if let (Some(bbox), Some(pt)) = (grounded.bbox, grounded.point) {
+                        let fused_anchor = eng.tracker.upsert_grounded_anchor(
+                            &mut fusion,
+                            &query_str,
+                            bbox,
+                            pt,
+                        );
+                        decision.gate = "fast_commit";
+                        decision.chosen_anchor_id = Some(fused_anchor.persistent_id);
+                        decision.chosen_bbox = Some(fused_anchor.bbox);
+                        decision.chosen_action =
+                            format!("{}:#{}", act_type, fused_anchor.persistent_id);
+                        decision.chosen_probability = 0.96;
+                        decision.confidence_margin = 0.85;
+                    }
+                } else {
+                    decision.gate = "slow_escalation";
+                    decision.chosen_action = "escalate_to_slow_vlm".to_string();
+                    decision.chosen_anchor_id = None;
+                    decision.chosen_bbox = None;
+                }
+                wevisone_outcome = Some(grounded);
+            }
+        }
+    }
 
     // Stage 7: Active Forward Prediction for the chosen next action
     let t_pred = Instant::now();
@@ -394,9 +546,18 @@ pub unsafe extern "C" fn EtaComputerStep(
         predictor::TransitionRegime::StructuralRegimeShift => "structural_regime_shift",
     };
 
+    let wevisone_json = match &wevisone_outcome {
+        Some(w) => serialize_wevisone_outcome(w),
+        None => "null".to_string(),
+    };
+
     let json = format!(
         "{{\"ok\":true,\
         \"ortVersion\":\"{}\",\
+        \"provider\":\"{}\",\
+        \"ocrProvider\":\"{}\",\
+        \"encoderProvider\":\"{}\",\
+        \"providerChain\":[{}],\
         \"gate\":\"{}\",\
         \"chosenAction\":\"{}\",\
         \"chosenAnchorId\":{},\
@@ -411,10 +572,20 @@ pub unsafe extern "C" fn EtaComputerStep(
         \"fusion\":{{\"activeAnchorCount\":{},\"collapsedRegionCount\":{},\"rigidScrollDetected\":{},\"rigidScrollDelta\":[{:.1},{:.1}],\"modalIsolated\":{},\"retainedIdCount\":{},\"newlyAddedCount\":{},\"visualLandmarkCount\":{},\"landmarkReused\":{}}},\
         \"activeAnchors\":{},\
         \"collapsedRegions\":{},\
-        \"timingsMs\":{{\"dirtyDiff\":{:.3},\"atlasPack\":{:.3},\"detectorOrt\":{:.3},\"nmsAndEmbed\":{:.3},\"ocrOrt\":{:.3},\"fusion\":{:.3},\"jevOrt\":{:.3},\"forwardPred\":{:.3},\"totalStep\":{:.3}}},\
+        \"wevisoneGrounding\":{},\
+        \"timingsMs\":{{\"dirtyDiff\":{:.3},\"atlasPack\":{:.3},\"detectorOrt\":{:.3},\"nmsAndEmbed\":{:.3},\"ocrOrt\":{:.3},\"fusion\":{:.3},\"jevOrt\":{:.3},\"wevisoneOga\":{:.3},\"forwardPred\":{:.3},\"totalStep\":{:.3}}},\
         \"ocrCache\":{{\"hits\":{},\"misses\":{},\"totalEntries\":{}}}\
         }}",
-        json_escape(&eng.triad.api.version),
+        json_escape(&eng.triad.version),
+        eng.triad.provider.label(),
+        eng.triad.ocr_provider.label(),
+        eng.triad.encoder_provider.label(),
+        eng.triad
+            .provider_chain
+            .iter()
+            .map(|p| format!("\"{}\"", json_escape(p)))
+            .collect::<Vec<_>>()
+            .join(","),
         decision.gate,
         json_escape(&decision.chosen_action),
         decision.chosen_anchor_id.map(|v| v.to_string()).unwrap_or_else(|| "null".to_string()),
@@ -456,6 +627,7 @@ pub unsafe extern "C" fn EtaComputerStep(
         can_reuse_landmarks,
         anchors_json,
         collapsed_json,
+        wevisone_json,
         dirty_diff_ms,
         vision_stats.atlas_pack_ms,
         vision_stats.detector_ort_ms,
@@ -463,6 +635,7 @@ pub unsafe extern "C" fn EtaComputerStep(
         vision_stats.ocr_ort_ms,
         fusion_ms,
         decision.jev_ort_ms,
+        wevisone_ms,
         forward_pred_ms,
         total_step_ms,
         vision_stats.ocr_cache_hits,
@@ -471,6 +644,146 @@ pub unsafe extern "C" fn EtaComputerStep(
     );
 
     CString::new(json).unwrap().into_raw()
+}
+
+fn serialize_wevisone_outcome(w: &WeVisOneGroundOutcome) -> String {
+    let pt_json = match w.point {
+        Some((px, py)) => format!("[{:.1},{:.1}]", px, py),
+        None => "null".to_string(),
+    };
+    let coarse_pt_json = match w.coarse_point {
+        Some((px, py)) => format!("[{:.1},{:.1}]", px, py),
+        None => "null".to_string(),
+    };
+    let box_json = match w.bbox {
+        Some(b) => format!(
+            "{{\"x\":{:.1},\"y\":{:.1},\"w\":{:.1},\"h\":{:.1}}}",
+            b.x, b.y, b.w, b.h
+        ),
+        None => "null".to_string(),
+    };
+    let ref_roi_json = match w.refined_roi {
+        Some(b) => format!(
+            "{{\"x\":{:.1},\"y\":{:.1},\"w\":{:.1},\"h\":{:.1}}}",
+            b.x, b.y, b.w, b.h
+        ),
+        None => "null".to_string(),
+    };
+    let coords_json = w
+        .norm_coords
+        .iter()
+        .map(|c| c.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"task\":\"{}\",\
+        \"query\":\"{}\",\
+        \"rejected\":{},\
+        \"point\":{},\
+        \"bbox\":{},\
+        \"normCoords\":[{}],\
+        \"rawResponse\":\"{}\",\
+        \"visualTokens\":{},\
+        \"kvCacheReused\":{},\
+        \"foveatedRefined\":{},\
+        \"coarsePoint\":{},\
+        \"refinedRoi\":{},\
+        \"timingsMs\":{{\"preprocess\":{:.3},\"visionAndPrefill\":{:.3},\"queryPrefill\":{:.3},\"decode\":{:.3},\"refine\":{:.3},\"total\":{:.3}}}\
+        }}",
+        json_escape(&w.task),
+        json_escape(&w.query),
+        w.rejected,
+        pt_json,
+        box_json,
+        coords_json,
+        json_escape(&w.raw_response),
+        w.visual_tokens,
+        w.kv_cache_reused,
+        w.foveated_refined,
+        coarse_pt_json,
+        ref_roi_json,
+        w.preprocess_ms,
+        w.vision_and_prefill_ms,
+        w.query_prefill_ms,
+        w.decode_ms,
+        w.refine_ms,
+        w.total_ms
+    )
+}
+
+/// Direct C-ABI entrypoint to run `WeVisOne-VL-2B` pure-vision grounding via `onnxruntime-genai`.
+/// `spec_ptr` is TSV: `<task>\t<query>\t<target_w>\t<target_h>\t<roi_x>\t<roi_y>\t<roi_w>\t<roi_h>\t<max_visual_tokens>\t<foveated_refine:0|1>`
+#[no_mangle]
+pub unsafe extern "C" fn EtaComputerGroundWeVisOne(
+    engine: *mut ComputerEngine,
+    curr_rgb_ptr: *const u8,
+    rgb_len: u64,
+    width: u32,
+    height: u32,
+    spec_ptr: *const c_char,
+) -> *mut c_char {
+    if engine.is_null() || curr_rgb_ptr.is_null() || spec_ptr.is_null() {
+        return ptr::null_mut();
+    }
+    let eng = &mut *engine;
+    let curr_rgb = slice::from_raw_parts(curr_rgb_ptr, rgb_len as usize);
+    let spec_str = CStr::from_ptr(spec_ptr).to_string_lossy();
+    let parts: Vec<&str> = spec_str.lines().next().unwrap_or("").split('\t').collect();
+    let task = parts.first().copied().unwrap_or("referring");
+    let query = parts.get(1).copied().unwrap_or("");
+    let target_w: usize = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let target_h: usize = parts.get(3).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let roi = if parts.len() >= 8 {
+        let rx: f32 = parts[4].parse().unwrap_or(0.0);
+        let ry: f32 = parts[5].parse().unwrap_or(0.0);
+        let rw: f32 = parts[6].parse().unwrap_or(0.0);
+        let rh: f32 = parts[7].parse().unwrap_or(0.0);
+        if rw > 0.0 && rh > 0.0 {
+            Some(Rect {
+                x: rx,
+                y: ry,
+                w: rw,
+                h: rh,
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    let max_visual_tokens: usize = parts.get(8).and_then(|s| s.parse().ok()).unwrap_or(32);
+    let foveated_refine: bool = parts.get(9).map(|&s| s == "1").unwrap_or(false);
+
+    let oga = match eng.ensure_wevisone_oga() {
+        Ok(o) => o,
+        Err(e) => {
+            let err_json = format!("{{\"ok\":false,\"error\":\"{}\"}}", json_escape(&e));
+            return CString::new(err_json).unwrap().into_raw();
+        }
+    };
+
+    match oga.ground_with_options(
+        curr_rgb,
+        width as usize,
+        height as usize,
+        task,
+        query,
+        target_w,
+        target_h,
+        roi,
+        max_visual_tokens,
+        foveated_refine,
+    ) {
+        Ok(outcome) => {
+            let inner = serialize_wevisone_outcome(&outcome);
+            let json = format!("{{\"ok\":true,\"grounding\":{}}}", inner);
+            CString::new(json).unwrap().into_raw()
+        }
+        Err(e) => {
+            let err_json = format!("{{\"ok\":false,\"error\":\"{}\"}}", json_escape(&e));
+            CString::new(err_json).unwrap().into_raw()
+        }
+    }
 }
 
 #[no_mangle]
