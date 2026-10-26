@@ -143,11 +143,11 @@ export interface SessionManagerOptions {
     | ((meta: SessionMeta) => SessionMemoryWiring | undefined)
     | undefined;
   /**
-   * The base prompt a session's system prompt starts from; absent means the harness's own. The
-   * persona, skills, platform and memory blocks still follow it, so this is where an app says what
-   * is true of *this* session (an agent's standing instructions) without owning the rest.
+   * Who the agent in a session is: its name, its place, its standing instructions. The harness's
+   * base prompt is left alone; this lands in the platform section, after the persona and skills,
+   * so it is where an app says what is true of *this* agent without owning the rest.
    */
-  baseSystemPromptFor?: ((meta: SessionMeta) => string | undefined) | undefined;
+  agentPromptFor?: ((meta: SessionMeta) => string | undefined) | undefined;
   /**
    * Middleware on a session's tool calls, read once when it opens.
    *
@@ -237,7 +237,7 @@ export class SessionManager {
   private readonly personasFor: SessionManagerOptions["personasFor"];
   private readonly skillsFor: SessionManagerOptions["skillsFor"];
   private readonly memoryFor: SessionManagerOptions["memoryFor"];
-  private readonly baseSystemPromptFor: SessionManagerOptions["baseSystemPromptFor"];
+  private readonly agentPromptFor: SessionManagerOptions["agentPromptFor"];
   private readonly toolMiddleware: SessionManagerOptions["toolMiddleware"];
   private readonly sessionTools: SessionManagerOptions["sessionTools"];
   private readonly sessionAttach: SessionManagerOptions["sessionAttach"];
@@ -258,7 +258,7 @@ export class SessionManager {
     this.personasFor = options.personasFor;
     this.skillsFor = options.skillsFor;
     this.memoryFor = options.memoryFor;
-    this.baseSystemPromptFor = options.baseSystemPromptFor;
+    this.agentPromptFor = options.agentPromptFor;
     this.toolMiddleware = options.toolMiddleware;
     this.sessionTools = options.sessionTools;
     this.sessionAttach = options.sessionAttach;
@@ -463,11 +463,11 @@ export class SessionManager {
             observe,
             onAnswer: (payload) => recordAnswer?.(payload),
           });
-    const baseSystemPrompt = this.baseSystemPromptFor?.(meta);
+    const agentPrompt = this.agentPromptFor?.(meta);
     const session = await openSession({
       storage: (await this.store.open(meta.id))!.storage,
       models,
-      ...(baseSystemPrompt === undefined ? {} : { baseSystemPrompt }),
+      ...(agentPrompt === undefined ? {} : { agentPrompt }),
       // The environment: what a session's tools run against, and where its memory lives. The
       // harness's tools were written against the seam, so a session across the room runs the
       // same read/write/edit/bash as one here.

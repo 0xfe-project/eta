@@ -36,7 +36,6 @@ import type { SessionHandle, SessionPlace, SessionSettings } from "./places";
 import type { ConversationRecord, ConversationStore } from "./store";
 import type { Timeline } from "./timeline";
 import { LinkError } from "@eta/daemon";
-import { DEFAULT_SYSTEM_PROMPT } from "@eta/harness";
 import { parseModelId } from "@eta/server";
 import { isTaskSession } from "../tasks/session-key";
 import { viewOf as attachmentView } from "./attachments";
@@ -206,16 +205,16 @@ export class Engine {
   /* ---------------------------------------------------------------- hooks */
 
   /**
-   * The base of an agent's system prompt: the harness's own, then who the agent is in this
-   * conversation and what it was told to be. Read when the session opens, so a change to the
-   * agent reaches a session the next time it is opened (see `#syncSession`).
+   * Who the agent is in this conversation and what it was told to be — the platform section of its
+   * system prompt; the harness's base prompt stays as it is. Read when the session opens, so a
+   * change to the agent reaches a session the next time it is opened (see `#syncSession`).
    */
-  readonly baseSystemPromptFor = (meta: SessionMeta): string | undefined => {
+  readonly agentPromptFor = (meta: SessionMeta): string | undefined => {
     if (meta.agentId === undefined) return undefined;
     const agent = this.#agents.get(meta.agentId);
     if (agent === undefined) return undefined;
     this.#opened.set(meta.id, this.#stamp(agent));
-    return promptOf(agent, isTaskSession(meta.conversationId));
+    return agentPromptOf(agent, isTaskSession(meta.conversationId));
   };
 
   /** What a session's prompt, persona and bundles were read from. */
@@ -286,7 +285,7 @@ export class Engine {
       machine: input.machine,
       cwd: input.cwd,
       existing: input.existing,
-      prompt: promptOf(input.agent, true),
+      prompt: agentPromptOf(input.agent, true),
       stamp: this.#stamp(input.agent),
       created: input.created,
     });
@@ -782,7 +781,7 @@ export class Engine {
         machine,
         cwd: project.path,
         existing: participant.sessionId,
-        prompt: promptOf(agent),
+        prompt: agentPromptOf(agent),
         stamp: this.#stamp(agent),
         created: (id) =>
           this.#conversations.setSession(conversation.id, agent.id, id),
@@ -1025,10 +1024,9 @@ function nameIn(
   return members.find((member) => member.id === id)?.name ?? id;
 }
 
-/** The base of an agent's system prompt: the harness's own, who it is here, what it was told. */
-function promptOf(agent: AgentRecord, task = false): string {
+/** Who an agent is here and what it was told: its system prompt's platform section, not its base. */
+function agentPromptOf(agent: AgentRecord, task = false): string {
   const parts = [
-    DEFAULT_SYSTEM_PROMPT,
     task
       ? `In this task you are ${agent.name}. You work on it alone, in a session of your own: nobody else is in it, and what you report on the task is what the user reads.`
       : `In this conversation you are ${agent.name}. The other members, and the user, address you by that name.`,

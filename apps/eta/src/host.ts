@@ -184,7 +184,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       compaction: etaCompaction(),
       // What the product adds to every session it owns: the agent's words in the system prompt,
       // and, from each of its features, tools, tool middleware and an ear for questions.
-      baseSystemPromptFor: product.engine.baseSystemPromptFor,
+      agentPromptFor: product.engine.agentPromptFor,
       skillDirsFor: product.skillDirsFor,
       ...product.sessionHooks,
       generated: product.generated,

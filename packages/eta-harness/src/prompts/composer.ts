@@ -27,7 +27,11 @@ export interface EtaPromptState {
   persona?: string | undefined;
   /** Rendered `<skills>` catalog block; stable, after the persona. */
   skills?: string | undefined;
-  /** Where the app's own files live, rendered by the server; stable, after skills. */
+  /**
+   * The platform section: everything the deployment adds beyond the base and the
+   * persona — who the agent is here (`<agent>`), where the app's files live
+   * (`<platform>`). Stable, after skills.
+   */
   platform?: string | undefined;
   /** Rendered `<memory>` block; always last, it changes most often. */
   memory?: string | undefined;
@@ -55,8 +59,8 @@ function sections(base: string, state: EtaPromptState): EtaPromptSection[] {
   if (state.skills !== undefined && state.skills.length > 0) {
     out.push({ name: "skills", text: state.skills, stable: true });
   }
-  // The platform briefing describes the app, not the conversation, so it sits
-  // with the blocks a provider cache is meant to keep.
+  // The platform section describes the deployment (the agent, the app), not the
+  // conversation, so it sits with the blocks a provider cache is meant to keep.
   if (state.platform !== undefined && state.platform.length > 0) {
     out.push({ name: "platform", text: state.platform, stable: true });
   }
