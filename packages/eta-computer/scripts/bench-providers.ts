@@ -9,7 +9,11 @@
  */
 import type { StructuralNode } from "../src/index";
 import process from "node:process";
-import { ComputerTriadEngine, renderSyntheticUiFrame } from "../src/index";
+import {
+  ComputerTriadEngine,
+  renderSyntheticUiFrame,
+  weVisOneSupported,
+} from "../src/index";
 
 const WIDTH = 1280;
 const HEIGHT = 720;
@@ -238,6 +242,13 @@ for (const report of reports) {
 }
 
 // Pure-vision WeVisOne-VL-2B (onnxruntime-genai) CPU Grounding Benchmark
+// The OpenVINO runtime stops at ORT 1.24, which predates the decoder's MRotaryEmbedding op.
+if (!weVisOneSupported()) {
+  console.log(
+    "\n== wevisone-vl-2b-oga: skipped (loaded ONNX Runtime is pre-1.26) ==",
+  );
+  process.exit(0);
+}
 const pureEngine = new ComputerTriadEngine({ providers: "cpu" });
 try {
   const pureFrame = renderSyntheticUiFrame(640, 360, [

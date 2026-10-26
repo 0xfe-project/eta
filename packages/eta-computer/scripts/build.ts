@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readdir, stat } from "node:fs/promises";
+import { copyFile, mkdir, readdir, rm, stat, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import process from "node:process";
 import { libraryPath, modelsDirPath } from "../src/index";
@@ -13,6 +13,9 @@ const ogaCacheDir = join(root, "native", "target", "oga-runtime");
 
 /// ONNX Runtime 1.30.0 (API 1..26) satisfies both `ort` (`api-22`) and `onnxruntime-genai` 0.17.0.
 const ORT_VERSION = "1.30.0";
+// The OpenVINO package is the only official build that carries `OpenVINOExecutionProvider`, and it
+// stops at 1.24.1 — so asking for it pins the whole runtime back six minor versions.
+const ORT_OPENVINO_VERSION = "1.24.1";
 const OGA_VERSION = "0.17.0";
 
 await mkdir(dirname(outLib), { recursive: true });
@@ -120,6 +123,12 @@ const runtimeLibPattern =
     : process.platform === "darwin"
       ? /\.dylib$/i
       : /\.so(\.\d+)*$/i;
+// Switching variants leaves the previous runtime behind, and a stale `libonnxruntime.so.1` would
+// silently win over the one just provisioned.
+for (const entry of await readdir(dirname(outLib))) {
+  if (!entry.startsWith("libonnxruntime.") || !entry.includes(".so")) continue;
+  await rm(join(dirname(outLib), entry), { force: true });
+}
 for (const dir of [ortLibDir, ogaLibDir]) {
   for (const entry of await readdir(dir)) {
     if (!runtimeLibPattern.test(entry)) continue;
@@ -139,6 +148,8 @@ async function provisionOrtRuntime(): Promise<string> {
   if (configured !== undefined && configured !== "") {
     return join(configured, "lib");
   }
+
+  if (await shouldUseOpenVinoRuntime()) return provisionOpenVinoOrtRuntime();
 
   const gpu = await shouldUseGpuRuntime();
   const asset = runtimeAssetName(gpu);
@@ -176,6 +187,84 @@ async function provisionOrtRuntime(): Promise<string> {
   }
   if (!existsSync(libDir)) {
     throw new Error(`${asset} did not contain a lib/ directory`);
+  }
+  return libDir;
+}
+
+/// `ETA_COMPUTER_ORT_VARIANT=openvino` selects the OpenVINO build, which is the only official
+/// package registering `OpenVINOExecutionProvider` (Intel CPU/GPU/NPU).
+async function shouldUseOpenVinoRuntime(): Promise<boolean> {
+  const variant = process.env.ETA_COMPUTER_ORT_VARIANT?.trim().toLowerCase();
+  if (variant === "openvino" || variant === "ov") return true;
+  if (variant !== undefined && variant !== "") return false;
+  // A device request is itself an intent to use the EP, so it selects the variant too.
+  return ["ETA_OPENVINO_DEVICE", "ETA_OPENVINO_CACHE"].some((key) => {
+    const value = process.env[key]?.trim();
+    return value !== undefined && value !== "";
+  });
+}
+
+/// Stages the OpenVINO wheel's `capi/` directory as a plain runtime directory. The wheel is the only
+/// distribution point for this EP on Linux, so it is fetched (+extracted) rather than built.
+async function provisionOpenVinoOrtRuntime(): Promise<string> {
+  if (process.platform !== "linux" || process.arch !== "x64") {
+    throw new Error(
+      "ETA_COMPUTER_ORT_VARIANT=openvino is only wired up for linux-x64",
+    );
+  }
+  const asset = `onnxruntime-openvino-${ORT_OPENVINO_VERSION}`;
+  const libDir = join(runtimeCacheDir, asset, "lib");
+  if (existsSync(join(libDir, "libonnxruntime.so.1"))) return libDir;
+
+  await mkdir(runtimeCacheDir, { recursive: true });
+  const wheelDir = join(runtimeCacheDir, `${asset}.wheel`);
+  const capi = join(wheelDir, "onnxruntime", "capi");
+  if (!existsSync(join(capi, "libonnxruntime.so.1.24.1"))) {
+    const listing = (await (
+      await fetch(
+        `https://pypi.org/pypi/onnxruntime-openvino/${ORT_OPENVINO_VERSION}/json`,
+      )
+    ).json()) as { urls: { filename: string; url: string }[] };
+    const wheel = listing.urls.find(
+      (entry) =>
+        entry.filename.includes("manylinux") &&
+        entry.filename.includes("x86_64") &&
+        entry.filename.includes("cp3"),
+    );
+    if (wheel === undefined) {
+      throw new Error(`no manylinux x86_64 wheel for ${asset}`);
+    }
+    console.log(`[eta-computer] downloading ${wheel.filename} (OpenVINO EP)`);
+    const response = await fetch(wheel.url);
+    if (!response.ok) {
+      throw new Error(`failed to download ${wheel.url}: ${response.status}`);
+    }
+    const archive = join(runtimeCacheDir, wheel.filename);
+    await Bun.write(archive, response);
+    const unzipProc = Bun.spawn(["unzip", "-oq", archive, "-d", wheelDir], {
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    if ((await unzipProc.exited) !== 0) throw new Error(`failed to unzip ${archive}`);
+  }
+
+  // The linker wants a bare `libonnxruntime.so`; the loader resolves the SONAME, so both names and
+  // the OpenVINO provider + plugin libraries have to sit in the same directory.
+  await mkdir(libDir, { recursive: true });
+  for (const entry of await readdir(capi)) {
+    if (!/\.so(?:\.\d+)*$/.test(entry)) continue;
+    const source = join(capi, entry);
+    if (!(await stat(source)).isFile()) continue;
+    await copyFile(source, join(libDir, entry));
+  }
+  for (const [alias, target] of [
+    ["libonnxruntime.so", `libonnxruntime.so.${ORT_OPENVINO_VERSION}`],
+    ["libonnxruntime.so.1", `libonnxruntime.so.${ORT_OPENVINO_VERSION}`],
+  ] as const) {
+    const link = join(libDir, alias);
+    if (existsSync(link)) continue;
+    await symlink(target, link);
   }
   return libDir;
 }

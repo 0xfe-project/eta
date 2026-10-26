@@ -795,6 +795,14 @@ pub unsafe extern "C" fn EtaComputerGroundWeVisOne(
     }
 }
 
+/// Reports what the loaded ONNX Runtime is, so callers can decide up front whether it can serve a
+/// given graph instead of discovering it from a failed session.
+#[no_mangle]
+pub extern "C" fn EtaComputerRuntimeInfo() -> *mut c_char {
+    let info = crate::ort_backend::runtime_info_json();
+    CString::new(info).unwrap_or_default().into_raw()
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn EtaComputerFreeString(ptr: *mut c_char) {
     if !ptr.is_null() {

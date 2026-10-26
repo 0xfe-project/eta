@@ -293,6 +293,7 @@ interface NativeSymbols {
   ) => Pointer | null;
   EtaComputerFreeString: (strPtr: Pointer) => void;
   EtaComputerDestroy: (engine: Pointer) => void;
+  EtaComputerRuntimeInfo: () => Pointer | null;
 }
 
 let cachedSymbols: NativeSymbols | undefined;
@@ -346,9 +347,44 @@ function loadNativeSymbols(): NativeSymbols {
       args: [FFIType.ptr],
       returns: FFIType.void,
     },
+    EtaComputerRuntimeInfo: {
+      args: [],
+      returns: FFIType.ptr,
+    },
   });
   cachedSymbols = lib.symbols as unknown as NativeSymbols;
   return cachedSymbols;
+}
+
+export interface ComputerRuntimeInfo {
+  ortVersion: string;
+  providers: string[];
+}
+
+/**
+ * What the loaded ONNX Runtime actually is. Cheaper than constructing an engine, and the only
+ * honest way to answer "can this build serve graph X".
+ */
+export function runtimeInfo(): ComputerRuntimeInfo {
+  const symbols = loadNativeSymbols();
+  const ptr = symbols.EtaComputerRuntimeInfo();
+  if (ptr === null) throw new Error("EtaComputerRuntimeInfo returned null");
+  try {
+    return JSON.parse(new CString(ptr).toString()) as ComputerRuntimeInfo;
+  } finally {
+    symbols.EtaComputerFreeString(ptr);
+  }
+}
+
+/// The WeVisOne decoder uses `com.microsoft::MRotaryEmbedding`, which ONNX Runtime only registered
+/// after 1.25 — the OpenVINO build stops at 1.24, so grounding cannot run there.
+export function weVisOneSupported(): boolean {
+  try {
+    const [major = 0, minor = 0] = runtimeInfo().ortVersion.split(".").map(Number);
+    return major > 1 || minor >= 26;
+  } catch {
+    return false;
+  }
 }
 
 const cleanTab = (s: string): string => s.replace(/[\t\r\n]/g, " ");

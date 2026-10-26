@@ -16,6 +16,7 @@ use std::time::Instant;
 use ort::environment::Environment;
 use ort::ep::{self, ExecutionProviderDispatch};
 use ort::inputs;
+use ort::ortsys;
 use ort::session::builder::{GraphOptimizationLevel, SessionBuilder};
 use ort::session::Session;
 use ort::value::TensorRef;
@@ -43,6 +44,10 @@ pub enum Provider {
     Cuda,
     DirectML,
     CoreML,
+    /// Intel CPU/GPU/NPU through the OpenVINO execution provider. The device is chosen with
+    /// `ETA_OPENVINO_DEVICE` (`NPU`, `GPU`, `GPU.1`, `HETERO:NPU,GPU`, ...), because which one is
+    /// present, permitted, and fastest is a per-machine question.
+    OpenVino,
     Cpu,
 }
 
@@ -52,6 +57,7 @@ impl Provider {
             Provider::Cuda => "cuda",
             Provider::DirectML => "directml",
             Provider::CoreML => "coreml",
+            Provider::OpenVino => "openvino",
             Provider::Cpu => "cpu",
         }
     }
@@ -61,6 +67,7 @@ impl Provider {
             "cuda" | "nvidia" => Some(Provider::Cuda),
             "directml" | "dml" => Some(Provider::DirectML),
             "coreml" | "ane" => Some(Provider::CoreML),
+            "openvino" | "ov" | "npu" => Some(Provider::OpenVino),
             "cpu" => Some(Provider::Cpu),
             _ => None,
         }
@@ -71,6 +78,7 @@ impl Provider {
             Provider::Cuda => cuda_dispatch(device_id),
             Provider::DirectML => directml_dispatch(device_id),
             Provider::CoreML => coreml_dispatch(),
+            Provider::OpenVino => openvino_dispatch(),
             Provider::Cpu => Some(ep::CPU::default().build()),
         }
     }
@@ -114,6 +122,141 @@ fn coreml_dispatch() -> Option<ExecutionProviderDispatch> {
     None
 }
 
+/// OpenVINO EP, on every platform where the runtime can carry it. `NPU` is the interesting device
+/// on an Intel client part; `AUTO` lets OpenVINO pick, and `HETERO:NPU,GPU` splits a graph.
+#[cfg(any(target_os = "windows", all(unix, not(target_os = "macos"))))]
+fn openvino_dispatch() -> Option<ExecutionProviderDispatch> {
+    let device = std::env::var("ETA_OPENVINO_DEVICE")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| "AUTO".to_string());
+    let mut ep = ep::OpenVINO::default().with_device_type(device);
+    // Compiled blobs cost ~120 ms on the detector's first frame and are stable per graph + device,
+    // so they are kept in the user cache by default (`ETA_OPENVINO_CACHE` overrides the location).
+    if let Some(dir) = openvino_cache_dir() {
+        ep = ep.with_cache_dir(dir);
+    }
+    Some(ep.build())
+}
+
+/// Blob cache location: `ETA_OPENVINO_CACHE`, else `<XDG cache>/eta-computer/openvino`. An empty
+/// override disables the cache.
+fn openvino_cache_dir() -> Option<String> {
+    if let Ok(value) = std::env::var("ETA_OPENVINO_CACHE") {
+        let trimmed = value.trim();
+        return if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    let base = std::env::var("XDG_CACHE_HOME")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| {
+            std::env::var("HOME")
+                .ok()
+                .map(|home| format!("{home}/.cache"))
+        })?;
+    let dir = format!("{base}/eta-computer/openvino");
+    let _ = fs::create_dir_all(&dir);
+    Some(dir)
+}
+
+#[cfg(not(any(target_os = "windows", all(unix, not(target_os = "macos")))))]
+fn openvino_dispatch() -> Option<ExecutionProviderDispatch> {
+    None
+}
+
+impl Provider {
+    /// The name ONNX Runtime uses when it reports which providers the loaded build registers.
+    fn ort_name(self) -> &'static str {
+        match self {
+            Provider::Cuda => "CUDAExecutionProvider",
+            Provider::DirectML => "DmlExecutionProvider",
+            Provider::CoreML => "CoreMLExecutionProvider",
+            Provider::OpenVino => "OpenVINOExecutionProvider",
+            Provider::Cpu => "CPUExecutionProvider",
+        }
+    }
+}
+
+/// Execution providers the *loaded* runtime actually carries. Asking up front is cheaper than
+/// discovering it from a failed session build, and it keeps a preference entry for an accelerator
+/// this build cannot run from costing a logged error on every session.
+fn runtime_providers() -> &'static [String] {
+    static PROVIDERS: OnceLock<Vec<String>> = OnceLock::new();
+    PROVIDERS
+        .get_or_init(|| {
+            if environment().is_err() {
+                return Vec::new();
+            }
+            let mut out: *mut *mut std::os::raw::c_char = std::ptr::null_mut();
+            let mut len: std::os::raw::c_int = 0;
+            // SAFETY: ONNX Runtime allocates `out`, and the guard below hands it back.
+            unsafe {
+                let status = ortsys![unsafe GetAvailableProviders(&mut out, &mut len)];
+                if ort::error::Error::result_from_status(status).is_err() || out.is_null() {
+                    return Vec::new();
+                }
+                let names = (0..len.max(0))
+                    .map(|i| {
+                        std::ffi::CStr::from_ptr(*out.add(i as usize))
+                            .to_string_lossy()
+                            .into_owned()
+                    })
+                    .collect();
+                let _ = ortsys![unsafe ReleaseAvailableProviders(out, len)];
+                names
+            }
+        })
+        .as_slice()
+}
+
+/// Drops preference entries this runtime cannot serve. An empty probe (e.g. the environment failed
+/// to initialise) leaves the chain untouched so the caller still gets a real error.
+fn retain_available(chain: Vec<Provider>) -> Vec<Provider> {
+    let available = runtime_providers();
+    if std::env::var("ETA_COMPUTER_DEBUG").is_ok_and(|v| !v.trim().is_empty()) {
+        eprintln!("[eta-computer] runtime execution providers: {}", available.join(", "));
+    }
+    if available.is_empty() {
+        return chain;
+    }
+    let retained: Vec<Provider> = chain
+        .iter()
+        .copied()
+        .filter(|p| *p == Provider::Cpu || available.iter().any(|a| a == p.ort_name()))
+        .collect();
+    let asked_for_openvino = std::env::var("ETA_OPENVINO_DEVICE")
+        .is_ok_and(|v| !v.trim().is_empty());
+    if asked_for_openvino
+        && !retained.contains(&Provider::OpenVino)
+        && chain.contains(&Provider::OpenVino)
+    {
+        eprintln!(
+            "[eta-computer] ETA_OPENVINO_DEVICE is set but this ONNX Runtime was built without the \
+             OpenVINO provider; rebuild with ETA_COMPUTER_ORT_VARIANT=openvino"
+        );
+    }
+    retained
+}
+
+/// `{"ortVersion":"1.30.0","providers":["CPUExecutionProvider"]}` — the runtime actually loaded,
+/// not the one the crate was compiled against.
+pub fn runtime_info_json() -> String {
+    let providers = runtime_providers()
+        .iter()
+        .map(|name| format!("\"{}\"", name))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"ortVersion\":\"{}\",\"providers\":[{}]}}",
+        runtime_version(),
+        providers
+    )
+}
+
 /// Preference chain, most-preferred accelerator first. `ETA_COMPUTER_PROVIDER` overrides it with a
 /// comma-separated list (e.g. `directml,cpu`); `cpu` is appended when the list omits it, so a
 /// session can always fall back.
@@ -136,15 +279,18 @@ fn provider_chain(override_spec: Option<&str>) -> Vec<Provider> {
         }
         None => {
             if cfg!(target_os = "windows") {
+                chain.push(Provider::OpenVino);
                 chain.push(Provider::Cuda);
                 chain.push(Provider::DirectML);
             } else if cfg!(target_os = "macos") {
                 chain.push(Provider::CoreML);
             } else {
+                chain.push(Provider::OpenVino);
                 chain.push(Provider::Cuda);
             }
         }
     }
+    let mut chain = retain_available(chain);
     if !chain.contains(&Provider::Cpu) {
         chain.push(Provider::Cpu);
     }
@@ -163,17 +309,33 @@ fn encoder_chain(
     perception: &[Provider],
     detector_provider: Provider,
 ) -> Vec<Provider> {
-    let configured = std::env::var("ETA_COMPUTER_ENCODER_PROVIDER").ok();
-    let spec = configured
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .or_else(|| requested.map(str::trim).filter(|s| !s.is_empty()));
-    if let Some(spec) = spec {
+    let dedicated = std::env::var("ETA_COMPUTER_ENCODER_PROVIDER")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    // OpenVINO returns non-finite logits for the INT8 verdict encoder, so it is dropped from
+    // anything but an encoder-specific request — a global "prefer this accelerator" is not a
+    // statement about this graph, and a NaN here reaches the caller as an unparseable step.
+    let for_encoder = |chain: Vec<Provider>| -> Vec<Provider> {
+        if dedicated.is_some() {
+            return chain;
+        }
+        chain
+            .into_iter()
+            .filter(|p| *p != Provider::OpenVino)
+            .chain(std::iter::once(Provider::Cpu))
+            .collect()
+    };
+
+    if let Some(spec) = dedicated.as_deref() {
         return provider_chain(Some(spec));
     }
+    if let Some(spec) = requested.map(str::trim).filter(|s| !s.is_empty()) {
+        return for_encoder(provider_chain(Some(spec)));
+    }
     if detector_provider == Provider::Cpu {
-        return perception.to_vec();
+        return for_encoder(perception.to_vec());
     }
     vec![Provider::Cpu]
 }

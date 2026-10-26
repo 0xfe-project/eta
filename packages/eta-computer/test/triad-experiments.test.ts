@@ -6,6 +6,7 @@ import {
   ComputerTriadEngine,
   modelsDirPath,
   renderSyntheticUiFrame,
+  weVisOneSupported,
 } from "../src/index";
 
 describe("3-Model Edge Triad Experiments (UI Detector+64d Embed + Fast OCR + OpenJev System-1)", () => {
@@ -102,7 +103,9 @@ describe("3-Model Edge Triad Experiments (UI Detector+64d Embed + Fast OCR + Ope
     });
 
     expect(step1.ortVersion).toMatch(/^1\./);
-    expect(["cuda", "directml", "coreml", "cpu"]).toContain(step1.provider);
+    expect(["cuda", "directml", "coreml", "openvino", "cpu"]).toContain(
+      step1.provider,
+    );
     expect(step1.ocrProvider).toBe(step1.provider);
     // The INT8 verdict encoder loses to the CPU on short sequences, so a GPU machine keeps it there
     // unless ETA_COMPUTER_ENCODER_PROVIDER says otherwise.
@@ -838,7 +841,11 @@ describe("3-Model Edge Triad Experiments (UI Detector+64d Embed + Fast OCR + Ope
   const wevisoneDir = join(modelsDirPath(), "wevisone_vl_2b_oga");
   // The 1.44 GB grounding artifact is produced by scripts/prepare-wevisone-oga.py and is not in
   // git, so this runs only where someone prepared it. Skipping keeps a fresh checkout green.
-  it.skipIf(!existsSync(join(wevisoneDir, "genai_config.json")))(
+  // The decoder also needs `com.microsoft::MRotaryEmbedding`, which ONNX Runtime only registers
+  // after 1.25 — the OpenVINO EP build stops at 1.24.
+  it.skipIf(
+    !existsSync(join(wevisoneDir, "genai_config.json")) || !weVisOneSupported(),
+  )(
     "experiment 9: Pure-vision desktop grounding via quantized WeVisOne-VL-2B (onnxruntime-genai) + KV-cache reuse + System-1 handoff",
     () => {
       const localEngine = new ComputerTriadEngine({ providers: "cpu" });

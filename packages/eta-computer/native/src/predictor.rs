@@ -420,6 +420,17 @@ pub fn evaluate_and_decide(
         escalate_logit,
     ));
 
+    // A misbehaving execution provider (INT8 on OpenVINO GPU does this) can return non-finite
+    // logits, and a single NaN would poison every probability below it — and then the caller's JSON.
+    if options.iter().any(|o| !o.3.is_finite()) {
+        eprintln!("[eta-computer] non-finite verdict logit; treating it as abstain");
+        for o in &mut options {
+            if !o.3.is_finite() {
+                o.3 = -6.0;
+            }
+        }
+    }
+
     // Softmax over options
     let max_logit = options
         .iter()

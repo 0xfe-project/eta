@@ -341,14 +341,77 @@ i7-13700K / RTX 3080 / ONNX Runtime 1.22.0，各 21 次取中位数。CPU 列为
 
 ---
 
-## 11. 尚未落地
+## 11. Intel OpenVINO EP：把感知搬到 iGPU / NPU
+
+### 为什么值得单独一条路
+
+这套硬件的算力分布很偏：Meteor Lake 的 NPU（`8086:7d1d` rev05）与 Arc iGPU 都闲着，而 detector 的卷积栈要吃掉整步一半的时间。ONNX Runtime 里唯一能同时摸到 Intel CPU / iGPU / NPU 的执行后端是 `OpenVINOExecutionProvider`。
+
+### 一个绕不开的版本陷阱
+
+官方只有 `onnxruntime-openvino` 这个 PyPI 包带 `OpenVINOExecutionProvider`，而它**止步于 1.24.1**。默认构建用的是 ORT 1.30.0。这带来两个硬性后果：
+
+1. **必须换运行时，不是加 feature。** `ETA_COMPUTER_ORT_VARIANT=openvino`（或只要设了 `ETA_OPENVINO_DEVICE`）会让 `scripts/build.ts` 去 PyPI 拉 1.24.1 的 wheel、把 `capi/` 下的 `.so` 与四个 OpenVINO 插件摊成一个普通运行时目录，再照常链接。见 [build.ts](./scripts/build.ts) 的 `provisionOpenVinoOrtRuntime()`。
+2. **同一进程只能有一份 `libonnxruntime.so.1`**，所以 OpenVINO 构建与默认构建**不能共存**。切回默认要重新 `bun run build`。
+
+### 实测：iGPU（Arc，非 NPU）
+
+285H，`ETA_OPENVINO_DEVICE=GPU`，1280×720，缓存全部击穿（每轮标签文本与控件位置都变），12 轮取中位数：
+
+| 阶段 | CPU EP | OpenVINO GPU EP | 倍率 |
+| --- | --- | --- | --- |
+| detector（含 64d 分支） | 49.9 ms | 13.6 ms | **3.7×** |
+| OCR rec（逐 anchor） | 19.4 ms | 12.7 ms | 1.5× |
+| 整步（无 A11y 节点） | 106.8 ms | 73.3 ms | 1.46× |
+| 整步（有 A11y 节点，OCR 被跳过） | 82.6 ms | 44.4 ms | 1.86× |
+
+三个反直觉处：
+
+- **首次 OCR 反而慢 6 倍**（113 ms vs 18 ms）。那不是推理而是 iGPU 图编译。第二帧起就反过来（12.7 vs 19.4 ms）。所以「第一次跑得慢」不能当成 EP 变慢的证据。
+- **blob 缓存是真的有用。** 默认写到 `$XDG_CACHE_HOME/eta-computer/openvino`（`ETA_OPENVINO_CACHE` 可改，置空则关掉）。暖缓存后 detector 14.9→12.3 ms，冷步 p95 121→73 ms，一次编译产出 348 个 blob。
+- **INT8 encoder 在 OpenVINO GPU 上直接算错。** 它返回非有限 logits，softmax 一路 NaN 下去，最后吐给调用方的 JSON 里出现裸 `NaN`——`JSON.parse` 当场炸。两层都补了：`encoder_chain()` 把 OpenVINO 从 encoder 的候选链里剔掉（只有 `ETA_COMPUTER_ENCODER_PROVIDER=openvino` 能强行指定），`predictor.rs` 在 softmax 前把非有限 logit 折成弃权。
+
+### 为什么 WeVisOne 用不了这条路
+
+`WeVisOne-VL-2B` 跑在 `onnxruntime-genai` 上，而它的 decoder 用了 `com.microsoft::MRotaryEmbedding`——ORT **1.26 之后**才注册的 contrib op。1.24.1 加载它直接失败：
+
+```
+Fatal error: com.microsoft:MRotaryEmbedding(-1) is not a registered function/op
+```
+
+OGA 本身还会先打两行 `The requested API version [26]/[25] is not available` 再退让。因此 OpenVINO 构建下 Grounding 层不可用，`eval-screenspot.ts --engine wevisone` 与实验 9 都会跳过。要两者兼得只有两条路：把 decoder 转成 OpenVINO IR 走 OpenVINO 原生 API（脱离 ORT 版本约束），或者让 Grounding 跑在独立进程里。
+
+### NPU：代码到位，机器没通
+
+`/sys/class/accel/accel0` 存在（261:0），`intel_vpu` 已加载，但 `/dev/accel/accel0` 这个设备节点不存在；即便它存在，权限也是 `root:render 660`，而当前用户只在 `mikanrico input wheel` 组。所以 `ETA_OPENVINO_DEVICE=NPU` 的实测结果是：
+
+```
+[OpenVINO] Device NPU is not available
+[eta-computer] execution provider `openvino` unavailable, falling back
+```
+
+回退路径本身是好的——不会崩，只是退回 CPU。要真正跑通 NPU 需要 root：
+
+```bash
+sudo mknod /dev/accel/accel0 c 261 0
+sudo chgrp render /dev/accel/accel0 && sudo chmod 660 /dev/accel/accel0
+sudo usermod -aG render "$USER"   # 之后重新登录
+```
+
+### 顺带修的一件事
+
+原生层以前完全没有「这个运行时长什么样」的自省接口，判断能力只能靠构造一个引擎再偷看 step 里的字段。现在有 `EtaComputerRuntimeInfo()` / `runtimeInfo()`，返回 `{ortVersion, providers}`；`weVisOneSupported()` 基于它判断（ORT ≥ 1.26）。`provider_chain()` 也改成先问 `GetAvailableProviders` 再决定候选——以前在纯 CPU 构建上每条会话都会白打一行 CUDA 回退日志。
+
+## 12. 尚未落地
 
 - **真实采集/注入层**（Linux PipeWire/XShm + `uinput`、Windows DXGI + `SendInput`、Playwright CDP）。当前只有合成帧与静态截图。
 - **Harness 工具与插件**：`computer_act` / `computer_observe`，以及 `@eta/plugin-computer`。
 - **物理熔断**：全局热键与鼠标晃动监听。
 - **A11y 采集**：目前结构节点由调用方传入，影子树尚未实现。
 - **DirectML / CoreML 只到「能被探测」的程度。** 探测与回退路径都有，但只有 CUDA 在有显卡的机器上真跑过；DirectML 需要一份带 DML provider 的 ONNX Runtime（官方 GPU 包不含），CoreML 需要 Apple 硬件。
-- **Provider 组合是「换哪个 ORT 构建」决定的**，不是插拔的。同一进程里只能有一份 `onnxruntime.dll`，所以 CUDA 与 DirectML 不能同时可用；要测 DirectML 得换运行时。
+- **Provider 组合是「换哪个 ORT 构建」决定的**，不是插拔的。同一进程里只能有一份 `onnxruntime.dll`，所以 CUDA / DirectML / OpenVINO 三者不能同时可用；要换就得重跑 `bun run build`。
+- **NPU 从未真正跑过一次推理。** 见 §11：设备节点与 `render` 组权限两道关都在 root 手里。
+- **OpenVINO 构建下没有 Grounding 层**（ORT 1.24.1 缺 `MRotaryEmbedding`），除非把 decoder 转成 OpenVINO IR 换掉 OGA。
 
 ## 参考文献
 
