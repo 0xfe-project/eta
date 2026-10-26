@@ -396,7 +396,7 @@ impl WeVisOneOgaEngine {
         roi: Option<Rect>,
     ) -> Result<WeVisOneGroundOutcome, String> {
         self.ground_with_options(
-            rgb, width, height, task, query, target_w, target_h, roi, 36, false,
+            rgb, width, height, task, query, target_w, target_h, roi, 512, false,
         )
     }
 
@@ -468,7 +468,7 @@ impl WeVisOneOgaEngine {
                     0,
                     0,
                     Some(fov_rect),
-                    max_visual_tokens.clamp(24, 36),
+                    max_visual_tokens.clamp(128, 256),
                 );
 
                 // Restore the global KV cache so subsequent queries on the full screen stay warm!
@@ -684,7 +684,7 @@ impl WeVisOneOgaEngine {
                     6usize,
                 ),
                 _ => (
-                    format!("Locate the instances that match the following description: {clean_q}."),
+                    format!("Locate a single instance that best matches the following description: {clean_q}."),
                     format!("<ref>{clean_q}</ref><box>"),
                     6usize,
                 ),

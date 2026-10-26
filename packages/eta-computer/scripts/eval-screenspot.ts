@@ -71,8 +71,9 @@ const flag = (name: string, fallback: string): string => {
   return i >= 0 && args[i + 1] !== undefined ? args[i + 1]! : fallback;
 };
 const split = flag("split", "all");
-const engineKind = flag("engine", "triad") as "triad" | "wevisone";
+const engineKind = flag("engine", "triad") as "triad" | "wevisone" | "hybrid";
 const isWeVisOne = engineKind === "wevisone";
+const isHybrid = engineKind === "hybrid";
 const limit = Number(flag("limit", "0"));
 const outPath = flag("out", `/tmp/ss/report-${engineKind}.json`);
 
@@ -190,6 +191,7 @@ try {
           subgoal: item.instruction,
           nowMs: 1000,
           resetDelta: true,
+          enableWeVisOneFallback: isHybrid,
           // No accessibility tree: pixels only, which is the point.
           structuralNodes: [],
         });

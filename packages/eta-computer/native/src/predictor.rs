@@ -176,6 +176,7 @@ pub fn evaluate_and_decide(
     actual_cursor: &str,
     stagnation_steps: u32,
     now_ms: u64,
+    failed_attempts: &[(Option<u32>, (f32, f32), Rect)],
 ) -> Result<JevDecisionOutcome, String> {
     // 1. Compute UI-JEPA Hybrid Symbolic-Latent Surprise Metrics
     let mut focus_matched = 1.0f32;
@@ -276,10 +277,25 @@ pub fn evaluate_and_decide(
         subgoal
     };
     let query_lower = query_str.to_lowercase();
-    let query_tokens: Vec<&str> = query_lower
+    const STOPWORDS: &[&str] = &[
+        "the", "this", "that", "into", "from", "with", "for", "and", "or", "to", "in", "on", "of",
+        "at", "by", "an", "as", "is", "it", "be", "are", "was", "were", "click", "tap", "press",
+        "select", "choose", "open", "view", "show", "switch", "toggle",
+    ];
+    let raw_tokens: Vec<&str> = query_lower
         .split(|c: char| !c.is_alphanumeric())
         .filter(|s| s.chars().count() >= 2)
         .collect();
+    let filtered_tokens: Vec<&str> = raw_tokens
+        .iter()
+        .copied()
+        .filter(|w| !STOPWORDS.contains(w))
+        .collect();
+    let query_tokens: Vec<&str> = if filtered_tokens.is_empty() {
+        raw_tokens
+    } else {
+        filtered_tokens
+    };
 
     let planned_id = next_step_hint.and_then(|h| h.target_anchor_id);
     let planned_act = next_step_hint
@@ -287,6 +303,31 @@ pub fn evaluate_and_decide(
         .unwrap_or_else(|| "click".to_string());
 
     let mut any_destructive_target = false;
+    let is_failed_anchor = |a: &crate::fusion::FusedAnchor| -> bool {
+        if planned_id == Some(a.persistent_id) {
+            return false;
+        }
+        let (cx, cy) = a.bbox.center();
+        failed_attempts.iter().any(|&(fid, (fx, fy), _)| {
+            fid == Some(a.persistent_id) || ((cx - fx).hypot(cy - fy) < 14.0)
+        })
+    };
+    let recovery_neighborhood_boost = |a: &crate::fusion::FusedAnchor| -> f32 {
+        let Some(&(_, (fx, fy), _)) = failed_attempts.last() else {
+            return 0.0;
+        };
+        if is_failed_anchor(a) {
+            return -2.5;
+        }
+        let (cx, cy) = a.bbox.center();
+        let dist = (cx - fx).hypot(cy - fy);
+        if (14.0..=160.0).contains(&dist) {
+            1.2 * (1.0 - (dist - 14.0) / 146.0)
+        } else {
+            0.0
+        }
+    };
+
     let mut ranked_anchors: Vec<(usize, f32)> = fusion
         .active_anchors
         .iter()
@@ -298,19 +339,25 @@ pub fn evaluate_and_decide(
             } else {
                 0.0f32
             };
-            (idx, overlap + id_bonus + a.confidence * 0.1)
+            let rec_boost = recovery_neighborhood_boost(a);
+            (idx, overlap * 2.0 + id_bonus + rec_boost + a.confidence * 0.08)
         })
         .collect();
     ranked_anchors.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let max_lexical_overlap = fusion
+        .active_anchors
+        .iter()
+        .filter(|a| !is_failed_anchor(a))
+        .map(|a| token_overlap_score(&a.label, &query_tokens))
+        .fold(0.0f32, f32::max);
 
-    // Select top 4 candidate anchors for the real 151M OpenJev GLiClass head + 1 explicit abstention slot
-    // keeping total BPE sequence length <= 45 tokens (~25ms on CPU instead of 450ms!)
+    // Select top 6 candidate anchors for the real 151M OpenJev GLiClass head + 1 explicit abstention slot
     let mut candidate_options: Vec<(String, Option<u32>, Option<Rect>, String, f32)> = Vec::new();
-    for &(anchor_idx, _) in ranked_anchors.iter().take(4) {
+    for &(anchor_idx, _) in ranked_anchors.iter().take(6) {
         let anchor = &fusion.active_anchors[anchor_idx];
         let overlap = token_overlap_score(&anchor.label, &query_tokens);
         let id_match = if planned_id == Some(anchor.persistent_id)
-            || (planned_id.is_none() && overlap >= 0.75)
+            || (planned_id.is_none() && overlap >= 0.50)
         {
             1.0f32
         } else {
@@ -322,9 +369,10 @@ pub fn evaluate_and_decide(
             any_destructive_target = true;
         }
 
-        // 300ms idempotency debounce lock against double-click hazard
+        // 300ms idempotency debounce lock against double-click hazard, plus closed-loop dead-click suppression
         let debounce_locked =
             anchor.last_clicked_ms > 0 && now_ms.saturating_sub(anchor.last_clicked_ms) < 300;
+        let failed_dead_zone = is_failed_anchor(anchor);
 
         let role_lower = anchor.role.to_ascii_lowercase();
         let is_input = role_lower.contains("input")
@@ -341,16 +389,20 @@ pub fn evaluate_and_decide(
             "click"
         };
 
-        let prior_logit_bias = if debounce_locked && act_verb == "click" {
+        let prior_logit_bias = if (debounce_locked || failed_dead_zone) && act_verb == "click" {
             -15.0f32
         } else {
-            id_match * 4.2 + overlap * 3.0
+            let rec = recovery_neighborhood_boost(anchor) * 2.6;
+            id_match * 4.2 + overlap * 8.0 + rec
         };
 
-        // Keep the label short: ModernBERT attention is quadratic in sequence length
-        // (measured: 21ms @ 32 tokens, 36ms @ 64, 95ms @ 192).
-        let short_label: String = anchor.label.chars().take(20).collect();
-        let label_desc = format!("{} {}: {}", act_verb, anchor.role, short_label);
+        // Keep the label short and clean (do not inject heuristic aspect-ratio role guesses into GLiClass).
+        let short_label: String = anchor.label.chars().take(24).collect();
+        let label_desc = if crate::fusion::is_generic_anchor_label(&anchor.label) {
+            format!("{} {}", act_verb, anchor.role)
+        } else {
+            format!("{}: {}", act_verb, short_label)
+        };
         candidate_options.push((
             format!("{}:#{}", act_verb, anchor.persistent_id),
             Some(anchor.persistent_id),
@@ -377,12 +429,25 @@ pub fn evaluate_and_decide(
     // Extract real OpenJev logits & apply RLCD temperature scaling (T = 1.0716)
     let rlcd_temp = 1.0716f32;
     let num_cands = candidate_options.len();
-    let abstain_raw_logit = triad.jev_out_logits25[num_cands.min(24)];
+    // When a candidate has direct lexical match with the instruction, dampen uncalibrated
+    // GLiClass raw logit noise (including the abstention slot) so it cannot flip a clear OCR/A11y
+    // label match to an unrelated box or to `None`.
+    let model_logit_scale = if max_lexical_overlap >= 0.35 {
+        0.15f32
+    } else {
+        1.0f32
+    };
+    let abstain_raw_logit = triad.jev_out_logits25[num_cands.min(24)] * model_logit_scale
+        - if max_lexical_overlap >= 0.35 {
+            4.5f32
+        } else {
+            0.0f32
+        };
 
     let mut options: Vec<(String, Option<u32>, Option<Rect>, f32)> =
         Vec::with_capacity(num_cands + 2);
     for (slot_idx, cand) in candidate_options.into_iter().enumerate() {
-        let model_logit = triad.jev_out_logits25[slot_idx.min(24)];
+        let model_logit = triad.jev_out_logits25[slot_idx.min(24)] * model_logit_scale;
         let combined_logit = (model_logit + cand.4) / rlcd_temp;
         options.push((cand.0, cand.1, cand.2, combined_logit));
     }

@@ -988,4 +988,62 @@ describe("3-Model Edge Triad Experiments (UI Detector+64d Embed + Fast OCR + Ope
     },
     45000,
   );
+
+  it("experiment 10: Closed-loop postcondition verification — dead-click suppression & local neighborhood recovery", () => {
+    const localEngine = new ComputerTriadEngine({ providers: "cpu" });
+    try {
+      // Two adjacent controls with similar labels: a static label decoy at [200, 120] and the
+      // actual interactive button right next to it at [290, 120].
+      const nodes: StructuralNode[] = [
+        {
+          role: "button",
+          label: "Adjust Style",
+          bbox: { x: 200, y: 120, w: 72, h: 36 },
+          region: "toolbar",
+        },
+        {
+          role: "button",
+          label: "Adjust Style",
+          bbox: { x: 288, y: 120, w: 72, h: 36 },
+          region: "toolbar",
+        },
+      ];
+      const frame = renderSyntheticUiFrame(WIDTH, HEIGHT, [
+        { bbox: { x: 200, y: 120, w: 72, h: 36 }, kind: "button" },
+        { bbox: { x: 288, y: 120, w: 72, h: 36 }, kind: "button" },
+      ]);
+
+      // Step 1: initial open-loop click picks the first candidate
+      const s1 = localEngine.step({
+        currRgb: frame,
+        width: WIDTH,
+        height: HEIGHT,
+        subgoal: "Click Adjust Style",
+        nowMs: 1000,
+        resetDelta: true,
+        structuralNodes: nodes,
+      });
+      expect(s1.chosenAnchorId).not.toBeNull();
+      const firstId = s1.chosenAnchorId!;
+
+      // Step 2: 500ms later (well past the 300ms debounce window), the screen has NOT changed
+      // (`prevRgb: frame, currRgb: frame`, `stagnationSteps: 1`). The postcondition verifier
+      // suppresses the dead-click anchor and promotes the adjacent neighbor at [288, 120].
+      const s2 = localEngine.step({
+        prevRgb: frame,
+        currRgb: frame,
+        width: WIDTH,
+        height: HEIGHT,
+        subgoal: "Click Adjust Style",
+        nowMs: 1500,
+        stagnationSteps: 1,
+        structuralNodes: nodes,
+      });
+      expect(s2.chosenAnchorId).not.toBeNull();
+      expect(s2.chosenAnchorId).not.toBe(firstId);
+      expect(s2.chosenBbox?.x).toBe(288);
+    } finally {
+      localEngine.close();
+    }
+  });
 });

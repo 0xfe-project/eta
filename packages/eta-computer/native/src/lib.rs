@@ -34,6 +34,9 @@ pub struct ComputerEngine {
     /// signature they were seen with. Reused while nothing about the widget set changed.
     pub last_landmarks: Vec<vision::VisualLandmark>,
     pub last_structural_sig: u64,
+    pub last_subgoal: String,
+    pub last_committed_click: Option<(Option<u32>, (f32, f32), Rect)>,
+    pub failed_attempts: Vec<(Option<u32>, (f32, f32), Rect)>,
 }
 
 fn json_escape(s: &str) -> String {
@@ -197,6 +200,9 @@ pub unsafe extern "C" fn EtaComputerCreate(
             last_fusion: None,
             last_landmarks: Vec::new(),
             last_structural_sig: 0,
+            last_subgoal: String::new(),
+            last_committed_click: None,
+            failed_attempts: Vec::new(),
         })),
         Err(err) => {
             eprintln!("[eta-computer-native] EtaComputerCreate failed: {}", err);
@@ -245,7 +251,18 @@ pub unsafe extern "C" fn EtaComputerStep(
 
     if parsed.reset_delta {
         eng.last_expected_delta = None;
+        eng.last_landmarks.clear();
+        eng.tracker.registry.clear();
+        eng.failed_attempts.clear();
+        eng.last_committed_click = None;
+        if eng.ocr_cache.len() > 2048 {
+            eng.ocr_cache.clear();
+        }
+    } else if parsed.subgoal != eng.last_subgoal {
+        eng.failed_attempts.clear();
+        eng.last_committed_click = None;
     }
+    eng.last_subgoal = parsed.subgoal.clone();
 
     // Stage 1: 8x8 Grid Dirty Rects + Onset/Settle State Machine
     let t_dirty = Instant::now();
@@ -257,6 +274,27 @@ pub unsafe extern "C" fn EtaComputerStep(
         0.03,
     );
     let dirty_diff_ms = t_dirty.elapsed().as_secs_f64() * 1000.0;
+
+    // Closed-Loop Postcondition Verifier:
+    // When a follow-up frame arrives (`!prev_rgb.is_empty()` and `!parsed.reset_delta`) with zero
+    // visual onset (`!dirty.action_onset_detected && dirty.dirty_area_ratio < 0.0005`) and no
+    // explicit `target_anchor_id` lock, the previous click missed its target (dead click).
+    let has_explicit_id = parsed
+        .next_hint
+        .as_ref()
+        .and_then(|h| h.target_anchor_id)
+        .is_some();
+    let postcondition_failed = !parsed.reset_delta
+        && !prev_rgb.is_empty()
+        && !has_explicit_id
+        && (parsed.nodes.is_empty() || parsed.stagnation_steps >= 1)
+        && !dirty.action_onset_detected
+        && dirty.dirty_area_ratio < 0.0005;
+    if postcondition_failed {
+        if let Some(failed) = eng.last_committed_click.take() {
+            eng.failed_attempts.push(failed);
+        }
+    }
 
     // Stage 2 & 3: Vision Pipeline (`ui_detector_embed.onnx` + `ocr_rec.onnx`)
     //
@@ -303,6 +341,11 @@ pub unsafe extern "C" fn EtaComputerStep(
             .filter(|n| !n.label.trim().is_empty() && n.enabled)
             .map(|n| n.bbox)
             .collect();
+        let det_cap = if parsed.nodes.is_empty() {
+            parsed.max_anchors.max(48)
+        } else {
+            parsed.max_anchors.clamp(8, 64)
+        };
         match run_vision_pipeline(
             &mut eng.triad,
             curr_rgb,
@@ -312,8 +355,8 @@ pub unsafe extern "C" fn EtaComputerStep(
             dirty.dirty_area_ratio,
             &mut eng.ocr_cache,
             &labeled_boxes,
-            0.25,
-            32,
+            0.20,
+            det_cap,
         ) {
             Ok(res) => {
                 eng.last_structural_sig = structural_sig;
@@ -329,11 +372,17 @@ pub unsafe extern "C" fn EtaComputerStep(
 
     // Stage 4: Multi-Modal IoU Fusion + Rigid-Body Scroll Compensation + Persistent Tracking + Foveated Folding
     let t_fuse = Instant::now();
+    // Pure-vision without A11y nodes keeps up to 48 anchors so dense screens are not clipped at 32.
+    let effective_max_anchors = if parsed.nodes.is_empty() {
+        parsed.max_anchors.max(48)
+    } else {
+        parsed.max_anchors
+    };
     let mut fusion = eng.tracker.fuse_and_track(
         &parsed.nodes,
         &visual_landmarks,
         &parsed.subgoal,
-        parsed.max_anchors,
+        effective_max_anchors,
     );
     let fusion_ms = t_fuse.elapsed().as_secs_f64() * 1000.0;
 
@@ -348,6 +397,7 @@ pub unsafe extern "C" fn EtaComputerStep(
         &parsed.cursor,
         parsed.stagnation_steps,
         parsed.now_ms,
+        &eng.failed_attempts,
     ) {
         Ok(d) => d,
         Err(e) => {
@@ -359,7 +409,8 @@ pub unsafe extern "C" fn EtaComputerStep(
     // Optional Stage 6.5: Pure-Vision Medium Path (`WeVisOne-VL-2B` via `onnxruntime-genai`)
     // Triggered when `enable_wevisone_fallback` is true and either:
     //   1. System-1 returned `slow_escalation`, OR
-    //   2. No structural A11y nodes were supplied (`parsed.nodes.is_empty()`), no explicit
+    //   2. Closed-loop postcondition verification detected a dead click (`postcondition_failed`), OR
+    //   3. No structural A11y nodes were supplied (`parsed.nodes.is_empty()`), no explicit
     //      `target_anchor_id` was pinned, and the chosen anchor has generic/unmatched text.
     let mut wevisone_outcome: Option<WeVisOneGroundOutcome> = None;
     let mut wevisone_ms = 0.0f64;
@@ -370,28 +421,34 @@ pub unsafe extern "C" fn EtaComputerStep(
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| parsed.subgoal.trim())
         .to_string();
-    let has_explicit_id = parsed
-        .next_hint
-        .as_ref()
-        .and_then(|h| h.target_anchor_id)
-        .is_some();
+    let query_lower = query_str.to_lowercase();
+    let route_tokens: Vec<&str> = query_lower
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|s| {
+            s.chars().count() >= 2
+                && !matches!(
+                    *s,
+                    "the" | "this" | "that" | "into" | "from" | "with" | "for" | "and" | "or"
+                        | "to" | "in" | "on" | "of" | "at" | "by" | "an" | "as" | "is" | "it"
+                        | "click" | "tap" | "press" | "select" | "choose" | "open" | "view"
+                        | "show" | "switch" | "toggle"
+                )
+        })
+        .collect();
     let chosen_is_unmatched = decision.chosen_anchor_id.map_or(true, |cid| {
         fusion
             .active_anchors
             .iter()
             .find(|a| a.persistent_id == cid)
             .map_or(true, |a| {
-                a.label.is_empty()
-                    || a.label.eq_ignore_ascii_case(&a.role)
-                    || !a
-                        .label
-                        .to_ascii_lowercase()
-                        .contains(&query_str.to_ascii_lowercase())
+                crate::fusion::is_generic_anchor_label(&a.label)
+                    || crate::fusion::token_overlap_score(&a.label, &route_tokens) < 0.80
             })
     });
     let should_run_wevisone = parsed.enable_wevisone_fallback
         && !query_str.is_empty()
         && (decision.gate == "slow_escalation"
+            || postcondition_failed
             || (parsed.nodes.is_empty() && !has_explicit_id && chosen_is_unmatched));
 
     if should_run_wevisone {
@@ -402,6 +459,7 @@ pub unsafe extern "C" fn EtaComputerStep(
             .unwrap_or("click")
             .to_string();
 
+        let failed_snapshot = eng.failed_attempts.clone();
         if let Ok(oga) = eng.ensure_wevisone_oga() {
             // If dirty area is localized (e.g. a newly popped-up dropdown or dialog < 35% of screen),
             // crop around `dirty.union_dirty` (padded by 48px) for 1:1 native detail; otherwise
@@ -424,18 +482,125 @@ pub unsafe extern "C" fn EtaComputerStep(
             };
             let auto_foveated = localized_roi.is_none() && (width >= 1600 || height >= 900);
 
-            if let Ok(grounded) = oga.ground_with_options(
+            if let Ok(mut grounded) = oga.ground_with_options(
                 curr_rgb,
                 width as usize,
                 height as usize,
-                "referring",
+                "point",
                 &query_str,
                 0,
                 0,
                 localized_roi,
-                32,
+                512,
                 auto_foveated,
             ) {
+                // Closed-Loop Recovery: if `point` landed inside a known dead zone from a previous
+                // failed click, consult `referring` (<box>) + nearby untried YOLOv8 landmarks to
+                // shift onto the adjacent live control instead of repeating the dead click.
+                if let Some((px, py)) = grounded.point {
+                    let in_dead_zone = failed_snapshot
+                        .iter()
+                        .any(|&(_, (fx, fy), _)| (px - fx).hypot(py - fy) < 16.0);
+                    if in_dead_zone {
+                        let mut recovered: Option<(Rect, (f32, f32))> = None;
+                        // 1. Try `<box>` referring pass (reuses hot KV cache via RewindTo in ~120ms)
+                        if let Ok(ref_out) = oga.ground_with_options(
+                            curr_rgb,
+                            width as usize,
+                            height as usize,
+                            "referring",
+                            &query_str,
+                            0,
+                            0,
+                            localized_roi,
+                            512,
+                            false,
+                        ) {
+                            grounded.total_ms += ref_out.total_ms;
+                            if let Some(rbox) = ref_out.bbox {
+                                let screen_area = (width as f32) * (height as f32);
+                                let contains_pt = px >= rbox.x - 12.0
+                                    && px <= rbox.x + rbox.w + 12.0
+                                    && py >= rbox.y - 12.0
+                                    && py <= rbox.y + rbox.h + 12.0;
+                                if contains_pt && rbox.area() < screen_area * 0.22 && rbox.w >= 24.0 {
+                                    // In `[Icon | Text]` composite controls, a center/right click on the label
+                                    // shifts onto the leading icon at `0.16 * w`.
+                                    let rx = if px >= rbox.x + rbox.w * 0.30 {
+                                        rbox.x + rbox.w * 0.16
+                                    } else {
+                                        rbox.x + rbox.w * 0.82
+                                    };
+                                    let ry = rbox.y + rbox.h * 0.5;
+                                    if (rx - px).hypot(ry - py) >= 14.0 {
+                                        recovered = Some((
+                                            Rect {
+                                                x: (rx - 20.0).max(0.0),
+                                                y: (ry - 16.0).max(0.0),
+                                                w: 40.0,
+                                                h: 32.0,
+                                            },
+                                            (rx, ry),
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                        // 2. Otherwise snap to the highest-confidence untried visual landmark within [16px, 96px]
+                        if recovered.is_none() {
+                            if let Some(best_neighbor) = fusion
+                                .active_anchors
+                                .iter()
+                                .filter(|a| {
+                                    a.bbox.area() <= 12800.0
+                                        && !failed_snapshot.iter().any(|&(fid, (fx, fy), _)| {
+                                            let (cx, cy) = a.bbox.center();
+                                            fid == Some(a.persistent_id)
+                                                || (cx - fx).hypot(cy - fy) < 16.0
+                                        })
+                                })
+                                .filter_map(|a| {
+                                    let (cx, cy) = a.bbox.center();
+                                    let d = (cx - px).hypot(cy - py);
+                                    if (16.0..=96.0).contains(&d) {
+                                        Some((a.bbox, (cx, cy), a.confidence - d * 0.003))
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .max_by(|a, b| {
+                                    a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal)
+                                })
+                            {
+                                recovered = Some((best_neighbor.0, best_neighbor.1));
+                            }
+                        }
+                        // 3. Final fallback: horizontal toolbar probe (+52px / -52px)
+                        if recovered.is_none() {
+                            let rx = if px + 56.0 < width as f32 {
+                                px + 52.0
+                            } else {
+                                (px - 52.0).max(8.0)
+                            };
+                            recovered = Some((
+                                Rect {
+                                    x: (rx - 20.0).max(0.0),
+                                    y: (py - 16.0).max(0.0),
+                                    w: 40.0,
+                                    h: 32.0,
+                                },
+                                (rx, py),
+                            ));
+                        }
+                        if let Some((rbox, rpt)) = recovered {
+                            grounded.bbox = Some(rbox);
+                            grounded.point = Some(rpt);
+                            grounded.foveated_refined = true;
+                            grounded.coarse_point = Some((px, py));
+                        }
+                    }
+                }
+
                 wevisone_ms = grounded.total_ms;
                 if !grounded.rejected {
                     if let (Some(bbox), Some(pt)) = (grounded.bbox, grounded.point) {
@@ -445,7 +610,11 @@ pub unsafe extern "C" fn EtaComputerStep(
                             bbox,
                             pt,
                         );
-                        decision.gate = "fast_commit";
+                        decision.gate = if postcondition_failed {
+                            "local_micro_correction"
+                        } else {
+                            "fast_commit"
+                        };
                         decision.chosen_anchor_id = Some(fused_anchor.persistent_id);
                         decision.chosen_bbox = Some(fused_anchor.bbox);
                         decision.chosen_action =
@@ -486,12 +655,15 @@ pub unsafe extern "C" fn EtaComputerStep(
     );
     let forward_pred_ms = t_pred.elapsed().as_secs_f64() * 1000.0;
 
-    // If we committed a click action, record the debounce timestamp
+    // If we committed a click action, record the debounce timestamp and closed-loop tracking entry
     if decision.gate == "fast_commit" || decision.gate == "local_micro_correction" {
         if let Some(cid) = decision.chosen_anchor_id {
             if decision.chosen_action.starts_with("click:") {
                 eng.tracker.mark_clicked(cid, parsed.now_ms);
             }
+        }
+        if let Some(cb) = decision.chosen_bbox {
+            eng.last_committed_click = Some((decision.chosen_anchor_id, cb.center(), cb));
         }
     }
 

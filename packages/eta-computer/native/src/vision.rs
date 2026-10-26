@@ -255,23 +255,43 @@ fn pack_rois_into_atlas(
     let plane_stride = 640 * 640;
 
     if dirty_rects.is_empty() || dirty_area_ratio > 0.45 {
-        // Aspect-ratio-preserving letterbox resize into 640x640 so wide/4K screens do not distort icons
+        // Bilinear + 2x2 box-filtered downsampling into 640x640 so 1px icon strokes do not vanish
         let scale = (640.0 / (width.max(1) as f32)).min(640.0 / (height.max(1) as f32));
         let dst_w = (((width as f32 * scale).round() as usize + 7) / 8 * 8).clamp(32, 640);
         let dst_h = (((height as f32 * scale).round() as usize + 7) / 8 * 8).clamp(32, 640);
         let pad_x = (640 - dst_w) / 2;
         let pad_y = (640 - dst_h) / 2;
+        let sx_step = width as f32 / dst_w as f32;
+        let sy_step = height as f32 / dst_h as f32;
 
         for ay in 0..dst_h {
-            let sy = (ay * height / dst_h).min(height.saturating_sub(1));
+            let sy_center = (ay as f32 + 0.5) * sy_step - 0.5;
+            let sy0 = (sy_center.floor().max(0.0) as usize).min(height.saturating_sub(1));
+            let sy1 = (sy0 + 1).min(height.saturating_sub(1));
+            let wy = (sy_center - sy0 as f32).clamp(0.0, 1.0);
             for ax in 0..dst_w {
-                let sx = (ax * width / dst_w).min(width.saturating_sub(1));
-                let s_idx = (sy * width + sx) * 3;
+                let sx_center = (ax as f32 + 0.5) * sx_step - 0.5;
+                let sx0 = (sx_center.floor().max(0.0) as usize).min(width.saturating_sub(1));
+                let sx1 = (sx0 + 1).min(width.saturating_sub(1));
+                let wx = (sx_center - sx0 as f32).clamp(0.0, 1.0);
+
+                let i00 = (sy0 * width + sx0) * 3;
+                let i01 = (sy0 * width + sx1) * 3;
+                let i10 = (sy1 * width + sx0) * 3;
+                let i11 = (sy1 * width + sx1) * 3;
                 let d_idx = (pad_y + ay) * 640 + (pad_x + ax);
-                if s_idx + 2 < rgb.len() {
-                    atlas_tensor[d_idx] = rgb[s_idx] as f32 / 255.0;
-                    atlas_tensor[plane_stride + d_idx] = rgb[s_idx + 1] as f32 / 255.0;
-                    atlas_tensor[2 * plane_stride + d_idx] = rgb[s_idx + 2] as f32 / 255.0;
+                if i11 + 2 < rgb.len() {
+                    let w00 = (1.0 - wx) * (1.0 - wy);
+                    let w01 = wx * (1.0 - wy);
+                    let w10 = (1.0 - wx) * wy;
+                    let w11 = wx * wy;
+                    for c in 0..3 {
+                        let v = w00 * (rgb[i00 + c] as f32)
+                            + w01 * (rgb[i01 + c] as f32)
+                            + w10 * (rgb[i10 + c] as f32)
+                            + w11 * (rgb[i11 + c] as f32);
+                        atlas_tensor[c * plane_stride + d_idx] = v / 255.0;
+                    }
                 }
             }
         }
@@ -383,30 +403,30 @@ pub fn sample_neck_embedding(neck_embed: &[f32], nx: f32, ny: f32) -> [f32; 64] 
     out
 }
 
-/// Check if a candidate bounding box contains non-uniform UI edges/strokes around its center core.
+/// Check if a candidate bounding box contains non-uniform UI edges/strokes across its full span
+/// (including borders and left-aligned labels, not just the center 25%).
 fn has_local_contrast(rgb: &[u8], width: usize, height: usize, rect: &Rect) -> bool {
-    let (cx, cy) = rect.center();
-    let half_w = (rect.w * 0.25).clamp(6.0, 40.0);
-    let half_h = (rect.h * 0.25).clamp(4.0, 24.0);
-    let x0 = ((cx - half_w).max(0.0) as usize).min(width.saturating_sub(1));
-    let y0 = ((cy - half_h).max(0.0) as usize).min(height.saturating_sub(1));
-    let x1 = ((cx + half_w).max(0.0) as usize).min(width);
-    let y1 = ((cy + half_h).max(0.0) as usize).min(height);
+    let x0 = (rect.x.max(0.0) as usize).min(width.saturating_sub(1));
+    let y0 = (rect.y.max(0.0) as usize).min(height.saturating_sub(1));
+    let x1 = ((rect.x + rect.w).ceil().max(0.0) as usize).min(width);
+    let y1 = ((rect.y + rect.h).ceil().max(0.0) as usize).min(height);
     if x1 <= x0 + 2 || y1 <= y0 + 2 {
         return false;
     }
 
-    let mut min_luma = 255u32;
+    let step_x = ((x1 - x0) / 16).clamp(1, 4);
+    let step_y = ((y1 - y0) / 12).clamp(1, 4);
+    let mut min_luma = 765u32;
     let mut max_luma = 0u32;
 
-    for y in (y0..y1).step_by(2) {
-        for x in (x0..x1).step_by(2) {
+    for y in (y0..y1).step_by(step_y) {
+        for x in (x0..x1).step_by(step_x) {
             let idx = (y * width + x) * 3;
             if idx + 2 < rgb.len() {
                 let luma = rgb[idx] as u32 + rgb[idx + 1] as u32 + rgb[idx + 2] as u32;
                 min_luma = min_luma.min(luma);
                 max_luma = max_luma.max(luma);
-                if max_luma.saturating_sub(min_luma) >= 80 {
+                if max_luma.saturating_sub(min_luma) >= 28 {
                     return true;
                 }
             }
@@ -429,12 +449,16 @@ fn hash_crop_region(rgb: &[u8], width: usize, height: usize, rect: &Rect) -> u64
     let y1 = ((rect.y + rect.h - inset_y).max(y0 as f32 + 1.0) as usize).min(height);
 
     let mut h: u64 = 0xcbf29ce484222325;
-    // Coarse geometry buckets keep two same-looking widgets apart on very different rows.
-    h ^= ((rect.w / 8.0) as u64) | (((rect.h / 8.0) as u64) << 12);
+    // Coarse geometry buckets keep two same-looking widgets apart on different rows/columns
+    // while still absorbing 2-4px detector jitter on the same widget.
+    h ^= ((rect.w / 6.0) as u64)
+        | (((rect.h / 6.0) as u64) << 12)
+        | (((rect.x / 16.0) as u64) << 24)
+        | (((rect.y / 16.0) as u64) << 40);
     h = h.wrapping_mul(0x100000001b3);
 
-    let cols = 6usize;
-    let rows = 3usize;
+    let cols = 12usize;
+    let rows = 4usize;
     let step_x = ((x1.saturating_sub(x0)) / cols).max(1);
     let step_y = ((y1.saturating_sub(y0)) / rows).max(1);
 
@@ -609,7 +633,7 @@ pub fn run_vision_pipeline(
             ocr_cache_hits += 1;
         } else {
             ocr_cache_misses += 1;
-            if uncached_indices.len() < 8 {
+            if uncached_indices.len() < 48 {
                 uncached_indices.push((idx, h));
             }
         }
@@ -617,72 +641,75 @@ pub fn run_vision_pipeline(
 
     let mut ocr_ort_ms = 0.0;
     if !uncached_indices.is_empty() {
-        let batch_n = uncached_indices.len();
         let crop_stride = 3 * 48 * 320;
         let plane_stride = 48 * 320;
-        triad.ocr_input_crops[..(batch_n * crop_stride)].fill(0.0);
-
-        for (batch_slot, &(lm_idx, _)) in uncached_indices.iter().enumerate() {
-            let r = kept[lm_idx].bbox;
-            let sx0 = (r.x as usize).min(width.saturating_sub(1));
-            let sy0 = (r.y as usize).min(height.saturating_sub(1));
-            let sw = (r.w as usize).max(1).min(width - sx0);
-            let sh = (r.h as usize).max(1).min(height - sy0);
-            let new_w = ((sw * 48) / sh.max(1)).clamp(16, 320);
-            let slot_base = batch_slot * crop_stride;
-
-            for ty in 0..48 {
-                let sy = sy0 + (ty * sh / 48).min(sh.saturating_sub(1));
-                for tx in 0..new_w {
-                    let sx = sx0 + (tx * sw / new_w).min(sw.saturating_sub(1));
-                    let s_idx = (sy * width + sx) * 3;
-                    let d_idx = ty * 320 + tx;
-                    if s_idx + 2 < rgb.len() {
-                        triad.ocr_input_crops[slot_base + d_idx] =
-                            (rgb[s_idx] as f32 / 255.0 - 0.5) / 0.5;
-                        triad.ocr_input_crops[slot_base + plane_stride + d_idx] =
-                            (rgb[s_idx + 1] as f32 / 255.0 - 0.5) / 0.5;
-                        triad.ocr_input_crops[slot_base + 2 * plane_stride + d_idx] =
-                            (rgb[s_idx + 2] as f32 / 255.0 - 0.5) / 0.5;
-                    }
-                }
-            }
-        }
-
-        ocr_ort_ms = triad.run_ocr_batch(batch_n)?;
-
         let vocab_len = triad.ocr_vocab.len().max(96);
         let step_stride = 438usize;
-        for (batch_slot, &(lm_idx, crop_hash)) in uncached_indices.iter().enumerate() {
-            let logits_base = batch_slot * 40 * step_stride;
-            let mut chars = String::new();
-            let mut prev_tok = 0usize;
-            for t in 0..40 {
-                let step_base = logits_base + t * step_stride;
-                let mut best_tok = 0usize;
-                let mut best_val = f32::NEG_INFINITY;
-                for tok in 0..step_stride {
-                    let v = triad.ocr_out_logits[step_base + tok];
-                    if v > best_val {
-                        best_val = v;
-                        best_tok = tok;
+
+        for chunk in uncached_indices.chunks(8) {
+            let batch_n = chunk.len();
+            triad.ocr_input_crops[..(batch_n * crop_stride)].fill(0.0);
+
+            for (batch_slot, &(lm_idx, _)) in chunk.iter().enumerate() {
+                let r = kept[lm_idx].bbox;
+                let sx0 = (r.x as usize).min(width.saturating_sub(1));
+                let sy0 = (r.y as usize).min(height.saturating_sub(1));
+                let sw = (r.w as usize).max(1).min(width - sx0);
+                let sh = (r.h as usize).max(1).min(height - sy0);
+                let new_w = ((sw * 48) / sh.max(1)).clamp(16, 320);
+                let slot_base = batch_slot * crop_stride;
+
+                for ty in 0..48 {
+                    let sy = sy0 + (ty * sh / 48).min(sh.saturating_sub(1));
+                    for tx in 0..new_w {
+                        let sx = sx0 + (tx * sw / new_w).min(sw.saturating_sub(1));
+                        let s_idx = (sy * width + sx) * 3;
+                        let d_idx = ty * 320 + tx;
+                        if s_idx + 2 < rgb.len() {
+                            triad.ocr_input_crops[slot_base + d_idx] =
+                                (rgb[s_idx] as f32 / 255.0 - 0.5) / 0.5;
+                            triad.ocr_input_crops[slot_base + plane_stride + d_idx] =
+                                (rgb[s_idx + 1] as f32 / 255.0 - 0.5) / 0.5;
+                            triad.ocr_input_crops[slot_base + 2 * plane_stride + d_idx] =
+                                (rgb[s_idx + 2] as f32 / 255.0 - 0.5) / 0.5;
+                        }
                     }
                 }
-                if best_tok > 0 && best_tok != prev_tok && best_tok < vocab_len {
-                    if let Some(piece) = triad.ocr_vocab.get(best_tok) {
-                        chars.push_str(piece);
-                    }
-                }
-                prev_tok = best_tok;
             }
-            let text = if chars.trim().is_empty() {
-                format!("{}:#{:04x}", kept[lm_idx].class_name, crop_hash & 0xffff)
-            } else {
-                chars.trim().to_string()
-            };
-            ocr_cache.insert(crop_hash, text.clone());
-            kept[lm_idx].ocr_text = Some(text);
-            kept[lm_idx].ocr_cached = false;
+
+            ocr_ort_ms += triad.run_ocr_batch(batch_n)?;
+
+            for (batch_slot, &(lm_idx, crop_hash)) in chunk.iter().enumerate() {
+                let logits_base = batch_slot * 40 * step_stride;
+                let mut chars = String::new();
+                let mut prev_tok = 0usize;
+                for t in 0..40 {
+                    let step_base = logits_base + t * step_stride;
+                    let mut best_tok = 0usize;
+                    let mut best_val = f32::NEG_INFINITY;
+                    for tok in 0..step_stride {
+                        let v = triad.ocr_out_logits[step_base + tok];
+                        if v > best_val {
+                            best_val = v;
+                            best_tok = tok;
+                        }
+                    }
+                    if best_tok > 0 && best_tok != prev_tok && best_tok < vocab_len {
+                        if let Some(piece) = triad.ocr_vocab.get(best_tok) {
+                            chars.push_str(piece);
+                        }
+                    }
+                    prev_tok = best_tok;
+                }
+                let text = if chars.trim().is_empty() {
+                    format!("{}:#{:04x}", kept[lm_idx].class_name, crop_hash & 0xffff)
+                } else {
+                    chars.trim().to_string()
+                };
+                ocr_cache.insert(crop_hash, text.clone());
+                kept[lm_idx].ocr_text = Some(text);
+                kept[lm_idx].ocr_cached = false;
+            }
         }
     }
 

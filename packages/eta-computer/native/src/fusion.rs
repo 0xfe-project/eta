@@ -202,6 +202,11 @@ impl PersistentAnchorTracker {
             });
         }
 
+        // Enrich visual-only icon landmarks with glyph aliases and window-caption geometric priors
+        if structural_nodes.is_empty() {
+            enrich_visual_icon_semantics(&mut raw_fused);
+        }
+
         // 2. Detect Rigid-Body Scroll / Translation across frames via unique semantic_hash matching
         let mut displacement_votes: Vec<(f32, f32)> = Vec::new();
         for cand in raw_fused.iter().take(structural_nodes.len()) {
@@ -437,8 +442,13 @@ impl PersistentAnchorTracker {
         point: (f32, f32),
     ) -> FusedAnchor {
         let mut best_idx: Option<usize> = None;
-        let mut best_score = 0.15f32;
+        let mut best_score = 0.25f32;
         for (idx, a) in fusion.active_anchors.iter().enumerate() {
+            // Do not merge a grounded point into a huge container panel (> 160x80) whose center
+            // would pull the click away from the grounded coordinate.
+            if a.bbox.w * a.bbox.h > 12800.0 {
+                continue;
+            }
             let iou = a.bbox.iou(&bbox);
             let contains = point.0 >= a.bbox.x
                 && point.0 <= a.bbox.x + a.bbox.w
@@ -458,7 +468,7 @@ impl PersistentAnchorTracker {
             anchor.label = label.to_string();
             anchor.semantic_hash = sem_hash;
             anchor.confidence = anchor.confidence.max(0.95);
-            if bbox.w > 8.0 && bbox.h > 8.0 && best_score < 0.80 {
+            if bbox.w > 8.0 && bbox.h > 8.0 && best_score < 0.75 {
                 anchor.bbox = bbox;
             }
             let updated = anchor.clone();
@@ -501,21 +511,239 @@ impl PersistentAnchorTracker {
     }
 }
 
+pub fn is_generic_anchor_label(text: &str) -> bool {
+    let t = text.trim();
+    t.is_empty()
+        || t.eq_ignore_ascii_case("button")
+        || t.eq_ignore_ascii_case("input")
+        || t.eq_ignore_ascii_case("icon_generic")
+        || t.starts_with("button:#")
+        || t.starts_with("input:#")
+        || t.starts_with("icon_generic:#")
+}
+
+/// Enrich pure-vision icon anchors using OCR glyph symbols (`×`, `+`, `←`, `…`, `?`) and
+/// standard desktop window-caption geometry (top-right minimize / maximize / close trio).
+fn enrich_visual_icon_semantics(anchors: &mut Vec<FusedAnchor>) {
+    let max_x = anchors
+        .iter()
+        .map(|a| a.bbox.x + a.bbox.w)
+        .fold(0.0f32, f32::max)
+        .max(320.0);
+
+    // 1. Direct OCR symbol glyph -> semantic action aliases on compact icon boxes
+    for a in anchors.iter_mut() {
+        if a.bbox.w > 72.0 || a.bbox.h > 64.0 {
+            continue;
+        }
+        let raw = a.label.trim();
+        let alias = match raw {
+            "×" | "x" | "X" | "✕" | "✖" => Some("× close delete remove cancel window"),
+            "+" | "＋" => Some("+ add new create plus zoom in"),
+            "←" | "<" | "‹" | "«" => Some("← back previous return left"),
+            "→" | ">" | "›" | "»" => Some("→ next forward right"),
+            "…" | "..." | ":" | "⋮" | "⋯" | "≡" | "=" => {
+                Some("… more menu options settings toolbar")
+            }
+            "?" | "？" => Some("? help info support"),
+            "-" | "—" | "–" | "_" => Some("- minimize hide zoom out"),
+            _ => None,
+        };
+        if let Some(sem) = alias {
+            a.label = sem.to_string();
+        }
+    }
+
+    // 2. Window caption control trio prior: horizontally aligned compact buttons on a window titlebar
+    // (`y <= 90`, `x > max_x * 0.65`, `w <= 56`, `h <= 42`) anchored by a `×` close box.
+    // Also synthesizes the missing `minimize` slot when YOLOv8 missed the thin `—` stroke.
+    let mut top_right_indices: Vec<usize> = anchors
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| {
+            a.bbox.y <= 90.0
+                && a.bbox.w <= 56.0
+                && a.bbox.h <= 42.0
+                && (a.bbox.x + a.bbox.w * 0.5) >= max_x * 0.65
+        })
+        .map(|(i, _)| i)
+        .collect();
+
+    top_right_indices.sort_by(|&i, &j| {
+        anchors[j]
+            .bbox
+            .x
+            .partial_cmp(&anchors[i].bbox.x)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let mut assigned = vec![false; anchors.len()];
+    let mut synth_minimize: Vec<FusedAnchor> = Vec::new();
+    for &right_idx in &top_right_indices {
+        if assigned[right_idx] || !anchors[right_idx].label.contains("close") {
+            continue;
+        }
+        let r_box = anchors[right_idx].bbox;
+        let (_, r_cy) = r_box.center();
+        let mut row: Vec<usize> = vec![right_idx];
+        let mut prev_x = r_box.x;
+        for &cand_idx in &top_right_indices {
+            if cand_idx == right_idx || assigned[cand_idx] {
+                continue;
+            }
+            let c_box = anchors[cand_idx].bbox;
+            let (_, c_cy) = c_box.center();
+            let gap = prev_x - (c_box.x + c_box.w);
+            if (c_cy - r_cy).abs() <= 6.0
+                && (c_box.h - r_box.h).abs() <= 8.0
+                && (-4.0..=24.0).contains(&gap)
+            {
+                row.push(cand_idx);
+                prev_x = c_box.x;
+                if row.len() >= 3 {
+                    break;
+                }
+            }
+        }
+
+        for &idx in &row {
+            assigned[idx] = true;
+        }
+        if row.len() == 3 {
+            anchors[row[1]].label =
+                format!("{} maximize restore window", anchors[row[1]].label);
+            anchors[row[2]].label = format!("{} minimize window", anchors[row[2]].label);
+        } else if row.len() == 2 {
+            // `[ □ ][ × ]` detected, thin `[ — ]` minimize button immediately to the left was missed
+            anchors[row[1]].label =
+                format!("{} maximize restore window", anchors[row[1]].label);
+            let step = (r_box.x - anchors[row[1]].bbox.x).clamp(r_box.w, r_box.w * 1.6);
+            let min_x = (anchors[row[1]].bbox.x - step).max(0.0);
+            let mut syn = anchors[right_idx].clone();
+            syn.bbox = Rect {
+                x: min_x,
+                y: r_box.y,
+                w: r_box.w,
+                h: r_box.h,
+            };
+            syn.label = "- minimize window".to_string();
+            syn.semantic_hash = fnv1a_str("visual:button:minimize_synth");
+            synth_minimize.push(syn);
+        } else if row.len() == 1 && r_box.y <= 72.0 {
+            // Only `[ × ]` detected on a floating window titlebar (e.g. Calculator): synthesize `[ — ]` 2 slots left
+            let step = (r_box.w * 1.32).clamp(36.0, 52.0);
+            let min_x = (r_box.x - step * 2.0).max(0.0);
+            let mut syn = anchors[right_idx].clone();
+            syn.bbox = Rect {
+                x: min_x,
+                y: r_box.y,
+                w: r_box.w,
+                h: r_box.h,
+            };
+            syn.label = "- minimize window calculator".to_string();
+            syn.semantic_hash = fnv1a_str("visual:button:minimize_floating_synth");
+            synth_minimize.push(syn);
+        }
+    }
+    anchors.extend(synth_minimize);
+}
+
+/// Returns true if `a` and `b` are within Levenshtein edit distance 1 (tolerating 1-char OCR drops/typos).
+fn edit_distance_le1(a: &str, b: &str) -> bool {
+    let ac: Vec<char> = a.chars().collect();
+    let bc: Vec<char> = b.chars().collect();
+    let (m, n) = (ac.len(), bc.len());
+    if m.abs_diff(n) > 1 {
+        return false;
+    }
+    let mut i = 0usize;
+    let mut j = 0usize;
+    let mut diffs = 0usize;
+    while i < m && j < n {
+        if ac[i] == bc[j] {
+            i += 1;
+            j += 1;
+        } else {
+            diffs += 1;
+            if diffs > 1 {
+                return false;
+            }
+            if m > n {
+                i += 1;
+            } else if n > m {
+                j += 1;
+            } else {
+                i += 1;
+                j += 1;
+            }
+        }
+    }
+    if i < m || j < n {
+        diffs += 1;
+    }
+    diffs <= 1
+}
+
 pub fn token_overlap_score(text: &str, query_tokens: &[&str]) -> f32 {
-    if query_tokens.is_empty() || text.is_empty() {
+    if query_tokens.is_empty() || is_generic_anchor_label(text) {
         return 0.0;
     }
     let lower = text.to_lowercase();
+    let label_words: Vec<&str> = lower
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|s| s.chars().count() >= 2)
+        .collect();
+    if label_words.is_empty() {
+        return 0.0;
+    }
+
+    // Generic context nouns ("file" in "save the file", "window" in "close this window") carry
+    // weaker standalone weight when the query also has specific action/target words.
+    const WEAK_CONTEXT_NOUNS: &[&str] = &[
+        "file", "window", "page", "folder", "item", "app", "image", "text", "button", "icon",
+        "mode", "tool", "option", "options",
+    ];
+    let has_strong_token = query_tokens
+        .iter()
+        .any(|t| !WEAK_CONTEXT_NOUNS.contains(&t.to_lowercase().as_str()));
+
     let mut matched = 0.0f32;
+    let mut total_weight = 0.0f32;
     for &t in query_tokens {
         let t_low = t.to_lowercase();
-        if lower.contains(&t_low) {
-            matched += 1.0;
-        } else if t_low.contains(&lower) && lower.chars().count() >= 2 {
-            matched += 0.85;
-        }
+        let t_len = t_low.chars().count();
+        let w_weight = if has_strong_token && WEAK_CONTEXT_NOUNS.contains(&t_low.as_str()) {
+            0.25f32
+        } else {
+            1.0f32
+        };
+        total_weight += w_weight;
+
+        let word_score = if label_words.iter().any(|&w| w == t_low) {
+            1.0
+        } else if t_len >= 3 && lower.contains(&t_low) {
+            0.95
+        } else if label_words
+            .iter()
+            .any(|&w| w.chars().count() >= 4 && t_low.contains(w))
+        {
+            0.80
+        } else if t_len >= 4
+            && label_words
+                .iter()
+                .any(|&w| w.chars().count() >= 3 && edit_distance_le1(w, &t_low))
+        {
+            0.82
+        } else {
+            0.0
+        };
+        matched += word_score * w_weight;
     }
-    (matched / (query_tokens.len() as f32)).clamp(0.0, 1.0)
+    if matched <= 0.0 {
+        return 0.0;
+    }
+    let ratio = matched / total_weight.max(1.0);
+    (matched * 0.45 + ratio * 0.55).clamp(0.0, 1.5)
 }
 
 fn summarize_region(region: &str, items: &[FusedAnchor]) -> CollapsedRegionSummary {
