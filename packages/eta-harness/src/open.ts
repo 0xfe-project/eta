@@ -73,6 +73,7 @@ import { recordGoalEntries, SessionLog } from "@eta/core/session";
 import { AskRegistry, createAskUserTool } from "./ask";
 import { BtwManager, btwSideAsk } from "./btw";
 import { CompactionService } from "./compaction-service";
+import { imageLimitsFor } from "./image-limits";
 import { JournalingService, SESSION_CONFIG, TASKS_STATE } from "./journaling";
 import { extractMemoryAtRunEnd, MemoryCache } from "./memory";
 import { MetricsService } from "./metrics";
@@ -328,22 +329,25 @@ export async function openSession(
 ): Promise<OpenSession> {
   const log = await SessionLog.load(options.storage);
 
-  // A transcript with a broken tool call/result pair is a transcript no provider
-  // will accept, and the failure reads as silence: the request is refused at the
-  // door, so there is no assistant message and no error the user can act on.
-  // Repair it before anything reads the branch — and say so, because a session
-  // that healed itself is a fact the operator needs to see, not a secret.
-  const repaired = await repairTranscript(log);
+  // The journal's own words win; a caller's default is for a session that has
+  // never been configured. Read before the repair: which images a request may
+  // carry is part of what "a transcript the provider will accept" means, and
+  // that answer depends on the session's model.
+  const storedConfig = (await options.storage.getValue(SESSION_CONFIG))?.value;
+  const config: KernelConfig =
+    storedConfig ?? defaultKernelConfig(options.config);
+
+  // Two things make a transcript no provider will accept, and both fail the
+  // same way: the request is refused at the door, so there is no assistant
+  // message and no error the user can act on. A tool call and its result that
+  // do not pair; and an image the model cannot decode. Repair both before
+  // anything reads the branch — and say so, because a session that healed
+  // itself is a fact the operator needs to see, not a secret.
+  const repaired = await repairTranscript(log, imageLimitsFor(config.model));
   if (repaired !== undefined)
     options.kernel?.warn?.(
       `[eta-harness] transcript repaired: ${describeRepair(repaired)}`,
     );
-
-  // The journal's own words win; a caller's default is for a session that has
-  // never been configured.
-  const storedConfig = (await options.storage.getValue(SESSION_CONFIG))?.value;
-  const config: KernelConfig =
-    storedConfig ?? defaultKernelConfig(options.config);
 
   const kernel = Kernel.create({
     ...options.kernel,
@@ -417,11 +421,11 @@ export async function openSession(
       ...(options.env === undefined
         ? []
         : [
-            createReadTool() as HarnessTool<
-              ExecutionToolContext,
-              TSchema,
-              unknown
-            >,
+            createReadTool({
+              // Read at call time: the model the session is on right now is
+              // what decides, and a model switch mid-session moves the limit.
+              imageLimits: () => imageLimitsFor(kernel.config.get().model),
+            }) as HarnessTool<ExecutionToolContext, TSchema, unknown>,
             createWriteTool() as HarnessTool<
               ExecutionToolContext,
               TSchema,
@@ -679,6 +683,46 @@ export async function openSession(
           );
         });
 
+  // A request whose *content* the provider refuses fails before the stream
+  // starts, and the next request rebuilds the same content: unhandled, the
+  // session is wedged until someone repairs the branch by hand. So when a run
+  // fails, read the branch again; if the repair changed something, the failure
+  // had a cause that can be removed, and the turn gets one more go.
+  //
+  // A repair that changes nothing means the cause was elsewhere — a 500, a
+  // dropped connection, a key — and that failure is reported as it happened.
+  // This is not a retry loop: a failed run buys one repair, two in a row is as
+  // far as it goes, and the count resets on any run that does not fail.
+  const MAX_AUTO_REPAIRS = 2;
+  let autoRepairs = 0;
+  const stopMediaRepair = kernelOn(kernel.ctx)("turn:run-end", (event) => {
+    if (event.status !== "failed") {
+      autoRepairs = 0;
+      return;
+    }
+    if (autoRepairs >= MAX_AUTO_REPAIRS) return;
+    void (async () => {
+      const again = await repairTranscript(
+        log,
+        imageLimitsFor(kernel.config.get().model),
+      );
+      if (again === undefined) return;
+      autoRepairs += 1;
+      options.kernel?.warn?.(
+        `[eta-harness] the run failed and the transcript could be repaired, so the turn was retried: ${describeRepair(again)}`,
+      );
+      // The runner read its messages when the session opened; the repair moved
+      // the branch under it, and a run on the stale copy would rebuild exactly
+      // the request that was refused.
+      runner.setTranscript(log.transcript());
+      // Once this run has really finished: a run started from inside its own
+      // run-end would be handed the run that is ending (`inFlight`).
+      setTimeout(() => {
+        void runner.run().catch(() => undefined);
+      }, 0);
+    })();
+  });
+
   const pump = new RunPump(kernel, runner, options.pump);
 
   // Side threads. What they inherit is the run's own request state, read per
@@ -836,6 +880,7 @@ export async function openSession(
     configRestored: storedConfig !== undefined,
     tasks,
     stop: () => {
+      stopMediaRepair();
       stopExtraction?.();
       stopPromptRefresh();
       stopGoalEntries();

@@ -38,13 +38,25 @@
  * would mean touching history the model never sees.
  */
 
-import type { AssistantMessage, Message, ToolCall } from "@eta/core";
+import type {
+  AgentMessage,
+  AssistantMessage,
+  Message,
+  ToolCall,
+} from "@eta/core";
 import type {
   Entry,
   MessageEntry,
   NewEntry,
   SessionLog,
 } from "@eta/core/session";
+import type { ImageLimits } from "./image-limits";
+import {
+  checkBase64Image,
+  DEFAULT_IMAGE_LIMITS,
+  describeImageProblem,
+} from "./image-limits";
+import { base64ByteLength } from "./tools/image";
 
 /** A result message, as the transcript holds it. */
 type ToolResultMessage = Extract<Message, { role: "toolResult" }>;
@@ -61,13 +73,26 @@ export interface TranscriptRepair {
   droppedResults: { entryId: string; toolCallId: string; toolName: string }[];
   /** Tool calls padded with a placeholder: nothing ever answered them. */
   paddedCalls: { entryId: string; toolCallId: string; toolName: string }[];
+  /** Images taken out of history: the model cannot accept them. */
+  degradedImages: {
+    entryId: string;
+    mimeType: string;
+    bytes: number;
+    detail: string;
+  }[];
 }
 
 /** One step of the repaired branch, in transcript order. */
 type Step =
   | { kind: "keep"; entry: Entry }
   | { kind: "drop"; entry: MessageEntry }
-  | { kind: "pad"; entry: MessageEntry; toolCallId: string; toolName: string };
+  | { kind: "pad"; entry: MessageEntry; toolCallId: string; toolName: string }
+  | {
+      kind: "degrade";
+      entry: MessageEntry;
+      message: AgentMessage;
+      images: { mimeType: string; bytes: number; detail: string }[];
+    };
 
 function isToolCall(part: unknown): part is ToolCall {
   return (
@@ -85,7 +110,7 @@ function isToolCall(part: unknown): part is ToolCall {
  * not a result, or at the end of the transcript — and whatever is still open
  * then can never be answered, so it is padded there.
  */
-function planRepair(path: readonly Entry[]): Step[] {
+function planRepair(path: readonly Entry[], limits: ImageLimits): Step[] {
   const steps: Step[] = [];
   /** The calls of the current scope that nothing has answered yet. */
   let open = new Map<string, string>();
@@ -100,6 +125,24 @@ function planRepair(path: readonly Entry[]): Step[] {
         toolName,
       });
     open = new Map();
+  };
+
+  // A message carrying an image the model cannot take is kept, with the picture
+  // replaced by a line saying what it was. Dropping the message outright would
+  // drop a tool result its call is waiting for, and keeping the picture wedges
+  // every later request; there is no third option.
+  const keepMessage = (entry: MessageEntry): void => {
+    const degraded = degradeImages(entry.message, limits);
+    if (degraded === undefined) {
+      steps.push({ kind: "keep", entry });
+      return;
+    }
+    steps.push({
+      kind: "degrade",
+      entry,
+      message: degraded.message,
+      images: degraded.images,
+    });
   };
 
   let scopeOwner: MessageEntry | undefined;
@@ -123,7 +166,7 @@ function planRepair(path: readonly Entry[]): Step[] {
       const calls = (message as AssistantMessage).content.filter(isToolCall);
       for (const call of calls) open.set(call.id, call.name);
       scopeOwner = entry;
-      steps.push({ kind: "keep", entry });
+      keepMessage(entry);
       continue;
     }
     if (message.role === "toolResult") {
@@ -133,17 +176,75 @@ function planRepair(path: readonly Entry[]): Step[] {
         continue;
       }
       open.delete(result.toolCallId);
-      steps.push({ kind: "keep", entry });
+      keepMessage(entry);
       continue;
     }
     // A user message: whatever was open can never be answered now, and a result
     // arriving after it would be a result out of its scope.
     closeScope(scopeOwner);
     scopeOwner = undefined;
-    steps.push({ kind: "keep", entry });
+    keepMessage(entry);
   }
   closeScope(scopeOwner);
   return steps;
+}
+
+/**
+ * The same message with every image the model cannot take replaced by a note.
+ *
+ * `undefined` when there is nothing to change — the common case, and the one
+ * that must leave the message exactly as it was. The note keeps the fact that
+ * an image was there, because a model that is told nothing about it will act
+ * as if the tool result was always a sentence.
+ */
+function degradeImages(
+  message: AgentMessage,
+  limits: ImageLimits,
+):
+  | {
+      message: AgentMessage;
+      images: { mimeType: string; bytes: number; detail: string }[];
+    }
+  | undefined {
+  const content = (message as { content?: unknown }).content;
+  if (!Array.isArray(content)) return undefined;
+  const images: { mimeType: string; bytes: number; detail: string }[] = [];
+  const parts = content.map((part: unknown) => {
+    if (!isImagePart(part)) return part;
+    const problem = checkBase64Image(part.data, part.mimeType, limits);
+    if (problem === undefined) return part;
+    const bytes = base64ByteLength(part.data);
+    images.push({ mimeType: part.mimeType, bytes, detail: problem.detail });
+    return {
+      type: "text" as const,
+      text:
+        "[An image was here and was removed from the history: " +
+        `${describeImageProblem(part.mimeType, bytes, problem)}. ` +
+        "A request carrying it is refused by the provider, so it could not " +
+        "stay. Read a smaller version if you need to see it again.]",
+    };
+  });
+  if (images.length === 0) return undefined;
+  return {
+    message: { ...message, content: parts } as AgentMessage,
+    images,
+  };
+}
+
+function isImagePart(
+  part: unknown,
+): part is { type: "image"; data: string; mimeType: string } {
+  if (typeof part !== "object" || part === null) return false;
+  const candidate = part as {
+    type?: unknown;
+    data?: unknown;
+    mimeType?: unknown;
+  };
+  return (
+    candidate.type === "image" &&
+    typeof candidate.data === "string" &&
+    typeof candidate.mimeType === "string"
+  );
 }
 
 /** A message entry re-appended under a fresh id, keeping what it carried. */
@@ -173,16 +274,19 @@ function placeholder(toolCallId: string, toolName: string): ToolResultMessage {
  */
 export async function repairTranscript(
   log: SessionLog,
+  limits: ImageLimits = DEFAULT_IMAGE_LIMITS,
 ): Promise<TranscriptRepair | undefined> {
-  const steps = planRepair(log.graph.pathOldestFirst());
+  const steps = planRepair(log.graph.pathOldestFirst(), limits);
   const firstBroken = steps.findIndex(
-    (step) => step.kind === "drop" || step.kind === "pad",
+    (step) =>
+      step.kind === "drop" || step.kind === "pad" || step.kind === "degrade",
   );
   if (firstBroken === -1) return undefined;
 
   const repair: TranscriptRepair = {
     droppedResults: [],
     paddedCalls: [],
+    degradedImages: [],
   };
 
   // Cut the branch just before the damage, then replay the rest of it. The
@@ -225,6 +329,15 @@ export async function repairTranscript(
       });
       continue;
     }
+    if (step.kind === "degrade") {
+      log.record({
+        ...reappendable(step.entry),
+        message: step.message,
+      } as NewEntry<MessageEntry>);
+      for (const image of step.images)
+        repair.degradedImages.push({ entryId: step.entry.id, ...image });
+      continue;
+    }
     if (step.entry.type === "message") {
       // `terminate` rides along in `rest`; it is the entry's own fact.
       log.record(reappendable(step.entry));
@@ -250,6 +363,14 @@ export function describeRepair(repair: TranscriptRepair): string {
     const ids = repair.paddedCalls.map((row) => row.toolCallId).join(", ");
     parts.push(
       `answered ${repair.paddedCalls.length} interrupted tool call(s) with a placeholder (${ids})`,
+    );
+  }
+  if (repair.degradedImages.length > 0) {
+    const images = repair.degradedImages
+      .map((row) => `${row.mimeType} (${row.detail})`)
+      .join("; ");
+    parts.push(
+      `removed ${repair.degradedImages.length} image(s) the model cannot accept (${images})`,
     );
   }
   return parts.join("; ");
