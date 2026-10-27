@@ -39,16 +39,71 @@ from onnxruntime.quantization import QuantType, quantize_dynamic
 from onnxruntime_genai.models.builder import create_model, parse_extra_options
 from transformers import Qwen3VLForConditionalGeneration
 
-REPO_ID = "tencent/WeVisOne-VL-2B"
-REVISION = "798ffc7c87ad6104410812b589e240ba32d92315"
+import os
 
-# 1,012 valid output tokens for pure-vision GUI grounding:
-#   - 6697: 'none' (absent target rejection)
-#   - 151645: '<|im_end|>'
-#   - 151669..152669: '<0>'..'<1000>' normalized 0..1000 coordinates
-#   - 152670..152678: '<ref>', '</ref>', '<box>', '</box>', '<point>', '</point>',
-#                     '<polygon>', '</polygon>', '<OBJ>'
-KEPT_OUTPUT_TOKEN_IDS = [6697, 151645, *range(151669, 152679)]
+DEFAULT_REPO_ID = "mPLUG/GUI-Owl-1.5-2B-Instruct"
+DEFAULT_REVISION = "528ceaec795bbfbe6103bd79e03db849feadfb24"
+
+# Supported Qwen3-VL 2B GUI grounding backbones:
+#   - `tencent/WeVisOne-VL-2B`: emits `<ref>...</ref><point><x><y>` with special `<0>..<1000>` tokens
+#   - `mPLUG/GUI-Owl-1.5-2B-Instruct`: SOTA GUI-specialized Qwen3-VL-2B (OSWorld-Verified 43.5%),
+#     emits 0..1000 relative coordinates inside `computer_use` tool calls `[x, y]`
+#   - `Qwen/Qwen3-VL-2B-Instruct`: official Qwen3-VL-2B instruct model
+WEVISONE_OUTPUT_TOKEN_IDS = [6697, 151645, *range(151669, 152679)]
+
+
+def select_pruned_token_ids(out_dir: Path, vocab_size: int) -> tuple[list[int], str]:
+    """Selects output token whitelist and protocol (`wevisone` vs `gui_owl`) from vocab structure."""
+    if vocab_size >= 152679:
+        return WEVISONE_OUTPUT_TOKEN_IDS, "wevisone"
+
+    tok_path = out_dir / "tokenizer.json"
+    kept: set[int] = {151643, 151645, 151657, 151658, 6697, 6857, 29654, 48061}
+    target_words = {
+        "left",
+        "click",
+        "left_click",
+        "mouse",
+        "move",
+        "mouse_move",
+        "coordinate",
+        "coordinates",
+        "terminate",
+        "status",
+        "failure",
+        "success",
+        "arguments",
+        "action",
+        "name",
+        "computer",
+        "use",
+        "computer_use",
+        "tool",
+        "call",
+        "tool_call",
+        "none",
+        "null",
+        "true",
+        "false",
+    }
+    if tok_path.exists():
+        tok_json = json.loads(tok_path.read_text(encoding="utf-8"))
+        vocab = dict(tok_json.get("model", {}).get("vocab", {}))
+        for added in tok_json.get("added_tokens", []):
+            vocab[added["content"]] = added["id"]
+        for piece, tid in vocab.items():
+            if not isinstance(tid, int) or tid >= vocab_size:
+                continue
+            clean = piece.replace("Ġ", " ").replace("Ċ", "\n")
+            if len(clean) > 0 and all(c in "0123456789,[](){} \n\"':_/-<>" for c in clean):
+                kept.add(tid)
+            else:
+                stripped = clean.strip(" \n\"':,[](){}_/-<>").lower()
+                if stripped in target_words:
+                    kept.add(tid)
+    else:
+        kept.update(range(11, 65))
+    return sorted(kept), "gui_owl"
 
 
 class ExportableQwen3VLVisionDeepStack(nn.Module):
@@ -168,16 +223,30 @@ class ExportableQwen3VLVisionDeepStack(nn.Module):
         return torch.cat([merged, *ds_feats], dim=-1)
 
 
-def prepare_wevisone_oga(out_dir: Path) -> dict:
+def prepare_wevisone_oga(
+    out_dir: Path,
+    repo_id: str | None = None,
+    revision: str | None = None,
+) -> dict:
+    selected_repo = (
+        repo_id
+        or os.environ.get("ETA_VLM_REPO", "").strip()
+        or DEFAULT_REPO_ID
+    )
+    selected_rev = (
+        revision
+        or os.environ.get("ETA_VLM_REVISION", "").strip()
+        or (DEFAULT_REVISION if selected_repo == DEFAULT_REPO_ID else None)
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
     cache_dir = out_dir / ".build_cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     t_start = time.perf_counter()
-    print(f"[1/4] Fetching {REPO_ID} (excluding 9.5M mask_decoder.pt)...")
+    print(f"[1/4] Fetching {selected_repo} (excluding mask_decoder.pt)...")
     snap_dir = snapshot_download(
-        REPO_ID,
-        revision=REVISION,
+        selected_repo,
+        revision=selected_rev,
         ignore_patterns=["mask_decoder.pt"],
     )
 
@@ -220,9 +289,10 @@ def prepare_wevisone_oga(out_dir: Path) -> dict:
     inits = {i.name: i for i in dec_proto.graph.initializer}
     w_q4_full = numpy_helper.to_array(inits["lm_head.MatMul.weight_Q4"])
     w_sc_full = numpy_helper.to_array(inits["lm_head.MatMul.weight_scales"])
+    vocab_size = int(w_q4_full.shape[0])
 
-    # 3a. Save `embedding.onnx` using the full 152,680-token INT4 table (186.38 MB)
-    w_q4_flat = w_q4_full.reshape(152680, 1024)
+    # 3a. Save `embedding.onnx` using the full INT4 token table
+    w_q4_flat = w_q4_full.reshape(vocab_size, 1024)
     emb_nodes = [
         helper.make_node(
             "GatherBlockQuantized",
@@ -323,9 +393,10 @@ def prepare_wevisone_oga(out_dir: Path) -> dict:
         location="embedding.onnx.data",
     )
 
-    # 3b. Prune `decoder.onnx` lm_head to 1,012 grounding tokens, slice RoPE to 4096,
+    # 3b. Prune `decoder.onnx` lm_head to grounding tokens, slice RoPE to 4096,
     #     and wire DeepStack layer 0/1/2 residual injections.
-    kept_ids = np.array(KEPT_OUTPUT_TOKEN_IDS, dtype=np.int64)
+    kept_token_list, grounding_protocol = select_pruned_token_ids(out_dir, vocab_size)
+    kept_ids = np.array(kept_token_list, dtype=np.int64)
     n_kept = len(kept_ids)
     w_q4_sub = np.ascontiguousarray(w_q4_full[kept_ids])
     w_sc_sub = np.ascontiguousarray(w_sc_full[kept_ids])
@@ -450,7 +521,7 @@ def prepare_wevisone_oga(out_dir: Path) -> dict:
     )
     kept_inits.append(
         numpy_helper.from_array(
-            np.full((1, 1, 152680), -50.0, dtype=np.float32),
+            np.full((1, 1, vocab_size), -50.0, dtype=np.float32),
             "/lm_head/base_neg_inf",
         )
     )
@@ -549,7 +620,10 @@ def prepare_wevisone_oga(out_dir: Path) -> dict:
     )
 
     manifest = {
-        "source": f"{REPO_ID}@{REVISION}",
+        "source": f"{selected_repo}@{selected_rev or 'main'}",
+        "groundingProtocol": grounding_protocol,
+        "vocabSize": vocab_size,
+        "keptOutputTokens": n_kept,
         "totalBuildTimeSec": round(time.perf_counter() - t_start, 2),
         "optimizations": [
             "Stripped 9.5M mask_decoder.pt and secondary 1024x1024 CNN matting pass",

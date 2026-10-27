@@ -202,9 +202,10 @@ impl PersistentAnchorTracker {
             });
         }
 
-        // Enrich visual-only icon landmarks with glyph aliases and window-caption geometric priors
+        // Enrich visual-only icon landmarks with glyph aliases, window-caption geometric priors,
+        // and spatial form-label-to-control association.
         if structural_nodes.is_empty() {
-            enrich_visual_icon_semantics(&mut raw_fused);
+            enrich_visual_icon_semantics(&mut raw_fused, subgoal);
         }
 
         // 2. Detect Rigid-Body Scroll / Translation across frames via unique semantic_hash matching
@@ -522,35 +523,141 @@ pub fn is_generic_anchor_label(text: &str) -> bool {
         || t.starts_with("icon_generic:#")
 }
 
-/// Enrich pure-vision icon anchors using OCR glyph symbols (`×`, `+`, `←`, `…`, `?`) and
-/// standard desktop window-caption geometry (top-right minimize / maximize / close trio).
-fn enrich_visual_icon_semantics(anchors: &mut Vec<FusedAnchor>) {
+/// Enrich pure-vision icon anchors using OCR glyph symbols (`×`, `+`, `←`, `…`, `?`),
+/// standard desktop window-caption geometry, and spatial label-to-control form association.
+fn enrich_visual_icon_semantics(anchors: &mut Vec<FusedAnchor>, subgoal: &str) {
     let max_x = anchors
         .iter()
         .map(|a| a.bbox.x + a.bbox.w)
         .fold(0.0f32, f32::max)
         .max(320.0);
+    let max_y = anchors
+        .iter()
+        .map(|a| a.bbox.y + a.bbox.h)
+        .fold(0.0f32, f32::max)
+        .max(240.0);
 
-    // 1. Direct OCR symbol glyph -> semantic action aliases on compact icon boxes
+    // 1. Direct OCR symbol glyph -> semantic action aliases on compact icon boxes (supporting up to 2K/Retina scales)
     for a in anchors.iter_mut() {
-        if a.bbox.w > 72.0 || a.bbox.h > 64.0 {
+        // Wide search/input boxes with partial OCR placeholders ("Type her...", "Find seti...")
+        if a.bbox.w >= 180.0 && a.bbox.w >= a.bbox.h * 3.8 {
+            let low = a.label.to_ascii_lowercase();
+            if low.contains("type her") || low.contains("find ") || low.contains("search") {
+                a.label = format!("{} search bar input field", a.label);
+            }
+            continue;
+        }
+        if a.bbox.w > 136.0 || a.bbox.h > 130.0 || a.bbox.w > a.bbox.h * 2.1 {
             continue;
         }
         let raw = a.label.trim();
         let alias = match raw {
-            "×" | "x" | "X" | "✕" | "✖" => Some("× close delete remove cancel window"),
+            "×" | "x" | "X" | "✕" | "✖" | "x\"" => {
+                Some("× close delete remove cancel window")
+            }
             "+" | "＋" => Some("+ add new create plus zoom in"),
             "←" | "<" | "‹" | "«" => Some("← back previous return left"),
-            "→" | ">" | "›" | "»" => Some("→ next forward right"),
+            "→" | ">" | "›" | "»" => Some("→ next forward right play run start"),
+            "↑" | "^" => Some("↑ up back previous parent folder sort"),
             "…" | "..." | ":" | "⋮" | "⋯" | "≡" | "=" => {
                 Some("… more menu options settings toolbar")
             }
-            "?" | "？" => Some("? help info support"),
-            "-" | "—" | "–" | "_" => Some("- minimize hide zoom out"),
+            "?" | "？" | "1?" => Some("? help info support details inspect"),
+            "-" | "—" | "–" | "_" | "−" => {
+                Some("- minimize remove delete minus hide zoom out")
+            }
+            "¤" | "Q" => Some("¤ search find homepage"),
+            "Aa" | "A" if a.bbox.y <= max_y * 0.15 => {
+                Some("Aa font size text style enlarge input method")
+            }
+            "B" if a.bbox.w <= 72.0 && a.bbox.h <= 80.0 => Some("B bold lettering font"),
+            "(1)" | "((1)" => Some("(1) volume sound audio music player"),
+            "*" | "$^$" | "☆" | "★" => Some("* star favourites favorite bookmark"),
+            "#" if a.bbox.y >= max_y * 0.80 && a.bbox.x <= max_x * 0.12 => {
+                Some("# start menu windows")
+            }
             _ => None,
         };
         if let Some(sem) = alias {
             a.label = sem.to_string();
+        }
+    }
+
+    // 1b. Form Label -> Input/Select Control spatial association:
+    // When the instruction asks to input/enter/choose/select/switch/change a field, a static text
+    // label immediately above or to the left of a wide input/dropdown box lends its label to the control.
+    let sg_low = subgoal.to_ascii_lowercase();
+    let is_typing_action = ["input ", "enter ", "type "]
+        .iter()
+        .any(|kw| sg_low.contains(kw));
+    let is_select_action = ["choose ", "select ", "switch ", "change "]
+        .iter()
+        .any(|kw| sg_low.contains(kw));
+    if is_typing_action || is_select_action {
+        let n = anchors.len();
+        let mut updates: Vec<(usize, usize, String, f32)> = Vec::new();
+        for i in 0..n {
+            let lbl_box = anchors[i].bbox;
+            let lbl_text = anchors[i].label.trim();
+            if is_generic_anchor_label(lbl_text)
+                || lbl_text.len() < 2
+                || lbl_text.len() > 28
+                || lbl_box.w > 300.0
+                || lbl_box.h > 88.0
+            {
+                continue;
+            }
+            let (_, l_cy) = lbl_box.center();
+            let mut best_ctrl: Option<(usize, f32)> = None;
+            for j in 0..n {
+                if i == j {
+                    continue;
+                }
+                let c_box = anchors[j].bbox;
+                let c_is_blank = is_generic_anchor_label(&anchors[j].label);
+                // For typing actions, target is typically a blank wide input box; for select/switch,
+                // target must be a wide dropdown box (`w >= 220`, `w >= h * 3.5`).
+                if is_typing_action && !c_is_blank && c_box.w < 300.0 {
+                    continue;
+                }
+                if c_box.w < 200.0 || c_box.w < c_box.h * 3.4 || c_box.w < lbl_box.w * 1.5 {
+                    continue;
+                }
+                let (_, c_cy) = c_box.center();
+                // Case A: Control directly below label, left-aligned
+                let dy_below = c_box.y - (lbl_box.y + lbl_box.h);
+                let dx_align = (c_box.x - lbl_box.x).abs();
+                if (-6.0..=(lbl_box.h * 1.2 + 22.0)).contains(&dy_below) && dx_align <= 44.0 {
+                    let dist = dy_below.abs() + dx_align * 0.5;
+                    if best_ctrl.map_or(true, |(_, d)| dist < d) {
+                        best_ctrl = Some((j, dist));
+                    }
+                }
+                // Case B: Control on the same horizontal row to the right of the label
+                let dy_row = (c_cy - l_cy).abs();
+                let dx_right = c_box.x - (lbl_box.x + lbl_box.w);
+                if dy_row <= lbl_box.h * 0.60 && (-8.0..=180.0).contains(&dx_right) {
+                    let dist = dx_right.abs() + dy_row;
+                    if best_ctrl.map_or(true, |(_, d)| dist < d) {
+                        best_ctrl = Some((j, dist));
+                    }
+                }
+            }
+            if let Some((ctrl_idx, _)) = best_ctrl {
+                let merged_lbl = if is_generic_anchor_label(&anchors[ctrl_idx].label) {
+                    lbl_text.to_string()
+                } else {
+                    format!("{} {}", lbl_text, anchors[ctrl_idx].label)
+                };
+                let boosted_conf = (anchors[i].confidence + 0.30).min(0.99);
+                updates.push((i, ctrl_idx, merged_lbl, boosted_conf));
+            }
+        }
+        for (lbl_idx, ctrl_idx, merged_lbl, boosted_conf) in updates {
+            anchors[ctrl_idx].label = merged_lbl;
+            anchors[ctrl_idx].confidence = anchors[ctrl_idx].confidence.max(boosted_conf);
+            anchors[ctrl_idx].role = "input".to_string();
+            anchors[lbl_idx].confidence = 0.05;
         }
     }
 

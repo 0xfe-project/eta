@@ -393,7 +393,7 @@ pub fn evaluate_and_decide(
             -15.0f32
         } else {
             let rec = recovery_neighborhood_boost(anchor) * 2.6;
-            id_match * 4.2 + overlap * 8.0 + rec
+            id_match * 4.2 + overlap * 8.0 + (anchor.confidence - 0.5) * 1.2 + rec
         };
 
         // Keep the label short and clean (do not inject heuristic aspect-ratio role guesses into GLiClass).

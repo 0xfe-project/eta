@@ -231,6 +231,14 @@ pub fn smart_resize_qwen3_vl(
     (w_bar, h_bar)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GroundingProtocol {
+    /// `tencent/WeVisOne-VL-2B` (`<ref>...</ref><point><x><y>` with special `<0>..<1000>` tokens)
+    WeVisOne,
+    /// `mPLUG/GUI-Owl-1.5-2B-Instruct` or `Qwen/Qwen3-VL-2B-Instruct` (`computer_use` JSON `[x, y]` in 0..1000)
+    GuiOwl,
+}
+
 pub struct WeVisOneOgaEngine {
     model: *mut OgaModel,
     tokenizer: *mut OgaTokenizer,
@@ -240,6 +248,7 @@ pub struct WeVisOneOgaEngine {
     cached_prefix_len: usize,
     cached_visual_tokens: usize,
     pixel_values_buf: Vec<f32>,
+    pub protocol: GroundingProtocol,
 }
 
 unsafe impl Send for WeVisOneOgaEngine {}
@@ -247,12 +256,23 @@ unsafe impl Send for WeVisOneOgaEngine {}
 impl WeVisOneOgaEngine {
     pub fn load(model_dir: &str, provider: Option<&str>) -> Result<Self, String> {
         let dir_path = Path::new(model_dir);
-        if !dir_path.join("genai_config.json").exists() {
+        let cfg_path = dir_path.join("genai_config.json");
+        if !cfg_path.exists() {
             return Err(format!(
                 "WeVisOne-VL-2B OGA model not found at {} (missing genai_config.json)",
                 model_dir
             ));
         }
+        let manifest_raw = std::fs::read_to_string(dir_path.join("manifest.json")).unwrap_or_default();
+        let env_proto = std::env::var("ETA_WEVISONE_PROTOCOL").unwrap_or_default();
+        let protocol = if env_proto.eq_ignore_ascii_case("gui_owl")
+            || manifest_raw.contains("\"groundingProtocol\": \"gui_owl\"")
+            || manifest_raw.contains("GUI-Owl")
+        {
+            GroundingProtocol::GuiOwl
+        } else {
+            GroundingProtocol::WeVisOne
+        };
 
         let c_dir = CString::new(model_dir).map_err(|e| e.to_string())?;
         unsafe {
@@ -325,6 +345,7 @@ impl WeVisOneOgaEngine {
                 cached_prefix_len: 0,
                 cached_visual_tokens: 0,
                 pixel_values_buf: Vec::new(),
+                protocol,
             })
         }
     }
@@ -433,6 +454,36 @@ impl WeVisOneOgaEngine {
             w: width as f32,
             h: height as f32,
         });
+
+        // If `point` mode prematurely emitted `none` or a truncated 1-coordinate tag (`<962></ref>`),
+        // retry once as `referring` (`<box>`) using the already-warm visual KV cache (~150ms).
+        if stage1.rejected && task.eq_ignore_ascii_case("point") {
+            if let Ok(box_fallback) = self.ground_single_pass(
+                rgb,
+                width,
+                height,
+                "referring",
+                query,
+                target_w,
+                target_h,
+                roi,
+                max_visual_tokens,
+            ) {
+                if !box_fallback.rejected {
+                    if let Some(b) = box_fallback.bbox {
+                        if b.area() < crop.area() * 0.45 && b.w >= 8.0 && b.h >= 8.0 {
+                            stage1.rejected = false;
+                            stage1.point = box_fallback.point;
+                            stage1.bbox = Some(b);
+                            stage1.norm_coords = box_fallback.norm_coords;
+                            stage1.raw_response = box_fallback.raw_response;
+                            stage1.query_prefill_ms += box_fallback.query_prefill_ms;
+                            stage1.decode_ms += box_fallback.decode_ms;
+                        }
+                    }
+                }
+            }
+        }
         let downsample_ratio = (crop.w.max(crop.h)) / (256.0f32);
 
         if foveated_refine && !stage1.rejected && downsample_ratio >= 2.2 {
@@ -633,7 +684,24 @@ impl WeVisOneOgaEngine {
                     return Err(e);
                 }
 
-                let mut prefix_prompt = String::with_capacity(32 + num_visual_tokens * 13);
+                let mut prefix_prompt = String::with_capacity(512 + num_visual_tokens * 13);
+                if self.protocol == GroundingProtocol::GuiOwl {
+                    prefix_prompt.push_str(
+                        "<|im_start|>system\n# Tools\n\nYou may call one or more functions to assist with the user query.\n\n\
+                        You are provided with function signatures within <tools></tools> XML tags:\n<tools>\n\
+                        {\"type\": \"function\", \"function\": {\"name\": \"computer_use\", \"description\": \"Use a mouse to interact with a computer.\\n\
+                        * The screen's resolution is 1000x1000.\\n\
+                        * Make sure to click any buttons, links, icons, etc with the cursor tip in the center of the element. Don't click boxes on their edges unless asked.\\n\
+                        * don't use any other computer use tool like type, key, scroll, left_click_drag and so on.\\n\
+                        * you can only use the left_click and mouse_move action to interact with the computer. if you can't find the element, you should terminate the task and report the failure.\", \
+                        \"parameters\": {\"properties\": {\"action\": {\"description\": \"The action to perform. The available actions are:\\n\
+                        * `mouse_move`: Move the cursor to a specified (x, y) pixel coordinate on the screen.\\n\
+                        * `left_click`: Click the left mouse button with coordinate (x, y) pixel coordinate on the screen.\", \
+                        \"enum\": [\"mouse_move\", \"left_click\"], \"type\": \"string\"}, \"coordinate\": {\"description\": \"(x, y): The x (pixels from the left edge) and y (pixels from the top edge) coordinates to move the mouse to. Required only by `action=mouse_move` and `action=left_click`.\", \"type\": \"array\"}}, \"required\": [\"action\"], \"type\": \"object\"}}}\n\
+                        </tools>\n\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n\
+                        <tool_call>\n{\"name\": <function-name>, \"arguments\": <args-json-object>}\n</tool_call><|im_end|>\n"
+                    );
+                }
                 prefix_prompt.push_str("<|im_start|>user\n<|vision_start|>");
                 for _ in 0..num_visual_tokens {
                     prefix_prompt.push_str("<|image_pad|>");
@@ -672,22 +740,42 @@ impl WeVisOneOgaEngine {
             let t_q = Instant::now();
             let clean_q = query.trim().trim_end_matches('.');
             let norm_task = task.trim().to_ascii_lowercase();
-            let (prompt_body, open_tag, max_new_tokens) = match norm_task.as_str() {
-                "point" => (
-                    format!("point to: {clean_q}"),
-                    format!("<ref>{clean_q}</ref><point>"),
-                    4usize,
-                ),
-                "ocr_grounding" => (
-                    format!("Locate the following text in the image: {clean_q}"),
-                    format!("<ref>{clean_q}</ref><box>"),
-                    6usize,
-                ),
-                _ => (
-                    format!("Locate a single instance that best matches the following description: {clean_q}."),
-                    format!("<ref>{clean_q}</ref><box>"),
-                    6usize,
-                ),
+            let (prompt_body, open_tag, max_new_tokens) = match self.protocol {
+                GroundingProtocol::GuiOwl => {
+                    let allow_reject = norm_task != "point";
+                    let body = if allow_reject {
+                        format!(
+                            "If the target is completely absent from the image, return \
+                             <tool_call>\n{{\"name\": \"computer_use\", \"arguments\": {{\"action\": \"terminate\", \"status\": \"failure\"}}}}\n</tool_call>\n\
+                             Otherwise click: {clean_q}"
+                        )
+                    } else {
+                        clean_q.to_string()
+                    };
+                    let open = if allow_reject {
+                        "<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"".to_string()
+                    } else {
+                        "<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [".to_string()
+                    };
+                    (body, open, 16usize)
+                }
+                GroundingProtocol::WeVisOne => match norm_task.as_str() {
+                    "point" => (
+                        format!("point to: {clean_q}"),
+                        format!("<ref>{clean_q}</ref><point>"),
+                        4usize,
+                    ),
+                    "ocr_grounding" => (
+                        format!("Locate the following text in the image: {clean_q}"),
+                        format!("<ref>{clean_q}</ref><box>"),
+                        6usize,
+                    ),
+                    _ => (
+                        format!("Locate a single instance that best matches the following description: {clean_q}."),
+                        format!("<ref>{clean_q}</ref><box>"),
+                        6usize,
+                    ),
+                },
             };
 
             let suffix_prompt = format!("{prompt_body}<|im_end|>\n<|im_start|>assistant\n{open_tag}");
@@ -738,11 +826,33 @@ impl WeVisOneOgaEngine {
                     if norm_task != "point" && norm_coords.len() >= 4 {
                         break;
                     }
-                } else if tok == TOKEN_BOX_END || tok == TOKEN_POINT_END || tok == TOKEN_REF_END {
-                    if norm_coords.len() < 2 {
+                } else if tok == TOKEN_BOX_END || tok == TOKEN_POINT_END || tok == TOKEN_REF_END || tok == 151658 {
+                    if norm_coords.len() < 2 && self.protocol == GroundingProtocol::WeVisOne {
                         rejected = true;
                     }
                     break;
+                }
+            }
+            let decoded_tail = self.decode_tokens(&out_tokens);
+            if self.protocol == GroundingProtocol::GuiOwl && norm_coords.len() < 2 {
+                let tail_low = decoded_tail.to_ascii_lowercase();
+                if tail_low.contains("terminate") || tail_low.contains("none") || tail_low.contains("failure") {
+                    rejected = true;
+                } else {
+                    for num_str in decoded_tail.split(|c: char| !c.is_ascii_digit()) {
+                        if !num_str.is_empty() {
+                            if let Ok(v) = num_str.parse::<u32>() {
+                                if v <= 1000 {
+                                    norm_coords.push(v);
+                                    if (norm_task == "point" && norm_coords.len() >= 2)
+                                        || norm_coords.len() >= 4
+                                    {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             let decode_ms = t_dec.elapsed().as_secs_f64() * 1000.0;
@@ -787,7 +897,7 @@ impl WeVisOneOgaEngine {
                 )
             };
 
-            let raw_response = format!("{open_tag}{}", self.decode_tokens(&out_tokens));
+            let raw_response = format!("{open_tag}{decoded_tail}");
             let total_ms = t_start.elapsed().as_secs_f64() * 1000.0;
 
             Ok(WeVisOneGroundOutcome {
