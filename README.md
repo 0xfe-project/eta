@@ -1,123 +1,232 @@
-# eta
+<p align="center">
+  <img src="public/Eta-Banner.png" alt="Eta" width="900" />
+</p>
 
-一个人用来指挥多个智能体的工作台。服务端是**一个 Bun 进程**：Web、产品数据（SQLite）、会话的运行和模型凭据都在里面。其他电脑上可以跑精简的 daemon，让会话在那里运行；记忆是一个可选的边车，GitHub 那条链（App、`open_pull_request` / `draft_issue` 工具、机器上的 git/gh 登录）默认也不加载，`--github` 才挂上。
+<h2 align="center">
+  Who's holding the AI that knows you?
+</h2>
+
+<p align="center">
+  <strong>100% transparent. 100% yours.</strong><br />
+  An open-source workbench for always-on agents that run on your machine, answer with your own model
+  accounts, and keep everything they know in one SQLite file you can open.
+</p>
+
+<p align="center">
+  <a href="#tldr">TL;DR</a> ·
+  <a href="#what-it-is">What it is</a> ·
+  <a href="#the-part-where-we-disagree">The part where we disagree</a> ·
+  <a href="#run-it">Run it</a> ·
+  <a href="#manual">Manual</a>
+</p>
+
+## TL;DR
+
+Grok Bot says every agent gets its own computer. True. That computer sits in xAI's datacenter.
+
+Muse gets your mail, your photos, your shopping. Today gets your calendar, your meetings, your work
+chat, and promises the memory is "readable, editable, erasable" — on their servers, on their word.
+
+Grok Bot, Muse, Today: different logos, the same trade. They learn everything about you, and they keep
+it somewhere you will never be allowed to look.
+
+**We don't think you have to accept the second half.**
+
+eta is the same product with the address changed. The thing that knows you lives on the machine under
+your desk. Read its source, watch what it does, swap the model, open the database, carry the whole
+thing to another machine with `cp -r`.
+
+> One process. One SQLite file. Zero required external services. 100% BYOK.
+
+## What it is
+
+A workbench where one person directs a crew of always-on agents: each one has a persona, a project it
+belongs to, its own tools and its own memory. You talk to them, hand them tasks, put things on a
+schedule — and when something needs your OK, they stop and wait for it. Long jobs survive the
+conversation that started them; wake-ups arrive only with what's new since the last time the agent
+looked.
+
+Nothing here is a black box, because there is no box:
+
+- **Every agent has its own computer — and it's yours.** Run the host on your laptop and the sessions
+  run there. Add a second machine and the sessions move: the daemon dials out to you, shows a
+  fingerprint, and waits for you to approve it.
+- **100% BYOK, not "supports BYOK".** Your ChatGPT, Grok and Gemini subscriptions by device code, any
+  OpenAI-compatible endpoint, and the private model in your own rack. A first-class citizen, not a
+  compatibility mode. Nothing is routed anywhere you didn't point it.
+- **Memory is a SQLite file.** One file, in the same data directory as everything else, queried per
+  conversation. Open it, grep it, fix a row, delete a row. Delete it and it's actually gone.
+- **You can see the work.** Every turn and every tool call — what it read, what it ran, what it
+  changed — lands on a timeline instead of a spinner. When an agent wakes up, it gets the increment,
+  not a rewrite of the whole story.
+- **Nothing to cancel.** No seat, no credits, no rate limit we invented. There is no account to be
+  banned from, because there is no account.
+- **The door has a lock that turns itself on.** Bind anything other than loopback and the token gate
+  comes up on its own. A file on disk, mode 0600, `Authorization: Bearer` for scripts.
+
+And it's all there to change. Prompts are files, personas are markdown cards, tools are plugins, the
+wire is documented frame by frame. If the runtime doesn't behave the way you need, it's not a feature
+request away — it's right there.
+
+## The part where we disagree
+
+**Grok Bot** Every agent gets its own computer — in their datacenter, on their dynamic router, which
+conveniently never tells you which model actually answered.
+
+**Muse** Ten million users in forty days, and the most popular thing to do with it is shopping. It's
+not a workbench, it's a storefront that remembers your address.
+
+**Today** "Memory you can read, edit and erase." Great. Ship me the file, then.
+
+**Claude Code** Useful? Yes. Yours? Not really.
+
+**Codex** The prompt, the state, the context and the storage move around while you're expected to
+smile and trust the dashboard.
+
+**OpenCode** If the runtime ignores your plan, that isn't autonomy, it's an argument you keep losing.
+
+## Run it
+
+```sh
+git clone https://github.com/0xfe-project/eta.git
+cd eta
+bun run setup     # install dependencies
+bun run dev       # host + web
+```
+
+Open http://127.0.0.1:3000, add a model service in Settings — an API key, or a subscription account by
+device code — then create an agent and a conversation. Data lands in `$HOME/.eta`, the same directory a
+production install uses, so nothing you set up here is throwaway.
+
+`bun run check` runs the same checks CI and the pre-commit hook run.
+
+If that sounds like your kind of tool: clone it, inspect it, and make it yours.
+
+## Manual
+
+Everything below is the reference: what the process is, what the flags are, how to run it on a server,
+how to add a machine, where the data lives.
+
+### Layout
 
 ```text
 apps/
-  eta/       host：一个 Bun 进程，WebSocket 管道 + cordis 插件 + SQLite（主 node）
-  daemon/    eta-daemon：别的机器上的精简节点，反向连回主 node，只跑会话
-  web/       React 界面，通过那条 WebSocket 读写
-  memory/    Python 边车（mem0 + PostgreSQL/pgvector），可选
+  eta/       host: one Bun process — WebSocket pipe, cordis plugins, SQLite (main node)
+  daemon/    eta-daemon: a slim node on another machine, dials back to the main node, runs sessions only
+  web/       React UI, reads and writes over that same WebSocket
 packages/
-  eta-*      上游 eta 的内核、harness、服务端地板、SSH 与 git 插件
-  client-wire-proto、client-contracts   线上的帧与产品 target 的类型
-deploy/      Dockerfile、memory.Dockerfile、compose.yaml
-docs/architecture/   架构说明
+  eta-*        kernel, harness, server floor, SSH and git plugins of upstream eta
+  client-wire-proto, client-contracts   wire frames and product target types
+docs/architecture/   design notes
 ```
 
-架构说明（中文）：
+Architecture notes:
 
-- [总览](docs/architecture/overview.md)：进程、分层、代码布局
-- [线协议与 target](docs/architecture/wire-protocol.md)：WebSocket 管道、帧、各 target 与 action
-- [产品模型](docs/architecture/product-model.md)：智能体、machine、project、对话、主理人、唤醒规则
-- [数据](docs/architecture/data.md)：SQLite 与迁移、会话文件、数据目录布局
-- [机器与 daemon](docs/architecture/machines.md)：配对、epoch、模型与工具的代理、远端会话
-- [访问控制](docs/architecture/access.md)：Origin 检查、令牌门、能力路由
-- [LLM 网关](docs/architecture/llm-gateway.md)：订阅账号（Codex、Grok）与 Gemini key，CLIProxyAPI 作为 host 的子进程运行
-- [记忆](docs/architecture/memory.md)：边车、身份头、host 如何调用它
-- [任务](docs/architecture/tasks.md)：智能体提出、用户确认、同一个智能体在全新会话里执行
-- [任务、产物与定时任务](docs/architecture/tasks-artifacts-routines.md)
+- [Overview](docs/architecture/overview.md): processes, layers, code layout
+- [Wire protocol and targets](docs/architecture/wire-protocol.md): WebSocket pipe, frames, targets and actions
+- [Product model](docs/architecture/product-model.md): agents, machines, projects, conversations, the lead agent, wake-up rules
+- [Data](docs/architecture/data.md): SQLite and migrations, session files, data directory layout
+- [Machines and daemon](docs/architecture/machines.md): pairing, epochs, model and tool proxying, remote sessions
+- [Access control](docs/architecture/access.md): origin checks, token gate, capability routing
+- [LLM gateway](docs/architecture/llm-gateway.md): subscription accounts (Codex, Grok) and Gemini keys, CLIProxyAPI run as a child process of the host
+- [Memory](docs/architecture/memory.md): what is stored, how it is queried per conversation
+- [Tasks](docs/architecture/tasks.md): an agent proposes, the user confirms, the same agent executes in a fresh session
+- [Tasks, artifacts and routines](docs/architecture/tasks-artifacts-routines.md)
 
-界面约定见 [DESIGN.md](DESIGN.md) 与 [apps/web/AGENTS.md](apps/web/AGENTS.md)。
+UI conventions live in [DESIGN.md](DESIGN.md) and [apps/web/AGENTS.md](apps/web/AGENTS.md).
 
-## 环境与初始化
+### Environment and setup
 
-需要 Bun 1.4.3（各包的类型检查用它自带的 `bun check`）、uv（Python 3.13，uv 会按 `.python-version` 自动获取）和 Go（LLM 网关；`go.mod` 要求的版本由 `GOTOOLCHAIN=auto` 自动获取，cgo 需要 gcc）。不需要 Docker、数据库或任何外部服务。没有 Go 时 host 仍能运行，只是没有订阅账号与 Gemini key。
+Needs Bun 1.4.3 (`bun check` is what every package type-checks with) and uv (Python 3.13, fetched by
+uv from `.python-version`). The LLM gateway's CLIProxyAPI binary comes with `bun install`. Nothing else
+to install and no service to stand up.
 
 ```sh
-bun run setup     # bun install + uv sync（记忆边车的 Python 依赖）+ 构建 LLM 网关库（首次约两分钟）
-bun run dev       # host 与 web 开发服务器
-bun run check     # 提交前的全部检查
+bun run setup     # bun install + uv sync
+bun run dev       # host and web dev server
+bun run check     # everything CI runs
 ```
 
-`bun run dev` 同时启动 host 和 vite：
+`bun run dev` starts the host and vite together:
 
-- Web：http://127.0.0.1:3000（`ETA_WEB_PORT` 改端口）
-- host：http://127.0.0.1:8787（`ETA_PORT` 改端口），数据在 `~/.eta/`（和装好之后是同一份）；vite 把 `/ws` 代理给它，host 以 `--allow-origin` 放行 vite 的地址
+- Web: http://127.0.0.1:3000 (`ETA_WEB_PORT` changes the port)
+- host: http://127.0.0.1:8787 (`ETA_PORT` changes the port), data in `~/.eta/` — the same directory an
+  installed instance uses; vite proxies `/ws` to it and the host allow-lists vite's origin
 
-打开 Web 后，先在设置的"模型服务"里添加模型服务（填 API key；或在"订阅与密钥"里用设备码绑定 Codex、Grok 订阅，或填 Google AI Studio 的 key），再新建智能体与对话。
+In the web UI, add a model service under Settings → Model services first (an API key, or a device-code
+link for a Codex or Grok subscription, or a Google AI Studio key), then create agents and conversations.
 
-`bun run check` 等于 `dprint check`、`bun run lint:repo`（根目录 eslint）和 `turbo run build typecheck lint test knip`。`bun run format` 用 dprint 格式化。CI 与 pre-commit 钩子跑的是同一组检查，turbo 结果走远程缓存。
+`bun run check` is `dprint check`, `bun run lint:repo` (root eslint) and
+`turbo run build typecheck lint test knip`. `bun run format` formats with dprint. CI and the pre-commit
+hook run the same set, through turbo's remote cache.
 
-## 生产启动
+### Running in production
 
-先构建 Web，再让 host 提供它：
+Build the web first, then let the host serve it:
 
 ```sh
 bun run --cwd apps/web build
 HOME=/var/lib/eta bun apps/eta/src/main.ts --web-dir apps/web/dist --host 0.0.0.0 --port 8787
 ```
 
-数据目录固定是 `$HOME/.eta`，没有开关：换位置就换 `HOME`（systemd 里是 `Environment=HOME=/var/lib/eta`）。
+The data directory is always `$HOME/.eta`; there is no switch. To move it, move `HOME` (in systemd,
+`Environment=HOME=/var/lib/eta`).
 
-host 的 flag（`apps/eta/src/main.ts`）：
+Host flags (`apps/eta/src/main.ts`):
 
-| flag                  | 含义                                                                                                                                                                                                                                                                                                            |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--port <n>`          | 端口，默认 `8787`（0 表示任意空闲端口）                                                                                                                                                                                                                                                                         |
-| `--host <addr>`       | 监听的网卡，默认 `127.0.0.1`。**监听回环以外的地址会自动开启令牌门**                                                                                                                                                                                                                                            |
-| `--web-dir <dir>`     | 构建好的 Web（含 `index.html`）。不给则只提供管道，不提供页面                                                                                                                                                                                                                                                   |
-| `--token-file <path>` | 开启令牌门并指定令牌文件（不存在时创建，权限 0600）。监听非回环地址而没给时用 `<数据目录>/access-token`                                                                                                                                                                                                         |
-| `--allow-origin <o>`  | 额外允许打开 WebSocket 的页面 origin，可重复。放在改写了 `Host` 的反向代理后面时填页面的外部地址                                                                                                                                                                                                                |
-| `--memory-url <url>`  | 记忆边车的地址，也可用环境变量 `ETA_MEMORY_URL`（flag 优先）。不给则没有记忆                                                                                                                                                                                                                                    |
-| `--github`            | 加载 GitHub 那条链（App 与向导、`github` target、`open_pull_request` / `draft_issue` 工具、回调路由、机器上的 git/gh 登录）。默认**不加载**：环境里没它就不建不挂不问，界面也不出任何 GitHub 入口。环境变量 `ETA_GITHUB=1` 同样算数，`--no-github` 顶掉环境里的那份（见 [GitHub](docs/architecture/github.md)） |
-| `--no-llm`            | 不加载 LLM 网关（没有订阅账号与 Gemini key）                                                                                                                                                                                                                                                                    |
+| flag                  | meaning                                                                                                                                                                                                                                                                                                                                                                                      |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--port <n>`          | port, default `8787` (`0` picks any free port)                                                                                                                                                                                                                                                                                                                                               |
+| `--host <addr>`       | interface to bind, default `127.0.0.1`. **Binding anything other than loopback turns the token gate on**                                                                                                                                                                                                                                                                                     |
+| `--web-dir <dir>`     | built web (with `index.html`). Without it the host serves the pipe only, no pages                                                                                                                                                                                                                                                                                                            |
+| `--token-file <path>` | turn the token gate on with an explicit token file (created if missing, mode 0600). Binding a non-loopback address without this uses `<data directory>/access-token`                                                                                                                                                                                                                         |
+| `--allow-origin <o>`  | extra page origin allowed to open the WebSocket, repeatable. Set it when you sit behind a reverse proxy that rewrites `Host`                                                                                                                                                                                                                                                                 |
+| `--github`            | load the GitHub chain (App and wizard, `github` target, `open_pull_request` / `draft_issue` tools, callback routes, machine git/gh login). **Not loaded by default**: if the environment has no GitHub, nothing is created, mounted or asked about, and no GitHub entry appears in the UI. `ETA_GITHUB=1` counts too, `--no-github` overrides it (see [GitHub](docs/architecture/github.md)) |
+| `--no-llm`            | don't load the LLM gateway (no subscription accounts, no Gemini keys)                                                                                                                                                                                                                                                                                                                        |
 
-首次访问带令牌的 host：在浏览器打开 `http://host:8787/?token=<令牌>` 一次，之后用 cookie；脚本用 `Authorization: Bearer <令牌>`。`/up` 是健康检查，不需要令牌。细节见[访问控制](docs/architecture/access.md)。
+First visit to a gated host: open `http://host:8787/?token=<token>` once in the browser, then the
+cookie takes over; scripts use `Authorization: Bearer <token>`. `/up` is the health check and needs no
+token. Details in [Access control](docs/architecture/access.md).
 
-### Docker
+### Behind a reverse proxy
 
-```sh
-docker build -f deploy/Dockerfile -t eta .
-docker run -d --name eta -p 8787:8787 -v eta-data:/data eta
-docker exec eta cat /data/.eta/access-token  # 令牌
-```
+Set `ETA_ALLOW_ORIGIN=https://your.domain`, and give the host `--allow-origin https://your.domain` when
+the proxy rewrites `Host`. The proxy has to upgrade WebSocket for `/ws` and `/machines/connect`. `/up`
+is the health check and needs no token.
 
-一个镜像（构建 Web，host 用 `--web-dir` 提供），一个卷 `/data` 放全部数据（`HOME` 指向它，所以内容在 `/data/.eta/`），监听 `0.0.0.0:8787`，所以令牌门默认开启。镜像名后面的参数会追加给 host，例如 `docker run … eta --allow-origin https://eta.example.com --memory-url http://memory:8320`。GitHub 默认不加载，需要它就在镜像名后面加 `--github`（或给容器设 `ETA_GITHUB=1`）。健康检查是 `/up`。host 和智能体的 bash 以镜像里的非 root 用户 `bun`（uid 1000）运行，新建的卷归它所有；旧镜像（root）留下的卷或绑定挂载需要改一次属主：`docker run --rm -u 0 --entrypoint chown -v eta-data:/data eta -R 1000:1000 /data`。
+Run it under systemd with `HOME=/var/lib/eta` and everything — database, sessions, artifacts, memory —
+lives in that one directory.
 
-`deploy/compose.yaml` 把 host 和（可选的）记忆边车放在一起：
+### daemon: run sessions on another machine
 
-```sh
-docker compose -f deploy/compose.yaml up -d --build                      # 只有 host
-MEMORY_LLM_BASE_URL=… MEMORY_LLM_API_KEY=… MEMORY_LLM_MODEL=… ETA_MEMORY_URL=http://memory:8320 \
-  docker compose -f deploy/compose.yaml --profile memory up -d --build   # 加上记忆
-```
-
-放在反向代理后面时设置 `ETA_ALLOW_ORIGIN=https://你的域名`，代理需要升级 WebSocket（`/ws`、`/machines/connect`）。
-
-## daemon：让别的电脑跑会话
-
-daemon 是 `bun build --compile` 的单文件，不含 Web、数据库和模型配置；模型调用和产品工具都回到主 node。
+The daemon is a single file from `bun build --compile`; it holds no web, no database and no model
+configuration — model calls and product tools all go back to the main node.
 
 ```sh
-bun run --cwd apps/daemon build           # 产出 apps/daemon/out/eta-daemon
+bun run --cwd apps/daemon build           # produces apps/daemon/out/eta-daemon
 ```
 
-1. 在主 node 的设置 → 机器里添加一台机器，得到一条命令（安装码 24 小时内有效、一次性）。
-2. 在那台电脑上执行：`eta-daemon setup <主 node 地址> <安装码>`。它在本地生成密钥并显示指纹，等待批准。
-3. 在设置页核对指纹一致后批准。
-4. `eta-daemon run` 启动；`eta-daemon install-service` 注册成 systemd 用户服务（Linux）或 launchd agent（macOS）。
+1. In the main node: Settings → Machines, add a machine, and get a command (the install code is valid
+   for 24 hours and works once).
+2. On that machine run `eta-daemon setup <main node address> <install code>`. It generates a key
+   locally and shows the fingerprint, then waits for approval.
+3. Check the fingerprint matches in Settings, then approve.
+4. `eta-daemon run` starts it; `eta-daemon install-service` registers a systemd user service (Linux) or
+   a launchd agent (macOS).
 
-daemon 只出站连接主 node，主 node 需要对它可达（经反向代理时要能升级 `/machines/connect`）。数据目录是 `~/.eta/daemon`，和宿主同一个根，由 `$HOME` 决定（没有开关）。原理见[机器与 daemon](docs/architecture/machines.md)。
+The daemon only dials out to the main node, which therefore has to be reachable from it (a reverse
+proxy has to upgrade `/machines/connect`). Its data directory is `~/.eta/daemon`, the same root as the
+host, decided by `$HOME` — no switch. How it works: [Machines and daemon](docs/architecture/machines.md).
 
-## 记忆边车
+### Memory
 
-可选。没有它，host 不挂载记忆，界面隐藏记忆页。它需要一个带 pgvector 的 PostgreSQL，以及一个 OpenAI 兼容的模型（用来从对话里抽取事实）：
+Memory is a SQLite file in the data directory, next to the sessions and the artifacts, and it is
+queried per conversation. There is no separate service to run and nothing to configure: it comes with
+the install, it travels with `$HOME/.eta`, and a row you delete stays deleted. See
+[Memory](docs/architecture/memory.md).
 
-| 环境变量                                                        | 含义                              |
-| --------------------------------------------------------------- | --------------------------------- |
-| `DATABASE_URL`                                                  | 边车自己的 PostgreSQL（pgvector） |
-| `MEMORY_LLM_BASE_URL`、`MEMORY_LLM_API_KEY`、`MEMORY_LLM_MODEL` | 抽取事实用的模型                  |
-| `MEMORY_HOST`、`MEMORY_PORT`                                    | 监听，默认 `127.0.0.1:8320`       |
+### Access
 
-边车没有鉴权，只让 host 能连到它（回环，或 compose 的内部网络）。镜像见 `deploy/memory.Dockerfile`；本地运行与细节见[记忆](docs/architecture/memory.md)。host 用 `--memory-url http://127.0.0.1:8320` 指向它。
+Origin checks on the pipe, a token gate that comes up automatically on a non-loopback bind, and
+capability routing so a daemon sees only what it needs. The full story is in
+[Access control](docs/architecture/access.md).

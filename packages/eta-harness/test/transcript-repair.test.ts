@@ -8,6 +8,7 @@
  * that only lives in memory re-breaks the session on the next open.
  */
 
+import { Buffer } from "node:buffer";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage } from "@eta/core/testing";
@@ -28,6 +29,18 @@ const resultFor = (toolCallId: string, text = "ok") => ({
   isError: false,
   timestamp: 0,
 });
+
+/** A PNG header at 1280×11024 — the picture a provider refuses. */
+const tallPng = (): string => {
+  const bytes = new Uint8Array(33);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(8, 13);
+  view.setUint32(12, 0x49484452);
+  view.setUint32(16, 1280);
+  view.setUint32(20, 11024);
+  return Buffer.from(bytes).toString("base64");
+};
 
 const callsTo = (...ids: string[]) =>
   assistantMessage({
@@ -192,5 +205,44 @@ describe("repairTranscript", () => {
 
     expect(await repairTranscript(log)).toBeUndefined();
     expect(shape(log)).toEqual(["compactionSummary", "user"]);
+  });
+
+  it("takes an image the model cannot accept out of the history", async () => {
+    // The picture that wedged a session: 1280×11024, refused by every request
+    // that carried it. It has to leave the branch for real — a filter at
+    // request time would leave the journal unreadable by any other caller.
+    const storage = new MemoryStorage();
+    const log = SessionLog.create(storage);
+    log.recordMessage(callsTo("callA"));
+    log.recordMessage({
+      role: "toolResult" as const,
+      toolCallId: "callA",
+      toolName: "read",
+      content: [
+        { type: "text" as const, text: "Read image file [image/png]" },
+        { type: "image" as const, data: tallPng(), mimeType: "image/png" },
+      ],
+      isError: false,
+      timestamp: 0,
+    });
+    await log.commit();
+
+    const repair = await repairTranscript(log);
+    expect(repair?.degradedImages).toHaveLength(1);
+    expect(repair?.degradedImages[0]?.detail).toContain("11024");
+
+    const reopened = await SessionLog.load(storage);
+    const messages = reopened.transcript();
+    // The pair still pairs; the text the tool wrote is still there; no image is.
+    expect(messages.map((message) => message.role)).toEqual([
+      "assistant",
+      "toolResult",
+    ]);
+    expect(JSON.stringify(messages)).not.toContain('"image"');
+    expect(JSON.stringify(messages)).toContain("Read image file [image/png]");
+    expect(JSON.stringify(messages)).toContain("removed from the history");
+
+    // And it heals once: a second open finds nothing to do.
+    expect(await repairTranscript(reopened)).toBeUndefined();
   });
 });

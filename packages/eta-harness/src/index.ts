@@ -69,6 +69,15 @@ export {
   shouldCompact,
 } from "./estimation";
 export {
+  checkBase64Image,
+  checkImage,
+  DEFAULT_IMAGE_LIMITS,
+  describeImageProblem,
+  type ImageLimits,
+  imageLimitsFor,
+  type ImageProblem,
+} from "./image-limits";
+export {
   JournalingService,
   type JournalingServiceOptions,
   SESSION_CONFIG,
@@ -198,7 +207,13 @@ export {
   generateUnifiedPatch,
 } from "./tools/edit-diff";
 export { withFileMutationQueue } from "./tools/file-mutation-queue";
-export { detectSupportedImageMimeType, encodeBase64 } from "./tools/image";
+export {
+  base64ByteLength,
+  decodeBase64,
+  detectSupportedImageMimeType,
+  encodeBase64,
+  readImageSize,
+} from "./tools/image";
 export { resolveReadToolPath, resolveToolPath } from "./tools/path-utils";
 export {
   createReadTool,

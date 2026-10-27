@@ -12,11 +12,12 @@ import type { ImageContent, ToolCallInfo } from "@eta/core";
 import type { ExecutionToolContext } from "../src/tools/context";
 import type { ToolResult } from "../src/tools/tool";
 import { Buffer } from "node:buffer";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeEnvironment } from "@eta/execution-node";
 import { beforeAll, describe, expect, it } from "vitest";
+import { DEFAULT_IMAGE_LIMITS } from "../src/image-limits";
 import { detectSupportedImageMimeType, encodeBase64 } from "../src/tools/image";
 import { createReadTool } from "../src/tools/read";
 
@@ -51,6 +52,18 @@ const tinyPng = (): Uint8Array =>
       "base64",
     ),
   );
+
+/** A PNG header of the given size — enough for every reader here. */
+function pngHeader(width: number, height: number): Uint8Array {
+  const bytes = new Uint8Array(33);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(8, 13);
+  view.setUint32(12, 0x49484452);
+  view.setUint32(16, width);
+  view.setUint32(20, height);
+  return bytes;
+}
 
 /** A well-formed 1×1 24-bit BMP header, 58 bytes long. */
 function tinyBmp(): Uint8Array {
@@ -236,5 +249,27 @@ describe("read with images", () => {
   it("cleans up after itself", async () => {
     await env.cleanup();
     await rm(directory, { recursive: true, force: true });
+  });
+  it("keeps an image the model cannot take out of the result", async () => {
+    // A full-page screenshot is the easiest way to break a session for good:
+    // the picture enters the journal, the provider refuses every request that
+    // carries it, and nothing the user types gets past it. The file stays
+    // readable — what the model gets instead is its size, where it is, and a
+    // way to get a copy the provider will take.
+    const path = join(directory, "tall.png");
+    // An earlier test removes the directory it was given.
+    await mkdir(directory, { recursive: true });
+    await writeFile(path, pngHeader(1280, 11024));
+
+    const result = await createReadTool({
+      imageLimits: () => DEFAULT_IMAGE_LIMITS,
+    }).execute({ path }, run());
+
+    expect(imageOf(result)).toBeUndefined();
+    const text = textOf(result);
+    expect(text).toContain("not attached");
+    expect(text).toContain("1280×11024");
+    expect(text).toContain(path);
+    expect(text).toContain("sips -Z 8192");
   });
 });

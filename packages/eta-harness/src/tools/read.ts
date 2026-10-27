@@ -17,6 +17,7 @@ import type { ImageContent, TextContent } from "@eta/core";
 import type { EnvCallOptions } from "@eta/execution";
 import type { TruncationResult } from "@eta/execution/output";
 import type { Static } from "typebox";
+import type { ImageLimits, ImageProblem } from "../image-limits";
 import type { ExecutionToolContext } from "./context";
 import type { HarnessTool, ToolResult } from "./tool";
 import { getOrThrow } from "@eta/execution";
@@ -27,6 +28,12 @@ import {
   truncateHead,
 } from "@eta/execution/output";
 import { Type } from "typebox";
+import {
+  checkBase64Image,
+  checkImage,
+  DEFAULT_IMAGE_LIMITS,
+  describeImageProblem,
+} from "../image-limits";
 import { detectSupportedImageMimeType, encodeBase64 } from "./image";
 import { resolveReadToolPath } from "./path-utils";
 import { text } from "./tool";
@@ -66,6 +73,12 @@ export interface ReadToolOptions {
   /** Whether an injected image processor should resize. Defaults to true. */
   autoResizeImages?: boolean | undefined;
   imageProcessor?: ReadImageProcessor | undefined;
+  /**
+   * What the model the session is on will accept. A function, not a value: the
+   * session's model can change between two reads, and an image one model takes
+   * another refuses. Absent means the conservative default.
+   */
+  imageLimits?: (() => ImageLimits | undefined) | undefined;
 }
 
 export function createReadTool<
@@ -85,7 +98,7 @@ export function createReadTool<
       const absolutePath = await resolveReadToolPath(env, args.path, call);
       const bytes = getOrThrow(await env.readBinaryFile(absolutePath, call));
 
-      const image = await readImage(bytes, options);
+      const image = await readImage(bytes, options, absolutePath);
       if (image !== undefined) return image;
 
       const textContent = new TextDecoder().decode(bytes);
@@ -148,9 +161,11 @@ export function createReadTool<
 async function readImage(
   bytes: Uint8Array,
   options: ReadToolOptions,
+  path: string,
 ): Promise<ToolResult<undefined> | undefined> {
   const mimeType = detectSupportedImageMimeType(bytes);
   if (mimeType === undefined) return undefined;
+  const limits = options.imageLimits?.() ?? DEFAULT_IMAGE_LIMITS;
 
   if (options.imageProcessor !== undefined) {
     const processed = await options.imageProcessor(bytes, mimeType, {
@@ -161,6 +176,21 @@ async function readImage(
         `Read image file [${mimeType}]\n${processed.message}`,
       ) as ToolResult<undefined>;
     }
+    // A processor that resized or transcoded changed what is sent, so the
+    // limit is asked about its output, not about what was on disk.
+    const problem = checkBase64Image(
+      processed.data,
+      processed.mimeType,
+      limits,
+    );
+    if (problem !== undefined)
+      return notAttached(
+        processed.data,
+        processed.mimeType,
+        path,
+        problem,
+        limits,
+      );
     const hints =
       processed.hints.length > 0 ? `\n${processed.hints.join("\n")}` : "";
     return {
@@ -180,6 +210,9 @@ async function readImage(
       "Read image file [image/bmp]\n[Image omitted: configure an imageProcessor to convert BMP images.]",
     ) as ToolResult<undefined>;
   }
+  const problem = checkImage(bytes, mimeType, limits);
+  if (problem !== undefined)
+    return notAttached(encodeBase64(bytes), mimeType, path, problem, limits);
   return {
     content: [
       { type: "text", text: `Read image file [${mimeType}]` },
@@ -187,4 +220,30 @@ async function readImage(
     ] satisfies (TextContent | ImageContent)[],
     details: undefined,
   };
+}
+
+/**
+ * An image the model will not take.
+ *
+ * The picture does not go into the transcript — a request carrying it is
+ * refused at the door, and every later request would be refused the same way,
+ * so the file is named instead, with what it is and how to get a version the
+ * model can see. Saying "no image" and stopping there would leave the model
+ * guessing about a file it was just told to read.
+ */
+function notAttached(
+  data: string,
+  mimeType: string,
+  path: string,
+  problem: ImageProblem,
+  limits: ImageLimits,
+): ToolResult<undefined> {
+  return text(
+    [
+      `Read image file [${mimeType}] — not attached: ${problem.detail}.`,
+      `[The image was left out of the transcript on purpose: the provider refuses a request that carries it (HTTP 400), and silent, every later request would fail the same way.`,
+      `The file is still at ${path}. Shrink it first — \`sips -Z ${limits.maxSide} "${path}" --out /tmp/shrunk.png\` — or capture a region instead of a full page, then read the smaller file.]`,
+      `(${describeImageProblem(mimeType, Math.floor((data.length * 3) / 4), problem)})`,
+    ].join(" "),
+  ) as ToolResult<undefined>;
 }
