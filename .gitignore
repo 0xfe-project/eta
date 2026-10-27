@@ -20,4 +20,3 @@ out/
 
 # Turborepo
 .turbo
-packages/llm-gateway/lib/

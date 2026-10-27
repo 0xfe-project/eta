@@ -5,53 +5,53 @@ LLM 网关让主 node 能用模型**订阅**（ChatGPT Codex、Grok）和 **Goog
 ## 组成
 
 ```text
-Bun 进程（host）                                    同一个进程里的 Go 运行时（c-shared）
-  apps/eta/src/llm/                                   packages/llm-gateway/
-    runtime.ts  startGateway ── bun:ffi ──────────▶     ffi/        LlmStart  LlmStop  LlmFree
-    client.ts   GatewayClient ─ HTTP 127.0.0.1:N ─▶     module/     回环 listener：/v1  /api/llm
-    models.ts   GatewayModels（llm 提供商）              gateway/    连接、登录、目录、额度
-    plugin.ts   llm target（accounts models quota）      cpa/        嵌入 CLIProxyAPI v8
+Bun 进程（host）  apps/eta/src/llm/                         子进程
+  runtime.ts   启动、/llm/v1 转发、智能体 key ─ HTTP 127.0.0.1:N /v1 ─────────▶  CLIProxyAPI v8.0.43
+  cpa.ts       经 @cpajs/cpa 启动并看管 CPA ─── HTTP 127.0.0.1:N /v8/management ▶  （@cpajs/<平台> 的二进制）
+  gateway.ts   账号、目录、额度、登录
+  state.ts     由 CPA 的冷却视图推导状态
+  codex.ts xai.ts gemini.ts   接入方式
+  models.ts    GatewayModels（llm 提供商）
+  plugin.ts    llm target（accounts models quota）
 ```
 
-- **嵌入方式**：Go 代码（嵌入 CLIProxyAPI 的 `sdk/cliproxy`）编成 `-buildmode=c-shared`，host 用 `bun:ffi` 加载。FFI 只导出三个函数：`LlmStart(配置 JSON)` 绑定回环 listener 并返回端口，`LlmStop()` 关闭，`LlmFree` 释放 `LlmStart` 返回的字符串。三个调用都立即返回。
-- **流量走回环 HTTP**：模型流量（`/v1`）和账号 API（`/api/llm/v1/*`）都是进程内 Go 监听的 `127.0.0.1` 随机端口上的 HTTP，用 host 每次启动随机生成的 key 做 bearer 鉴权，不经 FFI 回调。所以 Go 线程不会回调 JS；一次慢上游（登录、读额度要访问外部服务）也不会卡住 Bun 的事件循环。这是与 [#289](https://github.com/0xfe-project/eta/issues/289) 里“导出启动、停止、管理调用三个函数”的唯一出入：管理调用（`Call`）若走 FFI 就是同步阻塞主线程，所以改成同一个 listener 上的 HTTP，导出的第三个函数是 `LlmFree`。
-- **一个进程一次**：CPA 有进程级状态（logrus、模型注册表、访问提供者），库拒绝第二次 `LlmStart`。
-- **可以改成子进程**：`packages/llm-gateway/cmd/standalone` 是同一份 `module` 的独立可执行文件（`ETA_LLM_STATE_DIR`、`ETA_LLM_ACCESS_KEY`、`ETA_LLM_ADDR`），因为 host 只通过回环 HTTP 访问网关，换成子进程只需要改 `runtime.ts` 里启动的方式。
-- **没有 Go 的机器**：库没构建时 host 照常启动并提示一行，没有 `llm` 插件，网页里没有“订阅与密钥”一节，其余不变。有 Go 的机器上 `bun run setup` 会构建库；CI 和 `turbo run test` 把它当依赖（`test` 依赖 `build`）。
+- **子进程**：CPA 是官方二进制，由 [`@cpajs/cpa`](https://github.com/akarachen/cpajs)（`0.1.0-rc.7`，内置 CLIProxyAPI **v8.0.43**）以 `optionalDependencies` 按平台安装，`bun install` 即可，不需要 Go。`startServer` 写配置、选空闲端口、等 `/healthz`；CPA 经 cpajs 的 launcher 启动，Linux 上 `PR_SET_PDEATHSIG`，其他 POSIX 上由 launcher 看管，**host 被 SIGKILL 或崩溃时 CPA 也退出**。
+- **自愈**：CPA 自己退出（崩溃、被杀）时，`cpa.ts` 等一会儿后用 `startServer` 再启一个（cpajs 只管启动和停止，不自动重启）。新进程在任意空闲端口上：`cpa.client` 和 `cpa.baseUrl` 换成新进程的，`runtime.ts` 收到 `onRestarted` 后把 `llm` 提供商重新登记到新地址（不去抢原端口：不管端口变没变都重新登记，比“先试原端口”简单）。等待从 0.25 s 起，进程一分钟内又死就翻倍（到 30 s），活过一分钟就回到最短；没有次数上限，不会放弃。退出时把 CPA 最后 20 行输出写进警告。首次启动失败不重试：host 照常启动、没有网关并提示一行。
+- **起不来**：CPA 启动失败时 host 照常启动并提示一行，没有 `llm` 插件，网页里没有“订阅与密钥”一节，其余不变。`--no-llm` 则不启动。
 
 ### 与 CPA 的边界
 
-只使用 SDK 导出的包（`sdk/cliproxy`、`sdk/cliproxy/auth`、`sdk/access`、`sdk/api`、`sdk/config`、`sdk/translator/builtin`）和 CPA 的管理 HTTP API，不导入 `internal/`。当前版本 **v8.0.33**（模块路径 `github.com/router-for-me/CLIProxyAPI/v8`；CPA 仓库的 `docs/sdk-usage.md` 写的仍是 `/v6`，实现以 v8 的代码为准）。
+只用 CPA 的 HTTP 接口：`/v1`（模型流量）和 v8 管理 API（`/v8/management`，经 cpajs 的类型化客户端），不依赖它的内部包或 SDK。
 
-- **监听**：SDK 的 `Service.Run` 一定会自己 `net.Listen`，无法关闭，所以让它监听 `127.0.0.1:0`（没有任何路由指向它）。CPA 的 gin 引擎由 `RouterConfigurator` 交出来，作为 `http.Handler` 挂到网关自己的 listener 的 `/v1/` 下；客户端断开即取消请求上下文（CPA 随之取消上游请求），流式响应逐段写到 `ResponseWriter`。`OnAfterStart` 之后（凭据已加载、路由已注册）才算就绪：之前 `/v1` 返回 503，`GET /api/llm/ready` 返回 503。
-- **鉴权**：唯一的访问提供者 `eta-host`（`gateway/cpa/keys.go`）认两种 bearer：host 的 key，和由它派生的**智能体 key** `etak.<智能体 id>.<HMAC-SHA256(host key, id)>`（常量时间比较，id 只允许字母数字下划线连字符，没有或错误一律 401）。智能体 key 只开 `/v1`；账号 API 和吊销（`DELETE /api/llm/v1/keys/<id>`）只认 host 的 key。key 是派生的所以不存表，吊销记在内存里（host 重启网关即换 host key，旧 key 全部失效）。环境包经它用订阅账号，见[环境包](bundles.md#llm-网关的-key)；主 node 在自己端口上的 `/llm/v1/*` 把 daemon 的请求转给 `/v1`，只放行智能体 key。
-- **管理 API**：`config.yaml` 在每次启动时生成，管理密钥是每次随机的 `secret-key`，`allow-remote: false`；`cpa.Proxy.Management()` 在进程内直接调用 gin 引擎，不经过网络。
-- **日志**：CPA 用 logrus；网关把它的输出丢弃，用 hook 把每条记录（级别、字段）交给 `slog`（`library=cliproxy`，写到 stderr）。
-- **信号**：CPA v8.0.33 的 SDK 依赖树（565 个包）里没有 `os/signal`；只有 CLI 入口注册了 SIGINT/SIGTERM，不在依赖树里。`pluginhost` 只有显式 `WithPluginHost` 才启用，我们不用。Go 运行时以 c-shared 加载时只为 SIGSEGV、SIGBUS、SIGFPE、SIGPIPE、SIGURG 装处理器，其余转交宿主。`test/ffi.test.ts` 把这点和下面两项做成了测试。
-- **已知代价**：CPA 里一次未恢复的 panic 会带下整个 host。
+- **配置**：`<状态目录>/config.yaml` 在每次启动前由 `config` 函数重写：host 的设置（回环、`/v1` 的 key、关闭控制面板与请求日志、`request-retry: 1`）加上一次运行留在配置里的 `api-keys`（运行时经管理 API 改动的就是这一段），测试再合并 `cpaExtra`。所以 API key 的唯一真源是 CPA 的配置。改 key 时（`connectors.ts` 的 `updateKeys`）读 `api-keys/<provider>` 节点和它的 ETag，去掉读时注入的 `auth_index`，带 `If-Match` 写回，412 时重读重改（最多 3 次）；不加进程内锁，并发靠 ETag。CPA 写配置不是原子的，读恰好落在重写中间会得到 500 `invalid_config`：这里不重试，每 5 秒的同步下一轮就好，用户操作则报一次 `gateway_unavailable`。
+- **鉴权**：CPA 的 `/v1` 只认一个每次启动随机生成、不出 host 进程的 key；host 自己的模型层直接用它调 CPA。智能体 key `etak.<智能体 id>.<HMAC-SHA256(host key, id)>` 在 host 里校验（`keys.ts`，常量时间比较，id 只允许字母数字下划线连字符），通过后换成 CPA 的 key 转发。会话（本机的和 daemon 上的）一律经 host 端口上的 `/llm/v1/*`，只放行智能体 key 和 `/v1`。key 是派生的所以不存表，吊销记在内存里，host 重启即全部失效。环境包经它用订阅账号，见[环境包](bundles.md#llm-网关的-key)。
+- **管理 API**：管理密钥由 cpajs 每次启动随机生成，只有 bcrypt 哈希（cost 4）进配置，明文留在 `server.client()` 里，host 不经手；远程管理关闭。CPA 每个管理请求都校验一次哈希，cost 4 下约 1 ms（cost 10 时约 65 ms CPU，而网关每几秒就要读几次）。
+- **日志**：CPA 每个请求都打 info 日志；转给 host stderr（前缀 `[cpa]`）的只有 warn 及以上（按 cpajs 解析出的 `LogLine.level` 过滤），和 stderr 上不带级别的行（例如 panic），stdout 上不带级别的启动横幅不转。完整的近期输出在 cpajs 的 `recentLogs` 里，CPA 意外退出时会附在警告里。
 
 ## 账号与目录
 
-接入方式（Connector）只负责“凭据怎么进来”；账号的列表、启停、删除统一走 `coreauth.Manager` 和管理 API，模型统一来自 CPA 的模型注册表。
+接入方式（Connector）只负责“凭据怎么进来”；账号的列表、启停、删除统一在 `gateway.ts`：列表是 `GET /credentials`（凭据文件）加 `GET /config/api-keys`（配置里的 key，带 `auth_index`；key 或组的 `excluded-models` 含 `*` 即停用）。凭据文件按文件名走 `PATCH /credentials/status`、`DELETE /credentials`，配置里的 key 由 eta 改 `api-keys.<provider>`（停用即加上 `excluded-models: ["*"]`，与 CPA 自己的做法相同；删除即从组里去掉，组空了一并去掉）。账号的 id 是 CPA 的 `auth_index`（由凭据派生，重启不变）。
 
-- **Codex**：OpenAI 的设备码流程（`/api/accounts/deviceauth/usercode` → 轮询 `/deviceauth/token` → `/oauth/token`），不依赖 localhost 回调。CPA 只在 CLI 里实现了这一流程，所以协议在 Connector 里实现，得到的 token 按 CPA 的 codex 凭据文件格式经 `POST /v0/management/auth-files` 交给 CPA。
-- **Grok（xAI）**：调用管理 API 的 `xai-auth-url` / `get-auth-status` / `oauth-session`，CPA 自己保存凭据。
-- **Google AI Studio**：填 API key。提交时先用 `GET /v1beta/models` 向 Google 校验，重复的 key 报错；key 存在状态目录的 `providers.json`（0600，唯一真源），每次启动渲染进 CPA 的 `gemini-api-key`，运行时的增删和停用先写文件再经管理 API 热生效。无效的 key 判 `needs_login`（原因码 `invalid_api_key`）。
+- **Codex**：OpenAI 的设备码流程（`/api/accounts/deviceauth/usercode` → 轮询 `/deviceauth/token` → `/oauth/token`），不依赖 localhost 回调。CPA 的管理 API 里 Codex 只有 localhost 回调的流程，所以设备码协议在 `codex.ts` 里实现，得到的 token 按 CPA 的 codex 凭据文件格式经 `POST /credentials` 交给 CPA。
+- **Grok（xAI）**：调用管理 API 的 `oauth/auth-url`（`provider: xai`，设备码）/ `oauth/status` / `oauth/session`，CPA 自己保存凭据。
+- **Google AI Studio**：填 API key。提交时先用 `GET /v1beta/models` 向 Google 校验，重复的 key 报错；key 写进 CPA 配置的 `api-keys.gemini`，热生效。无效的 key 判 `needs_login`（原因码 `invalid_api_key`）。Go 网关留下的 `providers.json` 在第一次启动时并入配置（停用的保持停用），然后删除。
 
 上游 eta 自带的 Codex 登录（`providers` 插件，pi-ai 的 OAuth）仍然在，两者互不依赖：那条是上游 provider `openai-codex`，这条是经 CPA 的订阅账号，模型 id 以 `llm:` 开头。
 
 ### 状态
 
-状态以 CPA 实际怎么路由为准（`selector.isAuthBlockedForModel`），读时派生，网关不另存状态、不跑定时任务：`active`、`disabled`、`needs_login`、`rate_limited`、`error`、`degraded`，附原因码（见下）和恢复时间，不含 token。
+状态以 CPA 实际怎么路由为准，读时派生（`state.ts`），网关不另存状态、不跑定时任务：`active`、`disabled`、`needs_login`、`rate_limited`、`error`、`degraded`，附原因码（见下）和恢复时间，不含 token。
 
-- CPA 把请求失败记在模型上，之后只有该模型被冷却，其他模型照常路由到这个账号。所以只有关于凭据本身的失败才影响整个账号：任一模型收到 401（`needs_login`）、凭据级额度、尚未有模型状态时的账号级失败（429 → `rate_limited`，402/403 → `error`，其余 → `degraded`）。
+- 凭据文件的状态来自 `GET /credentials`：`status`、`status_message` 和**冷却视图**（`cooldowns`：作用于整个凭据或某个模型，带原因 `credential_quota`/`quota`/`unauthorized`/`invalid_grant`/`payment_required`/`not_found`/`transient_error`… 和恢复时间，由 CPA 的 `CooldownSnapshotForAuth` 按它自己的路由规则算出）。
+- CPA 把请求失败记在模型上，之后只有该模型被冷却，其他模型照常路由到这个账号。所以只有关于凭据本身的失败才影响整个账号：任一冷却的原因是 `unauthorized`/`invalid_grant`，或 `status: error` 且消息像登录失效（`needs_login`）；凭据级冷却（`credential_quota` → `rate_limited`/`quota_exhausted`，`quota` → `rate_limited`，`payment_required` → `error`，其余 → `degraded`）。
+- **API key 没有运行时状态**：CPA 的 v8 管理 API 不列出配置里的 key（`/credentials` 只列凭据文件），也就看不到它们的冷却。key 的状态只有停用与否，以及网关自己的检查（见“额度”）：Google 拒绝 key 时判 `needs_login`。一个 key 的 429 或模型冷却不会显示在界面上，CPA 照样按冷却路由。
 - 瞬时失败（超时、5xx）由 CPA 冷却约 1 分钟，期间同一账号同一模型的下一次请求也会被拒；冷却到期即恢复。
 - 模型的状态是 `available`、`degraded`（冷却中，请求仍放行）、`unavailable`（未绑定、停用、登录失效、无权、不存在、额度用尽，附原因）。同一模型由多个账号提供时取最好的那个。见过的模型持久化在 `models.json`，账号失效或被移除后模型仍在目录里，智能体保留原来的选择，重新绑定后自动恢复。图像、视频等非对话模型被过滤。
-- 目录里的每个模型还带 CPA 声明的思考档（`reasoning_levels`）和是否读图，host 据此生成模型配置。
+- 目录：凭据文件服务哪些模型来自 `GET /credentials/models`；配置里的 key 服务它配置的模型（按 alias，key 自己的优先于组的），没有配置就是该 channel 的全部模型。`excluded-models` 只认 `*`（停用）：停用的 key 由账号状态让它的模型不可用，其他排除规则 eta 不写，也就不读。每个模型的上下文长度、思考档（`reasoning_levels`）和是否读图来自 `GET /routing/model-definitions/<channel>`（CPA 内置的静态定义，随二进制固定，每个 channel 读一次缓存到进程结束，失败下次再读），配置里给的值优先；connector 的 provider 就是它的 channel。Codex 的 channel 定义是 Pro 套餐那张表；其他套餐的模型是它的子集，按 id 取详情。
 
 ### 额度
 
-订阅的额度窗口（Codex 的 5 小时与每周，Grok 的周期额度）由 `connectors/usage.go` 向提供商读：Codex 读 `chatgpt.com/backend-api/wham/usage`，Grok 读 `cli-chat-proxy.grok.com/v1/billing`，带账号令牌，不消耗额度。一次读同时是账号的健康检查：上游拒绝令牌（401）时先用 CPA 的 `ForceRefreshAuth` 刷新一次，仍被拒绝才判 `needs_login`；网络或上游故障只在账号上记 `check_error`，不改变可用性。`POST /api/llm/v1/refresh` 并发调用共享同一轮检查。API key 没有订阅窗口，返回空的窗口列表。
+订阅的额度窗口（Codex 的 5 小时与每周，Grok 的周期额度）向提供商读：Codex 读 `chatgpt.com/backend-api/wham/usage`，Grok 读 `cli-chat-proxy.grok.com/v1/billing`，经管理 API 的 `POST /requests/api-call`（`auth_index` 加 `Authorization: Bearer $TOKEN$`，令牌由 CPA 填入，**不出 CPA**），不消耗额度。一次读同时是账号的健康检查：上游拒绝令牌（401）时先用 `POST /credentials/refresh` 刷新一次，仍被拒绝才判 `needs_login`；网络或上游故障只在账号上记 `check_error`，不改变可用性。`refresh` 并发调用共享同一轮检查。API key 没有订阅窗口，返回空的窗口列表（Google AI Studio 的检查是列一次模型）。
 
 ## 与 host 的接缝
 
@@ -65,26 +65,19 @@ Bun 进程（host）                                    同一个进程里的 Go
 | `models`   | 目录与每个模型当前的可用性和原因                                     |
 | `quota`    | 每个账号的订阅窗口（`kind`：`5h`/`weekly`/`monthly`，`used` 百分比） |
 
-action：`refresh`（检查所有账号并读额度）、`loginStart`、`loginPoll`、`loginSubmit`（API key）、`loginCancel`、`setEnabled`、`remove`。账号与模型每 5 秒读一次（读的是同进程内存），有变化才推送；额度在启动时、登录成功后、`refresh` 和每 10 分钟读一次。失败和不可用的原因都是**码加参数**，不是句子：`packages/llm-gateway/gateway/codes.go` 是封闭的码表（`codes.json` 是同一份给 TypeScript 用，`LLM_CODES` 在 `packages/client-contracts/src/llm.ts`，两边各有测试保证一致）。网关返回 `{code, message, params}`，`message` 是只给日志看的英文诊断，`params` 是 `provider`（显示名）和 `status`（HTTP 状态）。host 的 `llm` 插件原样透传（失败的回复帧带 `problem: {code, params}`），不翻译；网页在 `llm:problems.*` 里把每个码翻成中英文，遇到不认识的码就显示码和诊断。连接方式的登录说明（原先的 `hint`）也不再由网关给出，网页按连接方式 id 取文案。
+action：`refresh`（检查所有账号并读额度）、`loginStart`、`loginPoll`、`loginSubmit`（API key）、`loginCancel`、`setEnabled`、`remove`。账号与模型每 5 秒读一次（几个回环管理请求），有变化才推送；额度在启动时、登录成功后、`refresh` 和每 10 分钟读一次。失败和不可用的原因都是**码加参数**，不是句子：`LLM_CODES`（`packages/client-contracts/src/llm.ts`）是封闭的码表，每个码的含义和参数写在 `apps/eta/src/llm/problems.ts`。网关给出 `{code, message, params}`，`message` 是只给日志看的英文诊断，`params` 是 `provider`（显示名）和 `status`（HTTP 状态）。`llm` 插件原样透传（失败的回复帧带 `problem: {code, params}`；网关没解释的失败报 `gateway_unavailable`），不翻译；网页在 `llm:problems.*` 里把每个码翻成中英文，遇到不认识的码就显示码和诊断。连接方式的登录说明（原先的 `hint`）也不再由网关给出，网页按连接方式 id 取文案。
 
 - **用量**：每次调用的 token 数沿用 `usage` 表：会话的 `turn:end` 里带着 `provider: "llm"`、模型和 token，按智能体记账；旧网关另外的“按主体账本”（`usage.json`）不再保留。订阅的额度窗口属于上面的 `quota` section。
 - **界面**：设置 → 模型服务里，“订阅与密钥”一节按连接方式分组列出账号（状态、套餐、额度条，重新登录、停用/启用、移除），Codex 和 Grok 用设备码弹窗（验证码、授权链接、倒计时、每 1.5 秒轮询），Google AI Studio 用填 key 的弹窗；“刷新状态”按钮调用 `refresh`。需要处理的账号会让设置按钮显示红点。网关的模型进入各处的模型选择器，按连接方式分组，不可用的置灰并给出原因。host 没有网关时整节隐藏。
 
 ## 状态目录
 
-`<数据目录>/llm/`：`auths/`（CPA 的凭据文件）、`models.json`（见过的模型）、`providers.json`（Google AI Studio 的 key，0600）、`config.yaml`（每次启动生成，勿手改）。
+`<数据目录>/llm/`：`auths/`（CPA 的凭据文件，格式与 Go 网关时相同，直接沿用）、`models.json`（见过的模型，格式沿用）、`config.yaml`（每次启动重写，其中 `api-keys` 是 API key 的唯一真源，勿手改）。
 
 ## 构建与测试
 
-```sh
-bun run --cwd packages/llm-gateway build      # go build -buildmode=c-shared → lib/libllm-gateway.{so,dylib,dll}
-bun run --cwd packages/llm-gateway test       # go test ./... + vitest
-```
+不需要构建：`bun install` 装上 `@cpajs/cpa` 和当前平台的 CPA 二进制。升级 CPA 即升级 `apps/eta/package.json` 里 `@cpajs/cpa` 的版本（它固定内置一个 CPA 版本），升级后跑下面的测试。
 
-需要 Go（`go.mod` 要求的版本，`GOTOOLCHAIN=auto` 会自动取）。首次构建要下载并编译 CPA，约两分钟。`ETA_LLM_LIB` 可以指向别处的库。Docker 镜像有单独的 Go 构建阶段。
-
-测试分三层：
-
-- **Go 契约测试**（`module/contract_test.go`，对假上游，CPA 升级时必须通过）：凭据上传后进入目录、模型进入注册表和 `/v1/models`；账号 API 与 `/v1` 只认 host 的 key；停用和删除（含凭据文件）生效；非流式 chat completions、流式 responses 逐段到达；客户端断开取消上游请求；上游 500/429 只影响该次请求；Google AI Studio 的 key 的校验、持久化、停用、失效、移除。`gateway/` 与 `connectors/` 的单元测试覆盖状态派生、登录、额度。
-- **FFI 测试**（`packages/llm-gateway/test/ffi.test.ts`，每项在独立的 Bun 进程里，对真实的库和 CPA）：压力下的流式（并发流式请求加不停的分配与强制 GC，没有被截断的流）；中途断开（数百个客户端读到一段就挂断，上游全部被取消，之后请求照常完成）；加载后 Bun 的 SIGTERM、SIGINT 处理器照常触发。
-- **host 测试**（`apps/eta/test/llm.test.ts`，真实的库，假上游）：`llm` target 与模型上线，经 `host.server.models` 流式生成并拿到 token，用量记录得到提供商 `llm`，中途停止取消上游，上游 500/429 只让那次生成失败。
+- **状态推导**（`apps/eta/test/llm-state.test.ts`，纯函数）：冷却视图到账号状态与模型状态的映射、智能体 key 的派生校验吊销、Codex 凭据文件格式与套餐名。
+- **网关对真实 CPA**（`apps/eta/test/llm-gateway.test.ts`，假的 Google 与 OpenAI 登录）：Google AI Studio key 的校验（空、无效、重复）、写入配置后出现账号与模型、检查、停用与启用、重启后仍在、移除后模型保留为不可用；Go 网关的 `providers.json` 迁入配置；Codex 设备码登录成为 CPA 的凭据文件、模型上线、停用与删除；CPA 被 SIGKILL 后重新启动并通知，`/v1` 的 key 和管理客户端在新进程上可用。
+- **host 测试**（`apps/eta/test/llm.test.ts`、`bundles-gateway.test.ts`，真实 CPA，假上游）：`llm` target 与模型上线，经 `host.server.models` 流式生成并拿到 token，用量记录得到提供商 `llm`，中途停止取消上游，上游 500/429 只让那次生成失败；环境包在本机和 daemon 上拿到网关地址和智能体 key，`/llm` 只为智能体 key 转发 `/v1`，智能体删除后 key 失效。

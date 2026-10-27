@@ -10,7 +10,7 @@
 import type { MutableModels } from "@earendil-works/pi-ai";
 import type { KernelModels } from "@eta/core";
 import type { EtaModelConfig } from "@eta/server";
-import type { CatalogModel } from "./client";
+import type { CatalogModel } from "./gateway";
 import { createModels } from "@earendil-works/pi-ai";
 import { LLM_PROVIDER_ID } from "@eta/client-contracts";
 import { buildProvider } from "@eta/server";

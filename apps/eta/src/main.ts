@@ -68,7 +68,7 @@ const host = await startHost({
     ? {}
     : { tokenFile: resolve(values["token-file"]) }),
   allowOrigins: values["allow-origin"] ?? [],
-  // Subscriptions and Gemini keys, through the in-process LLM gateway.
+  // Subscriptions and Gemini keys, through the LLM gateway (CLIProxyAPI in a child process).
   llm: values["no-llm"] !== true,
   // The whole GitHub chain, or none of it.
   github,

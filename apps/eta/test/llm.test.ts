@@ -3,15 +3,15 @@
  * wire and in the model layer, a generation through them streams and is billed, a client that
  * stops cancels the upstream, and an upstream failure is that generation's, not the host's.
  *
- * The gateway is the real native library (CLIProxyAPI inside this process); only the provider it
- * would call is fake. The library loads once per process, so this file has one host.
+ * The gateway is the real CLIProxyAPI (a child process); only the provider it would call is
+ * fake.
  */
 import type { AssistantMessage, Context } from "@earendil-works/pi-ai";
 import type { LlmAccounts, LlmModel, LlmQuota } from "@eta/client-contracts";
-import { cpaExtraFor, fakeUpstream, MODEL } from "@eta/llm-gateway/testing";
 import { describe, expect, it } from "vitest";
 import { entryOf } from "../src/usage/recorder";
 import { connect, until } from "./support/client";
+import { cpaExtraFor, fakeUpstream, MODEL } from "./support/fake-upstream";
 import { testHost } from "./support/host";
 
 const ask = (text: string): Context => ({
@@ -124,9 +124,9 @@ describe("the LLM gateway in the host", () => {
       }
       // CPA cools the model down after a failure, so the next generation may be refused too;
       // what must hold is that the gateway still answers for its catalog and its accounts.
-      const catalog = await host.llm!.client.models();
+      const catalog = await host.llm!.gateway.models();
       expect(catalog.map((entry) => entry.id)).toContain(MODEL);
-      expect(await host.llm!.client.connections()).toHaveLength(1);
+      expect(await host.llm!.gateway.connections()).toHaveLength(1);
 
       // Everything else about the host is as it was: the configured providers still answer for their own models.
       expect(models.getModel("acme", "m1")?.provider).not.toBe("llm");

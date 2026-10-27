@@ -53,7 +53,7 @@ interface Setup {
   connections?: LlmConnection[];
   quota?: LlmQuota[];
   models?: LlmModel[];
-  /** Leave the llm plugin out, as a host without the gateway library does. */
+  /** Leave the llm plugin out, as a host without the gateway does. */
   without?: boolean;
 }
 

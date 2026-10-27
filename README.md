@@ -90,7 +90,7 @@ smile and trust the dashboard.
 ```sh
 git clone https://github.com/0xfe-project/eta.git
 cd eta
-bun run setup     # install, toolchain, model gateway
+bun run setup     # install dependencies
 bun run dev       # host + web
 ```
 
@@ -115,7 +115,6 @@ apps/
   daemon/    eta-daemon: a slim node on another machine, dials back to the main node, runs sessions only
   web/       React UI, reads and writes over that same WebSocket
 packages/
-  llm-gateway  Go gateway (embeds CLIProxyAPI), built as a c-shared library loaded by the host
   eta-*        kernel, harness, server floor, SSH and git plugins of upstream eta
   client-wire-proto, client-contracts   wire frames and product target types
 docs/architecture/   design notes
@@ -129,7 +128,7 @@ Architecture notes:
 - [Data](docs/architecture/data.md): SQLite and migrations, session files, data directory layout
 - [Machines and daemon](docs/architecture/machines.md): pairing, epochs, model and tool proxying, remote sessions
 - [Access control](docs/architecture/access.md): origin checks, token gate, capability routing
-- [LLM gateway](docs/architecture/llm-gateway.md): subscription accounts (Codex, Grok) and Gemini keys, CLIProxyAPI embedded through c-shared and bun:ffi
+- [LLM gateway](docs/architecture/llm-gateway.md): subscription accounts (Codex, Grok) and Gemini keys, CLIProxyAPI run as a child process of the host
 - [Memory](docs/architecture/memory.md): what is stored, how it is queried per conversation
 - [Tasks](docs/architecture/tasks.md): an agent proposes, the user confirms, the same agent executes in a fresh session
 - [Tasks, artifacts and routines](docs/architecture/tasks-artifacts-routines.md)
@@ -138,13 +137,12 @@ UI conventions live in [DESIGN.md](DESIGN.md) and [apps/web/AGENTS.md](apps/web/
 
 ### Environment and setup
 
-Needs Bun 1.4.3 (`bun check` is what every package type-checks with), uv (Python 3.13, fetched by uv
-from `.python-version`) and Go (the LLM gateway; the version in `go.mod` is fetched automatically by
-`GOTOOLCHAIN=auto`, cgo needs gcc). Nothing else to install and no service to stand up. Without Go the
-host still runs, just without subscription accounts and Gemini keys.
+Needs Bun 1.4.3 (`bun check` is what every package type-checks with) and uv (Python 3.13, fetched by
+uv from `.python-version`). The LLM gateway's CLIProxyAPI binary comes with `bun install`. Nothing else
+to install and no service to stand up.
 
 ```sh
-bun run setup     # bun install + uv sync + build the LLM gateway library (about two minutes the first time)
+bun run setup     # bun install + uv sync
 bun run dev       # host and web dev server
 bun run check     # everything CI runs
 ```
