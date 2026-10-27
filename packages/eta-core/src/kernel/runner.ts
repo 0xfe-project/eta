@@ -347,6 +347,20 @@ export class Runner {
     this.transcript.push(...retainedTail);
   }
 
+  /**
+   * Replace the messages the next run will send.
+   *
+   * The journal is the transcript of record, and it can be repaired under a
+   * live session (`repairTranscript` moves the branch and re-appends what
+   * survives). What the runner read when the session opened is stale after
+   * that, and a run on the stale copy would rebuild the very request the
+   * provider refused.
+   */
+  setTranscript(messages: readonly AgentMessage[]): void {
+    this.transcript.length = 0;
+    this.transcript.push(...messages);
+  }
+
   /** Whether a run is in flight (an idle waker's guard, a dashboard's fact). */
   get running(): boolean {
     return this.inFlight !== undefined;
