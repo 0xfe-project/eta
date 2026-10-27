@@ -225,7 +225,9 @@ describe("agent keys", () => {
     expect(ada).toMatch(/^etak\.ada\.[0-9a-f]{64}$/);
     expect(keys.of("ada")).toBe(ada);
     expect(keys.scopeOf(ada)).toBe("ada");
-    expect(keys.scopeOf(`${ada.slice(0, -1)}0`)).toBeUndefined();
+    expect(
+      keys.scopeOf(`${ada.slice(0, -1)}${ada.endsWith("0") ? "1" : "0"}`),
+    ).toBeUndefined();
     expect(keys.scopeOf(new AgentKeys().of("ada"))).toBeUndefined();
     expect(keys.scopeOf("etak.a.b.c")).toBeUndefined();
     expect(() => keys.of("a.b")).toThrow();

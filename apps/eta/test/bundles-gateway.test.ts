@@ -91,7 +91,7 @@ describe("a bundle's tools and the LLM gateway", () => {
       for (const headers of [
         {},
         bearer("etak.nobody.0000"),
-        bearer(`${llm.scopedKey(away.id).slice(0, -1)}0`),
+        bearer(`${key.slice(0, -1)}${key.endsWith("0") ? "1" : "0"}`),
         bearer("a-key-that-is-not-an-agent-key"),
       ])
         expect((await fetch(models1, { headers })).status).toBe(401);
