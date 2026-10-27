@@ -6,8 +6,12 @@
  * API takes a key cpajs makes up and keeps behind `server.client()`. The config is written on
  * every launch: the settings below, the API keys the previous run kept in it (`api-keys`,
  * changed at runtime through the management API), and the test overrides. CPA cannot outlive
- * the host (cpajs's launcher), and when it exits on its own cpajs starts it again on the same
- * port, with the same handle and client.
+ * the host (cpajs's launcher).
+ *
+ * When CPA exits on its own it is started again, on whatever port is free: `client` and
+ * `baseUrl` then answer for the new process, and `onRestarted` says so. The wait before a start
+ * doubles (to 30 s) while CPA keeps dying within a minute of starting, and is short again once
+ * it has stayed up.
  */
 import type { CpaClient, CpaConfig } from "@cpajs/cpa/client";
 import type { CpaServer } from "@cpajs/cpa/server";
@@ -29,92 +33,44 @@ export interface CpaOptions {
   warn: (message: string) => void;
 }
 
+/** How long CPA must stay up for its next restart to be quick again. */
+const STABLE_MS = 60_000;
+
 export class Cpa {
   /** The key CPA's `/v1` takes. */
   readonly accessKey: string;
-  /** The management API; it follows CPA across restarts. */
-  readonly client: CpaClient;
-  readonly #server: CpaServer;
+  readonly #options: CpaOptions;
+  readonly #restarted = new Set<() => void>();
+  #server: CpaServer;
+  #client: CpaClient;
+  #startedAt = Date.now();
+  #backoff = 0;
+  #stopping = false;
 
   private constructor(
+    options: CpaOptions,
     accessKey: string,
     server: CpaServer,
-    warn: (message: string) => void,
   ) {
+    this.#options = options;
     this.accessKey = accessKey;
     this.#server = server;
-    this.client = server.client();
-    server.on("exit", ({ code, signal, recentLogs, willRestart, reason }) => {
-      if (reason !== "unexpected") return;
-      const last = recentLogs
-        .slice(-20)
-        .map(({ line }) => `  ${line}`)
-        .join("\n");
-      warn(
-        `[eta] llm: CPA exited (code ${String(code)}, signal ${String(signal)})${
-          willRestart ? "; starting it again" : ""
-        }\n${last}`,
-      );
-    });
-    server.on("restart-failed", ({ error, willRetry }) =>
-      warn(
-        `[eta] llm: CPA did not start again${willRetry ? "" : "; giving up"}: ${String(error)}`,
-      ),
-    );
+    this.#client = server.client();
+    this.#watch(server);
   }
 
   static async start(options: CpaOptions): Promise<Cpa> {
-    const { stateDir, extra = {}, warn } = options;
     const accessKey = randomBytes(32).toString("hex");
-    const { "api-keys": extraKeys, ...rest } = extra;
-    const legacy = join(stateDir, "providers.json");
-    const server = await startServer({
-      stateDir,
-      host: "127.0.0.1",
-      config: ({ existing, reason }) => ({
-        access: { "api-keys": [accessKey] },
-        management: {
-          "disable-control-panel": true,
-          "disable-auto-update-panel": true,
-        },
-        observability: {
-          logs: {
-            debug: false,
-            "logging-to-file": false,
-            "request-log": false,
-          },
-          usage: { "usage-statistics-enabled": false },
-        },
-        routing: { retry: { "request-retry": 1 } },
-        "api-keys": {
-          ...withProviders(
-            existing?.["api-keys"] ?? {},
-            reason === "start" ? legacy : undefined,
-          ),
-          ...extraKeys,
-        },
-        ...rest,
-      }),
-      // The keys are in the config now.
-      hooks: {
-        afterStart: ({ reason }) => {
-          if (reason === "start") rmSync(legacy, { force: true });
-        },
-      },
-      // On the same port, unless something took it meanwhile (see `onMoved`).
-      restart: {
-        onUnexpectedExit: true,
-        backoffMs: [500, 1000, 2000, 4000, 8000, 16_000, 30_000],
-        allowNewPort: true,
-      },
-      suppressWarnings: { noManagementKey: true },
-      onWarning: (warning) => warn(`[eta] llm: ${warning.message}`),
-      // CPA logs every request at info; the host's log gets its warnings and errors, and
-      // anything on stderr without a level (a panic, say), not its banners on stdout.
-      logs: { minLevel: "warn", unleveled: "stderr" },
-      onLog: ({ line }) => process.stderr.write(`[cpa] ${line}\n`),
-    });
-    return new Cpa(accessKey, server, warn);
+    const legacy = join(options.stateDir, "providers.json");
+    const server = await launch(options, accessKey, legacy);
+    // The keys are in the config now.
+    rmSync(legacy, { force: true });
+    return new Cpa(options, accessKey, server);
+  }
+
+  /** The management API of the running process. */
+  get client(): CpaClient {
+    return this.#client;
   }
 
   /** `http://127.0.0.1:<port>/v1`. */
@@ -122,21 +78,103 @@ export class Cpa {
     return this.#server.baseUrl;
   }
 
-  /** Call `listener` when CPA was started again on another port (its own was taken). */
-  onMoved(listener: () => void): () => void {
-    return this.#server.on("restarted", ({ originChanged }) => {
-      if (originChanged) listener();
-    });
-  }
-
   /** The process's id. */
   get pid(): number {
     return this.#server.pid;
   }
 
+  /** Call `listener` when CPA was started again after it exited on its own. */
+  onRestarted(listener: () => void): () => void {
+    this.#restarted.add(listener);
+    return () => this.#restarted.delete(listener);
+  }
+
   async stop(): Promise<void> {
+    this.#stopping = true;
     await this.#server.stop();
   }
+
+  #watch(server: CpaServer): void {
+    server.on("exit", ({ code, signal, recentLogs, reason }) => {
+      if (reason !== "unexpected" || this.#stopping) return;
+      const last = recentLogs
+        .slice(-20)
+        .map(({ line }) => `  ${line}`)
+        .join("\n");
+      this.#options.warn(
+        `[eta] llm: CPA exited (code ${String(code)}, signal ${String(signal)}); starting it again\n${last}`,
+      );
+      this.#backoff =
+        Date.now() - this.#startedAt < STABLE_MS ? this.#backoff + 1 : 0;
+      void this.#respawn();
+    });
+  }
+
+  async #respawn(): Promise<void> {
+    while (!this.#stopping) {
+      await Bun.sleep(Math.min(30_000, 250 * 2 ** this.#backoff));
+      if (this.#stopping) return;
+      try {
+        const server = await launch(this.#options, this.accessKey);
+        if (this.#stopping) {
+          await server.stop();
+          return;
+        }
+        this.#server = server;
+        this.#client = server.client();
+        this.#startedAt = Date.now();
+        this.#watch(server);
+        for (const listener of this.#restarted) listener();
+        return;
+      } catch (error) {
+        this.#backoff++;
+        this.#options.warn(
+          `[eta] llm: CPA did not start again: ${String(error)}`,
+        );
+      }
+    }
+  }
+}
+
+function launch(
+  { stateDir, extra = {}, warn }: CpaOptions,
+  accessKey: string,
+  legacy?: string,
+): Promise<CpaServer> {
+  const { "api-keys": extraKeys, ...rest } = extra;
+  return startServer({
+    stateDir,
+    host: "127.0.0.1",
+    config: ({ existing }) => ({
+      access: { "api-keys": [accessKey] },
+      management: {
+        "disable-control-panel": true,
+        "disable-auto-update-panel": true,
+      },
+      observability: {
+        logs: { debug: false, "logging-to-file": false, "request-log": false },
+        usage: { "usage-statistics-enabled": false },
+      },
+      routing: { retry: { "request-retry": 1 } },
+      "api-keys": {
+        ...withProviders(existing?.["api-keys"] ?? {}, legacy),
+        ...extraKeys,
+      },
+      ...rest,
+    }),
+    suppressWarnings: { noManagementKey: true },
+    onWarning: (warning) => warn(`[eta] llm: ${warning.message}`),
+    // CPA logs every request at info; the host's log gets its warnings and errors, and
+    // anything on stderr without a level (a panic, say), not its banners on stdout.
+    onLog: ({ stream, level, line }) => {
+      if (
+        level === undefined
+          ? stream === "stderr"
+          : level !== "info" && level !== "debug"
+      )
+        process.stderr.write(`[cpa] ${line}\n`);
+    },
+  });
 }
 
 /**

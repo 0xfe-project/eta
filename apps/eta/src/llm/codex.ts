@@ -197,7 +197,7 @@ export class Codex implements Connector {
       token.expires_in ?? 0,
       new Date(),
     );
-    await this.#context.cpa.credentials.upload({ name, content });
+    await this.#context.cpa().credentials.upload({ name, content });
   }
 
   async poll(id: string): Promise<LlmLogin> {
@@ -227,7 +227,7 @@ export class Codex implements Connector {
         secondary_window?: CodexWindow | null;
       };
     }>(
-      this.#context.cpa,
+      this.#context.cpa(),
       connection.authIndex,
       USAGE_URL,
       accountId === undefined || accountId === ""

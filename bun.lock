@@ -52,7 +52,7 @@
       "name": "@eta/app",
       "version": "0.1.0",
       "dependencies": {
-        "@cpajs/cpa": "0.1.0-rc.6",
+        "@cpajs/cpa": "0.1.0-rc.7",
         "@earendil-works/pi-ai": "0.85.1",
         "@eta/client-contracts": "*",
         "@eta/client-wire-proto": "*",
@@ -512,53 +512,53 @@
 
     "@clack/prompts": ["@clack/prompts@1.8.1", "", { "dependencies": { "@clack/core": "1.5.1", "fast-string-width": "^3.0.2", "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-dlT1m5e/0yUL0kRNcQn7yGLVThkgbB0Ga/1AmfDDC/8ik6AIiSf2QLQO2zPYvefsHP0aFgxO93cVLCCfDp7kzQ=="],
 
-    "@cpajs/cpa": ["@cpajs/cpa@0.1.0-rc.6", "", { "dependencies": { "bcryptjs": "^3.0.3", "yaml": "^2.9.1" }, "optionalDependencies": { "@cpajs/darwin-arm64": "0.1.0-rc.6", "@cpajs/darwin-x64": "0.1.0-rc.6", "@cpajs/freebsd-arm64": "0.1.0-rc.6", "@cpajs/freebsd-ia32": "0.1.0-rc.6", "@cpajs/freebsd-x64": "0.1.0-rc.6", "@cpajs/linux-arm": "0.1.0-rc.6", "@cpajs/linux-arm64-gnu": "0.1.0-rc.6", "@cpajs/linux-arm64-musl": "0.1.0-rc.6", "@cpajs/linux-ia32": "0.1.0-rc.6", "@cpajs/linux-loong64": "0.1.0-rc.6", "@cpajs/linux-mips": "0.1.0-rc.6", "@cpajs/linux-mipsel": "0.1.0-rc.6", "@cpajs/linux-ppc64": "0.1.0-rc.6", "@cpajs/linux-riscv64": "0.1.0-rc.6", "@cpajs/linux-s390x": "0.1.0-rc.6", "@cpajs/linux-x64-gnu": "0.1.0-rc.6", "@cpajs/linux-x64-musl": "0.1.0-rc.6", "@cpajs/netbsd-x64": "0.1.0-rc.6", "@cpajs/openbsd-arm64": "0.1.0-rc.6", "@cpajs/openbsd-x64": "0.1.0-rc.6", "@cpajs/win32-arm64": "0.1.0-rc.6", "@cpajs/win32-ia32": "0.1.0-rc.6", "@cpajs/win32-x64": "0.1.0-rc.6" } }, "sha512-wmTvi7gTmn1RkA1sHwmrQpQp0Wamrido6LGOxaicOLeeTxnEqLs1Lv+p/9j6neW6r/VXMAB56AxnIX5LX/FysQ=="],
+    "@cpajs/cpa": ["@cpajs/cpa@0.1.0-rc.7", "", { "dependencies": { "bcryptjs": "^3.0.3", "yaml": "^2.9.1" }, "optionalDependencies": { "@cpajs/darwin-arm64": "0.1.0-rc.7", "@cpajs/darwin-x64": "0.1.0-rc.7", "@cpajs/freebsd-arm64": "0.1.0-rc.7", "@cpajs/freebsd-ia32": "0.1.0-rc.7", "@cpajs/freebsd-x64": "0.1.0-rc.7", "@cpajs/linux-arm": "0.1.0-rc.7", "@cpajs/linux-arm64-gnu": "0.1.0-rc.7", "@cpajs/linux-arm64-musl": "0.1.0-rc.7", "@cpajs/linux-ia32": "0.1.0-rc.7", "@cpajs/linux-loong64": "0.1.0-rc.7", "@cpajs/linux-mips": "0.1.0-rc.7", "@cpajs/linux-mipsel": "0.1.0-rc.7", "@cpajs/linux-ppc64": "0.1.0-rc.7", "@cpajs/linux-riscv64": "0.1.0-rc.7", "@cpajs/linux-s390x": "0.1.0-rc.7", "@cpajs/linux-x64-gnu": "0.1.0-rc.7", "@cpajs/linux-x64-musl": "0.1.0-rc.7", "@cpajs/netbsd-x64": "0.1.0-rc.7", "@cpajs/openbsd-arm64": "0.1.0-rc.7", "@cpajs/openbsd-x64": "0.1.0-rc.7", "@cpajs/win32-arm64": "0.1.0-rc.7", "@cpajs/win32-ia32": "0.1.0-rc.7", "@cpajs/win32-x64": "0.1.0-rc.7" } }, "sha512-ZcehOzCQuku+ir8qwYGL7/DxUCA67dPfcQh/j/TUw8djnsEy6N/dYrMF2R1qR3DJf8HdkfOFdhCF1ifGpqkOHA=="],
 
-    "@cpajs/darwin-arm64": ["@cpajs/darwin-arm64@0.1.0-rc.6", "", { "os": "darwin", "cpu": "arm64" }, "sha512-jFzNCg7rgnLubOVJS5PhWWdhWK2wvjP73Kg8QcPcWtLCRcHJOGe0zDbP0BGr5SGN9R/PGXuVZ4Pa+rfp8CbKNA=="],
+    "@cpajs/darwin-arm64": ["@cpajs/darwin-arm64@0.1.0-rc.7", "", { "os": "darwin", "cpu": "arm64" }, "sha512-ktrevU7wDBo8SWBGQI+Ohqy8qZ3qxNh0BwGD34Tu/rsX8zG2mElcYsV0VEys7nXV6IlKPGc8V8oYkElwQqDz4Q=="],
 
-    "@cpajs/darwin-x64": ["@cpajs/darwin-x64@0.1.0-rc.6", "", { "os": "darwin", "cpu": "x64" }, "sha512-gq/qnz46zWx5VShGoUrC2wzhTtLxPso1/myp3/SzFn/254AjZXOmZtFLh1Pv2RzX4tEa3qTppVKOtushCMnX1w=="],
+    "@cpajs/darwin-x64": ["@cpajs/darwin-x64@0.1.0-rc.7", "", { "os": "darwin", "cpu": "x64" }, "sha512-02BwuJ3Qh/LA1LMFstOp+nWHrDGGOXXF0lBVwHnK2rVW3oJYBkwEiXz+gKzDi51dBwZX1+BF+RTIha8suZKOHA=="],
 
-    "@cpajs/freebsd-arm64": ["@cpajs/freebsd-arm64@0.1.0-rc.6", "", { "os": "freebsd", "cpu": "arm64" }, "sha512-JtfKKMAc7F6/kDIjSgbpAV+ezD9IWnYTYqsLt3Yvc70yOPqiM19oPtfl2z6WGLOE5wo5WAk4JZfleI0n1bn0vw=="],
+    "@cpajs/freebsd-arm64": ["@cpajs/freebsd-arm64@0.1.0-rc.7", "", { "os": "freebsd", "cpu": "arm64" }, "sha512-ypgrLveJ6ovBayOldKMYtQ9DtuzeXjPNcYrO+PpsJoVN3wdgHYaN0Y4UPbpLVOgz3zSy9mbdShHCR3qSAd7XQw=="],
 
-    "@cpajs/freebsd-ia32": ["@cpajs/freebsd-ia32@0.1.0-rc.6", "", { "os": "freebsd", "cpu": "ia32" }, "sha512-0KIKUJLnrOgGqnwMP1pq9bce1qiwiqheoXWiFwSfdbQF2HfQ40KJnUuVWlLR6XJqUIClwTTH9vCMzfQU6T0iWg=="],
+    "@cpajs/freebsd-ia32": ["@cpajs/freebsd-ia32@0.1.0-rc.7", "", { "os": "freebsd", "cpu": "ia32" }, "sha512-dOjmtgPXTZT2Bqhu/U4grdcftEwmuK3CwXW+5EmUCY3aqVJueO0eHpAbz57nmO288WjNpXsPUqc7LYTetRXHAA=="],
 
-    "@cpajs/freebsd-x64": ["@cpajs/freebsd-x64@0.1.0-rc.6", "", { "os": "freebsd", "cpu": "x64" }, "sha512-6orcgSz4GxW2FmcixQ/t7ka5iLE0ZoKSNh3/bT0HyceMFXBB7r/zFBNo6BPdcfZtBcMmhn4Sq2cx8CqGLqxZIA=="],
+    "@cpajs/freebsd-x64": ["@cpajs/freebsd-x64@0.1.0-rc.7", "", { "os": "freebsd", "cpu": "x64" }, "sha512-y/HltyBWZIJ2EyMpcwWZWBWojM2poB+4mfNim022oT4VwrTvo3cYJblEeVc5BXOENiM9lkuVQReHW2Ipqcb/IA=="],
 
-    "@cpajs/linux-arm": ["@cpajs/linux-arm@0.1.0-rc.6", "", { "os": "linux", "cpu": "arm" }, "sha512-4Ikj3UkjkoniKAVby+zigUEjpzQvxxtquOoHS+Dos6Ju0odUdrwPQXETpHgdMjrfqK33Wlv2NW2PF1J6vGS2jw=="],
+    "@cpajs/linux-arm": ["@cpajs/linux-arm@0.1.0-rc.7", "", { "os": "linux", "cpu": "arm" }, "sha512-ZDndaFXVDhOYdFpIsd4JuLEe2ozJdtlYd7+v+e0vvDpjG2hndHp58V2RQ4ccBWATa29sI6O230puhhKyt8vceg=="],
 
-    "@cpajs/linux-arm64-gnu": ["@cpajs/linux-arm64-gnu@0.1.0-rc.6", "", { "os": "linux", "cpu": "arm64" }, "sha512-6yjdjIt3XQ9HIfHfK2ysUkNFogfPD6L9SZkqP1xVN61P34SEcOxlmJVVuWvCnV9cJgcHfKiBCWpCoZ8ScTKS+w=="],
+    "@cpajs/linux-arm64-gnu": ["@cpajs/linux-arm64-gnu@0.1.0-rc.7", "", { "os": "linux", "cpu": "arm64" }, "sha512-CBjjiPnokuFq9Fi3htv+qCcpeZeXYdQKLVfIBGvmTg6jjLlS4WXKokJS6mDWt1fpTb7tVb0alBddu5RExLI5uQ=="],
 
-    "@cpajs/linux-arm64-musl": ["@cpajs/linux-arm64-musl@0.1.0-rc.6", "", { "os": "linux", "cpu": "arm64" }, "sha512-eIfBK8MuEu7JMrTfdofHvh9TQ2q49ftlfJm19fX06xkZDkOKjSqHoNP4U6uLBfn5nPdqauNe76jJMYCAT3M5fw=="],
+    "@cpajs/linux-arm64-musl": ["@cpajs/linux-arm64-musl@0.1.0-rc.7", "", { "os": "linux", "cpu": "arm64" }, "sha512-oqwwU5iw4x3LE3y1a0jyN4yLZ16iOWOmTTbgSaXXJ7exhE5WONZL7ZxwTPLX7HskBM8KXf/AD9sJcN6wsZGM0Q=="],
 
-    "@cpajs/linux-ia32": ["@cpajs/linux-ia32@0.1.0-rc.6", "", { "os": "linux", "cpu": "ia32" }, "sha512-HxyXBrBVTqh75RYKpvAOQl8XueGboAmNE1Gb/c8kVrxJKoR//JjRg5zK4g2vVNUFeFf8DZBc024yS4EIWLsALg=="],
+    "@cpajs/linux-ia32": ["@cpajs/linux-ia32@0.1.0-rc.7", "", { "os": "linux", "cpu": "ia32" }, "sha512-/PphY6cuOHZwyI8RZoqD9uVMxHQZ9LbRorGpdeJj3nCZJFUORv+SyWmsCPJHilR+cGcHB8L7AyJQpBfz3cWLkw=="],
 
-    "@cpajs/linux-loong64": ["@cpajs/linux-loong64@0.1.0-rc.6", "", { "os": "linux", "cpu": "none" }, "sha512-0zKvsQpZ88cfhYedvoyZSkWzOvGaPjuRDK76DlZBSHAmlJC5rmcfW6AFj7mrPBsH8eqvJyvnLndZrk+bk1ba+A=="],
+    "@cpajs/linux-loong64": ["@cpajs/linux-loong64@0.1.0-rc.7", "", { "os": "linux", "cpu": "none" }, "sha512-6ZEKHiBeUaBmjYJXiapEXXMOAwHAvAnSeTtneZmxV8nSpdeIMRxiln68X9jHebv2oOvXO2FNODjxVnO5e3kCtw=="],
 
-    "@cpajs/linux-mips": ["@cpajs/linux-mips@0.1.0-rc.6", "", { "os": "linux", "cpu": "mips" }, "sha512-ULEpRMByq1zOgFviCqFPZugR/rSuGeZgIpj6K5r0kBdMSF3NQP2lbZ+thgf8w2l1fmwALc1t+LuVQ3vcGgrtsg=="],
+    "@cpajs/linux-mips": ["@cpajs/linux-mips@0.1.0-rc.7", "", { "os": "linux", "cpu": "mips" }, "sha512-GnukDDDj1I8TPLjbeZME3izHCZYhi5lsZQB+9URUcxB+D1EMH52asS1EHJjAaBtGFkvdSGk3YxGd+MuA8XiLYQ=="],
 
-    "@cpajs/linux-mipsel": ["@cpajs/linux-mipsel@0.1.0-rc.6", "", { "os": "linux", "cpu": "mipsel" }, "sha512-DqcgPNvyxIT44VcmZXzUQ2d5ufBZ4DNmLZiCNGcYnEjFcM3hdOidX5BiB0+uB2Iu0XwXKNOpiJRO8C9u1YZi2Q=="],
+    "@cpajs/linux-mipsel": ["@cpajs/linux-mipsel@0.1.0-rc.7", "", { "os": "linux", "cpu": "mipsel" }, "sha512-tZTXYJv+7IQy9hBNqbtPwnJcyBZ0HFU+emm7iohI7epSBQnjUuuooqENwLnTD1jQLstGbvcFnSirCbb47iMwJg=="],
 
-    "@cpajs/linux-ppc64": ["@cpajs/linux-ppc64@0.1.0-rc.6", "", { "os": "linux", "cpu": "ppc64" }, "sha512-AShFggZhBOvFmUHXxpySdkYEthz6zIQTE6bOZQNVMeqC+YwsJS8osp8MhXe6WPPGd768Vz3+mRj1mLxWPvdlzg=="],
+    "@cpajs/linux-ppc64": ["@cpajs/linux-ppc64@0.1.0-rc.7", "", { "os": "linux", "cpu": "ppc64" }, "sha512-xac7BjdaldMAjSNfVsx7cJyg5MRW0BPA/f3ji0bi5Iw76IYGvjPgFd8H/oDOHgVblLPLLmYHDcPcGnUx1OMgNA=="],
 
-    "@cpajs/linux-riscv64": ["@cpajs/linux-riscv64@0.1.0-rc.6", "", { "os": "linux", "cpu": "none" }, "sha512-DlJKu8RF0IqOwd/QLDaERirfb2t3nRVxSi0CByvgGVTHeMhaua8+vY7cfShCISLsxbjsLOcmIHgCePHJ0ulsxA=="],
+    "@cpajs/linux-riscv64": ["@cpajs/linux-riscv64@0.1.0-rc.7", "", { "os": "linux", "cpu": "none" }, "sha512-gi5Ob0eK/rnKWsG20KLfNFZ2ByWaUsRD9MGILkqJOom3yAekNT7syveIBSynZ1xRjcJvItaSGYR3C+zLFRYT4A=="],
 
-    "@cpajs/linux-s390x": ["@cpajs/linux-s390x@0.1.0-rc.6", "", { "os": "linux", "cpu": "s390x" }, "sha512-X/UMur/7uDlDW2YNmwlWnWm0XSSHc1xGwM9dIMM3IZGLFCusrv5pQPynN3mUb/NdnkYa17DQX5mieC/VyujgJg=="],
+    "@cpajs/linux-s390x": ["@cpajs/linux-s390x@0.1.0-rc.7", "", { "os": "linux", "cpu": "s390x" }, "sha512-Ca5fMIIVU1wDkLa7YGkFoV1CZBGvo6HP/Erzr3TVkUe39ccZiZbsooWdu9ROgIXmXiuYX3We8I7oLriChIAKmQ=="],
 
-    "@cpajs/linux-x64-gnu": ["@cpajs/linux-x64-gnu@0.1.0-rc.6", "", { "os": "linux", "cpu": "x64" }, "sha512-34cVZc5KBcVHsLjCeVAv4RnxlFdI+QLt0WxBFuT3PGmZhENLyn7sambJ9vep+TmSxoHUM9cV7whXYMXcePTgug=="],
+    "@cpajs/linux-x64-gnu": ["@cpajs/linux-x64-gnu@0.1.0-rc.7", "", { "os": "linux", "cpu": "x64" }, "sha512-5amPC9Oq/lkYtpctOd2l4VblazHN+lEymRLlXrOdA/9vK/TXgfasvGqunp6DILAZ1xpXW3iw8rPM/pDuxJz2dA=="],
 
-    "@cpajs/linux-x64-musl": ["@cpajs/linux-x64-musl@0.1.0-rc.6", "", { "os": "linux", "cpu": "x64" }, "sha512-Ud9dGfhnoUJG95Dtwq9tnUN4H3bW/PvERRxZaOCzJlgF0xsIT+0Q9+TwBuknGsd3fIoIx2WFEujs6luilNRfKA=="],
+    "@cpajs/linux-x64-musl": ["@cpajs/linux-x64-musl@0.1.0-rc.7", "", { "os": "linux", "cpu": "x64" }, "sha512-+TzE9qPyumLx2Xuh6va7FYsVJm1OkqmDlOPX0L7hmcy65qdSCFBTaifAhLt++qbSXLtPAVntR19ZgC2f6sGEGw=="],
 
-    "@cpajs/netbsd-x64": ["@cpajs/netbsd-x64@0.1.0-rc.6", "", { "os": "none", "cpu": "x64" }, "sha512-navsaLNLq8VLrRqfiz9dLpHszwPHWNGv9o/8ddHsebIKLbKnMX4kdOJrNM0xLJdfZEz1Zv4F9wdc9wtmRiRW+g=="],
+    "@cpajs/netbsd-x64": ["@cpajs/netbsd-x64@0.1.0-rc.7", "", { "os": "none", "cpu": "x64" }, "sha512-AkcLL2XORars7wFpoRqIF7DiaDhTu5BagEwKq1OszAR+o3iZV0sTERECW1HUGfd3kW9zuGS77vslkl3aTcZdXg=="],
 
-    "@cpajs/openbsd-arm64": ["@cpajs/openbsd-arm64@0.1.0-rc.6", "", { "os": "openbsd", "cpu": "arm64" }, "sha512-CHIsXFpuO/imJ9qPcab8LJsjzJT3kH0rlG/8j3CyLxaPCs87AExix1+ChPkwwsmppUChjUqjKrm9l8V92HSGPQ=="],
+    "@cpajs/openbsd-arm64": ["@cpajs/openbsd-arm64@0.1.0-rc.7", "", { "os": "openbsd", "cpu": "arm64" }, "sha512-FFu4Bhk08J1HKKut4u5tXmp/uWBw5q7ikat6WlBx0TRdCcT9KjQpRpoyHFxDIMtB+z66gGseWthC6UImey3dJQ=="],
 
-    "@cpajs/openbsd-x64": ["@cpajs/openbsd-x64@0.1.0-rc.6", "", { "os": "openbsd", "cpu": "x64" }, "sha512-Vo2PLAP981S1EReDC4+mjtpNadpSInmZmbNQDAJGIg5cweTzXjQ1hDfCjBwqKozN6hu6lSySiVcm/CR45lWZhA=="],
+    "@cpajs/openbsd-x64": ["@cpajs/openbsd-x64@0.1.0-rc.7", "", { "os": "openbsd", "cpu": "x64" }, "sha512-Pucpnc1CxqaeA57+7n0wQCf0q3DXsAADE6NcWyTI6sHmaL+6s/o5kiFYz8fQgkC8rJ0/t55MIJ0UTUftspT4Cw=="],
 
-    "@cpajs/win32-arm64": ["@cpajs/win32-arm64@0.1.0-rc.6", "", { "os": "win32", "cpu": "arm64" }, "sha512-kJ30vtHm/uuIRB6msWurkNNF+pIxCNvJe6FJ7fyIMw67M0a8D0fhmEuaMxYfBupyeKOMNJ92hD1O75Jb9Rfgpg=="],
+    "@cpajs/win32-arm64": ["@cpajs/win32-arm64@0.1.0-rc.7", "", { "os": "win32", "cpu": "arm64" }, "sha512-jbJFbMzLD2F48rE/Am7jiw9PIJ6AeIfk63VVYnwB0xk7TvjGxSBiuPldVMQzEtrAncig6A3ilz3eRH9N/DGa9A=="],
 
-    "@cpajs/win32-ia32": ["@cpajs/win32-ia32@0.1.0-rc.6", "", { "os": "win32", "cpu": "ia32" }, "sha512-vCF1f+gJsOu0cIAE4Cc/+eFI3YZsmg8F6ebE2I1X5TBiBBOisJrXMDa6dRHeCdMigyKyOWG1twif46ORDhu7zg=="],
+    "@cpajs/win32-ia32": ["@cpajs/win32-ia32@0.1.0-rc.7", "", { "os": "win32", "cpu": "ia32" }, "sha512-LfCVuIbWsebW2X1fhhgvOMo3quuGYhqYNRNbc7kkvIY1hCa+On6ltkyOFmF+JRwKhEuoH/WDR8nMGo+Xs2/t0g=="],
 
-    "@cpajs/win32-x64": ["@cpajs/win32-x64@0.1.0-rc.6", "", { "os": "win32", "cpu": "x64" }, "sha512-R0LvJRsl9Kkebr8sKcv1spXUGEt7gIfesMirSH/RHzckfqnJBt/ndEYXavFHLqq79mmBVks/3QzU5moM0x7Rww=="],
+    "@cpajs/win32-x64": ["@cpajs/win32-x64@0.1.0-rc.7", "", { "os": "win32", "cpu": "x64" }, "sha512-iWMm01hGzEk1ntCwL+PfRRSOyb+txKGld4zmuLP7EvmXhPGaFpssOhniqm1gKy579WkcDWQvlh1S38gGeBRF3A=="],
 
     "@dotenvx/dotenvx": ["@dotenvx/dotenvx@1.75.1", "", { "dependencies": { "@dotenvx/primitives": "^0.8.0", "commander": "^11.1.0", "conf": "^10.2.0", "dotenv": "^17.2.1", "enquirer": "^2.4.1", "env-paths": "^2.2.1", "execa": "^5.1.1", "fdir": "^6.2.0", "ignore": "^5.3.0", "object-treeify": "1.1.33", "open": "^8.4.2", "picomatch": "^4.0.4", "systeminformation": "^5.22.11", "undici": "^7.11.0", "which": "^4.0.0", "yocto-spinner": "^1.1.0" }, "bin": { "dotenvx": "src/cli/dotenvx.js" } }, "sha512-/BITOC9dmS/edY2zQwZNicQ059O6RKabtQfyEafV0nGtfYRNHYy1DIPiYVcov40+tob9hfmBnbR963dS+EQ1DQ=="],
 

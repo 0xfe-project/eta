@@ -281,13 +281,15 @@ describe("the gateway's accounts", () => {
 });
 
 describe("the CPA process", () => {
-  it("is started again on the same port when it dies", async () => {
+  it("is started again when it dies, and says where", async () => {
     const warnings: string[] = [];
     const cpa = await Cpa.start({
       stateDir: await tempDir("eta-cpa-"),
       warn: (message) => warnings.push(message),
     });
     stops.push(() => cpa.stop());
+    let restarted = 0;
+    cpa.onRestarted(() => restarted++);
     const models = () =>
       fetch(`${cpa.baseUrl}/models`, {
         headers: { authorization: `Bearer ${cpa.accessKey}` },
@@ -296,47 +298,13 @@ describe("the CPA process", () => {
         () => 0,
       );
     expect(await models()).toBe(200);
-    const { baseUrl, pid } = cpa;
+    const { pid } = cpa;
     process.kill(pid, "SIGKILL");
-    await until(() => cpa.pid !== pid);
-    await until(async () => (await models()) === 200);
-    expect(cpa.baseUrl).toBe(baseUrl);
+    await until(() => restarted === 1);
+    expect(cpa.pid).not.toBe(pid);
+    // The same /v1 key and a management client for the new process.
+    expect(await models()).toBe(200);
     expect((await cpa.client.credentials.list()).files).toEqual([]);
     expect(warnings.join("\n")).toContain("CPA exited");
-  }, 60_000);
-
-  it("moves to another port when its own was taken meanwhile", async () => {
-    const cpa = await Cpa.start({
-      stateDir: await tempDir("eta-cpa-"),
-      warn: () => {},
-    });
-    stops.push(() => cpa.stop());
-    let moved = 0;
-    cpa.onMoved(() => moved++);
-    const { baseUrl, pid } = cpa;
-    const port = Number(new URL(baseUrl).port);
-    process.kill(pid, "SIGKILL");
-    // Take the port as soon as the dead process lets it go, before the restart does.
-    let squatter: ReturnType<typeof Bun.serve> | undefined;
-    await until(() => {
-      try {
-        squatter = Bun.serve({
-          port,
-          hostname: "127.0.0.1",
-          fetch: () => new Response(""),
-        });
-        return true;
-      } catch {
-        return false;
-      }
-    });
-    stops.push(() => squatter?.stop(true));
-    await until(() => moved === 1);
-    expect(cpa.baseUrl).not.toBe(baseUrl);
-    const answer = await fetch(`${cpa.baseUrl}/models`, {
-      headers: { authorization: `Bearer ${cpa.accessKey}` },
-    });
-    expect(answer.status).toBe(200);
-    expect((await cpa.client.credentials.list()).files).toEqual([]);
   }, 60_000);
 });

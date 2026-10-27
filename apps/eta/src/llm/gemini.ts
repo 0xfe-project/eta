@@ -5,7 +5,7 @@
 import type { LlmLogin } from "@eta/client-contracts";
 import type { Connector, ConnectorContext, Usage } from "./connectors";
 import type { Connection } from "./state";
-import { Logins, randomId } from "./connectors";
+import { Logins, randomId, readKeys, updateKeys } from "./connectors";
 import { LlmError } from "./problems";
 
 const API = "https://generativelanguage.googleapis.com";
@@ -60,21 +60,14 @@ export class Gemini implements Connector {
     const key = apiKey.trim();
     if (key === "")
       throw new LlmError("api_key_required", "The API key is empty.");
-    const cpa = this.#context.cpa;
+    const cpa = this.#context.cpa();
     const duplicate = () =>
       new LlmError("duplicate_api_key", "This API key was added before.");
     const has = (groups: { keys: { "api-key": string }[] }[] | undefined) =>
       (groups ?? []).some((group) =>
         group.keys.some((entry) => entry["api-key"] === key),
       );
-    const known = (await cpa.credentials.listAll()).some(
-      (entry) =>
-        entry.source === "config" &&
-        entry.provider === "gemini" &&
-        "api-key" in entry.raw &&
-        entry.raw["api-key"] === key,
-    );
-    if (known) throw duplicate();
+    if (has((await readKeys(cpa, "gemini")).groups)) throw duplicate();
     try {
       await this.#verify(key, AbortSignal.timeout(30_000));
     } catch (error) {
@@ -92,7 +85,7 @@ export class Gemini implements Connector {
         error,
       );
     }
-    await cpa.config.update("api-keys/gemini", (groups = []) => {
+    await updateKeys(cpa, "gemini", (groups) => {
       if (has(groups)) throw duplicate();
       // The keys of the default endpoint are one group; a group with a base URL is someone else's.
       const index = groups.findIndex(

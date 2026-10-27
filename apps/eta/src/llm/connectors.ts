@@ -4,7 +4,7 @@
  * credential file, or a key in its config), and listing, disabling and removing it is the
  * gateway's (`gateway.ts`), the same for every connector.
  */
-import type { CpaClient } from "@cpajs/cpa/client";
+import type { CpaClient, CpaConfig } from "@cpajs/cpa/client";
 import type {
   LlmConnector,
   LlmLogin,
@@ -12,7 +12,7 @@ import type {
 } from "@eta/client-contracts";
 import type { Connection } from "./state";
 import { randomBytes } from "node:crypto";
-import { CpaCredentialTokenError, CpaUpstreamError } from "@cpajs/cpa/client";
+import { CpaHttpError } from "@cpajs/cpa/client";
 import { LlmError, notFound } from "./problems";
 
 /** What a provider reports about one account's subscription. */
@@ -39,8 +39,8 @@ export interface Connector {
 
 /** What a connector needs of the gateway. */
 export interface ConnectorContext {
-  /** CPA's management API; it follows CPA across restarts. */
-  cpa: CpaClient;
+  /** CPA's management API, as of now (CPA may have been started again). */
+  cpa: () => CpaClient;
   warn: (message: string) => void;
 }
 
@@ -103,9 +103,9 @@ export async function getWithToken<T extends object>(
   headers: Record<string, string>,
   signal: AbortSignal,
 ): Promise<T> {
-  let data: unknown;
+  let response;
   try {
-    ({ data } = await cpa.requests.apiCallJson(
+    response = await cpa.requests.apiCall(
       {
         auth_index: authIndex,
         method: "GET",
@@ -117,18 +117,27 @@ export async function getWithToken<T extends object>(
         },
       },
       { signal },
-    ));
+    );
   } catch (error) {
-    if (error instanceof CpaCredentialTokenError) throw noToken();
-    if (error instanceof CpaUpstreamError && error.status === 401) {
-      throw new LlmError(
-        "login_expired",
-        "The login was rejected (HTTP 401) reading the usage.",
-      );
-    }
+    // CPA answers 400 when it has no token for the credential.
+    if (error instanceof CpaHttpError && error.status === 400) throw noToken();
     throw unreadable(error);
   }
-  return data as T;
+  if (response.status_code === 401) {
+    throw new LlmError(
+      "login_expired",
+      "The login was rejected (HTTP 401) reading the usage.",
+    );
+  }
+  if (response.status_code < 200 || response.status_code >= 300)
+    throw unreadable(`usage: status ${response.status_code}`);
+  try {
+    const data: unknown = JSON.parse(response.body);
+    if (typeof data === "object" && data !== null) return data as T;
+  } catch {
+    // Not JSON: the same as not an object.
+  }
+  throw unreadable("usage: not a JSON object");
 }
 
 /** Names a window by its length. */
@@ -144,3 +153,64 @@ export function windowKind(
 
 export const clampPercent = (value: number): number =>
   Math.min(Math.max(value, 0), 100);
+
+// --- API keys in CPA's config ------------------------------------------------------------------
+
+/** One provider's key groups under `api-keys`; every provider's have this shape as far as this reads. */
+export type KeyGroups = NonNullable<
+  NonNullable<CpaConfig["api-keys"]>["gemini"]
+>;
+
+/** The key groups of one provider, with their `auth_index`es; none when the node is missing. */
+export async function readKeys(
+  cpa: CpaClient,
+  provider: string,
+): Promise<{ groups: KeyGroups; etag: string | undefined }> {
+  try {
+    const { data, etag } = await cpa.config.getPath<KeyGroups | null>([
+      "api-keys",
+      provider,
+    ]);
+    return { groups: Array.isArray(data) ? data : [], etag };
+  } catch (error) {
+    if (error instanceof CpaHttpError && error.status === 404)
+      return { groups: [], etag: undefined };
+    throw error;
+  }
+}
+
+/**
+ * Change one provider's keys, conditional on the config file not having changed since it was
+ * read (CPA rewrites it itself now and then): on a 412 it is read and edited again.
+ */
+export async function updateKeys(
+  cpa: CpaClient,
+  provider: string,
+  edit: (groups: KeyGroups) => KeyGroups,
+): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    const { groups, etag } = await readKeys(cpa, provider);
+    // auth_index is put in on reads and refused on writes.
+    const next = edit(
+      groups.map((group) => ({
+        ...group,
+        keys: group.keys.map(({ auth_index: _index, ...key }) => key),
+      })),
+    );
+    try {
+      await cpa.config.set(
+        ["api-keys", provider] as readonly string[],
+        next,
+        etag === undefined ? {} : { ifMatch: etag },
+      );
+      return;
+    } catch (error) {
+      const raced = error instanceof CpaHttpError && error.status === 412;
+      if (!raced || attempt >= 3) throw error;
+    }
+  }
+}
+
+/** Whether `excluded-models` exclude everything: how CPA disables a config key. */
+export const excludesAll = (patterns: readonly string[] | null | undefined) =>
+  (patterns ?? []).some((pattern) => pattern.trim() === "*");

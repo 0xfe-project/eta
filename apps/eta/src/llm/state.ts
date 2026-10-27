@@ -12,16 +12,13 @@
  * active unless it is disabled, and the gateway's own check (`gateway.ts`) says when the provider
  * rejects it.
  */
-import type {
-  AuthFileEntry,
-  CooldownView,
-  CredentialSummary,
-} from "@cpajs/cpa/client";
+import type { AuthFileEntry, CooldownView } from "@cpajs/cpa/client";
 import type {
   LlmConnection,
   LlmModelStatus,
   LlmProblem,
 } from "@eta/client-contracts";
+import type { KeyGroups } from "./connectors";
 import { problem } from "./problems";
 
 /** A connection with what the gateway needs to act on it; the view drops the rest. */
@@ -31,11 +28,15 @@ export interface Connection extends LlmConnection {
   /** A credential file, by name; or an API key in CPA's config, under `api-keys.<provider>`. */
   readonly source:
     | { kind: "file"; name: string; accountId?: string | undefined }
-    | { kind: "key"; provider: string; key: string };
+    | {
+        kind: "key";
+        provider: string;
+        key: string;
+        /** The models its config lists (its own, else its group's); none means the channel's. */
+        models: NonNullable<KeyGroups[number]["models"]>;
+      };
   /** The credential's cooldowns that have not ended, for its models. */
   readonly cooldowns: readonly CooldownView[];
-  /** What CPA listed it as, to ask for its models with. */
-  readonly summary?: CredentialSummary | undefined;
 }
 
 /** The parts of a connection a client sees. */
@@ -44,7 +45,6 @@ export function connectionView(connection: Connection): LlmConnection {
     authIndex: _index,
     source: _source,
     cooldowns: _cooldowns,
-    summary: _summary,
     ...view
   } = connection;
   return view;
@@ -139,6 +139,7 @@ export function keyConnection(input: {
   connector: string;
   provider: string;
   key: string;
+  models?: NonNullable<KeyGroups[number]["models"]> | undefined;
   disabled: boolean;
   createdAt: string;
 }): Connection {
@@ -150,7 +151,12 @@ export function keyConnection(input: {
     label: input.key.length >= 8 ? `…${input.key.slice(-4)}` : input.authIndex,
     state: input.disabled ? "disabled" : "active",
     createdAt: input.createdAt,
-    source: { kind: "key", provider: input.provider, key: input.key },
+    source: {
+      kind: "key",
+      provider: input.provider,
+      key: input.key,
+      models: input.models ?? [],
+    },
     cooldowns: [],
   };
 }

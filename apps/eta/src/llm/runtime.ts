@@ -66,14 +66,14 @@ export async function openLlm(
     warn(`[eta] llm: the gateway did not start: ${String(error)}`);
     return undefined;
   }
-  const context: ConnectorContext = { cpa: cpa.client, warn };
+  const context: ConnectorContext = { cpa: () => cpa.client, warn };
   const connectors: Connector[] = [
     new Codex(context, options.endpoints?.codexIssuer),
     new XAI(context),
     new Gemini(context, options.endpoints?.gemini),
   ];
   const gateway = new Gateway({
-    cpa: cpa.client,
+    cpa: () => cpa.client,
     connectors,
     catalogPath: join(stateDir, "models.json"),
   });
@@ -88,7 +88,8 @@ export async function openLlm(
     }
   };
   await attach();
-  cpa.onMoved(() => void attach());
+  // A CPA started again listens somewhere else.
+  cpa.onRestarted(() => void attach());
 
   const keys = new AgentKeys();
   return {
