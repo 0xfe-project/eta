@@ -61,13 +61,6 @@ jobs:
           # and the save step fails on a missing path without this.
           ignore-nothing-to-cache: true
 
-      # The LLM gateway (packages/llm-gateway) is Go built as a C shared library; its modules
-      # and build cache are cached by this action.
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: packages/llm-gateway/go.mod
-          cache-dependency-path: packages/llm-gateway/go.sum
-
       # Bun's package store and dprint's compiled WASM plugins; uv's cache is
       # kept by its setup action above.
       - name: Cache Bun and dprint

@@ -12,6 +12,7 @@
     "test": "bun --bun vitest --run --passWithNoTests"
   },
   "dependencies": {
+    "@cpajs/cpa": "0.1.0-rc.3",
     "@earendil-works/pi-ai": "0.85.1",
     "@eta/client-contracts": "*",
     "@eta/client-wire-proto": "*",
@@ -20,7 +21,6 @@
     "@eta/daemon": "*",
     "@eta/execution-node": "*",
     "@eta/harness": "*",
-    "@eta/llm-gateway": "*",
     "@eta/mcp": "*",
     "@eta/plugin-akhook": "*",
     "@eta/server": "*",

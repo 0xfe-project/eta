@@ -87,10 +87,10 @@ daemon 把文件放进 `<数据目录>/bundles/<哈希>/`（先写临时目录�
 
 包的 MCP 服务器要用模型订阅（例如 grok：Grok Imagine 和搜索走网关里的 Grok 账号）时，用 `${ETA_GATEWAY_URL}`（`/v1` 挂在它下面）和 `${ETA_AGENT_KEY}`，用户什么都不用填。
 
-- **key**：宿主为每个智能体派生一把只开 `/v1` 的 key（`etak.<智能体 id>.<HMAC>`，HMAC 以宿主本次启动的随机 key 为密钥），不存表；网关校验时重算。删除智能体时宿主让网关吊销这个 id 的 key；网关重启换了宿主 key，旧的全部失效。它进不了账号 API（`/api/llm`）和别的路径。
-- **主机器**的会话：`${ETA_GATEWAY_URL}` 是回环 `http://127.0.0.1:<端口>`。
-- **daemon** 的会话：回环不通，所以是 `<主 node 地址>/llm`。主 node 在自己的端口上挂了 `/llm/v1/*`，不走令牌门（daemon 没有 cookie），只认 `etak.` 开头的智能体 key，转给网关的 `/v1`，请求体和响应都是流。`machine.open` 的 `gatewayKey` 把 key 带给 daemon，只存在内存里，和配置值一样。
-- 没有网关（库没构建）时两个变量都没有，用它们的 MCP 服务器被丢掉并记警告。
+- **key**：宿主为每个智能体派生一把只开 `/v1` 的 key（`etak.<智能体 id>.<HMAC>`，HMAC 以宿主本次启动的随机 key 为密钥），不存表；宿主校验时重算，通过后换成 CPA 自己的 key 转发。删除智能体时宿主吊销这个 id 的 key；宿主重启换了随机 key，旧的全部失效。它只能到 `/v1`，别的路径一律 401。
+- **主机器**的会话：`${ETA_GATEWAY_URL}` 是主 node 自己端口上的 `/llm`，经回环（`http://127.0.0.1:<端口>/llm`）。
+- **daemon** 的会话：回环不通，所以是 `<主 node 地址>/llm`。主 node 在自己的端口上挂了 `/llm/v1/*`，不走令牌门（daemon 没有 cookie），只认 `etak.` 开头的智能体 key，转给 CPA 的 `/v1`，请求体和响应都是流。`machine.open` 的 `gatewayKey` 把 key 带给 daemon，只存在内存里，和配置值一样。
+- 没有网关（`--no-llm`，或 CPA 没起来）时两个变量都没有，用它们的 MCP 服务器被丢掉并记警告。
 
 ## 就绪（`requires`）
 

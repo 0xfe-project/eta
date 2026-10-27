@@ -58,9 +58,10 @@ export interface HostOptions {
   memoryUrl?: string;
   /**
    * Whether to load the LLM gateway: subscription accounts (Codex, Grok) and Gemini API keys,
-   * served as the `llm` provider. Off by default so a host made for a test does not load a
-   * native library; `main.ts` turns it on. A host whose gateway library is not built runs
-   * without one and says so. The object form is for tests, which point an upstream at a fake.
+   * served as the `llm` provider, by CLIProxyAPI in a child process. Off by default so a host
+   * made for a test does not start one; `main.ts` turns it on. A host whose CPA does not start
+   * runs without a gateway and says so. The object form is for tests, which point an upstream
+   * at a fake.
    */
   llm?: boolean | LlmOptions;
   /** The model layer, when the caller has its own (a test with scripted answers). */
@@ -110,7 +111,7 @@ export interface Host {
   readonly product: Product;
   /** The upstream server: its sessions, wire service and plugin manager. */
   readonly server: AssembledServer;
-  /** The gateway's account API, when it is loaded. */
+  /** The LLM gateway, when it is running. */
   readonly llm: LlmRuntime | undefined;
   /** Stop listening, close the sessions and the database. */
   close: () => Promise<void>;
@@ -204,21 +205,22 @@ export async function startHost(options: HostOptions): Promise<Host> {
         llm = await openLlm({
           ...(options.llm === true ? {} : options.llm),
           dataDir: options.dataDir,
+          hostOrigin: localOrigin(hostname, server.server.port),
           models: gatewayModels,
           warn,
         });
         if (llm !== undefined) {
-          const { client } = llm;
+          const { gateway } = llm;
           await new Promise<void>((resolve) => {
             server.mount(
               "llm",
-              llmPlugin({ client, models: gatewayModels, warn }, resolve),
+              llmPlugin({ gateway, models: gatewayModels, warn }, resolve),
             );
           });
         }
       }
     } catch (error) {
-      llm?.close();
+      await llm?.close();
       await server.close();
       throw error;
     }
@@ -243,10 +245,21 @@ export async function startHost(options: HostOptions): Promise<Host> {
       closing ??= (async () => {
         await product.close();
         await server.close();
-        llm?.close();
+        await llm?.close();
         db.close();
       })();
       return closing;
     },
   };
+}
+
+/** The host's address as this machine reaches it: a wildcard bind is reached on loopback. */
+function localOrigin(hostname: string, port: number | undefined): string {
+  const host =
+    hostname === "0.0.0.0" || hostname === "::" || hostname === ""
+      ? "127.0.0.1"
+      : hostname.includes(":")
+        ? `[${hostname}]`
+        : hostname;
+  return `http://${host}:${String(port)}`;
 }

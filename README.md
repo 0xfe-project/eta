@@ -9,7 +9,6 @@ apps/
   web/       React 界面，通过那条 WebSocket 读写
   memory/    Python 边车（mem0 + PostgreSQL/pgvector），可选
 packages/
-  llm-gateway  Go 网关（嵌入 CLIProxyAPI），编成 c-shared 库由 host 加载
   eta-*      上游 eta 的内核、harness、服务端地板、SSH 与 git 插件
   client-wire-proto、client-contracts   线上的帧与产品 target 的类型
 deploy/      Dockerfile、memory.Dockerfile、compose.yaml
@@ -24,7 +23,7 @@ docs/architecture/   架构说明
 - [数据](docs/architecture/data.md)：SQLite 与迁移、会话文件、数据目录布局
 - [机器与 daemon](docs/architecture/machines.md)：配对、epoch、模型与工具的代理、远端会话
 - [访问控制](docs/architecture/access.md)：Origin 检查、令牌门、能力路由
-- [LLM 网关](docs/architecture/llm-gateway.md)：订阅账号（Codex、Grok）与 Gemini key，CLIProxyAPI 经 c-shared 与 bun:ffi 嵌入
+- [LLM 网关](docs/architecture/llm-gateway.md)：订阅账号（Codex、Grok）与 Gemini key，CLIProxyAPI 作为 host 的子进程运行
 - [记忆](docs/architecture/memory.md)：边车、身份头、host 如何调用它
 - [任务](docs/architecture/tasks.md)：智能体提出、用户确认、同一个智能体在全新会话里执行
 - [任务、产物与定时任务](docs/architecture/tasks-artifacts-routines.md)

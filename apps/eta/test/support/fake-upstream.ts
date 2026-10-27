@@ -1,5 +1,5 @@
 /**
- * A fake Codex backend and the gateway wired to it.
+ * A fake Codex backend for the LLM gateway.
  *
  * What it answers depends on the prompt the request carries: `fail-500` and `fail-429` fail,
  * `slow` streams until the client goes away (and counts that), anything else streams a short
@@ -7,10 +7,7 @@
  * server, so the whole path (CPA's routing, its Responses translation, the stream back out) is
  * the real one.
  */
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { startGateway } from "../src/index";
+import type { CpaConfig } from "@cpajs/cpa/client";
 
 export const MODEL = "gpt-test";
 
@@ -159,51 +156,17 @@ export function fakeUpstream(): FakeUpstream {
   } as FakeUpstream;
 }
 
-/** CPA's config for the fake as a Codex API key serving `MODEL`. */
-export function cpaExtraFor(upstream: FakeUpstream): Record<string, unknown> {
+/** CPA's config for the fake: a Codex API key serving `MODEL`. */
+export function cpaExtraFor(upstream: FakeUpstream): CpaConfig {
   return {
-    "codex-api-key": [
-      {
-        "api-key": "test-key",
-        "base-url": upstream.url,
-        models: [{ name: MODEL, alias: MODEL }],
-      },
-    ],
+    "api-keys": {
+      codex: [
+        {
+          "base-url": upstream.url,
+          keys: [{ "api-key": "test-key" }],
+          models: [{ name: MODEL, alias: MODEL }],
+        },
+      ],
+    },
   };
-}
-
-/** The gateway on a fresh state directory, wired to the fake, once it serves `MODEL`. */
-export async function gatewayOn(upstream: FakeUpstream) {
-  const gateway = startGateway({
-    stateDir: mkdtempSync(join(tmpdir(), "llm-gateway-")),
-    cpaExtra: cpaExtraFor(upstream),
-  });
-  // /v1 answers 503 until the credentials are loaded.
-  const deadline = Date.now() + 30_000;
-  for (;;) {
-    const response = await gateway.fetch("/v1/models");
-    if (response.ok && (await response.text()).includes(MODEL)) return gateway;
-    if (Date.now() > deadline)
-      throw new Error(`the gateway never served ${MODEL}`);
-    await Bun.sleep(50);
-  }
-}
-
-/** One streamed chat completion; resolves with the text it carried. */
-export async function chat(
-  gateway: { fetch: (path: string, init?: RequestInit) => Promise<Response> },
-  prompt: string,
-  signal?: AbortSignal,
-): Promise<{ status: number; text: string }> {
-  const response = await gateway.fetch("/v1/chat/completions", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      model: MODEL,
-      stream: true,
-      messages: [{ role: "user", content: prompt }],
-    }),
-    ...(signal === undefined ? {} : { signal }),
-  });
-  return { status: response.status, text: await response.text() };
 }
