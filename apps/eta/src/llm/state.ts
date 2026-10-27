@@ -1,4 +1,3 @@
-import type { AuthFileEntry, CooldownView } from "@cpajs/cpa/client";
 /**
  * What an account and a model can do right now, derived from what CPA reports.
  *
@@ -13,6 +12,7 @@ import type { AuthFileEntry, CooldownView } from "@cpajs/cpa/client";
  * active unless it is disabled, and the gateway's own check (`gateway.ts`) says when the provider
  * rejects it.
  */
+import type { AuthFileEntry, CooldownView } from "@cpajs/cpa/client";
 import type {
   LlmConnection,
   LlmModelStatus,

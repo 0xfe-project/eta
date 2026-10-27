@@ -14,7 +14,6 @@ const SETTINGS_URL = "https://cli-chat-proxy.grok.com/v1/settings";
 export class XAI implements Connector {
   readonly info = { id: "xai", name: "Grok", flow: "oauth_device" } as const;
   readonly provider = "xai";
-  readonly channel = "xai";
   readonly #context: ConnectorContext;
   readonly #logins = new Logins();
 
@@ -25,7 +24,7 @@ export class XAI implements Connector {
   async start(): Promise<LlmLogin> {
     let started;
     try {
-      started = await this.#context.cpa().oauth.start({ provider: "xai" });
+      started = await this.#context.cpa.oauth.start({ provider: "xai" });
     } catch (error) {
       throw new LlmError(
         "login_start_failed",
@@ -64,7 +63,7 @@ export class XAI implements Connector {
       expired();
       return this.#logins.get(id);
     }
-    const status = await this.#context.cpa().oauth.status(id);
+    const status = await this.#context.cpa.oauth.status(id);
     if (status.status === "ok") this.#logins.finish(id, "succeeded");
     else if (status.status === "error") {
       const error = status.error.toLowerCase();
@@ -88,12 +87,12 @@ export class XAI implements Connector {
 
   async cancel(id: string): Promise<void> {
     const login = this.#logins.delete(id);
-    if (login.status === "pending") await this.#context.cpa().oauth.cancel(id);
+    if (login.status === "pending") await this.#context.cpa.oauth.cancel(id);
   }
 
   /** The credit window of a Grok subscription; accounts billed without a period have none. */
   async usage(connection: Connection, signal: AbortSignal): Promise<Usage> {
-    const cpa = this.#context.cpa();
+    const cpa = this.#context.cpa;
     const billing = await getWithToken<{
       config?: {
         currentPeriod?: { start?: string; end?: string } | null;

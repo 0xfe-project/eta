@@ -1,11 +1,11 @@
-import type { LlmLogin } from "@eta/client-contracts";
-import type { Connector, ConnectorContext, Usage } from "./connectors";
-import type { Connection } from "./state";
 /**
  * Codex (ChatGPT) with OpenAI's device authorization. CPA runs this protocol only in its CLI (the
  * user code goes to stdout), so the steps are repeated here; the credential is handed to CPA as
  * a regular codex credential file.
  */
+import type { LlmLogin } from "@eta/client-contracts";
+import type { Connector, ConnectorContext, Usage } from "./connectors";
+import type { Connection } from "./state";
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import {
@@ -39,7 +39,6 @@ export class Codex implements Connector {
     flow: "oauth_device",
   } as const;
   readonly provider = "codex";
-  readonly channel = "codex";
   readonly #context: ConnectorContext;
   readonly #issuer: string;
   readonly #logins = new Logins();
@@ -198,7 +197,7 @@ export class Codex implements Connector {
       token.expires_in ?? 0,
       new Date(),
     );
-    await this.#context.cpa().credentials.upload({ name, content });
+    await this.#context.cpa.credentials.upload({ name, content });
   }
 
   async poll(id: string): Promise<LlmLogin> {
@@ -228,7 +227,7 @@ export class Codex implements Connector {
         secondary_window?: CodexWindow | null;
       };
     }>(
-      this.#context.cpa(),
+      this.#context.cpa,
       connection.authIndex,
       USAGE_URL,
       accountId === undefined || accountId === ""

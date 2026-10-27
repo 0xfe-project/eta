@@ -66,29 +66,25 @@ export async function openLlm(
     warn(`[eta] llm: the gateway did not start: ${String(error)}`);
     return undefined;
   }
-  const context: ConnectorContext = { cpa: () => cpa.client, warn };
+  const context: ConnectorContext = { cpa: cpa.client, warn };
   const connectors: Connector[] = [
     new Codex(context, options.endpoints?.codexIssuer),
     new XAI(context),
     new Gemini(context, options.endpoints?.gemini),
   ];
   const gateway = new Gateway({
-    cpa: () => cpa.client,
+    cpa: cpa.client,
     connectors,
     catalogPath: join(stateDir, "models.json"),
   });
-  const attach = async (): Promise<void> => {
-    models.attach({ baseUrl: cpa.baseUrl, key: cpa.accessKey });
-    // Sessions that resume at startup name models of this provider, so the catalog is in
-    // before the host serves anything.
-    try {
-      await models.update(await gateway.models());
-    } catch (error) {
-      warn(`[eta] llm: could not read the model catalog: ${String(error)}`);
-    }
-  };
-  await attach();
-  cpa.onMoved(() => void attach());
+  models.attach({ baseUrl: cpa.baseUrl, key: cpa.accessKey });
+  // Sessions that resume at startup name models of this provider, so the catalog is in before
+  // the host serves anything.
+  try {
+    await models.update(await gateway.models());
+  } catch (error) {
+    warn(`[eta] llm: could not read the model catalog: ${String(error)}`);
+  }
 
   const keys = new AgentKeys();
   return {

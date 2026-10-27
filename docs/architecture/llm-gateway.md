@@ -15,22 +15,22 @@ Bun 进程（host）  apps/eta/src/llm/                         子进程
   plugin.ts    llm target（accounts models quota）
 ```
 
-- **子进程**：CPA 是官方二进制，由 [`@cpajs/cpa`](https://github.com/akarachen/cpajs)（`0.1.0-rc.3`，内置 CLIProxyAPI **v8.0.43**）以 `optionalDependencies` 按平台安装，`bun install` 即可，不需要 Go。`startServer` 写配置、选空闲端口、等 `/healthz`；CPA 经 cpajs 的 launcher 启动，Linux 上 `PR_SET_PDEATHSIG`，其他 POSIX 上由 launcher 看管，**host 被 SIGKILL 或崩溃时 CPA 也退出**。
-- **自愈**：CPA 自己退出（崩溃、被杀）时，`cpa.ts` 退避后重新启动，先用原来的端口（模型层记着的地址不变），端口被占则换一个，并重新登记 `llm` 提供商。退出时把 CPA 最后 20 行输出写进警告。CPA 的 panic 不再带下 host。
+- **子进程**：CPA 是官方二进制，由 [`@cpajs/cpa`](https://github.com/akarachen/cpajs)（`0.1.0-rc.5`，内置 CLIProxyAPI **v8.0.43**）以 `optionalDependencies` 按平台安装，`bun install` 即可，不需要 Go。`startServer` 写配置、选空闲端口、等 `/healthz`；CPA 经 cpajs 的 launcher 启动，Linux 上 `PR_SET_PDEATHSIG`，其他 POSIX 上由 launcher 看管，**host 被 SIGKILL 或崩溃时 CPA 也退出**。
+- **自愈**：CPA 自己退出（崩溃、被杀）时，cpajs 按 `restart`（退避 0.5 s 起翻倍到 30 s；进程稳定运行 60 s 才清零）在**原端口**重新启动，句柄、`origin` 和管理客户端都不变，模型层记着的地址也就不变。退出时 `exit` 事件带着 CPA 最后的输出，写进警告。CPA 的 panic 不再带下 host。
 - **起不来**：CPA 启动失败时 host 照常启动并提示一行，没有 `llm` 插件，网页里没有“订阅与密钥”一节，其余不变。`--no-llm` 则不启动。
 
 ### 与 CPA 的边界
 
 只用 CPA 的 HTTP 接口：`/v1`（模型流量）和 v8 管理 API（`/v8/management`，经 cpajs 的类型化客户端），不依赖它的内部包或 SDK。
 
-- **配置**：`<状态目录>/config.yaml` 每次启动重写：host 的设置（回环、`/v1` 的 key、关闭控制面板与请求日志、`request-retry: 1`）加上一次运行留在配置里的 `api-keys`（运行时经管理 API 改动的就是这一段），测试再合并 `cpaExtra`。所以 API key 的唯一真源是 CPA 的配置；CPA 写配置不是原子的，读到空文件时的 500 `invalid_config` 会重试，改 key 时用 ETag（`If-Match`）防止覆盖 CPA 同时的改写。
+- **配置**：`<状态目录>/config.yaml` 在每次启动和重启前由 `config` 函数重写：host 的设置（回环、`/v1` 的 key、关闭控制面板与请求日志、`request-retry: 1`）加上一次运行留在配置里的 `api-keys`（运行时经管理 API 改动的就是这一段），测试再合并 `cpaExtra`。所以 API key 的唯一真源是 CPA 的配置。改 key 用 cpajs 的 `config.update("api-keys/<provider>", fn)`：读节点、去掉读时注入的 `auth_index`、带 `If-Match` 写回，412 时重读重算；CPA 写配置不是原子的，读到空文件时的 500 `invalid_config` 由 cpajs 重试。
 - **鉴权**：CPA 的 `/v1` 只认一个每次启动随机生成、不出 host 进程的 key；host 自己的模型层直接用它调 CPA。智能体 key `etak.<智能体 id>.<HMAC-SHA256(host key, id)>` 在 host 里校验（`keys.ts`，常量时间比较，id 只允许字母数字下划线连字符），通过后换成 CPA 的 key 转发。会话（本机的和 daemon 上的）一律经 host 端口上的 `/llm/v1/*`，只放行智能体 key 和 `/v1`。key 是派生的所以不存表，吊销记在内存里，host 重启即全部失效。环境包经它用订阅账号，见[环境包](bundles.md#llm-网关的-key)。
-- **管理 API**：管理密钥每次启动随机生成，经 `MANAGEMENT_PASSWORD` 只放进 CPA 自己的环境（cpajs 的 `management.viaEnvironment`）。原因是 CPA 对写在配置里的密钥（bcrypt 哈希）每个请求都做一次 bcrypt，约 65 ms CPU，而网关每几秒就要读一次；环境变量是明文比较。上游把这个变量当作同时允许远程管理，但 CPA 只绑定 127.0.0.1，外面连不上。
-- **日志**：CPA 每个请求都打 info 日志；转给 host stderr（前缀 `[cpa]`）的只有 warn 及以上，和 stderr 上不带级别的行（例如 panic）。完整的近期输出在 cpajs 的 `recentLogs` 里，CPA 意外退出时会附在警告里。
+- **管理 API**：管理密钥由 cpajs 每次启动随机生成，只有 bcrypt 哈希（cost 4）进配置，明文留在 `server.client()` 里，host 不经手；远程管理关闭。CPA 每个管理请求都校验一次哈希，cost 4 下约 1 ms（cost 10 时约 65 ms CPU，而网关每几秒就要读几次）。
+- **日志**：CPA 每个请求都打 info 日志；转给 host stderr（前缀 `[cpa]`）的只有 warn 及以上（cpajs 的 `logs.minLevel`），和 stderr 上不带级别的行（例如 panic），stdout 上不带级别的启动横幅不转。完整的近期输出在 cpajs 的 `recentLogs` 里，CPA 意外退出时会附在警告里。
 
 ## 账号与目录
 
-接入方式（Connector）只负责“凭据怎么进来”；账号的列表、启停、删除统一在 `gateway.ts`：凭据文件走管理 API 的 `/credentials`（`PATCH /credentials/status`、`DELETE /credentials`），配置里的 API key 改 `api-keys.<provider>`（停用即 `excluded-models: ["*"]`，与 CPA 自己的做法相同）。账号的 id 是 CPA 的 `auth_index`（由凭据派生，重启不变）。
+接入方式（Connector）只负责“凭据怎么进来”；账号的列表、启停、删除统一在 `gateway.ts`：列表是 cpajs 的 `credentials.listAll()`（凭据文件和配置里的 key 合在一起；配置 key 的 `disabled` 不反映 `excluded-models: ["*"]`，eta 自己判断），凭据文件走管理 API 的 `/credentials`（`PATCH /credentials/status`、`DELETE /credentials`），配置里的 API key 改 `api-keys.<provider>`（停用即 `excluded-models: ["*"]`，与 CPA 自己的做法相同）。账号的 id 是 CPA 的 `auth_index`（由凭据派生，重启不变）。
 
 - **Codex**：OpenAI 的设备码流程（`/api/accounts/deviceauth/usercode` → 轮询 `/deviceauth/token` → `/oauth/token`），不依赖 localhost 回调。CPA 的管理 API 里 Codex 只有 localhost 回调的流程，所以设备码协议在 `codex.ts` 里实现，得到的 token 按 CPA 的 codex 凭据文件格式经 `POST /credentials` 交给 CPA。
 - **Grok（xAI）**：调用管理 API 的 `oauth/auth-url`（`provider: xai`，设备码）/ `oauth/status` / `oauth/session`，CPA 自己保存凭据。
@@ -47,11 +47,11 @@ Bun 进程（host）  apps/eta/src/llm/                         子进程
 - **API key 没有运行时状态**：CPA 的 v8 管理 API 不列出配置里的 key（`/credentials` 只列凭据文件），也就看不到它们的冷却。key 的状态只有停用与否，以及网关自己的检查（见“额度”）：Google 拒绝 key 时判 `needs_login`。一个 key 的 429 或模型冷却不会显示在界面上，CPA 照样按冷却路由。
 - 瞬时失败（超时、5xx）由 CPA 冷却约 1 分钟，期间同一账号同一模型的下一次请求也会被拒；冷却到期即恢复。
 - 模型的状态是 `available`、`degraded`（冷却中，请求仍放行）、`unavailable`（未绑定、停用、登录失效、无权、不存在、额度用尽，附原因）。同一模型由多个账号提供时取最好的那个。见过的模型持久化在 `models.json`，账号失效或被移除后模型仍在目录里，智能体保留原来的选择，重新绑定后自动恢复。图像、视频等非对话模型被过滤。
-- 目录：凭据文件服务哪些模型来自 `GET /credentials/models`；配置里的 key 服务它配置的模型（按 alias），没有配置就是该 channel 的全部模型，减去 `excluded-models`。每个模型的上下文长度、思考档（`reasoning_levels`）和是否读图来自 `GET /routing/model-definitions/<channel>`（CPA 内置的静态定义，每个 channel 读一次），配置里给的值优先。Codex 的 channel 定义是 Pro 套餐那张表；其他套餐的模型是它的子集，按 id 取详情。
+- 目录：一个账号服务哪些模型及其详情来自 cpajs 的 `credentials.modelsFor({ auth_index }, { details: true })`：凭据文件是 `GET /credentials/models`，配置里的 key 按上游的规则（key 的 `models` 替代 channel 默认、`alias` 作 id、key 的 `excluded-models` 覆盖组的并支持 `*`），再并上 `GET /routing/model-definitions/<channel>` 的上下文长度、思考档（`reasoning_levels`）和是否读图，配置里给的值优先。Codex 的 channel 定义是 Pro 套餐那张表；其他套餐的模型是它的子集，按 id 取详情。
 
 ### 额度
 
-订阅的额度窗口（Codex 的 5 小时与每周，Grok 的周期额度）向提供商读：Codex 读 `chatgpt.com/backend-api/wham/usage`，Grok 读 `cli-chat-proxy.grok.com/v1/billing`，经管理 API 的 `POST /requests/api-call`（`auth_index` 加 `Authorization: Bearer $TOKEN$`，令牌由 CPA 填入，**不出 CPA**），不消耗额度。一次读同时是账号的健康检查：上游拒绝令牌（401）时先用 `POST /credentials/refresh` 刷新一次，仍被拒绝才判 `needs_login`；网络或上游故障只在账号上记 `check_error`，不改变可用性。`refresh` 并发调用共享同一轮检查。API key 没有订阅窗口，返回空的窗口列表（Google AI Studio 的检查是列一次模型）。
+订阅的额度窗口（Codex 的 5 小时与每周，Grok 的周期额度）向提供商读：Codex 读 `chatgpt.com/backend-api/wham/usage`，Grok 读 `cli-chat-proxy.grok.com/v1/billing`，经管理 API 的 `POST /requests/api-call`（cpajs 的 `requests.apiCallJson`，`auth_index` 加 `Authorization: Bearer $TOKEN$`，令牌由 CPA 填入，**不出 CPA**），不消耗额度。一次读同时是账号的健康检查：上游拒绝令牌（401）时先用 `POST /credentials/refresh` 刷新一次，仍被拒绝才判 `needs_login`；网络或上游故障只在账号上记 `check_error`，不改变可用性。`refresh` 并发调用共享同一轮检查。API key 没有订阅窗口，返回空的窗口列表（Google AI Studio 的检查是列一次模型）。
 
 ## 与 host 的接缝
 

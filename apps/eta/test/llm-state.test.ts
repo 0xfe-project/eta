@@ -1,8 +1,8 @@
-import type { AuthFileEntry, CooldownView } from "@cpajs/cpa/client";
 /**
  * What the gateway makes of CPA's reports: an account's state from its status and cooldowns, a
  * model's from the account's and its own; the agents' keys; the Codex credential file.
  */
+import type { AuthFileEntry, CooldownView } from "@cpajs/cpa/client";
 import { Buffer } from "node:buffer";
 import { describe, expect, it } from "vitest";
 import { codexCredential, codexPlanName } from "../src/llm/codex";
