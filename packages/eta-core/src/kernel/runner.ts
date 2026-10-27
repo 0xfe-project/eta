@@ -506,6 +506,18 @@ export class Runner {
           error = assistant.errorMessage ?? "provider error";
           break;
         }
+        if (assistant.stopReason === "aborted") {
+          // An aborted generation is not history: takeTurn records no entry for
+          // it. Its tool calls must not become history either — a result whose
+          // call the journal never received is an orphan, and a provider rejects
+          // every later request that carries one (HTTP 400, the session dead for
+          // good). The abort is this run being told to stop, and the batch is
+          // part of what it was told to stop doing.
+          const cancelled = cancellationOf(gate.signal);
+          if (cancelled !== undefined) throw cancelled;
+          status = "aborted";
+          break;
+        }
         const toolCalls = assistant.content.filter(
           (c): c is ToolCall => c.type === "toolCall",
         );
