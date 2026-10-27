@@ -77,14 +77,18 @@ export async function openLlm(
     connectors,
     catalogPath: join(stateDir, "models.json"),
   });
-  models.attach({ baseUrl: cpa.baseUrl, key: cpa.accessKey });
-  // Sessions that resume at startup name models of this provider, so the catalog is in before
-  // the host serves anything.
-  try {
-    await models.update(await gateway.models());
-  } catch (error) {
-    warn(`[eta] llm: could not read the model catalog: ${String(error)}`);
-  }
+  const attach = async (): Promise<void> => {
+    models.attach({ baseUrl: cpa.baseUrl, key: cpa.accessKey });
+    // Sessions that resume at startup name models of this provider, so the catalog is in
+    // before the host serves anything.
+    try {
+      await models.update(await gateway.models());
+    } catch (error) {
+      warn(`[eta] llm: could not read the model catalog: ${String(error)}`);
+    }
+  };
+  await attach();
+  cpa.onMoved(() => void attach());
 
   const keys = new AgentKeys();
   return {

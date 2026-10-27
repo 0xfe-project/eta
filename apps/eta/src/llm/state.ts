@@ -12,7 +12,11 @@
  * active unless it is disabled, and the gateway's own check (`gateway.ts`) says when the provider
  * rejects it.
  */
-import type { AuthFileEntry, CooldownView } from "@cpajs/cpa/client";
+import type {
+  AuthFileEntry,
+  CooldownView,
+  CredentialSummary,
+} from "@cpajs/cpa/client";
 import type {
   LlmConnection,
   LlmModelStatus,
@@ -30,6 +34,8 @@ export interface Connection extends LlmConnection {
     | { kind: "key"; provider: string; key: string };
   /** The credential's cooldowns that have not ended, for its models. */
   readonly cooldowns: readonly CooldownView[];
+  /** What CPA listed it as, to ask for its models with. */
+  readonly summary?: CredentialSummary | undefined;
 }
 
 /** The parts of a connection a client sees. */
@@ -38,6 +44,7 @@ export function connectionView(connection: Connection): LlmConnection {
     authIndex: _index,
     source: _source,
     cooldowns: _cooldowns,
+    summary: _summary,
     ...view
   } = connection;
   return view;

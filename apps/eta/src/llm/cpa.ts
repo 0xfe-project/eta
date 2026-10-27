@@ -35,7 +35,6 @@ export class Cpa {
   /** The management API; it follows CPA across restarts. */
   readonly client: CpaClient;
   readonly #server: CpaServer;
-  #stopping = false;
 
   private constructor(
     accessKey: string,
@@ -45,8 +44,8 @@ export class Cpa {
     this.accessKey = accessKey;
     this.#server = server;
     this.client = server.client();
-    server.on("exit", ({ code, signal, recentLogs, willRestart }) => {
-      if (this.#stopping) return;
+    server.on("exit", ({ code, signal, recentLogs, willRestart, reason }) => {
+      if (reason !== "unexpected") return;
       const last = recentLogs
         .slice(-20)
         .map(({ line }) => `  ${line}`)
@@ -102,19 +101,18 @@ export class Cpa {
           if (reason === "start") rmSync(legacy, { force: true });
         },
       },
+      // On the same port, unless something took it meanwhile (see `onMoved`).
       restart: {
         onUnexpectedExit: true,
         backoffMs: [500, 1000, 2000, 4000, 8000, 16_000, 30_000],
+        allowNewPort: true,
       },
       suppressWarnings: { noManagementKey: true },
       onWarning: (warning) => warn(`[eta] llm: ${warning.message}`),
       // CPA logs every request at info; the host's log gets its warnings and errors, and
       // anything on stderr without a level (a panic, say), not its banners on stdout.
-      logs: { minLevel: "warn" },
-      onLog: ({ stream, level, line }) => {
-        if (level !== undefined || stream === "stderr")
-          process.stderr.write(`[cpa] ${line}\n`);
-      },
+      logs: { minLevel: "warn", unleveled: "stderr" },
+      onLog: ({ line }) => process.stderr.write(`[cpa] ${line}\n`),
     });
     return new Cpa(accessKey, server, warn);
   }
@@ -124,13 +122,19 @@ export class Cpa {
     return this.#server.baseUrl;
   }
 
+  /** Call `listener` when CPA was started again on another port (its own was taken). */
+  onMoved(listener: () => void): () => void {
+    return this.#server.on("restarted", ({ originChanged }) => {
+      if (originChanged) listener();
+    });
+  }
+
   /** The process's id. */
   get pid(): number {
     return this.#server.pid;
   }
 
   async stop(): Promise<void> {
-    this.#stopping = true;
     await this.#server.stop();
   }
 }

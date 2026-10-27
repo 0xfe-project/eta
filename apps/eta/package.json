@@ -12,7 +12,7 @@
     "test": "bun --bun vitest --run --passWithNoTests"
   },
   "dependencies": {
-    "@cpajs/cpa": "0.1.0-rc.5",
+    "@cpajs/cpa": "0.1.0-rc.6",
     "@earendil-works/pi-ai": "0.85.1",
     "@eta/client-contracts": "*",
     "@eta/client-wire-proto": "*",

@@ -6,12 +6,7 @@
  * target's views. Nothing here is kept but the models seen so far (`models.json`, so a model
  * stays listed after its account goes) and the outcome of the latest check of each account.
  */
-import type {
-  AuthFileEntry,
-  CpaClient,
-  CpaConfig,
-  ModelInfo,
-} from "@cpajs/cpa/client";
+import type { CpaClient, ModelInfo } from "@cpajs/cpa/client";
 import type {
   LlmConnection,
   LlmConnector,
@@ -23,7 +18,6 @@ import type {
 import type { Connector } from "./connectors";
 import type { Connection } from "./state";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
-import { excludesAll } from "./connectors";
 import { codeOf, LlmError, notFound, problem } from "./problems";
 import {
   connectionReason,
@@ -50,9 +44,6 @@ interface SeenModel {
   reasoning_levels?: string[];
   image?: boolean;
 }
-
-/** One provider's key groups under `api-keys`; every provider's have this shape as far as this reads. */
-type KeyGroups = NonNullable<NonNullable<CpaConfig["api-keys"]>["gemini"]>;
 
 const USAGE_TIMEOUT_MS = 15_000;
 
@@ -138,34 +129,27 @@ export class Gateway {
     for (const entry of await this.#cpa.credentials.listAll()) {
       const connector = this.#byProvider.get(entry.provider.toLowerCase());
       if (connector === undefined || entry.auth_index === "") continue;
+      let connection: Connection;
       if (entry.source === "file") {
-        const file = entry.raw as AuthFileEntry;
-        out.push(
-          this.#withCheck(
-            fileConnection(file, connector.info.id, now),
-            Date.parse(file.updated_at ?? "") || 0,
-          ),
-        );
-        continue;
+        connection = fileConnection(entry.raw, connector.info.id, now);
+      } else {
+        const { raw } = entry;
+        // A keyless entry is an OpenAI-compatible group, which no connector makes.
+        if (!("api-key" in raw)) continue;
+        connection = keyConnection({
+          authIndex: entry.auth_index,
+          connector: connector.info.id,
+          provider: connector.provider,
+          key: raw["api-key"],
+          disabled: entry.disabled,
+          createdAt: this.#started,
+        });
       }
-      const key = entry.raw as {
-        "api-key": string;
-        "excluded-models"?: string[] | null;
-      };
-      out.push(
-        this.#withCheck(
-          keyConnection({
-            authIndex: entry.auth_index,
-            connector: connector.info.id,
-            provider: connector.provider,
-            key: key["api-key"],
-            // How CPA disables a config key, which `disabled` does not report.
-            disabled: entry.disabled || excludesAll(key["excluded-models"]),
-            createdAt: this.#started,
-          }),
-          0,
-        ),
-      );
+      const updatedAt =
+        entry.source === "file"
+          ? Date.parse(entry.raw.updated_at ?? "") || 0
+          : 0;
+      out.push(this.#withCheck({ ...connection, summary: entry }, updatedAt));
     }
     const order = this.#connectors.map((connector) => connector.info.id);
     return out.sort(
@@ -229,66 +213,21 @@ export class Gateway {
     return this.#byId.get(connector)?.info.name ?? connector;
   }
 
-  /** Enable or disable an account: a file through CPA's status, a key through its excluded models. */
+  /** Enable or disable an account: a file, or a key in CPA's config (by its excluded models). */
   async setEnabled(id: string, enabled: boolean): Promise<LlmConnection> {
-    const connection = await this.#connection(id);
-    const cpa = this.#cpa;
-    if (connection.source.kind === "file") {
-      await cpa.credentials.setStatus({
-        name: connection.source.name,
-        disabled: !enabled,
-      });
-    } else {
-      const { provider, key } = connection.source;
-      await this.#updateKeys(provider, (groups) =>
-        groups.map((group) => ({
-          ...group,
-          keys: group.keys.map((entry) => {
-            if (entry["api-key"] !== key) return entry;
-            const others = (entry["excluded-models"] ?? []).filter(
-              (pattern) => pattern.trim() !== "*",
-            );
-            const { "excluded-models": _excluded, ...rest } = entry;
-            const excluded = enabled ? others : [...others, "*"];
-            return excluded.length === 0
-              ? rest
-              : { ...rest, "excluded-models": excluded };
-          }),
-        })),
-      );
-    }
+    await this.#connection(id);
+    await this.#cpa.credentials.setStatus({
+      auth_index: id,
+      disabled: !enabled,
+    });
     return connectionView(await this.#connection(id));
   }
 
   /** Remove an account: its credential file, or its key from CPA's config. */
   async remove(id: string): Promise<void> {
-    const connection = await this.#connection(id);
-    const cpa = this.#cpa;
-    if (connection.source.kind === "file") {
-      await cpa.credentials.delete(connection.source.name);
-    } else {
-      const { provider, key } = connection.source;
-      await this.#updateKeys(provider, (groups) =>
-        groups
-          .map((group) => ({
-            ...group,
-            keys: group.keys.filter((entry) => entry["api-key"] !== key),
-          }))
-          .filter((group) => group.keys.length > 0),
-      );
-    }
+    await this.#connection(id);
+    await this.#cpa.credentials.delete({ auth_index: id });
     this.#checks.delete(id);
-  }
-
-  /** Change one provider's keys in CPA's config. */
-  async #updateKeys(
-    provider: string,
-    edit: (groups: KeyGroups) => KeyGroups,
-  ): Promise<void> {
-    await this.#cpa.config.update(
-      `api-keys/${provider}` as "api-keys/gemini",
-      (groups = []) => edit(groups),
-    );
   }
 
   // --- Catalog -----------------------------------------------------------------------------
@@ -296,7 +235,7 @@ export class Gateway {
   /** The models one account serves, with CPA's details of them. */
   async #served(connection: Connection): Promise<SeenModel[]> {
     const models = await this.#cpa.credentials.modelsFor(
-      { auth_index: connection.authIndex },
+      connection.summary ?? { auth_index: connection.authIndex },
       { details: true },
     );
     return models.map((info: ModelInfo): SeenModel => {

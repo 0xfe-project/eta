@@ -304,4 +304,39 @@ describe("the CPA process", () => {
     expect((await cpa.client.credentials.list()).files).toEqual([]);
     expect(warnings.join("\n")).toContain("CPA exited");
   }, 60_000);
+
+  it("moves to another port when its own was taken meanwhile", async () => {
+    const cpa = await Cpa.start({
+      stateDir: await tempDir("eta-cpa-"),
+      warn: () => {},
+    });
+    stops.push(() => cpa.stop());
+    let moved = 0;
+    cpa.onMoved(() => moved++);
+    const { baseUrl, pid } = cpa;
+    const port = Number(new URL(baseUrl).port);
+    process.kill(pid, "SIGKILL");
+    // Take the port as soon as the dead process lets it go, before the restart does.
+    let squatter: ReturnType<typeof Bun.serve> | undefined;
+    await until(() => {
+      try {
+        squatter = Bun.serve({
+          port,
+          hostname: "127.0.0.1",
+          fetch: () => new Response(""),
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    stops.push(() => squatter?.stop(true));
+    await until(() => moved === 1);
+    expect(cpa.baseUrl).not.toBe(baseUrl);
+    const answer = await fetch(`${cpa.baseUrl}/models`, {
+      headers: { authorization: `Bearer ${cpa.accessKey}` },
+    });
+    expect(answer.status).toBe(200);
+    expect((await cpa.client.credentials.list()).files).toEqual([]);
+  }, 60_000);
 });

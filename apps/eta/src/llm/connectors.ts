@@ -128,9 +128,6 @@ export async function getWithToken<T extends object>(
     }
     throw unreadable(error);
   }
-  // A body that is not JSON comes back as its text.
-  if (typeof data !== "object" || data === null)
-    throw unreadable("usage: not a JSON object");
   return data as T;
 }
 
@@ -147,7 +144,3 @@ export function windowKind(
 
 export const clampPercent = (value: number): number =>
   Math.min(Math.max(value, 0), 100);
-
-/** Whether a key's `excluded-models` exclude everything: how CPA disables a config key. */
-export const excludesAll = (patterns: readonly string[] | null | undefined) =>
-  (patterns ?? []).some((pattern) => pattern.trim() === "*");

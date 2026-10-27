@@ -71,7 +71,8 @@ export class Gemini implements Connector {
       (entry) =>
         entry.source === "config" &&
         entry.provider === "gemini" &&
-        (entry.raw as { "api-key"?: string })["api-key"] === key,
+        "api-key" in entry.raw &&
+        entry.raw["api-key"] === key,
     );
     if (known) throw duplicate();
     try {
