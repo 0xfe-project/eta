@@ -2,6 +2,7 @@ import type { Icon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/EnvelopeSimple";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
@@ -32,6 +33,7 @@ import {
 import { ROUTINES_VISIBLE } from "@/lib/features";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useEmail } from "@/queries/email";
 import { useTasks } from "@/queries/tasks";
 import { AgentEditor } from "./agent-editor";
 import { CreateGroup } from "./groups";
@@ -52,6 +54,13 @@ const sections = [
     icon: ListChecksIcon,
   },
   {
+    to: "/email",
+    get label() {
+      return translate("navigation:sections.email");
+    },
+    icon: EnvelopeSimpleIcon,
+  },
+  {
     to: "/routines",
     get label() {
       return translate("navigation:sections.routines");
@@ -68,8 +77,10 @@ const shownSections = sections.filter(
 /** What each section holds for the user: tasks to accept. */
 function useBadges(): Partial<Record<(typeof sections)[number]["to"], number>> {
   const { tasks } = useTasks();
+  const { stats } = useEmail();
   return {
     "/tasks": tasks.filter((t) => t.status === "in_review").length,
+    "/email": stats.unread,
   };
 }
 
@@ -234,8 +245,8 @@ export function BottomNav() {
           className={cn(
             "grid h-full",
             ROUTINES_VISIBLE
-              ? "grid-cols-[1fr_1fr_68px_1fr_1fr]"
-              : "grid-cols-4",
+              ? "grid-cols-[1fr_1fr_1fr_68px_1fr_1fr]"
+              : "grid-cols-[1fr_1fr_1fr_68px_1fr]",
           )}
         >
           <Tab
@@ -248,6 +259,12 @@ export function BottomNav() {
             label={translateText("sections.tasks")}
             icon={ListChecksIcon}
             badge={badges["/tasks"]}
+          />
+          <Tab
+            to="/email"
+            label={translateText("sections.email")}
+            icon={EnvelopeSimpleIcon}
+            badge={badges["/email"]}
           />
           <div className="flex items-center justify-center">
             <NewAction />
@@ -277,7 +294,7 @@ function Tab({
   icon: Icon,
   badge,
 }: {
-  to: "/" | "/tasks" | "/routines" | "/settings";
+  to: "/" | "/tasks" | "/email" | "/routines" | "/settings";
   label: string;
   icon: Icon;
   badge?: number | undefined;

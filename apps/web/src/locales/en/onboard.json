@@ -2,7 +2,8 @@
   "stepsLabel": "Setup steps",
   "steps": {
     "providers": "Connect a model",
-    "agents": "Install agents"
+    "agents": "Install agents",
+    "email": "Connect email"
   },
   "states": {
     "installing": "Installing…"
@@ -12,5 +13,8 @@
     "installed": "Installed",
     "failed": "Install failed: {{message}}",
     "retry": "Retry install"
+  },
+  "email": {
+    "optional": "Connect an IMAP mailbox now, or skip and add it later in settings."
   }
 }

@@ -112,6 +112,28 @@ it("shows the newly chosen option's label right after the value changes", async 
   expect(trigger?.textContent).toContain("模型 B");
 });
 
+it("keeps a long selected label on one truncated line", async () => {
+  await act(async () =>
+    root.render(
+      <Select aria-label="Project" value="project">
+        <SelectOption value="project">
+          Alice Agent · /very/long/project/path/alice/agents/8a9ac683-20ae-4c01
+        </SelectOption>
+      </Select>,
+    ),
+  );
+  const trigger = container.querySelector<HTMLElement>(
+    "[data-slot='select-trigger']",
+  )!;
+  expect(trigger.classList.contains("overflow-hidden")).toBe(true);
+  expect(trigger.className).toContain(
+    "[&_[data-slot=select-value]>span]:truncate",
+  );
+  expect(trigger.className).toContain(
+    "[&_[data-slot=select-value]>span]:whitespace-nowrap",
+  );
+});
+
 it("changes the label on the pick itself, before anything else re-renders", async () => {
   // The path a person takes: click the trigger, click the other option. The wrapper reports the
   // business value; the parent hands it back; the trigger reads that option's label. A controlled

@@ -44,6 +44,11 @@ import { conversationsPlugin } from "./conversations/plugin";
 import { ConversationStore } from "./conversations/store";
 import { ConversationTargets } from "./conversations/targets";
 import { Timeline } from "./conversations/timeline";
+import { EmailCredentials } from "./email/credentials";
+import { emailPlugin } from "./email/plugin";
+import { EmailService } from "./email/service";
+import { EmailStore } from "./email/store";
+import { emailSessionTools } from "./email/tools";
 import { GithubError } from "./github/error";
 import { githubPlugin } from "./github/plugin";
 import { githubRoutes } from "./github/routes";
@@ -352,6 +357,7 @@ export function createProduct(options: {
   const mirrors = new SessionMirrors(hub, (id) => machines.get(id)?.name);
   // The bundles agents load: their files, values, services and the readiness of each machine.
   const secretKey = loadSecretKey(dataDir);
+  const emailCredentials = new EmailCredentials(db, secretKey);
   const bundles = new Bundles({
     db,
     dataDir,
@@ -492,6 +498,13 @@ export function createProduct(options: {
   later.githubCredentials = githubCredentials;
   later.githubLogin = githubLogin;
   const attachments = new AttachmentStore(db, dataDir);
+  const email = new EmailService(
+    new EmailStore(db),
+    emailCredentials,
+    agents,
+    projects,
+    warn,
+  );
   const runHooks = combineRunHooks([
     akhook.runHooks,
     ...(memory === undefined ? [] : [memoryRunHooks(memory)]),
@@ -601,6 +614,7 @@ export function createProduct(options: {
       sessionAttach: akhook.sessionAttach,
       askObserve: (meta: SessionMeta) => inbox.askObserve(originOf(meta)),
     },
+    { sessionTools: emailSessionTools(email) },
     ...(memory === undefined
       ? []
       : [
@@ -652,6 +666,7 @@ export function createProduct(options: {
       mirrors.detach();
       githubLogin?.stop();
       await mcp.close();
+      email.stop();
       await bundles.close();
     },
     async mount(server) {
@@ -682,6 +697,7 @@ export function createProduct(options: {
         "usage",
         "bundles",
         "mcp",
+        "email",
         // Not mounted, so not waited for: github would otherwise cost the startup one
         // `MOUNT_TIMEOUT_MS` and then a failure.
         ...(github === undefined ? [] : ["github"]),
@@ -770,6 +786,20 @@ export function createProduct(options: {
         artifactsPlugin({ artifacts, board }, applied("artifacts")),
       );
       server.mount("inbox", inboxPlugin({ inbox }, applied("inbox")));
+      server.mount(
+        "email",
+        emailPlugin(
+          {
+            service: email,
+            projects,
+            agents,
+            conversations,
+            engine,
+            createdConversation: created,
+          },
+          applied("email"),
+        ),
+      );
       server.mount("usage", usagePlugin(usage, applied("usage")));
       server.mount(
         "bundles",

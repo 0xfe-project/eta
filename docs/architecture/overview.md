@@ -8,7 +8,7 @@ eta 是一个人用来指挥多个智能体的工作台。服务端是**一个 B
    ▼
 主 node  apps/eta                              ← 唯一的进程；SQLite + 文件在一个数据目录里
    ├─ 上游地板  packages/eta-server：sessions、providers、settings、personas
-   ├─ 产品插件  agents machines projects conversations inbox usage tasks artifacts routines bundles [memory] [llm]
+   ├─ 产品插件  agents machines projects conversations inbox email usage tasks artifacts routines bundles [memory] [llm]
    ├─ LLM 网关  packages/llm-gateway：嵌入 CLIProxyAPI 的 Go 库，bun:ffi 加载（订阅账号、Gemini key）
    ├─ 本机会话  harness（packages/eta-core、eta-harness…）直接在进程里跑
    │

@@ -6,6 +6,7 @@
   "description": "The eta host: one Bun process that serves the web, the product database and the upstream WebSocket server.",
   "scripts": {
     "dev": "bun --watch src/main.ts --allow-origin http://127.0.0.1:${ETA_WEB_PORT:-3000} --github",
+    "email:demo": "bun scripts/email-demo.ts",
     "start": "bun src/main.ts",
     "typecheck": "bun check",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
@@ -25,13 +26,22 @@
     "@eta/plugin-akhook": "*",
     "@eta/server": "*",
     "@eta/ssh": "*",
+    "cheerio": "1.1.2",
     "croner": "10.0.1",
     "fflate": "^0.8.3",
+    "imapflow": "2.9.1",
+    "mailparser": "3.12.4",
+    "markdown-it": "15.0.3",
+    "nodemailer": "10.2.1",
+    "sanitize-html": "2.18.1",
     "typebox": "1.3.34"
   },
   "devDependencies": {
     "@types/node": "22.19.19",
+    "@types/sanitize-html": "2.16.2",
     "bun-types": "1.4.2",
+    "imapkit": "5.2.0",
+    "smtp-server": "3.21.1",
     "typescript": "5.9.3",
     "vitest": "4.1.9"
   }

@@ -47,6 +47,7 @@
 | projects      | `projects`（eager）                   | `create` `update` `setSteward` `files`（归档经 `update`）                                                            |
 | conversations | `conversations`、`conversations.<id>` | `create` `update` `invite` `remove` `setSteward` `send` `stop` `read` `history` `attach` `unattach`                  |
 | inbox         | `inbox`                               | `answer` `setApprovals`                                                                                              |
+| email         | `email`、`email.<thread-id>`          | `saveAccount` `removeAccount` `verifyAccount` `refresh` `markRead` `assign` `confirmProposal` `discardProposal`      |
 | usage         | `usage`                               | 只读                                                                                                                 |
 | tasks         | `tasks`、`tasks.<id>`                 | `update` `comment` `delete` `link` `confirmDraft` `interrupt` `rerun`（没有 `create`，见[任务](tasks.md)）           |
 | artifacts     | `artifacts`                           | `share` `unshare` `delete` `preview`                                                                                 |

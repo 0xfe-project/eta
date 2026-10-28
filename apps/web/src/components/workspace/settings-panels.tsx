@@ -11,6 +11,7 @@ import { AgentSettings } from "./agent-settings";
 import { ApprovalSettings } from "./approval-settings";
 import { BundleSettings } from "./bundle-settings";
 import { ConnectionSettings } from "./connection-settings";
+import { EmailSettings } from "./email-settings";
 import { ArchivedGroups } from "./groups";
 import { MachineSettings } from "./machine-settings";
 import { McpSettings } from "./mcp-settings";
@@ -137,6 +138,8 @@ function SectionContent({
     <ConnectionSettings />
   ) : section === "mcp" ? (
     <McpSettings />
+  ) : section === "email" ? (
+    <EmailSettings />
   ) : section === "archived" ? (
     <ArchivedGroups />
   ) : (

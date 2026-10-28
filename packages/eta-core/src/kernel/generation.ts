@@ -29,10 +29,7 @@ import type { AgentMessage, ThinkingLevel } from "../types/messages";
 import type { RunFailure } from "./failure";
 import type { KernelModels } from "./providers";
 import type { AgentRetryPolicy } from "./retry";
-import {
-  isContextOverflow,
-  isRecoverableLength,
-} from "@earendil-works/pi-ai";
+import { isContextOverflow, isRecoverableLength } from "@earendil-works/pi-ai";
 import {
   AssistantStreamError,
   consumeInterruptibleStream,

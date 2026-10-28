@@ -106,7 +106,9 @@
     "notSelected": "未选择",
     "timeline": "时间线",
     "markdownSupported": "支持 Markdown。",
-    "apiKey": "API 密钥"
+    "apiKey": "API 密钥",
+    "configuredPlaceholder": "已配置——输入即替换",
+    "usernameSameAsAddress": "默认同邮箱地址"
   },
   "feedback": {
     "deletedItem": "已删除「{{name}}」",

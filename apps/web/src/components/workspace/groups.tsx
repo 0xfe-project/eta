@@ -52,7 +52,7 @@ import { useLinkTask, useTasks } from "@/queries/tasks";
 import { wireErrorMessage } from "@/queries/wire";
 import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar, AgentStatus, AgentStatusDot } from "./agent-identity";
-import { agentStatusLabels, memberStatusLabels } from "./agent-status";
+import { agentStatusLabels, memberStatusLabel } from "./agent-status";
 import { InspectButton } from "./inspect-button";
 import { MemberRing } from "./member-ring";
 import { MemberStats } from "./member-stats";
@@ -282,7 +282,7 @@ function conversationLine(conversation: ConversationSummary): string | null {
   if (conversation.kind === "direct") {
     const status = conversation.participants[0]?.status;
     if (status !== undefined && status !== "idle") {
-      return memberStatusLabels[status];
+      return memberStatusLabel(status);
     }
     return conversation.preview || null;
   }

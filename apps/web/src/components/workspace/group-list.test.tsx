@@ -10,7 +10,7 @@ import { createRoot } from "react-dom/client";
 import { translate } from "@/lib/i18n";
 import { setWire } from "@/lib/wire";
 import { agentView, conversationView, productHost } from "@/test-product";
-import { memberStatusLabels } from "./agent-status";
+import { agentStatusLabels } from "./agent-status";
 import { GroupList } from "./groups";
 
 const groups = rstest.hoisted(() => ({ list: [] as ConversationSummary[] }));
@@ -99,7 +99,7 @@ describe("最近对话的一行", () => {
     ];
     agents.splice(0, agents.length, agentView({ id: "a1", name: "小明" }));
     const container = await render(<GroupList />);
-    expect(container.textContent).toContain(memberStatusLabels.working);
+    expect(container.textContent).toContain(agentStatusLabels.working);
     expect(container.textContent).not.toContain(
       translate("chat:groups.directChat"),
     );
@@ -118,6 +118,6 @@ describe("最近对话的一行", () => {
     agents.splice(0, agents.length, agentView({ id: "a1", name: "小明" }));
     const container = await render(<GroupList />);
     expect(container.textContent).toContain("晚安");
-    expect(container.textContent).not.toContain(memberStatusLabels.idle);
+    expect(container.textContent).not.toContain(agentStatusLabels.idle);
   });
 });

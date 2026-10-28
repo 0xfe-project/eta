@@ -106,7 +106,9 @@
     "notSelected": "Not selected",
     "timeline": "Timeline",
     "markdownSupported": "Markdown supported.",
-    "apiKey": "API key"
+    "apiKey": "API key",
+    "configuredPlaceholder": "Configured — type to replace",
+    "usernameSameAsAddress": "Defaults to the email address"
   },
   "feedback": {
     "deletedItem": "Deleted “{{name}}”",

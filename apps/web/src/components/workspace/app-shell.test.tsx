@@ -285,8 +285,11 @@ describe("左栏的页眉", () => {
     );
     // Only the page that remains; 定时 is off in this build, and chat, pending
     // and memory have no button.
-    expect(links.map((a) => a.getAttribute("data-to"))).toEqual(["/tasks"]);
-    expect(links.map((a) => a.textContent)).toEqual(["任务"]);
+    expect(links.map((a) => a.getAttribute("data-to"))).toEqual([
+      "/tasks",
+      "/email",
+    ]);
+    expect(links.map((a) => a.textContent)).toEqual(["任务", "邮箱"]);
     expect(
       links
         .filter((a) => a.getAttribute("data-active") === "true")
@@ -322,9 +325,12 @@ describe("折叠成图标栏", () => {
     expect(root(container).getAttribute("data-state")).toBe("collapsed");
     expect(root(container).getAttribute("data-collapsible")).toBe("icon");
     const links = [...container.querySelectorAll("a[data-to][aria-label]")];
-    expect(links.map((a) => a.getAttribute("aria-label"))).toEqual(["任务"]);
+    expect(links.map((a) => a.getAttribute("aria-label"))).toEqual([
+      "任务",
+      "邮箱",
+    ]);
     // No text in the rail: the name a link lost is the name it has to carry for the reader.
-    expect(links.map((a) => a.textContent)).toEqual([""]);
+    expect(links.map((a) => a.textContent)).toEqual(["", ""]);
     expect(links[0]?.querySelector("svg")).not.toBeNull();
   });
 
@@ -357,9 +363,9 @@ describe("折叠成图标栏", () => {
       });
     };
     const open = await render(<Sidebar />, { open: true });
-    expect(rows(open)).toEqual(["任务"]);
+    expect(rows(open)).toEqual(["任务", "邮箱"]);
     const rail = await render(<Sidebar />, { open: false });
-    expect(rows(rail)).toEqual(["折叠或展开侧栏", "任务"]);
+    expect(rows(rail)).toEqual(["折叠或展开侧栏", "任务", "邮箱"]);
 
     // 它自己那一组：页脚里一条，不在分区列表里。
     for (const [container, isRail] of [
