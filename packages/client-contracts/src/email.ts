@@ -56,6 +56,78 @@ export interface EmailAccountInput {
   password?: string;
 }
 
+/**
+ * What one ETA agent sends another, next to the mail a person reads.
+ *
+ * Two audiences in one message. `ask`, `work` and `decided` are the part the sending agent writes;
+ * `from` and `human` are filled by the host that sends it, from what it already knows. The body a
+ * person reads is short on purpose: it has to be auditable in one look before the human presses
+ * send. The payload is the superset of it — `read_email` gives the peer this, not the body.
+ */
+export interface EtaMailPayload {
+  protocol: "eta-mp/1";
+  v: 1;
+  createdAt: string;
+  from: EtaMailPayloadFrom;
+  work: EtaMailPayloadWork;
+  ask: EtaMailPayloadAsk;
+  decided: EtaMailPayloadDecided[];
+  human: EtaMailPayloadHuman;
+}
+
+/** Who sent it and where they were standing. The host fills every field here. */
+export interface EtaMailPayloadFrom {
+  agentId: string | null;
+  agentName: string | null;
+  /** The session that sent it, on the sending side. */
+  sessionId: string | null;
+  /**
+   * The conversation or task session key it sits in, so that a reply lands in the same place.
+   * `task:<id>` when a task's executor sent it.
+   */
+  conversationId: string | null;
+  /** The board task whose executor sent it, when it is one. */
+  taskId: string | null;
+  /** The directory this session was working in: where the peer has to look. */
+  cwd: string | null;
+  /** The mail thread this is already part of, when it is a reply. */
+  mailThreadId: string | null;
+}
+
+/** What the work is, as the sender would say it to the peer. */
+export interface EtaMailPayloadWork {
+  /** One line: what this session is doing. */
+  doing: string | null;
+  repo: string | null;
+  branch: string | null;
+  /** Paths the peer has to look at to follow the sender. */
+  paths: string[];
+}
+
+/** What the sender is asking for. */
+export interface EtaMailPayloadAsk {
+  /** The human's question, close to their own words. */
+  question: string | null;
+  /** What the sender needs the peer's agent to do. */
+  needed: string | null;
+  /** When it is needed, in the sender's words. */
+  by: string | null;
+}
+
+/** Something the sender has already settled, so that the peer does not reopen it. */
+export interface EtaMailPayloadDecided {
+  text: string;
+  /** Where it came from: a message, a task, an artifact, a path. */
+  source: string | null;
+}
+
+/** What the sending human did to the body before confirming it. */
+export interface EtaMailPayloadHuman {
+  /** The final body, when the human changed it. Carried so the agent side never loses it. */
+  note: string | null;
+  edited: boolean;
+}
+
 export interface EmailMetaView {
   protocol: string | null;
   agentId: string | null;
@@ -65,11 +137,18 @@ export interface EmailMetaView {
   mailThreadId: string | null;
   taskId: string | null;
   packetCount: number;
+  /**
+   * Where the payload was found. Headers survive a mail client that rewrites the body; the logo
+   * alt survives a forward; `none` means this mail carries no agent part at all.
+   */
+  carrier: EmailMetaCarrier;
   signaturePresent: boolean;
   signatureValid: boolean | null;
   decodeError: string | null;
-  context: unknown;
+  payload: EtaMailPayload | null;
 }
+
+export type EmailMetaCarrier = "header" | "alt" | "logo" | "none";
 
 export interface EmailMessageView {
   id: string;

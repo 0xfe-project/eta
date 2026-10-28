@@ -5,6 +5,7 @@ import type { ConversationStore } from "../conversations/store";
 import type { ProjectStore } from "../projects/store";
 import type { EmailService } from "./service";
 import { Args, productPlugin, publish } from "../wire";
+import { renderAgentPayload } from "./payload";
 
 export interface EmailPluginDeps {
   service: EmailService;
@@ -44,10 +45,20 @@ function briefing(service: EmailService, threadIds: readonly string[]): string {
       `## Email: ${thread.subject}`,
       `Thread: ${thread.id}`,
       `Peer: ${thread.peer}`,
-      ...messages.map(
-        (message) =>
-          `### ${message.direction === "incoming" ? "Incoming" : "Outgoing"} · ${new Date(message.createdAt).toISOString()}\n${message.text.slice(0, 12_000)}`,
-      ),
+      ...messages.map((message) => {
+        const payload = message.meta?.payload ?? null;
+        // Same rule as the read tool: a peer agent's payload is what it needs; the body only
+        // matters for what the payload cannot hold.
+        const body =
+          payload === null
+            ? message.text.slice(0, 12_000)
+            : `${renderAgentPayload(payload, message.meta?.carrier ?? "none")}${
+                payload.human.note === null
+                  ? ""
+                  : `\n\nhuman.note:\n${message.text.slice(0, 12_000)}`
+              }`;
+        return `### ${message.direction === "incoming" ? "Incoming" : "Outgoing"} · ${new Date(message.createdAt).toISOString()}\n${body}`;
+      }),
       "The user explicitly handed this email to you. Use `reply` to prepare a reply widget; it will not send until the user confirms.",
     ].join("\n\n");
   });

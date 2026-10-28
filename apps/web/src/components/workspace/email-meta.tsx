@@ -142,13 +142,14 @@ function Row({
 export function EmailMetaPanel({ meta }: { meta: EmailMetaView }) {
   const { t } = useTranslation(["email"] as const);
   const [fullContext, setFullContext] = useState(false);
-  const entries = contextEntries(meta.context);
+  const entries = contextEntries(meta.payload);
   const routing = [
     [t("thread.metaAgentId"), meta.agentId],
     [t("thread.metaSession"), meta.sessionId],
     [t("thread.metaLogicalSession"), meta.logicalSessionId],
     [t("thread.metaMailThread"), meta.mailThreadId],
     [t("thread.metaTask"), meta.taskId],
+    [t("thread.metaCarrier"), meta.carrier],
   ].filter((entry): entry is [string, string] => entry[1] !== null);
   const contextCount = routing.length + entries.length;
   const signature =

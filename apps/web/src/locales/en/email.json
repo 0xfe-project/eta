@@ -77,6 +77,7 @@
     "metaLogicalSession": "Logical session",
     "metaMailThread": "Mail thread",
     "metaTask": "Task",
+    "metaCarrier": "Payload carrier",
     "metaPoints": "Data points",
     "metaSignature": "Signature",
     "metaDecode": "Decode",

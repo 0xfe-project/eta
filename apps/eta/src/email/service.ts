@@ -6,7 +6,7 @@ import type {
 } from "@eta/client-contracts";
 import type { AgentStore } from "../agents/store";
 import type { ProjectStore } from "../projects/store";
-import type { EtaMailEnvelope } from "./context";
+import type { EmailPayloadInput, EtaMailEnvelope } from "./context";
 import type { EmailCredentials } from "./credentials";
 import type { EmailStore } from "./store";
 import { Buffer } from "node:buffer";
@@ -14,7 +14,11 @@ import { fileURLToPath } from "node:url";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
-import { decodeEmailMeta, encodeContextPackets } from "./context";
+import {
+  decodeEmailMeta,
+  encodeContextPackets,
+  encodePayloadHeaders,
+} from "./context";
 import { PIXEL_PNG_BASE64, renderMail } from "./template";
 
 const LOGO_PATH = fileURLToPath(
@@ -44,6 +48,27 @@ const messageIdFor = (sessionId: string, address: string) => {
   return `<eta.${crypto.randomUUID()}.${sessionId}@${domain}>`;
 };
 
+/**
+ * The board task a session key names, when it names one. `tasks/session-key.ts` owns the full
+ * mapping; a mail only needs the plain `task:<id>` form, and a legacy `task-run:<runId>` key
+ * resolves to no id here rather than to a wrong one.
+ */
+const taskOfSessionKey = (key: string | null): string | null =>
+  key !== null && key.startsWith("task:") ? key.slice("task:".length) : null;
+
+/** The origin of a configured public URL, or nothing when it is not a site. */
+const httpOrigin = (text: string | undefined): string | undefined => {
+  if (text === undefined || text === "") return undefined;
+  try {
+    const url = new URL(text);
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url.origin
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 export class EmailService {
   #timer: ReturnType<typeof setInterval> | undefined;
   #running: Promise<PollResult> | undefined;
@@ -53,6 +78,8 @@ export class EmailService {
   readonly #agents: AgentStore;
   readonly #projects: ProjectStore;
   readonly #warn: (message: string) => void;
+  /** Where this host is reachable as a site, for the link back to the session. */
+  readonly #origin: string | undefined;
 
   constructor(
     store: EmailStore,
@@ -60,12 +87,14 @@ export class EmailService {
     agents: AgentStore,
     projects: ProjectStore,
     warn: (message: string) => void,
+    options: { publicUrl?: string | undefined } = {},
   ) {
     this.store = store;
     this.#credentials = credentials;
     this.#agents = agents;
     this.#projects = projects;
     this.#warn = warn;
+    this.#origin = httpOrigin(options.publicUrl);
   }
 
   onChange(listener: () => void): () => void {
@@ -293,7 +322,7 @@ export class EmailService {
           high = Math.max(high, item.uid);
           const parsed = await simpleParser(Buffer.from(item.source));
           const html = typeof parsed.html === "string" ? parsed.html : "";
-          const meta = decodeEmailMeta(html);
+          const meta = decodeEmailMeta(html, parsed.headers);
           const result = this.store.insertIncoming({
             accountId: account.id,
             remoteKey: `imap:${uidValidity}:${item.uid}`,
@@ -339,7 +368,11 @@ export class EmailService {
     bcc?: string;
     subject: string;
     markdown: string;
-    context?: unknown;
+    /**
+     * What the send carries besides the body. The tool fills `work`, `ask`, `decided`, `draft` and
+     * `origin`; nothing here is guessed at send time except what only the host knows.
+     */
+    context?: EmailPayloadInput;
   }): EmailProposalView {
     const account = this.store.account(input.accountId);
     if (!account) throw new Error(`no such email account: ${input.accountId}`);
@@ -424,20 +457,9 @@ export class EmailService {
                 ...(parent.rfcMessageId ? [parent.rfcMessageId] : []),
               ]),
             ];
-      const agent = this.#agents.get(proposal.agentId);
-      const envelope: EtaMailEnvelope = {
-        v: 1,
-        protocol: "eta-mp/1",
-        agentId: proposal.agentId,
-        agentName: agent?.name ?? null,
-        sessionId: proposal.sessionId,
-        logicalSessionId: thread.id,
-        mailThreadId: thread.id,
-        taskId: null,
-        createdAt: new Date().toISOString(),
-        context: this.store.proposalContext(proposal.id),
-      };
+      const envelope = this.#envelope(proposal, thread.id);
       const packets = encodeContextPackets(envelope);
+      const headers = encodePayloadHeaders(envelope);
       const html = renderMail({
         envelope,
         title: proposal.subject.replace(/^(?:re\s*:\s*)?\[eta-mp\]\s*/i, ""),
@@ -445,6 +467,9 @@ export class EmailService {
         markdown: proposal.markdown,
         packets,
         messageId,
+        ...(this.#link(envelope.payload.from.conversationId) === undefined
+          ? {}
+          : { ctaUrl: this.#link(envelope.payload.from.conversationId)! }),
       });
       let message = this.store.insertOutgoing({
         accountId: account.id,
@@ -457,7 +482,9 @@ export class EmailService {
         messageId,
         inReplyTo: parent?.rfcMessageId ?? null,
         references,
-        eta: envelope,
+        // Store what a reader will decode, not what was encoded: an outgoing message then
+        // carries the same view as an incoming one, and the round trip is checked on the way out.
+        eta: decodeEmailMeta(html, headers),
         status: "sending",
       });
       try {
@@ -468,6 +495,7 @@ export class EmailService {
           parent?.rfcMessageId ?? null,
           references,
           html,
+          headers,
         );
       } catch (error) {
         this.store.setMessageStatus(
@@ -495,6 +523,71 @@ export class EmailService {
     }
   }
 
+  /**
+   * The payload a send carries, rebuilt from what is true now.
+   *
+   * The body is the human's to edit and the host is the one that knows which session, directory
+   * and task this is, so the payload cannot be the copy the model made before review. Rebuilding
+   * here is also what keeps the rule honest: what a human typed before pressing send is in the
+   * payload, so the peer's agent never has to read the body to find it.
+   */
+  #envelope(
+    proposal: EmailProposalView,
+    mailThreadId: string,
+  ): EtaMailEnvelope {
+    const agent = this.#agents.get(proposal.agentId);
+    const context = (this.store.proposalContext(proposal.id) ??
+      {}) as EmailPayloadInput;
+    const conversationId = context.origin?.conversationId ?? null;
+    const draft = typeof context.draft === "string" ? context.draft : null;
+    const edited = draft !== null && draft.trim() !== proposal.markdown.trim();
+    const createdAt = new Date().toISOString();
+    return {
+      v: 1,
+      protocol: "eta-mp/1",
+      createdAt,
+      payload: {
+        protocol: "eta-mp/1",
+        v: 1,
+        createdAt,
+        from: {
+          agentId: proposal.agentId,
+          agentName: agent?.name ?? null,
+          sessionId: proposal.sessionId,
+          conversationId,
+          taskId: taskOfSessionKey(conversationId),
+          cwd: context.origin?.cwd ?? null,
+          mailThreadId,
+        },
+        work: {
+          doing: context.work?.doing ?? null,
+          repo: context.work?.repo ?? null,
+          branch: context.work?.branch ?? null,
+          paths: [...(context.work?.paths ?? [])],
+        },
+        ask: {
+          question: context.ask?.question ?? null,
+          needed: context.ask?.needed ?? null,
+          by: context.ask?.by ?? null,
+        },
+        decided: (context.decided ?? []).flatMap((entry) => {
+          const value =
+            typeof entry?.text === "string" ? entry.text.trim() : "";
+          return value === ""
+            ? []
+            : [{ text: value, source: entry.source ?? null }];
+        }),
+        human: { note: edited ? proposal.markdown : null, edited },
+      },
+    };
+  }
+
+  /** Where the recipient opens the session that sent this, when this host has an address. */
+  #link(conversationId: string | null): string | undefined {
+    if (this.#origin === undefined || conversationId === null) return undefined;
+    return `${this.#origin}/?group=${encodeURIComponent(conversationId)}`;
+  }
+
   async #send(
     account: EmailAccountView,
     proposal: EmailProposalView,
@@ -502,6 +595,7 @@ export class EmailService {
     inReplyTo: string | null,
     references: string[],
     html: string,
+    payloadHeaders: Record<string, string>,
   ): Promise<void> {
     const password = await this.#password(account.id);
     const transport = nodemailer.createTransport({
@@ -529,6 +623,7 @@ export class EmailService {
           "X-ETA-Protocol": "1",
           "X-ETA-Session-ID": proposal.sessionId,
           ...(inReplyTo ? { "X-ETA-Correlation-ID": inReplyTo } : {}),
+          ...payloadHeaders,
         },
         attachments: [
           { filename: "eta-logo.png", path: LOGO_PATH, cid: "eta-logo@eta" },

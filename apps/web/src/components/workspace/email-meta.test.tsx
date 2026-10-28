@@ -12,13 +12,32 @@ const meta: EmailMetaView = {
   mailThreadId: "thread-1",
   taskId: null,
   packetCount: 7,
+  carrier: "header",
   signaturePresent: false,
   signatureValid: null,
   decodeError: null,
-  context: {
-    from: "alice",
-    steps: ["send", "handoff", "reply"],
-    nested: { purpose: "demo" },
+  payload: {
+    protocol: "eta-mp/1",
+    v: 1,
+    createdAt: "2025-01-01T00:00:00.000Z",
+    from: {
+      agentId: "agent-1",
+      agentName: "Executor",
+      sessionId: "session-1",
+      conversationId: "task:t1",
+      taskId: "t1",
+      cwd: "/work/repo",
+      mailThreadId: "thread-1",
+    },
+    work: {
+      doing: "重做 mail 载荷",
+      repo: "eta",
+      branch: "feat/email-payload",
+      paths: ["apps/eta/src/email"],
+    },
+    ask: { question: "这个设计好不好", needed: "看一眼 schema", by: null },
+    decided: [{ text: "payload 是正文的超集", source: "message 12" }],
+    human: { note: null, edited: false },
   },
 };
 
@@ -32,20 +51,20 @@ describe("email metadata", () => {
     expect(text).toContain("7 个数据点");
     expect(text).toContain("Executor");
     expect(text).toContain("session-1");
-    expect(text).toContain("send · handoff · reply");
-    expect(text).toContain("purpose");
+    expect(text).toContain("header");
     expect(text).not.toContain('"protocol"');
     await click(
       [...view.container.querySelectorAll("button")].find((element) =>
         element.textContent?.includes("展开完整上下文"),
       ),
     );
-    expect(view.container.textContent).toContain("demo");
+    expect(view.container.textContent).toContain("payload 是正文的超集");
+    expect(view.container.textContent).toContain("/work/repo");
   });
 
   it("shows decoded routing context when the sender has no extra data", async () => {
     const view = await mount(
-      <EmailMetaPanel meta={{ ...meta, context: {} }} />,
+      <EmailMetaPanel meta={{ ...meta, payload: null }} />,
     );
     const text = view.container.textContent ?? "";
     expect(text).toContain("Executor");

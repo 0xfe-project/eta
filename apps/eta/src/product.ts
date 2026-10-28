@@ -504,6 +504,7 @@ export function createProduct(options: {
     agents,
     projects,
     warn,
+    { publicUrl: options.publicUrl },
   );
   const runHooks = combineRunHooks([
     akhook.runHooks,

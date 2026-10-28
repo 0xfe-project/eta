@@ -77,6 +77,7 @@
     "metaLogicalSession": "逻辑 Session",
     "metaMailThread": "邮件线程",
     "metaTask": "Task",
+    "metaCarrier": "载荷载体",
     "metaPoints": "数据点",
     "metaSignature": "签名",
     "metaDecode": "解码",

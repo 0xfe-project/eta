@@ -1,12 +1,18 @@
 import type { EmailAccountInput } from "@eta/client-contracts";
+import type { EtaMailEnvelope } from "../src/email/context";
 import { Buffer } from "node:buffer";
 import { join } from "node:path";
 import imapkit from "imapkit";
 import { afterEach, describe, expect, it } from "vitest";
 import { AgentStore } from "../src/agents/store";
 import { applyMigrations, loadMigrations, openDatabase } from "../src/db";
-import { decodeEmailMeta, encodeContextPackets } from "../src/email/context";
+import {
+  decodeEmailMeta,
+  encodeContextPackets,
+  encodePayloadHeaders,
+} from "../src/email/context";
 import { EmailCredentials } from "../src/email/credentials";
+import { renderAgentPayload } from "../src/email/payload";
 import { EmailService } from "../src/email/service";
 import { EmailStore } from "../src/email/store";
 import { renderMail } from "../src/email/template";
@@ -21,39 +27,87 @@ afterEach(async () => {
   for (const server of servers.splice(0)) await server.stop();
 });
 
-describe("email context", () => {
-  it("round-trips session metadata through the logo and data points", () => {
-    const envelope = {
-      v: 1 as const,
-      protocol: "eta-mp/1" as const,
-      agentId: "agent-a",
-      agentName: "A",
-      sessionId: "session-a",
-      logicalSessionId: "thread-1",
-      mailThreadId: "thread-1",
-      taskId: null,
-      createdAt: new Date().toISOString(),
-      context: { answer: 42, turns: ["one", "two"] },
+describe("email payload", () => {
+  const envelope = (): EtaMailEnvelope => {
+    const createdAt = "2025-01-01T00:00:00.000Z";
+    return {
+      v: 1,
+      protocol: "eta-mp/1",
+      createdAt,
+      payload: {
+        protocol: "eta-mp/1",
+        v: 1,
+        createdAt,
+        from: {
+          agentId: "agent-a",
+          agentName: "A",
+          sessionId: "session-a",
+          conversationId: "task:t1",
+          taskId: "t1",
+          cwd: "/work/repo",
+          mailThreadId: "<mail@example.com>",
+        },
+        work: {
+          doing: "重做 mail 载荷",
+          repo: "eta",
+          branch: "feat/email-payload",
+          paths: ["apps/eta/src/email"],
+        },
+        ask: {
+          question: "这个设计好不好",
+          needed: "看一眼 schema",
+          by: null,
+        },
+        decided: [{ text: "payload 是正文的超集", source: "message 12" }],
+        human: { note: null, edited: false },
+      },
     };
-    const packets = encodeContextPackets(envelope);
+  };
+
+  it("round-trips the payload through the image packets", () => {
+    const mail = envelope();
+    const packets = encodeContextPackets(mail);
     expect(packets).toHaveLength(7);
     const html = renderMail({
-      envelope,
+      envelope: mail,
       title: "Mail",
       status: "REQUEST",
       markdown: "Hello",
       packets,
       messageId: "<eta.test@example.com>",
     });
-    expect(decodeEmailMeta(html)).toMatchObject({
-      protocol: "eta-mp/1",
-      agentId: "agent-a",
-      sessionId: "session-a",
-      mailThreadId: "thread-1",
-      packetCount: packets.length,
-      decodeError: null,
-      context: envelope.context,
-    });
+    const meta = decodeEmailMeta(html);
+    expect(meta.carrier).toBe("alt");
+    expect(meta.payload).toEqual(mail.payload);
+    expect(meta.taskId).toBe("t1");
+    expect(meta.agentName).toBe("A");
+    expect(meta.signaturePresent).toBe(false);
+    expect(meta.decodeError).toBeNull();
+  });
+
+  it("survives a client that rewrites the body, through the headers", () => {
+    const mail = envelope();
+    const headers = encodePayloadHeaders(mail);
+    expect(Object.keys(headers)).toContain("X-ETA-Payload-1");
+    const meta = decodeEmailMeta("<p>正文被客户端换成别的东西</p>", headers);
+    expect(meta.carrier).toBe("header");
+    expect(meta.payload).toEqual(mail.payload);
+    expect(meta.decodeError).toBeNull();
+  });
+
+  it("says so when a mail carries nothing from an agent", () => {
+    const meta = decodeEmailMeta("<p>human mail</p>");
+    expect(meta.carrier).toBe("none");
+    expect(meta.payload).toBeNull();
+  });
+
+  it("renders the agent side as text with its provenance", () => {
+    const rendered = renderAgentPayload(envelope().payload, "header");
+    expect(rendered).toContain("carrier=header");
+    expect(rendered).toContain("未签名");
+    expect(rendered).toContain("需要你做: 看一眼 schema");
+    expect(rendered).toContain("payload 是正文的超集");
+    expect(rendered).toContain("task: t1");
   });
 });
 
@@ -233,7 +287,13 @@ describe("iMAP and SMTP bridge", () => {
       to: "mailbox@eta.test",
       subject: "Bridge test",
       markdown: "Hello from the ETA mail test.",
-      context: { test: true, turns: 3 },
+      context: {
+        work: { doing: "bridge test", repo: "eta", branch: "feat/x" },
+        ask: { question: "does it land", needed: "confirm it arrives" },
+        decided: [{ text: "the bridge works", source: "this test" }],
+        draft: "Hello from the ETA mail test.",
+        origin: { conversationId: "task:t9", cwd: "/tmp/eta" },
+      },
     });
     const sent = await service.confirmProposal(proposal.id);
     expect(sent.proposal.status).toBe("accepted");
@@ -250,6 +310,18 @@ describe("iMAP and SMTP bridge", () => {
     expect(incoming).toBeDefined();
     expect(incoming!.meta?.mailThreadId).toBe(received.id);
     expect(incoming!.meta?.sessionId).toBe("session-1");
+    // The header carrier is what a real SMTP round trip has to keep: the body may be rewritten
+    // anywhere along the way, headers are not.
+    expect(incoming!.meta?.carrier).toBe("header");
+    expect(incoming!.meta?.payload).toMatchObject({
+      ask: { needed: "confirm it arrives" },
+      work: { doing: "bridge test", branch: "feat/x" },
+      from: { taskId: "t9", cwd: "/tmp/eta", sessionId: "session-1" },
+      human: { edited: false, note: null },
+    });
+    expect(incoming!.meta?.payload?.decided).toEqual([
+      { text: "the bridge works", source: "this test" },
+    ]);
     expect(service.store.assignments(received.id)).toHaveLength(0);
     service.stop();
     db.close();
