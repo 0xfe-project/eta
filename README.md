@@ -130,6 +130,7 @@ Architecture notes:
 - [Access control](docs/architecture/access.md): origin checks, token gate, capability routing
 - [LLM gateway](docs/architecture/llm-gateway.md): subscription accounts (Codex, Grok) and Gemini keys, CLIProxyAPI run as a child process of the host
 - [Memory](docs/architecture/memory.md): what is stored, how it is queried per conversation
+- [Web](docs/architecture/web.md): `web_fetch` and `web_search`, in the host process; SSRF guard, paging, the SearXNG it runs
 - [Tasks](docs/architecture/tasks.md): an agent proposes, the user confirms, the same agent executes in a fresh session
 - [Tasks, artifacts and routines](docs/architecture/tasks-artifacts-routines.md)
 
@@ -183,6 +184,8 @@ Host flags (`apps/eta/src/main.ts`):
 | `--allow-origin <o>`  | extra page origin allowed to open the WebSocket, repeatable. Set it when you sit behind a reverse proxy that rewrites `Host`                                                                                                                                                                                                                                                                 |
 | `--github`            | load the GitHub chain (App and wizard, `github` target, `open_pull_request` / `draft_issue` tools, callback routes, machine git/gh login). **Not loaded by default**: if the environment has no GitHub, nothing is created, mounted or asked about, and no GitHub entry appears in the UI. `ETA_GITHUB=1` counts too, `--no-github` overrides it (see [GitHub](docs/architecture/github.md)) |
 | `--no-llm`            | don't load the LLM gateway (no subscription accounts, no Gemini keys)                                                                                                                                                                                                                                                                                                                        |
+| `--searxng-url <url>` | the SearXNG `web_search` asks (`ETA_SEARXNG_URL` counts too). Without it the host runs the prebuilt SearXNG as a child process on first search, on linux-x64 (glibc 2.35+), darwin-arm64 and win32-x64; elsewhere agents get `web_fetch` only (see [Web](docs/architecture/web.md))                                                                                                          |
+| `--no-web`            | don't give agents `web_fetch` and `web_search`                                                                                                                                                                                                                                                                                                                                               |
 
 First visit to a gated host: open `http://host:8787/?token=<token>` once in the browser, then the
 cookie takes over; scripts use `Authorization: Bearer <token>`. `/up` is the health check and needs no

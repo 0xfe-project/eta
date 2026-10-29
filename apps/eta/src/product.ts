@@ -23,6 +23,7 @@ import type { GithubTuning } from "./github/service";
 import type { MachineRecord } from "./machines/store";
 import type { McpTuning } from "./mcp/service";
 import type { SessionHooks } from "./session-hooks";
+import type { WebOptions } from "./web/service";
 import { homedir, hostname, platform } from "node:os";
 import { join } from "node:path";
 import { GitHubKeeper } from "@eta/daemon";
@@ -86,6 +87,8 @@ import { workspaceChooser } from "./tasks/workspace";
 import { usagePlugin } from "./usage/plugin";
 import { entryOf } from "./usage/recorder";
 import { UsageStore } from "./usage/store";
+import { Web } from "./web/service";
+import { webSessionTools } from "./web/tools";
 
 export interface AkhookOptions {
   /** The user-level configuration file; defaults to akhook's own path. */
@@ -178,6 +181,11 @@ export function createProduct(options: {
    * no plugin, no tools, no callbacks, no login, and nothing asked of GitHub.
    */
   github?: boolean | GithubTuning | undefined;
+  /**
+   * `web_fetch` and `web_search`, run in this process. Absent means neither tool; `{}` is both,
+   * searching with the SearXNG the host runs itself where a prebuilt one exists.
+   */
+  web?: Omit<WebOptions, "warn"> | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
   const memory =
@@ -491,6 +499,9 @@ export function createProduct(options: {
         });
   later.githubCredentials = githubCredentials;
   later.githubLogin = githubLogin;
+  // Reading the web: pages and searches, for every session that has the tools.
+  const web =
+    options.web === undefined ? undefined : new Web({ ...options.web, warn });
   const attachments = new AttachmentStore(db, dataDir);
   const runHooks = combineRunHooks([
     akhook.runHooks,
@@ -609,6 +620,7 @@ export function createProduct(options: {
               memoryTools(memory, { ...input, meta: originOf(input.meta) }),
           },
         ]),
+    ...(web === undefined ? [] : [{ sessionTools: webSessionTools(web) }]),
   ];
   // What the product's tools are, as a daemon's sessions get them (specs the daemon calls back).
   later.hooks = combineSessionHooks(productHooks);
@@ -653,6 +665,7 @@ export function createProduct(options: {
       githubLogin?.stop();
       await mcp.close();
       await bundles.close();
+      await web?.close();
     },
     async mount(server) {
       running = server;

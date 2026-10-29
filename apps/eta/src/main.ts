@@ -5,6 +5,7 @@
  *                            [--web-dir <built web>] [--token-file <path>]
  *                            [--allow-origin <origin>]... [--memory-url <sidecar>] [--no-llm]
  *                            [--github] [--public-url <the address the browser uses>]
+ *                            [--no-web] [--searxng-url <a SearXNG of your own>]
  *
  * A thin shell around `startHost`: flags, a startup summary on one line, and a signal handler.
  * Everything the host serves lives behind the one port; `--web-dir` adds the page, and a host
@@ -33,6 +34,9 @@ const { values } = parseArgs({
     // The GitHub chain is opt-in; `--no-github` overrides an environment that turns it on.
     github: { type: "boolean", default: false },
     "no-github": { type: "boolean", default: false },
+    // web_fetch and web_search are on; the search runs on the host's own SearXNG unless given one.
+    "no-web": { type: "boolean", default: false },
+    "searxng-url": { type: "string" },
   },
   strict: true,
 });
@@ -45,6 +49,7 @@ if (!Number.isInteger(port) || port < 0 || port > 65_535) {
 
 const memoryUrl = values["memory-url"] ?? process.env.ETA_MEMORY_URL;
 const publicUrl = values["public-url"] ?? process.env.ETA_PUBLIC_URL;
+const searxngUrl = values["searxng-url"] ?? process.env.ETA_SEARXNG_URL;
 
 /** An environment switch: on for `1`, `true`, `yes`, `on`; anything else (or nothing) is off. */
 const envOn = (value: string | undefined): boolean =>
@@ -72,6 +77,13 @@ const host = await startHost({
   llm: values["no-llm"] !== true,
   // The whole GitHub chain, or none of it.
   github,
+  // Reading the web, in this process; an empty SearXNG address means the host's own.
+  web:
+    values["no-web"] === true
+      ? false
+      : searxngUrl === undefined || searxngUrl === ""
+        ? true
+        : { searxngUrl },
   // The flag wins over the environment; an empty value means none.
   ...(memoryUrl === undefined || memoryUrl === "" ? {} : { memoryUrl }),
   ...(publicUrl === undefined || publicUrl === "" ? {} : { publicUrl }),

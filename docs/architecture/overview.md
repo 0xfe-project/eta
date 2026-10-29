@@ -10,6 +10,7 @@ eta 是一个人用来指挥多个智能体的工作台。服务端是**一个 B
    ├─ 上游地板  packages/eta-server：sessions、providers、settings、personas
    ├─ 产品插件  agents machines projects conversations inbox usage tasks artifacts routines bundles [memory] [llm]
    ├─ LLM 网关  apps/eta/src/llm：CLIProxyAPI 子进程（@cpajs/cpa）与账号、目录、额度（订阅账号、Gemini key）
+   ├─ 读网页    apps/eta/src/web：web_fetch / web_search，进程内调用 sex 库；托管的 SearXNG 是子进程（见 [读网页与搜索](web.md)）
    ├─ 本机会话  harness（packages/eta-core、eta-harness…）直接在进程里跑
    │
    ├──── /machines/connect（WSS，daemon 反向拨入）──▶ eta-daemon（别的机器：只跑会话）
@@ -25,7 +26,7 @@ eta 是一个人用来指挥多个智能体的工作台。服务端是**一个 B
 | eta-daemon     | `apps/daemon` | 可选，每台额外的机器一个。`bun build --compile` 出的单文件，不含 Web、数据库、产品插件和模型配置         |
 | 记忆边车       | `apps/memory` | 可选。Python（mem0 + fastembed），自己的 PostgreSQL（pgvector）。没有它，host 不挂载记忆，界面隐藏记忆页 |
 
-没有别的服务：没有控制面、消息队列、容器编排或主库。LLM 网关不是独立服务：CLIProxyAPI 是 host 启动并看管的子进程，随 host 退出（见 [LLM 网关](llm-gateway.md)）。
+没有别的服务：没有控制面、消息队列、容器编排或主库。LLM 网关不是独立服务：CLIProxyAPI 是 host 启动并看管的子进程，随 host 退出（见 [LLM 网关](llm-gateway.md)）。搜索用的 SearXNG 也一样：没给外部地址时，它是 host 在第一次搜索时启动的子进程，随 host 退出（见[读网页与搜索](web.md)）。
 
 ## 代码布局
 
@@ -33,7 +34,7 @@ eta 是一个人用来指挥多个智能体的工作台。服务端是**一个 B
 apps/
   eta/        host：入口 main.ts、host.ts（组装）、product.ts（产品插件）、access.ts（访问控制）、
               db.ts + migrations/（SQLite），以及 agents、machines、projects、conversations、inbox、usage、
-              memory、tasks、artifacts、routines、bundles 各一个目录
+              memory、tasks、artifacts、routines、bundles、web 各一个目录
   daemon/     eta-daemon：setup / run / install-service
   web/        React 界面，通过 WebSocket 读写
   memory/     Python 边车
