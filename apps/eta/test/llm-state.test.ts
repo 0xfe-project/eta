@@ -3,9 +3,8 @@
  * model's from the account's and its own; the agents' keys; the Codex credential file.
  */
 import type { AuthFileEntry, CooldownView } from "@cpajs/cpa/client";
-import { Buffer } from "node:buffer";
 import { describe, expect, it } from "vitest";
-import { codexCredential, codexPlanName } from "../src/llm/codex";
+import { codexPlanName } from "../src/llm/codex";
 import { AgentKeys } from "../src/llm/keys";
 import {
   connectionReason,
@@ -237,38 +236,7 @@ describe("agent keys", () => {
   });
 });
 
-describe("a Codex login", () => {
-  const jwt = (claims: unknown) =>
-    `x.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.y`;
-
-  it("becomes a credential file in CPA's codex format", () => {
-    const { name, content } = codexCredential(
-      jwt({
-        email: "ada@example.com",
-        "https://api.openai.com/auth": {
-          chatgpt_account_id: "acct-1",
-          chatgpt_plan_type: "Plus",
-        },
-      }),
-      "access",
-      "refresh",
-      3600,
-      new Date("2026-10-26T12:00:00.123Z"),
-    );
-    expect(name).toMatch(/^codex-[0-9a-f]{8}-ada@example\.com-plus\.json$/);
-    expect(content).toEqual({
-      type: "codex",
-      id_token: expect.any(String),
-      access_token: "access",
-      refresh_token: "refresh",
-      account_id: "acct-1",
-      email: "ada@example.com",
-      expired: "2026-10-26T13:00:00Z",
-      last_refresh: "2026-10-26T12:00:00Z",
-    });
-    expect(() => codexCredential(jwt({}), "a", "r", 1, new Date())).toThrow();
-  });
-
+describe("a Codex plan", () => {
   it("names plans as ChatGPT does", () => {
     expect(codexPlanName("prolite")).toBe("Pro 5x");
     expect(codexPlanName("pro")).toBe("Pro 20x");

@@ -52,6 +52,7 @@
       "name": "@eta/app",
       "version": "0.1.0",
       "dependencies": {
+        "@cpajs/codex-auth": "0.1.0-rc.6",
         "@cpajs/cpa": "0.1.0-rc.7",
         "@earendil-works/pi-ai": "0.85.1",
         "@eta/client-contracts": "*",
@@ -511,6 +512,8 @@
     "@clack/core": ["@clack/core@1.5.1", "", { "dependencies": { "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-iHTrHA8MtVuLl2TfZySmcKv1qO2PoyC9Z7pfSDozEuV5vtY3/wcOPKJXlqJ5Oq2Cx5DDGQGAMVx6HZfRRoVEbQ=="],
 
     "@clack/prompts": ["@clack/prompts@1.8.1", "", { "dependencies": { "@clack/core": "1.5.1", "fast-string-width": "^3.0.2", "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-dlT1m5e/0yUL0kRNcQn7yGLVThkgbB0Ga/1AmfDDC/8ik6AIiSf2QLQO2zPYvefsHP0aFgxO93cVLCCfDp7kzQ=="],
+
+    "@cpajs/codex-auth": ["@cpajs/codex-auth@0.1.0-rc.6", "", { "peerDependencies": { "@cpajs/cpa": "^0.1.0-rc" }, "optionalPeers": ["@cpajs/cpa"] }, "sha512-oUhuldp2DhRxE8J479tl4VpG11TqNLbXDDwR+axTazFHLqoDj5hYs7FwRR5MH1LDb2YRKgpQqMZvsXMMCnMtUA=="],
 
     "@cpajs/cpa": ["@cpajs/cpa@0.1.0-rc.7", "", { "dependencies": { "bcryptjs": "^3.0.3", "yaml": "^2.9.1" }, "optionalDependencies": { "@cpajs/darwin-arm64": "0.1.0-rc.7", "@cpajs/darwin-x64": "0.1.0-rc.7", "@cpajs/freebsd-arm64": "0.1.0-rc.7", "@cpajs/freebsd-ia32": "0.1.0-rc.7", "@cpajs/freebsd-x64": "0.1.0-rc.7", "@cpajs/linux-arm": "0.1.0-rc.7", "@cpajs/linux-arm64-gnu": "0.1.0-rc.7", "@cpajs/linux-arm64-musl": "0.1.0-rc.7", "@cpajs/linux-ia32": "0.1.0-rc.7", "@cpajs/linux-loong64": "0.1.0-rc.7", "@cpajs/linux-mips": "0.1.0-rc.7", "@cpajs/linux-mipsel": "0.1.0-rc.7", "@cpajs/linux-ppc64": "0.1.0-rc.7", "@cpajs/linux-riscv64": "0.1.0-rc.7", "@cpajs/linux-s390x": "0.1.0-rc.7", "@cpajs/linux-x64-gnu": "0.1.0-rc.7", "@cpajs/linux-x64-musl": "0.1.0-rc.7", "@cpajs/netbsd-x64": "0.1.0-rc.7", "@cpajs/openbsd-arm64": "0.1.0-rc.7", "@cpajs/openbsd-x64": "0.1.0-rc.7", "@cpajs/win32-arm64": "0.1.0-rc.7", "@cpajs/win32-ia32": "0.1.0-rc.7", "@cpajs/win32-x64": "0.1.0-rc.7" } }, "sha512-ZcehOzCQuku+ir8qwYGL7/DxUCA67dPfcQh/j/TUw8djnsEy6N/dYrMF2R1qR3DJf8HdkfOFdhCF1ifGpqkOHA=="],
 

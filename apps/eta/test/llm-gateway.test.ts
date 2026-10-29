@@ -8,7 +8,7 @@ import type { LlmModel } from "@eta/client-contracts";
 import type { LlmRuntime } from "../src/llm/runtime";
 import { Buffer } from "node:buffer";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { Cpa } from "../src/llm/cpa";
@@ -48,30 +48,38 @@ function fakeGoogle() {
 const jwt = (claims: unknown) =>
   `x.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.y`;
 
-/** OpenAI's device authorization: approved on the second poll. */
-function fakeOpenAI() {
+/**
+ * OpenAI's device authorization: approved on the second poll, unless `mode` says the login is
+ * refused (a final error while polling) or the exchange fails. It keeps what it was sent.
+ */
+function fakeOpenAI(mode: "ok" | "refused" | "exchange-fails" = "ok") {
   let polls = 0;
+  const sent: { path: string; body: string }[] = [];
   const server = Bun.serve({
     port: 0,
     hostname: "127.0.0.1",
     async fetch(request) {
       const { pathname } = new URL(request.url);
+      sent.push({ path: pathname, body: await request.text() });
       if (pathname === "/api/accounts/deviceauth/usercode")
         return Response.json({
           device_auth_id: "dev-1",
           user_code: "ABCD-1234",
           interval: "1",
         });
-      if (pathname === "/api/accounts/deviceauth/token")
+      if (pathname === "/api/accounts/deviceauth/token") {
+        if (mode === "refused")
+          return Response.json({ error: "access_denied" }, { status: 400 });
         return ++polls < 2
           ? new Response("pending", { status: 403 })
           : Response.json({
               authorization_code: "code",
               code_verifier: "verifier",
             });
+      }
       if (pathname === "/oauth/token") {
-        const form = new URLSearchParams(await request.text());
-        expect(form.get("code")).toBe("code");
+        if (mode === "exchange-fails")
+          return new Response("nope", { status: 500 });
         return Response.json({
           id_token: jwt({
             email: "ada@example.com",
@@ -90,6 +98,7 @@ function fakeOpenAI() {
   });
   return {
     url: `http://127.0.0.1:${server.port}`,
+    sent,
     stop: () => server.stop(true),
   };
 }
@@ -248,6 +257,29 @@ describe("the gateway's accounts", () => {
     await until(
       async () => (await gateway.loginPoll(login.id)).status === "succeeded",
     );
+    // What was asked of OpenAI, in order: the code, polls until approved, the exchange.
+    expect(openai.sent.map((request) => request.path)).toEqual([
+      "/api/accounts/deviceauth/usercode",
+      "/api/accounts/deviceauth/token",
+      "/api/accounts/deviceauth/token",
+      "/oauth/token",
+    ]);
+    expect(JSON.parse(openai.sent[0]!.body)).toEqual({
+      client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
+    });
+    expect(JSON.parse(openai.sent[1]!.body)).toEqual({
+      device_auth_id: "dev-1",
+      user_code: "ABCD-1234",
+    });
+    expect(
+      Object.fromEntries(new URLSearchParams(openai.sent[3]!.body)),
+    ).toEqual({
+      grant_type: "authorization_code",
+      client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
+      code: "code",
+      redirect_uri: "https://auth.openai.com/deviceauth/callback",
+      code_verifier: "verifier",
+    });
     await until(async () => (await gateway.connections()).length === 1);
     const [account] = await gateway.connections();
     expect(account).toMatchObject({
@@ -256,6 +288,22 @@ describe("the gateway's accounts", () => {
       plan: "plus",
       state: "active",
     });
+    // The credential file, as CPA's own device login writes it.
+    const auths = join(dataDir, "llm", "auths");
+    const [file] = await readdir(auths);
+    expect(file).toMatch(/^codex-[0-9a-f]{8}-ada@example\.com-plus\.json$/);
+    const credential = JSON.parse(await readFile(join(auths, file!), "utf8"));
+    expect(credential).toMatchObject({
+      type: "codex",
+      access_token: "access",
+      refresh_token: "refresh",
+      account_id: "acct-1",
+      email: "ada@example.com",
+      plan_type: "plus",
+    });
+    expect(
+      Date.parse(credential.expired) - Date.parse(credential.last_refresh),
+    ).toBe(3_600_000);
     // CPA serves its models; a disabled account serves none of them.
     await until(async () =>
       (await gateway.models()).some(
@@ -277,6 +325,28 @@ describe("the gateway's accounts", () => {
     await expect(gateway.loginStart("nobody")).rejects.toMatchObject({
       code: "not_found",
     });
+  }, 60_000);
+
+  it("end a Codex login the provider refuses, or whose exchange fails, with its code", async () => {
+    for (const [mode, code] of [
+      ["refused", "login_failed"],
+      ["exchange-fails", "login_save_failed"],
+    ] as const) {
+      const openai = fakeOpenAI(mode);
+      stops.push(openai.stop);
+      const { gateway } = await open(await tempDir("eta-llm-"), {
+        codexIssuer: openai.url,
+      });
+      const login = await gateway.loginStart("codex");
+      await until(
+        async () => (await gateway.loginPoll(login.id)).status !== "pending",
+      );
+      expect(await gateway.loginPoll(login.id)).toMatchObject({
+        status: "failed",
+        error: { code },
+      });
+      expect(await gateway.connections()).toEqual([]);
+    }
   }, 60_000);
 });
 

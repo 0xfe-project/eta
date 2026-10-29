@@ -12,6 +12,7 @@
     "test": "bun --bun vitest --run --passWithNoTests"
   },
   "dependencies": {
+    "@cpajs/codex-auth": "0.1.0-rc.6",
     "@cpajs/cpa": "0.1.0-rc.7",
     "@earendil-works/pi-ai": "0.85.1",
     "@eta/client-contracts": "*",
