@@ -7,6 +7,7 @@ import type { KernelTool } from "@eta/core";
 import type { Server } from "bun";
 import { channel } from "node:diagnostics_channel";
 import process from "node:process";
+import { AppError } from "@searxng-js/sex-scrape";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { sliceText, Web } from "../src/web/service";
 import { pageText, webSessionTools } from "../src/web/tools";
@@ -67,6 +68,9 @@ beforeAll(() => {
       if (url.pathname !== "/search")
         return new Response("no", { status: 404 });
       asked.push(url.searchParams);
+      // A SearXNG that never answers this one: what a cancel has to cut short.
+      if (url.searchParams.get("q") === "hang")
+        return new Promise<Response>(() => {});
       if (searxStatus !== 200)
         return new Response("down", { status: searxStatus });
       const news = url.searchParams.get("categories") === "news";
@@ -131,9 +135,17 @@ function toolsOf(web: Web): Map<string, KernelTool> {
   return new Map(tools.map((tool) => [tool.name, tool]));
 }
 
-async function run(tool: KernelTool | undefined, args: unknown) {
+async function run(
+  tool: KernelTool | undefined,
+  args: unknown,
+  signal?: AbortSignal,
+) {
   if (tool === undefined) throw new Error("no such tool");
-  const result = (await tool.execute(args, { turn: 1, toolCallId: "t1" })) as {
+  const result = (await tool.execute(args, {
+    turn: 1,
+    toolCallId: "t1",
+    ...(signal === undefined ? {} : { signal }),
+  })) as {
     content: { type: string; text: string }[];
     isError?: boolean;
   };
@@ -236,9 +248,11 @@ describe("web_fetch", () => {
     const { web } = makeWeb({ allowPrivateNetwork: true });
     const controller = new AbortController();
     controller.abort();
-    await expect(
-      web.fetchPage(`${siteUrl}/article`, {}, controller.signal),
-    ).rejects.toMatchObject({ code: "TIMEOUT" });
+    const error: unknown = await web
+      .fetchPage(`${siteUrl}/article`, {}, controller.signal)
+      .catch((reason: unknown) => reason);
+    expect(AppError.isInstance(error)).toBe(true);
+    expect(error).toMatchObject({ code: "TIMEOUT" });
   });
 });
 
@@ -319,6 +333,21 @@ describe("web_search", () => {
       excludeDomains: ["bun.sh"],
     });
     expect(both.isError).toBe(true);
+  });
+
+  it("stops when the call is cancelled, whatever SearXNG is doing", async () => {
+    const { web } = makeWeb({ searxngUrl: searxUrl });
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 100);
+    const started = Date.now();
+    const { text, isError } = await run(
+      toolsOf(web).get("web_search"),
+      { query: "hang" },
+      controller.signal,
+    );
+    expect(isError).toBe(true);
+    expect(text).toMatch(/^TIMEOUT: Request cancelled/);
+    expect(Date.now() - started).toBeLessThan(5_000);
   });
 
   it("names a SearXNG that fails", async () => {

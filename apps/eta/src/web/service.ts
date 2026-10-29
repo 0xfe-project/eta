@@ -11,6 +11,8 @@
  * - **Searching** asks an external SearXNG when the host was given one (`--searxng-url`), and
  *   otherwise the prebuilt SearXNG the library runs as a child of this process, started on the
  *   first search and gone with the host. Where no prebuilt binary exists there is no search.
+ * - **Errors** are the libraries' `AppError`, the host's own refusals included, so a tool has one
+ *   kind of failure to describe.
  * - **Logs**: the libraries write nothing themselves; their warnings and errors arrive on
  *   `node:diagnostics_channel` and go to the host's `warn`.
  *
@@ -23,7 +25,7 @@ import { subscribe, unsubscribe } from "node:diagnostics_channel";
 import process from "node:process";
 import { TARGETS } from "@searxng-js/searxng";
 import { ExtractPool } from "@searxng-js/sex-page";
-import { scrapeUrl } from "@searxng-js/sex-scrape";
+import { AppError, scrapeUrl } from "@searxng-js/sex-scrape";
 import { search } from "@searxng-js/sex-search";
 import { SearxngService } from "@searxng-js/sex-searxng";
 import pLimit from "p-limit";
@@ -63,44 +65,6 @@ export interface PageSlice {
 export interface SearchOutcome {
   data: SearchData;
   warning: string | undefined;
-}
-
-/** A failure of the libraries, as a model reads it: their `code`, then what happened. */
-export class WebError extends Error {
-  readonly code: string;
-
-  constructor(code: string, message: string) {
-    super(message);
-    this.name = "WebError";
-    this.code = code;
-  }
-}
-
-const SEX_ERROR = Symbol.for("searxng-js.sex.error");
-
-/**
- * The libraries' errors are `AppError`s, which no package exports: they are known by the marker
- * every copy of the class carries, and read by their fields, not by `instanceof`.
- */
-export function webErrorOf(error: unknown): WebError {
-  if (error instanceof WebError) return error;
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    (error as Record<symbol, unknown>)[SEX_ERROR] === true
-  ) {
-    const { code, message } = error as { code?: unknown; message?: unknown };
-    return new WebError(
-      typeof code === "string" ? code : "INTERNAL_ERROR",
-      typeof message === "string" ? message : String(error),
-    );
-  }
-  if (error instanceof Error && error.name === "AbortError")
-    return new WebError("TIMEOUT", "Request cancelled");
-  return new WebError(
-    "INTERNAL_ERROR",
-    error instanceof Error ? error.message : String(error),
-  );
 }
 
 /** The channels the libraries publish their log lines on. */
@@ -188,7 +152,7 @@ export class Web {
     }
     const total = page.markdown.length;
     if (offset > 0 && offset >= total)
-      throw new WebError(
+      throw new AppError(
         "BAD_REQUEST",
         `offset ${offset} is past the end of the page (${total} characters)`,
       );
@@ -216,8 +180,8 @@ export class Web {
         scrapeLimit: this.scrapeLimit,
         extractPool: this.extractPool,
         searchDomainLimit: this.searchDomainLimit,
-        // Waiting for a SearXNG that is still starting is waiting the call may stop.
-        searxng: { url: async () => await raced(searxng.url(), signal) },
+        // The search waits for a SearXNG that is still starting within its signal and timeout.
+        searxng,
       },
       request,
       signal,
@@ -266,9 +230,9 @@ export class Web {
   /** Made on the first search, so the managed SearXNG gets the proxy eta's settings applied. */
   private searxngService(): SearxngService {
     if (this.closed)
-      throw new WebError("INTERNAL_ERROR", "the host is stopping");
+      throw new AppError("INTERNAL_ERROR", "the host is stopping");
     if (!this.searchable)
-      throw new WebError(
+      throw new AppError(
         "SEARCH_BACKEND_UNAVAILABLE",
         "this host has no SearXNG to search with",
       );
@@ -358,25 +322,6 @@ function proxyFromEnvironment(): string | undefined {
     if (value !== undefined && value.trim() !== "") return value.trim();
   }
   return undefined;
-}
-
-/** `promise`, or a cancel as soon as `signal` aborts (the promise itself goes on). */
-async function raced<T>(
-  promise: Promise<T>,
-  signal: AbortSignal | undefined,
-): Promise<T> {
-  if (signal === undefined) return await promise;
-  if (signal.aborted) throw new WebError("TIMEOUT", "Request cancelled");
-  let stop!: () => void;
-  const aborted = new Promise<never>((_, reject) => {
-    stop = () => reject(new WebError("TIMEOUT", "Request cancelled"));
-    signal.addEventListener("abort", stop, { once: true });
-  });
-  try {
-    return await Promise.race([promise, aborted]);
-  } finally {
-    signal.removeEventListener("abort", stop);
-  }
 }
 
 /**

@@ -1,6 +1,6 @@
 # 读网页与搜索
 
-两个产品工具：`web_fetch` 读一个网页，返回 Markdown；`web_search` 搜索网页，返回排好序的结果。两者都在主 node 的进程里直接调用库（`@searxng-js/sex-scrape`、`sex-search`、`sex-searxng`、`sex-page`），不另起服务。代码在 `apps/eta/src/web/`。
+两个产品工具：`web_fetch` 读一个网页，返回 Markdown；`web_search` 搜索网页，返回排好序的结果。两者都在主 node 的进程里直接调用库（`@searxng-js/sex-scrape`、`sex-search`、`sex-searxng`、`sex-page`，0.1.1），不另起服务。代码在 `apps/eta/src/web/`。
 
 ## 为什么是会话工具
 
@@ -19,6 +19,14 @@
 | `--no-web`            | 两个工具都不加载                                                       |
 
 `startHost` 默认不加载（测试起的 host 没有这两个工具），`main.ts` 把它打开，和 LLM 网关的做法一样。
+
+## 参数为什么是 eta 自己写的
+
+sex-scrape / sex-search 0.1.1 的 zod schema 描述已经是中性的说法，但工具的参数仍然用 eta 自己的 TypeBox 定义（描述借鉴 sex-lite 的 MCP 工具）：
+
+- harness 用 TypeBox 校验参数（`defineTool`），sex 的是 zod，要转一道。
+- sex 的 `ScrapeRequest` / `SearchRequest` 是 Firecrawl 的整套选项：`formats`、`actions`、`waitFor`、`headers`、`maxAge`、`parsers`、`proxy`、`scrapeOptions`……大半要浏览器、LLM 或缓存，在 eta 里只会得到 501；`headers`、`timeout` 这类也不该交给模型。给模型看的越少，它越少犯错，提示词也越短。
+- eta 要的东西 sex 的 schema 里没有：`web_fetch` 的 `offset`（分段读），`web_search` 用 `timeRange` 枚举代替 Firecrawl 的 `tbs` 字符串，`limit` 和 `includeDomains` 的上限更小。
 
 ## web_fetch
 
@@ -54,8 +62,8 @@ eta 的网络设置（`@eta/server` 的 `initializeNetwork`）把代理写进环
 
 ## 错误和日志
 
-- 库的错误是 `AppError`，但没有包导出这个类：按 `Symbol.for("searxng-js.sex.error")` 标记认出，读它的 `code` 和 `message`，不用 `instanceof`。模型看到的是 `CODE: message`（例如 `PRIVATE_NETWORK_BLOCKED: ...`、`SEARCH_BACKEND_UNAVAILABLE: ...`），作为工具错误。
-- 取消：工具把会话的 `AbortSignal` 传给库；等托管 SearXNG 启动的那一段也会被取消打断。
+- 库的错误是 `AppError`（从 `@searxng-js/sex-scrape` 导入），主 node 自己的拒绝（offset 越界、没有 SearXNG）也用它，工具只有一种失败要描述。判断用 `AppError.isInstance(e)`，不用 `instanceof`：每个发布包里各打包了一份这个类。模型看到的是 `CODE: message`（例如 `PRIVATE_NETWORK_BLOCKED: ...`、`SEARCH_BACKEND_UNAVAILABLE: ...`），作为工具错误。
+- 取消和超时：工具把会话的 `AbortSignal` 传给库。`search()` 等托管 SearXNG 启动时也看这个 signal 和请求的 `timeout`（sex-search 0.1.1 起），取消或超时立刻是 `TIMEOUT`（“... while waiting for SearXNG to start”），SearXNG 在后台接着启动，下一次搜索直接用。
 - 日志：库自己不写 stdout/stderr，而是发到 `node:diagnostics_channel` 的 `searxng-js:sex:{scrape,search,searxng,page}`。主 node 订阅这几个频道，`warn` 和 `error` 进主 node 的 `warn`（`[eta] web: <包>: <消息> k=v`），`debug`、`info`（每次抓取、SearXNG 自己的输出）不记。
 
 ## 测试

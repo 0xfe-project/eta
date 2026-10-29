@@ -14,13 +14,19 @@ import type { SearchData, SearchRequest } from "@searxng-js/sex-search";
 import type { SessionHooks } from "../session-hooks";
 import type { PageSlice, Web } from "./service";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
+import { AppError } from "@searxng-js/sex-scrape";
 import { Type } from "typebox";
-import { webErrorOf } from "./service";
 
-const failure = (error: unknown) => {
-  const { code, message } = webErrorOf(error);
-  return toolError(`${code}: ${message}`);
-};
+/**
+ * A failure as the model reads it: the library's code, then what happened. `isInstance` rather
+ * than `instanceof`, because every published sex package bundles its own copy of the class.
+ */
+const failure = (error: unknown) =>
+  toolError(
+    AppError.isInstance(error)
+      ? `${error.code}: ${error.message}`
+      : `INTERNAL_ERROR: ${error instanceof Error ? error.message : String(error)}`,
+  );
 
 export function webSessionTools(
   web: Web,
