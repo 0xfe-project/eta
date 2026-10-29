@@ -52,7 +52,10 @@ const jwt = (claims: unknown) =>
  * OpenAI's device authorization: approved on the second poll, unless `mode` says the login is
  * refused (a final error while polling) or the exchange fails. It keeps what it was sent.
  */
-function fakeOpenAI(mode: "ok" | "refused" | "exchange-fails" = "ok") {
+function fakeOpenAI(
+  mode: "ok" | "refused" | "exchange-fails" = "ok",
+  email = "ada@example.com",
+) {
   let polls = 0;
   const sent: { path: string; body: string }[] = [];
   const server = Bun.serve({
@@ -82,7 +85,7 @@ function fakeOpenAI(mode: "ok" | "refused" | "exchange-fails" = "ok") {
           return new Response("nope", { status: 500 });
         return Response.json({
           id_token: jwt({
-            email: "ada@example.com",
+            email,
             "https://api.openai.com/auth": {
               chatgpt_account_id: "acct-1",
               chatgpt_plan_type: "plus",
@@ -290,7 +293,10 @@ describe("the gateway's accounts", () => {
     });
     // The credential file, as CPA's own device login writes it.
     const auths = join(dataDir, "llm", "auths");
-    const [file] = await readdir(auths);
+    // CPA keeps a `.lock` beside it.
+    const [file] = (await readdir(auths)).filter((name) =>
+      name.endsWith(".json"),
+    );
     expect(file).toMatch(/^codex-[0-9a-f]{8}-ada@example\.com-plus\.json$/);
     const credential = JSON.parse(await readFile(join(auths, file!), "utf8"));
     expect(credential).toMatchObject({
@@ -324,6 +330,33 @@ describe("the gateway's accounts", () => {
     });
     await expect(gateway.loginStart("nobody")).rejects.toMatchObject({
       code: "not_found",
+    });
+  }, 60_000);
+
+  it("keep a Codex login whose email has two dots in a row", async () => {
+    const email = "first..last@example.com";
+    const openai = fakeOpenAI("ok", email);
+    stops.push(openai.stop);
+    const dataDir = await tempDir("eta-llm-");
+    const { gateway } = await open(dataDir, { codexIssuer: openai.url });
+    const login = await gateway.loginStart("codex");
+    await until(
+      async () => (await gateway.loginPoll(login.id)).status !== "pending",
+    );
+    expect((await gateway.loginPoll(login.id)).status).toBe("succeeded");
+    // CPA took the file under that name, and serves the account.
+    // CPA keeps a `.lock` beside it.
+    const [file] = (await readdir(join(dataDir, "llm", "auths"))).filter(
+      (name) => name.endsWith(".json"),
+    );
+    expect(file).toMatch(
+      /^codex-[0-9a-f]{8}-first\.\.last@example\.com-plus\.json$/,
+    );
+    await until(async () => (await gateway.connections()).length === 1);
+    expect((await gateway.connections())[0]).toMatchObject({
+      connector: "codex",
+      label: email,
+      state: "active",
     });
   }, 60_000);
 
