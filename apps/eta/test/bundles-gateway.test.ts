@@ -1,16 +1,16 @@
 /* eslint-disable no-template-curly-in-string -- `${NAME}` is the bundle format's own variable syntax */
 import process from "node:process";
-/**
- * A bundle's MCP servers reach the LLM gateway with the agent's own key: `${ETA_GATEWAY_URL}` and
- * `${ETA_AGENT_KEY}` resolve for a session on the host (the loopback gateway) and on a daemon
- * (the primary's `/llm` route, which forwards to `/v1` for that key and for nothing else), and
- * the key ends with the agent.
- *
- * The gateway is the real native library, so this file has one host.
- */
-import { cpaExtraFor, fakeUpstream } from "@eta/llm-gateway/testing";
 import { describe, expect, it } from "vitest";
 import { digestOf, FAKE_MCP, writeBundle } from "./support/bundles";
+/**
+ * A bundle's MCP servers reach the LLM gateway with the agent's own key: `${ETA_GATEWAY_URL}` and
+ * `${ETA_AGENT_KEY}` resolve for a session on the host and on a daemon (the primary's `/llm`
+ * route, which forwards to `/v1` for that key and for nothing else), and the key ends with the
+ * agent.
+ *
+ * The gateway is the real CLIProxyAPI (a child process).
+ */
+import { cpaExtraFor, fakeUpstream } from "./support/fake-upstream";
 import { tempDir } from "./support/host";
 import { call, say, scriptedModels } from "./support/models";
 import { remoteWorld } from "./support/remote";
@@ -65,7 +65,7 @@ describe("a bundle's tools and the LLM gateway", () => {
         return requests.at(-1)!.transcript.join("\n");
       };
 
-      // On the host's machine: the loopback gateway, with the agent's key.
+      // On the host's machine: the host's own route on loopback, with the agent's key.
       const local = await r.agent("Ada", { bundles: ["gw"] });
       const here = await r.project();
       const onHost = await run(local, here.id);
@@ -91,7 +91,7 @@ describe("a bundle's tools and the LLM gateway", () => {
       for (const headers of [
         {},
         bearer("etak.nobody.0000"),
-        bearer(`${llm.scopedKey(away.id).slice(0, -1)}0`),
+        bearer(`${key.slice(0, -1)}${key.endsWith("0") ? "1" : "0"}`),
         bearer("a-key-that-is-not-an-agent-key"),
       ])
         expect((await fetch(models1, { headers })).status).toBe(401);

@@ -9,7 +9,7 @@
   },
   "scripts": {
     "prepare": "lefthook install",
-    "setup": "bun install && uv sync --project apps/memory --dev && bun run --cwd packages/llm-gateway build",
+    "setup": "bun install && uv sync --project apps/memory --dev",
     "dev": "bun scripts/dev.ts",
     "build": "turbo run build",
     "check": "dprint check && turbo run build typecheck lint //#lint:repo test //#knip",

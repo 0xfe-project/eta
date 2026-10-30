@@ -56,7 +56,7 @@ export interface EnsureInput {
   cwd: string;
   /** The session the participant row names, when it names one. */
   existing: string | null;
-  /** The base of the system prompt: the harness's own, who the agent is, what it was told. */
+  /** Who the agent is and what it was told: the platform section of its system prompt. */
   prompt: string;
   /** What `prompt` and the persona were read from; a session opened with another is reopened. */
   stamp: string;

@@ -1,7 +1,7 @@
 /**
  * The `llm` target: model subscriptions and API keys the LLM gateway holds.
  *
- * The gateway (an embedded CLIProxyAPI, see docs/architecture/llm-gateway.md) logs in to a
+ * The gateway (CLIProxyAPI in a child process, see docs/architecture/llm-gateway.md) logs in to a
  * Codex or Grok subscription with a device code, or takes a Google AI Studio API key, keeps the
  * credentials, and serves the models they unlock as one provider, `llm`. A model of it is named
  * `llm:<model id>` like any other. Three sections: `accounts` (who is connected and in what
@@ -34,9 +34,8 @@ export type LlmConnectionState =
   | "degraded";
 
 /**
- * Every code the gateway reports a failure or a reason with. The list is the gateway's
- * (`packages/llm-gateway/gateway/codes.go`, whose comment table says what each means and which
- * params it carries); `codes.json` there is the same list, and a test keeps the two equal.
+ * Every code the gateway reports a failure or a reason with: a closed set. What each means and
+ * which params it carries is in the gateway (`apps/eta/src/llm/problems.ts`).
  */
 export const LLM_CODES = [
   "login_expired",
@@ -111,7 +110,7 @@ export interface LlmConnection {
 }
 
 export interface LlmAccounts {
-  /** False while the gateway is starting (or is not built into this host). */
+  /** False while the gateway is starting. */
   ready: boolean;
   connectors: LlmConnector[];
   connections: LlmConnection[];

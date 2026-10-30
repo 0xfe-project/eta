@@ -376,4 +376,35 @@ describe("a tool cancelled by this run", () => {
     expect(toolEnds[0]?.result).toEqual({ isError: true, content: "aborted" });
     void kernel.dispose();
   });
+  it("does not run the tool calls of a generation that came back aborted", async () => {
+    // What a stop looks like from the inside: the stream is cut, and the
+    // assistant message is not history — its arguments may be half-written, so
+    // the turn records no entry for it. The batch used to run anyway, and its
+    // result *was* recorded: a tool result whose call never arrived, which a
+    // provider refuses every later request for (HTTP 400, the session dead).
+    const models = fakeModels([
+      assistantMessage({
+        stopReason: "aborted",
+        content: [
+          { type: "toolCall" as const, id: "c1", name: "wait", arguments: {} },
+        ],
+      }),
+    ]);
+    const { kernel, runner, runEnds, toolEnds } = setup(models);
+    const ran: string[] = [];
+    kernel.tools.register({
+      name: "wait",
+      execute: () => {
+        ran.push("wait");
+        return "done";
+      },
+    });
+    kernel.inject(userMsg("go"));
+
+    expect((await runner.run()).status).toBe("aborted");
+    expect(runEnds).toEqual([{ status: "aborted" }]);
+    expect(ran).toEqual([]);
+    expect(toolEnds).toEqual([]);
+    void kernel.dispose();
+  });
 });

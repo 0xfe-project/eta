@@ -219,7 +219,7 @@ export class DaemonNode {
           warn,
         });
       },
-      baseSystemPromptFor: (meta) => {
+      agentPromptFor: (meta) => {
         const opening = this.#openingOf(meta);
         if (opening === undefined) return undefined;
         this.#opened.set(meta.id, opening.stamp);
@@ -527,7 +527,7 @@ export class DaemonNode {
     const sessions = this.#service();
     if (args.modelSpec !== undefined) this.#catalog.add(args.modelSpec);
     this.#openings.set(keyOf(args.conversationId, args.agentId), {
-      prompt: args.systemPrompt,
+      prompt: args.agentPrompt,
       stamp: args.stamp,
       tools: args.tools,
       cards: (args.personaCards ?? []) as PersonaCard[],

@@ -8,8 +8,8 @@ eta 是一个人用来指挥多个智能体的工作台。服务端是**一个 B
    ▼
 主 node  apps/eta                              ← 唯一的进程；SQLite + 文件在一个数据目录里
    ├─ 上游地板  packages/eta-server：sessions、providers、settings、personas
-   ├─ 产品插件  agents machines projects conversations inbox email usage tasks artifacts routines bundles [memory] [llm]
-   ├─ LLM 网关  packages/llm-gateway：嵌入 CLIProxyAPI 的 Go 库，bun:ffi 加载（订阅账号、Gemini key）
+   ├─ 产品插件  agents machines projects conversations inbox usage tasks artifacts routines bundles [memory] [llm]
+   ├─ LLM 网关  apps/eta/src/llm：CLIProxyAPI 子进程（@cpajs/cpa）与账号、目录、额度（订阅账号、Gemini key）
    ├─ 本机会话  harness（packages/eta-core、eta-harness…）直接在进程里跑
    │
    ├──── /machines/connect（WSS，daemon 反向拨入）──▶ eta-daemon（别的机器：只跑会话）
@@ -25,7 +25,7 @@ eta 是一个人用来指挥多个智能体的工作台。服务端是**一个 B
 | eta-daemon     | `apps/daemon` | 可选，每台额外的机器一个。`bun build --compile` 出的单文件，不含 Web、数据库、产品插件和模型配置         |
 | 记忆边车       | `apps/memory` | 可选。Python（mem0 + fastembed），自己的 PostgreSQL（pgvector）。没有它，host 不挂载记忆，界面隐藏记忆页 |
 
-没有别的服务：没有控制面、消息队列、容器编排或主库。LLM 网关不是服务，是加载进 host 进程的一个库（见 [LLM 网关](llm-gateway.md)）。
+没有别的服务：没有控制面、消息队列、容器编排或主库。LLM 网关不是独立服务：CLIProxyAPI 是 host 启动并看管的子进程，随 host 退出（见 [LLM 网关](llm-gateway.md)）。
 
 ## 代码布局
 
@@ -44,7 +44,6 @@ packages/
   eta-plugin-akhook   声明式规则（akhook 的配置）与流式规则，见 [akhook](akhook.md)
   eta-mcp             MCP 库：代理工具、懒连接、元数据缓存、直接工具、OAuth，见 [MCP](mcp.md)
   client-wire-proto、client-contracts   线上的帧，以及产品 target 的类型（Web 与 host 共用）
-  llm-gateway   Go（CLIProxyAPI）网关，c-shared 库 + bun:ffi 绑定
 bundles/      内置的环境包（github、grok、oomol），见[环境包](bundles.md)；github 的 App、令牌与向导见 [GitHub](github.md)（那条链默认不加载，`--github` 才挂上）
 deploy/       Dockerfile、memory.Dockerfile、compose.yaml
 ```

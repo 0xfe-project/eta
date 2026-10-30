@@ -45,13 +45,14 @@ describe("an agent's session in a conversation", () => {
       "Executor",
     );
 
-    // The agent's words are in the system prompt, after the harness's own.
+    // The agent's words are in the platform section, after the harness's own base.
     const system = requests[0]!.system;
     expect(system).toContain("Always answer in haiku.");
-    expect(system).toContain("In this conversation you are Ada.");
-    expect(system.indexOf("You are Eta")).toBeLessThan(
+    expect(system).toContain("<agent>\nIn this conversation you are Ada.");
+    expect(system.indexOf("You came here to help")).toBeLessThan(
       system.indexOf("In this conversation you are Ada."),
     );
+    expect(system).not.toContain("You are Eta");
   });
 
   it("is one per agent and conversation: another conversation is another session", async () => {

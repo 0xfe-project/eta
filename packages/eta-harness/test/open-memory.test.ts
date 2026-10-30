@@ -59,7 +59,7 @@ describe("the memory block in a session", () => {
     // The block is the adaptive tail: it comes after the stable sections.
     expect(
       promptOf(models).indexOf("the harness owns prompts"),
-    ).toBeGreaterThan(promptOf(models).indexOf("You are Eta"));
+    ).toBeGreaterThan(promptOf(models).indexOf("You came here to help"));
     expect(session.memory).toBeDefined();
 
     // Someone edits the file between turns (a human, or another session): the next
@@ -87,7 +87,7 @@ describe("the memory block in a session", () => {
     session.kernel.inject(userMsg("hello"));
     await session.runner.run();
     const prompt = promptOf(models);
-    expect(prompt).toContain("You are Eta");
+    expect(prompt).toContain("You came here to help");
     // (The base prompt mentions `<memory>` — it tells the agent what a memory block
     // is — so the check is for the rendered note file, not for the tag.)
     expect(prompt).not.toContain("eta memory (untrusted)");

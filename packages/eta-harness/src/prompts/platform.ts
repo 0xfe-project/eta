@@ -61,3 +61,15 @@ export function renderPlatformBlock(info: PlatformPromptInfo): string {
   lines.push("</platform>");
   return lines.join("\n");
 }
+
+/**
+ * The agent block: who this agent is in the deployment around it — its name, its
+ * place in a conversation or task, the instructions it was given. The text is the
+ * app's (only it knows its agents); the harness only frames it, and puts it in the
+ * platform section rather than the base prompt, so the base reads the same for
+ * every agent and nothing in it names one. Empty text renders nothing.
+ */
+export function renderAgentBlock(text: string): string {
+  const body = text.trim();
+  return body.length === 0 ? "" : `<agent>\n${body}\n</agent>`;
+}

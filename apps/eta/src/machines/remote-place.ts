@@ -149,7 +149,7 @@ export class RemotePlace implements SessionPlace {
       ...(model === undefined ? {} : { model }),
       ...(thinkingLevel === undefined ? {} : { thinkingLevel }),
       ...(agent.persona === "" ? {} : { persona: agent.persona }),
-      systemPrompt: input.prompt,
+      agentPrompt: input.prompt,
       stamp: input.stamp,
       personaCards: await this.#cards(),
       ...(known === undefined

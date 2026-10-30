@@ -10,7 +10,7 @@
 <数据目录>/
   eta.sqlite(-wal, -shm)    产品数据库
   config.json               上游设置（模型、provider 等；providers 插件维护）
-  llm/                      LLM 网关的状态：auths/ 凭据、models.json、providers.json（Gemini key）
+  llm/                      LLM 网关的状态：auths/ 凭据、models.json、config.yaml（CPA 的配置，含 Gemini key）
   sessions/<会话 id>/       上游会话：meta.json + journal.jsonl（本机会话）
   attachments/<对话 id>/    用户附在消息上的文件：<附件 id>-<文件名>（上传中是 .up-<id>，重启时清理）
   agents/<智能体 id>/       智能体的工作区（它同时是一个 project）

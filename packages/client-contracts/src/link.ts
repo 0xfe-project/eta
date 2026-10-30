@@ -190,8 +190,8 @@ export interface OpenSessionArgs {
   model?: string;
   thinkingLevel?: string;
   persona?: string;
-  /** The base of the system prompt. */
-  systemPrompt: string;
+  /** Who the agent is and what it was told; the daemon puts it in the platform section. */
+  agentPrompt: string;
   /** What the prompt and persona were read from; a session opened with another is reopened. */
   stamp: string;
   /** The persona cards the user keeps on the primary; the daemon has its own and builtin ones. */

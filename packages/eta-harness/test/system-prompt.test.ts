@@ -120,7 +120,30 @@ describe("the composer", () => {
   });
 
   it("ships the base prompt and the builtin personas", () => {
-    expect(DEFAULT_SYSTEM_PROMPT).toContain("You are Eta");
+    // The base names no agent: who the agent is arrives in the platform section.
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain("You are Eta");
+    // It describes every tool a session is given by default, by the name it is registered under.
+    for (const tool of [
+      "TaskCreate",
+      "TaskUpdate",
+      "TaskList",
+      "TaskGet",
+      "read",
+      "edit",
+      "write",
+      "bash",
+      "update_state",
+      "check_state",
+      "list_state",
+      "Agent",
+      "get_subagent_result",
+      "steer_subagent",
+      "ask_user",
+    ])
+      expect(DEFAULT_SYSTEM_PROMPT).toMatch(new RegExp(`\\b${tool}\\b`));
+    // And no tool that does not exist.
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain("multi_tool_use");
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain("update_todos");
     expect(DEFAULT_SYSTEM_PROMPT).toContain("<current_tasks>");
     expect(Object.keys(builtinPersonas()).sort()).toEqual([
       "Artist",

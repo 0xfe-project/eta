@@ -44,7 +44,10 @@ describe("core", () => {
 
     const markers: [string, string][] = [
       ["the base prompt", "You came here to help the person you're talking to"],
-      ["the base prompt's opening", "You are Eta"],
+      [
+        "the base prompt's tool guide",
+        "Your tools — the ones a session has by default",
+      ],
       ["the task review prompt", TASK_REVIEW_PROMPT.slice(0, 60)],
       ["the task update reply", TASK_UPDATE_SUCCESS],
       ["a builtin persona card", builtinPersonas().Executor.slice(0, 60)],

@@ -15,7 +15,8 @@ import { useTarget, useWireMutation, useWireState } from "@/queries/wire";
 // The LLM gateway on the wire: the `llm` target, whose `accounts` section says who is connected
 // and in what state, `models` the catalog the accounts unlock and `quota` the subscription
 // windows the providers report. Logging in is a few calls (start, poll, submit a key, cancel).
-// A host without the gateway library has no `llm` plugin, and everything here is then empty.
+// A host without the gateway (started with --no-llm, or whose CPA did not start) has no `llm`
+// plugin, and everything here is then empty.
 
 const TARGET = "llm";
 

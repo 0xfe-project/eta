@@ -1,10 +1,10 @@
 /**
  * The `llm` plugin: the gateway's accounts, models and quota on the wire.
  *
- * The gateway holds the credentials and derives every status itself (CLIProxyAPI's routing state
- * is the truth); this plugin keeps a copy of what it said and publishes it. Reading accounts and
- * models costs nothing (it is memory in the same process), so they are re-read every few seconds
- * and pushed when they changed. Quota is different: it asks each provider, with the account's
+ * CLIProxyAPI holds the credentials, and its routing state is the truth; the gateway derives every
+ * status from it and this plugin keeps a copy of what it said and publishes it. Reading accounts
+ * and models costs a few loopback requests to CPA, so they are re-read every few seconds and
+ * pushed when they changed. Quota is different: it asks each provider, with the account's
  * token, what the subscription has left. That costs no quota, but it is a request, so it is read
  * once at start, after a login, on `refresh`, and every ten minutes.
  *
@@ -17,12 +17,13 @@ import type {
   LlmModel,
   LlmQuota,
 } from "@eta/client-contracts";
-import type { CatalogModel, GatewayClient } from "./client";
+import type { CatalogModel, Gateway } from "./gateway";
 import type { GatewayModels } from "./models";
 import { Args, productPlugin, publish } from "../wire";
+import { LlmError } from "./problems";
 
 export interface LlmPluginDeps {
-  client: GatewayClient;
+  gateway: Gateway;
   models: GatewayModels;
   warn: (message: string) => void;
   /** How often accounts and models are re-read. */
@@ -38,7 +39,22 @@ function view(model: CatalogModel): LlmModel {
 }
 
 export function llmPlugin(deps: LlmPluginDeps, applied: () => void) {
-  const { client, models, warn } = deps;
+  const { gateway, models, warn } = deps;
+  /** A failure the gateway did not explain is still one the client can name. */
+  const explained = async <T>(run: () => Promise<T>): Promise<T> => {
+    try {
+      return await run();
+    } catch (error) {
+      if (error instanceof LlmError) throw error;
+      warn(`[eta] llm: ${String(error)}`);
+      throw new LlmError(
+        "gateway_unavailable",
+        "The gateway failed.",
+        undefined,
+        error,
+      );
+    }
+  };
   return productPlugin(
     "llm",
     ({ wire }) => {
@@ -65,15 +81,12 @@ export function llmPlugin(deps: LlmPluginDeps, applied: () => void) {
       const sync = (): Promise<void> => {
         syncing ??= (async () => {
           try {
+            const { connections: nextConnections, models: nextCatalog } =
+              await gateway.status();
             if (!ready) {
-              if (!(await client.ready())) return;
-              connectors = await client.connectors();
+              connectors = gateway.connectors();
               ready = true;
             }
-            const [nextConnections, nextCatalog] = await Promise.all([
-              client.connections(),
-              client.models(),
-            ]);
             const modelsMoved =
               JSON.stringify(nextCatalog) !== JSON.stringify(catalog);
             connections = nextConnections;
@@ -90,7 +103,7 @@ export function llmPlugin(deps: LlmPluginDeps, applied: () => void) {
       };
       const readQuota = async (): Promise<void> => {
         try {
-          quota = await client.quota();
+          quota = await gateway.usage();
           if (!closed) wire.pushNow("llm");
         } catch (error) {
           warn(`[eta] llm: could not read quota: ${String(error)}`);
@@ -110,7 +123,7 @@ export function llmPlugin(deps: LlmPluginDeps, applied: () => void) {
 
       const registrations = [
         wire.handle("llm", "refresh", async () => {
-          const checked = await client.refresh();
+          const checked = await explained(() => gateway.refresh());
           connections = checked.connections;
           catalog = checked.models;
           quota = checked.quota;
@@ -120,11 +133,13 @@ export function llmPlugin(deps: LlmPluginDeps, applied: () => void) {
         }),
         wire.handle("llm", "loginStart", async (call) => {
           const args = new Args(call);
-          const login = await client.loginStart(args.string("connector"));
+          const connector = args.string("connector");
+          const login = await explained(() => gateway.loginStart(connector));
           return { result: { login } };
         }),
         wire.handle("llm", "loginPoll", async (call) => {
-          const login = await client.loginPoll(new Args(call).string("id"));
+          const id = new Args(call).string("id");
+          const login = await explained(() => gateway.loginPoll(id));
           // The credential is in as soon as the login succeeds; the catalog follows within
           // moments, so read it now rather than on the next tick.
           if (login.status === "succeeded") void after();
@@ -132,15 +147,14 @@ export function llmPlugin(deps: LlmPluginDeps, applied: () => void) {
         }),
         wire.handle("llm", "loginSubmit", async (call) => {
           const args = new Args(call);
-          const login = await client.loginSubmit(
-            args.string("id"),
-            args.string("apiKey"),
-          );
+          const [id, apiKey] = [args.string("id"), args.string("apiKey")];
+          const login = await explained(() => gateway.loginSubmit(id, apiKey));
           if (login.status === "succeeded") void after();
           return { result: { login } };
         }),
         wire.handle("llm", "loginCancel", async (call) => {
-          await client.loginCancel(new Args(call).string("id"));
+          const id = new Args(call).string("id");
+          await explained(() => gateway.loginCancel(id));
           return { result: {} };
         }),
         wire.handle("llm", "setEnabled", async (call) => {
@@ -148,12 +162,14 @@ export function llmPlugin(deps: LlmPluginDeps, applied: () => void) {
           const enabled = args.optionalBoolean("enabled");
           if (enabled === undefined)
             throw new Error("llm.setEnabled needs enabled");
-          await client.setEnabled(args.string("id"), enabled);
+          const id = args.string("id");
+          await explained(() => gateway.setEnabled(id, enabled));
           await sync();
           return { result: {} };
         }),
         wire.handle("llm", "remove", async (call) => {
-          await client.remove(new Args(call).string("id"));
+          const id = new Args(call).string("id");
+          await explained(() => gateway.remove(id));
           await sync();
           return { result: {} };
         }),
