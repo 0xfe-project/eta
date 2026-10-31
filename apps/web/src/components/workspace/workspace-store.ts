@@ -30,6 +30,7 @@ export type SettingsSection =
   | "machines"
   | "bundles"
   | "mcp"
+  | "email"
   | "connections"
   | "archived"
   | "appearance";

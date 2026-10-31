@@ -667,6 +667,11 @@
     padding-left: 11px;
     border-left: 1px solid var(--border);
   }
+  .turn-tasks[data-only-email-cards="true"] {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
   .task-fold {
     max-width: 28rem;
     border: 1px solid var(--border);

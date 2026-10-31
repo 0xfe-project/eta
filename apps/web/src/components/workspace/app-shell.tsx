@@ -1,7 +1,10 @@
+import type { EmailAccountStatus } from "@eta/client-contracts";
 import type { Icon } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
+import { ArrowsClockwiseIcon } from "@phosphor-icons/react/ArrowsClockwise";
 import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/EnvelopeSimple";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
@@ -21,6 +24,7 @@ import {
   SidebarGroup,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -32,6 +36,7 @@ import {
 import { ROUTINES_VISIBLE } from "@/lib/features";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useEmail, useVerifyEmailAccount } from "@/queries/email";
 import { useTasks } from "@/queries/tasks";
 import { AgentEditor } from "./agent-editor";
 import { CreateGroup } from "./groups";
@@ -52,6 +57,13 @@ const sections = [
     icon: ListChecksIcon,
   },
   {
+    to: "/email",
+    get label() {
+      return translate("navigation:sections.email");
+    },
+    icon: EnvelopeSimpleIcon,
+  },
+  {
     to: "/routines",
     get label() {
       return translate("navigation:sections.routines");
@@ -68,15 +80,67 @@ const shownSections = sections.filter(
 /** What each section holds for the user: tasks to accept. */
 function useBadges(): Partial<Record<(typeof sections)[number]["to"], number>> {
   const { tasks } = useTasks();
+  const { stats } = useEmail();
   return {
     "/tasks": tasks.filter((t) => t.status === "in_review").length,
+    "/email": stats.unread,
   };
 }
 
+const MAILBOX_STATUS = {
+  ready: "email:accountStatus.ready",
+  error: "email:accountStatus.error",
+  unverified: "email:accountStatus.unverified",
+} as const;
+
+/**
+ * What the 邮箱 row has to say about the accounts behind it, and the way to try again.
+ *
+ * The row is one destination, so the accounts are one state: every one of them ready is 连接正常,
+ * anything else is not. 连接异常 wins over 待检查 — a failure is the one a person has to act on,
+ * while an account nobody has checked yet is only a question. The button checks every account that
+ * is not ready, in turn: a failed check comes back as the account's own state, so there is nothing
+ * here to catch but the wire itself.
+ */
+function useMailboxRow(): {
+  status: EmailAccountStatus | undefined;
+  checking: boolean;
+  reconnect: () => Promise<void>;
+} {
+  const { accounts } = useEmail();
+  const verify = useVerifyEmailAccount();
+  const [checking, setChecking] = useState(false);
+  const status: EmailAccountStatus | undefined =
+    accounts.length === 0
+      ? undefined
+      : accounts.every((account) => account.status === "ready")
+        ? "ready"
+        : accounts.some((account) => account.status === "error")
+          ? "error"
+          : "unverified";
+  const reconnect = async () => {
+    if (checking) return;
+    setChecking(true);
+    try {
+      for (const account of accounts.filter(
+        (candidate) => candidate.status !== "ready",
+      )) {
+        await verify
+          .mutateAsync({ accountId: account.id })
+          .catch(() => undefined);
+      }
+    } finally {
+      setChecking(false);
+    }
+  };
+  return { status, checking, reconnect };
+}
+
 export function Sidebar() {
-  const { t: translateText } = useTranslation(["navigation"] as const);
+  const { t: translateText } = useTranslation(["navigation", "email"] as const);
   const { state, isMobile, toggleSidebar } = useSidebar();
   const badges = useBadges();
+  const mailbox = useMailboxRow();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   // The rail: the width 4rem of icons, and the same tree in it. Not the agent shelf's fold — that
   // one is the workspace store's, and the two never meet.
@@ -152,6 +216,14 @@ export function Sidebar() {
             ) : null}
             {shownSections.map(({ to, label, icon: Icon }) => {
               const count = badges[to];
+              // 邮箱 is the one destination whose page can be right there and useless, because the
+              // account behind it is not reachable — so it is the one row that says how it is.
+              const mail = to === "/email" ? mailbox : undefined;
+              const health =
+                mail?.status === undefined
+                  ? undefined
+                  : translateText(MAILBOX_STATUS[mail.status]);
+              const name = count ? `${label} · ${count}` : label;
               return (
                 <SidebarMenuItem key={to}>
                   <SidebarMenuButton
@@ -165,10 +237,28 @@ export function Sidebar() {
                   >
                     <Link
                       to={to}
-                      aria-label={count ? `${label} · ${count}` : label}
+                      aria-label={
+                        health === undefined ? name : `${name} · ${health}`
+                      }
                     >
                       <Icon aria-hidden="true" />
                       {rail ? null : <span>{label}</span>}
+                      {/* The state rides in the row, in the flow: it is what the label leads to
+                          a question about, and `pr-8` is already reserved for the button beside
+                          it by the row's own action. */}
+                      {rail || health === undefined ? null : (
+                        <span
+                          data-slot="mailbox-health"
+                          className={cn(
+                            "ml-auto shrink-0 font-mono text-[10px] text-muted-foreground",
+                            // The unread count keeps the row's right edge; the state steps
+                            // left of it rather than under it.
+                            count && "mr-6",
+                          )}
+                        >
+                          {health}
+                        </span>
+                      )}
                       {/* The badge the menu hides in the rail, as a corner mark on the icon:
                           folded away is not a reason to lose a count. The number is drawn here and
                           carried in the link's name, so it is neither silent nor said twice. */}
@@ -181,11 +271,47 @@ export function Sidebar() {
                           {count}
                         </span>
                       ) : null}
+                      {/* 4rem holds the icon and nothing beside it, so the state is a mark on the
+                          icon — and the link's name is where it is said. */}
+                      {rail && mail?.status !== undefined ? (
+                        <span
+                          data-slot="mailbox-dot"
+                          aria-hidden="true"
+                          className={cn(
+                            "absolute -right-1 -bottom-1 size-1.5 border border-sidebar",
+                            mail.status === "error"
+                              ? "bg-destructive"
+                              : "bg-muted-foreground",
+                          )}
+                        />
+                      ) : null}
                     </Link>
                   </SidebarMenuButton>
                   {!rail && count ? (
-                    <SidebarMenuBadge>{count}</SidebarMenuBadge>
+                    <SidebarMenuBadge
+                      className={health === undefined ? undefined : "right-7"}
+                    >
+                      {count}
+                    </SidebarMenuBadge>
                   ) : null}
+                  {rail || mail?.status === undefined ? null : (
+                    <SidebarMenuAction
+                      aria-label={translateText("email:reconnect")}
+                      title={translateText("email:reconnect")}
+                      // Nothing to reconnect is not a failure: the row says 连接正常 and this is the
+                      // door that stays shut until something is actually wrong.
+                      disabled={mail.checking || mail.status === "ready"}
+                      onClick={() => void mail.reconnect()}
+                    >
+                      <ArrowsClockwiseIcon
+                        aria-hidden="true"
+                        className={cn(
+                          "size-3.5",
+                          mail.checking && "motion-safe:animate-spin",
+                        )}
+                      />
+                    </SidebarMenuAction>
+                  )}
                 </SidebarMenuItem>
               );
             })}
@@ -234,8 +360,8 @@ export function BottomNav() {
           className={cn(
             "grid h-full",
             ROUTINES_VISIBLE
-              ? "grid-cols-[1fr_1fr_68px_1fr_1fr]"
-              : "grid-cols-4",
+              ? "grid-cols-[1fr_1fr_1fr_68px_1fr_1fr]"
+              : "grid-cols-[1fr_1fr_1fr_68px_1fr]",
           )}
         >
           <Tab
@@ -248,6 +374,12 @@ export function BottomNav() {
             label={translateText("sections.tasks")}
             icon={ListChecksIcon}
             badge={badges["/tasks"]}
+          />
+          <Tab
+            to="/email"
+            label={translateText("sections.email")}
+            icon={EnvelopeSimpleIcon}
+            badge={badges["/email"]}
           />
           <div className="flex items-center justify-center">
             <NewAction />
@@ -277,7 +409,7 @@ function Tab({
   icon: Icon,
   badge,
 }: {
-  to: "/" | "/tasks" | "/routines" | "/settings";
+  to: "/" | "/tasks" | "/email" | "/routines" | "/settings";
   label: string;
   icon: Icon;
   badge?: number | undefined;

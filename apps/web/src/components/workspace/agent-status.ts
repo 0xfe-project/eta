@@ -8,7 +8,7 @@ import { translate } from "@/lib/i18n";
  * stopping — because a conversation is a lane: an agent can be waiting in it, and a stop can be
  * on its way. Both are worth a word on a row, so the table covers the whole of `MemberStatus`.
  */
-export const memberStatusLabels: Record<MemberStatus, string> = {
+const memberStatusLabels: Record<MemberStatus, string> = {
   get idle() {
     return translate("agents:status.idle");
   },
@@ -25,6 +25,9 @@ export const memberStatusLabels: Record<MemberStatus, string> = {
     return translate("agents:status.stopping");
   },
 };
+
+export const memberStatusLabel = (status: MemberStatus) =>
+  memberStatusLabels[status];
 
 /** An agent's own statuses are a subset of a member's; one table, so the two can never disagree. */
 export const agentStatusLabels: Record<AgentStatus, string> =

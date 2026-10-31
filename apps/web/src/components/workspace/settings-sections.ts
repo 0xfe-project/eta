@@ -2,6 +2,7 @@ import type { Icon } from "@phosphor-icons/react";
 import type { SettingsSection } from "./workspace-store";
 import { ArchiveIcon } from "@phosphor-icons/react/Archive";
 import { DesktopIcon } from "@phosphor-icons/react/Desktop";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/EnvelopeSimple";
 import { LinkIcon } from "@phosphor-icons/react/Link";
 import { PackageIcon } from "@phosphor-icons/react/Package";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
@@ -60,6 +61,13 @@ export const settingsSections: {
       return translate("mcp:title");
     },
     icon: PlugIcon,
+  },
+  {
+    value: "email",
+    get label() {
+      return translate("email:title");
+    },
+    icon: EnvelopeSimpleIcon,
   },
   {
     value: "connections",
