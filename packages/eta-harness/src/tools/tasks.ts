@@ -1,5 +1,5 @@
 /**
- * The task tools — TaskCreate / TaskList / TaskGet / TaskUpdate (port of
+ * The step tools — create_step / list_steps / get_step / update_step (port of
  * eta-agent's `tools/tasks.ts`).
  *
  * They are a thin surface over the kernel's task primitive: the ledger itself
@@ -8,7 +8,14 @@
  * journaling service's business. What this file adds is the words a model reads
  * and the details a UI shows.
  *
- * Every mutation is a real mutation of the session's ledger, so a task list
+ * The names say "step", the kernel says `Task`: a step is one line of the plan
+ * this session keeps for itself, and the board's tasks are another thing that
+ * happens to share the word. The ledger's own type names are left alone because
+ * they are also what the journal writes to disk (`task:*` entries); renaming
+ * them would break replaying a session recorded before the change, for no gain
+ * the model can see.
+ *
+ * Every mutation is a real mutation of the session's ledger, so a step list
  * survives a restart because it was written down — not because it was echoed
  * back from a snapshot.
  */
@@ -16,16 +23,16 @@ import type { StoredTask, Task, TaskService, TaskStatus } from "@eta/core";
 import type { TSchema } from "typebox";
 import type { HarnessTool, ToolResult } from "./tool";
 import { Type } from "typebox";
-import { TASK_UPDATE_SUCCESS } from "../prompts/tasks";
+import { STEP_UPDATE_SUCCESS } from "../prompts/tasks";
 
 export type { TaskStatus };
 
-/** The names a deployment's task tools are registered under. */
-export const TASK_TOOL_NAMES: ReadonlySet<string> = new Set([
-  "TaskCreate",
-  "TaskList",
-  "TaskGet",
-  "TaskUpdate",
+/** The names the step tools are registered under. */
+export const STEP_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "create_step",
+  "list_steps",
+  "get_step",
+  "update_step",
 ]);
 
 const prioritySchema = Type.Optional(
@@ -39,7 +46,7 @@ const prioritySchema = Type.Optional(
 const createSchema = Type.Object({
   content: Type.String({ description: "What the step is, one line" }),
   deps: Type.Optional(
-    Type.Array(Type.String(), { description: "Task ids this waits on" }),
+    Type.Array(Type.String(), { description: "Step ids this waits on" }),
   ),
   priority: prioritySchema,
 });
@@ -62,15 +69,15 @@ const updateSchema = Type.Object({
   priority: prioritySchema,
 });
 
-/** The four task tools over a session's ledger. */
-export function createTaskTools(
+/** The four step tools over a session's ledger. */
+export function createStepTools(
   tasks: TaskService,
 ): HarnessTool<object | undefined, TSchema, unknown>[] {
   return [
     {
-      name: "TaskCreate",
-      label: "TaskCreate",
-      description: "Add a task to your plan. deps are ids this task waits on.",
+      name: "create_step",
+      label: "create_step",
+      description: "Add a step to your plan. deps are ids this step waits on.",
       parameters: createSchema,
       execute(args: {
         content: string;
@@ -85,7 +92,7 @@ export function createTaskTools(
           content: [
             {
               type: "text",
-              text: `Created ${task.id}. ${TASK_UPDATE_SUCCESS}${warnings.length > 0 ? `\nwarnings: ${warnings.join("; ")}` : ""}`,
+              text: `Created ${task.id}. ${STEP_UPDATE_SUCCESS}${warnings.length > 0 ? `\nwarnings: ${warnings.join("; ")}` : ""}`,
             },
           ],
           details: { task, warnings },
@@ -93,12 +100,12 @@ export function createTaskTools(
       },
     },
     {
-      name: "TaskList",
-      label: "TaskList",
-      description: "Show the current task list.",
+      name: "list_steps",
+      label: "list_steps",
+      description: "Show the current step list.",
       parameters: listSchema,
       execute(): ToolResult<unknown> {
-        const rendered = renderTasks(tasks.list());
+        const rendered = renderSteps(tasks.list());
         return {
           content: [{ type: "text", text: rendered }],
           details: { tasks: tasks.list() },
@@ -106,15 +113,15 @@ export function createTaskTools(
       },
     },
     {
-      name: "TaskGet",
-      label: "TaskGet",
-      description: "Show one task with its dependency edges.",
+      name: "get_step",
+      label: "get_step",
+      description: "Show one step with its dependency edges.",
       parameters: getSchema,
       execute(args: { id: string }): ToolResult<unknown> {
         const task = tasks.get(args.id);
         if (task === undefined)
           return {
-            content: [{ type: "text", text: `No task ${args.id}.` }],
+            content: [{ type: "text", text: `No step ${args.id}.` }],
             details: { task: undefined },
           };
         return {
@@ -124,10 +131,10 @@ export function createTaskTools(
       },
     },
     {
-      name: "TaskUpdate",
-      label: "TaskUpdate",
+      name: "update_step",
+      label: "update_step",
       description:
-        "Change a task: status (pending|in_progress|completed|cancelled), content, deps, priority.",
+        "Change a step: status (pending|in_progress|completed|cancelled), content, deps, priority.",
       parameters: updateSchema,
       execute(args: {
         id: string;
@@ -140,7 +147,7 @@ export function createTaskTools(
         const result = tasks.update(id, patch);
         if (result === undefined) {
           return {
-            content: [{ type: "text", text: `No task ${id}.` }],
+            content: [{ type: "text", text: `No step ${id}.` }],
             details: { task: undefined },
           };
         }
@@ -148,7 +155,7 @@ export function createTaskTools(
           content: [
             {
               type: "text",
-              text: `Updated ${id}. ${TASK_UPDATE_SUCCESS}${result.warnings.length > 0 ? `\nwarnings: ${result.warnings.join("; ")}` : ""}`,
+              text: `Updated ${id}. ${STEP_UPDATE_SUCCESS}${result.warnings.length > 0 ? `\nwarnings: ${result.warnings.join("; ")}` : ""}`,
             },
           ],
           details: { task: result.task, warnings: result.warnings },
@@ -158,8 +165,8 @@ export function createTaskTools(
   ];
 }
 
-/** The list a model reads: one line per task, marked by status. */
-function renderTasks(list: StoredTask[]): string {
+/** The list a model reads: one line per step, marked by status. */
+function renderSteps(list: StoredTask[]): string {
   const marks: Record<TaskStatus, string> = {
     pending: "[ ]",
     in_progress: "[~]",
@@ -169,5 +176,5 @@ function renderTasks(list: StoredTask[]): string {
   const body = list
     .map((task) => `${marks[task.status]} ${task.id}: ${task.content}`)
     .join("\n");
-  return `<current_tasks>\n${body}\n</current_tasks>`;
+  return `<current_steps>\n${body}\n</current_steps>`;
 }

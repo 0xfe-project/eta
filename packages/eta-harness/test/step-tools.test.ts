@@ -14,7 +14,7 @@ import { openSession } from "../src/open";
 import { sessionStateKV } from "../src/state";
 import { journaledKernel } from "../src/testing";
 import { createStateTools } from "../src/tools/state";
-import { createTaskTools, TASK_TOOL_NAMES } from "../src/tools/tasks";
+import { createStepTools, STEP_TOOL_NAMES } from "../src/tools/tasks";
 import { toKernelTool } from "../src/tools/tool";
 
 const _userMsg = (text: string) => ({
@@ -30,7 +30,7 @@ function session() {
   const { kernel, journaling } = journaledKernel(
     SessionLog.create(new MemoryStorage()),
   );
-  for (const tool of createTaskTools(kernel.tasks))
+  for (const tool of createStepTools(kernel.tasks))
     kernel.tools.register(toKernelTool(tool, () => undefined));
   for (const tool of createStateTools(
     sessionStateKV(journaling.log!, journaling),
@@ -39,7 +39,7 @@ function session() {
   }
   kernel.config.update({
     activeToolNames: [
-      ...TASK_TOOL_NAMES,
+      ...STEP_TOOL_NAMES,
       "update_state",
       "check_state",
       "list_state",
@@ -57,66 +57,66 @@ const textOf = (result: unknown): string =>
         .join("\n")
     : String(result);
 
-describe("task tools", () => {
+describe("step tools", () => {
   it("creates, lists, reads and updates the session's own ledger", async () => {
     const { kernel } = session();
     const tools = kernel.tools;
     const created = await tools.execute(
-      "TaskCreate",
+      "create_step",
       { content: "write the tests", priority: "high" },
       call,
     );
     expect(textOf(created)).toContain("Created t1.");
-    expect(textOf(created)).toContain("Updated TODOs.");
+    expect(textOf(created)).toContain("Updated steps.");
     const second = await tools.execute(
-      "TaskCreate",
+      "create_step",
       { content: "then ship it", deps: ["t1"] },
       call,
     );
     expect(textOf(second)).toContain("Created t2.");
 
-    const listed = textOf(await tools.execute("TaskList", {}, call));
-    expect(listed).toContain("<current_tasks>");
+    const listed = textOf(await tools.execute("list_steps", {}, call));
+    expect(listed).toContain("<current_steps>");
     expect(listed).toContain("[ ] t1: write the tests");
     expect(listed).toContain("[ ] t2: then ship it");
 
-    const one = textOf(await tools.execute("TaskGet", { id: "t2" }, call));
+    const one = textOf(await tools.execute("get_step", { id: "t2" }, call));
     expect(one).toContain('"dependsOn":["t1"]');
 
-    await tools.execute("TaskUpdate", { id: "t1", status: "completed" }, call);
-    const after = textOf(await tools.execute("TaskList", {}, call));
+    await tools.execute("update_step", { id: "t1", status: "completed" }, call);
+    const after = textOf(await tools.execute("list_steps", {}, call));
     expect(after).toContain("[x] t1: write the tests");
   });
 
   it("says so plainly when a task does not exist", async () => {
     const { kernel } = session();
     expect(
-      textOf(await kernel.tools.execute("TaskGet", { id: "t99" }, call)),
-    ).toBe("No task t99.");
+      textOf(await kernel.tools.execute("get_step", { id: "t99" }, call)),
+    ).toBe("No step t99.");
     expect(
       textOf(
         await kernel.tools.execute(
-          "TaskUpdate",
+          "update_step",
           { id: "t99", status: "completed" },
           call,
         ),
       ),
-    ).toBe("No task t99.");
+    ).toBe("No step t99.");
   });
 
   it("keeps the ledger across a restart, because it was written down", async () => {
     const storage = new MemoryStorage();
     const first = await openSession({ storage, models: fakeModels([]) });
-    for (const tool of createTaskTools(first.kernel.tasks)) {
+    for (const tool of createStepTools(first.kernel.tasks)) {
       first.kernel.tools.register(toKernelTool(tool, () => undefined));
     }
     await first.kernel.tools.execute(
-      "TaskCreate",
+      "create_step",
       { content: "survive the restart" },
       call,
     );
     await first.kernel.tools.execute(
-      "TaskCreate",
+      "create_step",
       { content: "and keep its edges", deps: ["t1"] },
       call,
     );
@@ -125,11 +125,11 @@ describe("task tools", () => {
 
     const again = await openSession({ storage, models: fakeModels([]) });
     // A deployment installs its tools on every session it opens.
-    for (const tool of createTaskTools(again.kernel.tasks)) {
+    for (const tool of createStepTools(again.kernel.tasks)) {
       again.kernel.tools.register(toKernelTool(tool, () => undefined));
     }
     const listed = textOf(
-      await again.kernel.tools.execute("TaskList", {}, call),
+      await again.kernel.tools.execute("list_steps", {}, call),
     );
     expect(listed).toContain("[ ] t1: survive the restart");
     expect(listed).toContain("[ ] t2: and keep its edges");

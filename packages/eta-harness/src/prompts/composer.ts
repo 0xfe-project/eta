@@ -18,7 +18,7 @@
  */
 import type { Task } from "@eta/core";
 import { goalPursuitGuidelines } from "./goal";
-import { renderCurrentTasks, TASK_REVIEW_PROMPT } from "./tasks";
+import { renderCurrentSteps, STEP_REVIEW_PROMPT } from "./tasks";
 
 export interface EtaPromptState {
   goal?: { objective: string; status: string } | undefined;
@@ -45,7 +45,7 @@ export interface EtaPromptSection {
     | "skills"
     | "platform"
     | "goal"
-    | "tasks"
+    | "steps"
     | "memory";
   stable: boolean;
   text: string;
@@ -73,8 +73,8 @@ function sections(base: string, state: EtaPromptState): EtaPromptSection[] {
   }
   if (state.tasks !== undefined && state.tasks.length > 0) {
     out.push({
-      name: "tasks",
-      text: `${TASK_REVIEW_PROMPT}\n\n${renderCurrentTasks(state.tasks)}`,
+      name: "steps",
+      text: `${STEP_REVIEW_PROMPT}\n\n${renderCurrentSteps(state.tasks)}`,
       stable: false,
     });
   }

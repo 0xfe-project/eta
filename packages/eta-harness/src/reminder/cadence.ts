@@ -18,16 +18,16 @@ export interface CadenceState {
 export interface CadenceConfig {
   /** Turns without a task-tool call before a reminder is considered due. */
   reminderInterval: number;
-  /** Tool names that count as task-tool usage and reset the cadence. */
-  taskToolNames: ReadonlySet<string>;
+  /** Tool names that count as step-tool usage and reset the cadence. */
+  stepToolNames: ReadonlySet<string>;
 }
 
-/** The default set: the task tools, as the prompts plugin will register them. */
-export const DEFAULT_TASK_TOOL_NAMES: ReadonlySet<string> = new Set([
-  "TaskCreate",
-  "TaskList",
-  "TaskGet",
-  "TaskUpdate",
+/** The default set: the step tools, as the prompts plugin will register them. */
+export const DEFAULT_STEP_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "create_step",
+  "list_steps",
+  "get_step",
+  "update_step",
 ]);
 
 export const DEFAULT_REMINDER_INTERVAL = 5;
@@ -60,7 +60,7 @@ export function evaluateToolResult(
   hasTasks: boolean,
   config: CadenceConfig,
 ): { markDue: boolean } {
-  if (config.taskToolNames.has(toolName)) {
+  if (config.stepToolNames.has(toolName)) {
     state.lastTaskToolUseTurn = state.currentTurn;
     state.reminderInjectedThisCycle = false;
     state.reminderDue = false;
