@@ -15,6 +15,7 @@
   "connected": "Connected {{address}}",
   "verify": "Check connection",
   "verifyHint": "The connection check signs in to SMTP and IMAP and opens the inbox and junk folders read-only. It sends no test email and does not verify ownership of the address.",
+  "reconnect": "Reconnect mailbox",
   "checkPassed": "Connection is healthy: SMTP, IMAP, and mail folders are reachable",
   "unknownError": "Unknown error",
   "accountStatus": {

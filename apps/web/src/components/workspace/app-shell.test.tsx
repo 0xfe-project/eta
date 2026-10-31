@@ -1,6 +1,7 @@
 import type {
   BoardTaskDetail,
   ConversationSummary,
+  EmailAccountView,
 } from "@eta/client-contracts";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -11,12 +12,13 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { setWire } from "@/lib/wire";
 import {
   agentView,
+  buildProductHost,
   conversationView,
   memberView,
-  productHost,
   projectView,
   taskDetail,
 } from "@/test-product";
+import { flush } from "@/test-render";
 import { agentStatusLabels } from "./agent-status";
 import { Sidebar } from "./app-shell";
 import { GroupList } from "./groups";
@@ -30,6 +32,12 @@ const state = rstest.hoisted(() => ({
 }));
 /** The board, for the count the rail has to keep. */
 let tasks: BoardTaskDetail[] = [];
+/** The mailboxes behind the 邮箱 row; empty unless a test is about that row. */
+let emailAccounts: EmailAccountView[] = [];
+/** Every account a press of the row's reconnect button asked the host to check. */
+const verified: string[] = [];
+/** Unread mail, for the corner the row has to leave for it. */
+let emailUnread = 0;
 rstest.mock("./use-agents", () => ({
   useAgents: () => ({
     agents: state.agents,
@@ -81,32 +89,59 @@ async function render(
   const client = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
   });
-  productHost({
-    agents: state.agents.map((a, index) =>
-      agentView({ ...a, createdAt: index + 1 } as Parameters<
-        typeof agentView
-      >[0]),
-    ),
-    projects: [
-      projectView({
-        id: "p-eta",
-        name: "eta",
-        path: "/Users/me/Desktop/eta",
-      }),
-      projectView({
-        id: "p-house",
-        name: "house",
-        path: "/Users/me/work/house",
-      }),
-      projectView({
-        id: "p",
-        name: "p",
-        path: "/p",
-      }),
-    ],
-    conversations: state.groups,
-    tasks: tasks.map((task) => ({ task })),
-  });
+  const host = buildProductHost(
+    {
+      agents: state.agents.map((a, index) =>
+        agentView({ ...a, createdAt: index + 1 } as Parameters<
+          typeof agentView
+        >[0]),
+      ),
+      projects: [
+        projectView({
+          id: "p-eta",
+          name: "eta",
+          path: "/Users/me/Desktop/eta",
+        }),
+        projectView({
+          id: "p-house",
+          name: "house",
+          path: "/Users/me/work/house",
+        }),
+        projectView({
+          id: "p",
+          name: "p",
+          path: "/p",
+        }),
+      ],
+      conversations: state.groups,
+      tasks: tasks.map((task) => ({ task })),
+    },
+    emailAccounts.length === 0 ? [] : ["email"],
+  );
+  if (emailAccounts.length > 0) {
+    const mailboxes = () => ({
+      accounts: emailAccounts,
+      threads: [],
+      proposals: [],
+      stats: { unread: emailUnread, pendingProposals: 0 },
+    });
+    host.target("email", mailboxes(), { eager: true });
+    // A check the host answers by publishing what the account looks like now: the row goes on
+    // saying what it is told, not what it hoped for.
+    host.handle("email.verifyAccount", (args) => {
+      const { accountId } = args as { accountId: string };
+      verified.push(accountId);
+      emailAccounts = emailAccounts.map((account) =>
+        account.id === accountId
+          ? { ...account, status: "ready" as const, lastError: null }
+          : account,
+      );
+      host.set("email", mailboxes());
+      return { account: emailAccounts.find((a) => a.id === accountId)! };
+    });
+  }
+  host.install();
+  host.hello();
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -131,6 +166,9 @@ afterEach(async () => {
   state.openAgent.mockClear();
   state.pathname = "/";
   tasks = [];
+  emailAccounts = [];
+  emailUnread = 0;
+  verified.length = 0;
   // What the last toggle left behind belongs to that test, not to the next one.
   document.cookie = "sidebar_state=; path=/; max-age=0";
   setWire(undefined);
@@ -446,5 +484,123 @@ describe("折叠成图标栏", () => {
     ).toBe("true");
     // 浏览器里没有 data-host，槽位不占位：外观和改动前一模一样。
     expect(document.documentElement.hasAttribute("data-host")).toBe(false);
+  });
+});
+
+describe("邮箱那一行", () => {
+  const mailboxView = (
+    fields: Partial<EmailAccountView> & { id: string },
+  ): EmailAccountView => ({
+    name: fields.id,
+    address: `${fields.id}@eta.test`,
+    username: `${fields.id}@eta.test`,
+    smtpHost: "smtp.eta.test",
+    smtpPort: 465,
+    smtpSecure: true,
+    imapHost: "imap.eta.test",
+    imapPort: 993,
+    imapSecure: true,
+    inboxFolder: "INBOX",
+    junkFolder: null,
+    pollIntervalSeconds: 60,
+    status: "ready",
+    lastError: null,
+    lastCheckedAt: null,
+    lastPollAt: null,
+    createdAt: 1,
+    updatedAt: 1,
+    ...fields,
+  });
+  const health = (container: HTMLElement) =>
+    container.querySelector('[data-slot="mailbox-health"]')?.textContent;
+  const retry = (container: HTMLElement) =>
+    container.querySelector<HTMLButtonElement>(
+      'button[aria-label="重新连接邮箱"]',
+    );
+
+  it("连接异常时说出来，点重连就查一次，好了改口", async () => {
+    emailAccounts = [
+      mailboxView({ id: "m1", status: "error", lastError: "socket gone" }),
+    ];
+    const container = await render(<Sidebar />);
+    expect(health(container)).toBe("连接异常");
+    // The state is also the link's name: the row is reached by a reader who cannot see it.
+    expect(
+      container
+        .querySelector('a[data-to="/email"]')
+        ?.getAttribute("aria-label"),
+    ).toBe("邮箱 · 连接异常");
+    expect(retry(container)?.disabled).toBe(false);
+    await act(async () => retry(container)!.click());
+    await flush();
+    expect(verified).toEqual(["m1"]);
+    expect(health(container)).toBe("连接正常");
+    // Nothing left to reconnect: the door stays shut rather than opening onto nothing.
+    expect(retry(container)?.disabled).toBe(true);
+  });
+
+  it("全部 ready 才算正常，按钮重连所有没连上的账号", async () => {
+    emailAccounts = [
+      mailboxView({ id: "m1" }),
+      mailboxView({ id: "m2", status: "error", lastError: "socket gone" }),
+      mailboxView({ id: "m3", status: "unverified" }),
+    ];
+    const container = await render(<Sidebar />);
+    expect(health(container)).toBe("连接异常");
+    await act(async () => retry(container)!.click());
+    await flush();
+    // The one that is fine is not checked again; the two that are not are.
+    expect(verified).toEqual(["m2", "m3"]);
+    expect(health(container)).toBe("连接正常");
+  });
+
+  it("只是还没查过的账号是待检查，不是异常", async () => {
+    emailAccounts = [
+      mailboxView({ id: "m1", status: "unverified" }),
+      mailboxView({ id: "m2" }),
+    ];
+    const container = await render(<Sidebar />);
+    expect(health(container)).toBe("待检查");
+  });
+
+  it("未读数在右端，状态让开它", async () => {
+    emailUnread = 3;
+    emailAccounts = [
+      mailboxView({ id: "m1", status: "error", lastError: "socket gone" }),
+    ];
+    const container = await render(<Sidebar />);
+    // The badge moves in for the button, and the state steps left of both: one row, three
+    // things on its right edge, none of them on top of the other.
+    expect(
+      container
+        .querySelector('[data-slot="sidebar-menu-badge"]')
+        ?.getAttribute("class"),
+    ).toContain("right-7");
+    expect(health(container)).toBe("连接异常");
+    expect(
+      container
+        .querySelector('[data-slot="mailbox-health"]')
+        ?.getAttribute("class"),
+    ).toContain("mr-6");
+  });
+
+  it("没有账号就什么都不说", async () => {
+    const container = await render(<Sidebar />);
+    expect(health(container)).toBeUndefined();
+    expect(retry(container)).toBeNull();
+  });
+
+  it("折叠成图标栏：状态是图标上的一颗点，点进去还是邮箱页", async () => {
+    emailAccounts = [
+      mailboxView({ id: "m1", status: "error", lastError: "socket gone" }),
+    ];
+    const container = await render(<Sidebar />, { open: false });
+    const link = container.querySelector('a[data-to="/email"]')!;
+    expect(link.getAttribute("aria-label")).toBe("邮箱 · 连接异常");
+    expect(link.textContent).toBe("");
+    const dot = link.querySelector('[data-slot="mailbox-dot"]')!;
+    expect(dot.className).toContain("bg-destructive");
+    // 4rem holds no button, and the press that matters there is the link's own.
+    expect(retry(container)).toBeNull();
   });
 });

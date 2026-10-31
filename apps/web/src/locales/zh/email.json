@@ -15,6 +15,7 @@
   "connected": "已连接 {{address}}",
   "verify": "检查连接",
   "verifyHint": "连接检查会用当前凭据登录 SMTP 和 IMAP，并以只读方式打开收件箱、垃圾邮件目录；不会发送测试邮件，也不验证邮箱地址的归属。",
+  "reconnect": "重新连接邮箱",
   "checkPassed": "连接正常：SMTP、IMAP 和邮件目录均可访问",
   "unknownError": "未知错误",
   "accountStatus": {

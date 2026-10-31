@@ -327,3 +327,105 @@ describe("iMAP and SMTP bridge", () => {
     db.close();
   }, 20_000);
 });
+
+describe("后台循环", () => {
+  /**
+   * A mailbox on a real IMAP and SMTP server, and the service in front of it. `input` builds the
+   * account's settings with whatever password is given: a wrong one is how a mailbox that cannot
+   * be reached looks from here, which is what the loop has to recover from.
+   */
+  async function bridge() {
+    const server = imapkit({
+      users: { "mailbox@eta.test": { password: "secret" } },
+      storage: {
+        INBOX: { subscribed: true, messages: [] },
+        "": { folders: { Junk: { messages: [] } } },
+      },
+      plugins: ["SPECIAL-USE"],
+      smtp: { host: "127.0.0.1", port: 0 },
+    });
+    servers.push(server);
+    const imapPort = await server.start(0, "127.0.0.1");
+    server.control.setSpecialUse("Junk", ["\\Junk"]);
+    const smtpAddress = server.smtpServer?.server.address();
+    if (!smtpAddress || typeof smtpAddress === "string")
+      throw new Error("SMTP did not start");
+    const dir = await tempDir("eta-email-loop-");
+    const db = openDatabase(join(dir, "eta.sqlite"));
+    applyMigrations(db, loadMigrations());
+    const store = new EmailStore(db);
+    const credentials = new EmailCredentials(db, loadSecretKey(dir));
+    const warnings: string[] = [];
+    const service = new EmailService(
+      store,
+      credentials,
+      new AgentStore(db),
+      new ProjectStore(db),
+      (message) => warnings.push(message),
+    );
+    const input = (password: string): EmailAccountInput => ({
+      name: "Mailbox",
+      address: "mailbox@eta.test",
+      smtpHost: "127.0.0.1",
+      smtpPort: smtpAddress.port,
+      smtpSecure: false,
+      imapHost: "127.0.0.1",
+      imapPort,
+      imapSecure: false,
+      inboxFolder: "INBOX",
+      username: "mailbox@eta.test",
+      password,
+    });
+    return { server, db, store, credentials, service, input, warnings };
+  }
+
+  it("把 error 的账号重新连上，并接着拉收件箱", async () => {
+    const b = await bridge();
+    // The password was wrong, so the account never became ready: the loop's starting point.
+    const failed = await b.service.saveAccount(b.input("wrong"));
+    expect(failed.status).toBe("error");
+    expect(failed.lastError).not.toBeNull();
+    expect(failed.lastPollAt).toBeNull();
+    // The password is right again; only the loop can pick the account back up.
+    await b.credentials.set(failed.id, "secret");
+    await b.service.tick();
+    const reconnected = b.store.account(failed.id)!;
+    expect(reconnected.status, reconnected.lastError ?? undefined).toBe(
+      "ready",
+    );
+    expect(reconnected.lastError).toBeNull();
+    // Same round: a ready account is due when it has never been polled, so the inbox was opened
+    // and its baseline recorded right after the reconnect.
+    expect(reconnected.lastPollAt).not.toBeNull();
+    // And mail that arrives after that baseline is pulled.
+    b.server.control.addMessage("INBOX", {
+      raw: "From: peer@eta.test\r\nTo: mailbox@eta.test\r\nSubject: after the reconnect\r\nMessage-ID: <reconnect@eta.test>\r\n\r\nHello again.\r\n",
+    });
+    const pulled = await b.service.refresh(reconnected.id, true);
+    expect(pulled.received).toBeGreaterThanOrEqual(1);
+    expect(b.store.threads()[0]?.subject).toBe("after the reconnect");
+    b.db.close();
+  }, 20_000);
+
+  it("ready 的账号按 pollIntervalSeconds 到期才轮询", async () => {
+    const b = await bridge();
+    const ready = await b.service.saveAccount(b.input("secret"));
+    expect(ready.status, ready.lastError ?? undefined).toBe("ready");
+    // Verified but never polled: the first round is due.
+    expect(ready.lastPollAt).toBeNull();
+    await b.service.tick();
+    const firstPoll = b.store.account(ready.id)!.lastPollAt;
+    expect(firstPoll).not.toBeNull();
+    // A round a second later is not: the account is ready, and its interval has not run out.
+    await b.service.tick();
+    expect(b.store.account(ready.id)!.lastPollAt).toBe(firstPoll);
+    // Time travel rather than a 60 second test: one millisecond past the interval, it polls.
+    const stale = Date.now() - (ready.pollIntervalSeconds * 1000 + 1);
+    b.db
+      .query("UPDATE email_account SET last_poll_at=? WHERE id=?")
+      .run(stale, ready.id);
+    await b.service.tick();
+    expect(b.store.account(ready.id)!.lastPollAt).toBeGreaterThan(stale);
+    b.db.close();
+  }, 20_000);
+});

@@ -30,6 +30,13 @@ interface PollResult {
   received: number;
 }
 
+/**
+ * How often the background loop looks at the accounts: a minute. It is also the shortest time a
+ * broken account stays broken — one round logs in to SMTP and opens the folders, which is a
+ * round trip a mail server tolerates once a minute without a backoff of its own.
+ */
+const TICK_MS = 60_000;
+
 const addresses = (
   value: { text?: string } | { text?: string }[] | undefined,
 ) =>
@@ -72,6 +79,8 @@ const httpOrigin = (text: string | undefined): string | undefined => {
 export class EmailService {
   #timer: ReturnType<typeof setInterval> | undefined;
   #running: Promise<PollResult> | undefined;
+  /** A round owns the accounts while it runs, so the next tick waits instead of racing it. */
+  #ticking = false;
   readonly #listeners = new Set<() => void>();
   readonly store: EmailStore;
   readonly #credentials: EmailCredentials;
@@ -110,12 +119,47 @@ export class EmailService {
     if (this.#timer) return;
     this.#timer = setInterval(
       () =>
-        void this.refresh().catch((error) =>
+        void this.tick().catch((error) =>
           this.#warn(`[eta] email refresh failed: ${String(error)}`),
         ),
-      15_000,
+      TICK_MS,
     );
     this.#timer.unref?.();
+  }
+
+  /**
+   * One round of the background loop: bring back what fell over, then poll what is up.
+   *
+   * A ready account is polled when its own interval is due. Every other account — error, or never
+   * checked — is reconnected instead: `verify` logs in to SMTP and opens the inbox and junk
+   * folders, and on success the account is ready again, so the poll below picks it up in the same
+   * round. A failed check stays recorded on the account rather than thrown: the loop has no
+   * caller to hand it to, and one account that is down must not stop the others from polling.
+   */
+  async tick(): Promise<void> {
+    if (this.#ticking) return;
+    this.#ticking = true;
+    try {
+      for (const account of this.store.accounts()) {
+        if (account.status === "ready") continue;
+        let reconnected: EmailAccountView;
+        try {
+          reconnected = await this.verify(account.id);
+        } catch (error) {
+          // `verify` records a failed check itself; this is only the account that is gone.
+          this.#warn(`[eta] email ${account.address}: ${String(error)}`);
+          continue;
+        }
+        if (reconnected.status !== "ready") {
+          this.#warn(
+            `[eta] email ${account.address}: ${reconnected.lastError ?? "reconnect failed"}`,
+          );
+        }
+      }
+      await this.refresh();
+    } finally {
+      this.#ticking = false;
+    }
   }
 
   stop(): void {
