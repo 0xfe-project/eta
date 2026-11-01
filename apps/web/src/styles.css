@@ -1280,12 +1280,12 @@
     justify-content: center;
     gap: 4px;
     min-height: 26px;
-    line-height: 18px;
+    line-height: 1.4;
   }
   .settings-row-label p {
     margin: 0;
     font-size: 11px;
-    line-height: 18px;
+    line-height: 1.5;
     color: var(--muted-foreground);
   }
   .settings-control {
