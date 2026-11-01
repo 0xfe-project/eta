@@ -55,6 +55,7 @@
     "nameLabel": "群 · {{name}}",
     "directChat": "私聊",
     "info": "群信息",
+    "unreadCount": "{{count}} 条未读",
     "groupChat": "群聊",
     "createWithMembers": "和他们新建群",
     "inviteSelected": "邀请加入群",

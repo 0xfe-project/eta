@@ -30,7 +30,7 @@ import { useConversationActions } from "@/queries/conversations";
 import { useMachines } from "@/queries/projects";
 import { useModels } from "@/queries/providers";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
-import { agentStatusLabels } from "./agent-status";
+import { agentStatusLabels, memberStatusLabel } from "./agent-status";
 import { useOpenAgent } from "./use-agents";
 import { useChatList } from "./use-chat-list";
 import { useOpenGroup } from "./use-groups";
@@ -337,6 +337,9 @@ function GroupCard({
             {conversation.name}
           </span>
           {busy.length > 0 ? (
+            <span className="sr-only">{` ${memberStatusLabel("working")}`}</span>
+          ) : null}
+          {busy.length > 0 ? (
             <span
               aria-hidden="true"
               className="absolute top-0.5 left-0.5 font-mono text-[10px] text-state-success"
@@ -378,7 +381,13 @@ function GroupCard({
             onClick={onOpen}
             className="absolute inset-x-0 top-0 h-11 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
           >
-            <span className="sr-only">{conversation.name}</span>
+            <span className="sr-only">
+              {conversation.name}
+              {conversation.unread > 0
+                ? ` ${translateText("chat:groups.unreadCount", { count: conversation.unread })}`
+                : null}
+              {busy.length > 0 ? ` ${memberStatusLabel("working")}` : null}
+            </span>
           </button>
           <div className="pointer-events-none relative z-10 px-2 pt-1.5">
             {/* The ⋯ is a corner control, not a column: the row ends before it. */}
@@ -408,6 +417,7 @@ function GroupCard({
               </span>
               {busy.length > 0 ? (
                 <span
+                  aria-hidden="true"
                   className="shrink-0 font-mono text-[10px] text-state-success"
                   title={busy.map((m) => nameOf(m.agentId)).join("、")}
                 >
@@ -415,7 +425,10 @@ function GroupCard({
                 </span>
               ) : null}
               {conversation.unread > 0 ? (
-                <span className="shrink-0 font-mono text-[10px] text-foreground tabular-nums">
+                <span
+                  aria-hidden="true"
+                  className="shrink-0 font-mono text-[10px] text-foreground tabular-nums"
+                >
                   {conversation.unread}
                 </span>
               ) : null}
