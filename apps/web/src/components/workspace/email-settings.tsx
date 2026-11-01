@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import {
   useEmail,
   useRemoveEmailAccount,
@@ -356,8 +357,21 @@ export function EmailSettings() {
             <li key={account.id} className="flex items-start gap-3 p-3">
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium">{account.name}</div>
-                <div className="truncate text-xs text-muted-foreground">
-                  {account.address} · {account.imapHost} · {statusOf(account)}
+                <div
+                  className="truncate text-xs text-muted-foreground"
+                  title={`${account.address} · ${account.imapHost}`}
+                >
+                  {account.address} · {account.imapHost}
+                </div>
+                <div
+                  className={cn(
+                    "text-xs break-words",
+                    account.status === "error"
+                      ? "text-destructive"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  {statusOf(account)}
                 </div>
               </div>
               <Button
