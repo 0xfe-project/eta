@@ -1238,6 +1238,10 @@
     overflow-y: auto;
     padding: 16px 20px;
   }
+  /* The page's rail sits against the sidebar like the header; only the rows keep a reading width. */
+  .settings-page .settings-content > * {
+    max-width: var(--container-content);
+  }
   .settings-heading {
     margin-bottom: 12px;
   }
