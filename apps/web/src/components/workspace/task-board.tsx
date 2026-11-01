@@ -488,7 +488,7 @@ export function TaskBoard() {
           id={id ? undefined : "main"}
           className={cn(
             "min-h-0 flex-1",
-            board ? "overflow-hidden" : "overflow-y-auto",
+            board ? "overflow-hidden" : "overflow-y-auto scroll-pt-9",
           )}
         >
           {error ? (
