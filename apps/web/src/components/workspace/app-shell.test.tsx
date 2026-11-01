@@ -161,6 +161,56 @@ async function render(
   return container;
 }
 
+/**
+ * The sidebar mounted at `pathname`, in a container of its own. The mocked router hands the pathname
+ * over when the component asks, so a tree has to be mounted for the path a test reads it on: a row
+ * carries the flag it was mounted with, and one sidebar's path is not another one's. The query
+ * client and the fake host are new here for the same reason -- this is the page opened at that path,
+ * not the last one navigated away from.
+ */
+async function mountAt(
+  node: React.ReactNode,
+  pathname: string,
+  { open }: { open?: boolean } = {},
+) {
+  state.pathname = pathname;
+  const client = new QueryClient({
+    defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+  });
+  const host = buildProductHost(
+    {
+      agents: state.agents.map((a, index) =>
+        agentView({ ...a, createdAt: index + 1 } as Parameters<
+          typeof agentView
+        >[0]),
+      ),
+      projects: [projectView({ id: "p", name: "p", path: "/p" })],
+      conversations: state.groups,
+      tasks: [],
+    },
+    [],
+  );
+  host.install();
+  host.hello();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <SidebarProvider defaultOpen={open}>
+          <TooltipProvider>{node}</TooltipProvider>
+        </SidebarProvider>
+      </QueryClientProvider>,
+    ),
+  );
+  cleanup.push(() => {
+    root.unmount();
+    container.remove();
+  });
+  return container;
+}
+
 afterEach(async () => {
   await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
   state.openAgent.mockClear();
@@ -318,21 +368,35 @@ describe("左栏的页眉", () => {
     state.agents = [];
     state.groups = [];
     const container = await render(<Sidebar />);
-    const links = [...container.querySelectorAll("a[data-to]")].filter((a) =>
-      a.hasAttribute("data-active"),
-    );
-    // Only the page that remains; 定时 is off in this build, and chat, pending
-    // and memory have no button.
-    expect(links.map((a) => a.getAttribute("data-to"))).toEqual([
+    // The header's wordmark links to the same home path, so the sections are read from the sections
+    // menu alone.
+    const rowsAt = (root: ParentNode) => [
+      ...root.querySelectorAll('ul[aria-label="分区"] a[data-to]'),
+    ];
+    const lit = (root: ParentNode) =>
+      rowsAt(root)
+        .filter((a) => a.getAttribute("data-active") === "true")
+        .map((a) => a.getAttribute("data-to"));
+    // The whole list, in the order it draws: 对话 leads, because it is the way back to the
+    // conversation view; 定时 is off in this build, and pending and memory have no button.
+    expect(rowsAt(container).map((a) => a.getAttribute("data-to"))).toEqual([
+      "/",
       "/tasks",
       "/email",
     ]);
-    expect(links.map((a) => a.textContent)).toEqual(["任务", "邮箱"]);
-    expect(
-      links
-        .filter((a) => a.getAttribute("data-active") === "true")
-        .map((a) => a.getAttribute("data-to")),
-    ).toEqual(["/tasks"]);
+    expect(rowsAt(container).map((a) => a.textContent)).toEqual([
+      "对话",
+      "任务",
+      "邮箱",
+    ]);
+    // 对话 must not stay lit from another section: `to: "/"` prefixes every path, so the home row is
+    // lit by the home path alone. Each path is read from a sidebar mounted at that path -- a row
+    // carries the flag it was mounted with, so one sidebar cannot speak for three paths.
+    expect(lit(await mountAt(<Sidebar />, "/tasks"))).toEqual(["/tasks"]);
+    // 邮箱 lights the email row alone, not the home row beside it.
+    expect(lit(await mountAt(<Sidebar />, "/email"))).toEqual(["/email"]);
+    // Back on the home path, 对话 is the one row lit.
+    expect(lit(await mountAt(<Sidebar />, "/"))).toEqual(["/"]);
   });
 });
 
@@ -364,11 +428,12 @@ describe("折叠成图标栏", () => {
     expect(root(container).getAttribute("data-collapsible")).toBe("icon");
     const links = [...container.querySelectorAll("a[data-to][aria-label]")];
     expect(links.map((a) => a.getAttribute("aria-label"))).toEqual([
+      "对话",
       "任务",
       "邮箱",
     ]);
     // No text in the rail: the name a link lost is the name it has to carry for the reader.
-    expect(links.map((a) => a.textContent)).toEqual(["", ""]);
+    expect(links.map((a) => a.textContent)).toEqual(["", "", ""]);
     expect(links[0]?.querySelector("svg")).not.toBeNull();
   });
 
@@ -401,9 +466,9 @@ describe("折叠成图标栏", () => {
       });
     };
     const open = await render(<Sidebar />, { open: true });
-    expect(rows(open)).toEqual(["任务", "邮箱"]);
+    expect(rows(open)).toEqual(["对话", "任务", "邮箱"]);
     const rail = await render(<Sidebar />, { open: false });
-    expect(rows(rail)).toEqual(["折叠或展开侧栏", "任务", "邮箱"]);
+    expect(rows(rail)).toEqual(["折叠或展开侧栏", "对话", "任务", "邮箱"]);
 
     // 它自己那一组：页脚里一条，不在分区列表里。
     for (const [container, isRail] of [
