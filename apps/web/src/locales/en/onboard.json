@@ -10,6 +10,7 @@
   },
   "agents": {
     "what": "agents",
+    "install": "Install agents",
     "installed": "Installed",
     "failed": "Install failed: {{message}}",
     "retry": "Retry install"

@@ -179,7 +179,7 @@ export function Onboard() {
               ? translateText("onboard:states.installing")
               : failure
                 ? translateText("onboard:agents.retry")
-                : translateText("common:actions.install")}
+                : translateText("onboard:agents.install")}
           </Button>
         )}
       </footer>
