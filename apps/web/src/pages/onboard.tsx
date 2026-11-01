@@ -87,7 +87,7 @@ export function Onboard() {
         ref={contentRef}
         tabIndex={-1}
         aria-label={steps[step]}
-        className="min-h-0 flex-1 overflow-y-auto"
+        className="min-h-0 flex-1 overflow-y-auto outline-none"
       >
         {step === 0 ? (
           <ProviderSettings />
