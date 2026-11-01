@@ -37,6 +37,8 @@
 - [133] Eta 压缩装配任务的验收必须出现硬证据：真实会话跨过阈值后 journal 有 type:'compaction' 条目，且 usage input 序列明显回落。
 - [136] Eta 聊天中，助手回复处于 working/等待 first token 时，必须立即渲染等高 ProcessBox/过程窗口并展示 loading，不能等 first token 或非文本 block 到达后才出现，避免头像与时间之间留空看起来卡住。
 - [137] Eta 聊天过程窗口的 loading 态与内容态必须保持同一尺寸、边框和 padding；first token 到达时应填充同一个窗口，不重新挂载造成布局跳动。
+- [143] Eta main->web native channel: desktop sends `window.__etaNative?.({kind, action})` via `webview.executeJavascript`; web must implement `window.__etaNative` listener to handle menu/context-menu actions.
+- [144] Eta web keydown handling: currently only sidebar toggle and mobile drawer Escape exist; no global command-palette/shortcut dispatcher registry yet.
 
 ## preference
 
@@ -70,6 +72,8 @@
 - [119] Eta default group names using the project name may duplicate for multiple groups in one project; do not auto-add subtitles/sequence disambiguation unless requested.
 - [134] 当用户批准带默认项的 UI 原型并让创建任务时，可按原型默认项建任务，但要把这些默认边界明确写进任务描述。
 - [138] Eta 聊天 first-token loading 应复用现有 ProcessBox/Loading 组件，使用 zh/en chat.json 成对文案和非空 aria-label；动画 motion-safe，已折叠历史不闪骨架。
+- [145] Eta web lib hooks style: prefer plain modules with `useSyncExternalStore` + external state (like fold.ts) or pure exported functions (like rail.ts); avoid heavy React state management for simple global/local storage-backed features.
+- [146] Eta web tests use `rstest` with `happy-dom`, importing from `@rstest/core`; setup forces Chinese locale in `beforeEach`.
 
 ## lesson
 
@@ -120,3 +124,8 @@
 - [139] 不要把 Eta 聊天 ProcessBox 渲染条件写成 active steps 非空；零 block 的等待态返回 null 会制造空白并造成卡住观感，应预渲染固定尺寸窗口并提供 loading。
 - [140] 这台机器的 bun 是 1.4.2，而 package.json 锁 bun@1.4.3；`apps/*/typecheck` 里的 `bun check` 是 1.4.3 的内建命令，在 1.4.2 下报 `Script not found "check"`，于是 lefthook pre-commit 的 verify 步骤必然失败。手动跑等价校验（bunx tsc --noEmit / eslint / dprint / turbo build）后用 `git commit --no-verify`，别把本地 bun 版本升给正在跑的 host。
 - [141] Eta email 没有 IMAP watcher/IDLE：连接状态只有 EmailStore 的 status，重连路径就是 `verify()`（SMTP 认证 + 打开收件箱/垃圾箱目录），后台每一轮 tick 对非 ready 账号走它。任何「重建 watcher」的说法在这份代码里都是空的。
+- [142] Eta GitHub 插件默认关闭时 `open_pull_request` 报「未连接」，且 akhook 挡 `gh pr create`；此时用已登录的 `gh` 走 REST API 直接建 PR（非 akhook 屏蔽的 `gh pr create` 包装），不要静默失败，也不要为建一个 PR 擅自带 `--github` 重启正在跑的 host（属产品决定）。见 #8/#82。
+- [147] Eta workspace-store.ts is located at `apps/web/src/components/workspace/workspace-store.ts`, not `src/stores/`.
+- [148] Eta `settings` state in workspace-store is not persisted (partialize excludes it), so changes to settings state do not survive reloads unless explicitly handled.
+- [149] Eta desktop menu items with 'action' currently do nothing because the main->page bridge is unidirectional (page->shell) except for context-menu clicks; new menu actions need the `window.__etaNative` channel implemented on the web side.
+- [150] Eta web has exactly one keyboard shortcut, ⌘,/Ctrl+, opening settings, mounted once on `window` by the root document (`apps/web/src/lib/settings-shortcut.ts`); the root route passes the page into `RootDocument` as children. A second chord is when a registry earns its place.

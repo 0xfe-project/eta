@@ -74,6 +74,8 @@ Vite + React + React Compiler。界面只通过 host 的一条 WebSocket（`/ws`
 - 设置是首页和 `/workspace` 共用的弹层，分区：智能体、模型服务、审批、机器、已归档、外观。`?settings=<分区>` 在任意页面打开对应分区一次，随后从地址里去掉。
 - 任务页：列表（按状态分组）或看板，`?task=<id>` 打开、`?task=new` 新建；定时任务页参数是 `routine`、`run`、`edit`；待处理页按天分组，`?filter=pending` 只看待处理。分区和侧栏共用同一套 URL 参数（`task-nav.ts`、`routine-nav.ts`、`workspace-search.ts`），都支持直接访问、刷新和浏览器历史。
 
+整个应用只有一个键盘快捷键：⌘,（Windows / Linux 为 Ctrl+,）打开设置，由根组件挂的一条 `window` 监听实现（`src/lib/settings-shortcut.ts`），所以在任何页面、任何焦点下都算——焦点在输入框里也开（带 ⌘ 的逗号不是可打印字符），输入法组合期间则让位。宽窗口开的是设置弹层，手机上没有弹窗语义，去 `/settings` 那一页并把盖着的层关掉。再加第二个快捷键时才需要注册表，现在只有一个。
+
 `localStorage` 只放这个浏览器自己的东西，都用 Zod 校验：`eta.workspace.v1` 是界面状态（布局、字体、上次用的模型、任务页过滤等），`eta.groups.v1` 是草稿和还没送达的消息，`eta.language.v1` 是语言。
 
 ## React Grab（圈选元素）

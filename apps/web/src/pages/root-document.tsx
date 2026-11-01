@@ -1,20 +1,28 @@
-import { Outlet } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageProvider } from "@/components/language-provider";
 import { AppProviders } from "@/components/providers";
 import { WindowControls } from "@/components/window-controls";
+import { useSettingsShortcut } from "@/lib/settings-shortcut";
 
-export function RootDocument() {
+/**
+ * Everything a window draws, whatever page it is showing: the providers, the window's buttons, the
+ * chord that opens settings, and — through `children` — the page itself. The root route renders
+ * this with the routed page as its children, which is what keeps a page from mounting the shared
+ * chrome twice or forgetting it.
+ */
+export function RootDocument({ children }: { children: ReactNode }) {
   return (
     <LanguageProvider>
-      <LocalizedDocument />
+      <LocalizedDocument>{children}</LocalizedDocument>
     </LanguageProvider>
   );
 }
 
-function LocalizedDocument() {
+function LocalizedDocument({ children }: { children: ReactNode }) {
   const { t: translateText } = useTranslation(["navigation"] as const);
+  useSettingsShortcut();
   // iOS zooms into focused inputs under 16px up to the page's maximum-scale,
   // while Safari still lets users pinch past it. Other browsers would block
   // pinch zoom with this, so it is added on iOS only.
@@ -39,7 +47,8 @@ function LocalizedDocument() {
       {/* The window's buttons sit outside the routed page: they belong to the window, so no page
           can mount them twice or forget them. On macOS and in a browser this draws nothing. */}
       <WindowControls />
-      <Outlet />
+      {/* The same reason for ⌘,: every route answers it, and no page can be left out of that. */}
+      {children}
     </AppProviders>
   );
 }
