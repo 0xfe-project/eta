@@ -233,7 +233,7 @@ function Card({ task }: { task: Task }) {
             <Comments count={task.comments} />
           </span>
         </span>
-        <span className="line-clamp-3 text-sm">{task.title}</span>
+        <span className="line-clamp-3 text-sm wrap-anywhere">{task.title}</span>
         <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground tabular-nums">
           <span className="truncate">{actorName(task.createdBy, agents)}</span>
           <span className="shrink-0">{ago(task.updatedAt)}</span>
