@@ -234,6 +234,22 @@ describe("侧边栏的两块", () => {
     expect(row.querySelectorAll("[data-slot=member-row]")).toHaveLength(2);
   });
 
+  it("忙着的成员不只是一个色块，读屏能听到状态", async () => {
+    useWorkspaceStore.setState({ workspace: { selectedGroupId: "g1" } });
+    const { container } = await tree([
+      group("g1", "装配", "p-eta", {
+        participants: [
+          memberView("a1", { status: "working" }),
+          memberView("a2"),
+        ],
+      }),
+    ]);
+    const rows = [...container.querySelectorAll("[data-slot=member-row]")];
+    expect(
+      rows.map((row) => row.querySelector(".sr-only")?.textContent),
+    ).toEqual(["工作中", undefined]);
+  });
+
   it("智能体带 persona 和模型，没配的就不显示那一行", async () => {
     const { container } = await tree([group("g1", "装配", "p-eta")]);
     const [first, second] = agentRows(container);
