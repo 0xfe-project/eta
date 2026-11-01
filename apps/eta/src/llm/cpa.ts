@@ -20,6 +20,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 import { startServer } from "@cpajs/cpa/server";
+import { besideExecutable, COMPILED } from "../resources";
 
 type ApiKeys = NonNullable<CpaConfig["api-keys"]>;
 
@@ -144,6 +145,9 @@ function launch(
   const { "api-keys": extraKeys, ...rest } = extra;
   return startServer({
     stateDir,
+    // A compiled host has no node_modules to find the platform package in: the binary (and
+    // `cpa-launcher`, which cpajs looks for next to it) travel beside the executable.
+    ...(COMPILED ? { binaryPath: besideExecutable("cli-proxy-api") } : {}),
     host: "127.0.0.1",
     config: ({ existing }) => ({
       access: { "api-keys": [accessKey] },

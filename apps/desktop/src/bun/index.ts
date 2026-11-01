@@ -19,9 +19,9 @@
  *
  * What the page learns about itself arrives that way, as `window.__ETA_HOST__`
  * (see `apps/web/src/lib/native.ts`). Two facts worth stating here: there is no `token` when the
- * host listens on loopback only, because a loopback host has no token gate; and `role` is `dev`
- * for as long as the shell runs the host out of a checkout — a packaged build, which ships the
- * host as a binary beside the app, will say `desktop`.
+ * host listens on loopback only, because a loopback host has no token gate; and `role` says where
+ * the host came from — `desktop` when the app carries it (`host/`, a compiled binary staged by
+ * `scripts/stage-host.ts`), `dev` when the shell runs it out of the checkout above it.
  *
  * The window is the app's own, not a browser's: it has no system title bar, and the 40px band the
  * page draws across its top *is* the title bar — the page's band carries the drag region and, on
@@ -36,7 +36,7 @@
 import type { ApplicationMenuItemConfig } from "electrobun/main";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import process from "node:process";
 import Electrobun, {
@@ -141,6 +141,45 @@ const APP_MENU: ApplicationMenuItemConfig[] = [
 // behind it would only be decoration that claims accelerators.
 if (process.platform === "darwin") ApplicationMenu.setApplicationMenu(APP_MENU);
 
+/**
+ * The host the app carries: `host/` beside the main process's bundle, with the compiled host and
+ * the page in it. Only a packaged build has one — `build.copy` never lands in the dev bundle.
+ */
+function packagedHost(): string | undefined {
+  const dir = join(dirname(Bun.main), "..", "host");
+  return existsSync(join(dir, "eta-host")) ? dir : undefined;
+}
+
+const packaged = packagedHost();
+
+/**
+ * PATH as the user's login shell has it.
+ *
+ * An app opened from Finder or the Dock inherits launchd's PATH (`/usr/bin:/bin:/usr/sbin:/sbin`),
+ * not the one the user's terminal builds, and the host hands its PATH on to everything it runs:
+ * the bash tool, git, an MCP server started with `node` or `bunx`. Asked once, at launch; a
+ * shell that does not answer within five seconds leaves PATH as it was.
+ */
+async function loginShellPath(): Promise<string | undefined> {
+  if (process.platform === "win32") return undefined;
+  const { SHELL } = process.env;
+  const marker = "__ETA_PATH__";
+  try {
+    const child = Bun.spawn(
+      [SHELL ?? "/bin/zsh", "-ilc", `printf '${marker}%s' "$PATH"`],
+      { stdin: "ignore", stdout: "pipe", stderr: "ignore" },
+    );
+    const timer = setTimeout(() => child.kill(), 5_000);
+    const output = await new Response(child.stdout).text();
+    clearTimeout(timer);
+    const at = output.lastIndexOf(marker);
+    const path = at === -1 ? "" : output.slice(at + marker.length).trim();
+    return path === "" ? undefined : path;
+  } catch {
+    return undefined;
+  }
+}
+
 /** The repository root: the directory holding `apps/eta` and `apps/web`, found by walking up. */
 function repoRoot(): string {
   // Dev bundles the main process inside build/<app>.app, so the root can sit many levels up.
@@ -204,7 +243,7 @@ const reasonOf = (error: unknown): string =>
  * Start the host and learn the port it bound.
  *
  * A failure here is a window's answer, not a process's exit: the two ways it goes wrong (no
- * checkout above us, no host within twenty seconds) both come back as the reason the page is
+ * host carried and no checkout above us, no host within twenty seconds) both come back as the reason the page is
  * missing, so the window can open and say it. Quitting on `process.exit` left the user with an
  * app that flashed and vanished.
  */
@@ -225,13 +264,33 @@ async function startHost(): Promise<Launch> {
     }
   }
 
-  let root: string;
-  try {
-    root = repoRoot();
-  } catch (error) {
-    return { ready: false, reason: reasonOf(error) };
+  // The app's own host, else the checkout's: `bun apps/eta/src/main.ts`, with the page when it
+  // has been built and the dev server's origin let in when it has not.
+  let command: string[];
+  let cwd: string;
+  let built: boolean;
+  if (packaged !== undefined) {
+    command = [join(packaged, "eta-host"), "--web-dir", join(packaged, "web")];
+    cwd = homedir();
+    built = true;
+  } else {
+    let root: string;
+    try {
+      root = repoRoot();
+    } catch (error) {
+      return { ready: false, reason: reasonOf(error) };
+    }
+    built = existsSync(join(root, "apps", "web", "dist", "index.html"));
+    command = [
+      bunBinary(),
+      "apps/eta/src/main.ts",
+      ...(built
+        ? ["--web-dir", "apps/web/dist"]
+        : ["--allow-origin", "http://127.0.0.1:3000"]),
+    ];
+    cwd = root;
   }
-  const built = existsSync(join(root, "apps", "web", "dist", "index.html"));
+  const path = packaged === undefined ? undefined : await loginShellPath();
 
   const runtime = join(tmpdir(), "eta-desktop");
   await mkdir(runtime, { recursive: true });
@@ -244,23 +303,16 @@ async function startHost(): Promise<Launch> {
   await Bun.write(wrapper, HOST_WRAPPER);
 
   host = Bun.spawn(
-    [
-      bunBinary(),
-      wrapper,
-      bunBinary(),
-      "apps/eta/src/main.ts",
-      // Port 0: the host picks a free port and says which in its summary.
-      "--port",
-      "0",
-      "--github",
-      ...(built
-        ? ["--web-dir", "apps/web/dist"]
-        : ["--allow-origin", "http://127.0.0.1:3000"]),
-    ],
+    // Port 0: the host picks a free port and says which in its summary.
+    [bunBinary(), wrapper, ...command, "--port", "0", "--github"],
     // The host keeps its data in ~/.eta; HOME is the only way to point it elsewhere.
     {
-      cwd: root,
-      env: { ...process.env, ETA_DESKTOP_SUMMARY: summary },
+      cwd,
+      env: {
+        ...process.env,
+        ...(path === undefined ? {} : { PATH: path }),
+        ETA_DESKTOP_SUMMARY: summary,
+      },
       stdout: "inherit",
       stderr: "inherit",
     },
@@ -383,7 +435,7 @@ const preload = `window.__ETA_HOST__=${JSON.stringify({
   native: true,
   nativeApiBase: bridge.apiBase,
   nativeToken: bridge.token,
-  role: "dev",
+  role: packaged === undefined ? "dev" : "desktop",
   ...(launch.ready ? {} : { error: launch.reason }),
 })};`;
 

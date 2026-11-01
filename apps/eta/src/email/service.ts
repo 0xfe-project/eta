@@ -10,10 +10,10 @@ import type { EmailPayloadInput, EtaMailEnvelope } from "./context";
 import type { EmailCredentials } from "./credentials";
 import type { EmailStore } from "./store";
 import { Buffer } from "node:buffer";
-import { fileURLToPath } from "node:url";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
+import { resourcePath } from "../resources";
 import {
   decodeEmailMeta,
   encodeContextPackets,
@@ -21,7 +21,8 @@ import {
 } from "./context";
 import { PIXEL_PNG_BASE64, renderMail } from "./template";
 
-const LOGO_PATH = fileURLToPath(
+const LOGO_PATH = resourcePath(
+  "Eta-Logo.png",
   new URL("../../../web/public/Eta-Logo.png", import.meta.url),
 );
 
