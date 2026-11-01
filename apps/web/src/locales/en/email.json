@@ -54,6 +54,7 @@
     "empty": "No mail yet. New messages appear after an account is connected.",
     "sentEmpty": "No sent mail yet.",
     "htmlMessage": "HTML email",
+    "noSubject": "(No subject)",
     "unread": "Unread",
     "messages": "{{count}} messages",
     "selected": "{{count}} selected",

@@ -124,6 +124,7 @@ function ThreadRow({
 }) {
   const { t } = useTranslation(["email"] as const);
   const eta = etaMail(thread.subject);
+  const subject = thread.subject || t("inbox.noSubject");
   return (
     <div
       className={cn(
@@ -136,7 +137,7 @@ function ThreadRow({
         className="mt-1"
         checked={checked}
         onCheckedChange={(value) => onCheckedChange(value === true)}
-        aria-label={thread.subject}
+        aria-label={subject}
       />
       <button
         type="button"
@@ -158,7 +159,7 @@ function ThreadRow({
                 ETA
               </span>
             ) : null}
-            <span className="truncate">{thread.subject || "(无主题)"}</span>
+            <span className="truncate">{subject}</span>
           </span>
           <span className="shrink-0 text-[11px] text-muted-foreground">
             {time(thread.lastMessageAt)}
@@ -194,7 +195,7 @@ function Message({ message }: { message: EmailMessageView }) {
         </span>
         <div className="min-w-0 flex-1">
           <h3 className="line-clamp-2 text-sm font-semibold sm:truncate">
-            {message.subject}
+            {message.subject || t("inbox.noSubject")}
           </h3>
           <p className="truncate text-xs text-muted-foreground">
             {message.from} → {message.to} · {time(message.createdAt)}
@@ -520,7 +521,7 @@ export function EmailInboxPage() {
                         </span>
                       ) : null}
                       <h1 className="line-clamp-2 text-base font-semibold leading-tight sm:truncate sm:text-lg">
-                        {detail.thread.subject}
+                        {detail.thread.subject || t("inbox.noSubject")}
                       </h1>
                     </div>
                     <p className="truncate text-xs text-muted-foreground">

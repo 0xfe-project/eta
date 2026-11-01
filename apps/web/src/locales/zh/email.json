@@ -54,6 +54,7 @@
     "empty": "还没有邮件。绑定账号后，新邮件会出现在这里。",
     "sentEmpty": "还没有发送记录。",
     "htmlMessage": "HTML 邮件",
+    "noSubject": "(无主题)",
     "unread": "未读",
     "messages": "{{count}} 封",
     "selected": "已选择 {{count}} 封",
