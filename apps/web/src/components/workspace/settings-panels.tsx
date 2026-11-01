@@ -97,7 +97,9 @@ function AppearanceSettings() {
       </div>
       <div className="settings-row">
         <div className="settings-row-label">
-          <div>{translateText("appearance.language")}</div>
+          <label htmlFor="language">
+            {translateText("appearance.language")}
+          </label>
         </div>
         <div className="settings-control">
           <LanguageSettings />
