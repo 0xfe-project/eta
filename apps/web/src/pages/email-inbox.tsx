@@ -600,70 +600,64 @@ export function EmailInboxPage() {
               {detail.messages.map((message) => (
                 <Message key={message.id} message={message} />
               ))}
-              <AssignDialog
-                threads={assignThreads}
-                open={assignOpen}
-                onOpenChange={setAssignOpen}
-                onAssigned={(result) => {
-                  setChecked([]);
-                  void navigate({
-                    to: "/",
-                    search: { group: result.conversationId },
-                  });
-                }}
-              />
-              <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {t("inbox.deleteTitle", { count: checked.length })}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {t("inbox.deleteDescription")}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>
-                      {t("common:actions.cancel")}
-                    </AlertDialogCancel>
-                    <AlertDialogAction
-                      disabled={removeThreads.isPending}
-                      onClick={() => {
-                        const deleting = checked;
-                        removeThreads.mutate(
-                          { threadIds: deleting },
-                          {
-                            onSuccess: ({ threadIds }) => {
-                              setChecked((current) =>
-                                current.filter((id) => !threadIds.includes(id)),
-                              );
-                              if (
-                                selected !== null &&
-                                threadIds.includes(selected)
-                              ) {
-                                void setSearch({ thread: null });
-                              }
-                              toast.success(
-                                t("inbox.deleted", {
-                                  count: threadIds.length,
-                                }),
-                              );
-                            },
-                            onError: (error) =>
-                              toast.error(wireErrorMessage(error)),
-                          },
-                        );
-                      }}
-                    >
-                      {t("common:actions.delete")}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
             </div>
           )}
         </section>
       </main>
+      <AssignDialog
+        threads={assignThreads}
+        open={assignOpen}
+        onOpenChange={setAssignOpen}
+        onAssigned={(result) => {
+          setChecked([]);
+          void navigate({
+            to: "/",
+            search: { group: result.conversationId },
+          });
+        }}
+      />
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("inbox.deleteTitle", { count: checked.length })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("inbox.deleteDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={removeThreads.isPending}
+              onClick={() => {
+                const deleting = checked;
+                removeThreads.mutate(
+                  { threadIds: deleting },
+                  {
+                    onSuccess: ({ threadIds }) => {
+                      setChecked((current) =>
+                        current.filter((id) => !threadIds.includes(id)),
+                      );
+                      if (selected !== null && threadIds.includes(selected)) {
+                        void setSearch({ thread: null });
+                      }
+                      toast.success(
+                        t("inbox.deleted", {
+                          count: threadIds.length,
+                        }),
+                      );
+                    },
+                    onError: (error) => toast.error(wireErrorMessage(error)),
+                  },
+                );
+              }}
+            >
+              {t("common:actions.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
