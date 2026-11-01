@@ -134,7 +134,7 @@ function ConnectionState({ connection }: { connection: LlmConnection }) {
         warn
           ? "text-destructive"
           : degraded
-            ? "text-amber-600 dark:text-amber-500"
+            ? "text-state-warning"
             : "text-muted-foreground",
       )}
     >
