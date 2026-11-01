@@ -1545,6 +1545,13 @@ export function EditableTitle({
 }
 
 /**
+ * Where Cancel or Save left a description editor: that task's edit button takes the focus back,
+ * also the one mounted anew when the saved description arrives (it keys Description), until the
+ * description is the one saved or the button is left.
+ */
+let descriptionFocus: { taskId: string; description: string } | null = null;
+
+/**
  * The task's description; `fold` folds a long one (the side panel), `className` replaces its
  * quote rule (the side panel's thread has the description as its first message). `quiet` makes
  * its edit button a pencil that shows where the pointer is over a `group/first` around it (and
@@ -1565,6 +1572,33 @@ export function Description({
   const update = useUpdateTask();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(task.description);
+  const editRef = useRef<HTMLButtonElement>(null);
+  const hasDescription = Boolean(task.description.trim());
+  useEffect(() => {
+    if (editing || descriptionFocus?.taskId !== task.id) return;
+    editRef.current?.focus();
+    if (descriptionFocus.description === task.description)
+      descriptionFocus = null;
+  }, [editing, task.id, task.description]);
+  const cancel = () => {
+    descriptionFocus = { taskId: task.id, description: task.description };
+    setEditing(false);
+  };
+  // Marked before the call: the saved description can arrive, and key a new Description, before
+  // the call returns to this one.
+  const save = () => {
+    descriptionFocus = { taskId: task.id, description: text };
+    update.mutate(
+      { taskId: task.id, description: text },
+      {
+        onSuccess: () => setEditing(false),
+        onError: (error) => {
+          descriptionFocus = null;
+          showError(error);
+        },
+      },
+    );
+  };
   if (editing)
     return (
       <div className="space-y-2">
@@ -1578,19 +1612,10 @@ export function Description({
           onChange={(e) => setText(e.target.value)}
         />
         <div className="flex justify-end gap-2">
-          <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+          <Button size="sm" variant="ghost" onClick={cancel}>
             {translateText("common:actions.cancel")}
           </Button>
-          <Button
-            size="sm"
-            disabled={update.isPending}
-            onClick={() =>
-              update.mutate(
-                { taskId: task.id, description: text },
-                { onSuccess: () => setEditing(false), onError: showError },
-              )
-            }
-          >
+          <Button size="sm" disabled={update.isPending} onClick={save}>
             {translateText("common:actions.save")}
           </Button>
         </div>
@@ -1600,16 +1625,21 @@ export function Description({
     setText(task.description);
     setEditing(true);
   };
-  if (quiet && task.description.trim())
+  const leaveEdit = () => {
+    if (descriptionFocus?.taskId === task.id) descriptionFocus = null;
+  };
+  if (quiet && hasDescription)
     return (
       <>
         <Button
+          ref={editRef}
           variant="ghost"
           size="icon-xs"
           aria-label={translateText("actions.editDescription")}
           title={translateText("actions.editDescription")}
           className="absolute top-0 right-0 text-muted-foreground opacity-0 group-focus-within/first:opacity-100 group-hover/first:opacity-100 pointer-coarse:opacity-100"
           onClick={startEditing}
+          onBlur={leaveEdit}
         >
           <PencilSimpleIcon aria-hidden="true" />
         </Button>
@@ -1620,18 +1650,20 @@ export function Description({
     );
   const edit = (
     <Button
+      ref={editRef}
       variant="ghost"
       size="xs"
       className="text-muted-foreground"
       onClick={startEditing}
+      onBlur={leaveEdit}
     >
       <PencilSimpleIcon aria-hidden="true" />
-      {task.description.trim()
+      {hasDescription
         ? translateText("actions.editDescription")
         : translateText("actions.addDescription")}
     </Button>
   );
-  if (!task.description.trim()) return <div className="-ml-2">{edit}</div>;
+  if (!hasDescription) return <div className="-ml-2">{edit}</div>;
   return (
     <Folded enabled={fold} max="max-h-56" className={className} actions={edit}>
       <Markdown className="text-sm">{task.description}</Markdown>
