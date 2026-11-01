@@ -49,7 +49,7 @@ describe("the default system prompt", () => {
     session.stop();
   });
 
-  it("assembles base → persona → skills → platform (agent, then app), then goal → tasks → memory", async () => {
+  it("assembles base → persona → skills → platform (agent, then app), then goal → steps → memory", async () => {
     const models = fakeModels([
       assistantMessage({ content: [{ type: "text", text: "ok" }] }),
     ]);
@@ -78,7 +78,7 @@ describe("the default system prompt", () => {
 
     const prompt = promptOf(models);
     // Specific to each *block*: the base prompt itself mentions
-    // `<current_tasks>` (it tells the agent to read that list), so the task block
+    // `<current_steps>` (it tells the agent to read that list), so the step block
     // is identified by the task, not by the tag.
     const order = [
       "You came here to help",
@@ -106,7 +106,7 @@ describe("the default system prompt", () => {
       "skills",
       "platform",
       "goal",
-      "tasks",
+      "steps",
       "memory",
     ]);
     expect(sections.stableChars).toBeGreaterThan(0);

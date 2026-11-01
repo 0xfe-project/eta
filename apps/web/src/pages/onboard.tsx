@@ -1,8 +1,8 @@
 import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LoadError, Loading } from "@/components/states";
+import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmailAccountForm } from "@/components/workspace/email-settings";
@@ -31,6 +31,22 @@ export function Onboard() {
   // Every card starts checked, so the state holds the ones the user unchecked.
   const [unchecked, setUnchecked] = useState<string[]>([]);
   const [failure, setFailure] = useState<string>();
+  const contentRef = useRef<HTMLElement>(null);
+  const shownRef = useRef(step);
+
+  // Next/Previous swap the content under the footer button, so focus follows
+  // the new step; the first render leaves focus where the page put it.
+  useEffect(() => {
+    if (shownRef.current === step) return;
+    shownRef.current = step;
+    contentRef.current?.focus();
+  }, [step]);
+
+  const steps = [
+    translateText("onboard:steps.providers"),
+    translateText("onboard:steps.agents"),
+    translateText("onboard:steps.email"),
+  ];
 
   const usable = (models ?? []).filter((model) => model.available);
   const defaultModel = usable.find((model) => model.default) ?? usable[0];
@@ -60,18 +76,19 @@ export function Onboard() {
   return (
     <main
       id="main"
-      className="mx-auto flex min-h-svh w-full max-w-2xl flex-col gap-4 p-4"
+      className="mx-auto flex h-svh w-full max-w-2xl flex-col gap-4 p-4"
     >
       <Stepper
-        steps={[
-          translateText("onboard:steps.providers"),
-          translateText("onboard:steps.agents"),
-          translateText("onboard:steps.email"),
-        ]}
+        steps={steps}
         step={step}
         label={translateText("onboard:stepsLabel")}
       />
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <section
+        ref={contentRef}
+        tabIndex={-1}
+        aria-label={steps[step]}
+        className="min-h-0 flex-1 overflow-y-auto outline-none"
+      >
         {step === 0 ? (
           <ProviderSettings />
         ) : step === 1 && !loaded && error === undefined ? (
@@ -81,6 +98,8 @@ export function Onboard() {
             what={translateText("onboard:agents.what")}
             error={error}
           />
+        ) : step === 1 && personas.length === 0 ? (
+          <Empty title={translateText("onboard:agents.empty")} />
         ) : step === 1 ? (
           <ul className="divide-y border">
             {personas.map((card) => {
@@ -104,7 +123,7 @@ export function Onboard() {
                       <span className="block text-sm font-medium">
                         {card.name}
                       </span>
-                      <span className="block truncate text-xs text-muted-foreground">
+                      <span className="block text-xs text-pretty break-words text-muted-foreground">
                         {card.description}
                       </span>
                     </span>
@@ -120,13 +139,13 @@ export function Onboard() {
           </ul>
         ) : (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-pretty text-muted-foreground">
               {translateText("onboard:email.optional")}
             </p>
             <EmailAccountForm compact />
           </div>
         )}
-      </div>
+      </section>
       {failure ? (
         <p
           role="alert"
@@ -179,7 +198,7 @@ export function Onboard() {
               ? translateText("onboard:states.installing")
               : failure
                 ? translateText("onboard:agents.retry")
-                : translateText("common:actions.install")}
+                : translateText("onboard:agents.install")}
           </Button>
         )}
       </footer>

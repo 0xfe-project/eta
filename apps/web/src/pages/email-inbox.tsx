@@ -42,6 +42,7 @@ import { useEmailNav } from "@/components/workspace/email-nav";
 import { EmailSessionLog } from "@/components/workspace/email-session-log";
 import { Select, SelectOption } from "@/components/workspace/select-field";
 import { useGroups } from "@/components/workspace/use-groups";
+import { formatLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useAgentList } from "@/queries/agents";
 import {
@@ -53,10 +54,10 @@ import {
   useRefreshEmail,
 } from "@/queries/email";
 import { useProjects } from "@/queries/projects";
-import { wireErrorMessage } from "@/queries/wire";
+import { useWireState, wireErrorMessage } from "@/queries/wire";
 
 function time(value: number): string {
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(formatLocale(), {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(value);
@@ -344,12 +345,22 @@ export function EmailInboxPage() {
   const { projects } = useProjects();
   const { groups } = useGroups();
   const navigate = useNavigate();
+  const connecting = useWireState((state) => state.status === "connecting");
   if (!email.mounted)
     return (
-      <LoadError
-        what={t("title")}
-        error={new Error("email plugin is not mounted")}
-      />
+      <>
+        <PageHeader title={t("title")} />
+        <main id="main" className="min-h-0 flex-1">
+          {connecting ? (
+            <Loading />
+          ) : (
+            <LoadError
+              what={t("title")}
+              error={new Error("email plugin is not mounted")}
+            />
+          )}
+        </main>
+      </>
     );
   const visibleThreads = emailThreadsForFolder(email.threads, folder);
   const chooseFolder = (next: EmailFolder) => {
@@ -452,6 +463,25 @@ export function EmailInboxPage() {
           </div>
           {!email.loaded ? (
             <Loading />
+          ) : folder === "inbox" && email.accounts.length === 0 ? (
+            <Empty
+              icon={EnvelopeSimpleIcon}
+              title={t("inbox.noAccount")}
+              action={
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    void navigate({
+                      to: "/settings",
+                      search: { section: "email" },
+                    })
+                  }
+                >
+                  {t("add")}
+                </Button>
+              }
+            />
           ) : visibleThreads.length === 0 ? (
             <Empty
               icon={EnvelopeSimpleIcon}
@@ -655,7 +685,7 @@ export function EmailInboxPage() {
                         );
                       }}
                     >
-                      {t("common:actions.delete")}
+                      {t("inbox.delete")}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>

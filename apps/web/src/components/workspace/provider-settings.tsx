@@ -211,11 +211,13 @@ function ProviderRow({
     <li className="flex min-w-0 items-center gap-2 px-3 py-1.5">
       <span className="min-w-0 flex-1">
         <span className="block truncate font-mono text-xs">{provider.id}</span>
-        <span className="block truncate text-[11px] text-muted-foreground">
+        <span className="block text-[11px] text-muted-foreground wrap-anywhere">
           {provider.kind} · {provider.baseUrl} ·{" "}
-          {translateText("editor.modelCount", {
-            count: provider.models.length,
-          })}
+          <span className="whitespace-nowrap">
+            {translateText("editor.modelCount", {
+              count: provider.models.length,
+            })}
+          </span>
           {provider.hasApiKey || signsIn(provider) ? null : (
             <span
               className={
@@ -242,7 +244,14 @@ function ProviderRow({
           {translateText("actions.linkAccount")}
         </Button>
       ) : null}
-      <Button size="xs" variant="ghost" onClick={onEdit}>
+      <Button
+        size="xs"
+        variant="ghost"
+        aria-label={translateText("common:actions.editItem", {
+          name: providerName,
+        })}
+        onClick={onEdit}
+      >
         {translateText("common:actions.edit")}
       </Button>
       <DropdownMenu>

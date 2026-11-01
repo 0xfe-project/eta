@@ -52,10 +52,10 @@ describe("what a session installs", () => {
     });
     expect(registered(session).sort()).toEqual(
       [
-        "TaskCreate",
-        "TaskGet",
-        "TaskList",
-        "TaskUpdate",
+        "create_step",
+        "get_step",
+        "list_steps",
+        "update_step",
         "bash",
         "check_state",
         "edit",
@@ -78,7 +78,7 @@ describe("what a session installs", () => {
       models: fakeModels([]) as never,
     });
     const names = registered(session);
-    expect(names).toContain("TaskUpdate");
+    expect(names).toContain("update_step");
     expect(names).toContain("update_state");
     // No environment, no way to read a file or run a command: absent, not broken.
     expect(names).not.toContain("read");

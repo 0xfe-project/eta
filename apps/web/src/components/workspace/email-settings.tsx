@@ -10,9 +10,20 @@ import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import {
   useEmail,
   useRemoveEmailAccount,
@@ -195,8 +206,9 @@ export function EmailAccountForm({
     <form onSubmit={(event) => void submit(event)} className="space-y-3">
       <div className={compact ? "grid gap-3" : "grid gap-3 sm:grid-cols-2"}>
         <div className="grid gap-1">
-          <Label>{t("provider")}</Label>
+          <Label htmlFor="email-provider">{t("provider")}</Label>
           <Select
+            id="email-provider"
             className="w-full"
             value={provider}
             onValueChange={(value) => pickProvider(value as Provider)}
@@ -277,6 +289,7 @@ export function EmailSettings() {
   const remove = useRemoveEmailAccount();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<EmailAccountView>();
+  const [removing, setRemoving] = useState<EmailAccountView>();
   const [checking, setChecking] = useState<Set<string>>(() => new Set());
   const closeForm = () => {
     setAdding(false);
@@ -344,9 +357,6 @@ export function EmailSettings() {
         <p className="text-xs leading-relaxed text-muted-foreground">
           {t("description")}
         </p>
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          {t("verifyHint")}
-        </p>
       </div>
       {accounts.length === 0 ? (
         <p className="border border-dashed px-3 py-2.5 text-xs text-muted-foreground">
@@ -363,20 +373,35 @@ export function EmailSettings() {
                 >
                   {account.name}
                 </div>
-                <div className="truncate text-xs text-muted-foreground">
-                  {account.address} · {account.imapHost} · {statusOf(account)}
+                <div
+                  className="truncate text-xs text-muted-foreground"
+                  title={`${account.address} · ${account.imapHost}`}
+                >
+                  {account.address} · {account.imapHost}
+                </div>
+                <div
+                  className={cn(
+                    "text-xs break-words",
+                    account.status === "error"
+                      ? "text-destructive"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  {statusOf(account)}
                 </div>
               </div>
               <Button
                 size="icon-sm"
                 variant="ghost"
-                aria-label={t("edit")}
+                aria-label={t("accessibility.editAccount", {
+                  address: account.address,
+                })}
                 onClick={() => {
                   setAdding(false);
                   setEditing(account);
                 }}
               >
-                <PencilSimpleIcon />
+                <PencilSimpleIcon aria-hidden="true" />
               </Button>
               <Button
                 size="sm"
@@ -390,22 +415,51 @@ export function EmailSettings() {
               <Button
                 size="icon-sm"
                 variant="ghost"
-                aria-label={t("remove")}
-                onClick={() =>
-                  remove.mutate(
-                    { accountId: account.id },
-                    {
-                      onError: (error) => toast.error(wireErrorMessage(error)),
-                    },
-                  )
-                }
+                aria-label={t("accessibility.removeAccount", {
+                  address: account.address,
+                })}
+                onClick={() => setRemoving(account)}
               >
-                <TrashIcon />
+                <TrashIcon aria-hidden="true" />
               </Button>
             </li>
           ))}
         </ul>
       )}
+      <AlertDialog
+        open={removing !== undefined}
+        onOpenChange={(open) => {
+          if (!open) setRemoving(undefined);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("removeConfirm.title", { name: removing?.name ?? "" })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("removeConfirm.description")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                if (!removing) return;
+                remove.mutate(
+                  { accountId: removing.id },
+                  {
+                    onError: (error) => toast.error(wireErrorMessage(error)),
+                  },
+                );
+              }}
+            >
+              {t("remove")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

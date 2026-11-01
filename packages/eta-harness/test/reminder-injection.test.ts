@@ -12,7 +12,7 @@ import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { openSession } from "../src/open";
-import { TASK_REVIEW_PROMPT } from "../src/prompts";
+import { STEP_REVIEW_PROMPT } from "../src/prompts";
 
 const userMsg = (text: string) => ({
   role: "user" as const,
@@ -76,7 +76,7 @@ describe("the reminder reaching a request", () => {
     // Turn 1 uses a tool: due after it. Turn 2 is the request that carries it.
     expect(reminderOf(models.calls[0]!)).not.toContain("<system-reminder>");
     expect(reminderOf(models.calls[1]!)).toContain("<system-reminder>");
-    expect(reminderOf(models.calls[1]!)).toContain(TASK_REVIEW_PROMPT);
+    expect(reminderOf(models.calls[1]!)).toContain(STEP_REVIEW_PROMPT);
     // Once per cycle: the request after it is clean again.
     expect(reminderOf(models.calls[2]!)).not.toContain("<system-reminder>");
 
@@ -151,7 +151,7 @@ describe("the reminder reaching a request", () => {
   it("goes quiet again when a task tool is used", async () => {
     const models = fakeModels([
       toolTurn("read"),
-      toolTurn("TaskUpdate"),
+      toolTurn("update_step"),
       toolTurn("read"),
       stopTurn(),
     ]);
@@ -161,13 +161,13 @@ describe("the reminder reaching a request", () => {
       reminderInterval: 1,
     });
     session.kernel.tools.register(plainTool);
-    session.kernel.tools.register({ name: "TaskUpdate", execute: () => "ok" });
+    session.kernel.tools.register({ name: "update_step", execute: () => "ok" });
     session.kernel.tasks.create("a task");
     session.kernel.inject(userMsg("go"));
     await session.runner.run();
 
     // Turn 1's `read` makes the reminder due, so turn 2's request carries it — the
-    // nudge arrives before the `TaskUpdate` that same turn runs…
+    // nudge arrives before the `update_step` that same turn runs…
     expect(reminderOf(models.calls[1]!)).toContain("<system-reminder>");
     // …turn 3's request is clean (the cycle is spent), and turn 3's `read` re-arms
     // the cadence, so turn 4's request carries the next one.

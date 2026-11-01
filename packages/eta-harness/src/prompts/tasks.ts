@@ -1,24 +1,28 @@
 /**
- * Task prompts (verbatim port of eta-agent's `prompts/tasks.ts`, itself a port
- * of todo.rs).
+ * Step prompts (port of eta-agent's `prompts/tasks.ts`, itself a port of
+ * todo.rs).
  *
  * Model-visible text lives here rather than in the tools that return it: the
  * prompts module owns the words, so a deployment can review what its agent says
  * in one place.
+ *
+ * A step is one line of the plan a session keeps for itself — what it is doing
+ * right now and in what order. It is not a board task: a board task is a unit of
+ * work that outlives the conversation, and it is proposed with `draft_task`.
  */
 import type { AgentMessage, Task, TaskStatus } from "@eta/core";
 
-/** What the task tools answer with after a write. */
-export const TASK_UPDATE_SUCCESS =
-  "Updated TODOs. FOLLOW and update your TODO list as you progress.";
+/** What the step tools answer with after a write. */
+export const STEP_UPDATE_SUCCESS =
+  "Updated steps. FOLLOW and update your step list as you progress.";
 
-/** Injected at the start of a turn when the session has tasks worth reviewing. */
-export const TASK_REVIEW_PROMPT =
-  "Before anything else, review your current task list (<current_tasks>...</current_tasks> above):" +
-  "\n- Are there tasks that are now completed? Mark them done." +
-  "\n- Are there tasks that are stale or no longer relevant? Cancel them." +
-  "\n- Are there any new tasks implied by the current conversation that should be added?" +
-  "\nAfter updating the list (if needed), continue working on the highest-priority pending or in-progress item.";
+/** Injected at the start of a turn when the session has steps worth reviewing. */
+export const STEP_REVIEW_PROMPT =
+  "Before anything else, review your current step list (<current_steps>...</current_steps> above):" +
+  "\n- Are there steps that are now completed? Mark them done." +
+  "\n- Are there steps that are stale or no longer relevant? Cancel them." +
+  "\n- Are there any new steps implied by the current conversation that should be added?" +
+  "\nAfter updating the list (if needed), continue working on the highest-priority pending or in-progress step.";
 
 /**
  * The transient nudge one request carries when the reminder cadence says a review
@@ -31,7 +35,7 @@ export const TASK_REVIEW_PROMPT =
  * stays byte-identical whether the reminder fired or not.
  */
 export function taskReminderMessage(
-  text: string = TASK_REVIEW_PROMPT,
+  text: string = STEP_REVIEW_PROMPT,
 ): AgentMessage {
   return {
     role: "user",
@@ -40,8 +44,8 @@ export function taskReminderMessage(
   } as AgentMessage;
 }
 
-/** Render the live task list into the system prompt block. */
-export function renderCurrentTasks(tasks: readonly Task[]): string {
+/** Render the live step list into the system prompt block. */
+export function renderCurrentSteps(tasks: readonly Task[]): string {
   const marks: Record<TaskStatus, string> = {
     pending: "[ ]",
     in_progress: "[~]",
@@ -51,5 +55,5 @@ export function renderCurrentTasks(tasks: readonly Task[]): string {
   const body = tasks
     .map((t) => `${marks[t.status] ?? "[ ]"} ${t.id}: ${t.content}`)
     .join("\n");
-  return `<current_tasks>\n${body}\n</current_tasks>`;
+  return `<current_steps>\n${body}\n</current_steps>`;
 }

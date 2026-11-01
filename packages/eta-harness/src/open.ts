@@ -97,7 +97,7 @@ import { createEditTool } from "./tools/edit";
 import { createReadTool } from "./tools/read";
 import { createStateTools } from "./tools/state";
 import { createSubagentTools } from "./tools/subagents";
-import { createTaskTools } from "./tools/tasks";
+import { createStepTools } from "./tools/tasks";
 import { toKernelTool } from "./tools/tool";
 import { createWriteTool } from "./tools/write";
 import { describeRepair, repairTranscript } from "./transcript-repair";
@@ -413,7 +413,7 @@ export async function openSession(
 
   const installedTools: HarnessTool<ExecutionToolContext, TSchema, unknown>[] =
     [
-      ...(createTaskTools(kernel.tasks) as HarnessTool<
+      ...(createStepTools(kernel.tasks) as HarnessTool<
         ExecutionToolContext,
         TSchema,
         unknown
