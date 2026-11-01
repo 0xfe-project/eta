@@ -21,8 +21,15 @@ bun run --cwd apps/desktop dev
 ## 打包
 
 ```sh
-bun run --cwd apps/web build
-hutch run --cwd apps/desktop build
+bun run --cwd apps/desktop package
 ```
+
+这条命令先构建前端，再用 `scripts/stage-host.ts` 把 host 编译成单个可执行文件 `eta-host`，
+连同它运行时要读的文件（migrations、内置 bundles、页面、CLIProxyAPI）一起放进
+`dist/host/`，最后 `hutch run build` 把它作为 `host/` 打进 app。产物在 `artifacts/`，
+打好的 app 不依赖仓库，可以装到 `/Applications`。
+
+不先 stage 直接 `hutch run build` 打出来的 app 不带 host，只能在仓库里打开（和开发时一样往上
+找 checkout）。
 
 数据目录是 `~/.eta`，和命令行启动的 host 共用一份。

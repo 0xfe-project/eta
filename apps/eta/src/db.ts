@@ -1,6 +1,5 @@
 import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 /**
  * The product's database: `<dataDir>/eta.sqlite`, as `bun:sqlite` in this process.
  *
@@ -14,6 +13,7 @@ import { fileURLToPath } from "node:url";
  * when they merge, not at runtime on somebody's data.
  */
 import { Database } from "bun:sqlite";
+import { resourcePath } from "./resources";
 
 export interface Migration {
   /** The file name without `.sql`: `0001-agents`. The number orders it, the whole name identifies it. */
@@ -26,7 +26,10 @@ const MIGRATION_TABLE = "eta_migrations";
 
 const MIGRATION_FILE = /^(\d{4})-[a-z0-9-]+\.sql$/;
 
-const MIGRATIONS_DIR = fileURLToPath(new URL("migrations/", import.meta.url));
+const MIGRATIONS_DIR = resourcePath(
+  "migrations",
+  new URL("migrations/", import.meta.url),
+);
 
 /** Where a data directory keeps its database. */
 export function databasePath(dataDir: string): string {

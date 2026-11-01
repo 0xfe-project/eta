@@ -1,4 +1,5 @@
 import type { ElectrobunConfig } from "electrobun";
+import { existsSync } from "node:fs";
 
 export default {
   app: {
@@ -26,6 +27,12 @@ export default {
       // but the HWND of a running window needs its own copy, and the shell loads it out of the
       // bundle (`src/bun/platform/windows/icon.ts`) — a packaged app has no checkout to read.
       "Eta-Logo.ico": "views/mainview/Eta-Logo.ico",
+      // The host the app carries (`scripts/stage-host.ts`; `bun run package` stages it first).
+      // Without it the app runs the host out of the checkout it was built in, as dev does. Found
+      // from this file: hutch does not load the config from this directory.
+      ...(existsSync(new URL("dist/host/eta-host", import.meta.url))
+        ? { "dist/host": "host" }
+        : {}),
     },
     mac: {
       bundleCEF: false,

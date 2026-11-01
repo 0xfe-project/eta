@@ -17,19 +17,20 @@ import type { MachineStore } from "../machines/store";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
 import {
   bundleHookLayer,
   bundleMcpServers,
   bundleSkillDirs,
 } from "@eta/daemon";
+import { resourcePath } from "../resources";
 import { Readiness } from "./plugin";
 import { BundleRegistry } from "./registry";
 import { BundleRows } from "./rows";
 import { BundleServices } from "./service";
 
 /** `bundles/` of the repository, where the built-in bundles are. */
-const BUILTIN_DIR = fileURLToPath(
+const BUILTIN_DIR = resourcePath(
+  "bundles",
   new URL("../../../../bundles", import.meta.url),
 );
 
