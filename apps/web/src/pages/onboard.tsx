@@ -1,6 +1,6 @@
 import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,22 @@ export function Onboard() {
   // Every card starts checked, so the state holds the ones the user unchecked.
   const [unchecked, setUnchecked] = useState<string[]>([]);
   const [failure, setFailure] = useState<string>();
+  const contentRef = useRef<HTMLElement>(null);
+  const shownRef = useRef(step);
+
+  // Next/Previous swap the content under the footer button, so focus follows
+  // the new step; the first render leaves focus where the page put it.
+  useEffect(() => {
+    if (shownRef.current === step) return;
+    shownRef.current = step;
+    contentRef.current?.focus();
+  }, [step]);
+
+  const steps = [
+    translateText("onboard:steps.providers"),
+    translateText("onboard:steps.agents"),
+    translateText("onboard:steps.email"),
+  ];
 
   const usable = (models ?? []).filter((model) => model.available);
   const defaultModel = usable.find((model) => model.default) ?? usable[0];
@@ -63,15 +79,16 @@ export function Onboard() {
       className="mx-auto flex min-h-svh w-full max-w-2xl flex-col gap-4 p-4"
     >
       <Stepper
-        steps={[
-          translateText("onboard:steps.providers"),
-          translateText("onboard:steps.agents"),
-          translateText("onboard:steps.email"),
-        ]}
+        steps={steps}
         step={step}
         label={translateText("onboard:stepsLabel")}
       />
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <section
+        ref={contentRef}
+        tabIndex={-1}
+        aria-label={steps[step]}
+        className="min-h-0 flex-1 overflow-y-auto"
+      >
         {step === 0 ? (
           <ProviderSettings />
         ) : step === 1 && !loaded && error === undefined ? (
@@ -126,7 +143,7 @@ export function Onboard() {
             <EmailAccountForm compact />
           </div>
         )}
-      </div>
+      </section>
       {failure ? (
         <p
           role="alert"
