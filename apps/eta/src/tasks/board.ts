@@ -56,8 +56,15 @@ export interface TaskRuns {
   stop: (taskId: string, why: string) => void;
   /** Whether a run of the task is starting or going. */
   active: (taskId: string) => boolean;
-  /** A comment on the task, for the run that is going to read. */
-  deliver: (taskId: string, activity: TaskActivityView) => void;
+  /**
+   * A comment on the task, for whoever should read it: the executor's run, and the agents it
+   * mentions. `wake: false` only hands it to a run that is going (a mentioned agent's answer).
+   */
+  deliver: (
+    taskId: string,
+    activity: TaskActivityView,
+    options?: { wake?: boolean },
+  ) => void;
 }
 
 /**
@@ -192,18 +199,26 @@ export class TaskBoard {
 
   /**
    * Comment on a task. A comment that is not the executor's own words (a run's tools say so with
-   * `deliver: false`) is also handed to the run that is going, which carries on with it. A retry
-   * with the same client id is the same comment and is delivered once.
+   * `deliver: false`) is also handed to the run that is going, which carries on with it, and to the
+   * agents it `mentions` (ids, kept in its data). `wake: false` hands it only to a run that is
+   * going. A retry with the same client id is the same comment and is delivered once.
    */
   comment(
     id: string,
     body: string,
     actor: TaskActor,
-    options: { clientId?: string | undefined; deliver?: boolean } = {},
+    options: {
+      clientId?: string | undefined;
+      deliver?: boolean;
+      wake?: boolean;
+      mentions?: readonly string[];
+    } = {},
   ): { task: BoardTaskDetail; activity: TaskActivityView } {
     const { clientId } = options;
-    this.#existing(id);
+    const mentions = [...new Set(options.mentions ?? [])];
+    const task = this.#existing(id);
     if (body.trim() === "") throw new Error("a comment needs some text");
+    this.#checkMentions(task, mentions);
     // A retry with the same client id is the same comment: hand back the one already there.
     const earlier =
       clientId === undefined
@@ -213,12 +228,17 @@ export class TaskBoard {
       return { task: this.#detailOf(this.#existing(id)), activity: earlier };
     let activity!: TaskActivityView;
     this.#commit(id, "changed", () => {
+      const data = {
+        ...(clientId === undefined ? {} : { clientId }),
+        ...(mentions.length === 0 ? {} : { mentions }),
+      };
       activity = this.#deps.tasks.record(id, "comment", actor, {
         body,
-        data: clientId === undefined ? undefined : { clientId },
+        data: Object.keys(data).length === 0 ? undefined : data,
       })!;
     });
-    if (options.deliver !== false) this.#runs?.deliver(id, activity);
+    if (options.deliver !== false)
+      this.#runs?.deliver(id, activity, { wake: options.wake !== false });
     return { task: this.#detailOf(this.#existing(id)), activity };
   }
 
@@ -379,6 +399,26 @@ export class TaskBoard {
       artifacts: this.#deps.artifactsOf(task.id),
       runs: this.#deps.runs.ofTask(task.id).map(({ taskId: _, ...run }) => run),
     };
+  }
+
+  /**
+   * A task that came from a group is that group's work: only its members can be called into the
+   * thread. One from a direct chat, or from nowhere, can call in any agent.
+   */
+  #checkMentions(task: TaskRecord, mentions: readonly string[]): void {
+    if (mentions.length === 0 || task.originConversationId === null) return;
+    const origin = this.#deps.conversations.get(task.originConversationId);
+    if (origin?.kind !== "group") return;
+    const members = new Set(
+      this.#deps.conversations
+        .participants(origin.id)
+        .map((member) => member.agentId),
+    );
+    const outside = mentions.filter((agentId) => !members.has(agentId));
+    if (outside.length > 0)
+      throw new Error(
+        `only members of the group "${origin.name}" can be mentioned on this task (not: ${outside.join(", ")})`,
+      );
   }
 
   #existing(id: string): TaskRecord {

@@ -143,8 +143,13 @@
     "awaitingYourReply": " Waiting for your reply",
     "unsupportedAttachments": "{{action}} does not support images or files yet; {{count}} were not added.",
     "deliveryFailed": "{{action}} was not delivered: {{message}}",
-    "placeholder": "Write a comment; Markdown supported. A running task reads it right away",
+    "placeholder": "Reply; a running task reads it right away",
     "queuedToSend": "Queued to send",
     "notDelivered": "Not delivered: {{message}}"
+  },
+  "thread": {
+    "replies": "{{count}} replies",
+    "replies_one": "{{count}} reply",
+    "replies_other": "{{count}} replies"
   }
 }

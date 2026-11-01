@@ -12,7 +12,8 @@ import type { ToolResult } from "@eta/harness";
  * Registered on each session when it opens, so a tool knows which agent it speaks for and where
  * without being told. An agent in a conversation proposes work (`draft_task`) or, when asked to,
  * makes it (`create_task`); the agent that made a task executes it, in a session of its own
- * (`task:` in `session-key.ts`), and that session reports with `comment_task` and `finish_task`.
+ * (`task:` in `session-key.ts`), and that session reports with `comment_task` and `finish_task`. An
+ * agent the user mentions on a task answers in a session of its own on it, with `comment_task` only.
  * Which run of the task that session is working on is asked when a tool is called, not when the
  * session opened: a session outlives its runs, since a comment that arrives later wakes another one
  * in the same session.
@@ -69,12 +70,15 @@ export function taskSessionTools(
       meta.conversationId,
       (runId) => deps.runner.runOf(runId)?.taskId,
     );
-    return taskId === undefined
-      ? conversationTools(deps, {
-          agentId: meta.agentId,
-          conversationId: meta.conversationId,
-        })
-      : runTools(deps, { agentId: meta.agentId, taskId });
+    if (taskId === undefined)
+      return conversationTools(deps, {
+        agentId: meta.agentId,
+        conversationId: meta.conversationId,
+      });
+    // A session of the task that is not its executor's is an agent mentioned on it.
+    return deps.board.find(taskId)?.createdBy.agentId === meta.agentId
+      ? runTools(deps, { agentId: meta.agentId, taskId })
+      : mentionedTools(deps, { agentId: meta.agentId, taskId });
   };
 }
 
@@ -364,6 +368,43 @@ function conversationTools(
     toKernelTool(create, none),
     toKernelTool(update, none),
     toKernelTool(comment, none),
+  ] as KernelTool[];
+}
+
+/** A mentioned agent's tools: read the board, and answer in the task's thread. */
+function mentionedTools(
+  deps: TaskToolDeps,
+  who: { agentId: string; taskId: string },
+): KernelTool[] {
+  const { runner } = deps;
+  const { list, get } = reading(deps);
+
+  const answer = defineTool({
+    name: "comment_task",
+    label: "comment_task",
+    description:
+      "Answer in this task's thread, in your name: what you were asked for, said once and in " +
+      "full. The user and the executor read it there. After it, stop: you are woken again when " +
+      "you are mentioned again.",
+    parameters: Type.Object({
+      body: Type.String({ description: "Your answer" }),
+    }),
+    execute(args) {
+      try {
+        return text(runner.answer(who.taskId, who.agentId, args.body), {
+          id: who.taskId,
+        });
+      } catch (error) {
+        return failure(error);
+      }
+    },
+  });
+
+  const none = (): undefined => undefined;
+  return [
+    toKernelTool(list, none),
+    toKernelTool(get, none),
+    toKernelTool(answer, none),
   ] as KernelTool[];
 }
 

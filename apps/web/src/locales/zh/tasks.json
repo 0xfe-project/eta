@@ -143,8 +143,13 @@
     "awaitingYourReply": " 在等你回复",
     "unsupportedAttachments": "{{action}}还不能带图片或文件，{{count}} 个没有加进来。",
     "deliveryFailed": "{{action}}未送达：{{message}}",
-    "placeholder": "写一条评论，支持 Markdown；执行中的任务会直接读到",
+    "placeholder": "回复；执行中的任务会直接读到",
     "queuedToSend": "待发送",
     "notDelivered": "未送达：{{message}}"
+  },
+  "thread": {
+    "replies": "{{count}} 条回复",
+    "replies_one": "{{count}} 条回复",
+    "replies_other": "{{count}} 条回复"
   }
 }

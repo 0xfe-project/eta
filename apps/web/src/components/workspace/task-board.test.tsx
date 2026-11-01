@@ -38,6 +38,7 @@ const first = taskDetail({
   runs: [
     {
       id: "r1",
+      agentId: null,
       status: "running",
       queueReason: null,
       machineId: "m1",
