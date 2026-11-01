@@ -66,13 +66,11 @@ function AppearanceSettings() {
     <div>
       <div className="settings-heading">
         <h2>{translateText("sections.appearance")}</h2>
-        <p>{translateText("appearance.description")}</p>
       </div>
       {/* Rows, not cards: a label on the left, its control on the right, one decision per line. */}
       <div className="settings-row">
         <div className="settings-row-label">
           <div>{translateText("appearance.colorMode")}</div>
-          <p>{translateText("appearance.colorModeHint")}</p>
         </div>
         <div className="settings-control settings-inline">
           {colorModes.map((choice) => (
