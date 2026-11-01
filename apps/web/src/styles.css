@@ -122,10 +122,16 @@
     width: 6px;
   }
   .pane-divider:hover,
+  .pane-divider:focus-visible,
   .pane-divider[data-dragging="true"] {
     width: 2px;
     background: var(--foreground);
     cursor: col-resize;
+  }
+  /* The 2px line is the focus ring; a transparent outline still shows in forced colours. */
+  .pane-divider:focus-visible {
+    outline-color: transparent;
+    outline-offset: 0;
   }
 
   /*
