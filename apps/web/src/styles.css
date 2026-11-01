@@ -796,7 +796,7 @@
   .composer-toolbar-hints {
     font-family: var(--font-mono);
     font-size: 10px;
-    color: var(--faint);
+    color: var(--muted-foreground);
   }
 
   /* Composer controls share one height; menus live in a fixed portal above them. */
