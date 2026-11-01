@@ -248,7 +248,11 @@ export function EmailAccountForm({
         </p>
       ) : null}
       <div className="flex gap-2">
-        <Button type="submit" disabled={save.isPending}>
+        <Button
+          type="submit"
+          variant={compact ? "outline" : "default"}
+          disabled={save.isPending}
+        >
           {save.isPending
             ? t("verifying")
             : editing
