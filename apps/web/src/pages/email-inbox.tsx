@@ -54,7 +54,7 @@ import {
   useRefreshEmail,
 } from "@/queries/email";
 import { useProjects } from "@/queries/projects";
-import { wireErrorMessage } from "@/queries/wire";
+import { useWireState, wireErrorMessage } from "@/queries/wire";
 
 function time(value: number): string {
   return new Intl.DateTimeFormat(formatLocale(), {
@@ -345,12 +345,22 @@ export function EmailInboxPage() {
   const { projects } = useProjects();
   const { groups } = useGroups();
   const navigate = useNavigate();
+  const connecting = useWireState((state) => state.status === "connecting");
   if (!email.mounted)
     return (
-      <LoadError
-        what={t("title")}
-        error={new Error("email plugin is not mounted")}
-      />
+      <>
+        <PageHeader title={t("title")} />
+        <main id="main" className="min-h-0 flex-1">
+          {connecting ? (
+            <Loading />
+          ) : (
+            <LoadError
+              what={t("title")}
+              error={new Error("email plugin is not mounted")}
+            />
+          )}
+        </main>
+      </>
     );
   const visibleThreads = emailThreadsForFolder(email.threads, folder);
   const chooseFolder = (next: EmailFolder) => {
