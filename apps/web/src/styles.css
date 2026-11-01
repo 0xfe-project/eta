@@ -1251,6 +1251,7 @@
     font-size: 12px;
     line-height: 1.5;
     color: var(--muted-foreground);
+    text-wrap: pretty;
   }
   .settings-hint {
     margin: 10px 0 0;
@@ -1287,6 +1288,7 @@
     font-size: 11px;
     line-height: 18px;
     color: var(--muted-foreground);
+    text-wrap: pretty;
   }
   .settings-control {
     display: flex;
