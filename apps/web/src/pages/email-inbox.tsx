@@ -42,6 +42,7 @@ import { useEmailNav } from "@/components/workspace/email-nav";
 import { EmailSessionLog } from "@/components/workspace/email-session-log";
 import { Select, SelectOption } from "@/components/workspace/select-field";
 import { useGroups } from "@/components/workspace/use-groups";
+import { formatLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useAgentList } from "@/queries/agents";
 import {
@@ -56,7 +57,7 @@ import { useProjects } from "@/queries/projects";
 import { wireErrorMessage } from "@/queries/wire";
 
 function time(value: number): string {
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(formatLocale(), {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(value);
