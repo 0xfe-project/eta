@@ -11,6 +11,7 @@
   "agents": {
     "what": "agents",
     "installed": "Installed",
+    "empty": "No persona cards to install",
     "failed": "Install failed: {{message}}",
     "retry": "Retry install"
   },
