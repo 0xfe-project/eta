@@ -14,17 +14,28 @@ import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { ChatCircleIcon } from "@phosphor-icons/react/ChatCircle";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
+import { GitPullRequestIcon } from "@phosphor-icons/react/GitPullRequest";
+import { InfoIcon } from "@phosphor-icons/react/Info";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
+import { PaperPlaneRightIcon } from "@phosphor-icons/react/PaperPlaneRight";
 import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
-import { RobotIcon } from "@phosphor-icons/react/Robot";
 import { SpinnerIcon } from "@phosphor-icons/react/Spinner";
 import { StopIcon } from "@phosphor-icons/react/Stop";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { UserIcon } from "@phosphor-icons/react/User";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Markdown } from "@/components/markdown";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,10 +44,19 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import { applyItem, buildMenu } from "@/lib/composer-menu";
 import { translate } from "@/lib/i18n";
+import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { cn } from "@/lib/utils";
 import { useAgentList } from "@/queries/agents";
+import { useConversationList } from "@/queries/conversations";
+import { useTaskPulls } from "@/queries/github";
 import {
   useCommentTask,
   useConfirmTaskDraft,
@@ -48,15 +68,14 @@ import {
   useUpdateTask,
 } from "@/queries/tasks";
 import { wireErrorMessage } from "@/queries/wire";
+import { AgentAvatar } from "./agent-identity";
 import { ArtifactButton } from "./artifact-dialog";
-import { BackToTop } from "./back-to-top";
 import { when } from "./routine-format";
 import { Select, SelectOption } from "./select-field";
 import { useTaskDraft } from "./task-draft";
 import {
   actorName,
   ago,
-  createdBy,
   isActive,
   queueReasonLabels,
   runStatusLabels,
@@ -68,6 +87,7 @@ import { useTaskNav } from "./task-nav";
 import { TaskPulls } from "./task-pulls";
 import { RunLog } from "./task-run-log";
 import { StatusIcon } from "./task-status-icon";
+import { SlashMenu } from "./transcript/slash-menu";
 import { useGroups } from "./use-groups";
 
 const showError = (error: Error) => toast.error(wireErrorMessage(error));
@@ -302,11 +322,13 @@ function StatusSelect({
   value,
   onChange,
   className,
+  size,
 }: {
   id?: string;
   value: TaskStatus;
   onChange: (status: TaskStatus) => void;
   className?: string;
+  size?: "sm" | "default";
 }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
   return (
@@ -314,6 +336,7 @@ function StatusSelect({
       id={id}
       aria-label={id ? undefined : translateText("fields.status")}
       className={className}
+      size={size}
       value={value}
       onValueChange={(value) => onChange(value as TaskStatus)}
     >
@@ -502,15 +525,18 @@ const propertyLabel = "text-xs leading-8 text-muted-foreground";
 
 /**
  * What the task is at now: its status, who executes it and where. Each value starts on an 8-high
- * line beside its name; `children` adds rows.
+ * line beside its name; `children` adds rows. `status={false}` leaves the status out, for a view
+ * that shows it elsewhere (the side panel's header).
  */
 export function TaskProperties({
   task,
   className,
+  status: withStatus = true,
   children,
 }: {
   task: TaskDetail;
   className?: string;
+  status?: boolean;
   children?: React.ReactNode;
 }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
@@ -523,17 +549,24 @@ export function TaskProperties({
         className,
       )}
     >
-      <dt className={propertyLabel}>{translateText("fields.status")}</dt>
-      <dd className="flex min-w-0 items-center gap-2">
-        <StatusIcon status={task.status} />
-        <StatusSelect
-          className="min-w-32"
-          value={task.status}
-          onChange={(status) =>
-            update.mutate({ taskId: task.id, status }, { onError: showError })
-          }
-        />
-      </dd>
+      {withStatus ? (
+        <>
+          <dt className={propertyLabel}>{translateText("fields.status")}</dt>
+          <dd className="flex min-w-0 items-center gap-2">
+            <StatusIcon status={task.status} />
+            <StatusSelect
+              className="min-w-32"
+              value={task.status}
+              onChange={(status) =>
+                update.mutate(
+                  { taskId: task.id, status },
+                  { onError: showError },
+                )
+              }
+            />
+          </dd>
+        </>
+      ) : null}
       {task.createdBy.kind === "agent" ? (
         <>
           <dt className={propertyLabel}>{translateText("executor.label")}</dt>
@@ -678,27 +711,25 @@ function describe(a: TaskActivity): React.ReactNode {
   }
 }
 
-/** Bookkeeping the task's current state already shows; runs of it fold. */
-const minor = new Set<string>([
-  "created",
-  "title",
-  "description",
-  "conversation",
-  "status",
-  "run_completed",
-  "run_nudged",
-]);
+/** What the thread gives a line of its own: what was said, what was delivered, what went wrong. */
+const standalone = new Set<string>(["comment", "artifact", "run_failed"]);
 
-/** The timeline's entries: single events, and runs of minor ones. */
+/**
+ * Never a line: the first message already says who made the task and when, and a run waiting for
+ * its turn is said under the thread while it waits (`LiveRuns`).
+ */
+const unlisted = new Set<string>(["created", "run_queued"]);
+
+/** The thread's entries: what stands alone, and everything between them folded into one. */
 function entries(items: TaskActivity[]) {
   const out: (TaskActivity | TaskActivity[])[] = [];
   for (const a of items) {
     const last = out.at(-1);
-    if (!minor.has(a.kind)) out.push(a);
+    if (standalone.has(a.kind)) out.push(a);
     else if (Array.isArray(last)) last.push(a);
     else out.push([a]);
   }
-  return out.map((e) => (Array.isArray(e) && e.length === 1 ? e[0] : e));
+  return out;
 }
 
 function Time({ at }: { at: number }) {
@@ -712,25 +743,37 @@ function Time({ at }: { at: number }) {
   );
 }
 
-/** An event as a line: who, what, when. */
-function EventLine({ a, task }: { a: TaskActivity; task: TaskDetail }) {
+/** An event as a line: who, what, when, and the log of the run it is about. */
+function EventLine({
+  a,
+  task,
+  run,
+}: {
+  a: TaskActivity;
+  task: TaskDetail;
+  run?: TaskRun | undefined;
+}) {
   const { agents } = useAgentList();
-  // A run's events read as the executor's.
+  // A run's events read as the executor's, unless they are a mentioned agent's own.
   const who = actorName(
-    a.kind.startsWith("run_") ? task.createdBy : a.actor,
+    a.kind.startsWith("run_") && a.actor.kind !== "agent"
+      ? task.createdBy
+      : a.actor,
     agents,
   );
   return (
     <p className="text-muted-foreground wrap-anywhere">
       {who} {describe(a)} <Time at={a.createdAt} />
+      {run ? <RunLogButton task={task} run={run} /> : null}
     </p>
   );
 }
 
-/** Minor events in a row, as one line that unfolds into them. */
+/** The bookkeeping between two messages, as one line that unfolds into it. */
 function Changes({ items, task }: { items: TaskActivity[]; task: TaskDetail }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
   const [open, setOpen] = useState(false);
+  const runs = new Map(task.runs.map((run) => [run.id, run]));
   return (
     <div>
       <button
@@ -747,15 +790,20 @@ function Changes({ items, task }: { items: TaskActivity[]; task: TaskDetail }) {
         {translateText("activity.changeCount", {
           count: items.length,
         })}
-        <span className="ml-1">
-          <Time at={items.at(-1)!.createdAt} />
-        </span>
       </button>
       {open ? (
         <ul className="mt-1 space-y-1">
           {items.map((a) => (
             <li key={a.id}>
-              <EventLine a={a} task={task} />
+              <EventLine
+                a={a}
+                task={task}
+                run={
+                  a.kind === "run_started" && a.runId
+                    ? runs.get(a.runId)
+                    : undefined
+                }
+              />
             </li>
           ))}
         </ul>
@@ -764,30 +812,76 @@ function Changes({ items, task }: { items: TaskActivity[]; task: TaskDetail }) {
   );
 }
 
-function Entry({
-  mark,
-  last,
+/** Who wrote a message, as a face: an agent's own, a filled square for me, a muted one for eta. */
+function Face({ actor }: { actor: TaskActivity["actor"] }) {
+  if (actor.kind === "agent" && actor.agentId)
+    return <AgentAvatar agent={{ id: actor.agentId }} className="size-7" />;
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "flex size-7 shrink-0 items-center justify-center",
+        actor.kind === "user"
+          ? "bg-foreground text-background"
+          : "bg-muted text-muted-foreground",
+      )}
+    >
+      <UserIcon className="size-4" />
+    </span>
+  );
+}
+
+/** The thread's two columns: faces, then what was said. */
+const threadRow = "grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-2";
+
+/**
+ * A message in the thread. `head` starts a sender's run of messages with their face, name and
+ * `meta` (when); the rest of the run is only its text, under the first.
+ */
+function Message({
+  actor,
+  head,
+  meta,
   children,
 }: {
-  mark: React.ReactNode;
-  last: boolean;
+  actor: TaskActivity["actor"];
+  head: boolean;
+  meta: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const { agents } = useAgentList();
   return (
-    <li className="relative grid grid-cols-[1rem_minmax(0,1fr)] gap-x-2 pb-4">
-      {last ? null : (
-        <span
-          aria-hidden="true"
-          className="absolute top-5 bottom-0 left-[calc(0.5rem-0.5px)] w-px bg-border"
-        />
-      )}
-      <span className="flex h-5 items-center justify-center">{mark}</span>
-      <div className="min-w-0 text-sm leading-5">{children}</div>
+    <li className={cn(threadRow, head ? "pt-3" : "pt-1")}>
+      <span>{head ? <Face actor={actor} /> : null}</span>
+      <div className="min-w-0 text-sm">
+        {head ? (
+          <p className="flex flex-wrap items-baseline gap-x-2 leading-5">
+            <span className="font-medium wrap-anywhere">
+              {actorName(actor, agents)}
+            </span>
+            {meta}
+          </p>
+        ) : null}
+        {children}
+      </div>
     </li>
   );
 }
 
-const dot = <span className="size-1.5 bg-muted-foreground/60" />;
+/** Something that happened, small and under the text column, between the messages. */
+function Note({ children }: { children: React.ReactNode }) {
+  return (
+    <li className={cn(threadRow, "pt-1.5")}>
+      <div className="col-start-2 min-w-0 text-xs leading-5">{children}</div>
+    </li>
+  );
+}
+
+/** A sender's messages run together while they follow each other within this. */
+const runOn = 5 * 60_000;
+
+const sameActor = (a: TaskActivity["actor"], b: TaskActivity["actor"]) =>
+  a.kind === b.kind && a.agentId === b.agentId;
 
 /** Stopping a run that has not ended; one that waits never starts. */
 function StopRun({ task, run }: { task: string; run: TaskRun }) {
@@ -829,51 +923,114 @@ function RunStatusText({ run }: { run: TaskRun }) {
   );
 }
 
-/** How a run is going, stopping it, and its log on demand. */
-function RunControls({ task, run }: { task: TaskDetail; run: TaskRun }) {
-  const { t: translateText } = useTranslation(["tasks", "common"] as const);
-  const [open, setOpen] = useState(false);
+/** Who works in a run: the agent mentioned into it, or the executor. */
+function useRunAgent(task: TaskDetail, run: TaskRun) {
+  const { agents } = useAgentList();
+  return actorName(
+    run.agentId === null
+      ? task.createdBy
+      : { kind: "agent", agentId: run.agentId },
+    agents,
+  );
+}
+
+/** A run's log, in a dialog: it is as long as the run was, more than a line of the thread holds. */
+function RunLogButton({ task, run }: { task: TaskDetail; run: TaskRun }) {
+  const { t: translateText } = useTranslation(["tasks"] as const);
+  const who = useRunAgent(task, run);
+  if (run.status === "queued") return null;
   return (
-    <>
-      <div className="-ml-2 flex flex-wrap items-center gap-x-1">
-        <span className="px-2">
-          <RunStatusText run={run} />
-        </span>
-        <StopRun task={task.id} run={run} />
-        {run.status === "queued" ? null : (
-          <Button
-            variant="ghost"
-            size="xs"
-            aria-expanded={open}
-            onClick={() => setOpen(!open)}
-          >
-            {open ? (
-              <CaretDownIcon aria-hidden="true" />
+    <Dialog>
+      <DialogTrigger asChild>
+        <button
+          type="button"
+          className="ml-2 text-xs text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:underline"
+        >
+          {translateText("log.title")}
+        </button>
+      </DialogTrigger>
+      <DialogContent className="grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle className="truncate pr-8">
+            #{task.number} · {who} · {translateText("log.title")}
+          </DialogTitle>
+          <DialogDescription className="wrap-anywhere">
+            {run.workspace ? (
+              <>
+                {translateText("log.workspacePrefix")}
+                <code>{run.workspace}</code>
+              </>
             ) : (
-              <CaretRightIcon aria-hidden="true" />
+              <RunStatusText run={run} />
             )}
-            {translateText("log.title")}
-          </Button>
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[70dvh] min-h-0 overflow-auto">
+          <RunLog run={run} />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** One run that has not ended: who, doing what, and stopping it. */
+function LiveRun({ task, run }: { task: TaskDetail; run: TaskRun }) {
+  const { t: translateText } = useTranslation(["tasks"] as const);
+  const who = useRunAgent(task, run);
+  const queued = run.status === "queued";
+  const Icon = queued ? ClockIcon : SpinnerIcon;
+  const doing = queued
+    ? translateText("live.queued", { name: who })
+    : run.status === "starting"
+      ? translateText("live.starting", { name: who })
+      : run.agentId === null
+        ? translateText("live.working", { name: who })
+        : translateText("live.answering", { name: who });
+  return (
+    <li className="flex min-w-0 items-center gap-1.5 text-xs">
+      <Icon
+        aria-hidden="true"
+        className={cn(
+          "size-3.5 shrink-0",
+          queued ? "text-muted-foreground" : "motion-safe:animate-spin",
         )}
-      </div>
-      {run.status === "queued" && run.queueReason ? (
-        <p className="text-xs text-muted-foreground">
-          {queueReasonLabels[run.queueReason]}
-        </p>
-      ) : null}
-      {run.continuesRunId === null ? null : (
-        <p className="text-xs text-muted-foreground">
-          {translateText("runs.continued")}
-        </p>
-      )}
-      {run.workspace && open ? (
-        <p className="text-xs text-muted-foreground wrap-anywhere">
-          {translateText("log.workspacePrefix")}
-          <code>{run.workspace}</code>
-        </p>
-      ) : null}
-      {open ? <RunLog run={run} /> : null}
-    </>
+      />
+      <span className="min-w-0 flex-1 truncate">
+        {doing}
+        {queued && run.queueReason ? (
+          <span className="text-muted-foreground">
+            {" · "}
+            {queueReasonLabels[run.queueReason]}
+          </span>
+        ) : null}
+      </span>
+      <RunLogButton task={task} run={run} />
+      <StopRun task={task.id} run={run} />
+    </li>
+  );
+}
+
+/**
+ * What is going on the task right now, one line per run: the executor working, an agent mentioned
+ * into the thread answering, a run waiting its turn. Under the thread, beside the box to answer,
+ * like someone typing; gone once the run ends, whose outcome the thread then says.
+ */
+export function LiveRuns({
+  task,
+  className,
+}: {
+  task: TaskDetail;
+  className?: string;
+}) {
+  const { t: translateText } = useTranslation(["tasks"] as const);
+  const active = task.runs.filter((run) => isActive(run.status));
+  if (active.length === 0) return null;
+  return (
+    <ul aria-label={translateText("live.label")} className={className}>
+      {active.map((run) => (
+        <LiveRun key={run.id} task={task} run={run} />
+      ))}
+    </ul>
   );
 }
 
@@ -886,8 +1043,10 @@ function RunControls({ task, run }: { task: TaskDetail; run: TaskRun }) {
 function RunRow({ task }: { task: TaskDetail }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
   const rerun = useRerunTask();
-  const latest = task.runs.at(-1);
-  const open = task.runs.some((run) => isActive(run.status));
+  // The executor's runs: a mentioned agent answering is not the task running.
+  const own = task.runs.filter((run) => run.agentId === null);
+  const latest = own.at(-1);
+  const open = own.some((run) => isActive(run.status));
   return (
     <>
       <dt className={propertyLabel}>{translateText("runs.label")}</dt>
@@ -924,94 +1083,63 @@ function RunRow({ task }: { task: TaskDetail }) {
   );
 }
 
-/** A run where it started: who, how it went, and its log on demand. */
-function RunEntry({
-  task,
-  run,
-  activity,
-}: {
-  task: TaskDetail;
-  run: TaskRun;
-  activity: TaskActivity;
-}) {
-  return (
-    <div className="space-y-1">
-      {activity.kind === "run_queued" ? null : (
-        <EventLine a={activity} task={task} />
-      )}
-      <RunControls task={task} run={run} />
-    </div>
-  );
-}
-
-/** The task's history: comments in full (long ones folded), bookkeeping folded into "N 条变更". */
+/**
+ * The task's history as a thread: comments as messages, a sender's run of them under one face, what
+ * was delivered and what failed on lines of their own, and the rest between them folded into one
+ * line ("N 条动态"). What is going now is not here but under it (`LiveRuns`).
+ */
 export function Timeline({ task }: { task: TaskDetail }) {
   const { t: translateText } = useTranslation(["common"] as const);
-  const { agents } = useAgentList();
-  // Runs show where they started; their queueing is news only while they still wait, with why.
   const runs = new Map(task.runs.map((run) => [run.id, run]));
-  const waiting = (a: TaskActivity) => {
-    const run = a.kind === "run_queued" && a.runId && runs.get(a.runId);
-    return run && run.status === "queued" ? run : undefined;
-  };
+  // A run still going is said under the thread (`LiveRuns`); its start joins the thread once it ends.
+  const going = (a: TaskActivity) =>
+    a.kind === "run_started" &&
+    a.runId !== null &&
+    isActive(runs.get(a.runId)?.status);
   const items = entries(
-    task.activity.filter((a) => describe(a) !== null || waiting(a)),
+    task.activity.filter(
+      (a) => !unlisted.has(a.kind) && !going(a) && describe(a) !== null,
+    ),
   );
   return (
     <ol aria-label={translateText("labels.timeline")}>
       {items.map((a, i) => {
-        const last = i === items.length - 1;
         if (Array.isArray(a))
           return (
-            <Entry key={a[0].id} last={last} mark={dot}>
+            <Note key={a[0].id}>
               <Changes items={a} task={task} />
-            </Entry>
+            </Note>
           );
-        if (a.kind === "comment")
+        if (a.kind === "comment") {
+          const before = items[i - 1];
+          const head = !(
+            before &&
+            !Array.isArray(before) &&
+            before.kind === "comment" &&
+            sameActor(before.actor, a.actor) &&
+            a.createdAt - before.createdAt < runOn
+          );
           return (
-            <Entry
+            <Message
               key={a.id}
-              last={last}
-              mark={
-                a.actor.kind === "user" ? (
-                  <span className="size-2 bg-foreground" />
-                ) : (
-                  <RobotIcon aria-hidden="true" className="size-3.5" />
-                )
-              }
+              actor={a.actor}
+              head={head}
+              meta={<Time at={a.createdAt} />}
             >
-              <p className="flex flex-wrap items-baseline gap-x-2">
-                <span className="text-xs font-medium wrap-anywhere">
-                  {actorName(a.actor, agents)}
-                </span>
-                <Time at={a.createdAt} />
-              </p>
-              <Folded max="max-h-60" className="mt-1">
+              <Folded max="max-h-60">
                 <Markdown className="text-sm">{a.body ?? ""}</Markdown>
               </Folded>
-            </Entry>
+            </Message>
           );
-        const run =
-          (a.kind === "run_started" && a.runId && runs.get(a.runId)) ||
-          waiting(a);
+        }
         return (
-          <Entry
-            key={a.id}
-            last={last}
-            mark={
-              a.kind === "run_failed" ? (
-                <span className="size-1.5 bg-destructive" />
-              ) : (
-                dot
-              )
-            }
-          >
-            {run ? (
-              <RunEntry task={task} run={run} activity={a} />
-            ) : (
-              <EventLine a={a} task={task} />
-            )}
-          </Entry>
+          <Note key={a.id}>
+            <EventLine
+              a={a}
+              task={task}
+              run={a.runId ? runs.get(a.runId) : undefined}
+            />
+          </Note>
         );
       })}
     </ol>
@@ -1034,17 +1162,50 @@ const commentsLike = (task: TaskDetail, body: string) =>
 interface Outgoing {
   id: string;
   body: string;
+  /** The agents it calls in, as written when it was sent. */
+  mentions: string[];
   /** How many such comments the task had when it was sent. */
   before: number;
   /** Why it did not arrive; absent while it is being sent. */
   failure?: string;
 }
 
-export function CommentBox({ task }: { task: TaskDetail }) {
+/**
+ * Who a comment on the task can call in: the members of the group it came from, or, for a task
+ * from a direct chat, any agent. Labelled the way the chat's composer labels them.
+ */
+function useMentionable(task: TaskDetail) {
+  const { agents } = useAgentList();
+  const { conversations } = useConversationList();
+  const origin = conversations.find((c) => c.id === task.originConversationId);
+  const members =
+    origin?.kind === "group"
+      ? new Set(origin.participants.map((member) => member.agentId))
+      : undefined;
+  const people = agents.filter((agent) => members?.has(agent.id) ?? true);
+  return people.map((agent) => ({
+    id: agent.id,
+    name: mentionLabel(agent, people),
+    busy: agent.status !== "idle",
+  }));
+}
+
+/** The box for the next comment; `className` places it (the side panel docks it at the bottom). */
+export function CommentBox({
+  task,
+  className,
+  top,
+}: {
+  task: TaskDetail;
+  className?: string;
+  /** Over the box, inside what places it (the side panel: what is going now). */
+  top?: React.ReactNode;
+}) {
   const { t: translateText } = useTranslation([
     "tasks",
     "common",
     "navigation",
+    "chat",
   ] as const);
   const text = useTaskDraft((s) => s.drafts[task.id] ?? "");
   const setDraft = useTaskDraft((s) => s.setDraft);
@@ -1052,6 +1213,27 @@ export function CommentBox({ task }: { task: TaskDetail }) {
     setDraft(task.id, update);
   const [outgoing, setOutgoing] = useState<Outgoing | null>(null);
   const comment = useCommentTask();
+  // `@` offers the agents the comment can call in (composer-menu.ts, as in the chat).
+  const listId = useId();
+  const members = useMentionable(task);
+  const [menuIndex, setMenuIndex] = useState(0);
+  const [menuDismissed, setMenuDismissed] = useState(false);
+  const menu = buildMenu({
+    text,
+    members,
+    files: [],
+    commands: [],
+    tasks: [],
+    dismissed: menuDismissed,
+  });
+  const items = menu?.items ?? [];
+  const menuActive = Math.min(menuIndex, items.length - 1);
+  const choose = (index: number) => {
+    const item = items[index];
+    if (!menu || !item) return;
+    setText(applyItem(text, menu, item).text);
+    setMenuIndex(0);
+  };
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -1076,7 +1258,11 @@ export function CommentBox({ task }: { task: TaskDetail }) {
       : null;
   const deliver = (o: Outgoing) => {
     comment
-      .mutateAsync({ taskId: task.id, body: o.body })
+      .mutateAsync({
+        taskId: task.id,
+        body: o.body,
+        ...(o.mentions.length ? { mentions: o.mentions } : {}),
+      })
       .catch((error: unknown) => {
         const failure = wireErrorMessage(error);
         // Gone with the task's view: say so, as the box that held it is gone.
@@ -1100,6 +1286,7 @@ export function CommentBox({ task }: { task: TaskDetail }) {
     const o = {
       id: crypto.randomUUID(),
       body,
+      mentions: mentionedMembers(body, members),
       before: commentsLike(task, body),
     };
     setOutgoing(o);
@@ -1126,54 +1313,115 @@ export function CommentBox({ task }: { task: TaskDetail }) {
           onDiscard={() => setOutgoing(null)}
         />
       ) : null}
-      <form
-        className="space-y-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-      >
-        <Textarea
-          id={commentBoxId}
-          aria-label={translateText("comments.title")}
-          placeholder={translateText("comments.placeholder")}
-          rows={2}
-          maxLength={20000}
-          className="min-h-16 text-sm md:text-sm"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          // A comment is text only: a pasted or dropped file would vanish
-          // without a word, so say it stayed out (a paste's text still goes in).
-          onPaste={(e) => leftOut(e.clipboardData.files.length)}
-          onDrop={(e) => {
-            if (!e.dataTransfer.files.length) return;
+      <div className={className}>
+        {top}
+        <form
+          className="relative flex items-end border border-input bg-background focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/50 dark:bg-input/30"
+          onSubmit={(e) => {
             e.preventDefault();
-            leftOut(e.dataTransfer.files.length);
+            submit();
           }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              submit();
+        >
+          {items.length ? (
+            <SlashMenu
+              id={listId}
+              rows={items.map((item) => ({
+                name: item.value.trim(),
+                description:
+                  item.kind === "member" && item.hint
+                    ? translateText("chat:mentions.busyHint")
+                    : translateText("chat:mentions.replyHint"),
+              }))}
+              active={menuActive}
+              label={translateText("chat:mentions.pickTargets")}
+              onHover={setMenuIndex}
+              onChoose={(row) =>
+                choose(
+                  items.findIndex((item) => item.value.trim() === row.name),
+                )
+              }
+            />
+          ) : null}
+          <Textarea
+            id={commentBoxId}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={items.length > 0}
+            aria-controls={items.length ? listId : undefined}
+            aria-activedescendant={
+              items.length ? `${listId}-${menuActive}` : undefined
             }
-          }}
-        />
-        <div className="flex flex-wrap justify-end gap-2">
+            aria-label={translateText("comments.title")}
+            placeholder={translateText("comments.placeholder")}
+            rows={1}
+            maxLength={20000}
+            className="max-h-48 min-h-9 resize-none border-0 bg-transparent text-sm focus-visible:ring-0 md:text-sm dark:bg-transparent"
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              setMenuDismissed(false);
+            }}
+            // A comment is text only: a pasted or dropped file would vanish
+            // without a word, so say it stayed out (a paste's text still goes in).
+            onPaste={(e) => leftOut(e.clipboardData.files.length)}
+            onDrop={(e) => {
+              if (!e.dataTransfer.files.length) return;
+              e.preventDefault();
+              leftOut(e.dataTransfer.files.length);
+            }}
+            onKeyDown={(e) => {
+              if (items.length && !e.nativeEvent.isComposing) {
+                const step = { ArrowDown: 1, ArrowUp: -1 }[e.key];
+                if (step) {
+                  e.preventDefault();
+                  setMenuIndex(
+                    (menuActive + step + items.length) % items.length,
+                  );
+                  return;
+                }
+                if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+                  e.preventDefault();
+                  choose(menuActive);
+                  return;
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setMenuDismissed(true);
+                  return;
+                }
+              }
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+          />
           <Button
             type="submit"
-            size="sm"
+            size="icon-sm"
+            variant="ghost"
+            className="m-0.5"
+            title={translateText("comments.title")}
             disabled={!text.trim() || Boolean(waiting)}
           >
             {waiting && !waiting.failure ? (
               <>
                 <SpinnerIcon aria-hidden="true" className="animate-spin" />
-                {translateText("common:states.sending")}
+                <span className="sr-only">
+                  {translateText("common:states.sending")}
+                </span>
               </>
             ) : (
-              translateText("comments.title")
+              <>
+                <PaperPlaneRightIcon aria-hidden="true" />
+                <span className="sr-only">
+                  {translateText("comments.title")}
+                </span>
+              </>
             )}
           </Button>
-        </div>
-      </form>
+        </form>
+      </div>
     </>
   );
 }
@@ -1196,16 +1444,16 @@ function OutgoingComment({
     "navigation",
   ] as const);
   return (
-    <ol aria-label={translateText("comments.queuedToSend")}>
-      <Entry
-        last
-        mark={
-          <span
-            className={cn(
-              "size-2 bg-muted-foreground/60",
-              outgoing.failure && "bg-destructive",
-            )}
-          />
+    <ol aria-label={translateText("comments.queuedToSend")} className="pb-3">
+      <Message
+        actor={{ kind: "user", agentId: null }}
+        head
+        meta={
+          outgoing.failure ? null : (
+            <span role="status" className="text-xs text-muted-foreground">
+              {translateText("common:states.sending")}
+            </span>
+          )
         }
       >
         <div className={cn(!outgoing.failure && "opacity-60")}>
@@ -1232,12 +1480,8 @@ function OutgoingComment({
               </Button>
             </div>
           </div>
-        ) : (
-          <p role="status" className="mt-1 text-xs text-muted-foreground">
-            {translateText("common:states.sending")}
-          </p>
-        )}
-      </Entry>
+        ) : null}
+      </Message>
     </ol>
   );
 }
@@ -1300,13 +1544,22 @@ export function EditableTitle({
   );
 }
 
-/** The task's description; `fold` folds a long one (the side panel). */
+/**
+ * The task's description; `fold` folds a long one (the side panel), `className` replaces its
+ * quote rule (the side panel's thread has the description as its first message). `quiet` makes
+ * its edit button a pencil that shows where the pointer is over a `group/first` around it (and
+ * always on touch), placed by the nearest positioned ancestor, rather than a line of its own.
+ */
 export function Description({
   task,
   fold = false,
+  className = "border-l-2 border-foreground pl-3",
+  quiet = false,
 }: {
   task: TaskDetail;
   fold?: boolean;
+  className?: string;
+  quiet?: boolean;
 }) {
   const { t: translateText } = useTranslation(["tasks", "common"] as const);
   const update = useUpdateTask();
@@ -1343,15 +1596,34 @@ export function Description({
         </div>
       </div>
     );
+  const startEditing = () => {
+    setText(task.description);
+    setEditing(true);
+  };
+  if (quiet && task.description.trim())
+    return (
+      <>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label={translateText("actions.editDescription")}
+          title={translateText("actions.editDescription")}
+          className="absolute top-0 right-0 text-muted-foreground opacity-0 group-focus-within/first:opacity-100 group-hover/first:opacity-100 pointer-coarse:opacity-100"
+          onClick={startEditing}
+        >
+          <PencilSimpleIcon aria-hidden="true" />
+        </Button>
+        <Folded enabled={fold} max="max-h-56" className={className}>
+          <Markdown className="text-sm">{task.description}</Markdown>
+        </Folded>
+      </>
+    );
   const edit = (
     <Button
       variant="ghost"
       size="xs"
       className="text-muted-foreground"
-      onClick={() => {
-        setText(task.description);
-        setEditing(true);
-      }}
+      onClick={startEditing}
     >
       <PencilSimpleIcon aria-hidden="true" />
       {task.description.trim()
@@ -1361,18 +1633,106 @@ export function Description({
   );
   if (!task.description.trim()) return <div className="-ml-2">{edit}</div>;
   return (
-    <Folded
-      enabled={fold}
-      max="max-h-56"
-      className="border-l-2 border-foreground pl-3"
-      actions={edit}
-    >
+    <Folded enabled={fold} max="max-h-56" className={className} actions={edit}>
       <Markdown className="text-sm">{task.description}</Markdown>
     </Folded>
   );
 }
 
-/** A task in the side panel: one column, what matters first. */
+/** The pull request the task delivered, newest, as a link in the header: it is the work. */
+function PullChip({ task }: { task: TaskDetail }) {
+  const pull = useTaskPulls(task.id).at(-1);
+  if (!pull) return null;
+  return (
+    <Button
+      asChild
+      variant="ghost"
+      size="xs"
+      className="text-muted-foreground tabular-nums"
+    >
+      <a href={pull.url} target="_blank" rel="noreferrer" title={pull.title}>
+        <GitPullRequestIcon aria-hidden="true" />#{pull.number}
+      </a>
+    </Button>
+  );
+}
+
+/** How long the pointer rests on the details button before they open, and leaves before they close. */
+const HOVER_OPEN_MS = 150;
+const HOVER_CLOSE_MS = 200;
+
+/**
+ * The task's underlying properties — who executes it, where, its runs and rerunning, its pull
+ * requests — behind one button. A click opens and pins them; a mouse resting on the button opens
+ * them too and they close when it leaves, unless a click pinned them. Not a hover card: they hold
+ * buttons, and a touch has no hover.
+ */
+function TaskDetails({ task }: { task: TaskDetail }) {
+  const { t: translateText } = useTranslation(["tasks"] as const);
+  const [open, setOpen] = useState(false);
+  const pinnedRef = useRef(false);
+  const timerRef = useRef<number | undefined>(undefined);
+  const hover = (next: boolean) => (e: React.PointerEvent) => {
+    if (e.pointerType !== "mouse" || pinnedRef.current) return;
+    window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(
+      setOpen,
+      next ? HOVER_OPEN_MS : HOVER_CLOSE_MS,
+      next,
+    );
+  };
+  useEffect(() => () => window.clearTimeout(timerRef.current), []);
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) pinnedRef.current = false;
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={translateText("details.propertiesTab")}
+          title={translateText("details.propertiesTab")}
+          onPointerEnter={hover(true)}
+          onPointerLeave={hover(false)}
+          onClick={(e) => {
+            // Open from hovering, a click pins it; otherwise a click opens and closes.
+            e.preventDefault();
+            window.clearTimeout(timerRef.current);
+            if (open && !pinnedRef.current) {
+              pinnedRef.current = true;
+              return;
+            }
+            pinnedRef.current = !open;
+            setOpen(!open);
+          }}
+        >
+          <InfoIcon aria-hidden="true" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className="w-80"
+        onPointerEnter={hover(true)}
+        onPointerLeave={hover(false)}
+      >
+        <TaskProperties task={task} status={false}>
+          <TaskPulls task={task} />
+        </TaskProperties>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * A task in the side panel, as a thread. The header holds what is always needed — the title and
+ * the status — and the rest of the task's properties behind a button (`TaskDetails`); the
+ * description is the first message; the comments, what was delivered and what failed follow, the
+ * rest folded between them; what is going now sits over the box to reply, at the bottom.
+ */
 function TaskView({ task }: { task: TaskDetail }) {
   const { t: translateText } = useTranslation([
     "tasks",
@@ -1381,68 +1741,127 @@ function TaskView({ task }: { task: TaskDetail }) {
   ] as const);
   const [, setNav] = useTaskNav();
   const { agents } = useAgentList();
+  const update = useUpdateTask();
   const remove = useDeleteTask();
+  const replies = task.activity.filter((a) => a.kind === "comment").length;
+  // A thread opens on its latest reply, next to the box to answer it; once more after the first
+  // paint, for what lays itself out late (folded text measuring itself). It is at least as tall as
+  // the panel shows, so a short one still has its box at the bottom.
+  const ref = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const article = ref.current;
+    let area = article?.parentElement;
+    while (
+      area &&
+      !["auto", "scroll"].includes(getComputedStyle(area).overflowY)
+    )
+      area = area.parentElement;
+    if (!article || !area) return;
+    const fill = () => {
+      const { paddingTop, paddingBottom } = getComputedStyle(area);
+      article.style.minHeight = `${area.clientHeight - Number.parseFloat(paddingTop) - Number.parseFloat(paddingBottom)}px`;
+    };
+    fill();
+    const resize = new ResizeObserver(fill);
+    resize.observe(area);
+    const end = () => area.scrollTo({ top: area.scrollHeight });
+    end();
+    const frame = requestAnimationFrame(end);
+    return () => {
+      cancelAnimationFrame(frame);
+      resize.disconnect();
+    };
+  }, []);
   return (
-    <>
-      <article className="space-y-4">
-        {/* Pinned to the panel's edge, over its padding (p-3), as the rest scrolls. */}
-        <header className="sticky -top-3 z-10 -mx-3 -mt-3 mb-2 space-y-1 bg-background px-3 pt-3 pb-2">
-          <div className="flex items-center justify-between gap-2">
-            <Back
-              label={translateText("navigation:sections.tasks")}
-              onClick={() => void setNav({ task: null })}
-            />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={translateText("navigation:sections.more")}
-                >
-                  <DotsThreeIcon aria-hidden="true" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  variant="destructive"
-                  onSelect={() =>
-                    remove.mutate(
-                      { taskId: task.id },
-                      {
-                        onSuccess: () => void setNav({ task: null }),
-                        onError: showError,
-                      },
-                    )
-                  }
-                >
-                  {translateText("common:actions.delete")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-          <EditableTitle key={task.title} task={task} />
-          <p className="text-xs text-muted-foreground tabular-nums">
-            #{task.number} · {createdBy(task, agents)}
+    <article ref={ref} className="flex flex-col">
+      {/* Pinned to the panel's edge, over its padding (p-3), as the rest scrolls. */}
+      <header className="sticky -top-3 z-10 -mx-3 -mt-3 space-y-1 bg-surface px-3 pt-3 pb-2">
+        <div className="flex items-center gap-1">
+          <Back
+            label={translateText("navigation:sections.tasks")}
+            onClick={() => void setNav({ task: null })}
+          />
+          <span className="flex-1 text-xs text-muted-foreground tabular-nums">
+            #{task.number}
+          </span>
+          <PullChip task={task} />
+          <StatusIcon status={task.status} />
+          <StatusSelect
+            size="sm"
+            value={task.status}
+            onChange={(status) =>
+              update.mutate({ taskId: task.id, status }, { onError: showError })
+            }
+          />
+          <TaskDetails task={task} />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={translateText("navigation:sections.more")}
+              >
+                <DotsThreeIcon aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={() =>
+                  remove.mutate(
+                    { taskId: task.id },
+                    {
+                      onSuccess: () => void setNav({ task: null }),
+                      onError: showError,
+                    },
+                  )
+                }
+              >
+                {translateText("common:actions.delete")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <EditableTitle key={task.title} task={task} />
+      </header>
+      <div className={cn(threadRow, "group/first relative pt-2")}>
+        <Face actor={task.createdBy} />
+        <div className="min-w-0 space-y-1 text-sm">
+          <p className="flex flex-wrap items-baseline gap-x-2 leading-5">
+            <span className="font-medium wrap-anywhere">
+              {actorName(task.createdBy, agents)}
+            </span>
+            <Time at={task.createdAt} />
           </p>
-        </header>
-        <TaskProperties task={task} className="bg-muted/50 px-3 py-2">
-          <TaskPulls task={task} />
-        </TaskProperties>
-        <Question task={task} />
-        <Description key={task.description} task={task} fold />
-        <section aria-labelledby="task-activity" className="space-y-3">
-          <h3
-            id="task-activity"
-            className="text-xs font-medium text-muted-foreground"
-          >
-            {translateText("details.activityTab")}
-          </h3>
+          <Description
+            key={task.description}
+            task={task}
+            fold
+            quiet
+            className=""
+          />
+        </div>
+      </div>
+      <section
+        aria-label={translateText("details.activityTab")}
+        className="flex flex-1 flex-col"
+      >
+        {replies ? (
+          <p className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+            {translateText("thread.replies", { count: replies })}
+            <span aria-hidden="true" className="h-px flex-1 bg-border" />
+          </p>
+        ) : null}
+        <div className="pb-3">
           <Timeline task={task} />
-          <CommentBox task={task} />
-        </section>
-      </article>
-      <BackToTop />
-    </>
+        </div>
+        <CommentBox
+          task={task}
+          className="sticky -bottom-3 z-10 -mx-3 -mb-3 mt-auto bg-surface px-3 pt-1 pb-3"
+          top={<LiveRuns task={task} className="space-y-1 pb-1.5" />}
+        />
+      </section>
+    </article>
   );
 }
 

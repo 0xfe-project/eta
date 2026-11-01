@@ -29,6 +29,11 @@ import type { SshTransport } from "@eta/ssh";
  *   is a prompt: it wakes the executor with another run, in the session the task already has, so it
  *   carries on from what it did rather than learning the project again. A task that is not worked
  *   on any more (`backlog`, `done`, `cancelled`) only records the comment.
+ * - **Mentions.** A user's comment can mention other agents. Each is woken in a run of its own on
+ *   the task (its lane: `agentId` on the run), in a session of its own that it carries on the next
+ *   time it is mentioned; it reads the task and the work, answers in the thread and is done — it
+ *   does not take the task over or move it. Its answer reaches the executor if a run of it is going,
+ *   and wakes nobody. A comment that mentions only others does not wake the executor either.
  * - **Stopping.** Interrupting a run stops its session; so does moving the task to done or
  *   cancelled. A restart ends the runs it interrupted as failures that say so; queued runs wait.
  * - **The worktree stays.** What a run left in its worktree is the work under review, and the next
@@ -52,7 +57,7 @@ import type { TaskRecord, TaskStore } from "./store";
 import { LinkError } from "@eta/daemon";
 import { shellQuote } from "@eta/ssh";
 import { workable } from "./board";
-import { sessionKeyOf, taskKey } from "./session-key";
+import { mentionKey, sessionKeyOf, taskKey } from "./session-key";
 import { prepareWorktree } from "./workspace";
 
 /** What a run says when the process died under it. */
@@ -107,7 +112,7 @@ interface Live {
   pending: string[];
   /** The run has been told what was said on the task; anything said later waits for it or for the next. */
   read: boolean;
-  /** The executor called `finish_task`. */
+  /** The executor called `finish_task`; a mentioned agent answered in the thread. */
   reported: boolean;
   /** Why the session was stopped from outside, if it was. */
   stopped: "interrupt" | "closing" | undefined;
@@ -130,6 +135,30 @@ const NUDGE =
  */
 const PARK_LIMIT = 20;
 
+/**
+ * One line of work on a task: its executor's runs (`agentId` null) or a mentioned agent's. A run
+ * waits for the previous run of its own lane, and what was said waits for the next one of it.
+ */
+interface Lane {
+  taskId: string;
+  agentId: string | null;
+}
+
+const laneKey = (lane: Lane): string =>
+  lane.agentId === null ? lane.taskId : `${lane.taskId}:${lane.agentId}`;
+
+/** Who a run's events are by: a mentioned agent's are its own; the executor's are the system's. */
+const actorOf = (run: RunRecord): TaskActor | undefined =>
+  run.agentId === null ? undefined : { kind: "agent", agentId: run.agentId };
+
+/** The agents a comment mentions, as its data keeps them. */
+const mentionsOf = (activity: TaskActivityView): string[] => {
+  const raw = activity.data.mentions;
+  return Array.isArray(raw)
+    ? raw.filter((id): id is string => typeof id === "string")
+    : [];
+};
+
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
@@ -142,8 +171,8 @@ const workingIn = (cwd: string, branch: string | null): string =>
 export class TaskRunner implements TaskRuns {
   readonly #deps: TaskRunnerDeps;
   readonly #live = new Map<string, Live>();
-  /** Comments waiting for the next run of a task to read, oldest first. */
-  readonly #waiting = new Map<string, string[]>();
+  /** Comments waiting for the next run of a lane to read, oldest first, by `laneKey`. */
+  readonly #waiting = new Map<string, { lane: Lane; texts: string[] }>();
   readonly #work = new Set<Promise<void>>();
   #attached = false;
   #closing = false;
@@ -207,7 +236,7 @@ export class TaskRunner implements TaskRuns {
    */
   rerun(taskId: string): { task: BoardTaskDetail; run: RunRecord } {
     const task = this.#task(taskId);
-    if (this.#deps.runs.openOf(task.id).length > 0)
+    if (this.#openIn({ taskId: task.id, agentId: null }).length > 0)
       throw new Error("this task already has a run that has not ended");
     const run = this.#queue(task.id);
     return { task: this.#deps.board.detail(task.id)!, run };
@@ -231,7 +260,7 @@ export class TaskRunner implements TaskRuns {
 
   /** The task is done or cancelled: its runs stop, and so does anything waiting to wake one. */
   stop(taskId: string, why: string): void {
-    this.#waiting.delete(taskId);
+    this.#forget(taskId);
     for (const run of this.#deps.runs.openOf(taskId)) this.#stop(run, why);
   }
 
@@ -247,22 +276,60 @@ export class TaskRunner implements TaskRuns {
    * wakes it is asked to work on. Nothing is running that could read it and the task is not worked
    * on any more (`backlog`, `done`, `cancelled`) — then it is a line on the timeline and nothing
    * more.
+   *
+   * The agents a user's comment mentions are each woken in their own lane to answer it. The
+   * executor is woken only by a comment meant for it: one that mentions it, or nobody; one that
+   * mentions only others it reads if it is working. `wake: false` (a mentioned agent's answer)
+   * wakes nobody at all.
    */
-  deliver(taskId: string, activity: TaskActivityView): void {
+  deliver(
+    taskId: string,
+    activity: TaskActivityView,
+    options: { wake?: boolean } = {},
+  ): void {
     if (activity.body === null || activity.actor.kind === "system") return;
     const task = this.#deps.tasks.get(taskId);
     if (task === undefined) return;
-    const open = this.#deps.runs.openOf(taskId);
-    const going = open.find(
-      (run) => run.status === "starting" || run.status === "running",
-    );
-    const live = going === undefined ? undefined : this.#live.get(going.id);
     const who =
       activity.actor.kind === "user"
         ? "the user"
         : (this.#deps.agents.get(activity.actor.agentId ?? "")?.name ??
           "another agent");
     const text = `A comment from ${who} on task #${task.number}:\n\n${activity.body}`;
+    const executor = task.createdBy.agentId;
+    // Only the user calls agents in: agents mentioning each other could wake one another forever.
+    const mentions = activity.actor.kind === "user" ? mentionsOf(activity) : [];
+    for (const agentId of mentions) {
+      if (agentId === executor) continue;
+      if (this.#deps.agents.get(agentId) === undefined) {
+        this.#deps.warn(
+          `[eta] task ${taskId} mentions agent ${agentId}, which is gone`,
+        );
+        continue;
+      }
+      this.#hand({ taskId, agentId }, text, true);
+    }
+    const forExecutor =
+      options.wake !== false &&
+      (mentions.length === 0 ||
+        (executor !== null && mentions.includes(executor)));
+    // Words left with a task that will not be worked on again are none of the runner's business.
+    this.#hand(
+      { taskId, agentId: null },
+      text,
+      forExecutor && workable(task.status),
+    );
+  }
+
+  /**
+   * Hand words to a lane: into its run that is going (steering the turn in flight, or with the
+   * next), or — when `wake` — left for its next run, which this asks for if none is waiting.
+   */
+  #hand(lane: Lane, text: string, wake: boolean): void {
+    const going = this.#openIn(lane).find(
+      (run) => run.status === "starting" || run.status === "running",
+    );
+    const live = going === undefined ? undefined : this.#live.get(going.id);
     if (going !== undefined && live !== undefined) {
       const handle = live.handle;
       if (live.inFlight && handle !== undefined) {
@@ -278,16 +345,27 @@ export class TaskRunner implements TaskRuns {
       }
       return;
     }
-    // Nobody is reading it now. Leave it with the task and let the queue decide who reads it: the
-    // run already waiting there, or one this comment has to ask for. Words left with a task that
-    // will not be worked on again are none business of the runner's.
-    if (!workable(task.status)) return;
-    this.#park(task.id, text);
-    // A continuation, not a restart: the task's session holds what the executor did, and the
-    // comment usually reads as an answer to it. It waits its turn like any run (offline machine, a
-    // full machine) and the comment waits with it; a task that has a run in the queue already will
-    // have that run read it instead. `pump` is where a parked comment turns into a run.
+    if (!wake) return;
+    // Nobody is reading it now. Leave it with the lane and let the queue decide who reads it: the
+    // run already waiting there, or one this comment has to ask for. For the executor that is a
+    // continuation, not a restart: the task's session holds what it did, and the comment usually
+    // reads as an answer to it. It waits its turn like any run (offline machine, a full machine)
+    // and the comment waits with it. `pump` is where a parked comment turns into a run.
+    this.#park(lane, text);
     this.pump();
+  }
+
+  /** The lane's runs that have not ended. */
+  #openIn(lane: Lane): RunRecord[] {
+    return this.#deps.runs
+      .openOf(lane.taskId)
+      .filter((run) => run.agentId === lane.agentId);
+  }
+
+  /** Everything left to read on a task, in every lane of it, goes. */
+  #forget(taskId: string): void {
+    for (const [key, { lane }] of this.#waiting)
+      if (lane.taskId === taskId) this.#waiting.delete(key);
   }
 
   /**
@@ -296,48 +374,54 @@ export class TaskRunner implements TaskRuns {
    * moments other than a comment that change it: a run ending, a machine coming back.
    */
   #wakeWaiting(): void {
-    for (const taskId of [...this.#waiting.keys()]) {
-      if ((this.#waiting.get(taskId)?.length ?? 0) === 0) {
-        this.#waiting.delete(taskId);
+    for (const [key, { lane, texts }] of [...this.#waiting]) {
+      if (texts.length === 0) {
+        this.#waiting.delete(key);
         continue;
       }
-      // A run of the task is in the queue or going: it will read what is waiting.
-      if (this.#deps.runs.openOf(taskId).length > 0) continue;
-      const task = this.#deps.tasks.get(taskId);
-      if (task === undefined || !workable(task.status)) {
-        this.#waiting.delete(taskId);
+      // A run of the lane is in the queue or going: it will read what is waiting.
+      if (this.#openIn(lane).length > 0) continue;
+      const task = this.#deps.tasks.get(lane.taskId);
+      // A mentioned agent answers whatever the task's status; the executor works only a workable one.
+      if (
+        task === undefined ||
+        (lane.agentId === null && !workable(task.status))
+      ) {
+        this.#waiting.delete(key);
         continue;
       }
       try {
         // The words stay parked for that run to be told, so a wake that got as far as queueing has
         // its answer in the table and survives a restart; only a refusal empties the park.
-        this.#queue(taskId, { continues: true });
+        this.#queue(lane.taskId, { continues: true, agentId: lane.agentId });
       } catch (error) {
-        this.#waiting.delete(taskId);
+        this.#waiting.delete(key);
         this.#deps.warn(
-          `[eta] task ${taskId} was not woken by a comment: ${messageOf(error)}`,
+          `[eta] task ${lane.taskId} was not woken by a comment: ${messageOf(error)}`,
         );
       }
     }
   }
 
-  /** Leave a comment for the next run of the task to be told. */
-  #park(taskId: string, text: string): void {
-    this.#parkAll(taskId, [text]);
+  /** Leave a comment for the next run of the lane to be told. */
+  #park(lane: Lane, text: string): void {
+    this.#parkAll(lane, [text]);
   }
 
-  /** Leave several, in order, for the next run of the task to be told. Nothing to tell is nothing to leave. */
-  #parkAll(taskId: string, texts: string[]): void {
+  /** Leave several, in order, for the next run of the lane to be told. Nothing to tell is nothing to leave. */
+  #parkAll(lane: Lane, texts: string[]): void {
     if (texts.length === 0) return;
-    const waiting = [...(this.#waiting.get(taskId) ?? []), ...texts];
-    this.#waiting.set(taskId, waiting.slice(-PARK_LIMIT));
+    const key = laneKey(lane);
+    const waiting = [...(this.#waiting.get(key)?.texts ?? []), ...texts];
+    this.#waiting.set(key, { lane, texts: waiting.slice(-PARK_LIMIT) });
   }
 
   /** The comments a run takes over as it starts. */
-  #unpark(taskId: string): string[] {
-    const waiting = this.#waiting.get(taskId);
-    this.#waiting.delete(taskId);
-    return waiting ?? [];
+  #unpark(lane: Lane): string[] {
+    const key = laneKey(lane);
+    const waiting = this.#waiting.get(key);
+    this.#waiting.delete(key);
+    return waiting?.texts ?? [];
   }
 
   /* ---------------------------------------------------------------- the executor's tools */
@@ -352,10 +436,35 @@ export class TaskRunner implements TaskRuns {
    * the task's and outlives a run, so the tools of a session that was opened by an earlier run are
    * asked again each time, and answer with the run that is reading them.
    */
-  workingRunOf(taskId: string): RunRecord | undefined {
-    return this.#deps.runs
-      .openOf(taskId)
-      .find((run) => run.status === "starting" || run.status === "running");
+  workingRunOf(
+    taskId: string,
+    agentId: string | null = null,
+  ): RunRecord | undefined {
+    return this.#openIn({ taskId, agentId }).find(
+      (run) => run.status === "starting" || run.status === "running",
+    );
+  }
+
+  /**
+   * A mentioned agent answers in the thread. The answer is a comment in its name that the
+   * executor reads if it is working, and that wakes nobody. Returns what to tell the model.
+   */
+  answer(taskId: string, agentId: string, body: string): string {
+    const run = this.workingRunOf(taskId, agentId);
+    const live = run === undefined ? undefined : this.#live.get(run.id);
+    if (run === undefined || live === undefined)
+      throw new Error(
+        "you are not answering on this task now, so there is nothing to answer",
+      );
+    const task = this.#task(taskId);
+    this.#deps.board.comment(
+      task.id,
+      body,
+      { kind: "agent", agentId },
+      { wake: false },
+    );
+    live.reported = true;
+    return `Your answer is in the thread of #${task.number}.`;
   }
 
   /**
@@ -419,21 +528,41 @@ export class TaskRunner implements TaskRuns {
    * Queue a run of a task, or say why it cannot have one. A run that continues the task carries on
    * in the session of the newest run that made one; a rerun and a task's first run open their own.
    */
-  #queue(taskId: string, options: { continues?: boolean } = {}): RunRecord {
+  #queue(
+    taskId: string,
+    options: { continues?: boolean; agentId?: string | null } = {},
+  ): RunRecord {
     const { runs, board, projects, agents } = this.#deps;
     const task = this.#task(taskId);
-    if (task.createdBy.kind !== "agent" || task.createdBy.agentId === null)
-      throw new Error("this task has no executor: only an agent's task runs");
-    if (agents.get(task.createdBy.agentId) === undefined)
-      throw new Error("the agent that made this task is gone");
+    const agentId = options.agentId ?? null;
+    if (agentId !== null) {
+      if (agents.get(agentId) === undefined)
+        throw new Error("the agent mentioned on this task is gone");
+    } else {
+      if (task.createdBy.kind !== "agent" || task.createdBy.agentId === null)
+        throw new Error("this task has no executor: only an agent's task runs");
+      if (agents.get(task.createdBy.agentId) === undefined)
+        throw new Error("the agent that made this task is gone");
+    }
     const project =
       task.projectId === null ? undefined : projects.get(task.projectId);
     if (project === undefined)
       throw new Error("this task's project is gone, so it has nowhere to run");
     const continued =
-      options.continues === true ? runs.lastSessionOf(task.id) : undefined;
-    const run = runs.create(task.id, project.machineId, continued?.id ?? null);
-    board.runEvent(task.id, { kind: "run_queued", runId: run.id });
+      options.continues === true
+        ? runs.lastSessionOf(task.id, agentId)
+        : undefined;
+    const run = runs.create(
+      task.id,
+      project.machineId,
+      continued?.id ?? null,
+      agentId,
+    );
+    board.runEvent(task.id, {
+      kind: "run_queued",
+      runId: run.id,
+      actor: actorOf(run),
+    });
     this.pump();
     return runs.get(run.id)!;
   }
@@ -450,7 +579,7 @@ export class TaskRunner implements TaskRuns {
       let reason: TaskQueueReason | null = null;
       if (machine === undefined || machine.status !== "online")
         reason = "machine_offline";
-      else if (runs.busy(run.taskId, run.id)) reason = "task_busy";
+      else if (runs.busy(run)) reason = "task_busy";
       else if (runs.activeOn(machine.id) >= machine.maxActiveRuns)
         reason = "machine_full";
       if (reason !== null || machine === undefined) {
@@ -475,12 +604,13 @@ export class TaskRunner implements TaskRuns {
     if (live === undefined) {
       // It never started: it never will. Nothing is going to read what was left for it, and the
       // user asked for the task to stop, so the words stay on the timeline and the queue is clear.
-      this.#waiting.delete(run.taskId);
+      this.#waiting.delete(laneKey(run));
       if (this.#deps.runs.finish(run.id, "interrupted", why) !== undefined) {
         this.#deps.board.runEvent(run.taskId, {
           kind: "run_interrupted",
           runId: run.id,
           body: why,
+          actor: actorOf(run),
         });
         this.pump();
       }
@@ -534,6 +664,7 @@ export class TaskRunner implements TaskRuns {
       this.#deps.board.runEvent(run.taskId, {
         kind: `run_${ended.status}`,
         runId: run.id,
+        actor: actorOf(run),
         ...(ended.error === undefined || ended.status === "completed"
           ? {}
           : { body: ended.error }),
@@ -544,8 +675,8 @@ export class TaskRunner implements TaskRuns {
     // start would else wake itself forever. The words are on the task's timeline either way, and a
     // comment that arrives later asks again.
     if (live.stopped === undefined && live.read)
-      this.#parkAll(run.taskId, live.pending.splice(0));
-    else this.#waiting.delete(run.taskId);
+      this.#parkAll(run, live.pending.splice(0));
+    else this.#waiting.delete(laneKey(run));
     this.#after(info, ended, live.said);
     // A comment left unread, a run that has now ended, a task still being worked on: that is a run.
     this.pump();
@@ -561,15 +692,17 @@ export class TaskRunner implements TaskRuns {
     const task = tasks.get(run.taskId);
     if (task === undefined)
       return { ended: { status: "failed", error: "The task is gone." } };
-    const agent =
-      task.createdBy.agentId === null
-        ? undefined
-        : agents.get(task.createdBy.agentId);
+    // The executor, or the agent this lane is: a mentioned agent answers, it does not execute.
+    const mentioned = run.agentId !== null;
+    const agentId = run.agentId ?? task.createdBy.agentId;
+    const agent = agentId === null ? undefined : agents.get(agentId);
     if (agent === undefined)
       return {
         ended: {
           status: "failed",
-          error: "The agent that made this task is gone.",
+          error: mentioned
+            ? "The agent mentioned on this task is gone."
+            : "The agent that made this task is gone.",
         },
       };
     const project =
@@ -610,7 +743,12 @@ export class TaskRunner implements TaskRuns {
       continued?.sessionId == null || continued.machineId !== run.machineId
         ? undefined
         : continued;
-    const key = reused === undefined ? taskKey(task.id) : sessionKeyOf(reused);
+    const key =
+      reused !== undefined
+        ? sessionKeyOf(reused)
+        : run.agentId === null
+          ? taskKey(task.id)
+          : mentionKey(task.id, run.agentId);
     const handle = await this.#deps.engine.openRunSession({
       key,
       existing: reused?.sessionId ?? null,
@@ -628,7 +766,7 @@ export class TaskRunner implements TaskRuns {
     if (live.stopped !== undefined) return { ended: { status: "interrupted" } };
 
     runs.running(run.id);
-    if (task.status !== "in_progress")
+    if (!mentioned && task.status !== "in_progress")
       board.update(
         task.id,
         { status: "in_progress" },
@@ -638,15 +776,17 @@ export class TaskRunner implements TaskRuns {
       kind: "run_started",
       runId: run.id,
       data: { workspace: cwd },
+      actor: actorOf(run),
     });
 
     // What was said on the task: while the session was being made, and (for a run woken by a
     // comment, or queued while comments arrived) whatever waited for this run to start. From here
     // on, anything said is this run's to read or the next one's.
-    const words = [...this.#unpark(task.id), ...live.pending.splice(0)];
+    const words = [...this.#unpark(run), ...live.pending.splice(0)];
     live.read = true;
-    const told =
-      carriesOn === true
+    const told = mentioned
+      ? this.#mentionedOf(task, agent.name, cwd, branch, carriesOn)
+      : carriesOn === true
         ? this.#carryOnOf(task, cwd, branch, words.length > 0)
         : this.#promptOf(task, cwd, branch);
     const conversationId = task.originConversationId ?? key;
@@ -703,6 +843,17 @@ export class TaskRunner implements TaskRuns {
         prompt = live.pending.splice(0).join("\n\n");
         continue;
       }
+      if (mentioned) {
+        // An answer that never went to the thread goes there now: what it said last is it.
+        if (!live.reported && live.said.trim() !== "")
+          board.comment(
+            task.id,
+            live.said,
+            { kind: "agent", agentId: agent.id },
+            { wake: false },
+          );
+        return { ended: { status: "completed" }, info };
+      }
       if (live.reported) return { ended: { status: "completed" }, info };
       const current = runs.get(run.id);
       if (current?.nudged !== true) {
@@ -734,7 +885,7 @@ export class TaskRunner implements TaskRuns {
         ? undefined
         : `It came from the conversation "${conversation.name}" (id ${conversation.id}); your result is posted there.`,
       `## Where you work\n\n${workingIn(cwd, branch)}`,
-      `## Reporting\n\n- comment_task posts a progress note or a question on the task.\n- When the work is done, or you cannot go on without the user, call finish_task with a summary: what you did, the result, and what the user should check. It moves the task to review and posts the summary in the conversation. A run that stops without calling it is reminded once, then fails.\n- The user may comment on the task while you work; their comments reach you as messages, and a comment left once this run has ended wakes another one, in this session.\n- Merging (opening a pull request) is decided after review: do not merge into the main branch unless the task says to.\n- get_task shows the whole task with its timeline.`,
+      `## Reporting\n\n- comment_task posts a progress note or a question on the task.\n- When the work is done, or you cannot go on without the user, call finish_task with a summary: what you did, the result, and what the user should check. It moves the task to review and posts the summary in the conversation. A run that stops without calling it is reminded once, then fails.\n- The user may comment on the task while you work; their comments reach you as messages, and a comment left once this run has ended wakes another one, in this session. Other agents the user mentions on the task answer in its thread; their answers reach you while you work.\n- Merging (opening a pull request) is decided after review: do not merge into the main branch unless the task says to.\n- get_task shows the whole task with its timeline.`,
     ]
       .filter((part) => part !== undefined)
       .join("\n\n");
@@ -773,6 +924,36 @@ export class TaskRunner implements TaskRuns {
         ? "What was said on the task is below."
         : "Nothing was left for you to read below it: open get_task, and answer what its timeline last asked of the task.",
     ].join("\n\n");
+  }
+
+  /**
+   * What a mentioned agent is told: whose task it is, that it is asked for its view and not to take
+   * the work over, where the work is, and how to answer. The comment that called it in follows.
+   */
+  #mentionedOf(
+    task: TaskRecord,
+    name: string,
+    cwd: string,
+    branch: string | null,
+    carriesOn: boolean,
+  ): string {
+    const executor =
+      task.createdBy.agentId === null
+        ? undefined
+        : this.#deps.agents.get(task.createdBy.agentId)?.name;
+    return [
+      carriesOn
+        ? `You were mentioned on task #${task.number}, "${task.title}", again. This is the session you answered in before: what is above is your own reading and your own answers.`
+        : `You are ${name}, and you were mentioned on task #${task.number}, "${task.title}". ${executor === undefined ? "Another agent" : executor} is its executor and does the work; the user asked for you in the task's thread. You are not taking the task over: read it, look at the work if that helps, and answer.`,
+      carriesOn
+        ? undefined
+        : `## The task\n\n${task.description.trim() === "" ? "(no description)" : task.description.trim()}`,
+      `## Where the work is\n\n${cwd}${branch === null ? "" : ` (the branch ${branch})`}. The executor works there too: change nothing unless the comment asks you to.`,
+      `## Answering\n\n- comment_task posts your answer in the task's thread, in your name; the user and the executor read it there. When you have answered, stop: there is nothing to finish, and you are woken again in this session the next time you are mentioned.\n- If you stop without comment_task, what you said last is posted as your answer.\n- get_task shows the whole task with its timeline.`,
+      "What you were asked is below.",
+    ]
+      .filter((part) => part !== undefined)
+      .join("\n\n");
   }
 
   async #before(info: RunInfo): Promise<string | undefined> {

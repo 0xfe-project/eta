@@ -18,6 +18,10 @@
  * (`task_run.session_key`) and every later run of that session reuses it — which is also how a
  * session made while the key still named a run (`task-run:` and the run's id, from before a task
  * had one session to keep) is found and reopened.
+ *
+ * An agent mentioned on the task answers in a session of its own, held in the task's key with the
+ * agent's id after it (`mentionKey`): still the task's, so everything that asks "which task is this
+ * session's" gets the same answer.
  */
 const TASK_PREFIX = "task:";
 
@@ -26,6 +30,13 @@ const RUN_PREFIX = "task-run:";
 
 /** The key a task's own session is held in. */
 export const taskKey = (taskId: string): string => `${TASK_PREFIX}${taskId}`;
+
+/**
+ * The key the session of an agent mentioned on a task is held in: the task's key and the agent.
+ * It is the task's like the executor's, and one per agent, so being mentioned again carries on.
+ */
+export const mentionKey = (taskId: string, agentId: string): string =>
+  `${taskKey(taskId)}:${agentId}`;
 
 /** The key a session made before the key named the task is held in. */
 const runKey = (runId: string): string => `${RUN_PREFIX}${runId}`;
@@ -55,8 +66,9 @@ export function taskOfKey(
   taskOfRun: (runId: string) => string | undefined,
 ): string | undefined {
   if (conversationId === undefined) return undefined;
+  // A mentioned agent's key goes on past the task's id (which has no colon) with its own.
   if (conversationId.startsWith(TASK_PREFIX))
-    return conversationId.slice(TASK_PREFIX.length);
+    return conversationId.slice(TASK_PREFIX.length).split(":")[0];
   return conversationId.startsWith(RUN_PREFIX)
     ? taskOfRun(conversationId.slice(RUN_PREFIX.length))
     : undefined;

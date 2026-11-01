@@ -127,11 +127,14 @@ const activityOf = (row: ActivityRow): TaskActivityView => {
   };
 };
 
-/** A task with its comment count and its newest run's status, which the board and every card show. */
+/**
+ * A task with its comment count and its executor's newest run's status, which the board and every
+ * card show: a mentioned agent answering is not the task running.
+ */
 const SELECT_TASK = `
   SELECT t.*,
          (SELECT COUNT(*) FROM task_activity a WHERE a.task_id = t.id AND a.kind = 'comment') AS comments,
-         (SELECT r.status FROM task_run r WHERE r.task_id = t.id ORDER BY r.created_at DESC, r.rowid DESC LIMIT 1) AS run_status
+         (SELECT r.status FROM task_run r WHERE r.task_id = t.id AND r.agent_id IS NULL ORDER BY r.created_at DESC, r.rowid DESC LIMIT 1) AS run_status
     FROM task t`;
 
 export class TaskStore {

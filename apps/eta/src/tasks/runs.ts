@@ -6,7 +6,9 @@ import type {
 /**
  * The runs of tasks: the rows, and nothing that decides.
  *
- * A run is one attempt of a task's executor, and the table is also the queue: a `queued` row waits
+ * A run is one attempt of a task's executor, or the turn of an agent mentioned on the task (its
+ * `agentId`; null is the executor). Each is a lane of the task: a run waits for the previous run of
+ * its own lane. The table is also the queue: a `queued` row waits
  * until the runner starts it. The runner (`runner.ts`) decides when; this file only keeps what it
  * is told and answers the questions it asks (how many are going on a machine, is the task busy).
  * Statuses only ever move forward (queued, starting, running, then one of the three ends), and a
@@ -25,6 +27,7 @@ interface Row {
   id: string;
   task_id: string;
   machine_id: string | null;
+  agent_id: string | null;
   status: string;
   queue_reason: string | null;
   session_id: string | null;
@@ -41,6 +44,7 @@ interface Row {
 const recordOf = (row: Row): RunRecord => ({
   id: row.id,
   taskId: row.task_id,
+  agentId: row.agent_id,
   status: row.status as TaskRunStatus,
   queueReason: row.queue_reason as TaskQueueReason | null,
   machineId: row.machine_id,
@@ -68,20 +72,21 @@ export class TaskRunStore {
   /**
    * A run, queued, on the machine the task's project is on. A run that continues another one works
    * in the session the other one made, and says so with `continuesRunId` (`tasks.rerun` leaves it
-   * null: a rerun starts afresh and remembers nothing).
+   * null: a rerun starts afresh and remembers nothing). `agentId` is a mentioned agent's lane.
    */
   create(
     taskId: string,
     machineId: string | null,
     continuesRunId: string | null = null,
+    agentId: string | null = null,
   ): RunRecord {
     const id = crypto.randomUUID();
     this.#db
       .query(
-        `INSERT INTO task_run (id, task_id, machine_id, continues_run_id, created_at)
-          VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO task_run (id, task_id, machine_id, continues_run_id, agent_id, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .run(id, taskId, machineId, continuesRunId, Date.now());
+      .run(id, taskId, machineId, continuesRunId, agentId, Date.now());
     return this.get(id)!;
   }
 
@@ -118,15 +123,21 @@ export class TaskRunStore {
     return row === null ? undefined : recordOf(row);
   }
 
-  /** The run whose session a continuation carries on: this task's newest session, if it has one. */
-  lastSessionOf(taskId: string): RunRecord | undefined {
+  /**
+   * The run whose session a continuation carries on: the newest session of this lane of the task
+   * (the executor's, or a mentioned agent's), if it has one.
+   */
+  lastSessionOf(
+    taskId: string,
+    agentId: string | null = null,
+  ): RunRecord | undefined {
     const row = this.#db
-      .query<Row, [string]>(
+      .query<Row, [string, string | null]>(
         `SELECT * FROM task_run
-          WHERE task_id = ? AND session_id IS NOT NULL
+          WHERE task_id = ? AND agent_id IS ? AND session_id IS NOT NULL
           ORDER BY created_at DESC, rowid DESC LIMIT 1`,
       )
-      .get(taskId);
+      .get(taskId, agentId);
     return row === null ? undefined : recordOf(row);
   }
 
@@ -168,15 +179,15 @@ export class TaskRunStore {
       .get(machineId)!.n;
   }
 
-  /** Whether the task has a run starting or going, other than this one. */
-  busy(taskId: string, except: string): boolean {
+  /** Whether this lane of the task has a run starting or going, other than this one. */
+  busy(run: Pick<RunRecord, "id" | "taskId" | "agentId">): boolean {
     return (
       this.#db
-        .query<{ n: number }, [string, string]>(
+        .query<{ n: number }, [string, string | null, string]>(
           `SELECT COUNT(*) AS n FROM task_run
-            WHERE task_id = ? AND id <> ? AND status IN ('starting', 'running')`,
+            WHERE task_id = ? AND agent_id IS ? AND id <> ? AND status IN ('starting', 'running')`,
         )
-        .get(taskId, except)!.n > 0
+        .get(run.taskId, run.agentId, run.id)!.n > 0
     );
   }
 

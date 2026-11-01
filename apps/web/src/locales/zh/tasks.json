@@ -36,7 +36,6 @@
     "never": "还没运行过",
     "run": "运行",
     "rerun": "从头重跑",
-    "continued": "它接着上一次运行的会话继续，记得自己做过什么。",
     "fromScratchHint": "评论会让执行者接着上次往下做；这样是开一个它什么都不记得的新会话。"
   },
   "scope": {
@@ -110,9 +109,9 @@
     "noReplyReminder": "这一轮结束时没有汇报，已提醒一次",
     "turnFailed": "这一轮失败了{{reason}}",
     "turnStopped": "这一轮已停止{{reason}}",
-    "changeCount": "{{count}} 条变更",
-    "changeCount_one": "{{count}} 条变更",
-    "changeCount_other": "{{count}} 条变更"
+    "changeCount": "{{count}} 条动态",
+    "changeCount_one": "{{count}} 条动态",
+    "changeCount_other": "{{count}} 条动态"
   },
   "log": {
     "loading": "正在读取记录…",
@@ -143,8 +142,20 @@
     "awaitingYourReply": " 在等你回复",
     "unsupportedAttachments": "{{action}}还不能带图片或文件，{{count}} 个没有加进来。",
     "deliveryFailed": "{{action}}未送达：{{message}}",
-    "placeholder": "写一条评论，支持 Markdown；执行中的任务会直接读到",
+    "placeholder": "回复；执行中的任务会直接读到",
     "queuedToSend": "待发送",
     "notDelivered": "未送达：{{message}}"
+  },
+  "thread": {
+    "replies": "{{count}} 条回复",
+    "replies_one": "{{count}} 条回复",
+    "replies_other": "{{count}} 条回复"
+  },
+  "live": {
+    "label": "进行中",
+    "working": "{{name}} 正在工作",
+    "answering": "{{name}} 正在回答",
+    "starting": "{{name}} 正在启动",
+    "queued": "{{name}} 排队中"
   }
 }
