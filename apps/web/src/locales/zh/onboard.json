@@ -2,7 +2,8 @@
   "stepsLabel": "初始化步骤",
   "steps": {
     "providers": "绑定模型",
-    "agents": "安装智能体"
+    "agents": "安装智能体",
+    "email": "绑定邮箱"
   },
   "states": {
     "installing": "正在安装…"
@@ -12,5 +13,8 @@
     "installed": "已安装",
     "failed": "安装失败：{{message}}",
     "retry": "重试安装"
+  },
+  "email": {
+    "optional": "可以现在绑定 IMAP 邮箱，也可以跳过，之后在设置中绑定。"
   }
 }

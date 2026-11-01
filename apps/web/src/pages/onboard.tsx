@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { EmailAccountForm } from "@/components/workspace/email-settings";
 import { ProviderSettings } from "@/components/workspace/provider-settings";
 import { Stepper } from "@/components/workspace/stepper";
 import { markOnboarded } from "@/lib/onboard";
@@ -13,8 +14,9 @@ import { usePersonas } from "@/queries/personas";
 import { useModels } from "@/queries/providers";
 
 /**
- * Setting up a fresh install in two steps: bind a model provider, then create one
- * agent per persona card. Nothing is created until 安装 on the second step; a
+ * Setting up a fresh install in three steps: bind a model provider, create one
+ * agent per persona card, then optionally connect an IMAP mailbox. Nothing is created until 安装;
+ * a
  * persona whose agent already exists is marked and skipped, so re-running the
  * wizard only fills the gaps.
  */
@@ -64,6 +66,7 @@ export function Onboard() {
         steps={[
           translateText("onboard:steps.providers"),
           translateText("onboard:steps.agents"),
+          translateText("onboard:steps.email"),
         ]}
         step={step}
         label={translateText("onboard:stepsLabel")}
@@ -71,14 +74,14 @@ export function Onboard() {
       <div className="min-h-0 flex-1 overflow-y-auto">
         {step === 0 ? (
           <ProviderSettings />
-        ) : !loaded && error === undefined ? (
+        ) : step === 1 && !loaded && error === undefined ? (
           <Loading rows={2} />
-        ) : error ? (
+        ) : step === 1 && error ? (
           <LoadError
             what={translateText("onboard:agents.what")}
             error={error}
           />
-        ) : (
+        ) : step === 1 ? (
           <ul className="divide-y border">
             {personas.map((card) => {
               const done = installed.has(card.id);
@@ -115,6 +118,13 @@ export function Onboard() {
               );
             })}
           </ul>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {translateText("onboard:email.optional")}
+            </p>
+            <EmailAccountForm compact />
+          </div>
         )}
       </div>
       {failure ? (
@@ -134,20 +144,30 @@ export function Onboard() {
             type="button"
             variant="outline"
             disabled={create.isPending}
-            onClick={() => setStep(0)}
+            onClick={() => setStep(step - 1)}
           >
             {translateText("common:actions.previous")}
           </Button>
         ) : null}
-        {step === 0 ? (
-          <Button
-            type="button"
-            className="ml-auto"
-            disabled={usable.length === 0}
-            onClick={() => setStep(1)}
-          >
-            {translateText("common:actions.next")}
-          </Button>
+        {step < 2 ? (
+          step === 0 ? (
+            <Button
+              type="button"
+              className="ml-auto"
+              disabled={usable.length === 0}
+              onClick={() => setStep(1)}
+            >
+              {translateText("common:actions.next")}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              className="ml-auto"
+              onClick={() => setStep(2)}
+            >
+              {translateText("common:actions.next")}
+            </Button>
+          )
         ) : (
           <Button
             type="button"

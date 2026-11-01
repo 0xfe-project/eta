@@ -4,6 +4,7 @@ import enBundles from "./en/bundles.json";
 import enChat from "./en/chat.json";
 import enCommon from "./en/common.json";
 import enConnections from "./en/connections.json";
+import enEmail from "./en/email.json";
 import enLlm from "./en/llm.json";
 import enMachines from "./en/machines.json";
 import enMcp from "./en/mcp.json";
@@ -21,6 +22,7 @@ import zhBundles from "./zh/bundles.json";
 import zhChat from "./zh/chat.json";
 import zhCommon from "./zh/common.json";
 import zhConnections from "./zh/connections.json";
+import zhEmail from "./zh/email.json";
 import zhLlm from "./zh/llm.json";
 import zhMachines from "./zh/machines.json";
 import zhMcp from "./zh/mcp.json";
@@ -33,6 +35,7 @@ import zhSettings from "./zh/settings.json";
 import zhTasks from "./zh/tasks.json";
 import zhValidation from "./zh/validation.json";
 
+// English is the source of truth for compile-time translation key checking.
 export const en = {
   common: enCommon,
   agents: enAgents,
@@ -43,6 +46,7 @@ export const en = {
   machines: enMachines,
   mcp: enMcp,
   connections: enConnections,
+  email: enEmail,
   navigation: enNavigation,
   onboard: enOnboard,
   overview: enOverview,
@@ -63,6 +67,7 @@ export const zh = {
   machines: zhMachines,
   mcp: zhMcp,
   connections: zhConnections,
+  email: zhEmail,
   navigation: zhNavigation,
   onboard: zhOnboard,
   overview: zhOverview,
@@ -84,6 +89,7 @@ export const namespaces = [
   "machines",
   "mcp",
   "connections",
+  "email",
   "llm",
   "navigation",
   "onboard",

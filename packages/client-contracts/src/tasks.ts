@@ -103,6 +103,11 @@ export interface TaskWorkspace {
 /** One attempt of the executor at the task, in the task's session; its transcript is its log. */
 export interface TaskRunView {
   id: string;
+  /**
+   * Who works in the run: null for the task's executor; an agent's id for one that was mentioned on
+   * the task and answers in its thread, in a session of its own, without taking the work over.
+   */
+  agentId: string | null;
   status: TaskRunStatus;
   /** Why it waits, while it is `queued`. */
   queueReason: TaskQueueReason | null;
@@ -264,7 +269,17 @@ export interface TaskArgs {
    * any more, so their comments are only recorded. A retry with the same `clientId` returns the
    * comment already added instead of adding another, and so wakes nobody twice.
    */
-  comment: { taskId: string; body: string; clientId?: string };
+  comment: {
+    taskId: string;
+    body: string;
+    clientId?: string;
+    /**
+     * Agents the comment mentions (ids). Each that is not the executor is woken in a run of its own
+     * on the task to answer in the thread; the comment wakes the executor only when it mentions the
+     * executor or nobody. Kept in the comment's `data.mentions`.
+     */
+    mentions?: string[];
+  };
   /**
    * The task goes, and its activity with it; its cards stay in the timelines, marked deleted. A
    * task with a run going cannot be deleted.

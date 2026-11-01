@@ -62,7 +62,7 @@ function Select({
     >
       <SelectTrigger
         {...props}
-        className={`min-w-0 max-w-full ${className ?? ""}`}
+        className={`min-w-0 max-w-full overflow-hidden [&_[data-slot=select-value]]:min-w-0 [&_[data-slot=select-value]]:overflow-hidden [&_[data-slot=select-value]>span]:block [&_[data-slot=select-value]>span]:truncate [&_[data-slot=select-value]>span]:whitespace-nowrap ${className ?? ""}`}
       >
         <SelectValue />
       </SelectTrigger>

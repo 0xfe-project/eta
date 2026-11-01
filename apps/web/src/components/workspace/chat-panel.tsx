@@ -64,6 +64,7 @@ import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar } from "./agent-identity";
 import { AttachmentChip, PasteChip } from "./composer-block";
 import { ComposerEditor } from "./composer-editor";
+import { EmailProposalCard } from "./email-proposal-card";
 import { useGitHubRef } from "./github-ref";
 import { GroupNotice } from "./group-notice";
 import { HeldMessages } from "./held-messages";
@@ -330,6 +331,16 @@ function publishedRefs(blocks: readonly RunBlock[]) {
   });
 }
 
+function emailProposalIds(blocks: readonly RunBlock[]): string[] {
+  return blocks.flatMap((block) => {
+    if (block.type !== "tool" || block.status !== "completed") return [];
+    if (block.name !== "send_email" && block.name !== "reply") return [];
+    const id = (block.details as { emailProposalId?: unknown } | undefined)
+      ?.emailProposalId;
+    return typeof id === "string" ? [id] : [];
+  });
+}
+
 /**
  * The cards a turn leaves beside its answer, in one column: the artifacts it published, in the
  * order it published them, then the task rows it wrote.
@@ -358,12 +369,21 @@ function TurnCards({
 }) {
   const live = useRunBlocks(sessionId);
   const published = publishedRefs(sessionId === undefined ? saved : live);
+  const proposals = emailProposalIds(sessionId === undefined ? saved : live);
   const rows = taskRows ?? [];
-  if (published.length === 0 && rows.length === 0) return null;
+  if (published.length === 0 && proposals.length === 0 && rows.length === 0)
+    return null;
+  const onlyEmailCards = published.length === 0 && rows.length === 0;
   return (
-    <div className="turn-tasks">
+    <div
+      className="turn-tasks"
+      data-only-email-cards={onlyEmailCards ? "true" : undefined}
+    >
       {published.map(({ id, ref }) => (
         <ActivityRefCard key={id} value={ref} />
+      ))}
+      {proposals.map((id) => (
+        <EmailProposalCard key={id} proposalId={id} />
       ))}
       {rows.map((row) => (
         <div key={row.id} id={`msg-${row.id}`} data-mid={row.id}>

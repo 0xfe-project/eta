@@ -45,6 +45,7 @@ import {
   Comments,
   Description,
   EditableTitle,
+  LiveRuns,
   Question,
   RunState,
   TaskMissing,
@@ -388,7 +389,10 @@ function TaskPage({ id }: { id: string }) {
                 {translateText("details.activityTab")}
               </h2>
               <Timeline task={task} />
-              <CommentBox task={task} />
+              <CommentBox
+                task={task}
+                top={<LiveRuns task={task} className="space-y-1 pb-1.5" />}
+              />
             </section>
           </div>
           <BackToTop className="px-4 sm:px-8" />
