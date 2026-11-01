@@ -2,7 +2,7 @@ import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LoadError, Loading } from "@/components/states";
+import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmailAccountForm } from "@/components/workspace/email-settings";
@@ -81,6 +81,8 @@ export function Onboard() {
             what={translateText("onboard:agents.what")}
             error={error}
           />
+        ) : step === 1 && personas.length === 0 ? (
+          <Empty title={translateText("onboard:agents.empty")} />
         ) : step === 1 ? (
           <ul className="divide-y border">
             {personas.map((card) => {
