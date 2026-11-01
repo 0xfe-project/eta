@@ -19,6 +19,7 @@ import type {
   RoutinesOptions,
   TasksOptions,
 } from "./product";
+import type { WebOptions } from "./web/service";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { etaCompaction } from "@eta/compaction";
@@ -84,6 +85,13 @@ export interface HostOptions {
    * web hides every GitHub face as soon as `hello` says the plugin is not there.
    */
   github?: boolean | GithubTuning;
+  /**
+   * `web_fetch` and `web_search` for every session: `true` loads them, searching with the SearXNG
+   * the host runs as a child process (where a prebuilt one exists); the object form names an
+   * external SearXNG, or, for a test, a fixture site on loopback. Off by default so a host made
+   * for a test has neither tool; `main.ts` turns them on.
+   */
+  web?: boolean | Omit<WebOptions, "warn">;
   /** Whether to apply the config's network settings to the environment. */
   network?: boolean;
   /**
@@ -149,6 +157,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
       publicUrl: options.publicUrl,
       mcp: options.mcp,
       github: options.github,
+      ...(options.web === undefined || options.web === false
+        ? {}
+        : { web: options.web === true ? {} : options.web }),
       akhook: options.akhook,
       hostname,
       ...(options.home === undefined ? {} : { home: options.home }),

@@ -50,7 +50,7 @@ daemon **只出站**：它反向拨号 `GET /machines/connect`（WebSocket），
 | `svc`  | daemon → 主 node | daemon 缺的几样东西：生成（`model.stream`）、产品工具（`tool.call`）、审批名单（`tool.gate`）、MCP 凭据（`mcp.credential`）、GitHub 令牌（`github.credentials`）、提问通知（`ask.observe`） |
 | `ctl`  | 双向             | `welcome`（哪台机器、第几个连接、是否已批准）、`approved`、心跳                                                                                                                             |
 
-因此**模型凭据、OAuth 令牌（含 LLM 网关里的订阅账号）和用量只在主 node**：daemon 要生成时把请求交给主 node，主 node 解析模型、加凭据、向 provider 流式取回再逐事件送回，并计入用量。产品工具（任务、产物、记忆、`mention` 等）在主 node 上为对应的会话运行，它们的执行环境是经链路的 SSH 环境，所以读文件读的是那台机器的文件。每个调用都带会话 id，且**只相信主 node 自己的行**：链路所属的机器必须就是该会话 project 的机器。
+因此**模型凭据、OAuth 令牌（含 LLM 网关里的订阅账号）和用量只在主 node**：daemon 要生成时把请求交给主 node，主 node 解析模型、加凭据、向 provider 流式取回再逐事件送回，并计入用量。产品工具（任务、产物、记忆、`mention`、`web_fetch` / `web_search` 等）在主 node 上为对应的会话运行，它们的执行环境是经链路的 SSH 环境，所以读文件读的是那台机器的文件；读网页则是主 node 自己去抓。每个调用都带会话 id，且**只相信主 node 自己的行**：链路所属的机器必须就是该会话 project 的机器。
 
 ## epoch 与有界
 
