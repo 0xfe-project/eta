@@ -1497,6 +1497,14 @@ export function EditableTitle({
   const update = useUpdateTask();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(task.title);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  // Enter and Escape hand focus back to the title; a blur went somewhere else on purpose.
+  const returnFocusRef = useRef(false);
+  useEffect(() => {
+    if (editing || !returnFocusRef.current) return;
+    returnFocusRef.current = false;
+    buttonRef.current?.focus();
+  }, [editing]);
   if (!editing)
     return (
       <h2
@@ -1506,6 +1514,7 @@ export function EditableTitle({
         )}
       >
         <button
+          ref={buttonRef}
           type="button"
           title={translateText("actions.changeTitle")}
           // Kept in view while the task scrolls, so a long title stays short.
@@ -1537,8 +1546,16 @@ export function EditableTitle({
       onChange={(e) => setTitle(e.target.value)}
       onBlur={save}
       onKeyDown={(e) => {
-        if (e.key === "Enter" && !e.nativeEvent.isComposing) save();
-        if (e.key === "Escape") setEditing(false);
+        if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+          // Or the same Enter would press the title it lands on and open the input again.
+          e.preventDefault();
+          returnFocusRef.current = true;
+          save();
+        }
+        if (e.key === "Escape") {
+          returnFocusRef.current = true;
+          setEditing(false);
+        }
       }}
     />
   );
@@ -1822,7 +1839,7 @@ function TaskView({ task }: { task: TaskDetail }) {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <EditableTitle key={task.title} task={task} />
+        <EditableTitle task={task} />
       </header>
       <div className={cn(threadRow, "group/first relative pt-2")}>
         <Face actor={task.createdBy} />
