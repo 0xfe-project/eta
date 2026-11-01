@@ -25,6 +25,10 @@
   },
   "edit": "Edit mailbox",
   "remove": "Disconnect",
+  "removeConfirm": {
+    "title": "Disconnect {{name}}?",
+    "description": "Eta stops syncing this mailbox and deletes its saved credentials. Mail at your provider is not affected."
+  },
   "provider": "Provider",
   "providers": {
     "qq": "QQ Mail",

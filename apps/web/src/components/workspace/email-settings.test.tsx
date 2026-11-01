@@ -182,4 +182,33 @@ describe("email settings", () => {
     finish?.();
     await flush();
   });
+
+  it("confirms before disconnecting a mailbox", async () => {
+    const fake = host();
+    fake.handle("email.removeAccount", () => ({ removed: true }));
+    const view = await mount(<EmailSettings />);
+    const trash = () =>
+      view.container.querySelectorAll<HTMLButtonElement>(
+        'button[aria-label="解除绑定"]',
+      )[1];
+    const dialogButton = (text: string) =>
+      [...document.querySelectorAll("[role=alertdialog] button")].find(
+        (candidate) => candidate.textContent === text,
+      );
+    const removed = () =>
+      fake.calls.filter((call) => call.action === "removeAccount");
+    await click(trash());
+    expect(document.querySelector("[role=alertdialog]")?.textContent).toContain(
+      "解除绑定 Bob？",
+    );
+    expect(removed()).toHaveLength(0);
+    await click(dialogButton("取消"));
+    expect(removed()).toHaveLength(0);
+    await click(trash());
+    await click(dialogButton("解除绑定"));
+    await flush();
+    expect(removed().map((call) => call.args)).toEqual([
+      { accountId: "mail-2" },
+    ]);
+  });
 });

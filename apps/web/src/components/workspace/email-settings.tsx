@@ -10,6 +10,16 @@ import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -277,6 +287,7 @@ export function EmailSettings() {
   const remove = useRemoveEmailAccount();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<EmailAccountView>();
+  const [removing, setRemoving] = useState<EmailAccountView>();
   const [checking, setChecking] = useState<Set<string>>(() => new Set());
   const closeForm = () => {
     setAdding(false);
@@ -386,14 +397,7 @@ export function EmailSettings() {
                 size="icon-sm"
                 variant="ghost"
                 aria-label={t("remove")}
-                onClick={() =>
-                  remove.mutate(
-                    { accountId: account.id },
-                    {
-                      onError: (error) => toast.error(wireErrorMessage(error)),
-                    },
-                  )
-                }
+                onClick={() => setRemoving(account)}
               >
                 <TrashIcon />
               </Button>
@@ -401,6 +405,40 @@ export function EmailSettings() {
           ))}
         </ul>
       )}
+      <AlertDialog
+        open={removing !== undefined}
+        onOpenChange={(open) => {
+          if (!open) setRemoving(undefined);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("removeConfirm.title", { name: removing?.name ?? "" })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("removeConfirm.description")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                if (!removing) return;
+                remove.mutate(
+                  { accountId: removing.id },
+                  {
+                    onError: (error) => toast.error(wireErrorMessage(error)),
+                  },
+                );
+              }}
+            >
+              {t("remove")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
