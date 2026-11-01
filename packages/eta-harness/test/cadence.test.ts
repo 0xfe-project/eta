@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import {
   createCadenceState,
   DEFAULT_REMINDER_INTERVAL,
-  DEFAULT_TASK_TOOL_NAMES,
+  DEFAULT_STEP_TOOL_NAMES,
   drainReminderForContext,
   evaluateToolResult,
   onTurnStart,
@@ -20,7 +20,7 @@ import {
 
 const config: CadenceConfig = {
   reminderInterval: 5,
-  taskToolNames: DEFAULT_TASK_TOOL_NAMES,
+  stepToolNames: DEFAULT_STEP_TOOL_NAMES,
 };
 
 function turns(state: CadenceState, n: number): void {
@@ -49,7 +49,7 @@ describe("cadence state machine", () => {
   it("a task-tool call resets the cadence", () => {
     const state = createCadenceState();
     turns(state, 4);
-    evaluateToolResult(state, "TaskUpdate", true, config);
+    evaluateToolResult(state, "update_step", true, config);
     turns(state, 4);
     expect(evaluateToolResult(state, "read", true, config).markDue).toBe(false);
     turns(state, 1);
@@ -67,7 +67,7 @@ describe("cadence state machine", () => {
     turns(state, 20);
     expect(evaluateToolResult(state, "read", true, config).markDue).toBe(false);
     // Touching a task resets the cadence, and then it can fire again.
-    evaluateToolResult(state, "TaskUpdate", true, config);
+    evaluateToolResult(state, "update_step", true, config);
     turns(state, DEFAULT_REMINDER_INTERVAL);
     expect(evaluateToolResult(state, "read", true, config).markDue).toBe(true);
   });

@@ -2,7 +2,7 @@ import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LoadError, Loading } from "@/components/states";
+import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmailAccountForm } from "@/components/workspace/email-settings";
@@ -60,7 +60,7 @@ export function Onboard() {
   return (
     <main
       id="main"
-      className="mx-auto flex min-h-svh w-full max-w-2xl flex-col gap-4 p-4"
+      className="mx-auto flex h-svh w-full max-w-2xl flex-col gap-4 p-4"
     >
       <Stepper
         steps={[
@@ -81,6 +81,8 @@ export function Onboard() {
             what={translateText("onboard:agents.what")}
             error={error}
           />
+        ) : step === 1 && personas.length === 0 ? (
+          <Empty title={translateText("onboard:agents.empty")} />
         ) : step === 1 ? (
           <ul className="divide-y border">
             {personas.map((card) => {
@@ -104,7 +106,7 @@ export function Onboard() {
                       <span className="block text-sm font-medium">
                         {card.name}
                       </span>
-                      <span className="block truncate text-xs text-muted-foreground">
+                      <span className="block text-xs text-pretty break-words text-muted-foreground">
                         {card.description}
                       </span>
                     </span>
@@ -120,7 +122,7 @@ export function Onboard() {
           </ul>
         ) : (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-pretty text-muted-foreground">
               {translateText("onboard:email.optional")}
             </p>
             <EmailAccountForm compact />
@@ -179,7 +181,7 @@ export function Onboard() {
               ? translateText("onboard:states.installing")
               : failure
                 ? translateText("onboard:agents.retry")
-                : translateText("common:actions.install")}
+                : translateText("onboard:agents.install")}
           </Button>
         )}
       </footer>

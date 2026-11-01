@@ -25,6 +25,10 @@
   },
   "edit": "编辑邮箱",
   "remove": "解除绑定",
+  "accessibility": {
+    "editAccount": "编辑邮箱 {{address}}",
+    "removeAccount": "解除绑定 {{address}}"
+  },
   "removeConfirm": {
     "title": "解除绑定 {{name}}？",
     "description": "Eta 会停止同步这个邮箱并删除已保存的凭据；邮件服务商中的邮件不受影响。"

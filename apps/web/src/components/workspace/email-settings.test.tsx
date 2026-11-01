@@ -107,7 +107,9 @@ describe("email settings", () => {
     const fake = host();
     const view = await mount(<EmailSettings />);
     view.container
-      .querySelector<HTMLButtonElement>('button[aria-label="编辑邮箱"]')!
+      .querySelector<HTMLButtonElement>(
+        'button[aria-label="编辑邮箱 alice@example.com"]',
+      )!
       .click();
     await flush();
     expect(
@@ -188,9 +190,9 @@ describe("email settings", () => {
     fake.handle("email.removeAccount", () => ({ removed: true }));
     const view = await mount(<EmailSettings />);
     const trash = () =>
-      view.container.querySelectorAll<HTMLButtonElement>(
-        'button[aria-label="解除绑定"]',
-      )[1];
+      view.container.querySelector<HTMLButtonElement>(
+        'button[aria-label="解除绑定 bob@example.com"]',
+      );
     const dialogButton = (text: string) =>
       [...document.querySelectorAll("[role=alertdialog] button")].find(
         (candidate) => candidate.textContent === text,
