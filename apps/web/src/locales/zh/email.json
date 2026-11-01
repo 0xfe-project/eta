@@ -111,7 +111,7 @@
     "assignedTo": "已交给 {{name}}，正在处理",
     "processingBy": "处理 Agent",
     "expandProcessing": "查看",
-    "project": "Project",
+    "project": "项目",
     "openSession": "打开处理会话",
     "processing": "处理中",
     "processEnded": "处理已结束",
