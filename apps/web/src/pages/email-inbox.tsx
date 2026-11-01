@@ -452,6 +452,25 @@ export function EmailInboxPage() {
           </div>
           {!email.loaded ? (
             <Loading />
+          ) : folder === "inbox" && email.accounts.length === 0 ? (
+            <Empty
+              icon={EnvelopeSimpleIcon}
+              title={t("inbox.noAccount")}
+              action={
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    void navigate({
+                      to: "/settings",
+                      search: { section: "email" },
+                    })
+                  }
+                >
+                  {t("add")}
+                </Button>
+              }
+            />
           ) : visibleThreads.length === 0 ? (
             <Empty
               icon={EnvelopeSimpleIcon}
