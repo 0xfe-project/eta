@@ -36,7 +36,6 @@
     "never": "Never run",
     "run": "Run",
     "rerun": "Start over",
-    "continued": "It carries on in the earlier run's session, so it remembers what it did.",
     "fromScratchHint": "A comment lets the executor carry on where it stopped; this opens a session that remembers nothing."
   },
   "scope": {
@@ -110,9 +109,9 @@
     "noReplyReminder": "This turn ended without a report; one reminder was sent",
     "turnFailed": "This turn failed{{reason}}",
     "turnStopped": "This turn stopped{{reason}}",
-    "changeCount": "{{count}} changes",
-    "changeCount_one": "{{count}} change",
-    "changeCount_other": "{{count}} changes"
+    "changeCount": "{{count}} updates",
+    "changeCount_one": "{{count}} update",
+    "changeCount_other": "{{count}} updates"
   },
   "log": {
     "loading": "Loading records…",
@@ -151,5 +150,12 @@
     "replies": "{{count}} replies",
     "replies_one": "{{count}} reply",
     "replies_other": "{{count}} replies"
+  },
+  "live": {
+    "label": "In progress",
+    "working": "{{name}} is working",
+    "answering": "{{name}} is answering",
+    "starting": "{{name}} is starting",
+    "queued": "{{name}} is queued"
   }
 }

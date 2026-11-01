@@ -271,7 +271,7 @@ describe("task board", () => {
     expect(container.textContent).toContain("评论会让执行者接着上次往下做");
   });
 
-  it("says when a run carries on the session of the run before it", async () => {
+  it("says what is going under the thread, not in it, with a way to stop it", async () => {
     navigation.task = "t2";
     const host = board();
     host.set("tasks.t2", {
@@ -303,7 +303,12 @@ describe("task board", () => {
     });
     const { container } = await mount(<TaskBoard />);
     await flush();
-    expect(container.textContent).toContain("它接着上一次运行的会话继续");
+    const live = container.querySelector('[aria-label="进行中"]')!;
+    expect(live.textContent).toContain("正在工作");
+    expect(live.textContent).toContain("停止");
+    // The thread folds the run's start into its bookkeeping.
+    const timeline = container.querySelector('ol[aria-label="时间线"]')!;
+    expect(timeline.textContent).not.toContain("停止");
   });
 
   it("draws a run's log from its session's transcript", async () => {
@@ -357,9 +362,8 @@ describe("task board", () => {
     )!;
     await click(log);
     await flush();
-    const text = container.querySelector(
-      '[aria-label="执行记录"]',
-    )!.textContent;
+    // In a dialog, which is drawn over the page rather than inside the board.
+    const text = document.querySelector('[aria-label="执行记录"]')!.textContent;
     expect(text).toContain("我先看看目录");
     expect(text).toContain("bash");
     // The briefing is the task itself, not a line of the log.

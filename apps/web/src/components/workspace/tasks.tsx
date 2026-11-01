@@ -14,6 +14,8 @@ import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { ChatCircleIcon } from "@phosphor-icons/react/ChatCircle";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
+import { GitPullRequestIcon } from "@phosphor-icons/react/GitPullRequest";
+import { InfoIcon } from "@phosphor-icons/react/Info";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PaperPlaneRightIcon } from "@phosphor-icons/react/PaperPlaneRight";
 import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
@@ -27,6 +29,14 @@ import { Markdown } from "@/components/markdown";
 import { Empty, LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -34,6 +44,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { applyItem, buildMenu } from "@/lib/composer-menu";
 import { translate } from "@/lib/i18n";
@@ -41,6 +56,7 @@ import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { cn } from "@/lib/utils";
 import { useAgentList } from "@/queries/agents";
 import { useConversationList } from "@/queries/conversations";
+import { useTaskPulls } from "@/queries/github";
 import {
   useCommentTask,
   useConfirmTaskDraft,
@@ -306,11 +322,13 @@ function StatusSelect({
   value,
   onChange,
   className,
+  size,
 }: {
   id?: string;
   value: TaskStatus;
   onChange: (status: TaskStatus) => void;
   className?: string;
+  size?: "sm" | "default";
 }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
   return (
@@ -318,6 +336,7 @@ function StatusSelect({
       id={id}
       aria-label={id ? undefined : translateText("fields.status")}
       className={className}
+      size={size}
       value={value}
       onValueChange={(value) => onChange(value as TaskStatus)}
     >
@@ -506,15 +525,18 @@ const propertyLabel = "text-xs leading-8 text-muted-foreground";
 
 /**
  * What the task is at now: its status, who executes it and where. Each value starts on an 8-high
- * line beside its name; `children` adds rows.
+ * line beside its name; `children` adds rows. `status={false}` leaves the status out, for a view
+ * that shows it elsewhere (the side panel's header).
  */
 export function TaskProperties({
   task,
   className,
+  status: withStatus = true,
   children,
 }: {
   task: TaskDetail;
   className?: string;
+  status?: boolean;
   children?: React.ReactNode;
 }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
@@ -527,17 +549,24 @@ export function TaskProperties({
         className,
       )}
     >
-      <dt className={propertyLabel}>{translateText("fields.status")}</dt>
-      <dd className="flex min-w-0 items-center gap-2">
-        <StatusIcon status={task.status} />
-        <StatusSelect
-          className="min-w-32"
-          value={task.status}
-          onChange={(status) =>
-            update.mutate({ taskId: task.id, status }, { onError: showError })
-          }
-        />
-      </dd>
+      {withStatus ? (
+        <>
+          <dt className={propertyLabel}>{translateText("fields.status")}</dt>
+          <dd className="flex min-w-0 items-center gap-2">
+            <StatusIcon status={task.status} />
+            <StatusSelect
+              className="min-w-32"
+              value={task.status}
+              onChange={(status) =>
+                update.mutate(
+                  { taskId: task.id, status },
+                  { onError: showError },
+                )
+              }
+            />
+          </dd>
+        </>
+      ) : null}
       {task.createdBy.kind === "agent" ? (
         <>
           <dt className={propertyLabel}>{translateText("executor.label")}</dt>
@@ -682,27 +711,25 @@ function describe(a: TaskActivity): React.ReactNode {
   }
 }
 
-/** Bookkeeping the task's current state already shows; runs of it fold. */
-const minor = new Set<string>([
-  "created",
-  "title",
-  "description",
-  "conversation",
-  "status",
-  "run_completed",
-  "run_nudged",
-]);
+/** What the thread gives a line of its own: what was said, what was delivered, what went wrong. */
+const standalone = new Set<string>(["comment", "artifact", "run_failed"]);
 
-/** The timeline's entries: single events, and runs of minor ones. */
+/**
+ * Never a line: the first message already says who made the task and when, and a run waiting for
+ * its turn is said under the thread while it waits (`LiveRuns`).
+ */
+const unlisted = new Set<string>(["created", "run_queued"]);
+
+/** The thread's entries: what stands alone, and everything between them folded into one. */
 function entries(items: TaskActivity[]) {
   const out: (TaskActivity | TaskActivity[])[] = [];
   for (const a of items) {
     const last = out.at(-1);
-    if (!minor.has(a.kind)) out.push(a);
+    if (standalone.has(a.kind)) out.push(a);
     else if (Array.isArray(last)) last.push(a);
     else out.push([a]);
   }
-  return out.map((e) => (Array.isArray(e) && e.length === 1 ? e[0] : e));
+  return out;
 }
 
 function Time({ at }: { at: number }) {
@@ -716,8 +743,16 @@ function Time({ at }: { at: number }) {
   );
 }
 
-/** An event as a line: who, what, when. */
-function EventLine({ a, task }: { a: TaskActivity; task: TaskDetail }) {
+/** An event as a line: who, what, when, and the log of the run it is about. */
+function EventLine({
+  a,
+  task,
+  run,
+}: {
+  a: TaskActivity;
+  task: TaskDetail;
+  run?: TaskRun | undefined;
+}) {
   const { agents } = useAgentList();
   // A run's events read as the executor's, unless they are a mentioned agent's own.
   const who = actorName(
@@ -729,14 +764,16 @@ function EventLine({ a, task }: { a: TaskActivity; task: TaskDetail }) {
   return (
     <p className="text-muted-foreground wrap-anywhere">
       {who} {describe(a)} <Time at={a.createdAt} />
+      {run ? <RunLogButton task={task} run={run} /> : null}
     </p>
   );
 }
 
-/** Minor events in a row, as one line that unfolds into them. */
+/** The bookkeeping between two messages, as one line that unfolds into it. */
 function Changes({ items, task }: { items: TaskActivity[]; task: TaskDetail }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
   const [open, setOpen] = useState(false);
+  const runs = new Map(task.runs.map((run) => [run.id, run]));
   return (
     <div>
       <button
@@ -753,15 +790,20 @@ function Changes({ items, task }: { items: TaskActivity[]; task: TaskDetail }) {
         {translateText("activity.changeCount", {
           count: items.length,
         })}
-        <span className="ml-1">
-          <Time at={items.at(-1)!.createdAt} />
-        </span>
       </button>
       {open ? (
         <ul className="mt-1 space-y-1">
           {items.map((a) => (
             <li key={a.id}>
-              <EventLine a={a} task={task} />
+              <EventLine
+                a={a}
+                task={task}
+                run={
+                  a.kind === "run_started" && a.runId
+                    ? runs.get(a.runId)
+                    : undefined
+                }
+              />
             </li>
           ))}
         </ul>
@@ -881,51 +923,114 @@ function RunStatusText({ run }: { run: TaskRun }) {
   );
 }
 
-/** How a run is going, stopping it, and its log on demand. */
-function RunControls({ task, run }: { task: TaskDetail; run: TaskRun }) {
-  const { t: translateText } = useTranslation(["tasks", "common"] as const);
-  const [open, setOpen] = useState(false);
+/** Who works in a run: the agent mentioned into it, or the executor. */
+function useRunAgent(task: TaskDetail, run: TaskRun) {
+  const { agents } = useAgentList();
+  return actorName(
+    run.agentId === null
+      ? task.createdBy
+      : { kind: "agent", agentId: run.agentId },
+    agents,
+  );
+}
+
+/** A run's log, in a dialog: it is as long as the run was, more than a line of the thread holds. */
+function RunLogButton({ task, run }: { task: TaskDetail; run: TaskRun }) {
+  const { t: translateText } = useTranslation(["tasks"] as const);
+  const who = useRunAgent(task, run);
+  if (run.status === "queued") return null;
   return (
-    <>
-      <div className="-ml-2 flex flex-wrap items-center gap-x-1">
-        <span className="px-2">
-          <RunStatusText run={run} />
-        </span>
-        <StopRun task={task.id} run={run} />
-        {run.status === "queued" ? null : (
-          <Button
-            variant="ghost"
-            size="xs"
-            aria-expanded={open}
-            onClick={() => setOpen(!open)}
-          >
-            {open ? (
-              <CaretDownIcon aria-hidden="true" />
+    <Dialog>
+      <DialogTrigger asChild>
+        <button
+          type="button"
+          className="ml-2 text-xs text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:underline"
+        >
+          {translateText("log.title")}
+        </button>
+      </DialogTrigger>
+      <DialogContent className="grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle className="truncate pr-8">
+            #{task.number} · {who} · {translateText("log.title")}
+          </DialogTitle>
+          <DialogDescription className="wrap-anywhere">
+            {run.workspace ? (
+              <>
+                {translateText("log.workspacePrefix")}
+                <code>{run.workspace}</code>
+              </>
             ) : (
-              <CaretRightIcon aria-hidden="true" />
+              <RunStatusText run={run} />
             )}
-            {translateText("log.title")}
-          </Button>
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[70dvh] min-h-0 overflow-auto">
+          <RunLog run={run} />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** One run that has not ended: who, doing what, and stopping it. */
+function LiveRun({ task, run }: { task: TaskDetail; run: TaskRun }) {
+  const { t: translateText } = useTranslation(["tasks"] as const);
+  const who = useRunAgent(task, run);
+  const queued = run.status === "queued";
+  const Icon = queued ? ClockIcon : SpinnerIcon;
+  const doing = queued
+    ? translateText("live.queued", { name: who })
+    : run.status === "starting"
+      ? translateText("live.starting", { name: who })
+      : run.agentId === null
+        ? translateText("live.working", { name: who })
+        : translateText("live.answering", { name: who });
+  return (
+    <li className="flex min-w-0 items-center gap-1.5 text-xs">
+      <Icon
+        aria-hidden="true"
+        className={cn(
+          "size-3.5 shrink-0",
+          queued ? "text-muted-foreground" : "motion-safe:animate-spin",
         )}
-      </div>
-      {run.status === "queued" && run.queueReason ? (
-        <p className="text-xs text-muted-foreground">
-          {queueReasonLabels[run.queueReason]}
-        </p>
-      ) : null}
-      {run.continuesRunId === null ? null : (
-        <p className="text-xs text-muted-foreground">
-          {translateText("runs.continued")}
-        </p>
-      )}
-      {run.workspace && open ? (
-        <p className="text-xs text-muted-foreground wrap-anywhere">
-          {translateText("log.workspacePrefix")}
-          <code>{run.workspace}</code>
-        </p>
-      ) : null}
-      {open ? <RunLog run={run} /> : null}
-    </>
+      />
+      <span className="min-w-0 flex-1 truncate">
+        {doing}
+        {queued && run.queueReason ? (
+          <span className="text-muted-foreground">
+            {" · "}
+            {queueReasonLabels[run.queueReason]}
+          </span>
+        ) : null}
+      </span>
+      <RunLogButton task={task} run={run} />
+      <StopRun task={task.id} run={run} />
+    </li>
+  );
+}
+
+/**
+ * What is going on the task right now, one line per run: the executor working, an agent mentioned
+ * into the thread answering, a run waiting its turn. Under the thread, beside the box to answer,
+ * like someone typing; gone once the run ends, whose outcome the thread then says.
+ */
+export function LiveRuns({
+  task,
+  className,
+}: {
+  task: TaskDetail;
+  className?: string;
+}) {
+  const { t: translateText } = useTranslation(["tasks"] as const);
+  const active = task.runs.filter((run) => isActive(run.status));
+  if (active.length === 0) return null;
+  return (
+    <ul aria-label={translateText("live.label")} className={className}>
+      {active.map((run) => (
+        <LiveRun key={run.id} task={task} run={run} />
+      ))}
+    </ul>
   );
 }
 
@@ -978,40 +1083,23 @@ function RunRow({ task }: { task: TaskDetail }) {
   );
 }
 
-/** A run where it started: who, how it went, and its log on demand. */
-function RunEntry({
-  task,
-  run,
-  activity,
-}: {
-  task: TaskDetail;
-  run: TaskRun;
-  activity: TaskActivity;
-}) {
-  return (
-    <div className="space-y-1">
-      {activity.kind === "run_queued" ? null : (
-        <EventLine a={activity} task={task} />
-      )}
-      <RunControls task={task} run={run} />
-    </div>
-  );
-}
-
 /**
- * The task's history as a thread: comments as messages, a sender's run of them under one face,
- * and bookkeeping as small lines between them (runs of it folded into "N 条变更").
+ * The task's history as a thread: comments as messages, a sender's run of them under one face, what
+ * was delivered and what failed on lines of their own, and the rest between them folded into one
+ * line ("N 条动态"). What is going now is not here but under it (`LiveRuns`).
  */
 export function Timeline({ task }: { task: TaskDetail }) {
   const { t: translateText } = useTranslation(["common"] as const);
-  // Runs show where they started; their queueing is news only while they still wait, with why.
   const runs = new Map(task.runs.map((run) => [run.id, run]));
-  const waiting = (a: TaskActivity) => {
-    const run = a.kind === "run_queued" && a.runId && runs.get(a.runId);
-    return run && run.status === "queued" ? run : undefined;
-  };
+  // A run still going is said under the thread (`LiveRuns`); its start joins the thread once it ends.
+  const going = (a: TaskActivity) =>
+    a.kind === "run_started" &&
+    a.runId !== null &&
+    isActive(runs.get(a.runId)?.status);
   const items = entries(
-    task.activity.filter((a) => describe(a) !== null || waiting(a)),
+    task.activity.filter(
+      (a) => !unlisted.has(a.kind) && !going(a) && describe(a) !== null,
+    ),
   );
   return (
     <ol aria-label={translateText("labels.timeline")}>
@@ -1044,16 +1132,13 @@ export function Timeline({ task }: { task: TaskDetail }) {
             </Message>
           );
         }
-        const run =
-          (a.kind === "run_started" && a.runId && runs.get(a.runId)) ||
-          waiting(a);
         return (
           <Note key={a.id}>
-            {run ? (
-              <RunEntry task={task} run={run} activity={a} />
-            ) : (
-              <EventLine a={a} task={task} />
-            )}
+            <EventLine
+              a={a}
+              task={task}
+              run={a.runId ? runs.get(a.runId) : undefined}
+            />
           </Note>
         );
       })}
@@ -1109,9 +1194,12 @@ function useMentionable(task: TaskDetail) {
 export function CommentBox({
   task,
   className,
+  top,
 }: {
   task: TaskDetail;
   className?: string;
+  /** Over the box, inside what places it (the side panel: what is going now). */
+  top?: React.ReactNode;
 }) {
   const { t: translateText } = useTranslation([
     "tasks",
@@ -1226,6 +1314,7 @@ export function CommentBox({
         />
       ) : null}
       <div className={className}>
+        {top}
         <form
           className="relative flex items-end border border-input bg-background focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/50 dark:bg-input/30"
           onSubmit={(e) => {
@@ -1457,16 +1546,20 @@ export function EditableTitle({
 
 /**
  * The task's description; `fold` folds a long one (the side panel), `className` replaces its
- * quote rule (the side panel's thread has the description as its first message).
+ * quote rule (the side panel's thread has the description as its first message). `quiet` makes
+ * its edit button a pencil that shows where the pointer is over a `group/first` around it (and
+ * always on touch), placed by the nearest positioned ancestor, rather than a line of its own.
  */
 export function Description({
   task,
   fold = false,
   className = "border-l-2 border-foreground pl-3",
+  quiet = false,
 }: {
   task: TaskDetail;
   fold?: boolean;
   className?: string;
+  quiet?: boolean;
 }) {
   const { t: translateText } = useTranslation(["tasks", "common"] as const);
   const update = useUpdateTask();
@@ -1503,15 +1596,34 @@ export function Description({
         </div>
       </div>
     );
+  const startEditing = () => {
+    setText(task.description);
+    setEditing(true);
+  };
+  if (quiet && task.description.trim())
+    return (
+      <>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label={translateText("actions.editDescription")}
+          title={translateText("actions.editDescription")}
+          className="absolute top-0 right-0 text-muted-foreground opacity-0 group-focus-within/first:opacity-100 group-hover/first:opacity-100 pointer-coarse:opacity-100"
+          onClick={startEditing}
+        >
+          <PencilSimpleIcon aria-hidden="true" />
+        </Button>
+        <Folded enabled={fold} max="max-h-56" className={className}>
+          <Markdown className="text-sm">{task.description}</Markdown>
+        </Folded>
+      </>
+    );
   const edit = (
     <Button
       variant="ghost"
       size="xs"
       className="text-muted-foreground"
-      onClick={() => {
-        setText(task.description);
-        setEditing(true);
-      }}
+      onClick={startEditing}
     >
       <PencilSimpleIcon aria-hidden="true" />
       {task.description.trim()
@@ -1527,10 +1639,99 @@ export function Description({
   );
 }
 
+/** The pull request the task delivered, newest, as a link in the header: it is the work. */
+function PullChip({ task }: { task: TaskDetail }) {
+  const pull = useTaskPulls(task.id).at(-1);
+  if (!pull) return null;
+  return (
+    <Button
+      asChild
+      variant="ghost"
+      size="xs"
+      className="text-muted-foreground tabular-nums"
+    >
+      <a href={pull.url} target="_blank" rel="noreferrer" title={pull.title}>
+        <GitPullRequestIcon aria-hidden="true" />#{pull.number}
+      </a>
+    </Button>
+  );
+}
+
+/** How long the pointer rests on the details button before they open, and leaves before they close. */
+const HOVER_OPEN_MS = 150;
+const HOVER_CLOSE_MS = 200;
+
 /**
- * A task in the side panel, as a thread: the description is its first message, with the task's
- * properties under it; the comments and what happened follow; the box to reply stays at the
- * bottom.
+ * The task's underlying properties — who executes it, where, its runs and rerunning, its pull
+ * requests — behind one button. A click opens and pins them; a mouse resting on the button opens
+ * them too and they close when it leaves, unless a click pinned them. Not a hover card: they hold
+ * buttons, and a touch has no hover.
+ */
+function TaskDetails({ task }: { task: TaskDetail }) {
+  const { t: translateText } = useTranslation(["tasks"] as const);
+  const [open, setOpen] = useState(false);
+  const pinnedRef = useRef(false);
+  const timerRef = useRef<number | undefined>(undefined);
+  const hover = (next: boolean) => (e: React.PointerEvent) => {
+    if (e.pointerType !== "mouse" || pinnedRef.current) return;
+    window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(
+      setOpen,
+      next ? HOVER_OPEN_MS : HOVER_CLOSE_MS,
+      next,
+    );
+  };
+  useEffect(() => () => window.clearTimeout(timerRef.current), []);
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) pinnedRef.current = false;
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={translateText("details.propertiesTab")}
+          title={translateText("details.propertiesTab")}
+          onPointerEnter={hover(true)}
+          onPointerLeave={hover(false)}
+          onClick={(e) => {
+            // Open from hovering, a click pins it; otherwise a click opens and closes.
+            e.preventDefault();
+            window.clearTimeout(timerRef.current);
+            if (open && !pinnedRef.current) {
+              pinnedRef.current = true;
+              return;
+            }
+            pinnedRef.current = !open;
+            setOpen(!open);
+          }}
+        >
+          <InfoIcon aria-hidden="true" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className="w-80"
+        onPointerEnter={hover(true)}
+        onPointerLeave={hover(false)}
+      >
+        <TaskProperties task={task} status={false}>
+          <TaskPulls task={task} />
+        </TaskProperties>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * A task in the side panel, as a thread. The header holds what is always needed — the title and
+ * the status — and the rest of the task's properties behind a button (`TaskDetails`); the
+ * description is the first message; the comments, what was delivered and what failed follow, the
+ * rest folded between them; what is going now sits over the box to reply, at the bottom.
  */
 function TaskView({ task }: { task: TaskDetail }) {
   const { t: translateText } = useTranslation([
@@ -1540,26 +1741,39 @@ function TaskView({ task }: { task: TaskDetail }) {
   ] as const);
   const [, setNav] = useTaskNav();
   const { agents } = useAgentList();
+  const update = useUpdateTask();
   const remove = useDeleteTask();
   const replies = task.activity.filter((a) => a.kind === "comment").length;
   // A thread opens on its latest reply, next to the box to answer it; once more after the first
-  // paint, for what lays itself out late (folded text measuring itself).
+  // paint, for what lays itself out late (folded text measuring itself). It is at least as tall as
+  // the panel shows, so a short one still has its box at the bottom.
   const ref = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
-    let area = ref.current?.parentElement;
+    const article = ref.current;
+    let area = article?.parentElement;
     while (
       area &&
       !["auto", "scroll"].includes(getComputedStyle(area).overflowY)
     )
       area = area.parentElement;
-    if (!area) return;
+    if (!article || !area) return;
+    const fill = () => {
+      const { paddingTop, paddingBottom } = getComputedStyle(area);
+      article.style.minHeight = `${area.clientHeight - Number.parseFloat(paddingTop) - Number.parseFloat(paddingBottom)}px`;
+    };
+    fill();
+    const resize = new ResizeObserver(fill);
+    resize.observe(area);
     const end = () => area.scrollTo({ top: area.scrollHeight });
     end();
     const frame = requestAnimationFrame(end);
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      resize.disconnect();
+    };
   }, []);
   return (
-    <article ref={ref}>
+    <article ref={ref} className="flex flex-col">
       {/* Pinned to the panel's edge, over its padding (p-3), as the rest scrolls. */}
       <header className="sticky -top-3 z-10 -mx-3 -mt-3 space-y-1 bg-surface px-3 pt-3 pb-2">
         <div className="flex items-center gap-1">
@@ -1570,6 +1784,16 @@ function TaskView({ task }: { task: TaskDetail }) {
           <span className="flex-1 text-xs text-muted-foreground tabular-nums">
             #{task.number}
           </span>
+          <PullChip task={task} />
+          <StatusIcon status={task.status} />
+          <StatusSelect
+            size="sm"
+            value={task.status}
+            onChange={(status) =>
+              update.mutate({ taskId: task.id, status }, { onError: showError })
+            }
+          />
+          <TaskDetails task={task} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -1600,22 +1824,28 @@ function TaskView({ task }: { task: TaskDetail }) {
         </div>
         <EditableTitle key={task.title} task={task} />
       </header>
-      <div className={cn(threadRow, "pt-2")}>
+      <div className={cn(threadRow, "group/first relative pt-2")}>
         <Face actor={task.createdBy} />
-        <div className="min-w-0 space-y-2 text-sm">
+        <div className="min-w-0 space-y-1 text-sm">
           <p className="flex flex-wrap items-baseline gap-x-2 leading-5">
             <span className="font-medium wrap-anywhere">
               {actorName(task.createdBy, agents)}
             </span>
             <Time at={task.createdAt} />
           </p>
-          <Description key={task.description} task={task} fold className="" />
-          <TaskProperties task={task} className="bg-muted/50 px-3 py-1">
-            <TaskPulls task={task} />
-          </TaskProperties>
+          <Description
+            key={task.description}
+            task={task}
+            fold
+            quiet
+            className=""
+          />
         </div>
       </div>
-      <section aria-label={translateText("details.activityTab")}>
+      <section
+        aria-label={translateText("details.activityTab")}
+        className="flex flex-1 flex-col"
+      >
         {replies ? (
           <p className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
             {translateText("thread.replies", { count: replies })}
@@ -1627,7 +1857,8 @@ function TaskView({ task }: { task: TaskDetail }) {
         </div>
         <CommentBox
           task={task}
-          className="sticky -bottom-3 z-10 -mx-3 -mb-3 bg-surface px-3 pt-1 pb-3"
+          className="sticky -bottom-3 z-10 -mx-3 -mb-3 mt-auto bg-surface px-3 pt-1 pb-3"
+          top={<LiveRuns task={task} className="space-y-1 pb-1.5" />}
         />
       </section>
     </article>
