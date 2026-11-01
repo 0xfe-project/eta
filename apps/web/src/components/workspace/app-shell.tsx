@@ -50,6 +50,13 @@ import { useWorkspaceStore } from "./workspace-store";
 
 const sections = [
   {
+    to: "/",
+    get label() {
+      return translate("navigation:sections.chat");
+    },
+    icon: ChatsCircleIcon,
+  },
+  {
     to: "/tasks",
     get label() {
       return translate("navigation:sections.tasks");
@@ -224,11 +231,15 @@ export function Sidebar() {
                   ? undefined
                   : translateText(MAILBOX_STATUS[mail.status]);
               const name = count ? `${label} · ${count}` : label;
+              // 对话 is the home row: `startsWith("/")` is true from every section, so it is lit by
+              // the home path alone. The other rows keep the prefix match.
+              const active =
+                to === "/" ? pathname === "/" : pathname.startsWith(to);
               return (
                 <SidebarMenuItem key={to}>
                   <SidebarMenuButton
                     asChild
-                    isActive={pathname.startsWith(to)}
+                    isActive={active}
                     tooltip={label}
                     className={cn(
                       "relative overflow-visible text-sm",
