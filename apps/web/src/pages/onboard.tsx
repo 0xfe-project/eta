@@ -104,7 +104,7 @@ export function Onboard() {
                       <span className="block text-sm font-medium">
                         {card.name}
                       </span>
-                      <span className="block truncate text-xs text-muted-foreground">
+                      <span className="block text-xs text-pretty break-words text-muted-foreground">
                         {card.description}
                       </span>
                     </span>
