@@ -119,7 +119,7 @@
     "statusReceived": "Received",
     "statusDraft": "Draft",
     "statusSending": "Sending",
-    "statusAccepted": "Accepted",
+    "statusAccepted": "Sent",
     "statusFailed": "Failed",
     "assigned": "Assigned to",
     "assignedTo": "Handed to {{name}}; processing started",
