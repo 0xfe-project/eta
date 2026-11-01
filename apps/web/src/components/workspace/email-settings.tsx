@@ -365,13 +365,15 @@ export function EmailSettings() {
               <Button
                 size="icon-sm"
                 variant="ghost"
-                aria-label={t("edit")}
+                aria-label={t("accessibility.editAccount", {
+                  address: account.address,
+                })}
                 onClick={() => {
                   setAdding(false);
                   setEditing(account);
                 }}
               >
-                <PencilSimpleIcon />
+                <PencilSimpleIcon aria-hidden="true" />
               </Button>
               <Button
                 size="sm"
@@ -385,7 +387,9 @@ export function EmailSettings() {
               <Button
                 size="icon-sm"
                 variant="ghost"
-                aria-label={t("remove")}
+                aria-label={t("accessibility.removeAccount", {
+                  address: account.address,
+                })}
                 onClick={() =>
                   remove.mutate(
                     { accountId: account.id },
@@ -395,7 +399,7 @@ export function EmailSettings() {
                   )
                 }
               >
-                <TrashIcon />
+                <TrashIcon aria-hidden="true" />
               </Button>
             </li>
           ))}

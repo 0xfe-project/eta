@@ -25,6 +25,10 @@
   },
   "edit": "编辑邮箱",
   "remove": "解除绑定",
+  "accessibility": {
+    "editAccount": "编辑邮箱 {{address}}",
+    "removeAccount": "解除绑定 {{address}}"
+  },
   "provider": "邮箱服务商",
   "providers": {
     "qq": "QQ 邮箱",

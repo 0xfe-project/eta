@@ -107,7 +107,9 @@ describe("email settings", () => {
     const fake = host();
     const view = await mount(<EmailSettings />);
     view.container
-      .querySelector<HTMLButtonElement>('button[aria-label="编辑邮箱"]')!
+      .querySelector<HTMLButtonElement>(
+        'button[aria-label="编辑邮箱 alice@example.com"]',
+      )!
       .click();
     await flush();
     expect(
