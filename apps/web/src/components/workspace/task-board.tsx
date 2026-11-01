@@ -252,7 +252,7 @@ function BoardView({ tasks }: { tasks: readonly Task[] }) {
       status !== "cancelled" || tasks.some((t) => t.status === status),
   );
   return (
-    <div className="flex h-full gap-3 overflow-x-auto py-4">
+    <div className="flex h-full gap-3 overflow-x-auto px-4 py-4 sm:px-6">
       {columns.map((status) => {
         const group = tasks.filter((t) => t.status === status);
         const label = statusLabel(status);
