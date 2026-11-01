@@ -40,6 +40,17 @@ function LocalizedDocument({ children }: { children: ReactNode }) {
     <AppProviders>
       <a
         href="#main"
+        // `#main` alone misses on a phone, where the column holding it is hidden; the visible
+        // `main` is the one to land on.
+        onClick={(event) => {
+          const main = [...document.querySelectorAll("main")].find(
+            (element) => element.getClientRects().length > 0,
+          );
+          if (!main) return;
+          event.preventDefault();
+          main.tabIndex = -1;
+          main.focus();
+        }}
         className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-background focus:p-3 focus:text-foreground"
       >
         {translateText("accessibility.skipToContent")}
