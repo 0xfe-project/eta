@@ -194,7 +194,10 @@ function Message({ message }: { message: EmailMessageView }) {
           {message.direction === "incoming" ? "IN" : "OUT"}
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="line-clamp-2 text-sm font-semibold sm:truncate">
+          <h3
+            className="line-clamp-2 text-sm font-semibold"
+            title={message.subject}
+          >
             {message.subject}
           </h3>
           <p className="truncate text-xs text-muted-foreground">
@@ -549,7 +552,10 @@ export function EmailInboxPage() {
                           ETA
                         </span>
                       ) : null}
-                      <h1 className="line-clamp-2 text-base font-semibold leading-tight sm:truncate sm:text-lg">
+                      <h1
+                        className="line-clamp-2 text-base font-semibold leading-tight sm:text-lg"
+                        title={detail.thread.subject}
+                      >
                         {detail.thread.subject}
                       </h1>
                     </div>
