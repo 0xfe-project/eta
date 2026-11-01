@@ -122,7 +122,7 @@ export function Onboard() {
           </ul>
         ) : (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-pretty text-muted-foreground">
               {translateText("onboard:email.optional")}
             </p>
             <EmailAccountForm compact />
