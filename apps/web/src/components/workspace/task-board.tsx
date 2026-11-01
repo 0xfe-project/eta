@@ -178,7 +178,7 @@ function ListView({
                       type="button"
                       aria-current={task.id === selected || undefined}
                       onClick={() => void setNav({ task: task.id })}
-                      className="grid h-full min-w-0 flex-1 grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-2 text-left outline-none focus-visible:underline @lg:grid-cols-[3rem_minmax(0,1fr)_auto_minmax(0,12rem)_4.5rem]"
+                      className="grid h-full min-w-0 flex-1 grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-2 pr-2 text-left outline-none focus-visible:underline @lg:grid-cols-[3rem_minmax(0,1fr)_auto_minmax(0,12rem)_4.5rem]"
                     >
                       <span className="text-xs text-muted-foreground tabular-nums">
                         #{task.number}
