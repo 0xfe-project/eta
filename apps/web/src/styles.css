@@ -336,7 +336,7 @@
   --overlay: oklch(0.145 0 0 / 3%);
   --overlay-hover: oklch(0.145 0 0 / 6%);
   /* Text that is there but not asking to be read: timestamps, counts, "—". */
-  --faint: oklch(0.708 0 0);
+  --faint: oklch(0.64 0 0);
   --state-error: oklch(0.577 0.245 27.325);
   --state-warning: oklch(0.62 0.18 75);
   --state-success: oklch(0.527 0.154 150.069);
