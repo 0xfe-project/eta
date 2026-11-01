@@ -122,13 +122,15 @@ export function ConversationList() {
         <SidebarMenu className="gap-1.5 py-1.5">
           {directories.length === 0 ? (
             loaded ? (
-              <p
-                className={
-                  rail ? "sr-only" : "px-2 py-1 text-xs text-muted-foreground"
-                }
-              >
-                {translateText("chat:groups.empty.title")}
-              </p>
+              <SidebarMenuItem>
+                <p
+                  className={
+                    rail ? "sr-only" : "px-2 py-1 text-xs text-muted-foreground"
+                  }
+                >
+                  {translateText("chat:groups.empty.title")}
+                </p>
+              </SidebarMenuItem>
             ) : null
           ) : (
             directories.flatMap((directory) =>
@@ -227,15 +229,17 @@ export function ConversationList() {
             <SidebarMenu className="gap-1.5 py-1.5">
               {directs.length === 0 ? (
                 loaded ? (
-                  <p
-                    className={
-                      rail
-                        ? "sr-only"
-                        : "px-2 py-1 text-xs text-muted-foreground"
-                    }
-                  >
-                    {translateText("chat:sections.noAgents")}
-                  </p>
+                  <SidebarMenuItem>
+                    <p
+                      className={
+                        rail
+                          ? "sr-only"
+                          : "px-2 py-1 text-xs text-muted-foreground"
+                      }
+                    >
+                      {translateText("chat:sections.noAgents")}
+                    </p>
+                  </SidebarMenuItem>
                 ) : null
               ) : (
                 directs.map((entry) => (
