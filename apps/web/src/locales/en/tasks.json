@@ -139,7 +139,7 @@
   "comments": {
     "title": "Comments",
     "awaitingReply": "Awaiting reply",
-    "awaitingYourReply": " Waiting for your reply",
+    "awaitingYourReply": "<name>{{name}}</name> is waiting for your reply",
     "unsupportedAttachments": "{{action}} does not support images or files yet; {{count}} were not added.",
     "deliveryFailed": "{{action}} was not delivered: {{message}}",
     "placeholder": "Reply; a running task reads it right away",
