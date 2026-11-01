@@ -105,7 +105,7 @@
     "statusReceived": "已接收",
     "statusDraft": "草稿",
     "statusSending": "发送中",
-    "statusAccepted": "已提交",
+    "statusAccepted": "已发送",
     "statusFailed": "失败",
     "assigned": "已交给",
     "assignedTo": "已交给 {{name}}，正在处理",
