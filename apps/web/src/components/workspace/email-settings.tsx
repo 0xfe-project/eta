@@ -195,8 +195,9 @@ export function EmailAccountForm({
     <form onSubmit={(event) => void submit(event)} className="space-y-3">
       <div className={compact ? "grid gap-3" : "grid gap-3 sm:grid-cols-2"}>
         <div className="grid gap-1">
-          <Label>{t("provider")}</Label>
+          <Label htmlFor="email-provider">{t("provider")}</Label>
           <Select
+            id="email-provider"
             className="w-full"
             value={provider}
             onValueChange={(value) => pickProvider(value as Provider)}
