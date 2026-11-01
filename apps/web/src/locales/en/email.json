@@ -25,6 +25,10 @@
   },
   "edit": "Edit mailbox",
   "remove": "Disconnect",
+  "accessibility": {
+    "editAccount": "Edit mailbox {{address}}",
+    "removeAccount": "Disconnect {{address}}"
+  },
   "provider": "Provider",
   "providers": {
     "qq": "QQ Mail",
