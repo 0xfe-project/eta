@@ -60,7 +60,7 @@ export function Onboard() {
   return (
     <main
       id="main"
-      className="mx-auto flex min-h-svh w-full max-w-2xl flex-col gap-4 p-4"
+      className="mx-auto flex h-svh w-full max-w-2xl flex-col gap-4 p-4"
     >
       <Stepper
         steps={[
