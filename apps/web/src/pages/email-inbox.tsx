@@ -11,7 +11,7 @@ import { EnvelopeSimpleIcon } from "@phosphor-icons/react/EnvelopeSimple";
 import { PaperPlaneRightIcon } from "@phosphor-icons/react/PaperPlaneRight";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
@@ -34,6 +34,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/workspace/app-shell";
 import { emailThreadsForFolder } from "@/components/workspace/email-folders";
 import { EmailMessageHtml } from "@/components/workspace/email-message-html";
@@ -253,6 +254,8 @@ function AssignDialog({
   const assign = useAssignEmail();
   const [agentId, setAgentId] = useState("");
   const [projectId, setProjectId] = useState("");
+  const agentFieldId = useId();
+  const projectFieldId = useId();
   const start = () => {
     const first = threads[0];
     if (!first) return;
@@ -281,10 +284,14 @@ function AssignDialog({
         </DialogHeader>
         <div className="grid gap-3">
           <div className="grid gap-1">
-            <span className="text-xs text-muted-foreground">
+            <Label
+              htmlFor={agentFieldId}
+              className="text-xs text-muted-foreground"
+            >
               {t("thread.agent")}
-            </span>
+            </Label>
             <Select
+              id={agentFieldId}
               className="w-full"
               value={agentId}
               onValueChange={setAgentId}
@@ -297,10 +304,14 @@ function AssignDialog({
             </Select>
           </div>
           <div className="grid gap-1">
-            <span className="text-xs text-muted-foreground">
+            <Label
+              htmlFor={projectFieldId}
+              className="text-xs text-muted-foreground"
+            >
               {t("thread.project")}
-            </span>
+            </Label>
             <Select
+              id={projectFieldId}
               className="w-full"
               value={projectId}
               onValueChange={setProjectId}
