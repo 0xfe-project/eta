@@ -655,7 +655,7 @@ export function EmailInboxPage() {
                         );
                       }}
                     >
-                      {t("common:actions.delete")}
+                      {t("inbox.delete")}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
