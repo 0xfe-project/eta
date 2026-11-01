@@ -344,9 +344,6 @@ export function EmailSettings() {
         <p className="text-xs leading-relaxed text-muted-foreground">
           {t("description")}
         </p>
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          {t("verifyHint")}
-        </p>
       </div>
       {accounts.length === 0 ? (
         <p className="border border-dashed px-3 py-2.5 text-xs text-muted-foreground">
