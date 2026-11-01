@@ -318,6 +318,7 @@ function GroupCard({
           type="button"
           data-sidebar="menu-button"
           data-active={active}
+          aria-current={active ? "true" : undefined}
           title={conversation.name}
           onClick={onOpen}
           className="relative flex w-full flex-col items-center gap-1 px-1 py-1.5 hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
@@ -374,6 +375,7 @@ function GroupCard({
             type="button"
             data-sidebar="menu-button"
             data-active={active}
+            aria-current={active ? "true" : undefined}
             title={conversation.name}
             onClick={onOpen}
             className="absolute inset-x-0 top-0 h-11 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
