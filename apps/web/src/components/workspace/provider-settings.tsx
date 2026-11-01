@@ -244,7 +244,14 @@ function ProviderRow({
           {translateText("actions.linkAccount")}
         </Button>
       ) : null}
-      <Button size="xs" variant="ghost" onClick={onEdit}>
+      <Button
+        size="xs"
+        variant="ghost"
+        aria-label={translateText("common:actions.editItem", {
+          name: providerName,
+        })}
+        onClick={onEdit}
+      >
         {translateText("common:actions.edit")}
       </Button>
       <DropdownMenu>
