@@ -102,7 +102,7 @@ export function ConversationList() {
           <span
             id="sidebar-groups"
             className={cn(
-              "font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase",
+              "font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase [&:lang(zh)]:tracking-normal",
               // Still the section's name, just not drawn: a heading cannot fit in a rail.
               rail && "sr-only",
             )}
@@ -199,7 +199,7 @@ export function ConversationList() {
             <span
               id="sidebar-agents"
               className={cn(
-                "min-w-0 flex-1 truncate font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase",
+                "min-w-0 flex-1 truncate font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase [&:lang(zh)]:tracking-normal",
                 rail && "sr-only",
               )}
             >
