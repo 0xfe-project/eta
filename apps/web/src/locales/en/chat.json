@@ -55,6 +55,7 @@
     "nameLabel": "Group · {{name}}",
     "directChat": "Direct chat",
     "info": "Group info",
+    "unreadCount": "{{count}} unread",
     "groupChat": "Group chat",
     "createWithMembers": "Create a group with them",
     "inviteSelected": "Invite to group",
