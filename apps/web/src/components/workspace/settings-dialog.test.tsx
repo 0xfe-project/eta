@@ -64,7 +64,15 @@ describe("设置左侧那一列", () => {
     await mount(<Dialog />);
     await flush();
     expect(rail()).toEqual(
-      labelsOf("agents", "providers", "mcp", "email", "archived", "appearance"),
+      labelsOf(
+        "agents",
+        "providers",
+        "machines",
+        "mcp",
+        "email",
+        "archived",
+        "appearance",
+      ),
     );
     expect(rail().join("")).not.toContain("需先确认的工具");
   });

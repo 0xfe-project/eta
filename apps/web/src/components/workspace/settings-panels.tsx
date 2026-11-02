@@ -26,13 +26,12 @@ import { useWorkspaceStore } from "./workspace-store";
 // hiding rules and the panels themselves are written once, here.
 
 /**
- * The sections the rail does not offer, by choice: 机器, 环境包 and 连接 are off in this build,
- * and 审批 is the editor's only. The settings stay in force — `?settings=machines` still opens
- * one — because hiding the door is not the same as turning the feature off.
+ * The sections the rail does not offer, by choice: 环境包 and 连接 are off in this build, and
+ * 审批 is the editor's only. The settings stay in force — `?settings=bundles` still opens one —
+ * because hiding the door is not the same as turning the feature off.
  */
 const hiddenSettings = new Set<SettingsSection>([
   "approvals",
-  "machines",
   "bundles",
   "connections",
 ]);
