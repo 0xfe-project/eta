@@ -146,7 +146,7 @@ function ThreadRow({
       <button
         type="button"
         onClick={onOpen}
-        className="min-w-0 flex-1 text-left outline-none"
+        className="min-w-0 flex-1 text-left"
       >
         <span className="flex items-baseline gap-2">
           <span
