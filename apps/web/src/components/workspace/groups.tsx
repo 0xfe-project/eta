@@ -336,6 +336,8 @@ export function GroupList() {
     // the room is better spent on a row. Its rows carry their own padding, so the list can start
     // straight under the header.
     <section className="min-h-0 flex-1 overflow-y-auto px-3">
+      {/* Until `hello`, the rows' outline at the rows' height. */}
+      {loaded ? null : <Loading layout="cards" rows={5} />}
       <ul className="space-y-px">
         {rows.map((row) =>
           row.kind === "agent" ? (

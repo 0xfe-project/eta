@@ -9,7 +9,12 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { translate } from "@/lib/i18n";
 import { setWire } from "@/lib/wire";
-import { agentView, conversationView, productHost } from "@/test-product";
+import {
+  agentView,
+  buildProductHost,
+  conversationView,
+  productHost,
+} from "@/test-product";
 import { agentStatusLabels } from "./agent-status";
 import { GroupList } from "./groups";
 
@@ -102,6 +107,39 @@ describe("最近对话的一行", () => {
     expect(container.textContent).toContain(agentStatusLabels.working);
     expect(container.textContent).not.toContain(
       translate("chat:groups.directChat"),
+    );
+  });
+
+  it("draws the rows' outline until hello, and not the empty line", async () => {
+    groups.list = [];
+    // Connected, but `hello` has not come: nothing is known about the list yet.
+    buildProductHost({ conversations: [], agents }).install();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <GroupList />
+        </QueryClientProvider>,
+      ),
+    );
+    cleanup.push(() => {
+      root.unmount();
+      container.remove();
+    });
+    expect(container.querySelector('[role="status"]')).not.toBeNull();
+    expect(container.textContent).not.toContain(
+      translate("chat:groups.empty.title"),
+    );
+  });
+
+  it("says the list is empty once it has arrived, with no outline left", async () => {
+    groups.list = [];
+    const container = await render(<GroupList />);
+    expect(container.querySelector('[role="status"]')).toBeNull();
+    expect(container.textContent).toContain(
+      translate("chat:groups.empty.title"),
     );
   });
 

@@ -10,6 +10,7 @@ import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { Loading } from "@/components/states";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -131,7 +132,12 @@ export function ConversationList() {
                   {translateText("chat:groups.empty.title")}
                 </p>
               </SidebarMenuItem>
-            ) : null
+            ) : (
+              // Until `hello`: the rows' outline, so the list does not pop in and push the shelf.
+              <SidebarMenuItem>
+                <Loading layout={rail ? "glyphs" : "list"} rows={3} />
+              </SidebarMenuItem>
+            )
           ) : (
             directories.flatMap((directory) =>
               directory.conversations.map((conversation) => {
@@ -240,7 +246,11 @@ export function ConversationList() {
                       {translateText("chat:sections.noAgents")}
                     </p>
                   </SidebarMenuItem>
-                ) : null
+                ) : (
+                  <SidebarMenuItem>
+                    <Loading layout={rail ? "glyphs" : "list"} rows={2} />
+                  </SidebarMenuItem>
+                )
               ) : (
                 directs.map((entry) => (
                   <AgentCard

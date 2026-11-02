@@ -53,6 +53,10 @@ async function start() {
   const router = getRouter();
   const root = document.getElementById("root");
   if (!root) throw new Error("missing #root");
+  // The first page is resolved, its chunk included, before React's first commit. Rendered any
+  // earlier, the router commits an empty tree (nothing matched yet) over index.html's outline and
+  // the window goes blank until the route's pending outline comes in after defaultPendingMs.
+  await router.load().catch(console.error);
 
   startTransition(() => {
     createRoot(root).render(

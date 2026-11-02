@@ -233,6 +233,9 @@
   --animate-in: none;
   --animate-out: none;
   --animate-skeleton-sweep: skeleton-sweep 1.6s linear infinite;
+  /* A skeleton waits 180ms before it is drawn at all, so a load that is already done never flashes
+     one. `visibility`, not opacity: when it comes it is simply there, with no fade to sit through. */
+  --animate-skeleton-hold: skeleton-hold 1ms 180ms backwards;
   --animate-upload-pulse: upload-pulse 1.6s linear infinite;
   --animate-copied-check: copied-check 2.5s linear both;
   --spacing: 0.225rem;
@@ -463,6 +466,15 @@
   }
   to {
     translate: 100%;
+  }
+}
+
+/* The hold's only frame. The reduced-motion rule shortens the duration but keeps the delay, and
+   hidden-then-shown is not motion, so the hold is the same for everyone. */
+@keyframes skeleton-hold {
+  from,
+  to {
+    visibility: hidden;
   }
 }
 

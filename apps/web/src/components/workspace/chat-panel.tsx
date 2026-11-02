@@ -25,6 +25,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { Markdown } from "@/components/markdown";
+import { Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -1333,9 +1334,12 @@ export function ChatPanel({
         send();
       }
     },
+    // Nothing read yet is not "no agents": the box says nothing until it knows.
     placeholder: groupName
       ? translateText("composer.placeholder", { agentName: groupName })
-      : translateText("composer.createAgentFirst"),
+      : loading
+        ? ""
+        : translateText("composer.createAgentFirst"),
     inputProps: {
       role: "combobox",
       "aria-autocomplete": "list",
@@ -1441,12 +1445,12 @@ export function ChatPanel({
                   </p>
                 ) : null}
                 {loading && error === undefined && !messages.length ? (
-                  <p
-                    role="status"
-                    className="px-1 py-2 text-xs text-muted-foreground"
-                  >
-                    {translateText("history.loading")}
-                  </p>
+                  // The turns' outline, where the turns will land. The words stay as its name.
+                  <Loading
+                    layout="messages"
+                    rows={4}
+                    label={translateText("history.loading")}
+                  />
                 ) : null}
                 {!loading && !error && messages.length === 0 ? (
                   <p className="px-1 py-2 text-xs text-muted-foreground">
