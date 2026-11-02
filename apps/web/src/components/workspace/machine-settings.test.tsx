@@ -86,7 +86,7 @@ describe("机器设置", () => {
     productHost({
       machines: [
         primary,
-        laptop,
+        { ...laptop, version: "d5f93964f3e9", build: "outdated" },
         machineView({
           id: "m3",
           name: "旧电脑",
@@ -110,17 +110,31 @@ describe("机器设置", () => {
     });
     await mount(<MachineSettings />);
     await flush();
+    const card = (name: string) =>
+      [...document.querySelectorAll("li")].find((item) =>
+        item.textContent?.includes(name),
+      );
     const status = (name: string) =>
-      [...document.querySelectorAll("li")]
-        .find((item) => item.textContent?.includes(name))
-        ?.querySelector('[role="img"]')
-        ?.getAttribute("aria-label");
+      card(name)?.querySelector('[role="img"]')?.getAttribute("aria-label");
+    const details = (name: string) =>
+      card(name)?.querySelector("p")?.textContent;
     expect(status("主机")).toBe("在线");
     expect(status("旧电脑")).toBe("离线");
     expect(status("新电脑")).toBe("待批准");
     expect(status("弃用")).toBe("已撤销");
-    expect(text()).toContain("macOS");
-    expect(text()).toContain("上次在线");
+    // Only the primary is marked, and an offline machine leads with when it was last seen, so
+    // that is not what the line cuts off.
+    expect(details("主机")).toBe(
+      "主机器 · Linux · /home/me · 同时运行 2 个任务",
+    );
+    expect(details("笔记本")).toBe("macOS · /Users/me · 同时运行 2 个任务");
+    expect(details("旧电脑")).toMatch(/^上次在线 今天 \d\d:\d\d · Linux/);
+    expect(text()).not.toContain("Daemon");
+    // The build is said in words when it is behind; the build itself is only on hover.
+    expect(text()).not.toContain("d5f93964f3e9");
+    expect(
+      card("笔记本")?.querySelector('[title="版本 d5f93964f3e9"]')?.textContent,
+    ).toBe("在线 · 需要更新");
     // Only the pending machine asks for a fingerprint, and a revoked one has no menu.
     expect(
       document.querySelectorAll('input[aria-label$="的指纹"]'),
