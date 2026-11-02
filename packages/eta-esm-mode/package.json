@@ -1,0 +1,26 @@
+{
+  "name": "@eta/esm-mode",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "One ESM realm per agent: it writes real modules against Node-shaped bindings, and everything it reaches is a binding we mounted.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./realm": "./src/realm.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "NODE_OPTIONS=--experimental-vm-modules vitest --run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
+  },
+  "dependencies": {
+    "zx": "lite"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.19",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}

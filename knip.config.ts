@@ -8,7 +8,7 @@ export default {
   ignoreBinaries: ["uv", "check", "hutch"],
   // Built-in bundles: scripts the host starts by path (an MCP server, a service), not imports.
   // `.eta` is the session's own directory (memory, scratch copies of packages), not source.
-  ignore: ["bundles/**", ".eta/**"],
+  ignore: ["bundles/**", ".eta/**", "**/test/fixtures/**"],
   // CSS files are part of the module graph: their @imports reference
   // packages (fonts, tw-animate-css, shadcn) and other stylesheets.
   compilers: {
