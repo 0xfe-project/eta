@@ -241,7 +241,7 @@
       "noodling": "推敲中",
       "conjuring": "构思中"
     },
-    "fold": "想的过程 · {{count}} 字"
+    "fold": "思考过程 · {{count}} 字"
   },
   "diff": {
     "addedLabel": "新增：",
