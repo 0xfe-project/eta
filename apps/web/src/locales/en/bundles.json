@@ -18,7 +18,6 @@
   "summary": {
     "requires": "Needs: {{commands}}",
     "missing": "{{machine}} lacks {{commands}}",
-    "unchecked": "{{machine}} is offline, not checked",
     "contents": "{{skills}} skills · {{servers}} MCP servers{{hooks}}",
     "hooks": " · rules"
   },
@@ -39,7 +38,7 @@
   "configure": {
     "title": "Configure {{name}}",
     "secretPlaceholder": "Set; leave empty to keep it",
-    "encryptionHelp": "Values are stored encrypted on this host and given only to {{name}}’s own processes. They never reach the agent’s shell and are not shown again.",
+    "encryptionHelp": "Values are stored encrypted on the primary machine and given only to {{name}}’s own processes. They never reach the agent’s shell and are not shown again.",
     "savedReady": "Saved",
     "savedIncomplete": "Saved; a required value is still missing",
     "clear": "Clear all",
@@ -50,12 +49,12 @@
   "add": {
     "title": "Add a bundle from git",
     "repo": "Repository",
-    "repoPlaceholder": "https://github.com/… or a local path",
+    "repoPlaceholder": "https://github.com/… or a path on the primary machine",
     "rev": "Branch, tag or commit",
     "revPlaceholder": "HEAD by default",
     "path": "Directory in the repository",
     "pathPlaceholder": "The repository root by default",
-    "hint": "It is resolved to a commit and kept at it, so every install is the same files; use Update to move. Private repositories use this host’s git credentials.",
+    "hint": "It is resolved to a commit and kept at it, so every install is the same files; use Update to move. Private repositories use the primary machine’s git credentials.",
     "added": "Added {{name}}"
   },
   "refresh": {
@@ -63,7 +62,7 @@
   },
   "remove": {
     "confirmTitle": "Remove {{name}}?",
-    "confirmDescription": "Its files and settings are deleted from this host. Agents that load it lose it.",
+    "confirmDescription": "Its files and settings are deleted from the primary machine. Agents that load it lose it.",
     "done": "Removed {{name}}"
   },
   "picker": {

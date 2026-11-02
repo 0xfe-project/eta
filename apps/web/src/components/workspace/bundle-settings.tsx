@@ -294,8 +294,10 @@ function AddDialog({ onClose }: { onClose: () => void }) {
 /** What the user has to know about a bundle: what it needs from machines, how its service is. */
 function Notes({ bundle }: { bundle: BundleView }) {
   const { t: translateText } = useTranslation(["bundles", "common"] as const);
+  // Only where a command is known to be missing. A machine that could not be asked has nothing
+  // to say about the bundle: whether it is reachable is the machines section's to show.
   const machines = bundle.machines.filter(
-    (machine) => machine.missing.length > 0 || !machine.checked,
+    (machine) => machine.missing.length > 0,
   );
   const lines = [
     bundle.requires.length > 0
@@ -304,12 +306,10 @@ function Notes({ bundle }: { bundle: BundleView }) {
         })
       : null,
     ...machines.map((machine) =>
-      machine.checked
-        ? translateText("summary.missing", {
-            machine: machine.name,
-            commands: machine.missing.join(", "),
-          })
-        : translateText("summary.unchecked", { machine: machine.name }),
+      translateText("summary.missing", {
+        machine: machine.name,
+        commands: machine.missing.join(", "),
+      }),
     ),
     bundle.service === null
       ? null
