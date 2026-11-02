@@ -89,6 +89,29 @@ export interface SpawnResult {
   effects: Effect[];
 }
 
+export interface AskRequest {
+  prompt: string;
+  model?: string;
+  /**
+   * Parent call stack: what was calling eta.ask.
+   * Carried forward in recursion.
+   */
+  parentStack?: string[];
+}
+
+export interface AskResult {
+  /** Model's reply (with call stack prepended). */
+  text: string;
+  /** All effects produced in this turn. */
+  effects: Effect[];
+  /** Structured call stack. */
+  stack: string[];
+  /** Whether the turn completed successfully or was cancelled. */
+  status: "completed" | "cancelled";
+  /** Warning for deep recursion (≥10 layers). */
+  warning?: string;
+}
+
 /**
  * The whole host surface.
  *
@@ -115,4 +138,6 @@ export interface Hooks {
   platform?: Record<string, PlatformCall>;
   /** A real sub-turn. Recursion, budget and cycles are the host's to enforce. */
   spawn?: (request: SpawnRequest) => Promise<SpawnResult>;
+  /** Call the current agent with a new turn. Supports recursion and sees full history. */
+  ask?: (request: AskRequest) => Promise<AskResult>;
 }

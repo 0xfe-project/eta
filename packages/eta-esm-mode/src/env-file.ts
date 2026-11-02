@@ -206,31 +206,57 @@ export class EnvFile {
 
   /** Replaces a block in place. The caller has already shown the old one. */
   replace(name: string, source: string, meta: CapabilityMeta = {}): boolean {
-    if (!this.#capabilitiesMeta.has(name)) return false;
-    this.#capabilitiesMeta.set(name, { source, meta });
-    let replaced = false;
-    this.#generated = this.#generated.replace(
-      BLOCK,
-      (whole, blockName: string) =>
-        blockName === name
-          ? ((replaced = true), renderBlock(name, source, meta))
-          : whole,
-    );
-    this.#syncMetaLine();
-    return replaced;
+    return this.#withLock(() => {
+      // Reload to pick up any concurrent changes
+      this.reload();
+
+      if (!this.#capabilitiesMeta.has(name)) return false;
+      this.#capabilitiesMeta.set(name, { source, meta });
+      let replaced = false;
+      this.#generated = this.#generated.replace(
+        BLOCK,
+        (whole, blockName: string) =>
+          blockName === name
+            ? ((replaced = true), renderBlock(name, source, meta))
+            : whole,
+      );
+      this.#syncMetaLine();
+
+      // Write to disk
+      const dir = dirname(this.#path);
+      mkdirSync(dir, { recursive: true });
+      const tmpPath = `${this.#path}.tmp`;
+      writeFileSync(tmpPath, this.source, "utf8");
+      renameSync(tmpPath, this.#path);
+
+      return replaced;
+    });
   }
 
   remove(name: string): boolean {
-    if (!this.#capabilitiesMeta.has(name)) return false;
-    this.#capabilitiesMeta.delete(name);
-    let removed = false;
-    this.#generated = this.#generated.replace(
-      BLOCK,
-      (whole, blockName: string) =>
-        blockName === name ? ((removed = true), "") : whole,
-    );
-    this.#syncMetaLine();
-    return removed;
+    return this.#withLock(() => {
+      // Reload to pick up any concurrent changes
+      this.reload();
+
+      if (!this.#capabilitiesMeta.has(name)) return false;
+      this.#capabilitiesMeta.delete(name);
+      let removed = false;
+      this.#generated = this.#generated.replace(
+        BLOCK,
+        (whole, blockName: string) =>
+          blockName === name ? ((removed = true), "") : whole,
+      );
+      this.#syncMetaLine();
+
+      // Write to disk
+      const dir = dirname(this.#path);
+      mkdirSync(dir, { recursive: true });
+      const tmpPath = `${this.#path}.tmp`;
+      writeFileSync(tmpPath, this.source, "utf8");
+      renameSync(tmpPath, this.#path);
+
+      return removed;
+    });
   }
 
   save(): void {

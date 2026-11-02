@@ -75,6 +75,13 @@ export function mountModules(
           capability: name,
           args,
         };
+
+        // Fast path: if already approved, call directly (preserve sync behavior)
+        if (approvalStore.isApproved(layer, name)) {
+          return fn.apply(this, args);
+        }
+
+        // Slow path: need to ask for approval (becomes async)
         const refusalPromise = authorize(
           request,
           approvalStore,
@@ -140,20 +147,32 @@ export function mountModules(
       const fromLayer = layers.layerOf(fromPath);
       layer = fromLayer || "self";
     } else {
-      // Parse "eta:layer:name" or "eta:name"
+      // Parse "eta:layer:name", "eta:layer", or "eta:name"
       const parts = specifier.slice(4).split(":");
       if (parts.length === 2) {
         // "eta:project:format" - pinned to a layer
         layer = parts[0] as Layer;
         name = parts[1];
       } else {
-        // "eta:format" - resolve by priority
-        name = parts[0];
-        const found = layers.find(name);
-        if (found === undefined) {
-          throw new Error(`Capability not found: ${name}`);
+        // parts.length === 1
+        // Check if it's a layer name first: "eta:project"
+        const isLayerName =
+          parts[0] === "self" ||
+          parts[0] === "project" ||
+          parts[0] === "global";
+        if (isLayerName) {
+          // "eta:project" - import eta module for that layer
+          layer = parts[0] as Layer;
+          name = undefined;
+        } else {
+          // "eta:format" - resolve capability by priority
+          name = parts[0];
+          const found = layers.find(name);
+          if (found === undefined) {
+            throw new Error(`Capability not found: ${name}`);
+          }
+          layer = found.layer;
         }
-        layer = found.layer;
       }
     }
 
@@ -198,6 +217,7 @@ export function mountModules(
     const exports = ["default", "define", "modules"];
     if (hooks?.memory) exports.push("memory");
     if (hooks?.spawn) exports.push("spawn");
+    if (hooks?.ask) exports.push("ask");
 
     return new vm.SyntheticModule(
       exports,
@@ -270,6 +290,28 @@ export function mountModules(
           );
         }
 
+        if (hooks?.ask) {
+          const ask = hooks.ask;
+          etaObject.ask = realm.binding(
+            "eta.ask",
+            (prompt: string, options?: { model?: string }) => {
+              // Build the new stack entry: truncate prompt to 30 chars
+              const truncated =
+                prompt.length > 30 ? `${prompt.slice(0, 30)}...` : prompt;
+              const entry = `eta.ask("${truncated}")`;
+
+              // Pass the parent stack in the request
+              const result = ask({
+                prompt,
+                model: options?.model,
+                parentStack: [entry], // Host will merge with session stack
+              });
+
+              return result;
+            },
+          );
+        }
+
         // Export default as the eta object
         this.setExport("default", etaObject);
         // Also export named exports for backward compat
@@ -277,6 +319,7 @@ export function mountModules(
         this.setExport("define", defineFn);
         if (hooks?.memory) this.setExport("memory", etaObject.memory);
         if (hooks?.spawn) this.setExport("spawn", etaObject.spawn);
+        if (hooks?.ask) this.setExport("ask", etaObject.ask);
       },
       { context: realm.context, identifier },
     );
