@@ -1,7 +1,8 @@
 import type { AgentView, ConversationSummary } from "@eta/client-contracts";
 import { useMemo } from "react";
+import { projectPlace } from "@/lib/projects";
 import { useAgentList } from "@/queries/agents";
-import { useProjects } from "@/queries/projects";
+import { useMachines, useProjects } from "@/queries/projects";
 import { useGroups } from "./use-groups";
 
 /**
@@ -16,8 +17,11 @@ import { useGroups } from "./use-groups";
 /** The groups that run in one directory, newest activity first. */
 export interface DirectoryGroup {
   projectId: string;
-  /** The directory, when the project is still there to say. */
-  path: string | undefined;
+  /**
+   * Where it runs (see projectPlace), when the project is still there to say: `short` for the card,
+   * `full` for when someone asks for the whole of it.
+   */
+  place: { short: string; full: string } | undefined;
   conversations: ConversationSummary[];
   /** The newest activity inside: what sorts the directories among themselves. */
   at: number;
@@ -38,6 +42,7 @@ export function useChatList() {
   const { groups, current } = useGroups();
   const { agents, loaded } = useAgentList();
   const { projects } = useProjects();
+  const { machines } = useMachines();
 
   const directories = useMemo<DirectoryGroup[]>(() => {
     const open = groups.filter(
@@ -56,15 +61,22 @@ export function useChatList() {
         const sorted = [...conversations].sort(
           (left, right) => activityOf(right) - activityOf(left),
         );
+        const project = projects.find((each) => each.id === projectId);
         return {
           projectId,
-          path: projects.find((project) => project.id === projectId)?.path,
+          place:
+            project === undefined
+              ? undefined
+              : {
+                  short: projectPlace(project, machines, { short: true }),
+                  full: projectPlace(project, machines),
+                },
           conversations: sorted,
           at: sorted[0] === undefined ? 0 : activityOf(sorted[0]),
         };
       })
       .sort((left, right) => right.at - left.at);
-  }, [groups, projects]);
+  }, [groups, projects, machines]);
 
   const directs = useMemo<AgentEntry[]>(() => {
     // Every private chat, archived ones included: an agent that has one is represented by it.
