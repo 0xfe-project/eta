@@ -201,19 +201,20 @@ function MachineCard({ machine }: { machine: MachineView }) {
   const [renaming, setRenaming] = useState(false);
   const [limiting, setLimiting] = useState(false);
   const status = translateText(`status.${machine.status}`);
+  // The line truncates, so what an offline machine's card is there to say, when it was last seen,
+  // goes first. Every machine but the primary runs the daemon, so only the primary is marked. The
+  // build is only worth reading when it is behind, which the header says in words; the exact one
+  // is on hover there.
   const details = [
-    translateText(`kinds.${machine.kind}`),
+    machine.status === "offline" && machine.lastSeenAt !== null
+      ? translateText("lastSeen", { time: when(machine.lastSeenAt) })
+      : null,
+    machine.kind === "primary" ? translateText("kinds.primary") : null,
     machine.os ? (osLabels[machine.os] ?? machine.os) : null,
-    machine.version === null
-      ? null
-      : translateText("build.version", { version: machine.version }),
     machine.home,
     machine.status === "pending" || machine.status === "revoked"
       ? null
       : translateText("runs.summary", { count: machine.maxActiveRuns }),
-    machine.status === "offline" && machine.lastSeenAt !== null
-      ? translateText("lastSeen", { time: when(machine.lastSeenAt) })
-      : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -242,7 +243,14 @@ function MachineCard({ machine }: { machine: MachineView }) {
         >
           {machine.name}
         </span>
-        <span className="text-xs text-muted-foreground">
+        <span
+          className="text-xs text-muted-foreground"
+          title={
+            machine.version === null
+              ? undefined
+              : translateText("build.version", { version: machine.version })
+          }
+        >
           {build === null ? status : `${status} · ${build}`}
         </span>
         {closed ? null : (

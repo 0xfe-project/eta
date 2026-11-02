@@ -7,9 +7,7 @@
     "revoked": "Revoked"
   },
   "kinds": {
-    "primary": "Primary",
-    "daemon": "Daemon",
-    "ssh": "SSH"
+    "primary": "Primary"
   },
   "lastSeen": "Last seen {{time}}",
   "build": {

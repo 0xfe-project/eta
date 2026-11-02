@@ -7,9 +7,7 @@
     "revoked": "已撤销"
   },
   "kinds": {
-    "primary": "主机器",
-    "daemon": "Daemon",
-    "ssh": "SSH"
+    "primary": "主机器"
   },
   "lastSeen": "上次在线 {{time}}",
   "build": {
