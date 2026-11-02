@@ -369,7 +369,7 @@ export function BottomNav() {
       <div className="relative h-[52px] border bg-background">
         <div
           className={cn(
-            "grid h-full",
+            "grid h-full grid-rows-1",
             ROUTINES_VISIBLE
               ? "grid-cols-[1fr_1fr_1fr_68px_1fr_1fr]"
               : "grid-cols-[1fr_1fr_1fr_68px_1fr]",
