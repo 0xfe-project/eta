@@ -8,7 +8,8 @@
   "workspace": {
     "label": "工作区",
     "worktree": "独立 worktree",
-    "local": "项目目录"
+    "local": "项目目录",
+    "away": "在 {{machine}} 上，不在项目里"
   },
   "status": {
     "inProgress": "进行中",

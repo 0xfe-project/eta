@@ -8,7 +8,8 @@
   "workspace": {
     "label": "Workspace",
     "worktree": "Own git worktree",
-    "local": "Project directory"
+    "local": "Project directory",
+    "away": "On {{machine}}, outside the project"
   },
   "status": {
     "inProgress": "In progress",

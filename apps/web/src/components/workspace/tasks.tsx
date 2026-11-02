@@ -67,7 +67,7 @@ import { cn } from "@/lib/utils";
 import { useAgentList } from "@/queries/agents";
 import { useConversationList } from "@/queries/conversations";
 import { useTaskPulls } from "@/queries/github";
-import { useMachines } from "@/queries/projects";
+import { useMachines, useProjects } from "@/queries/projects";
 import {
   useCommentTask,
   useConfirmTaskDraft,
@@ -553,6 +553,11 @@ export function TaskProperties({
   const { t: translateText } = useTranslation(["tasks"] as const);
   const update = useUpdateTask();
   const { agents } = useAgentList();
+  // The executor's latest run says where the work really is. On another machine than the
+  // project's it had no worktree: the row names that machine and where the run started instead.
+  const latest = task.runs.filter((run) => run.agentId === null).at(-1);
+  const away = useAwayMachine(task, latest);
+  const path = away === undefined ? task.workspace.path : latest?.workspace;
   return (
     <dl
       className={cn(
@@ -586,16 +591,18 @@ export function TaskProperties({
           </dd>
           <dt className={propertyLabel}>{translateText("workspace.label")}</dt>
           <dd className="min-w-0 py-1.5 leading-5">
-            {workspaceLabel(task.workspace)}
-            {task.workspace.branch ? (
+            {away === undefined
+              ? workspaceLabel(task.workspace)
+              : translateText("workspace.away", { machine: away })}
+            {away === undefined && task.workspace.branch ? (
               <span className="text-muted-foreground">
                 {" · "}
                 <code>{task.workspace.branch}</code>
               </span>
             ) : null}
-            {task.workspace.path ? (
+            {path ? (
               <span className="block text-xs text-muted-foreground wrap-anywhere">
-                <code>{task.workspace.path}</code>
+                <code>{path}</code>
               </span>
             ) : null}
           </dd>
@@ -954,10 +961,25 @@ function useMachineName(machineId: string | null | undefined) {
   return machines.find((machine) => machine.id === machineId)?.name;
 }
 
+/**
+ * The machine a run works on when it is not the one the task's project is on: its agent is pinned
+ * to another machine, so the run has no worktree or project directory and starts in that machine's
+ * home. Undefined in the ordinary case, and whenever the page cannot tell, so the planned workspace
+ * is what shows then.
+ */
+function useAwayMachine(task: TaskDetail, run: TaskRun | undefined) {
+  const { projects } = useProjects();
+  const name = useMachineName(run?.machineId);
+  const project = projects.find((candidate) => candidate.id === task.projectId);
+  if (run === undefined || project === undefined) return undefined;
+  return run.machineId === project.machineId ? undefined : name;
+}
+
 /** A run's log, in a dialog: it is as long as the run was, more than a line of the thread holds. */
 function RunLogButton({ task, run }: { task: TaskDetail; run: TaskRun }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
   const who = useRunAgent(task, run);
+  const away = useAwayMachine(task, run);
   if (run.status === "queued") return null;
   return (
     <Dialog>
@@ -978,6 +1000,7 @@ function RunLogButton({ task, run }: { task: TaskDetail; run: TaskRun }) {
             {run.workspace ? (
               <>
                 {translateText("log.workspacePrefix")}
+                {away === undefined ? null : `${away} · `}
                 <code>{run.workspace}</code>
               </>
             ) : (
