@@ -398,7 +398,7 @@ export class DaemonNode {
   async close(): Promise<void> {
     for (const fiber of this.#fibers.splice(0).reverse()) await fiber.dispose();
     await this.#manager.closeAll();
-    this.#github.stop();
+    await this.#github.stop();
     await this.#mcp.close();
     await this.#store.close();
   }
