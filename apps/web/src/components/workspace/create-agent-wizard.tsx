@@ -7,12 +7,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DialogFooter } from "@/components/ui/dialog";
-import {
-  useAgentModels,
-  useAgentRuntimes,
-  useCreateAgent,
-} from "@/queries/agents";
-import { useMachines } from "@/queries/projects";
+import { useAgentRuntimeChoices, useCreateAgent } from "@/queries/agents";
 import {
   InstructionsField,
   MachineField,
@@ -32,10 +27,7 @@ const steps = [
   "agents:editor.tabs.instructions",
 ] as const;
 // The fields each step checks before moving on.
-const stepFields = [
-  ["name", "machineId", "runtime", "model"],
-  ["description"],
-] as const;
+const stepFields = [["name", "runtime", "model"], ["description"]] as const;
 const last = steps.length - 1;
 
 /**
@@ -53,7 +45,6 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
   const lastModel = useWorkspaceStore((s) => s.workspace.lastModel);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
-  const { machines } = useMachines();
   const create = useCreateAgent();
   const [step, setStep] = useState(0);
   const [failure, setFailure] = useState<string>();
@@ -76,11 +67,7 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
   const runtime = useWatch({ control: form.control, name: "runtime" });
   const machineId = useWatch({ control: form.control, name: "machineId" });
   const external = runtime !== "eta";
-  // The runtimes are the agent's machine's: the host's own while it follows the project.
-  const { data: runtimes, isError: runtimesFailed } = useAgentRuntimes(
-    machineId || undefined,
-  );
-  const models = useAgentModels(runtime, machineId || undefined);
+  const { runtimes, models } = useAgentRuntimeChoices(runtime, machineId);
   const usable = (models ?? []).filter((item) => item.available);
   // New agents start with the last used model, else the default one, else the first usable one.
   // An external runtime starts on its own default, which is no choice at all.
@@ -164,11 +151,8 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
         {step === 0 ? (
           <>
             <NameField form={form} autoFocus />
-            <MachineField form={form} machines={machines} />
-            <RuntimeField
-              form={form}
-              runtimes={runtimesFailed ? [] : runtimes}
-            />
+            <MachineField form={form} />
+            <RuntimeField form={form} runtimes={runtimes} />
             <ModelField
               form={form}
               models={models}

@@ -93,6 +93,7 @@
     "eta": "eta (built-in)",
     "defaultModel": "Runtime default",
     "loading": "Looking for Claude Code, Codex…",
+    "unreachable": "Can't reach this machine to see which runtimes it has.",
     "status": {
       "unauthenticated": " (not signed in)",
       "missing": " (not installed)",

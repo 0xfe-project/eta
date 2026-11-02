@@ -93,6 +93,7 @@
     "eta": "eta 内置",
     "defaultModel": "运行时默认模型",
     "loading": "正在检测 Claude Code、Codex…",
+    "unreachable": "这台机器现在连不上，查不到它装了哪些运行方式。",
     "status": {
       "unauthenticated": "（未登录）",
       "missing": "（未安装）",

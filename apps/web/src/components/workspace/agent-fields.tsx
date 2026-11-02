@@ -1,4 +1,4 @@
-import type { AgentRuntimeInfo, MachineView } from "@eta/client-contracts";
+import type { AgentRuntimeInfo } from "@eta/client-contracts";
 import type { UseFormReturn } from "react-hook-form";
 import type { AgentForm } from "./agent-form";
 import type { Model } from "@/queries/providers";
@@ -13,6 +13,7 @@ import { formatLocale } from "@/lib/i18n";
 import { THINKING_LEVELS } from "@/lib/thinking";
 import { useBundles } from "@/queries/bundles";
 import { usePersonas } from "@/queries/personas";
+import { useMachines } from "@/queries/projects";
 import { modelGroups } from "@/queries/providers";
 import { DESCRIPTION_MAX } from "./agent-form";
 import { Select, SelectGroup, SelectOption } from "./select-field";
@@ -28,8 +29,11 @@ export function ModelSelect({
   ...props
 }: Omit<React.ComponentProps<typeof Select>, "children"> & {
   value: string;
-  /** Undefined while they load. */
-  models: Model[] | undefined;
+  /**
+   * Undefined while they load. Null when they cannot be listed (the machine is out of reach): the
+   * chosen one then shows as it is, since there is no list to say it is gone.
+   */
+  models: Model[] | null | undefined;
   invalid?: boolean;
   /** Offers "no model of its own" (the empty value) under this name, instead of asking to pick. */
   defaultLabel?: string;
@@ -39,7 +43,7 @@ export function ModelSelect({
     "common",
     "providers",
   ] as const);
-  const loading = !models;
+  const loading = models === undefined;
   const groups = modelGroups(models ?? []);
   const known = (models ?? []).some((model) => model.id === value);
   return (
@@ -60,7 +64,9 @@ export function ModelSelect({
         <SelectOption value={value} disabled>
           {loading
             ? translateText("models.loading")
-            : translateText("models.deletedOption", { modelName: value })}
+            : models === null
+              ? value
+              : translateText("models.deletedOption", { modelName: value })}
         </SelectOption>
       ) : null}
       {groups.map(({ provider, label, models }) => (
@@ -125,14 +131,9 @@ export function NameField({
  * more than one machine to choose from. Another machine has other runtimes, so an external
  * runtime's model is cleared.
  */
-export function MachineField({
-  form,
-  machines,
-}: {
-  form: Form;
-  machines: readonly MachineView[];
-}) {
+export function MachineField({ form }: { form: Form }) {
   const { t: translateText } = useTranslation(["agents", "machines"] as const);
+  const { machines } = useMachines();
   const value = useWatch({ control: form.control, name: "machineId" });
   const choices = machines.filter(
     (machine) =>
@@ -177,17 +178,23 @@ export function MachineField({
 /**
  * What answers for the agent: eta's own loop, or an agent runtime on the machine (Claude Code,
  * Codex, ...). Another runtime has other models, so a change clears the model.
+ *
+ * The agent's own runtime stays in the list when the machine's list does not have it, so the
+ * trigger never goes blank: as still being looked for while the machine is asked, and as
+ * unavailable when it has no such runtime or could not be asked.
  */
 export function RuntimeField({
   form,
   runtimes,
 }: {
   form: Form;
-  /** Undefined while the host looks. */
-  runtimes: AgentRuntimeInfo[] | undefined;
+  /** Undefined while the host looks; null when the machine could not be asked. */
+  runtimes: AgentRuntimeInfo[] | null | undefined;
 }) {
   const { t: translateText } = useTranslation(["agents", "common"] as const);
   const value = useWatch({ control: form.control, name: "runtime" });
+  const listed =
+    value === "eta" || (runtimes ?? []).some((runtime) => runtime.id === value);
   return (
     <div className="space-y-1.5">
       <Label htmlFor="agent-runtime">
@@ -197,6 +204,7 @@ export function RuntimeField({
         id="agent-runtime"
         className="w-full"
         value={value}
+        aria-describedby={runtimes === null ? "agent-runtime-hint" : undefined}
         onValueChange={(next) => {
           form.setValue("runtime", next as AgentForm["runtime"], {
             shouldDirty: true,
@@ -209,24 +217,39 @@ export function RuntimeField({
           {translateText("agents:runtime.eta")}
         </SelectOption>
         {runtimes === undefined ? (
-          <SelectOption value="" disabled>
+          <SelectOption value={listed ? "" : value} disabled>
             {translateText("agents:runtime.loading")}
           </SelectOption>
         ) : (
-          runtimes.map((runtime) => (
-            <SelectOption
-              key={runtime.id}
-              value={runtime.id}
-              disabled={runtime.status !== "available" && runtime.id !== value}
-            >
-              {runtime.label}
-              {runtime.status === "available"
-                ? ""
-                : translateText(`agents:runtime.status.${runtime.status}`)}
-            </SelectOption>
-          ))
+          <>
+            {listed ? null : (
+              <SelectOption value={value} disabled>
+                {value}
+                {translateText("agents:runtime.status.error")}
+              </SelectOption>
+            )}
+            {(runtimes ?? []).map((runtime) => (
+              <SelectOption
+                key={runtime.id}
+                value={runtime.id}
+                disabled={
+                  runtime.status !== "available" && runtime.id !== value
+                }
+              >
+                {runtime.label}
+                {runtime.status === "available"
+                  ? ""
+                  : translateText(`agents:runtime.status.${runtime.status}`)}
+              </SelectOption>
+            ))}
+          </>
         )}
       </Select>
+      {runtimes === null ? (
+        <p id="agent-runtime-hint" className="text-xs text-muted-foreground">
+          {translateText("agents:runtime.unreachable")}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -238,8 +261,8 @@ export function ModelField({
   external = false,
 }: {
   form: Form;
-  /** Undefined while they load. */
-  models: Model[] | undefined;
+  /** Undefined while they load; null when they cannot be listed. */
+  models: Model[] | null | undefined;
   onOpenProviders: () => void;
   /** An external runtime's models: none chosen is the runtime's own default, not a gap. */
   external?: boolean;
@@ -256,9 +279,7 @@ export function ModelField({
   const chosenModel = useWatch({ control: form.control, name: "model" });
   // Only once they have loaded can there be none.
   const noModels =
-    !external &&
-    models !== undefined &&
-    !models.some((model) => model.available);
+    !external && models?.some((model) => model.available) === false;
   return (
     <div className="space-y-1.5">
       <Label htmlFor="agent-model">
