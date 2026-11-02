@@ -142,7 +142,8 @@ describe("环境包设置", () => {
     expect(text()).toContain("未配置");
     expect(text()).toContain("需要命令：gh, github-mcp-server");
     expect(text()).toContain("主机 缺少 github-mcp-server");
-    expect(text()).toContain("笔记本 离线，未检查");
+    // A machine that could not be asked is the machines section's to show, not every bundle's.
+    expect(text()).not.toContain("笔记本");
     expect(text()).toContain("git · 0123456");
     expect(text()).toContain("服务出错: boom");
     expect(text()).toContain("plugin.json is missing");
