@@ -200,7 +200,8 @@ describe("侧边栏的两块", () => {
     const { container } = await tree([
       group("g1", "旧的", "p-eta", { lastMessageAt: now - 7_200_000 }),
       group("g2", "新的", "p-eta", { lastMessageAt: now - 60_000 }),
-      group("g3", "别处", "p-house"),
+      // Older than "新的" from the same `now`, but newer than "旧的".
+      group("g3", "别处", "p-house", { lastMessageAt: now - 3_600_000 }),
     ]);
     expect(new Set(cards(container).map((card) => card.text)).size).toBe(2);
     // Within the directory: newest first. Across directories: newest first as well.
