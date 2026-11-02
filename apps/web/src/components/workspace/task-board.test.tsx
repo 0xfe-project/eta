@@ -5,6 +5,7 @@ import {
   agentView,
   machineView,
   productHost,
+  projectView,
   taskActivity,
   taskDetail,
 } from "@/test-product";
@@ -352,6 +353,69 @@ describe("task board", () => {
     ].map((li) => li.textContent);
     expect(lines[0]).toContain("小艾 排队中 · macbook 不在线，连上后开始");
     expect(lines[1]).toContain("这台机器 不在线");
+  });
+
+  /** t1, open; its project is on m1, and the executor's run works on `machineId`, in `workspace`. */
+  function runOn(machineId: string, workspace: string) {
+    navigation.task = "t1";
+    const host = productHost({
+      agents: [agentView({ id: "a1", name: "小艾" })],
+      machines: [
+        machineView({ id: "m1", name: "builder" }),
+        machineView({ id: "m2", kind: "daemon", name: "macbook" }),
+      ],
+      projects: [projectView({ id: "p1", machineId: "m1" })],
+      tasks: [
+        {
+          task: {
+            ...first,
+            projectId: "p1",
+            runs: [{ ...first.runs[0]!, machineId, workspace }],
+          },
+        },
+      ],
+    });
+    host.target("sessions.s1", {
+      core: { session: "s1", running: true },
+      transcript: { messages: [] },
+    });
+    host.handle("sessions.resync", () => ({}));
+    host.hello();
+  }
+
+  /** The open task's properties, and the description of its run's log once opened. */
+  async function workspaceAndLog() {
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    const properties = container.querySelector("aside")!.textContent;
+    await click(
+      [...container.querySelectorAll("button")].find(
+        (b) => b.textContent === "执行记录",
+      ),
+    );
+    await flush();
+    const log = document.querySelector('[role="dialog"]')!.textContent;
+    return { properties, log };
+  }
+
+  it("says a run on another machine than its project's works there, not in a worktree", async () => {
+    runOn("m2", "/Users/me");
+    const { properties, log } = await workspaceAndLog();
+    expect(properties).toContain("在 macbook 上，不在项目里");
+    expect(properties).toContain("/Users/me");
+    // Nothing of the worktree the run never worked in.
+    expect(properties).not.toContain("独立 worktree");
+    expect(properties).not.toContain("eta/task-1");
+    expect(log).toContain("工作区 macbook · /Users/me");
+  });
+
+  it("says the worktree of a run on its project's machine, with no machine", async () => {
+    runOn("m1", "/data/worktrees/p1/task-1");
+    const { properties, log } = await workspaceAndLog();
+    expect(properties).toContain("独立 worktree · eta/task-1");
+    expect(properties).toContain("/data/worktrees/p1/task-1");
+    expect(properties).not.toContain("builder");
+    expect(log).toContain("工作区 /data/worktrees/p1/task-1");
   });
 
   it("draws a run's log from its session's transcript", async () => {
