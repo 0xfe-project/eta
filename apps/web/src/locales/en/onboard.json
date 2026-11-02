@@ -10,7 +10,9 @@
   },
   "agents": {
     "what": "agents",
+    "install": "Install agents",
     "installed": "Installed",
+    "empty": "No persona cards to install",
     "failed": "Install failed: {{message}}",
     "retry": "Retry install"
   },

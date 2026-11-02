@@ -68,6 +68,8 @@
     "configured": "Configured providers",
     "empty": "No providers yet. Add one to give the host something to run.",
     "modelCount": "{{count}} models",
+    "modelCount_one": "{{count}} model",
+    "modelCount_other": "{{count}} models",
     "unsaved": "This form has changes that would be lost.",
     "discard": "Discard them",
     "defaultThinking": "Default thinking level",

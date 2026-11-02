@@ -190,7 +190,7 @@ describe("the built-in sections a session contributes", () => {
     });
     expect(
       (before.sections.tools as { name: string }[]).map((tool) => tool.name),
-    ).toContain("TaskUpdate");
+    ).toContain("update_step");
     expect(before.sections.transcript).toEqual({ messages: [] });
 
     await session.kernel.dispose();

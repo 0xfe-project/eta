@@ -52,7 +52,7 @@ describe("taskReminderService", () => {
       due.push(event.turn);
     });
     // The task tools a deployment registers; the cadence resets on their use.
-    kernel.tools.register({ name: "TaskUpdate", execute: () => "ok" });
+    kernel.tools.register({ name: "update_step", execute: () => "ok" });
     kernel.tools.register({ name: "read", execute: () => "ok" });
     return {
       kernel,
@@ -109,7 +109,7 @@ describe("taskReminderService", () => {
       runId: "r",
       turnId: "t3",
       toolCallId: "c",
-      toolName: "TaskUpdate",
+      toolName: "update_step",
       result: "x",
       isError: false,
       terminate: false,

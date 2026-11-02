@@ -369,7 +369,7 @@ export function BottomNav() {
       <div className="relative h-[52px] border bg-background">
         <div
           className={cn(
-            "grid h-full",
+            "grid h-full grid-rows-1",
             ROUTINES_VISIBLE
               ? "grid-cols-[1fr_1fr_1fr_68px_1fr_1fr]"
               : "grid-cols-[1fr_1fr_1fr_68px_1fr]",
@@ -429,9 +429,10 @@ function Tab({
     <Link
       to={to}
       search={{}}
-      className="flex min-w-0 flex-col items-center justify-center gap-1 text-xs text-muted-foreground"
+      className="flex min-w-0 flex-col items-center justify-center gap-1 text-xs"
       activeOptions={{ exact: true, includeSearch: false }}
       activeProps={{ className: "text-foreground bg-muted/50" }}
+      inactiveProps={{ className: "text-muted-foreground" }}
     >
       <Icon className="size-5" aria-hidden="true" />
       <span className="max-w-full truncate px-1">

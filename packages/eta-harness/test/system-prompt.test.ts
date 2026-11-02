@@ -124,10 +124,10 @@ describe("the composer", () => {
     expect(DEFAULT_SYSTEM_PROMPT).not.toContain("You are Eta");
     // It describes every tool a session is given by default, by the name it is registered under.
     for (const tool of [
-      "TaskCreate",
-      "TaskUpdate",
-      "TaskList",
-      "TaskGet",
+      "create_step",
+      "update_step",
+      "list_steps",
+      "get_step",
       "read",
       "edit",
       "write",
@@ -144,7 +144,7 @@ describe("the composer", () => {
     // And no tool that does not exist.
     expect(DEFAULT_SYSTEM_PROMPT).not.toContain("multi_tool_use");
     expect(DEFAULT_SYSTEM_PROMPT).not.toContain("update_todos");
-    expect(DEFAULT_SYSTEM_PROMPT).toContain("<current_tasks>");
+    expect(DEFAULT_SYSTEM_PROMPT).toContain("<current_steps>");
     expect(Object.keys(builtinPersonas()).sort()).toEqual([
       "Artist",
       "Executor",

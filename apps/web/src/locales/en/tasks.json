@@ -139,7 +139,7 @@
   "comments": {
     "title": "Comments",
     "awaitingReply": "Awaiting reply",
-    "awaitingYourReply": " Waiting for your reply",
+    "awaitingYourReply": "<name>{{name}}</name> is waiting for your reply",
     "unsupportedAttachments": "Comments can't include images or files yet; {{count}} files weren't added.",
     "unsupportedAttachments_one": "Comments can't include images or files yet; {{count}} file wasn't added.",
     "unsupportedAttachments_other": "Comments can't include images or files yet; {{count}} files weren't added.",

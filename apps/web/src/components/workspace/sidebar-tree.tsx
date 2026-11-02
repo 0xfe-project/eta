@@ -102,7 +102,7 @@ export function ConversationList() {
           <span
             id="sidebar-groups"
             className={cn(
-              "font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase",
+              "font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase [&:lang(zh)]:tracking-normal",
               // Still the section's name, just not drawn: a heading cannot fit in a rail.
               rail && "sr-only",
             )}
@@ -199,7 +199,7 @@ export function ConversationList() {
             <span
               id="sidebar-agents"
               className={cn(
-                "min-w-0 flex-1 truncate font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase",
+                "min-w-0 flex-1 truncate font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase [&:lang(zh)]:tracking-normal",
                 rail && "sr-only",
               )}
             >
@@ -318,6 +318,7 @@ function GroupCard({
           type="button"
           data-sidebar="menu-button"
           data-active={active}
+          aria-current={active ? "true" : undefined}
           title={conversation.name}
           onClick={onOpen}
           className="relative flex w-full flex-col items-center gap-1 px-1 py-1.5 hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
@@ -374,6 +375,7 @@ function GroupCard({
             type="button"
             data-sidebar="menu-button"
             data-active={active}
+            aria-current={active ? "true" : undefined}
             title={conversation.name}
             onClick={onOpen}
             className="absolute inset-x-0 top-0 h-11 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"

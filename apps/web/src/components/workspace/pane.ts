@@ -15,9 +15,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export interface PaneWidth {
   width: number;
   dragging: boolean;
-  /** Spread on the divider: pointer capture, moves, release. */
+  /** Spread on the divider: pointer capture, moves, release, and arrow keys. */
   dividerProps: React.HTMLAttributes<HTMLDivElement> & {
     role: "separator";
+    tabIndex: 0;
     "aria-orientation": "vertical";
     "aria-valuenow": number;
     "aria-valuemin": number;
@@ -91,6 +92,26 @@ export function usePaneWidth(options: {
       "aria-valuemin": min,
       "aria-valuemax": max,
       "data-dragging": dragging,
+      tabIndex: 0,
+      // The keyboard's way to drag: arrows step 16px the way the pointer would move, Home and
+      // End go to the ends. Each press lands, so each press is remembered.
+      onKeyDown: (event) => {
+        const step = 16;
+        const next =
+          event.key === "ArrowLeft"
+            ? clamp(width - grow * step)
+            : event.key === "ArrowRight"
+              ? clamp(width + grow * step)
+              : event.key === "Home"
+                ? min
+                : event.key === "End"
+                  ? max
+                  : undefined;
+        if (next === undefined) return;
+        event.preventDefault();
+        setWidth(next);
+        remember(next);
+      },
       onPointerDown: (event) => {
         if (event.button !== 0) return;
         event.currentTarget.setPointerCapture(event.pointerId);
