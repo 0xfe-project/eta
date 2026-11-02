@@ -11,6 +11,7 @@
     "prepare": "lefthook install",
     "setup": "bun install && uv sync --project apps/memory --dev",
     "dev": "bun scripts/dev.ts",
+    "host:install": "bun scripts/host-install.ts",
     "build": "turbo run build",
     "check": "dprint check && turbo run build typecheck lint //#lint:repo test //#knip",
     "check:affected": "dprint check && turbo run build typecheck lint //#lint:repo test //#knip --affected",
