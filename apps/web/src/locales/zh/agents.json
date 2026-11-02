@@ -85,8 +85,8 @@
   },
   "machine": {
     "label": "运行机器",
-    "followProject": "跟随项目所在机器",
-    "offlineSuffix": "（离线）"
+    "followProject": "跟随项目",
+    "primarySuffix": "（主机器）"
   },
   "runtime": {
     "label": "运行方式",
