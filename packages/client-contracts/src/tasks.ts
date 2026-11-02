@@ -91,7 +91,11 @@ export interface TaskArtifactRef {
   version: number;
 }
 
-/** Where a task's runs work, on the project's machine. */
+/**
+ * Where a task's runs work: the project's directory, or a git worktree of it. A run whose agent is
+ * pinned to another machine than the project's has neither there and works in that machine's home
+ * instead; `TaskRunView.workspace` says where a run really worked.
+ */
 export interface TaskWorkspace {
   mode: TaskWorkspaceMode;
   /** The worktree's directory, once a run has made it; kept after the run. */
@@ -111,6 +115,7 @@ export interface TaskRunView {
   status: TaskRunStatus;
   /** Why it waits, while it is `queued`. */
   queueReason: TaskQueueReason | null;
+  /** The machine the run works on: its agent's, when pinned to one; else the project's. */
   machineId: string | null;
   /** The session it works in (`sessions.<id>` is its live transcript); null until it has started. */
   sessionId: string | null;
