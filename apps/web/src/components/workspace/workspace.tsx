@@ -1,7 +1,7 @@
 import type { WorkspaceView } from "./types";
 
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { SidebarProvider } from "@/components/ui/sidebar";
@@ -190,6 +190,26 @@ export function Workspace({
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, [drawerOpen, setMobilePanel]);
+  // The drawer takes the focus with it and gives it back: opening unmounts the header's button, so
+  // focus would fall to the body, and closing would leave it behind the drawer. Only the drawer:
+  // the phone's panel is a screen and the wide column is always there.
+  const workspaceButtonRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef = useRef(drawerOpen);
+  useEffect(() => {
+    if (wasOpenRef.current === drawerOpen) return;
+    wasOpenRef.current = drawerOpen;
+    if (!drawerMedia().matches) return;
+    const panel = document.getElementById("workspace-panel");
+    if (drawerOpen)
+      panel
+        ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+        ?.focus();
+    else if (
+      document.activeElement === document.body ||
+      panel?.contains(document.activeElement)
+    )
+      workspaceButtonRef.current?.focus();
+  }, [drawerOpen]);
   return (
     <SidebarProvider className="h-dvh min-h-0 bg-background">
       <Sidebar />
@@ -263,6 +283,7 @@ export function Workspace({
               // answers the one question the button asks — is the drawer away?
               workspaceOpen={drawerOpen}
               onOpenWorkspace={showPanel}
+              workspaceButtonRef={workspaceButtonRef}
             />
             <ChatPanel
               groupId={group?.id}
