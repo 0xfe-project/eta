@@ -404,7 +404,7 @@ export function GroupList() {
       </ul>
       {loaded && !rows.length && (
         <p className="px-2 py-6 text-xs text-muted-foreground">
-          {translateText("history.noConversations")}
+          {translateText("groups.empty.title")}
         </p>
       )}
     </section>
