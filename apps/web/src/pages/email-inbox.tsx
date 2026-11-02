@@ -129,9 +129,10 @@ function ThreadRow({
   return (
     <div
       className={cn(
-        "flex w-full items-start gap-2 border-b px-2 py-2.5",
-        selected && "bg-muted",
-        eta && "border-l-2 border-l-foreground bg-muted/25 pl-1.5",
+        "flex w-full items-start gap-2 border-b px-2 py-2.5 transition-colors duration-[60ms] ease-linear",
+        selected ? "bg-muted" : "hover:bg-muted/60",
+        eta && "border-l-2 border-l-foreground pl-1.5",
+        eta && !selected && "bg-muted/25",
       )}
     >
       <Checkbox
