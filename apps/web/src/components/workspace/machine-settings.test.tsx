@@ -121,7 +121,8 @@ describe("机器设置", () => {
     expect(status("主机")).toBe("在线");
     expect(status("旧电脑")).toBe("离线");
     expect(status("新电脑")).toBe("待批准");
-    expect(status("弃用")).toBe("已撤销");
+    // A revoked machine can do nothing more, so it is not listed at all.
+    expect(card("弃用")).toBeUndefined();
     // Only the primary is marked, and an offline machine leads with when it was last seen, so
     // that is not what the line cuts off.
     expect(details("主机")).toBe(
@@ -135,11 +136,29 @@ describe("机器设置", () => {
     expect(
       card("笔记本")?.querySelector('[title="版本 d5f93964f3e9"]')?.textContent,
     ).toBe("在线 · 需要更新");
-    // Only the pending machine asks for a fingerprint, and a revoked one has no menu.
+    // Only the pending machine asks for a fingerprint.
     expect(
       document.querySelectorAll('input[aria-label$="的指纹"]'),
     ).toHaveLength(1);
-    expect(document.querySelector('[aria-label="弃用 的操作"]')).toBeNull();
+  });
+
+  it("says there are no other machines when the only other one was revoked", async () => {
+    productHost({
+      machines: [
+        primary,
+        machineView({
+          id: "m5",
+          name: "弃用",
+          kind: "daemon",
+          status: "revoked",
+        }),
+      ],
+    });
+    await mount(<MachineSettings />);
+    await flush();
+    expect(document.querySelectorAll("li")).toHaveLength(1);
+    expect(text()).not.toContain("弃用");
+    expect(text()).toContain("还没有接入其他机器");
   });
 
   it("adding turns the panel into the way in: a command to run, with this page's origin", async () => {
@@ -241,9 +260,17 @@ describe("机器设置", () => {
 
   it("revokes after confirming, and the primary cannot be revoked", async () => {
     const fake = productHost({ machines: [primary, laptop] });
-    fake.handle("machines.revoke", () => ({
-      machine: { ...laptop, status: "revoked" },
-    }));
+    let answer = () => {};
+    fake.handle("machines.revoke", async () => {
+      // The host pushes the revoked machine before it answers, so the card is gone by then.
+      fake.set("machines", {
+        list: [primary, { ...laptop, status: "revoked" }],
+      });
+      await new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+      return { machine: { ...laptop, status: "revoked" } };
+    });
     await mount(<MachineSettings />);
     await flush();
     await openMenu("主机");
@@ -267,6 +294,10 @@ describe("机器设置", () => {
       action: "revoke",
       args: { machineId: "m2" },
     });
+    expect(text()).not.toContain("笔记本");
+    await act(async () => answer());
+    await flush();
+    expect(toasts.message).toHaveBeenCalledWith("已撤销 笔记本");
   });
 
   it("renames a machine", async () => {
