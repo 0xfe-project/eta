@@ -85,14 +85,15 @@
   },
   "machine": {
     "label": "Runs on",
-    "followProject": "The project's machine",
-    "offlineSuffix": " (offline)"
+    "followProject": "Follow the project",
+    "primarySuffix": " (primary)"
   },
   "runtime": {
     "label": "Runtime",
     "eta": "eta (built-in)",
     "defaultModel": "Runtime default",
     "loading": "Looking for Claude Code, Codex…",
+    "unreachable": "Can't reach this machine to see which runtimes it has.",
     "status": {
       "unauthenticated": " (not signed in)",
       "missing": " (not installed)",

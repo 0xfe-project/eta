@@ -32,13 +32,11 @@ import {
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
-  useAgentModels,
-  useAgentRuntimes,
+  useAgentRuntimeChoices,
   useDeleteAgent,
   useUpdateAgent,
 } from "@/queries/agents";
 import { useBundles } from "@/queries/bundles";
-import { useMachines } from "@/queries/projects";
 import {
   BundlesField,
   InstructionsField,
@@ -130,14 +128,7 @@ const tabs: {
       return translate("agents:editor.tabs.general");
     },
     icon: SlidersHorizontalIcon,
-    fields: [
-      "name",
-      "machineId",
-      "runtime",
-      "model",
-      "thinkingLevel",
-      "persona",
-    ],
+    fields: ["name", "runtime", "model", "thinkingLevel", "persona"],
   },
   {
     value: "instructions",
@@ -171,7 +162,6 @@ function AgentEditorForm({
   ] as const);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
-  const { machines } = useMachines();
   const { mounted: hasBundles } = useBundles();
   const shownTabs = tabs.filter(
     (item) => item.value !== "environment" || hasBundles,
@@ -211,11 +201,7 @@ function AgentEditorForm({
   const errors = form.formState.errors;
   const runtime = useWatch({ control: form.control, name: "runtime" });
   const machineId = useWatch({ control: form.control, name: "machineId" });
-  // The runtimes are the agent's machine's: the host's own while it follows the project.
-  const { data: runtimes, isError: runtimesFailed } = useAgentRuntimes(
-    machineId || undefined,
-  );
-  const models = useAgentModels(runtime, machineId || undefined);
+  const { runtimes, models } = useAgentRuntimeChoices(runtime, machineId);
 
   const save = form.handleSubmit(
     (values) => {
@@ -269,11 +255,8 @@ function AgentEditorForm({
           {tab === "general" ? (
             <>
               <NameField form={form} />
-              <MachineField form={form} machines={machines} />
-              <RuntimeField
-                form={form}
-                runtimes={runtimesFailed ? [] : runtimes}
-              />
+              <MachineField form={form} />
+              <RuntimeField form={form} runtimes={runtimes} />
               <ModelField
                 form={form}
                 models={models}

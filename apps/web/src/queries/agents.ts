@@ -9,6 +9,7 @@ import type { Model } from "@/queries/providers";
 import { useQuery } from "@tanstack/react-query";
 import { translate } from "@/lib/i18n";
 import { getWire } from "@/lib/wire";
+import { useMachines } from "@/queries/projects";
 import { useModels } from "@/queries/providers";
 import { useListTarget, useWireMutation } from "@/queries/wire";
 
@@ -67,7 +68,7 @@ export function useDirectChat() {
  * when no machine is named. Asking can start a runtime to list its models, so the answer is kept
  * for a while; the host keeps its own.
  */
-export function useAgentRuntimes(machineId?: string) {
+function useAgentRuntimes(machineId: string | undefined) {
   return useQuery({
     queryKey: ["wire", "agents", "runtimes", machineId ?? ""],
     queryFn: async () =>
@@ -96,17 +97,32 @@ function runtimeModelsOf(info: AgentRuntimeInfo): Model[] {
 }
 
 /**
- * The models an agent on `runtime` can choose: eta's providers' on eta, the runtime's own on an
- * external one. Undefined while they load.
+ * What an agent form offers on the machine it names ("" follows the project): that machine's
+ * runtimes, and the models an agent on `runtime` can choose (eta's providers' on eta, the
+ * runtime's own on an external one).
+ *
+ * Each is undefined while it loads and null when the machine could not be asked (offline, or no
+ * link): then nothing is known about it, which is not the same as having none. The host answers
+ * for the primary itself whether it is named or not, so naming it asks nothing new.
  */
-export function useAgentModels(
+export function useAgentRuntimeChoices(
   runtime: AgentRuntime,
-  machineId?: string,
-): Model[] | undefined {
-  const { data: models } = useModels();
-  const { data: runtimes } = useAgentRuntimes(machineId);
-  if (runtime === "eta") return models;
-  if (runtimes === undefined) return undefined;
+  machineId: string,
+): {
+  runtimes: AgentRuntimeInfo[] | null | undefined;
+  models: Model[] | null | undefined;
+} {
+  const { machines } = useMachines();
+  const { data: providerModels } = useModels();
+  const primary = machines.find((machine) => machine.kind === "primary");
+  const { data, isError } = useAgentRuntimes(
+    machineId === "" || machineId === primary?.id ? undefined : machineId,
+  );
+  // A refetch that fails keeps the list it had: only a machine that never answered is unknown.
+  const runtimes = data ?? (isError ? null : undefined);
+  if (runtime === "eta") return { runtimes, models: providerModels };
+  // An external runtime's models come with the machine's list: loading or unknown with it.
+  if (!runtimes) return { runtimes, models: runtimes };
   const info = runtimes.find((entry) => entry.id === runtime);
-  return info === undefined ? [] : runtimeModelsOf(info);
+  return { runtimes, models: info === undefined ? [] : runtimeModelsOf(info) };
 }
