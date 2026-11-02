@@ -85,8 +85,8 @@
   },
   "machine": {
     "label": "Runs on",
-    "followProject": "The project's machine",
-    "offlineSuffix": " (offline)"
+    "followProject": "Follow the project",
+    "primarySuffix": " (primary)"
   },
   "runtime": {
     "label": "Runtime",

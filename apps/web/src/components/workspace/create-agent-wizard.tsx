@@ -10,7 +10,6 @@ import { DialogFooter } from "@/components/ui/dialog";
 import { useAgentRuntimeChoices, useCreateAgent } from "@/queries/agents";
 import {
   InstructionsField,
-  MachineField,
   ModelField,
   NameField,
   PersonaField,
@@ -60,14 +59,15 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
       model: "",
       persona: "",
       thinkingLevel: "",
+      // A new agent follows the project. Nothing it is made with depends on a machine, so pinning
+      // it to one is left to the editor, and the runtimes offered here are the host's own.
       machineId: "",
     },
   });
   const model = useWatch({ control: form.control, name: "model" });
   const runtime = useWatch({ control: form.control, name: "runtime" });
-  const machineId = useWatch({ control: form.control, name: "machineId" });
   const external = runtime !== "eta";
-  const { runtimes, models } = useAgentRuntimeChoices(runtime, machineId);
+  const { runtimes, models } = useAgentRuntimeChoices(runtime, "");
   const usable = (models ?? []).filter((item) => item.available);
   // New agents start with the last used model, else the default one, else the first usable one.
   // An external runtime starts on its own default, which is no choice at all.
@@ -151,7 +151,6 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
         {step === 0 ? (
           <>
             <NameField form={form} autoFocus />
-            <MachineField form={form} />
             <RuntimeField form={form} runtimes={runtimes} />
             <ModelField
               form={form}

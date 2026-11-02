@@ -462,16 +462,41 @@ describe("an agent's machine and its runtimes", () => {
     expect(document.getElementById("agent-runtime-hint")).toBeNull();
   });
 
+  const options = () => [
+    ...document.querySelectorAll<HTMLElement>('[role="option"]'),
+  ];
+  const pick = (name: string) =>
+    click(
+      options().find((option) =>
+        option.textContent?.startsWith(name),
+      ) as unknown as HTMLButtonElement,
+    );
+
   it("asks the host once for the primary, named or not", async () => {
     await withMachines(null);
     expect(asked()).toEqual([{}]);
     await click(trigger("agent-machine"));
-    const option = [
-      ...document.querySelectorAll<HTMLElement>('[role="option"]'),
-    ].find((candidate) => candidate.textContent === "主机")!;
-    await click(option as unknown as HTMLButtonElement);
-    expect(trigger("agent-machine").textContent).toBe("主机");
+    await pick("主机");
+    expect(trigger("agent-machine").textContent).toBe("主机（主机器）");
     expect(asked()).toEqual([{}]);
     expect(trigger("agent-runtime").textContent).toBe("Claude Code");
+  });
+
+  it("names the primary among the machines, and keeps the model when the machine changes", async () => {
+    await withMachines("main");
+    await click(trigger("agent-machine"));
+    expect(options().map((option) => option.textContent)).toEqual([
+      "跟随项目",
+      "主机（主机器）",
+      "mac（离线）",
+    ]);
+    await pick("跟随项目");
+    expect(trigger("agent-model").textContent).toBe("Opus");
+    await save();
+    expect(updates()[0]).toMatchObject({
+      machineId: null,
+      runtime: "claude",
+      model: "claude:opus",
+    });
   });
 });

@@ -128,11 +128,11 @@ export function NameField({
 
 /**
  * The machine the agent runs on: the project's, or one it is pinned to. Only offered when there is
- * more than one machine to choose from. Another machine has other runtimes, so an external
- * runtime's model is cleared.
+ * more than one machine to choose from. A change keeps the model: a runtime calls its models the
+ * same on every machine, and one the new machine lacks stays in the model select, marked.
  */
 export function MachineField({ form }: { form: Form }) {
-  const { t: translateText } = useTranslation(["agents", "machines"] as const);
+  const { t: translateText } = useTranslation(["agents", "common"] as const);
   const { machines } = useMachines();
   const value = useWatch({ control: form.control, name: "machineId" });
   const choices = machines.filter(
@@ -151,13 +151,9 @@ export function MachineField({ form }: { form: Form }) {
         id="agent-machine"
         className="w-full"
         value={value}
-        onValueChange={(next) => {
-          form.setValue("machineId", next, { shouldDirty: true });
-          if (form.getValues("runtime") !== "eta") {
-            form.setValue("model", "", { shouldDirty: true });
-            form.clearErrors("model");
-          }
-        }}
+        onValueChange={(next) =>
+          form.setValue("machineId", next, { shouldDirty: true })
+        }
       >
         <SelectOption value="">
           {translateText("agents:machine.followProject")}
@@ -165,9 +161,12 @@ export function MachineField({ form }: { form: Form }) {
         {choices.map((machine) => (
           <SelectOption key={machine.id} value={machine.id}>
             {machine.name}
+            {machine.kind === "primary"
+              ? translateText("agents:machine.primarySuffix")
+              : ""}
             {machine.status === "online"
               ? ""
-              : translateText("agents:machine.offlineSuffix")}
+              : translateText("common:status.offlineSuffix")}
           </SelectOption>
         ))}
       </Select>
