@@ -72,10 +72,12 @@ export class GitHubKeeper {
     void this.poke();
   }
 
-  stop(): void {
+  /** Stop looking; resolves once a refresh in flight has finished writing. */
+  async stop(): Promise<void> {
     this.#stopped = true;
     if (this.#timer !== undefined) clearTimeout(this.#timer);
     this.#timer = undefined;
+    await this.#running?.catch(() => {});
   }
 
   /** Look again now (GitHub was connected, authorized or disconnected; the link came up). */

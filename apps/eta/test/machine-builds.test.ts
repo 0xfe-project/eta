@@ -107,7 +107,9 @@ describe("a daemon on another build", () => {
       machineId: daemon.machineId,
       fingerprint: daemon.fingerprint,
     });
-    await until(() => asked.length === 1, 10_000);
+    // `asked` fills before the fetch inside `upgrade` has answered.
+    await until(() => fetched !== undefined, 10_000);
+    expect(asked).toHaveLength(1);
     expect(asked[0]).toEqual({ version: "v2", sha256: sha256(BUILD) });
     expect(fetched).toEqual({ status: 200, body: BUILD });
     // Not let in as the old build: it is being replaced.

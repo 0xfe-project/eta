@@ -707,7 +707,7 @@ export function createProduct(options: {
       await taskRunner.detach();
       hub.close();
       mirrors.detach();
-      githubLogin?.stop();
+      await githubLogin?.stop();
       await mcp.close();
       email.stop();
       await bundles.close();
