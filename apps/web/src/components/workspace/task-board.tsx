@@ -310,6 +310,13 @@ function TaskPage({ id }: { id: string }) {
   const { agents } = useAgentList();
   const [deleting, setDeleting] = useState(false);
   const back = () => void setNav({ task: null });
+  // The list goes inert as the task opens; take focus so it doesn't fall to
+  // <body>. Each branch below has its own <main>, so again once loaded.
+  const mainRef = useRef<HTMLElement>(null);
+  const loaded = Boolean(task);
+  useEffect(() => {
+    mainRef.current?.focus({ preventScroll: true });
+  }, [loaded]);
   const crumbs = (
     <>
       <button
@@ -330,8 +337,10 @@ function TaskPage({ id }: { id: string }) {
       <>
         <PageHeader title={crumbs} />
         <main
+          ref={mainRef}
           id="main"
-          className="mx-auto w-full max-w-content px-4 py-6 sm:px-8"
+          tabIndex={-1}
+          className="mx-auto w-full max-w-content px-4 py-6 outline-none sm:px-8"
         >
           <TaskMissing missing={missing} error={error} />
         </main>
@@ -367,8 +376,10 @@ function TaskPage({ id }: { id: string }) {
         />
       </PageHeader>
       <main
+        ref={mainRef}
         id="main"
-        className="mx-auto min-h-0 w-full max-w-content flex-1 overflow-y-auto @2xl:grid @2xl:grid-cols-[minmax(0,1fr)_18rem] @2xl:overflow-hidden"
+        tabIndex={-1}
+        className="mx-auto min-h-0 w-full max-w-content flex-1 overflow-y-auto outline-none @2xl:grid @2xl:grid-cols-[minmax(0,1fr)_18rem] @2xl:overflow-hidden"
       >
         <div className="@2xl:overflow-y-auto">
           <div className="space-y-6 px-4 pb-6 sm:px-8">
