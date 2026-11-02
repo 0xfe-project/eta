@@ -196,6 +196,7 @@
   "history": {
     "loadEarlier": "加载更早的消息…",
     "loading": "正在读取对话…",
+    "noConversations": "还没有对话",
     "empty": "这里还没说过话。说一句就开始。"
   },
   "connection": {
