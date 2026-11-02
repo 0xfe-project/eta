@@ -377,7 +377,7 @@ function TaskPage({ id }: { id: string }) {
           <div className="space-y-6 px-4 pb-6 sm:px-8">
             {/* Pinned under the page header (任务 and the number) as the rest scrolls. */}
             <div className="sticky top-0 z-10 mb-3 space-y-1 bg-background pt-4 pb-3">
-              <EditableTitle key={task.title} task={task} className="text-xl" />
+              <EditableTitle task={task} className="text-xl" />
               <p className="text-xs text-muted-foreground tabular-nums">
                 {createdBy(task, agents)}
               </p>
