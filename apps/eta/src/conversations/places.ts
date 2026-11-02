@@ -90,6 +90,9 @@ export interface SessionSettings {
 export const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+/** The runtime a session's row names; a row that names none runs on eta's own loop. */
+const runtimeOf = (runtime: string | undefined): string => runtime ?? "eta";
+
 /** A session in this process. */
 class LocalHandle implements SessionHandle {
   readonly #sessions: SessionsService;
@@ -168,12 +171,18 @@ export class LocalPlace implements SessionPlace {
     const { agent, conversation } = input;
     if (input.existing !== null) {
       try {
-        await this.#sync(sessions, input.existing, agent, input.stamp);
-        const handle = new LocalHandle(
-          sessions,
-          (await sessions.open(input.existing)).managed,
+        const { managed } = await sessions.open(input.existing);
+        if (runtimeOf(managed.meta.runtime) === agent.runtime) {
+          await this.#sync(sessions, input.existing, agent, input.stamp);
+          return new LocalHandle(
+            sessions,
+            (await sessions.open(input.existing)).managed,
+          );
+        }
+        // The agent moved to another runtime: a conversation is one runtime's, so it starts over.
+        this.#warn(
+          `[eta] session ${input.existing} (agent ${agent.id} in ${conversation.id}) runs on ${runtimeOf(managed.meta.runtime)}, the agent on ${agent.runtime}; starting a new one`,
         );
-        return handle;
       } catch (error) {
         // The row outlived its journal: say so, then start over rather than failing every wake.
         if (!messageOf(error).startsWith("no such session")) throw error;
@@ -187,6 +196,7 @@ export class LocalPlace implements SessionPlace {
       title: `${conversation.name} · ${agent.name}`,
       agentId: agent.id,
       conversationId: conversation.id,
+      ...(agent.runtime === "eta" ? {} : { runtime: agent.runtime }),
       ...(agent.model === null ? {} : { model: agent.model }),
       ...(agent.persona === "" ? {} : { persona: agent.persona }),
     });

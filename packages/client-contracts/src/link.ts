@@ -186,7 +186,12 @@ export interface OpenSessionArgs {
   title: string;
   agentId: string;
   conversationId: string;
-  /** `provider:modelId`. */
+  /**
+   * The external runtime the session runs on (`claude`, `codex`, ...), on the daemon's machine;
+   * absent means eta's own loop. A session on another runtime than this is made again.
+   */
+  runtime?: string;
+  /** `provider:modelId` (`runtime:modelId` on an external runtime). */
   model?: string;
   thinkingLevel?: string;
   persona?: string;

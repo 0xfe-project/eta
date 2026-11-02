@@ -82,5 +82,16 @@
   "persona": {
     "default": "Project default",
     "label": "Persona"
+  },
+  "runtime": {
+    "label": "Runtime",
+    "eta": "eta (built-in)",
+    "defaultModel": "Runtime default",
+    "loading": "Looking for Claude Code, Codex…",
+    "status": {
+      "unauthenticated": " (not signed in)",
+      "missing": " (not installed)",
+      "error": " (unavailable)"
+    }
   }
 }

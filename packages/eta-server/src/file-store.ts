@@ -454,6 +454,9 @@ function isSessionMeta(value: unknown): value is SessionMeta {
     (meta.agentId === undefined || typeof meta.agentId === "string") &&
     (meta.conversationId === undefined ||
       typeof meta.conversationId === "string") &&
+    (meta.runtime === undefined || typeof meta.runtime === "string") &&
+    (meta.runtimeSession === undefined ||
+      typeof meta.runtimeSession === "string") &&
     (meta.pinned === undefined || typeof meta.pinned === "boolean") &&
     (meta.archived === undefined || typeof meta.archived === "boolean")
   );

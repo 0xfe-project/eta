@@ -89,6 +89,40 @@ const alerts = () =>
     (alert) => alert.textContent,
   );
 
+// The external runtimes the host reports: one ready, one not on the machine.
+const runtimes = [
+  {
+    id: "claude",
+    label: "Claude Code",
+    status: "available",
+    models: [
+      {
+        id: "sonnet",
+        name: "Sonnet",
+        default: false,
+        efforts: ["low", "high"],
+      },
+      { id: "opus", name: "Opus", default: false, efforts: ["low", "high"] },
+    ],
+  },
+  { id: "codex", label: "Codex", status: "missing", models: [] },
+];
+const press = async (element: HTMLElement) => {
+  await act(async () => {
+    element.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }),
+    );
+  });
+  await settle();
+};
+const options = () => [
+  ...document.querySelectorAll<HTMLElement>('[role="option"]'),
+];
+const choose = async (id: string, text: string) => {
+  await press(document.getElementById(id)!);
+  await press(options().find((option) => option.textContent?.includes(text))!);
+};
+
 // The agents.create calls the page made, and how the host answers the next one.
 let host: FakeHost;
 let created: unknown[] = [];
@@ -108,6 +142,7 @@ beforeEach(async () => {
       created.push(args);
       return answer(args);
     })
+    .handle("agents.runtimes", () => ({ runtimes }))
     .install();
   host.hello();
   api.select.mockReset();
@@ -156,12 +191,45 @@ describe("creating an agent step by step", () => {
         name: "审查",
         instructions: "只看会出错的地方",
         persona: "",
+        runtime: "eta",
         model: "c:m1",
         thinkingLevel: null,
       },
     ]);
     expect(api.select).toHaveBeenCalledWith("new");
     expect(dialog()).toBeNull();
+  });
+
+  it("creates an agent on an external runtime, with one of its own models", async () => {
+    await open();
+    await type("agent-name", "Claude");
+    await press(document.getElementById("agent-runtime")!);
+    // A runtime the machine does not have is listed, and cannot be picked.
+    const codex = options().find((option) =>
+      option.textContent?.includes("Codex"),
+    )!;
+    expect(codex.textContent).toContain("未安装");
+    expect(codex.getAttribute("aria-disabled")).toBe("true");
+    await press(
+      options().find((option) => option.textContent?.includes("Claude Code"))!,
+    );
+    // Its own default needs no choice; its models are the runtime's.
+    expect(document.getElementById("agent-model")!.textContent).toContain(
+      "运行时默认模型",
+    );
+    await choose("agent-model", "Sonnet");
+    await click("下一步");
+    await click("创建");
+    expect(created).toEqual([
+      {
+        name: "Claude",
+        instructions: "",
+        persona: "",
+        runtime: "claude",
+        model: "claude:sonnet",
+        thinkingLevel: null,
+      },
+    ]);
   });
 
   it("keeps everything after a failure and creates once on retry", async () => {

@@ -32,7 +32,12 @@ export interface AgentView {
   instructions: string;
   /** The persona card it wears, by name. Empty means the project's default card. */
   persona: string;
-  /** `provider:modelId`; null means whatever the settings choose. */
+  /** What answers for it: eta's own loop, or an external runtime on the machine. */
+  runtime: AgentRuntime;
+  /**
+   * `provider:modelId`; null means whatever the settings choose. On an external runtime it is
+   * `runtime:modelId` in that runtime's names, and null means the runtime's default.
+   */
   model: string | null;
   thinkingLevel: ThinkingLevel | null;
   /** The bundles it loads, by name. */
@@ -264,14 +269,58 @@ export interface ConversationSections {
 /* ------------------------------------------------------------------ agents */
 
 /** The actions this target has. One list, so the wire and the plugin cannot disagree. */
-export const AGENT_ACTIONS = ["create", "update", "delete", "direct"] as const;
+export const AGENT_ACTIONS = [
+  "create",
+  "update",
+  "delete",
+  "direct",
+  "runtimes",
+] as const;
 export type AgentAction = (typeof AGENT_ACTIONS)[number];
+
+/**
+ * What can answer for an agent. `eta` is eta's own loop on eta's models; the others are agent
+ * runtimes installed on the machine (Claude Code, Codex, OpenCode, Pi), each with its own tools,
+ * context and models, that the agent's sessions hand their runs to.
+ */
+export const AGENT_RUNTIMES = [
+  "eta",
+  "claude",
+  "codex",
+  "opencode",
+  "pi",
+] as const;
+export type AgentRuntime = (typeof AGENT_RUNTIMES)[number];
+
+/** A model an external runtime can run, in its own names. */
+export interface AgentRuntimeModel {
+  /** What its `--model` takes; an agent stores it as `runtime:id`. */
+  id: string;
+  name: string;
+  /** The one it runs when told none. */
+  default: boolean;
+  /** Its reasoning-effort levels, in the runtime's spelling; empty when it names none. */
+  efforts: string[];
+}
+
+/** An external runtime, as the primary machine has it. */
+export interface AgentRuntimeInfo {
+  id: Exclude<AgentRuntime, "eta">;
+  label: string;
+  /** Installed and signed in; installed and not signed in; not installed; or asking failed. */
+  status: "available" | "unauthenticated" | "missing" | "error";
+  version?: string;
+  detail?: string;
+  models: AgentRuntimeModel[];
+}
 
 export interface AgentFields {
   name: string;
   instructions?: string;
   persona?: string;
-  /** `provider:modelId`; null clears it. */
+  /** What answers for it; `eta` when omitted on create. */
+  runtime?: AgentRuntime;
+  /** `provider:modelId` (`runtime:modelId` on an external runtime); null clears it. */
   model?: string | null;
   thinkingLevel?: ThinkingLevel | null;
   /** The bundles to load, by name. */
@@ -287,12 +336,15 @@ export interface AgentArgs {
   delete: { agentId: string };
   /** The private chat with the agent, made the first time and found every time after. */
   direct: { agentId: string };
+  /** The external runtimes the primary machine has, with their models; `fresh` asks again. */
+  runtimes: { fresh?: boolean };
 }
 export interface AgentResults {
   create: { agent: AgentView };
   update: { agent: AgentView };
   delete: { agentId: string };
   direct: { conversation: ConversationSummary };
+  runtimes: { runtimes: AgentRuntimeInfo[] };
 }
 export type AgentCall = {
   [A in AgentAction]: Omit<CallFrame, "target" | "action" | "args"> & {

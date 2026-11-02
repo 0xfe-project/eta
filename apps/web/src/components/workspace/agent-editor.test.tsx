@@ -153,6 +153,7 @@ describe("editing an agent in tabs", () => {
         name: "代码审查",
         instructions: "只看 PR",
         persona: "",
+        runtime: "eta",
         model: "c:m1",
         thinkingLevel: null,
         bundles: [],

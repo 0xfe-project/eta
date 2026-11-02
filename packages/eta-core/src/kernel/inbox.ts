@@ -113,6 +113,19 @@ export class Inbox {
   private items: QueuedItem[] = [];
   private steeringMode: QueueMode = "all";
   private followUpMode: QueueMode = "all";
+  private readonly listeners = new Set<(item: QueuedItem) => void>();
+
+  /**
+   * Hear every input as it is queued. The runner's own loop reads the inbox at its boundaries
+   * and needs no signal; a run delegated to a runtime that takes input at any moment does, and
+   * `steer`/`followUp`/`nextRun` announce nothing on the bus. Returns the function that stops it.
+   */
+  subscribe(listener: (item: QueuedItem) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
 
   /** Keep the modes in step with the configuration the runner reads live. */
   configure(options: InboxOptions): void {
@@ -134,6 +147,7 @@ export class Inbox {
       message: normalizeQueuedInput(input, images),
     };
     this.items.push(item);
+    for (const listener of [...this.listeners]) listener(item);
     return item;
   }
 

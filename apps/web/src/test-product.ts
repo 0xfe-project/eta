@@ -26,6 +26,7 @@ export const agentView = (
   name: fields.id,
   instructions: "",
   persona: "",
+  runtime: "eta",
   model: "p:m",
   thinkingLevel: null,
   bundles: [],

@@ -82,5 +82,16 @@
   "persona": {
     "default": "项目默认",
     "label": "人格"
+  },
+  "runtime": {
+    "label": "运行方式",
+    "eta": "eta 内置",
+    "defaultModel": "运行时默认模型",
+    "loading": "正在检测本机的 Claude Code、Codex…",
+    "status": {
+      "unauthenticated": "（未登录）",
+      "missing": "（未安装）",
+      "error": "（不可用）"
+    }
   }
 }

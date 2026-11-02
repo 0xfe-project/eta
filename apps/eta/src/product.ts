@@ -7,7 +7,10 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
  * then. Between the two, the replies a dead process left in flight are failed, so nothing a client
  * is ever shown says `working` without something working.
  */
-import type { GitHubCredentials } from "@eta/client-contracts";
+import type {
+  AgentRuntimeInfo,
+  GitHubCredentials,
+} from "@eta/client-contracts";
 import type { ConfigInput } from "@eta/plugin-akhook";
 import type {
   AssembledServer,
@@ -191,6 +194,8 @@ export function createProduct(options: {
    * searching with the SearXNG the host runs itself where a prebuilt one exists.
    */
   web?: Omit<WebOptions, "warn"> | undefined;
+  /** The external runtimes the primary machine has, with their models, for the agent editor. */
+  runtimes?: ((fresh: boolean) => Promise<AgentRuntimeInfo[]>) | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
   const memory =
@@ -736,6 +741,7 @@ export function createProduct(options: {
             engine,
             changed,
             created,
+            runtimes: options.runtimes,
             removed: (agentId) =>
               void options
                 .gateway?.()

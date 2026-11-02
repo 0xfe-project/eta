@@ -17,6 +17,7 @@ import type {
   SubagentManager,
 } from "@eta/harness";
 import type { SessionEnvironment } from "@eta/plugin-sdk";
+import type { SessionRuntime, SessionRuntimes } from "./runtimes";
 import type { Settings } from "./settings";
 import type { SessionListing, SessionMeta, SessionStore } from "./store";
 /**
@@ -182,6 +183,11 @@ export interface SessionManagerOptions {
    * conversation). Absent means nobody is told.
    */
   askObserve?: ((meta: SessionMeta) => AskObserver | undefined) | undefined;
+  /**
+   * The external agent runtimes this host can run (`runtimes.ts`). A session whose metadata
+   * names one has its runs taken by it; without this, such a session cannot be opened here.
+   */
+  runtimes?: SessionRuntimes | undefined;
   /** Called when a session cannot be opened; the list keeps its row either way. */
   warn?: ((message: string) => void) | undefined;
 }
@@ -218,6 +224,12 @@ export interface CreateSessionOptions {
   persona?: string | undefined;
   model?: string | undefined;
   /**
+   * The external runtime that answers in this session (see `SessionMeta.runtime`); absent, or
+   * `eta`, means eta's own loop. Such a session takes no model or thinking level from the
+   * settings: those name eta's models, and the runtime has its own.
+   */
+  runtime?: string | undefined;
+  /**
    * The subagent record this session's own pool acts as. Omitted for a root session; a
    * subagent passes its record id, which is what files a grandchild under it.
    */
@@ -243,8 +255,11 @@ export class SessionManager {
   private readonly sessionAttach: SessionManagerOptions["sessionAttach"];
   private readonly askObserve: SessionManagerOptions["askObserve"];
   private readonly subagents: SessionManagerOptions["subagents"];
+  private readonly runtimes: SessionRuntimes | undefined;
   private readonly warn: (message: string) => void;
   private readonly open = new Map<string, ManagedSession>();
+  /** The external runtime behind each open session that has one, let go when it closes. */
+  private readonly runtimeOf = new Map<string, SessionRuntime>();
 
   constructor(options: SessionManagerOptions) {
     this.store = options.store;
@@ -263,15 +278,25 @@ export class SessionManager {
     this.sessionTools = options.sessionTools;
     this.sessionAttach = options.sessionAttach;
     this.askObserve = options.askObserve;
+    this.runtimes = options.runtimes;
     this.warn = options.warn ?? (() => undefined);
   }
 
   /** Start a session and open it, on whatever the settings say today. */
   async create(options: CreateSessionOptions = {}): Promise<ManagedSession> {
-    const settings = (await this.settings?.()) ?? {};
+    const runtime =
+      options.runtime === undefined || options.runtime === "eta"
+        ? undefined
+        : options.runtime;
+    // The settings name eta's own models and levels; a runtime session has its own.
+    const settings =
+      runtime === undefined ? ((await this.settings?.()) ?? {}) : {};
     const persona =
       options.persona ?? this.defaults?.persona ?? settings.persona;
-    const model = options.model ?? this.defaults?.model ?? settings.model;
+    const model =
+      options.model ??
+      (runtime === undefined ? this.defaults?.model : undefined) ??
+      settings.model;
     const meta: SessionMeta = {
       id: newSessionId(),
       createdAt: Date.now(),
@@ -285,6 +310,7 @@ export class SessionManager {
       ...(options.conversationId === undefined
         ? {}
         : { conversationId: options.conversationId }),
+      ...(runtime === undefined ? {} : { runtime }),
     };
     await this.store.create(meta);
     return await this.openSession(
@@ -406,6 +432,8 @@ export class SessionManager {
     joined?: SubagentManager,
     settings: Settings = {},
   ): Promise<ManagedSession> {
+    if (meta.runtime !== undefined)
+      return await this.openRuntimeSession(meta, meta.runtime);
     const models = await this.modelsFor(meta);
     // The pool a session runs its children through. A child joins its tree's; a root is
     // given a runner and the pool is built around it during assembly — which is why the
@@ -536,11 +564,22 @@ export class SessionManager {
       session.kernel.persona.setActive([meta.persona]);
     }
     box.pool = session.subagents;
-    // What the host adds to the toolset goes in before anything can run.
+    return (await this.attachHost(meta, session)).managed;
+  }
+
+  /**
+   * What the host adds to an assembled session, before anything can run: its tool policy, its
+   * tools, its features. Then the pump starts and the session is open.
+   */
+  private async attachHost(
+    meta: SessionMeta,
+    session: OpenSession,
+  ): Promise<{ managed: ManagedSession; hostTools: string[] }> {
     for (const middleware of this.toolMiddleware?.({ meta, session }) ?? []) {
       session.kernel.tools.use(middleware);
     }
-    registerSessionTools(session, this.sessionTools?.({ meta, session }) ?? []);
+    const tools = this.sessionTools?.({ meta, session }) ?? [];
+    registerSessionTools(session, tools);
     await this.sessionAttach?.({ meta, session });
     // A session the host opened is a session whose inbox becomes runs: the pump is what
     // decides that, and leaving it off would make "prompt a session nobody attached yet"
@@ -548,7 +587,73 @@ export class SessionManager {
     session.pump.start();
     const managed: ManagedSession = { meta, session };
     this.open.set(meta.id, managed);
-    return managed;
+    return { managed, hostTools: tools.map((tool) => tool.name) };
+  }
+
+  /**
+   * A session an external runtime answers in. It is assembled like any other (journal, bus,
+   * inbox, the host's tools) with the runtime's delegate taking its runs, and without the parts
+   * that are the runtime's own business: no file and shell tools, no memory, no compaction, no
+   * subagents. The runtime has all of those itself.
+   */
+  private async openRuntimeSession(
+    meta: SessionMeta,
+    runtimeId: string,
+  ): Promise<ManagedSession> {
+    const tools: { names: readonly string[] } = { names: [] };
+    const agentPrompt = this.agentPromptFor?.(meta);
+    const runtime = this.runtimes?.open({
+      sessionId: meta.id,
+      runtime: runtimeId,
+      cwd: meta.cwd,
+      resume: meta.runtimeSession,
+      agentPrompt,
+      remember: (nativeSession) => {
+        if (nativeSession === meta.runtimeSession) return;
+        void this.setMeta(meta.id, { runtimeSession: nativeSession }).catch(
+          (error: unknown) =>
+            this.warn(
+              `[eta-server] session ${meta.id}: could not remember ${runtimeId} session: ${String(error)}`,
+            ),
+        );
+      },
+      hostTools: () => tools.names,
+    });
+    if (runtime === undefined)
+      throw new Error(`runtime_unavailable: ${runtimeId} does not run here`);
+    try {
+      const observe = this.askObserve?.(meta);
+      let recordAnswer: ((payload: AnswerPayload) => void) | undefined;
+      const ask =
+        observe === undefined
+          ? true
+          : new AskRegistry({
+              observe,
+              onAnswer: (payload) => recordAnswer?.(payload),
+            });
+      const session = await openSession({
+        storage: (await this.store.open(meta.id))!.storage,
+        models: runtime.models,
+        ...(agentPrompt === undefined ? {} : { agentPrompt }),
+        runner: { delegate: runtime.delegate },
+        config:
+          meta.model === undefined ? {} : { model: parseModelId(meta.model) },
+        ask,
+        kernel: { warn: this.warn },
+      });
+      if (observe !== undefined) {
+        recordAnswer = (payload) => {
+          void session.journaling.recordAnswer(payload);
+        };
+      }
+      const { managed, hostTools } = await this.attachHost(meta, session);
+      tools.names = hostTools;
+      this.runtimeOf.set(meta.id, runtime);
+      return managed;
+    } catch (error) {
+      await runtime.dispose().catch(() => undefined);
+      throw error;
+    }
   }
 
   private async disposeSession(managed: ManagedSession): Promise<void> {
@@ -573,6 +678,17 @@ export class SessionManager {
     }
     managed.session.stop();
     await managed.session.kernel.dispose();
+    const runtime = this.runtimeOf.get(managed.meta.id);
+    if (runtime !== undefined) {
+      this.runtimeOf.delete(managed.meta.id);
+      await runtime
+        .dispose()
+        .catch((error: unknown) =>
+          this.warn(
+            `[eta-server] could not release the runtime of ${managed.meta.id}: ${String(error)}`,
+          ),
+        );
+    }
   }
 }
 

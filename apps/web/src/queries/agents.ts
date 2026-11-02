@@ -1,5 +1,15 @@
-import type { AgentArgs, AgentResults, AgentView } from "@eta/client-contracts";
+import type {
+  AgentArgs,
+  AgentResults,
+  AgentRuntime,
+  AgentRuntimeInfo,
+  AgentView,
+} from "@eta/client-contracts";
+import type { Model } from "@/queries/providers";
+import { useQuery } from "@tanstack/react-query";
 import { translate } from "@/lib/i18n";
+import { getWire } from "@/lib/wire";
+import { useModels } from "@/queries/providers";
 import { useListTarget, useWireMutation } from "@/queries/wire";
 
 // Agents on the wire: the `agents` target (one eager `list` section) and its four actions. An
@@ -50,4 +60,43 @@ export function useDirectChat() {
     "agents",
     "direct",
   );
+}
+
+/**
+ * The external runtimes the host's machine has (Claude Code, Codex, ...), with their models. Asking
+ * can start a runtime to list its models, so the answer is kept for a while; the host keeps its own.
+ */
+export function useAgentRuntimes() {
+  return useQuery({
+    queryKey: ["wire", "agents", "runtimes"],
+    queryFn: async () =>
+      (await getWire().call<AgentResults["runtimes"]>("agents", "runtimes", {}))
+        .runtimes,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** A runtime's models as a picker lists them: `runtime:modelId`, under the runtime's name. */
+function runtimeModelsOf(info: AgentRuntimeInfo): Model[] {
+  return info.models.map((model) => ({
+    id: `${info.id}:${model.id}`,
+    provider: info.id,
+    providerName: info.label,
+    name: model.name,
+    available: info.status === "available",
+    default: model.default,
+  }));
+}
+
+/**
+ * The models an agent on `runtime` can choose: eta's providers' on eta, the runtime's own on an
+ * external one. Undefined while they load.
+ */
+export function useAgentModels(runtime: AgentRuntime): Model[] | undefined {
+  const { data: models } = useModels();
+  const { data: runtimes } = useAgentRuntimes();
+  if (runtime === "eta") return models;
+  if (runtimes === undefined) return undefined;
+  const info = runtimes.find((entry) => entry.id === runtime);
+  return info === undefined ? [] : runtimeModelsOf(info);
 }

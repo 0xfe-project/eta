@@ -116,6 +116,8 @@ export interface AssembleOptions {
   skillDirsFor?: ((meta: SessionMeta) => readonly string[]) | undefined;
   toolMiddleware?: SessionManagerOptions["toolMiddleware"] | undefined;
   askObserve?: SessionManagerOptions["askObserve"] | undefined;
+  /** The external agent runtimes sessions may run on (`runtimes.ts`). */
+  runtimes?: SessionManagerOptions["runtimes"] | undefined;
   /**
    * Told how every model request a session makes ended: its turns, each retry of a turn, a
    * compaction's summary, a side question, a memory extraction and the turns of the subagents it
@@ -487,6 +489,7 @@ export async function assembleServer(
     ...(options.sessionAttach === undefined
       ? {}
       : { sessionAttach: options.sessionAttach }),
+    ...(options.runtimes === undefined ? {} : { runtimes: options.runtimes }),
     warn,
   });
 

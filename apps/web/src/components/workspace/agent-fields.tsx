@@ -1,3 +1,4 @@
+import type { AgentRuntimeInfo } from "@eta/client-contracts";
 import type { UseFormReturn } from "react-hook-form";
 import type { AgentForm } from "./agent-form";
 import type { Model } from "@/queries/providers";
@@ -119,15 +120,75 @@ export function NameField({
   );
 }
 
+/**
+ * What answers for the agent: eta's own loop, or an agent runtime on the machine (Claude Code,
+ * Codex, ...). Another runtime has other models, so a change clears the model.
+ */
+export function RuntimeField({
+  form,
+  runtimes,
+}: {
+  form: Form;
+  /** Undefined while the host looks. */
+  runtimes: AgentRuntimeInfo[] | undefined;
+}) {
+  const { t: translateText } = useTranslation(["agents", "common"] as const);
+  const value = useWatch({ control: form.control, name: "runtime" });
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="agent-runtime">
+        {translateText("agents:runtime.label")}
+      </Label>
+      <Select
+        id="agent-runtime"
+        className="w-full"
+        value={value}
+        onValueChange={(next) => {
+          form.setValue("runtime", next as AgentForm["runtime"], {
+            shouldDirty: true,
+          });
+          form.setValue("model", "", { shouldDirty: true });
+          form.clearErrors("model");
+        }}
+      >
+        <SelectOption value="eta">
+          {translateText("agents:runtime.eta")}
+        </SelectOption>
+        {runtimes === undefined ? (
+          <SelectOption value="" disabled>
+            {translateText("agents:runtime.loading")}
+          </SelectOption>
+        ) : (
+          runtimes.map((runtime) => (
+            <SelectOption
+              key={runtime.id}
+              value={runtime.id}
+              disabled={runtime.status !== "available" && runtime.id !== value}
+            >
+              {runtime.label}
+              {runtime.status === "available"
+                ? ""
+                : translateText(`agents:runtime.status.${runtime.status}`)}
+            </SelectOption>
+          ))
+        )}
+      </Select>
+    </div>
+  );
+}
+
 export function ModelField({
   form,
   models,
   onOpenProviders,
+  external = false,
 }: {
   form: Form;
   /** Undefined while they load. */
   models: Model[] | undefined;
   onOpenProviders: () => void;
+  /** An external runtime's models: none chosen is the runtime's own default, not a gap. */
+  external?: boolean;
 }) {
   const { t: translateText } = useTranslation([
     "agents",
@@ -141,7 +202,9 @@ export function ModelField({
   const chosenModel = useWatch({ control: form.control, name: "model" });
   // Only once they have loaded can there be none.
   const noModels =
-    models !== undefined && !models.some((model) => model.available);
+    !external &&
+    models !== undefined &&
+    !models.some((model) => model.available);
   return (
     <div className="space-y-1.5">
       <Label htmlFor="agent-model">
@@ -152,6 +215,9 @@ export function ModelField({
         value={chosenModel}
         models={models}
         invalid={Boolean(error)}
+        {...(external
+          ? { defaultLabel: translateText("agents:runtime.defaultModel") }
+          : {})}
         aria-describedby={error || noModels ? "agent-model-hint" : undefined}
         onValueChange={(value) =>
           form.setValue("model", value, {
