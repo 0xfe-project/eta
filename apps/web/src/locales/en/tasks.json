@@ -140,8 +140,10 @@
     "title": "Comments",
     "awaitingReply": "Awaiting reply",
     "awaitingYourReply": "<name>{{name}}</name> is waiting for your reply",
-    "unsupportedAttachments": "{{action}} does not support images or files yet; {{count}} were not added.",
-    "deliveryFailed": "{{action}} was not delivered: {{message}}",
+    "unsupportedAttachments": "Comments can't include images or files yet; {{count}} files weren't added.",
+    "unsupportedAttachments_one": "Comments can't include images or files yet; {{count}} file wasn't added.",
+    "unsupportedAttachments_other": "Comments can't include images or files yet; {{count}} files weren't added.",
+    "deliveryFailed": "Comment not delivered: {{message}}",
     "placeholder": "Reply; a running task reads it right away",
     "queuedToSend": "Queued to send",
     "notDelivered": "Not delivered: {{message}}"

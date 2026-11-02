@@ -140,8 +140,10 @@
     "title": "评论",
     "awaitingReply": "待回复",
     "awaitingYourReply": "<name>{{name}}</name> 在等你回复",
-    "unsupportedAttachments": "{{action}}还不能带图片或文件，{{count}} 个没有加进来。",
-    "deliveryFailed": "{{action}}未送达：{{message}}",
+    "unsupportedAttachments": "评论还不能带图片或文件，{{count}} 个没有加进来。",
+    "unsupportedAttachments_one": "评论还不能带图片或文件，{{count}} 个没有加进来。",
+    "unsupportedAttachments_other": "评论还不能带图片或文件，{{count}} 个没有加进来。",
+    "deliveryFailed": "评论未送达：{{message}}",
     "placeholder": "回复；执行中的任务会直接读到",
     "queuedToSend": "待发送",
     "notDelivered": "未送达：{{message}}"

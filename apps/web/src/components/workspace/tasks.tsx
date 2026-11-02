@@ -1257,10 +1257,7 @@ export function CommentBox({
   const leftOut = (files: number) => {
     if (files)
       toast.warning(
-        translateText("comments.unsupportedAttachments", {
-          action: translateText("comments.title"),
-          count: files,
-        }),
+        translateText("comments.unsupportedAttachments", { count: files }),
       );
   };
   // Arrived once the task has one more of it, from the reply or a push: the
@@ -1281,10 +1278,7 @@ export function CommentBox({
         // Gone with the task's view: say so, as the box that held it is gone.
         if (!mountedRef.current) {
           toast.error(
-            translateText("comments.deliveryFailed", {
-              action: translateText("comments.title"),
-              message: failure,
-            }),
+            translateText("comments.deliveryFailed", { message: failure }),
           );
           return;
         }
