@@ -27,6 +27,16 @@ import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Markdown } from "@/components/markdown";
 import { Empty, LoadError, Loading } from "@/components/states";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -1750,6 +1760,53 @@ function TaskDetails({ task }: { task: TaskDetail }) {
   );
 }
 
+/** Asks before a task goes: the host deletes it with its activity, and there is no undo. */
+export function DeleteTaskDialog({
+  task,
+  open,
+  onOpenChange,
+  onDeleted,
+}: {
+  task: Task;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDeleted: () => void;
+}) {
+  const { t: translateText } = useTranslation(["tasks", "common"] as const);
+  const remove = useDeleteTask();
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {translateText("delete.confirmTitle", { number: task.number })}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {translateText("delete.confirmDescription")}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>
+            {translateText("common:actions.cancel")}
+          </AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={remove.isPending}
+            onClick={() =>
+              remove.mutate(
+                { taskId: task.id },
+                { onSuccess: onDeleted, onError: showError },
+              )
+            }
+          >
+            {translateText("common:actions.delete")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 /**
  * A task in the side panel, as a thread. The header holds what is always needed — the title and
  * the status — and the rest of the task's properties behind a button (`TaskDetails`); the
@@ -1765,7 +1822,7 @@ function TaskView({ task }: { task: TaskDetail }) {
   const [, setNav] = useTaskNav();
   const { agents } = useAgentList();
   const update = useUpdateTask();
-  const remove = useDeleteTask();
+  const [deleting, setDeleting] = useState(false);
   const replies = task.activity.filter((a) => a.kind === "comment").length;
   // A thread opens on its latest reply, next to the box to answer it; once more after the first
   // paint, for what lays itself out late (folded text measuring itself). It is at least as tall as
@@ -1830,20 +1887,18 @@ function TaskView({ task }: { task: TaskDetail }) {
             <DropdownMenuContent align="end">
               <DropdownMenuItem
                 variant="destructive"
-                onSelect={() =>
-                  remove.mutate(
-                    { taskId: task.id },
-                    {
-                      onSuccess: () => void setNav({ task: null }),
-                      onError: showError,
-                    },
-                  )
-                }
+                onSelect={() => setDeleting(true)}
               >
                 {translateText("common:actions.delete")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <DeleteTaskDialog
+            task={task}
+            open={deleting}
+            onOpenChange={setDeleting}
+            onDeleted={() => void setNav({ task: null })}
+          />
         </div>
         <EditableTitle task={task} />
       </header>

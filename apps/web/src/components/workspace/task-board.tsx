@@ -21,12 +21,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useAgentList } from "@/queries/agents";
-import {
-  useDeleteTask,
-  useTask,
-  useTasks,
-  useUpdateTask,
-} from "@/queries/tasks";
+import { useTask, useTasks, useUpdateTask } from "@/queries/tasks";
 import { wireErrorMessage } from "@/queries/wire";
 import { PageHeader } from "./app-shell";
 import { BackToTop } from "./back-to-top";
@@ -43,6 +38,7 @@ import { StatusIcon } from "./task-status-icon";
 import {
   CommentBox,
   Comments,
+  DeleteTaskDialog,
   Description,
   EditableTitle,
   LiveRuns,
@@ -312,7 +308,7 @@ function TaskPage({ id }: { id: string }) {
   const [, setNav] = useTaskNav();
   const { task, missing, error } = useTask(id);
   const { agents } = useAgentList();
-  const remove = useDeleteTask();
+  const [deleting, setDeleting] = useState(false);
   const back = () => void setNav({ task: null });
   const crumbs = (
     <>
@@ -357,17 +353,18 @@ function TaskPage({ id }: { id: string }) {
           <DropdownMenuContent align="end">
             <DropdownMenuItem
               variant="destructive"
-              onSelect={() =>
-                remove.mutate(
-                  { taskId: task.id },
-                  { onSuccess: back, onError: showError },
-                )
-              }
+              onSelect={() => setDeleting(true)}
             >
               {translateText("common:actions.delete")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <DeleteTaskDialog
+          task={task}
+          open={deleting}
+          onOpenChange={setDeleting}
+          onDeleted={back}
+        />
       </PageHeader>
       <main
         id="main"

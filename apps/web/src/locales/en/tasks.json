@@ -157,5 +157,9 @@
     "answering": "{{name}} is answering",
     "starting": "{{name}} is starting",
     "queued": "{{name}} is queued"
+  },
+  "delete": {
+    "confirmTitle": "Delete task #{{number}}?",
+    "confirmDescription": "Its description, comments and activity are deleted and can't be restored."
   }
 }

@@ -157,5 +157,9 @@
     "answering": "{{name}} 正在回答",
     "starting": "{{name}} 正在启动",
     "queued": "{{name}} 排队中"
+  },
+  "delete": {
+    "confirmTitle": "删除任务 #{{number}}？",
+    "confirmDescription": "描述、评论和动态会一并删除，无法恢复。"
   }
 }
