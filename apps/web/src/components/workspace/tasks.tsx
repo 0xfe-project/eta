@@ -67,6 +67,7 @@ import { cn } from "@/lib/utils";
 import { useAgentList } from "@/queries/agents";
 import { useConversationList } from "@/queries/conversations";
 import { useTaskPulls } from "@/queries/github";
+import { useMachines } from "@/queries/projects";
 import {
   useCommentTask,
   useConfirmTaskDraft,
@@ -87,7 +88,7 @@ import {
   actorName,
   ago,
   isActive,
-  queueReasonLabels,
+  queueReasonLabel,
   runStatusLabels,
   statuses,
   statusLabel,
@@ -947,6 +948,12 @@ function useRunAgent(task: TaskDetail, run: TaskRun) {
   );
 }
 
+/** A machine's name, from a run's `machineId`; undefined when the page does not know the machine. */
+function useMachineName(machineId: string | null | undefined) {
+  const { machines } = useMachines();
+  return machines.find((machine) => machine.id === machineId)?.name;
+}
+
 /** A run's log, in a dialog: it is as long as the run was, more than a line of the thread holds. */
 function RunLogButton({ task, run }: { task: TaskDetail; run: TaskRun }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
@@ -990,6 +997,7 @@ function RunLogButton({ task, run }: { task: TaskDetail; run: TaskRun }) {
 function LiveRun({ task, run }: { task: TaskDetail; run: TaskRun }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
   const who = useRunAgent(task, run);
+  const machine = useMachineName(run.machineId);
   const queued = run.status === "queued";
   const Icon = queued ? ClockIcon : SpinnerIcon;
   const doing = queued
@@ -1013,7 +1021,7 @@ function LiveRun({ task, run }: { task: TaskDetail; run: TaskRun }) {
         {queued && run.queueReason ? (
           <span className="text-muted-foreground">
             {" · "}
-            {queueReasonLabels[run.queueReason]}
+            {queueReasonLabel(run.queueReason, machine)}
           </span>
         ) : null}
       </span>

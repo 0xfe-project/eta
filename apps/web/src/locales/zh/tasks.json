@@ -28,8 +28,9 @@
   },
   "queueReason": {
     "taskBusy": "等这个任务上一次运行结束",
-    "machineFull": "这台机器的运行数已满，等空位",
-    "machineOffline": "这台机器不在线，连上后开始"
+    "machineFull": "{{machine}} 同时运行的任务数已满，等空位",
+    "machineOffline": "{{machine}} 不在线，连上后开始",
+    "thisMachine": "这台机器"
   },
   "runs": {
     "label": "运行",
