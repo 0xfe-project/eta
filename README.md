@@ -163,7 +163,23 @@ hook run the same set, through turbo's remote cache.
 
 ### Running in production
 
-Build the web first, then let the host serve it:
+On a Linux or macOS computer, from a checkout, as your own user service:
+
+```sh
+bun run host:install -- --host tailscale --port 8790
+```
+
+This builds the web, stages the compiled host the way the desktop app carries it (page, migrations,
+bundles, CLIProxyAPI and the daemon for every platform), puts it in `~/.local/share/eta/host`, and runs
+`eta-host install-service <flags>`: a systemd user unit (`io.eta.host`) or launchd agent that starts at
+login and restarts on failure, with the PATH you installed from (so agents find git, gh, Claude Code,
+Codex). Running it again after `git pull` is the upgrade; the daemons follow on their next connect. On a
+headless Linux box, `loginctl enable-linger` keeps user services up without a login.
+`~/.local/share/eta/host/eta-host uninstall-service` removes the service; the data stays in `~/.eta`.
+
+`--host tailscale` listens on the tailnet address only, which is what other machines join over.
+
+Or run the host by hand:
 
 ```sh
 bun run --cwd apps/web build
@@ -178,8 +194,8 @@ Host flags (`apps/eta/src/main.ts`):
 | flag                  | meaning                                                                                                                                                                                                                                                                                                                                                                                      |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--port <n>`          | port, default `8787` (`0` picks any free port)                                                                                                                                                                                                                                                                                                                                               |
-| `--host <addr>`       | interface to bind, default `127.0.0.1`. **Binding anything other than loopback turns the token gate on**                                                                                                                                                                                                                                                                                     |
-| `--web-dir <dir>`     | built web (with `index.html`). Without it the host serves the pipe only, no pages                                                                                                                                                                                                                                                                                                            |
+| `--host <addr>`       | interface to bind, default `127.0.0.1`; `tailscale` is this computer's tailnet address. **Binding anything other than loopback turns the token gate on**                                                                                                                                                                                                                                     |
+| `--web-dir <dir>`     | built web (with `index.html`). A compiled host defaults to the `web/` beside it; otherwise without it the host serves the pipe only, no pages                                                                                                                                                                                                                                                |
 | `--token-file <path>` | turn the token gate on with an explicit token file (created if missing, mode 0600). Binding a non-loopback address without this uses `<data directory>/access-token`                                                                                                                                                                                                                         |
 | `--allow-origin <o>`  | extra page origin allowed to open the WebSocket, repeatable. Set it when you sit behind a reverse proxy that rewrites `Host`                                                                                                                                                                                                                                                                 |
 | `--github`            | load the GitHub chain (App and wizard, `github` target, `open_pull_request` / `draft_issue` tools, callback routes, machine git/gh login). **Not loaded by default**: if the environment has no GitHub, nothing is created, mounted or asked about, and no GitHub entry appears in the UI. `ETA_GITHUB=1` counts too, `--no-github` overrides it (see [GitHub](docs/architecture/github.md)) |
