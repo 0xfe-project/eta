@@ -33,7 +33,12 @@ import {
   loadIdentity,
 } from "./identity";
 import { DaemonNode } from "./node";
-import { installService, uninstallService } from "./service";
+import {
+  DAEMON_UNIT,
+  installedEnv,
+  installService,
+  uninstallService,
+} from "./service";
 import { RESTART_EXIT, settleUpgrade, upgrade } from "./upgrade";
 import { VERSION } from "./version";
 
@@ -201,7 +206,10 @@ switch (command) {
     await run();
     break;
   case "install-service": {
-    const definition = await installService(selfCommand());
+    const definition = await installService(selfCommand(), {
+      ...DAEMON_UNIT,
+      env: installedEnv(),
+    });
     console.log(`Installed ${definition.name} (${definition.path}).`);
     break;
   }

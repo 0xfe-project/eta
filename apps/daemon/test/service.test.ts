@@ -8,7 +8,7 @@ import {
   loadIdentity,
   saveIdentity,
 } from "../src/identity";
-import { serviceDefinition } from "../src/service";
+import { installedEnv, serviceDefinition } from "../src/service";
 
 const command = { program: "/opt/eta daemon/eta-daemon", args: [] };
 
@@ -39,6 +39,33 @@ describe("the service definition", () => {
     expect(serviceDefinition(command, "linux", "/h").name).toBe(
       "io.eta.daemon",
     );
+  });
+
+  it("starts with the PATH it was installed from, which a service manager would not give it", () => {
+    const unit = {
+      name: "io.eta.host",
+      description: "eta host",
+      args: [],
+      env: installedEnv({ PATH: "/home/u/.local/bin:/usr/bin" }),
+    };
+    const host = { program: "/opt/eta/eta-host", args: ["--port", "8790"] };
+    const linux = serviceDefinition(host, "linux", "/home/u", unit);
+    expect(linux.path).toBe("/home/u/.config/systemd/user/io.eta.host.service");
+    expect(linux.content).toContain("Description=eta host");
+    expect(linux.content).toContain(
+      'ExecStart="/opt/eta/eta-host" "--port" "8790"\nEnvironment="PATH=/home/u/.local/bin:/usr/bin"\n',
+    );
+    const mac = serviceDefinition(host, "darwin", "/Users/u", unit);
+    expect(mac.content).toContain(
+      "<key>EnvironmentVariables</key><dict><key>PATH</key><string>/home/u/.local/bin:/usr/bin</string></dict>",
+    );
+    expect(installedEnv({})).toEqual({});
+    // What `bun run` put in front is the checkout's, and a directory named twice is one.
+    expect(
+      installedEnv({
+        PATH: "/repo/node_modules/.bin:/home/node_modules/.bin:/usr/bin:/bin:/usr/bin",
+      }),
+    ).toEqual({ PATH: "/usr/bin:/bin" });
   });
 
   it("has no Windows service: that is WSL", () => {
