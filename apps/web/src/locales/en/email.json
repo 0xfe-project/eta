@@ -63,6 +63,7 @@
     "noAccount": "No mailbox connected",
     "sentEmpty": "No sent mail yet.",
     "htmlMessage": "HTML email",
+    "noSubject": "(No subject)",
     "unread": "Unread",
     "messages": "{{count}} messages",
     "selected": "{{count}} selected",
