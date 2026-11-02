@@ -26,8 +26,7 @@
     "started": "{{name}} 正在更新，完成后会重新连接"
   },
   "fields": {
-    "nameLabel": "机器名称",
-    "namePlaceholder": "例如：家里的 Mac mini"
+    "nameLabel": "机器名称"
   },
   "install": {
     "permissionsNotice": "智能体会在那台机器上以完全权限运行，请只接入专门用来干活的机器。",

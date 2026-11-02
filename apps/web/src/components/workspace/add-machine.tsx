@@ -23,13 +23,15 @@ import {
   useMachineAddresses,
   useMachineInstalls,
 } from "@/queries/machines";
+import { useMachines } from "@/queries/projects";
 import { wireErrorMessage } from "@/queries/wire";
 import { when } from "./routine-format";
 import { Select, SelectOption } from "./select-field";
 
 // Settings → 机器 → 添加机器: the machines panel turned into the way in, not a dialog over it.
 // Running a command on the new machine is the way that always works; installing over SSH is the
-// shortcut, with or without a password.
+// shortcut, with or without a password. No name is asked for up front: the host names a machine
+// after its hostname (or the SSH host), and its card can rename it.
 
 const showError = (error: Error) => toast.error(wireErrorMessage(error));
 
@@ -135,14 +137,9 @@ function Arrived({ machine }: { machine: MachineView }) {
 }
 
 /** Run a command on the new machine: the way in that always works. */
-function CommandWay({
-  name,
-  machines,
-}: {
-  name: string;
-  machines: readonly MachineView[];
-}) {
+function CommandWay() {
   const { t: translateText } = useTranslation(["machines", "common"] as const);
+  const { machines } = useMachines();
   const enroll = useEnrollMachine();
   const { data: addresses } = useMachineAddresses();
   const here = window.location.origin;
@@ -205,7 +202,7 @@ function CommandWay({
           onClick={() => {
             const known = new Set(machines.map((machine) => machine.id));
             enroll.mutate(
-              { ...(name.trim() ? { name: name.trim() } : {}), url: chosen },
+              { url: chosen },
               {
                 onSuccess: ({ command, expiresAt }) =>
                   setMade({ command, expiresAt, known }),
@@ -237,14 +234,9 @@ function CommandWay({
 const STEPS = ["connect", "send", "register", "service"] as const;
 
 /** An install over SSH as it goes: the four steps, and where it stopped if it did. */
-function InstallProgress({
-  install,
-  machines,
-}: {
-  install: MachineInstallView;
-  machines: readonly MachineView[];
-}) {
+function InstallProgress({ install }: { install: MachineInstallView }) {
   const { t: translateText } = useTranslation(["machines"] as const);
+  const { machines } = useMachines();
   const at =
     install.step === "done"
       ? STEPS.length
@@ -288,17 +280,11 @@ function InstallProgress({
 }
 
 /** Install over SSH from here: with the user's keys, or with a password for this once. */
-function SshWay({
-  name,
-  machines,
-}: {
-  name: string;
-  machines: readonly MachineView[];
-}) {
+function SshWay() {
   const { t: translateText } = useTranslation(["machines", "common"] as const);
   const install = useInstallMachine();
   const installs = useMachineInstalls();
-  const { data: tailnet } = useDiscoverMachines(true);
+  const { data: tailnet } = useDiscoverMachines();
   const listId = useId();
   const [host, setHost] = useState("");
   const [keyless, setKeyless] = useState(false);
@@ -323,11 +309,7 @@ function SshWay({
         event.preventDefault();
         if (!ready) return;
         install.mutate(
-          {
-            host: host.trim(),
-            ...(name.trim() ? { name: name.trim() } : {}),
-            ...(keyless ? {} : { password }),
-          },
+          { host: host.trim(), ...(keyless ? {} : { password }) },
           {
             onSuccess: ({ installId: id }) => {
               setInstallId(id);
@@ -397,23 +379,14 @@ function SshWay({
       <Button type="submit" disabled={!ready}>
         {translateText("ssh.install")}
       </Button>
-      {running === undefined ? null : (
-        <InstallProgress install={running} machines={machines} />
-      )}
+      {running === undefined ? null : <InstallProgress install={running} />}
     </form>
   );
 }
 
 /** The machines panel while a machine is being added. */
-export function AddMachine({
-  machines,
-  onBack,
-}: {
-  machines: readonly MachineView[];
-  onBack: () => void;
-}) {
+export function AddMachine({ onBack }: { onBack: () => void }) {
   const { t: translateText } = useTranslation(["machines", "common"] as const);
-  const [name, setName] = useState("");
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
@@ -432,18 +405,6 @@ export function AddMachine({
       <p className="text-xs text-muted-foreground">
         {translateText("install.permissionsNotice")}
       </p>
-      <div className="space-y-1.5">
-        <Label htmlFor="machine-name">
-          {translateText("fields.nameLabel")}
-        </Label>
-        <Input
-          id="machine-name"
-          placeholder={translateText("fields.namePlaceholder")}
-          maxLength={100}
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-      </div>
       <Tabs defaultValue="command">
         <TabsList>
           <TabsTrigger value="command">
@@ -452,10 +413,10 @@ export function AddMachine({
           <TabsTrigger value="ssh">{translateText("add.tabs.ssh")}</TabsTrigger>
         </TabsList>
         <TabsContent value="command">
-          <CommandWay name={name} machines={machines} />
+          <CommandWay />
         </TabsContent>
         <TabsContent value="ssh">
-          <SshWay name={name} machines={machines} />
+          <SshWay />
         </TabsContent>
       </Tabs>
     </div>
