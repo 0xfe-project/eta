@@ -30,7 +30,7 @@ import { useConversationActions } from "@/queries/conversations";
 import { useMachines } from "@/queries/projects";
 import { useModels } from "@/queries/providers";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
-import { agentStatusLabels } from "./agent-status";
+import { agentStatusLabels, memberStatusLabel } from "./agent-status";
 import { useOpenAgent } from "./use-agents";
 import { useChatList } from "./use-chat-list";
 import { useOpenGroup } from "./use-groups";
@@ -497,7 +497,15 @@ function GroupCard({
                     {nameOf(member.agentId)}
                   </span>
                   {member.status !== "idle" ? (
-                    <span className="size-1.5 shrink-0 bg-state-success" />
+                    <>
+                      <span
+                        aria-hidden="true"
+                        className="size-1.5 shrink-0 bg-state-success"
+                      />
+                      <span className="sr-only">
+                        {memberStatusLabel(member.status)}
+                      </span>
+                    </>
                   ) : null}
                 </button>
               </li>
