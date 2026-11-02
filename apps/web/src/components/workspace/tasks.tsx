@@ -23,7 +23,7 @@ import { SpinnerIcon } from "@phosphor-icons/react/Spinner";
 import { StopIcon } from "@phosphor-icons/react/Stop";
 import { UserIcon } from "@phosphor-icons/react/User";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Markdown } from "@/components/markdown";
 import { Empty, LoadError, Loading } from "@/components/states";
@@ -610,12 +610,15 @@ export function Question({ task }: { task: TaskDetail }) {
       aria-label={translateText("comments.awaitingReply")}
       className="space-y-1 bg-muted px-3 py-2"
     >
-      <p className="text-xs">
-        <span className="font-medium">{actorName(last.actor, agents)}</span>
-        <span className="text-muted-foreground">
-          {" "}
-          {translateText("comments.awaitingYourReply")}
-        </span>
+      <p className="text-xs text-muted-foreground">
+        <Trans
+          t={translateText}
+          i18nKey="comments.awaitingYourReply"
+          values={{ name: actorName(last.actor, agents) }}
+          components={{
+            name: <span className="font-medium text-foreground" />,
+          }}
+        />
       </p>
       <Folded
         max="max-h-32"
