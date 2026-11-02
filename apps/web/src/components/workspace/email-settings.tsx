@@ -367,7 +367,12 @@ export function EmailSettings() {
           {accounts.map((account) => (
             <li key={account.id} className="flex items-start gap-3 p-3">
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium">{account.name}</div>
+                <div
+                  className="truncate text-sm font-medium"
+                  title={account.name}
+                >
+                  {account.name}
+                </div>
                 <div
                   className="truncate text-xs text-muted-foreground"
                   title={`${account.address} · ${account.imapHost}`}
