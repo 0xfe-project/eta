@@ -1,4 +1,5 @@
 import type { SettingsSection } from "./workspace-store";
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageSettings } from "@/components/language-settings";
 import { Switch } from "@/components/ui/switch";
@@ -62,6 +63,7 @@ function AppearanceSettings() {
   const workspace = useWorkspaceStore((s) => s.workspace);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const { theme, setTheme } = useTheme();
+  const colorModeLabelId = useId();
   return (
     <div>
       <div className="settings-heading">
@@ -70,9 +72,15 @@ function AppearanceSettings() {
       {/* Rows, not cards: a label on the left, its control on the right, one decision per line. */}
       <div className="settings-row">
         <div className="settings-row-label">
-          <div>{translateText("appearance.colorMode")}</div>
+          <div id={colorModeLabelId}>
+            {translateText("appearance.colorMode")}
+          </div>
         </div>
-        <div className="settings-control settings-inline">
+        <div
+          className="settings-control settings-inline"
+          role="group"
+          aria-labelledby={colorModeLabelId}
+        >
           {colorModes.map((choice) => (
             <button
               key={choice.value}
@@ -87,7 +95,9 @@ function AppearanceSettings() {
       </div>
       <div className="settings-row">
         <div className="settings-row-label">
-          <div>{translateText("appearance.language")}</div>
+          <label htmlFor="language">
+            {translateText("appearance.language")}
+          </label>
         </div>
         <div className="settings-control">
           <LanguageSettings />

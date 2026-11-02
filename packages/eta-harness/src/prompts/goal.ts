@@ -14,7 +14,7 @@ Continuation:
 - Make concrete progress toward the real end state. Leave goal active if unfinished.
 
 Progress:
-- If multi-step, keep <current_tasks>...</current_tasks> tied to the objective. Update as steps complete. Skip for trivial one-step work. A plan update is NOT the work.
+- If multi-step, keep <current_steps>...</current_steps> tied to the objective. Update as steps complete. Skip for trivial one-step work. A plan update is NOT the work.
 
 Completion:
 - Only mark done when the end state is verified. Don't mark done just because you're stopping.`;

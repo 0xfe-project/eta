@@ -11,7 +11,7 @@ import { EnvelopeSimpleIcon } from "@phosphor-icons/react/EnvelopeSimple";
 import { PaperPlaneRightIcon } from "@phosphor-icons/react/PaperPlaneRight";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Empty, LoadError, Loading } from "@/components/states";
@@ -34,6 +34,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/workspace/app-shell";
 import { emailThreadsForFolder } from "@/components/workspace/email-folders";
 import { EmailMessageHtml } from "@/components/workspace/email-message-html";
@@ -42,6 +43,7 @@ import { useEmailNav } from "@/components/workspace/email-nav";
 import { EmailSessionLog } from "@/components/workspace/email-session-log";
 import { Select, SelectOption } from "@/components/workspace/select-field";
 import { useGroups } from "@/components/workspace/use-groups";
+import { formatLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useAgentList } from "@/queries/agents";
 import {
@@ -53,10 +55,10 @@ import {
   useRefreshEmail,
 } from "@/queries/email";
 import { useProjects } from "@/queries/projects";
-import { wireErrorMessage } from "@/queries/wire";
+import { useWireState, wireErrorMessage } from "@/queries/wire";
 
 function time(value: number): string {
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(formatLocale(), {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(value);
@@ -127,9 +129,10 @@ function ThreadRow({
   return (
     <div
       className={cn(
-        "flex w-full items-start gap-2 border-b px-2 py-2.5",
-        selected && "bg-muted",
-        eta && "border-l-2 border-l-foreground bg-muted/25 pl-1.5",
+        "flex w-full items-start gap-2 border-b px-2 py-2.5 transition-colors duration-[60ms] ease-linear",
+        selected ? "bg-muted" : "hover:bg-muted/60",
+        eta && "border-l-2 border-l-foreground pl-1.5",
+        eta && !selected && "bg-muted/25",
       )}
     >
       <Checkbox
@@ -193,7 +196,10 @@ function Message({ message }: { message: EmailMessageView }) {
           {message.direction === "incoming" ? "IN" : "OUT"}
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="line-clamp-2 text-sm font-semibold sm:truncate">
+          <h3
+            className="line-clamp-2 text-sm font-semibold"
+            title={message.subject}
+          >
             {message.subject}
           </h3>
           <p className="truncate text-xs text-muted-foreground">
@@ -253,6 +259,8 @@ function AssignDialog({
   const assign = useAssignEmail();
   const [agentId, setAgentId] = useState("");
   const [projectId, setProjectId] = useState("");
+  const agentFieldId = useId();
+  const projectFieldId = useId();
   const start = () => {
     const first = threads[0];
     if (!first) return;
@@ -281,10 +289,14 @@ function AssignDialog({
         </DialogHeader>
         <div className="grid gap-3">
           <div className="grid gap-1">
-            <span className="text-xs text-muted-foreground">
+            <Label
+              htmlFor={agentFieldId}
+              className="text-xs text-muted-foreground"
+            >
               {t("thread.agent")}
-            </span>
+            </Label>
             <Select
+              id={agentFieldId}
               className="w-full"
               value={agentId}
               onValueChange={setAgentId}
@@ -297,10 +309,14 @@ function AssignDialog({
             </Select>
           </div>
           <div className="grid gap-1">
-            <span className="text-xs text-muted-foreground">
+            <Label
+              htmlFor={projectFieldId}
+              className="text-xs text-muted-foreground"
+            >
               {t("thread.project")}
-            </span>
+            </Label>
             <Select
+              id={projectFieldId}
               className="w-full"
               value={projectId}
               onValueChange={setProjectId}
@@ -344,12 +360,22 @@ export function EmailInboxPage() {
   const { projects } = useProjects();
   const { groups } = useGroups();
   const navigate = useNavigate();
+  const connecting = useWireState((state) => state.status === "connecting");
   if (!email.mounted)
     return (
-      <LoadError
-        what={t("title")}
-        error={new Error("email plugin is not mounted")}
-      />
+      <>
+        <PageHeader title={t("title")} />
+        <main id="main" className="min-h-0 flex-1">
+          {connecting ? (
+            <Loading />
+          ) : (
+            <LoadError
+              what={t("title")}
+              error={new Error("email plugin is not mounted")}
+            />
+          )}
+        </main>
+      </>
     );
   const visibleThreads = emailThreadsForFolder(email.threads, folder);
   const chooseFolder = (next: EmailFolder) => {
@@ -452,6 +478,25 @@ export function EmailInboxPage() {
           </div>
           {!email.loaded ? (
             <Loading />
+          ) : folder === "inbox" && email.accounts.length === 0 ? (
+            <Empty
+              icon={EnvelopeSimpleIcon}
+              title={t("inbox.noAccount")}
+              action={
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    void navigate({
+                      to: "/settings",
+                      search: { section: "email" },
+                    })
+                  }
+                >
+                  {t("add")}
+                </Button>
+              }
+            />
           ) : visibleThreads.length === 0 ? (
             <Empty
               icon={EnvelopeSimpleIcon}
@@ -519,7 +564,10 @@ export function EmailInboxPage() {
                           ETA
                         </span>
                       ) : null}
-                      <h1 className="line-clamp-2 text-base font-semibold leading-tight sm:truncate sm:text-lg">
+                      <h1
+                        className="line-clamp-2 text-base font-semibold leading-tight sm:text-lg"
+                        title={detail.thread.subject}
+                      >
                         {detail.thread.subject}
                       </h1>
                     </div>
@@ -655,7 +703,7 @@ export function EmailInboxPage() {
                         );
                       }}
                     >
-                      {t("common:actions.delete")}
+                      {t("inbox.delete")}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>

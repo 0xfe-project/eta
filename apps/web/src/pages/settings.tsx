@@ -45,10 +45,7 @@ export function SettingsPage() {
           </>
         }
       />
-      <main
-        id="main"
-        className="mx-auto flex min-h-0 w-full max-w-content flex-1"
-      >
+      <main id="main" className="flex min-h-0 w-full flex-1">
         <SettingsPanels
           className="settings-page"
           value={search.section ?? "agents"}
