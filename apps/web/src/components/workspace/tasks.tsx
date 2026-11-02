@@ -1406,7 +1406,10 @@ export function CommentBox({
           >
             {waiting && !waiting.failure ? (
               <>
-                <SpinnerIcon aria-hidden="true" className="animate-spin" />
+                <SpinnerIcon
+                  aria-hidden="true"
+                  className="motion-safe:animate-spin"
+                />
                 <span className="sr-only">
                   {translateText("common:states.sending")}
                 </span>

@@ -174,14 +174,15 @@ function ProposalForm({ proposalId }: { proposalId: string }) {
         <button
           type="button"
           className={`flex w-full items-center gap-2 border px-3 py-2 text-left text-xs ${
-            closed
-              ? "text-muted-foreground"
-              : "border-amber-600/30 bg-amber-500/5 text-amber-700 dark:text-amber-400"
+            closed ? "text-muted-foreground" : "border-state-warning"
           }`}
           onClick={() => setExpanded(true)}
         >
           {closed ? null : (
-            <WarningIcon aria-hidden="true" className="size-4 shrink-0" />
+            <WarningIcon
+              aria-hidden="true"
+              className="size-4 shrink-0 text-state-warning"
+            />
           )}
           <span>{collapsedHint}</span>
           <span className="ml-auto shrink-0">{t("proposal.expand")}</span>

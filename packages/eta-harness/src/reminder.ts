@@ -21,7 +21,7 @@ import { Service } from "cordis";
 import {
   createCadenceState,
   DEFAULT_REMINDER_INTERVAL,
-  DEFAULT_TASK_TOOL_NAMES,
+  DEFAULT_STEP_TOOL_NAMES,
   drainReminderForContext,
   evaluateToolResult,
   onTurnStart,
@@ -32,8 +32,8 @@ export interface TaskReminderServiceOptions {
   tasks: TaskService;
   /** Turns without a task-tool call before a reminder is considered due. */
   reminderInterval?: number;
-  /** Tool names that reset the cadence. Defaults to the task tools. */
-  taskToolNames?: ReadonlySet<string>;
+  /** Tool names that reset the cadence. Defaults to the step tools. */
+  stepToolNames?: ReadonlySet<string>;
 }
 
 export class TaskReminderService extends Service {
@@ -51,7 +51,7 @@ export class TaskReminderService extends Service {
     this.emit = kernelEmit(ctx);
     this.config = {
       reminderInterval: options.reminderInterval ?? DEFAULT_REMINDER_INTERVAL,
-      taskToolNames: options.taskToolNames ?? DEFAULT_TASK_TOOL_NAMES,
+      stepToolNames: options.stepToolNames ?? DEFAULT_STEP_TOOL_NAMES,
     };
     const on = kernelOn(ctx);
     this.offs.push(

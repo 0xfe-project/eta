@@ -45,10 +45,22 @@ export function resolveTheme(choice: ThemeChoice): ResolvedTheme {
 /** Put the resolved mode on the document. The only place the DOM is touched. */
 export function applyTheme(choice: ThemeChoice): ResolvedTheme {
   const resolved = resolveTheme(choice);
+  if (typeof document === "undefined") return resolved;
   const root = document.documentElement;
+  // Every color transition would fire at once and the switch would smear: flip in one frame.
+  const still = document.createElement("style");
+  still.textContent = "*,*::before,*::after{transition:none!important}";
+  document.head.append(still);
   root.classList.toggle("dark", resolved === "dark");
   // Form controls, scrollbars and the canvas behind the page follow this, not the class.
   root.style.colorScheme = resolved;
+  // Commit the new colors while transitions are off, then hand them back after the paint.
+  void root.offsetHeight;
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(() => requestAnimationFrame(() => still.remove()));
+  } else {
+    still.remove();
+  }
   return resolved;
 }
 

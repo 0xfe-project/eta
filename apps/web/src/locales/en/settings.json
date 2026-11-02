@@ -4,14 +4,10 @@
     "system": "System",
     "light": "Light",
     "dark": "Dark",
-    "interfaceFont": "Interface font",
-    "monospaceFont": "Monospace font",
     "colorMode": "Color mode",
     "language": "Language",
     "elementPicker": "Element picker",
-    "elementPickerHint": "When on, you can pick an element on the page and copy its component and source location.",
-    "description": "One face, three colour modes, one language. Nothing here changes what the agents do.",
-    "colorModeHint": "Follows the system until you pick one."
+    "elementPickerHint": "When on, you can pick an element on the page and copy its component and source location."
   },
   "sections": {
     "approvals": "Tools that ask first",

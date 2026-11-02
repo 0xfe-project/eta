@@ -16,7 +16,7 @@ import {
   useConversationList,
 } from "./conversations";
 
-function Reader({ id }: { id: string }) {
+function Reader({ id }: { id: string | undefined }) {
   const { messages, hasOlder, loadOlder, loadingOlder, loaded } =
     useConversation(id);
   return (
@@ -136,6 +136,12 @@ describe("rows the host stopped sending", () => {
 });
 
 describe("one conversation's timeline", () => {
+  it("is loaded when there is no conversation to read", async () => {
+    productHost({ conversations: [] });
+    await mount(<Reader id={undefined} />);
+    expect(text("rows")).toBe("");
+  });
+
   it("shows the window the host publishes and follows a reply as it changes in place", async () => {
     const summary = conversationView({ id: "live", lastSeq: 2 });
     const host = productHost({
