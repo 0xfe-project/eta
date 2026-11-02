@@ -323,6 +323,17 @@ export interface OpenSession {
   stop: () => void;
 }
 
+/**
+ * Names a session may have pinned that are now called something else. Only renames that keep the
+ * meaning: the journal's own `task:*` entries are a different thing and are not touched.
+ */
+const RENAMED_TOOLS: Record<string, string> = {
+  TaskCreate: "create_step",
+  TaskList: "list_steps",
+  TaskGet: "get_step",
+  TaskUpdate: "update_step",
+};
+
 /** Replay a journal and hand back a session ready to run. */
 export async function openSession(
   options: OpenSessionOptions,
@@ -487,6 +498,23 @@ export async function openSession(
   // a narrower toolset is a decision somebody made, not something to overwrite — and
   // a name that is not installed is reported rather than silently dropped.
   const installedNames = installedTools.map((tool) => tool.name);
+  // A session's journal pins the names it was opened with, and a pinned name that no longer
+  // exists fails the next run (`configured_tools_unavailable`) instead of quietly losing a tool.
+  // Renaming a tool with the same meaning therefore has to carry the pin along: a session that
+  // asked for `TaskCreate` asked for what `create_step` now is.
+  const pinned = kernel.config.read("activeToolNames");
+  const renamed = pinned.map((name) => RENAMED_TOOLS[name] ?? name);
+  if (renamed.some((name, at) => name !== pinned[at])) {
+    kernel.config.update({ activeToolNames: renamed });
+    options.kernel?.warn?.(
+      `[eta-harness] tools renamed for this session: ${pinned
+        .map((name, at) =>
+          name === renamed[at] ? undefined : `${name} → ${renamed[at]}`,
+        )
+        .filter((one) => one !== undefined)
+        .join(", ")}`,
+    );
+  }
   if (kernel.config.read("activeToolNames").length === 0) {
     kernel.config.update({ activeToolNames: installedNames });
   } else {

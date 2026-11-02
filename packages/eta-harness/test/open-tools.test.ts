@@ -297,6 +297,41 @@ describe("the tools against a real environment", () => {
     again.stop();
   });
 
+  it("carries a session pinned to a renamed tool along to the new name", async () => {
+    const storage = new MemoryStorage();
+    const first = await openSession({
+      storage,
+      models: fakeModels([]) as never,
+      env: env as never,
+    });
+    // A journal written before the rename: the session asked for what is now `create_step`.
+    first.kernel.config.update({
+      activeToolNames: ["read", "TaskCreate", "TaskList"],
+    });
+    await first.journaling.flush();
+    await first.kernel.dispose();
+    first.stop();
+
+    const warnings: string[] = [];
+    const again = await openSession({
+      storage,
+      models: fakeModels([]) as never,
+      env: env as never,
+      kernel: { warn: (message) => warnings.push(message) },
+    });
+    // The pin moved with the name, so the run has nothing missing — the alternative is a session
+    // that answers `configured_tools_unavailable: TaskCreate` on every run from now on.
+    expect(again.config.activeToolNames).toEqual([
+      "read",
+      "create_step",
+      "list_steps",
+    ]);
+    expect(warnings.join(" ")).toContain("TaskCreate → create_step");
+    expect(warnings.join(" ")).not.toContain("not installed");
+    await again.kernel.dispose();
+    again.stop();
+  });
+
   it("warns when a configured tool is not installed instead of quietly dropping it", async () => {
     const storage = new MemoryStorage();
     const first = await openSession({
