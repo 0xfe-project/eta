@@ -72,8 +72,7 @@ function StatusDot({
         "size-1.5 shrink-0",
         status === "online" && "bg-state-success",
         status === "pending" && "bg-state-warning",
-        (status === "offline" || status === "revoked") &&
-          "bg-muted-foreground/40",
+        status === "offline" && "bg-muted-foreground/40",
       )}
     />
   );
@@ -212,13 +211,12 @@ function MachineCard({ machine }: { machine: MachineView }) {
     machine.kind === "primary" ? translateText("kinds.primary") : null,
     machine.os ? (osLabels[machine.os] ?? machine.os) : null,
     machine.home,
-    machine.status === "pending" || machine.status === "revoked"
+    machine.status === "pending"
       ? null
       : translateText("runs.summary", { count: machine.maxActiveRuns }),
   ]
     .filter(Boolean)
     .join(" · ");
-  const closed = machine.status === "revoked";
   const build =
     machine.build === "outdated" || machine.build === "updating"
       ? translateText(`build.${machine.build}`)
@@ -229,12 +227,7 @@ function MachineCard({ machine }: { machine: MachineView }) {
     (machine.build === "outdated" || machine.updateError !== null);
 
   return (
-    <li
-      className={cn(
-        "flex min-w-0 flex-col gap-2 border p-3",
-        closed && "text-muted-foreground",
-      )}
-    >
+    <li className="flex min-w-0 flex-col gap-2 border p-3">
       <div className="flex min-w-0 items-center gap-2">
         <StatusDot status={machine.status} label={status} />
         <span
@@ -253,65 +246,63 @@ function MachineCard({ machine }: { machine: MachineView }) {
         >
           {build === null ? status : `${status} · ${build}`}
         </span>
-        {closed ? null : (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={translateText("common:accessibility.itemActions", {
-                  name: machine.name,
-                })}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={translateText("common:accessibility.itemActions", {
+                name: machine.name,
+              })}
+            >
+              <DotsThreeIcon aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => setRenaming(true)}>
+              {translateText("actions.rename")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setLimiting(true)}>
+              {translateText("actions.runs")}
+            </DropdownMenuItem>
+            {updatable ? (
+              <DropdownMenuItem
+                disabled={upgrade.isPending}
+                onSelect={() =>
+                  upgrade.mutate(
+                    { machineId: machine.id },
+                    {
+                      onSuccess: () =>
+                        toast(
+                          translateText("upgrade.started", {
+                            name: machine.name,
+                          }),
+                        ),
+                      onError: showError,
+                    },
+                  )
+                }
               >
-                <DotsThreeIcon aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => setRenaming(true)}>
-                {translateText("actions.rename")}
+                {translateText("actions.upgrade")}
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setLimiting(true)}>
-                {translateText("actions.runs")}
+            ) : null}
+            {machine.kind === "primary" ? null : (
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={() => setConfirming(true)}
+              >
+                {translateText("actions.revoke")}
               </DropdownMenuItem>
-              {updatable ? (
-                <DropdownMenuItem
-                  disabled={upgrade.isPending}
-                  onSelect={() =>
-                    upgrade.mutate(
-                      { machineId: machine.id },
-                      {
-                        onSuccess: () =>
-                          toast(
-                            translateText("upgrade.started", {
-                              name: machine.name,
-                            }),
-                          ),
-                        onError: showError,
-                      },
-                    )
-                  }
-                >
-                  {translateText("actions.upgrade")}
-                </DropdownMenuItem>
-              ) : null}
-              {machine.kind === "primary" ? null : (
-                <DropdownMenuItem
-                  variant="destructive"
-                  onSelect={() => setConfirming(true)}
-                >
-                  {translateText("actions.revoke")}
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {details ? (
         <p className="truncate text-xs text-muted-foreground" title={details}>
           {details}
         </p>
       ) : null}
-      {machine.updateError !== null && !closed ? (
+      {machine.updateError !== null ? (
         <p
           className="text-xs break-words text-state-warning"
           title={machine.updateError}
@@ -369,8 +360,11 @@ export function MachineSettings() {
   const { t: translateText } = useTranslation(["machines", "common"] as const);
   const { machines, loaded, error } = useMachines();
   const [adding, setAdding] = useState(false);
+  // A revoked machine can do nothing more, and comes back only as a new machine when added
+  // again, so it is not listed.
+  const shown = machines.filter((machine) => machine.status !== "revoked");
   // The primary is always there; "none yet" is about the others.
-  const others = machines.filter((machine) => machine.kind !== "primary");
+  const others = shown.filter((machine) => machine.kind !== "primary");
   if (adding)
     return <AddMachine machines={machines} onBack={() => setAdding(false)} />;
 
@@ -394,7 +388,7 @@ export function MachineSettings() {
               aria-label={translateText("title")}
               className="grid grid-cols-1 gap-2 @lg:grid-cols-2"
             >
-              {machines.map((machine) => (
+              {shown.map((machine) => (
                 <MachineCard key={machine.id} machine={machine} />
               ))}
             </ul>
