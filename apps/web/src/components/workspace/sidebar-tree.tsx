@@ -3,6 +3,7 @@ import type {
   ConversationSummary,
   MemberView,
 } from "@eta/client-contracts";
+import type { DirectoryGroup } from "./use-chat-list";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
@@ -28,7 +29,6 @@ import {
 import { cn } from "@/lib/utils";
 import { agentName, useAgentList } from "@/queries/agents";
 import { useConversationActions } from "@/queries/conversations";
-import { useMachines } from "@/queries/projects";
 import { useModels } from "@/queries/providers";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels, memberStatusLabel } from "./agent-status";
@@ -47,14 +47,6 @@ function humanizeAge(at: number): string {
   return `${Math.floor(hours / 24)}d`;
 }
 
-/** `~/Desktop/eta`, not `/Users/lemonhx/Desktop/eta`: the row's title has the whole path. */
-function shortenPath(path: string, home: string | null): string {
-  if (home !== null && path.startsWith(`${home}/`))
-    return `~/${path.slice(home.length + 1)}`;
-  if (home !== null && path === home) return "~";
-  return path;
-}
-
 /**
  * The sidebar: groups in the space above, agents pinned to the bottom.
  *
@@ -69,7 +61,6 @@ function shortenPath(path: string, home: string | null): string {
 export function ConversationList() {
   const { t: translateText } = useTranslation(["chat"] as const);
   const { directories, directs, current, loaded } = useChatList();
-  const { machines } = useMachines();
   const setNewConversation = useWorkspaceStore(
     (state) => state.setNewConversation,
   );
@@ -82,7 +73,6 @@ export function ConversationList() {
   const setFocusedAgent = useWorkspaceStore((state) => state.setFocusedAgent);
   const focusedAgentId = useWorkspaceStore((state) => state.focusedAgentId);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const home = machines.find((machine) => machine.kind === "primary")?.home;
   const { state, isMobile } = useSidebar();
   // The sidebar's own fold, not the agent shelf's: on the rail every card is a glyph with its
   // name under it, and both halves of the list keep the same shape.
@@ -146,8 +136,7 @@ export function ConversationList() {
                   <GroupCard
                     key={conversation.id}
                     conversation={conversation}
-                    path={directory.path}
-                    home={home ?? null}
+                    place={directory.place}
                     active={active}
                     // The open group shows its members; folding it away is a choice of its own.
                     open={expanded[conversation.id] ?? active}
@@ -278,8 +267,7 @@ export function ConversationList() {
  */
 function GroupCard({
   conversation,
-  path,
-  home,
+  place,
   active,
   open,
   onToggle,
@@ -289,8 +277,7 @@ function GroupCard({
   rail,
 }: {
   conversation: ConversationSummary;
-  path: string | undefined;
-  home: string | null;
+  place: DirectoryGroup["place"];
   active: boolean;
   open: boolean;
   onToggle: () => void;
@@ -313,7 +300,6 @@ function GroupCard({
   const members = conversation.participants;
   const nameOf = (agentId: string) => agentName(agents, agentId);
   const busy = members.filter((member) => member.status !== "idle");
-  const directory = path ?? translateText("chat:sections.unknownDirectory");
 
   // On the rail a group is a glyph with its name under it: the member stack says who is in it,
   // the name says which one it is. Everything the wide card writes out has nowhere to go here, so
@@ -463,10 +449,10 @@ function GroupCard({
             </p>
             <p
               data-slot="conversation-path"
-              title={path}
+              title={place?.full}
               className="truncate pt-0.5 pl-6 pb-1.5 font-mono text-[10px] text-faint"
             >
-              {shortenPath(directory, home)}
+              {place?.short ?? translateText("chat:sections.unknownDirectory")}
             </p>
           </div>
         </>

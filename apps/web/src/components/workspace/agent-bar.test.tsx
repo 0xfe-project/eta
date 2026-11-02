@@ -13,6 +13,7 @@ import {
   agentView,
   conversationSections,
   conversationView,
+  machineView,
   memberView,
   productHost,
   projectView,
@@ -155,6 +156,34 @@ describe("header 里的名称切换", () => {
     expect(avatars).toHaveLength(2);
     await click(avatars[0]);
     expect(openAgentCalls).toEqual(["a1"]);
+  });
+
+  it("names the project's machine in the chip's whole path when it is not the primary", async () => {
+    productHost({
+      machines: [
+        machineView({ id: "m1" }),
+        machineView({ id: "m2", kind: "daemon", name: "gpu-box" }),
+      ],
+    });
+    const project = projectView({
+      id: "p2",
+      machineId: "m2",
+      name: "eta",
+      path: "/Users/me/Desktop/eta",
+    });
+    const { container } = await mount(
+      <ChatHeader
+        group={groups[2]}
+        info={conversationSections(groups[2]!).info}
+        project={project}
+        onInfo={() => {}}
+      />,
+    );
+    await flush();
+    // The same name and path as the primary's `eta`: only the machine tells them apart.
+    expect(
+      container.querySelector('[title="gpu-box:/Users/me/Desktop/eta"]'),
+    ).not.toBeNull();
   });
 
   it("lists the agents, marks the current one and opens the other's direct chat", async () => {

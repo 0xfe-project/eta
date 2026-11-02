@@ -66,6 +66,28 @@ const projects = [
     path: "/data/agents/a1",
     kind: "agent_home",
   }),
+  // On another machine: the same path as p-eta, and one under that machine's own home.
+  projectView({
+    id: "p-eta-gpu",
+    machineId: "m2",
+    name: "eta",
+    path: "/Users/me/Desktop/eta",
+  }),
+  projectView({
+    id: "p-train",
+    machineId: "m2",
+    name: "training",
+    path: "/home/eric/training",
+  }),
+];
+const machines = [
+  machineView({ id: "m1", name: "这台", home: "/Users/me" }),
+  machineView({
+    id: "m2",
+    kind: "daemon",
+    name: "gpu-box",
+    home: "/home/eric",
+  }),
 ];
 
 const group = (
@@ -105,7 +127,7 @@ async function tree(
   const host = productHost({
     agents,
     projects,
-    machines: [machineView({ id: "m1", name: "这台", home: "/Users/me" })],
+    machines,
     conversations,
   });
   host.target(
@@ -223,6 +245,24 @@ describe("侧边栏的两块", () => {
       { text: "~/Desktop/eta", title: "/Users/me/Desktop/eta" },
     ]);
     expect(conversationIds(container)[0]?.title).toBe("g1");
+  });
+
+  it("别的机器上的目录带着机器名，按那台机器的 home 缩写", async () => {
+    const now = Date.now();
+    const { container } = await tree([
+      group("g1", "eta", "p-eta", { lastMessageAt: now - 60_000 }),
+      group("g2", "eta", "p-eta-gpu", { lastMessageAt: now - 120_000 }),
+      group("g3", "训练", "p-train", { lastMessageAt: now - 180_000 }),
+    ]);
+    // One path on two machines is two places, and the cards say which is which.
+    expect(cards(container)).toEqual([
+      { text: "~/Desktop/eta", title: "/Users/me/Desktop/eta" },
+      {
+        text: "gpu-box:/Users/me/Desktop/eta",
+        title: "gpu-box:/Users/me/Desktop/eta",
+      },
+      { text: "gpu-box:~/training", title: "gpu-box:/home/eric/training" },
+    ]);
   });
 
   it("同目录的卡片挨在一起", async () => {
