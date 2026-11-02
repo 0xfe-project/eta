@@ -35,6 +35,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/workspace/app-shell";
 import { emailThreadsForFolder } from "@/components/workspace/email-folders";
 import { EmailMessageHtml } from "@/components/workspace/email-message-html";
@@ -414,36 +415,15 @@ export function EmailInboxPage() {
         >
           <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b bg-background px-3 py-2">
             <EnvelopeSimpleIcon className="size-4 shrink-0" />
-            <div role="tablist" className="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={folder === "inbox"}
-                className={cn(
-                  "whitespace-nowrap px-1.5 py-1 text-sm",
-                  folder === "inbox"
-                    ? "font-medium text-foreground"
-                    : "text-muted-foreground",
-                )}
-                onClick={() => chooseFolder("inbox")}
-              >
-                {t("inbox.title")}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={folder === "sent"}
-                className={cn(
-                  "whitespace-nowrap px-1.5 py-1 text-sm",
-                  folder === "sent"
-                    ? "font-medium text-foreground"
-                    : "text-muted-foreground",
-                )}
-                onClick={() => chooseFolder("sent")}
-              >
-                {t("inbox.sent")}
-              </button>
-            </div>
+            <Tabs
+              value={folder}
+              onValueChange={(value) => chooseFolder(value as EmailFolder)}
+            >
+              <TabsList>
+                <TabsTrigger value="inbox">{t("inbox.title")}</TabsTrigger>
+                <TabsTrigger value="sent">{t("inbox.sent")}</TabsTrigger>
+              </TabsList>
+            </Tabs>
             <span className="ml-auto shrink-0 whitespace-nowrap text-xs text-muted-foreground">
               {checked.length > 0
                 ? t("inbox.selected", { count: checked.length })
