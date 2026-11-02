@@ -2,6 +2,7 @@ import type { ProjectChoice } from "./use-project-choice";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -108,7 +109,7 @@ function NewConversationForm({
           {translateText("chat:new.agent")}
         </legend>
         {!loaded ? (
-          <p className="text-xs text-muted-foreground">…</p>
+          <Loading rows={3} className="border border-border" />
         ) : (
           <ul className="max-h-72 overflow-y-auto border border-border">
             {agents.map((agent) => (

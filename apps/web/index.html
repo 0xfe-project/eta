@@ -33,6 +33,303 @@
         font-style: normal;
         font-display: swap;
       }
+
+      /* The window's outline before any script has run: the same shape AppSkeleton("chat") draws
+         (src/components/app-skeleton.tsx), so React's first commit swaps one for the other and
+         nothing moves. No words, so nothing to translate before the language is known. Colours
+         are the app's variables where the stylesheet has already loaded (a build links it in the
+         head) and these copies of them where it has not (dev injects it from JS). Sizes are
+         literal: a Tailwind step here is 0.225rem. */
+      .boot {
+        --b-bg: var(--background, oklch(1 0 0));
+        --b-fg: var(--foreground, oklch(0.145 0 0));
+        --b-surface: var(--surface, oklch(0.985 0 0));
+        --b-sidebar: var(--sidebar, oklch(0.985 0 0));
+        --b-muted: var(--muted, oklch(0.97 0 0));
+        --b-border: var(--border, oklch(0.922 0 0));
+        --b-sheen: color-mix(in oklch, var(--b-fg) 6%, transparent);
+        display: flex;
+        height: 100dvh;
+        overflow: hidden;
+        background: var(--b-bg);
+      }
+      html.dark .boot {
+        --b-bg: var(--background, oklch(0.1 0 0));
+        --b-fg: var(--foreground, oklch(0.98 0 0));
+        --b-surface: var(--surface, oklch(0.14 0 0));
+        --b-sidebar: var(--sidebar, oklch(0.14 0 0));
+        --b-muted: var(--muted, oklch(0.2 0 0));
+        --b-border: var(--border, oklch(0.98 0 0 / 10%));
+      }
+      .boot div {
+        box-sizing: border-box;
+      }
+      .boot i {
+        display: block;
+        position: relative;
+        overflow: hidden;
+        flex: none;
+        height: 0.675rem;
+        background: var(--b-muted);
+      }
+      .boot i::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        translate: -100%;
+        background: linear-gradient(
+          to right,
+          transparent,
+          var(--b-sheen),
+          transparent
+        );
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .boot i::after {
+          animation: boot-sweep 1.6s linear infinite;
+        }
+      }
+      @keyframes boot-sweep {
+        from {
+          translate: -100%;
+        }
+        to {
+          translate: 100%;
+        }
+      }
+      .boot .band {
+        height: 40px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        border-bottom: 1px solid var(--b-border);
+        background: var(--b-surface);
+      }
+      .boot .row {
+        display: flex;
+        align-items: center;
+        gap: 0.675rem;
+        padding: 0 0.45rem;
+      }
+      .boot .glyph {
+        width: 0.7875rem;
+        height: 0.7875rem;
+      }
+      .boot .side {
+        display: none;
+        position: relative;
+        flex: none;
+        flex-direction: column;
+        width: 16rem;
+        background: var(--b-sidebar);
+      }
+      /* The sidebar's rule starts under the band, like .sidebar-rule. */
+      .boot .side::after {
+        content: "";
+        position: absolute;
+        top: 40px;
+        right: 0;
+        bottom: 0;
+        width: 1px;
+        background: var(--b-border);
+      }
+      .boot .side > div:not(.band) {
+        padding: 0.45rem 0.45rem 0;
+      }
+      .boot .nav {
+        flex: none;
+        padding-bottom: 0.225rem !important;
+        border-bottom: 1px solid var(--b-border);
+      }
+      .boot .nav .row,
+      .boot .foot .row {
+        height: 1.8rem;
+      }
+      .boot .groups {
+        flex: 1;
+        min-height: 0;
+      }
+      .boot .agents {
+        flex: none;
+        margin-top: auto;
+        border-top: 1px solid var(--b-border);
+      }
+      .boot .foot {
+        flex: none;
+        padding: 0.225rem !important;
+        border-top: 1px solid var(--b-border);
+      }
+      .boot .head {
+        display: flex;
+        align-items: center;
+        box-sizing: content-box !important;
+        height: 1.35rem;
+        padding: 0 0.45rem 0.225rem;
+        border-bottom: 1px solid var(--b-border);
+      }
+      .boot .head i {
+        width: 2.7rem;
+        height: 0.5625rem;
+      }
+      .boot .list {
+        padding: 0.3375rem 0;
+      }
+      .boot .list .row {
+        height: 2.025rem;
+      }
+      html[data-boot-rail] .boot .side {
+        width: 4rem;
+      }
+      html[data-boot-rail] .boot .side .row {
+        justify-content: center;
+      }
+      html[data-boot-rail] .boot .side .row i:not(.glyph),
+      html[data-boot-rail] .boot .head i {
+        display: none;
+      }
+      .boot .phone {
+        display: flex;
+        flex: 1;
+        min-width: 0;
+        flex-direction: column;
+      }
+      .boot .phone > header {
+        display: flex;
+        flex: none;
+        align-items: center;
+        height: 3.15rem;
+        padding: 0 1.125rem;
+      }
+      .boot .phone > header i {
+        width: 3.6rem;
+        height: 0.9rem;
+      }
+      .boot .cards {
+        flex: 1;
+        min-height: 0;
+        padding: 0 0.675rem;
+      }
+      .boot .card {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        min-height: 4.05rem;
+        margin-bottom: 1px;
+        padding: 0.675rem 0.45rem;
+      }
+      .boot .card > i {
+        width: 1.35rem;
+        height: 1.35rem;
+      }
+      .boot .card > div {
+        flex: 1;
+        min-width: 0;
+      }
+      .boot .card > div > i + i {
+        width: 75%;
+        height: 0.5625rem;
+        margin-top: 0.225rem;
+      }
+      .boot .plate {
+        flex: none;
+        padding: 0 8px 34px;
+      }
+      .boot .plate > div {
+        height: 52px;
+        border: 1px solid var(--b-border);
+        background: var(--b-bg);
+      }
+      .boot .main,
+      .boot .panel {
+        display: none;
+        min-width: 0;
+        flex-direction: column;
+      }
+      .boot .main {
+        flex: 1;
+      }
+      .boot .main > .band {
+        padding: 0 0.675rem;
+      }
+      .boot .main > .band i {
+        width: 7.2rem;
+      }
+      .boot .log {
+        flex: 1;
+        min-height: 0;
+        padding: 0.9rem 3.15rem 0.9rem 1.35rem;
+      }
+      .boot .log > div,
+      .boot .composer > div {
+        max-width: 860px;
+        margin: 0 auto;
+      }
+      .boot .log > div {
+        padding-top: 0.225rem;
+      }
+      .boot .turn {
+        margin-bottom: 28px;
+      }
+      .boot .turn > div {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        margin-bottom: 10px;
+      }
+      .boot .turn > div i {
+        width: 5.4rem;
+      }
+      .boot .turn > div i:first-child {
+        width: 18px;
+        height: 18px;
+      }
+      .boot .turn > i {
+        margin: 0 2px;
+      }
+      .boot .turn > i + i {
+        margin-top: 0.45rem;
+      }
+      .boot .turn.user {
+        display: flex;
+        justify-content: flex-end;
+      }
+      .boot .turn.user > i {
+        width: 40%;
+        max-width: 72%;
+        height: 2.025rem;
+        margin: 0;
+      }
+      .boot .composer {
+        flex: none;
+        padding: 11px 0.9rem 14px;
+      }
+      .boot .composer > div {
+        height: 83px;
+        border: 1px solid var(--b-border);
+      }
+      .boot .panel {
+        flex: none;
+        width: var(--boot-panel, 400px);
+        border-left: 1px solid var(--b-border);
+        background: var(--b-surface);
+      }
+      @media (min-width: 48rem) {
+        .boot .side,
+        .boot .main {
+          display: flex;
+        }
+        .boot .phone {
+          display: none;
+        }
+      }
+      @media (min-width: 64rem) {
+        .boot .side {
+          width: 18rem;
+        }
+        .boot .panel {
+          display: flex;
+        }
+      }
     </style>
     <link rel="icon" href="/Eta-Logo.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/Eta-Logo.png" />
@@ -50,6 +347,16 @@
               window.matchMedia("(prefers-color-scheme: dark)").matches);
           document.documentElement.classList.toggle("dark", dark);
           document.documentElement.style.colorScheme = dark ? "dark" : "light";
+          // The boot outline below, in the shape the window will open in: a folded sidebar (the
+          // cookie ui/sidebar.tsx keeps) and the right panel's dragged width (lib pane.ts).
+          if (/(?:^|;\s*)sidebar_state=false/.test(document.cookie))
+            document.documentElement.dataset.bootRail = "";
+          var panel = Number(localStorage.getItem("eta.panel.width"));
+          if (panel > 0)
+            document.documentElement.style.setProperty(
+              "--boot-panel",
+              Math.min(720, Math.max(320, Math.round(panel))) + "px",
+            );
         } catch (error) {
           // Storage denied: the app applies the system value again when it mounts.
         }
@@ -57,7 +364,68 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- React's first commit replaces this: no cleanup, and no text in it on purpose. -->
+    <div id="root">
+      <div class="boot" aria-hidden="true">
+        <div class="side">
+          <div class="band"></div>
+          <div class="nav">
+            <div class="row"><i class="glyph"></i><i style="width: 60%"></i></div>
+            <div class="row"><i class="glyph"></i><i style="width: 40%"></i></div>
+            <div class="row"><i class="glyph"></i><i style="width: 50%"></i></div>
+          </div>
+          <div class="groups">
+            <div class="head"><i></i></div>
+            <div class="list">
+              <div class="row"><i class="glyph"></i><i style="width: 60%"></i></div>
+              <div class="row"><i class="glyph"></i><i style="width: 40%"></i></div>
+              <div class="row"><i class="glyph"></i><i style="width: 50%"></i></div>
+              <div class="row"><i class="glyph"></i><i style="width: 66.667%"></i></div>
+            </div>
+          </div>
+          <div class="agents">
+            <div class="head"><i></i></div>
+            <div class="list">
+              <div class="row"><i class="glyph"></i><i style="width: 60%"></i></div>
+              <div class="row"><i class="glyph"></i><i style="width: 40%"></i></div>
+            </div>
+          </div>
+          <div class="foot">
+            <div class="row"><i class="glyph"></i><i style="width: 60%"></i></div>
+          </div>
+        </div>
+        <div class="phone">
+          <header data-window-drag data-lights-corridor><i></i></header>
+          <div class="cards">
+            <div class="card"><i></i><div><i style="width: 50%"></i><i></i></div></div>
+            <div class="card"><i></i><div><i style="width: 50%"></i><i></i></div></div>
+            <div class="card"><i></i><div><i style="width: 50%"></i><i></i></div></div>
+            <div class="card"><i></i><div><i style="width: 50%"></i><i></i></div></div>
+            <div class="card"><i></i><div><i style="width: 50%"></i><i></i></div></div>
+          </div>
+          <div class="plate"><div></div></div>
+        </div>
+        <div class="main">
+          <div class="band"><i></i></div>
+          <div class="log">
+            <div>
+              <div class="turn">
+                <div><i></i><i></i></div>
+                <i style="width: 100%"></i><i style="width: 60%"></i>
+              </div>
+              <div class="turn user"><i></i></div>
+              <div class="turn">
+                <div><i></i><i></i></div>
+                <i style="width: 100%"></i><i style="width: 40%"></i>
+              </div>
+              <div class="turn user"><i></i></div>
+            </div>
+          </div>
+          <div class="composer"><div></div></div>
+        </div>
+        <div class="panel"><div class="band"></div></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -12,6 +12,7 @@ import { agentName } from "@/queries/agents";
 import {
   useConversation,
   useConversationActions,
+  useConversationList,
 } from "@/queries/conversations";
 import {
   useOutbox,
@@ -73,6 +74,9 @@ export function Workspace({
   const { agents, openEditor } = useAgents();
   const { current: group, groupId } = useGroups();
   const conversation = useConversation(group?.id);
+  // Before `hello` there is no conversation to pick, and "no conversation" reads as loaded — so
+  // the list arriving is what ends the loading, not the conversation alone.
+  const { loaded: listLoaded } = useConversationList();
   const { projects } = useProjects();
   const project = projects.find(
     (candidate) => candidate.id === group?.projectId,
@@ -305,7 +309,7 @@ export function Workspace({
                     )
               }
               held={conversation.held}
-              loading={!conversation.loaded}
+              loading={!listLoaded || !conversation.loaded}
               hasOlder={conversation.hasOlder}
               loadingOlder={conversation.loadingOlder}
               onLoadOlder={conversation.loadOlder}

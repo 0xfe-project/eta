@@ -1,9 +1,11 @@
 import type { ConversationSummary } from "@eta/client-contracts";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import { translate } from "@/lib/i18n";
 import { setWire } from "@/lib/wire";
 import {
   agentView,
+  buildProductHost,
   conversationView,
   machineView,
   memberView,
@@ -171,6 +173,47 @@ const agentNames = (container: HTMLElement) =>
   agentRows(container).map(
     (row) => row.querySelector("[data-slot=agent-name]")?.textContent,
   );
+
+describe("hello 之前的侧边栏", () => {
+  it("draws both lists' outlines instead of saying they are empty", async () => {
+    buildProductHost({ agents, projects, conversations: [] }).install();
+    const { container } = await mount(
+      <SidebarProvider>
+        <ConversationList />
+      </SidebarProvider>,
+    );
+    await flush();
+    expect(
+      groupsSection(container)?.querySelector('[role="status"]'),
+    ).not.toBeNull();
+    expect(
+      agentsSection(container)?.querySelector('[role="status"]'),
+    ).not.toBeNull();
+    expect(container.textContent).not.toContain(
+      translate("chat:groups.empty.title"),
+    );
+    expect(container.textContent).not.toContain(
+      translate("chat:sections.noAgents"),
+    );
+  });
+
+  it("says they are empty once they arrive, with no outline left", async () => {
+    productHost({ projects, conversations: [] });
+    const { container } = await mount(
+      <SidebarProvider>
+        <ConversationList />
+      </SidebarProvider>,
+    );
+    await flush();
+    expect(container.querySelector('[role="status"]')).toBeNull();
+    expect(container.textContent).toContain(
+      translate("chat:groups.empty.title"),
+    );
+    expect(container.textContent).toContain(
+      translate("chat:sections.noAgents"),
+    );
+  });
+});
 
 describe("侧边栏的两块", () => {
   it("卡片上写着会话 id 和缩写路径，悬停给全路径", async () => {
