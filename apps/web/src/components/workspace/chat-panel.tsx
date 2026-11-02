@@ -1450,7 +1450,11 @@ export function ChatPanel({
                 ) : null}
                 {!loading && !error && messages.length === 0 ? (
                   <p className="px-1 py-2 text-xs text-muted-foreground">
-                    {translateText("history.empty")}
+                    {translateText(
+                      groupId === undefined
+                        ? "history.noConversations"
+                        : "history.empty",
+                    )}
                   </p>
                 ) : null}
                 {/* Off-screen turns skip rendering; `auto` remembers their size. */}
