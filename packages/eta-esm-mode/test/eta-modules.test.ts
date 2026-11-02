@@ -119,7 +119,7 @@ describe("eta module imports", () => {
 
     // The agent should fail to wake because project layer's env.js cannot import from self
     await expect(
-      async () => await agent.run(`export default "should not reach here"`),
+      agent.run(`export default "should not reach here"`),
     ).rejects.toThrow(/Layer project cannot import from layer self/);
   });
 

@@ -66,7 +66,8 @@ export function mountModules(
     }
 
     // Return a wrapper that checks authorization before calling the actual function
-    return async function (this: any, ...args: any[]) {
+    // Use a regular function to preserve sync/async behavior
+    return function (this: any, ...args: any[]) {
       // Check authorization
       if (approvalStore && hooks?.authorize) {
         const request: AuthorizeRequest = {
@@ -74,22 +75,34 @@ export function mountModules(
           capability: name,
           args,
         };
-        const refusal = await authorize(request, approvalStore, async (req) => {
-          // Use the provided authorize hook to ask the human
-          const result = await hooks.authorize!({
-            name: `capability.${req.layer}.${req.capability}`,
-            input: req.args,
-            at: { identifier: "eta.modules", line: 0, column: 0 },
-          });
-          return result === undefined; // undefined = approved, string = denied
-        });
+        const refusalPromise = authorize(
+          request,
+          approvalStore,
+          async (req) => {
+            // Use the provided authorize hook to ask the human
+            const result = await hooks.authorize!({
+              name: `capability.${req.layer}.${req.capability}`,
+              input: req.args,
+              at: { identifier: "eta.modules", line: 0, column: 0 },
+            });
+            // Convert hooks.authorize result to boolean:
+            // undefined = approved (return true)
+            // string = denied (return false)
+            return result === undefined;
+          },
+        );
 
-        if (refusal !== undefined) {
-          throw new Error(refusal);
-        }
+        // Return a promise chain that handles authorization then calls the function
+        return refusalPromise.then((refusal) => {
+          if (refusal !== undefined) {
+            throw new Error(refusal);
+          }
+          // Authorization passed, call the actual function
+          return fn.apply(this, args);
+        });
       }
 
-      // Authorization passed, call the actual function
+      // No authorization needed, call the actual function directly
       return fn.apply(this, args);
     };
   }
@@ -166,12 +179,9 @@ export function mountModules(
     if (cached !== undefined) return cached;
 
     if (name) {
-      // This is a capability import like "eta:format"
-      const found = layers.find(name);
-      if (!found || found.layer !== layer) {
-        throw new Error(`Capability ${name} not found in ${layer} layer`);
-      }
-      // Return module that exports from registry (already wrapped with authorization)
+      // This is a capability import like "eta:format" or "eta:global:format"
+      // Return module that exports from registry (will be populated when env.js is evaluated)
+      // If the capability doesn't exist, the runtime will throw when trying to access it
       const module = createCapabilityModule(cacheKey, layer, name);
       files.set(cacheKey, module);
       return module;
@@ -192,8 +202,7 @@ export function mountModules(
     return new vm.SyntheticModule(
       exports,
       function () {
-        const defineFn = realm.binding(
-          "eta.define",
+        const defineFn = realm.wrap(
           (name: string, source: unknown, meta?: unknown) => {
             // source can be a function (passed directly from env.js) or a string (to be compiled)
             let fn: any;

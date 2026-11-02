@@ -17,6 +17,8 @@ export interface AgentOptions {
   /** Global layer directory (optional). */
   global?: string;
   hooks?: Hooks;
+  /** Approval store for shared layer capabilities (optional). Defaults to file-based store. */
+  approvalStore?: ApprovalStore;
 }
 
 /**
@@ -54,9 +56,9 @@ export class Agent {
     // 兼容属性：指向 self 层
     this.env = this.layers.get("self")!;
     // Initialize approval store
-    this.#approvalStore = new FileApprovalStore(
-      defaultApprovalStorePath(options.root),
-    );
+    this.#approvalStore =
+      options.approvalStore ??
+      new FileApprovalStore(defaultApprovalStorePath(options.root));
   }
 
   get capabilities() {
@@ -135,6 +137,13 @@ export class Agent {
   ): Promise<Evaluation> {
     await this.wake();
     return (this.#realm as Realm).evaluate(source, options);
+  }
+
+  /** Reloads capability layers to pick up changes in env files. */
+  reload(): void {
+    this.layers.reload();
+    // Dispose and re-wake to rebuild the realm with updated layers
+    this.dispose();
   }
 
   dispose(): void {

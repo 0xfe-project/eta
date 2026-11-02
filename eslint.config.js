@@ -19,6 +19,8 @@ export default antfu(
       "apps/web/src/components/ui/**",
       "**/.venv/**",
       "**/out/**",
+      // Test fixtures: written as plain JS for runtime evaluation.
+      "**/test/fixtures/**",
     ],
   },
   {

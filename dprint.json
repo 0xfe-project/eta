@@ -23,7 +23,8 @@
     "bun.lock",
     "**/uv.lock",
     "**/var",
-    "AGENTS.md"
+    "AGENTS.md",
+    "**/test/fixtures/**/*.js"
   ],
   "plugins": [
     "npm:@dprint/biome@0.13.13",
