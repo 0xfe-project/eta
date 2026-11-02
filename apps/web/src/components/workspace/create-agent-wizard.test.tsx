@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { setWire } from "@/lib/wire";
-import { agentView } from "@/test-product";
+import { agentView, machineView } from "@/test-product";
 import { FakeHost } from "@/test-wire";
 import { AgentEditor } from "./agent-editor";
 import { useWorkspaceStore } from "./workspace-store";
@@ -137,7 +137,21 @@ beforeEach(async () => {
   host = new FakeHost()
     .target("providers", { config: providers }, { eager: true })
     .target("personas", { cards: [] }, { eager: true })
-    .plugins([{ name: "providers", source: "bundled" }])
+    // More than one machine: the editor would offer to pin an agent to one.
+    .target(
+      "machines",
+      {
+        list: [
+          machineView({ id: "main", name: "主机" }),
+          machineView({ id: "mac", name: "mac", kind: "daemon" }),
+        ],
+      },
+      { eager: true },
+    )
+    .plugins([
+      { name: "providers", source: "bundled" },
+      { name: "machines", source: "bundled" },
+    ])
     .handle("agents.create", (args) => {
       created.push(args);
       return answer(args);
@@ -276,6 +290,17 @@ describe("creating an agent step by step", () => {
     // It lands on 创建, which took 下一步's place.
     await click("创建", 2);
     expect(created).toEqual([]);
+  });
+
+  it("does not ask for a machine: a new agent follows the project", async () => {
+    await open();
+    expect(document.getElementById("agent-machine")).toBeNull();
+    // The runtimes on offer are the host's own.
+    expect(
+      host.calls
+        .filter((call) => call.action === "runtimes")
+        .map((call) => call.args),
+    ).toEqual([{}]);
   });
 
   it("starts over when cancelled and opened again", async () => {
