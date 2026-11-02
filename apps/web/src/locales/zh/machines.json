@@ -27,31 +27,19 @@
   "upgrade": {
     "started": "{{name}} 正在更新，完成后会重新连接"
   },
-  "tailnet": {
-    "title": "tailnet 上的机器",
-    "install": "安装",
-    "added": "已添加",
-    "offline": "离线",
-    "installed": "已在 {{name}} 上安装",
-    "installAction": "在 {{name}} 上安装 daemon"
-  },
   "fields": {
     "nameLabel": "机器名称",
     "namePlaceholder": "例如：家里的 Mac mini"
   },
   "install": {
-    "title": "接入机器",
     "permissionsNotice": "智能体会在那台机器上以完全权限运行，请只接入专门用来干活的机器。",
-    "chooseName": "起个名字",
     "generateCommand": "生成安装命令",
-    "runCommand": "在那台机器的终端里运行",
+    "runCommand": "在那台机器的终端里运行。它会下载 eta-daemon 并装成服务（Linux、macOS），对方不用预先安装任何东西。",
     "copyCommand": "复制安装命令",
     "commandExpiry": "命令只能用一次，{{time}} 前有效。",
     "waitingForCommand": "等待那台机器运行命令…"
   },
   "approval": {
-    "title": "核对指纹，批准连接",
-    "help": "命令运行后，那台机器的终端会打印一个指纹。把它粘贴到这里，一致才会批准。",
     "request": "{{name}} 请求接入：粘贴它终端里打印的指纹。",
     "label": "{{name}} 的指纹",
     "placeholder": "粘贴终端里打印的指纹",
@@ -73,5 +61,30 @@
   "empty": {
     "title": "还没有接入其他机器",
     "description": "接入后，项目和对话可以在它上面干活。"
+  },
+  "add": {
+    "tabs": {
+      "command": "运行命令",
+      "ssh": "通过 SSH 安装"
+    },
+    "address": "对方连接的地址",
+    "addressTailnet": "tailnet · {{url}}",
+    "addressCurrent": "当前地址 · {{url}}",
+    "joined": "{{name}} 已接入"
+  },
+  "ssh": {
+    "target": "目标",
+    "keyless": "已配置免密登录（SSH 密钥或 Tailscale SSH）",
+    "password": "密码",
+    "passwordPromise": "密码只用这一次，不会保存，也不会出现在日志里。",
+    "insecure": "当前页面的连接没有加密，不能在这里输入密码。请改用 https 或 tailnet 地址打开页面。",
+    "install": "安装",
+    "progress": "安装进度",
+    "steps": {
+      "connect": "连接",
+      "send": "传输",
+      "register": "注册",
+      "service": "启动服务"
+    }
   }
 }

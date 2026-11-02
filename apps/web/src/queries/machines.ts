@@ -1,7 +1,11 @@
-import type { MachineArgs, MachineResults } from "@eta/client-contracts";
+import type {
+  MachineArgs,
+  MachineInstallView,
+  MachineResults,
+} from "@eta/client-contracts";
 import { useQuery } from "@tanstack/react-query";
 import { getWire } from "@/lib/wire";
-import { useWireMutation } from "@/queries/wire";
+import { useTarget, useWireMutation } from "@/queries/wire";
 
 // The `machines` target's actions. The list itself is `useMachines` (queries/projects.ts).
 
@@ -58,7 +62,31 @@ export function useDiscoverMachines(enabled: boolean) {
   });
 }
 
-/** Put the daemon on a computer over SSH and register it. */
+/** The addresses a new machine can dial besides the page's own: the host's tailnet one. */
+export function useMachineAddresses() {
+  return useQuery({
+    queryKey: ["wire", "machines", "addresses"],
+    queryFn: async () =>
+      await getWire().call<MachineResults["addresses"]>(
+        "machines",
+        "addresses",
+        {},
+      ),
+  });
+}
+
+const NO_INSTALLS: readonly MachineInstallView[] = [];
+
+/** The installs over SSH as they go, newest first. */
+export function useMachineInstalls(): readonly MachineInstallView[] {
+  return (
+    (useTarget("machines")?.sections.installs as
+      | readonly MachineInstallView[]
+      | undefined) ?? NO_INSTALLS
+  );
+}
+
+/** Put the daemon on a computer over SSH and register it; the steps show in `useMachineInstalls`. */
 export function useInstallMachine() {
   return useWireMutation<MachineArgs["install"], MachineResults["install"]>(
     "machines",

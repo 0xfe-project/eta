@@ -7,6 +7,7 @@
  */
 import type {
   DaemonServiceParams,
+  MachineInstallView,
   MachineResults,
 } from "@eta/client-contracts";
 import type { SshRunner } from "../src/machines/install";
@@ -18,10 +19,11 @@ import process from "node:process";
 import { DaemonLink, DaemonNode, enroll } from "@eta/daemon";
 import { describe, expect, it } from "vitest";
 import { platformOf } from "../src/machines/install";
+import { MachineStore } from "../src/machines/store";
 import { Tailscale } from "../src/machines/tailscale";
 import { until } from "./support/client";
 import { approve, machineView, startDaemon } from "./support/daemon";
-import { tempDir } from "./support/host";
+import { tempDir, testHost } from "./support/host";
 import { world } from "./support/world";
 
 const PLATFORM = `${process.platform}-${process.arch}`;
@@ -235,7 +237,7 @@ describe("the build route", () => {
 });
 
 /** A `tailscale` command that knows one tailnet: this node, a peer of the same user, a tagged one. */
-function tailnet(whois: "own" | "tagged" | "stranger") {
+function tailnet(whois: "own" | "tagged" | "stranger" | "self") {
   const status = {
     BackendState: "Running",
     Self: {
@@ -282,6 +284,10 @@ function tailnet(whois: "own" | "tagged" | "stranger") {
       Node: { StableID: "nCI", Name: "ci.", Tags: ["tag:ci"] },
       UserProfile: { LoginName: "tagged-devices" },
     },
+    self: {
+      Node: { StableID: "nSELF", Name: "primary.tail1234.ts.net." },
+      UserProfile: { LoginName: "me@example.com" },
+    },
     stranger: {
       Node: { StableID: "nX", Name: "x." },
       UserProfile: { LoginName: "them@example.com" },
@@ -308,6 +314,13 @@ describe("the tailnet", () => {
     expect(machineView(w.client, daemon.machineId)?.tailnetNode).toBe(
       "nLAPTOP",
     );
+  });
+
+  it("asks for the fingerprint of whatever comes through this very node: a proxy in front, or a local process", async () => {
+    const w = await world({ tailscale: tailnet("self") });
+    const daemon = await startDaemon(w.host, w.client);
+    await daemon.reached("pending");
+    expect(machineView(w.client, daemon.machineId)?.status).toBe("pending");
   });
 
   it("asks for the fingerprint of a tagged node, and of another user's", async () => {
@@ -373,13 +386,23 @@ describe("the tailnet", () => {
 });
 
 describe("installing over SSH", () => {
-  it("sends the build for the computer's platform, registers it and installs the service", async () => {
-    const scripts: string[] = [];
-    let sent: string | undefined;
+  /** The installs section, as the page sees it. */
+  const installOf = (w: Awaited<ReturnType<typeof world>>, id: string) =>
+    w.client
+      .section<MachineInstallView[]>("machines", "installs")
+      ?.find((install) => install.id === id);
+
+  /** A computer at `me@laptop` that answers like a real one and registers with its code. */
+  async function laptop(seen: {
+    scripts: string[];
+    sent?: string;
+    passwords: (string | undefined)[];
+  }) {
     const remoteDir = await tempDir("eta-remote-daemon-");
-    const ssh: SshRunner = async (host, script, input) => {
+    const ssh: SshRunner = async (host, script, input, options) => {
       expect(host).toBe("me@laptop");
-      scripts.push(script);
+      seen.scripts.push(script);
+      seen.passwords.push(options?.password);
       if (script.startsWith("uname")) {
         const [os, arch] = PLATFORM.split("-");
         return {
@@ -388,38 +411,87 @@ describe("installing over SSH", () => {
           stderr: "",
         };
       }
-      if (input !== undefined) sent = await input.text();
+      if (input !== undefined) seen.sent = await input.text();
       const setup = /setup '([^']+)' '([^']+)' --no-wait/.exec(script);
       // The other computer registering with the code it was given.
       if (setup !== null)
         await enroll({ dataDir: remoteDir, url: setup[1]!, code: setup[2]! });
       return { code: 0, stdout: "", stderr: "" };
     };
-    const w = await world({ daemonBuilds: await builds(), ssh });
-    const result = (await w.client.call("machines", "install", {
+    return ssh;
+  }
+
+  it("sends the build for the computer's platform, registers it and installs the service, step by step", async () => {
+    const seen = {
+      scripts: [] as string[],
+      passwords: [] as (string | undefined)[],
+    } as {
+      scripts: string[];
+      sent?: string;
+      passwords: (string | undefined)[];
+    };
+    const w = await world({
+      daemonBuilds: await builds(),
+      ssh: await laptop(seen),
+    });
+    w.client.subscribe("machines");
+    const { installId } = (await w.client.call("machines", "install", {
       host: "me@laptop",
       url: `http://127.0.0.1:${w.host.port}`,
     })) as MachineResults["install"];
-    expect(result.platform).toBe(PLATFORM);
-    expect(result.machine).toMatchObject({ name: "laptop", status: "pending" });
-    expect(sent).toBe(BUILD);
-    expect(scripts.some((script) => script.includes("install-service"))).toBe(
+    await until(() => installOf(w, installId)?.step === "done", 10_000);
+    const done = installOf(w, installId)!;
+    expect(done).toMatchObject({ host: "me@laptop", error: null });
+    expect(machineView(w.client, done.machineId!)).toMatchObject({
+      name: "laptop",
+      status: "pending",
+    });
+    expect(seen.sent).toBe(BUILD);
+    expect(
+      seen.scripts.some((script) => script.includes("install-service")),
+    ).toBe(true);
+    // No password was given: ssh is asked for none.
+    expect(seen.passwords.every((password) => password === undefined)).toBe(
       true,
     );
   });
 
-  it("says which step failed, and refuses what is not a host", async () => {
-    const ssh: SshRunner = async () => ({
-      code: 255,
-      stdout: "",
-      stderr: "ssh: connect to host laptop port 22: Connection refused",
-    });
-    const w = await world({ daemonBuilds: await builds(), ssh });
-    await expect(
-      w.client.call("machines", "install", { host: "laptop" }),
-    ).rejects.toThrow(
-      /Asking what the computer is on laptop failed .*Connection refused/,
+  it("logs in with a password given for the install, and never lets it out", async () => {
+    const seen = {
+      scripts: [] as string[],
+      passwords: [] as (string | undefined)[],
+    };
+    const leaky: SshRunner = async (_host, _script, _input, options) => {
+      seen.passwords.push(options?.password);
+      return {
+        code: 255,
+        stdout: "",
+        stderr: `Permission denied for hunter2-${options?.password ?? ""}`,
+      };
+    };
+    const w = await world({ daemonBuilds: await builds(), ssh: leaky });
+    w.client.subscribe("machines");
+    const { installId } = (await w.client.call("machines", "install", {
+      host: "me@laptop",
+      password: "s3cret!",
+    })) as MachineResults["install"];
+    await until(() => installOf(w, installId)?.step === "failed", 10_000);
+    expect(seen.passwords).toEqual(["s3cret!"]);
+    const failed = installOf(w, installId)!;
+    expect(failed.error).toMatch(
+      /Asking what the computer is on me@laptop failed .*Permission denied/,
     );
+    expect(failed.error).not.toContain("s3cret!");
+    expect(
+      JSON.stringify(w.client.section("machines", "installs")),
+    ).not.toContain("s3cret!");
+  });
+
+  it("refuses what is not a host", async () => {
+    const w = await world({
+      daemonBuilds: await builds(),
+      ssh: await laptop({ scripts: [], passwords: [] }),
+    });
     await expect(
       w.client.call("machines", "install", { host: "-oProxyCommand=x" }),
     ).rejects.toThrow(/not a host/);
@@ -430,5 +502,79 @@ describe("installing over SSH", () => {
     expect(platformOf("Darwin", "arm64")).toBe("darwin-arm64");
     expect(platformOf("Linux", "aarch64")).toBe("linux-arm64");
     expect(platformOf("FreeBSD", "amd64")).toBeUndefined();
+  });
+});
+
+describe("the install script", () => {
+  it("installs with a good code, from the address it was fetched at, without using the code up", async () => {
+    const w = await world({ daemonBuilds: await builds() });
+    const base = `http://127.0.0.1:${w.host.port}`;
+    const { code, command } = (await w.client.call("machines", "enroll", {
+      url: base,
+    })) as MachineResults["enroll"];
+    expect(command).toBe(
+      `curl -fsSL '${base}/machines/install.sh?code=${code}' | sh`,
+    );
+    const script = await fetch(`${base}/machines/install.sh?code=${code}`);
+    expect(script.status).toBe(200);
+    const text = await script.text();
+    expect(text).toContain(`origin='${base}'`);
+    expect(text).toContain(`code='${code}'`);
+    expect(text).toContain(
+      '"$bin/eta-daemon" setup "$origin" "$code" --no-wait',
+    );
+    expect(
+      await (
+        await fetch(`${base}/machines/install/${PLATFORM}?code=${code}`)
+      ).text(),
+    ).toBe(BUILD);
+    // Fetching is not registering: the code still works once.
+    const { identity } = await enroll({
+      dataDir: await tempDir("eta-daemon-"),
+      url: base,
+      code,
+    });
+    expect(identity.machineId).not.toBe("");
+    // And once used, the script is gone with it.
+    expect(
+      (await fetch(`${base}/machines/install.sh?code=${code}`)).status,
+    ).toBe(403);
+  });
+
+  it("answers nothing to a code it did not make", async () => {
+    const w = await world({ daemonBuilds: await builds() });
+    const base = `http://127.0.0.1:${w.host.port}`;
+    expect(
+      (await fetch(`${base}/machines/install.sh?code=eta_nope`)).status,
+    ).toBe(403);
+    expect(
+      (await fetch(`${base}/machines/install/${PLATFORM}?code=eta_nope`))
+        .status,
+    ).toBe(403);
+    expect((await fetch(`${base}/machines/install.sh`)).status).toBe(403);
+  });
+});
+
+describe("on a host that asks for a token", () => {
+  it("the install script, its build and a daemon's build need no token, only their own credential", async () => {
+    const dir = await tempDir("eta-token-");
+    const host = await testHost({
+      daemonBuilds: await builds(),
+      tokenFile: join(dir, "token"),
+    });
+    const base = `http://127.0.0.1:${host.port}`;
+    const { code } = new MachineStore(host.db).enroll(undefined);
+    expect(
+      (await fetch(`${base}/machines/install.sh?code=${code}`)).status,
+    ).toBe(200);
+    expect(
+      (await fetch(`${base}/machines/install/${PLATFORM}?code=${code}`)).status,
+    ).toBe(200);
+    // Past the gate, but not past the route's own check.
+    expect((await fetch(`${base}/machines/daemon/${PLATFORM}`)).status).toBe(
+      401,
+    );
+    // And the rest of the host still asks for the token.
+    expect((await fetch(`${base}/version`)).status).toBe(401);
   });
 });

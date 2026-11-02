@@ -11,6 +11,9 @@
  *   a new epoch, and a newer one from the same device takes the older one's place.
  * - `GET /machines/daemon/<platform>` hands a daemon the build this primary carries for it, on the
  *   same credential: what a daemon fetches when it is told to replace itself.
+ * - `GET /machines/install.sh?code=` and `GET /machines/install/<platform>?code=` are what a new
+ *   machine runs and fetches to install itself (`install-script.ts`): they answer while the
+ *   install code is good, and do not use it up.
  *
  * A daemon is part of the primary: when one comes up reporting another build than the one carried
  * (`builds.ts`), it is told to replace itself before it is let do anything else, and comes back as
@@ -35,12 +38,15 @@ import type { MachineRecord, MachineStore } from "./store";
 import {
   DAEMON_DOWNLOAD_PATH,
   ENROLL_PATH,
+  INSTALL_DOWNLOAD_PATH,
+  INSTALL_SCRIPT_PATH,
   LINK_CLOSE,
   LINK_LIMITS,
   LINK_PATH,
   LINK_PROTOCOL,
 } from "@eta/client-contracts";
 import { LinkError, Peer } from "@eta/daemon";
+import { installScript } from "./install-script";
 import { PipeClient } from "./pipe";
 import { EnrollmentError } from "./store";
 
@@ -474,9 +480,62 @@ export class MachineHub {
 
   /* ---------------------------------------------------------------- routes */
 
-  /** The hub's HTTP routes: enrolling, and a daemon fetching its build. */
+  /** The hub's HTTP routes: enrolling, a daemon fetching its build, a new machine installing. */
   async route(request: Request): Promise<Response | undefined> {
-    return (await this.enroll(request)) ?? this.download(request);
+    return (
+      (await this.enroll(request)) ??
+      this.download(request) ??
+      this.install(request)
+    );
+  }
+
+  /**
+   * The install script and the build it fetches, for whoever holds a good install code. A wrong
+   * code counts against the same limit as a wrong code at the enrol door.
+   */
+  install(request: Request): Response | undefined {
+    const url = new URL(request.url);
+    const script = url.pathname === INSTALL_SCRIPT_PATH;
+    if (!script && !url.pathname.startsWith(`${INSTALL_DOWNLOAD_PATH}/`))
+      return undefined;
+    if (request.method !== "GET")
+      return new Response("method not allowed", { status: 405 });
+    const now = (this.#options.now ?? Date.now)();
+    this.#badCodes = this.#badCodes.filter(
+      (at) => now - at < BAD_CODE_WINDOW_MS,
+    );
+    if (this.#badCodes.length >= MAX_BAD_CODES)
+      return new Response("too many bad codes; try again later", {
+        status: 429,
+      });
+    const code = url.searchParams.get("code") ?? "";
+    if (code.length > 512 || !this.#options.machines.codeIsGood(code, now)) {
+      this.#badCodes.push(now);
+      return new Response("invalid or expired code\n", { status: 403 });
+    }
+    if (script)
+      return new Response(installScript(url.origin, code), {
+        headers: {
+          "content-type": "text/x-shellscript; charset=utf-8",
+          "cache-control": "no-store",
+        },
+      });
+    const build = this.#options.builds?.get(
+      url.pathname.slice(INSTALL_DOWNLOAD_PATH.length + 1),
+    );
+    if (build === undefined)
+      return new Response(
+        "this host carries no daemon build for that platform\n",
+        {
+          status: 404,
+        },
+      );
+    return new Response(Bun.file(build.path), {
+      headers: {
+        "content-type": "application/octet-stream",
+        "cache-control": "no-store",
+      },
+    });
   }
 
   /** `GET /machines/daemon/<platform>`, for a daemon that has been let in. */

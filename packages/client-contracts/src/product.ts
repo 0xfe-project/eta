@@ -276,6 +276,8 @@ export interface AgentsSections {
 }
 export interface MachinesSections {
   list: MachineView[];
+  /** The installs over SSH of this host's life, newest first (the last few). */
+  installs: MachineInstallView[];
 }
 export interface ProjectsSections {
   list: ProjectView[];
@@ -394,6 +396,7 @@ export const MACHINE_ACTIONS = [
   "upgrade",
   "discover",
   "install",
+  "addresses",
 ] as const;
 export type MachineAction = (typeof MACHINE_ACTIONS)[number];
 
@@ -420,8 +423,24 @@ export interface MachineArgs {
   /**
    * Put the daemon on a computer over SSH and register it: `host` is what `ssh` is given (a tailnet
    * node's name, `user@host`, an alias). `url` is the address it should dial, as for `enroll`.
+   * `password` logs in when the computer has no key for this host; it is used for this install
+   * only, never kept or logged. Returns at once; the steps show in the `installs` section.
    */
-  install: { host: string; name?: string; url?: string };
+  install: { host: string; name?: string; url?: string; password?: string };
+  /** The addresses a new machine can dial this host at, besides the one the page is on. */
+  addresses: Record<string, never>;
+}
+
+/** An install over SSH, as it goes (`machines.installs`). */
+export interface MachineInstallView {
+  id: string;
+  host: string;
+  /** The step it is on; `done` and `failed` are where it ended. */
+  step: "connect" | "send" | "register" | "service" | "done" | "failed";
+  error: string | null;
+  /** The machine it registered as, once it has. */
+  machineId: string | null;
+  startedAt: number;
 }
 
 /** A node of the tailnet, as `machines.discover` shows it. */
@@ -454,8 +473,9 @@ export interface MachineResults {
     self?: { name: string; dnsName: string; login: string | null };
     peers: TailnetPeerView[];
   };
-  /** The machine as it registered (pending, unless it was let in at once). */
-  install: { machine: MachineView | null; platform: string };
+  install: { installId: string };
+  /** The host's tailnet address (`http://<MagicDNS name>:<port>`), when it listens there. */
+  addresses: { tailnet: string | null };
 }
 export type MachineCall = {
   [A in MachineAction]: Omit<CallFrame, "target" | "action" | "args"> & {

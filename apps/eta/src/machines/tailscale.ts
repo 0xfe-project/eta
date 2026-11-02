@@ -182,6 +182,10 @@ export class Tailscale {
       this.whois(address),
     ]);
     if (status === undefined || who === undefined) return undefined;
+    // This very node is not another machine of the user's: it is a proxy in front of the host (a
+    // request from the internet that a local Caddy passed on) or a process on this computer, and
+    // whoever is behind it is not known.
+    if (who.node === status.self.node) return undefined;
     if (who.login === null || who.tags.length > 0) return undefined;
     if (status.self.login === null || who.login !== status.self.login)
       return undefined;
