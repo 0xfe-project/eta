@@ -260,9 +260,17 @@ describe("机器设置", () => {
 
   it("revokes after confirming, and the primary cannot be revoked", async () => {
     const fake = productHost({ machines: [primary, laptop] });
-    fake.handle("machines.revoke", () => ({
-      machine: { ...laptop, status: "revoked" },
-    }));
+    let answer = () => {};
+    fake.handle("machines.revoke", async () => {
+      // The host pushes the revoked machine before it answers, so the card is gone by then.
+      fake.set("machines", {
+        list: [primary, { ...laptop, status: "revoked" }],
+      });
+      await new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+      return { machine: { ...laptop, status: "revoked" } };
+    });
     await mount(<MachineSettings />);
     await flush();
     await openMenu("主机");
@@ -286,6 +294,10 @@ describe("机器设置", () => {
       action: "revoke",
       args: { machineId: "m2" },
     });
+    expect(text()).not.toContain("笔记本");
+    await act(async () => answer());
+    await flush();
+    expect(toasts.message).toHaveBeenCalledWith("已撤销 笔记本");
   });
 
   it("renames a machine", async () => {

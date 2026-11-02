@@ -333,17 +333,18 @@ function MachineCard({ machine }: { machine: MachineView }) {
             </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
+              // The host lists the machine as revoked before it answers, and this card goes with
+              // it, so the answer is waited for here: callbacks given to `mutate` would not run.
               onClick={() =>
-                revoke.mutate(
-                  { machineId: machine.id },
-                  {
-                    onSuccess: () =>
+                void revoke
+                  .mutateAsync({ machineId: machine.id })
+                  .then(
+                    () =>
                       toast(
                         translateText("revoke.success", { name: machine.name }),
                       ),
-                    onError: showError,
-                  },
-                )
+                    showError,
+                  )
               }
             >
               {translateText("actions.revoke")}
