@@ -223,16 +223,20 @@ export function Workspace({
             phone now, and a second entry that opened a different frame was two answers to one
             question. The header itself is the phone's top rail, so it grabs the window and keeps
             clear of the lights the shell paints in that corner. */}
-        <header
-          className="flex h-14 shrink-0 items-center px-5"
-          data-window-drag
-          data-lights-corridor
-        >
-          <h1 className="text-lg font-semibold">
-            {translateText("sections.chat")}
-          </h1>
-        </header>
-        <GroupList />
+        {/* The phone's list is the page's content, so it is the landmark the skip link reaches;
+            the bar below stays outside it, as navigation. No `id`: the chat column keeps `#main`. */}
+        <main className="flex min-h-0 flex-1 flex-col focus-visible:-outline-offset-2">
+          <header
+            className="flex h-14 shrink-0 items-center px-5"
+            data-window-drag
+            data-lights-corridor
+          >
+            <h1 className="text-lg font-semibold">
+              {translateText("sections.chat")}
+            </h1>
+          </header>
+          <GroupList />
+        </main>
         <BottomNav />
       </div>
       <div
