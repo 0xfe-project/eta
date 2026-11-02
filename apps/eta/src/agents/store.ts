@@ -21,6 +21,11 @@ export interface AgentRecord {
   thinkingLevel: ThinkingLevel | null;
   /** The bundles it loads, by name, in the order they were chosen. */
   bundles: string[];
+  /**
+   * The machine it runs on, when it is pinned to one: its sessions are made there whatever
+   * machine the project is on. Null follows the project.
+   */
+  machineId: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -33,6 +38,7 @@ export interface AgentInput {
   model?: string | null | undefined;
   thinkingLevel?: ThinkingLevel | null | undefined;
   bundles?: string[] | undefined;
+  machineId?: string | null | undefined;
 }
 
 interface Row {
@@ -44,6 +50,7 @@ interface Row {
   model: string | null;
   thinking_level: string | null;
   bundles: string;
+  machine_id: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -69,6 +76,7 @@ const recordOf = (row: Row): AgentRecord => ({
   model: row.model,
   thinkingLevel: row.thinking_level as ThinkingLevel | null,
   bundles: namesOf(row.bundles),
+  machineId: row.machine_id,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -103,8 +111,8 @@ export class AgentStore {
     const now = Date.now();
     this.#db
       .query(
-        `INSERT INTO agent (id, name, instructions, persona, runtime, model, thinking_level, bundles, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO agent (id, name, instructions, persona, runtime, model, thinking_level, bundles, machine_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -115,6 +123,7 @@ export class AgentStore {
         input.model ?? null,
         input.thinkingLevel ?? null,
         JSON.stringify(input.bundles ?? []),
+        input.machineId ?? null,
         now,
         now,
       );
@@ -127,7 +136,7 @@ export class AgentStore {
     if (current === undefined) return undefined;
     this.#db
       .query(
-        `UPDATE agent SET name = ?, instructions = ?, persona = ?, runtime = ?, model = ?, thinking_level = ?, bundles = ?, updated_at = ?
+        `UPDATE agent SET name = ?, instructions = ?, persona = ?, runtime = ?, model = ?, thinking_level = ?, bundles = ?, machine_id = ?, updated_at = ?
           WHERE id = ?`,
       )
       .run(
@@ -140,6 +149,7 @@ export class AgentStore {
           ? current.thinkingLevel
           : patch.thinkingLevel,
         JSON.stringify(patch.bundles ?? current.bundles),
+        patch.machineId === undefined ? current.machineId : patch.machineId,
         Date.now(),
         id,
       );

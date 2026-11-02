@@ -9,6 +9,14 @@
  * - `GET /machines/connect` (a WebSocket) is the link. The daemon proves itself with its device
  *   credential in the handshake; the primary checks the digest. Every connection that gets in is
  *   a new epoch, and a newer one from the same device takes the older one's place.
+ * - `GET /machines/daemon/<platform>` hands a daemon the build this primary carries for it, on the
+ *   same credential: what a daemon fetches when it is told to replace itself.
+ *
+ * A daemon is part of the primary: when one comes up reporting another build than the one carried
+ * (`builds.ts`), it is told to replace itself before it is let do anything else, and comes back as
+ * the new build. One that cannot (not run by a service, no build for its platform) is let in as it
+ * is, with the reason on its row, unless it speaks another link protocol, which it cannot be let in
+ * with at all.
  *
  * The hub knows who is connected and speaks the link's rules. What the link is *for* (sessions,
  * models, tools) is the business of the code that asks the hub for a machine's link.
@@ -18,14 +26,19 @@ import type {
   DaemonServiceResults,
   MachineActionArgs,
   MachineActionResults,
+  MachineFacts,
+  MachineView,
 } from "@eta/client-contracts";
 import type { WebSocketEndpoint } from "@eta/server";
+import type { DaemonBuilds } from "./builds";
 import type { MachineRecord, MachineStore } from "./store";
 import {
+  DAEMON_DOWNLOAD_PATH,
   ENROLL_PATH,
   LINK_CLOSE,
   LINK_LIMITS,
   LINK_PATH,
+  LINK_PROTOCOL,
 } from "@eta/client-contracts";
 import { LinkError, Peer } from "@eta/daemon";
 import { PipeClient } from "./pipe";
@@ -74,7 +87,24 @@ export interface MachineHubOptions {
    * before it has said anything.
    */
   serve?: ((link: MachineLink) => void) | undefined;
+  /** The daemon builds this primary carries; without them daemons are left at their builds. */
+  builds?: DaemonBuilds | undefined;
+  /**
+   * Who an enrolling machine is, when that can be told without the user: the tailnet node it is,
+   * when Tailscale says it belongs to the user this host runs as. Such a machine is let in at once
+   * instead of waiting for its fingerprint to be approved.
+   */
+  identify?:
+    | ((request: Request) => Promise<{ node: string } | undefined>)
+    | undefined;
 }
+
+/** How long a daemon has to come back after it was told to replace itself. */
+const UPDATING_MS = 3 * 60 * 1000;
+/** How soon the same daemon is told to move to the same build again, after a try. */
+const RETRY_MS = 60 * 60 * 1000;
+/** How long fetching, checking and swapping a build may take on the daemon. */
+const UPGRADE_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** Bad codes tolerated per window before the door stops listening for a while. */
 const MAX_BAD_CODES = 20;
@@ -89,6 +119,13 @@ export class MachineHub {
   readonly #lost = new Set<(machineId: string, reason: string) => void>();
   #epoch: number;
   #badCodes: number[] = [];
+  /** Machines told to replace themselves, until they come back (or do not, in time). */
+  readonly #updating = new Map<string, ReturnType<typeof setTimeout>>();
+  /**
+   * When each machine was last told to move to each build (`machine:version`), and whether it said
+   * it had swapped the build in.
+   */
+  readonly #tried = new Map<string, { at: number; swapped: boolean }>();
 
   constructor(options: MachineHubOptions) {
     this.#options = options;
@@ -112,6 +149,40 @@ export class MachineHub {
   onLost(listener: (machineId: string, reason: string) => void): () => void {
     this.#lost.add(listener);
     return () => void this.#lost.delete(listener);
+  }
+
+  /** Where the machine's daemon stands against the build this primary carries. */
+  buildOf(machine: MachineRecord): MachineView["build"] {
+    if (machine.kind !== "daemon") return null;
+    if (this.#updating.has(machine.id)) return "updating";
+    const wanted = this.#options.builds?.version();
+    if (wanted === undefined || machine.version === null) return null;
+    return machine.version === wanted ? "current" : "outdated";
+  }
+
+  /**
+   * Bring an online machine to the carried build now, whenever it was last tried. Resolves when the
+   * daemon has swapped the build in (it then restarts and comes back) or has said why it cannot.
+   */
+  async upgrade(machineId: string): Promise<MachineRecord> {
+    const connection = this.#connections.get(machineId);
+    const machine = this.#options.machines.get(machineId);
+    if (machine === undefined) throw new Error("no such machine");
+    if (connection === undefined || connection.gone || !connection.approved)
+      throw new Error(`${machine.name} is not connected`);
+    const replaced = await this.#bringUpToDate(
+      connection,
+      {
+        version: machine.version ?? "",
+        platform: machine.platform ?? undefined,
+        install: machine.install ?? undefined,
+      },
+      true,
+    );
+    const after = this.#options.machines.get(machineId)!;
+    if (!replaced && after.updateError !== null)
+      throw new Error(after.updateError);
+    return after;
   }
 
   /* ---------------------------------------------------------------- decisions */
@@ -146,6 +217,8 @@ export class MachineHub {
   close(): void {
     for (const connection of [...this.#connections.values()])
       this.#drop(connection, "the host is stopping", 1001);
+    for (const timer of this.#updating.values()) clearTimeout(timer);
+    this.#updating.clear();
   }
 
   /* ---------------------------------------------------------------- the link */
@@ -153,17 +226,7 @@ export class MachineHub {
   readonly endpoint: WebSocketEndpoint = {
     path: LINK_PATH,
     accept: (request) => {
-      const credential = request.headers
-        .get("authorization")
-        ?.replace(/^Bearer\s+/i, "");
-      const split = credential?.indexOf(".") ?? -1;
-      const machine =
-        credential === undefined || split <= 0
-          ? undefined
-          : this.#options.machines.authenticate(
-              credential.slice(0, split),
-              credential.slice(split + 1),
-            );
+      const machine = this.#authenticate(request);
       if (machine === undefined) {
         // Not why: a caller that is not a machine we know learns nothing.
         return new Response("unauthorized", { status: 401 });
@@ -245,10 +308,30 @@ export class MachineHub {
       ]).finally(() => clearTimeout(timer));
       const facts = await connection.machine("info", {});
       if (connection.gone) return;
+      // Whatever it was told before, this is the build it came back as.
+      this.#settled(connection.machineId);
       machines.setFacts(connection.machineId, {
         home: facts.home,
         os: facts.os,
+        version: facts.version,
+        platform: facts.platform,
+        install: facts.install,
+        protocol: facts.protocol,
       });
+      // A daemon on another build is replaced before it is let do anything: it restarts as the
+      // carried one and comes back on a new connection.
+      if (await this.#bringUpToDate(connection, facts, false)) return;
+      if (connection.gone) return;
+      const protocol = facts.protocol ?? 1;
+      if (protocol !== LINK_PROTOCOL) {
+        machines.setUpdateError(
+          connection.machineId,
+          `it speaks link protocol ${protocol} and this primary ${LINK_PROTOCOL}; it has to be updated to be used`,
+        );
+        this.#options.changed();
+        this.#drop(connection, "another link protocol", LINK_CLOSE.protocol);
+        return;
+      }
       machines.setStatus(connection.machineId, "online", Date.now());
       connection.ready = true;
       this.#options.changed();
@@ -260,6 +343,103 @@ export class MachineHub {
       );
       this.#drop(connection, "did not come up", LINK_CLOSE.protocol);
     }
+  }
+
+  /**
+   * Tell a daemon on another build than the carried one to replace itself. True when it did (it is
+   * about to restart); false when there was nothing to do or it could not, with the reason on the
+   * machine's row. `force` tries again even if this build was tried lately.
+   */
+  async #bringUpToDate(
+    connection: Connection,
+    facts: {
+      version: string;
+      platform?: string | undefined;
+      install?: MachineFacts["install"];
+    },
+    force: boolean,
+  ): Promise<boolean> {
+    const { machines, builds } = this.#options;
+    const id = connection.machineId;
+    const wanted = builds?.version();
+    if (wanted === undefined) {
+      if (force)
+        machines.setUpdateError(id, "this primary carries no daemon builds");
+      return false;
+    }
+    if (facts.version === wanted) {
+      machines.setUpdateError(id, null);
+      return false;
+    }
+    const build =
+      facts.platform === undefined ? undefined : builds?.get(facts.platform);
+    let refused: string | undefined;
+    if (build === undefined)
+      refused = `this primary carries no daemon build for ${facts.platform ?? "its platform"}`;
+    else if (facts.install !== "service")
+      refused =
+        facts.install === "source"
+          ? "it runs from source; update its checkout"
+          : "it is not run by a service, so it cannot restart itself; run `eta-daemon install-service` there";
+    if (refused !== undefined || build === undefined) {
+      machines.setUpdateError(id, refused ?? null);
+      this.#options.changed();
+      return false;
+    }
+    const now = (this.#options.now ?? Date.now)();
+    const key = `${id}:${wanted}`;
+    const last = this.#tried.get(key);
+    if (!force && last !== undefined && now - last.at < RETRY_MS) {
+      // It swapped the build in and is back on another one: the new build put the old one back.
+      if (last.swapped) {
+        machines.setUpdateError(
+          id,
+          `the update to ${wanted} did not hold; it went back to ${facts.version}`,
+        );
+        this.#options.changed();
+      }
+      return false;
+    }
+    const tried = { at: now, swapped: false };
+    this.#tried.set(key, tried);
+    this.#updating.set(
+      id,
+      setTimeout(() => {
+        this.#settled(id);
+        this.#options.changed();
+      }, UPDATING_MS),
+    );
+    this.#options.changed();
+    try {
+      const answer = await connection.daemon(
+        "upgrade",
+        { version: build.version, sha256: build.sha256 },
+        { timeoutMs: UPGRADE_TIMEOUT_MS },
+      );
+      if (answer.ok) {
+        tried.swapped = true;
+        machines.setUpdateError(id, null);
+        this.#options.changed();
+        return true;
+      }
+      machines.setUpdateError(id, answer.reason);
+    } catch (error) {
+      machines.setUpdateError(
+        id,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+    this.#settled(id);
+    this.#options.changed();
+    return false;
+  }
+
+  /** It came back, or gave up, or ran out of time: it is not being replaced any more. */
+  #settled(machineId: string): void {
+    const timer = this.#updating.get(machineId);
+    if (timer === undefined) return;
+    clearTimeout(timer);
+    this.#updating.delete(machineId);
   }
 
   /** End a connection from this side. */
@@ -290,6 +470,49 @@ export class MachineHub {
     if (connection.ready) {
       for (const listener of this.#lost) listener(connection.machineId, reason);
     }
+  }
+
+  /* ---------------------------------------------------------------- routes */
+
+  /** The hub's HTTP routes: enrolling, and a daemon fetching its build. */
+  async route(request: Request): Promise<Response | undefined> {
+    return (await this.enroll(request)) ?? this.download(request);
+  }
+
+  /** `GET /machines/daemon/<platform>`, for a daemon that has been let in. */
+  download(request: Request): Response | undefined {
+    const { pathname } = new URL(request.url);
+    if (!pathname.startsWith(`${DAEMON_DOWNLOAD_PATH}/`)) return undefined;
+    if (request.method !== "GET")
+      return new Response("method not allowed", { status: 405 });
+    const machine = this.#authenticate(request);
+    if (machine === undefined || machine.status === "pending")
+      return new Response("unauthorized", { status: 401 });
+    const build = this.#options.builds?.get(
+      pathname.slice(DAEMON_DOWNLOAD_PATH.length + 1),
+    );
+    if (build === undefined)
+      return new Response("no such build", { status: 404 });
+    return new Response(Bun.file(build.path), {
+      headers: {
+        "content-type": "application/octet-stream",
+        "cache-control": "no-store",
+      },
+    });
+  }
+
+  /** The machine whose device credential the request carries, if it is good. */
+  #authenticate(request: Request): MachineRecord | undefined {
+    const credential = request.headers
+      .get("authorization")
+      ?.replace(/^Bearer\s+/i, "");
+    const split = credential?.indexOf(".") ?? -1;
+    return credential === undefined || split <= 0
+      ? undefined
+      : this.#options.machines.authenticate(
+          credential.slice(0, split),
+          credential.slice(split + 1),
+        );
   }
 
   /* ---------------------------------------------------------------- enrolling */
@@ -338,6 +561,19 @@ export class MachineHub {
         },
         now,
       );
+      // The user's own tailnet node needs no fingerprint compared: Tailscale has said who it is.
+      const known = await this.#options
+        .identify?.(request)
+        .catch((error: unknown) => {
+          this.#options.warn(
+            `[eta] could not tell who enrolled ${machine.name}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          return undefined;
+        });
+      if (known !== undefined) {
+        this.#options.machines.admit(machine.id);
+        this.#options.machines.setTailnetNode(machine.id, known.node);
+      }
       this.#options.changed();
       return Response.json({ machineId: machine.id });
     } catch (error) {

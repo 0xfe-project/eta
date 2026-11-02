@@ -156,6 +156,7 @@ describe("editing an agent in tabs", () => {
         runtime: "eta",
         model: "c:m1",
         thinkingLevel: null,
+        machineId: null,
         bundles: [],
       },
     ]);

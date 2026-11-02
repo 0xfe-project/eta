@@ -239,6 +239,7 @@ export {
   createConnection,
   type EndpointConnection,
   type EndpointSocket,
+  peerAddressOf,
   serveWire,
   type Socket,
   type TransportDeps,

@@ -13,6 +13,7 @@ import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/site";
 import type { GithubTuning } from "./github/service";
 import type { LlmOptions, LlmRuntime } from "./llm/runtime";
+import type { SshRunner } from "./machines/install";
 import type { McpTuning } from "./mcp/service";
 import type {
   AkhookOptions,
@@ -39,6 +40,8 @@ import { GatewayModels } from "./llm/models";
 import { llmPlugin } from "./llm/plugin";
 import { LLM_ROUTE } from "./llm/route";
 import { openLlm } from "./llm/runtime";
+import { DaemonBuilds, defaultBuildsDir } from "./machines/builds";
+import { Tailscale } from "./machines/tailscale";
 import { createProduct } from "./product";
 
 export interface HostOptions {
@@ -111,6 +114,21 @@ export interface HostOptions {
    * this machine, by default. A test hands in scripted ones; `false` runs none.
    */
   runtimes?: OarRuntimes | false;
+  /**
+   * Tailscale on this host (discovering machines, letting the user's own nodes in): `true` reads
+   * it through the `tailscale` command; a test hands in one with a scripted command. Off by
+   * default; `main.ts` turns it on.
+   */
+  tailscale?: boolean | Tailscale;
+  /**
+   * The daemon builds this primary carries (`apps/daemon/scripts/build.ts`): `true` looks where
+   * they are kept (the checkout's `apps/daemon/out/dist`, or `daemon/` beside a compiled host), a
+   * string is a directory of them. Off by default, so a host made for a test leaves daemons at
+   * whatever build they are; `main.ts` turns it on.
+   */
+  daemonBuilds?: boolean | string;
+  /** How a daemon is put on another computer; the user's `ssh` by default (a test fakes it). */
+  ssh?: SshRunner;
   warn?: (message: string) => void;
 }
 
@@ -177,6 +195,22 @@ export async function startHost(options: HostOptions): Promise<Host> {
       ...(runtimes === undefined
         ? {}
         : { runtimes: async (fresh) => await runtimes.catalog.list(fresh) }),
+      ...(options.tailscale === undefined || options.tailscale === false
+        ? {}
+        : {
+            tailscale:
+              options.tailscale === true ? new Tailscale() : options.tailscale,
+          }),
+      ...(options.daemonBuilds === undefined || options.daemonBuilds === false
+        ? {}
+        : {
+            daemonBuilds: new DaemonBuilds(
+              options.daemonBuilds === true
+                ? defaultBuildsDir()
+                : options.daemonBuilds,
+            ),
+          }),
+      ...(options.ssh === undefined ? {} : { ssh: options.ssh }),
     });
     const web = createWebRoutes(options.webDir);
     server = await assembleServer({

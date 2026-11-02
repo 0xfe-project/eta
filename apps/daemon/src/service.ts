@@ -95,12 +95,10 @@ export async function installService(
     await run("launchctl", ["bootstrap", domain, definition.path]);
   } else {
     await run("systemctl", ["--user", "daemon-reload"]);
-    await run("systemctl", [
-      "--user",
-      "enable",
-      "--now",
-      `${definition.name}.service`,
-    ]);
+    await run("systemctl", ["--user", "enable", `${definition.name}.service`]);
+    // A restart, not `--now`: a unit that is already running (an install over an older one) has
+    // to start again on the new file and identity.
+    await run("systemctl", ["--user", "restart", `${definition.name}.service`]);
   }
   return definition;
 }

@@ -12,11 +12,28 @@
     "ssh": "SSH"
   },
   "lastSeen": "Last seen {{time}}",
+  "build": {
+    "version": "Build {{version}}",
+    "outdated": "Needs update",
+    "updating": "Updating…"
+  },
   "actions": {
     "add": "Add machine",
     "rename": "Rename",
     "runs": "Runs at once",
+    "upgrade": "Update now",
     "revoke": "Revoke"
+  },
+  "upgrade": {
+    "started": "{{name}} is updating and will reconnect"
+  },
+  "tailnet": {
+    "title": "On your tailnet",
+    "install": "Install",
+    "added": "Added",
+    "offline": "Offline",
+    "installed": "Installed on {{name}}",
+    "installAction": "Install the daemon on {{name}}"
   },
   "fields": {
     "nameLabel": "Machine name",

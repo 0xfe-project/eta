@@ -3,10 +3,12 @@ import type { ServiceCommand } from "./service";
 /**
  * The daemon's command line.
  *
- *   eta-daemon setup <primary-url> <code>   trade an install code for a place on the primary
+ *   eta-daemon setup <primary-url> <code> [--no-wait]
+ *                                            trade an install code for a place on the primary
  *   eta-daemon run                           serve the primary (the default)
  *   eta-daemon install-service               run at login as a systemd user unit or launchd agent
  *   eta-daemon uninstall-service
+ *   eta-daemon version                       print the build
  *
  * One file once built (`bun build --compile`): the sessions, their journals and the one
  * credential live in `$HOME/.eta/daemon`. There is no web, no database and no provider
@@ -32,17 +34,27 @@ import {
 } from "./identity";
 import { DaemonNode } from "./node";
 import { installService, uninstallService } from "./service";
+import { RESTART_EXIT, settleUpgrade, upgrade } from "./upgrade";
+import { VERSION } from "./version";
 
-const VERSION = "0.1.0";
-
-const { positionals } = parseArgs({
-  options: {},
+const { positionals, values } = parseArgs({
+  options: {
+    // `setup` returns once registered instead of waiting for the approval: the service that is
+    // installed next waits instead (the primary's one-step install does this).
+    "no-wait": { type: "boolean", default: false },
+  },
   allowPositionals: true,
   strict: true,
 });
 const dataDir = resolve(defaultDataDir());
 const legacyDir = resolve(legacyDataDir());
 const [command = "run", ...rest] = positionals;
+
+// What an upgrade runs to see that a new build starts: nothing else is touched.
+if (command === "version") {
+  console.log(VERSION);
+  process.exit(0);
+}
 
 // An older daemon kept its identity and sessions here. Starting on an empty directory instead
 // would look like a machine that had never been set up — and the sessions would be gone from the
@@ -86,6 +98,7 @@ async function setup(): Promise<void> {
   );
   console.log(`  ${groupFingerprint(fingerprint)}`);
   console.log("");
+  if (values["no-wait"] === true) return;
   console.log("Waiting for the primary to approve this machine...");
   await new Promise<void>((done) => {
     const link = new DaemonLink({
@@ -116,16 +129,49 @@ async function run(): Promise<void> {
     );
     process.exit(2);
   }
-  const node = new DaemonNode({
+  let closing = false;
+  let node: DaemonNode | undefined;
+  let link: DaemonLink | undefined;
+  let settled: ReturnType<typeof settleUpgrade> | undefined;
+  // Stop serving and leave; a code other than 0 is a request for the service manager to start
+  // this file again (which, after an upgrade or a roll-back, is another build).
+  const leave = (code: number): void => {
+    if (closing) return;
+    closing = true;
+    settled?.dispose();
+    void Promise.resolve(link?.stop())
+      .then(() => node?.close())
+      .then(() => process.exit(code));
+  };
+  // A build that was just swapped in has to get back in, or the old one is put back.
+  settled = settleUpgrade({
+    dataDir,
+    version: VERSION,
+    rollBack: () => leave(RESTART_EXIT),
+    warn: (message) => console.error(message),
+  });
+  if (closing) return;
+  node = new DaemonNode({
     dataDir,
     version: VERSION,
     primaryUrl: identity.url,
+    upgrade: async (wanted) => {
+      const done = await upgrade(wanted, {
+        identity,
+        dataDir,
+        version: VERSION,
+      });
+      // The answer has to reach the primary before the link goes.
+      if (done.ok) setTimeout(leave, 500, RESTART_EXIT);
+      return done;
+    },
   });
   await node.start();
-  const link = new DaemonLink({
+  link = new DaemonLink({
     identity,
     server: node,
     onState: (state) => {
+      if (state.state === "online") settled?.admitted();
       console.log(
         JSON.stringify({
           link: state.state,
@@ -136,19 +182,15 @@ async function run(): Promise<void> {
   });
   link.start();
   console.log(
-    JSON.stringify({ pid: process.pid, dataDir, primary: identity.url }),
+    JSON.stringify({
+      pid: process.pid,
+      dataDir,
+      primary: identity.url,
+      version: VERSION,
+    }),
   );
-  let closing = false;
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
-    process.on(signal, () => {
-      if (closing) return;
-      closing = true;
-      void link
-        .stop()
-        .then(() => node.close())
-        .then(() => process.exit(0));
-    });
-  }
+  for (const signal of ["SIGINT", "SIGTERM"] as const)
+    process.on(signal, () => leave(0));
 }
 
 switch (command) {

@@ -1,4 +1,6 @@
 import type { MachineArgs, MachineResults } from "@eta/client-contracts";
+import { useQuery } from "@tanstack/react-query";
+import { getWire } from "@/lib/wire";
 import { useWireMutation } from "@/queries/wire";
 
 // The `machines` target's actions. The list itself is `useMachines` (queries/projects.ts).
@@ -31,6 +33,37 @@ export function useSetMaxActiveRuns() {
     MachineArgs["setMaxActiveRuns"],
     MachineResults["setMaxActiveRuns"]
   >("machines", "setMaxActiveRuns");
+}
+
+/** Replace a connected daemon with the build the host carries, now. */
+export function useUpgradeMachine() {
+  return useWireMutation<MachineArgs["upgrade"], MachineResults["upgrade"]>(
+    "machines",
+    "upgrade",
+  );
+}
+
+/** The tailnet's nodes, asked once when the add dialog opens (`enabled`). */
+export function useDiscoverMachines(enabled: boolean) {
+  return useQuery({
+    queryKey: ["wire", "machines", "discover"],
+    queryFn: async () =>
+      await getWire().call<MachineResults["discover"]>(
+        "machines",
+        "discover",
+        {},
+      ),
+    enabled,
+    staleTime: 0,
+  });
+}
+
+/** Put the daemon on a computer over SSH and register it. */
+export function useInstallMachine() {
+  return useWireMutation<MachineArgs["install"], MachineResults["install"]>(
+    "machines",
+    "install",
+  );
 }
 
 export function useRenameMachine() {

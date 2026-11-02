@@ -23,13 +23,17 @@ import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/site";
 import type { GatewayKeys } from "./bundles/bundles";
 import type { GithubTuning } from "./github/service";
+import type { DaemonBuilds } from "./machines/builds";
+import type { SshRunner } from "./machines/install";
 import type { MachineRecord } from "./machines/store";
+import type { Tailscale } from "./machines/tailscale";
 import type { McpTuning } from "./mcp/service";
 import type { SessionHooks } from "./session-hooks";
 import type { WebOptions } from "./web/service";
 import { homedir, hostname, platform } from "node:os";
 import { join } from "node:path";
 import { GitHubKeeper } from "@eta/daemon";
+import { peerAddressOf } from "@eta/server";
 import { agentsPlugin } from "./agents/plugin";
 import { AgentStore } from "./agents/store";
 import { AkhookHost } from "./akhook";
@@ -196,6 +200,15 @@ export function createProduct(options: {
   web?: Omit<WebOptions, "warn"> | undefined;
   /** The external runtimes the primary machine has, with their models, for the agent editor. */
   runtimes?: ((fresh: boolean) => Promise<AgentRuntimeInfo[]>) | undefined;
+  /**
+   * Tailscale on this host: discovery of the tailnet's nodes, the address new machines dial, and
+   * letting the user's own nodes in without a fingerprint. Absent means the tailnet is not used.
+   */
+  tailscale?: Tailscale | undefined;
+  /** The daemon builds this primary carries: daemons are kept at them and installed from them. */
+  daemonBuilds?: DaemonBuilds | undefined;
+  /** How a daemon is put on another computer; the user's `ssh` by default (a test fakes it). */
+  ssh?: SshRunner | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
   const memory =
@@ -330,6 +343,17 @@ export function createProduct(options: {
       later.taskRunner?.pump();
     },
     warn,
+    builds: options.daemonBuilds,
+    ...(options.tailscale === undefined
+      ? {}
+      : {
+          identify: async (request: Request) => {
+            const address = peerAddressOf(request);
+            return address === undefined
+              ? undefined
+              : await options.tailscale!.ownNode(address);
+          },
+        }),
     serve: (link) =>
       serveLink(link, {
         taskRun: (session) => {
@@ -670,7 +694,7 @@ export function createProduct(options: {
     skillDirsFor: (meta) => bundles.skillDirsFor(meta),
     shellEnv: githubLogin?.env ?? {},
     fetch: async (request) =>
-      (await hub.enroll(request)) ??
+      (await hub.route(request)) ??
       (await mcp.route(request)) ??
       (await githubCallbacks(request)) ??
       (await bundles.route(request)) ??
@@ -742,6 +766,19 @@ export function createProduct(options: {
             changed,
             created,
             runtimes: options.runtimes,
+            machineRuntimes: async (machineId, fresh) => {
+              const link = hub.link(machineId);
+              if (link === undefined)
+                throw new Error(
+                  `${machines.get(machineId)?.name ?? machineId} is not online`,
+                );
+              const { runtimes } = await link.daemon(
+                "runtimes",
+                { fresh },
+                { timeoutMs: 60_000 },
+              );
+              return runtimes;
+            },
             removed: (agentId) =>
               void options
                 .gateway?.()
@@ -766,8 +803,15 @@ export function createProduct(options: {
               // The limit may have moved: runs that were waiting for a slot can start.
               taskRunner.pump();
             },
-            defaultUrl: () =>
-              `http://${options.hostname ?? "127.0.0.1"}:${server.server.port}`,
+            defaultUrl: async () =>
+              await defaultDaemonUrl(
+                options.hostname ?? "127.0.0.1",
+                server.server.port,
+                options.tailscale,
+              ),
+            tailscale: options.tailscale,
+            builds: options.daemonBuilds,
+            ssh: options.ssh,
           },
           applied("machines"),
         ),
@@ -868,4 +912,29 @@ export function createProduct(options: {
         void github.status(false).catch(() => undefined);
     },
   };
+}
+
+/**
+ * The address a new machine is told to dial when the user does not say. On a host that listens on
+ * its tailnet address (or on every interface) and is on a tailnet, its MagicDNS name: what every
+ * node of the tailnet can reach. Otherwise the interface it listens on, or the computer's name
+ * when that is every interface.
+ */
+async function defaultDaemonUrl(
+  bound: string,
+  port: number,
+  tailscale: Tailscale | undefined,
+): Promise<string> {
+  const every = bound === "0.0.0.0" || bound === "::";
+  const status = await tailscale?.status();
+  if (
+    status !== undefined &&
+    (every || status.self.addresses.includes(bound))
+  ) {
+    const name = status.self.dnsName || status.self.addresses[0];
+    if (name !== undefined && name !== "")
+      return `http://${name.includes(":") ? `[${name}]` : name}:${port}`;
+  }
+  if (every) return `http://${hostname()}:${port}`;
+  return `http://${bound.includes(":") ? `[${bound}]` : bound}:${port}`;
 }

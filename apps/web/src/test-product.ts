@@ -30,6 +30,7 @@ export const agentView = (
   model: "p:m",
   thinkingLevel: null,
   bundles: [],
+  machineId: null,
   home: `/data/agents/${fields.id}`,
   homeProjectId: `home-${fields.id}`,
   status: "idle",
@@ -50,6 +51,13 @@ export const machineView = (
   maxActiveRuns: 2,
   createdAt: 1,
   lastSeenAt: null,
+  version: null,
+  platform: null,
+  install: null,
+  protocol: null,
+  updateError: null,
+  tailnetNode: null,
+  build: null,
   ...fields,
 });
 
