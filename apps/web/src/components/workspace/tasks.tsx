@@ -23,10 +23,20 @@ import { SpinnerIcon } from "@phosphor-icons/react/Spinner";
 import { StopIcon } from "@phosphor-icons/react/Stop";
 import { UserIcon } from "@phosphor-icons/react/User";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Markdown } from "@/components/markdown";
 import { Empty, LoadError, Loading } from "@/components/states";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -610,12 +620,15 @@ export function Question({ task }: { task: TaskDetail }) {
       aria-label={translateText("comments.awaitingReply")}
       className="space-y-1 bg-muted px-3 py-2"
     >
-      <p className="text-xs">
-        <span className="font-medium">{actorName(last.actor, agents)}</span>
-        <span className="text-muted-foreground">
-          {" "}
-          {translateText("comments.awaitingYourReply")}
-        </span>
+      <p className="text-xs text-muted-foreground">
+        <Trans
+          t={translateText}
+          i18nKey="comments.awaitingYourReply"
+          values={{ name: actorName(last.actor, agents) }}
+          components={{
+            name: <span className="font-medium text-foreground" />,
+          }}
+        />
       </p>
       <Folded
         max="max-h-32"
@@ -1244,10 +1257,7 @@ export function CommentBox({
   const leftOut = (files: number) => {
     if (files)
       toast.warning(
-        translateText("comments.unsupportedAttachments", {
-          action: translateText("comments.title"),
-          count: files,
-        }),
+        translateText("comments.unsupportedAttachments", { count: files }),
       );
   };
   // Arrived once the task has one more of it, from the reply or a push: the
@@ -1268,10 +1278,7 @@ export function CommentBox({
         // Gone with the task's view: say so, as the box that held it is gone.
         if (!mountedRef.current) {
           toast.error(
-            translateText("comments.deliveryFailed", {
-              action: translateText("comments.title"),
-              message: failure,
-            }),
+            translateText("comments.deliveryFailed", { message: failure }),
           );
           return;
         }
@@ -1355,7 +1362,7 @@ export function CommentBox({
             placeholder={translateText("comments.placeholder")}
             rows={1}
             maxLength={20000}
-            className="max-h-48 min-h-9 resize-none border-0 bg-transparent text-sm focus-visible:ring-0 md:text-sm dark:bg-transparent"
+            className="max-h-48 min-h-9 resize-none border-0 bg-transparent text-base focus-visible:ring-0 md:text-sm dark:bg-transparent"
             value={text}
             onChange={(e) => {
               setText(e.target.value);
@@ -1406,7 +1413,10 @@ export function CommentBox({
           >
             {waiting && !waiting.failure ? (
               <>
-                <SpinnerIcon aria-hidden="true" className="animate-spin" />
+                <SpinnerIcon
+                  aria-hidden="true"
+                  className="motion-safe:animate-spin"
+                />
                 <span className="sr-only">
                   {translateText("common:states.sending")}
                 </span>
@@ -1497,6 +1507,14 @@ export function EditableTitle({
   const update = useUpdateTask();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(task.title);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  // Enter and Escape hand focus back to the title; a blur went somewhere else on purpose.
+  const returnFocusRef = useRef(false);
+  useEffect(() => {
+    if (editing || !returnFocusRef.current) return;
+    returnFocusRef.current = false;
+    buttonRef.current?.focus();
+  }, [editing]);
   if (!editing)
     return (
       <h2
@@ -1506,6 +1524,7 @@ export function EditableTitle({
         )}
       >
         <button
+          ref={buttonRef}
           type="button"
           title={translateText("actions.changeTitle")}
           // Kept in view while the task scrolls, so a long title stays short.
@@ -1537,12 +1556,27 @@ export function EditableTitle({
       onChange={(e) => setTitle(e.target.value)}
       onBlur={save}
       onKeyDown={(e) => {
-        if (e.key === "Enter" && !e.nativeEvent.isComposing) save();
-        if (e.key === "Escape") setEditing(false);
+        if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+          // Or the same Enter would press the title it lands on and open the input again.
+          e.preventDefault();
+          returnFocusRef.current = true;
+          save();
+        }
+        if (e.key === "Escape") {
+          returnFocusRef.current = true;
+          setEditing(false);
+        }
       }}
     />
   );
 }
+
+/**
+ * Where Cancel or Save left a description editor: that task's edit button takes the focus back,
+ * also the one mounted anew when the saved description arrives (it keys Description), until the
+ * description is the one saved or the button is left.
+ */
+let descriptionFocus: { taskId: string; description: string } | null = null;
 
 /**
  * The task's description; `fold` folds a long one (the side panel), `className` replaces its
@@ -1565,6 +1599,33 @@ export function Description({
   const update = useUpdateTask();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(task.description);
+  const editRef = useRef<HTMLButtonElement>(null);
+  const hasDescription = Boolean(task.description.trim());
+  useEffect(() => {
+    if (editing || descriptionFocus?.taskId !== task.id) return;
+    editRef.current?.focus();
+    if (descriptionFocus.description === task.description)
+      descriptionFocus = null;
+  }, [editing, task.id, task.description]);
+  const cancel = () => {
+    descriptionFocus = { taskId: task.id, description: task.description };
+    setEditing(false);
+  };
+  // Marked before the call: the saved description can arrive, and key a new Description, before
+  // the call returns to this one.
+  const save = () => {
+    descriptionFocus = { taskId: task.id, description: text };
+    update.mutate(
+      { taskId: task.id, description: text },
+      {
+        onSuccess: () => setEditing(false),
+        onError: (error) => {
+          descriptionFocus = null;
+          showError(error);
+        },
+      },
+    );
+  };
   if (editing)
     return (
       <div className="space-y-2">
@@ -1573,24 +1634,15 @@ export function Description({
           autoFocus
           rows={8}
           maxLength={20000}
-          className="max-h-[60dvh] text-sm md:text-sm"
+          className="max-h-[60dvh] text-base md:text-sm"
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
         <div className="flex justify-end gap-2">
-          <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+          <Button size="sm" variant="ghost" onClick={cancel}>
             {translateText("common:actions.cancel")}
           </Button>
-          <Button
-            size="sm"
-            disabled={update.isPending}
-            onClick={() =>
-              update.mutate(
-                { taskId: task.id, description: text },
-                { onSuccess: () => setEditing(false), onError: showError },
-              )
-            }
-          >
+          <Button size="sm" disabled={update.isPending} onClick={save}>
             {translateText("common:actions.save")}
           </Button>
         </div>
@@ -1600,16 +1652,21 @@ export function Description({
     setText(task.description);
     setEditing(true);
   };
-  if (quiet && task.description.trim())
+  const leaveEdit = () => {
+    if (descriptionFocus?.taskId === task.id) descriptionFocus = null;
+  };
+  if (quiet && hasDescription)
     return (
       <>
         <Button
+          ref={editRef}
           variant="ghost"
           size="icon-xs"
           aria-label={translateText("actions.editDescription")}
           title={translateText("actions.editDescription")}
           className="absolute top-0 right-0 text-muted-foreground opacity-0 group-focus-within/first:opacity-100 group-hover/first:opacity-100 pointer-coarse:opacity-100"
           onClick={startEditing}
+          onBlur={leaveEdit}
         >
           <PencilSimpleIcon aria-hidden="true" />
         </Button>
@@ -1620,18 +1677,20 @@ export function Description({
     );
   const edit = (
     <Button
+      ref={editRef}
       variant="ghost"
       size="xs"
       className="text-muted-foreground"
       onClick={startEditing}
+      onBlur={leaveEdit}
     >
       <PencilSimpleIcon aria-hidden="true" />
-      {task.description.trim()
+      {hasDescription
         ? translateText("actions.editDescription")
         : translateText("actions.addDescription")}
     </Button>
   );
-  if (!task.description.trim()) return <div className="-ml-2">{edit}</div>;
+  if (!hasDescription) return <div className="-ml-2">{edit}</div>;
   return (
     <Folded enabled={fold} max="max-h-56" className={className} actions={edit}>
       <Markdown className="text-sm">{task.description}</Markdown>
@@ -1727,6 +1786,53 @@ function TaskDetails({ task }: { task: TaskDetail }) {
   );
 }
 
+/** Asks before a task goes: the host deletes it with its activity, and there is no undo. */
+export function DeleteTaskDialog({
+  task,
+  open,
+  onOpenChange,
+  onDeleted,
+}: {
+  task: Task;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDeleted: () => void;
+}) {
+  const { t: translateText } = useTranslation(["tasks", "common"] as const);
+  const remove = useDeleteTask();
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {translateText("delete.confirmTitle", { number: task.number })}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {translateText("delete.confirmDescription")}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>
+            {translateText("common:actions.cancel")}
+          </AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={remove.isPending}
+            onClick={() =>
+              remove.mutate(
+                { taskId: task.id },
+                { onSuccess: onDeleted, onError: showError },
+              )
+            }
+          >
+            {translateText("common:actions.delete")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 /**
  * A task in the side panel, as a thread. The header holds what is always needed — the title and
  * the status — and the rest of the task's properties behind a button (`TaskDetails`); the
@@ -1742,7 +1848,7 @@ function TaskView({ task }: { task: TaskDetail }) {
   const [, setNav] = useTaskNav();
   const { agents } = useAgentList();
   const update = useUpdateTask();
-  const remove = useDeleteTask();
+  const [deleting, setDeleting] = useState(false);
   const replies = task.activity.filter((a) => a.kind === "comment").length;
   // A thread opens on its latest reply, next to the box to answer it; once more after the first
   // paint, for what lays itself out late (folded text measuring itself). It is at least as tall as
@@ -1807,22 +1913,20 @@ function TaskView({ task }: { task: TaskDetail }) {
             <DropdownMenuContent align="end">
               <DropdownMenuItem
                 variant="destructive"
-                onSelect={() =>
-                  remove.mutate(
-                    { taskId: task.id },
-                    {
-                      onSuccess: () => void setNav({ task: null }),
-                      onError: showError,
-                    },
-                  )
-                }
+                onSelect={() => setDeleting(true)}
               >
                 {translateText("common:actions.delete")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <DeleteTaskDialog
+            task={task}
+            open={deleting}
+            onOpenChange={setDeleting}
+            onDeleted={() => void setNav({ task: null })}
+          />
         </div>
-        <EditableTitle key={task.title} task={task} />
+        <EditableTitle task={task} />
       </header>
       <div className={cn(threadRow, "group/first relative pt-2")}>
         <Face actor={task.createdBy} />

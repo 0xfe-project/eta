@@ -30,7 +30,7 @@ import { useConversationActions } from "@/queries/conversations";
 import { useMachines } from "@/queries/projects";
 import { useModels } from "@/queries/providers";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
-import { agentStatusLabels } from "./agent-status";
+import { agentStatusLabels, memberStatusLabel } from "./agent-status";
 import { useOpenAgent } from "./use-agents";
 import { useChatList } from "./use-chat-list";
 import { useOpenGroup } from "./use-groups";
@@ -102,7 +102,7 @@ export function ConversationList() {
           <span
             id="sidebar-groups"
             className={cn(
-              "font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase",
+              "font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase [&:lang(zh)]:tracking-normal",
               // Still the section's name, just not drawn: a heading cannot fit in a rail.
               rail && "sr-only",
             )}
@@ -122,13 +122,15 @@ export function ConversationList() {
         <SidebarMenu className="gap-1.5 py-1.5">
           {directories.length === 0 ? (
             loaded ? (
-              <p
-                className={
-                  rail ? "sr-only" : "px-2 py-1 text-xs text-muted-foreground"
-                }
-              >
-                {translateText("chat:groups.empty.title")}
-              </p>
+              <SidebarMenuItem>
+                <p
+                  className={
+                    rail ? "sr-only" : "px-2 py-1 text-xs text-muted-foreground"
+                  }
+                >
+                  {translateText("chat:groups.empty.title")}
+                </p>
+              </SidebarMenuItem>
             ) : null
           ) : (
             directories.flatMap((directory) =>
@@ -199,7 +201,7 @@ export function ConversationList() {
             <span
               id="sidebar-agents"
               className={cn(
-                "min-w-0 flex-1 truncate font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase",
+                "min-w-0 flex-1 truncate font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase [&:lang(zh)]:tracking-normal",
                 rail && "sr-only",
               )}
             >
@@ -227,15 +229,17 @@ export function ConversationList() {
             <SidebarMenu className="gap-1.5 py-1.5">
               {directs.length === 0 ? (
                 loaded ? (
-                  <p
-                    className={
-                      rail
-                        ? "sr-only"
-                        : "px-2 py-1 text-xs text-muted-foreground"
-                    }
-                  >
-                    {translateText("chat:sections.noAgents")}
-                  </p>
+                  <SidebarMenuItem>
+                    <p
+                      className={
+                        rail
+                          ? "sr-only"
+                          : "px-2 py-1 text-xs text-muted-foreground"
+                      }
+                    >
+                      {translateText("chat:sections.noAgents")}
+                    </p>
+                  </SidebarMenuItem>
                 ) : null
               ) : (
                 directs.map((entry) => (
@@ -318,6 +322,7 @@ function GroupCard({
           type="button"
           data-sidebar="menu-button"
           data-active={active}
+          aria-current={active ? "true" : undefined}
           title={conversation.name}
           onClick={onOpen}
           className="relative flex w-full flex-col items-center gap-1 px-1 py-1.5 hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
@@ -336,6 +341,9 @@ function GroupCard({
           >
             {conversation.name}
           </span>
+          {busy.length > 0 ? (
+            <span className="sr-only">{` ${memberStatusLabel("working")}`}</span>
+          ) : null}
           {busy.length > 0 ? (
             <span
               aria-hidden="true"
@@ -374,11 +382,18 @@ function GroupCard({
             type="button"
             data-sidebar="menu-button"
             data-active={active}
+            aria-current={active ? "true" : undefined}
             title={conversation.name}
             onClick={onOpen}
             className="absolute inset-x-0 top-0 h-11 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
           >
-            <span className="sr-only">{conversation.name}</span>
+            <span className="sr-only">
+              {conversation.name}
+              {conversation.unread > 0
+                ? ` ${translateText("chat:groups.unreadCount", { count: conversation.unread })}`
+                : null}
+              {busy.length > 0 ? ` ${memberStatusLabel("working")}` : null}
+            </span>
           </button>
           <div className="pointer-events-none relative z-10 px-2 pt-1.5">
             {/* The ⋯ is a corner control, not a column: the row ends before it. */}
@@ -408,6 +423,7 @@ function GroupCard({
               </span>
               {busy.length > 0 ? (
                 <span
+                  aria-hidden="true"
                   className="shrink-0 font-mono text-[10px] text-state-success"
                   title={busy.map((m) => nameOf(m.agentId)).join("、")}
                 >
@@ -415,7 +431,10 @@ function GroupCard({
                 </span>
               ) : null}
               {conversation.unread > 0 ? (
-                <span className="shrink-0 font-mono text-[10px] text-foreground tabular-nums">
+                <span
+                  aria-hidden="true"
+                  className="shrink-0 font-mono text-[10px] text-foreground tabular-nums"
+                >
                   {conversation.unread}
                 </span>
               ) : null}
@@ -495,7 +514,15 @@ function GroupCard({
                     {nameOf(member.agentId)}
                   </span>
                   {member.status !== "idle" ? (
-                    <span className="size-1.5 shrink-0 bg-state-success" />
+                    <>
+                      <span
+                        aria-hidden="true"
+                        className="size-1.5 shrink-0 bg-state-success"
+                      />
+                      <span className="sr-only">
+                        {memberStatusLabel(member.status)}
+                      </span>
+                    </>
                   ) : null}
                 </button>
               </li>

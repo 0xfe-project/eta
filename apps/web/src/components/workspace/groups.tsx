@@ -329,7 +329,7 @@ export function GroupList() {
   const open = useOpenGroup();
   const openAgent = useOpenAgent();
   const rowClass =
-    "flex w-full min-h-18 items-center gap-2 px-2 py-3 text-left outline-none duration-[60ms] hover:bg-sidebar-accent active:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-ring";
+    "flex w-full min-h-18 items-center gap-2 px-2 py-3 text-left outline-none transition-colors hover:bg-sidebar-accent active:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-ring";
   return (
     // No band of its own at the top of the list. The page's own header already says what this
     // screen is, and a second title under it spent a hundred pixels of a phone saying it twice —
@@ -404,7 +404,7 @@ export function GroupList() {
       </ul>
       {loaded && !rows.length && (
         <p className="px-2 py-6 text-xs text-muted-foreground">
-          {translateText("history.noConversations")}
+          {translateText("groups.empty.title")}
         </p>
       )}
     </section>
@@ -440,7 +440,7 @@ export function ArchivedGroups() {
                   setSettings((state) => ({ ...state, open: false }));
                   open(g.id);
                 }}
-                className="flex min-w-0 flex-1 items-center gap-2 self-stretch px-2 text-left outline-none duration-[60ms] hover:bg-accent focus-visible:ring-1 focus-visible:ring-ring"
+                className="flex min-w-0 flex-1 items-center gap-2 self-stretch px-2 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <GroupAvatars group={g} />
                 <span className="min-w-0 flex-1">

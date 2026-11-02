@@ -139,9 +139,11 @@
   "comments": {
     "title": "评论",
     "awaitingReply": "待回复",
-    "awaitingYourReply": " 在等你回复",
-    "unsupportedAttachments": "{{action}}还不能带图片或文件，{{count}} 个没有加进来。",
-    "deliveryFailed": "{{action}}未送达：{{message}}",
+    "awaitingYourReply": "<name>{{name}}</name> 在等你回复",
+    "unsupportedAttachments": "评论还不能带图片或文件，{{count}} 个没有加进来。",
+    "unsupportedAttachments_one": "评论还不能带图片或文件，{{count}} 个没有加进来。",
+    "unsupportedAttachments_other": "评论还不能带图片或文件，{{count}} 个没有加进来。",
+    "deliveryFailed": "评论未送达：{{message}}",
     "placeholder": "回复；执行中的任务会直接读到",
     "queuedToSend": "待发送",
     "notDelivered": "未送达：{{message}}"
@@ -157,5 +159,9 @@
     "answering": "{{name}} 正在回答",
     "starting": "{{name}} 正在启动",
     "queued": "{{name}} 排队中"
+  },
+  "delete": {
+    "confirmTitle": "删除任务 #{{number}}？",
+    "confirmDescription": "描述、评论和动态会一并删除，无法恢复。"
   }
 }

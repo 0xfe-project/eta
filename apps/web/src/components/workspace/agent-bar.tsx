@@ -142,6 +142,7 @@ export function ChatHeader({
   onInfo,
   onOpenWorkspace,
   workspaceOpen,
+  workspaceButtonRef,
 }: {
   group?: ConversationSummary;
   /** The conversation's own facts (its steward override); not there until its target arrives. */
@@ -155,6 +156,8 @@ export function ChatHeader({
   onOpenWorkspace?: () => void;
   /** The drawer's state. Not asked above lg, where the panel is a column that is always there. */
   workspaceOpen?: boolean;
+  /** The toggle itself, so the drawer can hand the focus back to it when it closes. */
+  workspaceButtonRef?: React.Ref<HTMLButtonElement>;
 }) {
   const { t: translateText } = useTranslation(["chat", "navigation"] as const);
   const openAgent = useOpenAgent();
@@ -222,6 +225,7 @@ export function ChatHeader({
           className="hidden md:inline-flex lg:hidden"
           aria-label={translateText("navigation:actions.openWorkspace")}
           onClick={onOpenWorkspace}
+          ref={workspaceButtonRef}
         >
           {/* The left rail's own glyph, facing the other way: the right column is the left
               sidebar mirrored, and one symbol for "a panel folds here" is worth more than a

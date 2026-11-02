@@ -21,12 +21,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useAgentList } from "@/queries/agents";
-import {
-  useDeleteTask,
-  useTask,
-  useTasks,
-  useUpdateTask,
-} from "@/queries/tasks";
+import { useTask, useTasks, useUpdateTask } from "@/queries/tasks";
 import { wireErrorMessage } from "@/queries/wire";
 import { PageHeader } from "./app-shell";
 import { BackToTop } from "./back-to-top";
@@ -43,6 +38,7 @@ import { StatusIcon } from "./task-status-icon";
 import {
   CommentBox,
   Comments,
+  DeleteTaskDialog,
   Description,
   EditableTitle,
   LiveRuns,
@@ -178,7 +174,7 @@ function ListView({
                       type="button"
                       aria-current={task.id === selected || undefined}
                       onClick={() => void setNav({ task: task.id })}
-                      className="grid h-full min-w-0 flex-1 grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-2 text-left outline-none focus-visible:underline @lg:grid-cols-[3rem_minmax(0,1fr)_auto_minmax(0,12rem)_4.5rem]"
+                      className="grid h-full min-w-0 flex-1 grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-2 pr-2 text-left outline-none focus-visible:underline @lg:grid-cols-[3rem_minmax(0,1fr)_auto_minmax(0,12rem)_4.5rem]"
                     >
                       <span className="text-xs text-muted-foreground tabular-nums">
                         #{task.number}
@@ -233,7 +229,7 @@ function Card({ task }: { task: Task }) {
             <Comments count={task.comments} />
           </span>
         </span>
-        <span className="line-clamp-3 text-sm">{task.title}</span>
+        <span className="line-clamp-3 text-sm wrap-anywhere">{task.title}</span>
         <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground tabular-nums">
           <span className="truncate">{actorName(task.createdBy, agents)}</span>
           <span className="shrink-0">{ago(task.updatedAt)}</span>
@@ -252,7 +248,7 @@ function BoardView({ tasks }: { tasks: readonly Task[] }) {
       status !== "cancelled" || tasks.some((t) => t.status === status),
   );
   return (
-    <div className="flex h-full gap-3 overflow-x-auto py-4">
+    <div className="flex h-full gap-3 overflow-x-auto px-4 py-4 sm:px-6">
       {columns.map((status) => {
         const group = tasks.filter((t) => t.status === status);
         const label = statusLabel(status);
@@ -312,8 +308,15 @@ function TaskPage({ id }: { id: string }) {
   const [, setNav] = useTaskNav();
   const { task, missing, error } = useTask(id);
   const { agents } = useAgentList();
-  const remove = useDeleteTask();
+  const [deleting, setDeleting] = useState(false);
   const back = () => void setNav({ task: null });
+  // The list goes inert as the task opens; take focus so it doesn't fall to
+  // <body>. Each branch below has its own <main>, so again once loaded.
+  const mainRef = useRef<HTMLElement>(null);
+  const loaded = Boolean(task);
+  useEffect(() => {
+    mainRef.current?.focus({ preventScroll: true });
+  }, [loaded]);
   const crumbs = (
     <>
       <button
@@ -334,8 +337,10 @@ function TaskPage({ id }: { id: string }) {
       <>
         <PageHeader title={crumbs} />
         <main
+          ref={mainRef}
           id="main"
-          className="mx-auto w-full max-w-content px-4 py-6 sm:px-8"
+          tabIndex={-1}
+          className="mx-auto w-full max-w-content px-4 py-6 outline-none sm:px-8"
         >
           <TaskMissing missing={missing} error={error} />
         </main>
@@ -357,27 +362,30 @@ function TaskPage({ id }: { id: string }) {
           <DropdownMenuContent align="end">
             <DropdownMenuItem
               variant="destructive"
-              onSelect={() =>
-                remove.mutate(
-                  { taskId: task.id },
-                  { onSuccess: back, onError: showError },
-                )
-              }
+              onSelect={() => setDeleting(true)}
             >
               {translateText("common:actions.delete")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <DeleteTaskDialog
+          task={task}
+          open={deleting}
+          onOpenChange={setDeleting}
+          onDeleted={back}
+        />
       </PageHeader>
       <main
+        ref={mainRef}
         id="main"
-        className="mx-auto min-h-0 w-full max-w-content flex-1 overflow-y-auto @2xl:grid @2xl:grid-cols-[minmax(0,1fr)_18rem] @2xl:overflow-hidden"
+        tabIndex={-1}
+        className="mx-auto min-h-0 w-full max-w-content flex-1 overflow-y-auto outline-none @2xl:grid @2xl:grid-cols-[minmax(0,1fr)_18rem] @2xl:overflow-hidden"
       >
         <div className="@2xl:overflow-y-auto">
           <div className="space-y-6 px-4 pb-6 sm:px-8">
             {/* Pinned under the page header (任务 and the number) as the rest scrolls. */}
             <div className="sticky top-0 z-10 mb-3 space-y-1 bg-background pt-4 pb-3">
-              <EditableTitle key={task.title} task={task} className="text-xl" />
+              <EditableTitle task={task} className="text-xl" />
               <p className="text-xs text-muted-foreground tabular-nums">
                 {createdBy(task, agents)}
               </p>
@@ -488,7 +496,7 @@ export function TaskBoard() {
           id={id ? undefined : "main"}
           className={cn(
             "min-h-0 flex-1",
-            board ? "overflow-hidden" : "overflow-y-auto",
+            board ? "overflow-hidden" : "overflow-y-auto scroll-pt-9",
           )}
         >
           {error ? (

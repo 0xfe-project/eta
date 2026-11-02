@@ -7,7 +7,7 @@
  * corrupt row can't poison the session.
  *
  * Every mutation emits its task:* event on the bus; persistence is a bus
- * subscriber's job. Tool registration (TaskCreate/List/Get/Update) is NOT
+ * subscriber's job. Tool registration (create_step / list_steps / get_step / update_step) is NOT
  * here — that is the tools plugin's job (REFACTOR.md §2.3.3).
  */
 

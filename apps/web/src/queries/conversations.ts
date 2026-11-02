@@ -168,7 +168,7 @@ export function useConversation(
   const oldest = messages[0]?.seq;
   const { mutate, isPending } = history;
   return {
-    loaded: state !== undefined,
+    loaded: conversationId === undefined || state !== undefined,
     info,
     messages,
     held,

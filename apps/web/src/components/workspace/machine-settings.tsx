@@ -72,8 +72,8 @@ function StatusDot({
       title={label}
       className={cn(
         "size-1.5 shrink-0",
-        status === "online" && "bg-emerald-500",
-        status === "pending" && "bg-amber-500",
+        status === "online" && "bg-state-success",
+        status === "pending" && "bg-state-warning",
         (status === "offline" || status === "revoked") &&
           "bg-muted-foreground/40",
       )}
