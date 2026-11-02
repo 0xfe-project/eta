@@ -76,17 +76,20 @@ export const runStatusLabels: Record<RunStatus, string> = {
   },
 };
 
-export const queueReasonLabels: Record<TaskQueueReason, string> = {
-  get task_busy() {
-    return translate("tasks:queueReason.taskBusy");
-  },
-  get machine_full() {
-    return translate("tasks:queueReason.machineFull");
-  },
-  get machine_offline() {
-    return translate("tasks:queueReason.machineOffline");
-  },
-};
+/**
+ * Why a run waits. The two machine reasons name the machine, so the person knows which one to
+ * turn on or whose limit to raise; `machine` is undefined only when the run's machine is unknown.
+ */
+export function queueReasonLabel(
+  reason: TaskQueueReason,
+  machine: string | undefined,
+) {
+  if (reason === "task_busy") return translate("tasks:queueReason.taskBusy");
+  const named = machine ?? translate("tasks:queueReason.thisMachine");
+  return reason === "machine_full"
+    ? translate("tasks:queueReason.machineFull", { machine: named })
+    : translate("tasks:queueReason.machineOffline", { machine: named });
+}
 
 /** Whether a run has not ended. */
 export const isActive = (

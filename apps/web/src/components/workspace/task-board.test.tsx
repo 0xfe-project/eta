@@ -3,6 +3,7 @@ import { act } from "react";
 import { setWire } from "@/lib/wire";
 import {
   agentView,
+  machineView,
   productHost,
   taskActivity,
   taskDetail,
@@ -309,6 +310,48 @@ describe("task board", () => {
     // The thread folds the run's start into its bookkeeping.
     const timeline = container.querySelector('ol[aria-label="时间线"]')!;
     expect(timeline.textContent).not.toContain("停止");
+  });
+
+  it("names the machine a queued run waits for", async () => {
+    navigation.task = "t1";
+    const queued = (id: string, machineId: string) => ({
+      ...first.runs[0]!,
+      id,
+      status: "queued" as const,
+      queueReason: "machine_offline" as const,
+      machineId,
+      sessionId: null,
+      workspace: null,
+      startedAt: null,
+    });
+    productHost({
+      agents: [agentView({ id: "a1", name: "小艾" })],
+      machines: [
+        machineView({
+          id: "m2",
+          kind: "daemon",
+          name: "macbook",
+          status: "offline",
+        }),
+      ],
+      tasks: [
+        {
+          task: {
+            ...first,
+            runStatus: "queued",
+            // The second is on a machine the page does not know: it says "this machine", as before.
+            runs: [queued("r1", "m2"), queued("r2", "gone")],
+          },
+        },
+      ],
+    });
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    const lines = [
+      ...container.querySelectorAll('[aria-label="进行中"] li'),
+    ].map((li) => li.textContent);
+    expect(lines[0]).toContain("小艾 排队中 · macbook 不在线，连上后开始");
+    expect(lines[1]).toContain("这台机器 不在线");
   });
 
   it("draws a run's log from its session's transcript", async () => {

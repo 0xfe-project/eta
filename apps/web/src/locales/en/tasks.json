@@ -28,8 +28,9 @@
   },
   "queueReason": {
     "taskBusy": "Waiting for this task's previous run to end",
-    "machineFull": "This machine is running as many as it may; waiting for a slot",
-    "machineOffline": "This machine is offline; it starts when it connects"
+    "machineFull": "{{machine}} is running as many tasks as it may; waiting for a slot",
+    "machineOffline": "{{machine}} is offline; it starts when it connects",
+    "thisMachine": "This machine"
   },
   "runs": {
     "label": "Run",
