@@ -1,0 +1,26 @@
+{
+  "name": "@eta/esm-mode",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ESM mode file operations and realm utilities",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest --run",
+    "typecheck": "bun tsc --noEmit",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
+  },
+  "dependencies": {
+    "@vscode/ripgrep": "^1.15.9",
+    "execa": "^9.5.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.19",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}

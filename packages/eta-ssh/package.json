@@ -11,7 +11,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "test": "vitest --run --passWithNoTests",
-    "typecheck": "bun check",
+    "typecheck": "tsc --noEmit",
     "smoke": "vitest --run test/ssh-target.e2e.test.ts",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
   },
