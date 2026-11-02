@@ -1,4 +1,5 @@
 import type { AgentView } from "@eta/client-contracts";
+import type { ModelAvailability } from "@/queries/providers";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PencilSimpleIcon } from "@phosphor-icons/react/PencilSimple";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
@@ -28,9 +29,17 @@ function AgentRow({ agent }: { agent: AgentView }) {
   const { openEditor } = useAgents();
   const [confirming, setConfirming] = useState(false);
   const instructions = agent.instructions.trim();
-  const availability = useModelAvailability(agent);
-  const modelName =
-    availability.state === "not_set"
+  const catalog = useModelAvailability(agent);
+  // An external runtime (Claude Code, Codex, ...) names its models itself, on the machine the
+  // agent runs on. The catalog here only knows eta's providers, so it has no say on them: the
+  // model is shown as the agent has it, and never as gone.
+  const external = agent.runtime !== "eta";
+  const availability: ModelAvailability = external
+    ? { state: "ok", model: undefined }
+    : catalog;
+  const modelName = external
+    ? (agent.model ?? translateText("runtime.defaultModel"))
+    : availability.state === "not_set"
       ? translateText("models.noneSelected")
       : (availability.model?.name ?? agent.model);
 
