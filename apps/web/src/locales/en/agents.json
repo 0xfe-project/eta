@@ -83,6 +83,11 @@
     "default": "Project default",
     "label": "Persona"
   },
+  "machine": {
+    "label": "Runs on",
+    "followProject": "The project's machine",
+    "offlineSuffix": " (offline)"
+  },
   "runtime": {
     "label": "Runtime",
     "eta": "eta (built-in)",

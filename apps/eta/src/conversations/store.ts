@@ -28,6 +28,8 @@ export interface ParticipantRecord {
   conversationId: string;
   agentId: string;
   sessionId: string | null;
+  /** The machine the session was made on; null for one made before this was kept (the project's). */
+  machineId: string | null;
   lastSeq: number;
   invitedAt: number;
 }
@@ -51,6 +53,7 @@ interface ParticipantRow {
   conversation_id: string;
   agent_id: string;
   session_id: string | null;
+  machine_id: string | null;
   last_seq: number;
   invited_at: number;
 }
@@ -74,6 +77,7 @@ const participantOf = (row: ParticipantRow): ParticipantRecord => ({
   conversationId: row.conversation_id,
   agentId: row.agent_id,
   sessionId: row.session_id,
+  machineId: row.machine_id,
   lastSeq: row.last_seq,
   invitedAt: row.invited_at,
 });
@@ -267,17 +271,24 @@ export class ConversationStore {
     );
   }
 
-  setSession(conversationId: string, agentId: string, sessionId: string): void {
+  /** The participant's session, and the machine it was made on. */
+  setSession(
+    conversationId: string,
+    agentId: string,
+    sessionId: string,
+    machineId: string,
+  ): void {
     this.#db
       .query(
-        "UPDATE participant SET session_id = ? WHERE conversation_id = ? AND agent_id = ?",
+        "UPDATE participant SET session_id = ?, machine_id = ? WHERE conversation_id = ? AND agent_id = ?",
       )
-      .run(sessionId, conversationId, agentId);
+      .run(sessionId, machineId, conversationId, agentId);
   }
 
   /**
-   * The conversation and agent a session is the side of, and the machine it runs on (the machine
-   * of the conversation's project). A session no participant names is not here.
+   * The conversation and agent a session is the side of, and the machine it runs on: the one it was
+   * made on, which for a session from before that was kept is the machine of the conversation's
+   * project. A session no participant names is not here.
    */
   ofSession(
     sessionId: string,
@@ -289,7 +300,7 @@ export class ConversationStore {
         { conversation_id: string; agent_id: string; machine_id: string },
         [string]
       >(
-        `SELECT p.conversation_id, p.agent_id, pr.machine_id
+        `SELECT p.conversation_id, p.agent_id, COALESCE(p.machine_id, pr.machine_id) AS machine_id
          FROM participant p
          JOIN conversation c ON c.id = p.conversation_id
          JOIN project pr ON pr.id = c.project_id
@@ -323,7 +334,7 @@ export class ConversationStore {
          FROM participant p
          JOIN conversation c ON c.id = p.conversation_id
          JOIN project pr ON pr.id = c.project_id
-         WHERE pr.machine_id = ? AND p.session_id IS NOT NULL`,
+         WHERE COALESCE(p.machine_id, pr.machine_id) = ? AND p.session_id IS NOT NULL`,
       )
       .all(machineId)
       .map((row) => row.session_id);

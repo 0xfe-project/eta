@@ -14,6 +14,7 @@
  */
 import type { CallFrame } from "@eta/client-wire-proto";
 import type { ThinkingLevel } from "./data";
+import type { DaemonInstall } from "./link";
 
 /* ------------------------------------------------------------------ views */
 
@@ -42,6 +43,12 @@ export interface AgentView {
   thinkingLevel: ThinkingLevel | null;
   /** The bundles it loads, by name. */
   bundles: string[];
+  /**
+   * The machine it runs on, when it is pinned to one: its sessions are made there whatever
+   * machine the conversation's or task's project is on, and an external runtime is that machine's.
+   * Null follows the project.
+   */
+  machineId: string | null;
   /** The agent's workspace directory (on the primary machine). */
   home: string;
   homeProjectId: string;
@@ -72,6 +79,23 @@ export interface MachineView {
   maxActiveRuns: number;
   createdAt: number;
   lastSeenAt: number | null;
+  /** The daemon's build as it last said; null for the primary and before a daemon reports. */
+  version: string | null;
+  /** `<os>-<arch>`, what its build is for. */
+  platform: string | null;
+  /** How the daemon was started: only a `service` can be replaced from here. */
+  install: DaemonInstall | null;
+  protocol: number | null;
+  /** Why it could not be brought up to date, the last time that was tried. */
+  updateError: string | null;
+  /** The Tailscale node it is, when it came in over the tailnet. */
+  tailnetNode: string | null;
+  /**
+   * Against the daemon build this primary carries: `current`, `outdated` (another version),
+   * `updating` (being replaced now), or null when there is nothing to compare (the primary, no
+   * builds carried, or a daemon that has not said).
+   */
+  build: "current" | "outdated" | "updating" | null;
 }
 
 export type ProjectKind = "project" | "agent_home";
@@ -303,7 +327,7 @@ export interface AgentRuntimeModel {
   efforts: string[];
 }
 
-/** An external runtime, as the primary machine has it. */
+/** An external runtime, as a machine has it. */
 export interface AgentRuntimeInfo {
   id: Exclude<AgentRuntime, "eta">;
   label: string;
@@ -325,6 +349,8 @@ export interface AgentFields {
   thinkingLevel?: ThinkingLevel | null;
   /** The bundles to load, by name. */
   bundles?: string[];
+  /** The machine to run on; null follows the project. */
+  machineId?: string | null;
 }
 
 /** Valid requests from a client. The server still validates untrusted JSON at runtime. */
@@ -336,8 +362,11 @@ export interface AgentArgs {
   delete: { agentId: string };
   /** The private chat with the agent, made the first time and found every time after. */
   direct: { agentId: string };
-  /** The external runtimes the primary machine has, with their models; `fresh` asks again. */
-  runtimes: { fresh?: boolean };
+  /**
+   * The external runtimes a machine has, with their models: the primary's, or `machineId`'s (which
+   * has to be online to be asked). `fresh` asks the runtimes again.
+   */
+  runtimes: { fresh?: boolean; machineId?: string };
 }
 export interface AgentResults {
   create: { agent: AgentView };
@@ -362,6 +391,9 @@ export const MACHINE_ACTIONS = [
   "approve",
   "revoke",
   "setMaxActiveRuns",
+  "upgrade",
+  "discover",
+  "install",
 ] as const;
 export type MachineAction = (typeof MACHINE_ACTIONS)[number];
 
@@ -378,6 +410,35 @@ export interface MachineArgs {
   revoke: { machineId: string };
   /** How many task runs the machine works on at once, 1 to 20; runs already going go on. */
   setMaxActiveRuns: { machineId: string; maxActiveRuns: number };
+  /**
+   * Replace a connected daemon with the build this primary carries, now. Daemons are replaced when
+   * they connect anyway; this is the retry, after a failure was fixed.
+   */
+  upgrade: { machineId: string };
+  /** The nodes of the tailnet this host is on, and which of them are machines here already. */
+  discover: Record<string, never>;
+  /**
+   * Put the daemon on a computer over SSH and register it: `host` is what `ssh` is given (a tailnet
+   * node's name, `user@host`, an alias). `url` is the address it should dial, as for `enroll`.
+   */
+  install: { host: string; name?: string; url?: string };
+}
+
+/** A node of the tailnet, as `machines.discover` shows it. */
+export interface TailnetPeerView {
+  /** Tailscale's stable node id. */
+  node: string;
+  name: string;
+  /** The MagicDNS name, when MagicDNS is on: what `install` is best given. */
+  dnsName: string;
+  os: string;
+  online: boolean;
+  /** Whose it is; null for a tagged node. */
+  login: string | null;
+  /** The user's own node: one that would be let in without approval. */
+  own: boolean;
+  /** The machine it already is here, when it is one. */
+  machineId: string | null;
 }
 export interface MachineResults {
   rename: { machine: MachineView };
@@ -385,6 +446,16 @@ export interface MachineResults {
   approve: { machine: MachineView };
   revoke: { machine: MachineView };
   setMaxActiveRuns: { machine: MachineView };
+  upgrade: { machine: MachineView };
+  /** `available` is false without Tailscale on this host (`reason` says what is missing). */
+  discover: {
+    available: boolean;
+    reason?: string;
+    self?: { name: string; dnsName: string; login: string | null };
+    peers: TailnetPeerView[];
+  };
+  /** The machine as it registered (pending, unless it was let in at once). */
+  install: { machine: MachineView | null; platform: string };
 }
 export type MachineCall = {
   [A in MachineAction]: Omit<CallFrame, "target" | "action" | "args"> & {

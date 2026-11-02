@@ -1,4 +1,4 @@
-import type { AgentRuntimeInfo } from "@eta/client-contracts";
+import type { AgentRuntimeInfo, MachineView } from "@eta/client-contracts";
 import type { UseFormReturn } from "react-hook-form";
 import type { AgentForm } from "./agent-form";
 import type { Model } from "@/queries/providers";
@@ -116,6 +116,60 @@ export function NameField({
           {error.message}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The machine the agent runs on: the project's, or one it is pinned to. Only offered when there is
+ * more than one machine to choose from. Another machine has other runtimes, so an external
+ * runtime's model is cleared.
+ */
+export function MachineField({
+  form,
+  machines,
+}: {
+  form: Form;
+  machines: readonly MachineView[];
+}) {
+  const { t: translateText } = useTranslation(["agents", "machines"] as const);
+  const value = useWatch({ control: form.control, name: "machineId" });
+  const choices = machines.filter(
+    (machine) =>
+      (machine.kind === "primary" || machine.kind === "daemon") &&
+      machine.status !== "pending" &&
+      machine.status !== "revoked",
+  );
+  if (choices.length < 2 && value === "") return null;
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="agent-machine">
+        {translateText("agents:machine.label")}
+      </Label>
+      <Select
+        id="agent-machine"
+        className="w-full"
+        value={value}
+        onValueChange={(next) => {
+          form.setValue("machineId", next, { shouldDirty: true });
+          if (form.getValues("runtime") !== "eta") {
+            form.setValue("model", "", { shouldDirty: true });
+            form.clearErrors("model");
+          }
+        }}
+      >
+        <SelectOption value="">
+          {translateText("agents:machine.followProject")}
+        </SelectOption>
+        {choices.map((machine) => (
+          <SelectOption key={machine.id} value={machine.id}>
+            {machine.name}
+            {machine.status === "online"
+              ? ""
+              : translateText("agents:machine.offlineSuffix")}
+          </SelectOption>
+        ))}
+      </Select>
     </div>
   );
 }

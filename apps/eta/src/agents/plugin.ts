@@ -48,6 +48,10 @@ export interface AgentsDeps {
   removed: (agentId: string) => void;
   /** The external runtimes this host has, with their models; absent when it runs none. */
   runtimes?: ((fresh: boolean) => Promise<AgentRuntimeInfo[]>) | undefined;
+  /** The external runtimes of a daemon machine, asked over its link (which has to be up). */
+  machineRuntimes?:
+    | ((machineId: string, fresh: boolean) => Promise<AgentRuntimeInfo[]>)
+    | undefined;
 }
 
 export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
@@ -70,12 +74,28 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
       model: agent.model,
       thinkingLevel: agent.thinkingLevel,
       bundles: agent.bundles,
+      machineId: agent.machineId,
       home,
       homeProjectId: project?.id ?? "",
       status: statuses.get(agent.id) ?? "idle",
       createdAt: agent.createdAt,
       updatedAt: agent.updatedAt,
     };
+  };
+
+  /** A machine an agent can be pinned to: the primary or a daemon that was let in. */
+  const checkMachine = (machineId: string | null | undefined): void => {
+    if (machineId === undefined || machineId === null) return;
+    const machine = machines.get(machineId);
+    if (
+      machine === undefined ||
+      (machine.kind !== "primary" && machine.kind !== "daemon")
+    )
+      throw new Error(`no such machine: ${machineId}`);
+    if (machine.status === "revoked" || machine.status === "pending")
+      throw new Error(
+        `${machine.name} is ${machine.status}: an agent cannot run there`,
+      );
   };
 
   const existing = (id: string): AgentRecord => {
@@ -104,6 +124,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
         wire.handle("agents", "create", async (call) => {
           const fields = fieldsOf(call, true);
           checkModel(fields.runtime ?? "eta", fields.model ?? null);
+          checkMachine(fields.machineId);
           const primary = machines.primary();
           if (primary === undefined)
             throw new Error("this host has no machine");
@@ -143,6 +164,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             fields.runtime ?? before.runtime,
             fields.model === undefined ? before.model : fields.model,
           );
+          checkMachine(fields.machineId);
           const agent = agents.update(id, fields)!;
           if (agent.name !== before.name) renameHome(agent);
           // The model and thinking level belong to a session once it exists; an edit of the agent
@@ -187,7 +209,23 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
         wire.handle("agents", "runtimes", async (call) => {
           const fresh =
             (call.args as { fresh?: unknown } | undefined)?.fresh === true;
-          return { result: { runtimes: (await deps.runtimes?.(fresh)) ?? [] } };
+          const machineId = new Args(call).optionalString("machineId");
+          const machine =
+            machineId === undefined ? undefined : machines.get(machineId);
+          if (machineId !== undefined && machine === undefined)
+            throw new Error(`no such machine: ${machineId}`);
+          // The primary's own, unless another machine is asked about.
+          if (machine === undefined || machine.kind === "primary")
+            return {
+              result: { runtimes: (await deps.runtimes?.(fresh)) ?? [] },
+            };
+          if (machine.status !== "online" || deps.machineRuntimes === undefined)
+            throw new Error(`${machine.name} is not online`);
+          return {
+            result: {
+              runtimes: await deps.machineRuntimes(machine.id, fresh),
+            },
+          };
         }),
 
         wire.handle("agents", "direct", (call) => {
@@ -257,6 +295,7 @@ function fieldsOf(
   model?: string | null;
   thinkingLevel?: ThinkingLevel | null;
   bundles?: string[];
+  machineId?: string | null;
 } {
   const args = new Args(call);
   const runtime = args.optionalString("runtime");
@@ -271,6 +310,7 @@ function fieldsOf(
   const level = args.nullableString("thinkingLevel");
   if (typeof level === "string" && !THINKING_LEVELS.includes(level as never))
     throw new Error(`unknown thinking level: ${level}`);
+  const machineId = args.nullableString("machineId");
   const instructions = args.optionalString("instructions");
   const persona = args.optionalString("persona");
   const bundles = (call.args as { bundles?: unknown } | undefined)?.bundles;
@@ -297,6 +337,9 @@ function fieldsOf(
     ...(level === undefined
       ? {}
       : { thinkingLevel: level === "" ? null : (level as ThinkingLevel) }),
+    ...(machineId === undefined
+      ? {}
+      : { machineId: machineId === "" ? null : machineId }),
   };
 }
 

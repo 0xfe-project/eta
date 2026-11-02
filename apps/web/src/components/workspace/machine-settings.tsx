@@ -1,4 +1,4 @@
-import type { MachineView } from "@eta/client-contracts";
+import type { MachineView, TailnetPeerView } from "@eta/client-contracts";
 import type { ReactNode } from "react";
 import { CopyIcon } from "@phosphor-icons/react/Copy";
 import { DesktopIcon } from "@phosphor-icons/react/Desktop";
@@ -37,10 +37,13 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   useApproveMachine,
+  useDiscoverMachines,
   useEnrollMachine,
+  useInstallMachine,
   useRenameMachine,
   useRevokeMachine,
   useSetMaxActiveRuns,
+  useUpgradeMachine,
 } from "@/queries/machines";
 import { useMachines } from "@/queries/projects";
 import { wireErrorMessage } from "@/queries/wire";
@@ -48,7 +51,8 @@ import { when } from "./routine-format";
 
 // Settings → 机器: the primary and the machines that run the daemon. A machine joins by an install
 // command, shows up here as pending, and is let in when the user pastes back the fingerprint its
-// terminal printed.
+// terminal printed. A computer on the host's tailnet can be installed from here in one step (over
+// SSH); the user's own nodes are let in without a fingerprint.
 
 const showError = (error: Error) => toast.error(wireErrorMessage(error));
 
@@ -194,6 +198,72 @@ function CommandBox({ command }: { command: string }) {
   );
 }
 
+/** One tailnet node: installable unless it is a machine here already or offline. */
+function TailnetPeer({ peer }: { peer: TailnetPeerView }) {
+  const { t: translateText } = useTranslation(["machines", "common"] as const);
+  const install = useInstallMachine();
+  const added = peer.machineId !== null || install.isSuccess;
+  return (
+    <li className="flex min-w-0 items-center gap-2 py-1">
+      <span className="min-w-0 flex-1 truncate text-sm" title={peer.dnsName}>
+        {peer.name}
+      </span>
+      <span className="text-xs text-muted-foreground">
+        {osLabels[peer.os] ?? peer.os}
+      </span>
+      {added ? (
+        <span className="text-xs text-muted-foreground">
+          {translateText("tailnet.added")}
+        </span>
+      ) : !peer.online ? (
+        <span className="text-xs text-muted-foreground">
+          {translateText("tailnet.offline")}
+        </span>
+      ) : (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={install.isPending}
+          aria-label={translateText("tailnet.installAction", {
+            name: peer.name,
+          })}
+          onClick={() =>
+            install.mutate(
+              { host: peer.dnsName || peer.name, name: peer.name },
+              {
+                onSuccess: () =>
+                  toast(
+                    translateText("tailnet.installed", { name: peer.name }),
+                  ),
+                onError: showError,
+              },
+            )
+          }
+        >
+          {translateText("tailnet.install")}
+        </Button>
+      )}
+    </li>
+  );
+}
+
+/** The host's tailnet, when it is on one: the computers there, each one install away. */
+function TailnetPeers() {
+  const { t: translateText } = useTranslation(["machines", "common"] as const);
+  const { data } = useDiscoverMachines(true);
+  if (data?.available !== true || data.peers.length === 0) return null;
+  return (
+    <section className="space-y-1">
+      <h3 className="text-sm font-medium">{translateText("tailnet.title")}</h3>
+      <ul aria-label={translateText("tailnet.title")} className="divide-y">
+        {data.peers.map((peer) => (
+          <TailnetPeer key={peer.node} peer={peer} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 interface Made {
   command: string;
   expiresAt: number;
@@ -231,6 +301,7 @@ function EnrollDialog({
             {translateText("install.permissionsNotice")}
           </DialogDescription>
         </DialogHeader>
+        <TailnetPeers />
         <ol className="space-y-4">
           <Step
             n={1}
@@ -440,6 +511,7 @@ function RunsDialog({
 function MachineCard({ machine }: { machine: MachineView }) {
   const { t: translateText } = useTranslation(["machines", "common"] as const);
   const revoke = useRevokeMachine();
+  const upgrade = useUpgradeMachine();
   const [confirming, setConfirming] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [limiting, setLimiting] = useState(false);
@@ -447,6 +519,9 @@ function MachineCard({ machine }: { machine: MachineView }) {
   const details = [
     translateText(`kinds.${machine.kind}`),
     machine.os ? (osLabels[machine.os] ?? machine.os) : null,
+    machine.version === null
+      ? null
+      : translateText("build.version", { version: machine.version }),
     machine.home,
     machine.status === "pending" || machine.status === "revoked"
       ? null
@@ -458,6 +533,14 @@ function MachineCard({ machine }: { machine: MachineView }) {
     .filter(Boolean)
     .join(" · ");
   const closed = machine.status === "revoked";
+  const build =
+    machine.build === "outdated" || machine.build === "updating"
+      ? translateText(`build.${machine.build}`)
+      : null;
+  const updatable =
+    machine.kind === "daemon" &&
+    machine.status === "online" &&
+    (machine.build === "outdated" || machine.updateError !== null);
 
   return (
     <li
@@ -474,7 +557,9 @@ function MachineCard({ machine }: { machine: MachineView }) {
         >
           {machine.name}
         </span>
-        <span className="text-xs text-muted-foreground">{status}</span>
+        <span className="text-xs text-muted-foreground">
+          {build === null ? status : `${status} · ${build}`}
+        </span>
         {closed ? null : (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -495,6 +580,27 @@ function MachineCard({ machine }: { machine: MachineView }) {
               <DropdownMenuItem onSelect={() => setLimiting(true)}>
                 {translateText("actions.runs")}
               </DropdownMenuItem>
+              {updatable ? (
+                <DropdownMenuItem
+                  disabled={upgrade.isPending}
+                  onSelect={() =>
+                    upgrade.mutate(
+                      { machineId: machine.id },
+                      {
+                        onSuccess: () =>
+                          toast(
+                            translateText("upgrade.started", {
+                              name: machine.name,
+                            }),
+                          ),
+                        onError: showError,
+                      },
+                    )
+                  }
+                >
+                  {translateText("actions.upgrade")}
+                </DropdownMenuItem>
+              ) : null}
               {machine.kind === "primary" ? null : (
                 <DropdownMenuItem
                   variant="destructive"
@@ -510,6 +616,14 @@ function MachineCard({ machine }: { machine: MachineView }) {
       {details ? (
         <p className="truncate text-xs text-muted-foreground" title={details}>
           {details}
+        </p>
+      ) : null}
+      {machine.updateError !== null && !closed ? (
+        <p
+          className="text-xs break-words text-state-warning"
+          title={machine.updateError}
+        >
+          {machine.updateError}
         </p>
       ) : null}
       {machine.status === "pending" ? <Approval machine={machine} /> : null}

@@ -28,6 +28,8 @@ export const agentFormSchema = z.object({
   thinkingLevel: z.string(),
   // The bundles it loads. Only the editor sets them; a form without them leaves them alone.
   bundles: z.array(z.string()).optional(),
+  // The machine it runs on; "" follows the project's.
+  machineId: z.string(),
 });
 export type AgentForm = z.infer<typeof agentFormSchema>;
 
@@ -43,6 +45,7 @@ export function agentDraft({
   thinkingLevel,
   name,
   bundles,
+  machineId,
 }: AgentForm): AgentFields {
   return {
     name,
@@ -51,6 +54,7 @@ export function agentDraft({
     runtime,
     model: model || null,
     thinkingLevel: (thinkingLevel || null) as ThinkingLevel | null,
+    machineId: machineId || null,
     ...(bundles === undefined ? {} : { bundles }),
   };
 }

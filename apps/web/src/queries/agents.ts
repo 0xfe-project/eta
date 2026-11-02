@@ -63,16 +63,23 @@ export function useDirectChat() {
 }
 
 /**
- * The external runtimes the host's machine has (Claude Code, Codex, ...), with their models. Asking
- * can start a runtime to list its models, so the answer is kept for a while; the host keeps its own.
+ * The external runtimes a machine has (Claude Code, Codex, ...), with their models: the host's own
+ * when no machine is named. Asking can start a runtime to list its models, so the answer is kept
+ * for a while; the host keeps its own.
  */
-export function useAgentRuntimes() {
+export function useAgentRuntimes(machineId?: string) {
   return useQuery({
-    queryKey: ["wire", "agents", "runtimes"],
+    queryKey: ["wire", "agents", "runtimes", machineId ?? ""],
     queryFn: async () =>
-      (await getWire().call<AgentResults["runtimes"]>("agents", "runtimes", {}))
-        .runtimes,
+      (
+        await getWire().call<AgentResults["runtimes"]>(
+          "agents",
+          "runtimes",
+          machineId === undefined ? {} : { machineId },
+        )
+      ).runtimes,
     staleTime: 5 * 60_000,
+    retry: false,
   });
 }
 
@@ -92,9 +99,12 @@ function runtimeModelsOf(info: AgentRuntimeInfo): Model[] {
  * The models an agent on `runtime` can choose: eta's providers' on eta, the runtime's own on an
  * external one. Undefined while they load.
  */
-export function useAgentModels(runtime: AgentRuntime): Model[] | undefined {
+export function useAgentModels(
+  runtime: AgentRuntime,
+  machineId?: string,
+): Model[] | undefined {
   const { data: models } = useModels();
-  const { data: runtimes } = useAgentRuntimes();
+  const { data: runtimes } = useAgentRuntimes(machineId);
   if (runtime === "eta") return models;
   if (runtimes === undefined) return undefined;
   const info = runtimes.find((entry) => entry.id === runtime);

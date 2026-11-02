@@ -11,6 +11,7 @@
  *   Eta-Logo.png    the logo the mail template embeds
  *   web/            apps/web/dist, the page (built first: `bun run --cwd apps/web build`)
  *   cli-proxy-api   CLIProxyAPI for this platform, and `cpa-launcher` next to it
+ *   daemon/         eta-daemon for every platform, with its manifest
  *
  * The cpajs platform packages are external to the bundle: their table names every platform, the
  * install has one, and the compiled host is handed its binary by path instead.
@@ -54,6 +55,13 @@ cpSync(
   join(out, "Eta-Logo.png"),
 );
 cpSync(web, join(out, "web"), { recursive: true });
+
+// The daemon for every platform it runs on: what this host keeps its machines at and installs new
+// ones from (`apps/eta/src/machines/builds.ts`).
+await $`bun run --cwd ${join(root, "apps", "daemon")} build:all`;
+cpSync(join(root, "apps", "daemon", "out", "dist"), join(out, "daemon"), {
+  recursive: true,
+});
 
 // cpajs's own lookup, from where the host resolves it: the binary of the installed platform.
 const server = (await import(Bun.resolveSync("@cpajs/cpa/server", app))) as {

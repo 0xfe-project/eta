@@ -10,6 +10,8 @@
  * A thin shell around `startHost`: flags, a startup summary on one line, and a signal handler.
  * Everything the host serves lives behind the one port; `--web-dir` adds the page, and a host
  * that listens beyond loopback (or is given a `--token-file`) asks for a token first.
+ * `--host tailscale` listens on this computer's tailnet address, which is how the other computers
+ * of the tailnet reach it (and the address they are told to dial when added as machines).
  *
  * The data directory is `~/.eta` and is not a flag. A second one was a second half: personas went
  * on being read from the real home while the config came from somewhere else, so a process pointed
@@ -20,6 +22,7 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 import { parseArgs } from "node:util";
 import { startHost } from "./host";
+import { Tailscale } from "./machines/tailscale";
 
 const { values } = parseArgs({
   options: {
@@ -47,6 +50,19 @@ if (!Number.isInteger(port) || port < 0 || port > 65_535) {
   process.exit(2);
 }
 
+// `tailscale` is not an interface: it is this computer's address on its tailnet, asked for now.
+let listen = values.host;
+if (listen === "tailscale") {
+  const address = await new Tailscale().address();
+  if (address === undefined) {
+    console.error(
+      "--host tailscale: Tailscale is not installed or not up here",
+    );
+    process.exit(2);
+  }
+  listen = address;
+}
+
 const memoryUrl = values["memory-url"] ?? process.env.ETA_MEMORY_URL;
 const publicUrl = values["public-url"] ?? process.env.ETA_PUBLIC_URL;
 const searxngUrl = values["searxng-url"] ?? process.env.ETA_SEARXNG_URL;
@@ -65,7 +81,11 @@ const github =
 const host = await startHost({
   dataDir: join(homedir(), ".eta"),
   port,
-  hostname: values.host,
+  hostname: listen,
+  // The tailnet's computers can be found and added as machines, and the user's own let in.
+  tailscale: true,
+  // The daemon builds carried beside this host (or in the checkout): daemons are kept at them.
+  daemonBuilds: true,
   ...(values["web-dir"] === undefined
     ? {}
     : { webDir: resolve(values["web-dir"]) }),

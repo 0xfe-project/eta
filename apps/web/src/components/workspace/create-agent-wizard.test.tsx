@@ -194,6 +194,7 @@ describe("creating an agent step by step", () => {
         runtime: "eta",
         model: "c:m1",
         thinkingLevel: null,
+        machineId: null,
       },
     ]);
     expect(api.select).toHaveBeenCalledWith("new");
@@ -228,6 +229,7 @@ describe("creating an agent step by step", () => {
         runtime: "claude",
         model: "claude:sonnet",
         thinkingLevel: null,
+        machineId: null,
       },
     ]);
   });

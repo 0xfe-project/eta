@@ -62,6 +62,8 @@ export async function startDaemon(
     tap?: (direction: "in" | "out", text: string) => void;
     /** The MCP library's manager settings on the daemon (a fake `fetch`, no timers). */
     mcp?: DaemonNodeOptions["mcp"];
+    /** More of the node's options: its version, how it says it was started, its runtimes. */
+    node?: Partial<DaemonNodeOptions>;
   } = {},
 ): Promise<TestDaemon> {
   const dataDir = options.dataDir ?? (await tempDir("eta-daemon-"));
@@ -77,6 +79,7 @@ export async function startDaemon(
     // The real user's akhook file is not this test's business.
     akhookUserConfig: join(dataDir, "no-user-akhook.yml"),
     warn: options.warn ?? (() => undefined),
+    ...options.node,
   });
   await node.start();
   const states: LinkState[] = [];
