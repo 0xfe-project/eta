@@ -47,8 +47,8 @@ export function useUpgradeMachine() {
   );
 }
 
-/** The tailnet's nodes, asked once when the add dialog opens (`enabled`). */
-export function useDiscoverMachines(enabled: boolean) {
+/** The tailnet's nodes, asked afresh each time the SSH way of adding a machine shows. */
+export function useDiscoverMachines() {
   return useQuery({
     queryKey: ["wire", "machines", "discover"],
     queryFn: async () =>
@@ -57,7 +57,6 @@ export function useDiscoverMachines(enabled: boolean) {
         "discover",
         {},
       ),
-    enabled,
     staleTime: 0,
   });
 }

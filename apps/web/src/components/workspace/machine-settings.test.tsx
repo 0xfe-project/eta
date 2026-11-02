@@ -37,8 +37,6 @@ async function type(input: HTMLInputElement, value: string) {
 const input = (label: string) =>
   document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
 
-const byId = (id: string) => document.getElementById(id) as HTMLInputElement;
-
 const back = () =>
   document.querySelector<HTMLButtonElement>('button[aria-label="返回"]')!;
 
@@ -177,12 +175,13 @@ describe("机器设置", () => {
     // Not a dialog over the panel: the panel itself, with a way back.
     expect(document.querySelector("[role=dialog]")).toBeNull();
     expect(back()).toBeTruthy();
-    await type(byId("machine-name"), " 书房 ");
+    // No name up front: the host names the machine after its hostname, and the card renames it.
+    expect(text()).not.toContain("机器名称");
     await click(button(document.body, "生成安装命令"));
-    expect(fake.calls.at(-1)).toMatchObject({
+    expect(fake.calls.at(-1)).toEqual({
       target: "machines",
       action: "enroll",
-      args: { name: "书房", url: location.origin },
+      args: { url: location.origin },
     });
     expect(text()).toContain(
       "curl -fsSL 'https://eta.test/machines/install.sh?code=c0de' | sh",

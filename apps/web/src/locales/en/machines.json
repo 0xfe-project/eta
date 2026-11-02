@@ -26,8 +26,7 @@
     "started": "{{name}} is updating and will reconnect"
   },
   "fields": {
-    "nameLabel": "Machine name",
-    "namePlaceholder": "e.g. Mac mini at home"
+    "nameLabel": "Machine name"
   },
   "install": {
     "permissionsNotice": "Agents run on that machine with full permissions. Only connect machines meant for work.",

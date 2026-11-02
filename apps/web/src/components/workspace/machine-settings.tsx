@@ -366,8 +366,7 @@ export function MachineSettings() {
   const shown = machines.filter((machine) => machine.status !== "revoked");
   // The primary is always there; "none yet" is about the others.
   const others = shown.filter((machine) => machine.kind !== "primary");
-  if (adding)
-    return <AddMachine machines={machines} onBack={() => setAdding(false)} />;
+  if (adding) return <AddMachine onBack={() => setAdding(false)} />;
 
   return (
     <div className="space-y-3">
