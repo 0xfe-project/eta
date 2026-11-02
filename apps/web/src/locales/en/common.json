@@ -88,8 +88,6 @@
     "unknown": "Unknown",
     "waiting": "Waiting",
     "stopped": "Stopped",
-    "online": "Online",
-    "offline": "Offline",
     "deleted": "Deleted",
     "paused": "Paused"
   },
