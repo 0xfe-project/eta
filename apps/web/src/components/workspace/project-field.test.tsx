@@ -32,8 +32,8 @@ function Harness() {
 }
 
 /** Radix Select opens on a key press (happy-dom has no pointer capture for a click). */
-async function openMachines() {
-  const trigger = document.querySelector<HTMLElement>('[aria-label="机器"]')!;
+async function openProjects() {
+  const trigger = document.querySelector<HTMLElement>("#new-project")!;
   await act(async () => {
     trigger.dispatchEvent(
       new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
@@ -42,12 +42,17 @@ async function openMachines() {
   return trigger;
 }
 
-async function pickMachine(name: string) {
-  await openMachines();
+const options = () =>
+  [...document.querySelectorAll<HTMLElement>('[role="option"]')].map(
+    (option) => option.textContent,
+  );
+
+async function pick(text: string) {
+  await openProjects();
   const option = [
     ...document.querySelectorAll<HTMLElement>('[role="option"]'),
-  ].find((candidate) => candidate.textContent === name);
-  expect(option, name).toBeDefined();
+  ].find((candidate) => candidate.textContent === text);
+  expect(option, text).toBeDefined();
   await act(async () => option!.click());
 }
 
@@ -63,10 +68,12 @@ describe("添加目录时选机器", () => {
     });
     await mount(<Harness />);
     await flush();
-    expect(document.querySelector('[aria-label="机器"]')).toBeNull();
+    // Nothing to choose: the label goes straight to the path.
+    expect(document.querySelector("#new-project")?.tagName).toBe("INPUT");
+    expect(document.querySelector('[role="combobox"]')).toBeNull();
   });
 
-  it("defaults to the primary and lists only online machines", async () => {
+  it("asks in the project list, one option per online machine, the primary first", async () => {
     productHost({
       machines: [
         primary,
@@ -77,16 +84,14 @@ describe("添加目录时选机器", () => {
     });
     await mount(<Harness />);
     await flush();
-    const trigger = await openMachines();
-    expect(trigger.textContent).toContain("主机");
-    expect(
-      [...document.querySelectorAll('[role="option"]')].map(
-        (o) => o.textContent,
-      ),
-    ).toEqual(["主机", "m2"]);
+    const trigger = await openProjects();
+    expect(trigger.textContent).toBe("在 主机 上添加目录…");
+    expect(options()).toEqual(["在 主机 上添加目录…", "在 m2 上添加目录…"]);
+    // The path is asked for once, under the one control that says where.
+    expect(document.querySelectorAll('[role="combobox"]')).toHaveLength(1);
   });
 
-  it("adds the path on the chosen machine, and on the primary by leaving it out", async () => {
+  it("adds the path on the machine its option names", async () => {
     const fake = productHost({
       machines: [primary, machine("m2", "online")],
       projects: [projectView({ id: "p1" })],
@@ -100,8 +105,8 @@ describe("添加目录时选机器", () => {
     }));
     await mount(<Harness />);
     await flush();
-    await pickMachine("m2");
-    expect(current).toMatchObject({ machineId: "m2" });
+    await pick("在 m2 上添加目录…");
+    expect(current).toMatchObject({ projectId: "", machineId: "m2" });
     await act(async () => {
       await resolve!(current!, undefined, null);
     });
@@ -110,11 +115,66 @@ describe("添加目录时选机器", () => {
       action: "create",
       args: { path: "/srv/app", machineId: "m2" },
     });
-    await pickMachine("主机");
+    await pick("在 主机 上添加目录…");
     await act(async () => {
       await resolve!(current!, undefined, null);
     });
-    expect(fake.calls.at(-1)!.args).toEqual({ path: "/srv/app" });
+    expect(fake.calls.at(-1)!.args).toEqual({
+      path: "/srv/app",
+      machineId: "m1",
+    });
+  });
+});
+
+describe("项目列表里的机器", () => {
+  const projects = [
+    projectView({ id: "eta", machineId: "m1", path: "/srv/eta" }),
+    projectView({ id: "eta2", name: "eta", machineId: "m2", path: "/srv/eta" }),
+    projectView({ id: "ios", machineId: "m3", path: "/Users/me/ios" }),
+  ];
+
+  it("names the machine of a project that is not on the primary, and says when it is offline", async () => {
+    productHost({
+      machines: [primary, machine("m2", "online"), machine("m3", "offline")],
+      projects,
+    });
+    await mount(<Harness />);
+    await flush();
+    await openProjects();
+    expect(options()).toEqual([
+      "eta/srv/eta",
+      "etam2:/srv/eta",
+      "iosm3:/Users/me/ios（离线）",
+      "在 主机 上添加目录…",
+      "在 m2 上添加目录…",
+    ]);
+  });
+
+  it("is the bare path while the machines have not said, with the one add option", async () => {
+    productHost({ projects });
+    await mount(<Harness />);
+    await flush();
+    await openProjects();
+    expect(options()).toEqual([
+      "eta/srv/eta",
+      "eta/srv/eta",
+      "ios/Users/me/ios",
+      "添加目录…",
+    ]);
+  });
+
+  it("shows the chosen project's place once, in the select", async () => {
+    productHost({
+      machines: [primary, machine("m2", "online")],
+      projects,
+    });
+    await mount(<Harness />);
+    await flush();
+    await pick("etam2:/srv/eta");
+    expect(current).toMatchObject({ projectId: "eta2" });
+    const field = document.querySelector("#new-project")!.parentElement!;
+    expect(field.textContent!.split("/srv/eta")).toHaveLength(2);
+    expect(field.querySelector("input")).toBeNull();
   });
 });
 
@@ -191,9 +251,9 @@ describe("在桌面壳里选目录", () => {
     shell({ path: "/srv/elsewhere" });
     await mount(<Harness />);
     await flush();
-    await pickMachine("m2");
+    await pick("在 m2 上添加目录…");
     expect(chooseFolder()).toBeUndefined();
-    await pickMachine("主机");
+    await pick("在 主机 上添加目录…");
     expect(chooseFolder()).toBeDefined();
   });
 });

@@ -285,9 +285,9 @@
     "start": "开始",
     "project": "项目",
     "addPath": "添加目录…",
+    "addPathOn": "在 {{machine}} 上添加目录…",
     "path": "目录路径",
-    "machine": "机器",
-    "pathHint": "在所选机器上的绝对路径，必须是已存在的目录。成员在这里干活。",
+    "pathHint": "绝对路径，必须是已存在的目录。成员在这里干活。",
     "chooseFolder": "选择目录…"
   },
   "chat": {},

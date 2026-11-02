@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { host, pickFolder } from "@/lib/native";
+import { projectPlace } from "@/lib/projects";
+import { useMachines } from "@/queries/projects";
 import { Select, SelectOption } from "./select-field";
 import {
   useChoosable,
@@ -10,6 +12,7 @@ import {
   useUsableMachines,
 } from "./use-project-choice";
 
+/** The "add a directory" option; with more than one usable machine, `__add__:<machine id>` each. */
 const ADD = "__add__";
 
 export function ProjectField({
@@ -22,66 +25,83 @@ export function ProjectField({
   const { t: translateText } = useTranslation(["chat", "common"] as const);
   const projects = useChoosable();
   const { project, adding } = useChosenProject(choice);
-  const machines = useUsableMachines();
+  const { machines } = useMachines();
+  const usable = useUsableMachines();
   const primary = machines.find((machine) => machine.kind === "primary");
-  const machineId = choice.machineId ?? primary?.id ?? "";
+  // Which machine a path goes on is a choice only once there are two to choose from, and then it is
+  // made where the path is asked for: one "add" option per machine, at the end of the projects.
+  const perMachine = usable.length > 1;
+  const listed = projects.length > 0 || perMachine;
   // A folder dialog sees this machine's disk, so it is offered only while the path would be added
   // on this machine. A path on a daemon is still typed by hand — and that is not a gap: the folder
   // being picked is not on the disk in front of the user.
   const canPick =
-    host().kind === "desktop" && machineId === (primary?.id ?? "");
+    host().kind === "desktop" &&
+    (choice.machineId ?? primary?.id) === primary?.id;
   const choose = async () => {
     const picked = await pickFolder(choice.path.trim() || undefined);
     if (picked !== null) onChange({ ...choice, path: picked });
   };
+  const offline = (machineId: string) =>
+    machines.some(
+      (machine) => machine.id === machineId && machine.status !== "online",
+    );
   return (
     <div className="grid gap-1 text-sm">
       <label htmlFor="new-project">{translateText("chat:new.project")}</label>
-      {projects.length > 0 ? (
+      {listed ? (
         <Select
           id="new-project"
           className="w-full"
-          value={adding ? ADD : (project?.id ?? "")}
+          value={
+            adding
+              ? perMachine
+                ? `${ADD}:${choice.machineId ?? primary?.id ?? ""}`
+                : ADD
+              : (project?.id ?? "")
+          }
           onValueChange={(value) =>
-            onChange({ ...choice, projectId: value === ADD ? "" : value })
+            onChange(
+              value.startsWith(ADD)
+                ? {
+                    ...choice,
+                    projectId: "",
+                    machineId: value.slice(ADD.length + 1) || undefined,
+                  }
+                : { ...choice, projectId: value },
+            )
           }
         >
+          {/* The trigger shows the chosen option as it is, so the place written here is also what
+              tells two projects at one path apart once one of them is chosen. */}
           {projects.map((candidate) => (
             <SelectOption key={candidate.id} value={candidate.id}>
               {candidate.name}
               <span className="ml-1 font-mono text-muted-foreground">
-                {candidate.path}
+                {projectPlace(candidate, machines)}
+                {offline(candidate.machineId)
+                  ? translateText("common:status.offlineSuffix")
+                  : null}
               </span>
             </SelectOption>
           ))}
-          <SelectOption value={ADD}>
-            {translateText("chat:new.addPath")}
-          </SelectOption>
+          {perMachine ? (
+            usable.map((machine) => (
+              <SelectOption key={machine.id} value={`${ADD}:${machine.id}`}>
+                {translateText("chat:new.addPathOn", { machine: machine.name })}
+              </SelectOption>
+            ))
+          ) : (
+            <SelectOption value={ADD}>
+              {translateText("chat:new.addPath")}
+            </SelectOption>
+          )}
         </Select>
       ) : null}
       {adding ? (
         <>
-          {machines.length > 1 ? (
-            <Select
-              aria-label={translateText("chat:new.machine")}
-              className="w-full"
-              value={machineId}
-              onValueChange={(value) =>
-                onChange({
-                  ...choice,
-                  machineId: value === primary?.id ? undefined : value,
-                })
-              }
-            >
-              {machines.map((machine) => (
-                <SelectOption key={machine.id} value={machine.id}>
-                  {machine.name}
-                </SelectOption>
-              ))}
-            </Select>
-          ) : null}
           <Input
-            id={projects.length > 0 ? undefined : "new-project"}
+            id={listed ? undefined : "new-project"}
             aria-label={translateText("chat:new.path")}
             value={choice.path}
             onChange={(event) =>
@@ -106,11 +126,7 @@ export function ProjectField({
             {translateText("chat:new.pathHint")}
           </span>
         </>
-      ) : (
-        <span className="truncate font-mono text-xs text-muted-foreground">
-          {project?.path}
-        </span>
-      )}
+      ) : null}
     </div>
   );
 }
