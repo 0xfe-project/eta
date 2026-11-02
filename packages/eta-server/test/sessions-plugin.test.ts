@@ -1289,7 +1289,7 @@ describe("choosing how the next turn is generated", () => {
       assistantMessage({
         stopReason: "toolUse",
         content: [
-          { type: "toolCall", id: "c1", name: "TaskList", arguments: {} },
+          { type: "toolCall", id: "c1", name: "list_steps", arguments: {} },
         ],
       }),
       assistantMessage({ content: [{ type: "text", text: "done" }] }),

@@ -201,14 +201,12 @@ function conversationTools(
   const actor: TaskActor = { kind: "agent", agentId: who.agentId };
   const { taskOf, list, get } = reading(deps);
 
-  // Debt, not settled here: `DEFAULT_SYSTEM_PROMPT` (packages/eta-harness/src/prompts/base.ts)
-  // points the other way — "the moment you feel something is bigger than one step, you open the
-  // todo" sends work that has outgrown a reply to the session's own list instead of to the board,
-  // which is where the user can see it. Fixing that means touching the base prompt, so it waits
-  // for its own change. It is easy to miss because the two things are called the same word: the
-  // session's todo items are `Task` in `client-contracts/src/data.ts`, and the board's are `Task`
-  // in `client-contracts/src/tasks.ts`, whose own comment says the two "have nothing in common
-  // but the word".
+  // The debt this comment used to record is paid on the prompt side. The session's own list is
+  // now "steps" (`create_step` / `update_step` / `list_steps` / `get_step`), the base prompt says
+  // a step stays in this session, and the platform block tells a model that work which changes
+  // files, runs a build or tests, or needs the user to accept a result is proposed here instead of
+  // being kept as a step. The kernel type is still `Task`: those names are what the journal writes
+  // to disk, so they are not ours to rename.
   const draft = defineTool({
     name: "draft_task",
     label: "draft_task",
@@ -220,8 +218,8 @@ function conversationTools(
       "to a person; this tool hands it to the board. A draft is not your step list: it is the " +
       "board's proposal. The user edits and confirms it, then you do it yourself in a fresh " +
       "session that cannot see this conversation — so write the goal and acceptance for a reader " +
-      "who knows nothing else, and put what you have established in `decided`. In a discussion, " +
-      "prefer it to `create_task`.",
+      "who knows nothing else, and put what you have established in `decided`. This is how work " +
+      "leaves a conversation: `create_task` is for when the user named a task themselves.",
     parameters: Type.Object({
       title: Type.String({
         description: "A short title for this piece of work",
@@ -269,8 +267,8 @@ function conversationTools(
     description:
       "Create a task on the board at once, linked to this conversation, and start on it: you " +
       "execute the tasks you make, in a fresh session of your own that does not see this " +
-      "conversation. Only when the user explicitly asked for a task: otherwise propose it with " +
-      "`draft_task` and let the user decide.",
+      "conversation. Drafting first is the rule, not a suggestion: unless the user named the task " +
+      "themselves, propose it with `draft_task` and let the user decide.",
     parameters: Type.Object({
       title: Type.String({ description: "A short title" }),
       description: Type.Optional(

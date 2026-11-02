@@ -324,10 +324,10 @@
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  --muted-foreground: oklch(0.54 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
+  --destructive: oklch(0.53 0.22 27.325);
   --success: oklch(0.527 0.154 150.069);
   --border: oklch(0.922 0 0);
   /* The border that has to be seen: menu frames, inputs, dividers you can grab. */
@@ -796,7 +796,7 @@
   .composer-toolbar-hints {
     font-family: var(--font-mono);
     font-size: 10px;
-    color: var(--faint);
+    color: var(--muted-foreground);
   }
 
   /* Composer controls share one height; menus live in a fixed portal above them. */
@@ -1196,9 +1196,13 @@
     font-size: 12px;
     color: var(--muted-foreground);
   }
-  .settings-layout nav button:hover {
-    background: var(--overlay);
-    color: var(--foreground);
+  /* Hover only where there is a pointer to hover with: on a phone a tap leaves :hover stuck on
+     the button until the next tap elsewhere. Each stays where it was so the cascade does not move. */
+  @media (hover: hover) {
+    .settings-layout nav button:hover {
+      background: var(--overlay);
+      color: var(--foreground);
+    }
   }
   .settings-layout nav button[aria-current="page"] {
     border-left-color: var(--foreground);
@@ -1238,19 +1242,25 @@
     overflow-y: auto;
     padding: 16px 20px;
   }
+  /* The page's rail sits against the sidebar like the header; only the rows keep a reading width. */
+  .settings-page .settings-content > * {
+    max-width: var(--container-content);
+  }
   .settings-heading {
     margin-bottom: 12px;
   }
   .settings-heading h2 {
     margin: 0 0 4px;
-    font-size: 16px;
-    font-weight: 500;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.3;
   }
   .settings-heading p,
   .settings-hint {
     font-size: 12px;
     line-height: 1.5;
     color: var(--muted-foreground);
+    text-wrap: pretty;
   }
   .settings-hint {
     margin: 10px 0 0;
@@ -1280,13 +1290,14 @@
     justify-content: center;
     gap: 4px;
     min-height: 26px;
-    line-height: 18px;
+    line-height: 1.4;
   }
   .settings-row-label p {
     margin: 0;
     font-size: 11px;
-    line-height: 18px;
+    line-height: 1.5;
     color: var(--muted-foreground);
+    text-wrap: pretty;
   }
   .settings-control {
     display: flex;
@@ -1328,8 +1339,10 @@
     align-items: center;
     gap: 4px;
   }
-  .settings-back button:hover {
-    color: var(--foreground);
+  @media (hover: hover) {
+    .settings-back button:hover {
+      color: var(--foreground);
+    }
   }
 
   .settings-field {
@@ -1405,9 +1418,11 @@
     padding: 6px;
     font-size: 12px;
   }
-  .settings-add-model:hover {
-    border-color: var(--border-strong);
-    background: var(--overlay-hover);
+  @media (hover: hover) {
+    .settings-add-model:hover {
+      border-color: var(--border-strong);
+      background: var(--overlay-hover);
+    }
   }
 
   .settings-headers {
@@ -1436,8 +1451,10 @@
     font-size: 11px;
     color: var(--muted-foreground);
   }
-  .settings-text-button:hover {
-    color: var(--foreground);
+  @media (hover: hover) {
+    .settings-text-button:hover {
+      color: var(--foreground);
+    }
   }
 
   .settings-check {

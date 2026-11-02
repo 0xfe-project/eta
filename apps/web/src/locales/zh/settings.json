@@ -4,14 +4,10 @@
     "system": "跟随系统",
     "light": "浅色",
     "dark": "深色",
-    "interfaceFont": "界面字体",
-    "monospaceFont": "等宽字体",
     "colorMode": "颜色模式",
     "language": "语言",
     "elementPicker": "圈选元素",
-    "elementPickerHint": "打开后可以圈选元素并复制组件和源码位置。",
-    "description": "一套字体、三种明暗、一种语言。这里的东西不影响智能体怎么干活。",
-    "colorModeHint": "不选就跟随系统。"
+    "elementPickerHint": "打开后可以圈选元素并复制组件和源码位置。"
   },
   "sections": {
     "approvals": "需先确认的工具",

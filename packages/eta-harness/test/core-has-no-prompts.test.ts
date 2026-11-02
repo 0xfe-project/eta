@@ -17,8 +17,8 @@ import { describe, expect, it } from "vitest";
 import {
   builtinPersonas,
   DEFAULT_SYSTEM_PROMPT,
-  TASK_REVIEW_PROMPT,
-  TASK_UPDATE_SUCCESS,
+  STEP_REVIEW_PROMPT,
+  STEP_UPDATE_SUCCESS,
 } from "../src/prompts";
 
 const CORE_SOURCE = join(import.meta.dirname, "..", "..", "eta-core", "src");
@@ -48,8 +48,8 @@ describe("core", () => {
         "the base prompt's tool guide",
         "Your tools — the ones a session has by default",
       ],
-      ["the task review prompt", TASK_REVIEW_PROMPT.slice(0, 60)],
-      ["the task update reply", TASK_UPDATE_SUCCESS],
+      ["the task review prompt", STEP_REVIEW_PROMPT.slice(0, 60)],
+      ["the task update reply", STEP_UPDATE_SUCCESS],
       ["a builtin persona card", builtinPersonas().Executor.slice(0, 60)],
       ["the goal continuation", "[goal] keep going"],
       ["a system reminder", "<system-reminder>"],

@@ -131,7 +131,7 @@ export {
   type CadenceState,
   createCadenceState,
   DEFAULT_REMINDER_INTERVAL,
-  DEFAULT_TASK_TOOL_NAMES,
+  DEFAULT_STEP_TOOL_NAMES,
   drainReminderForContext,
   evaluateToolResult,
   onTurnStart,
@@ -227,8 +227,8 @@ export {
 export { createStateTools, stateToolSchemas } from "./tools/state";
 export { createSubagentTools, SUBAGENT_TOOL_NAMES } from "./tools/subagents";
 export {
-  createTaskTools,
-  TASK_TOOL_NAMES,
+  createStepTools,
+  STEP_TOOL_NAMES,
   type TaskStatus,
 } from "./tools/tasks";
 export {
