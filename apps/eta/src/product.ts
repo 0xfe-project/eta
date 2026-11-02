@@ -67,6 +67,7 @@ import { inboxPlugin } from "./inbox/plugin";
 import { SettingStore } from "./inbox/setting";
 import { InteractionStore } from "./inbox/store";
 import { MachineHub } from "./machines/hub";
+import { sshRunner } from "./machines/install";
 import { SessionMirrors } from "./machines/mirror";
 import { machinesPlugin } from "./machines/plugin";
 import { RemotePlace } from "./machines/remote-place";
@@ -809,9 +810,15 @@ export function createProduct(options: {
                 server.server.port,
                 options.tailscale,
               ),
+            tailnetUrl: async () =>
+              await tailnetDaemonUrl(
+                options.hostname ?? "127.0.0.1",
+                server.server.port,
+                options.tailscale,
+              ),
             tailscale: options.tailscale,
             builds: options.daemonBuilds,
-            ssh: options.ssh,
+            ssh: options.ssh ?? sshRunner(join(dataDir, "run")),
           },
           applied("machines"),
         ),
@@ -925,16 +932,24 @@ async function defaultDaemonUrl(
   port: number,
   tailscale: Tailscale | undefined,
 ): Promise<string> {
+  const tailnet = await tailnetDaemonUrl(bound, port, tailscale);
+  if (tailnet !== undefined) return tailnet;
+  if (bound === "0.0.0.0" || bound === "::")
+    return `http://${hostname()}:${port}`;
+  return `http://${bound.includes(":") ? `[${bound}]` : bound}:${port}`;
+}
+
+/** This host on its tailnet, by MagicDNS name, when it is on one and listens there. */
+async function tailnetDaemonUrl(
+  bound: string,
+  port: number,
+  tailscale: Tailscale | undefined,
+): Promise<string | undefined> {
   const every = bound === "0.0.0.0" || bound === "::";
   const status = await tailscale?.status();
-  if (
-    status !== undefined &&
-    (every || status.self.addresses.includes(bound))
-  ) {
-    const name = status.self.dnsName || status.self.addresses[0];
-    if (name !== undefined && name !== "")
-      return `http://${name.includes(":") ? `[${name}]` : name}:${port}`;
-  }
-  if (every) return `http://${hostname()}:${port}`;
-  return `http://${bound.includes(":") ? `[${bound}]` : bound}:${port}`;
+  if (status === undefined || !(every || status.self.addresses.includes(bound)))
+    return undefined;
+  const name = status.self.dnsName || status.self.addresses[0];
+  if (name === undefined || name === "") return undefined;
+  return `http://${name.includes(":") ? `[${name}]` : name}:${port}`;
 }

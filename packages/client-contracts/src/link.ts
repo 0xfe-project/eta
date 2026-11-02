@@ -30,6 +30,13 @@ export const ENROLL_PATH = "/machines/enroll";
  * device credential, as on the link.
  */
 export const DAEMON_DOWNLOAD_PATH = "/machines/daemon";
+/**
+ * What a new machine runs to install itself: `curl -fsSL <primary>/machines/install.sh?code=<code> | sh`.
+ * The script fetches the build from `INSTALL_DOWNLOAD_PATH/<platform>?code=<code>`; both answer only
+ * while the install code is good, and neither uses it up (registering does).
+ */
+export const INSTALL_SCRIPT_PATH = "/machines/install.sh";
+export const INSTALL_DOWNLOAD_PATH = "/machines/install";
 
 /**
  * The link's own version: what both sides must agree on to talk at all. It moves only when a

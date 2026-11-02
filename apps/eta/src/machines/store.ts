@@ -257,6 +257,16 @@ export class MachineStore {
     })();
   }
 
+  /** Whether an install code is good now: made, not used, not expired. It is not used up. */
+  codeIsGood(code: string, now: number = Date.now()): boolean {
+    const row = this.#db
+      .query<{ expires_at: number; used_at: number | null }, [string]>(
+        "SELECT expires_at, used_at FROM machine_enrollment WHERE code_digest = ?",
+      )
+      .get(digestOf(code));
+    return row !== null && row.used_at === null && row.expires_at >= now;
+  }
+
   /** The machine that used an install code, once one has. */
   enrolledWith(code: string): MachineRecord | undefined {
     const row = this.#db

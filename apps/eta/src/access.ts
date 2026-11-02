@@ -1,3 +1,13 @@
+import type { Buffer } from "node:buffer";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 /**
  * Who may reach the host. Two independent checks, both run by the transport's `authorize`
  * before any route and before the WebSocket upgrade — the pipe runs commands and reads files as
@@ -19,16 +29,13 @@
  * `SameSite=Strict` so another site's request does not carry it. This is the dev gateway of the
  * upstream repository (scripts/dev/gateway.ts) moved into the host.
  */
-import type { Buffer } from "node:buffer";
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
-import { dirname, join } from "node:path";
+  DAEMON_DOWNLOAD_PATH,
+  ENROLL_PATH,
+  INSTALL_DOWNLOAD_PATH,
+  INSTALL_SCRIPT_PATH,
+  LINK_PATH,
+} from "@eta/client-contracts";
 
 import {
   GITHUB_AUTHORIZATION_CALLBACK_PATH,
@@ -141,12 +148,20 @@ function carriesOwnCapability(request: Request, pathname: string): boolean {
 }
 
 /**
- * The two routes a daemon uses. A daemon is not a browser: it has no cookie and sends no origin,
- * so neither check below can say anything about it. Each route authenticates what it carries (an
- * install code, a device credential), and the host answers for that, not this file.
+ * The routes a machine uses, not a browser: enrolling, the link, fetching the daemon build to
+ * replace itself with, and the install script a new machine runs (with the build it fetches). A
+ * machine has no cookie and sends no origin, so neither check below can say anything about it.
+ * Each route authenticates what it carries (an install code, a device credential), and the host
+ * answers for that, not this file.
  */
 function isMachineRoute(pathname: string): boolean {
-  return pathname === "/machines/enroll" || pathname === "/machines/connect";
+  return (
+    pathname === ENROLL_PATH ||
+    pathname === LINK_PATH ||
+    pathname === INSTALL_SCRIPT_PATH ||
+    pathname.startsWith(`${DAEMON_DOWNLOAD_PATH}/`) ||
+    pathname.startsWith(`${INSTALL_DOWNLOAD_PATH}/`)
+  );
 }
 
 /**

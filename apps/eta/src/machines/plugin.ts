@@ -5,8 +5,15 @@
  * its link is up). What can be done: name a machine, make an install code for a new one, approve
  * a pending one by its fingerprint, revoke one, bring one's daemon up to date, look at the tailnet
  * for computers to add, and put the daemon on one of them over SSH.
+ *
+ * An install over SSH takes a while (a build is tens of megabytes): the call returns at once and
+ * its steps are the `installs` section, which the page watches.
  */
-import type { MachineView, TailnetPeerView } from "@eta/client-contracts";
+import type {
+  MachineInstallView,
+  MachineView,
+  TailnetPeerView,
+} from "@eta/client-contracts";
 import type { DaemonBuilds } from "./builds";
 import type { MachineHub } from "./hub";
 import type { SshRunner } from "./install";
@@ -14,6 +21,7 @@ import type { MachineRecord, MachineStore } from "./store";
 import type { Tailscale } from "./tailscale";
 import { Args, productPlugin, publish } from "../wire";
 import { installDaemon } from "./install";
+import { installCommand } from "./install-script";
 
 export interface MachinesDeps {
   machines: MachineStore;
@@ -21,18 +29,19 @@ export interface MachinesDeps {
   changed: () => void;
   /** Where a daemon should dial when the caller does not say: this host's own address. */
   defaultUrl: () => Promise<string>;
+  /** This host's tailnet address, when it listens there. */
+  tailnetUrl: () => Promise<string | undefined>;
   /** Tailscale on this host, for discovery; without it the tailnet is never looked at. */
   tailscale?: Tailscale | undefined;
   /** The daemon builds carried, what `install` sends. */
   builds?: DaemonBuilds | undefined;
-  /** How `install` reaches a computer; the user's `ssh` by default. */
-  ssh?: SshRunner | undefined;
+  /** How `install` reaches a computer. */
+  ssh: SshRunner;
+  now?: (() => number) | undefined;
 }
 
-/** What the user is told to type on the other machine. */
-function installCommand(url: string, code: string): string {
-  return `eta-daemon setup ${url} ${code}`;
-}
+/** The installs kept for the page: enough to see the last few, never a history. */
+const KEEP_INSTALLS = 10;
 
 /** An address a daemon can dial: `http(s)://host[:port]`, and nothing after it. */
 function originOf(url: string, action: string): string {
@@ -47,6 +56,7 @@ function originOf(url: string, action: string): string {
 }
 
 export function machinesPlugin(deps: MachinesDeps, applied: () => void) {
+  const installs: MachineInstallView[] = [];
   const viewOf = (machine: MachineRecord): MachineView => ({
     ...machine,
     build: deps.hub.buildOf(machine),
@@ -67,7 +77,10 @@ export function machinesPlugin(deps: MachinesDeps, applied: () => void) {
         publish(
           wire,
           "machines",
-          { list: () => deps.machines.list().map(viewOf) },
+          {
+            list: () => deps.machines.list().map(viewOf),
+            installs: () => installs.map((install) => ({ ...install })),
+          },
           { eager: true },
         ),
         wire.handle("machines", "rename", (call) => {
@@ -176,33 +189,64 @@ export function machinesPlugin(deps: MachinesDeps, applied: () => void) {
             },
           };
         }),
+        wire.handle("machines", "addresses", async () => ({
+          result: { tailnet: (await deps.tailnetUrl()) ?? null },
+        })),
         wire.handle("machines", "install", async (call) => {
           const args = new Args(call);
           const host = args.string("host").trim();
           // Something `ssh` would read as an option is not a host.
           if (host === "" || host.startsWith("-") || /\s/.test(host))
             throw new Error(`machines.install: not a host: ${host}`);
-          if (deps.builds === undefined)
+          const builds = deps.builds;
+          if (builds === undefined)
             throw new Error("this primary carries no daemon builds");
           const url = await urlFor(args.optionalString("url"), "install");
           const name = args.optionalString("name")?.trim();
+          const password = args.optionalString("password");
           const { code } = deps.machines.enroll(
             name === undefined || name === ""
               ? host.replace(/^.*@/, "").split(".")[0]
               : name,
           );
-          const { platform } = await installDaemon(
-            { host, url, code },
-            { builds: deps.builds, ssh: deps.ssh },
-          );
-          const machine = deps.machines.enrolledWith(code);
-          deps.changed();
-          return {
-            result: {
-              machine: machine === undefined ? null : viewOf(machine),
-              platform,
-            },
+          const install: MachineInstallView = {
+            id: crypto.randomUUID(),
+            host,
+            step: "connect",
+            error: null,
+            machineId: null,
+            startedAt: (deps.now ?? Date.now)(),
           };
+          installs.unshift(install);
+          installs.splice(KEEP_INSTALLS);
+          const moved = (): void => wire.pushNow("machines");
+          moved();
+          // The call is answered now; the install goes on, and its steps are the section.
+          void installDaemon(
+            { host, url, code, password },
+            {
+              builds,
+              ssh: deps.ssh,
+              onStep: (step) => {
+                install.step = step;
+                moved();
+              },
+            },
+          ).then(
+            () => {
+              install.step = "done";
+              install.machineId = deps.machines.enrolledWith(code)?.id ?? null;
+              deps.changed();
+              moved();
+            },
+            (error: unknown) => {
+              install.step = "failed";
+              install.error =
+                error instanceof Error ? error.message : String(error);
+              moved();
+            },
+          );
+          return { result: { installId: install.id } };
         }),
       ];
       return () => {

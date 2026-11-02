@@ -37,6 +37,11 @@ async function type(input: HTMLInputElement, value: string) {
 const input = (label: string) =>
   document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
 
+const byId = (id: string) => document.getElementById(id) as HTMLInputElement;
+
+const back = () =>
+  document.querySelector<HTMLButtonElement>('button[aria-label="返回"]')!;
+
 const submit = async (form: Element) => {
   await act(async () => {
     form.dispatchEvent(
@@ -123,38 +128,47 @@ describe("机器设置", () => {
     expect(document.querySelector('[aria-label="弃用 的操作"]')).toBeNull();
   });
 
-  it("enrolls: asks for the command with this page's origin and shows it with its expiry", async () => {
+  it("adding turns the panel into the way in: a command to run, with this page's origin", async () => {
     const fake = productHost({ machines: [primary] });
+    fake.handle("machines.addresses", () => ({ tailnet: null }));
     fake.handle("machines.enroll", () => ({
       code: "c0de",
       expiresAt: Date.now() + 3_600_000,
       url: location.origin,
-      command: "curl -fsSL https://eta.test/install | sh -s -- c0de",
+      command:
+        "curl -fsSL 'https://eta.test/machines/install.sh?code=c0de' | sh",
     }));
     await mount(<MachineSettings />);
     await flush();
     await click(button(document.body, "添加机器"));
-    await type(input("机器名称"), " 书房 ");
-    await submit(document.querySelector("[role=dialog] form")!);
+    // Not a dialog over the panel: the panel itself, with a way back.
+    expect(document.querySelector("[role=dialog]")).toBeNull();
+    expect(back()).toBeTruthy();
+    await type(byId("machine-name"), " 书房 ");
+    await click(button(document.body, "生成安装命令"));
     expect(fake.calls.at(-1)).toMatchObject({
       target: "machines",
       action: "enroll",
       args: { name: "书房", url: location.origin },
     });
     expect(text()).toContain(
-      "curl -fsSL https://eta.test/install | sh -s -- c0de",
+      "curl -fsSL 'https://eta.test/machines/install.sh?code=c0de' | sh",
     );
     expect(text()).toContain("命令只能用一次");
-    expect(text()).toContain("前有效");
+    // With no tailnet address there is nothing to choose.
+    expect(document.getElementById("machine-address")).toBeNull();
+    await click(back());
+    expect(button(document.body, "添加机器")).toBeTruthy();
   });
 
   it("approves a machine that shows up after the command, with the pasted fingerprint", async () => {
     const fake = productHost({ machines: [primary] });
+    fake.handle("machines.addresses", () => ({ tailnet: null }));
     fake.handle("machines.enroll", () => ({
       code: "c0de",
       expiresAt: Date.now() + 3_600_000,
       url: location.origin,
-      command: "eta-daemon enroll c0de",
+      command: "curl -fsSL x | sh",
     }));
     fake.handle("machines.approve", () => ({
       machine: { ...laptop, status: "online" },
@@ -162,17 +176,16 @@ describe("机器设置", () => {
     await mount(<MachineSettings />);
     await flush();
     await click(button(document.body, "添加机器"));
-    await submit(document.querySelector("[role=dialog] form")!);
-    expect(document.querySelectorAll("[role=dialog] input")).toHaveLength(0);
+    await click(button(document.body, "生成安装命令"));
+    expect(text()).toContain("等待那台机器运行命令");
     await act(async () =>
       fake.set("machines", {
         list: [primary, { ...laptop, status: "pending", fingerprint: "ABCD" }],
+        installs: [],
       }),
     );
     await flush();
-    const field = document.querySelector<HTMLInputElement>(
-      '[role=dialog] input[aria-label="笔记本 的指纹"]',
-    )!;
+    const field = input("笔记本 的指纹");
     await type(field, "abcd efgh:ijkl");
     await submit(field.closest("form")!);
     expect(fake.calls.at(-1)).toMatchObject({
