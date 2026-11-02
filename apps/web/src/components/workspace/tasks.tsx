@@ -1362,7 +1362,7 @@ export function CommentBox({
             placeholder={translateText("comments.placeholder")}
             rows={1}
             maxLength={20000}
-            className="max-h-48 min-h-9 resize-none border-0 bg-transparent text-sm focus-visible:ring-0 md:text-sm dark:bg-transparent"
+            className="max-h-48 min-h-9 resize-none border-0 bg-transparent text-base focus-visible:ring-0 md:text-sm dark:bg-transparent"
             value={text}
             onChange={(e) => {
               setText(e.target.value);
@@ -1634,7 +1634,7 @@ export function Description({
           autoFocus
           rows={8}
           maxLength={20000}
-          className="max-h-[60dvh] text-sm md:text-sm"
+          className="max-h-[60dvh] text-base md:text-sm"
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
