@@ -1,4 +1,5 @@
 import type { AgentFields, ThinkingLevel } from "@eta/client-contracts";
+import { AGENT_RUNTIMES } from "@eta/client-contracts";
 import { z } from "zod";
 import { formatLocale, translate } from "@/lib/i18n";
 
@@ -19,7 +20,9 @@ export const agentFormSchema = z.object({
   }),
   // Which persona card the agent wears; "" is the project's default, which is a card too.
   persona: z.string().max(200),
-  // "" until a model is chosen.
+  // What answers for it: eta's own loop, or an external runtime on the machine.
+  runtime: z.enum(AGENT_RUNTIMES),
+  // "" until a model is chosen; on an external runtime, "" is the runtime's default.
   model: z.string(),
   // "" leaves it to the model's own default.
   thinkingLevel: z.string(),
@@ -36,6 +39,7 @@ export function agentDraft({
   description,
   model,
   persona,
+  runtime,
   thinkingLevel,
   name,
   bundles,
@@ -44,6 +48,7 @@ export function agentDraft({
     name,
     instructions: description,
     persona,
+    runtime,
     model: model || null,
     thinkingLevel: (thinkingLevel || null) as ThinkingLevel | null,
     ...(bundles === undefined ? {} : { bundles }),

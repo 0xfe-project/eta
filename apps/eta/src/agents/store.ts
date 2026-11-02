@@ -1,4 +1,4 @@
-import type { ThinkingLevel } from "@eta/client-contracts";
+import type { AgentRuntime, ThinkingLevel } from "@eta/client-contracts";
 /**
  * The agents: names, instructions, the model and persona each wears.
  *
@@ -14,6 +14,9 @@ export interface AgentRecord {
   name: string;
   instructions: string;
   persona: string;
+  /** What answers for it: eta's own loop, or an external runtime its sessions delegate to. */
+  runtime: AgentRuntime;
+  /** `provider:modelId`, or `runtime:modelId` on an external runtime. */
   model: string | null;
   thinkingLevel: ThinkingLevel | null;
   /** The bundles it loads, by name, in the order they were chosen. */
@@ -26,6 +29,7 @@ export interface AgentInput {
   name: string;
   instructions?: string | undefined;
   persona?: string | undefined;
+  runtime?: AgentRuntime | undefined;
   model?: string | null | undefined;
   thinkingLevel?: ThinkingLevel | null | undefined;
   bundles?: string[] | undefined;
@@ -36,6 +40,7 @@ interface Row {
   name: string;
   instructions: string;
   persona: string;
+  runtime: string;
   model: string | null;
   thinking_level: string | null;
   bundles: string;
@@ -60,6 +65,7 @@ const recordOf = (row: Row): AgentRecord => ({
   name: row.name,
   instructions: row.instructions,
   persona: row.persona,
+  runtime: row.runtime as AgentRuntime,
   model: row.model,
   thinkingLevel: row.thinking_level as ThinkingLevel | null,
   bundles: namesOf(row.bundles),
@@ -97,14 +103,15 @@ export class AgentStore {
     const now = Date.now();
     this.#db
       .query(
-        `INSERT INTO agent (id, name, instructions, persona, model, thinking_level, bundles, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO agent (id, name, instructions, persona, runtime, model, thinking_level, bundles, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
         input.name,
         input.instructions ?? "",
         input.persona ?? "",
+        input.runtime ?? "eta",
         input.model ?? null,
         input.thinkingLevel ?? null,
         JSON.stringify(input.bundles ?? []),
@@ -120,13 +127,14 @@ export class AgentStore {
     if (current === undefined) return undefined;
     this.#db
       .query(
-        `UPDATE agent SET name = ?, instructions = ?, persona = ?, model = ?, thinking_level = ?, bundles = ?, updated_at = ?
+        `UPDATE agent SET name = ?, instructions = ?, persona = ?, runtime = ?, model = ?, thinking_level = ?, bundles = ?, updated_at = ?
           WHERE id = ?`,
       )
       .run(
         patch.name ?? current.name,
         patch.instructions ?? current.instructions,
         patch.persona ?? current.persona,
+        patch.runtime ?? current.runtime,
         patch.model === undefined ? current.model : patch.model,
         patch.thinkingLevel === undefined
           ? current.thinkingLevel

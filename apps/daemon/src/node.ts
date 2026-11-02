@@ -42,6 +42,7 @@ import {
   AkhookSession,
   journalTriggerStore,
 } from "@eta/plugin-akhook";
+import { createOarRuntimes } from "@eta/runtime-oar";
 import {
   createConnection,
   discoverPersonas,
@@ -187,6 +188,8 @@ export class DaemonNode {
     });
     this.#manager = new SessionManager({
       store: this.#store,
+      // Claude Code, Codex, OpenCode, Pi: an agent on one of them runs it on this machine.
+      runtimes: createOarRuntimes({ warn }),
       // Generation is the primary's: this is a model layer that asks it.
       modelsFor: (meta) =>
         remoteModels({
@@ -546,7 +549,10 @@ export class DaemonNode {
     if (args.session !== undefined) {
       const id = args.session;
       try {
-        await sessions.open(id);
+        const { managed } = await sessions.open(id);
+        // A conversation is one runtime's: an agent that moved to another starts over.
+        if ((managed.meta.runtime ?? "eta") !== (args.runtime ?? "eta"))
+          throw new Error(`no such session on ${args.runtime ?? "eta"}: ${id}`);
         if (this.#opened.get(id) !== args.stamp) {
           await sessions.setMeta(id, {
             persona: args.persona === undefined ? undefined : args.persona,
@@ -568,6 +574,7 @@ export class DaemonNode {
       title: args.title,
       agentId: args.agentId,
       conversationId: args.conversationId,
+      ...(args.runtime === undefined ? {} : { runtime: args.runtime }),
       ...(args.model === undefined ? {} : { model: args.model }),
       ...(args.persona === undefined ? {} : { persona: args.persona }),
     });

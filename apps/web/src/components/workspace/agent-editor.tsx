@@ -7,7 +7,7 @@ import { ScrollIcon } from "@phosphor-icons/react/Scroll";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/SlidersHorizontal";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
@@ -31,15 +31,20 @@ import {
 } from "@/components/ui/dialog";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { useDeleteAgent, useUpdateAgent } from "@/queries/agents";
+import {
+  useAgentModels,
+  useAgentRuntimes,
+  useDeleteAgent,
+  useUpdateAgent,
+} from "@/queries/agents";
 import { useBundles } from "@/queries/bundles";
-import { useModels } from "@/queries/providers";
 import {
   BundlesField,
   InstructionsField,
   ModelField,
   NameField,
   PersonaField,
+  RuntimeField,
   ThinkingField,
 } from "./agent-fields";
 import { agentDraft, agentFormSchema } from "./agent-form";
@@ -123,7 +128,7 @@ const tabs: {
       return translate("agents:editor.tabs.general");
     },
     icon: SlidersHorizontalIcon,
-    fields: ["name", "model", "thinkingLevel", "persona"],
+    fields: ["name", "runtime", "model", "thinkingLevel", "persona"],
   },
   {
     value: "instructions",
@@ -157,7 +162,7 @@ function AgentEditorForm({
   ] as const);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
-  const { data: models } = useModels();
+  const { data: runtimes } = useAgentRuntimes();
   const { mounted: hasBundles } = useBundles();
   const shownTabs = tabs.filter(
     (item) => item.value !== "environment" || hasBundles,
@@ -170,6 +175,7 @@ function AgentEditorForm({
     defaultValues: {
       name: agent.name,
       description: agent.instructions,
+      runtime: agent.runtime,
       model: agent.model ?? "",
       persona: agent.persona,
       thinkingLevel: agent.thinkingLevel ?? "",
@@ -193,18 +199,25 @@ function AgentEditorForm({
     setFocus({ field });
   };
   const errors = form.formState.errors;
+  const runtime = useWatch({ control: form.control, name: "runtime" });
+  const models = useAgentModels(runtime);
 
   const save = form.handleSubmit(
     (values) => {
-      // Agents can be created before any account is connected, not after.
-      if (!values.model && models?.some((model) => model.available)) {
+      // Agents can be created before any account is connected, not after. An external runtime
+      // runs its own default when none is chosen.
+      if (
+        values.runtime === "eta" &&
+        !values.model &&
+        models?.some((model) => model.available)
+      ) {
         form.setError("model", {
           message: translateText("validation:modelRequired"),
         });
         showError("model");
         return;
       }
-      if (values.model) {
+      if (values.model && values.runtime === "eta") {
         setWorkspace((state) => ({ ...state, lastModel: values.model }));
       }
       updateAgent.mutate(
@@ -241,10 +254,12 @@ function AgentEditorForm({
           {tab === "general" ? (
             <>
               <NameField form={form} />
+              <RuntimeField form={form} runtimes={runtimes} />
               <ModelField
                 form={form}
                 models={models}
                 onOpenProviders={openProviders}
+                external={runtime !== "eta"}
               />
               <ThinkingField form={form} />
               <PersonaField form={form} />

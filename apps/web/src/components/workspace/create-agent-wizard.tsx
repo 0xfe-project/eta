@@ -7,13 +7,17 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DialogFooter } from "@/components/ui/dialog";
-import { useCreateAgent } from "@/queries/agents";
-import { useModels } from "@/queries/providers";
+import {
+  useAgentModels,
+  useAgentRuntimes,
+  useCreateAgent,
+} from "@/queries/agents";
 import {
   InstructionsField,
   ModelField,
   NameField,
   PersonaField,
+  RuntimeField,
   ThinkingField,
 } from "./agent-fields";
 import { agentDraft, agentFormSchema } from "./agent-form";
@@ -26,7 +30,7 @@ const steps = [
   "agents:editor.tabs.instructions",
 ] as const;
 // The fields each step checks before moving on.
-const stepFields = [["name", "model"], ["description"]] as const;
+const stepFields = [["name", "runtime", "model"], ["description"]] as const;
 const last = steps.length - 1;
 
 /**
@@ -44,8 +48,7 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
   const lastModel = useWorkspaceStore((s) => s.workspace.lastModel);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
-  const { data: models } = useModels();
-  const usable = (models ?? []).filter((model) => model.available);
+  const { data: runtimes } = useAgentRuntimes();
   const create = useCreateAgent();
   const [step, setStep] = useState(0);
   const [failure, setFailure] = useState<string>();
@@ -57,17 +60,24 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
     defaultValues: {
       name: "",
       description: "",
+      runtime: "eta",
       model: "",
       persona: "",
       thinkingLevel: "",
     },
   });
   const model = useWatch({ control: form.control, name: "model" });
+  const runtime = useWatch({ control: form.control, name: "runtime" });
+  const external = runtime !== "eta";
+  const models = useAgentModels(runtime);
+  const usable = (models ?? []).filter((item) => item.available);
   // New agents start with the last used model, else the default one, else the first usable one.
-  const preferred =
-    usable.find((item) => item.id === lastModel) ??
-    usable.find((item) => item.default) ??
-    usable[0];
+  // An external runtime starts on its own default, which is no choice at all.
+  const preferred = external
+    ? undefined
+    : (usable.find((item) => item.id === lastModel) ??
+      usable.find((item) => item.default) ??
+      usable[0]);
   useEffect(() => {
     if (!model && preferred) form.setValue("model", preferred.id);
   }, [form, model, preferred]);
@@ -80,7 +90,7 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
   const valid = async (at: number) => {
     if (!(await form.trigger([...stepFields[at]]))) return false;
     // Agents can be created before any account is connected, not after.
-    if (at === 0 && !form.getValues("model") && usable.length) {
+    if (at === 0 && !external && !form.getValues("model") && usable.length) {
       form.setError("model", {
         message: translateText("validation:modelRequired"),
       });
@@ -109,7 +119,7 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
     sendingRef.current = true;
     setFailure(undefined);
     const values = agentFormSchema.parse(form.getValues());
-    if (values.model) {
+    if (values.model && values.runtime === "eta") {
       setWorkspace((state) => ({ ...state, lastModel: values.model }));
     }
     create.mutate(agentDraft(values), {
@@ -143,10 +153,12 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
         {step === 0 ? (
           <>
             <NameField form={form} autoFocus />
+            <RuntimeField form={form} runtimes={runtimes} />
             <ModelField
               form={form}
               models={models}
               onOpenProviders={openProviders}
+              external={external}
             />
             <ThinkingField form={form} />
           </>

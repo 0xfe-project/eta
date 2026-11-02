@@ -27,6 +27,11 @@ export {
   validateRetryPolicy,
   validateToolNames,
 } from "./kernel/config";
+export type {
+  DelegatedRunResult,
+  RunDelegate,
+  RunDelegateContext,
+} from "./kernel/delegate";
 export {
   AbortRequested,
   createGate,
