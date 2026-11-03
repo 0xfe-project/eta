@@ -89,15 +89,21 @@ export interface SpawnResult {
   effects: Effect[];
 }
 
-<<<<<<< HEAD
 export interface AskRequest {
   prompt: string;
   model?: string;
   /**
    * Parent call stack: what was calling eta.ask.
-   * Carried forward in recursion.
+   * Carried forward in recursion. The host merges this with the session
+   * stack; the depth the runtime computes below is only what the runtime
+   * itself can see — the host's own, longer stack wins.
    */
   parentStack?: string[];
+  /**
+   * Depth of this ask in the recursion, ≥1 for a first call. The runtime
+   * stamps it so a host does not have to recount the stack it merged.
+   */
+  depth?: number;
 }
 
 export interface AskResult {
@@ -113,8 +119,6 @@ export interface AskResult {
   warning?: string;
 }
 
-=======
->>>>>>> eta/task-21
 /**
  * The whole host surface.
  *
@@ -141,9 +145,6 @@ export interface Hooks {
   platform?: Record<string, PlatformCall>;
   /** A real sub-turn. Recursion, budget and cycles are the host's to enforce. */
   spawn?: (request: SpawnRequest) => Promise<SpawnResult>;
-<<<<<<< HEAD
   /** Call the current agent with a new turn. Supports recursion and sees full history. */
   ask?: (request: AskRequest) => Promise<AskResult>;
-=======
->>>>>>> eta/task-21
 }

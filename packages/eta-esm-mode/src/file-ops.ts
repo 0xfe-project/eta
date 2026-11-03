@@ -1,9 +1,9 @@
+import type { Realm } from "./realm";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { cwd } from "node:process";
-import { ripgrep } from "ripgrep";
 
-import type { Realm } from "./realm";
+import { ripgrep } from "ripgrep";
 
 /**
  * The three file operations a script reaches for first, as realm top-level

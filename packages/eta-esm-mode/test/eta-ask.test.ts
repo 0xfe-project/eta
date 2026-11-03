@@ -166,40 +166,75 @@ export default 1;`,
     expect(capturedStack?.[0]?.length).toBeLessThan(60); // "eta.ask(\"" + 30 + "...\")" is ~44 chars
   });
 
-  it("can see history from before the call (simulated)", async () => {
-    // This test simulates the host providing history context
-    let historyProvided = false;
+  it("the request carries depth for the host to count recursion", async () => {
+    // History injection is the host's job; what the runtime owes the host is
+    // a depth it can trust and a stack it can merge. This tests that much and
+    // nothing about session history — the rest is #23's (host side).
+    const depths: number[] = [];
     const hooks: Hooks = {
-      ask: async (_request: AskRequest): Promise<AskResult> => {
-        // In a real implementation, the host would check session history here
-        historyProvided = true;
+      ask: async (request: AskRequest): Promise<AskResult> => {
+        depths.push(request.depth ?? 0);
         return {
-          text: "The project name is Eta",
+          text: "ok",
           effects: [],
-          stack: ["main"],
+          stack: request.parentStack ?? ["main"],
           status: "completed",
         };
       },
     };
 
     const agent = new Agent({ root, hooks });
-    // First, simulate storing some history
-    await agent.run(`export default "remember: project=Eta";`, {
-      identifier: join(root, "setup.js"),
-    });
+    await agent.run(
+      `import eta from "eta";
+await eta.ask("first");`,
+      {
+        identifier: join(root, "test.js"),
+      },
+    );
 
-    // Then call eta.ask
+    expect(depths).toEqual([1]);
+  });
+
+  it("a deep ask surfaces a warning but does not stop", async () => {
+    let hostDepth = 10;
+    const hooks: Hooks = {
+      ask: async (request: AskRequest): Promise<AskResult> => {
+        // The host mirrors deeper session stacks: it counts, the runtime warns.
+        void request;
+        return {
+          text: "ok",
+          effects: [],
+          stack: ["main"],
+          status: "completed",
+          ...(hostDepth >= 10
+            ? { warning: `eta.ask recursion depth is ${hostDepth}` }
+            : {}),
+        };
+      },
+    };
+
+    const agent = new Agent({ root, hooks });
     const result = await agent.run(
       `import eta from "eta";
-const answer = await eta.ask("What is the project name?");
-export default answer;`,
+const r = await eta.ask("deep");
+export default r;`,
       { identifier: join(root, "test.js") },
     );
 
-    expect(historyProvided).toBe(true);
+    // A warning arrives, and the result still comes back: never a stop.
     expect(result.value).toMatchObject({
-      text: expect.stringContaining("Eta"),
+      status: "completed",
+      warning: expect.stringContaining("depth"),
     });
+
+    hostDepth = 3;
+    const shallow = await agent.run(
+      `import eta from "eta";
+const r = await eta.ask("shallow");
+export default r;`,
+      { identifier: join(root, "test2.js") },
+    );
+    expect((shallow.value as { warning?: string }).warning).toBeUndefined();
   });
 
   it("handles cancelled status", async () => {
@@ -324,5 +359,54 @@ export default r1;`,
     expect(stacks.length).toBeGreaterThan(0);
     expect(stacks[0]).toBeDefined();
     expect(stacks[0]?.[0]).toContain("eta.ask");
+  });
+});
+
+describe("eta.ask effect ledger", () => {
+  it("records the call site and a prompt summary", async () => {
+    const hooks: Hooks = {
+      ask: async (request: AskRequest): Promise<AskResult> => ({
+        text: "answer",
+        effects: [],
+        stack: request.parentStack ?? ["main"],
+        status: "completed",
+      }),
+    };
+
+    const agent = new Agent({ root, hooks });
+    const result = await agent.run(
+      `import eta from "eta";
+const r = await eta.ask("find the failing test");
+export default r;`,
+      { identifier: join(root, "ledger.js") },
+    );
+
+    const ask = result.effects.find((e) => e.name === "eta.ask");
+    expect(ask).toBeDefined();
+    expect(ask?.status).toBe("ok");
+    expect(ask?.detail).toContain("find the failing test");
+    expect(ask?.at.line).toBe(2);
+  });
+
+  it("records a failed ask as failed, and it still throws into the script", async () => {
+    const hooks: Hooks = {
+      ask: async (): Promise<AskResult> => {
+        throw new Error("host exploded");
+      },
+    };
+
+    const agent = new Agent({ root, hooks });
+    const result = await agent.run(
+      `import eta from "eta";
+try { await eta.ask("boom"); } catch { }
+export default 1;`,
+      { identifier: join(root, "failed.js") },
+    );
+
+    // The script caught the rethrow, so the run completes — with a failed row.
+    expect(result.value).toBe(1);
+    expect(
+      result.effects.some((e) => e.name === "eta.ask" && e.status === "failed"),
+    ).toBe(true);
   });
 });

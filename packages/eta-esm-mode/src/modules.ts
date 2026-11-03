@@ -75,7 +75,6 @@ export function mountModules(
           capability: name,
           args,
         };
-<<<<<<< HEAD
 
         // Fast path: if already approved, call directly (preserve sync behavior)
         if (approvalStore.isApproved(layer, name)) {
@@ -83,8 +82,6 @@ export function mountModules(
         }
 
         // Slow path: need to ask for approval (becomes async)
-=======
->>>>>>> eta/task-21
         const refusalPromise = authorize(
           request,
           approvalStore,
@@ -150,30 +147,24 @@ export function mountModules(
       const fromLayer = layers.layerOf(fromPath);
       layer = fromLayer || "self";
     } else {
-<<<<<<< HEAD
       // Parse "eta:layer:name", "eta:layer", or "eta:name"
-=======
       // Parse "eta:layer:name" or "eta:name"
->>>>>>> eta/task-21
       const parts = specifier.slice(4).split(":");
       if (parts.length === 2) {
         // "eta:project:format" - pinned to a layer
         layer = parts[0] as Layer;
         name = parts[1];
-<<<<<<< HEAD
       } else {
-        // parts.length === 1
-        // Check if it's a layer name first: "eta:project"
-        const isLayerName =
+        // parts.length === 1: "eta:project" names the layer's own module,
+        // anything else is a capability resolved by priority.
+        if (
           parts[0] === "self" ||
           parts[0] === "project" ||
-          parts[0] === "global";
-        if (isLayerName) {
-          // "eta:project" - import eta module for that layer
+          parts[0] === "global"
+        ) {
           layer = parts[0] as Layer;
           name = undefined;
         } else {
-          // "eta:format" - resolve capability by priority
           name = parts[0];
           const found = layers.find(name);
           if (found === undefined) {
@@ -181,24 +172,6 @@ export function mountModules(
           }
           layer = found.layer;
         }
-=======
-      } else if (
-        parts[0] === "self" ||
-        parts[0] === "project" ||
-        parts[0] === "global"
-      ) {
-        // "eta:project" - the eta module for that layer
-        layer = parts[0] as Layer;
-        name = undefined;
-      } else {
-        // "eta:format" - resolve by priority
-        name = parts[0];
-        const found = layers.find(name);
-        if (found === undefined) {
-          throw new Error(`Capability not found: ${name}`);
-        }
-        layer = found.layer;
->>>>>>> eta/task-21
       }
     }
 
@@ -243,10 +216,7 @@ export function mountModules(
     const exports = ["default", "define", "modules"];
     if (hooks?.memory) exports.push("memory");
     if (hooks?.spawn) exports.push("spawn");
-<<<<<<< HEAD
     if (hooks?.ask) exports.push("ask");
-=======
->>>>>>> eta/task-21
 
     return new vm.SyntheticModule(
       exports,
@@ -319,7 +289,6 @@ export function mountModules(
           );
         }
 
-<<<<<<< HEAD
         if (hooks?.ask) {
           const ask = hooks.ask;
           etaObject.ask = realm.binding(
@@ -330,20 +299,36 @@ export function mountModules(
                 prompt.length > 30 ? `${prompt.slice(0, 30)}...` : prompt;
               const entry = `eta.ask("${truncated}")`;
 
-              // Pass the parent stack in the request
+              // Pass the parent stack in the request. The host merges this
+              // with the session stack, so depth here counts from this call
+              // down; if the host's own stack is deeper, its count wins.
+              const parentStack = [entry];
+              const depth = parentStack.length;
               const result = ask({
                 prompt,
                 model: options?.model,
-                parentStack: [entry], // Host will merge with session stack
+                parentStack,
+                depth,
               });
+
+              // Deep recursion is a warning, never a stop (ESMMODE-IMPL §三):
+              // ≥10 layers is where a model is usually going in circles.
+              // The runtime stamps depth; a host with a deeper session stack
+              // stamps its own (larger) warning — whoever sees more wins.
+              if (depth >= 10) {
+                return result.then((value) => {
+                  value.warning ??= `eta.ask recursion depth is ${depth}; consider returning a result instead of asking again`;
+                  return value;
+                });
+              }
 
               return result;
             },
+            (prompt, options) =>
+              `${prompt.slice(0, 80)}${options?.model !== undefined ? ` [model:${options.model}]` : ""}`,
           );
         }
 
-=======
->>>>>>> eta/task-21
         // Export default as the eta object
         this.setExport("default", etaObject);
         // Also export named exports for backward compat
@@ -351,10 +336,7 @@ export function mountModules(
         this.setExport("define", defineFn);
         if (hooks?.memory) this.setExport("memory", etaObject.memory);
         if (hooks?.spawn) this.setExport("spawn", etaObject.spawn);
-<<<<<<< HEAD
         if (hooks?.ask) this.setExport("ask", etaObject.ask);
-=======
->>>>>>> eta/task-21
       },
       { context: realm.context, identifier },
     );
