@@ -8,6 +8,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 /**
  * A reply's process (thinking and tool calls) in a group. While the agent still works it is the
@@ -28,7 +29,7 @@ export function ProcessBox({
 }: {
   /** The thinking blocks and tool cards, in order. */
   steps: React.ReactNode;
-  /** How many steps there are: a new one is what the frame follows. */
+  /** How many steps there are: a new one is what the frame follows. 0 before the first one. */
   count: number;
   running: boolean;
   /** The reply is at its final text: the process folds into one "thinking process" row. */
@@ -63,7 +64,8 @@ export function ProcessBox({
       type="button"
       variant="ghost"
       size="xs"
-      className="text-muted-foreground"
+      // Nothing to view yet (before the first step): kept in place, so the first step moves nothing.
+      className={cn("text-muted-foreground", count === 0 && "invisible")}
       onClick={() => setOpen(true)}
     >
       {translateText("process.viewAll")}
