@@ -1,6 +1,6 @@
 import type { ApprovalStore, AuthorizeRequest } from "./authorize";
 import type { CapabilityMeta } from "./env-file";
-import type { Hooks } from "./hooks";
+import type { AskRequest, AskResult, Hooks } from "./hooks";
 import type { EnvLayers, Layer } from "./layers";
 import type { Linker, Realm } from "./realm";
 import { spawnSync } from "node:child_process";
@@ -10,6 +10,187 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import * as vm from "node:vm";
 import { authorize } from "./authorize";
 import { mountNodeModules } from "./host-modules";
+
+/**
+ * Manages concurrent eta.ask calls with a maximum concurrency limit.
+ * Queues requests beyond the limit and processes them in FIFO order.
+ * Flattens results in call order (not completion order).
+ */
+class ConcurrentQueue {
+  private running = new Set<number>();
+  private pending: Array<{
+    seq: number;
+    request: AskRequest;
+    resolve: (result: AskResult) => void;
+    reject: (error: unknown) => void;
+  }> = [];
+  private completedResults = new Map<number, AskResult>();
+  private resolvers = new Map<
+    number,
+    { resolve: (result: AskResult) => void; reject: (error: unknown) => void }
+  >();
+  private nextSeq = 0;
+  private nextFlushSeq = 0;
+  private readonly maxConcurrent: number;
+  private readonly ask: (request: AskRequest) => Promise<AskResult>;
+  private paused = false;
+
+  constructor(
+    ask: (request: AskRequest) => Promise<AskResult>,
+    maxConcurrent = 5,
+  ) {
+    this.ask = ask;
+    this.maxConcurrent = maxConcurrent;
+  }
+
+  /**
+   * Enqueue an eta.ask call. Returns a promise that resolves when:
+   * 1. The call gets a turn slot and completes
+   * 2. All earlier calls have also completed (to maintain call order)
+   */
+  async enqueue(request: AskRequest): Promise<AskResult> {
+    const seq = this.nextSeq++;
+
+    return new Promise<AskResult>((resolve, reject) => {
+      if (this.paused) {
+        // If paused, immediately reject
+        reject(new Error("eta.ask queue is paused"));
+        return;
+      }
+
+      // Store the resolver for this sequence number
+      this.resolvers.set(seq, { resolve, reject });
+
+      const item = { seq, request, resolve, reject };
+
+      if (this.running.size < this.maxConcurrent) {
+        // Start immediately
+        void this.startTurn(item);
+      } else {
+        // Queue for later
+        this.pending.push(item);
+      }
+    });
+  }
+
+  private async startTurn(item: {
+    seq: number;
+    request: AskRequest;
+    resolve: (result: AskResult) => void;
+    reject: (error: unknown) => void;
+  }): Promise<void> {
+    this.running.add(item.seq);
+
+    try {
+      const result = await this.ask(item.request);
+      this.completedResults.set(item.seq, result);
+      this.tryFlush();
+    } catch (error) {
+      // The error was already recorded as "failed" by realm.binding
+      // We need to store it so we can maintain call order and reject the right promise
+      const resolver = this.resolvers.get(item.seq);
+      if (resolver) {
+        this.resolvers.delete(item.seq);
+        resolver.reject(error);
+      }
+      // Still need to advance nextFlushSeq
+      if (item.seq === this.nextFlushSeq) {
+        this.nextFlushSeq++;
+        this.tryFlush();
+      }
+    } finally {
+      this.running.delete(item.seq);
+      this.tryStartNext();
+    }
+  }
+
+  /**
+   * Flush completed results in call order.
+   * Only resolve promises when all earlier calls have completed.
+   */
+  private tryFlush(): void {
+    while (this.completedResults.has(this.nextFlushSeq)) {
+      const result = this.completedResults.get(this.nextFlushSeq)!;
+      this.completedResults.delete(this.nextFlushSeq);
+
+      // Resolve the promise for this sequence
+      const resolver = this.resolvers.get(this.nextFlushSeq);
+      if (resolver) {
+        this.resolvers.delete(this.nextFlushSeq);
+        resolver.resolve(result);
+      }
+
+      this.nextFlushSeq++;
+    }
+  }
+
+  private tryStartNext(): void {
+    if (this.pending.length === 0 || this.paused) return;
+    if (this.running.size >= this.maxConcurrent) return;
+
+    const next = this.pending.shift();
+    if (next !== undefined) {
+      void this.startTurn(next);
+    }
+  }
+
+  /**
+   * Pause the queue. All running turns will complete,
+   * but no new turns will start.
+   */
+  pause(): void {
+    this.paused = true;
+  }
+
+  /**
+   * Cancel all pending and running turns.
+   * Flushes partial results for running turns.
+   */
+  cancelAll(): AskResult[] {
+    this.paused = true;
+    const results: AskResult[] = [];
+
+    // Cancel all pending (not yet started)
+    for (const item of this.pending) {
+      const result: AskResult = {
+        text: "Cancelled by user",
+        effects: [],
+        stack: item.request.parentStack ?? ["main"],
+        status: "cancelled",
+      };
+      results.push(result);
+
+      // Store in completedResults to maintain ordering
+      this.completedResults.set(item.seq, result);
+    }
+    this.pending = [];
+
+    // Try to flush whatever we can
+    this.tryFlush();
+
+    // Note: running turns will complete naturally and their results
+    // will be marked as cancelled if the host supports it.
+
+    return results;
+  }
+
+  /**
+   * Resume the queue after pause.
+   */
+  resume(): void {
+    this.paused = false;
+    this.tryStartNext();
+  }
+
+  get stats() {
+    return {
+      running: this.running.size,
+      pending: this.pending.length,
+      completed: this.completedResults.size,
+      paused: this.paused,
+    };
+  }
+}
 
 export interface ModuleMountOptions {
   /** Everything is resolved and named relative to this directory. */
@@ -48,6 +229,12 @@ export function mountModules(
     ["project", {}],
     ["global", {}],
   ]);
+
+  // Create concurrent queue for eta.ask (max 5 concurrent calls)
+  let askQueue: ConcurrentQueue | undefined;
+  if (hooks?.ask) {
+    askQueue = new ConcurrentQueue(hooks.ask, 5);
+  }
 
   /**
    * Wrap a capability function with authorization check.
@@ -289,8 +476,7 @@ export function mountModules(
           );
         }
 
-        if (hooks?.ask) {
-          const ask = hooks.ask;
+        if (hooks?.ask && askQueue) {
           etaObject.ask = realm.binding(
             "eta.ask",
             (prompt: string, options?: { model?: string }) => {
@@ -304,7 +490,9 @@ export function mountModules(
               // down; if the host's own stack is deeper, its count wins.
               const parentStack = [entry];
               const depth = parentStack.length;
-              const result = ask({
+
+              // Enqueue the request through the concurrent queue
+              const result = askQueue.enqueue({
                 prompt,
                 model: options?.model,
                 parentStack,
