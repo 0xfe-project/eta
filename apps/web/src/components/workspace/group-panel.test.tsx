@@ -95,6 +95,9 @@ const rowsOf = (container: HTMLElement, section: string) =>
     (row) => row.textContent ?? "",
   );
 
+const countOf = (container: HTMLElement, section: string) =>
+  container.querySelector(`section[aria-label="${section}"] h3`)!.textContent;
+
 afterEach(() => {
   document.body.innerHTML = "";
   setWire(undefined);
@@ -166,4 +169,40 @@ it("orders 任务 by the last move made, and shows five", async () => {
     (row) => row.match(/任务\d/)?.[0],
   );
   expect(listed).toEqual(["任务1", "任务3", "任务4", "任务5", "任务6"]);
+});
+
+it("leaves closed tasks out of 任务, and out of its count", async () => {
+  surfaceHost({
+    conversations: [group],
+    tasks: [
+      task(1, { status: "done", updatedAt: 900 }),
+      task(2, { status: "in_progress", updatedAt: 800 }),
+      task(3, { status: "cancelled", updatedAt: 700 }),
+      task(4, { status: "backlog", updatedAt: 600 }),
+      task(5, { updatedAt: 500 }),
+      task(6, { status: "in_review", updatedAt: 400 }),
+      task(7, { status: "blocked", updatedAt: 300 }),
+      task(8, { updatedAt: 200 }),
+    ],
+  });
+  const container = await mount();
+  const listed = rowsOf(container, "任务").map(
+    (row) => row.match(/任务\d/)?.[0],
+  );
+  // Six still open: the count says six, the list shows the first five.
+  expect(listed).toEqual(["任务2", "任务4", "任务5", "任务6", "任务7"]);
+  expect(countOf(container, "任务")).toBe("任务6");
+});
+
+it("does not say 还没有任务 when every task here is closed", async () => {
+  surfaceHost({
+    conversations: [group],
+    tasks: [task(1, { status: "done" }), task(2, { status: "cancelled" })],
+  });
+  const container = await mount();
+  expect(rowsOf(container, "任务")).toEqual([]);
+  expect(countOf(container, "任务")).toBe("任务0");
+  const section = container.querySelector('section[aria-label="任务"]')!;
+  expect(section.textContent).toContain(translate("tasks:empty.noOpen"));
+  expect(section.textContent).not.toContain(translate("tasks:empty.title"));
 });

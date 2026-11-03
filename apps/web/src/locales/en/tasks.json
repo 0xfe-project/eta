@@ -93,6 +93,7 @@
   },
   "empty": {
     "title": "No tasks yet",
+    "noOpen": "No open tasks",
     "description": "An agent proposes a task in a conversation; once you confirm it, the agent gets to work and records each step in the timeline.",
     "deletedTitle": "This task no longer exists"
   },

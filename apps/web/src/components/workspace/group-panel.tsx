@@ -26,6 +26,9 @@ import { when } from "./routine-format";
  * second thing to keep in sync. What this file adds is only what surrounds that.
  */
 
+/** What 任务 leaves out: a closed task needs nothing more, and the 任务 tab still holds it. */
+const closed = new Set<string>(["done", "cancelled"]);
+
 export function GroupPanel({
   group,
 }: {
@@ -43,7 +46,8 @@ export function GroupPanel({
   const { artifacts } = useArtifacts();
   const { info } = useConversation(group?.id);
   if (group === undefined) return null;
-  const tasks = board.filter((task) => task.conversationId === group.id);
+  const groupTasks = board.filter((task) => task.conversationId === group.id);
+  const tasks = groupTasks.filter((task) => !closed.has(task.status));
   const groupRoutines = routines.filter(
     (routine) => routine.conversationId === group.id,
   );
@@ -61,8 +65,13 @@ export function GroupPanel({
           count={tasks.length}
         >
           {tasks.length === 0 ? (
+            // "No tasks yet" would be wrong once some have been closed here.
             <p className="text-xs text-muted-foreground">
-              {translateText("tasks:empty.title")}
+              {translateText(
+                groupTasks.length === 0
+                  ? "tasks:empty.title"
+                  : "tasks:empty.noOpen",
+              )}
             </p>
           ) : (
             <ul className="space-y-1">
