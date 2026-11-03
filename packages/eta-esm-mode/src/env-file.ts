@@ -206,6 +206,7 @@ export class EnvFile {
 
   /** Replaces a block in place. The caller has already shown the old one. */
   replace(name: string, source: string, meta: CapabilityMeta = {}): boolean {
+<<<<<<< HEAD
     return this.#withLock(() => {
       // Reload to pick up any concurrent changes
       this.reload();
@@ -257,6 +258,35 @@ export class EnvFile {
 
       return removed;
     });
+=======
+    if (!this.#capabilitiesMeta.has(name)) return false;
+    this.#capabilitiesMeta.set(name, { source, meta });
+    let replaced = false;
+    this.#generated = this.#generated.replace(
+      BLOCK,
+      (whole, blockName: string) =>
+        blockName === name
+          ? ((replaced = true), renderBlock(name, source, meta))
+          : whole,
+    );
+    this.#syncMetaLine();
+    if (replaced) this.save();
+    return replaced;
+  }
+
+  remove(name: string): boolean {
+    if (!this.#capabilitiesMeta.has(name)) return false;
+    this.#capabilitiesMeta.delete(name);
+    let removed = false;
+    this.#generated = this.#generated.replace(
+      BLOCK,
+      (whole, blockName: string) =>
+        blockName === name ? ((removed = true), "") : whole,
+    );
+    this.#syncMetaLine();
+    if (removed) this.save();
+    return removed;
+>>>>>>> eta/task-21
   }
 
   save(): void {

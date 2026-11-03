@@ -14,7 +14,7 @@
   },
   "scripts": {
     "test": "bun --bun vitest --run --passWithNoTests",
-    "typecheck": "bun check",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
   },
   "dependencies": {

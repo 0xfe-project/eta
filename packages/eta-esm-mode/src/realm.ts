@@ -91,6 +91,15 @@ const DEFAULT_TIMEOUT_MS = 10_000;
  */
 const FRAME = /^\s*at\s+([^\s()]+\s+\()?([^\s:]+):(\d+):(\d+)\)?$/;
 
+/**
+ * JSC (Bun) names module frames `[source:N]` instead of the module's
+ * identifier — a global counter, not a file. The line and column in that
+ * frame are the real module positions, so accept it and report the module
+ * being evaluated; without this the frame is rejected and the walk lands on
+ * a host frame (which is how effects used to come back with realm.ts's own
+ * line numbers under Bun).
+ */
+const SOURCE_FRAME = /^\s*at\s+(?:\[[^\]]+\]|unknown):(\d+):(\d+)$/;
 function formatArg(value: unknown): string {
   if (typeof value === "string") return value;
   if (value instanceof Error) return `${value.name}: ${value.message}`;
@@ -430,6 +439,14 @@ export class Realm {
         continue;
       }
       if (!afterWrapper) continue;
+      const source = SOURCE_FRAME.exec(raw);
+      if (source !== null) {
+        return {
+          identifier: this.#identifier,
+          line: Number(source[1]),
+          column: Number(source[2]),
+        };
+      }
       const match = FRAME.exec(raw);
       if (match === null) continue;
       const file = match[2] ?? "";

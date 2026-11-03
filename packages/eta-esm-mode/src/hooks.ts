@@ -89,6 +89,7 @@ export interface SpawnResult {
   effects: Effect[];
 }
 
+<<<<<<< HEAD
 export interface AskRequest {
   prompt: string;
   model?: string;
@@ -112,6 +113,8 @@ export interface AskResult {
   warning?: string;
 }
 
+=======
+>>>>>>> eta/task-21
 /**
  * The whole host surface.
  *
@@ -138,6 +141,9 @@ export interface Hooks {
   platform?: Record<string, PlatformCall>;
   /** A real sub-turn. Recursion, budget and cycles are the host's to enforce. */
   spawn?: (request: SpawnRequest) => Promise<SpawnResult>;
+<<<<<<< HEAD
   /** Call the current agent with a new turn. Supports recursion and sees full history. */
   ask?: (request: AskRequest) => Promise<AskResult>;
+=======
+>>>>>>> eta/task-21
 }

@@ -4,6 +4,10 @@ import type { EnvFile } from "./env-file";
 import type { CtxView, Hooks } from "./hooks";
 import type { Evaluation } from "./realm";
 import { defaultApprovalStorePath, FileApprovalStore } from "./authorize";
+<<<<<<< HEAD
+=======
+import { mountFileOps } from "./file-ops";
+>>>>>>> eta/task-21
 import { mountGlobals, mountShell } from "./host-modules";
 import { EnvLayers } from "./layers";
 import { mountModules } from "./modules";
@@ -171,6 +175,10 @@ export class Agent {
     });
     mountGlobals(realm);
     mountShell(realm);
+<<<<<<< HEAD
+=======
+    mountFileOps(realm);
+>>>>>>> eta/task-21
     mountNonEtaHooks(realm, hooks);
     return realm;
   }
