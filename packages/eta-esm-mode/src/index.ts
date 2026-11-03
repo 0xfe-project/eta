@@ -6,5 +6,6 @@ export type { SearchOptions, SearchResult, ViewOptions } from "./file-ops.js";
 export * from "./hooks";
 export * from "./host-modules";
 export * from "./layers";
+export * from "./memory";
 export * from "./modules";
 export * from "./realm";
