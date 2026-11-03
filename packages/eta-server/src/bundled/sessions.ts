@@ -2,6 +2,7 @@ import type {
   PromptImage,
   PromptInput,
   SessionArgs,
+  SessionImage,
   SidebarSession,
 } from "@eta/client-contracts";
 import type { CallFrame } from "@eta/client-wire-proto";
@@ -672,6 +673,40 @@ export class SessionsService extends Service implements SessionsApi {
   }
 
   /**
+   * One picture the view or a history page left out: the image part at `index` in the
+   * `content` of message entry `entryId` on the session's branch.
+   *
+   * Read from the branch like `history`, so a picture the user rewound past is not served.
+   */
+  async image(
+    id: string,
+    entryId: string,
+    index: number,
+  ): Promise<SessionImage> {
+    const attached = await this.open(id);
+    const entry = attached.managed.session.log.graph
+      .pathOldestFirst()
+      .find((candidate) => candidate.id === entryId);
+    const content =
+      entry?.type === "message"
+        ? (entry.message as { content?: unknown }).content
+        : undefined;
+    const part = Array.isArray(content) ? content[index] : undefined;
+    const image = part as
+      | { type?: unknown; data?: unknown; mimeType?: unknown }
+      | undefined;
+    if (
+      image?.type !== "image" ||
+      typeof image.data !== "string" ||
+      image.data.length === 0 ||
+      typeof image.mimeType !== "string"
+    ) {
+      throw new Error(`sessions.image: no picture at ${entryId}#${index}`);
+    }
+    return { mimeType: image.mimeType, data: image.data };
+  }
+
+  /**
    * Which sessions mention something.
    *
    * The search walks every session this plugin holds open, one hit each: the answer a search box
@@ -1318,6 +1353,28 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
               ...(args.limit === undefined ? {} : { limit: args.limit }),
             });
             return { result: { session: args.session, rows, systems } };
+          }),
+        );
+        registrations.push(
+          routed("image", async (call) => {
+            const args = (call.args ?? {}) as Partial<SessionArgs["image"]>;
+            if (
+              typeof args.session !== "string" ||
+              typeof args.entryId !== "string" ||
+              typeof args.index !== "number" ||
+              !Number.isInteger(args.index) ||
+              args.index < 0
+            ) {
+              throw new Error(
+                "sessions.image needs a session, an entryId and an index",
+              );
+            }
+            const image: SessionImage = await service.image(
+              args.session,
+              args.entryId,
+              args.index,
+            );
+            return { result: image };
           }),
         );
         registrations.push(

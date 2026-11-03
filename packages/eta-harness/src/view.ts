@@ -264,6 +264,47 @@ export function queuedText(message: AgentMessage): {
   return { text: text.join("\n"), ...(images.length === 0 ? {} : { images }) };
 }
 
+/** How many bytes a base64 string decodes to, without decoding it. */
+function base64Bytes(data: string): number {
+  const padding = data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0;
+  return Math.max(0, Math.floor((data.length * 3) / 4) - padding);
+}
+
+/**
+ * The message with its pictures left out: each image part in an array `content` becomes
+ * `{ type: "image", mimeType, data: "", bytes }`, and `sessions.image` fetches the bytes when
+ * a reader wants them. A screenshot is megabytes of base64 that every snapshot would resend.
+ *
+ * The journal's message is never touched: a message with pictures is copied, one without
+ * is returned as is, so a transcript of plain text allocates nothing.
+ */
+export function withoutImageData(message: AgentMessage): AgentMessage {
+  const content = (message as { content?: unknown }).content;
+  if (!Array.isArray(content)) return message;
+  const isPicture = (part: unknown): boolean => {
+    const image = part as { type?: unknown; data?: unknown } | null;
+    return (
+      image?.type === "image" &&
+      typeof image.data === "string" &&
+      image.data.length > 0
+    );
+  };
+  if (!content.some(isPicture)) return message;
+  return {
+    ...message,
+    content: content.map((part: unknown) => {
+      if (!isPicture(part)) return part;
+      const image = part as { data: string; mimeType: string };
+      return {
+        type: "image",
+        mimeType: image.mimeType,
+        data: "",
+        bytes: base64Bytes(image.data),
+      };
+    }),
+  } as AgentMessage;
+}
+
 /** The entries a view shows as system rows rather than messages. */
 export const SYSTEM_ROW_KINDS = [
   "goal",
@@ -372,7 +413,11 @@ export function builtinViewContributions(
           }));
         const window = messages.slice(-VIEW_MESSAGE_WINDOW);
         return {
-          messages: window,
+          // Pictures stay in the journal; `sessions.image` fetches one on demand.
+          messages: window.map((row) => {
+            const message = withoutImageData(row.message);
+            return message === row.message ? row : { ...row, message };
+          }),
           ...(messages.length > window.length
             ? { messagesBefore: messages.length - window.length }
             : {}),

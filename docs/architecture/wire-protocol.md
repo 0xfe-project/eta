@@ -64,6 +64,10 @@ eager 的 target 随 `hello` 到达，页面不用先订阅就能画出来。
 
 附件走同一条 WebSocket，不另开 HTTP 路由：`conversations.attach` 一次带一块（至多 384 KiB 文件内容的 base64），`index` 从 0 起严格递增，`last` 标记最后一块，回复在最后一块时带上附件。上传 id（`uploadId`，客户端生成的 uuid）就是附件的 id，所以丢了回复后重发同一块是同一次上传。选这个而不是 HTTP 上传：访问控制、重连与超时已经在这条连接上，界面也不必再认第二种认证；代价是文件上限 20 MB 要拆成最多 54 次调用，对人手粘贴的文件够用。`conversations.send` 的 `attachments` 列出已上传的附件 id（至多 10 个，文本可以为空），消息认领它们后不能再撤回（`unattach` 只撤回未发送的）。
 
+## 会话里的图片
+
+`sessions.<id>` 的 `transcript` 分段只带最后 200 行消息，更早的由 `sessions.history` 按 `beforeSeq` 往回翻页。这两处都不带图片本身：用户消息和工具结果（比如 `Read` 一张截图）里的图片块换成 `{ type: "image", mimeType, data: "", bytes }`，`bytes` 是解码后的字节数。图片仍完整地留在日志里，界面要画时用 `sessions.image`（`session`、`entryId`、`index` 是图片块在该消息 `content` 里的位置）取回 `{ mimeType, data }`；那个位置不是图片就报错。这么做是因为每次快照都要重发整个窗口，十几张截图的 base64 能让一帧到几 MB。daemon 上的会话也一样：视图在 daemon 上就已去掉图片，`sessions.image` 和别的 `sessions.*` 一样由 `RemoteSessionsRouter` 转发过去。
+
 ## 界面如何用
 
 `apps/web/src/lib/wire.ts` 是页面唯一的连接：处理 hello、reply、state、event 与断线重连（间隔递增）；`queries/wire.ts` 把它接成 React hooks（`useTarget`、调用用的 mutation）。`hello.mounted` 里没有的插件，对应入口隐藏（例如没配记忆边车就没有记忆页）。开发时 vite 把 `/ws` 代理给 host，生产页与 host 同源。

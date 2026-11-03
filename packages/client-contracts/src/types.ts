@@ -86,6 +86,12 @@ export interface SessionHistoryResult {
   systems?: SessionViewSystemRow[] | undefined;
 }
 
+/** `sessions.image`'s answer: the picture a view or history page left out. */
+export interface SessionImage {
+  mimeType: string;
+  data: string;
+}
+
 export interface TranscriptSection {
   messages: ViewMessageRow[];
   /** Messages older than this window exist in the journal; set once paging starts. */
