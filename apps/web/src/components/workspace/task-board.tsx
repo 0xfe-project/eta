@@ -431,8 +431,9 @@ export function TaskBoard() {
   ] as const);
   const [nav] = useTaskNav();
   const { tasks, loaded, error } = useTasks();
-  // Remembered in this browser, so the page opens as it was left.
-  const layout = useWorkspaceStore((s) => s.workspace.taskLayout ?? "list");
+  // Remembered in this browser, so the page opens as it was left; a first
+  // visit opens on the board.
+  const layout = useWorkspaceStore((s) => s.workspace.taskLayout ?? "board");
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setView = (changes: Pick<WorkspaceState, "taskLayout">) =>
     setWorkspace((workspace) => ({ ...workspace, ...changes }));
