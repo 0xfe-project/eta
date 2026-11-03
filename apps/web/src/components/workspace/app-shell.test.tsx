@@ -499,6 +499,19 @@ describe("折叠成图标栏", () => {
     expect(header.querySelectorAll("button")).toHaveLength(0);
   });
 
+  it("右缘只留 sidebar-rule，默认 border-r 不再从窗顶画到底", async () => {
+    // The component's default edge is full height. Stacked on `sidebar-rule` (the 1px line that
+    // starts under the band) it reads as one thick rule. The shell zeros that edge; the rule stays.
+    for (const open of [true, false]) {
+      const container = await render(<Sidebar />, { open });
+      const edge = container.querySelector('[data-slot="sidebar-container"]')!;
+      expect(edge.className).toContain("sidebar-rule");
+      expect(edge.className).toContain("group-data-[side=left]:border-r-0");
+      expect(edge.className).not.toContain("group-data-[side=left]:border-r ");
+      expect(edge.className).not.toMatch(/group-data-\[side=left\]:border-r$/);
+    }
+  });
+
   it("开关能折叠也能展开，刷新后还记着", async () => {
     const container = await render(<Sidebar />);
     expect(root(container).getAttribute("data-state")).toBe("expanded");
