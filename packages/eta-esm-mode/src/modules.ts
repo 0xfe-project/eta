@@ -2,14 +2,16 @@ import type { ApprovalStore, AuthorizeRequest } from "./authorize";
 import type { CapabilityMeta } from "./env-file";
 import type { AskRequest, AskResult, Hooks } from "./hooks";
 import type { EnvLayers, Layer } from "./layers";
+import type { MemoryApi, MemorySection } from "./memory";
 import type { Linker, Realm } from "./realm";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
 
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import * as vm from "node:vm";
 import { authorize } from "./authorize";
 import { mountNodeModules } from "./host-modules";
+import { createMemoryModule, MEMORY_FILE } from "./memory";
 
 /**
  * Manages concurrent eta.ask calls with a maximum concurrency limit.
@@ -230,6 +232,18 @@ export function mountModules(
     ["global", {}],
   ]);
 
+  // One MEMORY.md per layer, next to that layer's env.js:
+  // self → ~/.eta/sessions/{id}/, project → {project}/.eta/, global → ~/.eta/global/.
+  const memoryModules = new Map<Layer, MemoryApi>();
+  for (const layer of ["self", "project", "global"] as const) {
+    const env = layers?.get(layer);
+    if (env !== undefined)
+      memoryModules.set(
+        layer,
+        createMemoryModule(join(dirname(env.path), MEMORY_FILE)),
+      );
+  }
+
   // Create concurrent queue for eta.ask (max 5 concurrent calls)
   let askQueue: ConcurrentQueue | undefined;
   if (hooks?.ask) {
@@ -384,6 +398,17 @@ export function mountModules(
     if (cached !== undefined) return cached;
 
     if (name) {
+      // Handle built-in memory module
+      if (name === "memory") {
+        const memoryModule = memoryModules.get(layer);
+        if (!memoryModule) {
+          throw new Error(`Memory module not available for layer ${layer}`);
+        }
+        const module = createMemoryModuleWrapper(cacheKey, memoryModule);
+        files.set(cacheKey, module);
+        return module;
+      }
+
       // This is a capability import like "eta:format" or "eta:global:format"
       // Return module that exports from registry (will be populated when env.js is evaluated)
       // If the capability doesn't exist, the runtime will throw when trying to access it
@@ -547,6 +572,51 @@ export function mountModules(
           );
         }
         this.setExport("default", fn);
+      },
+      { context: realm.context, identifier },
+    );
+  }
+
+  /**
+   * `eta:{layer}:memory`. Entries are copied into the realm (its own JSON), so
+   * a script never holds a host object whose prototype leads back out.
+   */
+  function createMemoryModuleWrapper(
+    identifier: string,
+    memory: MemoryApi,
+  ): vm.Module {
+    const intoRealm = vm.runInContext(
+      "(json) => json === undefined ? undefined : JSON.parse(json)",
+      realm.context,
+    ) as (json: string | undefined) => unknown;
+    const own = (value: unknown): unknown =>
+      intoRealm(value === undefined ? undefined : JSON.stringify(value));
+    const api = {
+      list: realm.wrap((section?: MemorySection) => own(memory.list(section))),
+      get: realm.wrap((id: string) => own(memory.get(id))),
+      add: realm.binding(
+        "eta.memory.add",
+        (section: MemorySection, text: string) => memory.add(section, text),
+        (section, text) => `${section}: ${String(text).slice(0, 80)}`,
+      ),
+      remove: realm.binding("eta.memory.remove", (id: string) =>
+        memory.remove(id),
+      ),
+    };
+    // The default export is built inside the realm too, not a host `{}`.
+    const bundle = vm.runInContext(
+      "(list, get, add, remove) => ({ list, get, add, remove })",
+      realm.context,
+    ) as (...fns: unknown[]) => unknown;
+    const exports = {
+      ...api,
+      default: bundle(api.list, api.get, api.add, api.remove),
+    };
+    return new vm.SyntheticModule(
+      Object.keys(exports),
+      function () {
+        for (const [name, value] of Object.entries(exports))
+          this.setExport(name, value);
       },
       { context: realm.context, identifier },
     );
