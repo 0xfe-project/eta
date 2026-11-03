@@ -124,7 +124,13 @@ function blocksFrom(
 ): (RunBlock | UserBlock)[] {
   const blocks: (RunBlock | UserBlock)[] = [];
   const tools = new Map<string, Extract<RunBlock, { type: "tool" }>>();
-  const add = (id: string, message: AgentMessage) => {
+  // A message's blocks are keyed by when it started, which it keeps from its first streamed frame
+  // to its row: the page draws them as the same elements throughout, so the words already shown
+  // do not fade in again when it lands, and the next message's words are drawn fresh. A row
+  // without a time falls back to its entry.
+  const add = (fallback: string, message: AgentMessage) => {
+    const stamp = stampOf(message);
+    const id = stamp > 0 ? `at${stamp}` : fallback;
     contentOf(message).forEach((part, index) => {
       const key = `${id}:${index}`;
       if (part.type === "thinking" && part.thinking)

@@ -1,6 +1,6 @@
 import type { AgentMessage, ViewMessageRow } from "@eta/client-contracts";
 import { describe, expect, it } from "@rstest/core";
-import { runBlocks, savedTools } from "./run";
+import { logBlocks, runBlocks, savedTools } from "./run";
 
 let seq = 0;
 const row = (message: object): ViewMessageRow => {
@@ -129,6 +129,39 @@ describe("the run in flight", () => {
     expect(
       runBlocks(committed, growing).map((b) => ("text" in b ? b.text : "")),
     ).toEqual(["one", "two so far"]);
+  });
+
+  // The page draws a block as one element for as long as its id holds: one that changes when the
+  // message lands draws its words again from scratch, and they all fade in again.
+  it("keeps a message's block ids from its first streamed frame to its row", () => {
+    const rows = [user("go")];
+    const ids = (blocks: { id: string }[]) => blocks.map((b) => b.id);
+    const growing = streaming(3, [
+      { type: "thinking", thinking: "hmm" },
+      { type: "text", text: "我先看看" },
+    ]);
+    const committed = [
+      ...rows,
+      assistant(3, [
+        { type: "thinking", thinking: "hmm" },
+        { type: "text", text: "我先看看" },
+      ]),
+    ];
+    expect(ids(runBlocks(committed, growing))).toEqual(
+      ids(runBlocks(rows, growing)),
+    );
+    expect(ids(logBlocks(committed, growing))).toEqual(
+      ids(logBlocks(rows, growing)),
+    );
+    // The next message is drawn fresh, not over the one before it.
+    const next = runBlocks(
+      committed,
+      streaming(5, [
+        { type: "thinking", thinking: "then" },
+        { type: "text", text: "看完了" },
+      ]),
+    );
+    expect(new Set(ids(next)).size).toBe(4);
   });
 });
 
