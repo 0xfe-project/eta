@@ -1095,23 +1095,31 @@ export function ChatPanel({
     onLoadOlder,
   });
 
+  // The rail is off until 设置 → 外观 turns it on; off, nothing below is worked out for it.
+  const showRail = useWorkspaceStore(
+    (state) => state.workspace.transcriptRail ?? false,
+  );
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
   // What the rail numbers: the agent's replies (squares) and your own messages (circles). A
   // conversation with one of each has nothing to jump between, and the rail draws nothing. A task
   // row drawn inside a turn is not one of its own numbers, so it is not on the rail either.
   const railReplies = useMemo(
     () =>
-      rows
-        .filter((message) => message.author === "agent")
-        .map((message) => ({ id: message.id, text: message.text })),
-    [rows],
+      showRail
+        ? rows
+            .filter((message) => message.author === "agent")
+            .map((message) => ({ id: message.id, text: message.text }))
+        : [],
+    [rows, showRail],
   );
   const railPrompts = useMemo(
     () =>
-      rows
-        .filter((message) => message.author === "user")
-        .map((message) => ({ id: message.id, text: message.text })),
-    [rows],
+      showRail
+        ? rows
+            .filter((message) => message.author === "user")
+            .map((message) => ({ id: message.id, text: message.text }))
+        : [],
+    [rows, showRail],
   );
   // Composition state the keydown handler needs but the DOM only reports to other listeners.
   const ime = useRef({ composing: false, endedAt: 0 });
@@ -1399,7 +1407,7 @@ export function ChatPanel({
           onScroll={() => {
             transcript.onScroll();
             // Cheap enough: one pass over the rows that are actually in the DOM.
-            setActiveId(transcript.active());
+            if (showRail) setActiveId(transcript.active());
           }}
           className="no-scrollbar h-full overflow-y-auto py-4 pr-14 pl-6"
         >
@@ -1598,14 +1606,16 @@ export function ChatPanel({
             </Button>
           )}
         </div>
-        <div className="absolute top-16 right-1">
-          <TranscriptRail
-            replies={railReplies}
-            prompts={railPrompts}
-            activeId={activeId}
-            onJump={transcript.jumpTo}
-          />
-        </div>
+        {showRail && (
+          <div className="absolute top-16 right-1">
+            <TranscriptRail
+              replies={railReplies}
+              prompts={railPrompts}
+              activeId={activeId}
+              onJump={transcript.jumpTo}
+            />
+          </div>
+        )}
       </div>
       {/*
        * The composer, copied from eta-old rather than improvised: `.input-area` → `.input-outer`
