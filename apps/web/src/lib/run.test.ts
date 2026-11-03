@@ -1,6 +1,6 @@
 import type { AgentMessage, ViewMessageRow } from "@eta/client-contracts";
 import { describe, expect, it } from "@rstest/core";
-import { logBlocks, runBlocks, savedTools } from "./run";
+import { groupBlocks, logBlocks, runBlocks, savedTools } from "./run";
 
 let seq = 0;
 const row = (message: object): ViewMessageRow => {
@@ -207,5 +207,165 @@ describe("the tool calls a finished reply kept", () => {
     expect(savedTools({})).toEqual([]);
     expect(savedTools({ activity: "x" })).toEqual([]);
     expect(savedTools({ activity: [null, { id: 1 }] })).toEqual([]);
+  });
+});
+
+const call = (id: string, name: string, args: object) =>
+  assistant(2, [{ type: "toolCall", id, name, arguments: args }]);
+const result = (id: string, content: object[], extra: object = {}) =>
+  row({
+    role: "toolResult",
+    toolCallId: id,
+    toolName: "x",
+    content,
+    isError: false,
+    timestamp: 3,
+    ...extra,
+  });
+
+describe("a run's log", () => {
+  it("keeps the pictures a tool result carried, with where to fetch them", () => {
+    const shot = result("r1", [
+      { type: "text", text: "read it" },
+      { type: "image", mimeType: "image/png", data: "iVBOR" },
+      { type: "image", mimeType: "image/jpeg", data: "", bytes: 2048 },
+    ]);
+    const [block] = logBlocks(
+      [user("brief"), call("r1", "Read", { file_path: "a.png" }), shot],
+      undefined,
+    );
+    expect(block).toMatchObject({
+      type: "tool",
+      output: "read it",
+      images: [
+        {
+          mimeType: "image/png",
+          data: "iVBOR",
+          entryId: shot.entryId,
+          index: 1,
+        },
+        {
+          mimeType: "image/jpeg",
+          data: "",
+          bytes: 2048,
+          entryId: shot.entryId,
+          index: 2,
+        },
+      ],
+    });
+  });
+
+  it("shows a steer with its pictures, but not the briefing", () => {
+    const steer = row({
+      role: "user",
+      content: [{ type: "image", mimeType: "image/png", data: "x" }],
+      timestamp: 4,
+    });
+    const blocks = logBlocks([user("brief"), steer], undefined);
+    expect(blocks).toMatchObject([
+      {
+        type: "user",
+        text: "",
+        images: [{ index: 0, entryId: steer.entryId }],
+      },
+    ]);
+  });
+
+  it("says where a turn failed or was stopped, and where history was summarized", () => {
+    const blocks = logBlocks(
+      [
+        user("brief"),
+        row({
+          role: "assistant",
+          content: [],
+          stopReason: "error",
+          errorMessage: "429 rate limited",
+          timestamp: 2,
+        }),
+        row({
+          role: "compactionSummary",
+          summary: "did a and b",
+          tokensBefore: 9,
+          timestamp: 3,
+        }),
+        row({
+          role: "assistant",
+          content: [],
+          stopReason: "aborted",
+          timestamp: 4,
+        }),
+      ],
+      undefined,
+    );
+    expect(blocks).toMatchObject([
+      { type: "error", aborted: false, text: "429 rate limited" },
+      { type: "summary", kind: "compaction", text: "did a and b" },
+      { type: "error", aborted: true, text: "" },
+    ]);
+  });
+
+  it("leaves failures and summaries out of a reply in a conversation", () => {
+    const blocks = runBlocks(
+      [
+        user("go"),
+        row({
+          role: "assistant",
+          content: [],
+          stopReason: "error",
+          timestamp: 2,
+        }),
+      ],
+      undefined,
+    );
+    expect(blocks).toEqual([]);
+  });
+});
+
+describe("folding a log", () => {
+  const done = (id: string, name: string, input: object = { path: id }) => ({
+    type: "tool" as const,
+    id,
+    name,
+    input,
+    status: "completed" as const,
+  });
+
+  it("folds three calls to one tool in a row into a group", () => {
+    const items = groupBlocks([
+      done("a", "Read"),
+      done("b", "Read"),
+      done("c", "Read"),
+      done("d", "Write"),
+    ]);
+    expect(items.map((item) => item.type)).toEqual(["group", "tool"]);
+    expect(items[0]).toMatchObject({
+      name: "Read",
+      tools: [{ id: "a" }, { id: "b" }, { id: "c" }],
+    });
+  });
+
+  it("leaves two in a row, commands and calls still at work as they are", () => {
+    const items = groupBlocks([
+      done("a", "Read"),
+      done("b", "Read"),
+      { type: "text", id: "t", text: "hm" },
+      done("c", "Bash", { command: "ls" }),
+      done("d", "Bash", { command: "ls" }),
+      done("e", "Bash", { command: "ls" }),
+      { ...done("f", "Read"), status: "running" },
+      done("g", "Read"),
+      done("h", "Read"),
+    ]);
+    expect(items.map((item) => item.id)).toEqual([
+      "a",
+      "b",
+      "t",
+      "c",
+      "d",
+      "e",
+      "f",
+      "g",
+      "h",
+    ]);
   });
 });

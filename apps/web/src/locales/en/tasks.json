@@ -122,7 +122,16 @@
     "title": "Execution log",
     "workspacePrefix": "Workspace ",
     "done": "Done",
-    "failed": "Failed"
+    "failed": "Failed",
+    "error": "Error",
+    "aborted": "Stopped",
+    "compacted": "Context compacted; what came before is a summary",
+    "branched": "The earlier branch is a summary",
+    "group": "{{name}} · {{count}} calls",
+    "group_one": "{{name}} · {{count}} call",
+    "group_other": "{{name}} · {{count}} calls",
+    "earlier": "Load earlier records",
+    "loadingEarlier": "Loading earlier records…"
   },
   "draft": {
     "title": "Task draft",

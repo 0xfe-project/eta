@@ -45,7 +45,28 @@
   "tools": {
     "arguments": "arguments",
     "result": "result",
-    "refused": "refused"
+    "refused": "refused",
+    "command": "command",
+    "printing": "output so far",
+    "plan": "plan",
+    "children": "subagent steps",
+    "runtimeTask": "runtime task",
+    "background": "background",
+    "added": "new file",
+    "deleted": "deleted",
+    "exit": "exit {{code}}",
+    "images": "{{count}} images",
+    "images_one": "{{count}} image",
+    "images_other": "{{count}} images",
+    "steps": "{{count}} steps",
+    "steps_one": "{{count}} step",
+    "steps_other": "{{count}} steps",
+    "foldMore": "Show all {{count}} lines",
+    "foldMore_one": "Show all {{count}} line",
+    "foldMore_other": "Show all {{count}} lines",
+    "foldLess": "Show less",
+    "truncated": "Output was too long; only part of it was kept",
+    "truncatedAt": "Output was too long; only part of it was kept. Full output: {{path}}"
   },
   "agentSwitcher": {
     "currentDirectChat": "Chatting with {{agentName}} ({{status}}); switch agent",
@@ -338,5 +359,13 @@
     "pullBackAction": "Pull back",
     "pullBack": "Pull back into the box: {{text}}",
     "drop": "Drop this one: {{text}}"
+  },
+  "images": {
+    "open": "Open image {{index}} of {{count}}",
+    "title": "Image {{index}} of {{count}}",
+    "hint": "Click the image to toggle its actual size, use the arrow keys to move between images, Esc to close.",
+    "previous": "Previous",
+    "next": "Next",
+    "failed": "Couldn't load the image"
   }
 }

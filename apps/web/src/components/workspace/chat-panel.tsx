@@ -55,7 +55,6 @@ import {
   RUNNING_STATUSES,
   taskRowsByTurn,
 } from "@/lib/timeline";
-import { summarizeArgs } from "@/lib/tool-summary";
 import { cn } from "@/lib/utils";
 import { agentName } from "@/queries/agents";
 import { beginUpload, useOutbox } from "@/queries/outbox";
@@ -81,7 +80,7 @@ import { Message, SystemMessage } from "./transcript/message";
 import { ProcessBox } from "./transcript/process-box";
 import { SlashMenu } from "./transcript/slash-menu";
 import { ThinkingBlock } from "./transcript/thinking-block";
-import { ToolCard, ToolCardBlock } from "./transcript/tool-card";
+import { ToolDetailCard } from "./transcript/tool-detail";
 import { useWorkspaceStore } from "./workspace-store";
 
 type SlashName =
@@ -400,32 +399,22 @@ function TurnCards({
   );
 }
 
-function ToolActivity({ block }: { block: ToolBlock }) {
-  // The arguments are a JSON object; the header shows what the call is *doing*, which is the first
-  // thing worth quoting out of it (lib/tool-summary.ts).
-  const summary = summarizeArgs(block.input);
+function ToolActivity({
+  block,
+  sessionId,
+}: {
+  block: ToolBlock;
+  /** The session at work, which pictures its view left out are fetched from. */
+  sessionId?: string | undefined;
+}) {
   const github = useGitHubRef(block);
   return (
     <>
-      <ToolCard
-        tool={block.name}
-        summary={summary.length > 0 ? summary : undefined}
-        status={block.status}
+      <ToolDetailCard
+        block={block}
+        sessionId={sessionId}
         statusLabel={activityText[block.status]}
-      >
-        {block.input === undefined || block.input === null ? null : (
-          <ToolCardBlock label={translate("chat:tools.arguments")}>
-            {typeof block.input === "string"
-              ? block.input
-              : JSON.stringify(block.input, null, 2)}
-          </ToolCardBlock>
-        )}
-        {block.output === undefined ? null : (
-          <ToolCardBlock label={translate("chat:tools.result")}>
-            {block.output}
-          </ToolCardBlock>
-        )}
-      </ToolCard>
+      />
       {github === undefined ? null : <ActivityRefCard value={github} />}
     </>
   );
@@ -680,7 +669,7 @@ function LiveReply({
       <ThinkingBlock key={block.id} text={block.text} />
     ) : block.type === "tool" ? (
       <div key={block.id} className="tool-step space-y-1">
-        <ToolActivity block={block} />
+        <ToolActivity block={block} sessionId={sessionId} />
       </div>
     ) : null;
   const text = (block: (typeof blocks)[number]) =>

@@ -17,6 +17,11 @@ export interface ImageContent {
   type: "image";
   data: string;
   mimeType: string;
+  /**
+   * Set by a view that left the picture out: `data` is then `""` and `sessions.image` returns it.
+   * The decoded size in bytes.
+   */
+  bytes?: number;
 }
 export interface ToolCall {
   type: "toolCall";
