@@ -21,7 +21,6 @@
     "@eta/compaction": "*",
     "@eta/core": "*",
     "@eta/daemon": "*",
-    "@eta/execution-node": "*",
     "@eta/harness": "*",
     "@eta/mcp": "*",
     "@eta/plugin-akhook": "*",

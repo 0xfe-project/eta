@@ -15,12 +15,6 @@
  * `read` tool's job, not a second API.
  */
 
-import type {
-  EnvCallOptions,
-  ExecutionEnv,
-  FileInfo,
-  Result,
-} from "@eta/execution";
 import ignore from "ignore";
 import { parse } from "yaml";
 
