@@ -11,13 +11,17 @@ import type { ScriptedTurn } from "@botiverse/oar/testing";
 import type {
   AgentRuntimeInfo,
   AgentView,
+  ArtifactView,
   ToolActivity,
 } from "@eta/client-contracts";
 import type { World } from "./support/world";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createRuntimeRegistry } from "@botiverse/oar";
 import { scriptedRuntime } from "@botiverse/oar/testing";
 import { createOarRuntimes } from "@eta/runtime-oar";
 import { describe, expect, it } from "vitest";
+import { until } from "./support/client";
 import { scriptedModels } from "./support/models";
 import { world } from "./support/world";
 
@@ -44,6 +48,41 @@ async function onClaude(
     }),
   });
   return { w, turns, etaRequests: requests };
+}
+
+/** Call one of eta's tools the way Claude Code does: over the MCP server the session was given. */
+async function callHostTool(
+  turn: ScriptedTurn,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<{ text: string; isError: boolean }> {
+  const server = turn.options.mcpServers?.find((entry) => entry.name === "eta");
+  if (server === undefined || !("url" in server))
+    throw new Error("the session was not given eta's tools");
+  const response = await fetch(server.url, {
+    method: "POST",
+    headers: {
+      ...server.headers,
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name, arguments: args },
+    }),
+  });
+  const reply = (await response.json()) as {
+    result?: { content: { text?: string }[]; isError?: boolean };
+    error?: { message: string };
+  };
+  if (reply.result === undefined)
+    throw new Error(reply.error?.message ?? "no result");
+  return {
+    text: reply.result.content.map((part) => part.text ?? "").join(""),
+    isError: reply.result.isError === true,
+  };
 }
 
 async function direct(w: World, agent: AgentView) {
@@ -170,5 +209,55 @@ describe("a conversation with an agent on Claude Code", () => {
     expect(turns).toHaveLength(1);
     // A new runtime conversation: nothing to resume.
     expect(turns[0]!.options.resume).toBeUndefined();
+  });
+});
+
+describe("eta's tools, called by an agent on Claude Code", () => {
+  it("publish_artifact reads the project's directory on eta's side and publishes it", async () => {
+    const results: { text: string; isError: boolean }[] = [];
+    const { w } = await onClaude(async (turn) => {
+      await turn.tool("mcp__eta__publish_artifact", "{}", async () => {
+        const result = await callHostTool(turn, "publish_artifact", {
+          path: "site",
+          title: "Page",
+        });
+        results.push(result);
+        return result.text;
+      });
+      turn.say("published");
+    });
+    const agent = await w.agent("Cody", {
+      runtime: "claude",
+      model: "claude:sonnet",
+    });
+    const project = await w.project({ stewardId: agent.id });
+    await mkdir(join(project.path, "site"), { recursive: true });
+    await writeFile(join(project.path, "site", "index.html"), "<h1>hi</h1>");
+    const group = await w.group(project.id, [agent.id]);
+    await w.watch(group.id);
+    w.client.subscribe("artifacts");
+    const sent = await w.send(group.id, "publish the site", {
+      mentions: [agent.id],
+    });
+    const done = await w.settled(group.id, sent.replies[0]!.id);
+    expect(done.status).toBe("done");
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ isError: false });
+    expect(results[0]!.text).toContain('Published "Page" version 1 (1 files)');
+
+    const artifacts = () =>
+      w.client.section<ArtifactView[]>("artifacts", "list") ?? [];
+    await until(() => artifacts().length === 1);
+    expect(artifacts()[0]).toMatchObject({
+      title: "Page",
+      publisherAgentId: agent.id,
+    });
+    const id = artifacts()[0]!.id;
+    expect(
+      await readFile(
+        join(w.host.dataDir, "artifacts", id, "1", "files", "index.html"),
+        "utf8",
+      ),
+    ).toBe("<h1>hi</h1>");
   });
 });

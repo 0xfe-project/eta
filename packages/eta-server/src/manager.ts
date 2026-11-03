@@ -631,11 +631,21 @@ export class SessionManager {
               observe,
               onAnswer: (payload) => recordAnswer?.(payload),
             });
+      // The host's own tools still run here, against this session's directory (publish_artifact
+      // reads the files it packs through it), so they get the environment an eta session would.
+      // It goes to the runner as the tools' context and not as `env`: that one would also install
+      // eta's read/write/edit/bash, which are the runtime's own. Made on the first call that needs
+      // it, since most runs never ask.
+      let environment: { env?: ExecutionEnv | undefined } | undefined;
+      const toolContext = () => {
+        environment ??= { env: this.envFor?.(meta)?.env };
+        return environment;
+      };
       const session = await openSession({
         storage: (await this.store.open(meta.id))!.storage,
         models: runtime.models,
         ...(agentPrompt === undefined ? {} : { agentPrompt }),
-        runner: { delegate: runtime.delegate },
+        runner: { delegate: runtime.delegate, toolContext },
         config:
           meta.model === undefined ? {} : { model: parseModelId(meta.model) },
         ask,
