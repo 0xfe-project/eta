@@ -75,10 +75,9 @@ describe("activity ref cards", () => {
         text: "#16 整理 Q4 发布说明待办",
       },
     ]);
-    // Told apart from its column by its fill: no outline of its own.
+    // A flat row: no outline and no resting fill of its own; the list rules between rows.
     const card = container.querySelector('[role="log"] a')!;
-    expect(card.className).toContain("bg-card-raised");
-    expect(card.className).not.toMatch(/(^|\s)border(-|\s|$)/);
+    expect(card.className).not.toMatch(/(^|\s)(border|bg-)/);
   });
 
   it("keeps a real group, and drops the word null", async () => {

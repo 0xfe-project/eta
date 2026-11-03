@@ -570,8 +570,9 @@ export function GroupMembers() {
         </DropdownMenu>
       </div>
       {/* One member per row: a member carries three lines (name, status, its session's numbers),
-          and auto-fill columns turn that into two cramped columns in a 320px panel. */}
-      <ul className="grid grid-cols-1 gap-1">
+          and auto-fill columns turn that into two cramped columns in a 320px panel. Rows, not
+          boxed cards: one rule between two, run out to the panel's edges. */}
+      <ul className="-mx-3 divide-y divide-border">
         {members.map((p) => {
           const agent = agents.find((a) => a.id === p.agentId);
           const name = agentName(agents, p.agentId);
@@ -580,13 +581,13 @@ export function GroupMembers() {
             <li
               key={p.agentId}
               className={cn(
-                "min-w-0 border",
-                // Focused is a frame around the card, not a different card: the numbers stay where
-                // they were, so comparing two members does not mean re-learning the layout.
-                focused === p.agentId ? "border-foreground" : "border-border",
+                "min-w-0",
+                // Focused is the row's fill, not a different row: the numbers stay where they
+                // were, so comparing two members does not mean re-learning the layout.
+                focused === p.agentId && "bg-accent",
               )}
             >
-              <div className="flex min-w-0 items-start gap-2 px-2 py-1.5">
+              <div className="flex min-w-0 items-start gap-2 px-3 py-1.5">
                 {/* The row's first thing was the member's avatar; the gauge wraps that one instead
                   of adding a second avatar beside the numbers. A member with no session yet has
                   nothing to draw a ring around, so it is just the avatar. */}
@@ -601,8 +602,8 @@ export function GroupMembers() {
                   chat narrows to it. The menu beside it is the other thing a member has. */}
                 <button
                   type="button"
-                  // Press to focus, press again to let go. The frame is the whole state: white
-                  // border = narrowed to this member, and the same press takes it back.
+                  // Press to focus, press again to let go. The fill is the whole state: a filled
+                  // row = narrowed to this member, and the same press takes it back.
                   onClick={() =>
                     setFocusedAgent(focused === p.agentId ? null : p.agentId)
                   }
@@ -726,7 +727,7 @@ export function GroupMembers() {
               {translateText("groups.relatedTasks.help")}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid max-h-96 gap-2 overflow-y-auto">
+          <div className="grid max-h-96 divide-y divide-border overflow-y-auto">
             {linked.map((t) => (
               <div key={t.id} className="flex min-w-0 items-center gap-1">
                 <ActivityRefCard
@@ -900,7 +901,7 @@ export function GroupArtifacts() {
       </Empty>
     );
   return (
-    <ul aria-label="Artifacts" className="space-y-2">
+    <ul aria-label="Artifacts" className="-mx-3 divide-y divide-border">
       {artifacts.map((a) => (
         <li key={a.id}>
           <ActivityRefCard

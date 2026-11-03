@@ -82,12 +82,12 @@ export function ConversationList() {
     <>
       <SidebarGroup
         aria-labelledby="sidebar-groups"
-        className="min-h-0 flex-1 overflow-y-auto pb-0"
+        className="min-h-0 flex-1 overflow-y-auto px-0 pb-0"
       >
         <div
           className={cn(
             "flex items-center border-b pb-1",
-            rail ? "justify-center" : "justify-between px-2 pr-1",
+            rail ? "justify-center" : "justify-between pr-3 pl-4",
           )}
         >
           <span
@@ -110,10 +110,10 @@ export function ConversationList() {
             <PlusIcon aria-hidden="true" className="size-3.5" />
           </button>
         </div>
-        <SidebarMenu className="gap-1.5 py-1.5">
+        <SidebarMenu className="divide-y divide-border">
           {directories.length === 0 ? (
             loaded ? (
-              <SidebarMenuItem>
+              <SidebarMenuItem className="px-2 py-1.5">
                 <p
                   className={
                     rail ? "sr-only" : "px-2 py-1 text-xs text-muted-foreground"
@@ -124,7 +124,7 @@ export function ConversationList() {
               </SidebarMenuItem>
             ) : (
               // Until `hello`: the rows' outline, so the list does not pop in and push the shelf.
-              <SidebarMenuItem>
+              <SidebarMenuItem className="px-2 py-1.5">
                 <Loading layout={rail ? "glyphs" : "list"} rows={3} />
               </SidebarMenuItem>
             )
@@ -163,12 +163,12 @@ export function ConversationList() {
       </SidebarGroup>
       <SidebarGroup
         aria-labelledby="sidebar-agents"
-        className="mt-auto shrink-0 border-t pb-0"
+        className="mt-auto shrink-0 border-t px-0 pb-0"
       >
         <div
           className={cn(
             "flex items-center border-b pb-1",
-            rail ? "justify-center gap-1" : "justify-between pr-1 pl-1",
+            rail ? "justify-center gap-1" : "justify-between pr-3 pl-3",
           )}
         >
           <button
@@ -217,14 +217,14 @@ export function ConversationList() {
         </div>
         {collapsed ? null : (
           // Never more than two fifths of the screen: the agents are who you can talk to, the
-          // groups are the work, and the work keeps the room. On the rail the shelf gets a hair of
-          // horizontal padding, which is where a card's corner count sits: without it the count
-          // overhangs the scroll box and the rail grows a horizontal scrollbar.
-          <div className={cn("max-h-[40dvh] overflow-y-auto", rail && "px-1")}>
-            <SidebarMenu className="gap-1.5 py-1.5">
+          // groups are the work, and the work keeps the room. No horizontal padding, on the rail
+          // either: the rules between the rows run to the column's edges, and a card's corner count
+          // sits inside its row rather than overhanging the scroll box.
+          <div className="max-h-[40dvh] overflow-y-auto">
+            <SidebarMenu className="divide-y divide-border">
               {directs.length === 0 ? (
                 loaded ? (
-                  <SidebarMenuItem>
+                  <SidebarMenuItem className="px-2 py-1.5">
                     <p
                       className={
                         rail
@@ -236,7 +236,7 @@ export function ConversationList() {
                     </p>
                   </SidebarMenuItem>
                 ) : (
-                  <SidebarMenuItem>
+                  <SidebarMenuItem className="px-2 py-1.5">
                     <Loading layout={rail ? "glyphs" : "list"} rows={2} />
                   </SidebarMenuItem>
                 )
@@ -308,7 +308,7 @@ function GroupCard({
     return (
       <SidebarMenuItem
         className={cn(
-          "group/menu-item relative bg-card-raised transition-colors duration-75",
+          "group/menu-item relative transition-colors duration-75",
           "hover:bg-sidebar-accent",
           active && "bg-sidebar-accent",
         )}
@@ -352,7 +352,7 @@ function GroupCard({
           {conversation.unread > 0 ? (
             <span
               data-slot="conversation-unread"
-              className="pointer-events-none absolute -top-1 -right-1 border border-border bg-sidebar px-0.5 font-mono text-[9px] leading-3 tabular-nums"
+              className="pointer-events-none absolute top-1 right-1 border border-border bg-sidebar px-0.5 font-mono text-[9px] leading-3 tabular-nums"
             >
               {conversation.unread}
             </span>
@@ -364,7 +364,7 @@ function GroupCard({
   return (
     <SidebarMenuItem
       className={cn(
-        "group/menu-item relative bg-card-raised transition-colors duration-75",
+        "group/menu-item relative transition-colors duration-75",
         "hover:bg-sidebar-accent",
         active && "bg-sidebar-accent",
       )}
@@ -391,7 +391,7 @@ function GroupCard({
               {busy.length > 0 ? ` ${memberStatusLabel("working")}` : null}
             </span>
           </button>
-          <div className="pointer-events-none relative z-10 px-2 pt-1.5">
+          <div className="pointer-events-none relative z-10 px-4 pt-1.5">
             {/* The ⋯ is a corner control, not a column: the row ends before it. */}
             <div className="flex items-center gap-1.5 pr-6">
               <button
@@ -457,7 +457,7 @@ function GroupCard({
           </div>
         </>
       ) : (
-        <div className="relative z-10 px-2 py-2">
+        <div className="relative z-10 px-4 py-2">
           <RenameField
             value={draft}
             onChange={setDraft}
@@ -485,7 +485,7 @@ function GroupCard({
            * read as belonging to the card rather than as more rows of the list. */}
           <span
             aria-hidden="true"
-            className="absolute top-0 bottom-0 left-6 w-px bg-border"
+            className="absolute top-0 bottom-0 left-8 w-px bg-border"
           />
           <ul className="py-1">
             {members.map((member) => (
@@ -498,7 +498,7 @@ function GroupCard({
                     name: nameOf(member.agentId),
                   })}
                   className={cn(
-                    "flex w-full items-center gap-2 py-1.5 pr-2 pl-9 text-left hover:bg-sidebar-accent",
+                    "flex w-full items-center gap-2 py-1.5 pr-4 pl-11 text-left hover:bg-sidebar-accent",
                     focusedAgentId === member.agentId && "text-foreground",
                   )}
                 >
@@ -556,7 +556,7 @@ function AgentCard({
   // count or the status in the corner. Same button, same destination as the wide card.
   if (rail)
     return (
-      <SidebarMenuItem className="relative bg-card-raised transition-colors duration-75">
+      <SidebarMenuItem className="relative transition-colors duration-75">
         <button
           type="button"
           data-sidebar="menu-button"
@@ -581,7 +581,7 @@ function AgentCard({
         {unread > 0 ? (
           <span
             data-slot="agent-unread"
-            className="pointer-events-none absolute -top-1 -right-1 border border-border bg-sidebar px-0.5 font-mono text-[9px] leading-3 tabular-nums"
+            className="pointer-events-none absolute top-1 right-1 border border-border bg-sidebar px-0.5 font-mono text-[9px] leading-3 tabular-nums"
           >
             {unread}
           </span>
@@ -594,7 +594,7 @@ function AgentCard({
       </SidebarMenuItem>
     );
   return (
-    <SidebarMenuItem className="bg-card-raised transition-colors duration-75">
+    <SidebarMenuItem className="transition-colors duration-75">
       <button
         type="button"
         data-sidebar="menu-button"
@@ -602,7 +602,7 @@ function AgentCard({
           name: agent.name,
         })}
         onClick={() => openAgent(agent.id)}
-        className="flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors duration-75 hover:bg-sidebar-accent"
+        className="flex w-full items-center gap-2 px-4 py-1.5 text-left transition-colors duration-75 hover:bg-sidebar-accent"
       >
         {/* Top-aligned, not centred: the avatar lines up with the name, so a card with tags
          * underneath still reads as avatar-then-name rather than a block floating mid-row. */}
@@ -683,7 +683,7 @@ function RowMenu({
         <SidebarMenuAction
           showOnHover
           aria-label={translateText("chat:groups.accessibility.actions")}
-          className="top-1.5 right-1 z-20"
+          className="top-1.5 right-3 z-20"
         >
           <DotsThreeIcon aria-hidden="true" />
         </SidebarMenuAction>
