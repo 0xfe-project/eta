@@ -1,5 +1,5 @@
 import type { RunImage } from "@/lib/run";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Dialog,
@@ -132,7 +132,10 @@ function Lightbox({
   );
 }
 
-/** One picture, fetched from the host when the view left it out. */
+/**
+ * One picture, fetched from the host when the view left it out — once it is on screen: a log holds
+ * every screenshot the run took, folded away in cards nobody has opened.
+ */
 function Picture({
   sessionId,
   image,
@@ -141,10 +144,21 @@ function Picture({
   image: RunImage;
 }) {
   const { t: translateText } = useTranslation("chat");
-  const { src, failed } = useSessionImage(sessionId, image);
+  const ref = useRef<HTMLSpanElement>(null);
+  const [seen, setSeen] = useState(typeof IntersectionObserver === "undefined");
+  useEffect(() => {
+    const element = ref.current;
+    if (seen || element === null) return undefined;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) setSeen(true);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [seen]);
+  const { src, failed } = useSessionImage(sessionId, image, seen);
   if (src === undefined)
     return (
-      <span className="image-pending">
+      <span ref={ref} className="image-pending">
         {failed ? translateText("images.failed") : sizeLabel(image)}
       </span>
     );

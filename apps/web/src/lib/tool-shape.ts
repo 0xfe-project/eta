@@ -236,8 +236,8 @@ export function runtimeTaskOf(block: ToolBlock): RuntimeTask | undefined {
 }
 
 /** A terminal's colour and cursor codes, which read as noise outside one. */
-// eslint-disable-next-line no-control-regex
 const ANSI =
+  // eslint-disable-next-line no-control-regex
   /\u001B\[[\d;?]*[\u0020-\u002F]*[\u0040-\u007E]|\u001B\][^\u0007]*\u0007/g;
 
 export function withoutAnsi(text: string): string {

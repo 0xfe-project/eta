@@ -1,6 +1,7 @@
 import type {
   AgentMessage,
   SessionArgs,
+  SessionImage,
   SessionViewSections,
   ViewMessageRow,
 } from "@eta/client-contracts";
@@ -169,19 +170,12 @@ export function useRunBlocks(sessionId: string | undefined) {
   return useMemo(() => runBlocks(rows ?? [], streaming), [rows, streaming]);
 }
 
-/**
- * A whole session as blocks, for a task run's log; undefined until the session's view arrives (a
- * run that has not started has no session).
- */
-export function useLogBlocks(sessionId: string | null | undefined) {
-  return useSessionLog(sessionId).blocks;
-}
-
 /** How many older messages one page back asks for: the size of the view's own window. */
 const HISTORY_PAGE = 200;
 
 /** A session's log, with the messages older than the view's window as far back as it has paged. */
 export interface SessionLog {
+  /** Undefined until the session's view arrives (a run that has not started has no session). */
   blocks: LogBlock[] | undefined;
   /** Messages exist before the oldest one the page has. */
   earlier: boolean;
@@ -347,12 +341,13 @@ const pictures = new Map<string, Promise<string>>();
 
 /**
  * A picture as something an `<img>` can show. One the view carried whole is shown as it is; one
- * it left out (to keep the view small) is asked for once with `sessions.image` and kept for the
- * rest of the page's life.
+ * it left out (to keep the view small) is asked for once with `sessions.image`, when `wanted` says
+ * it is on screen, and kept for the rest of the page's life.
  */
 export function useSessionImage(
   sessionId: string | null | undefined,
   image: RunImage,
+  wanted = true,
 ): { src: string | undefined; failed: boolean } {
   const inline =
     image.data === ""
@@ -369,6 +364,7 @@ export function useSessionImage(
   }>();
   useEffect(() => {
     if (
+      !wanted ||
       inline !== undefined ||
       key === undefined ||
       sessionId === null ||
@@ -379,7 +375,7 @@ export function useSessionImage(
     let request = pictures.get(key);
     if (request === undefined) {
       request = getWire()
-        .call<{ mimeType: string; data: string }>("sessions", "image", {
+        .call<SessionImage>("sessions", "image", {
           session: sessionId,
           entryId: image.entryId,
           index: image.index,
@@ -400,7 +396,7 @@ export function useSessionImage(
     return () => {
       cancelled = true;
     };
-  }, [inline, key, sessionId, image.entryId, image.index]);
+  }, [wanted, inline, key, sessionId, image.entryId, image.index]);
   if (inline !== undefined) return { src: inline, failed: false };
   const mine = loaded?.key === key ? loaded : undefined;
   return { src: mine?.src, failed: mine?.failed === true };

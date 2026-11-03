@@ -1075,6 +1075,11 @@
   .tool-card-meta + .tool-card-status {
     margin-left: 0;
   }
+  .tool-card-block-label.verbatim {
+    text-transform: none;
+    letter-spacing: 0.02em;
+    font-size: 10px;
+  }
   /* A block that folds its own length (Folded) does not scroll inside a second frame. */
   .tool-card-block-content.tool-card-plain {
     max-height: none;

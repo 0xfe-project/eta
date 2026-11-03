@@ -56,16 +56,21 @@ export function ToolCard({
 /** One labelled block inside a tool card: the arguments, or the output. */
 export function ToolCardBlock({
   label,
+  verbatim = false,
   className,
   children,
 }: {
   label: string;
+  /** The label is a name (a file's path) and keeps its case. */
+  verbatim?: boolean;
   className?: string;
   children: ReactNode;
 }) {
   return (
     <div className="tool-card-block">
-      <span className="tool-card-block-label">{label}</span>
+      <span className={cn("tool-card-block-label", verbatim && "verbatim")}>
+        {label}
+      </span>
       <div className={cn("tool-card-block-content", className)}>{children}</div>
     </div>
   );

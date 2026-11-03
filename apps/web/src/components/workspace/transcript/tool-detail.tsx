@@ -133,6 +133,7 @@ function ToolBody({
             // eslint-disable-next-line react/no-array-index-key
             key={`${file.path}:${index}`}
             label={fileLabel(file, translateText)}
+            verbatim
             className="tool-card-plain"
           >
             <PatchView patch={file.patch} />
@@ -141,6 +142,7 @@ function ToolBody({
       ) : shape.kind === "write" ? (
         <ToolCardBlock
           label={`${shape.path} · +${lineCount(shape.content)}`}
+          verbatim
           className="tool-card-plain"
         >
           <Folded text={shape.content} />
@@ -241,7 +243,7 @@ const FOLD_CHARS = 1600;
  * Text that may be long: past fourteen lines it shows the first ones and says how many more there
  * are. Opened, it is all there and folds back again.
  */
-export function Folded({
+function Folded({
   text,
   children,
 }: {
@@ -335,6 +337,15 @@ function PlanList({ items }: { items: readonly PlanItem[] }) {
   );
 }
 
+/** A runtime's raw argument text, as the object it is when it is JSON. */
+function parsed(input: string): unknown {
+  try {
+    return JSON.parse(input) as unknown;
+  } catch {
+    return input;
+  }
+}
+
 /** What a runtime's subagent did inside the call: its commands and words, one line each. */
 function ChildSteps({ steps }: { steps: readonly ChildStep[] }) {
   return (
@@ -353,7 +364,7 @@ function ChildSteps({ steps }: { steps: readonly ChildStep[] }) {
                 {step.name}
                 {step.input === undefined || step.input === ""
                   ? ""
-                  : ` · ${summarizeArgs(step.input)}`}
+                  : ` · ${summarizeArgs(parsed(step.input))}`}
               </summary>
               {step.output === undefined || step.output === "" ? null : (
                 <Folded text={withoutAnsi(step.output)} />

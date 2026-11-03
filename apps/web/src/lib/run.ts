@@ -133,7 +133,7 @@ export function runBlocks(
 }
 
 /** What a user message said, in a log: the first one is the briefing and is not shown. */
-export interface UserBlock {
+interface UserBlock {
   type: "user";
   id: string;
   text: string;
@@ -141,7 +141,7 @@ export interface UserBlock {
 }
 
 /** A turn that ended on an error, or that was stopped: what the reader is owed is why. */
-export interface ErrorBlock {
+interface ErrorBlock {
   type: "error";
   id: string;
   aborted: boolean;
@@ -149,7 +149,7 @@ export interface ErrorBlock {
 }
 
 /** Where the session folded its history into a summary (a compaction, or a branch left behind). */
-export interface SummaryBlock {
+interface SummaryBlock {
   type: "summary";
   id: string;
   kind: "compaction" | "branch";

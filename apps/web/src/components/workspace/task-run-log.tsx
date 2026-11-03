@@ -193,7 +193,16 @@ function Earlier({
       return undefined;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) loadRef.current();
+        // Only a reader who went up there: a working run opens at its bottom, with this out of
+        // sight until they scroll.
+        const box = scrollRef?.current;
+        if (
+          entries.some((entry) => entry.isIntersecting) &&
+          (box === null ||
+            box === undefined ||
+            box.scrollTop < box.clientHeight)
+        )
+          loadRef.current();
       },
       { root: scrollRef?.current ?? null, rootMargin: "200px 0px 0px 0px" },
     );
