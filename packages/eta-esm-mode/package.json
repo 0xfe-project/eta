@@ -16,10 +16,7 @@
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
   },
   "dependencies": {
-<<<<<<< HEAD
-=======
     "ripgrep": "^0.3.1",
->>>>>>> eta/task-21
     "zx": "lite"
   },
   "devDependencies": {
