@@ -1,2 +1,10 @@
+export * from "./agent";
+export * from "./env-file";
+export * from "./hooks";
+export * from "./host-modules";
+export * from "./layers";
+export * from "./modules";
+export * from "./realm";
+export { mountFileOps } from "./file-ops.js";
 export { edit, search, view } from "./file-ops.js";
 export type { SearchOptions, SearchResult, ViewOptions } from "./file-ops.js";

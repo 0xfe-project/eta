@@ -1,230 +1,178 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { cwd } from "node:process";
-import { rgPath } from "@vscode/ripgrep";
-import { execa } from "execa";
+import { ripgrep } from "ripgrep";
+
+import type { Realm } from "./realm";
 
 /**
- * Search result from ripgrep
+ * The three file operations a script reaches for first, as realm top-level
+ * globals. Each one is a binding, so it lands in the effect ledger with the
+ * line that called it and goes through the authorizer like every other host
+ * call — there is no second door.
+ *
+ * `search` shells out to ripgrep via the npm `ripgrep` library (WASM build,
+ * no native binary). `view` and `edit` are plain fs work; `edit` refuses an
+ * ambiguous match, which is the whole reason it exists next to `fs.writeFile`.
  */
+
 export interface SearchResult {
-  /** Relative path to the file */
+  /** Path as ripgrep reported it, relative to the search cwd when it is one. */
   file: string;
-  /** Line number (1-indexed) */
+  /** Line number (1-indexed). */
   line: number;
-  /** Column number (optional, 1-indexed) */
+  /** Column of the first submatch (1-indexed), when ripgrep reports one. */
   column?: number;
-  /** Full text of the matched line */
+  /** The matched line's full text. */
   text: string;
-  /** Matched substring (if ripgrep provides it) */
+  /** The matched substring, when ripgrep reports one. */
   match?: string;
 }
 
-/**
- * Search options
- */
 export interface SearchOptions {
-  /** File pattern filter (e.g., "*.ts") */
+  /** File filter handed to ripgrep, e.g. `"*.ts"`. */
   glob?: string;
-  /** Search directory (defaults to current working directory) */
+  /** Directory to search. Defaults to the host process cwd. */
   cwd?: string;
-  /** Maximum number of results to return (default: 100) */
+  /** Stop after this many matches. Default 100. */
   limit?: number;
 }
 
-/**
- * View options
- */
 export interface ViewOptions {
-  /** Starting line number (1-indexed, default: 1) */
+  /** First line to read, 1-indexed. Default 1. */
   start?: number;
-  /** Maximum number of lines to read (default: 50) */
+  /** How many lines to read. Default 50. */
   limit?: number;
 }
 
-/**
- * Search file contents using ripgrep.
- *
- * @param pattern - Search pattern (supports regex)
- * @param options - Search options
- * @returns Array of search results
- *
- * @example
- * ```ts
- * const results = await search("export.*function", { glob: "*.ts", limit: 50 });
- * for (const r of results) {
- *   console.log(`${r.file}:${r.line} - ${r.text}`);
- * }
- * ```
- */
 export async function search(
   pattern: string,
   options: SearchOptions = {},
 ): Promise<SearchResult[]> {
   const { glob, cwd: workingDir = cwd(), limit = 100 } = options;
 
-  const args = [
-    "--json",
-    "--line-number",
-    "--column",
-    "--no-heading",
-    "--with-filename",
-  ];
+  const args = ["--json", "--line-number", "--column", "--no-heading"];
+  if (glob !== undefined) args.push("--glob", glob);
+  args.push("--", pattern, workingDir);
 
-  if (glob) {
-    args.push("--glob", glob);
-  }
+  const { code, stdout, stderr } = await ripgrep(args, {
+    buffer: true,
+    // The library preopens `process.cwd()` by default; an explicit cwd needs
+    // the matching preopen or the WASM instance cannot see the directory.
+    preopens: { "/": "/" },
+  });
+  if (code === 2)
+    throw new Error(`ripgrep error: ${stderr.trim() || "unknown error"}`);
 
-  args.push("--", pattern);
-
-  try {
-    const { stdout } = await execa(rgPath, args, {
-      cwd: workingDir,
-      stdin: "ignore",
-    });
-
-    const results: SearchResult[] = [];
-    const lines = stdout
-      .trim()
-      .split("\n")
-      .filter((line) => line);
-
-    for (const line of lines) {
-      if (results.length >= limit) break;
-
-      const parsed = JSON.parse(line);
-
-      if (parsed.type === "match") {
-        const data = parsed.data;
-        const result: SearchResult = {
-          file: data.path.text,
-          line: data.line_number,
-          text: data.lines.text.trimEnd(),
-        };
-
-        // Add column if available
-        if (data.submatches && data.submatches.length > 0) {
-          result.column = data.submatches[0].start + 1; // Convert to 1-indexed
-          result.match = data.submatches[0].match.text;
-        }
-
-        results.push(result);
-      }
+  const results: SearchResult[] = [];
+  for (const line of stdout.split("\n")) {
+    if (line === "" || results.length >= limit) continue;
+    let event: {
+      type: string;
+      data?: {
+        path?: { text?: string };
+        line_number?: number;
+        lines?: { text?: string };
+        submatches?: { match?: { text?: string }; start?: number }[];
+      };
+    };
+    try {
+      event = JSON.parse(line) as typeof event;
+    } catch {
+      continue;
     }
-
-    return results;
-  } catch (err: any) {
-    // ripgrep exits with 1 if no matches found
-    if (err.exitCode === 1) {
-      return [];
+    if (event.type !== "match" || event.data === undefined) continue;
+    const data = event.data;
+    const file = data.path?.text;
+    const line_number = data.line_number;
+    if (file === undefined || line_number === undefined) continue;
+    const result: SearchResult = {
+      file,
+      line: line_number,
+      text: (data.lines?.text ?? "").trimEnd(),
+    };
+    const first = data.submatches?.[0];
+    if (first?.match?.text !== undefined) {
+      result.match = first.match.text;
+      if (first.start !== undefined) result.column = first.start + 1;
     }
-
-    // For other errors, throw with more context
-    throw new Error(`ripgrep error: ${err.stderr || err.message}`);
+    results.push(result);
   }
+  return results;
 }
 
-/**
- * View file contents with line numbers.
- *
- * @param path - File path (relative or absolute)
- * @param options - View options
- * @returns File contents with line numbers
- *
- * @example
- * ```ts
- * const code = await view("src/agent.ts", { start: 100, limit: 20 });
- * // "100: export class Agent {\n101:   constructor(...) {..."
- * ```
- */
 export async function view(
   path: string,
   options: ViewOptions = {},
 ): Promise<string> {
   const { start = 1, limit = 50 } = options;
+  if (start < 1) throw new Error(`start must be >= 1, got ${start}`);
 
-  if (start < 1) {
-    throw new Error(`start must be >= 1, got ${start}`);
-  }
-
-  const resolvedPath = resolve(path);
-  const content = await readFile(resolvedPath, "utf-8");
+  const content = await readFile(resolve(path), "utf-8");
   const lines = content.split("\n");
+  if (start > lines.length) return "";
 
-  if (start > lines.length) {
-    return "";
-  }
-
-  const endLine = Math.min(start + limit - 1, lines.length);
-  const result: string[] = [];
-
-  for (let i = start; i <= endLine; i++) {
-    result.push(`${i}: ${lines[i - 1]}`);
-  }
-
-  return result.join("\n");
+  const end = Math.min(start + limit - 1, lines.length);
+  const out: string[] = [];
+  for (let i = start; i <= end; i++) out.push(`${i}: ${lines[i - 1]}`);
+  return out.join("\n");
 }
 
-/**
- * Edit file by exact text replacement.
- *
- * The oldText must match exactly once in the file, otherwise the operation fails.
- *
- * @param path - File path (relative or absolute)
- * @param oldText - Text to replace (must match exactly once)
- * @param newText - Replacement text
- *
- * @example
- * ```ts
- * await edit(
- *   "src/config.ts",
- *   "timeout: 5000",
- *   "timeout: 10000"
- * );
- * ```
- */
 export async function edit(
   path: string,
   oldText: string,
   newText: string,
 ): Promise<void> {
-  const resolvedPath = resolve(path);
-  const content = await readFile(resolvedPath, "utf-8");
+  const resolved = resolve(path);
+  const content = await readFile(resolved, "utf-8");
 
-  // Count occurrences of oldText
-  const occurrences = countOccurrences(content, oldText);
-
-  if (occurrences === 0) {
-    throw new Error(
-      `No match found for:\n${oldText.slice(0, 100)}${oldText.length > 100 ? "..." : ""}`,
-    );
-  }
-
-  if (occurrences > 1) {
-    throw new Error(
-      `Match is not unique, found ${occurrences} occurrences:\n${oldText.slice(0, 100)}${oldText.length > 100 ? "..." : ""}`,
-    );
-  }
-
-  // Perform replacement
-  const newContent = content.replace(oldText, newText);
-
-  await writeFile(resolvedPath, newContent, "utf-8");
-}
-
-/**
- * Count exact occurrences of a substring in a string.
- */
-function countOccurrences(text: string, substring: string): number {
   let count = 0;
   let pos = 0;
-
-  while (true) {
-    const index = text.indexOf(substring, pos);
-    if (index === -1) break;
+  for (;;) {
+    const at = content.indexOf(oldText, pos);
+    if (at === -1) break;
     count++;
-    pos = index + substring.length;
+    pos = at + oldText.length;
   }
 
-  return count;
+  const preview =
+    oldText.length > 100 ? `${oldText.slice(0, 100)}...` : oldText;
+  if (count === 0) throw new Error(`edit: no match found for:\n${preview}`);
+  if (count > 1)
+    throw new Error(
+      `edit: match is not unique, found ${count} occurrences of:\n${preview}`,
+    );
+
+  await writeFile(resolved, content.replace(oldText, newText), "utf-8");
+}
+
+/** Mounts `search` / `view` / `edit` as realm top-level globals. */
+export function mountFileOps(realm: Realm): void {
+  realm.global(
+    "search",
+    realm.binding(
+      "search",
+      (pattern: string, options?: SearchOptions) => search(pattern, options),
+      (pattern, options) =>
+        `${pattern}${options?.glob !== undefined ? ` glob:${options.glob}` : ""}${options?.cwd !== undefined ? ` in:${options.cwd}` : ""}`,
+    ),
+  );
+  realm.global(
+    "view",
+    realm.binding(
+      "view",
+      (path: string, options?: ViewOptions) => view(path, options),
+      (path, options) =>
+        `${path}${options?.start !== undefined ? ` :${options.start}` : ""}${options?.limit !== undefined ? `+${options.limit}` : ""}`,
+    ),
+  );
+  realm.global(
+    "edit",
+    realm.binding(
+      "edit",
+      (path: string, oldText: string, newText: string) =>
+        edit(path, oldText, newText),
+      (path) => path,
+    ),
+  );
 }

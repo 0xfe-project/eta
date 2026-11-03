@@ -222,7 +222,7 @@ describe("edit", () => {
     );
 
     await expect(edit(filePath, "5000", "10000")).rejects.toThrow(
-      "Match is not unique, found 3 occurrences",
+      "match is not unique, found 3 occurrences",
     );
 
     // Verify file unchanged
@@ -236,7 +236,7 @@ describe("edit", () => {
     await writeFile(filePath, "const x = 1;");
 
     await expect(edit(filePath, "nonexistent", "replacement")).rejects.toThrow(
-      "No match found",
+      "no match found",
     );
 
     // Verify file unchanged
@@ -305,5 +305,61 @@ describe("edit", () => {
     const { readFile } = await import("node:fs/promises");
     const content = await readFile(filePath, "utf-8");
     expect(content).toBe("const x = 1;");
+  });
+});
+
+describe("mountFileOps", () => {
+  it("exposes search/view/edit as realm top-level globals with effects", async () => {
+    const { Agent } = await import("../src/index.js");
+    const agent = new Agent({ root: testDir });
+    await writeFile(
+      join(testDir, "probe.ts"),
+      "export const greeting = 'hello realm';\n",
+    );
+
+    const result = await agent.run(
+      [
+        `const hits = await search('greeting', { cwd: ${JSON.stringify(testDir)} });`,
+        `const text = await view(${JSON.stringify(join(testDir, "probe.ts"))});`,
+        `await edit(${JSON.stringify(join(testDir, "probe.ts"))}, 'hello realm', 'hello mounted');`,
+        "export default { hits: hits.length, head: text.split('\\n')[0] };",
+      ].join("\n"),
+      { identifier: join(testDir, "run.js") },
+    );
+
+    expect(result.value).toMatchObject({ hits: 1 });
+    expect((result.value as { head: string }).head).toContain("1: ");
+    expect(result.effects.map((e) => e.name)).toEqual(
+      expect.arrayContaining(["search", "view", "edit"]),
+    );
+
+    const { readFile } = await import("node:fs/promises");
+    const edited = await readFile(join(testDir, "probe.ts"), "utf-8");
+    expect(edited).toContain("hello mounted");
+  });
+
+  it("blocked edit leaves the file untouched", async () => {
+    const { Agent } = await import("../src/index.js");
+    const target = join(testDir, "guard.ts");
+    await writeFile(target, "const keep = 'original';\n");
+
+    const agent = new Agent({
+      root: testDir,
+      hooks: {
+        authorize: (request) =>
+          request.name === "edit" ? "no editing in this test" : undefined,
+      },
+    });
+
+    await expect(
+      agent.run(
+        `await edit(${JSON.stringify(target)}, 'original', 'hacked');`,
+        {
+          identifier: join(testDir, "run2.js"),
+        },
+      ),
+    ).rejects.toThrow("edit was refused");
+    const { readFile } = await import("node:fs/promises");
+    expect(await readFile(target, "utf-8")).toContain("original");
   });
 });
