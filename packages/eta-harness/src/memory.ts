@@ -16,6 +16,8 @@
  * "remove something in the other file", which it ignores rather than guessing.
  */
 
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import {
   MEMORY_EXTRACT_PROMPT,
   MEMORY_EXTRACT_SYSTEM_PROMPT,
@@ -24,7 +26,7 @@ import {
 /**
  * The little filesystem this module needs. Narrow on purpose: memory is about
  * four operations, and a test (or a GUI's sandbox) can supply them without a real
- * environment. `envMemoryFs` adapts an `ExecutionEnv` when there is one.
+ * filesystem. `nodeMemoryFs` is the local-disk one.
  */
 export interface MemoryFs {
   readFile: (path: string) => Promise<string | undefined>;
@@ -443,4 +445,41 @@ export async function extractMemoryAtRunEnd(
     onOutcome?.(outcome);
     return outcome;
   }
+}
+
+/** Memory on the local disk, through `node:fs`. Missing files read as undefined. */
+export function nodeMemoryFs(): MemoryFs {
+  const missing = (error: unknown): boolean =>
+    (error as NodeJS.ErrnoException).code === "ENOENT"
+    || (error as NodeJS.ErrnoException).code === "ENOTDIR";
+  return {
+    async readFile(path) {
+      try {
+        return await readFile(path, "utf8");
+      } catch (error) {
+        if (missing(error)) return undefined;
+        throw error;
+      }
+    },
+    async mtime(path) {
+      try {
+        return (await stat(path)).mtimeMs;
+      } catch (error) {
+        if (missing(error)) return undefined;
+        throw error;
+      }
+    },
+    async writeFile(path, content) {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, content, "utf8");
+    },
+    async listFileNames(dir) {
+      try {
+        return await readdir(dir);
+      } catch (error) {
+        if (missing(error)) return [];
+        throw error;
+      }
+    },
+  };
 }

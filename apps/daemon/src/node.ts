@@ -210,7 +210,6 @@ export class DaemonNode {
         const env = createLocalEnvironment(meta.cwd);
         if (env === undefined) return "";
         return await renderSkillsBlock({
-          env,
           cwd: meta.cwd,
           home,
           extraDirs: (this.#openingOf(meta)?.bundles ?? []).flatMap(

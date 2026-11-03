@@ -3,7 +3,7 @@
   "type": "module",
   "version": "0.1.0",
   "private": true,
-  "description": "Shared plugin wire, session, environment and lifecycle contracts.",
+  "description": "Shared plugin wire, session and lifecycle contracts.",
   "exports": {
     ".": "./src/index.ts"
   },
@@ -14,9 +14,7 @@
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
   },
   "dependencies": {
-    "@eta/client-wire-proto": "*",
-    "@eta/execution": "*",
-    "@eta/harness": "*"
+    "@eta/client-wire-proto": "*"
   },
   "devDependencies": {
     "typescript": "5.9.3"

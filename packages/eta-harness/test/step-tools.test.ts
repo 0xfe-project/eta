@@ -11,9 +11,7 @@ import { MemoryStorage } from "@eta/core/storage";
 import { fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { openSession } from "../src/open";
-import { sessionStateKV } from "../src/state";
 import { journaledKernel } from "../src/testing";
-import { createStateTools } from "../src/tools/state";
 import { createStepTools, STEP_TOOL_NAMES } from "../src/tools/tasks";
 import { toKernelTool } from "../src/tools/tool";
 
@@ -23,7 +21,7 @@ const _userMsg = (text: string) => ({
   timestamp: 0,
 });
 
-/** A kernel with the task and state tools registered, as a deployment wires them. */
+/** A kernel with the step tools registered, as a deployment wires them. */
 const call = { turn: 1, toolCallId: "c1" } as never;
 
 function session() {
@@ -32,18 +30,8 @@ function session() {
   );
   for (const tool of createStepTools(kernel.tasks))
     kernel.tools.register(toKernelTool(tool, () => undefined));
-  for (const tool of createStateTools(
-    sessionStateKV(journaling.log!, journaling),
-  )) {
-    kernel.tools.register(toKernelTool(tool, () => undefined));
-  }
   kernel.config.update({
-    activeToolNames: [
-      ...STEP_TOOL_NAMES,
-      "update_state",
-      "check_state",
-      "list_state",
-    ],
+    activeToolNames: [...STEP_TOOL_NAMES],
   });
   return { kernel, journaling };
 }
@@ -134,88 +122,6 @@ describe("step tools", () => {
     expect(listed).toContain("[ ] t1: survive the restart");
     expect(listed).toContain("[ ] t2: and keep its edges");
     expect(again.tasks?.kept).toBe(2);
-    await again.kernel.dispose();
-  });
-});
-
-describe("state tools", () => {
-  it("stores, reads, lists and deletes keys — through the journal", async () => {
-    const { kernel, journaling } = session();
-    expect(
-      textOf(await kernel.tools.execute("check_state", { key: "plan" }, call)),
-    ).toBe("plan is not set.");
-    expect(textOf(await kernel.tools.execute("list_state", {}, call))).toBe(
-      "No state keys.",
-    );
-
-    expect(
-      textOf(
-        await kernel.tools.execute(
-          "update_state",
-          { key: "plan", value: "green" },
-          call,
-        ),
-      ),
-    ).toBe("Stored plan.");
-    expect(
-      textOf(await kernel.tools.execute("check_state", { key: "plan" }, call)),
-    ).toBe("green");
-    await kernel.tools.execute(
-      "update_state",
-      { key: "other", value: "blue" },
-      call,
-    );
-    expect(textOf(await kernel.tools.execute("list_state", {}, call))).toBe(
-      "other\nplan",
-    );
-
-    // A stored key is committed, not held in a variable: the write waited for
-    // the disk before the tool answered.
-    await journaling.flush();
-
-    expect(
-      textOf(
-        await kernel.tools.execute(
-          "update_state",
-          { key: "plan", value: null },
-          call,
-        ),
-      ),
-    ).toBe("Deleted plan.");
-    expect(
-      textOf(await kernel.tools.execute("check_state", { key: "plan" }, call)),
-    ).toBe("plan is not set.");
-    expect(textOf(await kernel.tools.execute("list_state", {}, call))).toBe(
-      "other",
-    );
-  });
-
-  it("finds its keys again after a restart", async () => {
-    const storage = new MemoryStorage();
-    const first = await openSession({ storage, models: fakeModels([]) });
-    for (const tool of createStateTools(
-      sessionStateKV(first.log, first.journaling),
-    )) {
-      first.kernel.tools.register(toKernelTool(tool, () => undefined));
-    }
-    await first.kernel.tools.execute(
-      "update_state",
-      { key: "note", value: "remember me" },
-      call,
-    );
-    await first.kernel.dispose();
-
-    const again = await openSession({ storage, models: fakeModels([]) });
-    for (const tool of createStateTools(
-      sessionStateKV(again.log, again.journaling),
-    )) {
-      again.kernel.tools.register(toKernelTool(tool, () => undefined));
-    }
-    expect(
-      textOf(
-        await again.kernel.tools.execute("check_state", { key: "note" }, call),
-      ),
-    ).toBe("remember me");
     await again.kernel.dispose();
   });
 });

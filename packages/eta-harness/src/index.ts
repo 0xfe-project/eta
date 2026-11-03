@@ -31,7 +31,6 @@ export {
   CompactionService,
   type CompactionServiceOptions,
 } from "./compaction-service";
-
 export {
   calculateContextTokens,
   type ContextUsageEstimate,
@@ -76,6 +75,7 @@ export {
   type MemoryExtractionSource,
   type MemoryFile,
   memoryFileLabel,
+  nodeMemoryFs,
   type MemoryFs,
   type MemoryLoaded,
   type MemoryScan,
@@ -87,6 +87,23 @@ export {
   scanMemoryPaths,
   type TranscriptLike,
 } from "./memory";
+export { MetricsService } from "./metrics";
+export { OutputRate } from "./metrics/output-rate";
+export { dirnameEnvPath, formatSkillInvocation } from "./prompt-blocks";
+export * from "./prompts";
+export { RunPump, type RunPumpOptions } from "./pump";
+export {
+  type CadenceConfig,
+  type CadenceState,
+  createCadenceState,
+  DEFAULT_REMINDER_INTERVAL,
+  DEFAULT_STEP_TOOL_NAMES,
+  drainReminderForContext,
+  evaluateToolResult,
+  onTurnStart,
+  resetCadenceState,
+} from "./reminder/cadence";
+export { MODEL_STATE, sessionStateKV, type StateKV } from "./state";
 export {
   type OpenSession,
   openSession,
@@ -104,13 +121,6 @@ export {
   type SkillDiagnostic,
   type SkillDiagnosticCode,
 } from "./skills";
-export {
-  createEditTool,
-  editSchema,
-  type EditToolDetails,
-  type EditToolInput,
-  prepareEditArguments,
-} from "./tools/edit";
 export {
   base64ByteLength,
   decodeBase64,
@@ -156,25 +166,3 @@ export {
   type ViewSources,
   type ViewSystemRow,
 } from "./view";
-export {
-  AdaptivePublisher,
-  type AdaptivePublisherOptions,
-  applyShellOutputUpdate,
-  DEFAULT_MAX_BYTES,
-  DEFAULT_MAX_LINES,
-  formatSize,
-  GREP_MAX_LINE_LENGTH,
-  LiveOutput,
-  type LiveOutputOptions,
-  OUTPUT_MIN_EMIT_INTERVAL_MS,
-  OUTPUT_TARGET_BYTES_PER_SECOND,
-  OutputBuffer,
-  type OutputBufferOptions,
-  sanitizeShellOutput,
-  truncateHead,
-  truncateLine,
-  truncateTail,
-  type TruncationOptions,
-  type TruncationResult,
-  utf8ByteLength,
-} from "@eta/execution/output";

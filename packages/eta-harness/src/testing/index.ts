@@ -10,8 +10,3 @@ export {
   type SmokeOptions,
   type SmokeReport,
 } from "./smoke-scenario";
-export {
-  envContract,
-  type EnvContractHandle,
-  type EnvFactory,
-} from "@eta/execution/testing";

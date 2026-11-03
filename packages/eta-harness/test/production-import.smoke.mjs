@@ -1,44 +1,26 @@
 import assert from "node:assert/strict";
 import { plugin } from "bun";
 
+// The harness reaches the local disk through `node:fs` directly (skills, memory, the ESM
+// realm), so that is no longer checked. What still must not leak into a production import
+// is test code.
 plugin({
-  name: "reject-node-adapter",
+  name: "reject-test-code",
   setup(build) {
     build.onLoad(
-      { filter: /[/\\](eta-execution-node|testing|vitest|@vitest)[/\\]/ },
+      { filter: /[/\\](testing|vitest|@vitest)[/\\]/ },
       ({ path }) => {
-        throw new Error(
-          `Harness production import loaded adapter/test code: ${path}`,
-        );
+        throw new Error(`Harness production import loaded test code: ${path}`);
       },
     );
   },
 });
 const harness = await import("@eta/harness");
 assert.equal(typeof harness.openSession, "function");
-for (const name of [
-  "NodeEnvironment",
-  "NodeFileSystem",
-  "NodeShell",
-  "killProcessTree",
-]) {
-  assert.equal(
-    name in harness,
-    false,
-    `${name} belongs in @eta/execution-node`,
-  );
-}
-// Check harness-owned reachable modules with third-party dependencies external:
-// third-party SDK platform internals are outside the adapter extraction.
 const result = await Bun.build({
   entrypoints: [new URL("../src/index.ts", import.meta.url).pathname],
   target: "bun",
   packages: "external",
 });
 assert.equal(result.success, true, String(result.logs));
-const output = await result.outputs[0].text();
-assert.doesNotMatch(
-  output,
-  /(?:from|import)\s*["'](?:node:)?(?:fs(?:\/promises)?|child_process)["']/,
-);
 console.log("Harness production import passed");

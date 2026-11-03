@@ -8,15 +8,11 @@ import type {
 import type { AnswerPayload } from "@eta/core/session";
 import type {
   AskObserver,
-  ExecutionEnv,
   MemoryExtractionOutcome,
-  MemoryFs,
   OpenSession,
   PlatformPromptInfo,
   SessionMemoryOptions,
-  SubagentManager,
 } from "@eta/harness";
-import type { SessionEnvironment } from "@eta/plugin-sdk";
 import type { Settings } from "./settings";
 import type { SessionListing, SessionMeta, SessionStore } from "./store";
 /**
@@ -44,11 +40,10 @@ import type { SessionListing, SessionMeta, SessionStore } from "./store";
 import process from "node:process";
 import { DEFAULT_COMPACTION_SETTINGS } from "@eta/core";
 import { forkChain } from "@eta/core/session";
-import { AskRegistry, envMemoryFs, openSession } from "@eta/harness";
+import { AskRegistry, nodeMemoryFs, openSession } from "@eta/harness";
 import { forkWrites } from "./fork";
 import { parseModelId } from "./model-id";
 import { resolvePersona } from "./personas";
-import { sessionSubagentRunner } from "./subagent";
 
 /**
  * Put tools on an open session, and make sure the model is offered them.
@@ -88,12 +83,6 @@ export interface SessionManagerOptions {
   modelsFor: (meta: SessionMeta) => KernelModels | Promise<KernelModels>;
   /** The summarizer a session compacts with; without one, a session runs unbound. */
   compaction?: CompactionSummarizer | undefined;
-  /**
-   * Whether a session can spawn subagents. On by default: a subagent is a session of its
-   * own here, so the capability costs nothing new to explain. `false` means the subagent
-   * tools are not installed at all — absent, not disabled.
-   */
-  subagents?: { poolSize?: number | undefined } | false | undefined;
   /** What a new session's metadata starts as, beyond the id and the time. */
   defaults?:
     | Partial<Pick<SessionMeta, "persona" | "model" | "title">>
@@ -104,20 +93,9 @@ export interface SessionManagerOptions {
    * A function, not a value: the point of settings is that the *next* session gets what the
    * user just chose, and a snapshot taken when the manager was built would freeze the first
    * answer forever. Read here rather than in the plugin so every path that creates a session
-   * inherits them — including a subagent's, which is created by the runner.
+   * inherits them.
    */
   settings?: (() => Promise<Settings>) | undefined;
-  /**
-   * How a session's environment is decided — the file and shell tools it runs, and where its
-   * memory lives.
-   *
-   * A function of the session's metadata, because the answer is per session: a session in a
-   * remote workspace runs its tools over SSH, and one in a local directory runs them here. The
-   * manager does not know what an environment *is*; it asks, and hands the answer to the
-   * harness. Absent means no environment at all — a session with no read/write/edit/bash, which
-   * is a legitimate session (a side thread, a sandbox).
-   */
-  envFor?: ((meta: SessionMeta) => SessionEnvironment | undefined) | undefined;
   /**
    * The app's own facts for the platform briefing — paths only, per the harness's split. Absent
    * means the session is told nothing about the app around it, which is what a bare embedding
@@ -186,8 +164,6 @@ export interface SessionManagerOptions {
   warn?: ((message: string) => void) | undefined;
 }
 
-export type { SessionEnvironment } from "@eta/plugin-sdk";
-
 /** Where a session's memory is, and how an extraction reaches a model. */
 export interface SessionMemoryWiring {
   home?: string | undefined;
@@ -217,13 +193,6 @@ export interface CreateSessionOptions {
   title?: string | undefined;
   persona?: string | undefined;
   model?: string | undefined;
-  /**
-   * The subagent record this session's own pool acts as. Omitted for a root session; a
-   * subagent passes its record id, which is what files a grandchild under it.
-   */
-  subagentOwner?: string | undefined;
-  /** A pool to join: set by a subagent, which belongs to the tree that spawned it. */
-  subagents?: SubagentManager | undefined;
 }
 
 export class SessionManager {
@@ -232,7 +201,6 @@ export class SessionManager {
   private readonly compaction: CompactionSummarizer | undefined;
   private readonly defaults: SessionManagerOptions["defaults"];
   private readonly settings: (() => Promise<Settings>) | undefined;
-  private readonly envFor: SessionManagerOptions["envFor"];
   private readonly platformFor: SessionManagerOptions["platformFor"];
   private readonly personasFor: SessionManagerOptions["personasFor"];
   private readonly skillsFor: SessionManagerOptions["skillsFor"];
@@ -242,7 +210,6 @@ export class SessionManager {
   private readonly sessionTools: SessionManagerOptions["sessionTools"];
   private readonly sessionAttach: SessionManagerOptions["sessionAttach"];
   private readonly askObserve: SessionManagerOptions["askObserve"];
-  private readonly subagents: SessionManagerOptions["subagents"];
   private readonly warn: (message: string) => void;
   private readonly open = new Map<string, ManagedSession>();
 
@@ -250,10 +217,8 @@ export class SessionManager {
     this.store = options.store;
     this.modelsFor = options.modelsFor;
     this.compaction = options.compaction;
-    this.subagents = options.subagents;
     this.defaults = options.defaults;
     this.settings = options.settings;
-    this.envFor = options.envFor;
     this.platformFor = options.platformFor;
     this.personasFor = options.personasFor;
     this.skillsFor = options.skillsFor;
@@ -287,12 +252,7 @@ export class SessionManager {
         : { conversationId: options.conversationId }),
     };
     await this.store.create(meta);
-    return await this.openSession(
-      meta,
-      options.subagentOwner,
-      options.subagents,
-      settings,
-    );
+    return await this.openSession(meta, settings);
   }
 
   /**
@@ -402,45 +362,18 @@ export class SessionManager {
 
   private async openSession(
     meta: SessionMeta,
-    subagentOwner?: string,
-    joined?: SubagentManager,
     settings: Settings = {},
   ): Promise<ManagedSession> {
     const models = await this.modelsFor(meta);
-    // The pool a session runs its children through. A child joins its tree's; a root is
-    // given a runner and the pool is built around it during assembly — which is why the
-    // runner reads the pool lazily, through this box.
     const platform = this.platformFor?.(meta);
-    const box: { pool?: SubagentManager } = {};
-    const poolSize =
-      this.subagents === false ? undefined : this.subagents?.poolSize;
-    const subagentOptions: Record<string, unknown> =
-      joined !== undefined
-        ? {
-            subagents: joined,
-            ...(subagentOwner === undefined ? {} : { subagentOwner }),
-          }
-        : {
-            subagentRunner: sessionSubagentRunner({
-              manager: this,
-              parent: meta,
-              parentPool: () => box.pool,
-              warn: this.warn,
-            }),
-            ...(subagentOwner === undefined ? {} : { subagentOwner }),
-            ...(poolSize === undefined ? {} : { poolSize }),
-          };
-    const environment = this.envFor?.(meta);
     const wiring = this.memoryFor?.(meta);
     const skills = await this.skillsFor?.(meta);
     const memory: SessionMemoryOptions | undefined =
       wiring === undefined
         ? undefined
         : {
-            // The environment's files, when there is one: memory belongs to the project, and a
-            // session in a remote workspace reads *that* project's memory.
-            fs: (environment?.memoryFs ??
-              memoryFsFrom(environment?.env)) as MemoryFs,
+            // Memory belongs to the project, and the project is on this machine's disk.
+            fs: nodeMemoryFs(),
             cwd: meta.cwd,
             ...(wiring.home === undefined ? {} : { home: wiring.home }),
             ...(wiring.call === undefined ? {} : { call: wiring.call }),
@@ -468,19 +401,12 @@ export class SessionManager {
       storage: (await this.store.open(meta.id))!.storage,
       models,
       ...(agentPrompt === undefined ? {} : { agentPrompt }),
-      // The environment: what a session's tools run against, and where its memory lives. The
-      // harness's tools were written against the seam, so a session across the room runs the
-      // same read/write/edit/bash as one here.
-      ...(environment === undefined ? {} : { env: environment.env }),
       // The app's own facts: the words are the harness's, the paths are this app's.
       ...(platform === undefined ? {} : { platform }),
       ...(skills === undefined || skills.length === 0
         ? {}
         : { skillsSection: skills }),
       ...(memory === undefined ? {} : { memory }),
-      // Subagents: a session joins the pool of the tree that spawned it, or — when it is a
-      // root — gets a runner, and the pool is built around it during assembly.
-      ...(this.subagents === false ? {} : subagentOptions),
       ...(this.compaction === undefined ? {} : { compaction: this.compaction }),
       config: {
         ...(meta.model === undefined
@@ -535,7 +461,6 @@ export class SessionManager {
     } else if (meta.persona !== undefined) {
       session.kernel.persona.setActive([meta.persona]);
     }
-    box.pool = session.subagents;
     // What the host adds to the toolset goes in before anything can run.
     for (const middleware of this.toolMiddleware?.({ meta, session }) ?? []) {
       session.kernel.tools.use(middleware);
@@ -544,7 +469,7 @@ export class SessionManager {
     await this.sessionAttach?.({ meta, session });
     // A session the host opened is a session whose inbox becomes runs: the pump is what
     // decides that, and leaving it off would make "prompt a session nobody attached yet"
-    // (a subagent's own run, a session from the store) quietly do nothing.
+    // (a session from the store) quietly do nothing.
     session.pump.start();
     const managed: ManagedSession = { meta, session };
     this.open.set(meta.id, managed);
@@ -552,17 +477,6 @@ export class SessionManager {
   }
 
   private async disposeSession(managed: ManagedSession): Promise<void> {
-    // A closing session stops what it spawned: nothing is orphaned when the thing that was
-    // going to read the answer is gone — the same rule the pool applies to a parent that
-    // settles on its own.
-    for (const record of managed.session.subagents?.list() ?? []) {
-      if (record.status !== "running" && record.status !== "queued") continue;
-      try {
-        managed.session.subagents?.stop(record.id, undefined);
-      } catch (error) {
-        this.warn(`[eta-server] could not stop ${record.id}: ${String(error)}`);
-      }
-    }
     managed.session.pump.stop();
     try {
       await managed.session.journaling.flush();
@@ -574,24 +488,6 @@ export class SessionManager {
     managed.session.stop();
     await managed.session.kernel.dispose();
   }
-}
-
-/**
- * Memory through an environment.
- *
- * `envMemoryFs` is the harness's adapter, and it needs an `ExecutionEnv`; a session with no
- * environment has no memory to read, which the caller expresses by not asking for any.
- */
-function memoryFsFrom(env: ExecutionEnv | undefined): MemoryFs {
-  if (env === undefined) {
-    return {
-      readFile: async () => undefined,
-      mtime: async () => undefined,
-      writeFile: async () => undefined,
-      listFileNames: async () => [],
-    };
-  }
-  return envMemoryFs(env);
 }
 
 /** The title a fork gets when the caller did not choose one. */

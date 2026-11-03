@@ -101,11 +101,6 @@ export interface AssembleOptions {
   /** The agent's home, for `~/.eta/persona`. Defaults to the real one. */
   home?: string | undefined;
   /**
-   * How a session's environment is decided — the file and shell tools it runs, and where its
-   * memory lives. Passed straight to the manager; the server itself never builds one.
-   */
-  envFor?: SessionManagerOptions["envFor"] | undefined;
-  /**
    * The per-session hooks a host product wires into the manager (see `SessionManagerOptions`):
    * who the agent in a session is, what is added to its toolset, the policy on its tool calls, and who
    * hears about its questions. Passed straight through; the server never decides any of them.
@@ -382,7 +377,6 @@ export async function assembleServer(
     root: join(options.dataDir, "sessions"),
     warn,
   });
-  const envFor = options.envFor;
   // The model layer one session talks to: the shared one, watched for the host when it asked to be.
   const modelsOf = (meta: SessionMeta): KernelModels => {
     const generated = options.generated;
@@ -391,7 +385,6 @@ export async function assembleServer(
       : observedModels(kernelModels, (message) => generated(meta, message));
   };
   const sessions = new SessionManager({
-    ...(envFor === undefined ? {} : { envFor }),
     store,
     modelsFor: modelsOf,
     settings: defaults,
@@ -403,14 +396,9 @@ export async function assembleServer(
         home: options.home ?? homedir(),
         warn,
       }).then((cards) => [...cards.values()]),
-    // The skills that apply to a session's directory, rendered once at open. Discovery needs a
-    // filesystem, and the session's own is the right one: a skill on the far side of an SSH
-    // session is a skill that machine has.
+    // The skills that apply to a session's directory, rendered once at open.
     skillsFor: async (meta) => {
-      const environment = envFor?.(meta);
-      if (environment === undefined) return "";
       return await renderSkillsBlock({
-        env: environment.env,
         cwd: meta.cwd,
         home: options.home ?? homedir(),
         ...(options.skillDirsFor === undefined

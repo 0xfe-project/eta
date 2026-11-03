@@ -18,7 +18,6 @@ import { join } from "node:path";
  */
 import process from "node:process";
 import { SERVICE_PROTOCOL } from "@eta/client-contracts";
-import { createLocalEnvironment } from "@eta/execution-node";
 import { assembleServer } from "./server";
 import { claimServiceFile } from "./service-file";
 
@@ -59,13 +58,6 @@ const server = await assembleServer({
   configPath,
   port,
   hostname,
-  // The file and shell tools a session runs: the local Node adapter, when this runtime can
-  // host it (Node, or Bun/Deno in Node-compatibility mode). Without one a session still
-  // works — it simply has no read/write/edit/bash, which is a session, not a failure.
-  envFor: (meta) => {
-    const env = createLocalEnvironment(meta.cwd);
-    return env === undefined ? undefined : { env };
-  },
 });
 const hello = {
   pid: process.pid,

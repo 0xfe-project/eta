@@ -2,7 +2,6 @@
 
 import type { CallFrame } from "@eta/client-wire-proto";
 import type { JsonValue, Task, TaskStatus, ThinkingLevel } from "./data";
-import type { SessionViewBtwThread } from "./types";
 
 /** The actions this target has. One list, so the wire and the plugin cannot disagree. */
 export const SESSION_ACTIONS = [
@@ -17,13 +16,6 @@ export const SESSION_ACTIONS = [
   "archive",
   "fork",
   "compact",
-  "btwOpen",
-  "btwAsk",
-  "btwAnswer",
-  "btwSave",
-  "btwHandoff",
-  "btwClear",
-  "subagentStop",
   "history",
   "search",
   "goal",
@@ -80,7 +72,6 @@ export interface ForkSessionInput {
 interface Session {
   session: string;
 }
-type Thread = Session & { threadId: string };
 /** Valid requests from a client. The server still validates untrusted JSON at runtime. */
 export interface SessionArgs {
   create: CreateSessionInput;
@@ -94,13 +85,6 @@ export interface SessionArgs {
   archive: Session & { archived: boolean };
   fork: Session & ForkSessionInput;
   compact: Session & { instructions?: string };
-  btwOpen: Session & { kind: SessionViewBtwThread["kind"] };
-  btwAsk: Thread & { question: string };
-  btwAnswer: Thread & { question: string; answer?: string };
-  btwSave: Thread;
-  btwHandoff: Thread;
-  btwClear: Thread;
-  subagentStop: Session & { id: string };
   history: Session & { beforeSeq?: number; limit?: number };
   search: { query: string };
   goal: Session & {

@@ -47,7 +47,6 @@ import type {
 } from "@eta/core";
 import type { GoalEntry } from "@eta/core/session";
 import type { StorageService } from "@eta/core/storage";
-import type { ExecutionEnv } from "@eta/execution";
 import type { TSchema } from "typebox";
 import type { MemoryExtractionOutcome, MemoryFile, MemoryFs } from "./memory";
 import type {
@@ -56,22 +55,17 @@ import type {
   PlatformPromptInfo,
 } from "./prompts";
 import type { RunPumpOptions } from "./pump";
-import type { SubagentRunner } from "./subagent";
-import type { ExecutionToolContext } from "./tools/context";
 import type { HarnessTool, ToolResult } from "./tools/tool";
 import {
   applyGoalEntries,
   defaultKernelConfig,
   Kernel,
-  kernelEmit,
   kernelOn,
   Runner,
   sessionScope,
-  toToolResultMessage,
 } from "@eta/core";
 import { recordGoalEntries, SessionLog } from "@eta/core/session";
 import { AskRegistry, createAskUserTool } from "./ask";
-import { BtwManager, btwSideAsk } from "./btw";
 import { CompactionService } from "./compaction-service";
 import { imageLimitsFor } from "./image-limits";
 import { JournalingService, SESSION_CONFIG, TASKS_STATE } from "./journaling";
@@ -90,16 +84,9 @@ import {
 import { convertToLlm } from "./prompts/summaries";
 import { RunPump } from "./pump";
 import { TaskReminderService } from "./reminder";
-import { MODEL_STATE, sessionStateKV } from "./state";
-import { SubagentManager } from "./subagent";
-import { createBashTool } from "./tools/bash";
-import { createEditTool } from "./tools/edit";
-import { createReadTool } from "./tools/read";
-import { createStateTools } from "./tools/state";
-import { createSubagentTools } from "./tools/subagents";
+import { MODEL_STATE } from "./state";
 import { createStepTools } from "./tools/tasks";
 import { toKernelTool } from "./tools/tool";
-import { createWriteTool } from "./tools/write";
 import { describeRepair, repairTranscript } from "./transcript-repair";
 import {
   builtinViewContributions,
@@ -165,12 +152,6 @@ export interface OpenSessionOptions {
     | (() => string | undefined | Promise<string | undefined>)
     | undefined;
   /**
-   * The execution environment to install the file and shell tools for. Without one
-   * a session has no read/write/edit/bash — there is nothing to run them against —
-   * and that is a legitimate session (a subagent, a sandbox, a side thread).
-   */
-  env?: ExecutionEnv | undefined;
-  /**
    * The ask channel. `true` installs `ask_user` with the session owning the
    * registry (see `OpenSession.ask`); passing a registry the host built keeps the
    * host's own answer policy, but then the host is also the one recording answers.
@@ -179,38 +160,10 @@ export interface OpenSessionOptions {
   /** How long `ask_user` waits for a human. Defaults to no timeout. */
   askTimeoutMs?: number | undefined;
   /**
-   * How a subagent runs. Given one, the session gets a pool of its own — `Agent`,
-   * `get_subagent_result`, `steer_subagent` — whose bus is the session's own bus, so a
-   * panel sees a spawn the way it sees a turn. Without one a session cannot spawn
-   * children and the tools are simply not there: the capability is absent, not disabled.
-   *
-   * The pool is built *here* rather than handed in because it belongs to the session: a
-   * pool built by the caller would have to be given this kernel's bus, which does not
-   * exist until the assembly is done.
-   */
-  subagentRunner?: SubagentRunner | undefined;
-  /**
-   * A pool to join instead of building one. A subagent runs as a session of its own, but it
-   * belongs to the *tree* that spawned it: the cap on nesting depth, "only your own
-   * children", and usage rolling up the chain all need one pool to count in. So the root
-   * brings a runner, and every child it spawns joins the pool it was made by.
-   */
-  subagents?: SubagentManager | undefined;
-  /**
-   * The record this session's pool acts as. `undefined` is the root agent — the only one
-   * that may stop or steer anything in the pool; a nested child passes its own record id,
-   * which is what keeps a subagent's reach to its own children.
-   */
-  subagentOwner?: string | undefined;
-  /** How many top-level subagents may run at once. Nested children never take a slot. */
-  poolSize?: number | undefined;
-  /**
    * Extra tools, appended after the standard set and installed the same way. A
    * deployment that adds a tool does not have to assemble the standard ones itself.
    */
-  tools?:
-    | readonly HarnessTool<ExecutionToolContext, TSchema, unknown>[]
-    | undefined;
+  tools?: readonly HarnessTool<unknown, TSchema, unknown>[] | undefined;
   /**
    * The project's memory, wired end to end: the block is read (and re-read when a
    * file changes), and what is worth keeping is asked for at the end of a run.
@@ -229,7 +182,7 @@ export interface OpenSessionOptions {
 
 /** The project's memory, as a session needs it: where it is, and how to write it. */
 export interface SessionMemoryOptions {
-  /** How memory is reached: `envMemoryFs(env)` for a session with an environment. */
+  /** How memory is reached: `nodeMemoryFs()` for the local disk. */
   fs: MemoryFs;
   /** The project's working directory; memory is scanned up from here. */
   cwd: string;
@@ -280,13 +233,6 @@ export interface OpenSession {
    * is the host's policy, so the host calls `start()`.
    */
   pump: RunPump;
-  /** The side threads asked beside the run; their saved notes are journal entries. */
-  btw: BtwManager;
-  /**
-   * The subagents this session spawned, when it was opened with a runner. This is where
-   * `sessions.subagentStop` reaches, and what the `subagents` section projects.
-   */
-  subagents: SubagentManager | undefined;
   /**
    * The compaction driver this session runs with; the host asks it to compact
    * (`/compact`). Undefined when the session was opened without a summarizer.
@@ -333,6 +279,24 @@ const RENAMED_TOOLS: Record<string, string> = {
   TaskGet: "get_step",
   TaskUpdate: "update_step",
 };
+
+/**
+ * Tools that no longer exist and have no successor. A journal that pinned one would otherwise fail
+ * its next run with `configured_tools_unavailable`; the pin is dropped instead, because the session
+ * asked for something that is gone, not for something else under a new name.
+ */
+const REMOVED_TOOLS: ReadonlySet<string> = new Set([
+  "read",
+  "write",
+  "edit",
+  "bash",
+  "update_state",
+  "check_state",
+  "list_state",
+  "Agent",
+  "get_subagent_result",
+  "steer_subagent",
+]);
 
 /** Replay a journal and hand back a session ready to run. */
 export async function openSession(
@@ -393,8 +357,8 @@ export async function openSession(
 
   // The standard battery: what a session is for. It is assembled here rather than by
   // every host because "a session" means the same set of capabilities everywhere —
-  // and what is *absent* is expressed by what was passed in (no env, no file tools;
-  // no pool, no children), not by leaving pieces of the battery out.
+  // and what is *absent* is expressed by what was passed in, not by leaving pieces
+  // of the battery out.
   // The ask channel: one registry per session, recording both halves of the
   // exchange — the question before it waits (so a killed process still has it) and
   // the answer when it lands (so a replay never re-surfaces a settled question).
@@ -409,83 +373,33 @@ export async function openSession(
         ? undefined
         : options.ask;
 
-  // The subagent pool: this session's own, with the caller's runner saying what a child is
-  // (in the server, a session of its own).
-  // A child joins the pool it was spawned into; a root brings the runner and gets one.
-  const subagents =
-    options.subagents ??
-    (options.subagentRunner === undefined
-      ? undefined
-      : new SubagentManager(
-          { emit: kernelEmit(kernel.ctx) },
-          options.subagentRunner,
-          options.poolSize,
-        ));
-
-  const installedTools: HarnessTool<ExecutionToolContext, TSchema, unknown>[] =
-    [
-      ...(createStepTools(kernel.tasks) as HarnessTool<
-        ExecutionToolContext,
-        TSchema,
-        unknown
-      >[]),
-      ...(options.env === undefined
-        ? []
-        : [
-            createReadTool({
-              // Read at call time: the model the session is on right now is
-              // what decides, and a model switch mid-session moves the limit.
-              imageLimits: () => imageLimitsFor(kernel.config.get().model),
-            }) as HarnessTool<ExecutionToolContext, TSchema, unknown>,
-            createWriteTool() as HarnessTool<
-              ExecutionToolContext,
-              TSchema,
-              unknown
-            >,
-            createEditTool() as HarnessTool<
-              ExecutionToolContext,
-              TSchema,
-              unknown
-            >,
-            createBashTool() as HarnessTool<
-              ExecutionToolContext,
-              TSchema,
-              unknown
-            >,
-          ]),
-      ...(createStateTools(sessionStateKV(log, journaling)) as HarnessTool<
-        ExecutionToolContext,
-        TSchema,
-        unknown
-      >[]),
-      ...(subagents === undefined
-        ? []
-        : (createSubagentTools(subagents, options.subagentOwner) as HarnessTool<
-            ExecutionToolContext,
-            TSchema,
-            unknown
-          >[])),
-      ...(ask === undefined
-        ? []
-        : [
-            createAskUserTool({
-              registry: ask,
-              // The entry lands before the wait: that is what makes a question
-              // survive the process that asked it.
-              onAsk: async (payload) => {
-                await journaling.recordAsk(payload);
-              },
-              ...(options.askTimeoutMs === undefined
-                ? {}
-                : { timeoutMs: options.askTimeoutMs }),
-            }) as HarnessTool<ExecutionToolContext, TSchema, unknown>,
-          ]),
-      ...(options.tools ?? []),
-    ];
-  const env = options.env;
+  const installedTools: HarnessTool<unknown, TSchema, unknown>[] = [
+    ...(createStepTools(kernel.tasks) as HarnessTool<
+      unknown,
+      TSchema,
+      unknown
+    >[]),
+    ...(ask === undefined
+      ? []
+      : [
+          createAskUserTool({
+            registry: ask,
+            // The entry lands before the wait: that is what makes a question
+            // survive the process that asked it.
+            onAsk: async (payload) => {
+              await journaling.recordAsk(payload);
+            },
+            ...(options.askTimeoutMs === undefined
+              ? {}
+              : { timeoutMs: options.askTimeoutMs }),
+          }) as HarnessTool<unknown, TSchema, unknown>,
+        ]),
+    ...(options.tools ?? []),
+  ];
   for (const tool of installedTools) {
     kernel.tools.register(
-      toKernelTool(tool, () => ({ env }) as ExecutionToolContext) as KernelTool<
+      // Whatever the run resolved for tools is handed through as it is.
+      toKernelTool(tool, (toolContext) => toolContext) as KernelTool<
         unknown,
         ToolResult<unknown>
       >,
@@ -503,11 +417,21 @@ export async function openSession(
   // Renaming a tool with the same meaning therefore has to carry the pin along: a session that
   // asked for `TaskCreate` asked for what `create_step` now is.
   const pinned = kernel.config.read("activeToolNames");
-  const renamed = pinned.map((name) => RENAMED_TOOLS[name] ?? name);
-  if (renamed.some((name, at) => name !== pinned[at])) {
+  const removed = pinned.filter((name) => REMOVED_TOOLS.has(name));
+  if (removed.length > 0) {
+    kernel.config.update({
+      activeToolNames: pinned.filter((name) => !REMOVED_TOOLS.has(name)),
+    });
+    options.kernel?.warn?.(
+      `[eta-harness] removed tools dropped from this session: ${removed.join(", ")}`,
+    );
+  }
+  const kept = kernel.config.read("activeToolNames");
+  const renamed = kept.map((name) => RENAMED_TOOLS[name] ?? name);
+  if (renamed.some((name, at) => name !== kept[at])) {
     kernel.config.update({ activeToolNames: renamed });
     options.kernel?.warn?.(
-      `[eta-harness] tools renamed for this session: ${pinned
+      `[eta-harness] tools renamed for this session: ${kept
         .map((name, at) =>
           name === renamed[at] ? undefined : `${name} → ${renamed[at]}`,
         )
@@ -594,11 +518,6 @@ export async function openSession(
     // of the cacheable prefix).
     transientMessages: () =>
       taskReminder.drain() ? taskReminderMessage() : undefined,
-    // What the built-in tools see: the environment this session runs on. A caller
-    // that supplies its own resolution keeps it.
-    ...(options.env === undefined || options.runner?.toolContext !== undefined
-      ? {}
-      : { toolContext: () => ({ env: options.env }) as ExecutionToolContext }),
   });
 
   // Memory: one cache per session, so the block is re-read when a file changes and
@@ -753,44 +672,6 @@ export async function openSession(
 
   const pump = new RunPump(kernel, runner, options.pump);
 
-  // Side threads. What they inherit is the run's own request state, read per
-  // question; what they leave behind is a note in the journal, never a message in
-  // the transcript. Their tools go through the kernel's own chain, so a side
-  // request cannot reach anything the run could not.
-  const btw = new BtwManager({
-    buildContext: (entries) => ({
-      messages: entries.flatMap((entry) =>
-        entry.type === "message" ? [entry.message] : [],
-      ),
-    }),
-    onVisibleNote: async (note) => {
-      await journaling.recordNote(note);
-    },
-    observe: kernelEmit(kernel.ctx),
-    sideAsk: btwSideAsk({
-      models: options.models,
-      requestState: () => runner.requestState(),
-      executeTool: async (call, info) =>
-        toToolResultMessage(
-          call,
-          await kernel.tools.execute(call.name, call.arguments, {
-            turn: info.turn,
-            toolCallId: call.id,
-            ...(info.toolContext === undefined
-              ? {}
-              : { toolContext: info.toolContext }),
-          }),
-        ),
-      onUsage: (usage, threadId) => {
-        void journaling
-          .recordUsage(usage, { details: { source: "btw", threadId } })
-          .catch(() => undefined);
-      },
-    }),
-  });
-  // Threads the journal still speaks for: a saved note comes back as a thread.
-  btw.replay(log.graph.pathOldestFirst());
-
   // The view: a container plus every section its owner contributes. Nothing here
   // enumerates the sections the way a struct would — a plugin that wants a panel adds
   // one, and the frame that carries it is the same frame as everything else.
@@ -848,8 +729,10 @@ export async function openSession(
               ? {}
               : { pending: ask.pendingAsks()[0] }),
           },
-    sideThread: () => btw.list(),
-    subagents: () => subagents?.list() ?? [],
+    // Side threads and subagents are gone from the harness; the sections stay
+    // empty until the view drops them.
+    sideThread: () => [],
+    subagents: () => [],
   })) {
     view.contribute(contribution);
   }
@@ -884,8 +767,6 @@ export async function openSession(
     metrics,
     taskReminder,
     pump,
-    btw,
-    subagents,
     memory,
     view,
     tools: installedTools.map((tool) => tool.name),

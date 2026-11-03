@@ -9,11 +9,13 @@
  */
 
 import type { MemoryFile, MemoryFs } from "../src/memory";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { MemoryEnvironment } from "../src/env/memory";
 import {
   applyExtraction,
-  envMemoryFs,
+  nodeMemoryFs,
   extractionTranscript,
   extractMemory,
   extractMemoryAtRunEnd,
@@ -345,20 +347,26 @@ describe("extraction", () => {
   });
 });
 
-describe("the environment-backed filesystem", () => {
-  it("reads, writes and reports mtimes through an ExecutionEnv", async () => {
-    const env = new MemoryEnvironment({ cwd: "/work" });
-    const fs = envMemoryFs(env);
-    expect(await fs.readFile("/work/.eta/MEMORY.md")).toBeUndefined();
-    expect(await fs.mtime("/work/.eta/MEMORY.md")).toBeUndefined();
-    await fs.writeFile(
-      "/work/.eta/MEMORY.md",
-      "# eta memory (untrusted)\n## decision\n- [0] a note\n",
-    );
-    expect(await fs.readFile("/work/.eta/MEMORY.md")).toContain("a note");
-    expect(await fs.mtime("/work/.eta/MEMORY.md")).toBeGreaterThan(0);
-    expect(await fs.listFileNames("/work/.eta")).toEqual(["MEMORY.md"]);
-    // The three sections are the contract both sides write.
-    expect(MEMORY_SECTIONS).toEqual(["decision", "preference", "lesson"]);
+describe("the local-disk filesystem", () => {
+  it("reads, writes and reports mtimes through node:fs", async () => {
+    const root = await mkdtemp(join(tmpdir(), "eta-memory-"));
+    try {
+      const fs = nodeMemoryFs();
+      const file = join(root, ".eta", "MEMORY.md");
+      expect(await fs.readFile(file)).toBeUndefined();
+      expect(await fs.mtime(file)).toBeUndefined();
+      expect(await fs.listFileNames(join(root, ".eta"))).toEqual([]);
+      await fs.writeFile(
+        file,
+        "# eta memory (untrusted)\n## decision\n- [0] a note\n",
+      );
+      expect(await fs.readFile(file)).toContain("a note");
+      expect(await fs.mtime(file)).toBeGreaterThan(0);
+      expect(await fs.listFileNames(join(root, ".eta"))).toEqual(["MEMORY.md"]);
+      // The three sections are the contract both sides write.
+      expect(MEMORY_SECTIONS).toEqual(["decision", "preference", "lesson"]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

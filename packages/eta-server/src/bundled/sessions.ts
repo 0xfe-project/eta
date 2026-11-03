@@ -13,7 +13,7 @@ import type {
   TaskStatus,
   ThinkingLevel,
 } from "@eta/core";
-import type { AskResponse, BtwSaveState, BtwThread } from "@eta/harness";
+import type { AskResponse } from "@eta/harness";
 import type {
   SessionFacts,
   SessionsApi,
@@ -41,8 +41,7 @@ import type { WireService } from "../wire-service";
  *
  * - **the actions**: create / delete / focus / resync / prompt / abort, the ones that move a
  *   session's row (rename / pin / archive), the one that branches it (fork), the one that compacts
- *   it on demand (compact), and the six that drive a side thread (btwOpen / btwAsk / btwAnswer /
- *   btwSave / btwHandoff / btwClear), and the one that stops a subagent (subagentStop);
+ *   it on demand (compact);
  * - **the states**: `sessions` (the sidebar, eager, so a fresh client draws it from `hello`)
  *   and `sessions.<id>` (one session's view, registered when it opens, gone when it closes);
  * - **the traffic around a turn**: every kernel event on a session's bus becomes an `event`
@@ -131,9 +130,6 @@ const FORWARDED_EVENTS = [
   "compaction:end",
   "retry:scheduled",
   "retry:end",
-  "subagents:completed",
-  "subagents:failed",
-  "subagents:steered",
   "state:config-update",
   "queue:update",
 ] as const;
@@ -343,80 +339,6 @@ export class SessionsService extends Service implements SessionsApi {
     const compacted = await compaction.manual(instructions);
     this.wire.pushNow(`sessions.${id}`);
     return compacted;
-  }
-
-  /**
-   * Open a side thread. The two kinds differ in what they start from: a `contextual`
-   * thread is seeded with the session as it stands now (everything visible except the
-   * side chatter itself, so answers never compound), a `tangent` one starts empty.
-   */
-  async btwOpen(id: string, kind: BtwThread["kind"]): Promise<BtwThread> {
-    const attached = await this.open(id);
-    const thread = attached.managed.session.btw.create(kind);
-    const graph = attached.managed.session.log.graph;
-    attached.managed.session.btw.seedFrom(
-      thread.id,
-      graph.pathOldestFirst(),
-      graph.tipId(),
-    );
-    this.wire.pushNow(`sessions.${id}`);
-    return thread;
-  }
-
-  /**
-   * Ask a side thread. The wait belongs to the thread (`pending`), and the frame
-   * showing that goes out before the answer does: a side request that takes seconds
-   * must not look frozen. `ask` settles into an answer or an error, never a rejection.
-   */
-  async btwAsk(id: string, threadId: string, question: string): Promise<void> {
-    const attached = await this.open(id);
-    this.requireThread(attached, threadId);
-    const settled = attached.managed.session.btw.ask(threadId, question);
-    this.wire.pushNow(`sessions.${id}`);
-    await settled;
-    this.wire.pushNow(`sessions.${id}`);
-  }
-
-  /** Record an exchange without asking a model (a note, a question the user answered). */
-  async btwAnswer(
-    id: string,
-    threadId: string,
-    question: string,
-    answer: string,
-  ): Promise<void> {
-    const attached = await this.open(id);
-    this.requireThread(attached, threadId);
-    attached.managed.session.btw.answer(threadId, question, answer);
-    this.wire.pushNow(`sessions.${id}`);
-  }
-
-  /** Save a thread's notes as a visible note; mid-run they queue for the boundary. */
-  async btwSave(id: string, threadId: string): Promise<BtwSaveState> {
-    const attached = await this.open(id);
-    this.requireThread(attached, threadId);
-    const state = await attached.managed.session.btw.save(
-      threadId,
-      attached.running,
-    );
-    this.wire.pushNow(`sessions.${id}`);
-    return state;
-  }
-
-  /**
-   * Hand a thread's notes to the main run. While a run is in flight they arrive as a
-   * follow-up it folds in at its next boundary; with nothing running they *are* the
-   * next run — a follow-up with nothing to attach to would sit unread.
-   */
-  async btwHandoff(id: string, threadId: string): Promise<boolean> {
-    const attached = await this.open(id);
-    this.requireThread(attached, threadId);
-    const text = attached.managed.session.btw.handoff(threadId);
-    this.wire.pushNow(`sessions.${id}`);
-    if (text === undefined) return false;
-    if (attached.running) attached.managed.session.kernel.followUp(text);
-    else attached.managed.session.kernel.nextRun(text);
-    attached.managed.session.pump.pump();
-    return true;
   }
 
   /**
@@ -635,22 +557,6 @@ export class SessionsService extends Service implements SessionsApi {
   }
 
   /**
-   * Stop one subagent — and, with it, everything it spawned.
-   *
-   * The pool refuses an id it does not know, and the wire op acts as the root (`byId`
-   * undefined), which is the only agent allowed to reach the whole tree: the user is not
-   * a sibling.
-   */
-  async subagentStop(id: string, subagentId: string): Promise<void> {
-    const attached = await this.open(id);
-    const pool = attached.managed.session.subagents;
-    if (pool === undefined)
-      throw new Error(`session ${id} cannot spawn subagents`);
-    pool.stop(subagentId, undefined);
-    this.wire.pushNow(`sessions.${id}`);
-  }
-
-  /**
    * A page of one session's transcript, oldest-first, ending just before `beforeSeq`.
    *
    * The page comes from the session's own *branch* — the journal it replayed — rather than from
@@ -695,15 +601,6 @@ export class SessionsService extends Service implements SessionsApi {
       if (hit !== undefined) hits.push(hit);
     }
     return hits;
-  }
-
-  /** Drop a thread from the panel; notes already written to the journal stay. */
-  async btwClear(id: string, threadId: string): Promise<boolean> {
-    const attached = await this.open(id);
-    this.requireThread(attached, threadId);
-    const cleared = attached.managed.session.btw.clear(threadId);
-    this.wire.pushNow(`sessions.${id}`);
-    return cleared;
   }
 
   session(id: string): ManagedSession | undefined {
@@ -817,13 +714,6 @@ export class SessionsService extends Service implements SessionsApi {
     if (attached === undefined)
       throw new Error(`session ${id} could not be attached`);
     return attached;
-  }
-
-  /** A thread id that is not in the panel is an error, not an operation that quietly does nothing. */
-  private requireThread(attached: Attached, threadId: string): void {
-    if (attached.managed.session.btw.get(threadId) === undefined) {
-      throw new Error(`no such side thread: ${threadId}`);
-    }
   }
 
   /**
@@ -1016,117 +906,6 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
               throw new Error("sessions.compact needs a session");
             const compacted = await service.compact(session, instructions);
             return { result: { session, compacted } };
-          }),
-        );
-        registrations.push(
-          routed("btwOpen", async (call) => {
-            const { session, kind } = (call.args ?? {}) as Partial<
-              SessionArgs["btwOpen"]
-            >;
-            if (session === undefined)
-              throw new Error("sessions.btwOpen needs a session");
-            if (kind !== "contextual" && kind !== "tangent") {
-              throw new Error(
-                "sessions.btwOpen needs kind: contextual or tangent",
-              );
-            }
-            const thread = await service.btwOpen(session, kind);
-            return { result: { session, thread } };
-          }),
-        );
-        registrations.push(
-          routed("btwAsk", async (call) => {
-            const { session, threadId, question } = (call.args ??
-              {}) as Partial<SessionArgs["btwAsk"]>;
-            if (
-              session === undefined ||
-              threadId === undefined ||
-              question === undefined
-            ) {
-              throw new Error(
-                "sessions.btwAsk needs a session, a threadId and a question",
-              );
-            }
-            await service.btwAsk(session, threadId, question);
-            return { result: { session, threadId } };
-          }),
-        );
-        registrations.push(
-          routed("btwAnswer", async (call) => {
-            const { session, threadId, question, answer } = (call.args ??
-              {}) as Partial<SessionArgs["btwAnswer"]>;
-            if (
-              session === undefined ||
-              threadId === undefined ||
-              question === undefined
-            ) {
-              throw new Error(
-                "sessions.btwAnswer needs a session, a threadId and a question",
-              );
-            }
-            await service.btwAnswer(session, threadId, question, answer ?? "");
-            return { result: { session, threadId } };
-          }),
-        );
-        registrations.push(
-          routed("btwSave", async (call) => {
-            const { session, threadId } = (call.args ?? {}) as Partial<
-              SessionArgs["btwSave"]
-            >;
-            if (session === undefined || threadId === undefined) {
-              throw new Error(
-                "sessions.btwSave needs a session and a threadId",
-              );
-            }
-            return {
-              result: { state: await service.btwSave(session, threadId) },
-            };
-          }),
-        );
-        registrations.push(
-          routed("btwHandoff", async (call) => {
-            const { session, threadId } = (call.args ?? {}) as Partial<
-              SessionArgs["btwHandoff"]
-            >;
-            if (session === undefined || threadId === undefined) {
-              throw new Error(
-                "sessions.btwHandoff needs a session and a threadId",
-              );
-            }
-            return {
-              result: {
-                delivered: await service.btwHandoff(session, threadId),
-              },
-            };
-          }),
-        );
-        registrations.push(
-          routed("btwClear", async (call) => {
-            const { session, threadId } = (call.args ?? {}) as Partial<
-              SessionArgs["btwClear"]
-            >;
-            if (session === undefined || threadId === undefined) {
-              throw new Error(
-                "sessions.btwClear needs a session and a threadId",
-              );
-            }
-            return {
-              result: { cleared: await service.btwClear(session, threadId) },
-            };
-          }),
-        );
-        registrations.push(
-          routed("subagentStop", async (call) => {
-            const { session, id } = (call.args ?? {}) as Partial<
-              SessionArgs["subagentStop"]
-            >;
-            if (session === undefined || id === undefined) {
-              throw new Error(
-                "sessions.subagentStop needs a session and an id",
-              );
-            }
-            await service.subagentStop(session, id);
-            return { result: { session, id } };
           }),
         );
         registrations.push(

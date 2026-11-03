@@ -19,7 +19,6 @@
  * Nothing here decodes a picture: dimensions are read from the header, because
  * the header is what decides.
  */
-import { formatSize } from "@eta/execution/output";
 import { base64ByteLength, decodeBase64, readImageSize } from "./tools/image";
 
 export interface ImageLimits {
@@ -140,4 +139,11 @@ export function describeImageProblem(
   problem: ImageProblem,
 ): string {
   return `${mimeType}, ${formatSize(bytes)} — ${problem.detail}`;
+}
+
+/** A byte count as a person reads it: `512B`, `1.5KB`, `3.2MB`. */
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }

@@ -8,41 +8,10 @@
  * an image processor converts it).
  */
 
-import type { ImageContent, ToolCallInfo } from "@eta/core";
-import type { ExecutionToolContext } from "../src/tools/context";
-import type { ToolResult } from "../src/tools/tool";
 import { Buffer } from "node:buffer";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { NodeEnvironment } from "@eta/execution-node";
-import { beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { DEFAULT_IMAGE_LIMITS } from "../src/image-limits";
 import { detectSupportedImageMimeType, encodeBase64 } from "../src/tools/image";
-import { createReadTool } from "../src/tools/read";
-
-let directory = "";
-let env: NodeEnvironment;
-
-beforeAll(async () => {
-  directory = await mkdtemp(join(tmpdir(), "eta-image-"));
-  env = new NodeEnvironment({ cwd: directory });
-});
-
-const run = () =>
-  ({
-    call: { turn: 1, toolCallId: "read-1" } as ToolCallInfo,
-    context: { env } as ExecutionToolContext,
-    update: () => undefined,
-  }) satisfies Parameters<ReturnType<typeof createReadTool>["execute"]>[1];
-
-const imageOf = (result: ToolResult<unknown>): ImageContent | undefined =>
-  result.content.find((part): part is ImageContent => part.type === "image");
-
-const textOf = (result: ToolResult<unknown>): string =>
-  result.content
-    .flatMap((part) => (part.type === "text" ? [part.text] : []))
-    .join("\n");
 
 /** One-pixel PNG (the smallest thing a provider will take). */
 const tinyPng = (): Uint8Array =>
@@ -171,105 +140,5 @@ describe("image detection", () => {
     ]) {
       expect(encodeBase64(bytes)).toBe(Buffer.from(bytes).toString("base64"));
     }
-  });
-});
-
-describe("read with images", () => {
-  it("reads a picture by content, even with a text extension", async () => {
-    const png = tinyPng();
-    await env.writeFile("image.txt", png);
-    const result = await createReadTool().execute({ path: "image.txt" }, run());
-    expect(textOf(result)).toContain("Read image file [image/png]");
-    expect(imageOf(result)).toEqual({
-      type: "image",
-      data: Buffer.from(png).toString("base64"),
-      mimeType: "image/png",
-    });
-  });
-
-  it("omits a BMP unless a processor can convert it", async () => {
-    await env.writeFile("plain.bmp", tinyBmp());
-    const plain = await createReadTool().execute({ path: "plain.bmp" }, run());
-    expect(textOf(plain)).toContain("Image omitted");
-    expect(imageOf(plain)).toBeUndefined();
-  });
-
-  it("delegates conversion to an injected processor, and passes its hints on", async () => {
-    const bmp = tinyBmp();
-    await env.writeFile("convert.bmp", bmp);
-    let received:
-      | { bytes: Uint8Array; mimeType: string; autoResizeImages: boolean }
-      | undefined;
-    const tool = createReadTool({
-      autoResizeImages: false,
-      imageProcessor: async (bytes, mimeType, options) => {
-        received = {
-          bytes,
-          mimeType,
-          autoResizeImages: options.autoResizeImages,
-        };
-        return {
-          ok: true,
-          data: "converted",
-          mimeType: "image/png",
-          hints: ["[Image converted from image/bmp to image/png.]"],
-        };
-      },
-    });
-    const result = await tool.execute({ path: "convert.bmp" }, run());
-    expect(received).toMatchObject({
-      mimeType: "image/bmp",
-      autoResizeImages: false,
-    });
-    expect(Array.from(received?.bytes ?? [])).toEqual(Array.from(bmp));
-    expect(textOf(result)).toContain(
-      "[Image converted from image/bmp to image/png.]",
-    );
-    expect(imageOf(result)).toEqual({
-      type: "image",
-      data: "converted",
-      mimeType: "image/png",
-    });
-  });
-
-  it("tells the model when the processor refuses the image", async () => {
-    await env.writeFile("refuse.bmp", tinyBmp());
-    const tool = createReadTool({
-      imageProcessor: async () => ({
-        ok: false,
-        message: "[Could not convert this image.]",
-      }),
-    });
-    const result = await tool.execute({ path: "refuse.bmp" }, run());
-    expect(textOf(result)).toContain("Read image file [image/bmp]");
-    expect(textOf(result)).toContain("[Could not convert this image.]");
-    expect(imageOf(result)).toBeUndefined();
-  });
-
-  it("cleans up after itself", async () => {
-    await env.cleanup();
-    await rm(directory, { recursive: true, force: true });
-  });
-  it("keeps an image the model cannot take out of the result", async () => {
-    // A full-page screenshot is the easiest way to break a session for good:
-    // the picture enters the journal, the provider refuses every request that
-    // carries it, and nothing the user types gets past it. The file stays
-    // readable — what the model gets instead is its size, where it is, and a
-    // way to get a copy the provider will take.
-    const path = join(directory, "tall.png");
-    // An earlier test removes the directory it was given.
-    await mkdir(directory, { recursive: true });
-    await writeFile(path, pngHeader(1280, 11024));
-
-    const result = await createReadTool({
-      imageLimits: () => DEFAULT_IMAGE_LIMITS,
-    }).execute({ path }, run());
-
-    expect(imageOf(result)).toBeUndefined();
-    const text = textOf(result);
-    expect(text).toContain("not attached");
-    expect(text).toContain("1280×11024");
-    expect(text).toContain(path);
-    expect(text).toContain("sips -Z 8192");
   });
 });
