@@ -25,7 +25,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { Markdown } from "@/components/markdown";
-import { Loading } from "@/components/states";
+import { Loading, Skeleton } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -56,6 +56,7 @@ import {
   taskRowsByTurn,
 } from "@/lib/timeline";
 import { summarizeArgs } from "@/lib/tool-summary";
+import { cn } from "@/lib/utils";
 import { agentName } from "@/queries/agents";
 import { beginUpload, useOutbox } from "@/queries/outbox";
 import { useProjectFiles } from "@/queries/projects";
@@ -630,20 +631,50 @@ const joinedNames = (message: MessageView, agents: readonly AgentView[]) =>
         .join("、")
     : "";
 
+/**
+ * A reply at work before its first block: one line the height of a thinking header, sweeping, where
+ * the thinking will start. Without it the row is a name over nothing for the seconds before the
+ * first token, which reads as stuck. Drawn at once (no skeleton hold): the wait is already long.
+ */
+function FirstToken({ boxed }: { boxed: boolean }) {
+  const { t: translateText } = useTranslation("chat");
+  return (
+    <div
+      role="status"
+      className={cn(
+        "flex items-center gap-2 px-[10px] py-[5px] font-mono text-[10px] tracking-[0.08em] text-faint uppercase",
+        // In the box the frame is the border; alone it is framed like the thinking block it becomes.
+        !boxed && "border",
+      )}
+    >
+      <span className="shrink-0">
+        {translateText("thinking.verbs.thinking")}
+      </span>
+      <Skeleton className="h-2 flex-1" />
+    </div>
+  );
+}
+
 /** A reply that is writing now: what its session has said and done in this run. */
 function LiveReply({
   sessionId,
   boxed,
+  waiting,
   author,
   time,
 }: {
   sessionId: string;
   /** In a group the thinking and tools go in a fixed-height box. */
   boxed: boolean;
+  /** It is waiting on the reader, not working: no first-token placeholder. */
+  waiting: boolean;
   author?: string | undefined;
   time: string;
 }) {
   const blocks = useRunBlocks(sessionId);
+  // Nothing from the run yet: the placeholder holds the place, and the first block replaces it.
+  const placeholder =
+    blocks.length === 0 && !waiting ? <FirstToken boxed={boxed} /> : null;
   const step = (block: (typeof blocks)[number]) =>
     block.type === "thinking" ? (
       <ThinkingBlock key={block.id} text={block.text} />
@@ -659,15 +690,17 @@ function LiveReply({
       </div>
     ) : null;
   if (!boxed)
-    return blocks.map((block) =>
-      block.type === "text" ? text(block) : step(block),
+    return (
+      placeholder ??
+      blocks.map((block) => (block.type === "text" ? text(block) : step(block)))
     );
   const steps = blocks.filter((block) => block.type !== "text");
   return (
     <>
-      {steps.length === 0 ? null : (
+      {steps.length === 0 && placeholder === null ? null : (
+        // Before the first token the box is already there, at work; its steps fill the same frame.
         <ProcessBox
-          steps={steps.map(step)}
+          steps={placeholder ?? steps.map(step)}
           count={steps.length}
           running
           // Text after the last tool or thinking block: the final response is being written.
@@ -797,6 +830,7 @@ const Turn = memo(
           <LiveReply
             sessionId={sessionId}
             boxed={boxed}
+            waiting={message.status === "waiting_for_input"}
             author={author}
             time={when(message.createdAt)}
           />

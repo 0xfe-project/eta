@@ -56,8 +56,8 @@ afterEach(async () => {
   useOutbox.setState({ drafts: {}, outgoing: [] });
 });
 
-/** A group whose reply is still working, with its session's run fed by message events. */
-async function live() {
+/** A conversation whose reply is still working, with its session's run fed by message events. */
+async function live(kind: "group" | "direct" = "group") {
   conversations += 1;
   const id = `process-box-${conversations}`;
   const host = surfaceHost({
@@ -65,7 +65,7 @@ async function live() {
     conversations: [
       conversationView({
         id,
-        kind: "group",
+        kind,
         participants: [memberView("a1", { sessionId: "s1" })],
       }),
     ],
@@ -214,6 +214,42 @@ describe("a reply's process in a group", () => {
     expect(dialog?.querySelectorAll(".thinking-block")).toHaveLength(1);
     expect(dialog?.textContent).toContain("最终答案");
     expect(dialog?.textContent).toContain("研究员");
+  });
+});
+
+describe("a reply before its first token", () => {
+  const placeholder = (container: HTMLElement) =>
+    [...container.querySelectorAll('[role="status"]')].find(
+      (status) => status.textContent === "思考中",
+    );
+
+  it("holds the process box in a group, at work, until the first block", async () => {
+    const { container, say } = await live();
+    const box = container.querySelector<HTMLElement>(".process-box");
+    expect(box).not.toBeNull();
+    expect(placeholder(container)?.closest(".process-box")).toBe(box);
+    expect(
+      box?.querySelector(".motion-safe\\:after\\:animate-skeleton-sweep"),
+    ).not.toBeNull();
+    await say(thought);
+    expect(placeholder(container)).toBeUndefined();
+    expect(
+      container.querySelector(".process-box .thinking-block"),
+    ).not.toBeNull();
+  });
+
+  it("is one line under the author in a direct chat, gone once text arrives", async () => {
+    const { container, say } = await live("direct");
+    expect(container.querySelector(".process-box")).toBeNull();
+    expect(placeholder(container)).not.toBeUndefined();
+    await say(words("开始写"));
+    expect(placeholder(container)).toBeUndefined();
+    expect(container.textContent).toContain("开始写");
+  });
+
+  it("is not on a finished reply", async () => {
+    const { container } = await start("group", 2);
+    expect(placeholder(container)).toBeUndefined();
   });
 });
 
