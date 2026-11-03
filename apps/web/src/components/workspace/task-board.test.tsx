@@ -1,4 +1,11 @@
-import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  rstest,
+} from "@rstest/core";
 import { act } from "react";
 import { setWire } from "@/lib/wire";
 import {
@@ -97,15 +104,53 @@ const listPane = (container: HTMLElement) =>
   container.firstElementChild!.firstElementChild as HTMLElement;
 
 describe("task board", () => {
+  // Most of these read the list, so they start as someone who picked it.
+  beforeEach(() => {
+    useWorkspaceStore.getState().setWorkspace((workspace) => ({
+      ...workspace,
+      taskLayout: "list",
+    }));
+  });
+
   afterEach(async () => {
     await cleanup();
     setWire(undefined);
     navigation.task = null;
     navigation.set.mockClear();
+  });
+
+  it("opens on the board when no layout was picked", async () => {
     useWorkspaceStore.getState().setWorkspace((workspace) => ({
       ...workspace,
-      taskLayout: "list",
+      taskLayout: undefined,
     }));
+    board();
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    const main = container.querySelector('[role="main"]#main')!;
+    // The board has a column for every status, empty or not; the list
+    // only has the groups with tasks in them.
+    expect(main.querySelector('section[aria-label="进行中"]')).not.toBeNull();
+    const tab = container.querySelector<HTMLElement>('[aria-label="看板"]')!;
+    expect(tab.getAttribute("aria-selected")).toBe("true");
+    expect(
+      container
+        .querySelector('[aria-label="列表"]')!
+        .getAttribute("aria-selected"),
+    ).toBe("false");
+  });
+
+  it("keeps the list for someone who picked it", async () => {
+    board();
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    const main = container.querySelector('[role="main"]#main')!;
+    expect(main.querySelector('section[aria-label="进行中"]')).toBeNull();
+    expect(
+      container
+        .querySelector('[aria-label="列表"]')!
+        .getAttribute("aria-selected"),
+    ).toBe("true");
   });
 
   it("lists the board by status, in the board's own words", async () => {

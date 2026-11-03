@@ -34,6 +34,12 @@ describe("workspace store persistence", () => {
     expect(useWorkspaceStore.getState().workspace).toMatchObject(page);
   });
 
+  it("keeps a list picked before the board became the default", async () => {
+    localStorage.setItem(key, JSON.stringify({ ...saved, taskLayout: "list" }));
+    await useWorkspaceStore.persist.rehydrate();
+    expect(useWorkspaceStore.getState().workspace.taskLayout).toBe("list");
+  });
+
   it("remembers the chat's rail switched on across a reload", async () => {
     localStorage.setItem(
       key,
