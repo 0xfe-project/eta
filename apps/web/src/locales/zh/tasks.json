@@ -122,7 +122,16 @@
     "title": "执行记录",
     "workspacePrefix": "工作区 ",
     "done": "完成",
-    "failed": "失败"
+    "failed": "失败",
+    "error": "出错",
+    "aborted": "已停止",
+    "compacted": "上下文已压缩，之前的内容合成了摘要",
+    "branched": "之前的分支合成了摘要",
+    "group": "{{name}} · {{count}} 次",
+    "group_one": "{{name}} · {{count}} 次",
+    "group_other": "{{name}} · {{count}} 次",
+    "earlier": "加载更早的记录",
+    "loadingEarlier": "正在加载更早的记录…"
   },
   "draft": {
     "title": "任务草稿",
