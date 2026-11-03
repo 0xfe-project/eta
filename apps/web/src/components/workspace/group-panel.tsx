@@ -74,7 +74,8 @@ export function GroupPanel({
               )}
             </p>
           ) : (
-            <ul className="space-y-1">
+            // Rows, edge to edge: the rule between two runs into the panel's own edges.
+            <ul className="-mx-3 divide-y divide-border">
               {listed.slice(0, 5).map((task) => (
                 <li key={task.id}>
                   <ActivityRefCard
@@ -101,7 +102,7 @@ export function GroupPanel({
               {translateText("artifacts:empty.title")}
             </p>
           ) : (
-            <ul className="space-y-1">
+            <ul className="-mx-3 divide-y divide-border">
               {groupArtifacts.map((artifact) => (
                 <li key={artifact.id}>
                   <ActivityRefCard

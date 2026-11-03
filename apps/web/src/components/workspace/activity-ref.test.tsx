@@ -75,6 +75,9 @@ describe("activity ref cards", () => {
         text: "#16 整理 Q4 发布说明待办",
       },
     ]);
+    // A flat row: no outline and no resting fill of its own; the list rules between rows.
+    const card = container.querySelector('[role="log"] a')!;
+    expect(card.className).not.toMatch(/(^|\s)(border|bg-)/);
   });
 
   it("keeps a real group, and drops the word null", async () => {

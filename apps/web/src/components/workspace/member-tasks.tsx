@@ -96,7 +96,7 @@ export function MemberTasksPanel({ sessionId }: { sessionId: string }) {
 
   if (tasks.length === 0)
     return (
-      <p className="border-t px-2 py-1.5 text-xs text-muted-foreground">
+      <p className="border-t px-3 py-1.5 text-xs text-muted-foreground">
         {translateText("chat:tasks.empty")}
       </p>
     );
@@ -105,7 +105,7 @@ export function MemberTasksPanel({ sessionId }: { sessionId: string }) {
     <div className="border-t">
       <ul>
         {tasks.map((task) => (
-          <li key={task.id} className="flex items-center gap-1.5 px-2 py-1">
+          <li key={task.id} className="flex items-center gap-1.5 px-3 py-1">
             <button
               type="button"
               title={statusLabel(translateText, task.status)}

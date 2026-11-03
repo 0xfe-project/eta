@@ -196,6 +196,10 @@ const agentNames = (container: HTMLElement) =>
     (row) => row.querySelector("[data-slot=agent-name]")?.textContent,
   );
 
+// A card's own box: a `border` or a resting `bg-` utility on the card itself. The cards are flat
+// rows; the list draws one rule between two, and only hover and selection fill a row.
+const box = /(^|\s)(border|bg-)/;
+
 describe("hello 之前的侧边栏", () => {
   it("draws both lists' outlines instead of saying they are empty", async () => {
     buildProductHost({ agents, projects, conversations: [] }).install();
@@ -303,6 +307,39 @@ describe("侧边栏的两块", () => {
       );
     expect(members("装修")).toHaveLength(2);
     expect(members("装配")).toHaveLength(0);
+  });
+
+  it("卡片是平铺的行：不套框、不铺底，行间一条线，线贴到侧栏两边", async () => {
+    useWorkspaceStore.setState({ workspace: { selectedGroupId: "g2" } });
+    const { container } = await tree([
+      group("g1", "装配", "p-eta"),
+      group("g2", "装修", "p-eta"),
+    ]);
+    const item = (id: string) =>
+      container.querySelector<HTMLElement>(
+        `[data-sidebar="menu-item"]:has([title="${id}"])`,
+      )!;
+    expect(item("装配").className).not.toMatch(box);
+    expect(item("装配").className).toContain("hover:bg-sidebar-accent");
+    // 选中的只多一层底色。
+    expect(item("装修").className).toContain("bg-sidebar-accent");
+    const agents = [
+      ...agentsSection(container)!.querySelectorAll<HTMLElement>(
+        "[data-sidebar=menu-item]",
+      ),
+    ];
+    expect(agents.length).toBeGreaterThan(0);
+    for (const card of agents) expect(card.className).not.toMatch(box);
+    for (const section of [
+      groupsSection(container)!,
+      agentsSection(container)!,
+    ]) {
+      // 行间的线由列表画，分区不留左右 padding，线和组头下面那条一样贴到两边。
+      expect(section.querySelector("[data-sidebar=menu]")?.className).toContain(
+        "divide-y",
+      );
+      expect(section.className).toContain("px-0");
+    }
   });
 
   it("三角能把没选中的群也打开", async () => {
@@ -457,6 +494,27 @@ describe("折叠成图标栏", () => {
         (child) => child.tagName !== "BUTTON",
       ),
     ).toHaveLength(1);
+  });
+
+  it("rail 上的卡片也是平铺的行，没有框也没有底色", async () => {
+    const { container } = await tree([group("g1", "装配", "p-eta")], {
+      open: false,
+    });
+    const cards = [
+      ...groupsSection(container)!.querySelectorAll<HTMLElement>(
+        "[data-sidebar=menu-item]",
+      ),
+      ...agentsSection(container)!.querySelectorAll<HTMLElement>(
+        "[data-sidebar=menu-item]",
+      ),
+    ];
+    expect(cards.length).toBeGreaterThan(1);
+    for (const card of cards) {
+      // Only the open group is filled, and only with the selected fill.
+      if (card.dataset.active === "true")
+        expect(card.className).toContain("bg-sidebar-accent");
+      else expect(card.className).not.toMatch(box);
+    }
   });
 
   it("有未读时 rail 卡片角上是数字", async () => {

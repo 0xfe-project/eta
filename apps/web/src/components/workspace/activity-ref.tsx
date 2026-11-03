@@ -174,7 +174,14 @@ export function ActivityRefCard({
 
   if (value.url) {
     return (
-      <div className={cn(frameClass, draft && "border-dashed", className)}>
+      <div
+        className={cn(
+          frameClass,
+          // A draft is not a thing yet: the dashed outline says so. It is a state, not a layer.
+          draft && "border border-dashed border-[var(--muted-foreground)]/40",
+          className,
+        )}
+      >
         <a
           href={value.url}
           target="_blank"
