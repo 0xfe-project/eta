@@ -9,6 +9,19 @@ import type {
 // session is where the words are: the messages the transcript already holds since the last thing
 // the user said, plus the one being streamed.
 
+/**
+ * A picture a message carried, and where it sits: the view may leave its bytes out (`data` is
+ * empty, `bytes` says how big it is), and then `sessions.image` with the row and part index is
+ * how the page gets it.
+ */
+export interface RunImage {
+  mimeType: string;
+  data: string;
+  bytes?: number | undefined;
+  entryId: string;
+  index: number;
+}
+
 export type RunBlock =
   | { type: "thinking"; id: string; text: string }
   | { type: "text"; id: string; text: string }
@@ -18,6 +31,8 @@ export type RunBlock =
       name: string;
       input: unknown;
       output?: string | undefined;
+      /** The pictures the result carried (a screenshot `Read` back), in order. */
+      images?: RunImage[] | undefined;
       /** What the tool left for the page beyond its text (`publish_artifact` names its artifact). */
       details?: unknown;
       status: "running" | "completed" | "failed";
@@ -57,6 +72,9 @@ interface Part {
   id?: string;
   name?: string;
   arguments?: unknown;
+  data?: string;
+  mimeType?: string;
+  bytes?: number;
 }
 
 function contentOf(message: AgentMessage): Part[] {
@@ -70,6 +88,23 @@ function resultText(message: AgentMessage): string {
     .filter((part) => part.type === "text" && typeof part.text === "string")
     .map((part) => part.text)
     .join("\n");
+}
+
+/** The pictures among a message's parts, each with the place it can be fetched from. */
+function imagesOf(entryId: string, message: AgentMessage): RunImage[] {
+  return contentOf(message).flatMap((part, index) =>
+    part.type === "image" && typeof part.mimeType === "string"
+      ? [
+          {
+            mimeType: part.mimeType,
+            data: typeof part.data === "string" ? part.data : "",
+            ...(typeof part.bytes === "number" ? { bytes: part.bytes } : {}),
+            entryId,
+            index,
+          },
+        ]
+      : [],
+  );
 }
 
 function stampOf(message: AgentMessage | undefined): number {
@@ -98,21 +133,41 @@ export function runBlocks(
 }
 
 /** What a user message said, in a log: the first one is the briefing and is not shown. */
-export interface UserBlock {
+interface UserBlock {
   type: "user";
   id: string;
   text: string;
+  images?: RunImage[] | undefined;
 }
+
+/** A turn that ended on an error, or that was stopped: what the reader is owed is why. */
+interface ErrorBlock {
+  type: "error";
+  id: string;
+  aborted: boolean;
+  text: string;
+}
+
+/** Where the session folded its history into a summary (a compaction, or a branch left behind). */
+interface SummaryBlock {
+  type: "summary";
+  id: string;
+  kind: "compaction" | "branch";
+  text: string;
+}
+
+export type LogBlock = RunBlock | UserBlock | ErrorBlock | SummaryBlock;
 
 /**
  * A whole session as blocks: every run it has had, with the user messages that steered it (a task
  * run's log is its session's transcript). The first user message is the briefing the run began
- * with; it is the task itself and is left out.
+ * with; it is the task itself and is left out. A log also says where a turn failed and where the
+ * history was summarized, which a reply in a conversation shows elsewhere.
  */
 export function logBlocks(
   rows: readonly ViewMessageRow[],
   streaming: AgentMessage | undefined,
-): (RunBlock | UserBlock)[] {
+): LogBlock[] {
   return blocksFrom(rows, streaming, 0, true);
 }
 
@@ -120,10 +175,10 @@ function blocksFrom(
   rows: readonly ViewMessageRow[],
   streaming: AgentMessage | undefined,
   start: number,
-  users = false,
-): (RunBlock | UserBlock)[] {
-  const blocks: (RunBlock | UserBlock)[] = [];
-  const tools = new Map<string, Extract<RunBlock, { type: "tool" }>>();
+  log = false,
+): LogBlock[] {
+  const blocks: LogBlock[] = [];
+  const tools = new Map<string, ToolBlock>();
   // A message's blocks are keyed by when it started, which it keeps from its first streamed frame
   // to its row: the page draws them as the same elements throughout, so the words already shown
   // do not fade in again when it lands, and the next message's words are drawn fresh. A row
@@ -138,7 +193,7 @@ function blocksFrom(
       else if (part.type === "text" && part.text)
         blocks.push({ type: "text", id: key, text: part.text });
       else if (part.type === "toolCall" && part.id !== undefined) {
-        const block: Extract<RunBlock, { type: "tool" }> = {
+        const block: ToolBlock = {
           type: "tool",
           id: part.id,
           name: part.name ?? "",
@@ -149,30 +204,118 @@ function blocksFrom(
         blocks.push(block);
       }
     });
+    if (!log || message.role !== "assistant") return;
+    const { stopReason, errorMessage } = message;
+    if (stopReason === "error" || stopReason === "aborted")
+      blocks.push({
+        type: "error",
+        id: `${id}:error`,
+        aborted: stopReason === "aborted",
+        text: errorMessage ?? "",
+      });
   };
   let newest = 0;
   let briefed = false;
   for (const row of rows.slice(start)) {
-    if (row.message.role === "user") {
-      const content = (row.message as { content?: unknown }).content;
-      const text =
-        typeof content === "string" ? content : resultText(row.message);
-      if (users && briefed && text !== "")
-        blocks.push({ type: "user", id: row.entryId, text });
+    const message = row.message;
+    if (message.role === "user") {
+      const content = (message as { content?: unknown }).content;
+      const text = typeof content === "string" ? content : resultText(message);
+      const images = imagesOf(row.entryId, message);
+      if (log && briefed && (text !== "" || images.length > 0))
+        blocks.push({
+          type: "user",
+          id: row.entryId,
+          text,
+          ...(images.length > 0 ? { images } : {}),
+        });
       briefed = true;
-    } else if (row.message.role === "assistant") {
-      newest = Math.max(newest, stampOf(row.message));
-      add(row.entryId, row.message);
-    } else if (row.message.role === "toolResult") {
-      const call = tools.get(row.message.toolCallId);
+    } else if (message.role === "assistant") {
+      newest = Math.max(newest, stampOf(message));
+      add(row.entryId, message);
+    } else if (message.role === "toolResult") {
+      const call = tools.get(message.toolCallId);
       if (call !== undefined) {
-        call.output = resultText(row.message);
-        call.details = row.message.details;
-        call.status = row.message.isError ? "failed" : "completed";
+        call.output = resultText(message);
+        const images = imagesOf(row.entryId, message);
+        if (images.length > 0) call.images = images;
+        call.details = message.details;
+        call.status = message.isError ? "failed" : "completed";
       }
+    } else if (
+      log &&
+      (message.role === "compactionSummary" || message.role === "branchSummary")
+    ) {
+      blocks.push({
+        type: "summary",
+        id: row.entryId,
+        kind: message.role === "compactionSummary" ? "compaction" : "branch",
+        text: message.summary,
+      });
     }
   }
   if (streaming?.role === "assistant" && stampOf(streaming) > newest)
     add("stream", streaming);
   return blocks;
+}
+
+/** A run of calls to one tool, drawn as one row that opens to them. */
+export interface ToolGroup {
+  type: "group";
+  id: string;
+  name: string;
+  tools: ToolBlock[];
+}
+
+/** How many calls in a row it takes to fold them: two side by side still read as two. */
+const GROUP_FROM = 3;
+
+/**
+ * The log's blocks with runs of the same tool folded into groups: twelve `Read`s in a row are one
+ * thing the agent did (it looked around), and a line each pushes what it found off the screen.
+ * Commands are never folded, because each one is a separate decision worth reading.
+ */
+export function groupBlocks(
+  blocks: readonly LogBlock[],
+): (LogBlock | ToolGroup)[] {
+  const out: (LogBlock | ToolGroup)[] = [];
+  let run: ToolBlock[] = [];
+  const flush = () => {
+    if (run.length >= GROUP_FROM)
+      out.push({
+        type: "group",
+        id: `group:${run[0]!.id}`,
+        name: run[0]!.name,
+        tools: run,
+      });
+    else out.push(...run);
+    run = [];
+  };
+  for (const block of blocks) {
+    const foldable =
+      block.type === "tool" &&
+      block.status !== "running" &&
+      commandOf(block.input) === undefined;
+    if (foldable && (run.length === 0 || run[0]!.name === block.name)) {
+      run.push(block);
+      continue;
+    }
+    flush();
+    if (foldable) run.push(block as ToolBlock);
+    else out.push(block);
+  }
+  flush();
+  return out;
+}
+
+/** The shell command a call ran, when its input says it ran one. */
+export function commandOf(input: unknown): string | undefined {
+  if (typeof input !== "object" || input === null) return undefined;
+  const command =
+    (input as { command?: unknown; cmd?: unknown }).command ??
+    (input as { cmd?: unknown }).cmd;
+  if (typeof command === "string") return command;
+  if (Array.isArray(command) && command.every((p) => typeof p === "string"))
+    return command.join(" ");
+  return undefined;
 }

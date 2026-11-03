@@ -86,11 +86,20 @@ describe("a router for sessions that live elsewhere", () => {
     expect(await call("history", { session: "far-1" })).toMatchObject({
       from: "router",
     });
+    expect(
+      await call("image", { session: "far-1", entryId: "e1", index: 1 }),
+    ).toMatchObject({ from: "router", action: "image" });
     expect(seen.map((entry) => entry.action)).toEqual([
       "prompt",
       "abort",
       "history",
+      "image",
     ]);
+    expect(seen[3]?.args).toEqual({
+      session: "far-1",
+      entryId: "e1",
+      index: 1,
+    });
     expect(seen[0]?.args).toEqual({ session: "far-1", text: "hi" });
   });
 

@@ -25,6 +25,7 @@ export const SESSION_ACTIONS = [
   "btwClear",
   "subagentStop",
   "history",
+  "image",
   "search",
   "goal",
   "taskCreate",
@@ -102,6 +103,11 @@ export interface SessionArgs {
   btwClear: Thread;
   subagentStop: Session & { id: string };
   history: Session & { beforeSeq?: number; limit?: number };
+  /**
+   * One picture a view left out (`ImageContent.bytes` set, `data` empty): the image part at
+   * `index` in the `content` of the message entry `entryId`. Answers `SessionImage`.
+   */
+  image: Session & { entryId: string; index: number };
   search: { query: string };
   goal: Session & {
     action: "set" | "pause" | "resume" | "clear";

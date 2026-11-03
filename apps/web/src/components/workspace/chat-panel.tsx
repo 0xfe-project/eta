@@ -55,7 +55,6 @@ import {
   RUNNING_STATUSES,
   taskRowsByTurn,
 } from "@/lib/timeline";
-import { summarizeArgs } from "@/lib/tool-summary";
 import { cn } from "@/lib/utils";
 import { agentName } from "@/queries/agents";
 import { beginUpload, useOutbox } from "@/queries/outbox";
@@ -81,7 +80,7 @@ import { Message, SystemMessage } from "./transcript/message";
 import { ProcessBox } from "./transcript/process-box";
 import { SlashMenu } from "./transcript/slash-menu";
 import { ThinkingBlock } from "./transcript/thinking-block";
-import { ToolCard, ToolCardBlock } from "./transcript/tool-card";
+import { ToolDetailCard } from "./transcript/tool-detail";
 import { useWorkspaceStore } from "./workspace-store";
 
 type SlashName =
@@ -400,32 +399,22 @@ function TurnCards({
   );
 }
 
-function ToolActivity({ block }: { block: ToolBlock }) {
-  // The arguments are a JSON object; the header shows what the call is *doing*, which is the first
-  // thing worth quoting out of it (lib/tool-summary.ts).
-  const summary = summarizeArgs(block.input);
+function ToolActivity({
+  block,
+  sessionId,
+}: {
+  block: ToolBlock;
+  /** The session at work, which pictures its view left out are fetched from. */
+  sessionId?: string | undefined;
+}) {
   const github = useGitHubRef(block);
   return (
     <>
-      <ToolCard
-        tool={block.name}
-        summary={summary.length > 0 ? summary : undefined}
-        status={block.status}
+      <ToolDetailCard
+        block={block}
+        sessionId={sessionId}
         statusLabel={activityText[block.status]}
-      >
-        {block.input === undefined || block.input === null ? null : (
-          <ToolCardBlock label={translate("chat:tools.arguments")}>
-            {typeof block.input === "string"
-              ? block.input
-              : JSON.stringify(block.input, null, 2)}
-          </ToolCardBlock>
-        )}
-        {block.output === undefined ? null : (
-          <ToolCardBlock label={translate("chat:tools.result")}>
-            {block.output}
-          </ToolCardBlock>
-        )}
-      </ToolCard>
+      />
       {github === undefined ? null : <ActivityRefCard value={github} />}
     </>
   );
@@ -680,7 +669,7 @@ function LiveReply({
       <ThinkingBlock key={block.id} text={block.text} />
     ) : block.type === "tool" ? (
       <div key={block.id} className="tool-step space-y-1">
-        <ToolActivity block={block} />
+        <ToolActivity block={block} sessionId={sessionId} />
       </div>
     ) : null;
   const text = (block: (typeof blocks)[number]) =>
@@ -1106,23 +1095,31 @@ export function ChatPanel({
     onLoadOlder,
   });
 
+  // The rail is off until 设置 → 外观 turns it on; off, nothing below is worked out for it.
+  const showRail = useWorkspaceStore(
+    (state) => state.workspace.transcriptRail ?? false,
+  );
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
   // What the rail numbers: the agent's replies (squares) and your own messages (circles). A
   // conversation with one of each has nothing to jump between, and the rail draws nothing. A task
   // row drawn inside a turn is not one of its own numbers, so it is not on the rail either.
   const railReplies = useMemo(
     () =>
-      rows
-        .filter((message) => message.author === "agent")
-        .map((message) => ({ id: message.id, text: message.text })),
-    [rows],
+      showRail
+        ? rows
+            .filter((message) => message.author === "agent")
+            .map((message) => ({ id: message.id, text: message.text }))
+        : [],
+    [rows, showRail],
   );
   const railPrompts = useMemo(
     () =>
-      rows
-        .filter((message) => message.author === "user")
-        .map((message) => ({ id: message.id, text: message.text })),
-    [rows],
+      showRail
+        ? rows
+            .filter((message) => message.author === "user")
+            .map((message) => ({ id: message.id, text: message.text }))
+        : [],
+    [rows, showRail],
   );
   // Composition state the keydown handler needs but the DOM only reports to other listeners.
   const ime = useRef({ composing: false, endedAt: 0 });
@@ -1410,7 +1407,7 @@ export function ChatPanel({
           onScroll={() => {
             transcript.onScroll();
             // Cheap enough: one pass over the rows that are actually in the DOM.
-            setActiveId(transcript.active());
+            if (showRail) setActiveId(transcript.active());
           }}
           className="no-scrollbar h-full overflow-y-auto py-4 pr-14 pl-6"
         >
@@ -1609,14 +1606,16 @@ export function ChatPanel({
             </Button>
           )}
         </div>
-        <div className="absolute top-16 right-1">
-          <TranscriptRail
-            replies={railReplies}
-            prompts={railPrompts}
-            activeId={activeId}
-            onJump={transcript.jumpTo}
-          />
-        </div>
+        {showRail && (
+          <div className="absolute top-16 right-1">
+            <TranscriptRail
+              replies={railReplies}
+              prompts={railPrompts}
+              activeId={activeId}
+              onJump={transcript.jumpTo}
+            />
+          </div>
+        )}
       </div>
       {/*
        * The composer, copied from eta-old rather than improvised: `.input-area` → `.input-outer`

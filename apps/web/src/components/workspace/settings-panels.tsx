@@ -104,6 +104,22 @@ function AppearanceSettings() {
       </div>
       <div className="settings-row">
         <div className="settings-row-label">
+          <div>{translateText("appearance.transcriptRail")}</div>
+          <p>{translateText("appearance.transcriptRailHint")}</p>
+        </div>
+        <div className="settings-control">
+          <Switch
+            id="transcript-rail"
+            aria-label={translateText("appearance.transcriptRail")}
+            checked={workspace.transcriptRail ?? false}
+            onCheckedChange={(transcriptRail) =>
+              setWorkspace((state) => ({ ...state, transcriptRail }))
+            }
+          />
+        </div>
+      </div>
+      <div className="settings-row">
+        <div className="settings-row-label">
           <div>{translateText("appearance.elementPicker")}</div>
           <p>{translateText("appearance.elementPickerHint")}</p>
         </div>

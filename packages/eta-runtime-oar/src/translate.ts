@@ -15,7 +15,8 @@
  * - A call's end is `tool:end` and a tool-result message, which the journal writes too.
  *
  * Only the root agent's facts become the transcript. A runtime's own subagent works inside one of
- * the root's tool calls, so its tool calls are told as progress (`tool:update`) of that call.
+ * the root's tool calls, so its tool calls are told as progress (`tool:update`) of that call, and
+ * its steps ride on that call's result as `details.children` for the run log to draw.
  *
  * Usage is a running total from oar; a message costs what the total grew by since the last one.
  */
@@ -31,6 +32,55 @@ import type {
 type Block = AssistantMessage["content"][number];
 
 type ToolCallProgress = Extract<Event, { kind: "tool_call_progress" }>;
+
+type TaskEvent = Extract<
+  Event,
+  { kind: "task_started" | "task_updated" | "task_ended" }
+>;
+
+type ToolResultContent = Extract<
+  AgentMessage,
+  { role: "toolResult" }
+>["content"];
+
+/** One step a runtime's subagent took inside a root call: a tool it ran, or what it said. */
+export type OarChildStep =
+  | {
+      kind: "tool";
+      id: string;
+      name: string;
+      input?: string;
+      status: "running" | "completed" | "failed";
+      output?: string;
+      outputTruncated?: true;
+      exitCode?: number | null;
+    }
+  | { kind: "text"; text: string };
+
+type ChildToolStep = Extract<OarChildStep, { kind: "tool" }>;
+
+/** The task the runtime tracked for a root call: a subagent, a background command. */
+export interface OarRuntimeTask {
+  type: string;
+  nativeType?: string;
+  description?: string;
+  background?: boolean;
+  status?: string;
+  summary?: string;
+  outputFile?: string;
+}
+
+/** What a root call's tool result carries beside its content; absent when there is nothing. */
+export interface OarToolResultDetails {
+  exitCode?: number | null;
+  children?: OarChildStep[];
+  runtimeTask?: OarRuntimeTask;
+  other?: unknown[];
+}
+
+/** A subagent can run long; the run log needs its shape, not every step or every byte. */
+const MAX_CHILD_STEPS = 200;
+const MAX_CHILD_OUTPUT = 4000;
 
 interface OpenMessage {
   turnId: string;
@@ -48,6 +98,9 @@ interface PendingCall {
   startedAt: number;
   /** What the call has printed so far, for its progress. */
   output?: string;
+  /** The steps the runtime's subagent took inside this call, deeper subagents flattened in. */
+  children: OarChildStep[];
+  runtimeTask?: OarRuntimeTask;
 }
 
 /** What the translator needs from the run: where to say things, and who is talking. */
@@ -113,11 +166,14 @@ export function argumentsOf(
   return { input };
 }
 
-/** A tool result's parts as a tool-result message's content. */
+/**
+ * A tool result's parts as a tool-result message's content. A part oar does not recognize stays
+ * in the content as its JSON too, so search and a model replaying the transcript still see it.
+ */
 function resultContent(
   parts: readonly ToolOutputPart[] | undefined,
-): Extract<AgentMessage, { role: "toolResult" }>["content"] {
-  const content: Extract<AgentMessage, { role: "toolResult" }>["content"] = [];
+): ToolResultContent {
+  const content: ToolResultContent = [];
   for (const part of parts ?? []) {
     if (part.type === "text") content.push({ type: "text", text: part.text });
     else if (part.type === "image")
@@ -136,6 +192,8 @@ export class Translator {
   readonly #identity: TranslatorIdentity;
   #open: OpenMessage | undefined;
   readonly #pending = new Map<string, PendingCall>();
+  /** The root call each runtime task belongs to, until that call's result is written. */
+  readonly #tasks = new Map<string, string>();
   /** The running total the last message was charged up to. */
   #charged: TokenTotals | undefined;
   /** The running total the runtime reported last. */
@@ -161,6 +219,16 @@ export class Translator {
   }
 
   see(event: Event): void {
+    // A task names the call that started it; claude reports it from the root agent, but a
+    // subagent's own task would come under its path, so the call decides, not the path.
+    if (
+      event.kind === "task_started" ||
+      event.kind === "task_updated" ||
+      event.kind === "task_ended"
+    ) {
+      this.#task(event);
+      return;
+    }
     if (event.agentPath.length > 0) {
       this.#seeChild(event);
       return;
@@ -185,7 +253,12 @@ export class Translator {
         this.#callInput(event.callId, event.input);
         break;
       case "tool_call_ended":
-        this.#callEnded(event.callId, event.content, event.result === "failed");
+        this.#callEnded(
+          event.callId,
+          event.content,
+          event.result === "failed",
+          event.exitCode,
+        );
         break;
       case "tool_call_progress":
         this.#progress(event.callId, event);
@@ -360,6 +433,7 @@ export class Translator {
       args,
       turnId: open.turnId,
       startedAt: Date.now(),
+      children: [],
     });
     this.#update({
       type: "toolcall_start",
@@ -413,23 +487,44 @@ export class Translator {
     callId: string,
     content: readonly ToolOutputPart[] | undefined,
     failed: boolean,
+    exitCode: number | null | undefined,
   ): void {
     // The call came back: the message that made it is over.
     if (this.#callIndex(callId) >= 0) this.#close("toolUse");
     const call = this.#pending.get(callId);
     if (call === undefined) return;
-    this.#result(callId, call, resultContent(content), failed);
+    const other = (content ?? []).flatMap((part) =>
+      part.type === "other" ? [part.value] : [],
+    );
+    this.#result(callId, call, resultContent(content), failed, {
+      ...(exitCode === undefined ? {} : { exitCode }),
+      ...(other.length === 0 ? {} : { other }),
+    });
   }
 
   #result(
     callId: string,
     call: PendingCall,
-    content: Extract<AgentMessage, { role: "toolResult" }>["content"],
+    content: ToolResultContent,
     isError: boolean,
+    reported: Pick<OarToolResultDetails, "exitCode" | "other"> = {},
   ): void {
     this.#pending.delete(callId);
+    // The result is written once. What a task reports after it (a background command's end, a
+    // subagent that keeps going) has nowhere to land, so the task is let go here and its later
+    // updates are dropped.
+    for (const [taskId, owner] of this.#tasks)
+      if (owner === callId) this.#tasks.delete(taskId);
+    const details: OarToolResultDetails = {
+      ...reported,
+      ...(call.children.length === 0 ? {} : { children: call.children }),
+      ...(call.runtimeTask === undefined
+        ? {}
+        : { runtimeTask: call.runtimeTask }),
+    };
+    const detailed = Object.keys(details).length === 0 ? {} : { details };
     const { runId, emit, push } = this.#target;
-    const result = { content, isError };
+    const result = { content, ...detailed, isError };
     emit("tool:end", {
       runId,
       turnId: call.turnId,
@@ -445,9 +540,49 @@ export class Translator {
       toolCallId: callId,
       toolName: call.name,
       content,
+      ...detailed,
       isError,
       timestamp: Date.now(),
     });
+  }
+
+  /**
+   * A runtime task, kept on the root call that started it. A task under any other call (one a
+   * subagent made) is left out, and so is ambient work the runtime does for itself.
+   */
+  #task(event: TaskEvent): void {
+    if (event.kind === "task_started") {
+      if (event.ambient === true || event.toolCallId === undefined) return;
+      const call = this.#pending.get(event.toolCallId);
+      if (call === undefined) return;
+      this.#tasks.set(event.taskId, event.toolCallId);
+      call.runtimeTask = {
+        type: event.taskType,
+        ...(event.nativeType === undefined
+          ? {}
+          : { nativeType: event.nativeType }),
+        ...(event.description === undefined
+          ? {}
+          : { description: event.description }),
+        ...(event.background === undefined
+          ? {}
+          : { background: event.background }),
+      };
+      return;
+    }
+    const owner = this.#tasks.get(event.taskId);
+    const task =
+      owner === undefined ? undefined : this.#pending.get(owner)?.runtimeTask;
+    if (task === undefined) return;
+    if (event.kind === "task_updated") {
+      if (event.status !== undefined) task.status = event.status;
+      if (event.background !== undefined) task.background = event.background;
+      if (event.description !== undefined) task.description = event.description;
+      return;
+    }
+    task.status = event.status;
+    if (event.summary !== undefined) task.summary = event.summary;
+    if (event.outputFile !== undefined) task.outputFile = event.outputFile;
   }
 
   /** A running call's output so far: replaced by `output`, grown by `outputDelta`. */
@@ -465,26 +600,84 @@ export class Translator {
     });
   }
 
-  /** A subagent's tool call, told as progress of the root call it works inside. */
+  /**
+   * A subagent's fact, kept as a step of the root call it works inside; a deeper subagent's
+   * flattens onto the same root. Its tool calls are also told as progress of that call, for
+   * whoever watches it run.
+   */
   #seeChild(event: Event): void {
-    if (event.kind !== "tool_call_started") return;
     const parent = event.agentPath[0];
     const call = parent === undefined ? undefined : this.#pending.get(parent);
     if (parent === undefined || call === undefined) return;
-    this.#target.emit("tool:update", {
-      runId: this.#target.runId,
-      turnId: call.turnId,
-      toolCallId: parent,
-      toolName: call.name,
-      partialResult: {
-        content: [
-          {
-            type: "text",
-            text: `→ ${event.tool}${event.input === undefined ? "" : ` ${event.input}`}`,
+    const steps = call.children;
+    const add = (step: OarChildStep): void => {
+      if (steps.length < MAX_CHILD_STEPS) steps.push(step);
+    };
+    const toolStep = (id: string): ChildToolStep | undefined => {
+      for (let i = steps.length - 1; i >= 0; i--) {
+        const step = steps[i]!;
+        if (step.kind === "tool" && step.id === id) return step;
+      }
+      return undefined;
+    };
+    switch (event.kind) {
+      case "tool_call_started":
+        add({
+          kind: "tool",
+          id: event.callId,
+          name: event.tool,
+          ...(event.input === undefined ? {} : { input: event.input }),
+          status: "running",
+        });
+        this.#target.emit("tool:update", {
+          runId: this.#target.runId,
+          turnId: call.turnId,
+          toolCallId: parent,
+          toolName: call.name,
+          partialResult: {
+            content: [
+              {
+                type: "text",
+                text: `→ ${event.tool}${event.input === undefined ? "" : ` ${event.input}`}`,
+              },
+            ],
           },
-        ],
-      },
-    });
+        });
+        break;
+      case "tool_call_input": {
+        const step = toolStep(event.callId);
+        if (step !== undefined) step.input = event.input;
+        break;
+      }
+      case "tool_call_input_delta": {
+        const step = toolStep(event.callId);
+        if (step !== undefined)
+          step.input = `${step.input ?? ""}${event.delta}`;
+        break;
+      }
+      case "tool_call_ended": {
+        const step = toolStep(event.callId);
+        if (step === undefined) break;
+        step.status = event.result === "failed" ? "failed" : "completed";
+        const output = (event.content ?? [])
+          .flatMap((part) => (part.type === "text" ? [part.text] : []))
+          .join("\n");
+        if (output.length > MAX_CHILD_OUTPUT) {
+          step.output = output.slice(0, MAX_CHILD_OUTPUT);
+          step.outputTruncated = true;
+        } else if (output !== "") step.output = output;
+        if (event.exitCode !== undefined) step.exitCode = event.exitCode;
+        break;
+      }
+      case "text_delta": {
+        const last = steps.at(-1);
+        if (last?.kind === "text") last.text += event.text;
+        else add({ kind: "text", text: event.text });
+        break;
+      }
+      default:
+        break;
+    }
   }
 
   #close(

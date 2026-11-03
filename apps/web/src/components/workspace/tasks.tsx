@@ -39,14 +39,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -99,6 +91,7 @@ import { TaskPulls } from "./task-pulls";
 import { RunLog } from "./task-run-log";
 import { StatusIcon } from "./task-status-icon";
 import { SlashMenu } from "./transcript/slash-menu";
+import { TranscriptDialog } from "./transcript/transcript-dialog";
 import { useGroups } from "./use-groups";
 
 const showError = (error: Error) => toast.error(wireErrorMessage(error));
@@ -975,44 +968,42 @@ function useAwayMachine(task: TaskDetail, run: TaskRun | undefined) {
   return run.machineId === project.machineId ? undefined : name;
 }
 
-/** A run's log, in a dialog: it is as long as the run was, more than a line of the thread holds. */
+/**
+ * A run's log, in a dialog: it is as long as the run was, more than a line of the thread holds. The
+ * frame is fixed (see TranscriptDialog), so a short log and a long one open in the same place.
+ */
 function RunLogButton({ task, run }: { task: TaskDetail; run: TaskRun }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
   const who = useRunAgent(task, run);
   const away = useAwayMachine(task, run);
+  const scrollRef = useRef<HTMLDivElement>(null);
   if (run.status === "queued") return null;
   return (
-    <Dialog>
-      <DialogTrigger asChild>
+    <TranscriptDialog
+      trigger={
         <button
           type="button"
           className="ml-2 text-xs text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:underline"
         >
           {translateText("log.title")}
         </button>
-      </DialogTrigger>
-      <DialogContent className="grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle className="truncate pr-8">
-            #{task.number} · {who} · {translateText("log.title")}
-          </DialogTitle>
-          <DialogDescription className="wrap-anywhere">
-            {run.workspace ? (
-              <>
-                {translateText("log.workspacePrefix")}
-                {away === undefined ? null : `${away} · `}
-                <code>{run.workspace}</code>
-              </>
-            ) : (
-              <RunStatusText run={run} />
-            )}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="max-h-[70dvh] min-h-0 overflow-auto">
-          <RunLog run={run} />
-        </div>
-      </DialogContent>
-    </Dialog>
+      }
+      title={`#${task.number} · ${who} · ${translateText("log.title")}`}
+      description={
+        run.workspace ? (
+          <>
+            {translateText("log.workspacePrefix")}
+            {away === undefined ? null : `${away} · `}
+            <code>{run.workspace}</code>
+          </>
+        ) : (
+          <RunStatusText run={run} />
+        )
+      }
+      bodyRef={scrollRef}
+    >
+      <RunLog run={run} scrollRef={scrollRef} />
+    </TranscriptDialog>
   );
 }
 
