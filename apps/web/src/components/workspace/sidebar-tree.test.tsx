@@ -196,6 +196,10 @@ const agentNames = (container: HTMLElement) =>
     (row) => row.querySelector("[data-slot=agent-name]")?.textContent,
   );
 
+// A card's own outline: any `border` utility on the card itself. The rails draw the lines between
+// regions; a card is told apart by its fill.
+const frame = /(^|\s)border(-|\s|$)/;
+
 describe("hello 之前的侧边栏", () => {
   it("draws both lists' outlines instead of saying they are empty", async () => {
     buildProductHost({ agents, projects, conversations: [] }).install();
@@ -303,6 +307,32 @@ describe("侧边栏的两块", () => {
       );
     expect(members("装修")).toHaveLength(2);
     expect(members("装配")).toHaveLength(0);
+  });
+
+  it("卡片靠底色和侧栏分开，不再套外框；选中的换成 accent", async () => {
+    useWorkspaceStore.setState({ workspace: { selectedGroupId: "g2" } });
+    const { container } = await tree([
+      group("g1", "装配", "p-eta"),
+      group("g2", "装修", "p-eta"),
+    ]);
+    const item = (id: string) =>
+      container.querySelector<HTMLElement>(
+        `[data-sidebar="menu-item"]:has([title="${id}"])`,
+      )!;
+    expect(item("装配").className).toContain("bg-card-raised");
+    expect(item("装配").className).toContain("hover:bg-sidebar-accent");
+    expect(item("装修").className).toContain("bg-sidebar-accent");
+    expect(item("装修").className).not.toContain("bg-card-raised");
+    const agents = [
+      ...agentsSection(container)!.querySelectorAll<HTMLElement>(
+        "[data-sidebar=menu-item]",
+      ),
+    ];
+    expect(agents.length).toBeGreaterThan(0);
+    for (const card of [item("装配"), item("装修"), ...agents])
+      expect(card.className).not.toMatch(frame);
+    for (const card of agents)
+      expect(card.className).toContain("bg-card-raised");
   });
 
   it("三角能把没选中的群也打开", async () => {
@@ -457,6 +487,28 @@ describe("折叠成图标栏", () => {
         (child) => child.tagName !== "BUTTON",
       ),
     ).toHaveLength(1);
+  });
+
+  it("rail 上的卡片也没有外框，靠底色分层", async () => {
+    const { container } = await tree([group("g1", "装配", "p-eta")], {
+      open: false,
+    });
+    const cards = [
+      ...groupsSection(container)!.querySelectorAll<HTMLElement>(
+        "[data-sidebar=menu-item]",
+      ),
+      ...agentsSection(container)!.querySelectorAll<HTMLElement>(
+        "[data-sidebar=menu-item]",
+      ),
+    ];
+    expect(cards.length).toBeGreaterThan(1);
+    for (const card of cards) {
+      // The open group trades the card's fill for the selected one.
+      expect(card.className).toContain(
+        card.dataset.active === "true" ? "bg-sidebar-accent" : "bg-card-raised",
+      );
+      expect(card.className).not.toMatch(frame);
+    }
   });
 
   it("有未读时 rail 卡片角上是数字", async () => {

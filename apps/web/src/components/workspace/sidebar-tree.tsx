@@ -308,7 +308,7 @@ function GroupCard({
     return (
       <SidebarMenuItem
         className={cn(
-          "group/menu-item relative border border-border transition-colors duration-75",
+          "group/menu-item relative bg-card-raised transition-colors duration-75",
           "hover:bg-sidebar-accent",
           active && "bg-sidebar-accent",
         )}
@@ -364,7 +364,7 @@ function GroupCard({
   return (
     <SidebarMenuItem
       className={cn(
-        "group/menu-item relative border border-border transition-colors duration-75",
+        "group/menu-item relative bg-card-raised transition-colors duration-75",
         "hover:bg-sidebar-accent",
         active && "bg-sidebar-accent",
       )}
@@ -556,7 +556,7 @@ function AgentCard({
   // count or the status in the corner. Same button, same destination as the wide card.
   if (rail)
     return (
-      <SidebarMenuItem className="relative border border-border transition-colors duration-75">
+      <SidebarMenuItem className="relative bg-card-raised transition-colors duration-75">
         <button
           type="button"
           data-sidebar="menu-button"
@@ -594,7 +594,7 @@ function AgentCard({
       </SidebarMenuItem>
     );
   return (
-    <SidebarMenuItem className="border border-border transition-colors duration-75">
+    <SidebarMenuItem className="bg-card-raised transition-colors duration-75">
       <button
         type="button"
         data-sidebar="menu-button"

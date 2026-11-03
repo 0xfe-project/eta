@@ -296,6 +296,7 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-card-raised: var(--card-raised);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
   --color-surface: var(--surface);
@@ -326,6 +327,11 @@
   --surface: oklch(0.985 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
+  /* A card that sits on a rail: told apart from the rail by its fill, not by a frame. The rail
+     and --sidebar-accent are only 0.015 apart, too close to fit a third grey between them that
+     reads against both, so the card goes a step below the accent instead: hovering or selecting
+     it lifts it back to --sidebar-accent, as far off the resting card as the accent is off the rail. */
+  --card-raised: oklch(0.955 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
   --primary: oklch(0.205 0 0);
@@ -376,6 +382,8 @@
   --foreground: oklch(0.98 0 0);
   --card: oklch(0.14 0 0);
   --card-foreground: oklch(0.98 0 0);
+  /* Halfway from the rail (0.14) to --sidebar-accent (0.2), so hover and selection still step on. */
+  --card-raised: oklch(0.17 0 0);
   --popover: oklch(0.14 0 0);
   --popover-foreground: oklch(0.98 0 0);
   --primary: oklch(0.98 0 0);

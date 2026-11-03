@@ -75,6 +75,10 @@ describe("activity ref cards", () => {
         text: "#16 整理 Q4 发布说明待办",
       },
     ]);
+    // Told apart from its column by its fill: no outline of its own.
+    const card = container.querySelector('[role="log"] a')!;
+    expect(card.className).toContain("bg-card-raised");
+    expect(card.className).not.toMatch(/(^|\s)border(-|\s|$)/);
   });
 
   it("keeps a real group, and drops the word null", async () => {
