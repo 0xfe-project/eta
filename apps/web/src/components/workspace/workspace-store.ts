@@ -18,6 +18,8 @@ const workspaceSchema = z.object({
   taskLayout: z.enum(["list", "board"]).optional(),
   // 圈选元素 (lib/element-picker.ts); unset follows the build.
   reactGrab: z.boolean().optional(),
+  // The chat's right-edge rail (transcript-rail.tsx); unset is off.
+  transcriptRail: z.boolean().optional(),
   // The sidebar's agent section, folded down to its heading.
   agentsCollapsed: z.boolean().optional(),
 });

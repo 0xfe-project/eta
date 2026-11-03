@@ -7,7 +7,9 @@
     "colorMode": "Color mode",
     "language": "Language",
     "elementPicker": "Element picker",
-    "elementPickerHint": "When on, you can pick an element on the page and copy its component and source location."
+    "elementPickerHint": "When on, you can pick an element on the page and copy its component and source location.",
+    "transcriptRail": "Conversation rail",
+    "transcriptRailHint": "When on, the chat's right edge shows a rail of replies (squares) and your messages (circles); click one to jump to it."
   },
   "sections": {
     "approvals": "Tools that ask first",
