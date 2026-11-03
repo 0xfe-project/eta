@@ -155,9 +155,11 @@ export function Sidebar() {
   return (
     <SidebarRoot
       collapsible="icon"
-      // `sidebar-rule`, not `border-r`: the rule down this edge starts under the band, so it never
-      // runs through the window's lights inside the band. See `styles.css`.
-      className="sidebar-rule hidden shrink-0 md:flex"
+      // `sidebar-rule`, not the component's default `border-r`: that border runs the full height,
+      // through the window's lights inside the band. The rule starts under the band (see
+      // `styles.css`). The zero is the same `group-data-[side=left]` variant, because a bare
+      // `border-r-0` does not win the merge against `group-data-[side=left]:border-r`.
+      className="sidebar-rule group-data-[side=left]:border-r-0 hidden shrink-0 md:flex"
     >
       <SidebarHeader
         // Only the CSS reads this: a collapsed rail is 4rem wide, which on a desktop is where the
