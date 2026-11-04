@@ -1,4 +1,5 @@
 import type {
+  CompactResult,
   PromptImage,
   PromptInput,
   SessionArgs,
@@ -335,15 +336,26 @@ export class SessionsService extends Service implements SessionsApi {
   /**
    * Compact a session on demand — `/compact`. Takes it out of the threshold's hands
    * and does it now; a session assembled without a summarizer says so rather than
-   * pretending it did nothing.
+   * pretending it did nothing. A session an external runtime answers in holds no context
+   * of eta's: the runtime compacts its own, and says what became of it.
    */
-  async compact(id: string, instructions?: string): Promise<boolean> {
-    const compaction = (await this.open(id)).managed.session.compaction;
+  async compact(id: string, instructions?: string): Promise<CompactResult> {
+    const { managed } = await this.open(id);
+    if (managed.meta.runtime !== undefined) {
+      const runtime = await this.manager.compactRuntime(managed);
+      this.wire.pushNow(`sessions.${id}`);
+      return {
+        session: id,
+        compacted: runtime.outcome === "completed",
+        runtime,
+      };
+    }
+    const compaction = managed.session.compaction;
     if (compaction === undefined)
       throw new Error(`session ${id} has no compaction configured`);
     const compacted = await compaction.manual(instructions);
     this.wire.pushNow(`sessions.${id}`);
-    return compacted;
+    return { session: id, compacted };
   }
 
   /**
@@ -1049,8 +1061,7 @@ export function sessionsPlugin(options: SessionsPluginOptions) {
             >;
             if (session === undefined)
               throw new Error("sessions.compact needs a session");
-            const compacted = await service.compact(session, instructions);
-            return { result: { session, compacted } };
+            return { result: await service.compact(session, instructions) };
           }),
         );
         registrations.push(

@@ -165,6 +165,16 @@
     "allowForSession": "Yes, and don’t ask again this session",
     "denyAndExplain": "No, tell Claude what to do next (esc)"
   },
+  "compaction": {
+    "running": "Compacting context…",
+    "completed": "{{runtime}} compacted its context.",
+    "empty": "Nothing to compact yet.",
+    "busy": "{{runtime}} is working. Try again when this turn ends.",
+    "unsupported": "{{runtime}} doesn't support compacting context.",
+    "aborted": "{{runtime}} stopped compacting.",
+    "failed": "{{runtime}} couldn't compact its context: {{reason}}",
+    "unconfirmed": "{{runtime}} didn't confirm the compaction. It may still be running."
+  },
   "commands": {
     "stopAllDescription": "Stop all replies in the group",
     "compactDescription": "Compact context",

@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { compactionNotice } from "@/lib/compaction-notice";
 import { draftText, EMPTY_DRAFT } from "@/lib/composer";
 import { mentionedMembers } from "@/lib/mentions";
 import { cn } from "@/lib/utils";
@@ -367,7 +368,27 @@ export function Workspace({
                   return void toast.error(
                     translateText("chat:commands.compactRequiresMention"),
                   );
-                compact.mutate({ session }, { onError });
+                // A runtime's compaction leaves nothing in the transcript, so the toast tells it.
+                const agentId = members.find(
+                  (member) => member.sessionId === session,
+                )?.agentId;
+                const onRuntime = agents.some(
+                  (agent) => agent.id === agentId && agent.runtime !== "eta",
+                );
+                const waiting = onRuntime
+                  ? toast.loading(translateText("chat:compaction.running"))
+                  : undefined;
+                compact.mutateAsync({ session }).then(
+                  ({ runtime }) => {
+                    if (runtime === undefined) return;
+                    const { level, text } = compactionNotice(runtime);
+                    toast[level](text, { id: waiting });
+                  },
+                  (error: Error) => {
+                    toast.dismiss(waiting);
+                    onError(error);
+                  },
+                );
                 setDraft([]);
               }}
               onStop={(messageId) => {

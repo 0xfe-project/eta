@@ -9,7 +9,10 @@
  * The manager does not know what a runtime is or how it is reached; it knows the shape below. A
  * host that supplies none simply cannot open such a session, and says so.
  */
-import type { KernelModels, RunDelegate } from "@eta/core";
+import type { RuntimeCompaction } from "@eta/client-contracts";
+import type { KernelConfig, KernelModels, RunDelegate } from "@eta/core";
+
+export type { RuntimeCompaction };
 
 export interface SessionRuntimeInput {
   /** The eta session whose runs this takes. */
@@ -42,6 +45,12 @@ export interface SessionRuntime {
    */
   models: KernelModels;
   delegate: RunDelegate;
+  /**
+   * Compact the runtime's context now, in the runtime's own way (`/compact`). `config` is what
+   * the session is on, for a runtime that has to be opened first. A session's context is the
+   * runtime's, so this is the one way to it: eta's compaction is not installed on such a session.
+   */
+  compact?: (config: KernelConfig) => Promise<RuntimeCompaction>;
   /** Let the runtime go: its process, and anything it served for the session. */
   dispose: () => Promise<void>;
 }

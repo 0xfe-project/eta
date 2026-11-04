@@ -7,6 +7,7 @@
  * the runtime, tool calls included, and never by eta's own models; an edit of the model reaches
  * the runtime; and an agent moved to another runtime starts its conversations over.
  */
+import type { CompactionOutcome, Runtime, Session } from "@botiverse/oar";
 import type { ScriptedTurn } from "@botiverse/oar/testing";
 import type {
   AgentRuntimeInfo,
@@ -23,6 +24,7 @@ import { createOarRuntimes } from "@eta/runtime-oar";
 import { describe, expect, it } from "vitest";
 import { until } from "./support/client";
 import { scriptedModels } from "./support/models";
+import { remoteWorld, sessionOf } from "./support/remote";
 import { world } from "./support/world";
 
 /** A host whose Claude Code is a script, and whose eta models must never be asked. */
@@ -372,5 +374,48 @@ describe("eta's tools, called by an agent on Claude Code", () => {
       artifactId,
     );
     expect(versions).toEqual([1, 2]);
+  });
+});
+
+describe("/compact on an agent on a runtime", () => {
+  /** A Claude Code whose compaction is a script too, which scripted sessions have none of. */
+  const compacting = (compact: () => Promise<CompactionOutcome>) => {
+    const scripted = scriptedRuntime({
+      id: "claude",
+      turn: (turn) => turn.say("ok"),
+    });
+    const runtime: Runtime = {
+      ...scripted,
+      manualCompaction: { kind: "supported", activeTurn: "reject" },
+      session: async (installation, options, context) => {
+        const session = await scripted.session(installation, options, context);
+        return new Proxy(session, {
+          get: (target, key) =>
+            key === "compact" ? compact : Reflect.get(target, key, target),
+        }) as Session;
+      },
+    };
+    return createOarRuntimes({ registry: createRuntimeRegistry([runtime]) });
+  };
+
+  it("reaches the runtime on a daemon, and its answer comes back", async () => {
+    let asked = 0;
+    const runtimes = compacting(async () => {
+      asked += 1;
+      return { kind: "completed" } as CompactionOutcome;
+    });
+    const r = await remoteWorld({}, { node: { runtimes } });
+    const cody = await r.agent("Cody", { runtime: "claude" });
+    const group = await r.group(r.remoteProject.id, [cody.id]);
+    await r.watch(group.id);
+    const sent = await r.send(group.id, "hi");
+    await r.settled(group.id, sent.replies[0]!.id);
+    const session = sessionOf(r, group.id)!;
+    expect(await r.client.call("sessions", "compact", { session })).toEqual({
+      session,
+      compacted: true,
+      runtime: { runtime: "Claude Code", outcome: "completed" },
+    });
+    expect(asked).toBe(1);
   });
 });

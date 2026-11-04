@@ -165,6 +165,16 @@
     "allowForSession": "是，本次会话不再询问",
     "denyAndExplain": "否，告诉 Claude 接下来怎么做（esc）"
   },
+  "compaction": {
+    "running": "正在压缩上下文…",
+    "completed": "{{runtime}} 已压缩上下文。",
+    "empty": "还没有可以压缩的内容。",
+    "busy": "{{runtime}} 正在工作，等这一轮结束再压缩。",
+    "unsupported": "{{runtime}} 不支持压缩上下文。",
+    "aborted": "{{runtime}} 中止了压缩。",
+    "failed": "{{runtime}} 没能压缩上下文：{{reason}}",
+    "unconfirmed": "{{runtime}} 没有确认压缩结果，可能还在进行。"
+  },
   "commands": {
     "stopAllDescription": "停止群内全部回复",
     "compactDescription": "压缩上下文",
