@@ -2,8 +2,8 @@ import { closeSync, mkdirSync, openSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { EnvFile } from "../src/env-file";
-import { EnvLayers } from "../src/layers";
+import { EnvFile } from "../../src/realm/env-file";
+import { EnvLayers } from "../../src/realm/layers";
 
 describe("envLayers", () => {
   let selfDir: string;

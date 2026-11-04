@@ -580,7 +580,12 @@ export async function openSession(
         : [renderAgentBlock(options.agentPrompt)]),
       ...(options.platform === undefined
         ? []
-        : [renderPlatformBlock(options.platform)]),
+        : [
+            renderPlatformBlock({
+              ...options.platform,
+              realm: esm !== undefined,
+            }),
+          ]),
     ]
       .filter((part) => part.length > 0)
       .join("\n\n");

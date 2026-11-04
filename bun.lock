@@ -186,30 +186,18 @@
         "vitest": "4.1.9",
       },
     },
-    "packages/eta-esm-mode": {
-      "name": "@eta/esm-mode",
-      "version": "0.1.0",
-      "dependencies": {
-        "ripgrep": "^0.3.1",
-        "zx": "lite",
-      },
-      "devDependencies": {
-        "@types/node": "22.19.19",
-        "typescript": "5.9.3",
-        "vitest": "4.1.9",
-      },
-    },
     "packages/eta-harness": {
       "name": "@eta/harness",
       "version": "0.1.0",
       "dependencies": {
         "@earendil-works/pi-ai": "0.85.1",
         "@eta/core": "*",
-        "@eta/esm-mode": "*",
         "cordis": "4.0.0-rc.10",
         "ignore": "7.0.10",
+        "ripgrep": "^0.3.1",
         "typebox": "1.3.34",
         "yaml": "^2.9.1",
+        "zx": "lite",
       },
       "devDependencies": {
         "@eta/compaction": "*",
@@ -543,8 +531,6 @@
     "@eta/daemon": ["@eta/daemon@workspace:apps/daemon"],
 
     "@eta/desktop": ["@eta/desktop@workspace:apps/desktop"],
-
-    "@eta/esm-mode": ["@eta/esm-mode@workspace:packages/eta-esm-mode"],
 
     "@eta/harness": ["@eta/harness@workspace:packages/eta-harness"],
 

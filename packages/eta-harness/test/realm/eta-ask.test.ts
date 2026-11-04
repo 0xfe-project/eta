@@ -1,11 +1,11 @@
-import type { AskRequest, AskResult, Hooks } from "../src/index";
+import type { AskRequest, AskResult, Hooks } from "../../src/realm/index";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { Agent } from "../src/index";
+import { Agent } from "../../src/realm/index";
 
 let root = "";
 

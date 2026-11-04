@@ -25,14 +25,14 @@ import type {
   Message,
   Runner,
 } from "@eta/core";
+import type { TSchema } from "typebox";
 import type {
   AskRequest,
   AskResult,
   Effect,
   Layer,
   PlatformCall,
-} from "@eta/esm-mode";
-import type { TSchema } from "typebox";
+} from "./realm";
 import type { StateKV } from "./state";
 import type { HarnessTool, ToolResult } from "./tools/tool";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -40,9 +40,9 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { toToolResultMessage } from "@eta/core";
-import { Agent, snippetSource } from "@eta/esm-mode";
 import { Type } from "typebox";
 import { convertToLlm } from "./prompts/summaries";
+import { Agent, snippetSource } from "./realm";
 
 export const ESM_TOOL_NAMES = [
   "esmrun",

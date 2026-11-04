@@ -19,11 +19,12 @@
   "dependencies": {
     "@earendil-works/pi-ai": "0.85.1",
     "@eta/core": "*",
-    "@eta/esm-mode": "*",
     "cordis": "4.0.0-rc.10",
     "ignore": "7.0.10",
+    "ripgrep": "^0.3.1",
     "typebox": "1.3.34",
-    "yaml": "^2.9.1"
+    "yaml": "^2.9.1",
+    "zx": "lite"
   },
   "devDependencies": {
     "@eta/compaction": "*",

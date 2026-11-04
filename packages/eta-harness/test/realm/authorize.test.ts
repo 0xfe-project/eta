@@ -1,10 +1,10 @@
-import type { AuthorizeRequest } from "../src/authorize";
+import type { AuthorizeRequest } from "../../src/realm/authorize";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
-import { Agent } from "../src/agent";
-import { MemoryApprovalStore } from "../src/authorize";
+import { Agent } from "../../src/realm/agent";
+import { MemoryApprovalStore } from "../../src/realm/authorize";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

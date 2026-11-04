@@ -11,6 +11,8 @@ export interface PlatformPromptInfo {
   memoryTarget: string;
   /** Whether anything has been remembered for this project yet. */
   memoryExists: boolean;
+  /** Whether the session has a realm (`esmrun`); the realm part of the briefing is only written then. */
+  realm?: boolean;
 }
 
 /**
@@ -73,10 +75,25 @@ export function renderPlatformBlock(info: PlatformPromptInfo): string {
   lines.push(
     "- Work that changes files, runs a build or tests, needs the user to accept a result, or takes more than a couple of tool rounds is not chat work, and it is not a step either. Propose it with `draft_task` and let the user confirm it. `create_task` is not a shortcut around that, and neither is a step list: draft first, then create.",
   );
+  lines.push(
+    "- A task runs in a fresh session that cannot see this conversation. Write its goal and acceptance for a reader who knows nothing else, put what is already settled in `decided`, and always give `base`: the branch, commit or `#N` its worktree starts from. Give `assignee` when the work is for another agent; then that agent runs it, not you.",
+  );
+  lines.push("");
+  lines.push("Working with others in a conversation:");
+  lines.push(
+    "- `conversation_info` says who is here, the goal and what has been decided. Read it before you take on work or answer for someone.",
+  );
+  lines.push(
+    "- `mention` wakes the members you name and posts your message where they see it. You do not wait for them; they answer in the conversation. Wake-ups are limited: mention someone only when they have to act or know something, and say exactly what (the file, the decision, the question).",
+  );
+  lines.push(
+    "- Do not do work assigned to another member, and do not redo a review someone else owns. If you disagree with a decision, say so once with the reason, then follow what was decided.",
+  );
   lines.push("");
   lines.push(
     "Loops and schedules run in the app rather than in a shell you hold open: a loop you created fires on its own clock and returns to this session as an injected message, so a run ending is not the loop ending.",
   );
+  if (info.realm === true) lines.push("", ...realmLines());
   lines.push("</platform>");
   return lines.join("\n");
 }
@@ -91,4 +108,136 @@ export function renderPlatformBlock(info: PlatformPromptInfo): string {
 export function renderAgentBlock(text: string): string {
   const body = text.trim();
   return body.length === 0 ? "" : `<agent>\n${body}\n</agent>`;
+}
+
+export interface RealmExample {
+  /** What the snippet shows, one line. */
+  title: string;
+  /** The scripts, one per `esmrun` call, in order. */
+  scripts: string[];
+}
+
+// The examples are scripts as text: their `${...}` is the realm's template, not ours.
+/* eslint-disable no-template-curly-in-string */
+export const REALM_EXAMPLES: RealmExample[] = [
+  {
+    title:
+      "`$` quotes every interpolation (arrays become several arguments), so build commands from values, never by string concatenation",
+    scripts: [
+      [
+        'const name = "my notes; rm -rf ~";',
+        'await $`touch ${name}`.timeout("5s");',
+        'const listed = (await $`ls`.timeout("5s")).lines();',
+        'const args = ["-n", "1"];',
+        'const head = (await $`git log ${args} --format=%s`.timeout("10s").nothrow()).exitCode;',
+        "({ listed, head });",
+      ].join("\n"),
+    ],
+  },
+  {
+    title:
+      "Every command gets a timeout that fits it; `.timeout()` kills one that hangs. A failing command throws; `.nothrow()` returns it instead. `Promise.all` runs commands side by side, `.pipe()` chains them, `$({ input })` feeds stdin",
+    scripts: [
+      [
+        'let slow = "finished";',
+        'try { await $`sleep 999`.timeout("1s"); } catch (e) { slow = `killed by ${e.signal}`; }',
+        'const missing = await $`ls /no/such/dir`.timeout("5s").nothrow();',
+        'const [one, two] = await Promise.all([$`echo one`.timeout("5s"), $`echo two`.timeout("5s")]);',
+        'const sorted = (await $`printf "b\\na\\n"`.timeout("5s").pipe($`sort`.timeout("5s"))).lines();',
+        'const parsed = (await $({ input: \'{"ok":true}\' })`cat`.timeout("5s")).json();',
+        "({ slow, missing: [missing.exitCode, missing.stderr.trim()], both: [one.stdout.trim(), two.stdout.trim()], sorted, parsed });",
+      ].join("\n"),
+    ],
+  },
+  {
+    title:
+      "Files: search/view/edit first; node:fs/promises when you need more. Relative paths are the session cwd",
+    scripts: [
+      [
+        'import { writeFile } from "node:fs/promises";',
+        'await writeFile("app.ts", "const port = 3000; // TODO read from config\\n");',
+        'const [hit] = await search("TODO", { glob: "*.ts" });',
+        'await edit(hit.file, "const port = 3000;", "const port = Number(config.port);");',
+        "await view(hit.file, { start: hit.line, limit: 3 });",
+      ].join("\n"),
+    ],
+  },
+  {
+    title:
+      "Top-level const does not reach the next call; eta.state does, with any value (a client, a function, a Map)",
+    scripts: [
+      [
+        'import eta from "eta";',
+        'eta.state.seen = new Set(["a.ts"]);',
+        'eta.state.slug = (s) => s.toLowerCase().replace(/\\W+/g, "-");',
+        "eta.state.seen.size;",
+      ].join("\n"),
+      [
+        'import eta from "eta";',
+        'eta.state.seen.add("b.ts");',
+        '[eta.state.seen.size, eta.state.slug("Hello World")];',
+      ].join("\n"),
+    ],
+  },
+  {
+    title:
+      "eta.ask runs a nested turn of you, with your tools and the history so far; Promise.all fans out (5 at a time) and you merge the answers in code",
+    scripts: [
+      [
+        'import eta from "eta";',
+        'const areas = ["the parser", "the type checker"];',
+        "const answers = await Promise.all(areas.map((a) => eta.ask(`Find the riskiest bug in ${a}. One line.`)));",
+        'answers.map((r) => `${r.status}: ${r.text.split("\\n").at(-1)}`);',
+      ].join("\n"),
+    ],
+  },
+  {
+    title:
+      "eta.platform.<tool> is every tool you have, callable from code; eta.platform.llm is a bare model call with no tools and no history",
+    scripts: [
+      [
+        'import eta from "eta";',
+        'const summary = await eta.platform.llm({ system: "Answer in five words.", prompt: "What does a linker do?" });',
+        "summary;",
+      ].join("\n"),
+    ],
+  },
+];
+/* eslint-enable no-template-curly-in-string */
+
+/** The realm part of the platform briefing: how to work in `esmrun`, then the examples. */
+function realmLines(): string[] {
+  return [
+    "You act through code. `esmrun` runs JavaScript in a realm that belongs to this session; its description carries the realm's declarations. The realm is a full JS runtime with top-level await, so when the work is more than one call, write the loop, the retry or the fan-out in code and make one call, not a tool call per step.",
+    "",
+    "How a script behaves:",
+    "- The last expression is the result. Do not `export default` it.",
+    "- Each call is its own module. Top-level `const`/`let` are gone in the next call; put what the next call needs on `eta.state`, never on `globalThis`.",
+    "- Every script is saved under the session's runs/ directory, so what you did can be read and replayed.",
+    '- A bare import (`import x from "some-package"`) installs that package from npm on first use. Before writing a helper, check whether a package already does it: a driver, a parser, a browser, an SDK.',
+    "- For files use `search`, `view` and `edit`. Do not reach for `$` with cat/sed/grep to read or change a file.",
+    "",
+    "Shell (`$`, zx):",
+    '- Every command gets a time limit that makes sense for it: `.timeout("5s")` for a quick lookup, minutes for a build or a test run. The only exception is a service you mean to leave running (a dev server, a watcher); start that without awaiting it and keep the handle on `eta.state` so you can `.kill()` it later.',
+    "- `$` is not intercepted: what you run is what happens. Destructive commands are yours to judge.",
+    "",
+    "Yourself, from code:",
+    "- `eta.ask(prompt)` is a nested turn of this same model instance, you, with your tools and the session history so far. Concurrent calls (`Promise.all`) run in parallel, 5 at a time, and do not see each other; merge their answers in code.",
+    "- `eta.platform.llm({ prompt, system? })` is the same model instance called bare: no tools, no history. Use it for a cheap transform (summarize, classify, extract) inside a loop.",
+    "- `eta.platform.<tool>` is every tool you have as a function, so a workflow can call `draft_task`, `mention` or `web_search` from code.",
+    "",
+    "Making tools:",
+    '- When you write the same code a second time, make it a capability with `esmrunandkeep`: it saves the module, runs it once, and keeps it only if that run succeeds. Afterwards it is `import f from "eta:<name>"`. `list_capabilities` shows what exists in this session, the project and globally; look there before building.',
+    "- A capability is the plugin system: wrap a package or an API in one, and every later session can call it. Keep only what you will call again; one-off work stays in esmrun.",
+    "",
+    renderExamples(),
+  ];
+}
+
+/** The examples as they appear in the prompt. */
+function renderExamples(): string {
+  return REALM_EXAMPLES.map(
+    (example) =>
+      `${example.title}:\n${example.scripts.map((s) => `\`\`\`js\n${s}\n\`\`\``).join("\nnext call:\n")}`,
+  ).join("\n\n");
 }

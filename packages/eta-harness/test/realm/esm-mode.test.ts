@@ -1,4 +1,4 @@
-import type { Hooks } from "../src/index";
+import type { Hooks } from "../../src/realm/index";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -6,7 +6,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { Agent, mountGlobals, mountModules, Realm } from "../src/index";
+import {
+  Agent,
+  mountGlobals,
+  mountModules,
+  Realm,
+} from "../../src/realm/index";
 
 let root = "";
 

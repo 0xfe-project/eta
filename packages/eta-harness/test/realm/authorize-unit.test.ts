@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { authorize, MemoryApprovalStore } from "../src/authorize";
+import { authorize, MemoryApprovalStore } from "../../src/realm/authorize";
 
 describe("authorize function unit", () => {
   it("should record approval when askHuman returns true", async () => {

@@ -20,7 +20,7 @@ export default antfu(
       "**/.venv/**",
       "**/out/**",
       // Test fixtures: written as plain JS for runtime evaluation.
-      "**/test/fixtures/**",
+      "**/test/**/fixtures/**",
     ],
   },
   {

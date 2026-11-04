@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { edit, search, view } from "../src/file-ops.js";
+import { edit, search, view } from "../../src/realm/file-ops";
 
 let testDir: string;
 
@@ -310,7 +310,7 @@ describe("edit", () => {
 
 describe("mountFileOps", () => {
   it("exposes search/view/edit as realm top-level globals with effects", async () => {
-    const { Agent } = await import("../src/index.js");
+    const { Agent } = await import("../../src/realm/index");
     const agent = new Agent({ root: testDir });
     await writeFile(
       join(testDir, "probe.ts"),
@@ -339,7 +339,7 @@ describe("mountFileOps", () => {
   });
 
   it("blocked edit leaves the file untouched", async () => {
-    const { Agent } = await import("../src/index.js");
+    const { Agent } = await import("../../src/realm/index");
     const target = join(testDir, "guard.ts");
     await writeFile(target, "const keep = 'original';\n");
 

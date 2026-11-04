@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
-import { Agent } from "@eta/esm-mode";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { openSession } from "../src/open";
+import { Agent } from "../src/realm";
 import { defineTool } from "../src/tools/tool";
 
 const call = (name: string, args: Record<string, unknown>, id = `c-${name}`) =>

@@ -15,7 +15,7 @@ import {
   memoryFileLabel,
   parseMemoryFile,
   serializeMemoryFile,
-} from "../src/memory.ts";
+} from "../../src/realm/memory";
 
 const { afterEach, beforeEach, describe, it } = (
   process.env.VITEST === undefined

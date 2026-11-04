@@ -7,7 +7,7 @@ export default {
   ignoreBinaries: ["uv", "hutch"],
   // Built-in bundles: scripts the host starts by path (an MCP server, a service), not imports.
   // `packages/TOBEREFR` holds plugins parked until the ESM rework is done (TODO.md there).
-  ignore: ["bundles/**", "**/test/fixtures/**", "packages/TOBEREFR/**"],
+  ignore: ["bundles/**", "**/test/**/fixtures/**", "packages/TOBEREFR/**"],
   // CSS files are part of the module graph: their @imports reference
   // packages (fonts, tw-animate-css, shadcn) and other stylesheets.
   compilers: {

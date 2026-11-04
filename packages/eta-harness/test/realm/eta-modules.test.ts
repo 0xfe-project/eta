@@ -2,7 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { Agent } from "../src/agent";
+import { Agent } from "../../src/realm/agent";
 
 describe("eta module imports", () => {
   let selfDir: string;

@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { Agent } from "../src/agent";
+import { Agent } from "../../src/realm/agent";
 
 const EMPTY_ENV = `// @capabilities []\nimport eta from "eta";\n\n// eta:generated\n\n// eta:by hand\n`;
 
