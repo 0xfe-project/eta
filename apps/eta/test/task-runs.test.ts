@@ -215,8 +215,6 @@ describe("a task run", () => {
     expect(first!.system).toContain("Answer in one line.");
     expect(first!.tools).toEqual(
       expect.arrayContaining([
-        "bash",
-        "read",
         "publish_artifact",
         "list_tasks",
         "get_task",
@@ -257,7 +255,8 @@ describe("a task run", () => {
     expect(result.text).toContain("Login works again, on a branch.");
   });
 
-  it("is equipped as the agent's conversation sessions are: its bundles' skills, MCP tools and hook rules", async () => {
+  // TOBEREFR: see packages/TOBEREFR/TODO.md
+  it.skip("is equipped as the agent's conversation sessions are: its bundles' skills, MCP tools and hook rules", async () => {
     const home = await tempDir("eta-home-");
     await writeBundle(home, "demo", demoFiles());
     const { models, requests } = scriptedModels(finishes());

@@ -75,11 +75,11 @@ export {
   type MemoryExtractionSource,
   type MemoryFile,
   memoryFileLabel,
-  nodeMemoryFs,
   type MemoryFs,
   type MemoryLoaded,
   type MemoryScan,
   type MemorySection,
+  nodeMemoryFs,
   parseMemory,
   renderMemory,
   renderMemoryBlock,
@@ -89,9 +89,19 @@ export {
 } from "./memory";
 export { MetricsService } from "./metrics";
 export { OutputRate } from "./metrics/output-rate";
+export {
+  type OpenSession,
+  openSession,
+  type OpenSessionOptions,
+  type SessionMemoryOptions,
+} from "./open";
 export { dirnameEnvPath, formatSkillInvocation } from "./prompt-blocks";
 export * from "./prompts";
 export { RunPump, type RunPumpOptions } from "./pump";
+export {
+  TaskReminderService,
+  type TaskReminderServiceOptions,
+} from "./reminder";
 export {
   type CadenceConfig,
   type CadenceState,
@@ -103,17 +113,6 @@ export {
   onTurnStart,
   resetCadenceState,
 } from "./reminder/cadence";
-export { MODEL_STATE, sessionStateKV, type StateKV } from "./state";
-export {
-  type OpenSession,
-  openSession,
-  type OpenSessionOptions,
-  type SessionMemoryOptions,
-} from "./open";
-export {
-  TaskReminderService,
-  type TaskReminderServiceOptions,
-} from "./reminder";
 export {
   loadSkills,
   loadSourcedSkills,
@@ -121,6 +120,7 @@ export {
   type SkillDiagnostic,
   type SkillDiagnosticCode,
 } from "./skills";
+export { MODEL_STATE, sessionStateKV, type StateKV } from "./state";
 export {
   base64ByteLength,
   decodeBase64,

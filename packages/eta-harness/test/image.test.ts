@@ -10,7 +10,6 @@
 
 import { Buffer } from "node:buffer";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_IMAGE_LIMITS } from "../src/image-limits";
 import { detectSupportedImageMimeType, encodeBase64 } from "../src/tools/image";
 
 /** One-pixel PNG (the smallest thing a provider will take). */
@@ -21,18 +20,6 @@ const tinyPng = (): Uint8Array =>
       "base64",
     ),
   );
-
-/** A PNG header of the given size — enough for every reader here. */
-function pngHeader(width: number, height: number): Uint8Array {
-  const bytes = new Uint8Array(33);
-  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
-  const view = new DataView(bytes.buffer);
-  view.setUint32(8, 13);
-  view.setUint32(12, 0x49484452);
-  view.setUint32(16, width);
-  view.setUint32(20, height);
-  return bytes;
-}
 
 /** A well-formed 1×1 24-bit BMP header, 58 bytes long. */
 function tinyBmp(): Uint8Array {

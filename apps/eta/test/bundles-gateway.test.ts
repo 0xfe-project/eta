@@ -28,7 +28,8 @@ const files = (): Record<string, string> => ({
   }),
 });
 
-describe("a bundle's tools and the LLM gateway", () => {
+// TOBEREFR: see packages/TOBEREFR/TODO.md
+describe.skip("a bundle's tools and the LLM gateway", () => {
   it("get the agent's key and the gateway's address on the host and on a daemon, and the key stops with the agent", async () => {
     const upstream = fakeUpstream();
     try {

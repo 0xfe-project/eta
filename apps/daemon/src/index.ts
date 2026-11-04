@@ -5,9 +5,7 @@ export {
   BundleError,
   type BundleField,
   type BundleFiles,
-  bundleHookLayer,
   type BundleManifest,
-  bundleMcpServers,
   type BundleServiceSpec,
   bundleSkillDirs,
   BundleStore,
@@ -44,18 +42,6 @@ export {
   type ServeContext,
   type ServeHandler,
 } from "./link/peer";
-export {
-  mcpServerKey,
-  relayAuthProviderFor,
-  relayCredentialStore,
-  RELAYED_KINDS,
-} from "./mcp-auth";
-export {
-  McpHost,
-  type McpHostOptions,
-  type McpSessionInput,
-  mcpSources,
-} from "./mcp-host";
 export { forwardedOptions, modelSpecOf } from "./models";
 export { DaemonNode, type DaemonNodeOptions } from "./node";
 export { listen, runAndWait } from "./run";

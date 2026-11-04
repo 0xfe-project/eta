@@ -5,10 +5,9 @@
  * directory of its own that only it uses, so a test can tell which side touched which files.
  */
 import type { MachineView } from "@eta/client-contracts";
-import type { DaemonNodeOptions, Identity, LinkState } from "@eta/daemon";
+import type { Identity, LinkState } from "@eta/daemon";
 import type { Host } from "../../src/host";
 import type { Client } from "./client";
-import { join } from "node:path";
 import { DaemonLink, DaemonNode, enroll } from "@eta/daemon";
 import { afterEach } from "vitest";
 import { until } from "./client";
@@ -60,8 +59,6 @@ export async function startDaemon(
     warn?: (message: string) => void;
     /** Sees every text frame that crosses the link, both ways. */
     tap?: (direction: "in" | "out", text: string) => void;
-    /** The MCP library's manager settings on the daemon (a fake `fetch`, no timers). */
-    mcp?: DaemonNodeOptions["mcp"];
   } = {},
 ): Promise<TestDaemon> {
   const dataDir = options.dataDir ?? (await tempDir("eta-daemon-"));
@@ -73,9 +70,6 @@ export async function startDaemon(
     primaryUrl: identity.url,
     // The real home (its personas, its `~/.eta/mcp.json`) is not this test's business.
     home: dataDir,
-    ...(options.mcp === undefined ? {} : { mcp: options.mcp }),
-    // The real user's akhook file is not this test's business.
-    akhookUserConfig: join(dataDir, "no-user-akhook.yml"),
     warn: options.warn ?? (() => undefined),
   });
   await node.start();

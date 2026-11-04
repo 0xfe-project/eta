@@ -1452,7 +1452,7 @@ export function ChatPanel({
                   <p className="px-1 py-2 text-xs text-muted-foreground">
                     {translateText(
                       groupId === undefined
-                        ? "history.noConversations"
+                        ? "groups.empty.title"
                         : "history.empty",
                     )}
                   </p>

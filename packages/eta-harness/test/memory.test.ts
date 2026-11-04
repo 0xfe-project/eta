@@ -15,7 +15,6 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   applyExtraction,
-  nodeMemoryFs,
   extractionTranscript,
   extractMemory,
   extractMemoryAtRunEnd,
@@ -23,6 +22,7 @@ import {
   MEMORY_SECTIONS,
   MemoryCache,
   memoryFileLabel,
+  nodeMemoryFs,
   parseMemory,
   renderMemory,
   renderMemoryBlock,

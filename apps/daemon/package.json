@@ -19,8 +19,6 @@
     "@eta/client-wire-proto": "*",
     "@eta/core": "*",
     "@eta/harness": "*",
-    "@eta/mcp": "*",
-    "@eta/plugin-akhook": "*",
     "@eta/server": "*",
     "@eta/ssh": "*",
     "cordis": "4.0.0-rc.10"

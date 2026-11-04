@@ -3,7 +3,7 @@
   "type": "module",
   "version": "0.1.0",
   "private": true,
-  "description": "An ExecutionEnv over SSH: the harness's filesystem and shell, on another machine.",
+  "description": "Run shell scripts on another machine over SSH, and quote for it.",
   "exports": {
     ".": "./src/index.ts"
   },
@@ -12,11 +12,7 @@
   "scripts": {
     "test": "vitest --run --passWithNoTests",
     "typecheck": "tsc --noEmit",
-    "smoke": "vitest --run test/ssh-target.e2e.test.ts",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
-  },
-  "dependencies": {
-    "@eta/execution": "*"
   },
   "devDependencies": {
     "@types/node": "22.19.19",

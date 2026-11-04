@@ -12,18 +12,11 @@ import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/site";
 import type { GithubTuning } from "./github/service";
 import type { LlmOptions, LlmRuntime } from "./llm/runtime";
-import type { McpTuning } from "./mcp/service";
-import type {
-  AkhookOptions,
-  Product,
-  RoutinesOptions,
-  TasksOptions,
-} from "./product";
+import type { Product, RoutinesOptions, TasksOptions } from "./product";
 import type { WebOptions } from "./web/service";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { etaCompaction } from "@eta/compaction";
-import { createLocalEnvironment } from "@eta/execution-node";
 import { assembleServer } from "@eta/server";
 import { createAccess } from "./access";
 import {
@@ -73,11 +66,9 @@ export interface HostOptions {
   artifactLimits?: Partial<SiteLimits> | undefined;
   /**
    * The address the user's browser reaches the host at (`https://eta.example.com`), when it is not
-   * the one the web page was opened at: where an MCP server's OAuth sign-in returns to.
+   * the one the web page was opened at: where an OAuth sign-in (GitHub) returns to.
    */
   publicUrl?: string;
-  /** The MCP library's settings for a test (fake servers, no timers). */
-  mcp?: McpTuning;
   /**
    * The GitHub chain: `true` loads it, a `GithubTuning` (where GitHub is, for a test with a fake
    * one) loads it pointed at that. Off by default, and off means none of it: no `github` target,
@@ -94,12 +85,6 @@ export interface HostOptions {
   web?: boolean | Omit<WebOptions, "warn">;
   /** Whether to apply the config's network settings to the environment. */
   network?: boolean;
-  /**
-   * akhook beyond the user's and the project's files: the user-level file's path (a test points
-   * it somewhere else), and host layers that those cannot disable or replace. The data
-   * directory's `akhook.yml` and `AKHOOK_ADDITIONAL_CONFIG_PATH` are host layers too.
-   */
-  akhook?: AkhookOptions;
   /** The routines' clock and limits, for a caller that moves time by hand (a test). */
   routines?: RoutinesOptions;
   /** Whether tasks run; a test that is about the board and not the runs turns them off. */
@@ -155,12 +140,10 @@ export async function startHost(options: HostOptions): Promise<Host> {
       memoryUrl: options.memoryUrl,
       gateway: () => llm,
       publicUrl: options.publicUrl,
-      mcp: options.mcp,
       github: options.github,
       ...(options.web === undefined || options.web === false
         ? {}
         : { web: options.web === true ? {} : options.web }),
-      akhook: options.akhook,
       hostname,
       ...(options.home === undefined ? {} : { home: options.home }),
     });
@@ -170,12 +153,6 @@ export async function startHost(options: HostOptions): Promise<Host> {
       configPath: join(options.dataDir, "config.json"),
       port: options.port,
       hostname,
-      // The file and shell tools a session runs: the local adapter, when this runtime can
-      // host it. Without one a session still works — it simply has no read/write/edit/bash.
-      envFor: (meta) => {
-        const env = createLocalEnvironment(meta.cwd, product.shellEnv);
-        return env === undefined ? undefined : { env };
-      },
       // The product's pages (artifacts) first; they answer for their own paths, found or not.
       fetch: async (request) =>
         (llm !== undefined &&

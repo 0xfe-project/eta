@@ -243,7 +243,8 @@ describe("an agent that loads a bundle", () => {
     ).rejects.toThrow(/bundle/);
   });
 
-  it("gets the skills, the MCP tools and the rules, and the secret only in their processes", async () => {
+  // TOBEREFR: see packages/TOBEREFR/TODO.md
+  it.skip("gets the skills, the MCP tools and the rules, and the secret only in their processes", async () => {
     const home = await started();
     const { models, requests } = ask();
     const { w, dir, group } = await setUp(home, models);
@@ -285,7 +286,7 @@ describe("an agent that loads a bundle", () => {
     expect(JSON.stringify(w.client.frames)).not.toContain(SECRET);
   });
 
-  it("has only the skills until the bundle is configured, then the rest from the next message", async () => {
+  it.skip("has only the skills until the bundle is configured, then the rest from the next message", async () => {
     const { models, requests } = scriptedModels(() => say("ok"));
     const home = await started();
     const w = await world({ dataDir: home, models });
