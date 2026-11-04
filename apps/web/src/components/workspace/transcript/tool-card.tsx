@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -8,6 +9,9 @@ import { cn } from "@/lib/utils";
  * adds the one number worth knowing before opening it (how many lines an edit changed, the exit
  * code of a command that failed). Opening it shows the arguments and the output — the body is
  * where the scrolling lives, so the transcript keeps its shape however much a tool printed.
+ *
+ * `defaultOpen` is only where it starts: once the reader folds or opens it, that is what it stays,
+ * however many frames the call streams after.
  */
 export function ToolCard({
   tool,
@@ -15,6 +19,7 @@ export function ToolCard({
   meta,
   status,
   statusLabel,
+  defaultOpen = false,
   className,
   children,
 }: {
@@ -25,11 +30,18 @@ export function ToolCard({
   meta?: ReactNode;
   status: "running" | "completed" | "failed";
   statusLabel: string;
+  /** Open on first draw (a script worth watching as it is written); the reader decides after. */
+  defaultOpen?: boolean;
   className?: string;
   children?: ReactNode;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <details className={cn("tool-card", className)}>
+    <details
+      className={cn("tool-card", className)}
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
       <summary className="tool-card-head">
         <span className="tool-card-label">
           {tool}

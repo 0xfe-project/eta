@@ -19,8 +19,14 @@ import {
 } from "@/lib/tool-shape";
 import { summarizeArgs } from "@/lib/tool-summary";
 import { cn } from "@/lib/utils";
+import { CodeView } from "./code-view";
 import { ImageStrip } from "./image-strip";
 import { ToolCard, ToolCardBlock } from "./tool-card";
+
+type Fields = Record<string, unknown>;
+
+const isFields = (value: unknown): value is Fields =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
  * One tool call as a card whose body is drawn for what the call was: an edit as the lines it
@@ -48,6 +54,7 @@ export function ToolDetailCard({
       meta={<ToolMeta block={block} shape={shape} />}
       status={block.status}
       statusLabel={statusLabel}
+      defaultOpen={isScript(block)}
     >
       <ToolBody
         block={block}
@@ -57,6 +64,11 @@ export function ToolDetailCard({
       />
     </ToolCard>
   );
+}
+
+/** eta's `esmrun` and `esmrunandkeep`: their input is a script, worth reading as it is written. */
+function isScript(block: ToolBlock): boolean {
+  return block.name.startsWith("esmrun");
 }
 
 function summaryOf(block: ToolBlock, shape: ToolShape): string {
@@ -159,13 +171,16 @@ function ToolBody({
           label={translateText("tools.arguments")}
           className="tool-card-plain"
         >
-          <Folded
-            text={
-              typeof block.input === "string"
-                ? block.input
-                : JSON.stringify(block.input, null, 2)
-            }
-          />
+          {isScript(block) && isFields(block.input) ? (
+            <ScriptArgs
+              input={block.input}
+              streaming={block.status === "running"}
+            />
+          ) : typeof block.input === "string" ? (
+            <Folded text={block.input} />
+          ) : (
+            <JsonText text={JSON.stringify(block.input, null, 2)} />
+          )}
         </ToolCardBlock>
       )}
       {task === undefined ? null : (
@@ -199,7 +214,11 @@ function ToolBody({
           }
           className="tool-card-plain"
         >
-          <Folded text={withoutAnsi(output)} />
+          {block.status === "running" ? (
+            <Folded text={withoutAnsi(output)} />
+          ) : (
+            <ResultText text={withoutAnsi(output)} script={isScript(block)} />
+          )}
           {fullOutput === undefined ? null : (
             <p className="tool-card-note">
               {fullOutput === ""
@@ -245,16 +264,19 @@ const FOLD_CHARS = 1600;
  */
 function Folded({
   text,
+  unfolded = false,
   children,
 }: {
   text: string;
+  /** Still being written: shown whole, and folded by the same rule once it lands. */
+  unfolded?: boolean;
   /** Drawn instead of the text, when the text is only how long it is (a diff draws its own lines). */
   children?: ReactNode;
 }) {
   const { t: translateText } = useTranslation("chat");
   const [open, setOpen] = useState(false);
   const lines = text.split("\n").length;
-  const long = lines > FOLD_LINES || text.length > FOLD_CHARS;
+  const long = !unfolded && (lines > FOLD_LINES || text.length > FOLD_CHARS);
   return (
     <div className="folded" data-open={!long || open ? "true" : undefined}>
       <div className="folded-body">{children ?? text}</div>
@@ -270,6 +292,80 @@ function Folded({
         </button>
       ) : null}
     </div>
+  );
+}
+
+/** JSON, coloured, folded like any other long block. */
+function JsonText({ text }: { text: string }) {
+  return (
+    <Folded text={text}>
+      <CodeView lang="json" text={text} />
+    </Folded>
+  );
+}
+
+/**
+ * A script call's arguments: the script as code, coloured on every frame it streams, and the rest
+ * (esmrunandkeep's name, desc, entry, args) as one quiet line above it.
+ */
+function ScriptArgs({
+  input,
+  streaming,
+}: {
+  input: Fields;
+  streaming: boolean;
+}) {
+  const script = typeof input.script === "string" ? input.script : "";
+  const rest = Object.entries(input)
+    .filter(([key]) => key !== "script")
+    .map(
+      ([key, value]) =>
+        `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`,
+    );
+  return (
+    <>
+      {rest.length === 0 ? null : (
+        <p className="tool-card-args-line">{rest.join(" · ")}</p>
+      )}
+      <Folded text={script} unfolded={streaming}>
+        <CodeView lang="js" text={script} />
+      </Folded>
+    </>
+  );
+}
+
+/** What eta's script tool appends after the value: console, asks, effects, the script's file. */
+const SCRIPT_TAIL = /\n\n(?:console:\n|eta\.ask \[|effects:\n|script: )/;
+
+/** A text that is JSON, as its value; anything else, undefined. */
+function jsonOf(text: string): unknown {
+  const trimmed = text.trim();
+  if (trimmed === "") return undefined;
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * A call's result: coloured when it is JSON, as printed when it is not. A script's result is its
+ * value and then the sections eta adds (effects, the script's file); the value is coloured when it
+ * is JSON, and the sections are drawn quietly after it either way.
+ */
+function ResultText({ text, script }: { text: string; script: boolean }) {
+  const cut = script ? text.search(SCRIPT_TAIL) : -1;
+  const head = cut < 0 ? text : text.slice(0, cut);
+  const tail = cut < 0 ? "" : text.slice(cut + 2);
+  const json = jsonOf(head) !== undefined;
+  if (!json && tail === "") return <Folded text={text} />;
+  return (
+    <Folded text={text}>
+      {json ? <CodeView lang="json" text={head} /> : head}
+      {tail === "" ? null : (
+        <span className="tool-card-tail">{`\n\n${tail}`}</span>
+      )}
+    </Folded>
   );
 }
 

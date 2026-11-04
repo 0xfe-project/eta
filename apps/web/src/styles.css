@@ -1109,6 +1109,43 @@
     color: var(--faint);
     user-select: none;
   }
+  /* esmrunandkeep's name/desc/entry/args, one line above the script. */
+  .tool-card-args-line {
+    margin-bottom: 4px;
+    color: var(--muted-foreground);
+    word-break: break-all;
+  }
+  /* What eta adds after a script's value (effects, the script's file): there, not asking to be read. */
+  .tool-card-tail {
+    color: var(--faint);
+  }
+
+  /* Code tokens (CodeView), coloured from the theme's state colours so both themes stay legible. */
+  .code-view {
+    font: inherit;
+    color: var(--foreground);
+  }
+  .code-view .tok-keyword {
+    color: var(--state-info);
+  }
+  .code-view .tok-string {
+    color: var(--state-success);
+  }
+  .code-view .tok-class {
+    color: var(--state-warning);
+  }
+  .code-view .tok-property {
+    color: color-mix(in oklch, var(--state-info) 55%, var(--foreground));
+  }
+  .code-view .tok-entity {
+    color: color-mix(in oklch, var(--state-error) 50%, var(--state-info));
+  }
+  .code-view .tok-sign {
+    color: var(--muted-foreground);
+  }
+  .code-view .tok-comment {
+    color: var(--faint);
+  }
   .diff-count.add {
     color: var(--state-success);
   }
