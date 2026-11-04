@@ -7,6 +7,7 @@ import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { KanbanIcon } from "@phosphor-icons/react/Kanban";
 import { ListIcon } from "@phosphor-icons/react/List";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
+import { SidebarSimpleIcon } from "@phosphor-icons/react/SidebarSimple";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -34,6 +35,7 @@ import {
   statusLabel,
 } from "./task-format";
 import { useTaskNav } from "./task-nav";
+import { TaskPulls } from "./task-pulls";
 import { StatusIcon } from "./task-status-icon";
 import {
   CommentBox,
@@ -299,6 +301,15 @@ function BoardView({ tasks }: { tasks: readonly Task[] }) {
 
 // --- task ---------------------------------------------------------------------------
 
+/** Wide enough for the document (~680px) and the properties (~280px) side by side. */
+const propertiesRail = "@4xl";
+
+/**
+ * One task as a document: the number, title, description and activity in a
+ * centered column, the properties always in a rail beside it. Narrower than
+ * that, the rail is out of the way and a button in the header opens it.
+ * The side panel (`TaskView`) is a different layout and is not this.
+ */
 function TaskPage({ id }: { id: string }) {
   const { t: translateText } = useTranslation([
     "tasks",
@@ -309,6 +320,8 @@ function TaskPage({ id }: { id: string }) {
   const { task, missing, error } = useTask(id);
   const { agents } = useAgentList();
   const [deleting, setDeleting] = useState(false);
+  // Opened from the header, only while the rail does not fit.
+  const [propertiesOpen, setPropertiesOpen] = useState(false);
   const back = () => void setNav({ task: null });
   // The list goes inert as the task opens; take focus so it doesn't fall to
   // <body>. Each branch below has its own <main>, so again once loaded.
@@ -318,19 +331,16 @@ function TaskPage({ id }: { id: string }) {
     mainRef.current?.focus({ preventScroll: true });
   }, [loaded]);
   const crumbs = (
-    <>
-      <button
-        type="button"
-        onClick={back}
-        className="flex items-center gap-1.5 text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
-      >
-        <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
-        {translateText("navigation:sections.tasks")}
-      </button>
-      {task ? (
-        <span className="truncate tabular-nums">#{task.number}</span>
-      ) : null}
-    </>
+    <button
+      type="button"
+      onClick={back}
+      className="flex min-w-0 items-center gap-1.5 text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
+    >
+      <ArrowLeftIcon aria-hidden="true" className="size-3.5 shrink-0" />
+      <span className="truncate">
+        {task ? task.title : translateText("navigation:sections.tasks")}
+      </span>
+    </button>
   );
   if (!task)
     return (
@@ -340,15 +350,28 @@ function TaskPage({ id }: { id: string }) {
           ref={mainRef}
           id="main"
           tabIndex={-1}
-          className="mx-auto w-full max-w-content px-4 py-6 outline-none sm:px-8"
+          className="mx-auto w-full max-w-[42.5rem] px-4 py-6 outline-none sm:px-8"
         >
           <TaskMissing missing={missing} error={error} />
         </main>
       </>
     );
+  const propertiesLabel = translateText("details.propertiesTab");
   return (
     <>
       <PageHeader title={crumbs}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={propertiesLabel}
+          aria-expanded={propertiesOpen}
+          aria-controls="task-properties"
+          title={propertiesLabel}
+          className={`${propertiesRail}:hidden`}
+          onClick={() => setPropertiesOpen((open) => !open)}
+        >
+          <SidebarSimpleIcon aria-hidden="true" />
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -379,19 +402,18 @@ function TaskPage({ id }: { id: string }) {
         ref={mainRef}
         id="main"
         tabIndex={-1}
-        className="mx-auto min-h-0 w-full max-w-content flex-1 overflow-y-auto outline-none @2xl:grid @2xl:grid-cols-[minmax(0,1fr)_18rem] @2xl:overflow-hidden"
+        className={`grid min-h-0 w-full flex-1 grid-cols-1 overflow-hidden outline-none ${propertiesRail}:grid-cols-[minmax(0,1fr)_17.5rem]`}
       >
-        <div className="@2xl:overflow-y-auto">
-          <div className="space-y-6 px-4 pb-6 sm:px-8">
-            {/* Pinned under the page header (任务 and the number) as the rest scrolls. */}
-            <div className="sticky top-0 z-10 mb-3 space-y-1 bg-background pt-4 pb-3">
-              <EditableTitle task={task} className="text-xl" />
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {createdBy(task, agents)}
-              </p>
-            </div>
+        <div className="min-h-0 overflow-y-auto">
+          <div className="mx-auto w-full max-w-[42.5rem] space-y-6 px-4 pt-4 pb-6 sm:px-8">
+            <p className="text-xs text-muted-foreground tabular-nums">
+              <span>#{task.number}</span>
+              {" · "}
+              {createdBy(task, agents)}
+            </p>
+            <EditableTitle task={task} className="text-xl" />
             <Question task={task} />
-            <Description key={task.description} task={task} />
+            <Description key={task.description} task={task} className="" />
             <section aria-labelledby="task-activity" className="space-y-3">
               <h2 id="task-activity" className="text-sm font-semibold">
                 {translateText("details.activityTab")}
@@ -399,17 +421,37 @@ function TaskPage({ id }: { id: string }) {
               <Timeline task={task} />
               <CommentBox
                 task={task}
+                className="sticky bottom-0 z-10 -mx-4 bg-background px-4 pt-2 pb-4 sm:-mx-8 sm:px-8"
                 top={<LiveRuns task={task} className="space-y-1 pb-1.5" />}
               />
             </section>
           </div>
-          <BackToTop className="px-4 sm:px-8" />
+          <BackToTop className="mx-auto max-w-[42.5rem] px-4 sm:px-8" />
         </div>
+        {propertiesOpen ? (
+          <button
+            type="button"
+            aria-label={propertiesLabel}
+            className={`fixed inset-0 z-20 bg-black/20 ${propertiesRail}:hidden`}
+            onClick={() => setPropertiesOpen(false)}
+          />
+        ) : null}
         <aside
-          aria-label={translateText("details.propertiesTab")}
-          className="border-t px-4 py-5 text-xs sm:px-8 @2xl:overflow-y-auto @2xl:border-t-0 @2xl:border-l @2xl:px-4"
+          id="task-properties"
+          aria-label={propertiesLabel}
+          // Narrow: `hidden` takes it out of the one-column grid until the
+          // header opens it over the document. Wide (`@4xl`): `@4xl:block`
+          // wins over that, so the rail stays in the second column.
+          className={cn(
+            "overflow-y-auto border-l bg-background px-4 py-5 text-xs",
+            "@4xl:static @4xl:z-auto @4xl:block @4xl:w-auto @4xl:shadow-none",
+            propertiesOpen
+              ? "fixed top-12 right-0 bottom-0 z-30 block w-[17.5rem] shadow-md"
+              : "hidden",
+          )}
         >
           <TaskProperties task={task}>
+            <TaskPulls task={task} />
             <dt className="text-xs leading-8 text-muted-foreground">
               {translateText("fields.updatedAt")}
             </dt>
