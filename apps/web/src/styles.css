@@ -682,10 +682,9 @@
   /*
    * A task draft, and the card it becomes: the two task rows a conversation carries, folded the way
    * a turn's thinking and tool calls are. They belong to the turn that wrote them, so they are drawn
-   * inside that turn's box, indented behind a hairline that says whose turn is asking to be decided
-   * with. A row that names no turn (any draft written before a draft knew its turn, or one whose turn
-   * is on an earlier page) is the same frame with nothing beside it: the same row, less certain of
-   * where it came from, and no worse for that.
+   * inside that turn's box, flush with the answer's left edge. A row that names no turn (any draft
+   * written before a draft knew its turn, or one whose turn is on an earlier page) is the same frame
+   * with nothing beside it: the same row, less certain of where it came from, and no worse for that.
    *
    * The fold line is `.thinking-block-header` with two additions: the title in the reader's type
    * rather than in the mono label's (an uppercase-cased sentence is a different sentence), and the
@@ -697,14 +696,6 @@
     flex-direction: column;
     gap: 8px;
     margin-top: 12px;
-    margin-left: 9px;
-    padding-left: 11px;
-    border-left: 1px solid var(--border);
-  }
-  .turn-tasks[data-only-email-cards="true"] {
-    margin-left: 0;
-    padding-left: 0;
-    border-left: 0;
   }
   .task-fold {
     max-width: 28rem;
