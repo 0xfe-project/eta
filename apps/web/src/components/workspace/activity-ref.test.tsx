@@ -27,11 +27,18 @@ const task: ActivityRef = {
   status: "todo",
 };
 
-async function mount(refs: ActivityRef[], { path = "/" } = {}) {
+async function mount(
+  refs: ActivityRef[],
+  { path = "/", variant }: { path?: string; variant?: "flat" | "framed" } = {},
+) {
   const ui = () => (
     <div role="log">
       {refs.map((value, index) => (
-        <ActivityRefCard key={index} value={value} />
+        <ActivityRefCard
+          key={index}
+          value={value}
+          {...(variant ? { variant } : {})}
+        />
       ))}
     </div>
   );
@@ -53,6 +60,27 @@ async function mount(refs: ActivityRef[], { path = "/" } = {}) {
   });
   return { container, router };
 }
+
+const hasBorder = (el: Element) => el.classList.contains("border");
+
+/** The element that carries the frame, in each of the card's three shapes. */
+const frames = (c: HTMLElement) => {
+  const log = c.querySelector('[role="log"]')!;
+  return [...log.children];
+};
+
+// The three shapes the card is drawn in: an address (a link inside a frame), an artifact (a
+// button inside a frame), and a task (a router link that is its own frame).
+const shapes: ActivityRef[] = [
+  {
+    kind: "pull_request",
+    number: 7,
+    title: "Add cards",
+    url: "https://github.com/akarachen/eta/pull/7",
+  },
+  { kind: "artifact", id: "a1", title: "看板", number: 2 },
+  task,
+];
 
 const cards = (c: HTMLElement) =>
   [...c.querySelectorAll<HTMLAnchorElement>('[role="log"] a')].map((a) => ({
@@ -78,6 +106,43 @@ describe("activity ref cards", () => {
     // A flat row: no outline and no resting fill of its own; the list rules between rows.
     const card = container.querySelector('[role="log"] a')!;
     expect(card.className).not.toMatch(/(^|\s)(border|bg-)/);
+  });
+
+  it("draws no line of its own by default, in any shape", async () => {
+    const { container: unset } = await mount(shapes);
+    const { container: flat } = await mount(shapes, { variant: "flat" });
+    for (const container of [unset, flat]) {
+      const drawn = frames(container);
+      expect(drawn).toHaveLength(3);
+      for (const frame of drawn) expect(hasBorder(frame)).toBe(false);
+    }
+    // `flat` is the default, spelled out: the same classes, not a look of its own.
+    expect(frames(flat).map((frame) => frame.className)).toEqual(
+      frames(unset).map((frame) => frame.className),
+    );
+  });
+
+  it("draws a 1px line round a framed card, in every shape", async () => {
+    const { container } = await mount(shapes, { variant: "framed" });
+    const drawn = frames(container);
+    expect(drawn).toHaveLength(3);
+    for (const frame of drawn) {
+      expect(hasBorder(frame)).toBe(true);
+      expect(frame.classList.contains("border-border")).toBe(true);
+      // The line, and nothing else: a card here is still square, and has no fill of its own.
+      expect(frame.className).not.toMatch(/(^|\s)(bg-|shadow|rounded|max-w)/);
+    }
+  });
+
+  it("keeps a draft dashed when it is framed: that is its state", async () => {
+    const url = "https://github.com/akarachen/eta/issues/new?title=x";
+    const { container } = await mount(
+      [{ kind: "issue_draft", title: "卡片错位", url }],
+      { variant: "framed" },
+    );
+    const frame = frames(container)[0]!;
+    expect(frame.classList.contains("border-dashed")).toBe(true);
+    expect(frame.classList.contains("border-border")).toBe(false);
   });
 
   it("keeps a real group, and drops the word null", async () => {

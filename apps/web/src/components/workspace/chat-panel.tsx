@@ -386,7 +386,7 @@ function TurnCards({
   return (
     <div className="turn-tasks">
       {published.map(({ id, ref }) => (
-        <ActivityRefCard key={id} value={ref} />
+        <ActivityRefCard key={id} value={ref} variant="framed" />
       ))}
       {proposals.map((id) => (
         <EmailProposalCard key={id} proposalId={id} />
@@ -420,7 +420,11 @@ function ToolActivity({
         sessionId={sessionId}
         statusLabel={activityText[block.status]}
       />
-      {github === undefined ? null : <ActivityRefCard value={github} />}
+      {github === undefined ? null : (
+        <div className="tool-ref">
+          <ActivityRefCard value={github} variant="framed" />
+        </div>
+      )}
     </>
   );
 }

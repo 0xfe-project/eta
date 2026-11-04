@@ -12,6 +12,9 @@
 // draws one rule between rows, edge to edge. A frame round every card on top of the rails' own
 // lines made every list a grid.
 export const frameClass = "flex min-h-11 w-full items-stretch sm:min-h-8";
+// In a chat there is no list to draw the rules: a card stands alone among the turn's text, so it
+// draws its own line. Cards that stack keep the column's gap between them, one line each.
+export const framedClass = "border border-border";
 export const actionClass =
   "flex min-w-0 items-center gap-2 px-3 py-1 text-left outline-none hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring motion-reduce:transition-none";
 export const muted = "text-muted-foreground";

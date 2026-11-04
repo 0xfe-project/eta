@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { ROUTINES_VISIBLE } from "@/lib/features";
 import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { actionClass, frameClass, muted } from "./activity-card";
+import { actionClass, frameClass, framedClass, muted } from "./activity-card";
 import { ArtifactButton } from "./artifact-dialog";
 import { statuses } from "./task-format";
 import { StatusIcon } from "./task-status-icon";
@@ -94,9 +94,12 @@ function repository(url: string) {
 
 export function ActivityRefCard({
   value,
+  variant = "flat",
   className,
 }: {
   value: ActivityRef;
+  /** `flat` is a row of a list, which draws the rules; `framed` stands alone, in a chat. */
+  variant?: "flat" | "framed";
   className?: string;
 }) {
   const { t: translateText } = useTranslation([
@@ -112,6 +115,7 @@ export function ActivityRefCard({
   const status = value.kind === "task" ? taskStatus(value.status) : undefined;
   const repo = value.url ? repository(value.url) : undefined;
   const draft = value.kind === "issue_draft";
+  const frame = cn(frameClass, variant === "framed" && framedClass);
   // An artifact's number is its version, not an id to show first.
   const artifact = value.kind === "artifact";
   const number = value.number && !artifact ? value.number : undefined;
@@ -176,7 +180,7 @@ export function ActivityRefCard({
     return (
       <div
         className={cn(
-          frameClass,
+          frame,
           // A draft is not a thing yet: the dashed outline says so. It is a state, not a layer.
           draft && "border border-dashed border-[var(--muted-foreground)]/40",
           className,
@@ -199,7 +203,7 @@ export function ActivityRefCard({
   if (!value.id) return null;
   if (artifact)
     return (
-      <div className={cn(frameClass, className)}>
+      <div className={cn(frame, className)}>
         <ArtifactButton
           id={value.id}
           version={value.number}
@@ -220,7 +224,7 @@ export function ActivityRefCard({
       {...link}
       aria-label={label}
       title={label}
-      className={cn(frameClass, actionClass, className)}
+      className={cn(frame, actionClass, className)}
     >
       {body}
     </Link>
