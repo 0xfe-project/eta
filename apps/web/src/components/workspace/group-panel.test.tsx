@@ -171,6 +171,23 @@ it("orders 任务 by the last move made, and shows five", async () => {
   expect(listed).toEqual(["任务1", "任务3", "任务4", "任务5", "任务6"]);
 });
 
+it("draws its cards as flat rows: the list rules them, not a frame each", async () => {
+  surfaceHost({
+    conversations: [group],
+    tasks: [task(1), task(2)],
+    artifacts: [
+      artifactView({ id: "v1", title: "看板", conversationId: "g1" }),
+    ],
+  });
+  const container = await mount();
+  const rows = ["任务", "产物"].flatMap((section) => [
+    ...container.querySelectorAll(`section[aria-label="${section}"] li > *`),
+  ]);
+  expect(rows).toHaveLength(3);
+  for (const card of rows)
+    expect(card.classList.contains("border")).toBe(false);
+});
+
 it("leaves closed tasks out of 任务, and out of its count", async () => {
   surfaceHost({
     conversations: [group],
