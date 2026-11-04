@@ -305,15 +305,15 @@ describe("a draft belongs to the turn that wrote it", () => {
     ).toContain("补一份变更日志");
   });
 
-  it("is open while the turn works, folded once it settles, and still asks then", async () => {
+  it("is folded from the moment it lands, while the turn still works, and still asks", async () => {
     const reply = turn();
     const row = within(reply);
     const { container, host } = await chat([reply, row]);
     const fold = container.querySelector(`#msg-${reply.id} .task-fold`);
-    expect(fold?.hasAttribute("open")).toBe(true);
+    // The call streamed inside the process. Once the row exists it is one line, not a card that
+    // opens its prose and folds again when the turn ends.
+    expect(fold?.hasAttribute("open")).toBe(false);
 
-    // The turn ends. The draft is no longer news, so it becomes one line — and the one line still
-    // says what it is, what it proposes, and how to confirm it.
     await push(host, [{ ...reply, status: "done", revision: 2 }]);
     expect(fold?.hasAttribute("open")).toBe(false);
     // The default moved, so the reader never said anything: the page remembers nothing about this
@@ -357,7 +357,7 @@ describe("a draft belongs to the turn that wrote it", () => {
     const row = within(reply);
     const { container, host } = await chat([reply, row]);
     const fold = container.querySelector(`#msg-${reply.id} .task-fold`)!;
-    // It is open because the turn is at work; the reader folds it themselves.
+    // It arrives folded. The reader opens it themselves.
     await act(async () => {
       fold
         .querySelector("summary")!
@@ -365,12 +365,11 @@ describe("a draft belongs to the turn that wrote it", () => {
           new MouseEvent("click", { bubbles: true, cancelable: true }),
         );
     });
-    expect(fold.hasAttribute("open")).toBe(false);
+    expect(fold.hasAttribute("open")).toBe(true);
 
-    // The turn settling would fold it anyway; what the reader said is what stands, and it is the
-    // same after the page is rebuilt.
+    // The turn settling does not take that choice back, and it is the same after the page is rebuilt.
     await push(host, [{ ...reply, status: "done", revision: 2 }]);
-    expect(fold.hasAttribute("open")).toBe(false);
+    expect(fold.hasAttribute("open")).toBe(true);
     await act(async () => {
       host.set(`conversations.${CONV}`, conversationSections(summary, []));
     });
@@ -379,7 +378,7 @@ describe("a draft belongs to the turn that wrote it", () => {
       again.container
         .querySelector(`#msg-${reply.id} .task-fold`)
         ?.hasAttribute("open"),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("draws a card in that turn too, open, and folds when told", async () => {
@@ -546,5 +545,94 @@ describe("an artifact an agent publishes", () => {
       artifactId: "art1",
       version: 3,
     });
+  });
+});
+
+describe("a draft_task that is still streaming", () => {
+  const streaming = (fake: ReturnType<typeof productHost>) => {
+    fake.target("sessions.s1", {
+      core: { session: "s1", running: true },
+      transcript: {
+        messages: [
+          {
+            entryId: "e1",
+            seq: 1,
+            at: 1,
+            message: { role: "user", content: "起草一个任务", timestamp: 1 },
+          },
+          {
+            entryId: "e2",
+            seq: 2,
+            at: 2,
+            message: {
+              role: "assistant",
+              timestamp: 2,
+              content: [
+                {
+                  type: "toolCall",
+                  id: "d1",
+                  name: "draft_task",
+                  arguments: {
+                    title: "整理发布说明",
+                    goal: "列出这次变更",
+                    acceptance: "说明里有每一项变更",
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    fake.handle("sessions.resync", () => ({}));
+  };
+
+  it("keeps the call in the process and puts no draft card beside the answer", async () => {
+    const user = messageView({ conversationId: CONV, text: "起草一个任务" });
+    const reply = messageView({
+      conversationId: CONV,
+      author: "agent",
+      agentId: "a1",
+      replyToId: user.id,
+      status: "working",
+    });
+    const { container, host } = await chat([user, reply], streaming);
+    await flush(80);
+    const process = container.querySelector(".process-box, .process-fold")!;
+    expect(process.textContent).toContain("draft_task");
+    expect(process.textContent).toContain("整理发布说明");
+    // Arguments are still arriving, and the row does not exist yet: nothing beside the answer
+    // opens them as a draft card.
+    expect(container.querySelector(".turn-tasks")).toBeNull();
+    expect(container.querySelector(".task-fold")).toBeNull();
+
+    // The call finishes and the draft row lands. The card column gets the folded line, not the
+    // prose opened and then folded again.
+    const row = messageView({
+      conversationId: CONV,
+      kind: "task_draft",
+      author: "agent",
+      agentId: "a1",
+      data: {
+        title: "整理发布说明",
+        description: "## 目标\n\n列出这次变更",
+        workspace: "worktree",
+        turnMessageId: reply.id,
+      },
+    });
+    await push(host, [user, reply, row]);
+    const fold = container.querySelector(`#msg-${reply.id} .task-fold`)!;
+    expect(fold.closest(".turn-tasks")).not.toBeNull();
+    expect(fold.hasAttribute("open")).toBe(false);
+    const head = fold.querySelector("summary")!;
+    expect(head.textContent).toContain("任务草稿");
+    expect(head.textContent).toContain("整理发布说明");
+    expect(head.textContent).toContain("待确认");
+    expect(head.textContent).toContain("编辑并确认");
+    expect(fold.querySelector(".task-fold-body")).not.toBeNull();
+    // The call itself is still in the process, the way any other tool is.
+    expect(
+      container.querySelector(".process-box, .process-fold")?.textContent,
+    ).toContain("draft_task");
   });
 });
