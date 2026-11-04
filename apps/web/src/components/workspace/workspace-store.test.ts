@@ -51,6 +51,12 @@ describe("workspace store persistence", () => {
     });
   });
 
+  it("remembers the chat's content width across a reload", async () => {
+    localStorage.setItem(key, JSON.stringify({ ...saved, chatWidth: "full" }));
+    await useWorkspaceStore.persist.rehydrate();
+    expect(useWorkspaceStore.getState().workspace.chatWidth).toBe("full");
+  });
+
   it("drops a task scope saved before the board had none", async () => {
     localStorage.setItem(
       key,
