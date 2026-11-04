@@ -115,6 +115,63 @@ describe("the run in flight", () => {
     ]);
   });
 
+  // The reply goes to work before the view has the message that started it, so for a moment the
+  // newest user message in the transcript is the last run's.
+  it("shows nothing of the last run before this run's message arrives", () => {
+    const last = [
+      user("first"),
+      assistant(2, [{ type: "text", text: "last answer" }]),
+    ];
+    const runFrom = last.at(-1)!.seq;
+    expect(runBlocks(last, undefined, runFrom)).toEqual([]);
+    // Without the place from the row, this is the bug: the last answer reads as this run's.
+    expect(runBlocks(last, undefined)).toMatchObject([{ text: "last answer" }]);
+
+    // The stream can overtake the transcript, and only it is this run's.
+    const growing = streaming(3, [{ type: "text", text: "this one" }]);
+    expect(runBlocks(last, growing, runFrom)).toMatchObject([
+      { text: "this one" },
+    ]);
+
+    const asked = [...last, user("second")];
+    expect(runBlocks(asked, undefined, runFrom)).toEqual([]);
+    expect(
+      runBlocks(
+        [...asked, assistant(3, [{ type: "text", text: "this one" }])],
+        undefined,
+        runFrom,
+      ),
+    ).toMatchObject([{ text: "this one" }]);
+  });
+
+  it("still starts over at a steer, after the place the row names", () => {
+    const before = user("first");
+    const blocks = runBlocks(
+      [
+        before,
+        user("second"),
+        assistant(2, [{ type: "text", text: "going" }]),
+        user("no, the other one"),
+        assistant(3, [{ type: "text", text: "turning" }]),
+      ],
+      undefined,
+      before.seq,
+    );
+    expect(blocks).toMatchObject([{ text: "turning" }]);
+  });
+
+  it("keeps a run longer than the view's window, whose start has scrolled out of it", () => {
+    const blocks = runBlocks(
+      [
+        assistant(5, [{ type: "text", text: "still" }]),
+        assistant(6, [{ type: "text", text: "going" }]),
+      ],
+      undefined,
+      0,
+    );
+    expect(blocks).toMatchObject([{ text: "still" }, { text: "going" }]);
+  });
+
   it("ends with the message being streamed, until the transcript has committed it", () => {
     const rows = [user("go"), assistant(2, [{ type: "text", text: "one" }])];
     const growing = streaming(3, [{ type: "text", text: "two so" }]);

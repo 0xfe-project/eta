@@ -161,13 +161,25 @@ function useStreamedMessage(
   return streamed?.sessionId === sessionId ? streamed?.message : undefined;
 }
 
-/** The run in flight on a session, as blocks to draw: thinking, text and tool calls in order. */
-export function useRunBlocks(sessionId: string | undefined) {
+/**
+ * The run in flight on a session, as blocks to draw: thinking, text and tool calls in order.
+ * `runFrom` is where the run starts in the session, from the reply's row. A view that has nothing
+ * past it has not caught up with the run, so what it says is streaming is the last run's (the
+ * events are this run's: they only arrive while the page listens).
+ */
+export function useRunBlocks(
+  sessionId: string | undefined,
+  runFrom?: number | undefined,
+) {
   const session = useSession(sessionId);
   const streamed = useStreamedMessage(sessionId);
   const rows = session?.transcript?.messages;
-  const streaming = streamed ?? session?.core?.streaming;
-  return useMemo(() => runBlocks(rows ?? [], streaming), [rows, streaming]);
+  const behind = runFrom !== undefined && (rows?.at(-1)?.seq ?? 0) <= runFrom;
+  const streaming = streamed ?? (behind ? undefined : session?.core?.streaming);
+  return useMemo(
+    () => runBlocks(rows ?? [], streaming, runFrom),
+    [rows, streaming, runFrom],
+  );
 }
 
 /** How many older messages one page back asks for: the size of the view's own window. */

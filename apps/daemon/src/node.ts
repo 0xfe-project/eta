@@ -72,7 +72,7 @@ import { relayAuthProviderFor } from "./mcp-auth";
 import { McpHost } from "./mcp-host";
 import { ModelCatalog, remoteModels } from "./models";
 import { Reports } from "./reports";
-import { runAndWait } from "./run";
+import { lastSeq, runAndWait } from "./run";
 import { proxyTools } from "./tools";
 import { daemonPlatform, installKind } from "./upgrade";
 
@@ -510,6 +510,10 @@ export class DaemonNode {
           model: formatModelId(config.read("model")),
           thinkingLevel: config.read("thinkingLevel"),
         };
+      },
+      lastSeq: async ({ session }) => {
+        const { managed } = await this.#service().open(session);
+        return { seq: lastSeq(managed) };
       },
     };
     return (Object.keys(handlers) as (keyof MachineActionArgs)[]).map(

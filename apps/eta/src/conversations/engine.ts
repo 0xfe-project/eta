@@ -881,12 +881,18 @@ export class Engine {
       trigger,
     };
     const extra = await this.#beforeRun(info);
+    const runFrom = await this.#lastSeq(handle);
     // A stop that arrived while the hook was asking.
     if (this.#timeline.get(replyId)?.status !== "queued") return;
     const prompt = extra === undefined ? told.text : `${extra}\n\n${told.text}`;
     this.#conversations.setSeen(conversationId, agent.id, told.seen);
     const key = keyOf(conversationId, agent.id);
     this.#running.set(key, { replyId, handle });
+    // The row says where the run starts in the session. The page cannot tell from the session: its
+    // view is sent on a pace of its own, so for a moment after this push the newest things the
+    // view holds are still the last run's.
+    if (runFrom !== undefined)
+      this.#timeline.setData(replyId, { ...reply.data, runFrom });
     this.#timeline.transition(replyId, ["queued"], "working");
     this.#changed([conversationId]);
 
@@ -938,6 +944,16 @@ export class Engine {
       this.#changed([conversationId]);
     }
     this.#afterRun(info);
+  }
+
+  /** Where the session stands before a run; a machine that cannot say does not stop the run. */
+  async #lastSeq(handle: SessionHandle): Promise<number | undefined> {
+    try {
+      return await handle.lastSeq();
+    } catch (error) {
+      this.#warn(`[eta] no position for ${handle.id}: ${messageOf(error)}`);
+      return undefined;
+    }
   }
 
   /** The hook's words for this run; a hook that fails or says nothing leaves the run as it was. */

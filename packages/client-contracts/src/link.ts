@@ -153,6 +153,8 @@ export interface MachineActionArgs {
   catalog: { models: ModelSpec[] };
   /** What the session is configured with now. */
   config: { session: string };
+  /** How far the session's journal has got: what its next run writes comes after this. */
+  lastSeq: { session: string };
   /** Which of these bundle contents (by hash) are not on the machine yet. */
   bundleHave: { hashes: string[] };
   /** Keep a bundle's files (path to base64 data) under their hash. */
@@ -171,6 +173,7 @@ export interface MachineActionResults {
   open: { session: string };
   catalog: Record<string, never>;
   config: { model: string | undefined; thinkingLevel: string };
+  lastSeq: { seq: number };
   bundleHave: { missing: string[] };
   bundlePut: Record<string, never>;
   which: { found: string[] };
