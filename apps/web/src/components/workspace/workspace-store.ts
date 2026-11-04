@@ -14,8 +14,6 @@ const workspaceSchema = z.object({
   selectedAgentId: z.string().max(64).optional(),
   // Preselected model for new agents.
   lastModel: z.string().max(100).optional(),
-  // The task page as last left: rows or a board.
-  taskLayout: z.enum(["list", "board"]).optional(),
   // 圈选元素 (lib/element-picker.ts); unset follows the build.
   reactGrab: z.boolean().optional(),
   // The chat's right-edge rail (transcript-rail.tsx); unset is off.
