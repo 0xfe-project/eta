@@ -365,16 +365,19 @@ function emailProposalIds(blocks: readonly RunBlock[]): string[] {
 function TurnCards({
   saved,
   sessionId,
+  runFrom,
   taskRows,
 }: {
   /** The tool calls a finished reply kept on its row. */
   saved: readonly ToolBlock[];
   /** The session of a reply that is at work: its publishes come from the run, not from the row. */
   sessionId?: string | undefined;
+  /** Where this reply's run starts, so a live session does not replay the previous turn. */
+  runFrom?: number | undefined;
   /** The task rows this turn wrote, and which are drawn here rather than on the timeline. */
   taskRows: readonly MessageView[] | undefined;
 }) {
-  const live = useRunBlocks(sessionId, runFromOf(turn.data));
+  const live = useRunBlocks(sessionId, runFrom);
   const published = publishedRefs(sessionId === undefined ? saved : live);
   const proposals = emailProposalIds(sessionId === undefined ? saved : live);
   const rows = taskRows ?? [];
@@ -862,6 +865,7 @@ const Turn = memo(
         <TurnCards
           saved={tools}
           sessionId={running ? sessionId : undefined}
+          runFrom={runFromOf(message.data)}
           taskRows={taskRowsOf}
         />
         <div className="message-footer">
