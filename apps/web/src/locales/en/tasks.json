@@ -13,7 +13,6 @@
   },
   "status": {
     "inProgress": "In progress",
-    "changeLabel": "Status: {{status}}; change",
     "inReview": "In review",
     "blocked": "Blocked",
     "todo": "To do",
@@ -85,11 +84,6 @@
     "titlePlaceholder": "e.g. Fix the login page layout in Safari",
     "description": "Description",
     "descriptionPlaceholder": "Goal, background, completion criteria…"
-  },
-  "layout": {
-    "label": "Layout",
-    "list": "List",
-    "board": "Board"
   },
   "empty": {
     "title": "No tasks yet",

@@ -1,11 +1,6 @@
-import type { WorkspaceState } from "./workspace-store";
 import type { Task, TaskStatus } from "@/queries/tasks";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
-import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
-import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
-import { KanbanIcon } from "@phosphor-icons/react/Kanban";
-import { ListIcon } from "@phosphor-icons/react/List";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { SidebarSimpleIcon } from "@phosphor-icons/react/SidebarSimple";
 import { useEffect, useRef, useState } from "react";
@@ -19,7 +14,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useAgentList } from "@/queries/agents";
 import { useTask, useTasks, useUpdateTask } from "@/queries/tasks";
@@ -27,13 +21,7 @@ import { wireErrorMessage } from "@/queries/wire";
 import { PageHeader } from "./app-shell";
 import { BackToTop } from "./back-to-top";
 import { when } from "./routine-format";
-import {
-  actorName,
-  ago,
-  createdBy,
-  statuses,
-  statusLabel,
-} from "./task-format";
+import { actorName, ago, createdBy, statusLabel } from "./task-format";
 import { useTaskNav } from "./task-nav";
 import { TaskPulls } from "./task-pulls";
 import { StatusIcon } from "./task-status-icon";
@@ -50,11 +38,10 @@ import {
   TaskProperties,
   Timeline,
 } from "./tasks";
-import { useWorkspaceStore } from "./workspace-store";
 
-// The task board as a full-window page: every task as rows grouped by status
-// or as a board to drag them across, or one open task in their place. The
-// task lays itself out by its own width (container queries), not the window's.
+// The task board as a full-window page: every task on a board to drag across
+// the statuses, or one open task in its place. The task lays itself out by its
+// own width (container queries), not the window's.
 
 const showError = (error: Error) => toast.error(wireErrorMessage(error));
 
@@ -68,141 +55,6 @@ const flow: TaskStatus[] = [
   "done",
   "cancelled",
 ];
-
-/** The status icon as a menu: change a task's status without opening it. */
-function StatusMenu({ task }: { task: Task }) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "common",
-    "navigation",
-  ] as const);
-  const update = useUpdateTask();
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label={translateText("status.changeLabel", {
-            status: statusLabel(task.status),
-          })}
-          className="flex size-7 shrink-0 items-center justify-center outline-none hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring"
-        >
-          <StatusIcon status={task.status} />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-40">
-        {statuses.map((s) => (
-          <DropdownMenuItem
-            key={s.value}
-            disabled={s.value === task.status}
-            onSelect={() =>
-              update.mutate(
-                { taskId: task.id, status: s.value },
-                { onError: showError },
-              )
-            }
-          >
-            <StatusIcon status={s.value} />
-            {s.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-// --- list ---------------------------------------------------------------------------
-
-function ListView({
-  tasks,
-  selected,
-  hidden,
-}: {
-  tasks: readonly Task[];
-  /** The task last open, marked so the list reads as left. */
-  selected: string | null;
-  hidden: boolean;
-}) {
-  useTranslation(["tasks", "common", "navigation"] as const);
-  const [, setNav] = useTaskNav();
-  const { agents } = useAgentList();
-  const [open, setOpen] = useState<Record<string, boolean>>({});
-  const selectedRef = useRef<HTMLButtonElement>(null);
-  // Back from a task, focus returns to its row.
-  useEffect(() => {
-    if (!hidden) selectedRef.current?.focus();
-  }, [hidden]);
-  // Every group starts open; a click folds it.
-  const isOpen = (status: TaskStatus) => open[status] ?? true;
-  return (
-    <div className="mx-auto max-w-content pb-6">
-      {statuses.map(({ value, label }) => {
-        const group = tasks.filter((t) => t.status === value);
-        if (!group.length) return null;
-        return (
-          <section key={value} aria-label={label}>
-            <div className="sticky top-0 z-10 flex h-9 items-center border-b bg-muted">
-              <button
-                type="button"
-                aria-expanded={isOpen(value)}
-                onClick={() => setOpen({ ...open, [value]: !isOpen(value) })}
-                className="flex h-full flex-1 items-center gap-2 px-2 text-left text-xs font-medium outline-none focus-visible:underline"
-              >
-                {isOpen(value) ? (
-                  <CaretDownIcon aria-hidden="true" className="size-3" />
-                ) : (
-                  <CaretRightIcon aria-hidden="true" className="size-3" />
-                )}
-                <StatusIcon status={value} className="size-3.5" />
-                {label}
-                <span className="text-muted-foreground tabular-nums">
-                  {group.length}
-                </span>
-              </button>
-            </div>
-            {isOpen(value) ? (
-              <ul>
-                {group.map((task) => (
-                  <li
-                    key={task.id}
-                    className={cn(
-                      "flex h-10 items-center gap-1 border-b duration-[60ms] ease-linear hover:bg-muted/40",
-                      task.id === selected && "bg-muted hover:bg-muted",
-                    )}
-                  >
-                    <StatusMenu task={task} />
-                    <button
-                      ref={task.id === selected ? selectedRef : undefined}
-                      type="button"
-                      aria-current={task.id === selected || undefined}
-                      onClick={() => void setNav({ task: task.id })}
-                      className="grid h-full min-w-0 flex-1 grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-2 pr-2 text-left outline-none focus-visible:underline @lg:grid-cols-[3rem_minmax(0,1fr)_auto_minmax(0,12rem)_4.5rem]"
-                    >
-                      <span className="text-xs text-muted-foreground tabular-nums">
-                        #{task.number}
-                      </span>
-                      <span className="truncate text-sm">{task.title}</span>
-                      <span className="flex items-center gap-3 text-xs text-muted-foreground tabular-nums">
-                        <RunState task={task} />
-                        <Comments count={task.comments} />
-                      </span>
-                      <span className="hidden truncate text-xs text-muted-foreground @lg:block">
-                        {actorName(task.createdBy, agents)}
-                      </span>
-                      <span className="hidden text-right text-xs text-muted-foreground tabular-nums @lg:block">
-                        {ago(task.updatedAt)}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </section>
-        );
-      })}
-    </div>
-  );
-}
 
 // --- board --------------------------------------------------------------------------
 
@@ -473,18 +325,9 @@ export function TaskBoard() {
   ] as const);
   const [nav] = useTaskNav();
   const { tasks, loaded, error } = useTasks();
-  // Remembered in this browser, so the page opens as it was left; a first
-  // visit opens on the board.
-  const layout = useWorkspaceStore((s) => s.workspace.taskLayout ?? "board");
-  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
-  const setView = (changes: Pick<WorkspaceState, "taskLayout">) =>
-    setWorkspace((workspace) => ({ ...workspace, ...changes }));
   const id = nav.task ?? null;
-  const [last, setLast] = useState(id);
-  if (id && id !== last) setLast(id);
-  const board = layout === "board";
-  // An open task takes the page; the list stays behind it, laid out but
-  // unseen, so going back finds it scrolled and folded as it was left.
+  // An open task takes the page; the board stays behind it, laid out but
+  // unseen, so going back finds it scrolled as it was left.
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <div
@@ -505,42 +348,13 @@ export function TaskBoard() {
               ) : null}
             </>
           }
-        >
-          <Tabs
-            value={layout}
-            onValueChange={(value) =>
-              setView({ taskLayout: value as typeof layout })
-            }
-          >
-            <TabsList aria-label={translateText("layout.label")}>
-              <TabsTrigger
-                value="list"
-                aria-label={translateText("layout.list")}
-                title={translateText("layout.list")}
-                className="px-2"
-              >
-                <ListIcon aria-hidden="true" />
-              </TabsTrigger>
-              <TabsTrigger
-                value="board"
-                aria-label={translateText("layout.board")}
-                title={translateText("layout.board")}
-                className="px-2"
-              >
-                <KanbanIcon aria-hidden="true" />
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </PageHeader>
+        />
         {/* The page's main until a task takes the page; the same element
-            either way, so the list keeps its place behind the task. */}
+            either way, so the board keeps its place behind the task. */}
         <section
           role={id ? undefined : "main"}
           id={id ? undefined : "main"}
-          className={cn(
-            "min-h-0 flex-1",
-            board ? "overflow-hidden" : "overflow-y-auto scroll-pt-9",
-          )}
+          className="min-h-0 flex-1 overflow-hidden"
         >
           {error ? (
             <div className="mx-auto max-w-md py-16">
@@ -557,10 +371,8 @@ export function TaskBoard() {
                 {translateText("empty.description")}
               </Empty>
             </div>
-          ) : board ? (
-            <BoardView tasks={tasks} />
           ) : (
-            <ListView tasks={tasks} selected={last} hidden={Boolean(id)} />
+            <BoardView tasks={tasks} />
           )}
         </section>
       </div>

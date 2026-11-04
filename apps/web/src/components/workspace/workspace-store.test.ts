@@ -27,17 +27,22 @@ describe("workspace store persistence", () => {
     expect(useWorkspaceStore.getState().workspace).toEqual({});
   });
 
-  it("remembers how the task page was left", async () => {
-    const page = { taskLayout: "board" };
-    localStorage.setItem(key, JSON.stringify({ ...saved, ...page }));
-    await useWorkspaceStore.persist.rehydrate();
-    expect(useWorkspaceStore.getState().workspace).toMatchObject(page);
-  });
-
-  it("keeps a list picked before the board became the default", async () => {
-    localStorage.setItem(key, JSON.stringify({ ...saved, taskLayout: "list" }));
-    await useWorkspaceStore.persist.rehydrate();
-    expect(useWorkspaceStore.getState().workspace.taskLayout).toBe("list");
+  it("drops the list or board saved before the page was only a board", async () => {
+    const kept = {
+      selectedGroupId: "g1",
+      selectedAgentId: "a1",
+      lastModel: "m1",
+      reactGrab: true,
+      transcriptRail: true,
+      chatWidth: "narrow",
+      agentsCollapsed: true,
+      recentDirectories: { m1: ["/code/eta"] },
+    };
+    for (const taskLayout of ["list", "board"]) {
+      localStorage.setItem(key, JSON.stringify({ ...kept, taskLayout }));
+      await useWorkspaceStore.persist.rehydrate();
+      expect(useWorkspaceStore.getState().workspace).toEqual(kept);
+    }
   });
 
   it("remembers the chat's rail switched on across a reload", async () => {
@@ -65,12 +70,11 @@ describe("workspace store persistence", () => {
   it("drops a task scope saved before the board had none", async () => {
     localStorage.setItem(
       key,
-      JSON.stringify({ ...saved, taskLayout: "board", taskScope: "remote" }),
+      JSON.stringify({ ...saved, taskScope: "remote" }),
     );
     await useWorkspaceStore.persist.rehydrate();
     expect(useWorkspaceStore.getState().workspace).toEqual({
       ...saved,
-      taskLayout: "board",
     });
   });
 

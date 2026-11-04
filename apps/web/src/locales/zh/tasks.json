@@ -13,7 +13,6 @@
   },
   "status": {
     "inProgress": "进行中",
-    "changeLabel": "状态：{{status}}，修改",
     "inReview": "待验收",
     "blocked": "受阻",
     "todo": "待办",
@@ -85,11 +84,6 @@
     "titlePlaceholder": "例如：修复登录页在 Safari 上的布局",
     "description": "描述",
     "descriptionPlaceholder": "目标、背景、完成的标准……"
-  },
-  "layout": {
-    "label": "布局",
-    "list": "列表",
-    "board": "看板"
   },
   "empty": {
     "title": "还没有任务",
