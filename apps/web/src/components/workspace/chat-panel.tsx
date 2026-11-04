@@ -4,7 +4,8 @@ import type {
   ConversationSummary,
   MessageView,
 } from "@eta/client-contracts";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import type { WorkspaceState } from "./workspace-store";
 import type { Draft, FilePart, PasteRange } from "@/lib/composer";
 import type { RunBlock, ToolBlock } from "@/lib/run";
 import type { Outgoing, SendMode } from "@/queries/outbox";
@@ -178,6 +179,13 @@ const FAILURE_CODES = {
   unavailable: "unavailable",
   gone: "gone",
 } as const;
+// 设置 → 外观's 聊天内容宽度, as the section's `--chat-width`: the transcript, the strip over the
+// composer and `.input-outer` all read that, so they cannot come apart.
+const chatWidths: Record<NonNullable<WorkspaceState["chatWidth"]>, string> = {
+  narrow: "720px",
+  standard: "860px",
+  full: "none",
+};
 
 /** The files a message came with (`data.attachments`), under its text. */
 function MessageFiles({ data }: { data: Record<string, unknown> }) {
@@ -1099,6 +1107,9 @@ export function ChatPanel({
   const showRail = useWorkspaceStore(
     (state) => state.workspace.transcriptRail ?? false,
   );
+  const chatWidth = useWorkspaceStore(
+    (state) => state.workspace.chatWidth ?? "standard",
+  );
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
   // What the rail numbers: the agent's replies (squares) and your own messages (circles). A
   // conversation with one of each has nothing to jump between, and the rail draws nothing. A task
@@ -1396,6 +1407,7 @@ export function ChatPanel({
     <section
       aria-label={translateText("navigation:sections.chat")}
       className="relative isolate flex h-full min-h-0 flex-col bg-background"
+      style={{ "--chat-width": chatWidths[chatWidth] } as CSSProperties}
     >
       {/* eta-old's timeline: a scroller that keeps clear of the rail on its right, and the rail
           pinned to the *viewport* rather than to the content — which is the whole difference
@@ -1428,7 +1440,7 @@ export function ChatPanel({
             agents={agents}
             onChoose={onChoose}
           />
-          <div className="mx-auto max-w-[860px]">
+          <div className="mx-auto max-w-(--chat-width)">
             <div className="min-w-0">
               <div
                 ref={transcript.contentRef}
@@ -1628,7 +1640,7 @@ export function ChatPanel({
       <footer className="input-area">
         {/* Its own strip above the frame, not a row inside it: the frame is one thing — a notice,
             the box, the toolbar — and a message that has not been sent yet is not part of it. */}
-        <div className="mx-auto w-full max-w-[860px] px-1 pb-1.5">
+        <div className="mx-auto w-full max-w-(--chat-width) px-1 pb-1.5">
           {/* What is waiting behind the run in flight, over the box that would send it. */}
           <HeldMessages
             conversationId={groupId ?? ""}

@@ -8,6 +8,11 @@
     "language": "Language",
     "elementPicker": "Element picker",
     "elementPickerHint": "When on, you can pick an element on the page and copy its component and source location.",
+    "chatWidth": "Chat content width",
+    "chatWidthHint": "Applies to the transcript and the composer together. In a narrow column all three look the same.",
+    "chatWidthNarrow": "Narrow",
+    "chatWidthStandard": "Standard",
+    "chatWidthFull": "Full",
     "transcriptRail": "Conversation rail",
     "transcriptRailHint": "When on, the chat's right edge shows a rail of replies (squares) and your messages (circles); click one to jump to it."
   },
