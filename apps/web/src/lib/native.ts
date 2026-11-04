@@ -7,7 +7,7 @@
  * whole degradation story, and it is why callers may call unconditionally.
  *
  * Requests go to the window's own capability bridge on `nativeApiBase`, not to the host this page
- * came from and not over the wire. It is not product state: a folder dialog belongs to one window,
+ * came from and not over the wire. It is not product state: a window button belongs to one window,
  * so it lives in the process that owns that window, behind a token generated for that window only.
  *
  * What the shell tells us (`__ETA_HOST__`):
@@ -114,20 +114,6 @@ async function call<T>(
   }).catch(() => null);
   if (response?.ok !== true) return null;
   return (await response.json().catch(() => null)) as T | null;
-}
-
-/**
- * The system's folder chooser, starting where the field already points. `null` when the user
- * cancelled, or when there is no shell to ask — the typed path stays the path either way.
- */
-export async function pickFolder(
-  startingFolder?: string,
-): Promise<string | null> {
-  const answer = await call<{ path: string | null }>(
-    "folder-dialog",
-    startingFolder === undefined ? {} : { startingFolder },
-  );
-  return text(answer?.path) ?? null;
 }
 
 /**

@@ -4,7 +4,7 @@ import type {
   ProjectResults,
   ProjectView,
 } from "@eta/client-contracts";
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import { getWire } from "@/lib/wire";
 import { useListTarget, useWireMutation } from "@/queries/wire";
 
@@ -35,6 +35,24 @@ export function useSetProjectSteward() {
     ProjectResults["setSteward"]
   >("projects", "setSteward");
 }
+
+/**
+ * The directories in a directory of a machine, with `path` left out for its home. Kept for a moment
+ * so stepping back into a directory just left is instant; a failure says why in `problem.code`.
+ */
+export const directoriesQuery = (machineId: string, path: string | undefined) =>
+  queryOptions({
+    queryKey: ["directories", machineId, path ?? null],
+    queryFn: () =>
+      getWire().call<ProjectResults["directories"]>(
+        "projects",
+        "directories",
+        { machineId, ...(path === undefined ? {} : { path }) },
+        { timeoutMs: 20_000 },
+      ),
+    staleTime: 5_000,
+    retry: false,
+  });
 
 const NO_FILES: readonly string[] = [];
 

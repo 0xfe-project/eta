@@ -492,6 +492,7 @@ export const PROJECT_ACTIONS = [
   "update",
   "setSteward",
   "files",
+  "directories",
 ] as const;
 export type ProjectAction = (typeof PROJECT_ACTIONS)[number];
 
@@ -511,7 +512,24 @@ export interface ProjectArgs {
    * files come first; `limit` (default 2000, at most 5000) caps the list.
    */
   files: { projectId: string; limit?: number };
+  /**
+   * The directories in a directory of a machine, for choosing one to add. The machine defaults to
+   * the primary and the path to its home; `~` is that machine's home. A failure says why in its
+   * `problem.code`, a `DirectoryProblem`.
+   */
+  directories: { machineId?: string; path?: string };
 }
+/** A directory inside the one listed. Names only: no file is ever listed or read. */
+export interface DirectoryEntry {
+  name: string;
+  /** The name starts with a dot. */
+  hidden: boolean;
+  /** It holds a `.git`: a code repository. */
+  git: boolean;
+  /** The project at this path on this machine, when there is one. */
+  projectId: string | null;
+}
+export type DirectoryProblem = "not_found" | "denied" | "offline";
 export interface ProjectResults {
   /** `existed` when the machine already had a project at that path: that one is returned. */
   create: { project: ProjectView; existed: boolean };
@@ -519,6 +537,14 @@ export interface ProjectResults {
   setSteward: { project: ProjectView };
   /** `truncated` when more files exist than were returned. */
   files: { files: string[]; truncated: boolean };
+  /** `path` is normalized and absolute; `parent` is null at the root. `truncated` as for files. */
+  directories: {
+    path: string;
+    home: string;
+    parent: string | null;
+    entries: DirectoryEntry[];
+    truncated: boolean;
+  };
 }
 export type ProjectCall = {
   [A in ProjectAction]: Omit<CallFrame, "target" | "action" | "args"> & {
