@@ -292,17 +292,6 @@ describe("creating an agent step by step", () => {
     expect(created).toEqual([]);
   });
 
-  it("does not ask for a machine: a new agent follows the project", async () => {
-    await open();
-    expect(document.getElementById("agent-machine")).toBeNull();
-    // The runtimes on offer are the host's own.
-    expect(
-      host.calls
-        .filter((call) => call.action === "runtimes")
-        .map((call) => call.args),
-    ).toEqual([{}]);
-  });
-
   it("starts over when cancelled and opened again", async () => {
     await open();
     await type("agent-name", "半成品");
@@ -313,5 +302,265 @@ describe("creating an agent step by step", () => {
     await open();
     expect(step()).toContain("名称与模型");
     expect(field("agent-name").value).toBe("");
+  });
+});
+
+describe("choosing where a new agent runs", () => {
+  const claude = runtimes[0]!;
+  const opencode = {
+    id: "opencode",
+    label: "OpenCode",
+    status: "available",
+    models: [{ id: "big", name: "Big", default: false, efforts: [] }],
+  };
+  const fleet = [
+    machineView({ id: "main", name: "主机" }),
+    machineView({ id: "gpu", name: "gpu-box", kind: "daemon" }),
+    machineView({
+      id: "mac",
+      name: "mac",
+      kind: "daemon",
+      status: "offline",
+    }),
+  ];
+  // The primary has Claude Code, gpu-box has OpenCode and a Claude Code of fewer models. A host
+  // names every runtime it knows and says which ones are not there.
+  const onEach = (args: { machineId?: string }) =>
+    args.machineId === "gpu"
+      ? {
+          runtimes: [
+            {
+              ...claude,
+              models: claude.models.filter((model) => model.id === "opus"),
+            },
+            opencode,
+          ],
+        }
+      : { runtimes: [...runtimes, { ...opencode, status: "missing" }] };
+
+  async function withMachines(
+    list = fleet,
+    answer: (args: { machineId?: string }) => unknown = onEach,
+  ) {
+    await act(async () => root.render(null));
+    setWire(undefined);
+    host = new FakeHost()
+      .target("providers", { config: providers }, { eager: true })
+      .target("personas", { cards: [] }, { eager: true })
+      .target("machines", { list }, { eager: true })
+      .plugins([
+        { name: "providers", source: "bundled" },
+        { name: "machines", source: "bundled" },
+      ])
+      .handle("agents.create", (args) => {
+        created.push(args);
+        return ok(args);
+      })
+      .handle("agents.runtimes", (args) =>
+        answer(args as { machineId?: string }),
+      )
+      .install();
+    host.hello();
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <AgentEditor />
+        </QueryClientProvider>,
+      ),
+    );
+    await open();
+  }
+
+  const asked = () =>
+    host.calls
+      .filter((call) => call.action === "runtimes")
+      .map((call) => call.args);
+  const radio = (name: string) =>
+    document.querySelector<HTMLInputElement>(
+      `input[type="radio"][aria-label="${name}"]`,
+    )!;
+  const row = (name: string) => radio(name).closest("label")!.textContent;
+  const trigger = (id: string) => document.getElementById(id)!;
+  const note = () => document.getElementById("agent-runtime-note")?.textContent;
+
+  it("lists the machines with what each runs, and follows the project unless told otherwise", async () => {
+    await withMachines();
+    expect(radio("跟随项目").checked).toBe(true);
+    expect(row("跟随项目")).toContain("在项目所在的机器上运行");
+    expect(dialog()!.textContent).toContain("运行方式先按主机器列出");
+    expect(row("主机（主机器）")).toContain("在线");
+    expect(row("主机（主机器）")).toContain("eta 内置 · Claude Code");
+    // A runtime the machine lacks is not one it runs.
+    expect(row("主机（主机器）")).not.toContain("Codex");
+    expect(row("gpu-box")).toContain("eta 内置 · Claude Code · OpenCode");
+    // The offline one is shown and not asked: there is nothing to reach.
+    expect(row("mac")).toContain("离线");
+    expect(row("mac")).toContain("连不上，无法确认运行方式");
+    expect(radio("mac").disabled).toBe(true);
+    expect(asked()).toEqual([{}, { machineId: "gpu" }]);
+
+    await press(radio("gpu-box"));
+    expect(dialog()!.textContent).not.toContain("运行方式先按主机器列出");
+
+    await press(radio("跟随项目"));
+    await type("agent-name", "审查");
+    await click("下一步");
+    await click("创建");
+    expect(created).toMatchObject([{ machineId: null, runtime: "eta" }]);
+  });
+
+  it("does not show a machine still being asked as having nothing, and keeps one that fails choosable", async () => {
+    let fail!: (reason: Error) => void;
+    await withMachines(fleet, (args) =>
+      args.machineId === "gpu"
+        ? new Promise((_, reject) => (fail = reject))
+        : { runtimes },
+    );
+    expect(
+      radio("gpu-box")
+        .closest("label")!
+        .querySelector('[data-slot="skeleton"]'),
+    ).not.toBeNull();
+    expect(radio("gpu-box").disabled).toBe(false);
+    // The others do not wait for it.
+    expect(row("主机（主机器）")).toContain("Claude Code");
+
+    await act(async () => fail(new Error("timed out")));
+    await settle();
+    expect(row("gpu-box")).toContain("无法确认运行方式");
+    expect(radio("gpu-box").disabled).toBe(false);
+  });
+
+  it("is not there with one machine, and the agent follows the project", async () => {
+    await withMachines([machineView({ id: "main", name: "主机" })]);
+    expect(document.querySelector('[role="radiogroup"]')).toBeNull();
+    expect(asked()).toEqual([{}]);
+    await type("agent-name", "审查");
+    await click("下一步");
+    await click("创建");
+    expect(created).toMatchObject([{ machineId: null }]);
+  });
+
+  it("offers a runtime only the chosen machine has, and creates the agent there", async () => {
+    await withMachines();
+    await press(trigger("agent-runtime"));
+    expect(
+      options()
+        .find((option) => option.textContent?.includes("OpenCode"))
+        ?.getAttribute("aria-disabled"),
+    ).toBe("true");
+    await act(async () =>
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
+    );
+    await press(radio("gpu-box"));
+    await choose("agent-runtime", "OpenCode");
+    await choose("agent-model", "Big");
+    await type("agent-name", "训练");
+    await click("下一步");
+    await click("创建");
+    expect(created).toMatchObject([
+      { machineId: "gpu", runtime: "opencode", model: "opencode:big" },
+    ]);
+  });
+
+  it("moves to a runtime the new machine has, says so, and picks the model again", async () => {
+    await withMachines();
+    await press(radio("gpu-box"));
+    await choose("agent-runtime", "OpenCode");
+    await choose("agent-model", "Big");
+
+    await press(radio("主机（主机器）"));
+    expect(trigger("agent-runtime").textContent).toBe("eta 内置");
+    expect(note()).toBe("主机 上没有 OpenCode，已换成 eta 内置");
+    // eta's first usable model, as for any new agent.
+    expect(trigger("agent-model").textContent).toBe("M1");
+
+    await press(radio("gpu-box"));
+    expect(note()).toBeUndefined();
+    await choose("agent-runtime", "OpenCode");
+    await press(radio("跟随项目"));
+    expect(note()).toBe("主机器 上没有 OpenCode，已换成 eta 内置");
+    await choose("agent-runtime", "Claude Code");
+    expect(note()).toBeUndefined();
+  });
+
+  it("does not carry a runtime to a machine that cannot vouch for it", async () => {
+    await withMachines(fleet, (args) => {
+      if (args.machineId === "gpu") throw new Error("timed out");
+      return { runtimes };
+    });
+    await choose("agent-runtime", "Claude Code");
+    await press(radio("gpu-box"));
+    expect(trigger("agent-runtime").textContent).toBe("eta 内置");
+    expect(note()).toBe("无法确认 gpu-box 有哪些运行方式，已换成 eta 内置");
+  });
+
+  it("keeps the runtime and only lets go of a model the new machine lacks", async () => {
+    await withMachines();
+    await choose("agent-runtime", "Claude Code");
+    await choose("agent-model", "Opus");
+    await press(radio("gpu-box"));
+    expect(trigger("agent-model").textContent).toBe("Opus");
+
+    await press(radio("主机（主机器）"));
+    await choose("agent-model", "Sonnet");
+    await press(radio("gpu-box"));
+    expect(trigger("agent-runtime").textContent).toBe("Claude Code");
+    expect(trigger("agent-model").textContent).toBe("运行时默认模型");
+    expect(note()).toBeUndefined();
+  });
+
+  it("waits for the machine's answer before moving on with an external runtime", async () => {
+    let answerGpu!: (result: unknown) => void;
+    await withMachines(fleet, (args) =>
+      args.machineId === "gpu"
+        ? new Promise((resolve) => (answerGpu = resolve))
+        : { runtimes },
+    );
+    await type("agent-name", "审查");
+    await choose("agent-runtime", "Claude Code");
+    await press(radio("gpu-box"));
+    expect(button("下一步").disabled).toBe(true);
+    // Enter does what the button does.
+    await act(async () =>
+      document
+        .querySelector('[role="dialog"] form')!
+        .dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true }),
+        ),
+    );
+    await settle();
+    expect(step()).toContain("名称与模型");
+
+    await act(async () =>
+      answerGpu({
+        runtimes: [{ ...claude, status: "missing", models: [] }, opencode],
+      }),
+    );
+    await settle();
+    expect(note()).toBe("gpu-box 上没有 Claude Code，已换成 eta 内置");
+    expect(button("下一步").disabled).toBe(false);
+  });
+
+  it("does not pin to a machine that went offline after it was chosen", async () => {
+    await withMachines();
+    await press(radio("gpu-box"));
+    await type("agent-name", "审查");
+    await act(async () =>
+      host.set("machines", {
+        list: fleet.map((machine) =>
+          machine.id === "gpu" ? { ...machine, status: "offline" } : machine,
+        ),
+      }),
+    );
+    await settle();
+    await click("下一步");
+    expect(step()).toContain("名称与模型");
+    expect(alerts()).toContain("gpu-box 已经离线，请换一台机器。");
+
+    await press(radio("跟随项目"));
+    expect(alerts()).toEqual([]);
+    await click("下一步");
+    expect(step()).toContain("指令");
   });
 });
