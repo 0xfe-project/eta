@@ -91,6 +91,7 @@ const make = (
   r: Pick<Room, "w" | "ada" | "group">,
   title: string,
   workspace: "local" | "worktree" = "local",
+  extra: { base?: string; assignee?: string } = {},
 ): BoardTaskDetail =>
   r.w.host.product.board.create(
     {
@@ -99,6 +100,7 @@ const make = (
       status: "todo",
       conversationId: r.group.id,
       workspace,
+      ...extra,
     },
     { kind: "agent", agentId: r.ada.id },
   );
@@ -281,6 +283,23 @@ describe("a task run", () => {
     );
   });
 
+  it("is run by the agent it was assigned to, which is not always the agent that made it", async () => {
+    const r = await room(finishes());
+    const bola = await r.w.agent("Bola");
+    const task = make(r, "For Bola", "local", { assignee: bola.id });
+    await until(() => reviewed(r.w, task.id));
+    // The executor's brief is Bola's: the assignee runs it, though Ada made it.
+    const runs = r.requests.filter(isRun);
+    expect(runs.length).toBeGreaterThanOrEqual(1);
+    expect(runs[0]!.system).toContain("In this task you are Bola");
+    expect(runs[0]!.system).not.toContain("In this task you are Ada");
+    expect(taskOf(r.w, task.id).createdBy).toMatchObject({
+      kind: "agent",
+      agentId: r.ada.id,
+    });
+    expect(taskOf(r.w, task.id).assigneeAgentId).toBe(bola.id);
+  });
+
   it("is only ever made by an agent: the user has no way to create a task", async () => {
     const r = await room(finishes());
     await expect(
@@ -304,6 +323,7 @@ describe("a task run", () => {
     );
     expect(taskOf(r.w, task.id).workspace).toEqual({
       mode: "local",
+      base: null,
       path: null,
       branch: null,
     });
@@ -336,6 +356,46 @@ describe("a task run", () => {
       () => runStatuses(r.w, task.id).join() === "completed,completed",
     );
     expect(runsOf(r.w, task.id)[1]!.workspace).toBe(where);
+  });
+
+  it("starts a worktree at the branch the task names, not the checkout's HEAD", async () => {
+    const dir = await repo();
+    // A second line the checkout is not on: the task's worktree must start there.
+    git(dir, "switch", "-q", "-c", "side-line");
+    git(dir, "commit", "-q", "--allow-empty", "-m", "side work");
+    const side = git(dir, "rev-parse", "HEAD");
+    git(dir, "switch", "-q", "main");
+    const r = await room(finishes(), { dir });
+    const task = make(r, "On the side", "worktree", { base: "side-line" });
+    await until(() => reviewed(r.w, task.id));
+    expect(taskOf(r.w, task.id).workspace.base).toBe("side-line");
+    const where = join(r.w.host.dataDir, "worktrees", r.project.id, "task-1");
+    expect(git(where, "rev-parse", "HEAD")).toBe(side);
+    expect(git(dir, "rev-parse", "main")).not.toBe(side);
+  });
+
+  it("resolves a `#number` base to that task's branch, so one task can build on another", async () => {
+    const dir = await repo();
+    const r = await room(finishes(), { dir });
+    const first = make(r, "First", "worktree", { base: "main" });
+    await until(() => reviewed(r.w, first.id));
+    const second = make(r, "Second", "worktree", { base: `#${first.number}` });
+    expect(taskOf(r.w, second.id).workspace.base).toBe(
+      `eta/task-${first.number}`,
+    );
+    await until(() => reviewed(r.w, second.id));
+    const where = join(
+      r.w.host.dataDir,
+      "worktrees",
+      r.project.id,
+      `task-${second.number}`,
+    );
+    expect(git(where, "rev-parse", "--abbrev-ref", "HEAD")).toBe(
+      `eta/task-${second.number}`,
+    );
+    expect(git(where, "merge-base", `eta/task-${first.number}`, "HEAD")).toBe(
+      git(where, `rev-parse`, `eta/task-${first.number}`),
+    );
   });
 
   it("is told, when the agent proposes the task, that a worktree needs a repository; and picks the workspace by default", async () => {

@@ -75,8 +75,11 @@ export function taskSessionTools(
         agentId: meta.agentId,
         conversationId: meta.conversationId,
       });
-    // A session of the task that is not its executor's is an agent mentioned on it.
-    return deps.board.find(taskId)?.createdBy.agentId === meta.agentId
+    // A session of the task that is not its executor's is an agent mentioned on it: the
+    // executor is the assignee when one was named, which is not always the maker.
+    const task = deps.board.find(taskId);
+    const executor = task?.assigneeAgentId ?? task?.createdBy.agentId;
+    return executor === meta.agentId
       ? runTools(deps, { agentId: meta.agentId, taskId })
       : mentionedTools(deps, { agentId: meta.agentId, taskId });
   };
@@ -239,6 +242,22 @@ function conversationTools(
         }),
       ),
       workspace: workspaceParameter,
+      base: Type.Optional(
+        Type.String({
+          description:
+            "A branch name, a commit, or `#N` naming another task, that the task's worktree " +
+            "starts at. Write it whenever the work does not belong to the project checkout's " +
+            "current line: an executor in an isolated session cannot guess it. Absent is the " +
+            "project checkout's HEAD.",
+        }),
+      ),
+      assignee: Type.Optional(
+        Type.String({
+          description:
+            "The agent this work is for, when it is not you: an agent's id, as the user named " +
+            "it. Absent is you, the proposer, which executes it itself.",
+        }),
+      ),
     }),
     async execute(args) {
       try {
@@ -246,13 +265,14 @@ function conversationTools(
           who.conversationId,
           args.workspace,
         );
+        const { base, assignee, ...rest } = args;
         const row = board.draft({
           conversationId: who.conversationId,
           agentId: who.agentId,
-          draft: { ...args, workspace },
+          draft: { ...rest, workspace, base, assignee },
         });
         return text(
-          `Drafted "${args.title}" for the user to confirm; it will run in ${workspace === "worktree" ? "a git worktree" : "the project directory"}.`,
+          `Drafted "${args.title}" for the user to confirm; it will run in ${workspace === "worktree" ? "a git worktree" : "the project directory"}${base === undefined ? "" : ` based on ${base}`}${assignee === undefined ? "" : `, executed by ${assignee}`}.`,
           { messageId: row.id },
         );
       } catch (error) {
@@ -284,6 +304,22 @@ function conversationTools(
         }),
       ),
       workspace: workspaceParameter,
+      base: Type.Optional(
+        Type.String({
+          description:
+            "A branch name, a commit, or `#N` naming another task, that the task's worktree " +
+            "starts at. Write it whenever the work does not belong to the project checkout's " +
+            "current line: an executor in an isolated session cannot guess it. Absent is the " +
+            "project checkout's HEAD.",
+        }),
+      ),
+      assignee: Type.Optional(
+        Type.String({
+          description:
+            "The agent this work is for, when it is not you: an agent's id, as the user named " +
+            "it. Absent is you, the maker, which executes it itself.",
+        }),
+      ),
     }),
     async execute(args) {
       try {
@@ -291,8 +327,15 @@ function conversationTools(
           who.conversationId,
           args.workspace,
         );
+        const { base, assignee, ...rest } = args;
         const task = board.create(
-          { ...args, workspace, conversationId: who.conversationId },
+          {
+            ...rest,
+            workspace,
+            base,
+            assignee,
+            conversationId: who.conversationId,
+          },
           actor,
         );
         return text(`Created task #${task.number} "${task.title}".`, {
