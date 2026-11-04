@@ -230,9 +230,9 @@ describe("task board", () => {
     expect(main[0]!.id).toBe("main");
     expect(main[0]!.textContent).toContain("任务说明");
     expect(main[0]!.textContent).toContain("好的");
-    // 任务 goes back to the list.
+    // The task's name in the header goes back to the list.
     const back = [...container.querySelectorAll("button")].find(
-      (b) => !pane.contains(b) && b.textContent === "任务",
+      (b) => !pane.contains(b) && b.textContent === "测试任务",
     )!;
     await act(async () => back.click());
     expect(navigation.set).toHaveBeenCalledWith({ task: null });
@@ -248,12 +248,34 @@ describe("task board", () => {
     );
   });
 
-  it("edits the status of the open task, and shows its executor and workspace", async () => {
+  it("lays an open task out as a document with its properties beside it", async () => {
     navigation.task = "t1";
     const host = board();
     const { container } = await mount(<TaskBoard />);
     await flush();
+    const main = container.querySelector("main")!;
+    // The document column holds the number, the title and the description as
+    // body text — not the first message of a thread — then the activity.
+    expect(main.className).toContain("@4xl:grid-cols-[minmax(0,1fr)_17.5rem]");
+    const column = main.querySelector(".max-w-\\[42\\.5rem\\]")!;
+    expect(column.textContent).toContain("#1");
+    expect(column.textContent).toContain("测试任务");
+    expect(column.textContent).toContain("任务说明");
+    expect(column.textContent).toContain("动态");
+    // The description is the task's own text, not a message with a face.
+    const edit = [...column.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("编辑描述"),
+    )!;
+    let node: HTMLElement | null = edit.parentElement;
+    while (node && node !== column) {
+      expect(node.className).not.toContain("grid-cols-");
+      node = node.parentElement;
+    }
+    // The properties are a rail of their own, with the status that can change.
     const aside = container.querySelector("aside")!;
+    expect(aside.getAttribute("aria-label")).toBe("属性");
+    expect(aside.className).toContain("@4xl:block");
+    expect(aside.className).toContain("hidden");
     expect(aside.textContent).toContain("小艾");
     expect(aside.textContent).toContain("独立 worktree");
     expect(aside.textContent).toContain("eta/task-1");
@@ -271,6 +293,30 @@ describe("task board", () => {
     expect(
       host.calls.filter((c) => c.action === "update").map((c) => c.args),
     ).toEqual([{ taskId: "t1", status: "blocked" }]);
+  });
+
+  it("keeps the properties out of a narrow page until their button opens them", async () => {
+    navigation.task = "t1";
+    board();
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    const aside = container.querySelector("aside")!;
+    // Closed, the rail does not take a column (`hidden`); the header button does.
+    expect(aside.className.split(" ")).toContain("hidden");
+    expect(aside.className).not.toContain("fixed");
+    const open = container.querySelector<HTMLButtonElement>(
+      'button[aria-controls="task-properties"]',
+    )!;
+    expect(open.className).toContain("@4xl:hidden");
+    expect(open.getAttribute("aria-expanded")).toBe("false");
+    await click(open);
+    expect(open.getAttribute("aria-expanded")).toBe("true");
+    expect(aside.className).toContain("fixed");
+    expect(aside.className.split(" ")).not.toContain("hidden");
+    // Still the same properties, status included.
+    expect(aside.querySelector('[role="combobox"]')).not.toBeNull();
+    await click(open);
+    expect(aside.className.split(" ")).toContain("hidden");
   });
 
   it("stops the run that is going, from the timeline", async () => {
