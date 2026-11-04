@@ -21,7 +21,7 @@ const workspaceSchema = z.object({
   // The chat's right-edge rail (transcript-rail.tsx); unset is off.
   transcriptRail: z.boolean().optional(),
   // How wide the chat's content runs (chat-panel.tsx); unset is standard.
-  chatWidth: z.enum(["narrow", "standard", "full"]).optional(),
+  chatWidth: z.enum(["extra-narrow", "narrow", "standard", "full"]).optional(),
   // The sidebar's agent section, folded down to its heading.
   agentsCollapsed: z.boolean().optional(),
 });

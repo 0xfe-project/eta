@@ -59,6 +59,12 @@ const colorModes = [
 
 const chatWidths = [
   {
+    value: "extra-narrow",
+    get label() {
+      return translate("settings:appearance.chatWidthExtraNarrow");
+    },
+  },
+  {
     value: "narrow",
     get label() {
       return translate("settings:appearance.chatWidthNarrow");

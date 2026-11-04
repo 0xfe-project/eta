@@ -182,6 +182,7 @@ const FAILURE_CODES = {
 // 设置 → 外观's 聊天内容宽度, as the section's `--chat-width`: the transcript, the strip over the
 // composer and `.input-outer` all read that, so they cannot come apart.
 const chatWidths: Record<NonNullable<WorkspaceState["chatWidth"]>, string> = {
+  "extra-narrow": "600px",
   narrow: "720px",
   standard: "860px",
   full: "none",
