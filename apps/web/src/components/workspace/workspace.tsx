@@ -385,7 +385,8 @@ export function Workspace({
                     toast[level](text, { id: waiting });
                   },
                   (error: Error) => {
-                    toast.dismiss(waiting);
+                    // With no id this would dismiss every toast on the screen.
+                    if (waiting !== undefined) toast.dismiss(waiting);
                     onError(error);
                   },
                 );
