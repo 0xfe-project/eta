@@ -102,7 +102,7 @@ describe("a task draft", () => {
       createdBy: { kind: "agent", agentId: ada.id },
       originConversationId: group.id,
       projectId: project.id,
-      workspace: { mode: "local", path: null, branch: null },
+      workspace: { mode: "local", base: null, path: null, branch: null },
       // Not edited, so it is the draft's.
       description: (draft.data as { description: string }).description,
     });
@@ -145,6 +145,49 @@ describe("a task draft", () => {
       actor: { kind: "agent", agentId: ada.id },
       data: { status: "in_review", draftId: draft.id },
     });
+  });
+
+  it("carries a base and an assignee the draft named, so one task can be for another agent and on another line", async () => {
+    // Ada drafts on Bola's behalf, based on task #1's branch. Task #1 is made straight on the
+    // board, which is the same thing a confirmed draft does.
+    const { w, ada, project, group } = await drafted();
+    const first = await confirm(
+      w,
+      group.id,
+      w.rows(group.id).find((row) => row.kind === "task_draft")!.id,
+    );
+    expect(first.task.number).toBe(1);
+    const bola = await w.agent("Bola");
+    // The draft comes through the agent tool, as it would in a real conversation.
+    const draft2 = w.host.product.board.draft({
+      conversationId: group.id,
+      agentId: ada.id,
+      draft: {
+        title: "Follow up",
+        goal: "Do the follow-up",
+        acceptance: "It is done",
+        workspace: "local",
+        assignee: bola.id,
+        base: "#1",
+      },
+    });
+    const { task } = await confirm(w, group.id, draft2.id);
+    expect(task).toMatchObject({
+      number: 2,
+      createdBy: { kind: "agent", agentId: ada.id },
+      assigneeAgentId: bola.id,
+    });
+    expect(task.workspace).toMatchObject({ base: "eta/task-1" });
+    // The stored row says it too: the worktree will start there, not at the checkout's HEAD.
+    expect(
+      w.host.db
+        .query<
+          { base_branch: string | null; assignee_agent: string | null },
+          []
+        >("SELECT base_branch, assignee_agent FROM task WHERE number = 2")
+        .get(),
+    ).toEqual({ base_branch: "eta/task-1", assignee_agent: bola.id });
+    void project;
   });
 
   it("confirms once: a second confirm, edited or not, is the same task", async () => {

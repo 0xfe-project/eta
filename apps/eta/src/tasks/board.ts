@@ -95,6 +95,7 @@ const viewOf = (task: TaskRecord): BoardTaskView => ({
   title: task.title,
   status: task.status,
   createdBy: task.createdBy,
+  assigneeAgentId: task.assigneeAgentId,
   conversationId: task.conversationId,
   runStatus: task.runStatus,
   comments: task.comments,
@@ -154,12 +155,17 @@ export class TaskBoard {
       title: string;
       conversationId: string;
       workspace: TaskWorkspaceMode;
+      /** The branch (or `#number` of another task) the worktree starts at. */
+      base?: string | undefined;
+      /** The agent the work is for, when that is not the maker. */
+      assignee?: string | undefined;
     },
     actor: TaskActor,
   ): BoardTaskDetail {
     if (actor.kind !== "agent" || actor.agentId === null)
       throw new Error("only an agent makes a task");
     const { title, ...fields } = this.#fieldsOf(input);
+    const { base, assignee } = input;
     if (title === undefined) throw new Error("a task needs a title");
     const conversationId = this.#conversation(input.conversationId)!;
     const task = this.#deps.tasks.create({
@@ -167,6 +173,8 @@ export class TaskBoard {
       title,
       conversationId,
       createdByAgent: actor.agentId,
+      assigneeAgent: assignee || undefined,
+      baseBranch: base === undefined ? undefined : this.#baseOf(base),
       projectId: this.#deps.conversations.get(conversationId)?.projectId,
       workspaceMode: input.workspace,
     });
@@ -327,13 +335,34 @@ export class TaskBoard {
 
   /* ---------------------------------------------------------------- drafts */
 
+  /**
+   * A base a task names, resolved: `#N` is that task's `eta/task-<N>` branch, so one task can
+   * build on another. A branch or commit is kept as written; an empty base is none at all.
+   */
+  #baseOf(base: string): string {
+    const trimmed = base.trim();
+    if (trimmed === "") return "";
+    const mentioned = /^#?(\d+)$/.exec(trimmed);
+    if (mentioned !== null) return `eta/task-${mentioned[1]}`;
+    return trimmed;
+  }
+
   /** An agent proposes work in the conversation it is in; the user decides. */
   draft(input: {
     conversationId: string;
     agentId: string;
     draft: DraftInput;
   }): MessageView {
-    const row = this.#deps.cards.draft(input);
+    const row = this.#deps.cards.draft({
+      ...input,
+      draft: {
+        ...input.draft,
+        base:
+          input.draft.base === undefined
+            ? undefined
+            : this.#baseOf(input.draft.base),
+      },
+    });
     this.#deps.changed([input.conversationId]);
     return row;
   }
@@ -382,6 +411,7 @@ export class TaskBoard {
       description,
       projectId,
       workspaceMode,
+      baseBranch,
       worktreePath,
       worktreeBranch,
       originConversationId,
@@ -393,6 +423,7 @@ export class TaskBoard {
       originConversationId,
       workspace: {
         mode: workspaceMode,
+        base: baseBranch,
         path: worktreePath,
         branch: worktreeBranch,
       },

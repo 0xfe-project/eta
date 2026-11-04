@@ -57,9 +57,16 @@ export async function prepareWorktree(
     projectId: string;
     number: number;
     root: string;
+    /**
+     * The branch or commit the worktree starts at, as the task named it (`#N` already resolved
+     * to `eta/task-<N>`). Absent is the project checkout's HEAD, which is where a worktree has
+     * always started.
+     */
+    base?: string | null | undefined;
   },
 ): Promise<Worktree> {
   const branch = branchOf(input.number);
+  const base = input.base?.trim();
   const script = [
     `cd ${shellQuote(input.projectPath)} || { echo ${shellQuote(`no such directory: ${input.projectPath}`)} >&2; exit 2; }`,
     `git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo ${shellQuote(`${input.projectPath} is not a git repository, so its tasks can only run in local mode`)} >&2; exit 3; }`,
@@ -70,7 +77,9 @@ export async function prepareWorktree(
     `  if git show-ref --verify --quiet ${shellQuote(`refs/heads/${branch}`)}; then`,
     `    git worktree add "$wt" ${shellQuote(branch)} >&2 || exit 5`,
     `  else`,
-    `    git worktree add -b ${shellQuote(branch)} "$wt" >&2 || exit 5`,
+    // The path comes before the base: after `-b <branch> <path> <base>`, with the path last,
+    // git takes the path for a commit-ish ("invalid reference").
+    `    git worktree add -b ${shellQuote(branch)} "$wt"${base === undefined || base === "" ? "" : ` ${shellQuote(base)}`} >&2 || exit 5`,
     `  fi`,
     `fi`,
     `printf '%s\\n%s' "$wt" "$prefix"`,

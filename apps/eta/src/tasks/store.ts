@@ -22,6 +22,10 @@ export interface TaskRecord extends BoardTaskView {
   description: string;
   projectId: string | null;
   workspaceMode: TaskWorkspaceMode;
+  /** The branch or commit the worktree starts at, as the proposer named it; null is the checkout's HEAD. */
+  baseBranch: string | null;
+  /** The agent that executes it, when that is not the maker; null is the maker. */
+  assigneeAgentId: string | null;
   worktreePath: string | null;
   worktreeBranch: string | null;
   originConversationId: string | null;
@@ -31,8 +35,12 @@ export interface NewTask {
   title: string;
   description?: string | undefined;
   status?: BoardTaskStatus | undefined;
-  /** The agent that makes it, and executes it; absent is the user (a task that cannot run). */
+  /** The agent that makes it, and executes it unless someone else is assigned; absent is the user (a task that cannot run). */
   createdByAgent?: string | undefined;
+  /** The agent that executes it, when that is not the maker. */
+  assigneeAgent?: string | undefined;
+  /** The branch or commit its worktree starts at; null is the project checkout's HEAD. */
+  baseBranch?: string | null | undefined;
   /** Where it is discussed, and, for good, where it came from. */
   conversationId?: string | undefined;
   projectId?: string | undefined;
@@ -59,6 +67,8 @@ interface TaskRow {
   conversation_id: string | null;
   project_id: string | null;
   workspace_mode: string;
+  base_branch: string | null;
+  assignee_agent: string | null;
   worktree_path: string | null;
   worktree_branch: string | null;
   origin_conversation_id: string | null;
@@ -88,6 +98,8 @@ const recordOf = (row: TaskRow): TaskRecord => ({
   status: row.status as BoardTaskStatus,
   projectId: row.project_id,
   workspaceMode: row.workspace_mode as TaskWorkspaceMode,
+  baseBranch: row.base_branch,
+  assigneeAgentId: row.assignee_agent,
   worktreePath: row.worktree_path,
   worktreeBranch: row.worktree_branch,
   originConversationId: row.origin_conversation_id,
@@ -156,9 +168,9 @@ export class TaskStore {
       this.#db
         .query(
           `INSERT INTO task
-             (id, title, description, status, created_by_agent, conversation_id, origin_conversation_id,
-              project_id, workspace_mode, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             (id, title, description, status, created_by_agent, assignee_agent, conversation_id, origin_conversation_id,
+              project_id, workspace_mode, base_branch, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           id,
@@ -166,10 +178,12 @@ export class TaskStore {
           input.description ?? "",
           status,
           input.createdByAgent ?? null,
+          input.assigneeAgent ?? input.createdByAgent ?? null,
           input.conversationId ?? null,
           input.conversationId ?? null,
           input.projectId ?? null,
           input.workspaceMode ?? "local",
+          input.baseBranch ?? null,
           now,
           now,
         );
