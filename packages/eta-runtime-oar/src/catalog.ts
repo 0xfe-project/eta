@@ -81,6 +81,11 @@ export class RuntimeCatalog {
     return this.#registry.require(id);
   }
 
+  /** What the user calls a runtime. */
+  label(id: RuntimeId): string {
+    return LABELS[id];
+  }
+
   /** What is known about a runtime now, without asking; undefined before the first answer. */
   peek(id: RuntimeId): RuntimeInfo | undefined {
     return this.#entries.get(id)?.info;

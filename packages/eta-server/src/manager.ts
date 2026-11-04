@@ -1,3 +1,4 @@
+import type { RuntimeCompaction } from "@eta/client-contracts";
 import type {
   CompactionSummarizer,
   KernelModels,
@@ -380,6 +381,21 @@ export class SessionManager {
     return await this.store.remove(id);
   }
 
+  /**
+   * `/compact` on a session an external runtime answers in: the runtime compacts its own context.
+   * A runtime that offers no way to says so; only `completed` means it happened.
+   */
+  async compactRuntime(managed: ManagedSession): Promise<RuntimeCompaction> {
+    const { id, runtime: runtimeId = "" } = managed.meta;
+    const runtime = this.runtimeOf.get(id);
+    return (
+      (await runtime?.compact?.(managed.session.kernel.config.get())) ?? {
+        runtime: runtimeId,
+        outcome: "unsupported",
+      }
+    );
+  }
+
   /** The sessions that are open right now. */
   openSessions(): ManagedSession[] {
     return [...this.open.values()];
@@ -528,7 +544,7 @@ export class SessionManager {
    * A session an external runtime answers in. It is assembled like any other (journal, bus,
    * inbox, the host's tools) with the runtime's delegate taking its runs, and without the parts
    * that are the runtime's own business: no file and shell tools, no memory, no compaction, no
-   * subagents. The runtime has all of those itself.
+   * subagents. The runtime has all of those itself; `/compact` asks it (`compactRuntime`).
    *
    * The runtime keeps its own system prompt, so the words of eta's it needs reach it through
    * `agentPrompt`, the platform briefing written for it among them.

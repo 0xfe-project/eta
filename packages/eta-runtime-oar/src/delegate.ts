@@ -11,6 +11,8 @@
  *   the same conversation under the new ones: the history stays, the model is new.
  * - **Steering** goes into the turn in flight where the runtime can take it (`Session.steer`);
  *   where it cannot, the words wait in the inbox for the turn to end and open the next prompt.
+ *   A steer has already joined the transcript when it goes, so what the runtime turns down, or
+ *   drops, is kept and opens the next prompt too (`#undelivered`), the next run's if this one ended.
  * - **The abort** interrupts the runtime's turn; the run ends with the turn's own end.
  * - **The host's tools** (a task board, a way to reach other agents) are served to the runtime
  *   over MCP (`serveMcpTools`) and run through the session's own middleware, so a tool's policy
@@ -18,8 +20,12 @@
  *   (`HostCalls`): the tool's name, and the `details` an MCP answer has no room for.
  * - **Resume:** the runtime's session id is remembered on the eta session, so a restart picks up
  *   the same conversation instead of starting the runtime from nothing.
+ * - **`/compact`** is the runtime's own (`Session.compact`), between turns only. It holds the
+ *   runtime's input while it works, so a run that starts meanwhile waits for it. A session not
+ *   open yet is opened just for that: its host tools need a run to serve them.
  */
 import type {
+  CompactionOutcome,
   Event,
   HostTool,
   HostToolContent,
@@ -38,6 +44,7 @@ import type {
   RunDelegate,
   RunDelegateContext,
 } from "@eta/core";
+import type { RuntimeCompaction } from "@eta/server";
 import type { RuntimeCatalog, RuntimeId } from "./catalog";
 import { Buffer } from "node:buffer";
 import { mkdir, rm, writeFile } from "node:fs/promises";
@@ -69,11 +76,15 @@ export interface OarDelegateOptions {
   warn: (message: string) => void;
 }
 
-/** What the runtime session was opened with: a run on other settings reopens it. */
-interface Opened {
-  session: Session;
+/** What a runtime session is opened on. */
+interface Settings {
   model: string | undefined;
   effort: string | undefined;
+}
+
+/** What the runtime session was opened with: a run on other settings reopens it. */
+interface Opened extends Settings {
+  session: Session;
   /** Whether the agent's words went in as a system prompt; if not, the first prompt carries them. */
   prompted: boolean;
 }
@@ -104,6 +115,20 @@ function inputOf(messages: readonly AgentMessage[]): Input {
   return { text: texts.join("\n\n"), images };
 }
 
+/** Several inputs as one prompt. */
+function joined(inputs: readonly Input[]): Input {
+  return {
+    text: inputs
+      .map((input) => input.text)
+      .filter((text) => text !== "")
+      .join("\n\n"),
+    images: inputs.flatMap((input) => input.images),
+  };
+}
+
+const isEmpty = (input: Input): boolean =>
+  input.text === "" && input.images.length === 0;
+
 /** The runtime's own id for the model the session is on; undefined means its default. */
 export function modelFor(
   runtime: RuntimeId,
@@ -119,6 +144,24 @@ function failureOf(outcome: TurnOutcome): string | undefined {
   return outcome.kind === "failed"
     ? `${outcome.failure}: ${outcome.reason}`
     : undefined;
+}
+
+/** What a runtime said of its compaction, in the words a client is told. */
+function compactionOf(
+  outcome: CompactionOutcome,
+): Pick<RuntimeCompaction, "outcome" | "reason"> {
+  switch (outcome.kind) {
+    case "completed":
+    case "aborted":
+      return { outcome: outcome.kind };
+    case "failed":
+    case "unconfirmed":
+      return { outcome: outcome.kind, reason: outcome.reason };
+    case "rejected":
+      if (outcome.code === "busy") return { outcome: "busy" };
+      if (outcome.code === "aborted") return { outcome: "aborted" };
+      return { outcome: "failed", reason: outcome.reason };
+  }
 }
 
 /** A session tool's result as an MCP tool answer, and the details that answer cannot carry. */
@@ -146,6 +189,23 @@ function hostResultOf(
   };
 }
 
+/** How long a compaction is waited for, inside what a client waits for the answer. */
+const COMPACT_WAIT_MS = 9 * 60 * 1000;
+
+/** Waits for `work`, or until `signal` aborts. */
+async function until(
+  work: Promise<unknown> | undefined,
+  signal: AbortSignal,
+): Promise<void> {
+  if (work === undefined) return;
+  await Promise.race([
+    work,
+    new Promise((resolve) =>
+      signal.addEventListener("abort", resolve, { once: true }),
+    ),
+  ]);
+}
+
 export class OarDelegate implements RunDelegate {
   readonly #options: OarDelegateOptions;
   #opened: Opened | undefined;
@@ -160,6 +220,12 @@ export class OarDelegate implements RunDelegate {
   #run: RunDelegateContext | undefined;
   /** The host tool calls of the run in flight. */
   #calls: HostCalls | undefined;
+  /** What was taken for a turn and never reached the runtime: it opens the next prompt. */
+  readonly #undelivered: Input[] = [];
+  /** The compaction in flight; it never rejects. */
+  #compacting: Promise<RuntimeCompaction> | undefined;
+  /** Stops waiting for the compaction in flight. */
+  #compactWait: AbortController | undefined;
   #disposed = false;
 
   constructor(options: OarDelegateOptions) {
@@ -172,24 +238,28 @@ export class OarDelegate implements RunDelegate {
       return { status: "failed", error: "the session is closed" };
     this.#run = context;
     try {
-      const config = context.config();
-      const model = modelFor(this.#options.runtime, config);
-      const listed = this.#options.catalog
-        .peek(this.#options.runtime)
-        ?.models.find((entry) => entry.id === model);
-      const effort = effortFor(config.thinkingLevel, listed?.efforts);
-      const opened = await this.#ensure(context, model, effort);
+      // A compaction holds the runtime's input: a prompt now would be refused.
+      await until(this.#compacting, context.signal);
+      if (context.signal.aborted) return { status: "aborted" };
+      const settings = this.#settings(context.config());
+      const opened = await this.#ensure(context, settings);
       this.#calls = new HostCalls(this.#options.runtime, this.#hostTools);
       const translator = new Translator(
         context,
         {
           provider: this.#options.runtime,
-          model: model ?? opened.session.model().value ?? this.#options.runtime,
+          model:
+            settings.model ??
+            opened.session.model().value ??
+            this.#options.runtime,
         },
         this.#charged,
         this.#calls,
       );
-      let input = inputOf(context.opening);
+      let input = joined([
+        ...this.#undelivered.splice(0),
+        inputOf(context.opening),
+      ]);
       const agentPrompt = opened.prompted
         ? undefined
         : this.#options.agentPrompt();
@@ -217,10 +287,12 @@ export class OarDelegate implements RunDelegate {
               };
         }
         if (context.signal.aborted) return { status: "aborted" };
-        // What arrived while the turn ran, and could not be steered into it, opens the next one.
-        const next = context.take({ followUps: true });
-        if (next.length === 0) return { status: "completed" };
-        input = inputOf(next);
+        // What arrived while the turn ran, and did not reach it, opens the next one.
+        input = joined([
+          ...this.#undelivered.splice(0),
+          inputOf(context.take({ followUps: true })),
+        ]);
+        if (isEmpty(input)) return { status: "completed" };
       }
     } finally {
       this.#run = undefined;
@@ -228,8 +300,82 @@ export class OarDelegate implements RunDelegate {
     }
   }
 
+  /**
+   * Compact the runtime's context, between turns. Answers what became of it, whatever that was:
+   * the runtime's own report, or why it was not asked.
+   */
+  async compact(config: KernelConfig): Promise<RuntimeCompaction> {
+    const { runtime: id, catalog } = this.#options;
+    const report = (
+      result: Pick<RuntimeCompaction, "outcome" | "reason">,
+    ): RuntimeCompaction => ({ runtime: catalog.label(id), ...result });
+    const declared = catalog.runtime(id).manualCompaction;
+    const opened = this.#opened;
+    if (
+      declared?.kind === "unsupported" ||
+      (opened !== undefined && opened.session.compact === undefined)
+    )
+      return report({ outcome: "unsupported" });
+    if (this.#run !== undefined) return report({ outcome: "busy" });
+    if (this.#compacting !== undefined) return await this.#compacting;
+    if (this.#disposed)
+      return report({ outcome: "failed", reason: "the session is closed" });
+    // Nothing has run here yet, and nothing is there to resume.
+    if (opened === undefined && this.#resume === undefined)
+      return report({
+        outcome: declared?.kind === "supported" ? "empty" : "unsupported",
+      });
+    const wait = new AbortController();
+    this.#compactWait = wait;
+    this.#compacting = this.#compact(config, opened, wait.signal)
+      .then(report)
+      .finally(() => {
+        this.#compacting = undefined;
+        this.#compactWait = undefined;
+      });
+    return await this.#compacting;
+  }
+
+  async #compact(
+    config: KernelConfig,
+    opened: Opened | undefined,
+    signal: AbortSignal,
+  ): Promise<Pick<RuntimeCompaction, "outcome" | "reason">> {
+    let session = opened?.session;
+    try {
+      session ??= await this.#openForCompaction(config);
+      if (session.compact === undefined) return { outcome: "unsupported" };
+      return compactionOf(
+        await session.compact({ timeoutMs: COMPACT_WAIT_MS, signal }),
+      );
+    } catch (error) {
+      // The conversation is gone: the next run starts a new one, and there is nothing to compact.
+      if ((error as Error).name === "SessionNotFoundError")
+        return { outcome: "empty" };
+      return {
+        outcome: "failed",
+        reason: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      if (opened === undefined) await session?.dispose().catch(() => undefined);
+    }
+  }
+
+  /** The conversation on this delegate's runtime, for a compaction and nothing after it. */
+  async #openForCompaction(config: KernelConfig): Promise<Session> {
+    const { runtime: id, catalog } = this.#options;
+    return await catalog
+      .runtime(id)
+      .session(
+        await catalog.installation(id),
+        this.#sessionOptions(this.#settings(config), this.#resume, undefined),
+      );
+  }
+
   async dispose(): Promise<void> {
     this.#disposed = true;
+    this.#compactWait?.abort();
+    await this.#compacting;
     const opened =
       this.#opened ?? (await this.#opening?.catch(() => undefined));
     this.#opened = undefined;
@@ -241,17 +387,26 @@ export class OarDelegate implements RunDelegate {
     );
   }
 
+  /** The model and effort a run on this configuration takes. */
+  #settings(config: KernelConfig): Settings {
+    const { runtime, catalog } = this.#options;
+    const model = modelFor(runtime, config);
+    const listed = catalog
+      .peek(runtime)
+      ?.models.find((entry) => entry.id === model);
+    return { model, effort: effortFor(config.thinkingLevel, listed?.efforts) };
+  }
+
   /** The runtime session for these settings: the open one, or one (re)opened for them. */
   async #ensure(
     context: RunDelegateContext,
-    model: string | undefined,
-    effort: string | undefined,
+    settings: Settings,
   ): Promise<Opened> {
     const current = this.#opened;
     if (
       current !== undefined &&
-      current.model === model &&
-      current.effort === effort
+      current.model === settings.model &&
+      current.effort === settings.effort
     )
       return current;
     if (current !== undefined) {
@@ -260,7 +415,7 @@ export class OarDelegate implements RunDelegate {
       this.#resume = current.session.id;
       await current.session.dispose().catch(() => undefined);
     }
-    this.#opening = this.#open(context, model, effort);
+    this.#opening = this.#open(context, settings);
     try {
       this.#opened = await this.#opening;
       return this.#opened;
@@ -269,32 +424,49 @@ export class OarDelegate implements RunDelegate {
     }
   }
 
-  async #open(
-    context: RunDelegateContext,
-    model: string | undefined,
-    effort: string | undefined,
-  ): Promise<Opened> {
-    const { runtime: id, catalog, cwd } = this.#options;
-    const runtime = catalog.runtime(id);
-    const installation = await catalog.installation(id);
-    const refused = runtime.refusedSessionOptions ?? {};
-    const served =
-      refused.mcpServers === undefined ? await this.#serve(context) : undefined;
-    const agentPrompt = this.#options.agentPrompt();
-    const appends =
-      agentPrompt !== undefined && refused.appendSystemPrompt === undefined;
-    const options = (resume: string | undefined): SessionOptions => ({
-      cwd,
+  /** The agent's words as a system prompt, on a runtime that takes one. */
+  #systemPrompt(): string | undefined {
+    const { runtime, catalog, agentPrompt } = this.#options;
+    return catalog.runtime(runtime).refusedSessionOptions
+      ?.appendSystemPrompt === undefined
+      ? agentPrompt()
+      : undefined;
+  }
+
+  /** What a runtime session opens with. */
+  #sessionOptions(
+    { model, effort }: Settings,
+    resume: string | undefined,
+    served: ServedMcpTools | undefined,
+  ): SessionOptions {
+    const systemPrompt = this.#systemPrompt();
+    return {
+      cwd: this.#options.cwd,
       ...(model === undefined ? {} : { model }),
       ...(effort === undefined ? {} : { effort }),
       ...(resume === undefined ? {} : { resume }),
-      // A resumed conversation keeps the prompt it was opened with (claude refuses a new one
-      // on resume), so only a new one is told.
-      ...(appends && resume === undefined
-        ? { appendSystemPrompt: agentPrompt }
-        : {}),
+      // Told on every open, resumed or not: a resumed conversation that was not told keeps the
+      // prompt only until its next compaction (`resumedSessionOptions`), and then forgets it.
+      ...(systemPrompt === undefined
+        ? {}
+        : { appendSystemPrompt: systemPrompt }),
       ...(served === undefined ? {} : { mcpServers: [served.server] }),
-    });
+    };
+  }
+
+  async #open(
+    context: RunDelegateContext,
+    settings: Settings,
+  ): Promise<Opened> {
+    const { runtime: id, catalog } = this.#options;
+    const runtime = catalog.runtime(id);
+    const installation = await catalog.installation(id);
+    const served =
+      runtime.refusedSessionOptions?.mcpServers === undefined
+        ? await this.#serve(context)
+        : undefined;
+    const options = (resume: string | undefined): SessionOptions =>
+      this.#sessionOptions(settings, resume, served);
     let session: Session;
     try {
       session = await runtime.session(installation, options(this.#resume));
@@ -317,10 +489,9 @@ export class OarDelegate implements RunDelegate {
     this.#options.remember(session.id);
     return {
       session,
-      model,
-      effort,
+      ...settings,
       // A resumed conversation already heard who it is.
-      prompted: appends || resumed,
+      prompted: this.#systemPrompt() !== undefined || resumed,
     };
   }
 
@@ -375,16 +546,32 @@ export class OarDelegate implements RunDelegate {
     const dir = this.#imageDir();
     await mkdir(dir, { recursive: true });
     return await Promise.all(
-      images.map(async (image, index) => {
+      images.map(async (image) => {
         const extension = image.mimeType.split("/")[1] ?? "png";
-        const path = join(
-          dir,
-          `${Date.now().toString(36)}-${index}.${extension}`,
-        );
+        // Unique, not by the clock: a prompt and a steer can write theirs in the same instant.
+        const path = join(dir, `${crypto.randomUUID()}.${extension}`);
         await writeFile(path, Buffer.from(image.data, "base64"));
         return { path, mediaType: image.mimeType };
       }),
     );
+  }
+
+  /**
+   * An input as this runtime takes it: its images as its own image input, or, where it has none,
+   * named by path, since they are files on its machine and it can read those.
+   */
+  async #deliverable(
+    session: Session,
+    input: Input,
+  ): Promise<{ text: string; images: InputImage[] }> {
+    const images = await this.#images(input.images);
+    if (images.length === 0 || session.capabilities.images)
+      return { text: input.text, images };
+    const named = images.map((image) => `[image: ${image.path}]`).join("\n");
+    return {
+      text: input.text === "" ? named : `${input.text}\n\n${named}`,
+      images: [],
+    };
   }
 
   /** One prompt and the runtime's turn on it, told through the translator. */
@@ -394,14 +581,21 @@ export class OarDelegate implements RunDelegate {
     input: Input,
     context: RunDelegateContext,
   ): Promise<TurnOutcome> {
-    const images = await this.#images(input.images);
-    return await new Promise<TurnOutcome>((resolve) => {
+    const prompt = await this.#deliverable(session, input);
+    // The steers in flight, one after another; each ends when its fate is known.
+    let steering: Promise<void> = Promise.resolve();
+    const outcome = await new Promise<TurnOutcome>((resolve) => {
       let settled = false;
       const offs: (() => void)[] = [];
+      /** Steers the runtime took, until a turn answers for them. */
+      const accepted = new Map<string, Input>();
+      let ended: TurnOutcome | undefined;
       const settle = (outcome: TurnOutcome): void => {
         if (settled) return;
         settled = true;
         for (const off of offs) off();
+        // Taken and never answered: the runtime is gone, or the turn was cut short.
+        this.#undelivered.push(...accepted.values());
         translator.finish(
           outcome.kind === "completed" ? "completed" : outcome.kind,
           failureOf(outcome),
@@ -417,9 +611,15 @@ export class OarDelegate implements RunDelegate {
           translator.see(event);
           if (event.agentPath.length > 0) return;
           if (event.kind === "turn_ended") {
+            // A runtime that names the inputs of a turn can show a steer it took too late for
+            // this one (claude reads them from its stdin): that opens a turn of its own, and
+            // the run lasts until that one ends.
+            if (event.inputIds === undefined) accepted.clear();
+            for (const id of event.inputIds ?? []) accepted.delete(id);
+            ended = event.outcome;
+            if (accepted.size > 0 && ended.kind === "completed") return;
             // The turn's usage rides in the same frame, right after its end.
-            const outcome = event.outcome;
-            setTimeout(settle, 0, outcome);
+            setTimeout(settle, 0, ended);
           } else if (event.kind === "exited") {
             this.#lost(session);
             settle({
@@ -427,32 +627,61 @@ export class OarDelegate implements RunDelegate {
               failure: "runtime_exited",
               reason: `${this.#options.runtime} exited${event.code === null ? "" : ` with code ${event.code}`}${event.reason === undefined ? "" : `: ${event.reason}`}`,
             });
-          } else if (
-            event.kind === "input_dropped" &&
-            event.inputId === inputId &&
-            event.reason === "runtime_refused"
-          ) {
-            settle({
-              kind: "failed",
-              failure: event.failure ?? "invalid_request",
-              reason: event.message ?? "the runtime refused the prompt",
-            });
+          } else if (event.kind === "input_dropped") {
+            const dropped = accepted.get(event.inputId);
+            if (dropped !== undefined) {
+              // It comes back to us, and may have been all a finished turn was waiting for.
+              accepted.delete(event.inputId);
+              this.#undelivered.push(dropped);
+              if (ended !== undefined && accepted.size === 0)
+                setTimeout(settle, 0, ended);
+            } else if (
+              event.inputId === inputId &&
+              event.reason === "runtime_refused"
+            ) {
+              settle({
+                kind: "failed",
+                failure: event.failure ?? "invalid_request",
+                reason: event.message ?? "the runtime refused the prompt",
+              });
+            }
           }
         }),
       );
+      /** Into the turn, or kept for the next prompt: never neither. */
+      const deliver = async (
+        steer: NonNullable<Session["steer"]>,
+        steered: Input,
+      ): Promise<void> => {
+        const kept = (why: string): void => {
+          this.#options.warn(
+            `[eta-runtime-oar] a steer did not land, the next prompt carries it: ${why}`,
+          );
+          this.#undelivered.push(steered);
+        };
+        // One came back, so the turn is ending: the rest keep their order behind it.
+        if (this.#undelivered.length > 0) return kept("a steer before it did");
+        try {
+          const { text, images } = await this.#deliverable(session, steered);
+          const id = crypto.randomUUID();
+          const result = await steer(text, {
+            inputId: id,
+            ...(images.length === 0 ? {} : { images }),
+          });
+          if (result.kind === "rejected") kept(result.reason);
+          else if (!settled) accepted.set(id, steered);
+        } catch (error) {
+          kept(error instanceof Error ? error.message : String(error));
+        }
+      };
       // Steering: into the turn where the runtime takes it; otherwise it waits for the turn's end.
       if (session.steer !== undefined) {
         const steer = session.steer.bind(session);
         offs.push(
           context.onInput(() => {
             const steered = inputOf(context.take({ followUps: false }));
-            if (steered.text === "") return;
-            void steer(steered.text).then((result) => {
-              if (result.kind === "rejected")
-                this.#options.warn(
-                  `[eta-runtime-oar] a steer did not land: ${result.reason}`,
-                );
-            });
+            if (isEmpty(steered)) return;
+            steering = steering.then(() => deliver(steer, steered));
           }),
         );
       }
@@ -469,9 +698,9 @@ export class OarDelegate implements RunDelegate {
       context.signal.addEventListener("abort", abort, { once: true });
       offs.push(() => context.signal.removeEventListener("abort", abort));
       void session
-        .prompt(input.text, {
+        .prompt(prompt.text, {
           inputId,
-          ...(images.length === 0 ? {} : { images }),
+          ...(prompt.images.length === 0 ? {} : { images: prompt.images }),
         })
         .then(
           (result) => {
@@ -490,6 +719,9 @@ export class OarDelegate implements RunDelegate {
             }),
         );
     });
+    // A steer still on its way may yet come back: the caller reads what did.
+    await steering;
+    return outcome;
   }
 
   /** The runtime process is gone: the next run opens it again, resuming the conversation. */

@@ -15,7 +15,7 @@
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
   },
   "dependencies": {
-    "@botiverse/oar": "0.83.0",
+    "@botiverse/oar": "0.86.0",
     "@eta/core": "*",
     "@eta/server": "*"
   },

@@ -1,5 +1,6 @@
 import type {
   AgentMessage,
+  CompactResult,
   SessionArgs,
   SessionImage,
   SessionViewSections,
@@ -418,9 +419,12 @@ export function useSessionImage(
 export function useSessionActions() {
   return {
     goal: useWireMutation<SessionArgs["goal"]>("sessions", "goal"),
-    compact: useWireMutation<SessionArgs["compact"]>("sessions", "compact", {
-      timeoutMs: 120_000,
-    }),
+    compact: useWireMutation<SessionArgs["compact"], CompactResult>(
+      "sessions",
+      "compact",
+      // A runtime's compaction takes as long as it takes: what a daemon is given for one.
+      { timeoutMs: 10 * 60 * 1000 },
+    ),
     /**
      * Take one queued message back. The answer is the ack: `already_consumed` means a run reached
      * its tool boundary first and the message is on its way, so the caller must not remove the chip

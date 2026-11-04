@@ -73,6 +73,33 @@ export interface ForkSessionInput {
 interface Session {
   session: string;
 }
+/**
+ * What became of a `/compact` on a session an external runtime answers in. Only `completed` means
+ * the context shrank: `unconfirmed` is a wait that ended without the runtime's word, and it may
+ * still be working.
+ */
+export interface RuntimeCompaction {
+  /** The runtime, as the user knows it. */
+  runtime: string;
+  outcome:
+    | "completed"
+    | "empty"
+    | "busy"
+    | "unsupported"
+    | "aborted"
+    | "failed"
+    | "unconfirmed";
+  /** The runtime's own words, for `failed` and `unconfirmed`. */
+  reason?: string;
+}
+
+/** The answer to `sessions.compact`; `runtime` is there on a session an external runtime answers in. */
+export interface CompactResult {
+  session: string;
+  compacted: boolean;
+  runtime?: RuntimeCompaction;
+}
+
 /** Valid requests from a client. The server still validates untrusted JSON at runtime. */
 export interface SessionArgs {
   create: CreateSessionInput;

@@ -12,6 +12,7 @@
  */
 import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
 import type { CompactionSummarizer } from "@eta/core";
+import type { SessionRuntime, SessionRuntimes } from "../src/runtimes";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
@@ -39,6 +40,7 @@ async function harness(
   options: {
     compaction?: CompactionSummarizer;
     modelsFor?: (meta: { title?: string }) => unknown;
+    runtimes?: SessionRuntimes;
   } = {},
 ): Promise<Harness> {
   const ctx = new Context();
@@ -52,6 +54,7 @@ async function harness(
         ? models
         : options.modelsFor(meta)) as never,
     compaction: options.compaction,
+    runtimes: options.runtimes,
   });
   let unload: (() => Promise<void>) | undefined;
   const plugin = sessionsPlugin({ manager });
@@ -493,6 +496,67 @@ describe("compacting on demand", () => {
       bare.call("sessions", "compact", { session: plain }),
     ).rejects.toThrow(/no compaction configured/);
     await bare.unload();
+    await h.unload();
+  });
+});
+
+describe("compacting a session an external runtime answers in", () => {
+  const onRuntime = async (compact?: SessionRuntime["compact"]) => {
+    const runtimes: SessionRuntimes = {
+      open: () => ({
+        models: { getModel: () => undefined } as never,
+        delegate: { run: async () => ({ status: "completed" }) },
+        ...(compact === undefined ? {} : { compact }),
+        dispose: async () => undefined,
+      }),
+    };
+    const h = await harness(undefined, { runtimes });
+    await h.load();
+    const { session } = (await h.call("sessions", "create", {
+      cwd: "/work/eta",
+      runtime: "claude",
+    })) as { session: string };
+    return { h, session };
+  };
+
+  it("leaves it to the runtime, with what the session is on", async () => {
+    const configs: unknown[] = [];
+    const { h, session } = await onRuntime(async (config) => {
+      configs.push(config);
+      return { runtime: "Claude Code", outcome: "completed" };
+    });
+    expect(await h.call("sessions", "compact", { session })).toEqual({
+      session,
+      compacted: true,
+      runtime: { runtime: "Claude Code", outcome: "completed" },
+    });
+    expect(configs).toHaveLength(1);
+    await h.unload();
+  });
+
+  it.each(["empty", "busy", "aborted", "unconfirmed", "failed"] as const)(
+    "does not call %s compacted",
+    async (outcome) => {
+      const { h, session } = await onRuntime(async () => ({
+        runtime: "Codex",
+        outcome,
+      }));
+      expect(await h.call("sessions", "compact", { session })).toEqual({
+        session,
+        compacted: false,
+        runtime: { runtime: "Codex", outcome },
+      });
+      await h.unload();
+    },
+  );
+
+  it("says a runtime with no way to compact has none", async () => {
+    const { h, session } = await onRuntime();
+    expect(await h.call("sessions", "compact", { session })).toEqual({
+      session,
+      compacted: false,
+      runtime: { runtime: "claude", outcome: "unsupported" },
+    });
     await h.unload();
   });
 });

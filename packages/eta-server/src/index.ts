@@ -184,6 +184,7 @@ export {
   matchesFilter,
 } from "./ring";
 export type {
+  RuntimeCompaction,
   SessionRuntime,
   SessionRuntimeInput,
   SessionRuntimes,
