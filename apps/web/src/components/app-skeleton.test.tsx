@@ -6,6 +6,7 @@ import { AppSkeleton, PageSkeleton } from "./app-skeleton";
 afterEach(async () => {
   await cleanup();
   document.cookie = "sidebar_state=; path=/; max-age=0";
+  localStorage.clear();
 });
 
 describe("页面代码还在路上时的窗口轮廓", () => {
@@ -38,6 +39,25 @@ describe("页面代码还在路上时的窗口轮廓", () => {
     expect(
       folded.container.querySelector('[data-rail="true"]')?.className,
     ).toContain("w-[4rem]");
+  });
+
+  it("draws the sidebar at its dragged width, and the rail stays the rail", async () => {
+    const side = (container: HTMLElement) =>
+      container.querySelector<HTMLElement>("[data-rail]")!;
+    const fresh = await mount(<AppSkeleton content="chat" />);
+    expect(side(fresh.container).style.width).toBe("");
+
+    localStorage.setItem("eta.sidebar.width", "340");
+    const dragged = await mount(<AppSkeleton content="chat" />);
+    expect(side(dragged.container).style.width).toBe("340px");
+
+    localStorage.setItem("eta.sidebar.width", "9000");
+    const clamped = await mount(<AppSkeleton content="page" />);
+    expect(side(clamped.container).style.width).toBe("420px");
+
+    document.cookie = "sidebar_state=false; path=/";
+    const folded = await mount(<AppSkeleton content="chat" />);
+    expect(side(folded.container).style.width).toBe("");
   });
 
   it("gives a page under the shell one status of its own", async () => {

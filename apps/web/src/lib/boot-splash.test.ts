@@ -25,4 +25,10 @@ describe("脚本运行前的启动轮廓", () => {
     expect(style.match(/animation:\s*boot-sweep/g)).toHaveLength(1);
     expect(style).toContain("html.dark .boot");
   });
+
+  it("opens at the dragged sidebar width, on both sides of lg", () => {
+    expect(style).toContain("width: var(--boot-side, 16rem)");
+    expect(style).toContain("width: var(--boot-side, 18rem)");
+    expect(html).toContain('localStorage.getItem("eta.sidebar.width")');
+  });
 });

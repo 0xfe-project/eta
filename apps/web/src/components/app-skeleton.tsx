@@ -34,6 +34,21 @@ function panelWidth() {
   }
 }
 
+/**
+ * The left column's width, as app-shell.tsx's usePaneWidth keeps it (260–420): nothing until it has
+ * been dragged, because the default is the stylesheet's and moves at `lg`.
+ */
+function sidebarWidth() {
+  try {
+    const stored = Number(localStorage.getItem("eta.sidebar.width"));
+    return Number.isFinite(stored) && stored > 0
+      ? Math.min(420, Math.max(260, Math.round(stored)))
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** One sidebar row: a glyph and its name, or the glyph alone in the rail. */
 function SideRows({
   rows,
@@ -72,9 +87,11 @@ function SideHeading({ rail }: { rail: boolean }) {
 
 function SidebarSkeleton() {
   const rail = folded();
+  const width = rail ? undefined : sidebarWidth();
   return (
     <div
       data-rail={rail ? "true" : "false"}
+      style={{ width }}
       className={cn(
         "sidebar-rule hidden shrink-0 flex-col bg-sidebar md:flex",
         // In rem, not spacing steps: ui/sidebar.tsx's widths are rem, and a step here is 0.225rem.

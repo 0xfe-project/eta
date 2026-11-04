@@ -120,7 +120,7 @@
         position: relative;
         flex: none;
         flex-direction: column;
-        width: 16rem;
+        width: var(--boot-side, 16rem);
         background: var(--b-sidebar);
       }
       /* The sidebar's rule starts under the band, like .sidebar-rule. */
@@ -324,7 +324,7 @@
       }
       @media (min-width: 64rem) {
         .boot .side {
-          width: 18rem;
+          width: var(--boot-side, 18rem);
         }
         .boot .panel {
           display: flex;
@@ -348,7 +348,7 @@
           document.documentElement.classList.toggle("dark", dark);
           document.documentElement.style.colorScheme = dark ? "dark" : "light";
           // The boot outline below, in the shape the window will open in: a folded sidebar (the
-          // cookie ui/sidebar.tsx keeps) and the right panel's dragged width (lib pane.ts).
+          // cookie ui/sidebar.tsx keeps) and the two columns' dragged widths (lib pane.ts).
           if (/(?:^|;\s*)sidebar_state=false/.test(document.cookie))
             document.documentElement.dataset.bootRail = "";
           var panel = Number(localStorage.getItem("eta.panel.width"));
@@ -356,6 +356,12 @@
             document.documentElement.style.setProperty(
               "--boot-panel",
               Math.min(720, Math.max(320, Math.round(panel))) + "px",
+            );
+          var side = Number(localStorage.getItem("eta.sidebar.width"));
+          if (side > 0)
+            document.documentElement.style.setProperty(
+              "--boot-side",
+              Math.min(420, Math.max(260, Math.round(side))) + "px",
             );
         } catch (error) {
           // Storage denied: the app applies the system value again when it mounts.

@@ -14,6 +14,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
  */
 export interface PaneWidth {
   width: number;
+  /**
+   * Whether a width has been chosen here, by a drag now or a saved one. Until then `width` is the
+   * caller's `fallback`, and a caller whose default is the stylesheet's has nothing to write.
+   */
+  sized: boolean;
   dragging: boolean;
   /** Spread on the divider: pointer capture, moves, release, and arrow keys. */
   dividerProps: React.HTMLAttributes<HTMLDivElement> & {
@@ -44,13 +49,15 @@ export function usePaneWidth(options: {
   const read = useCallback(() => {
     try {
       const stored = Number(localStorage.getItem(storageKey));
-      return Number.isFinite(stored) && stored > 0 ? clamp(stored) : fallback;
+      return Number.isFinite(stored) && stored > 0 ? clamp(stored) : undefined;
     } catch {
-      return fallback;
+      return undefined;
     }
-  }, [storageKey, fallback, clamp]);
+  }, [storageKey, clamp]);
 
-  const [width, setWidth] = useState(read);
+  const [chosen, setChosen] = useState(read);
+  // Read through on every render, not copied in once: `fallback` can move with the window.
+  const width = chosen ?? fallback;
   const [dragging, setDragging] = useState(false);
   const dragRef = useRef<{ startX: number; startWidth: number } | undefined>(
     undefined,
@@ -84,6 +91,7 @@ export function usePaneWidth(options: {
 
   return {
     width,
+    sized: chosen !== undefined,
     dragging,
     dividerProps: {
       role: "separator",
@@ -109,7 +117,7 @@ export function usePaneWidth(options: {
                   : undefined;
         if (next === undefined) return;
         event.preventDefault();
-        setWidth(next);
+        setChosen(next);
         remember(next);
       },
       onPointerDown: (event) => {
@@ -121,7 +129,7 @@ export function usePaneWidth(options: {
       onPointerMove: (event) => {
         const current = dragRef.current;
         if (current === undefined) return;
-        setWidth(
+        setChosen(
           clamp(current.startWidth + grow * (event.clientX - current.startX)),
         );
       },
@@ -130,7 +138,8 @@ export function usePaneWidth(options: {
         event.currentTarget.releasePointerCapture(event.pointerId);
         dragRef.current = undefined;
         setDragging(false);
-        remember(width);
+        // A press that never moved chose nothing, so it does not pin the default.
+        if (chosen !== undefined) remember(chosen);
       },
     },
   };

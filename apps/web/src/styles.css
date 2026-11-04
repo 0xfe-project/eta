@@ -135,15 +135,31 @@
   }
 
   /*
-   * The wide sidebar: 18rem from `lg` up.
+   * The same control on the sidebar's edge, laid over the line instead of being one. The column
+   * already draws its own rule (`.sidebar-rule`), so at rest this paints nothing and that rule stays
+   * the one line; under the pointer its 2px cover the rule, which is what the `z-index` is for. It
+   * starts under the band like the rule does: the band is the window's in the shell, and the corner
+   * of it the lights sit in stays clear of any vertical line.
+   */
+  .sidebar-divider {
+    position: absolute;
+    z-index: 1;
+    inset-block: var(--header-band) 0;
+    right: 0;
+    background: none;
+  }
+
+  /*
+   * The wide sidebar: 18rem from `lg` up, until a width has been dragged.
    *
    * The provider writes the width inline on the wrapper, and the gap that holds the page content
    * back belongs to that wrapper too. Carried on the sidebar element instead, the override moves
    * the sidebar and forgets the gap, and the content ends up 2rem under a sidebar that can fold
-   * over it. `!important` because that inline default is otherwise the last word.
+   * over it. `!important` because that inline default is otherwise the last word — which is why a
+   * dragged width, written in the same place, has to be exempted by name: it would lose here too.
    */
   @media (min-width: 64rem) {
-    [data-slot="sidebar-wrapper"] {
+    [data-slot="sidebar-wrapper"]:not([data-sidebar-sized]) {
       --sidebar-width: 18rem !important;
     }
   }
@@ -1883,6 +1899,20 @@ html[data-host="desktop"] [data-lights-corridor] {
   width: 1px;
   background: var(--border);
   pointer-events: none;
+}
+
+/*
+ * While the sidebar's edge is being dragged the column follows the pointer: the 200ms `width`
+ * transition that animates the fold would trail behind it, and a press that wanders over the chat
+ * would select the chat. Only for the drag, so the fold keeps its animation. Outside the layers
+ * because a `transition` in one loses to the utility that sets it.
+ */
+[data-sidebar-dragging] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+[data-sidebar-dragging] :is([data-slot="sidebar-gap"], [data-slot="sidebar-container"]) {
+  transition: none;
 }
 
 /*
