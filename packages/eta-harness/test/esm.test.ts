@@ -37,9 +37,13 @@ const resultOf = (
   return found?.content.map((p) => p.text ?? "").join("") ?? "(no result)";
 };
 
-const open = async (script: ReturnType<typeof stop>[]) => {
-  const root = await mkdtemp(join(tmpdir(), "esm-root-"));
-  const cwd = await mkdtemp(join(tmpdir(), "esm-cwd-"));
+const open = async (
+  script: ReturnType<typeof stop>[],
+  reuse?: { storage: MemoryStorage; root: string; cwd: string },
+) => {
+  const root = reuse?.root ?? (await mkdtemp(join(tmpdir(), "esm-root-")));
+  const cwd = reuse?.cwd ?? (await mkdtemp(join(tmpdir(), "esm-cwd-")));
+  const storage = reuse?.storage ?? new MemoryStorage();
   const models = fakeModels(script);
   const echo = defineTool({
     name: "echo",
@@ -51,13 +55,13 @@ const open = async (script: ReturnType<typeof stop>[]) => {
     }),
   });
   const session = await openSession({
-    storage: new MemoryStorage(),
+    storage,
     models: models as never,
     cwd,
     esm: { root },
     tools: [echo as never],
   });
-  return { session, models, root, cwd };
+  return { session, models, root, cwd, storage };
 };
 
 describe("esmrun", () => {
@@ -83,7 +87,7 @@ describe("esmrun", () => {
       'import eta from "eta";',
       'import { writeFile } from "node:fs/promises";',
       'await writeFile("hello.txt", "hi");',
-      'await eta.state.set("k", "v");',
+      'eta.state.k = "v";',
       'const said = await eta.platform.echo({ text: "x" });',
       "const pwd = (await $`pwd`).stdout.trim();",
       '({ said, pwd, seen: await view("hello.txt") })',
@@ -108,7 +112,7 @@ describe("esmrun", () => {
         { key: "k" },
         { turn: 1, toolCallId: "r" },
       ),
-    ).toMatchObject({ content: [{ text: "v" }] });
+    ).toMatchObject({ content: [{ text: "k: v" }] });
     session.stop();
   });
 
@@ -229,6 +233,80 @@ describe("esmrun across calls", () => {
     await session.runner.run();
     expect(resultOf(session, "r2")).toContain("a is not defined");
     session.stop();
+  });
+
+  it("carries any value through eta.state, and saves the JSON-able ones with the session", async () => {
+    const first = await open([
+      call(
+        "esmrun",
+        {
+          script:
+            'import eta from "eta";\neta.state.a = 1;\neta.state.cfg = { n: [1, 2] };\neta.state.fn = (x) => x * 10;',
+        },
+        "s1",
+      ),
+      call(
+        "esmrun",
+        {
+          script:
+            'import eta from "eta";\nconst b = eta.state.a + 1; console.log(b);\n({ b, n: eta.state.cfg.n, f: eta.state.fn(3) })',
+        },
+        "s2",
+      ),
+      stop(),
+    ]);
+    first.session.kernel.nextRun(userMsg("go"));
+    await first.session.runner.run();
+    const s2 = resultOf(first.session, "s2");
+    expect(s2).toContain('"b": 2');
+    expect(s2).toContain('"f": 30');
+    expect(s2).toContain("console:\n2");
+    // eta.state is not globalThis.
+    expect(
+      await first.session.kernel.tools.execute(
+        "esmrun",
+        { script: "typeof globalThis.a" },
+        { turn: 1, toolCallId: "g" },
+      ),
+    ).toMatchObject({
+      content: [{ text: expect.stringContaining("undefined") }],
+    });
+    const listed = await first.session.kernel.tools.execute(
+      "read_state",
+      {},
+      { turn: 1, toolCallId: "r" },
+    );
+    expect(listed).toMatchObject({
+      content: [
+        {
+          text: expect.stringContaining("fn: [function] (not saved: not JSON)"),
+        },
+      ],
+    });
+    first.session.stop();
+
+    // Same journal, a fresh session: the JSON-able values come back, the function does not.
+    const second = await open(
+      [
+        call(
+          "esmrun",
+          {
+            script:
+              'import eta from "eta";\n({ a: eta.state.a, n: eta.state.cfg.n, fn: typeof eta.state.fn })',
+          },
+          "s3",
+        ),
+        stop(),
+      ],
+      { storage: first.storage, root: first.root, cwd: first.cwd },
+    );
+    second.session.kernel.nextRun(userMsg("again"));
+    await second.session.runner.run();
+    const s3 = resultOf(second.session, "s3");
+    expect(s3).toContain('"a": 1');
+    expect(s3).toContain('"fn": "undefined"');
+    expect(s3).toMatch(/"n": \[\s*1,\s*2\s*\]/);
+    second.session.stop();
   });
 });
 

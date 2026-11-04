@@ -588,22 +588,9 @@ export function mountModules(
           etaObject.platform = platform;
         }
 
-        if (hooks?.state) {
-          const state = hooks.state;
-          etaObject.state = {
-            get: realm.binding("eta.state.get", (key: string) =>
-              state.get(key),
-            ),
-            set: realm.binding(
-              "eta.state.set",
-              (key: string, value: string | null) => state.set(key, value),
-              (key) => key,
-            ),
-            keys: realm.binding("eta.state.keys", async () =>
-              realm.own(await state.keys()),
-            ),
-          };
-        }
+        // The host's object itself: `eta.state.x = y` is a plain assignment, and every
+        // layer's `eta` sees the same one.
+        if (hooks?.state) etaObject.state = hooks.state;
 
         // Export default as the eta object
         this.setExport("default", etaObject);

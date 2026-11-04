@@ -63,16 +63,14 @@ export interface ToolsSink {
 }
 
 /**
- * `eta.state`: the one container whose values outlive the realm. The host
- * decides where it lives (eta keeps it in the session journal); the realm only
- * sees strings in and strings out.
+ * `eta.state`: a plain object a script reads and writes as `eta.state.x = y`.
+ *
+ * Top-level `const` does not outlive one evaluation (each is its own module), and
+ * `globalThis` is the realm's, not the script's. This object is where a value goes
+ * to reach the next call. The host owns it, so it survives a realm being rebuilt;
+ * what of it is persisted (eta journals the JSON-able values) is the host's call.
  */
-export interface StateSink {
-  get: (key: string) => Promise<string | undefined>;
-  /** `null` deletes the key. */
-  set: (key: string, value: string | null) => Promise<void>;
-  keys: () => Promise<string[]>;
-}
+export type StateObject = Record<string, unknown>;
 
 export interface MemorySink {
   append: (text: string) => Promise<void>;
@@ -162,8 +160,8 @@ export interface Hooks {
   platform?:
     | Record<string, PlatformCall>
     | (() => Record<string, PlatformCall>);
-  /** `eta.state`. Absent means the realm has no state that survives it. */
-  state?: StateSink;
+  /** `eta.state`, shared by every layer's `eta`. Absent means there is none. */
+  state?: StateObject;
   /** A real sub-turn. Recursion, budget and cycles are the host's to enforce. */
   spawn?: (request: SpawnRequest) => Promise<SpawnResult>;
   /** Call the current agent with a new turn. Supports recursion and sees full history. */

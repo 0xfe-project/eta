@@ -214,8 +214,8 @@ export function platformDts(kernel: Kernel): string {
     "    };",
     "    /** A nested turn of this agent: same tools, the session history so far. Concurrent calls run in parallel (5 at a time). */",
     '    ask(prompt: string): Promise<{ text: string; effects: unknown[]; stack: string[]; status: "completed" | "cancelled"; warning?: string }>;',
-    "    /** Values that outlive the realm (journaled with the session). */",
-    "    state: { get(key: string): Promise<string | undefined>; set(key: string, value: string | null): Promise<void>; keys(): Promise<string[]> };",
+    "    /** A plain object for values that reach the next call: `eta.state.x = y`, any value. Top-level const does not carry over. JSON-able values are saved with the session; the rest (functions, connections) live until the session closes. */",
+    "    state: Record<string, any>;",
     "    /** Persist a function as a capability in this layer's env.js. */",
     "    define(name: string, fn: (...args: any[]) => unknown, meta?: { desc?: string }): string;",
     "    /** Capabilities defined in this layer. */",
@@ -402,6 +402,52 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
     return result;
   };
 
+  // `eta.state`: one host object for the session, so it outlives a realm rebuilt after a
+  // define. It is filled from the session KV before the first run, and after every run
+  // the JSON-able keys are written back (a key that is gone is deleted).
+  const etaState: Record<string, unknown> = {};
+  const persisted = new Map<string, string>();
+  let hydrated: Promise<void> | undefined;
+  const hydrate = (): Promise<void> =>
+    (hydrated ??= (async () => {
+      for (const key of await state.keys()) {
+        const raw = await state.get(key);
+        if (raw === undefined) continue;
+        persisted.set(key, raw);
+        try {
+          etaState[key] = JSON.parse(raw);
+        } catch {
+          etaState[key] = raw; // written before eta.state took any value
+        }
+      }
+    })());
+  const flush = async (): Promise<void> => {
+    for (const [key, value] of Object.entries(etaState)) {
+      let json: string | undefined;
+      try {
+        json = typeof value === "function" ? undefined : JSON.stringify(value);
+      } catch {
+        json = undefined; // a cycle, a BigInt: kept in memory only
+      }
+      if (json === undefined) {
+        if (persisted.has(key)) {
+          await state.set(key, null);
+          persisted.delete(key);
+        }
+        continue;
+      }
+      if (persisted.get(key) !== json) {
+        await state.set(key, json);
+        persisted.set(key, json);
+      }
+    }
+    for (const key of [...persisted.keys()])
+      if (!Object.hasOwn(etaState, key)) {
+        await state.set(key, null);
+        persisted.delete(key);
+      }
+  };
+
   const agent = new Agent({
     root,
     ...(options.project === undefined ? {} : { project: options.project }),
@@ -409,7 +455,7 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
     hooks: {
       platform,
-      state,
+      state: etaState,
       ask,
       onConsole: (level, line) => {
         frames
@@ -447,6 +493,7 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
     const parts: string[] = [];
     let isError = false;
     let effects: Effect[] = [];
+    await hydrate();
     await frames.run(frame, async () => {
       try {
         const realm = agent.realm();
@@ -464,6 +511,13 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
         );
       }
     });
+    try {
+      await flush();
+    } catch (error) {
+      parts.push(
+        `(eta.state was not saved: ${error instanceof Error ? error.message : String(error)})`,
+      );
+    }
     let text = parts.join("\n");
     if (text.length > RESULT_CHARS) {
       const full = `${file.replace(/\.js$/, "")}.out.txt`;
@@ -675,27 +729,25 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
     name: "read_state",
     label: "read_state",
     description:
-      "Read eta.state: one key's value, or every key when `key` is absent. Writing is `eta.state.set` in esmrun.",
+      "Read eta.state: one key's value, or every key when `key` is absent. Writing is `eta.state.x = y` in esmrun.",
     parameters: Type.Object({ key: Type.Optional(Type.String()) }),
     async execute(raw) {
       const { key } = raw as { key?: string };
-      if (key !== undefined) {
-        const v = await state.get(key);
-        return {
-          content: [
-            { type: "text", text: v === undefined ? `(${key} is not set)` : v },
-          ],
-        };
-      }
-      const keys = await state.keys();
-      return {
-        content: [
-          {
-            type: "text",
-            text: keys.length === 0 ? "(state is empty)" : keys.join("\n"),
-          },
-        ],
+      await hydrate();
+      const line = (k: string): string => {
+        const v = etaState[k];
+        const saved = persisted.has(k) ? "" : " (not saved: not JSON)";
+        return `${k}: ${typeof v === "function" ? "[function]" : show(v)}${saved}`;
       };
+      const text =
+        key !== undefined
+          ? Object.hasOwn(etaState, key)
+            ? line(key)
+            : `(${key} is not set)`
+          : Object.keys(etaState).length === 0
+            ? "(state is empty)"
+            : Object.keys(etaState).sort().map(line).join("\n");
+      return { content: [{ type: "text", text }] };
     },
   };
 
