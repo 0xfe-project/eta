@@ -8,7 +8,6 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { NodeEnvironment } from "@eta/execution-node";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   discoverSkillDirs,
@@ -115,7 +114,6 @@ describe("the catalog block", () => {
     await skill(skillsDir, "shipping", "How to ship a slice.");
 
     const block = await renderSkillsBlock({
-      env: new NodeEnvironment({ cwd: project }),
       cwd: project,
       home: join(root, "home"),
     });
@@ -133,7 +131,6 @@ describe("the catalog block", () => {
     await mkdir(project, { recursive: true });
     expect(
       await renderSkillsBlock({
-        env: new NodeEnvironment({ cwd: project }),
         cwd: project,
         home: join(root, "home"),
       }),
@@ -154,7 +151,6 @@ describe("the catalog block", () => {
 
     const warnings: string[] = [];
     const block = await renderSkillsBlock({
-      env: new NodeEnvironment({ cwd: project }),
       cwd: project,
       home: join(root, "home"),
       warn: (message) => warnings.push(message),
@@ -170,7 +166,6 @@ describe("the catalog block", () => {
     await mkdir(project, { recursive: true });
     const read = () =>
       renderSkillsBlock({
-        env: new NodeEnvironment({ cwd: project }),
         cwd: project,
         home: join(root, "home"),
       });

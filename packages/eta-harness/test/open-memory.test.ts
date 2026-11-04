@@ -1,7 +1,7 @@
 /**
  * Memory, wired into a session (H11c).
  *
- * The pieces were all here — `MemoryCache`, `envMemoryFs`, `extractMemoryAtRunEnd`
+ * The pieces were all here — `MemoryCache`, `MemoryFs`, `extractMemoryAtRunEnd`
  * — and a session used none of them: nothing read `MEMORY.md` into a prompt, and
  * nothing asked at the end of a run what was worth keeping. What is pinned here is
  * the wiring, and the properties that make it safe to have a model write files by
@@ -10,13 +10,10 @@
  */
 
 import type { KernelModels } from "@eta/core";
-import type { ExecutionEnv } from "@eta/execution";
-import type { MemoryExtractionOutcome } from "../src/memory";
+import type { MemoryExtractionOutcome, MemoryFs } from "../src/memory";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
-import { MemoryEnvironment } from "../src/env/memory";
-import { envMemoryFs } from "../src/memory";
 import { openSession } from "../src/open";
 
 const userMsg = (text: string) => ({
@@ -30,9 +27,38 @@ const answer = (text: string) =>
 
 /** A session whose environment stands in for a project directory. */
 async function projectMemory() {
-  const env = new MemoryEnvironment({ cwd: "/work/eta" });
+  const files = new Map<string, { text: string; mtime: number }>();
+  let clock = 0;
+  const env = {
+    async writeFile(path: string, text: string) {
+      files.set(path, { text, mtime: ++clock });
+    },
+    async readTextFile(path: string) {
+      const file = files.get(path);
+      return file === undefined
+        ? ({ ok: false } as const)
+        : ({ ok: true, value: file.text } as const);
+    },
+    async exists(path: string) {
+      return { ok: true, value: files.has(path) } as const;
+    },
+  };
+  const fs: MemoryFs = {
+    readFile: async (path) => files.get(path)?.text,
+    mtime: async (path) => files.get(path)?.mtime,
+    writeFile: env.writeFile,
+    listFileNames: async (dir) => {
+      const prefix = dir.endsWith("/") ? dir : `${dir}/`;
+      const names = new Set<string>();
+      for (const path of files.keys()) {
+        if (path.startsWith(prefix))
+          names.add(path.slice(prefix.length).split("/")[0]!);
+      }
+      return [...names];
+    },
+  };
   await env.writeFile("/work/eta/.git/HEAD", "ref: refs/heads/main");
-  return { env, fs: envMemoryFs(env as unknown as ExecutionEnv) };
+  return { env, fs };
 }
 
 const promptOf = (models: {

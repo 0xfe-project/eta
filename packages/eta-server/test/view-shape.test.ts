@@ -7,18 +7,12 @@
  * building, which is cheaper than a client that receives frames it cannot read.
  */
 
-import type {
-  GoalState,
-  SessionViewBtwThread,
-  SessionViewSubagent,
-  StoredTask,
-} from "@eta/client-contracts";
+import type { GoalState, StoredTask } from "@eta/client-contracts";
 import type { StatePatch, StateSnapshot } from "@eta/client-wire-proto";
 import type {
   GoalState as RuntimeGoal,
   StoredTask as RuntimeTask,
 } from "@eta/core";
-import type { BtwThread, SubagentRecord } from "@eta/harness";
 import { stateSection } from "@eta/client-contracts";
 import { stateDiff } from "@eta/client-wire-proto";
 import { MemoryStorage } from "@eta/core/storage";
@@ -72,8 +66,6 @@ describe("the harness snapshot is what the wire says a view is", () => {
 
 // These DTOs must remain structurally compatible with their runtime producers,
 // while the client builds with neither producer nor its dependencies installed.
-const btwDto = (value: BtwThread): SessionViewBtwThread => value;
-const subagentDto = (value: SubagentRecord): SessionViewSubagent => value;
 const goalDto = (value: RuntimeGoal): GoalState => value;
 const taskDto = (value: RuntimeTask): StoredTask => value;
-void [btwDto, subagentDto, goalDto, taskDto];
+void [goalDto, taskDto];

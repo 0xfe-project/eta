@@ -19,7 +19,7 @@ import { modelSpecOf } from "@eta/daemon";
 import { parseModelId } from "@eta/server";
 
 /** Actions that wait on a model or on a whole compaction take as long as that takes. */
-const LONG_ACTIONS = new Set(["btwAsk", "compact", "goal", "fork"]);
+const LONG_ACTIONS = new Set(["compact", "goal", "fork"]);
 const LONG_MS = 10 * 60 * 1000;
 const SHORT_MS = 60 * 1000;
 

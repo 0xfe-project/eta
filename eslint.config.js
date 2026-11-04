@@ -15,10 +15,14 @@ export default antfu(
     toml: false,
     ignores: [
       "**/*.gen.ts",
+      // `.eta` is the session's own directory (memory, scratch copies of packages), not source.
+      ".eta/**",
       // Generated from the shadcn registry.
       "apps/web/src/components/ui/**",
       "**/.venv/**",
       "**/out/**",
+      // Test fixtures: written as plain JS for runtime evaluation.
+      "**/test/**/fixtures/**",
     ],
   },
   {

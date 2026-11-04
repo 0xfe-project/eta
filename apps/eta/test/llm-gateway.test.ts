@@ -11,7 +11,6 @@ import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { Cpa } from "../src/llm/cpa";
 import { GatewayModels } from "../src/llm/models";
 import { openLlm } from "../src/llm/runtime";
 import { until } from "./support/client";
@@ -380,34 +379,5 @@ describe("the gateway's accounts", () => {
       });
       expect(await gateway.connections()).toEqual([]);
     }
-  }, 60_000);
-});
-
-describe("the CPA process", () => {
-  it("is started again when it dies, and says where", async () => {
-    const warnings: string[] = [];
-    const cpa = await Cpa.start({
-      stateDir: await tempDir("eta-cpa-"),
-      warn: (message) => warnings.push(message),
-    });
-    stops.push(() => cpa.stop());
-    let restarted = 0;
-    cpa.onRestarted(() => restarted++);
-    const models = () =>
-      fetch(`${cpa.baseUrl}/models`, {
-        headers: { authorization: `Bearer ${cpa.accessKey}` },
-      }).then(
-        (response) => response.status,
-        () => 0,
-      );
-    expect(await models()).toBe(200);
-    const { pid } = cpa;
-    process.kill(pid, "SIGKILL");
-    await until(() => restarted === 1);
-    expect(cpa.pid).not.toBe(pid);
-    // The same /v1 key and a management client for the new process.
-    expect(await models()).toBe(200);
-    expect((await cpa.client.credentials.list()).files).toEqual([]);
-    expect(warnings.join("\n")).toContain("CPA exited");
   }, 60_000);
 });

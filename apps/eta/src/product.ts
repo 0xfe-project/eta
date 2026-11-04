@@ -11,7 +11,6 @@ import type {
   AgentRuntimeInfo,
   GitHubCredentials,
 } from "@eta/client-contracts";
-import type { ConfigInput } from "@eta/plugin-akhook";
 import type {
   AssembledServer,
   RemoteSessions,
@@ -27,7 +26,6 @@ import type { DaemonBuilds } from "./machines/builds";
 import type { SshRunner } from "./machines/install";
 import type { MachineRecord } from "./machines/store";
 import type { Tailscale } from "./machines/tailscale";
-import type { McpTuning } from "./mcp/service";
 import type { SessionHooks } from "./session-hooks";
 import type { WebOptions } from "./web/service";
 import { homedir, hostname, platform } from "node:os";
@@ -36,7 +34,6 @@ import { GitHubKeeper } from "@eta/daemon";
 import { peerAddressOf } from "@eta/server";
 import { agentsPlugin } from "./agents/plugin";
 import { AgentStore } from "./agents/store";
-import { AkhookHost } from "./akhook";
 import { loadKey } from "./artifacts/capability";
 import { artifactsPlugin } from "./artifacts/plugin";
 import { createArtifactRoutes } from "./artifacts/routes";
@@ -75,8 +72,6 @@ import { RemoteSessionsRouter } from "./machines/remote-sessions";
 import { serveLink } from "./machines/service";
 import { transportOn } from "./machines/shell";
 import { MachineStore } from "./machines/store";
-import { mcpPlugin } from "./mcp/plugin";
-import { McpService } from "./mcp/service";
 import { MemoryClient } from "./memory/client";
 import { memoryRunHooks, memoryTools } from "./memory/hooks";
 import { memoryPlugin } from "./memory/plugin";
@@ -102,13 +97,6 @@ import { entryOf } from "./usage/recorder";
 import { UsageStore } from "./usage/store";
 import { Web } from "./web/service";
 import { webSessionTools } from "./web/tools";
-
-export interface AkhookOptions {
-  /** The user-level configuration file; defaults to akhook's own path. */
-  userConfigPath?: string | undefined;
-  /** Host layers that neither the user's nor a project's file can disable or replace. */
-  additional?: readonly ConfigInput[] | undefined;
-}
 
 /** What a test sets to move time by hand; a real host leaves all of it alone. */
 export interface RoutinesOptions {
@@ -173,8 +161,6 @@ export function createProduct(options: {
         | (GatewayKeys & { revoke: (agentId: string) => Promise<void> })
         | undefined)
     | undefined;
-  /** akhook: the user-level file, and host layers beyond the environment's and the data directory's. */
-  akhook?: AkhookOptions | undefined;
   warn: (message: string) => void;
   /** The interface the host listens on, for the address a new machine is told to dial. */
   hostname?: string | undefined;
@@ -186,8 +172,6 @@ export function createProduct(options: {
   artifactLimits?: Partial<SiteLimits> | undefined;
   /** The address the user's browser reaches the host at, for MCP sign-in callbacks. */
   publicUrl?: string | undefined;
-  /** The MCP library's manager and fetch, for a test with fake servers. */
-  mcp?: McpTuning | undefined;
   /**
    * The GitHub chain: `true` loads it, and a `GithubTuning` (where GitHub is and what time it is,
    * for a test with a fake GitHub) loads it pointed at that. Absent or false means none of it:
@@ -252,14 +236,7 @@ export function createProduct(options: {
   /** Say that product state moved, to whoever is looking at it. */
   const changed = (touched?: readonly string[] | "all"): void => {
     if (wire === undefined) return;
-    // `mcp` lists each agent's servers, so it moves with the agents.
-    for (const target of [
-      "agents",
-      "machines",
-      "projects",
-      "conversations",
-      "mcp",
-    ])
+    for (const target of ["agents", "machines", "projects", "conversations"])
       wire.pushNow(target);
     const ids =
       touched === "all"
@@ -331,8 +308,6 @@ export function createProduct(options: {
     taskRunner?: TaskRunner;
     hooks?: Required<SessionHooks>;
     inbox?: Inbox;
-    akhook?: AkhookHost;
-    mcp?: McpService;
     githubCredentials?: () => Promise<GitHubCredentials | null>;
     githubLogin?: GitHubKeeper;
   } = {};
@@ -382,10 +357,6 @@ export function createProduct(options: {
         models: () => running?.models,
         hooks: () => later.hooks,
         approvals: () => later.inbox?.approvals() ?? [],
-        mcpCredential: async (call) => {
-          if (later.mcp === undefined) throw new Error("the host is starting");
-          return await later.mcp.relay(call);
-        },
         githubCredentials: async () =>
           (await later.githubCredentials?.()) ?? null,
         generated,
@@ -422,7 +393,6 @@ export function createProduct(options: {
     models: () => running?.models,
     defaults: async () => (await running?.defaults()) ?? {},
     hooks: () => later.hooks,
-    akhook: () => later.akhook?.layerTexts() ?? [],
     bundles,
     home: options.home ?? homedir(),
     forward: (action, args) => router.forward(action, args),
@@ -461,34 +431,6 @@ export function createProduct(options: {
     changed: () => wire?.pushNow("inbox"),
     warn,
   });
-  // The rules of the user's akhook files and the host's own, and the approval list: one set of
-  // tool-call checks per session, one question when several of them want to ask.
-  const akhook = new AkhookHost({
-    dataDir,
-    userConfigPath: options.akhook?.userConfigPath,
-    additional: options.akhook?.additional,
-    // The host's own `eta:github` layer belongs to the GitHub chain: with the chain left out, an
-    // agent is told to use `gh pr create` again instead of a tool it does not have.
-    github: githubOn,
-    approvals: () => inbox.approvals(),
-    bundleLayers: (agentId, cwd) => bundles.layersFor(agentId, cwd),
-    warn,
-  });
-  // MCP: the servers of the agents' bundles, the user's files and the projects, started on this
-  // machine; OAuth credentials sealed in the database; the sign-in callback.
-  const mcp = new McpService({
-    db,
-    key: secretKey,
-    dataDir,
-    home: options.home ?? homedir(),
-    agents: () => agents.list().map(({ id, name }) => ({ id, name })),
-    bundleSources: (agentId, cwd) => bundles.mcpSourcesFor(agentId, cwd),
-    publicUrl: options.publicUrl,
-    changed: () => wire?.pushNow("mcp"),
-    warn,
-    ...options.mcp,
-  });
-  later.mcp = mcp;
   // The GitHub App agents act as, and git and gh on this machine logged in as it (the daemons'
   // machines ask over their links; see `machines/service.ts`). None of it is there when the host
   // was started without GitHub: no App to act as, so no token to hand a machine either.
@@ -547,10 +489,9 @@ export function createProduct(options: {
     warn,
     { publicUrl: options.publicUrl },
   );
-  const runHooks = combineRunHooks([
-    akhook.runHooks,
-    ...(memory === undefined ? [] : [memoryRunHooks(memory)]),
-  ]);
+  const runHooks = combineRunHooks(
+    memory === undefined ? [] : [memoryRunHooks(memory)],
+  );
   const engine = new Engine({
     db,
     attachments,
@@ -652,8 +593,6 @@ export function createProduct(options: {
           },
         ]),
     {
-      toolMiddleware: akhook.toolMiddleware,
-      sessionAttach: akhook.sessionAttach,
       askObserve: (meta: SessionMeta) => inbox.askObserve(originOf(meta)),
     },
     { sessionTools: emailSessionTools(email) },
@@ -669,21 +608,8 @@ export function createProduct(options: {
   ];
   // What the product's tools are, as a daemon's sessions get them (specs the daemon calls back).
   later.hooks = combineSessionHooks(productHooks);
-  // The host's own sessions also get MCP: the proxy tool and the direct tools of their agent's
-  // servers, with akhook asked about each call. They are not in `later.hooks` because a daemon
-  // starts its own, on its own machine.
-  const sessionHooks = combineSessionHooks([
-    ...productHooks,
-    {
-      sessionTools: (input) =>
-        mcp.sessionTools({
-          ...input,
-          akhook: akhook.toolMiddleware(input)[0],
-        }),
-    },
-  ]);
+  const sessionHooks = later.hooks;
   later.inbox = inbox;
-  later.akhook = akhook;
 
   return {
     engine,
@@ -696,7 +622,6 @@ export function createProduct(options: {
     shellEnv: githubLogin?.env ?? {},
     fetch: async (request) =>
       (await hub.route(request)) ??
-      (await mcp.route(request)) ??
       (await githubCallbacks(request)) ??
       (await bundles.route(request)) ??
       (await artifactRoutes(request)),
@@ -708,7 +633,6 @@ export function createProduct(options: {
       hub.close();
       mirrors.detach();
       await githubLogin?.stop();
-      await mcp.close();
       email.stop();
       await bundles.close();
       await web?.close();
@@ -740,7 +664,6 @@ export function createProduct(options: {
         "inbox",
         "usage",
         "bundles",
-        "mcp",
         "email",
         // Not mounted, so not waited for: github would otherwise cost the startup one
         // `MOUNT_TIMEOUT_MS` and then a failure.
@@ -885,7 +808,6 @@ export function createProduct(options: {
           applied("bundles"),
         ),
       );
-      server.mount("mcp", mcpPlugin({ service: mcp }, applied("mcp")));
       if (github !== undefined)
         server.mount("github", githubPlugin({ github }, applied("github")));
       if (memory !== undefined)

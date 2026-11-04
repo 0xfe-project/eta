@@ -27,7 +27,6 @@
  * and a cache would be a cache that has to be invalidated when a skill appears.
  */
 
-import type { ExecutionEnv } from "@eta/harness";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, parse, resolve } from "node:path";
 
@@ -87,7 +86,6 @@ export function gitRepoChain(cwd: string): string[] {
 }
 
 export interface RenderSkillsOptions {
-  env: ExecutionEnv;
   cwd: string;
   home: string;
   /** Skill directories beyond the discovered ones (a bundle's), looked at after them. */
@@ -111,7 +109,7 @@ export async function renderSkillsBlock(
   const { formatSkillsForSystemPrompt, loadSkills } = await import(
     "@eta/harness"
   );
-  const { skills, diagnostics } = await loadSkills(options.env, [
+  const { skills, diagnostics } = await loadSkills([
     ...discoverSkillDirs(options.cwd, options.home),
     ...(options.extraDirs ?? []),
   ]);

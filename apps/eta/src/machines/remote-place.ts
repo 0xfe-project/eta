@@ -38,8 +38,6 @@ export interface RemotePlaceDeps {
   defaults: () => Promise<Settings>;
   /** The product's per-session hooks; not there until the product is made. */
   hooks: () => Required<SessionHooks> | undefined;
-  /** The host's akhook layers, as text: the rules a remote session lives under besides its own. */
-  akhook: () => { name: string; text: string }[];
   /** The bundles; what an agent loads is sent along with its session. */
   bundles: Bundles;
   /** The primary's home: where the user's own persona cards are. */
@@ -168,7 +166,6 @@ export class RemotePlace implements SessionPlace {
             }),
           }),
       tools: this.#tools(conversation.id, agent.id, input.cwd),
-      akhook: this.#deps.akhook(),
       bundles: await this.#deps.bundles.openOn(link, agent.bundles),
       ...(gatewayKey === undefined ? {} : { gatewayKey }),
     });

@@ -25,13 +25,11 @@ import type {
 } from "@eta/client-contracts";
 import type { CallFrame, ServerFrame } from "@eta/client-wire-proto";
 import type { KernelTool, PersonaCard, ThinkingLevel } from "@eta/core";
-import type { AskObserver, OpenSession } from "@eta/harness";
-import type { McpConfigSource } from "@eta/mcp";
+import type { AskObserver } from "@eta/harness";
 import type { OarRuntimes } from "@eta/runtime-oar";
 import type { SessionMeta, SessionsService, Socket } from "@eta/server";
 import type { ActiveBundle } from "./bundle";
 import type { Peer } from "./link/peer";
-import type { McpHostOptions } from "./mcp-host";
 import { Buffer } from "node:buffer";
 import { mkdirSync } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -39,13 +37,6 @@ import { homedir, hostname, platform } from "node:os";
 import { isAbsolute, join } from "node:path";
 import process from "node:process";
 import { LINK_PROTOCOL } from "@eta/client-contracts";
-import { createLocalEnvironment } from "@eta/execution-node";
-import { createRefreshDedupingFetch } from "@eta/mcp";
-import {
-  additionalConfigPathsFromEnv,
-  AkhookSession,
-  journalTriggerStore,
-} from "@eta/plugin-akhook";
 import { createOarRuntimes } from "@eta/runtime-oar";
 import {
   createConnection,
@@ -60,16 +51,12 @@ import {
 import { LocalTransport } from "@eta/ssh";
 import { Context } from "cordis";
 import {
-  bundleHookLayer,
-  bundleMcpServers,
   bundleSkillDirs,
   BundleStore,
   isConfigured,
   readBundle,
 } from "./bundle";
 import { GitHubKeeper } from "./github";
-import { relayAuthProviderFor } from "./mcp-auth";
-import { McpHost } from "./mcp-host";
 import { ModelCatalog, remoteModels } from "./models";
 import { Reports } from "./reports";
 import { lastSeq, runAndWait } from "./run";
@@ -85,13 +72,9 @@ export interface DaemonNodeOptions {
    * `/llm`. Without it a session gets no gateway, and the MCP servers that need it are dropped.
    */
   primaryUrl?: string | undefined;
-  /** The user-level akhook file on this machine; defaults to akhook's own path. */
-  akhookUserConfig?: string | undefined;
   warn?: ((message: string) => void) | undefined;
   /** The user's home on this machine (personas, `~/.eta/mcp.json`); the real one by default. */
   home?: string | undefined;
-  /** Overrides of the MCP library's manager, for a test. */
-  mcp?: McpHostOptions["manager"];
   /** How this process was started; read from the environment by default. */
   install?: DaemonInstall | undefined;
   /**
@@ -113,8 +96,6 @@ interface Opening {
   stamp: string;
   tools: readonly ToolSpec[];
   cards: PersonaCard[];
-  /** The primary's akhook layers, as text. */
-  akhook: { name: string; text: string }[];
   /** The bundles the agent loads, read from this machine's copies. */
   bundles: ActiveBundle[];
 }
@@ -149,7 +130,6 @@ export class DaemonNode {
   readonly #store: FileSessionStore;
   readonly #catalog = new ModelCatalog();
   readonly #runtimes: OarRuntimes;
-  readonly #mcp: McpHost;
   /** git and gh on this machine, logged in as the primary's GitHub App. */
   readonly #github: GitHubKeeper;
   /** The bundles the primary sent, by contents. */
@@ -160,7 +140,6 @@ export class DaemonNode {
   readonly #reports: Reports<QuestionReport>;
   /** What each open session's prompt was read from, to know when it has to be opened again. */
   readonly #opened = new Map<string, string>();
-  readonly #akhookSessions = new WeakMap<object, AkhookSession>();
   readonly #fibers: { dispose: () => Promise<void> }[] = [];
   #sessions: SessionsService | undefined;
   #peer: Peer | undefined;
@@ -196,15 +175,6 @@ export class DaemonNode {
       },
       warn,
     });
-    // Credentials are the primary's: a token this machine refreshes is saved there.
-    this.#mcp = new McpHost({
-      dataDir: options.dataDir,
-      home,
-      warn,
-      authProviderFor: relayAuthProviderFor(() => this.#peer),
-      fetch: createRefreshDedupingFetch(),
-      manager: options.mcp,
-    });
     this.#runtimes = options.runtimes ?? createOarRuntimes({ warn });
     this.#manager = new SessionManager({
       store: this.#store,
@@ -217,11 +187,6 @@ export class DaemonNode {
           catalog: this.#catalog,
           peer: () => this.#peer,
         }),
-      envFor: (meta) => {
-        // The shells see GitHub's login the keeper maintains (`./github`).
-        const env = createLocalEnvironment(meta.cwd, this.#github.env);
-        return env === undefined ? undefined : { env };
-      },
       personasFor: async (meta) => {
         const found = await discoverPersonas({ cwd: meta.cwd, home, warn });
         // The user's cards live on the primary; the ones it sent win a clash like a project's do.
@@ -230,10 +195,7 @@ export class DaemonNode {
         return [...found.values()];
       },
       skillsFor: async (meta) => {
-        const env = createLocalEnvironment(meta.cwd);
-        if (env === undefined) return "";
         return await renderSkillsBlock({
-          env,
           cwd: meta.cwd,
           home,
           extraDirs: (this.#openingOf(meta)?.bundles ?? []).flatMap(
@@ -252,30 +214,13 @@ export class DaemonNode {
         const { meta } = input;
         const opening = this.#openingOf(meta);
         if (opening === undefined) return [];
-        // The product's tools are the primary's; an MCP server starts here, with the session.
-        return [
-          ...proxyTools({
-            session: meta.id,
-            specs: opening.tools,
-            peer: () => this.#peer,
-          }),
-          ...this.#mcp.sessionTools({
-            ...input,
-            bundles: this.#bundleSources(opening, meta),
-            akhook: this.#akhook(input).middleware,
-          }),
-        ];
-      },
-      // The rules of the machine the session runs on (the user's file, the project's
-      // `.akhook.yml` here), then the primary's: the same rules the primary's own sessions have.
-      // A tool on the primary's approval list is asked about through the same question.
-      toolMiddleware: (input) =>
-        this.#openingOf(input.meta) === undefined
-          ? []
-          : [this.#akhook(input).middleware],
-      sessionAttach: async (input) => {
-        if (this.#openingOf(input.meta) === undefined) return;
-        await this.#akhook(input).attach(input.session);
+        // The product's tools are the primary's. (MCP servers and akhook rules started here
+        // until they moved to TOBEREFR; see packages/TOBEREFR/TODO.md.)
+        return proxyTools({
+          session: meta.id,
+          specs: opening.tools,
+          peer: () => this.#peer,
+        });
       },
       askObserve: (meta): AskObserver | undefined => {
         if (this.#openingOf(meta) === undefined) return undefined;
@@ -399,59 +344,13 @@ export class DaemonNode {
     for (const fiber of this.#fibers.splice(0).reverse()) await fiber.dispose();
     await this.#manager.closeAll();
     await this.#github.stop();
-    await this.#mcp.close();
     await this.#store.close();
-  }
-
-  #akhook(input: { meta: SessionMeta; session: OpenSession }): AkhookSession {
-    let made = this.#akhookSessions.get(input.session);
-    if (made === undefined) {
-      const { meta, session } = input;
-      made = new AkhookSession({
-        cwd: meta.cwd,
-        ask: session.ask,
-        approvals: (name) => this.#needsApproval(meta.id, name),
-        userConfigPath: this.#options.akhookUserConfig,
-        additional: () => [
-          ...additionalConfigPathsFromEnv(),
-          ...(this.#openingOf(meta)?.akhook ?? []),
-          ...(this.#openingOf(meta)?.bundles ?? []).flatMap((active) => {
-            const layer = bundleHookLayer(active, { cwd: meta.cwd });
-            return layer === undefined ? [] : [layer];
-          }),
-        ],
-        store: journalTriggerStore(session),
-        warn: this.#warn,
-      });
-      this.#akhookSessions.set(session, made);
-    }
-    return made;
-  }
-
-  /** The MCP servers of the bundles the agent loads, one source each. */
-  #bundleSources(opening: Opening, meta: SessionMeta): McpConfigSource[] {
-    return opening.bundles.map((active) => ({
-      name: `bundle:${active.bundle.manifest.name}`,
-      servers: bundleMcpServers(active, { cwd: meta.cwd }, this.#warn),
-    }));
   }
 
   #openingOf(meta: SessionMeta): Opening | undefined {
     if (meta.agentId === undefined || meta.conversationId === undefined)
       return undefined;
     return this.#openings.get(keyOf(meta.conversationId, meta.agentId));
-  }
-
-  async #needsApproval(session: string, name: string): Promise<boolean> {
-    const peer = this.#peer;
-    if (peer === undefined || peer.lost)
-      throw new Error("the primary is not reachable");
-    const answer = (await peer.call(
-      "tool.gate",
-      { session, name },
-      { timeoutMs: 15_000 },
-    )) as { ask: boolean };
-    return answer.ask;
   }
 
   /* ------------------------------------------------------------ machine.* */
@@ -571,7 +470,6 @@ export class DaemonNode {
       stamp: args.stamp,
       tools: args.tools,
       cards: (args.personaCards ?? []) as PersonaCard[],
-      akhook: args.akhook ?? [],
       bundles: this.#activeBundles(args),
     });
     const thinking = (id: string): Promise<unknown> =>

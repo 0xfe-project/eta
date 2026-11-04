@@ -11,7 +11,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "test": "vitest --run --passWithNoTests",
-    "typecheck": "bun check",
+    "typecheck": "tsc --noEmit",
     "smoke": "ETA_SMOKE_CONFIG=\"${ETA_SMOKE_CONFIG:-$HOME/.eta/config.json}\" vitest --run test/smoke.e2e.test.ts",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
   },

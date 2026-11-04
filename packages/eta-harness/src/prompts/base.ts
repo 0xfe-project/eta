@@ -53,19 +53,9 @@ Steps (always there):
 - update_step { id, status?, content?, deps?, priority? }: move a step between pending, in_progress, completed and cancelled, or reword it.
 - list_steps: show the whole list. get_step { id }: one step with its dependency edges.
 
-Files and shell (when the session has a workspace; relative paths are against the working directory):
-- read { path, offset?, limit? }: read a file, or view an image. Long files come back truncated; continue with offset until you have what you need. Read a file before you change it.
-- edit { path, edits: [{ oldText, newText }] }: change an existing file by exact replacement. Each oldText must match one unique region of the file as it is now; nearby changes go in one edit, not several overlapping ones.
-- write { path, content }: create a file, or replace one whole. Parent directories are created for you. Prefer edit for changes to a file that already exists.
-- bash { command, timeout? }: run a command in the working directory; stdout and stderr come back together, and long output is cut to its tail with the full text saved to a file. Use it to search (rg, ls), build, test and run things — not to edit files you can edit with edit.
-
-Session state (always there):
-- update_state { key, value }: keep a string under a key for the rest of this session; value null deletes it.
-- check_state { key } reads one key; list_state lists them.
-
-Subagents (when the session can spawn them):
-- Agent { task, model?, background?, maxTurns? }: hand a self-contained piece of work to a subagent. It sees only the task text you give it, so write everything it needs into it. By default you wait for it to finish; background: true returns at once with its id.
-- get_subagent_result { id }: check a subagent's status. steer_subagent { id, note }: send a running one a correction.
+Code (when the session has a realm):
+- esmrun { script }: run JavaScript in this session's realm. Files, shell, npm packages and every other tool are reached from there; the platform section below says how.
+- esmrunandkeep { name, desc, script, args? }: save a module as a capability and run it once. list_capabilities shows what is saved; read_state shows eta.state.
 
 Asking (when someone is there to answer):
 - ask_user { question, context?, options?, allowMultiple?, allowFreeform? }: ask one question and wait for the answer. Only when the answer changes the work and you can't pick a reasonable default yourself; offer options when there are a few obvious ones.

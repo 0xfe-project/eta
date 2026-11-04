@@ -1,4 +1,3 @@
-/* eslint-disable no-template-curly-in-string -- `${NAME}` is the bundle format's own variable syntax */
 /**
  * Environment bundles, the part both the primary and a daemon need.
  *
@@ -7,7 +6,7 @@
  * ```
  * plugin.json        name, description, requires, config, service
  * mcp.json           { "mcpServers": { "<name>": { command, args, env, cwd } | { url, headers }, plus the
- *                    @eta/mcp fields: lifecycle, directTools, approveTools, auth, ... } }
+ *                    MCP fields } } — read and kept, not started (see packages/TOBEREFR/TODO.md)
  * skills/<name>/SKILL.md  Agent Skills (and whatever references they carry)
  * akhook.yml         hook rules, akhook's own file
  * ```
@@ -21,8 +20,6 @@
  * environment, and in `${NAME}` of a URL or header) and its hook commands (as environment). They
  * are not in the akhook text, not in the session's shell and not in a file.
  */
-import type { McpServerEntry } from "@eta/mcp";
-import type { ConfigInput } from "@eta/plugin-akhook";
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import {
@@ -37,7 +34,6 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, normalize, sep } from "node:path";
 import process from "node:process";
-import { parseMcpServers } from "@eta/mcp";
 
 export class BundleError extends Error {
   override readonly name = "BundleError";
@@ -78,7 +74,8 @@ export interface Bundle {
   manifest: BundleManifest;
   /** Where it is on this machine. */
   dir: string;
-  mcp: Record<string, McpServerEntry>;
+  /** Its `mcp.json` servers, as declared. Nothing starts them while MCP is in TOBEREFR. */
+  mcp: Record<string, Record<string, unknown>>;
   /** The names of the skill directories it has. */
   skills: string[];
   /** The text of its `akhook.yml`, when it has one. */
@@ -195,7 +192,7 @@ function serviceOf(raw: unknown): BundleServiceSpec | undefined {
   };
 }
 
-function mcpOf(raw: unknown): Record<string, McpServerEntry> {
+function mcpOf(raw: unknown): Record<string, Record<string, unknown>> {
   if (raw === undefined) return {};
   if (!isPlain(raw) || !isPlain(raw.mcpServers ?? {}))
     throw new BundleError("mcp.json: mcpServers must be a mapping");
@@ -205,12 +202,10 @@ function mcpOf(raw: unknown): Record<string, McpServerEntry> {
       throw new BundleError(`mcp.json: ${name} is not a usable server name`);
     if (!isPlain(decl))
       throw new BundleError(`mcp.json: ${name} must be a mapping`);
+    if (typeof decl.command !== "string" && typeof decl.url !== "string")
+      throw new BundleError(`mcp.json: ${name} needs a command or a url`);
   }
-  // The library reads the whole entry (lifecycle, directTools, approveTools, ...); a bundle that
-  // writes one wrong is refused rather than half loaded.
-  const { servers, issues } = parseMcpServers({ mcpServers: declared });
-  if (issues.length > 0) throw new BundleError(`mcp.json: ${issues[0]}`);
-  return servers;
+  return declared as Record<string, Record<string, unknown>>;
 }
 
 /** Read a bundle's directory. Throws `BundleError` for anything that does not parse. */
@@ -295,115 +290,11 @@ export interface ActiveBundle {
   gateway?: { url: string; key: string } | undefined;
 }
 
-export interface SessionVars {
-  /** The session's working directory. */
-  cwd: string;
-}
-
-const VARIABLE = /\$\{([A-Z_]\w*)\}/gi;
-
-function expand(
-  text: string,
-  vars: Readonly<Record<string, string>>,
-  where: string,
-): string {
-  return text.replace(VARIABLE, (_, name: string) => {
-    const value = vars[name];
-    if (value === undefined)
-      throw new BundleError(`${where}: \${${name}} has no value here`);
-    return value;
-  });
-}
-
-function varsOf(active: ActiveBundle, session: SessionVars) {
-  const vars: Record<string, string> = {};
-  for (const field of active.bundle.manifest.config)
-    vars[field.name] = active.config[field.name] ?? "";
-  vars.PLUGIN_ROOT = active.bundle.dir;
-  vars.ETA_WORKSPACE_DIR = session.cwd;
-  if (active.serviceUrl !== undefined) vars.ETA_SERVICE_URL = active.serviceUrl;
-  if (active.gateway !== undefined) {
-    vars.ETA_GATEWAY_URL = active.gateway.url;
-    vars.ETA_AGENT_KEY = active.gateway.key;
-  }
-  return vars;
-}
-
 /** The skill directories of the bundle (`<dir>/skills`), when it has skills. */
 export function bundleSkillDirs(active: ActiveBundle): string[] {
   return active.bundle.skills.length === 0
     ? []
     : [join(active.bundle.dir, "skills")];
-}
-
-/**
- * The MCP servers of the bundle, ready for the MCP library to start on this machine. A bundle that is not configured
- * has none, and a server that asks for something this machine does not have (the service's
- * address, from a daemon) is reported and left out.
- */
-export function bundleMcpServers(
-  active: ActiveBundle,
-  session: SessionVars,
-  warn: (message: string) => void = () => undefined,
-): Record<string, McpServerEntry> {
-  if (!active.configured) return {};
-  const vars = varsOf(active, session);
-  const servers: Record<string, McpServerEntry> = {};
-  for (const [name, decl] of Object.entries(active.bundle.mcp)) {
-    const where = `bundle ${active.bundle.manifest.name}, server ${name}`;
-    const fill = (text: string): string => expand(text, vars, where);
-    const fillAll = (record: Record<string, string>): Record<string, string> =>
-      Object.fromEntries(
-        Object.entries(record).map(([key, value]) => [key, fill(value)]),
-      );
-    try {
-      const entry: McpServerEntry = { ...decl };
-      if (decl.command !== undefined) {
-        // The config reaches the process as its environment, under the names it was declared by.
-        const env: Record<string, string> = {};
-        for (const [key, value] of Object.entries(active.config))
-          if (value !== "") env[key] = value;
-        Object.assign(env, fillAll(decl.env ?? {}));
-        entry.command = fill(decl.command);
-        entry.args = (decl.args ?? []).map(fill);
-        entry.env = env;
-        entry.cwd = decl.cwd === undefined ? active.bundle.dir : fill(decl.cwd);
-      }
-      if (decl.url !== undefined) entry.url = fill(decl.url);
-      if (decl.headers !== undefined) entry.headers = fillAll(decl.headers);
-      if (decl.bearerToken !== undefined)
-        entry.bearerToken = fill(decl.bearerToken);
-      servers[name] = entry;
-    } catch (error) {
-      warn(`[eta] ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-  return servers;
-}
-
-/**
- * The bundle's hook rules as an akhook layer: its text with the paths filled in, rule ids put
- * under the bundle's name, and the config values as the environment of its commands (the text
- * itself never holds them).
- */
-export function bundleHookLayer(
-  active: ActiveBundle,
-  session: SessionVars,
-): Extract<ConfigInput, { text: string }> | undefined {
-  const { hooks, manifest, dir } = active.bundle;
-  if (hooks === undefined || !active.configured) return undefined;
-  const text = hooks
-    .replaceAll("${PLUGIN_ROOT}", dir)
-    .replaceAll("${ETA_WORKSPACE_DIR}", session.cwd);
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(active.config))
-    if (value !== "") env[key] = value;
-  return {
-    name: `bundle:${manifest.name}`,
-    text,
-    env,
-    idPrefix: `${manifest.name}/`,
-  };
 }
 
 /* ---------------------------------------------------------------- moving files */
