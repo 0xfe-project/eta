@@ -68,7 +68,7 @@ import {
 import { recordGoalEntries, SessionLog } from "@eta/core/session";
 import { AskRegistry, createAskUserTool } from "./ask";
 import { CompactionService } from "./compaction-service";
-import { openEsmSession } from "./esm";
+import { ESM_TOOL_NAMES, openEsmSession } from "./esm";
 import { imageLimitsFor } from "./image-limits";
 import { JournalingService, SESSION_CONFIG, TASKS_STATE } from "./journaling";
 import { extractMemoryAtRunEnd, MemoryCache } from "./memory";
@@ -445,7 +445,8 @@ export async function openSession(
 
   // What the model may call. A session whose journal already chose a set keeps it —
   // a narrower toolset is a decision somebody made, not something to overwrite — and
-  // a name that is not installed is reported rather than silently dropped.
+  // a name that is not installed is reported rather than silently dropped. The realm is
+  // the exception: it is how a session acts at all, so a pin that predates it gains it below.
   const installedNames = installedTools.map((tool) => tool.name);
   // A session's journal pins the names it was opened with, and a pinned name that no longer
   // exists fails the next run (`configured_tools_unavailable`) instead of quietly losing a tool.
@@ -477,6 +478,22 @@ export async function openSession(
   if (kernel.config.read("activeToolNames").length === 0) {
     kernel.config.update({ activeToolNames: installedNames });
   } else {
+    // Read off the pin, not off what was dropped above: a session that lost `read` and `bash` on
+    // an earlier open has nothing left to drop, and it still has no way to run anything. Only the
+    // names that are missing are added, so a second open writes nothing.
+    const active = kernel.config.read("activeToolNames");
+    const realm = ESM_TOOL_NAMES.filter(
+      (name) =>
+        esm !== undefined &&
+        installedNames.includes(name) &&
+        !active.includes(name),
+    );
+    if (realm.length > 0) {
+      kernel.config.update({ activeToolNames: [...active, ...realm] });
+      options.kernel?.warn?.(
+        `[eta-harness] realm tools added to this session: ${realm.join(", ")}`,
+      );
+    }
     const missing = kernel.config
       .read("activeToolNames")
       .filter((name) => !installedNames.includes(name));
