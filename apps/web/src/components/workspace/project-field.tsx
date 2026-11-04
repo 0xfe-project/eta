@@ -1,9 +1,7 @@
 import type { ProjectChoice } from "./use-project-choice";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { host, pickFolder } from "@/lib/native";
-import { projectPlace } from "@/lib/projects";
+import { folderName, projectPlace } from "@/lib/projects";
 import { useMachines } from "@/queries/projects";
 import { Select, SelectOption } from "./select-field";
 import {
@@ -14,13 +12,18 @@ import {
 
 /** The "add a directory" option; with more than one usable machine, `__add__:<machine id>` each. */
 const ADD = "__add__";
+/** The directory chosen to add, which stands in the list like a project until it is one. */
+const CHOSEN = "__chosen__";
 
 export function ProjectField({
   choice,
   onChange,
+  onBrowse,
 }: {
   choice: ProjectChoice;
   onChange: (choice: ProjectChoice) => void;
+  /** Go and choose a directory, on the machine named or else wherever the choice points. */
+  onBrowse: (machineId?: string) => void;
 }) {
   const { t: translateText } = useTranslation(["chat", "common"] as const);
   const projects = useChoosable();
@@ -32,19 +35,24 @@ export function ProjectField({
   // made where the path is asked for: one "add" option per machine, at the end of the projects.
   const perMachine = usable.length > 1;
   const listed = projects.length > 0 || perMachine;
-  // A folder dialog sees this machine's disk, so it is offered only while the path would be added
-  // on this machine. A path on a daemon is still typed by hand — and that is not a gap: the folder
-  // being picked is not on the disk in front of the user.
-  const canPick =
-    host().kind === "desktop" &&
-    (choice.machineId ?? primary?.id) === primary?.id;
-  const choose = async () => {
-    const picked = await pickFolder(choice.path.trim() || undefined);
-    if (picked !== null) onChange({ ...choice, path: picked });
-  };
   const offline = (machineId: string) =>
     machines.some(
       (machine) => machine.id === machineId && machine.status !== "online",
+    );
+  const path = choice.path.trim();
+  const chosen =
+    path === "" ? (
+      translateText("chat:new.pickPrompt")
+    ) : (
+      <>
+        {folderName(path)}
+        <span className="ml-1 font-mono text-muted-foreground">
+          {projectPlace(
+            { machineId: choice.machineId ?? primary?.id ?? "", path },
+            machines,
+          )}
+        </span>
+      </>
     );
   return (
     <div className="grid gap-1 text-sm">
@@ -53,25 +61,24 @@ export function ProjectField({
         <Select
           id="new-project"
           className="w-full"
-          value={
-            adding
-              ? perMachine
-                ? `${ADD}:${choice.machineId ?? primary?.id ?? ""}`
-                : ADD
-              : (project?.id ?? "")
-          }
-          onValueChange={(value) =>
-            onChange(
-              value.startsWith(ADD)
-                ? {
-                    ...choice,
-                    projectId: "",
-                    machineId: value.slice(ADD.length + 1) || undefined,
-                  }
-                : { ...choice, projectId: value },
-            )
-          }
+          value={adding ? CHOSEN : (project?.id ?? "")}
+          onValueChange={(value) => {
+            if (value.startsWith(ADD))
+              onBrowse(value.slice(ADD.length + 1) || undefined);
+            else if (value !== CHOSEN)
+              onChange({ ...choice, projectId: value });
+          }}
         >
+          {/* With nothing chosen yet the option only names the empty field, and is not on offer. */}
+          {adding ? (
+            <SelectOption
+              value={CHOSEN}
+              disabled={path === ""}
+              className={path === "" ? "hidden" : undefined}
+            >
+              {chosen}
+            </SelectOption>
+          ) : null}
           {/* The trigger shows the chosen option as it is, so the place written here is also what
               tells two projects at one path apart once one of them is chosen. */}
           {projects.map((candidate) => (
@@ -97,36 +104,17 @@ export function ProjectField({
             </SelectOption>
           )}
         </Select>
-      ) : null}
-      {adding ? (
-        <>
-          <Input
-            id={listed ? undefined : "new-project"}
-            aria-label={translateText("chat:new.path")}
-            value={choice.path}
-            onChange={(event) =>
-              onChange({ ...choice, path: event.target.value })
-            }
-            placeholder={translateText("chat:groups.fields.cwdPlaceholder")}
-            spellCheck={false}
-            className="font-mono"
-          />
-          {canPick ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="justify-self-start"
-              onClick={() => void choose()}
-            >
-              {translateText("chat:new.chooseFolder")}
-            </Button>
-          ) : null}
-          <span className="text-xs text-muted-foreground">
-            {translateText("chat:new.pathHint")}
-          </span>
-        </>
-      ) : null}
+      ) : (
+        <Button
+          id="new-project"
+          type="button"
+          variant="outline"
+          className="w-full justify-start overflow-hidden font-normal"
+          onClick={() => onBrowse()}
+        >
+          <span className="truncate">{chosen}</span>
+        </Button>
+      )}
     </div>
   );
 }

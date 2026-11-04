@@ -1,8 +1,8 @@
 /**
  * The window's own capabilities, on a loopback port that exists for as long as the window does.
  *
- * A folder dialog, a place to save a file, the system browser, a context menu, the three window
- * buttons: none of these belong to the host. The host owns sessions and knows nothing about
+ * A place to save a file, the system browser, a context menu, the three window buttons: none of
+ * these belong to the host. The host owns sessions and knows nothing about
  * windows, and there may be several windows' worth of clients talking to one host — so the
  * capabilities that are true of *this* window live in the process that owns *this* window.
  *
@@ -36,8 +36,6 @@ interface NativeMenuItem {
 }
 
 interface NativeHandlers {
-  /** The system's own folder chooser. `null` is a cancelled dialog, not a failure. */
-  folderDialog: (input: { startingFolder?: string }) => Promise<string | null>;
   /** Write `content` somewhere the user chose; `null` when they chose nothing. */
   saveFile: (input: {
     filename: string;
@@ -171,7 +169,6 @@ export function startNativeBridge(options: NativeBridgeOptions): NativeBridge {
         return new Response("native_request_invalid", { status: 400, headers });
       // The body is whatever a page sent, so it is read by name rather than trusted as a shape.
       const field = (name: string): unknown => body[name];
-      const startingFolder = text(field("startingFolder"));
       const filename = text(field("filename"));
       const content = field("content");
       const url = externalUrl(field("url"));
@@ -180,12 +177,6 @@ export function startNativeBridge(options: NativeBridgeOptions): NativeBridge {
         (candidate) => candidate === field("action"),
       );
       try {
-        if (path === "/api/native/folder-dialog")
-          return json({
-            path: await handlers.folderDialog(
-              startingFolder === undefined ? {} : { startingFolder },
-            ),
-          });
         if (path === "/api/native/save-file") {
           if (filename === undefined || typeof content !== "string")
             return new Response("native_request_invalid", {

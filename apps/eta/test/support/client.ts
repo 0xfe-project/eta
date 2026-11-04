@@ -63,7 +63,10 @@ export function connect(
       if (waiter === undefined) return;
       pending.delete(frame.requestId);
       if (frame.ok) waiter.resolve(frame.result);
-      else waiter.reject(new Error(frame.error));
+      else
+        waiter.reject(
+          Object.assign(new Error(frame.error), { problem: frame.problem }),
+        );
     });
     socket.addEventListener("error", () =>
       reject(new Error("the socket could not connect")),

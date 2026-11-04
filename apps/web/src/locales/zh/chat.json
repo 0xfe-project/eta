@@ -304,8 +304,29 @@
     "addPath": "添加目录…",
     "addPathOn": "在 {{machine}} 上添加目录…",
     "path": "目录路径",
-    "pathHint": "绝对路径，必须是已存在的目录。成员在这里干活。",
-    "chooseFolder": "选择目录…"
+    "pickPrompt": "选择目录…",
+    "picker": {
+      "title": "选择目录",
+      "hint": "成员会在这个目录里干活。",
+      "machine": "机器",
+      "crumbs": "当前路径",
+      "typePath": "输入路径",
+      "filter": "筛选",
+      "hidden": "隐藏目录",
+      "recent": "最近用过",
+      "home": "主目录",
+      "added": "已添加",
+      "empty": "这里没有子目录，可以直接选择当前目录",
+      "noMatch": "没有匹配的目录",
+      "truncated": "目录太多，只列出前 {{limit}} 个。用筛选或输入路径。",
+      "up": "回到上一级",
+      "choose": "选择此目录",
+      "problems": {
+        "notFound": "这个目录不存在",
+        "denied": "没有权限读取这个目录",
+        "offline": "连不上这台机器"
+      }
+    }
   },
   "chat": {},
   "steward": {

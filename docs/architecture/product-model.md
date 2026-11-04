@@ -21,6 +21,8 @@ project = machine + 目录（同一台机器上同一路径唯一）。`steward_
 
 **文件列表**（`projects.files`，输入框的 `@` 菜单用）：在 project 所在的机器上用一段 shell 脚本列出（本机经进程自己的 shell，daemon 经链路的 `exec`，所以只有一套实现）：git 检出里取 git 认识的文件（已跟踪、未被忽略），否则是深度 ≤ 8 的 `find`；再滤掉 `node_modules`、`.git`、`.eta`、`dist`、`build` 等目录，按浅层优先排序，默认 2000、最多 5000 条，超出时 `truncated`。路径相对 project 目录，也就是智能体的工作目录。菜单里成员在前、文件在后。
 
+**列目录**（`projects.directories`，选目录的视图用）：同样是在目标机器上跑一段 shell 脚本，只列目录（含指向目录的符号链接），带 `hidden`、`git` 和已有的 `projectId`，不碰文件名。没有用 `ExecutionEnv.listDir`：它逐项取文件信息，远端读不了的目录会被当成空目录。路径按文本规范化，不解析符号链接，和 `projects.create` 存的 key 一致。上限 1000 项，超出时 `truncated`，可见目录优先。失败时 `problem.code` 是 `not_found`、`denied` 或 `offline`，不带系统细节。
+
 **切换主理人**：旧智能体的会话保留，仍然可以被 @；新智能体的会话在第一次被唤醒时才创建，只被告知它没看过的部分（`participant.last_seq` 之后的行）；时间线上落一条 `system` 行（"X 现在是主理人，接替 Y"）。
 
 ## 对话与成员

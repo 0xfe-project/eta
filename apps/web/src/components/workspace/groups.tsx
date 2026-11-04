@@ -53,6 +53,7 @@ import { wireErrorMessage } from "@/queries/wire";
 import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar, AgentStatus, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels, memberStatusLabel } from "./agent-status";
+import { DirectoryPicker } from "./directory-picker";
 import { InspectButton } from "./inspect-button";
 import { MemberRing } from "./member-ring";
 import { MemberStats } from "./member-stats";
@@ -63,7 +64,11 @@ import { when } from "./routine-format";
 import { useAgents, useOpenAgent } from "./use-agents";
 import { useChatList } from "./use-chat-list";
 import { useGroups, useOpenGroup } from "./use-groups";
-import { useChosenProject, useResolveProject } from "./use-project-choice";
+import {
+  useChosenProject,
+  useDirectoryBrowsing,
+  useResolveProject,
+} from "./use-project-choice";
 import { useWorkspaceStore } from "./workspace-store";
 
 const onError = (error: Error) => toast.error(wireErrorMessage(error));
@@ -125,13 +130,16 @@ export function CreateGroup({
   const setOpen = onOpenChange ?? setUncontrolled;
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
-  // Where the group works: a project, or a typed path to add as one (a folder picker is the
-  // desktop's job, and a typed path is honest about what will be used).
+  // Where the group works: a project, or a directory to add as one.
   const [choice, setChoice] = useState<ProjectChoice>({
     projectId: undefined,
     path: "",
   });
   const { project, adding } = useChosenProject(choice);
+  const { browsing, picker, dialog, browse } = useDirectoryBrowsing(
+    choice,
+    setChoice,
+  );
   const resolver = useResolveProject();
   const [chosen, setChosen] = useState<string[]>(members);
   const { agents } = useAgents();
@@ -147,6 +155,7 @@ export function CreateGroup({
       onOpenChange={(value) => {
         setOpen(value);
         if (value) setChosen(members);
+        else picker.onBack();
       }}
     >
       {controlled === undefined && (
@@ -162,105 +171,117 @@ export function CreateGroup({
           )}
         </DialogTrigger>
       )}
-      <DialogContent onCloseAutoFocus={returnFocus}>
-        <DialogHeader>
-          <DialogTitle>{translateText("groups.actions.create")}</DialogTitle>
-          <DialogDescription>
-            {translateText("groups.createDescription")}
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          className="grid gap-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (sendingRef.current) return;
-            sendingRef.current = true;
-            void (async () => {
-              try {
-                const target = await resolver.resolve(
-                  choice,
-                  project,
-                  chosen[0] ?? null,
-                );
-                const { conversation } = await create.mutateAsync({
-                  projectId: target.id,
-                  name: name.trim(),
-                  agentIds: chosen,
-                });
-                if (goal.trim())
-                  await update.mutateAsync({
-                    conversationId: conversation.id,
-                    goal,
-                  });
-                setOpen(false);
-                setName("");
-                setGoal("");
-                setChoice({ projectId: undefined, path: "" });
-                openGroup(conversation.id);
-              } catch (error) {
-                onError(error as Error);
-              } finally {
-                sendingRef.current = false;
-              }
-            })();
-          }}
-        >
-          <label className="grid gap-2 text-sm">
-            {translateText("groups.fields.name")}
-            <Input
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={translateText("groups.fields.namePlaceholder")}
-              maxLength={100}
-            />
-          </label>
-          <ProjectField choice={choice} onChange={setChoice} />
-          <label className="grid gap-2 text-sm">
-            {translateText("groups.fields.optionalGoal")}
-            <Textarea
-              value={goal}
-              onChange={(e) => setGoal(e.target.value)}
-              maxLength={10000}
-            />
-          </label>
-          <fieldset className="grid max-h-64 gap-1 overflow-y-auto">
-            <legend className="mb-2 text-sm">
-              {translateText("groups.members.title")}
-            </legend>
-            {agents.map((a) => (
-              <label
-                key={a.id}
-                className="flex min-h-10 items-center gap-2 text-sm"
-              >
-                <Checkbox
-                  checked={chosen.includes(a.id)}
-                  onCheckedChange={(v) =>
-                    setChosen(
-                      v
-                        ? [...chosen, a.id]
-                        : chosen.filter((id) => id !== a.id),
-                    )
+      <DialogContent {...dialog} onCloseAutoFocus={returnFocus}>
+        {browsing ? (
+          <DirectoryPicker {...picker} />
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>
+                {translateText("groups.actions.create")}
+              </DialogTitle>
+              <DialogDescription>
+                {translateText("groups.createDescription")}
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              className="grid gap-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (sendingRef.current) return;
+                sendingRef.current = true;
+                void (async () => {
+                  try {
+                    const target = await resolver.resolve(
+                      choice,
+                      project,
+                      chosen[0] ?? null,
+                    );
+                    const { conversation } = await create.mutateAsync({
+                      projectId: target.id,
+                      name: name.trim(),
+                      agentIds: chosen,
+                    });
+                    if (goal.trim())
+                      await update.mutateAsync({
+                        conversationId: conversation.id,
+                        goal,
+                      });
+                    setOpen(false);
+                    setName("");
+                    setGoal("");
+                    setChoice({ projectId: undefined, path: "" });
+                    openGroup(conversation.id);
+                  } catch (error) {
+                    onError(error as Error);
+                  } finally {
+                    sendingRef.current = false;
                   }
-                />
-                <AgentAvatar agent={a} className="size-6" />
-                {a.name}
-              </label>
-            ))}
-          </fieldset>
-          <DialogFooter>
-            <Button
-              type="submit"
-              disabled={
-                !chosen.length ||
-                create.isPending ||
-                (adding && choice.path.trim().length === 0)
-              }
+                })();
+              }}
             >
-              {translateText("groups.actions.createGroup")}
-            </Button>
-          </DialogFooter>
-        </form>
+              <label className="grid gap-2 text-sm">
+                {translateText("groups.fields.name")}
+                <Input
+                  autoFocus
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={translateText("groups.fields.namePlaceholder")}
+                  maxLength={100}
+                />
+              </label>
+              <ProjectField
+                choice={choice}
+                onChange={setChoice}
+                onBrowse={browse}
+              />
+              <label className="grid gap-2 text-sm">
+                {translateText("groups.fields.optionalGoal")}
+                <Textarea
+                  value={goal}
+                  onChange={(e) => setGoal(e.target.value)}
+                  maxLength={10000}
+                />
+              </label>
+              <fieldset className="grid max-h-64 gap-1 overflow-y-auto">
+                <legend className="mb-2 text-sm">
+                  {translateText("groups.members.title")}
+                </legend>
+                {agents.map((a) => (
+                  <label
+                    key={a.id}
+                    className="flex min-h-10 items-center gap-2 text-sm"
+                  >
+                    <Checkbox
+                      checked={chosen.includes(a.id)}
+                      onCheckedChange={(v) =>
+                        setChosen(
+                          v
+                            ? [...chosen, a.id]
+                            : chosen.filter((id) => id !== a.id),
+                        )
+                      }
+                    />
+                    <AgentAvatar agent={a} className="size-6" />
+                    {a.name}
+                  </label>
+                ))}
+              </fieldset>
+              <DialogFooter>
+                <Button
+                  type="submit"
+                  disabled={
+                    !chosen.length ||
+                    create.isPending ||
+                    (adding && choice.path.trim().length === 0)
+                  }
+                >
+                  {translateText("groups.actions.createGroup")}
+                </Button>
+              </DialogFooter>
+            </form>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

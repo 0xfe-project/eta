@@ -11,11 +11,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import { useConversationActions } from "@/queries/conversations";
 import { AgentAvatar } from "./agent-identity";
+import { DirectoryPicker } from "./directory-picker";
 import { ProjectField } from "./project-field";
 import { useAgents } from "./use-agents";
-import { useChosenProject, useResolveProject } from "./use-project-choice";
+import {
+  useChosenProject,
+  useDirectoryBrowsing,
+  useResolveProject,
+} from "./use-project-choice";
 import { useWorkspaceStore } from "./workspace-store";
 
 /**
@@ -25,8 +31,9 @@ import { useWorkspaceStore } from "./workspace-store";
  * to a page for them took the sidebar and the panel away, which left a mostly empty screen behind
  * a form that fits in a corner of it.
  *
- * The project is one of the existing ones, or a path to add (adding a path that is already a
- * project returns that project, so the form never asks twice). A project made here takes the agent
+ * The project is one of the existing ones, or a directory to add, chosen in a view that takes the
+ * form's place (adding a path that is already a project returns that project, so the form never
+ * asks twice). A project made here takes the agent
  * as its steward, because a conversation with nobody to take its first message is a room nobody
  * answers in. The result shows up in the sidebar like any other.
  *
@@ -34,7 +41,6 @@ import { useWorkspaceStore } from "./workspace-store";
  * the first), and the agent list is the same one the sidebar shows.
  */
 export function NewConversationDialog() {
-  const { t: translateText } = useTranslation(["chat"] as const);
   const open = useWorkspaceStore((state) => state.newConversation.open);
   const projectId = useWorkspaceStore(
     (state) => state.newConversation.projectId,
@@ -45,18 +51,10 @@ export function NewConversationDialog() {
   const close = () => setNewConversation({ open: false });
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? undefined : close())}>
-      <DialogContent className="gap-3 sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{translateText("chat:new.title")}</DialogTitle>
-          <DialogDescription>
-            {translateText("chat:new.hint")}
-          </DialogDescription>
-        </DialogHeader>
-        {/* Mounted per open: a form left half filled in is not what the next open should show. */}
-        {open ? (
-          <NewConversationForm projectId={projectId} onDone={close} />
-        ) : null}
-      </DialogContent>
+      {/* Mounted per open: a form left half filled in is not what the next open should show. */}
+      {open ? (
+        <NewConversationForm projectId={projectId} onDone={close} />
+      ) : null}
     </Dialog>
   );
 }
@@ -79,6 +77,10 @@ function NewConversationForm({
     path: "",
   });
   const { project, adding } = useChosenProject(choice);
+  const { browsing, picker, dialog, browse } = useDirectoryBrowsing(
+    choice,
+    setChoice,
+  );
   const [failed, setFailed] = useState("");
   const chosen = agentId ?? agents[0]?.id;
 
@@ -102,50 +104,74 @@ function NewConversationForm({
   };
 
   return (
-    <>
-      <ProjectField choice={choice} onChange={setChoice} />
-      <fieldset className="grid gap-1">
-        <legend className="mb-1 text-sm">
-          {translateText("chat:new.agent")}
-        </legend>
-        {!loaded ? (
-          <Loading rows={3} className="border border-border" />
-        ) : (
-          <ul className="max-h-72 overflow-y-auto border border-border">
-            {agents.map((agent) => (
-              <li key={agent.id}>
-                <button
-                  type="button"
-                  aria-pressed={chosen === agent.id}
-                  onClick={() => setAgentId(agent.id)}
-                  className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm hover:bg-muted aria-pressed:bg-muted"
-                >
-                  <AgentAvatar agent={{ id: agent.id }} className="size-4" />
-                  <span className="min-w-0 flex-1 truncate">{agent.name}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </fieldset>
-      {failed.length > 0 ? (
-        <p role="alert" className="text-xs text-state-error">
-          {failed}
-        </p>
-      ) : null}
-      <div className="flex items-center gap-2">
-        <Button
-          onClick={() => void start()}
-          disabled={
-            create.isPending ||
-            resolver.pending ||
-            agents.length === 0 ||
-            (adding && choice.path.trim().length === 0)
-          }
-        >
-          {translateText("chat:new.start")}
-        </Button>
-      </div>
-    </>
+    <DialogContent
+      {...dialog}
+      className={cn("gap-3 sm:max-w-md", dialog.className)}
+    >
+      {browsing ? (
+        <DirectoryPicker {...picker} />
+      ) : (
+        <>
+          <DialogHeader>
+            <DialogTitle>{translateText("chat:new.title")}</DialogTitle>
+            <DialogDescription>
+              {translateText("chat:new.hint")}
+            </DialogDescription>
+          </DialogHeader>
+          <ProjectField
+            choice={choice}
+            onChange={setChoice}
+            onBrowse={browse}
+          />
+          <fieldset className="grid gap-1">
+            <legend className="mb-1 text-sm">
+              {translateText("chat:new.agent")}
+            </legend>
+            {!loaded ? (
+              <Loading rows={3} className="border border-border" />
+            ) : (
+              <ul className="max-h-72 overflow-y-auto border border-border">
+                {agents.map((agent) => (
+                  <li key={agent.id}>
+                    <button
+                      type="button"
+                      aria-pressed={chosen === agent.id}
+                      onClick={() => setAgentId(agent.id)}
+                      className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm hover:bg-muted aria-pressed:bg-muted"
+                    >
+                      <AgentAvatar
+                        agent={{ id: agent.id }}
+                        className="size-4"
+                      />
+                      <span className="min-w-0 flex-1 truncate">
+                        {agent.name}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </fieldset>
+          {failed.length > 0 ? (
+            <p role="alert" className="text-xs text-state-error">
+              {failed}
+            </p>
+          ) : null}
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => void start()}
+              disabled={
+                create.isPending ||
+                resolver.pending ||
+                agents.length === 0 ||
+                (adding && choice.path.trim().length === 0)
+              }
+            >
+              {translateText("chat:new.start")}
+            </Button>
+          </div>
+        </>
+      )}
+    </DialogContent>
   );
 }

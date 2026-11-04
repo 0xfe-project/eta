@@ -32,7 +32,7 @@ export function projectPlace(
 }
 
 /** `~/Desktop/eta`, not `/Users/lemonhx/Desktop/eta`. */
-function shortenPath(path: string, home: string | null): string {
+export function shortenPath(path: string, home: string | null): string {
   if (home !== null && path.startsWith(`${home}/`))
     return `~/${path.slice(home.length + 1)}`;
   if (home !== null && path === home) return "~";

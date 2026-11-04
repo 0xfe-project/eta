@@ -7,6 +7,7 @@
  * writes a system row into every conversation that follows the project.
  */
 import type { ProjectView } from "@eta/client-contracts";
+import type { SshTransport } from "@eta/ssh";
 import type { AgentStore } from "../agents/store";
 import type { ConversationStore } from "../conversations/store";
 import type { Timeline } from "../conversations/timeline";
@@ -18,6 +19,7 @@ import { basename, isAbsolute, resolve } from "node:path";
 import { announceSteward } from "../conversations/steward";
 import { transportOn } from "../machines/shell";
 import { Args, productPlugin, publish } from "../wire";
+import { DirectoryError, listDirectories } from "./directories";
 import { DEFAULT_FILE_LIMIT, listProjectFiles } from "./files";
 
 export interface ProjectsDeps {
@@ -68,6 +70,16 @@ export function projectsPlugin(deps: ProjectsDeps, applied: () => void) {
     return project;
   };
 
+  /** The machine a call names; the primary when it names none. */
+  const machineOf = (args: Args): MachineRecord => {
+    const machine =
+      machines.get(
+        args.optionalString("machineId") ?? machines.primary()?.id ?? "",
+      ) ?? undefined;
+    if (machine === undefined) throw new Error("no such machine");
+    return machine;
+  };
+
   const steward = (id: string | null | undefined): string | null => {
     if (id === undefined || id === null) return null;
     if (agents.get(id) === undefined) throw new Error(`no such agent: ${id}`);
@@ -87,11 +99,7 @@ export function projectsPlugin(deps: ProjectsDeps, applied: () => void) {
 
         wire.handle("projects", "create", async (call) => {
           const args = new Args(call);
-          const machine =
-            machines.get(
-              args.optionalString("machineId") ?? machines.primary()?.id ?? "",
-            ) ?? undefined;
-          if (machine === undefined) throw new Error("no such machine");
+          const machine = machineOf(args);
           const raw = args.string("path");
           if (!isAbsolute(raw))
             throw new Error(`the path must be absolute: ${raw}`);
@@ -143,6 +151,27 @@ export function projectsPlugin(deps: ProjectsDeps, applied: () => void) {
               transportOn(machine, deps.hub),
               project.path,
               args.optionalInteger("limit") ?? DEFAULT_FILE_LIMIT,
+            ),
+          };
+        }),
+
+        wire.handle("projects", "directories", async (call) => {
+          const args = new Args(call);
+          const machine = machineOf(args);
+          let transport: SshTransport;
+          try {
+            transport = transportOn(machine, deps.hub);
+          } catch {
+            throw new DirectoryError("offline");
+          }
+          const onMachine = projects
+            .list()
+            .filter((project) => project.machineId === machine.id);
+          return {
+            result: await listDirectories(
+              transport,
+              args.optionalString("path"),
+              new Map(onMachine.map((project) => [project.path, project.id])),
             ),
           };
         }),

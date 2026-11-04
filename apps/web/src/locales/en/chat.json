@@ -304,8 +304,29 @@
     "addPath": "Add a directory…",
     "addPathOn": "Add a directory on {{machine}}…",
     "path": "Directory path",
-    "pathHint": "An absolute path to an existing directory. The members work here.",
-    "chooseFolder": "Choose a folder…"
+    "pickPrompt": "Choose a directory…",
+    "picker": {
+      "title": "Choose a directory",
+      "hint": "Members work in this directory.",
+      "machine": "Machine",
+      "crumbs": "Current path",
+      "typePath": "Enter path",
+      "filter": "Filter",
+      "hidden": "Hidden directories",
+      "recent": "Recent",
+      "home": "Home",
+      "added": "Added",
+      "empty": "No subdirectories here. You can choose this directory.",
+      "noMatch": "No matching directories",
+      "truncated": "Too many directories. Showing the first {{limit}}. Use the filter or enter a path.",
+      "up": "Up one level",
+      "choose": "Choose this directory",
+      "problems": {
+        "notFound": "This directory does not exist",
+        "denied": "No permission to read this directory",
+        "offline": "Can't reach this machine"
+      }
+    }
   },
   "chat": {},
   "steward": {

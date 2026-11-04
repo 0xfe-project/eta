@@ -1,11 +1,5 @@
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
-import {
-  host,
-  markHost,
-  openExternal,
-  pickFolder,
-  watchExternalLinks,
-} from "./native";
+import { host, markHost, openExternal, watchExternalLinks } from "./native";
 
 /** A page as the shell's preload leaves it. */
 function shell(extra: Record<string, unknown> = {}) {
@@ -49,9 +43,8 @@ describe("in a browser", () => {
     expect(document.documentElement.hasAttribute("data-host")).toBe(false);
   });
 
-  it("asks the window for nothing, and a typed path stays the path", async () => {
-    const fetch = serve({ path: "/elsewhere" });
-    expect(await pickFolder("/srv")).toBeNull();
+  it("asks the window for nothing", async () => {
+    const fetch = serve({});
     await openExternal("https://example.com");
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -85,21 +78,19 @@ describe("in the shell", () => {
 
   it("gives no bridge when the shell forgot its token", async () => {
     shell({ nativeToken: undefined });
-    const fetch = serve({ path: "/srv/eta" });
-    expect(await pickFolder()).toBeNull();
+    const fetch = serve({});
+    await openExternal("https://example.com");
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("picks a folder from where the field already points", async () => {
+  it("asks with this launch's token, uncached and without a cookie", async () => {
     shell();
-    const fetch = serve({ path: "/Users/me/code/eta" });
-    expect(await pickFolder("/Users/me/code")).toBe("/Users/me/code/eta");
+    const fetch = serve({});
+    await openExternal("https://example.com");
     expect(fetch).toHaveBeenCalledTimes(1);
     const [url, init] = fetch.mock.calls[0]!;
-    expect(url).toBe("http://127.0.0.1:5001/api/native/folder-dialog");
-    expect(init!.body).toBe(
-      JSON.stringify({ startingFolder: "/Users/me/code" }),
-    );
+    expect(url).toBe("http://127.0.0.1:5001/api/native/open-external");
+    expect(init!.body).toBe(JSON.stringify({ url: "https://example.com" }));
     expect(init!.cache).toBe("no-store");
     expect(init!.credentials).toBe("omit");
     expect((init!.headers as Record<string, string>).authorization).toBe(
@@ -107,20 +98,14 @@ describe("in the shell", () => {
     );
   });
 
-  it("treats a cancelled dialog as no answer", async () => {
-    shell();
-    serve({ path: null });
-    expect(await pickFolder("/srv")).toBeNull();
-  });
-
-  it("treats a refused or unreachable window as no answer", async () => {
+  it("takes a refused or unreachable window in its stride", async () => {
     shell();
     serve(new Response("authentication_failed", { status: 401 }));
-    expect(await pickFolder("/srv")).toBeNull();
+    await openExternal("https://example.com");
     globalThis.fetch = (async () => {
       throw new TypeError("Failed to fetch");
     }) as unknown as typeof globalThis.fetch;
-    expect(await pickFolder("/srv")).toBeNull();
+    await openExternal("https://example.com");
   });
 
   it("hands links to the system browser instead of leaving", async () => {

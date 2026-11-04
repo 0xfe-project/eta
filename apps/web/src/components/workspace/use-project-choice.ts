@@ -1,5 +1,8 @@
 import type { MachineView, ProjectView } from "@eta/client-contracts";
+import type { DirectoryPickerProps } from "./directory-picker";
+import { useEffect, useRef, useState } from "react";
 import { useCreateProject, useMachines, useProjects } from "@/queries/projects";
+import { useWorkspaceStore } from "./workspace-store";
 
 /**
  * Where a conversation works: one of the projects, or a path to add as one.
@@ -40,6 +43,94 @@ export function useChosenProject(choice: ProjectChoice): {
     project: adding
       ? undefined
       : (projects.find((p) => p.id === choice.projectId) ?? projects[0]),
+  };
+}
+
+/** How many chosen directories each machine remembers: the list on top of its home. */
+const RECENT_DIRECTORIES = 5;
+
+function rememberDirectory(machineId: string, path: string) {
+  useWorkspaceStore.getState().setWorkspace((workspace) => {
+    const earlier = workspace.recentDirectories?.[machineId] ?? [];
+    return {
+      ...workspace,
+      recentDirectories: {
+        ...workspace.recentDirectories,
+        [machineId]: [path, ...earlier.filter((seen) => seen !== path)].slice(
+          0,
+          RECENT_DIRECTORIES,
+        ),
+      },
+    };
+  });
+}
+
+/**
+ * A dialog whose project field can swap the form for the directory picker. The form's state stays
+ * where it is, in the dialog, and only what is on screen changes: going back finds it as it was.
+ * Escape and a click outside step back too, rather than close a form that is half filled in.
+ *
+ * A directory that is already a project is that project. One that was put away, or is an agent's
+ * own, is not in the list to choose from, so it stays a path and adding it finds the project.
+ */
+export function useDirectoryBrowsing(
+  choice: ProjectChoice,
+  onChange: (choice: ProjectChoice) => void,
+) {
+  const projects = useChoosable();
+  const { machines } = useMachines();
+  const primary = machines.find((machine) => machine.kind === "primary");
+  const [machineId, setMachineId] = useState<string | undefined>(undefined);
+  const browsing = machineId !== undefined;
+  const wasBrowsingRef = useRef(false);
+  useEffect(() => {
+    // Back on the form, the keyboard is back on the field that left it.
+    if (wasBrowsingRef.current && !browsing)
+      document.getElementById("new-project")?.focus();
+    wasBrowsingRef.current = browsing;
+  }, [browsing]);
+
+  const back = () => setMachineId(undefined);
+  const dialog = {
+    className: browsing ? "sm:max-w-[560px]" : undefined,
+    onEscapeKeyDown: (event: KeyboardEvent) => {
+      if (browsing) event.preventDefault();
+    },
+    onInteractOutside: (event: Event) => {
+      if (browsing) event.preventDefault();
+    },
+    onKeyDown: (event: { key: string; nativeEvent: KeyboardEvent }) => {
+      if (browsing && event.key === "Escape" && !event.nativeEvent.isComposing)
+        back();
+    },
+  };
+  const chosenOn = choice.machineId ?? primary?.id;
+  const picker: DirectoryPickerProps = {
+    machineId: machineId ?? "",
+    start:
+      choice.path.trim() !== "" && chosenOn === machineId
+        ? choice.path.trim()
+        : undefined,
+    onBack: back,
+    onPick: (path, on) => {
+      rememberDirectory(on, path);
+      const existing = projects.find(
+        (project) => project.machineId === on && project.path === path,
+      );
+      onChange({
+        projectId: existing?.id ?? "",
+        path: existing === undefined ? path : "",
+        machineId: on,
+      });
+      back();
+    },
+  };
+  return {
+    browsing,
+    picker,
+    dialog,
+    /** Open on a machine; none is where the choice already points. */
+    browse: (on?: string) => setMachineId(on ?? chosenOn ?? ""),
   };
 }
 
