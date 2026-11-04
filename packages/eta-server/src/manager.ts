@@ -45,7 +45,12 @@ import type { SessionListing, SessionMeta, SessionStore } from "./store";
 import process from "node:process";
 import { DEFAULT_COMPACTION_SETTINGS } from "@eta/core";
 import { forkChain } from "@eta/core/session";
-import { AskRegistry, envMemoryFs, openSession } from "@eta/harness";
+import {
+  AskRegistry,
+  envMemoryFs,
+  openSession,
+  renderRuntimePlatformBlock,
+} from "@eta/harness";
 import { forkWrites } from "./fork";
 import { parseModelId } from "./model-id";
 import { resolvePersona } from "./personas";
@@ -595,6 +600,9 @@ export class SessionManager {
    * inbox, the host's tools) with the runtime's delegate taking its runs, and without the parts
    * that are the runtime's own business: no file and shell tools, no memory, no compaction, no
    * subagents. The runtime has all of those itself.
+   *
+   * The runtime keeps its own system prompt, so the words of eta's it needs reach it through
+   * `agentPrompt`, the platform briefing written for it among them.
    */
   private async openRuntimeSession(
     meta: SessionMeta,
@@ -602,12 +610,24 @@ export class SessionManager {
   ): Promise<ManagedSession> {
     const tools: { names: readonly string[] } = { names: [] };
     const agentPrompt = this.agentPromptFor?.(meta);
+    const platform = this.platformFor?.(meta);
     const runtime = this.runtimes?.open({
       sessionId: meta.id,
       runtime: runtimeId,
       cwd: meta.cwd,
       resume: meta.runtimeSession,
-      agentPrompt,
+      // Same channel, same order as an eta session's platform section: who it is, then the app.
+      agentPrompt: () => {
+        const parts = [
+          ...(agentPrompt === undefined ? [] : [agentPrompt]),
+          renderRuntimePlatformBlock({
+            configPath: platform?.configPath,
+            sessionDir: platform?.sessionDir,
+            tools: tools.names,
+          }),
+        ].filter((part) => part.length > 0);
+        return parts.length === 0 ? undefined : parts.join("\n\n");
+      },
       remember: (nativeSession) => {
         if (nativeSession === meta.runtimeSession) return;
         void this.setMeta(meta.id, { runtimeSession: nativeSession }).catch(

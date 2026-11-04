@@ -8,8 +8,8 @@
  * an abort is an abort, and a reopened session picks its runtime conversation back up.
  */
 import type { ScriptedTurn } from "@botiverse/oar/testing";
-import type { AgentMessage } from "@eta/core";
-import type { ManagedSession } from "@eta/server";
+import type { AgentMessage, KernelTool } from "@eta/core";
+import type { ManagedSession, SessionManagerOptions } from "@eta/server";
 import { createRuntimeRegistry } from "@botiverse/oar";
 import { scriptedRuntime } from "@botiverse/oar/testing";
 import { kernelOn } from "@eta/core";
@@ -30,17 +30,28 @@ const textOf = (message: AgentMessage): string =>
         .join("")
     : "";
 
-function setup(turn: (turn: ScriptedTurn) => void | Promise<void>) {
+function setup(
+  turn: (turn: ScriptedTurn) => void | Promise<void>,
+  options: Partial<SessionManagerOptions> & { refuses?: boolean } = {},
+) {
+  const { refuses = false, ...managerOptions } = options;
   const turns: ScriptedTurn[] = [];
+  const scripted = scriptedRuntime({
+    id: "claude",
+    turn: async (scriptedTurn) => {
+      turns.push(scriptedTurn);
+      await turn(scriptedTurn);
+    },
+  });
   const runtimes = createOarRuntimes({
     registry: createRuntimeRegistry([
-      scriptedRuntime({
-        id: "claude",
-        turn: async (scripted) => {
-          turns.push(scripted);
-          await turn(scripted);
-        },
-      }),
+      refuses
+        ? {
+            ...scripted,
+            session: scripted.session.bind(scripted),
+            refusedSessionOptions: { appendSystemPrompt: "not on this one" },
+          }
+        : scripted,
     ]),
   });
   const store = new MemorySessionStore();
@@ -51,6 +62,7 @@ function setup(turn: (turn: ScriptedTurn) => void | Promise<void>) {
     },
     runtimes,
     agentPromptFor: () => "In this conversation you are Probe.",
+    ...managerOptions,
   });
   return { manager, turns, store };
 }
@@ -61,10 +73,136 @@ async function run(managed: ManagedSession, prompt: string) {
   return await runner.run();
 }
 
+const hostTool = (name: string): KernelTool =>
+  ({
+    name,
+    description: `the ${name} tool`,
+    parameters: { type: "object", properties: {} },
+    execute: () => ({ content: [{ type: "text", text: "done" }] }),
+  }) as KernelTool;
+
+const platformFor = (meta: { id: string; cwd: string }) => ({
+  cwd: meta.cwd,
+  home: "/home/lemon",
+  configPath: "/home/lemon/.eta/config.json",
+  sessionDir: `/home/lemon/.eta/sessions/${meta.id}`,
+  memoryTarget: `${meta.cwd}/.eta/MEMORY.md`,
+  memoryExists: false,
+});
+
+/** The tools a member of a conversation and the executor of a task are given. */
+const MEMBER_TOOLS = [
+  "draft_task",
+  "create_task",
+  "update_task",
+  "comment_task",
+];
+const EXECUTOR_TOOLS = ["update_task", "comment_task", "finish_task"];
+
+/** Names an eta session's tools, or a memory, that a runtime does not have. */
+const NOT_ON_A_RUNTIME = [
+  "create_step",
+  "list_steps",
+  "get_step",
+  "update_step",
+  "memory block",
+  "MEMORY.md",
+  "persona",
+];
+
+const expectNoneOf = (text: string) => {
+  // `meta.json`'s own description names the persona field; that is the file, not a card.
+  const said = text.replace("(persona, cwd, title, model)", "");
+  for (const name of NOT_ON_A_RUNTIME) expect(said).not.toContain(name);
+};
+
 const transcript = (managed: ManagedSession): string[] =>
   managed.session.journaling
     .transcript()
     .map((message) => `${message.role}:${textOf(message)}`);
+
+describe("what an external runtime is told about the app", () => {
+  it("appends the board's rules and the app's paths to the runtime's system prompt", async () => {
+    const { manager, turns } = setup((turn) => turn.say("ok"), {
+      platformFor,
+      sessionTools: () => MEMBER_TOOLS.map(hostTool),
+    });
+    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
+    await run(managed, "change a line");
+    const prompt = turns[0]!.options.appendSystemPrompt ?? "";
+    expect(prompt.startsWith("In this conversation you are Probe.")).toBe(true);
+    expect(prompt).toContain("<platform>");
+    expect(prompt).toContain("Propose it with `draft_task`");
+    expect(prompt).toContain("/home/lemon/.eta/config.json");
+    expect(prompt).toContain(`/home/lemon/.eta/sessions/${managed.meta.id}`);
+    expectNoneOf(prompt);
+    expect(prompt).not.toContain("finish_task");
+    await manager.closeAll();
+  });
+
+  it("puts them in the first prompt of a runtime that refuses a system prompt", async () => {
+    const { manager, turns } = setup((turn) => turn.say("ok"), {
+      platformFor,
+      sessionTools: () => MEMBER_TOOLS.map(hostTool),
+      refuses: true,
+    });
+    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
+    await run(managed, "change a line");
+    await run(managed, "and another");
+    expect(turns[0]!.options.appendSystemPrompt).toBeUndefined();
+    expect(turns[0]!.input).toContain("Propose it with `draft_task`");
+    expect(turns[0]!.input).toContain("/home/lemon/.eta/config.json");
+    expect(turns[0]!.input.endsWith("change a line")).toBe(true);
+    expectNoneOf(turns[0]!.input);
+    expect(turns[1]!.input).toBe("and another");
+    await manager.closeAll();
+  });
+
+  it("does not send the executor of a task off to draft it", async () => {
+    const { manager, turns } = setup((turn) => turn.say("ok"), {
+      platformFor,
+      sessionTools: () => EXECUTOR_TOOLS.map(hostTool),
+    });
+    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
+    await run(managed, "do the task");
+    const prompt = turns[0]!.options.appendSystemPrompt ?? "";
+    expect(prompt).toContain("/home/lemon/.eta/config.json");
+    expect(prompt).toContain("This session is one of those");
+    expect(prompt).not.toContain("draft_task");
+    expect(prompt).not.toContain("create_task");
+    expectNoneOf(prompt);
+    await manager.closeAll();
+  });
+
+  it("tells the rules without the paths on a host that has no platform facts", async () => {
+    // A daemon: it has the tools, and the app's config is on the primary.
+    const { manager, turns } = setup((turn) => turn.say("ok"), {
+      sessionTools: () => MEMBER_TOOLS.map(hostTool),
+    });
+    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
+    await run(managed, "change a line");
+    const prompt = turns[0]!.options.appendSystemPrompt ?? "";
+    expect(prompt).toContain("Propose it with `draft_task`");
+    expect(prompt).not.toContain("readable");
+    await manager.closeAll();
+  });
+
+  it("is not told again on resume: a session opened before this has to be opened anew", async () => {
+    const { manager, turns } = setup((turn) => turn.say("ok"), {
+      platformFor,
+      sessionTools: () => MEMBER_TOOLS.map(hostTool),
+    });
+    const created = await manager.create({ cwd: "/work", runtime: "claude" });
+    await run(created, "before");
+    await manager.close(created.meta.id);
+    const reopened = (await manager.session(created.meta.id))!;
+    await run(reopened, "after");
+    expect(turns[0]!.options.appendSystemPrompt).toContain("draft_task");
+    expect(turns[1]!.options.resume).toBeDefined();
+    expect(turns[1]!.options.appendSystemPrompt).toBeUndefined();
+    await manager.closeAll();
+  });
+});
 
 describe("a session on an external runtime", () => {
   it("journals the runtime's turn as eta turns", async () => {
