@@ -8,7 +8,9 @@ export function getRouter() {
   return createRouter({
     routeTree,
     context: { queryClient },
-    scrollRestoration: true,
+    // Not on the chat: every conversation is one more location of "/", in the same scrollers, and
+    // the router would write the last conversation's offsets into the next one.
+    scrollRestoration: ({ location }) => location.pathname !== "/",
     defaultPreload: "intent",
     defaultPreloadStaleTime: 0,
     // A page whose code is still downloading shows its outline instead of a blank screen. The

@@ -465,6 +465,14 @@ function Warning({ children }: { children: React.ReactNode }) {
 }
 
 /**
+ * At the live end, or close enough: 32px keeps the last line readable and is far enough that a
+ * stray wheel tick does not count as leaving.
+ */
+const GLUED_WITHIN = 32;
+const glued = (el: HTMLElement) =>
+  el.scrollHeight - el.scrollTop - el.clientHeight < GLUED_WITHIN;
+
+/**
  * Scrolls the transcript like a terminal: it opens at the bottom and follows
  * new output while the reader is there. Older messages added above keep the
  * view where it was, and come in as the top is approached.
@@ -472,12 +480,15 @@ function Warning({ children }: { children: React.ReactNode }) {
 function useTranscriptScroll({
   groupId,
   firstId,
+  loading,
   hasOlder,
   loadingOlder,
   onLoadOlder,
 }: {
   groupId: string | undefined;
   firstId: string | undefined;
+  /** The conversation's own rows have not come yet: what is drawn is not where it will end. */
+  loading: boolean;
   hasOlder: boolean;
   loadingOlder: boolean;
   onLoadOlder: () => void;
@@ -491,22 +502,52 @@ function useTranscriptScroll({
   const [pinned, setPinned] = useState(true);
   // scrollHeight - scrollTop as of the last layout, to restore after a prepend.
   const fromBottomRef = useRef(0);
+  // The view as last looked at, to tell the view moving from the content moving under it.
+  const seenRef = useRef({ top: 0, height: 0 });
+  // A wheel or a finger is moving the view. Lasts while the view keeps rising.
+  const handRef = useRef(false);
+  // A jump is on its way up the transcript. Rows resolving their height can bring the bottom to it
+  // on the way, and that must not re-attach it. Over once the view, away from the bottom, stops
+  // rising: not `scrollend`, which the older system webviews do not have.
+  const jumpingRef = useRef(false);
 
+  function record(el: HTMLElement, following: boolean) {
+    atBottomRef.current = following;
+    setPinned(following);
+    seenRef.current = { top: el.scrollTop, height: el.scrollHeight };
+    fromBottomRef.current = el.scrollHeight - el.scrollTop;
+  }
+  /**
+   * Only the reader leaves the bottom. Being away from it proves nothing: the scroll event comes a
+   * frame late, and the content may have grown since, or rows off screen may have traded their
+   * estimated height for the real one. So leaving takes the view rising, in content that held
+   * still or under a hand on it; a clamp or the browser's anchoring moves it with the height.
+   */
   function remember() {
     const el = scrollRef.current;
     if (!el) return;
-    // 32px: close enough that the last line is still readable, far enough that a stray wheel tick
-    // does not count as leaving.
-    const glued = el.scrollHeight - el.scrollTop - el.clientHeight < 32;
-    atBottomRef.current = glued;
-    if (glued !== pinned) setPinned(glued);
-    fromBottomRef.current = el.scrollHeight - el.scrollTop;
+    const seen = seenRef.current;
+    const rose = el.scrollTop < seen.top;
+    const left = rose && (el.scrollHeight === seen.height || handRef.current);
+    handRef.current &&= rose;
+    jumpingRef.current &&= rose || glued(el);
+    record(
+      el,
+      atBottomRef.current
+        ? !left || glued(el)
+        : !left && !jumpingRef.current && glued(el),
+    );
+  }
+  function follow() {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    record(el, true);
   }
   function toBottom() {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-    atBottomRef.current = true;
-    setPinned(true);
+    handRef.current = false;
+    jumpingRef.current = false;
+    follow();
   }
 
   // A new agent's transcript opens at its end.
@@ -514,8 +555,9 @@ function useTranscriptScroll({
   // Older messages arrived above: keep the same distance from the bottom.
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (el && !atBottomRef.current)
-      el.scrollTop = el.scrollHeight - fromBottomRef.current;
+    if (!el || atBottomRef.current) return;
+    el.scrollTop = el.scrollHeight - fromBottomRef.current;
+    record(el, false);
   }, [firstId]);
   // Streaming output, new turns, a resized panel: follow while at the bottom.
   useLayoutEffect(() => {
@@ -523,17 +565,18 @@ function useTranscriptScroll({
     const content = contentRef.current;
     if (!el || !content) return;
     const observer = new ResizeObserver(() => {
-      if (atBottomRef.current) toBottom();
-      remember();
+      if (atBottomRef.current) follow();
+      else record(el, glued(el) && !jumpingRef.current);
     });
     observer.observe(el);
     observer.observe(content);
     return () => observer.disconnect();
   }, []);
-  // Observed afresh after each page, so a top still in view loads the next.
+  // Observed afresh after each page, so a top still in view loads the next. Not while the
+  // conversation is coming in: the top of a few cached rows is not the reader reaching the top.
   useEffect(() => {
     const top = topRef.current;
-    if (!top || !hasOlder || loadingOlder) return;
+    if (!top || !hasOlder || loadingOlder || loading) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) onLoadOlder();
@@ -542,21 +585,34 @@ function useTranscriptScroll({
     );
     observer.observe(top);
     return () => observer.disconnect();
-  }, [hasOlder, loadingOlder, onLoadOlder]);
+  }, [hasOlder, loadingOlder, loading, onLoadOlder]);
 
   return {
     scrollRef,
     contentRef,
     topRef,
     onScroll: remember,
+    /** A wheel or a finger on the transcript: the next rise is the reader's, whatever else moved. */
+    onHand: () => {
+      handRef.current = true;
+    },
     toBottom,
     pinned,
     /** Jump to one message by id: the rail's whole job. */
     jumpTo: (id: string) => {
-      const el = scrollRef.current?.querySelector<HTMLElement>(
+      const el = scrollRef.current;
+      const row = el?.querySelector<HTMLElement>(
         `[data-mid="${CSS.escape(id)}"]`,
       );
-      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (!el || !row) return;
+      // Stop following now: the scroll takes many frames, and new output would undo the first ones.
+      const rise =
+        el.getBoundingClientRect().top - row.getBoundingClientRect().top;
+      if (rise >= GLUED_WITHIN) {
+        jumpingRef.current = true;
+        record(el, false);
+      }
+      row.scrollIntoView({ behavior: "smooth", block: "start" });
     },
     /** The first message visible, so the rail can light where you are reading. */
     active: () => {
@@ -1103,6 +1159,7 @@ export function ChatPanel({
   const transcript = useTranscriptScroll({
     groupId,
     firstId: messages[0]?.id,
+    loading: loading ?? false,
     hasOlder,
     loadingOlder,
     onLoadOlder,
@@ -1426,6 +1483,10 @@ export function ChatPanel({
             // Cheap enough: one pass over the rows that are actually in the DOM.
             if (showRail) setActiveId(transcript.active());
           }}
+          onWheel={(event) => {
+            if (event.deltaY < 0) transcript.onHand();
+          }}
+          onTouchMove={transcript.onHand}
           className="no-scrollbar h-full overflow-y-auto py-4 pr-14 pl-6"
         >
           {/* Floats over the transcript, which scrolls on beneath it and stays
