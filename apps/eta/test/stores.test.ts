@@ -448,9 +448,10 @@ describe("conversations", () => {
     conversations.setSeen(conv.id, a.id, 5);
     conversations.setSeen(conv.id, a.id, 3);
     expect(conversations.participant(conv.id, a.id)?.lastSeq).toBe(5);
-    conversations.setSession(conv.id, a.id, "eta-1");
+    conversations.setSession(conv.id, a.id, "eta-1", project.machineId);
     expect(conversations.participant(conv.id, a.id)).toMatchObject({
       sessionId: "eta-1",
+      machineId: project.machineId,
       lastSeq: 5,
     });
   });

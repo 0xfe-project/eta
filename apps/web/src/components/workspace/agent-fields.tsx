@@ -1,3 +1,4 @@
+import type { AgentRuntimeInfo } from "@eta/client-contracts";
 import type { UseFormReturn } from "react-hook-form";
 import type { AgentForm } from "./agent-form";
 import type { Model } from "@/queries/providers";
@@ -27,8 +28,11 @@ export function ModelSelect({
   ...props
 }: Omit<React.ComponentProps<typeof Select>, "children"> & {
   value: string;
-  /** Undefined while they load. */
-  models: Model[] | undefined;
+  /**
+   * Undefined while they load. Null when they cannot be listed (the machine is out of reach): the
+   * chosen one then shows as it is, since there is no list to say it is gone.
+   */
+  models: Model[] | null | undefined;
   invalid?: boolean;
   /** Offers "no model of its own" (the empty value) under this name, instead of asking to pick. */
   defaultLabel?: string;
@@ -38,7 +42,7 @@ export function ModelSelect({
     "common",
     "providers",
   ] as const);
-  const loading = !models;
+  const loading = models === undefined;
   const groups = modelGroups(models ?? []);
   const known = (models ?? []).some((model) => model.id === value);
   return (
@@ -59,7 +63,9 @@ export function ModelSelect({
         <SelectOption value={value} disabled>
           {loading
             ? translateText("models.loading")
-            : translateText("models.deletedOption", { modelName: value })}
+            : models === null
+              ? value
+              : translateText("models.deletedOption", { modelName: value })}
         </SelectOption>
       ) : null}
       {groups.map(({ provider, label, models }) => (
@@ -119,15 +125,116 @@ export function NameField({
   );
 }
 
+/**
+ * What answers for the agent: eta's own loop, or an agent runtime on the machine (Claude Code,
+ * Codex, ...). Another runtime has other models, so a change clears the model.
+ *
+ * The agent's own runtime stays in the list when the machine's list does not have it, so the
+ * trigger never goes blank: as still being looked for while the machine is asked, and as
+ * unavailable when it has no such runtime or could not be asked.
+ */
+export function RuntimeField({
+  form,
+  runtimes,
+  note,
+  onChange,
+}: {
+  form: Form;
+  /** Undefined while the host looks; null when the machine could not be asked. */
+  runtimes: AgentRuntimeInfo[] | null | undefined;
+  /** Why the runtime is not the one that was chosen. */
+  note?: string | undefined;
+  onChange?: (() => void) | undefined;
+}) {
+  const { t: translateText } = useTranslation(["agents", "common"] as const);
+  const value = useWatch({ control: form.control, name: "runtime" });
+  const listed =
+    value === "eta" || (runtimes ?? []).some((runtime) => runtime.id === value);
+  const hints = [
+    runtimes === null ? "agent-runtime-hint" : null,
+    note ? "agent-runtime-note" : null,
+  ].filter(Boolean);
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="agent-runtime">
+        {translateText("agents:runtime.label")}
+      </Label>
+      <Select
+        id="agent-runtime"
+        className="w-full"
+        value={value}
+        aria-describedby={hints.length ? hints.join(" ") : undefined}
+        onValueChange={(next) => {
+          onChange?.();
+          form.setValue("runtime", next as AgentForm["runtime"], {
+            shouldDirty: true,
+          });
+          form.setValue("model", "", { shouldDirty: true });
+          form.clearErrors("model");
+        }}
+      >
+        <SelectOption value="eta">
+          {translateText("agents:runtime.eta")}
+        </SelectOption>
+        {runtimes === undefined ? (
+          <SelectOption value={listed ? "" : value} disabled>
+            {translateText("agents:runtime.loading")}
+          </SelectOption>
+        ) : (
+          <>
+            {listed ? null : (
+              <SelectOption value={value} disabled>
+                {value}
+                {translateText("agents:runtime.status.error")}
+              </SelectOption>
+            )}
+            {(runtimes ?? []).map((runtime) => (
+              <SelectOption
+                key={runtime.id}
+                value={runtime.id}
+                disabled={
+                  runtime.status !== "available" && runtime.id !== value
+                }
+              >
+                {runtime.label}
+                {runtime.status === "available"
+                  ? ""
+                  : translateText(`agents:runtime.status.${runtime.status}`)}
+              </SelectOption>
+            ))}
+          </>
+        )}
+      </Select>
+      {runtimes === null ? (
+        <p id="agent-runtime-hint" className="text-xs text-muted-foreground">
+          {translateText("agents:runtime.unreachable")}
+        </p>
+      ) : null}
+      {note ? (
+        <p
+          id="agent-runtime-note"
+          role="status"
+          className="text-xs text-state-warning"
+        >
+          {note}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function ModelField({
   form,
   models,
   onOpenProviders,
+  external = false,
 }: {
   form: Form;
-  /** Undefined while they load. */
-  models: Model[] | undefined;
+  /** Undefined while they load; null when they cannot be listed. */
+  models: Model[] | null | undefined;
   onOpenProviders: () => void;
+  /** An external runtime's models: none chosen is the runtime's own default, not a gap. */
+  external?: boolean;
 }) {
   const { t: translateText } = useTranslation([
     "agents",
@@ -141,7 +248,7 @@ export function ModelField({
   const chosenModel = useWatch({ control: form.control, name: "model" });
   // Only once they have loaded can there be none.
   const noModels =
-    models !== undefined && !models.some((model) => model.available);
+    !external && models?.some((model) => model.available) === false;
   return (
     <div className="space-y-1.5">
       <Label htmlFor="agent-model">
@@ -152,6 +259,9 @@ export function ModelField({
         value={chosenModel}
         models={models}
         invalid={Boolean(error)}
+        {...(external
+          ? { defaultLabel: translateText("agents:runtime.defaultModel") }
+          : {})}
         aria-describedby={error || noModels ? "agent-model-hint" : undefined}
         onValueChange={(value) =>
           form.setValue("model", value, {

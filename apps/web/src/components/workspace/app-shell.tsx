@@ -1,6 +1,7 @@
 import type { EmailAccountStatus } from "@eta/client-contracts";
 import type { Icon } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import type { PaneWidth } from "./pane";
 import { ArrowsClockwiseIcon } from "@phosphor-icons/react/ArrowsClockwise";
 import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
@@ -10,7 +11,7 @@ import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { UsersThreeIcon } from "@phosphor-icons/react/UsersThree";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Dialog,
@@ -41,6 +42,7 @@ import { useTasks } from "@/queries/tasks";
 import { AgentEditor } from "./agent-editor";
 import { CreateGroup } from "./groups";
 import { NewConversationDialog } from "./new-conversation-dialog";
+import { usePaneWidth } from "./pane";
 import { SettingsDialog, SettingsMenuItem } from "./settings-dialog";
 import { ConversationList } from "./sidebar-tree";
 import { useWorkspaceStore } from "./workspace-store";
@@ -143,7 +145,12 @@ function useMailboxRow(): {
   return { status, checking, reconnect };
 }
 
-export function Sidebar() {
+export function Sidebar({
+  resize,
+}: {
+  /** The drag on the column's right edge, from `SidebarShell`. */
+  resize?: PaneWidth["dividerProps"];
+}) {
   const { t: translateText } = useTranslation(["navigation", "email"] as const);
   const { state, isMobile, toggleSidebar } = useSidebar();
   const badges = useBadges();
@@ -155,9 +162,11 @@ export function Sidebar() {
   return (
     <SidebarRoot
       collapsible="icon"
-      // `sidebar-rule`, not `border-r`: the rule down this edge starts under the band, so it never
-      // runs through the window's lights inside the band. See `styles.css`.
-      className="sidebar-rule hidden shrink-0 md:flex"
+      // `sidebar-rule`, not the component's default `border-r`: that border runs the full height,
+      // through the window's lights inside the band. The rule starts under the band (see
+      // `styles.css`). The zero is the same `group-data-[side=left]` variant, because a bare
+      // `border-r-0` does not win the merge against `group-data-[side=left]:border-r`.
+      className="sidebar-rule group-data-[side=left]:border-r-0 hidden shrink-0 md:flex"
     >
       <SidebarHeader
         // Only the CSS reads this: a collapsed rail is 4rem wide, which on a desktop is where the
@@ -343,7 +352,68 @@ export function Sidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+      {/* Inside the column, not beside it: a gutter in the row would add a pixel to the layout and
+          a second line next to `sidebar-rule`, and this one rides the fold's animation with the
+          edge it sits on. The rail has no width to choose, so it has no line to drag. */}
+      {resize === undefined || rail ? null : (
+        <div
+          aria-label={translateText("accessibility.resizeSidebar")}
+          className="pane-divider sidebar-divider hidden md:block"
+          {...resize}
+        />
+      )}
     </SidebarRoot>
+  );
+}
+
+const WIDE_SIDEBAR = "(min-width: 64rem)";
+
+/** Whether `styles.css` has the sidebar at its wide default, kept in step with the window. */
+function useWideSidebar() {
+  return useSyncExternalStore(
+    (changed) => {
+      const media = window.matchMedia(WIDE_SIDEBAR);
+      media.addEventListener("change", changed);
+      return () => media.removeEventListener("change", changed);
+    },
+    () => window.matchMedia(WIDE_SIDEBAR).matches,
+  );
+}
+
+/**
+ * The window's row: the provider, the left column, and the width the two share. The workspace and
+ * the full-window pages each mount one, so a width dragged on one is there on the other.
+ *
+ * The bounds are the ones the layout can actually hold: below 260px a folder path and a
+ * conversation name cannot share a row; above 420px the column starts competing with the chat,
+ * which is the thing being read.
+ *
+ * Nobody who has not dragged gets a width written for them: the default stays the stylesheet's, 16rem
+ * and 18rem from `lg`, and the fallback is those two in pixels (256 is under the drag's floor on
+ * purpose), there for the drag to start from.
+ */
+export function SidebarShell({ children }: { children: ReactNode }) {
+  const pane = usePaneWidth({
+    storageKey: "eta.sidebar.width",
+    min: 260,
+    max: 420,
+    fallback: useWideSidebar() ? 288 : 256,
+    edge: "left",
+  });
+  return (
+    <SidebarProvider
+      className="h-dvh min-h-0 bg-background"
+      data-sidebar-sized={pane.sized ? "true" : undefined}
+      data-sidebar-dragging={pane.dragging ? "true" : undefined}
+      style={
+        pane.sized
+          ? ({ "--sidebar-width": `${pane.width}px` } as CSSProperties)
+          : undefined
+      }
+    >
+      <Sidebar resize={pane.dividerProps} />
+      {children}
+    </SidebarProvider>
   );
 }
 
@@ -531,8 +601,7 @@ export function PageHeader({
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
-    <SidebarProvider className="h-dvh min-h-0 bg-background">
-      <Sidebar />
+    <SidebarShell>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {children}
         <BottomNav />
@@ -540,6 +609,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       <SettingsDialog />
       <AgentEditor />
       <NewConversationDialog />
-    </SidebarProvider>
+    </SidebarShell>
   );
 }

@@ -1,5 +1,9 @@
 /**
- * The entry point: start the host.
+ * The entry point: start the host, or register it as the user's service.
+ *
+ *   eta-host install-service [flags]   run with these flags at login (systemd user unit, launchd
+ *                                       agent), and now; again replaces the flags and restarts
+ *   eta-host uninstall-service
  *
  *   bun apps/eta/src/main.ts [--port 8787] [--host 127.0.0.1]
  *                            [--web-dir <built web>] [--token-file <path>]
@@ -10,18 +14,39 @@
  * A thin shell around `startHost`: flags, a startup summary on one line, and a signal handler.
  * Everything the host serves lives behind the one port; `--web-dir` adds the page, and a host
  * that listens beyond loopback (or is given a `--token-file`) asks for a token first.
+ * `--host tailscale` listens on this computer's tailnet address, which is how the other computers
+ * of the tailnet reach it (and the address they are told to dial when added as machines).
+ *
+ * A compiled host serves the page beside it (`web/`, as `stage-host.ts` lays it out) unless told
+ * another `--web-dir`.
  *
  * The data directory is `~/.eta` and is not a flag. A second one was a second half: personas went
  * on being read from the real home while the config came from somewhere else, so a process pointed
  * at another directory looked like a config that had gone missing. One root, `$HOME` decides it.
  */
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
 import { parseArgs } from "node:util";
+import { installedEnv, installService, uninstallService } from "@eta/daemon";
 import { startHost } from "./host";
+import { Tailscale } from "./machines/tailscale";
+import { besideExecutable, COMPILED } from "./resources";
+
+/** The host as a user service: one per user, like the daemon. */
+const HOST_UNIT = { name: "io.eta.host", description: "eta host", args: [] };
+
+// `install-service` and `uninstall-service` come first; every other argument is a flag of the run.
+const [command, ...rest] = process.argv.slice(2);
+const serviceCommand =
+  command === "install-service" || command === "uninstall-service"
+    ? command
+    : undefined;
+const flags = serviceCommand === undefined ? process.argv.slice(2) : rest;
 
 const { values } = parseArgs({
+  args: flags,
   options: {
     port: { type: "string", default: "8787" },
     host: { type: "string", default: "127.0.0.1" },
@@ -47,6 +72,43 @@ if (!Number.isInteger(port) || port < 0 || port > 65_535) {
   process.exit(2);
 }
 
+if (serviceCommand !== undefined) {
+  // How this process was started, for a service that has to start it again: a compiled host is
+  // its own program; from source it is bun and this file. The flags were checked above.
+  const self = COMPILED
+    ? { program: process.execPath, args: flags }
+    : { program: process.execPath, args: [Bun.main, ...flags] };
+  if (serviceCommand === "uninstall-service") {
+    const definition = await uninstallService(self, HOST_UNIT);
+    console.log(`Removed ${definition.name}.`);
+  } else {
+    const definition = await installService(self, {
+      ...HOST_UNIT,
+      env: installedEnv(),
+    });
+    console.log(`Installed ${definition.name} (${definition.path}).`);
+    console.log(
+      values.host === "127.0.0.1" || values.host === "localhost"
+        ? `It listens on http://127.0.0.1:${port}.`
+        : `It asks for a token beyond loopback: open the page once with ?token=<the token in ${join(homedir(), ".eta", "access-token")}>.`,
+    );
+  }
+  process.exit(0);
+}
+
+// `tailscale` is not an interface: it is this computer's address on its tailnet, asked for now.
+let listen = values.host;
+if (listen === "tailscale") {
+  const address = await new Tailscale().address();
+  if (address === undefined) {
+    console.error(
+      "--host tailscale: Tailscale is not installed or not up here",
+    );
+    process.exit(2);
+  }
+  listen = address;
+}
+
 const memoryUrl = values["memory-url"] ?? process.env.ETA_MEMORY_URL;
 const publicUrl = values["public-url"] ?? process.env.ETA_PUBLIC_URL;
 const searxngUrl = values["searxng-url"] ?? process.env.ETA_SEARXNG_URL;
@@ -65,7 +127,17 @@ const github =
 const host = await startHost({
   dataDir: join(homedir(), ".eta"),
   port,
-  hostname: values.host,
+  hostname: listen,
+  // The page beside a compiled host, unless another was named.
+  ...(values["web-dir"] === undefined &&
+  COMPILED &&
+  existsSync(join(besideExecutable("web"), "index.html"))
+    ? { webDir: besideExecutable("web") }
+    : {}),
+  // The tailnet's computers can be found and added as machines, and the user's own let in.
+  tailscale: true,
+  // The daemon builds carried beside this host (or in the checkout): daemons are kept at them.
+  daemonBuilds: true,
   ...(values["web-dir"] === undefined
     ? {}
     : { webDir: resolve(values["web-dir"]) }),

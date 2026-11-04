@@ -2,7 +2,11 @@
  * A reply's life, through a real socket: joining a turn that is running, waiting behind one,
  * being stopped, asking the user something, and what a restart does to the ones in flight.
  */
-import type { MessageView, ToolActivity } from "@eta/client-contracts";
+import type {
+  MessageView,
+  ToolActivity,
+  ViewMessageRow,
+} from "@eta/client-contracts";
 import type { World } from "./support/world";
 import { describe, expect, it } from "vitest";
 import { until } from "./support/client";
@@ -99,6 +103,43 @@ describe("a message that arrives while the agent is answering", () => {
     const done = await w.settled(group.id, queued.id);
     expect(done.text).toBe("answer 2");
     expect(order[1]).toContain("second question");
+  });
+});
+
+describe("where a reply's run starts", () => {
+  it("is on the row from the moment it works, and the run's messages come after it", async () => {
+    const opened = gate();
+    const { models } = scriptedModels(async (request) => {
+      if (request.index === 1) await opened.opened;
+      return say(`answer ${request.index + 1}`);
+    });
+    const w = await world({ models });
+    const { group } = await ada(w);
+
+    const one = await w.send(group.id, "first");
+    await w.settled(group.id, one.replies[0]!.id);
+    const session = w.client.section<{ sessionId: string | null }[]>(
+      `conversations.${group.id}`,
+      "members",
+    )?.[0]?.sessionId;
+    w.client.subscribe(`sessions.${session}`);
+    const rows = () =>
+      w.client.section<{ messages: ViewMessageRow[] }>(
+        `sessions.${session}`,
+        "transcript",
+      )?.messages ?? [];
+    await until(() => rows().length === 2);
+    const last = rows().at(-1)!.seq;
+
+    const two = await w.send(group.id, "second");
+    const working = await w.settled(group.id, two.replies[0]!.id, ["working"]);
+    expect(working.data.runFrom).toBe(last);
+
+    await until(() => rows().length === 3);
+    expect(rows().at(-1)!.message.role).toBe("user");
+    expect(rows().at(-1)!.seq).toBeGreaterThan(last);
+    opened.open();
+    await w.settled(group.id, two.replies[0]!.id);
   });
 });
 

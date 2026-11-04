@@ -12,6 +12,7 @@
  */
 import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
 import type { CompactionSummarizer } from "@eta/core";
+import { Buffer } from "node:buffer";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
@@ -787,6 +788,98 @@ describe("a session that is only in the store", () => {
     expect(
       h.manager.session(session).then((open) => open !== undefined),
     ).toBeInstanceOf(Promise);
+    await h.unload();
+  });
+});
+
+describe("pictures, left out of the view and fetched on demand", () => {
+  it("strips them from the transcript and history, and sessions.image hands them back", async () => {
+    const h = await harness();
+    await h.load();
+    const { session } = (await h.call("sessions", "create", {
+      cwd: "/work/eta",
+    })) as { session: string };
+    const dataBase64 = Buffer.from("not really a png").toString("base64");
+    await h.call("sessions", "prompt", {
+      session,
+      text: "what is this?",
+      images: [{ mime: "image/png", dataBase64 }],
+    });
+    await until(
+      () =>
+        h.manager.openSessions().find((open) => open.meta.id === session)
+          ?.session.runner.running === false &&
+        (
+          h.state(`sessions.${session}`)?.sections.transcript as
+            | { messages: unknown[] }
+            | undefined
+        )?.messages.length === 2,
+    );
+    interface Row {
+      entryId: string;
+      message: { role: string; content: unknown };
+    }
+    const transcript = h.state(`sessions.${session}`)?.sections.transcript as {
+      messages: Row[];
+    };
+    const asked = transcript.messages.find(
+      (row) => row.message.role === "user",
+    );
+    expect(asked).toBeDefined();
+    const content = asked?.message.content as {
+      type: string;
+      data?: string;
+      bytes?: number;
+      mimeType?: string;
+    }[];
+    const index = content.findIndex((part) => part.type === "image");
+    expect(content[index]).toEqual({
+      type: "image",
+      mimeType: "image/png",
+      data: "",
+      bytes: Buffer.from(dataBase64, "base64").length,
+    });
+
+    const history = (await h.call("sessions", "history", { session })) as {
+      rows: Row[];
+    };
+    const paged = history.rows.find((row) => row.entryId === asked?.entryId);
+    expect((paged?.message.content as { data?: string }[])[index]?.data).toBe(
+      "",
+    );
+
+    expect(
+      await h.call("sessions", "image", {
+        session,
+        entryId: asked?.entryId,
+        index,
+      }),
+    ).toEqual({ mimeType: "image/png", data: dataBase64 });
+
+    // An address that holds no picture is an error that names the address.
+    await expect(
+      h.call("sessions", "image", { session, entryId: "nope", index }),
+    ).rejects.toThrow(`sessions.image: no picture at nope#${index}`);
+    const text = content.findIndex((part) => part.type === "text");
+    await expect(
+      h.call("sessions", "image", {
+        session,
+        entryId: asked?.entryId,
+        index: text,
+      }),
+    ).rejects.toThrow("sessions.image: no picture at");
+    await expect(
+      h.call("sessions", "image", {
+        session,
+        entryId: asked?.entryId,
+        index: 99,
+      }),
+    ).rejects.toThrow("sessions.image: no picture at");
+    await expect(
+      h.call("sessions", "image", { session, entryId: asked?.entryId }),
+    ).rejects.toThrow(
+      "sessions.image needs a session, an entryId and an index",
+    );
     await h.unload();
   });
 });

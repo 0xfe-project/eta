@@ -280,6 +280,17 @@ export interface WireServer {
   stop: () => void;
 }
 
+/** The address each request on the port came from, while the request is alive. */
+const peerAddresses = new WeakMap<Request, string>();
+
+/**
+ * The address a request came from (the TCP peer, not anything a header claims); undefined for a
+ * request this transport did not receive.
+ */
+export function peerAddressOf(request: Request): string | undefined {
+  return peerAddresses.get(request);
+}
+
 export function serveWire(
   deps: TransportDeps,
   options: WireServerOptions,
@@ -319,6 +330,8 @@ export function serveWire(
     port: options.port,
     hostname: options.hostname ?? "127.0.0.1",
     fetch(request, bunServer) {
+      const address = bunServer.requestIP(request)?.address;
+      if (address !== undefined) peerAddresses.set(request, address);
       const refused = options.authorize?.(request);
       if (refused !== undefined) return refused;
       if (new URL(request.url).pathname === "/ws") {

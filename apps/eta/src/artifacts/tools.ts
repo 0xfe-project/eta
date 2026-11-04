@@ -70,8 +70,10 @@ export function artifactSessionTools(deps: {
       parameters: parameters(),
       async execute(args, run) {
         if (run.context.env === undefined) {
+          // The files are read on eta's side, through the environment the host gave this
+          // session, not through whatever the agent itself can reach.
           return toolError(
-            "this session has no file access, so it cannot publish a directory",
+            "eta has no execution environment for this session to read the directory from, so it cannot publish it",
           );
         }
         try {

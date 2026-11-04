@@ -1,5 +1,17 @@
-import type { AgentArgs, AgentResults, AgentView } from "@eta/client-contracts";
+import type {
+  AgentArgs,
+  AgentResults,
+  AgentRuntime,
+  AgentRuntimeInfo,
+  AgentView,
+  MachineView,
+} from "@eta/client-contracts";
+import type { Model } from "@/queries/providers";
+import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";
 import { translate } from "@/lib/i18n";
+import { getWire } from "@/lib/wire";
+import { useMachines } from "@/queries/projects";
+import { useModels } from "@/queries/providers";
 import { useListTarget, useWireMutation } from "@/queries/wire";
 
 // Agents on the wire: the `agents` target (one eager `list` section) and its four actions. An
@@ -50,4 +62,95 @@ export function useDirectChat() {
     "agents",
     "direct",
   );
+}
+
+/**
+ * The external runtimes a machine has (Claude Code, Codex, ...), with their models: the host's own
+ * when no machine is named. Asking can start a runtime to list its models, so the answer is kept
+ * for a while; the host keeps its own.
+ */
+const runtimesQuery = (machineId: string | undefined) =>
+  queryOptions({
+    queryKey: ["wire", "agents", "runtimes", machineId ?? ""],
+    queryFn: async () =>
+      (
+        await getWire().call<AgentResults["runtimes"]>(
+          "agents",
+          "runtimes",
+          machineId === undefined ? {} : { machineId },
+        )
+      ).runtimes,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+// A refetch that fails keeps the list it had: only a machine that never answered is unknown.
+const knownRuntimes = ({
+  data,
+  isError,
+}: {
+  data: AgentRuntimeInfo[] | undefined;
+  isError: boolean;
+}) => data ?? (isError ? null : undefined);
+
+/**
+ * What each of these machines has, by machine id, each undefined until it answers and null when it
+ * could not be asked. They are asked one by one, so a slow machine holds up only its own answer.
+ */
+export function useRuntimesByMachine(
+  machines: readonly MachineView[],
+): ReadonlyMap<string, AgentRuntimeInfo[] | null | undefined> {
+  const answers = useQueries({
+    queries: machines.map((machine) =>
+      runtimesQuery(machine.kind === "primary" ? undefined : machine.id),
+    ),
+  });
+  return new Map(
+    machines.map((machine, at) => [machine.id, knownRuntimes(answers[at]!)]),
+  );
+}
+
+/** A runtime's models as a picker lists them: `runtime:modelId`, under the runtime's name. */
+function runtimeModelsOf(info: AgentRuntimeInfo): Model[] {
+  return info.models.map((model) => ({
+    id: `${info.id}:${model.id}`,
+    provider: info.id,
+    providerName: info.label,
+    name: model.name,
+    available: info.status === "available",
+    default: model.default,
+  }));
+}
+
+/**
+ * What an agent form offers on the machine it names ("" follows the project): that machine's
+ * runtimes, and the models an agent on `runtime` can choose (eta's providers' on eta, the
+ * runtime's own on an external one).
+ *
+ * Each is undefined while it loads and null when the machine could not be asked (offline, or no
+ * link): then nothing is known about it, which is not the same as having none. The host answers
+ * for the primary itself whether it is named or not, so naming it asks nothing new.
+ */
+export function useAgentRuntimeChoices(
+  runtime: AgentRuntime,
+  machineId: string,
+): {
+  runtimes: AgentRuntimeInfo[] | null | undefined;
+  models: Model[] | null | undefined;
+} {
+  const { machines } = useMachines();
+  const { data: providerModels } = useModels();
+  const primary = machines.find((machine) => machine.kind === "primary");
+  const runtimes = knownRuntimes(
+    useQuery(
+      runtimesQuery(
+        machineId === "" || machineId === primary?.id ? undefined : machineId,
+      ),
+    ),
+  );
+  if (runtime === "eta") return { runtimes, models: providerModels };
+  // An external runtime's models come with the machine's list: loading or unknown with it.
+  if (!runtimes) return { runtimes, models: runtimes };
+  const info = runtimes.find((entry) => entry.id === runtime);
+  return { runtimes, models: info === undefined ? [] : runtimeModelsOf(info) };
 }

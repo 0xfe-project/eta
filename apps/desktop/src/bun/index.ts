@@ -11,7 +11,7 @@
  *
  * Two things sit beside the host in this process, and both are the window's, not the product's:
  *
- * - the **capability bridge** (`native.ts`): a loopback port that answers folder dialogs, the
+ * - the **capability bridge** (`native.ts`): a loopback port that answers save dialogs, the
  *   system browser, window buttons. It exists so the page can do what a page cannot.
  * - the **preload**: the one script that runs in the page before any of its own code. `preload` is
  *   script *source*, not a path, which is the only reason the bridge's port — which does not exist
@@ -372,15 +372,6 @@ const bridge = startNativeBridge({
   origins: pageOrigin === undefined ? [] : [pageOrigin],
   platform: process.platform,
   handlers: {
-    async folderDialog({ startingFolder }) {
-      const picked = await Utils.openFileDialog({
-        canChooseFiles: false,
-        canChooseDirectory: true,
-        allowsMultipleSelection: false,
-        ...(startingFolder === undefined ? {} : { startingFolder }),
-      });
-      return picked[0] ?? null;
-    },
     async saveFile({ content, filename }) {
       // Electrobun has no save panel: the honest closest thing is to ask for a directory and
       // write the file there, rather than put it somewhere the user did not point at.

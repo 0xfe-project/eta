@@ -14,7 +14,9 @@
  * call fails and the run says so.
  */
 import type {
+  DaemonInstall,
   DaemonServiceParams,
+  DaemonServiceResults,
   GitHubCredentials,
   MachineActionArgs,
   MachineActionResults,
@@ -25,6 +27,7 @@ import type { CallFrame, ServerFrame } from "@eta/client-wire-proto";
 import type { KernelTool, PersonaCard, ThinkingLevel } from "@eta/core";
 import type { AskObserver, OpenSession } from "@eta/harness";
 import type { McpConfigSource } from "@eta/mcp";
+import type { OarRuntimes } from "@eta/runtime-oar";
 import type { SessionMeta, SessionsService, Socket } from "@eta/server";
 import type { ActiveBundle } from "./bundle";
 import type { Peer } from "./link/peer";
@@ -35,6 +38,7 @@ import { stat } from "node:fs/promises";
 import { homedir, hostname, platform } from "node:os";
 import { isAbsolute, join } from "node:path";
 import process from "node:process";
+import { LINK_PROTOCOL } from "@eta/client-contracts";
 import { createLocalEnvironment } from "@eta/execution-node";
 import { createRefreshDedupingFetch } from "@eta/mcp";
 import {
@@ -42,6 +46,7 @@ import {
   AkhookSession,
   journalTriggerStore,
 } from "@eta/plugin-akhook";
+import { createOarRuntimes } from "@eta/runtime-oar";
 import {
   createConnection,
   discoverPersonas,
@@ -67,8 +72,9 @@ import { relayAuthProviderFor } from "./mcp-auth";
 import { McpHost } from "./mcp-host";
 import { ModelCatalog, remoteModels } from "./models";
 import { Reports } from "./reports";
-import { runAndWait } from "./run";
+import { lastSeq, runAndWait } from "./run";
 import { proxyTools } from "./tools";
+import { daemonPlatform, installKind } from "./upgrade";
 
 export interface DaemonNodeOptions {
   /** Where sessions live: `<dataDir>/sessions`. */
@@ -86,6 +92,19 @@ export interface DaemonNodeOptions {
   home?: string | undefined;
   /** Overrides of the MCP library's manager, for a test. */
   mcp?: McpHostOptions["manager"];
+  /** How this process was started; read from the environment by default. */
+  install?: DaemonInstall | undefined;
+  /**
+   * Replace this daemon with the primary's build (`./upgrade`). Without it the daemon refuses; a
+   * success is followed by the process exiting, which is the caller's to do.
+   */
+  upgrade?:
+    | ((
+        wanted: DaemonServiceParams["upgrade"],
+      ) => Promise<DaemonServiceResults["upgrade"]>)
+    | undefined;
+  /** The external runtimes; oar's by default (a test hands in scripted ones). */
+  runtimes?: OarRuntimes | undefined;
 }
 
 /** What the primary last said about one agent's session in one conversation. */
@@ -129,6 +148,7 @@ export class DaemonNode {
   readonly #manager: SessionManager;
   readonly #store: FileSessionStore;
   readonly #catalog = new ModelCatalog();
+  readonly #runtimes: OarRuntimes;
   readonly #mcp: McpHost;
   /** git and gh on this machine, logged in as the primary's GitHub App. */
   readonly #github: GitHubKeeper;
@@ -185,8 +205,11 @@ export class DaemonNode {
       fetch: createRefreshDedupingFetch(),
       manager: options.mcp,
     });
+    this.#runtimes = options.runtimes ?? createOarRuntimes({ warn });
     this.#manager = new SessionManager({
       store: this.#store,
+      // Claude Code, Codex, OpenCode, Pi: an agent on one of them runs it on this machine.
+      runtimes: this.#runtimes,
       // Generation is the primary's: this is a model layer that asks it.
       modelsFor: (meta) =>
         remoteModels({
@@ -348,6 +371,16 @@ export class DaemonNode {
         signal,
       });
     });
+    peer.handle("upgrade", async (raw) => {
+      const wanted = raw as DaemonServiceParams["upgrade"];
+      if (this.#options.upgrade === undefined)
+        return { ok: false, reason: "this daemon cannot replace itself" };
+      return await this.#options.upgrade(wanted);
+    });
+    peer.handle("runtimes", async (raw) => {
+      const { fresh } = (raw ?? {}) as DaemonServiceParams["runtimes"];
+      return { runtimes: await this.#runtimes.catalog.list(fresh === true) };
+    });
     // What the questions did while nobody was listening.
     this.#reports.attach(peer);
     return {
@@ -365,7 +398,7 @@ export class DaemonNode {
   async close(): Promise<void> {
     for (const fiber of this.#fibers.splice(0).reverse()) await fiber.dispose();
     await this.#manager.closeAll();
-    this.#github.stop();
+    await this.#github.stop();
     await this.#mcp.close();
     await this.#store.close();
   }
@@ -434,6 +467,9 @@ export class DaemonNode {
         home: homedir(),
         os: platform(),
         version: this.#options.version,
+        protocol: LINK_PROTOCOL,
+        platform: daemonPlatform(),
+        install: this.#options.install ?? installKind(),
       }),
       stat: async ({ path }) => {
         if (!isAbsolute(path))
@@ -474,6 +510,10 @@ export class DaemonNode {
           model: formatModelId(config.read("model")),
           thinkingLevel: config.read("thinkingLevel"),
         };
+      },
+      lastSeq: async ({ session }) => {
+        const { managed } = await this.#service().open(session);
+        return { seq: lastSeq(managed) };
       },
     };
     return (Object.keys(handlers) as (keyof MachineActionArgs)[]).map(
@@ -546,7 +586,10 @@ export class DaemonNode {
     if (args.session !== undefined) {
       const id = args.session;
       try {
-        await sessions.open(id);
+        const { managed } = await sessions.open(id);
+        // A conversation is one runtime's: an agent that moved to another starts over.
+        if ((managed.meta.runtime ?? "eta") !== (args.runtime ?? "eta"))
+          throw new Error(`no such session on ${args.runtime ?? "eta"}: ${id}`);
         if (this.#opened.get(id) !== args.stamp) {
           await sessions.setMeta(id, {
             persona: args.persona === undefined ? undefined : args.persona,
@@ -568,6 +611,7 @@ export class DaemonNode {
       title: args.title,
       agentId: args.agentId,
       conversationId: args.conversationId,
+      ...(args.runtime === undefined ? {} : { runtime: args.runtime }),
       ...(args.model === undefined ? {} : { model: args.model }),
       ...(args.persona === undefined ? {} : { persona: args.persona }),
     });

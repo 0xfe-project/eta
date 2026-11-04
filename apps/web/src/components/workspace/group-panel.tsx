@@ -1,9 +1,7 @@
 import type { ConversationSummary } from "@eta/client-contracts";
 import type { ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { ROUTINES_VISIBLE } from "@/lib/features";
-import { cn } from "@/lib/utils";
 import { useArtifacts } from "@/queries/artifacts";
 import { useConversation } from "@/queries/conversations";
 import { useRoutines } from "@/queries/routines";
@@ -11,21 +9,16 @@ import { useTasks } from "@/queries/tasks";
 import { ActivityRefCard } from "./activity-ref";
 import { GroupMembers } from "./groups";
 import { when } from "./routine-format";
-import { useAttention } from "./use-attention";
-import { useSectionLink } from "./workspace-search";
 
 /**
  * 上下文: what this conversation is made of, for the panel beside it, ordered by
  * whether it is worth a look *now* — reading it top down should cost one glance,
  * not a scroll to find out whether anything needs the user.
  *
- * So: 等你 first (what waits for the user *in this conversation*, the same rows
- * the 待处理 tab counts, from the same hook — see `useAttention`; a second judge
- * here would disagree with the badge), then what the group made and what it is
- * on track to make (任务, 产物, 定时), then the background that is only news when
- * it changes (成员, 目标). A confirmation is not drawn again here — it is already
- * demanding an answer in the conversation — so its row is the way to the tab that
- * holds them, and its count keeps this section's total equal to the badge's.
+ * So: what the group made and what it is on track to make first (任务, 产物,
+ * 定时), then the background that is only news when it changes (成员, 目标).
+ * What waits for the user is the 待处理 tab's, with its badge; it is not listed
+ * again here.
  *
  * The members are the group's own component, the one the group manager uses,
  * because it already carries everything a member has (its session's numbers, the
@@ -33,9 +26,8 @@ import { useSectionLink } from "./workspace-search";
  * second thing to keep in sync. What this file adds is only what surrounds that.
  */
 
-/** The one row shape this panel uses twice: what waits, and why it waits. */
-const rowClass =
-  "flex min-w-0 items-baseline gap-2 outline-none hover:underline focus-visible:underline";
+/** What 任务 leaves out: a closed task needs nothing more, and the 任务 tab still holds it. */
+const closed = new Set<string>(["done", "cancelled"]);
 
 export function GroupPanel({
   group,
@@ -53,113 +45,37 @@ export function GroupPanel({
   const { routines } = useRoutines();
   const { artifacts } = useArtifacts();
   const { info } = useConversation(group?.id);
-  const attention = useAttention();
-  const sectionLink = useSectionLink();
   if (group === undefined) return null;
-  const tasks = board.filter((task) => task.conversationId === group.id);
+  const groupTasks = board.filter((task) => task.conversationId === group.id);
+  const tasks = groupTasks.filter((task) => !closed.has(task.status));
   const groupRoutines = routines.filter(
     (routine) => routine.conversationId === group.id,
   );
   const groupArtifacts = artifacts.filter(
     (artifact) => artifact.conversationId === group.id,
   );
-  // What waits, as the 待处理 tab sees it, kept to this conversation.
-  const waitingTasks = attention.tasks.filter(
-    ({ task }) => task.conversationId === group.id,
-  );
-  const waitingRoutines = attention.routines.filter(
-    ({ routine }) => routine.conversationId === group.id,
-  );
-  const waitingIds = new Set(waitingTasks.map(({ task }) => task.id));
-  // Nothing of this conversation to point at, and no confirmations to send them
-  // to, and the section is not drawn at all: an empty「等你」would be the panel
-  // spending a heading on "nothing to see".
-  const holds =
-    waitingTasks.length + waitingRoutines.length + attention.interactions > 0;
-  // A task the user has to act on leads its own section too; the rest follow the
-  // last move made on them.
-  const listed = [...tasks].sort(
-    (a, b) =>
-      Number(waitingIds.has(b.id)) - Number(waitingIds.has(a.id)) ||
-      b.updatedAt - a.updatedAt,
-  );
+  // The last move made on them, latest first.
+  const listed = [...tasks].sort((a, b) => b.updatedAt - a.updatedAt);
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="divide-y divide-border pb-2">
-        {holds ? (
-          <Section
-            title={translateText("chat:context.awaitingYou")}
-            count={attention.total}
-          >
-            <ul className="space-y-1">
-              {waitingTasks.map(({ task, reason, alert }) => (
-                <li key={task.id}>
-                  <Link
-                    {...sectionLink("tasks", { task: task.id })}
-                    title={`#${task.number} ${task.title}`}
-                    className={rowClass}
-                  >
-                    <WaitingRow
-                      title={
-                        <>
-                          <span className="text-faint tabular-nums">
-                            #{task.number}{" "}
-                          </span>
-                          {task.title}
-                        </>
-                      }
-                      reason={reason}
-                      alert={alert}
-                    />
-                  </Link>
-                </li>
-              ))}
-              {waitingRoutines.map(({ routine, reason, alert }) => (
-                <li key={routine.id}>
-                  <Link
-                    {...sectionLink("routines", { routine: routine.id })}
-                    title={routine.name}
-                    className={rowClass}
-                  >
-                    <WaitingRow
-                      title={routine.name}
-                      reason={reason}
-                      alert={alert}
-                    />
-                  </Link>
-                </li>
-              ))}
-              {attention.interactions === 0 ? null : (
-                <li>
-                  <Link
-                    to="/"
-                    search={{ group: group.id, view: "inbox" }}
-                    className={rowClass}
-                  >
-                    <WaitingRow
-                      title={translateText("chat:confirmations.requestLabel")}
-                      count={attention.interactions}
-                      reason={translateText("chat:context.openPending")}
-                      alert={false}
-                    />
-                  </Link>
-                </li>
-              )}
-            </ul>
-          </Section>
-        ) : null}
-
         <Section
           title={translateText("navigation:sections.tasks")}
           count={tasks.length}
         >
           {tasks.length === 0 ? (
+            // "No tasks yet" would be wrong once some have been closed here.
             <p className="text-xs text-muted-foreground">
-              {translateText("tasks:empty.title")}
+              {translateText(
+                groupTasks.length === 0
+                  ? "tasks:empty.title"
+                  : "tasks:empty.noOpen",
+              )}
             </p>
           ) : (
-            <ul className="space-y-1">
+            // Rows, edge to edge: the rule between two runs into the panel's own edges.
+            <ul className="-mx-3 divide-y divide-border">
               {listed.slice(0, 5).map((task) => (
                 <li key={task.id}>
                   <ActivityRefCard
@@ -186,7 +102,7 @@ export function GroupPanel({
               {translateText("artifacts:empty.title")}
             </p>
           ) : (
-            <ul className="space-y-1">
+            <ul className="-mx-3 divide-y divide-border">
               {groupArtifacts.map((artifact) => (
                 <li key={artifact.id}>
                   <ActivityRefCard
@@ -272,37 +188,5 @@ function Section({
       </h3>
       {children}
     </section>
-  );
-}
-
-/** One thing that waits: what it is, and why. The reason is the 待处理 tab's own words. */
-function WaitingRow({
-  title,
-  count,
-  reason,
-  alert,
-}: {
-  title: ReactNode;
-  count?: number;
-  reason: string;
-  alert: boolean;
-}) {
-  return (
-    <>
-      <span className="min-w-0 flex-1 truncate text-xs">
-        {title}
-        {count === undefined ? null : (
-          <span className="ml-1 text-faint tabular-nums">{count}</span>
-        )}
-      </span>
-      <span
-        className={cn(
-          "shrink-0 font-mono text-[10px]",
-          alert ? "text-destructive" : "text-faint",
-        )}
-      >
-        {reason}
-      </span>
-    </>
   );
 }

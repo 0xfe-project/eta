@@ -1,3 +1,4 @@
+import type { OarRuntimes } from "@eta/runtime-oar";
 import type { AssembledServer, AssembleOptions } from "@eta/server";
 /**
  * The host: the upstream server floor, plus what a product around it needs.
@@ -12,6 +13,7 @@ import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/site";
 import type { GithubTuning } from "./github/service";
 import type { LlmOptions, LlmRuntime } from "./llm/runtime";
+import type { SshRunner } from "./machines/install";
 import type { McpTuning } from "./mcp/service";
 import type {
   AkhookOptions,
@@ -24,6 +26,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { etaCompaction } from "@eta/compaction";
 import { createLocalEnvironment } from "@eta/execution-node";
+import { createOarRuntimes } from "@eta/runtime-oar";
 import { assembleServer } from "@eta/server";
 import { createAccess } from "./access";
 import {
@@ -37,6 +40,8 @@ import { GatewayModels } from "./llm/models";
 import { llmPlugin } from "./llm/plugin";
 import { LLM_ROUTE } from "./llm/route";
 import { openLlm } from "./llm/runtime";
+import { DaemonBuilds, defaultBuildsDir } from "./machines/builds";
+import { Tailscale } from "./machines/tailscale";
 import { createProduct } from "./product";
 
 export interface HostOptions {
@@ -104,6 +109,26 @@ export interface HostOptions {
   routines?: RoutinesOptions;
   /** Whether tasks run; a test that is about the board and not the runs turns them off. */
   tasks?: TasksOptions;
+  /**
+   * The external agent runtimes (Claude Code, Codex, OpenCode, Pi) agents may run on: oar's, on
+   * this machine, by default. A test hands in scripted ones; `false` runs none.
+   */
+  runtimes?: OarRuntimes | false;
+  /**
+   * Tailscale on this host (discovering machines, letting the user's own nodes in): `true` reads
+   * it through the `tailscale` command; a test hands in one with a scripted command. Off by
+   * default; `main.ts` turns it on.
+   */
+  tailscale?: boolean | Tailscale;
+  /**
+   * The daemon builds this primary carries (`apps/daemon/scripts/build.ts`): `true` looks where
+   * they are kept (the checkout's `apps/daemon/out/dist`, or `daemon/` beside a compiled host), a
+   * string is a directory of them. Off by default, so a host made for a test leaves daemons at
+   * whatever build they are; `main.ts` turns it on.
+   */
+  daemonBuilds?: boolean | string;
+  /** How a daemon is put on another computer; the user's `ssh` by default (a test fakes it). */
+  ssh?: SshRunner;
   warn?: (message: string) => void;
 }
 
@@ -145,6 +170,10 @@ export async function startHost(options: HostOptions): Promise<Host> {
   try {
     applyMigrations(db, loadMigrations());
     const warn = options.warn ?? ((message: string) => console.warn(message));
+    const runtimes =
+      options.runtimes === false
+        ? undefined
+        : (options.runtimes ?? createOarRuntimes({ warn }));
     product = createProduct({
       db,
       dataDir: options.dataDir,
@@ -163,6 +192,25 @@ export async function startHost(options: HostOptions): Promise<Host> {
       akhook: options.akhook,
       hostname,
       ...(options.home === undefined ? {} : { home: options.home }),
+      ...(runtimes === undefined
+        ? {}
+        : { runtimes: async (fresh) => await runtimes.catalog.list(fresh) }),
+      ...(options.tailscale === undefined || options.tailscale === false
+        ? {}
+        : {
+            tailscale:
+              options.tailscale === true ? new Tailscale() : options.tailscale,
+          }),
+      ...(options.daemonBuilds === undefined || options.daemonBuilds === false
+        ? {}
+        : {
+            daemonBuilds: new DaemonBuilds(
+              options.daemonBuilds === true
+                ? defaultBuildsDir()
+                : options.daemonBuilds,
+            ),
+          }),
+      ...(options.ssh === undefined ? {} : { ssh: options.ssh }),
     });
     const web = createWebRoutes(options.webDir);
     server = await assembleServer({
@@ -200,6 +248,8 @@ export async function startHost(options: HostOptions): Promise<Host> {
       skillDirsFor: product.skillDirsFor,
       ...product.sessionHooks,
       generated: product.generated,
+      // An agent on an external runtime has its sessions' runs taken by it (`@eta/runtime-oar`).
+      ...(runtimes === undefined ? {} : { runtimes }),
       ...(options.models === undefined ? {} : { models: options.models }),
       ...(options.llm !== undefined && options.llm !== false
         ? { overlayModels: gatewayModels.overlay }

@@ -70,9 +70,10 @@ export class TaskRunStore {
   }
 
   /**
-   * A run, queued, on the machine the task's project is on. A run that continues another one works
-   * in the session the other one made, and says so with `continuesRunId` (`tasks.rerun` leaves it
-   * null: a rerun starts afresh and remembers nothing). `agentId` is a mentioned agent's lane.
+   * A run, queued, on the machine it works on: its agent's, when the agent is pinned to one; else
+   * the project's. A run that continues another one works in the session the other one made, and
+   * says so with `continuesRunId` (`tasks.rerun` leaves it null: a rerun starts afresh and
+   * remembers nothing). `agentId` is a mentioned agent's lane.
    */
   create(
     taskId: string,

@@ -7,34 +7,36 @@
     "revoked": "Revoked"
   },
   "kinds": {
-    "primary": "Primary",
-    "daemon": "Daemon",
-    "ssh": "SSH"
+    "primary": "Primary"
   },
   "lastSeen": "Last seen {{time}}",
+  "build": {
+    "version": "Build {{version}}",
+    "outdated": "Needs update",
+    "updating": "Updating…"
+  },
   "actions": {
     "add": "Add machine",
     "rename": "Rename",
     "runs": "Runs at once",
+    "upgrade": "Update now",
     "revoke": "Revoke"
   },
+  "upgrade": {
+    "started": "{{name}} is updating and will reconnect"
+  },
   "fields": {
-    "nameLabel": "Machine name",
-    "namePlaceholder": "e.g. Mac mini at home"
+    "nameLabel": "Machine name"
   },
   "install": {
-    "title": "Connect a machine",
     "permissionsNotice": "Agents run on that machine with full permissions. Only connect machines meant for work.",
-    "chooseName": "Name it",
     "generateCommand": "Generate command",
-    "runCommand": "Run in that machine's terminal",
+    "runCommand": "Run this in that machine's terminal. It downloads eta-daemon and installs it as a service (Linux, macOS); nothing has to be installed there first.",
     "copyCommand": "Copy install command",
     "commandExpiry": "The command works once and is valid until {{time}}.",
     "waitingForCommand": "Waiting for the machine to run the command…"
   },
   "approval": {
-    "title": "Check the fingerprint, approve",
-    "help": "After the command runs, that machine's terminal prints a fingerprint. Paste it here; it is approved only if it matches.",
     "request": "{{name}} wants to connect: paste the fingerprint its terminal printed.",
     "label": "Fingerprint of {{name}}",
     "placeholder": "Paste the fingerprint from the terminal",
@@ -56,5 +58,30 @@
   "empty": {
     "title": "No other machines yet",
     "description": "Once connected, projects and conversations can work on it."
+  },
+  "add": {
+    "tabs": {
+      "command": "Run a command",
+      "ssh": "Install over SSH"
+    },
+    "address": "Address it connects to",
+    "addressTailnet": "Tailnet · {{url}}",
+    "addressCurrent": "This page · {{url}}",
+    "joined": "{{name}} is connected"
+  },
+  "ssh": {
+    "target": "Target",
+    "keyless": "Logs in without a password (SSH key or Tailscale SSH)",
+    "password": "Password",
+    "passwordPromise": "Used for this install only. It is never saved and never written to a log.",
+    "insecure": "This page is not on an encrypted connection, so no password can be typed here. Open it over https or the tailnet address.",
+    "install": "Install",
+    "progress": "Install progress",
+    "steps": {
+      "connect": "Connect",
+      "send": "Send",
+      "register": "Register",
+      "service": "Start service"
+    }
   }
 }

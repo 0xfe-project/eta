@@ -2,6 +2,7 @@ import type {
   InboxResponse,
   InteractionView,
   SidebarSession,
+  ViewMessageRow,
 } from "@eta/client-contracts";
 /**
  * A conversation in a project on another machine.
@@ -57,6 +58,55 @@ function withCredential(
 }
 
 describe("a reply on a remote machine", () => {
+  it("names where its run starts in the daemon's journal, which the view's rows are numbered by", async () => {
+    const opened = gate();
+    const { models } = scriptedModels(async (request) => {
+      if (request.index === 1) await opened.opened;
+      return say(`answer ${request.index + 1}`);
+    });
+    const r = await remoteWorld({ models });
+    const { group } = await r.agents("Ada");
+
+    const one = await r.send(group.id, "first");
+    await r.settled(group.id, one.replies[0]!.id);
+    const session = sessionOf(r, group.id)!;
+    r.client.subscribe(`sessions.${session}`);
+    const rows = () =>
+      r.client.section<{ messages: ViewMessageRow[] }>(
+        `sessions.${session}`,
+        "transcript",
+      )?.messages ?? [];
+    await until(() => rows().length === 2);
+    const last = rows().at(-1)!.seq;
+
+    const two = await r.send(group.id, "second");
+    const working = await r.settled(group.id, two.replies[0]!.id, ["working"]);
+    expect(working.data.runFrom).toBe(last);
+
+    await until(() => rows().length === 3);
+    expect(rows().at(-1)!.seq).toBeGreaterThan(last);
+    opened.open();
+    await r.settled(group.id, two.replies[0]!.id);
+  });
+
+  it("still runs when the daemon cannot say where the session stands", async () => {
+    const { models } = scriptedModels(() => say("hello"));
+    const r = await remoteWorld({ models });
+    const { group } = await r.agents("Ada");
+    // A daemon of an older build has no such action.
+    const link = r.host.product.hub.link(r.daemon.machineId)!;
+    const asked = link.machine.bind(link);
+    link.machine = ((action: "info", args: Record<string, never>) =>
+      (action as string) === "lastSeq"
+        ? Promise.reject(new Error("unknown action"))
+        : asked(action, args)) as typeof link.machine;
+
+    const sent = await r.send(group.id, "hi");
+    const done = await r.settled(group.id, sent.replies[0]!.id);
+    expect(done).toMatchObject({ status: "done", text: "hello" });
+    expect(done.data).not.toHaveProperty("runFrom");
+  });
+
   it("runs on the daemon, generates through the primary and streams to a browser watching the session", async () => {
     const opened = gate();
     const { models, requests } = scriptedModels(async (request) => {

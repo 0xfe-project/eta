@@ -8,11 +8,11 @@
   "workspace": {
     "label": "工作区",
     "worktree": "独立 worktree",
-    "local": "项目目录"
+    "local": "项目目录",
+    "away": "在 {{machine}} 上，不在项目里"
   },
   "status": {
     "inProgress": "进行中",
-    "changeLabel": "状态：{{status}}，修改",
     "inReview": "待验收",
     "blocked": "受阻",
     "todo": "待办",
@@ -28,8 +28,9 @@
   },
   "queueReason": {
     "taskBusy": "等这个任务上一次运行结束",
-    "machineFull": "这台机器的运行数已满，等空位",
-    "machineOffline": "这台机器不在线，连上后开始"
+    "machineFull": "{{machine}} 同时运行的任务数已满，等空位",
+    "machineOffline": "{{machine}} 不在线，连上后开始",
+    "thisMachine": "这台机器"
   },
   "runs": {
     "label": "运行",
@@ -84,13 +85,9 @@
     "description": "描述",
     "descriptionPlaceholder": "目标、背景、完成的标准……"
   },
-  "layout": {
-    "label": "布局",
-    "list": "列表",
-    "board": "看板"
-  },
   "empty": {
     "title": "还没有任务",
+    "noOpen": "没有进行中的任务",
     "description": "智能体在对话里提出任务，你确认后它会自己动手，并在时间线里记下每一步。",
     "deletedTitle": "这个任务已不存在"
   },
@@ -119,7 +116,16 @@
     "title": "执行记录",
     "workspacePrefix": "工作区 ",
     "done": "完成",
-    "failed": "失败"
+    "failed": "失败",
+    "error": "出错",
+    "aborted": "已停止",
+    "compacted": "上下文已压缩，之前的内容合成了摘要",
+    "branched": "之前的分支合成了摘要",
+    "group": "{{name}} · {{count}} 次",
+    "group_one": "{{name}} · {{count}} 次",
+    "group_other": "{{name}} · {{count}} 次",
+    "earlier": "加载更早的记录",
+    "loadingEarlier": "正在加载更早的记录…"
   },
   "draft": {
     "title": "任务草稿",

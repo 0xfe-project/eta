@@ -3,13 +3,16 @@ import { act } from "react";
 import { setWire } from "@/lib/wire";
 import {
   agentView,
+  buildProductHost,
+  machineView,
   productHost,
+  projectView,
   taskActivity,
   taskDetail,
 } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
 import { TaskBoard } from "./task-board";
-import { useWorkspaceStore } from "./workspace-store";
+import { storageKey, useWorkspaceStore } from "./workspace-store";
 
 const navigation = rstest.hoisted(() => ({
   task: null as string | null,
@@ -90,8 +93,8 @@ function board() {
   return host;
 }
 
-/** The list's pane: the page's first child, behind an open task. */
-const listPane = (container: HTMLElement) =>
+/** The board's pane: the page's first child, behind an open task. */
+const boardPane = (container: HTMLElement) =>
   container.firstElementChild!.firstElementChild as HTMLElement;
 
 describe("task board", () => {
@@ -100,36 +103,92 @@ describe("task board", () => {
     setWire(undefined);
     navigation.task = null;
     navigation.set.mockClear();
-    useWorkspaceStore.getState().setWorkspace((workspace) => ({
-      ...workspace,
-      taskLayout: "list",
-    }));
+    localStorage.clear();
+    useWorkspaceStore.setState({ workspace: {} });
   });
 
-  it("lists the board by status, in the board's own words", async () => {
+  it("opens on the board, with nothing to switch to", async () => {
     board();
     const { container } = await mount(<TaskBoard />);
     await flush();
     const main = container.querySelector('[role="main"]#main')!;
-    const sections = [...main.querySelectorAll("section")].map((s) => ({
-      label: s.getAttribute("aria-label"),
-      rows: [...s.querySelectorAll("li")].map((li) => li.textContent),
-    }));
-    expect(sections.map((s) => s.label)).toEqual(["待验收", "待办"]);
-    expect(sections[1]!.rows[0]).toContain("#1");
-    expect(sections[1]!.rows[0]).toContain("测试任务");
-    expect(container.textContent).toContain("2");
+    // A column for every status, empty or not.
+    expect(main.querySelector('section[aria-label="进行中"]')).not.toBeNull();
+    expect(container.querySelector('[role="tablist"]')).toBeNull();
+    expect(container.querySelector('[aria-label="列表"]')).toBeNull();
+    expect(container.querySelector('[aria-label="看板"]')).toBeNull();
   });
 
-  it("shows the executor and the run of each task on its row", async () => {
+  it("opens on the board in a browser that saved the list", async () => {
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify({ lastModel: "m1", taskLayout: "list" }),
+    );
+    await useWorkspaceStore.persist.rehydrate();
     board();
     const { container } = await mount(<TaskBoard />);
     await flush();
-    const row = [...container.querySelectorAll("li")].find((li) =>
+    const main = container.querySelector('[role="main"]#main')!;
+    expect(main.querySelector('section[aria-label="进行中"]')).not.toBeNull();
+    expect(useWorkspaceStore.getState().workspace).toEqual({ lastModel: "m1" });
+  });
+
+  it("says so when there are no tasks yet", async () => {
+    productHost({ tasks: [] });
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    expect(container.textContent).toContain("还没有任务");
+    expect(container.querySelector("#main section")).toBeNull();
+  });
+
+  it("shows it is loading until the host has answered", async () => {
+    buildProductHost({ tasks: [] }).install();
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    expect(container.querySelector('#main [role="status"]')).not.toBeNull();
+    expect(container.querySelector("#main section")).toBeNull();
+  });
+
+  it("says so when the tasks cannot be read", async () => {
+    productHost({ absent: ["tasks"] });
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    const alert = container.querySelector('#main [role="alert"]')!;
+    expect(alert.textContent).toContain("无法加载任务");
+    expect(container.querySelector("#main section")).toBeNull();
+  });
+
+  it("sets the tasks out by status, in the board's own words", async () => {
+    board();
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    const main = container.querySelector('[role="main"]#main')!;
+    const columns = [...main.querySelectorAll("section")].map((s) => ({
+      label: s.getAttribute("aria-label"),
+      cards: [...s.querySelectorAll("li")].map((li) => li.textContent),
+    }));
+    expect(columns.map((c) => c.label)).toEqual([
+      "积压",
+      "待办",
+      "进行中",
+      "受阻",
+      "待验收",
+      "已完成",
+    ]);
+    expect(columns[1]!.cards[0]).toContain("#1");
+    expect(columns[1]!.cards[0]).toContain("测试任务");
+    expect(container.textContent).toContain("2");
+  });
+
+  it("shows the executor and the run of each task on its card", async () => {
+    board();
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    const card = [...container.querySelectorAll("li")].find((li) =>
       li.textContent?.includes("测试任务"),
     )!;
-    expect(row.textContent).toContain("小艾");
-    expect(row.textContent).toContain("正在运行");
+    expect(card.textContent).toContain("小艾");
+    expect(card.textContent).toContain("正在运行");
   });
 
   it("has no way to make a task: tasks are proposed by agents", async () => {
@@ -145,22 +204,29 @@ describe("task board", () => {
     expect(host.calls.filter((c) => c.action === "create")).toHaveLength(0);
   });
 
-  it("changes a task's status from its row without opening it", async () => {
+  it("changes a task's status by dragging its card to a column", async () => {
     const host = board();
     const { container } = await mount(<TaskBoard />);
     await flush();
-    const trigger = container.querySelector<HTMLElement>(
-      'button[aria-label^="状态：待办"]',
-    )!;
-    await act(async () => {
-      trigger.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-      );
-    });
-    const done = [...document.querySelectorAll('[role="menuitem"]')].find(
-      (item) => item.textContent === "已完成",
-    );
-    await click(done);
+    const card = container.querySelector<HTMLElement>("li button")!;
+    const done = container.querySelector('section[aria-label="已完成"]')!;
+    const data = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: "none",
+      get types() {
+        return [...data.keys()];
+      },
+      setData: (type: string, value: string) => data.set(type, value),
+      getData: (type: string) => data.get(type) ?? "",
+    };
+    const drag = (target: Element, type: string) =>
+      act(async () => {
+        const event = new Event(type, { bubbles: true, cancelable: true });
+        target.dispatchEvent(Object.assign(event, { dataTransfer }));
+      });
+    await drag(card, "dragstart");
+    await drag(done, "dragover");
+    await drag(done, "drop");
     await flush();
     expect(host.calls.find((c) => c.action === "update")?.args).toEqual({
       taskId: "t1",
@@ -168,13 +234,13 @@ describe("task board", () => {
     });
   });
 
-  it("gives an open task the page, with the list out of the way", async () => {
+  it("gives an open task the page, with the board out of the way", async () => {
     navigation.task = "t1";
     board();
     const { container } = await mount(<TaskBoard />);
     await flush();
-    // The list takes no room and no focus; nothing is left to resize.
-    const pane = listPane(container);
+    // The board takes no room and no focus; nothing is left to resize.
+    const pane = boardPane(container);
     expect(pane.inert).toBe(true);
     expect(pane.className).toContain("invisible absolute inset-0");
     // The task is the page's one main.
@@ -183,9 +249,9 @@ describe("task board", () => {
     expect(main[0]!.id).toBe("main");
     expect(main[0]!.textContent).toContain("任务说明");
     expect(main[0]!.textContent).toContain("好的");
-    // 任务 goes back to the list.
+    // The task's name in the header goes back to the board.
     const back = [...container.querySelectorAll("button")].find(
-      (b) => !pane.contains(b) && b.textContent === "任务",
+      (b) => !pane.contains(b) && b.textContent === "测试任务",
     )!;
     await act(async () => back.click());
     expect(navigation.set).toHaveBeenCalledWith({ task: null });
@@ -201,12 +267,34 @@ describe("task board", () => {
     );
   });
 
-  it("edits the status of the open task, and shows its executor and workspace", async () => {
+  it("lays an open task out as a document with its properties beside it", async () => {
     navigation.task = "t1";
     const host = board();
     const { container } = await mount(<TaskBoard />);
     await flush();
+    const main = container.querySelector("main")!;
+    // The document column holds the number, the title and the description as
+    // body text — not the first message of a thread — then the activity.
+    expect(main.className).toContain("@4xl:grid-cols-[minmax(0,1fr)_17.5rem]");
+    const column = main.querySelector(".max-w-\\[42\\.5rem\\]")!;
+    expect(column.textContent).toContain("#1");
+    expect(column.textContent).toContain("测试任务");
+    expect(column.textContent).toContain("任务说明");
+    expect(column.textContent).toContain("动态");
+    // The description is the task's own text, not a message with a face.
+    const edit = [...column.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("编辑描述"),
+    )!;
+    let node: HTMLElement | null = edit.parentElement;
+    while (node && node !== column) {
+      expect(node.className).not.toContain("grid-cols-");
+      node = node.parentElement;
+    }
+    // The properties are a rail of their own, with the status that can change.
     const aside = container.querySelector("aside")!;
+    expect(aside.getAttribute("aria-label")).toBe("属性");
+    expect(aside.className).toContain("@4xl:block");
+    expect(aside.className).toContain("hidden");
     expect(aside.textContent).toContain("小艾");
     expect(aside.textContent).toContain("独立 worktree");
     expect(aside.textContent).toContain("eta/task-1");
@@ -224,6 +312,30 @@ describe("task board", () => {
     expect(
       host.calls.filter((c) => c.action === "update").map((c) => c.args),
     ).toEqual([{ taskId: "t1", status: "blocked" }]);
+  });
+
+  it("keeps the properties out of a narrow page until their button opens them", async () => {
+    navigation.task = "t1";
+    board();
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    const aside = container.querySelector("aside")!;
+    // Closed, the rail does not take a column (`hidden`); the header button does.
+    expect(aside.className.split(" ")).toContain("hidden");
+    expect(aside.className).not.toContain("fixed");
+    const open = container.querySelector<HTMLButtonElement>(
+      'button[aria-controls="task-properties"]',
+    )!;
+    expect(open.className).toContain("@4xl:hidden");
+    expect(open.getAttribute("aria-expanded")).toBe("false");
+    await click(open);
+    expect(open.getAttribute("aria-expanded")).toBe("true");
+    expect(aside.className).toContain("fixed");
+    expect(aside.className.split(" ")).not.toContain("hidden");
+    // Still the same properties, status included.
+    expect(aside.querySelector('[role="combobox"]')).not.toBeNull();
+    await click(open);
+    expect(aside.className.split(" ")).toContain("hidden");
   });
 
   it("stops the run that is going, from the timeline", async () => {
@@ -303,12 +415,117 @@ describe("task board", () => {
     });
     const { container } = await mount(<TaskBoard />);
     await flush();
-    const live = container.querySelector('[aria-label="进行中"]')!;
+    const live = container.querySelector('main [aria-label="进行中"]')!;
     expect(live.textContent).toContain("正在工作");
     expect(live.textContent).toContain("停止");
     // The thread folds the run's start into its bookkeeping.
     const timeline = container.querySelector('ol[aria-label="时间线"]')!;
     expect(timeline.textContent).not.toContain("停止");
+  });
+
+  it("names the machine a queued run waits for", async () => {
+    navigation.task = "t1";
+    const queued = (id: string, machineId: string) => ({
+      ...first.runs[0]!,
+      id,
+      status: "queued" as const,
+      queueReason: "machine_offline" as const,
+      machineId,
+      sessionId: null,
+      workspace: null,
+      startedAt: null,
+    });
+    productHost({
+      agents: [agentView({ id: "a1", name: "小艾" })],
+      machines: [
+        machineView({
+          id: "m2",
+          kind: "daemon",
+          name: "macbook",
+          status: "offline",
+        }),
+      ],
+      tasks: [
+        {
+          task: {
+            ...first,
+            runStatus: "queued",
+            // The second is on a machine the page does not know: it says "this machine", as before.
+            runs: [queued("r1", "m2"), queued("r2", "gone")],
+          },
+        },
+      ],
+    });
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    const lines = [
+      ...container.querySelectorAll('main [aria-label="进行中"] li'),
+    ].map((li) => li.textContent);
+    expect(lines[0]).toContain("小艾 排队中 · macbook 不在线，连上后开始");
+    expect(lines[1]).toContain("这台机器 不在线");
+  });
+
+  /** t1, open; its project is on m1, and the executor's run works on `machineId`, in `workspace`. */
+  function runOn(machineId: string, workspace: string) {
+    navigation.task = "t1";
+    const host = productHost({
+      agents: [agentView({ id: "a1", name: "小艾" })],
+      machines: [
+        machineView({ id: "m1", name: "builder" }),
+        machineView({ id: "m2", kind: "daemon", name: "macbook" }),
+      ],
+      projects: [projectView({ id: "p1", machineId: "m1" })],
+      tasks: [
+        {
+          task: {
+            ...first,
+            projectId: "p1",
+            runs: [{ ...first.runs[0]!, machineId, workspace }],
+          },
+        },
+      ],
+    });
+    host.target("sessions.s1", {
+      core: { session: "s1", running: true },
+      transcript: { messages: [] },
+    });
+    host.handle("sessions.resync", () => ({}));
+    host.hello();
+  }
+
+  /** The open task's properties, and the description of its run's log once opened. */
+  async function workspaceAndLog() {
+    const { container } = await mount(<TaskBoard />);
+    await flush();
+    const properties = container.querySelector("aside")!.textContent;
+    await click(
+      [...container.querySelectorAll("button")].find(
+        (b) => b.textContent === "执行记录",
+      ),
+    );
+    await flush();
+    const log = document.querySelector('[role="dialog"]')!.textContent;
+    return { properties, log };
+  }
+
+  it("says a run on another machine than its project's works there, not in a worktree", async () => {
+    runOn("m2", "/Users/me");
+    const { properties, log } = await workspaceAndLog();
+    expect(properties).toContain("在 macbook 上，不在项目里");
+    expect(properties).toContain("/Users/me");
+    // Nothing of the worktree the run never worked in.
+    expect(properties).not.toContain("独立 worktree");
+    expect(properties).not.toContain("eta/task-1");
+    expect(log).toContain("工作区 macbook · /Users/me");
+  });
+
+  it("says the worktree of a run on its project's machine, with no machine", async () => {
+    runOn("m1", "/data/worktrees/p1/task-1");
+    const { properties, log } = await workspaceAndLog();
+    expect(properties).toContain("独立 worktree · eta/task-1");
+    expect(properties).toContain("/data/worktrees/p1/task-1");
+    expect(properties).not.toContain("builder");
+    expect(log).toContain("工作区 /data/worktrees/p1/task-1");
   });
 
   it("draws a run's log from its session's transcript", async () => {
@@ -370,46 +587,43 @@ describe("task board", () => {
     expect(text).not.toContain("简报");
   });
 
-  it("finds the list as it was left, at the task just open", async () => {
+  it("finds the board as it was left, scrolled where it was", async () => {
     board();
     const { container, show } = await mount(<TaskBoard />);
     await flush();
+    const columns = container.querySelector<HTMLElement>(
+      '[role="main"] > div',
+    )!;
+    columns.scrollLeft = 200;
     navigation.task = "t1";
     await show(<TaskBoard />);
+    // Behind the task it is still there, not rendered anew on the way back.
+    const pane = boardPane(container);
+    expect(pane.contains(columns)).toBe(true);
     navigation.task = null;
     await show(<TaskBoard />);
-    const pane = listPane(container);
     expect(pane.inert).toBe(false);
     expect(pane.className).not.toContain("invisible");
-    const current = container.querySelector<HTMLElement>(
-      '[role="main"] [aria-current="true"]',
-    )!;
-    expect(current.textContent).toContain("测试任务");
-    expect(document.activeElement).toBe(current);
+    expect(container.querySelector('[role="main"] > div')).toBe(columns);
+    expect(columns.scrollLeft).toBe(200);
   });
 
   it("keeps the board behind a task", async () => {
-    useWorkspaceStore.getState().setWorkspace((workspace) => ({
-      ...workspace,
-      taskLayout: "board",
-    }));
     navigation.task = "t1";
     board();
     const { container } = await mount(<TaskBoard />);
     await flush();
     expect(
-      listPane(container).querySelector('section[aria-label="待办"]'),
+      boardPane(container).querySelector('section[aria-label="待办"]'),
     ).not.toBeNull();
-    expect(useWorkspaceStore.getState().workspace.taskLayout).toBe("board");
   });
 
-  it("is the whole page without a task, and a row opens its task", async () => {
+  it("is the whole page without a task, and a card opens its task", async () => {
     board();
     const { container } = await mount(<TaskBoard />);
     await flush();
     const main = container.querySelector('[role="main"]#main')!;
-    expect(listPane(container).contains(main)).toBe(true);
-    expect(main.querySelector('[aria-current="true"]')).toBeNull();
+    expect(boardPane(container).contains(main)).toBe(true);
     const next = [...main.querySelectorAll("button")].find((b) =>
       b.textContent?.includes("另一个任务"),
     )!;
@@ -432,7 +646,9 @@ describe("task board", () => {
         ].map(({ description: _d, artifacts: _a, ...listed }) => listed),
       });
     });
-    expect(container.querySelector('section[aria-label="待办"]')).toBeNull();
+    expect(
+      container.querySelector('section[aria-label="待办"]')?.textContent,
+    ).not.toContain("测试任务");
     expect(
       container.querySelector('section[aria-label="已完成"]')?.textContent,
     ).toContain("测试任务");

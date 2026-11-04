@@ -35,6 +35,7 @@ import type { AttachmentRecord, AttachmentStore } from "./attachments";
 import type { SessionHandle, SessionPlace, SessionSettings } from "./places";
 import type { ConversationRecord, ConversationStore } from "./store";
 import type { Timeline } from "./timeline";
+import { homedir } from "node:os";
 import { LinkError } from "@eta/daemon";
 import { parseModelId } from "@eta/server";
 import { isTaskSession } from "../tasks/session-key";
@@ -163,6 +164,8 @@ export class Engine {
   readonly #running = new Map<string, Running>();
   /** What each open session was opened with, to know when it has to be opened again. */
   readonly #opened = new Map<string, string>();
+  /** What each session made away from its project's machine is told about that, by `conversation:agent`. */
+  readonly #away = new Map<string, string>();
 
   constructor(options: EngineOptions) {
     this.#db = options.db;
@@ -213,13 +216,49 @@ export class Engine {
     if (meta.agentId === undefined) return undefined;
     const agent = this.#agents.get(meta.agentId);
     if (agent === undefined) return undefined;
-    this.#opened.set(meta.id, this.#stamp(agent));
-    return agentPromptOf(agent, isTaskSession(meta.conversationId));
+    const away =
+      meta.conversationId === undefined
+        ? undefined
+        : this.#away.get(keyOf(meta.conversationId, meta.agentId));
+    this.#opened.set(meta.id, this.#stamp(agent, away));
+    return withAway(
+      agentPromptOf(agent, isTaskSession(meta.conversationId)),
+      away,
+    );
   };
 
   /** What a session's prompt, persona and bundles were read from. */
-  #stamp(agent: AgentRecord): string {
-    return `${stampOf(agent)}${this.#bundleStamp?.(agent) ?? ""}`;
+  #stamp(agent: AgentRecord, away?: string): string {
+    return `${stampOf(agent)}${this.#bundleStamp?.(agent) ?? ""}${away ?? ""}`;
+  }
+
+  /**
+   * The machine an agent's sessions in a project are made on: its own, when it is pinned to one
+   * that is still here, else the project's.
+   */
+  machineFor(
+    agent: AgentRecord,
+    projectMachineId: string,
+  ): MachineRecord | undefined {
+    const pinned =
+      agent.machineId === null
+        ? undefined
+        : this.#machines.get(agent.machineId);
+    return pinned ?? this.#machines.get(projectMachineId);
+  }
+
+  /**
+   * What a session made on another machine than its project's is told about that (the platform
+   * section, never the transcript), by `conversation:agent`; read when the session opens.
+   */
+  #setAway(
+    conversationId: string,
+    agentId: string,
+    away: string | undefined,
+  ): void {
+    const key = keyOf(conversationId, agentId);
+    if (away === undefined) this.#away.delete(key);
+    else this.#away.set(key, away);
   }
 
   /** The tools an agent's session has beyond the harness's: reaching the other members. */
@@ -275,18 +314,25 @@ export class Engine {
     cwd: string;
     /** The session was made: record it before anything else can fail. */
     created: (sessionId: string) => void;
+    /** The machine the task's project is on, when the session is made on another one. */
+    awayFrom?: MachineRecord | undefined;
   }): Promise<SessionHandle> {
     const place = this.#placeOf(input.machine);
     if (place === undefined)
       throw new Error(`Sessions cannot run on ${input.machine.name} yet.`);
+    const away =
+      input.awayFrom === undefined
+        ? undefined
+        : awayNote(input.machine.name, input.awayFrom.name, true);
+    this.#setAway(input.key, input.agent.id, away);
     return await place.ensure({
       conversation: { id: input.key, name: input.title },
       agent: input.agent,
       machine: input.machine,
       cwd: input.cwd,
       existing: input.existing,
-      prompt: agentPromptOf(input.agent, true),
-      stamp: this.#stamp(input.agent),
+      prompt: withAway(agentPromptOf(input.agent, true), away),
+      stamp: this.#stamp(input.agent, away),
       created: input.created,
     });
   }
@@ -505,11 +551,16 @@ export class Engine {
     const running = this.#running.get(keyOf(conversation.id, agentId));
     if (running === undefined || participant?.sessionId == null)
       throw new Error("no session to join");
+    const held = this.#conversations.ofSession(participant.sessionId);
+    const machine =
+      held === undefined ? undefined : this.#machines.get(held.machineId);
+    if (machine === undefined) throw new Error("no session to join");
     const told = await this.#briefingFor(
       conversation,
       participant,
       message,
       running.handle,
+      machine,
     );
     await running.handle.steer(told.text, told.images);
     this.#conversations.setSeen(conversation.id, agentId, told.seen);
@@ -761,10 +812,19 @@ export class Engine {
     )
       return fail("gone", "The agent is no longer part of this conversation.");
     const project = this.#projects.get(conversation.projectId);
-    const machine =
+    const home =
       project === undefined ? undefined : this.#machines.get(project.machineId);
-    if (project === undefined || machine === undefined)
+    if (project === undefined || home === undefined)
       return fail("unavailable", "The conversation's project is gone.");
+    // An agent pinned to a machine answers from there, wherever the project is: in its home
+    // directory, told (out of the transcript's sight) that the project's paths are another
+    // machine's.
+    const machine = this.machineFor(agent, project.machineId) ?? home;
+    const elsewhere = machine.id !== home.id;
+    const cwd = elsewhere ? homeOf(machine) : project.path;
+    const away = elsewhere
+      ? awayNote(machine.name, home.name, false)
+      : undefined;
     const place = this.#placeOf(machine);
     if (place === undefined) {
       return fail("unavailable", `Sessions cannot run on ${machine.name} yet.`);
@@ -772,6 +832,7 @@ export class Engine {
     const trigger = this.#timeline.get(reply.replyToId ?? "");
     if (trigger === undefined)
       return fail("gone", "The message this reply answers is gone.");
+    this.#setAway(conversation.id, agent.id, away);
 
     let handle: SessionHandle;
     try {
@@ -779,12 +840,22 @@ export class Engine {
         conversation,
         agent,
         machine,
-        cwd: project.path,
-        existing: participant.sessionId,
-        prompt: agentPromptOf(agent),
-        stamp: this.#stamp(agent),
+        cwd,
+        // A session lives on the machine it was made on: one made elsewhere (the agent was
+        // pinned, or moved) is not reached for here, and a new one is made.
+        existing:
+          (participant.machineId ?? home.id) === machine.id
+            ? participant.sessionId
+            : null,
+        prompt: withAway(agentPromptOf(agent), away),
+        stamp: this.#stamp(agent, away),
         created: (id) =>
-          this.#conversations.setSession(conversation.id, agent.id, id),
+          this.#conversations.setSession(
+            conversation.id,
+            agent.id,
+            id,
+            machine.id,
+          ),
       });
     } catch (error) {
       return fail("unavailable", messageOf(error));
@@ -798,23 +869,30 @@ export class Engine {
       this.#conversations.participant(conversationId, agent.id) ?? participant,
       trigger,
       handle,
+      machine,
     );
     const info: RunInfo = {
       conversationId,
       agentId: agent.id,
       replyId,
       sessionId: handle.id,
-      cwd: machine.kind === "primary" ? project.path : undefined,
+      cwd: machine.kind === "primary" ? cwd : undefined,
       told: told.text,
       trigger,
     };
     const extra = await this.#beforeRun(info);
+    const runFrom = await this.#lastSeq(handle);
     // A stop that arrived while the hook was asking.
     if (this.#timeline.get(replyId)?.status !== "queued") return;
     const prompt = extra === undefined ? told.text : `${extra}\n\n${told.text}`;
     this.#conversations.setSeen(conversationId, agent.id, told.seen);
     const key = keyOf(conversationId, agent.id);
     this.#running.set(key, { replyId, handle });
+    // The row says where the run starts in the session. The page cannot tell from the session: its
+    // view is sent on a pace of its own, so for a moment after this push the newest things the
+    // view holds are still the last run's.
+    if (runFrom !== undefined)
+      this.#timeline.setData(replyId, { ...reply.data, runFrom });
     this.#timeline.transition(replyId, ["queued"], "working");
     this.#changed([conversationId]);
 
@@ -868,6 +946,16 @@ export class Engine {
     this.#afterRun(info);
   }
 
+  /** Where the session stands before a run; a machine that cannot say does not stop the run. */
+  async #lastSeq(handle: SessionHandle): Promise<number | undefined> {
+    try {
+      return await handle.lastSeq();
+    } catch (error) {
+      this.#warn(`[eta] no position for ${handle.id}: ${messageOf(error)}`);
+      return undefined;
+    }
+  }
+
   /** The hook's words for this run; a hook that fails or says nothing leaves the run as it was. */
   async #beforeRun(info: RunInfo): Promise<string | undefined> {
     try {
@@ -902,6 +990,7 @@ export class Engine {
     participant: { agentId: string; lastSeq: number },
     trigger: MessageView,
     handle: SessionHandle,
+    machine: MachineRecord,
   ) {
     const rows = this.#timeline.after(conversation.id, participant.lastSeq);
     const shown = rows.some((row) => row.id === trigger.id)
@@ -916,7 +1005,7 @@ export class Engine {
     let images: PromptImage[] = [];
     if (files.size > 0) {
       const all = [...files.values()].flat();
-      const placed = await this.#place(all, conversation);
+      const placed = await this.#place(all, conversation, machine);
       for (const [rowId, carried] of files) {
         lines.set(
           rowId,
@@ -951,11 +1040,12 @@ export class Engine {
   async #place(
     files: readonly AttachmentRecord[],
     conversation: ConversationRecord,
+    machine: MachineRecord,
   ) {
     try {
       return await this.#attachments.deliver(
         files,
-        this.#transportFor(conversation),
+        this.#transportFor(machine),
       );
     } catch (error) {
       const failed = new Map(files.map((file) => [file.id, messageOf(error)]));
@@ -963,12 +1053,9 @@ export class Engine {
     }
   }
 
-  /** How to run a script where the conversation's sessions are; undefined for this machine. */
-  #transportFor(conversation: ConversationRecord): SshTransport | undefined {
-    const project = this.#projects.get(conversation.projectId);
-    const machine =
-      project === undefined ? undefined : this.#machines.get(project.machineId);
-    if (machine === undefined || machine.kind === "primary") return undefined;
+  /** How to run a script on the machine a session is on; undefined for this machine. */
+  #transportFor(machine: MachineRecord): SshTransport | undefined {
+    if (machine.kind === "primary") return undefined;
     if (this.#shell === undefined)
       throw new Error(`files cannot be sent to ${machine.name} from here`);
     return this.#shell(machine);
@@ -1022,6 +1109,30 @@ function nameIn(
   id: string,
 ): string {
   return members.find((member) => member.id === id)?.name ?? id;
+}
+
+/** Where a session on a machine starts when the project's directory is another machine's. */
+function homeOf(machine: MachineRecord): string {
+  return machine.home ?? (machine.kind === "primary" ? homedir() : "/");
+}
+
+/**
+ * What an agent working on another machine than its project's is told. Only what is known for
+ * certain: which machine it is on and whose the context is. Finding a checkout, or making one, is
+ * the agent's to do with what the context gives it.
+ */
+function awayNote(here: string, there: string, task: boolean): string {
+  return [
+    "<system-reminder>",
+    `You are running on ${here}, not on the machine this ${task ? "task" : "conversation"} belongs to (${there}).`,
+    "Paths and files mentioned in the context may refer to that machine and may not exist here.",
+    "Find what you need to do the work on this machine yourself.",
+    "</system-reminder>",
+  ].join("\n");
+}
+
+function withAway(prompt: string, away: string | undefined): string {
+  return away === undefined ? prompt : `${prompt}\n\n${away}`;
 }
 
 /** Who an agent is here and what it was told: its system prompt's platform section, not its base. */

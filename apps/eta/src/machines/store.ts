@@ -1,4 +1,8 @@
-import type { MachineKind, MachineStatus } from "@eta/client-contracts";
+import type {
+  DaemonInstall,
+  MachineKind,
+  MachineStatus,
+} from "@eta/client-contracts";
 /**
  * The machines sessions can run on.
  *
@@ -23,6 +27,15 @@ export interface MachineRecord {
   maxActiveRuns: number;
   createdAt: number;
   lastSeenAt: number | null;
+  /** The daemon's build, platform, how it was started and its link protocol, as it last said. */
+  version: string | null;
+  platform: string | null;
+  install: DaemonInstall | null;
+  protocol: number | null;
+  /** Why it could not be brought up to date, the last time that was tried. */
+  updateError: string | null;
+  /** The Tailscale node it is, when it came in over the tailnet. */
+  tailnetNode: string | null;
 }
 
 /** How many task runs a machine may work on at once, at most. */
@@ -39,6 +52,12 @@ interface Row {
   max_active_runs: number;
   created_at: number;
   last_seen_at: number | null;
+  version: string | null;
+  platform: string | null;
+  install: string | null;
+  protocol: number | null;
+  update_error: string | null;
+  tailnet_node: string | null;
 }
 
 const recordOf = (row: Row): MachineRecord => ({
@@ -52,6 +71,12 @@ const recordOf = (row: Row): MachineRecord => ({
   maxActiveRuns: row.max_active_runs,
   createdAt: row.created_at,
   lastSeenAt: row.last_seen_at,
+  version: row.version,
+  platform: row.platform,
+  install: row.install as DaemonInstall | null,
+  protocol: row.protocol,
+  updateError: row.update_error,
+  tailnetNode: row.tailnet_node,
 });
 
 /** How long an install code is good for. */
@@ -232,6 +257,36 @@ export class MachineStore {
     })();
   }
 
+  /** Whether an install code is good now: made, not used, not expired. It is not used up. */
+  codeIsGood(code: string, now: number = Date.now()): boolean {
+    const row = this.#db
+      .query<{ expires_at: number; used_at: number | null }, [string]>(
+        "SELECT expires_at, used_at FROM machine_enrollment WHERE code_digest = ?",
+      )
+      .get(digestOf(code));
+    return row !== null && row.used_at === null && row.expires_at >= now;
+  }
+
+  /** The machine that used an install code, once one has. */
+  enrolledWith(code: string): MachineRecord | undefined {
+    const row = this.#db
+      .query<{ machine_id: string | null }, [string]>(
+        "SELECT machine_id FROM machine_enrollment WHERE code_digest = ?",
+      )
+      .get(digestOf(code));
+    return row?.machine_id == null ? undefined : this.get(row.machine_id);
+  }
+
+  /** The machine that is this tailnet node, when one is. */
+  byTailnetNode(node: string): MachineRecord | undefined {
+    const row = this.#db
+      .query<Row, [string]>(
+        "SELECT * FROM machine WHERE tailnet_node = ? AND status <> 'revoked'",
+      )
+      .get(node);
+    return row === null ? undefined : recordOf(row);
+  }
+
   /**
    * Let a pending machine in, if `fingerprint` is the one it enrolled with. A different one is
    * somebody else's machine (or a typo), and is refused the same way.
@@ -272,10 +327,56 @@ export class MachineStore {
       .run(status, seenAt, id);
   }
 
-  setFacts(id: string, facts: { home: string; os: string }): void {
+  setFacts(
+    id: string,
+    facts: {
+      home: string;
+      os: string;
+      version?: string | undefined;
+      platform?: string | undefined;
+      install?: DaemonInstall | undefined;
+      protocol?: number | undefined;
+    },
+  ): void {
     this.#db
-      .query("UPDATE machine SET home = ?, os = ? WHERE id = ?")
-      .run(facts.home, facts.os, id);
+      .query(
+        "UPDATE machine SET home = ?, os = ?, version = ?, platform = ?, install = ?, protocol = ? WHERE id = ?",
+      )
+      .run(
+        facts.home,
+        facts.os,
+        facts.version ?? null,
+        facts.platform ?? null,
+        facts.install ?? null,
+        facts.protocol ?? null,
+        id,
+      );
+  }
+
+  /** Why the daemon could not be brought up to date; null when it is. */
+  setUpdateError(id: string, error: string | null): void {
+    this.#db
+      .query("UPDATE machine SET update_error = ? WHERE id = ?")
+      .run(error, id);
+  }
+
+  setTailnetNode(id: string, node: string): void {
+    this.#db
+      .query("UPDATE machine SET tailnet_node = ? WHERE id = ?")
+      .run(node, id);
+  }
+
+  /**
+   * Let a pending machine in without a fingerprint typed: the caller has established who it is
+   * some other way (the tailnet says it is the user's own node).
+   */
+  admit(id: string): MachineRecord | undefined {
+    const machine = this.get(id);
+    if (machine === undefined) return undefined;
+    if (machine.kind !== "daemon" || machine.status !== "pending")
+      throw new Error(`${machine.name} is not waiting for approval`);
+    this.setStatus(id, "offline");
+    return this.get(id);
   }
 
   /** Nothing is connected when a host starts: whatever was online is not. */

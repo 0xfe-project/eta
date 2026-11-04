@@ -6,12 +6,13 @@
   "scripts": {
     "dev": "bun ../../scripts/dev.ts --desktop",
     "start": "hutch run start",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "electrobun prepare && tsc --noEmit",
     "//": "Not `build`: turbo would run it, and a distributable app is not part of a source build.",
     "package": "bun run --cwd ../web build && bun scripts/stage-host.ts && hutch run build"
   },
   "devDependencies": {
     "@types/bun": "1.4.0",
+    "electrobun": "2.0.4",
     "typescript": "5.9.3"
   }
 }

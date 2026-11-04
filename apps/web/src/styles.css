@@ -135,15 +135,31 @@
   }
 
   /*
-   * The wide sidebar: 18rem from `lg` up.
+   * The same control on the sidebar's edge, laid over the line instead of being one. The column
+   * already draws its own rule (`.sidebar-rule`), so at rest this paints nothing and that rule stays
+   * the one line; under the pointer its 2px cover the rule, which is what the `z-index` is for. It
+   * starts under the band like the rule does: the band is the window's in the shell, and the corner
+   * of it the lights sit in stays clear of any vertical line.
+   */
+  .sidebar-divider {
+    position: absolute;
+    z-index: 1;
+    inset-block: var(--header-band) 0;
+    right: 0;
+    background: none;
+  }
+
+  /*
+   * The wide sidebar: 18rem from `lg` up, until a width has been dragged.
    *
    * The provider writes the width inline on the wrapper, and the gap that holds the page content
    * back belongs to that wrapper too. Carried on the sidebar element instead, the override moves
    * the sidebar and forgets the gap, and the content ends up 2rem under a sidebar that can fold
-   * over it. `!important` because that inline default is otherwise the last word.
+   * over it. `!important` because that inline default is otherwise the last word — which is why a
+   * dragged width, written in the same place, has to be exempted by name: it would lose here too.
    */
   @media (min-width: 64rem) {
-    [data-slot="sidebar-wrapper"] {
+    [data-slot="sidebar-wrapper"]:not([data-sidebar-sized]) {
       --sidebar-width: 18rem !important;
     }
   }
@@ -233,6 +249,9 @@
   --animate-in: none;
   --animate-out: none;
   --animate-skeleton-sweep: skeleton-sweep 1.6s linear infinite;
+  /* A skeleton waits 180ms before it is drawn at all, so a load that is already done never flashes
+     one. `visibility`, not opacity: when it comes it is simply there, with no fade to sit through. */
+  --animate-skeleton-hold: skeleton-hold 1ms 180ms backwards;
   --animate-upload-pulse: upload-pulse 1.6s linear infinite;
   --animate-copied-check: copied-check 2.5s linear both;
   --spacing: 0.225rem;
@@ -466,6 +485,15 @@
   }
 }
 
+/* The hold's only frame. The reduced-motion rule shortens the duration but keeps the delay, and
+   hidden-then-shown is not motion, so the hold is the same for everyone. */
+@keyframes skeleton-hold {
+  from,
+  to {
+    visibility: hidden;
+  }
+}
+
 @keyframes upload-pulse {
   50% {
     opacity: 0.45;
@@ -654,10 +682,9 @@
   /*
    * A task draft, and the card it becomes: the two task rows a conversation carries, folded the way
    * a turn's thinking and tool calls are. They belong to the turn that wrote them, so they are drawn
-   * inside that turn's box, indented behind a hairline that says whose turn is asking to be decided
-   * with. A row that names no turn (any draft written before a draft knew its turn, or one whose turn
-   * is on an earlier page) is the same frame with nothing beside it: the same row, less certain of
-   * where it came from, and no worse for that.
+   * inside that turn's box, flush with the answer's left edge. A row that names no turn (any draft
+   * written before a draft knew its turn, or one whose turn is on an earlier page) is the same frame
+   * with nothing beside it: the same row, less certain of where it came from, and no worse for that.
    *
    * The fold line is `.thinking-block-header` with two additions: the title in the reader's type
    * rather than in the mono label's (an uppercase-cased sentence is a different sentence), and the
@@ -669,14 +696,6 @@
     flex-direction: column;
     gap: 8px;
     margin-top: 12px;
-    margin-left: 9px;
-    padding-left: 11px;
-    border-left: 1px solid var(--border);
-  }
-  .turn-tasks[data-only-email-cards="true"] {
-    margin-left: 0;
-    padding-left: 0;
-    border-left: 0;
   }
   .task-fold {
     max-width: 28rem;
@@ -751,7 +770,7 @@
   .input-outer {
     position: relative;
     width: 100%;
-    max-width: 860px;
+    max-width: var(--chat-width);
     margin: 0 auto;
     display: flex;
     flex-direction: column;
@@ -923,6 +942,12 @@
   .process-fold-body > :last-child .tool-card:last-child {
     border-bottom-width: 0;
   }
+  /* A framed card keeps its own line in there, so it stands off the frame's: flush, the two would
+     read as one 2px line down each side. */
+  .process-box .tool-ref,
+  .process-fold-body .tool-ref {
+    padding: 0 4px 4px;
+  }
   /* Once the reply is at its final text the frame folds into one row; opened, the steps stack
      under it in the same frame, at their natural height. */
   .process-fold {
@@ -1052,6 +1077,270 @@
     overflow-y: auto;
   }
 
+  /* What a tool card says beside its status before it is opened: +12 −3, exit 1, 2 images. */
+  .tool-card-meta {
+    flex: none;
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--faint);
+  }
+  .tool-card-meta + .tool-card-status {
+    margin-left: 0;
+  }
+  .tool-card-block-label.verbatim {
+    text-transform: none;
+    letter-spacing: 0.02em;
+    font-size: 10px;
+  }
+  /* A block that folds its own length (Folded) does not scroll inside a second frame. */
+  .tool-card-block-content.tool-card-plain {
+    max-height: none;
+    overflow: visible;
+  }
+  .tool-card-note {
+    margin-top: 4px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--state-warning);
+    word-break: break-all;
+  }
+  .terminal-prompt {
+    color: var(--faint);
+    user-select: none;
+  }
+  .diff-count.add {
+    color: var(--state-success);
+  }
+  .diff-count.del {
+    color: var(--state-error);
+  }
+
+  /* Long text shows its first fourteen lines and the rest one click away. */
+  .folded:not([data-open]) .folded-body {
+    max-height: calc(14 * 1.5em);
+    overflow: hidden;
+    mask-image: linear-gradient(to bottom, black calc(100% - 3em), transparent);
+  }
+  .folded-toggle {
+    margin-top: 4px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--muted-foreground);
+    cursor: pointer;
+    transition: color 60ms linear;
+  }
+  .folded-toggle:hover {
+    color: var(--foreground);
+  }
+
+  .diff-line {
+    margin: 0 -10px;
+    padding: 0 10px;
+    white-space: pre-wrap;
+  }
+  .diff-line.add {
+    background: color-mix(in oklch, var(--state-success) 12%, transparent);
+  }
+  .diff-line.del {
+    background: color-mix(in oklch, var(--state-error) 12%, transparent);
+  }
+  .diff-line.hunk {
+    color: var(--faint);
+  }
+
+  .plan-list {
+    display: grid;
+    gap: 2px;
+  }
+  .plan-list li {
+    display: flex;
+    gap: 6px;
+  }
+  .plan-list li[data-status="completed"],
+  .plan-list li[data-status="cancelled"] {
+    color: var(--muted-foreground);
+  }
+  .plan-list li[data-status="cancelled"] {
+    text-decoration: line-through;
+  }
+  .plan-mark {
+    flex: none;
+    color: var(--faint);
+  }
+  .plan-list li[data-status="in_progress"] .plan-mark {
+    color: var(--foreground);
+  }
+
+  .child-steps {
+    display: grid;
+    gap: 2px;
+  }
+  .child-steps summary {
+    cursor: pointer;
+    color: var(--muted-foreground);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .child-steps summary:hover {
+    color: var(--foreground);
+  }
+  .child-steps li[data-status="failed"] summary {
+    color: var(--state-error);
+  }
+  .child-steps .folded {
+    padding: 2px 0 4px 12px;
+  }
+  .child-text {
+    font-family: var(--font-sans);
+    white-space: pre-wrap;
+  }
+
+  /* Pictures a message carried: thumbnails that open over the whole window. */
+  .image-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .image-thumb {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 100%;
+    min-width: 96px;
+    min-height: 64px;
+    border: 1px solid var(--border);
+    background: var(--overlay);
+    cursor: zoom-in;
+    transition: border-color 60ms linear;
+  }
+  .image-thumb:hover,
+  .image-thumb:focus-visible {
+    border-color: var(--border-strong);
+    outline: none;
+  }
+  .image-thumb img {
+    display: block;
+    max-width: 100%;
+    max-height: 320px;
+    object-fit: contain;
+  }
+  .image-pending {
+    padding: 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--faint);
+  }
+  .lightbox {
+    display: flex;
+    flex-direction: column;
+  }
+  .lightbox-stage {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    cursor: zoom-in;
+    background: var(--overlay);
+  }
+  .lightbox-stage img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+  /* At its own size the picture scrolls, from its top-left corner. */
+  .lightbox-stage[data-actual] {
+    display: block;
+    overflow: auto;
+    cursor: zoom-out;
+  }
+  .lightbox-stage[data-actual] img {
+    max-width: none;
+    max-height: none;
+  }
+  .lightbox-bar {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 12px max(6px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted-foreground);
+  }
+  .lightbox-bar button {
+    cursor: pointer;
+  }
+  .lightbox-bar button:hover:not(:disabled) {
+    color: var(--foreground);
+  }
+  .lightbox-bar button:disabled {
+    color: var(--faint);
+    cursor: default;
+  }
+
+  /* A task run's log. Off-screen rows skip layout and paint: a long run is hundreds of them. */
+  .run-log > li {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 30px;
+  }
+  .log-error {
+    border: 1px solid var(--state-error);
+    padding: 6px 10px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .log-error-label {
+    margin-right: 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--state-error);
+  }
+  .log-summary > summary {
+    list-style: none;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--faint);
+    border-top: 1px dashed var(--border-strong);
+    padding-top: 4px;
+  }
+  .log-summary > summary:hover {
+    color: var(--foreground);
+  }
+  .log-summary[open] > summary {
+    margin-bottom: 4px;
+  }
+  .tool-group {
+    border: 1px solid var(--border);
+    background: var(--background);
+  }
+  .tool-group[open] > .tool-card-head {
+    border-bottom: 1px solid var(--border);
+  }
+  .tool-group-body {
+    padding: 8px 8px 8px 16px;
+  }
+  .log-earlier {
+    display: block;
+    margin: 0 auto 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--muted-foreground);
+    cursor: pointer;
+  }
+  .log-earlier:hover:not(:disabled) {
+    color: var(--foreground);
+  }
+
   /* An ask: the run is standing still on an answer. One line for the question, its options as
      bordered controls under it — the same grammar as the composer's toolbar. */
   .ask-block {
@@ -1178,9 +1467,9 @@
 
 @layer components {
   /* ---- settings, ported from eta-old's settings.css (numbers included) ----
-   * A 196px rail of sections with a 2px current marker, and a content column of rows that are a
-   * label on the left and its control on the right, separated by 1px lines. No cards, no groups of
-   * boxes: a settings page is a list of decisions. */
+   * A 196px rail of sections, and a content column of rows that are a label on the left and its
+   * control on the right, separated by 1px lines. No cards, no groups of boxes: a settings page is
+   * a list of decisions. */
 
   .settings-layout {
     display: grid;
@@ -1194,7 +1483,6 @@
     gap: 2px;
     overflow-y: auto;
     border-right: 1px solid var(--border);
-    background: var(--surface);
     padding: 10px 8px;
   }
 
@@ -1202,7 +1490,6 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    border-left: 2px solid transparent;
     padding: 7px 10px;
     text-align: left;
     font-size: 12px;
@@ -1217,7 +1504,6 @@
     }
   }
   .settings-layout nav button[aria-current="page"] {
-    border-left-color: var(--foreground);
     background: var(--overlay-hover);
     color: var(--foreground);
   }
@@ -1235,14 +1521,8 @@
       overflow-y: hidden;
       border-right: 0;
     }
-    /* The marker turns with the rail: a rule under the current section instead of beside it. */
     .settings-page nav button {
       min-height: 44px;
-      border-left: 0;
-      border-bottom: 2px solid transparent;
-    }
-    .settings-page nav button[aria-current="page"] {
-      border-bottom-color: var(--foreground);
     }
   }
 
@@ -1616,6 +1896,20 @@ html[data-host="desktop"] [data-lights-corridor] {
   width: 1px;
   background: var(--border);
   pointer-events: none;
+}
+
+/*
+ * While the sidebar's edge is being dragged the column follows the pointer: the 200ms `width`
+ * transition that animates the fold would trail behind it, and a press that wanders over the chat
+ * would select the chat. Only for the drag, so the fold keeps its animation. Outside the layers
+ * because a `transition` in one loses to the utility that sets it.
+ */
+[data-sidebar-dragging] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+[data-sidebar-dragging] :is([data-slot="sidebar-gap"], [data-slot="sidebar-container"]) {
+  transition: none;
 }
 
 /*

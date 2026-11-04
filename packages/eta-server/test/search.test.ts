@@ -9,6 +9,7 @@
  * at every page boundary, which is the kind of bug a reader notices and cannot explain.
  */
 import type { Entry } from "@eta/core/session";
+import { Buffer } from "node:buffer";
 import { describe, expect, it } from "vitest";
 import {
   branchMessages,
@@ -184,6 +185,49 @@ describe("system rows in a history page", () => {
     expect(
       historyPageOf(only, { limit: 10 }).systems.map((row) => row.entryId),
     ).toEqual(["f0"]);
+  });
+});
+
+describe("pictures in a history page", () => {
+  it("leaves the bytes out like the view does, and keeps the journal whole", () => {
+    const data = Buffer.from("0123456789").toString("base64");
+    const withPicture = {
+      id: "m1",
+      seq: 2,
+      parentId: "m0",
+      timestamp: 1_002,
+      type: "message",
+      message: {
+        role: "toolResult",
+        toolCallId: "t1",
+        toolName: "read",
+        content: [
+          { type: "text", text: "a screenshot" },
+          { type: "image", data, mimeType: "image/png" },
+        ],
+        isError: false,
+        timestamp: 1_002,
+      },
+    } as Entry;
+    const plain = message("m0", 1, "look", null);
+    const page = historyPageOf([plain, withPicture], { limit: 10 });
+    expect(page.rows[1]?.message).toMatchObject({
+      content: [
+        { type: "text", text: "a screenshot" },
+        { type: "image", mimeType: "image/png", data: "", bytes: 10 },
+      ],
+    });
+    expect(page.rows[0]?.message).toBe(
+      (plain as Extract<Entry, { type: "message" }>).message,
+    );
+    expect(
+      (withPicture as Extract<Entry, { type: "message" }>).message,
+    ).toMatchObject({
+      content: [
+        { type: "text", text: "a screenshot" },
+        { type: "image", data, mimeType: "image/png" },
+      ],
+    });
   });
 });
 

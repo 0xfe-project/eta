@@ -58,4 +58,11 @@ export {
 } from "./mcp-host";
 export { forwardedOptions, modelSpecOf } from "./models";
 export { DaemonNode, type DaemonNodeOptions } from "./node";
-export { listen, runAndWait } from "./run";
+export { lastSeq, listen, runAndWait } from "./run";
+export {
+  installedEnv,
+  installService,
+  type ServiceCommand,
+  type ServiceUnit,
+  uninstallService,
+} from "./service";

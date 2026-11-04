@@ -4,7 +4,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { SidebarProvider } from "@/components/ui/sidebar";
 import { draftText, EMPTY_DRAFT } from "@/lib/composer";
 import { mentionedMembers } from "@/lib/mentions";
 import { cn } from "@/lib/utils";
@@ -12,6 +11,7 @@ import { agentName } from "@/queries/agents";
 import {
   useConversation,
   useConversationActions,
+  useConversationList,
 } from "@/queries/conversations";
 import {
   useOutbox,
@@ -24,7 +24,7 @@ import { useSessionActions } from "@/queries/sessions";
 import { useConnectionLost } from "@/queries/wire";
 import { ChatHeader, MobileChatHeader } from "./agent-bar";
 import { AgentEditor } from "./agent-editor";
-import { BottomNav, Sidebar } from "./app-shell";
+import { BottomNav, SidebarShell } from "./app-shell";
 import { ChatPanel, ComposerNotice } from "./chat-panel";
 import { GroupList } from "./groups";
 import { NewConversationDialog } from "./new-conversation-dialog";
@@ -73,6 +73,9 @@ export function Workspace({
   const { agents, openEditor } = useAgents();
   const { current: group, groupId } = useGroups();
   const conversation = useConversation(group?.id);
+  // Before `hello` there is no conversation to pick, and "no conversation" reads as loaded — so
+  // the list arriving is what ends the loading, not the conversation alone.
+  const { loaded: listLoaded } = useConversationList();
   const { projects } = useProjects();
   const project = projects.find(
     (candidate) => candidate.id === group?.projectId,
@@ -211,8 +214,7 @@ export function Workspace({
       workspaceButtonRef.current?.focus();
   }, [drawerOpen]);
   return (
-    <SidebarProvider className="h-dvh min-h-0 bg-background">
-      <Sidebar />
+    <SidebarShell>
       <div
         className={cn(
           "min-h-0 min-w-0 flex-1 flex-col md:hidden",
@@ -305,7 +307,7 @@ export function Workspace({
                     )
               }
               held={conversation.held}
-              loading={!conversation.loaded}
+              loading={!listLoaded || !conversation.loaded}
               hasOlder={conversation.hasOlder}
               loadingOlder={conversation.loadingOlder}
               onLoadOlder={conversation.loadOlder}
@@ -425,6 +427,6 @@ export function Workspace({
       <SettingsDialog />
       <AgentEditor />
       <NewConversationDialog />
-    </SidebarProvider>
+    </SidebarShell>
   );
 }

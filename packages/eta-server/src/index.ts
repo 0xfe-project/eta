@@ -183,6 +183,11 @@ export {
   type EventRing,
   matchesFilter,
 } from "./ring";
+export type {
+  SessionRuntime,
+  SessionRuntimeInput,
+  SessionRuntimes,
+} from "./runtimes";
 export {
   branchMessages,
   firstHit,
@@ -234,6 +239,7 @@ export {
   createConnection,
   type EndpointConnection,
   type EndpointSocket,
+  peerAddressOf,
   serveWire,
   type Socket,
   type TransportDeps,

@@ -53,6 +53,9 @@ export async function testHost(
     // Personas are read from the agent's home; the real one is not this test's business.
     home: dataDir,
     network: false,
+    // The machine's Claude Code or Codex are not this test's business: a test that is about
+    // runtimes hands in scripted ones.
+    runtimes: false,
     ...overrides,
     // The real user's akhook file is not this test's business either.
     akhook: {

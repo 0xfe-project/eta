@@ -1,5 +1,5 @@
 import type { PromptImage } from "./operations";
-import type { ToolActivity } from "./product";
+import type { AgentRuntimeInfo, ToolActivity } from "./product";
 
 /**
  * The link between the primary and a machine that runs the daemon.
@@ -25,6 +25,33 @@ import type { ToolActivity } from "./product";
 /** Where a daemon dials, and where it trades an install code for a credential. */
 export const LINK_PATH = "/machines/connect";
 export const ENROLL_PATH = "/machines/enroll";
+/**
+ * Where a daemon fetches the build the primary carries for it: `<path>/<platform>`, with its
+ * device credential, as on the link.
+ */
+export const DAEMON_DOWNLOAD_PATH = "/machines/daemon";
+/**
+ * What a new machine runs to install itself: `curl -fsSL <primary>/machines/install.sh?code=<code> | sh`.
+ * The script fetches the build from `INSTALL_DOWNLOAD_PATH/<platform>?code=<code>`; both answer only
+ * while the install code is good, and neither uses it up (registering does).
+ */
+export const INSTALL_SCRIPT_PATH = "/machines/install.sh";
+export const INSTALL_DOWNLOAD_PATH = "/machines/install";
+
+/**
+ * The link's own version: what both sides must agree on to talk at all. It moves only when a
+ * change would break an older peer; a daemon that reports none speaks version 1.
+ */
+export const LINK_PROTOCOL = 1;
+
+/** A daemon's platform, as `<os>-<arch>` in Node's spelling: `linux-x64`, `darwin-arm64`. */
+export type DaemonPlatform = `${string}-${string}`;
+
+/**
+ * How a daemon was started, which decides whether it can replace itself: only a compiled binary
+ * that a service manager brings back up after it exits can.
+ */
+export type DaemonInstall = "service" | "binary" | "source";
 
 export const LINK_LIMITS = {
   /** The largest text frame either side accepts, in bytes. */
@@ -98,7 +125,12 @@ export interface MachineFacts {
   hostname: string;
   home: string;
   os: string;
+  /** The daemon's build: equal to the primary's daemon build when it is current. */
   version: string;
+  /** `LINK_PROTOCOL` as the daemon knows it; absent on daemons older than the field (1). */
+  protocol?: number;
+  platform?: DaemonPlatform;
+  install?: DaemonInstall;
 }
 
 /**
@@ -121,6 +153,8 @@ export interface MachineActionArgs {
   catalog: { models: ModelSpec[] };
   /** What the session is configured with now. */
   config: { session: string };
+  /** How far the session's journal has got: what its next run writes comes after this. */
+  lastSeq: { session: string };
   /** Which of these bundle contents (by hash) are not on the machine yet. */
   bundleHave: { hashes: string[] };
   /** Keep a bundle's files (path to base64 data) under their hash. */
@@ -139,6 +173,7 @@ export interface MachineActionResults {
   open: { session: string };
   catalog: Record<string, never>;
   config: { model: string | undefined; thinkingLevel: string };
+  lastSeq: { seq: number };
   bundleHave: { missing: string[] };
   bundlePut: Record<string, never>;
   which: { found: string[] };
@@ -151,9 +186,20 @@ export interface DaemonServiceParams {
   run: { session: string; text: string; images?: PromptImage[] };
   /** Run a script on the machine, the way the SSH transport does. */
   exec: { script: string; inputBase64?: string; timeoutMs?: number };
+  /**
+   * Replace yourself with this build: fetch it from `DAEMON_DOWNLOAD_PATH/<platform>`, check it is
+   * these bytes and that it runs and says this version, swap it in keeping the old one, and exit
+   * for the service manager to start the new one. A daemon that cannot (not a service, not a
+   * compiled binary) refuses.
+   */
+  upgrade: { version: string; sha256: string };
+  /** The external agent runtimes this machine has, with their models; `fresh` asks them again. */
+  runtimes: { fresh?: boolean };
 }
 export interface DaemonServiceResults {
   run: RunOutcome;
+  upgrade: { ok: true } | { ok: false; reason: string };
+  runtimes: { runtimes: AgentRuntimeInfo[] };
   exec: {
     code: number;
     stdout: string;
@@ -186,7 +232,12 @@ export interface OpenSessionArgs {
   title: string;
   agentId: string;
   conversationId: string;
-  /** `provider:modelId`. */
+  /**
+   * The external runtime the session runs on (`claude`, `codex`, ...), on the daemon's machine;
+   * absent means eta's own loop. A session on another runtime than this is made again.
+   */
+  runtime?: string;
+  /** `provider:modelId` (`runtime:modelId` on an external runtime). */
   model?: string;
   thinkingLevel?: string;
   persona?: string;

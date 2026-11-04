@@ -26,13 +26,12 @@ import { useWorkspaceStore } from "./workspace-store";
 // hiding rules and the panels themselves are written once, here.
 
 /**
- * The sections the rail does not offer, by choice: 机器, 环境包 and 连接 are off in this build,
- * and 审批 is the editor's only. The settings stay in force — `?settings=machines` still opens
- * one — because hiding the door is not the same as turning the feature off.
+ * The sections the rail does not offer, by choice: 环境包 and 连接 are off in this build, and
+ * 审批 is the editor's only. The settings stay in force — `?settings=bundles` still opens one —
+ * because hiding the door is not the same as turning the feature off.
  */
 const hiddenSettings = new Set<SettingsSection>([
   "approvals",
-  "machines",
   "bundles",
   "connections",
 ]);
@@ -58,12 +57,40 @@ const colorModes = [
   },
 ] as const;
 
+const chatWidths = [
+  {
+    value: "extra-narrow",
+    get label() {
+      return translate("settings:appearance.chatWidthExtraNarrow");
+    },
+  },
+  {
+    value: "narrow",
+    get label() {
+      return translate("settings:appearance.chatWidthNarrow");
+    },
+  },
+  {
+    value: "standard",
+    get label() {
+      return translate("settings:appearance.chatWidthStandard");
+    },
+  },
+  {
+    value: "full",
+    get label() {
+      return translate("settings:appearance.chatWidthFull");
+    },
+  },
+] as const;
+
 function AppearanceSettings() {
   const { t: translateText } = useTranslation(["settings", "common"] as const);
   const workspace = useWorkspaceStore((s) => s.workspace);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const { theme, setTheme } = useTheme();
   const colorModeLabelId = useId();
+  const chatWidthLabelId = useId();
   return (
     <div>
       <div className="settings-heading">
@@ -101,6 +128,53 @@ function AppearanceSettings() {
         </div>
         <div className="settings-control">
           <LanguageSettings />
+        </div>
+      </div>
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div id={chatWidthLabelId}>
+            {translateText("appearance.chatWidth")}
+          </div>
+          <p>{translateText("appearance.chatWidthHint")}</p>
+        </div>
+        <div
+          className="settings-control settings-inline"
+          role="group"
+          aria-labelledby={chatWidthLabelId}
+        >
+          {chatWidths.map((choice) => (
+            <button
+              key={choice.value}
+              type="button"
+              aria-pressed={
+                (workspace.chatWidth ?? "standard") === choice.value
+              }
+              onClick={() =>
+                setWorkspace((state) => ({
+                  ...state,
+                  chatWidth: choice.value,
+                }))
+              }
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <div>{translateText("appearance.transcriptRail")}</div>
+          <p>{translateText("appearance.transcriptRailHint")}</p>
+        </div>
+        <div className="settings-control">
+          <Switch
+            id="transcript-rail"
+            aria-label={translateText("appearance.transcriptRail")}
+            checked={workspace.transcriptRail ?? false}
+            onCheckedChange={(transcriptRail) =>
+              setWorkspace((state) => ({ ...state, transcriptRail }))
+            }
+          />
         </div>
       </div>
       <div className="settings-row">

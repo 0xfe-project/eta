@@ -82,5 +82,30 @@
   "persona": {
     "default": "Project default",
     "label": "Persona"
+  },
+  "machine": {
+    "label": "Runs on",
+    "followProject": "Follow the project",
+    "primarySuffix": " (primary)",
+    "followHint": "Runs on the machine the project is on",
+    "followNote": "Runtimes are listed from the primary for now, and may differ if the project is on another machine.",
+    "offlineHint": "Can't reach it to confirm its runtimes",
+    "runtimesUnknown": "Couldn't confirm its runtimes",
+    "running": "{{count}} running",
+    "runtimeMissing": "{{machine}} doesn't have {{runtime}}, so this switched to {{next}}",
+    "runtimeUnknown": "Couldn't confirm what {{machine}} has, so this switched to {{next}}",
+    "wentOffline": "{{machine}} went offline. Choose another machine."
+  },
+  "runtime": {
+    "label": "Runtime",
+    "eta": "eta (built-in)",
+    "defaultModel": "Runtime default",
+    "loading": "Looking for Claude Code, Codex…",
+    "unreachable": "Can't reach this machine to see which runtimes it has.",
+    "status": {
+      "unauthenticated": " (not signed in)",
+      "missing": " (not installed)",
+      "error": " (unavailable)"
+    }
   }
 }

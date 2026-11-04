@@ -13,6 +13,29 @@ export interface PlatformPromptInfo {
   memoryExists: boolean;
 }
 
+/** What a session on an external runtime is told about the app; see `renderRuntimePlatformBlock`. */
+export interface RuntimePlatformPromptInfo {
+  /** The eta config file, when this machine has one: a remote machine's is the primary's. */
+  configPath?: string | undefined;
+  /** The session's own directory, when the session is persisted. */
+  sessionDir?: string | undefined;
+  /** The tools the host gave this session, by name: what the board's rules are about. */
+  tools: readonly string[];
+}
+
+const configLine = (configPath: string): string =>
+  `Config: ${configPath} — the model providers: id, baseUrl, apiKey, the model list, and any per-provider \`headers\`. The GUI writes this file as well. Its apiKeys are secrets: consult them when a request needs debugging, never paste them back.`;
+
+const sessionLine = (sessionDir: string): string =>
+  `This session's history: ${sessionDir} — \`meta.json\` (persona, cwd, title, model), \`journal.jsonl\` (every accepted change, append-only), \`dev.jsonl\` (what the app logged for itself). The journal is an internal format: the app rewrites it from the state it produced once it outgrows that state, so hand-editing it is not a supported operation.`;
+
+const BOARD_TASK =
+  "A task lives on the board. It outlives the conversation, the user can see it and confirm it, and it runs in a session of its own.";
+
+/** The rule that sends work to the board. `steps` is whether this session has a step list too. */
+const draftRule = (steps: boolean): string =>
+  `Work that changes files, runs a build or tests, needs the user to accept a result, or takes more than a couple of tool rounds is not chat work${steps ? ", and it is not a step either" : ""}. Propose it with \`draft_task\` and let the user confirm it. \`create_task\` is not a shortcut around that${steps ? ", and neither is a step list" : ""}: draft first, then create.`;
+
 /**
  * The platform briefing (verbatim port of eta-agent's
  * `eta-server/src/platform-prompt.ts`): what the app around this agent is made
@@ -33,7 +56,8 @@ export interface PlatformPromptInfo {
  * One paragraph names `draft_task` and `create_task`: those are the eta deployment's board
  * tools, and the sentence is written for a deployment that has them. A session without a
  * board simply never sees those tools, and the base prompt already tells a model to use the
- * tools it has.
+ * tools it has. A session on an external runtime is told something else:
+ * `renderRuntimePlatformBlock`.
  */
 export function renderPlatformBlock(info: PlatformPromptInfo): string {
   const home = info.home;
@@ -42,12 +66,9 @@ export function renderPlatformBlock(info: PlatformPromptInfo): string {
     "<platform>",
     "eta is the app running this session. Its own files are readable, and the ones that describe you are yours to change:",
     "",
-    `Config: ${info.configPath} — the model providers: id, baseUrl, apiKey, the model list, and any per-provider \`headers\`. The GUI writes this file as well. Its apiKeys are secrets: consult them when a request needs debugging, never paste them back.`,
+    configLine(info.configPath),
   ];
-  if (info.sessionDir !== undefined)
-    lines.push(
-      `This session's history: ${info.sessionDir} — \`meta.json\` (persona, cwd, title, model), \`journal.jsonl\` (every accepted change, append-only), \`dev.jsonl\` (what the app logged for itself). The journal is an internal format: the app rewrites it from the state it produced once it outgrows that state, so hand-editing it is not a supported operation.`,
-    );
+  if (info.sessionDir !== undefined) lines.push(sessionLine(info.sessionDir));
   lines.push(
     `Personas are markdown cards. Write \`<id>.persona.md\` into ${home}/.eta/persona (every session) or ${cwd}/.eta/persona (this project only): the file name is the persona id and the body is what gets injected as the persona block. Saving the file is enough — persona directories are re-read while the app runs, so a new card is pickable without a restart.`,
   );
@@ -68,17 +89,58 @@ export function renderPlatformBlock(info: PlatformPromptInfo): string {
     "- A step is one line of the plan this session keeps for itself: what you are doing now and in what order. `create_step`, `list_steps`, `get_step` and `update_step` work on it. Nobody else sees it, nothing runs it, and it ends with the session.",
   );
   lines.push(
-    "- A task lives on the board. It outlives the conversation, the user can see it and confirm it, and it runs in a session of its own. `create_task` puts one there; `update_task`, `comment_task` and `finish_task` act on it.",
+    `- ${BOARD_TASK} \`create_task\` puts one there; \`update_task\`, \`comment_task\` and \`finish_task\` act on it.`,
   );
-  lines.push(
-    "- Work that changes files, runs a build or tests, needs the user to accept a result, or takes more than a couple of tool rounds is not chat work, and it is not a step either. Propose it with `draft_task` and let the user confirm it. `create_task` is not a shortcut around that, and neither is a step list: draft first, then create.",
-  );
+  lines.push(`- ${draftRule(true)}`);
   lines.push("");
   lines.push(
     "Loops and schedules run in the app rather than in a shell you hold open: a loop you created fires on its own clock and returns to this session as an injected message, so a run ending is not the loop ending.",
   );
   lines.push("</platform>");
   return lines.join("\n");
+}
+
+/**
+ * The platform briefing for a session an external runtime answers in (Claude Code, Codex, ...).
+ *
+ * `renderPlatformBlock` describes eta's own loop, and most of that is false here: the runtime has
+ * no steps, its memory and its loops are its own, and a persona card does not reach it. What is
+ * still true is the app's files and the board, so that is what this says, in the same words.
+ *
+ * What it says about the board follows from the session's tools rather than from what kind of
+ * session it is, because the tools are what a host on any machine knows: a member of a
+ * conversation has `draft_task`, and a session working on a task has `comment_task` and no
+ * `draft_task`, so nothing there sends it off to draft the work it was given. A session with
+ * neither hears nothing about the board. With nothing to say this renders nothing.
+ */
+export function renderRuntimePlatformBlock(
+  info: RuntimePlatformPromptInfo,
+): string {
+  const paths = [
+    ...(info.configPath === undefined ? [] : [configLine(info.configPath)]),
+    ...(info.sessionDir === undefined ? [] : [sessionLine(info.sessionDir)]),
+  ];
+  const board = info.tools.includes("draft_task")
+    ? [
+        `- ${BOARD_TASK} \`create_task\` puts one there; \`update_task\` and \`comment_task\` act on it.`,
+        `- ${draftRule(false)} The file and shell tools your runtime gives you do not change that: being able to make the edit yourself is no reason to make it in chat. Reading, looking things up, explaining and checking a command or two stay in chat.`,
+        "- These tools are eta's, served to your runtime over MCP. It may list them under a prefix (`mcp__eta__draft_task`) or load them on demand, so look them up before you decide you do not have them.",
+      ]
+    : info.tools.includes("comment_task")
+      ? [
+          `- ${BOARD_TASK} This session is one of those: do what it was given here, and report on the task. It needs no draft.`,
+        ]
+      : [];
+  if (paths.length === 0 && board.length === 0) return "";
+  return [
+    "<platform>",
+    "eta is the app running this session, on top of your runtime.",
+    ...(paths.length === 0
+      ? []
+      : ["", "Its own files are readable:", "", ...paths]),
+    ...(board.length === 0 ? [] : ["", ...board]),
+    "</platform>",
+  ].join("\n");
 }
 
 /**

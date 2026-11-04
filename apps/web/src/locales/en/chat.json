@@ -45,7 +45,28 @@
   "tools": {
     "arguments": "arguments",
     "result": "result",
-    "refused": "refused"
+    "refused": "refused",
+    "command": "command",
+    "printing": "output so far",
+    "plan": "plan",
+    "children": "subagent steps",
+    "runtimeTask": "runtime task",
+    "background": "background",
+    "added": "new file",
+    "deleted": "deleted",
+    "exit": "exit {{code}}",
+    "images": "{{count}} images",
+    "images_one": "{{count}} image",
+    "images_other": "{{count}} images",
+    "steps": "{{count}} steps",
+    "steps_one": "{{count}} step",
+    "steps_other": "{{count}} steps",
+    "foldMore": "Show all {{count}} lines",
+    "foldMore_one": "Show all {{count}} line",
+    "foldMore_other": "Show all {{count}} lines",
+    "foldLess": "Show less",
+    "truncated": "Output was too long; only part of it was kept",
+    "truncatedAt": "Output was too long; only part of it was kept. Full output: {{path}}"
   },
   "agentSwitcher": {
     "currentDirectChat": "Chatting with {{agentName}} ({{status}}); switch agent",
@@ -196,6 +217,7 @@
   "history": {
     "loadEarlier": "Load earlier messages…",
     "loading": "Loading conversation…",
+    "noConversations": "No conversations yet",
     "empty": "Nothing said here yet. Say something to start."
   },
   "connection": {
@@ -273,10 +295,6 @@
     "title": "Waiting for you",
     "more": "and {{count}} more waiting"
   },
-  "context": {
-    "awaitingYou": "Waiting for you",
-    "openPending": "Open Pending"
-  },
   "new": {
     "title": "New conversation",
     "hint": "Pick a project and an agent. The conversation appears under that project in the sidebar.",
@@ -284,10 +302,31 @@
     "start": "Start",
     "project": "Project",
     "addPath": "Add a directory…",
+    "addPathOn": "Add a directory on {{machine}}…",
     "path": "Directory path",
-    "machine": "Machine",
-    "pathHint": "An absolute path on the chosen machine; it must be an existing directory. The members work here.",
-    "chooseFolder": "Choose a folder…"
+    "pickPrompt": "Choose a directory…",
+    "picker": {
+      "title": "Choose a directory",
+      "hint": "Members work in this directory.",
+      "machine": "Machine",
+      "crumbs": "Current path",
+      "typePath": "Enter path",
+      "filter": "Filter",
+      "hidden": "Hidden directories",
+      "recent": "Recent",
+      "home": "Home",
+      "added": "Added",
+      "empty": "No subdirectories here. You can choose this directory.",
+      "noMatch": "No matching directories",
+      "truncated": "Too many directories. Showing the first {{limit}}. Use the filter or enter a path.",
+      "up": "Up one level",
+      "choose": "Choose this directory",
+      "problems": {
+        "notFound": "This directory does not exist",
+        "denied": "No permission to read this directory",
+        "offline": "Can't reach this machine"
+      }
+    }
   },
   "chat": {},
   "steward": {
@@ -341,5 +380,13 @@
     "pullBackAction": "Pull back",
     "pullBack": "Pull back into the box: {{text}}",
     "drop": "Drop this one: {{text}}"
+  },
+  "images": {
+    "open": "Open image {{index}} of {{count}}",
+    "title": "Image {{index}} of {{count}}",
+    "hint": "Click the image to toggle its actual size, use the arrow keys to move between images, Esc to close.",
+    "previous": "Previous",
+    "next": "Next",
+    "failed": "Couldn't load the image"
   }
 }

@@ -95,11 +95,6 @@ const rowsOf = (container: HTMLElement, section: string) =>
     (row) => row.textContent ?? "",
   );
 
-const linksOf = (container: HTMLElement, section: string) =>
-  [...container.querySelectorAll(`section[aria-label="${section}"] a`)].map(
-    (link) => link.getAttribute("href"),
-  );
-
 const countOf = (container: HTMLElement, section: string) =>
   container.querySelector(`section[aria-label="${section}"] h3`)!.textContent;
 
@@ -108,9 +103,10 @@ afterEach(() => {
   setWire(undefined);
 });
 
-it("puts what waits for the user above everything else", async () => {
-  // The goal and the members used to be the first screen, and the two tasks
-  // waiting for the user were below the fold.
+it("leaves what waits to the 待处理 tab, even when something does", async () => {
+  // A blocked task, one in review, a failed routine run and a confirmation, all
+  // of this group's: none of them gets a section here, and the badge that sends
+  // the user to them still counts them.
   const host = surfaceHost({
     conversations: [group, other],
     tasks: [
@@ -146,48 +142,17 @@ it("puts what waits for the user above everything else", async () => {
     conversationSections(group, [], { goal: "本周上线" }),
   );
   const container = await mount();
-  expect(sections(container)).toEqual(["等你", "任务", "产物", "成员", "目标"]);
-  // What waits, saying why in the 待处理 tab's own words; the confirmation is
-  // not drawn again, only the way to the tab that holds it. 定时 is off in this
-  // build, so its failed run is neither a row nor part of the count.
-  expect(rowsOf(container, "等你")).toEqual([
-    "#1 任务1待验收",
-    "确认请求1去待处理",
-  ]);
-  expect(linksOf(container, "等你")).toEqual([
-    "/?group=g1&view=tasks&task=t1",
-    "/?group=g1&view=inbox",
-  ]);
-  // The count is the badge's number, from the same hook: the other group's
-  // blocked task counts toward it too, while the rows listed stay this group's.
-  expect(countOf(container, "等你")).toBe("等你3");
+  expect(sections(container)).toEqual(["任务", "产物", "成员", "目标"]);
+  expect(container.textContent).not.toContain("等你");
+  expect(container.textContent).not.toContain("去待处理");
   expect(container.querySelector("[data-badge]")!.textContent).toBe("3");
   // The background is still here, at the bottom.
   expect(container.textContent).toContain("本周上线");
 });
 
-it("does not spend a heading on an empty「等你」", async () => {
-  const host = surfaceHost({
-    conversations: [group],
-    tasks: [task(1, { status: "in_progress" }), task(2)],
-    routines: [
-      routineSections(
-        routineInfo({ id: "r1", name: "日报", conversationId: "g1" }),
-      ),
-    ],
-  });
-  host.target(
-    "conversations.g1",
-    conversationSections(group, [], { goal: "本周上线" }),
-  );
-  const container = await mount();
-  expect(sections(container)).toEqual(["任务", "产物", "成员", "目标"]);
-  expect(container.textContent).not.toContain("等你");
-});
-
-it("leads 任务 with what waits, then the last move made, and shows five", async () => {
-  // The blocked one is the user's to unblock, so it leads its own section even
-  // though it was not the last thing touched.
+it("orders 任务 by the last move made, and shows five", async () => {
+  // A task waiting for the user does not jump the queue: that is the 待处理
+  // tab's job.
   surfaceHost({
     conversations: [group],
     tasks: [
@@ -203,5 +168,58 @@ it("leads 任务 with what waits, then the last move made, and shows five", asyn
   const listed = rowsOf(container, "任务").map(
     (row) => row.match(/任务\d/)?.[0],
   );
-  expect(listed).toEqual(["任务4", "任务2", "任务1", "任务3", "任务5"]);
+  expect(listed).toEqual(["任务1", "任务3", "任务4", "任务5", "任务6"]);
+});
+
+it("draws its cards as flat rows: the list rules them, not a frame each", async () => {
+  surfaceHost({
+    conversations: [group],
+    tasks: [task(1), task(2)],
+    artifacts: [
+      artifactView({ id: "v1", title: "看板", conversationId: "g1" }),
+    ],
+  });
+  const container = await mount();
+  const rows = ["任务", "产物"].flatMap((section) => [
+    ...container.querySelectorAll(`section[aria-label="${section}"] li > *`),
+  ]);
+  expect(rows).toHaveLength(3);
+  for (const card of rows)
+    expect(card.classList.contains("border")).toBe(false);
+});
+
+it("leaves closed tasks out of 任务, and out of its count", async () => {
+  surfaceHost({
+    conversations: [group],
+    tasks: [
+      task(1, { status: "done", updatedAt: 900 }),
+      task(2, { status: "in_progress", updatedAt: 800 }),
+      task(3, { status: "cancelled", updatedAt: 700 }),
+      task(4, { status: "backlog", updatedAt: 600 }),
+      task(5, { updatedAt: 500 }),
+      task(6, { status: "in_review", updatedAt: 400 }),
+      task(7, { status: "blocked", updatedAt: 300 }),
+      task(8, { updatedAt: 200 }),
+    ],
+  });
+  const container = await mount();
+  const listed = rowsOf(container, "任务").map(
+    (row) => row.match(/任务\d/)?.[0],
+  );
+  // Six still open: the count says six, the list shows the first five.
+  expect(listed).toEqual(["任务2", "任务4", "任务5", "任务6", "任务7"]);
+  expect(countOf(container, "任务")).toBe("任务6");
+});
+
+it("does not say 还没有任务 when every task here is closed", async () => {
+  surfaceHost({
+    conversations: [group],
+    tasks: [task(1, { status: "done" }), task(2, { status: "cancelled" })],
+  });
+  const container = await mount();
+  expect(rowsOf(container, "任务")).toEqual([]);
+  expect(countOf(container, "任务")).toBe("任务0");
+  const section = container.querySelector('section[aria-label="任务"]')!;
+  expect(section.textContent).toContain(translate("tasks:empty.noOpen"));
+  expect(section.textContent).not.toContain(translate("tasks:empty.title"));
 });

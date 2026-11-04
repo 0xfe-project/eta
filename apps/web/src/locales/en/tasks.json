@@ -8,11 +8,11 @@
   "workspace": {
     "label": "Workspace",
     "worktree": "Own git worktree",
-    "local": "Project directory"
+    "local": "Project directory",
+    "away": "On {{machine}}, outside the project"
   },
   "status": {
     "inProgress": "In progress",
-    "changeLabel": "Status: {{status}}; change",
     "inReview": "In review",
     "blocked": "Blocked",
     "todo": "To do",
@@ -28,8 +28,9 @@
   },
   "queueReason": {
     "taskBusy": "Waiting for this task's previous run to end",
-    "machineFull": "This machine is running as many as it may; waiting for a slot",
-    "machineOffline": "This machine is offline; it starts when it connects"
+    "machineFull": "{{machine}} is running as many tasks as it may; waiting for a slot",
+    "machineOffline": "{{machine}} is offline; it starts when it connects",
+    "thisMachine": "This machine"
   },
   "runs": {
     "label": "Run",
@@ -84,13 +85,9 @@
     "description": "Description",
     "descriptionPlaceholder": "Goal, background, completion criteria…"
   },
-  "layout": {
-    "label": "Layout",
-    "list": "List",
-    "board": "Board"
-  },
   "empty": {
     "title": "No tasks yet",
+    "noOpen": "No open tasks",
     "description": "An agent proposes a task in a conversation; once you confirm it, the agent gets to work and records each step in the timeline.",
     "deletedTitle": "This task no longer exists"
   },
@@ -119,7 +116,16 @@
     "title": "Execution log",
     "workspacePrefix": "Workspace ",
     "done": "Done",
-    "failed": "Failed"
+    "failed": "Failed",
+    "error": "Error",
+    "aborted": "Stopped",
+    "compacted": "Context compacted; what came before is a summary",
+    "branched": "The earlier branch is a summary",
+    "group": "{{name}} · {{count}} calls",
+    "group_one": "{{name}} · {{count}} call",
+    "group_other": "{{name}} · {{count}} calls",
+    "earlier": "Load earlier records",
+    "loadingEarlier": "Loading earlier records…"
   },
   "draft": {
     "title": "Task draft",

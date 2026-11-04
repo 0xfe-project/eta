@@ -7,7 +7,7 @@ import {
   productHost,
   projectView,
 } from "@/test-product";
-import { cleanup, flush, mount } from "@/test-render";
+import { button, cleanup, click, flush, mount } from "@/test-render";
 import { CreateGroup } from "./groups";
 
 const navigation = rstest.hoisted(() => ({ open: rstest.fn() }));
@@ -120,21 +120,29 @@ describe("新建群的项目", () => {
     expect(navigation.open).toHaveBeenCalledWith("c-new");
   });
 
-  it("adds a typed path as a project first, trimmed, with the first member as its steward", async () => {
+  it("adds a chosen directory as a project first, with the first member as its steward", async () => {
     const fake = host([]);
+    fake.handle("projects.directories", () => ({
+      path: "/home/me",
+      home: "/home/me",
+      parent: "/home",
+      entries: [],
+      truncated: false,
+    }));
     await mount(<CreateGroup open members={["a1"]} onOpenChange={() => {}} />);
     await named("无项目");
-    await type(
-      document.querySelector<HTMLInputElement>('input[aria-label="目录路径"]')!,
-      "  /tmp/app  ",
-    );
+    await click(document.querySelector("#new-project"));
+    await flush();
+    await click(button(document.body, "选择此目录"));
+    await flush();
+    // Back on the form with what was typed in it.
+    expect(byLabel("群名")!.querySelector("input")!.value).toBe("无项目");
     await submit();
-    expect(fake.calls[0]).toMatchObject({
+    expect(fake.calls.find((call) => call.action === "create")).toMatchObject({
       target: "projects",
       action: "create",
-      // Trimmed: a trailing space in a path is a path that does not exist.
-      args: { path: "/tmp/app", stewardId: "a1" },
+      args: { path: "/home/me", stewardId: "a1" },
     });
-    expect(fake.calls[1]!.args).toMatchObject({ projectId: "made" });
+    expect(fake.calls.at(-1)!.args).toMatchObject({ projectId: "made" });
   });
 });

@@ -17,7 +17,7 @@ import type {
 import type { ManagedSession, SessionsService } from "@eta/server";
 import type { AgentRecord } from "../agents/store";
 import type { MachineRecord } from "../machines/store";
-import { runAndWait } from "@eta/daemon";
+import { lastSeq, runAndWait } from "@eta/daemon";
 import { formatModelId } from "@eta/server";
 
 /** One session, as the engine drives it. */
@@ -29,6 +29,8 @@ export interface SessionHandle {
   steer: (text: string, images?: PromptImage[]) => Promise<void>;
   /** The model the session runs on now, as `provider:modelId`; undefined when it cannot say. */
   model: () => Promise<string | undefined>;
+  /** How far the session's journal has got: what its next run writes comes after this. */
+  lastSeq: () => Promise<number>;
   /**
    * Give the session these words as its next run and wait until it is quiet. `keepGoing` lets a
    * caller that is shutting down end the wait between two runs of the same reply.
@@ -90,6 +92,9 @@ export interface SessionSettings {
 export const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+/** The runtime a session's row names; a row that names none runs on eta's own loop. */
+const runtimeOf = (runtime: string | undefined): string => runtime ?? "eta";
+
 /** A session in this process. */
 class LocalHandle implements SessionHandle {
   readonly #sessions: SessionsService;
@@ -120,6 +125,10 @@ class LocalHandle implements SessionHandle {
     return Promise.resolve(
       formatModelId(this.#managed.session.kernel.config.read("model")),
     );
+  }
+
+  lastSeq(): Promise<number> {
+    return Promise.resolve(lastSeq(this.#managed));
   }
 
   run(
@@ -168,12 +177,18 @@ export class LocalPlace implements SessionPlace {
     const { agent, conversation } = input;
     if (input.existing !== null) {
       try {
-        await this.#sync(sessions, input.existing, agent, input.stamp);
-        const handle = new LocalHandle(
-          sessions,
-          (await sessions.open(input.existing)).managed,
+        const { managed } = await sessions.open(input.existing);
+        if (runtimeOf(managed.meta.runtime) === agent.runtime) {
+          await this.#sync(sessions, input.existing, agent, input.stamp);
+          return new LocalHandle(
+            sessions,
+            (await sessions.open(input.existing)).managed,
+          );
+        }
+        // The agent moved to another runtime: a conversation is one runtime's, so it starts over.
+        this.#warn(
+          `[eta] session ${input.existing} (agent ${agent.id} in ${conversation.id}) runs on ${runtimeOf(managed.meta.runtime)}, the agent on ${agent.runtime}; starting a new one`,
         );
-        return handle;
       } catch (error) {
         // The row outlived its journal: say so, then start over rather than failing every wake.
         if (!messageOf(error).startsWith("no such session")) throw error;
@@ -187,6 +202,7 @@ export class LocalPlace implements SessionPlace {
       title: `${conversation.name} · ${agent.name}`,
       agentId: agent.id,
       conversationId: conversation.id,
+      ...(agent.runtime === "eta" ? {} : { runtime: agent.runtime }),
       ...(agent.model === null ? {} : { model: agent.model }),
       ...(agent.persona === "" ? {} : { persona: agent.persona }),
     });

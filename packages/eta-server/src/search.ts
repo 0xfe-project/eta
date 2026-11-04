@@ -19,7 +19,7 @@
 import type { AgentMessage } from "@eta/core";
 import type { Entry } from "@eta/core/session";
 import type { ViewSystemRow } from "@eta/harness";
-import { systemRowOf } from "@eta/harness";
+import { systemRowOf, withoutImageData } from "@eta/harness";
 
 /** One row of a transcript page. */
 export interface HistoryRow {
@@ -106,7 +106,12 @@ export function historyPageOf(
   entries: readonly Entry[],
   options: { beforeSeq?: number | undefined; limit: number },
 ): HistoryPage {
-  const rows = historyOf(entries, options);
+  // A page goes on the wire like the view's window does, so its pictures stay behind the
+  // same way; `sessions.image` fetches one on demand.
+  const rows = historyOf(entries, options).map((row) => {
+    const message = withoutImageData(row.message);
+    return message === row.message ? row : { ...row, message };
+  });
   const firstMessage = branchMessages(entries)[0];
   const oldest = rows[0];
   const from =

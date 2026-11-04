@@ -11,7 +11,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { setWire } from "@/lib/wire";
-import { agentView } from "@/test-product";
+import { agentView, machineView } from "@/test-product";
 import { FakeHost } from "@/test-wire";
 import { AgentEditor } from "./agent-editor";
 import { useWorkspaceStore } from "./workspace-store";
@@ -153,8 +153,10 @@ describe("editing an agent in tabs", () => {
         name: "代码审查",
         instructions: "只看 PR",
         persona: "",
+        runtime: "eta",
         model: "c:m1",
         thinkingLevel: null,
+        machineId: null,
         bundles: [],
       },
     ]);
@@ -354,5 +356,207 @@ describe("picking a model", () => {
     expect(trigger.textContent).toContain("M2");
     await save();
     expect(updates()[0]).toMatchObject({ agentId: "a1", model: "c:m2" });
+  });
+});
+
+describe("an agent's machine and its runtimes", () => {
+  // The host's own runtimes; another machine is asked over its link, and the daemon here is off.
+  const runtimes = [
+    {
+      id: "claude",
+      label: "Claude Code",
+      status: "available",
+      models: [
+        { id: "opus", name: "Opus", default: false, efforts: [] },
+        { id: "sonnet", name: "Sonnet", default: false, efforts: [] },
+      ],
+    },
+  ];
+  const asked = () =>
+    host.calls
+      .filter((call) => call.action === "runtimes")
+      .map((call) => call.args);
+
+  async function withMachines(
+    machineId: string | null,
+    answer: (args: { machineId?: string }) => unknown = (args) => {
+      if (args.machineId === "mac") throw new Error("mac is not online");
+      if (args.machineId === "gpu") return { runtimes: [] };
+      return { runtimes };
+    },
+  ) {
+    await act(async () => root.render(null));
+    setWire(undefined);
+    host = new FakeHost()
+      .target("providers", { config: providers }, { eager: true })
+      .target(
+        "agents",
+        {
+          list: [
+            agentView({
+              id: "a1",
+              name: "审查",
+              runtime: "claude",
+              model: "claude:opus",
+              machineId,
+            }),
+          ],
+        },
+        { eager: true },
+      )
+      .target(
+        "machines",
+        {
+          list: [
+            machineView({ id: "main", name: "主机" }),
+            machineView({
+              id: "mac",
+              name: "mac",
+              kind: "daemon",
+              status: "offline",
+            }),
+            machineView({
+              id: "old",
+              name: "old",
+              kind: "daemon",
+              status: "offline",
+            }),
+            machineView({ id: "gpu", name: "gpu-box", kind: "daemon" }),
+          ],
+        },
+        { eager: true },
+      )
+      .target("personas", { cards: [] }, { eager: true })
+      .plugins([
+        { name: "providers", source: "bundled" },
+        { name: "agents", source: "bundled" },
+        { name: "machines", source: "bundled" },
+      ])
+      .handle("agents.runtimes", (args) =>
+        answer(args as { machineId?: string }),
+      )
+      .handle("agents.update", () => ({}))
+      .install();
+    host.hello();
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <AgentEditor />
+        </QueryClientProvider>,
+      ),
+    );
+    await settle();
+  }
+
+  const radio = (name: string) =>
+    document.querySelector<HTMLInputElement>(
+      `input[type="radio"][aria-label="${name}"]`,
+    )!;
+  const trigger = (id: string) =>
+    document.getElementById(id) as HTMLButtonElement;
+
+  it("keeps the runtime in view and the model choosable when the machine cannot be asked", async () => {
+    await withMachines("mac");
+    expect(asked()).toContainEqual({ machineId: "mac" });
+    // Not blank: the runtime it is on, unavailable for now, and why.
+    expect(trigger("agent-runtime").textContent).toContain("claude（不可用）");
+    expect(document.getElementById("agent-runtime-hint")?.textContent).toBe(
+      "这台机器现在连不上，查不到它装了哪些运行方式。",
+    );
+    // Not stuck loading, and not called gone: nobody could say.
+    expect(trigger("agent-model").disabled).toBe(false);
+    expect(trigger("agent-model").textContent).toBe("claude:opus");
+  });
+
+  it("reads as being looked for while the machine is asked", async () => {
+    await withMachines("mac", () => new Promise(() => {}));
+    expect(radio("mac").checked).toBe(true);
+    expect(trigger("agent-runtime").textContent).toContain("正在检测");
+    expect(document.getElementById("agent-runtime-hint")).toBeNull();
+  });
+
+  const row = (name: string) => radio(name).closest("label")!.textContent;
+  const pick = (name: string) =>
+    click(radio(name) as unknown as HTMLButtonElement);
+
+  it("asks the host once for the primary, named or not", async () => {
+    await withMachines(null);
+    expect(asked()).toEqual([{}, { machineId: "gpu" }]);
+    await pick("主机（主机器）");
+    expect(radio("主机（主机器）").checked).toBe(true);
+    expect(asked()).toEqual([{}, { machineId: "gpu" }]);
+    expect(trigger("agent-runtime").textContent).toBe("Claude Code");
+  });
+
+  it("names the primary among the machines, and keeps the model when the machine changes", async () => {
+    await withMachines("main");
+    expect(
+      [...document.querySelectorAll('input[type="radio"]')].map((input) =>
+        input.getAttribute("aria-label"),
+      ),
+    ).toEqual(["跟随项目", "主机（主机器）", "mac", "old", "gpu-box"]);
+    await pick("跟随项目");
+    expect(trigger("agent-model").textContent).toBe("Opus");
+    await save();
+    expect(updates()[0]).toMatchObject({
+      machineId: null,
+      runtime: "claude",
+      model: "claude:opus",
+    });
+  });
+
+  it("keeps an agent on its offline machine, and no other offline one can be picked", async () => {
+    await withMachines("mac");
+    expect(radio("mac").checked).toBe(true);
+    expect(row("mac")).toContain("连不上，无法确认运行方式");
+    expect(radio("old").disabled).toBe(true);
+
+    // Trying another machine does not lose the way back.
+    await pick("主机（主机器）");
+    expect(radio("mac").disabled).toBe(false);
+    await pick("mac");
+    await type("agent-name", "改名");
+    await save();
+    expect(updates()[0]).toMatchObject({
+      machineId: "mac",
+      runtime: "claude",
+      model: "claude:opus",
+    });
+  });
+
+  it("says what is running on a machine as far as it can tell, and never that it is idle", async () => {
+    await withMachines("main");
+    expect(row("主机（主机器）")).toContain("在线");
+    expect(row("主机（主机器）")).not.toContain("运行中");
+    expect(row("主机（主机器）")).not.toContain("空闲");
+    await act(async () =>
+      host.set("agents", {
+        list: [
+          agentView({
+            id: "a1",
+            name: "审查",
+            runtime: "claude",
+            model: "claude:opus",
+            machineId: "main",
+            status: "working",
+          }),
+        ],
+      }),
+    );
+    await settle();
+    expect(row("主机（主机器）")).toContain("在线 · 1 个运行中");
+  });
+
+  it("does not move a saved agent off a runtime the machine lacks", async () => {
+    await withMachines(null);
+    await pick("gpu-box");
+    expect(trigger("agent-runtime").textContent).toContain("claude（不可用）");
+    expect(document.getElementById("agent-runtime-note")).toBeNull();
+    await save();
+    expect(updates()[0]).toMatchObject({
+      machineId: "gpu",
+      runtime: "claude",
+      model: "claude:opus",
+    });
   });
 });

@@ -139,7 +139,15 @@ describe("设置整页", () => {
     host();
     await open("/settings?section=appearance");
     expect(rail()).toEqual(
-      labelsOf("agents", "providers", "mcp", "email", "archived", "appearance"),
+      labelsOf(
+        "agents",
+        "providers",
+        "machines",
+        "mcp",
+        "email",
+        "archived",
+        "appearance",
+      ),
     );
     // The address says which section, so a reload comes back to it.
     expect(document.body.textContent).toContain("颜色模式");

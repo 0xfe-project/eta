@@ -81,6 +81,10 @@ class RemoteHandle implements SessionHandle {
     return (await this.#link.machine("config", { session: this.id })).model;
   }
 
+  async lastSeq(): Promise<number> {
+    return (await this.#link.machine("lastSeq", { session: this.id })).seq;
+  }
+
   async run(
     prompt: string,
     _keepGoing?: () => boolean,
@@ -127,7 +131,9 @@ export class RemotePlace implements SessionPlace {
         `${machine.name} is ${machine.status === "online" ? "starting" : machine.status}, so ${agent.name} cannot answer there now`,
       );
     }
-    const defaults = await this.#deps.defaults();
+    // The settings name eta's own models; an agent on an external runtime has the runtime's.
+    const external = agent.runtime !== "eta";
+    const defaults: Settings = external ? {} : await this.#deps.defaults();
     const model = agent.model ?? defaults.model;
     const thinkingLevel = agent.thinkingLevel ?? defaults.thinkingLevel;
     // With no model chosen a session runs on the kernel's placeholder, which only a model layer
@@ -136,9 +142,9 @@ export class RemotePlace implements SessionPlace {
       model === undefined
         ? { provider: "unknown", modelId: "unknown" }
         : parseModelId(model);
-    const known = this.#deps
-      .models()
-      ?.getModel(identity.provider, identity.modelId);
+    const known = external
+      ? undefined
+      : this.#deps.models()?.getModel(identity.provider, identity.modelId);
     const gatewayKey = this.#deps.bundles.gatewayKey(agent.id);
     const { session } = await link.machine("open", {
       ...(input.existing === null ? {} : { session: input.existing }),
@@ -146,6 +152,7 @@ export class RemotePlace implements SessionPlace {
       title: `${conversation.name} · ${agent.name}`,
       agentId: agent.id,
       conversationId: conversation.id,
+      ...(external ? { runtime: agent.runtime } : {}),
       ...(model === undefined ? {} : { model }),
       ...(thinkingLevel === undefined ? {} : { thinkingLevel }),
       ...(agent.persona === "" ? {} : { persona: agent.persona }),

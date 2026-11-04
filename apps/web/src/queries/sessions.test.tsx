@@ -10,8 +10,8 @@ function Numbers({ id }: { id: string | null }) {
   return <output>{session?.model?.id ?? "…"}</output>;
 }
 
-function Run({ id }: { id: string }) {
-  const blocks = useRunBlocks(id);
+function Run({ id, runFrom }: { id: string; runFrom?: number }) {
+  const blocks = useRunBlocks(id, runFrom);
   return (
     <output>
       {blocks
@@ -101,6 +101,62 @@ describe("the run in flight", () => {
     );
     await flush(60);
     expect(document.body.textContent).toBe("");
+  });
+
+  it("does not take what a view that is behind says is streaming for this run", async () => {
+    const lastRun = {
+      role: "assistant",
+      content: [{ type: "text", text: "last answer" }],
+      timestamp: 2,
+    };
+    const asked = {
+      entryId: "e1",
+      seq: 1,
+      at: 1,
+      message: { role: "user", content: "first", timestamp: 1 },
+    };
+    const host = sessionHost();
+    await mount(<Run id="s1" runFrom={2} />);
+    await flush();
+    // The view has not yet had the last run's end, let alone this run's start.
+    await act(async () =>
+      host.set(
+        "sessions.s1",
+        sections({
+          core: { session: "s1", running: true, streaming: lastRun },
+          transcript: { messages: [asked] },
+        }),
+      ),
+    );
+    await flush(60);
+    expect(document.body.textContent).toBe("");
+
+    // Past the place, what it says is streaming is this run's.
+    await act(async () =>
+      host.set(
+        "sessions.s1",
+        sections({
+          core: {
+            session: "s1",
+            running: true,
+            streaming: { ...lastRun, timestamp: 9 },
+          },
+          transcript: {
+            messages: [
+              asked,
+              {
+                entryId: "e3",
+                seq: 3,
+                at: 3,
+                message: { role: "user", content: "second", timestamp: 3 },
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    await flush(60);
+    expect(document.body.textContent).toBe("last answer");
   });
 
   it("draws the tool calls the transcript already holds", async () => {

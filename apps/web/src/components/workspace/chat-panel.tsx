@@ -4,7 +4,8 @@ import type {
   ConversationSummary,
   MessageView,
 } from "@eta/client-contracts";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import type { WorkspaceState } from "./workspace-store";
 import type { Draft, FilePart, PasteRange } from "@/lib/composer";
 import type { RunBlock, ToolBlock } from "@/lib/run";
 import type { Outgoing, SendMode } from "@/queries/outbox";
@@ -25,6 +26,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { Markdown } from "@/components/markdown";
+import { Loading, Skeleton } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -47,14 +49,14 @@ import { buildMenu, hashAt, mentionAt } from "@/lib/composer-menu";
 import { translate } from "@/lib/i18n";
 import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { firstVisible } from "@/lib/rail";
-import { savedTools } from "@/lib/run";
+import { runFromOf, savedTools } from "@/lib/run";
 import { readTheme, setTheme } from "@/lib/theme";
 import {
   ACTIVE_STATUSES,
   RUNNING_STATUSES,
   taskRowsByTurn,
 } from "@/lib/timeline";
-import { summarizeArgs } from "@/lib/tool-summary";
+import { cn } from "@/lib/utils";
 import { agentName } from "@/queries/agents";
 import { beginUpload, useOutbox } from "@/queries/outbox";
 import { useProjectFiles } from "@/queries/projects";
@@ -79,7 +81,7 @@ import { Message, SystemMessage } from "./transcript/message";
 import { ProcessBox } from "./transcript/process-box";
 import { SlashMenu } from "./transcript/slash-menu";
 import { ThinkingBlock } from "./transcript/thinking-block";
-import { ToolCard, ToolCardBlock } from "./transcript/tool-card";
+import { ToolDetailCard } from "./transcript/tool-detail";
 import { useWorkspaceStore } from "./workspace-store";
 
 type SlashName =
@@ -177,6 +179,14 @@ const FAILURE_CODES = {
   unavailable: "unavailable",
   gone: "gone",
 } as const;
+// 设置 → 外观's 聊天内容宽度, as the section's `--chat-width`: the transcript, the strip over the
+// composer and `.input-outer` all read that, so they cannot come apart.
+const chatWidths: Record<NonNullable<WorkspaceState["chatWidth"]>, string> = {
+  "extra-narrow": "600px",
+  narrow: "720px",
+  standard: "860px",
+  full: "none",
+};
 
 /** The files a message came with (`data.attachments`), under its text. */
 function MessageFiles({ data }: { data: Record<string, unknown> }) {
@@ -348,39 +358,35 @@ function emailProposalIds(blocks: readonly RunBlock[]): string[] {
  * Neither is a step the agent took, so neither is drawn in the process — a group folds that away as
  * soon as the text is written, which used to take an artifact's card out of the conversation with
  * it, leaving only the tool line that no one scrolls to. Both are things the reader is meant to
- * open, so they are drawn where the answer is, inside the turn's own frame and behind the hairline
- * that says where they came from. The `publish_artifact` call itself stays in the process, with the
+ * open, so they are drawn where the answer is, inside the turn's own frame, flush with the answer.
+ * The `publish_artifact` call itself stays in the process, with the
  * arguments and result that go with it; its card is not repeated there.
  */
 function TurnCards({
-  turn,
   saved,
   sessionId,
+  runFrom,
   taskRows,
 }: {
-  /** The turn drawing these: a draft names the agent that proposed it and when. */
-  turn: MessageView;
   /** The tool calls a finished reply kept on its row. */
   saved: readonly ToolBlock[];
   /** The session of a reply that is at work: its publishes come from the run, not from the row. */
   sessionId?: string | undefined;
+  /** Where this reply's run starts, so a live session does not replay the previous turn. */
+  runFrom?: number | undefined;
   /** The task rows this turn wrote, and which are drawn here rather than on the timeline. */
   taskRows: readonly MessageView[] | undefined;
 }) {
-  const live = useRunBlocks(sessionId);
+  const live = useRunBlocks(sessionId, runFrom);
   const published = publishedRefs(sessionId === undefined ? saved : live);
   const proposals = emailProposalIds(sessionId === undefined ? saved : live);
   const rows = taskRows ?? [];
   if (published.length === 0 && proposals.length === 0 && rows.length === 0)
     return null;
-  const onlyEmailCards = published.length === 0 && rows.length === 0;
   return (
-    <div
-      className="turn-tasks"
-      data-only-email-cards={onlyEmailCards ? "true" : undefined}
-    >
+    <div className="turn-tasks">
       {published.map(({ id, ref }) => (
-        <ActivityRefCard key={id} value={ref} />
+        <ActivityRefCard key={id} value={ref} variant="framed" />
       ))}
       {proposals.map((id) => (
         <EmailProposalCard key={id} proposalId={id} />
@@ -388,7 +394,7 @@ function TurnCards({
       {rows.map((row) => (
         <div key={row.id} id={`msg-${row.id}`} data-mid={row.id}>
           {row.kind === "task_draft" ? (
-            <TaskDraftRow message={row} turn={turn} />
+            <TaskDraftRow message={row} />
           ) : (
             <TaskCardRow message={row} />
           )}
@@ -398,33 +404,27 @@ function TurnCards({
   );
 }
 
-function ToolActivity({ block }: { block: ToolBlock }) {
-  // The arguments are a JSON object; the header shows what the call is *doing*, which is the first
-  // thing worth quoting out of it (lib/tool-summary.ts).
-  const summary = summarizeArgs(block.input);
+function ToolActivity({
+  block,
+  sessionId,
+}: {
+  block: ToolBlock;
+  /** The session at work, which pictures its view left out are fetched from. */
+  sessionId?: string | undefined;
+}) {
   const github = useGitHubRef(block);
   return (
     <>
-      <ToolCard
-        tool={block.name}
-        summary={summary.length > 0 ? summary : undefined}
-        status={block.status}
+      <ToolDetailCard
+        block={block}
+        sessionId={sessionId}
         statusLabel={activityText[block.status]}
-      >
-        {block.input === undefined || block.input === null ? null : (
-          <ToolCardBlock label={translate("chat:tools.arguments")}>
-            {typeof block.input === "string"
-              ? block.input
-              : JSON.stringify(block.input, null, 2)}
-          </ToolCardBlock>
-        )}
-        {block.output === undefined ? null : (
-          <ToolCardBlock label={translate("chat:tools.result")}>
-            {block.output}
-          </ToolCardBlock>
-        )}
-      </ToolCard>
-      {github === undefined ? null : <ActivityRefCard value={github} />}
+      />
+      {github === undefined ? null : (
+        <div className="tool-ref">
+          <ActivityRefCard value={github} variant="framed" />
+        </div>
+      )}
     </>
   );
 }
@@ -465,6 +465,14 @@ function Warning({ children }: { children: React.ReactNode }) {
 }
 
 /**
+ * At the live end, or close enough: 32px keeps the last line readable and is far enough that a
+ * stray wheel tick does not count as leaving.
+ */
+const GLUED_WITHIN = 32;
+const glued = (el: HTMLElement) =>
+  el.scrollHeight - el.scrollTop - el.clientHeight < GLUED_WITHIN;
+
+/**
  * Scrolls the transcript like a terminal: it opens at the bottom and follows
  * new output while the reader is there. Older messages added above keep the
  * view where it was, and come in as the top is approached.
@@ -472,12 +480,15 @@ function Warning({ children }: { children: React.ReactNode }) {
 function useTranscriptScroll({
   groupId,
   firstId,
+  loading,
   hasOlder,
   loadingOlder,
   onLoadOlder,
 }: {
   groupId: string | undefined;
   firstId: string | undefined;
+  /** The conversation's own rows have not come yet: what is drawn is not where it will end. */
+  loading: boolean;
   hasOlder: boolean;
   loadingOlder: boolean;
   onLoadOlder: () => void;
@@ -491,22 +502,52 @@ function useTranscriptScroll({
   const [pinned, setPinned] = useState(true);
   // scrollHeight - scrollTop as of the last layout, to restore after a prepend.
   const fromBottomRef = useRef(0);
+  // The view as last looked at, to tell the view moving from the content moving under it.
+  const seenRef = useRef({ top: 0, height: 0 });
+  // A wheel or a finger is moving the view. Lasts while the view keeps rising.
+  const handRef = useRef(false);
+  // A jump is on its way up the transcript. Rows resolving their height can bring the bottom to it
+  // on the way, and that must not re-attach it. Over once the view, away from the bottom, stops
+  // rising: not `scrollend`, which the older system webviews do not have.
+  const jumpingRef = useRef(false);
 
+  function record(el: HTMLElement, following: boolean) {
+    atBottomRef.current = following;
+    setPinned(following);
+    seenRef.current = { top: el.scrollTop, height: el.scrollHeight };
+    fromBottomRef.current = el.scrollHeight - el.scrollTop;
+  }
+  /**
+   * Only the reader leaves the bottom. Being away from it proves nothing: the scroll event comes a
+   * frame late, and the content may have grown since, or rows off screen may have traded their
+   * estimated height for the real one. So leaving takes the view rising, in content that held
+   * still or under a hand on it; a clamp or the browser's anchoring moves it with the height.
+   */
   function remember() {
     const el = scrollRef.current;
     if (!el) return;
-    // 32px: close enough that the last line is still readable, far enough that a stray wheel tick
-    // does not count as leaving.
-    const glued = el.scrollHeight - el.scrollTop - el.clientHeight < 32;
-    atBottomRef.current = glued;
-    if (glued !== pinned) setPinned(glued);
-    fromBottomRef.current = el.scrollHeight - el.scrollTop;
+    const seen = seenRef.current;
+    const rose = el.scrollTop < seen.top;
+    const left = rose && (el.scrollHeight === seen.height || handRef.current);
+    handRef.current &&= rose;
+    jumpingRef.current &&= rose || glued(el);
+    record(
+      el,
+      atBottomRef.current
+        ? !left || glued(el)
+        : !left && !jumpingRef.current && glued(el),
+    );
+  }
+  function follow() {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    record(el, true);
   }
   function toBottom() {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-    atBottomRef.current = true;
-    setPinned(true);
+    handRef.current = false;
+    jumpingRef.current = false;
+    follow();
   }
 
   // A new agent's transcript opens at its end.
@@ -514,8 +555,9 @@ function useTranscriptScroll({
   // Older messages arrived above: keep the same distance from the bottom.
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (el && !atBottomRef.current)
-      el.scrollTop = el.scrollHeight - fromBottomRef.current;
+    if (!el || atBottomRef.current) return;
+    el.scrollTop = el.scrollHeight - fromBottomRef.current;
+    record(el, false);
   }, [firstId]);
   // Streaming output, new turns, a resized panel: follow while at the bottom.
   useLayoutEffect(() => {
@@ -523,17 +565,18 @@ function useTranscriptScroll({
     const content = contentRef.current;
     if (!el || !content) return;
     const observer = new ResizeObserver(() => {
-      if (atBottomRef.current) toBottom();
-      remember();
+      if (atBottomRef.current) follow();
+      else record(el, glued(el) && !jumpingRef.current);
     });
     observer.observe(el);
     observer.observe(content);
     return () => observer.disconnect();
   }, []);
-  // Observed afresh after each page, so a top still in view loads the next.
+  // Observed afresh after each page, so a top still in view loads the next. Not while the
+  // conversation is coming in: the top of a few cached rows is not the reader reaching the top.
   useEffect(() => {
     const top = topRef.current;
-    if (!top || !hasOlder || loadingOlder) return;
+    if (!top || !hasOlder || loadingOlder || loading) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) onLoadOlder();
@@ -542,21 +585,34 @@ function useTranscriptScroll({
     );
     observer.observe(top);
     return () => observer.disconnect();
-  }, [hasOlder, loadingOlder, onLoadOlder]);
+  }, [hasOlder, loadingOlder, loading, onLoadOlder]);
 
   return {
     scrollRef,
     contentRef,
     topRef,
     onScroll: remember,
+    /** A wheel or a finger on the transcript: the next rise is the reader's, whatever else moved. */
+    onHand: () => {
+      handRef.current = true;
+    },
     toBottom,
     pinned,
     /** Jump to one message by id: the rail's whole job. */
     jumpTo: (id: string) => {
-      const el = scrollRef.current?.querySelector<HTMLElement>(
+      const el = scrollRef.current;
+      const row = el?.querySelector<HTMLElement>(
         `[data-mid="${CSS.escape(id)}"]`,
       );
-      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (!el || !row) return;
+      // Stop following now: the scroll takes many frames, and new output would undo the first ones.
+      const rise =
+        el.getBoundingClientRect().top - row.getBoundingClientRect().top;
+      if (rise >= GLUED_WITHIN) {
+        jumpingRef.current = true;
+        record(el, false);
+      }
+      row.scrollIntoView({ behavior: "smooth", block: "start" });
     },
     /** The first message visible, so the rail can light where you are reading. */
     active: () => {
@@ -629,26 +685,59 @@ const joinedNames = (message: MessageView, agents: readonly AgentView[]) =>
         .join("、")
     : "";
 
+/**
+ * A reply at work before its first block: one line the height of a thinking header, sweeping, where
+ * the thinking will start. Without it the row is a name over nothing for the seconds before the
+ * first token, which reads as stuck. Drawn at once (no skeleton hold): the wait is already long.
+ */
+function FirstToken({ boxed }: { boxed: boolean }) {
+  const { t: translateText } = useTranslation("chat");
+  return (
+    <div
+      role="status"
+      className={cn(
+        "flex items-center gap-2 px-[10px] py-[5px] font-mono text-[10px] tracking-[0.08em] text-faint uppercase",
+        // In the box the frame is the border; alone it is framed like the thinking block it becomes.
+        !boxed && "border",
+      )}
+    >
+      <span className="shrink-0">
+        {translateText("thinking.verbs.thinking")}
+      </span>
+      <Skeleton className="h-2 flex-1" />
+    </div>
+  );
+}
+
 /** A reply that is writing now: what its session has said and done in this run. */
 function LiveReply({
   sessionId,
+  runFrom,
   boxed,
+  waiting,
   author,
   time,
 }: {
   sessionId: string;
+  /** Where this reply's run starts in the session. */
+  runFrom: number | undefined;
   /** In a group the thinking and tools go in a fixed-height box. */
   boxed: boolean;
+  /** It is waiting on the reader, not working: no first-token placeholder. */
+  waiting: boolean;
   author?: string | undefined;
   time: string;
 }) {
-  const blocks = useRunBlocks(sessionId);
+  const blocks = useRunBlocks(sessionId, runFrom);
+  // Nothing from the run yet: the placeholder holds the place, and the first block replaces it.
+  const placeholder =
+    blocks.length === 0 && !waiting ? <FirstToken boxed={boxed} /> : null;
   const step = (block: (typeof blocks)[number]) =>
     block.type === "thinking" ? (
       <ThinkingBlock key={block.id} text={block.text} />
     ) : block.type === "tool" ? (
       <div key={block.id} className="tool-step space-y-1">
-        <ToolActivity block={block} />
+        <ToolActivity block={block} sessionId={sessionId} />
       </div>
     ) : null;
   const text = (block: (typeof blocks)[number]) =>
@@ -658,15 +747,17 @@ function LiveReply({
       </div>
     ) : null;
   if (!boxed)
-    return blocks.map((block) =>
-      block.type === "text" ? text(block) : step(block),
+    return (
+      placeholder ??
+      blocks.map((block) => (block.type === "text" ? text(block) : step(block)))
     );
   const steps = blocks.filter((block) => block.type !== "text");
   return (
     <>
-      {steps.length === 0 ? null : (
+      {steps.length === 0 && placeholder === null ? null : (
+        // Before the first token the box is already there, at work; its steps fill the same frame.
         <ProcessBox
-          steps={steps.map(step)}
+          steps={placeholder ?? steps.map(step)}
           count={steps.length}
           running
           // Text after the last tool or thinking block: the final response is being written.
@@ -795,7 +886,9 @@ const Turn = memo(
         {running && sessionId !== undefined ? (
           <LiveReply
             sessionId={sessionId}
+            runFrom={runFromOf(message.data)}
             boxed={boxed}
+            waiting={message.status === "waiting_for_input"}
             author={author}
             time={when(message.createdAt)}
           />
@@ -830,9 +923,9 @@ const Turn = memo(
         {/* The turn's own card layer: what it left for the reader to open, outside the process
             (see `TurnCards`). Inside the turn's frame, so its author and its time are the turn's. */}
         <TurnCards
-          turn={message}
           saved={tools}
           sessionId={running ? sessionId : undefined}
+          runFrom={runFromOf(message.data)}
           taskRows={taskRowsOf}
         />
         <div className="message-footer">
@@ -1066,28 +1159,40 @@ export function ChatPanel({
   const transcript = useTranscriptScroll({
     groupId,
     firstId: messages[0]?.id,
+    loading: loading ?? false,
     hasOlder,
     loadingOlder,
     onLoadOlder,
   });
 
+  // The rail is off until 设置 → 外观 turns it on; off, nothing below is worked out for it.
+  const showRail = useWorkspaceStore(
+    (state) => state.workspace.transcriptRail ?? false,
+  );
+  const chatWidth = useWorkspaceStore(
+    (state) => state.workspace.chatWidth ?? "standard",
+  );
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
   // What the rail numbers: the agent's replies (squares) and your own messages (circles). A
   // conversation with one of each has nothing to jump between, and the rail draws nothing. A task
   // row drawn inside a turn is not one of its own numbers, so it is not on the rail either.
   const railReplies = useMemo(
     () =>
-      rows
-        .filter((message) => message.author === "agent")
-        .map((message) => ({ id: message.id, text: message.text })),
-    [rows],
+      showRail
+        ? rows
+            .filter((message) => message.author === "agent")
+            .map((message) => ({ id: message.id, text: message.text }))
+        : [],
+    [rows, showRail],
   );
   const railPrompts = useMemo(
     () =>
-      rows
-        .filter((message) => message.author === "user")
-        .map((message) => ({ id: message.id, text: message.text })),
-    [rows],
+      showRail
+        ? rows
+            .filter((message) => message.author === "user")
+            .map((message) => ({ id: message.id, text: message.text }))
+        : [],
+    [rows, showRail],
   );
   // Composition state the keydown handler needs but the DOM only reports to other listeners.
   const ime = useRef({ composing: false, endedAt: 0 });
@@ -1333,9 +1438,12 @@ export function ChatPanel({
         send();
       }
     },
+    // Nothing read yet is not "no agents": the box says nothing until it knows.
     placeholder: groupName
       ? translateText("composer.placeholder", { agentName: groupName })
-      : translateText("composer.createAgentFirst"),
+      : loading
+        ? ""
+        : translateText("composer.createAgentFirst"),
     inputProps: {
       role: "combobox",
       "aria-autocomplete": "list",
@@ -1361,6 +1469,7 @@ export function ChatPanel({
     <section
       aria-label={translateText("navigation:sections.chat")}
       className="relative isolate flex h-full min-h-0 flex-col bg-background"
+      style={{ "--chat-width": chatWidths[chatWidth] } as CSSProperties}
     >
       {/* eta-old's timeline: a scroller that keeps clear of the rail on its right, and the rail
           pinned to the *viewport* rather than to the content — which is the whole difference
@@ -1372,8 +1481,12 @@ export function ChatPanel({
           onScroll={() => {
             transcript.onScroll();
             // Cheap enough: one pass over the rows that are actually in the DOM.
-            setActiveId(transcript.active());
+            if (showRail) setActiveId(transcript.active());
           }}
+          onWheel={(event) => {
+            if (event.deltaY < 0) transcript.onHand();
+          }}
+          onTouchMove={transcript.onHand}
           className="no-scrollbar h-full overflow-y-auto py-4 pr-14 pl-6"
         >
           {/* Floats over the transcript, which scrolls on beneath it and stays
@@ -1393,7 +1506,7 @@ export function ChatPanel({
             agents={agents}
             onChoose={onChoose}
           />
-          <div className="mx-auto max-w-[860px]">
+          <div className="mx-auto max-w-(--chat-width)">
             <div className="min-w-0">
               <div
                 ref={transcript.contentRef}
@@ -1441,12 +1554,12 @@ export function ChatPanel({
                   </p>
                 ) : null}
                 {loading && error === undefined && !messages.length ? (
-                  <p
-                    role="status"
-                    className="px-1 py-2 text-xs text-muted-foreground"
-                  >
-                    {translateText("history.loading")}
-                  </p>
+                  // The turns' outline, where the turns will land. The words stay as its name.
+                  <Loading
+                    layout="messages"
+                    rows={4}
+                    label={translateText("history.loading")}
+                  />
                 ) : null}
                 {!loading && !error && messages.length === 0 ? (
                   <p className="px-1 py-2 text-xs text-muted-foreground">
@@ -1571,14 +1684,16 @@ export function ChatPanel({
             </Button>
           )}
         </div>
-        <div className="absolute top-16 right-1">
-          <TranscriptRail
-            replies={railReplies}
-            prompts={railPrompts}
-            activeId={activeId}
-            onJump={transcript.jumpTo}
-          />
-        </div>
+        {showRail && (
+          <div className="absolute top-16 right-1">
+            <TranscriptRail
+              replies={railReplies}
+              prompts={railPrompts}
+              activeId={activeId}
+              onJump={transcript.jumpTo}
+            />
+          </div>
+        )}
       </div>
       {/*
        * The composer, copied from eta-old rather than improvised: `.input-area` → `.input-outer`
@@ -1591,7 +1706,7 @@ export function ChatPanel({
       <footer className="input-area">
         {/* Its own strip above the frame, not a row inside it: the frame is one thing — a notice,
             the box, the toolbar — and a message that has not been sent yet is not part of it. */}
-        <div className="mx-auto w-full max-w-[860px] px-1 pb-1.5">
+        <div className="mx-auto w-full max-w-(--chat-width) px-1 pb-1.5">
           {/* What is waiting behind the run in flight, over the box that would send it. */}
           <HeldMessages
             conversationId={groupId ?? ""}

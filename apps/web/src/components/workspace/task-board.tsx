@@ -1,12 +1,8 @@
-import type { WorkspaceState } from "./workspace-store";
 import type { Task, TaskStatus } from "@/queries/tasks";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
-import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
-import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
-import { KanbanIcon } from "@phosphor-icons/react/Kanban";
-import { ListIcon } from "@phosphor-icons/react/List";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
+import { SidebarSimpleIcon } from "@phosphor-icons/react/SidebarSimple";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -18,7 +14,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useAgentList } from "@/queries/agents";
 import { useTask, useTasks, useUpdateTask } from "@/queries/tasks";
@@ -26,14 +21,9 @@ import { wireErrorMessage } from "@/queries/wire";
 import { PageHeader } from "./app-shell";
 import { BackToTop } from "./back-to-top";
 import { when } from "./routine-format";
-import {
-  actorName,
-  ago,
-  createdBy,
-  statuses,
-  statusLabel,
-} from "./task-format";
+import { actorName, ago, createdBy, statusLabel } from "./task-format";
 import { useTaskNav } from "./task-nav";
+import { TaskPulls } from "./task-pulls";
 import { StatusIcon } from "./task-status-icon";
 import {
   CommentBox,
@@ -48,11 +38,10 @@ import {
   TaskProperties,
   Timeline,
 } from "./tasks";
-import { useWorkspaceStore } from "./workspace-store";
 
-// The task board as a full-window page: every task as rows grouped by status
-// or as a board to drag them across, or one open task in their place. The
-// task lays itself out by its own width (container queries), not the window's.
+// The task board as a full-window page: every task on a board to drag across
+// the statuses, or one open task in its place. The task lays itself out by its
+// own width (container queries), not the window's.
 
 const showError = (error: Error) => toast.error(wireErrorMessage(error));
 
@@ -66,141 +55,6 @@ const flow: TaskStatus[] = [
   "done",
   "cancelled",
 ];
-
-/** The status icon as a menu: change a task's status without opening it. */
-function StatusMenu({ task }: { task: Task }) {
-  const { t: translateText } = useTranslation([
-    "tasks",
-    "common",
-    "navigation",
-  ] as const);
-  const update = useUpdateTask();
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label={translateText("status.changeLabel", {
-            status: statusLabel(task.status),
-          })}
-          className="flex size-7 shrink-0 items-center justify-center outline-none hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring"
-        >
-          <StatusIcon status={task.status} />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-40">
-        {statuses.map((s) => (
-          <DropdownMenuItem
-            key={s.value}
-            disabled={s.value === task.status}
-            onSelect={() =>
-              update.mutate(
-                { taskId: task.id, status: s.value },
-                { onError: showError },
-              )
-            }
-          >
-            <StatusIcon status={s.value} />
-            {s.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-// --- list ---------------------------------------------------------------------------
-
-function ListView({
-  tasks,
-  selected,
-  hidden,
-}: {
-  tasks: readonly Task[];
-  /** The task last open, marked so the list reads as left. */
-  selected: string | null;
-  hidden: boolean;
-}) {
-  useTranslation(["tasks", "common", "navigation"] as const);
-  const [, setNav] = useTaskNav();
-  const { agents } = useAgentList();
-  const [open, setOpen] = useState<Record<string, boolean>>({});
-  const selectedRef = useRef<HTMLButtonElement>(null);
-  // Back from a task, focus returns to its row.
-  useEffect(() => {
-    if (!hidden) selectedRef.current?.focus();
-  }, [hidden]);
-  // Every group starts open; a click folds it.
-  const isOpen = (status: TaskStatus) => open[status] ?? true;
-  return (
-    <div className="mx-auto max-w-content pb-6">
-      {statuses.map(({ value, label }) => {
-        const group = tasks.filter((t) => t.status === value);
-        if (!group.length) return null;
-        return (
-          <section key={value} aria-label={label}>
-            <div className="sticky top-0 z-10 flex h-9 items-center border-b bg-muted">
-              <button
-                type="button"
-                aria-expanded={isOpen(value)}
-                onClick={() => setOpen({ ...open, [value]: !isOpen(value) })}
-                className="flex h-full flex-1 items-center gap-2 px-2 text-left text-xs font-medium outline-none focus-visible:underline"
-              >
-                {isOpen(value) ? (
-                  <CaretDownIcon aria-hidden="true" className="size-3" />
-                ) : (
-                  <CaretRightIcon aria-hidden="true" className="size-3" />
-                )}
-                <StatusIcon status={value} className="size-3.5" />
-                {label}
-                <span className="text-muted-foreground tabular-nums">
-                  {group.length}
-                </span>
-              </button>
-            </div>
-            {isOpen(value) ? (
-              <ul>
-                {group.map((task) => (
-                  <li
-                    key={task.id}
-                    className={cn(
-                      "flex h-10 items-center gap-1 border-b duration-[60ms] ease-linear hover:bg-muted/40",
-                      task.id === selected && "bg-muted hover:bg-muted",
-                    )}
-                  >
-                    <StatusMenu task={task} />
-                    <button
-                      ref={task.id === selected ? selectedRef : undefined}
-                      type="button"
-                      aria-current={task.id === selected || undefined}
-                      onClick={() => void setNav({ task: task.id })}
-                      className="grid h-full min-w-0 flex-1 grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-2 pr-2 text-left outline-none focus-visible:underline @lg:grid-cols-[3rem_minmax(0,1fr)_auto_minmax(0,12rem)_4.5rem]"
-                    >
-                      <span className="text-xs text-muted-foreground tabular-nums">
-                        #{task.number}
-                      </span>
-                      <span className="truncate text-sm">{task.title}</span>
-                      <span className="flex items-center gap-3 text-xs text-muted-foreground tabular-nums">
-                        <RunState task={task} />
-                        <Comments count={task.comments} />
-                      </span>
-                      <span className="hidden truncate text-xs text-muted-foreground @lg:block">
-                        {actorName(task.createdBy, agents)}
-                      </span>
-                      <span className="hidden text-right text-xs text-muted-foreground tabular-nums @lg:block">
-                        {ago(task.updatedAt)}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </section>
-        );
-      })}
-    </div>
-  );
-}
 
 // --- board --------------------------------------------------------------------------
 
@@ -299,6 +153,15 @@ function BoardView({ tasks }: { tasks: readonly Task[] }) {
 
 // --- task ---------------------------------------------------------------------------
 
+/** Wide enough for the document (~680px) and the properties (~280px) side by side. */
+const propertiesRail = "@4xl";
+
+/**
+ * One task as a document: the number, title, description and activity in a
+ * centered column, the properties always in a rail beside it. Narrower than
+ * that, the rail is out of the way and a button in the header opens it.
+ * The side panel (`TaskView`) is a different layout and is not this.
+ */
 function TaskPage({ id }: { id: string }) {
   const { t: translateText } = useTranslation([
     "tasks",
@@ -309,6 +172,8 @@ function TaskPage({ id }: { id: string }) {
   const { task, missing, error } = useTask(id);
   const { agents } = useAgentList();
   const [deleting, setDeleting] = useState(false);
+  // Opened from the header, only while the rail does not fit.
+  const [propertiesOpen, setPropertiesOpen] = useState(false);
   const back = () => void setNav({ task: null });
   // The list goes inert as the task opens; take focus so it doesn't fall to
   // <body>. Each branch below has its own <main>, so again once loaded.
@@ -318,19 +183,16 @@ function TaskPage({ id }: { id: string }) {
     mainRef.current?.focus({ preventScroll: true });
   }, [loaded]);
   const crumbs = (
-    <>
-      <button
-        type="button"
-        onClick={back}
-        className="flex items-center gap-1.5 text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
-      >
-        <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
-        {translateText("navigation:sections.tasks")}
-      </button>
-      {task ? (
-        <span className="truncate tabular-nums">#{task.number}</span>
-      ) : null}
-    </>
+    <button
+      type="button"
+      onClick={back}
+      className="flex min-w-0 items-center gap-1.5 text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
+    >
+      <ArrowLeftIcon aria-hidden="true" className="size-3.5 shrink-0" />
+      <span className="truncate">
+        {task ? task.title : translateText("navigation:sections.tasks")}
+      </span>
+    </button>
   );
   if (!task)
     return (
@@ -340,15 +202,28 @@ function TaskPage({ id }: { id: string }) {
           ref={mainRef}
           id="main"
           tabIndex={-1}
-          className="mx-auto w-full max-w-content px-4 py-6 outline-none sm:px-8"
+          className="mx-auto w-full max-w-[42.5rem] px-4 py-6 outline-none sm:px-8"
         >
           <TaskMissing missing={missing} error={error} />
         </main>
       </>
     );
+  const propertiesLabel = translateText("details.propertiesTab");
   return (
     <>
       <PageHeader title={crumbs}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={propertiesLabel}
+          aria-expanded={propertiesOpen}
+          aria-controls="task-properties"
+          title={propertiesLabel}
+          className={`${propertiesRail}:hidden`}
+          onClick={() => setPropertiesOpen((open) => !open)}
+        >
+          <SidebarSimpleIcon aria-hidden="true" />
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -379,19 +254,18 @@ function TaskPage({ id }: { id: string }) {
         ref={mainRef}
         id="main"
         tabIndex={-1}
-        className="mx-auto min-h-0 w-full max-w-content flex-1 overflow-y-auto outline-none @2xl:grid @2xl:grid-cols-[minmax(0,1fr)_18rem] @2xl:overflow-hidden"
+        className={`grid min-h-0 w-full flex-1 grid-cols-1 overflow-hidden outline-none ${propertiesRail}:grid-cols-[minmax(0,1fr)_17.5rem]`}
       >
-        <div className="@2xl:overflow-y-auto">
-          <div className="space-y-6 px-4 pb-6 sm:px-8">
-            {/* Pinned under the page header (任务 and the number) as the rest scrolls. */}
-            <div className="sticky top-0 z-10 mb-3 space-y-1 bg-background pt-4 pb-3">
-              <EditableTitle task={task} className="text-xl" />
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {createdBy(task, agents)}
-              </p>
-            </div>
+        <div className="min-h-0 overflow-y-auto">
+          <div className="mx-auto w-full max-w-[42.5rem] space-y-6 px-4 pt-4 pb-6 sm:px-8">
+            <p className="text-xs text-muted-foreground tabular-nums">
+              <span>#{task.number}</span>
+              {" · "}
+              {createdBy(task, agents)}
+            </p>
+            <EditableTitle task={task} className="text-xl" />
             <Question task={task} />
-            <Description key={task.description} task={task} />
+            <Description key={task.description} task={task} className="" />
             <section aria-labelledby="task-activity" className="space-y-3">
               <h2 id="task-activity" className="text-sm font-semibold">
                 {translateText("details.activityTab")}
@@ -399,17 +273,37 @@ function TaskPage({ id }: { id: string }) {
               <Timeline task={task} />
               <CommentBox
                 task={task}
+                className="sticky bottom-0 z-10 -mx-4 bg-background px-4 pt-2 pb-4 sm:-mx-8 sm:px-8"
                 top={<LiveRuns task={task} className="space-y-1 pb-1.5" />}
               />
             </section>
           </div>
-          <BackToTop className="px-4 sm:px-8" />
+          <BackToTop className="mx-auto max-w-[42.5rem] px-4 sm:px-8" />
         </div>
+        {propertiesOpen ? (
+          <button
+            type="button"
+            aria-label={propertiesLabel}
+            className={`fixed inset-0 z-20 bg-black/20 ${propertiesRail}:hidden`}
+            onClick={() => setPropertiesOpen(false)}
+          />
+        ) : null}
         <aside
-          aria-label={translateText("details.propertiesTab")}
-          className="border-t px-4 py-5 text-xs sm:px-8 @2xl:overflow-y-auto @2xl:border-t-0 @2xl:border-l @2xl:px-4"
+          id="task-properties"
+          aria-label={propertiesLabel}
+          // Narrow: `hidden` takes it out of the one-column grid until the
+          // header opens it over the document. Wide (`@4xl`): `@4xl:block`
+          // wins over that, so the rail stays in the second column.
+          className={cn(
+            "overflow-y-auto border-l bg-background px-4 py-5 text-xs",
+            "@4xl:static @4xl:z-auto @4xl:block @4xl:w-auto @4xl:shadow-none",
+            propertiesOpen
+              ? "fixed top-12 right-0 bottom-0 z-30 block w-[17.5rem] shadow-md"
+              : "hidden",
+          )}
         >
           <TaskProperties task={task}>
+            <TaskPulls task={task} />
             <dt className="text-xs leading-8 text-muted-foreground">
               {translateText("fields.updatedAt")}
             </dt>
@@ -431,17 +325,9 @@ export function TaskBoard() {
   ] as const);
   const [nav] = useTaskNav();
   const { tasks, loaded, error } = useTasks();
-  // Remembered in this browser, so the page opens as it was left.
-  const layout = useWorkspaceStore((s) => s.workspace.taskLayout ?? "list");
-  const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
-  const setView = (changes: Pick<WorkspaceState, "taskLayout">) =>
-    setWorkspace((workspace) => ({ ...workspace, ...changes }));
   const id = nav.task ?? null;
-  const [last, setLast] = useState(id);
-  if (id && id !== last) setLast(id);
-  const board = layout === "board";
-  // An open task takes the page; the list stays behind it, laid out but
-  // unseen, so going back finds it scrolled and folded as it was left.
+  // An open task takes the page; the board stays behind it, laid out but
+  // unseen, so going back finds it scrolled as it was left.
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
       <div
@@ -462,42 +348,13 @@ export function TaskBoard() {
               ) : null}
             </>
           }
-        >
-          <Tabs
-            value={layout}
-            onValueChange={(value) =>
-              setView({ taskLayout: value as typeof layout })
-            }
-          >
-            <TabsList aria-label={translateText("layout.label")}>
-              <TabsTrigger
-                value="list"
-                aria-label={translateText("layout.list")}
-                title={translateText("layout.list")}
-                className="px-2"
-              >
-                <ListIcon aria-hidden="true" />
-              </TabsTrigger>
-              <TabsTrigger
-                value="board"
-                aria-label={translateText("layout.board")}
-                title={translateText("layout.board")}
-                className="px-2"
-              >
-                <KanbanIcon aria-hidden="true" />
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </PageHeader>
+        />
         {/* The page's main until a task takes the page; the same element
-            either way, so the list keeps its place behind the task. */}
+            either way, so the board keeps its place behind the task. */}
         <section
           role={id ? undefined : "main"}
           id={id ? undefined : "main"}
-          className={cn(
-            "min-h-0 flex-1",
-            board ? "overflow-hidden" : "overflow-y-auto scroll-pt-9",
-          )}
+          className="min-h-0 flex-1 overflow-hidden"
         >
           {error ? (
             <div className="mx-auto max-w-md py-16">
@@ -514,10 +371,8 @@ export function TaskBoard() {
                 {translateText("empty.description")}
               </Empty>
             </div>
-          ) : board ? (
-            <BoardView tasks={tasks} />
           ) : (
-            <ListView tasks={tasks} selected={last} hidden={Boolean(id)} />
+            <BoardView tasks={tasks} />
           )}
         </section>
       </div>

@@ -25,6 +25,7 @@ import type { Emit } from "../types/events";
 import type { AgentMessage, ThinkingLevel } from "../types/messages";
 import type { CompactionDriver } from "./compaction";
 import type { ConfigService } from "./config";
+import type { RunDelegate } from "./delegate";
 import type { Gate, GateControl } from "./effect-gate";
 import type { GenerationInterrupt } from "./generation";
 import type { GoalService } from "./goal";
@@ -130,6 +131,12 @@ export interface RunnerOptions {
   guardGeneration?: (frame: GenerationFrame) => GenerationVerdict;
   /** Interrupts honoured per turn (default `DEFAULT_MAX_INTERRUPTS`); the guard is not asked past it. */
   maxInterrupts?: number;
+  /**
+   * Someone else takes this session's runs (an external agent runtime, `delegate.ts`). The
+   * runner keeps the run's lifecycle, its inbox, its abort and its durability; the turns are the
+   * delegate's. Without one, the runner's own loop takes them.
+   */
+  delegate?: RunDelegate;
 }
 
 /** One stream frame, as the generation guard sees it. */
@@ -469,7 +476,16 @@ export class Runner {
     this.emit("turn:run-start", { runId, startedAt: Date.now() });
     // What a run takes when it starts: next-run items always, steering and
     // follow-ups per their modes. They become the run's opening transcript.
-    this.adopt(this.kernel.acceptInbox());
+    const opening = this.kernel.acceptInbox();
+    this.adopt(opening);
+    if (this.options.delegate !== undefined) {
+      return await this.runDelegated(
+        this.options.delegate,
+        runId,
+        gate,
+        opening.map((item) => item.message),
+      );
+    }
     // Compaction's threshold check belongs to the first turn of every run, not
     // to the first turn this kernel ever ran: a session can grow past the
     // ceiling between two runs, and the second one must still notice.
@@ -601,6 +617,71 @@ export class Runner {
         throw caught;
       }
     }
+    return await this.endRun(runId, status, error);
+  }
+
+  /**
+   * A run the delegate takes. The opening is already adopted; what the delegate reports in
+   * between is its own, and how the run ends is announced here exactly as for the loop's run.
+   * A delegate that throws failed, unless the run was being cancelled: then that is the abort.
+   */
+  private async runDelegated(
+    delegate: RunDelegate,
+    runId: string,
+    gate: Gate,
+    opening: readonly AgentMessage[],
+  ): Promise<RunResult> {
+    let status: RunResult["status"] = "completed";
+    let error: string | undefined;
+    this.currentRunId = runId;
+    try {
+      const outcome = await this.track(
+        delegate.run({
+          runId,
+          opening,
+          signal: gate.signal,
+          emit: this.emit,
+          noteTurn: () => this.kernel.noteTurn(),
+          push: (message) => this.push(message),
+          take: ({ followUps }) => {
+            const { steers, followUps: taken } = this.kernel.takeAtBoundary({
+              followUpWhenNoTrigger: followUps,
+            });
+            const items = [...steers, ...taken];
+            this.adopt(items);
+            return items.map((item) => item.message);
+          },
+          onInput: (listener) => this.kernel.inbox.subscribe(() => listener()),
+          config: () => this.config.get(),
+          tools: () => this.tools.list(),
+          executeTool: async (name, args, call) =>
+            await this.tools.execute(name, args, {
+              turn: this.kernel.turns,
+              toolCallId: call.toolCallId,
+              signal: gate.signal,
+              toolContext: await this.resolveToolContext(),
+              ...(call.update === undefined ? {} : { update: call.update }),
+            }),
+        }),
+      );
+      status = outcome.status;
+      if (outcome.status === "failed")
+        error = outcome.error ?? "the runtime failed";
+    } catch (caught) {
+      if (cancellationOf(gate.signal) !== undefined || isAbortError(caught))
+        status = "aborted";
+      else error = caught instanceof Error ? caught.message : String(caught);
+    }
+    return await this.endRun(runId, status, error);
+  }
+
+  /** How every run ends: the failure (if any), the durability wait, then `turn:run-end`. */
+  private async endRun(
+    runId: string,
+    ended: RunResult["status"],
+    error: string | undefined,
+  ): Promise<RunResult> {
+    let status = ended;
     if (error !== undefined) {
       status = "failed";
       // The failure is announced before the flush, so the journal's record of it

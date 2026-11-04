@@ -268,6 +268,7 @@ export {
   type ViewServiceOptions,
   type ViewSources,
   type ViewSystemRow,
+  withoutImageData,
 } from "./view";
 export {
   type EnvCallOptions,

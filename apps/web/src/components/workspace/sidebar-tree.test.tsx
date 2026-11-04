@@ -1,9 +1,11 @@
 import type { ConversationSummary } from "@eta/client-contracts";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import { translate } from "@/lib/i18n";
 import { setWire } from "@/lib/wire";
 import {
   agentView,
+  buildProductHost,
   conversationView,
   machineView,
   memberView,
@@ -64,6 +66,28 @@ const projects = [
     path: "/data/agents/a1",
     kind: "agent_home",
   }),
+  // On another machine: the same path as p-eta, and one under that machine's own home.
+  projectView({
+    id: "p-eta-gpu",
+    machineId: "m2",
+    name: "eta",
+    path: "/Users/me/Desktop/eta",
+  }),
+  projectView({
+    id: "p-train",
+    machineId: "m2",
+    name: "training",
+    path: "/home/eric/training",
+  }),
+];
+const machines = [
+  machineView({ id: "m1", name: "这台", home: "/Users/me" }),
+  machineView({
+    id: "m2",
+    kind: "daemon",
+    name: "gpu-box",
+    home: "/home/eric",
+  }),
 ];
 
 const group = (
@@ -103,7 +127,7 @@ async function tree(
   const host = productHost({
     agents,
     projects,
-    machines: [machineView({ id: "m1", name: "这台", home: "/Users/me" })],
+    machines,
     conversations,
   });
   host.target(
@@ -147,15 +171,6 @@ const cards = (container: HTMLElement) =>
     text: node.textContent,
     title: node.getAttribute("title"),
   }));
-const conversationIds = (container: HTMLElement) =>
-  [
-    ...(groupsSection(container)?.querySelectorAll(
-      "[data-slot=conversation-id]",
-    ) ?? []),
-  ].map((node) => ({
-    text: node.textContent,
-    title: node.getAttribute("title"),
-  }));
 const groupRows = (container: HTMLElement) =>
   [
     ...(groupsSection(container)?.querySelectorAll(
@@ -172,14 +187,77 @@ const agentNames = (container: HTMLElement) =>
     (row) => row.querySelector("[data-slot=agent-name]")?.textContent,
   );
 
+// A card's own box: a `border` or a resting `bg-` utility on the card itself. The cards are flat
+// rows; the list draws one rule between two, and only hover and selection fill a row.
+const box = /(^|\s)(border|bg-)/;
+
+describe("hello 之前的侧边栏", () => {
+  it("draws both lists' outlines instead of saying they are empty", async () => {
+    buildProductHost({ agents, projects, conversations: [] }).install();
+    const { container } = await mount(
+      <SidebarProvider>
+        <ConversationList />
+      </SidebarProvider>,
+    );
+    await flush();
+    expect(
+      groupsSection(container)?.querySelector('[role="status"]'),
+    ).not.toBeNull();
+    expect(
+      agentsSection(container)?.querySelector('[role="status"]'),
+    ).not.toBeNull();
+    expect(container.textContent).not.toContain(
+      translate("chat:groups.empty.title"),
+    );
+    expect(container.textContent).not.toContain(
+      translate("chat:sections.noAgents"),
+    );
+  });
+
+  it("says they are empty once they arrive, with no outline left", async () => {
+    productHost({ projects, conversations: [] });
+    const { container } = await mount(
+      <SidebarProvider>
+        <ConversationList />
+      </SidebarProvider>,
+    );
+    await flush();
+    expect(container.querySelector('[role="status"]')).toBeNull();
+    expect(container.textContent).toContain(
+      translate("chat:groups.empty.title"),
+    );
+    expect(container.textContent).toContain(
+      translate("chat:sections.noAgents"),
+    );
+  });
+});
+
 describe("侧边栏的两块", () => {
-  it("卡片上写着会话 id 和缩写路径，悬停给全路径", async () => {
-    const { container } = await tree([group("g1", "装配", "p-eta")]);
+  it("卡片上写着缩写路径，悬停给全路径，不写会话 id", async () => {
+    const { container } = await tree([group("group-id", "装配", "p-eta")]);
     // The directory the group runs in is part of what the group is, so it is on the card.
     expect(cards(container)).toEqual([
       { text: "~/Desktop/eta", title: "/Users/me/Desktop/eta" },
     ]);
-    expect(conversationIds(container)[0]?.title).toBe("g1");
+    expect(groupsSection(container)?.textContent).not.toContain("group-id");
+  });
+
+  it("别的机器上的目录带着机器名，按那台机器的 home 缩写", async () => {
+    const now = Date.now();
+    const { container } = await tree([
+      group("g1", "eta", "p-eta", { lastMessageAt: now - 60_000 }),
+      group("g2", "eta", "p-eta-gpu", { lastMessageAt: now - 120_000 }),
+      group("g3", "训练", "p-train", { lastMessageAt: now - 180_000 }),
+    ]);
+    // One path on two machines is two places, and the cards say which is which.
+    expect(cards(container)).toEqual([
+      { text: "~/Desktop/eta", title: "/Users/me/Desktop/eta" },
+      {
+        text: "gpu-box:/Users/me/Desktop/eta",
+        title: "gpu-box:/Users/me/Desktop/eta",
+      },
+      { text: "gpu-box:~/training", title: "gpu-box:/home/eric/training" },
+    ]);
   });
 
   it("同目录的卡片挨在一起", async () => {
@@ -200,7 +278,8 @@ describe("侧边栏的两块", () => {
     const { container } = await tree([
       group("g1", "旧的", "p-eta", { lastMessageAt: now - 7_200_000 }),
       group("g2", "新的", "p-eta", { lastMessageAt: now - 60_000 }),
-      group("g3", "别处", "p-house"),
+      // Older than "新的" from the same `now`, but newer than "旧的".
+      group("g3", "别处", "p-house", { lastMessageAt: now - 3_600_000 }),
     ]);
     expect(new Set(cards(container).map((card) => card.text)).size).toBe(2);
     // Within the directory: newest first. Across directories: newest first as well.
@@ -221,6 +300,39 @@ describe("侧边栏的两块", () => {
     expect(members("装配")).toHaveLength(0);
   });
 
+  it("卡片是平铺的行：不套框、不铺底，行间一条线，线贴到侧栏两边", async () => {
+    useWorkspaceStore.setState({ workspace: { selectedGroupId: "g2" } });
+    const { container } = await tree([
+      group("g1", "装配", "p-eta"),
+      group("g2", "装修", "p-eta"),
+    ]);
+    const item = (id: string) =>
+      container.querySelector<HTMLElement>(
+        `[data-sidebar="menu-item"]:has([title="${id}"])`,
+      )!;
+    expect(item("装配").className).not.toMatch(box);
+    expect(item("装配").className).toContain("hover:bg-sidebar-accent");
+    // 选中的只多一层底色。
+    expect(item("装修").className).toContain("bg-sidebar-accent");
+    const agents = [
+      ...agentsSection(container)!.querySelectorAll<HTMLElement>(
+        "[data-sidebar=menu-item]",
+      ),
+    ];
+    expect(agents.length).toBeGreaterThan(0);
+    for (const card of agents) expect(card.className).not.toMatch(box);
+    for (const section of [
+      groupsSection(container)!,
+      agentsSection(container)!,
+    ]) {
+      // 行间的线由列表画，分区不留左右 padding，线和组头下面那条一样贴到两边。
+      expect(section.querySelector("[data-sidebar=menu]")?.className).toContain(
+        "divide-y",
+      );
+      expect(section.className).toContain("px-0");
+    }
+  });
+
   it("三角能把没选中的群也打开", async () => {
     useWorkspaceStore.setState({ workspace: { selectedGroupId: "g2" } });
     const { container } = await tree([
@@ -232,6 +344,19 @@ describe("侧边栏的两块", () => {
     )!;
     await click(row.querySelector('[aria-label="展开成员"]'));
     expect(row.querySelectorAll("[data-slot=member-row]")).toHaveLength(2);
+  });
+
+  it("点击区铺满卡片，不盖到展开的成员上", async () => {
+    useWorkspaceStore.setState({ workspace: { selectedGroupId: "g1" } });
+    const { container } = await tree([group("g1", "装配", "p-eta")]);
+    const target = container.querySelector<HTMLElement>('[title="装配"]')!;
+    expect(target.className).toContain("inset-0");
+    const card = target.parentElement!;
+    expect(card.querySelector("[data-slot=conversation-path]")).not.toBeNull();
+    expect(card.querySelector("[data-slot=member-row]")).toBeNull();
+    expect(
+      card.parentElement?.querySelectorAll("[data-slot=member-row]"),
+    ).toHaveLength(2);
   });
 
   it("忙着的成员不只是一个色块，读屏能听到状态", async () => {
@@ -317,6 +442,17 @@ describe("侧边栏的两块", () => {
       agentId: null,
     });
   });
+
+  it("组头的两个 + 只有图标，不带边框，点击区域不变", async () => {
+    const { container } = await tree([group("g1", "装配", "p-eta")]);
+    for (const add of [
+      groupsSection(container)!.querySelector('button[title="新对话"]')!,
+      agentsSection(container)!.querySelector('button[title="新建智能体"]')!,
+    ]) {
+      expect(add.className).not.toContain("border");
+      expect(add.className).toContain("size-6");
+    }
+  });
 });
 
 describe("折叠成图标栏", () => {
@@ -373,6 +509,27 @@ describe("折叠成图标栏", () => {
         (child) => child.tagName !== "BUTTON",
       ),
     ).toHaveLength(1);
+  });
+
+  it("rail 上的卡片也是平铺的行，没有框也没有底色", async () => {
+    const { container } = await tree([group("g1", "装配", "p-eta")], {
+      open: false,
+    });
+    const cards = [
+      ...groupsSection(container)!.querySelectorAll<HTMLElement>(
+        "[data-sidebar=menu-item]",
+      ),
+      ...agentsSection(container)!.querySelectorAll<HTMLElement>(
+        "[data-sidebar=menu-item]",
+      ),
+    ];
+    expect(cards.length).toBeGreaterThan(1);
+    for (const card of cards) {
+      // Only the open group is filled, and only with the selected fill.
+      if (card.dataset.active === "true")
+        expect(card.className).toContain("bg-sidebar-accent");
+      else expect(card.className).not.toMatch(box);
+    }
   });
 
   it("有未读时 rail 卡片角上是数字", async () => {

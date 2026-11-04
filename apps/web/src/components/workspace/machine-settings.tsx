@@ -1,6 +1,4 @@
 import type { MachineView } from "@eta/client-contracts";
-import type { ReactNode } from "react";
-import { CopyIcon } from "@phosphor-icons/react/Copy";
 import { DesktopIcon } from "@phosphor-icons/react/Desktop";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
@@ -22,7 +20,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -36,19 +33,20 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
-  useApproveMachine,
-  useEnrollMachine,
   useRenameMachine,
   useRevokeMachine,
   useSetMaxActiveRuns,
+  useUpgradeMachine,
 } from "@/queries/machines";
 import { useMachines } from "@/queries/projects";
 import { wireErrorMessage } from "@/queries/wire";
+import { AddMachine, Approval } from "./add-machine";
 import { when } from "./routine-format";
 
-// Settings → 机器: the primary and the machines that run the daemon. A machine joins by an install
-// command, shows up here as pending, and is let in when the user pastes back the fingerprint its
-// terminal printed.
+// Settings → 机器: the primary and the machines that run the daemon. Adding one turns this panel
+// into the way in (`add-machine.tsx`): a command to run on it, or an install over SSH. A machine
+// shows up here pending until its fingerprint is approved; the user's own tailnet nodes are let in
+// without one.
 
 const showError = (error: Error) => toast.error(wireErrorMessage(error));
 
@@ -58,7 +56,7 @@ const osLabels: Record<string, string> = {
   windows: "Windows",
 };
 
-function StatusDot({
+export function StatusDot({
   status,
   label,
 }: {
@@ -74,252 +72,9 @@ function StatusDot({
         "size-1.5 shrink-0",
         status === "online" && "bg-state-success",
         status === "pending" && "bg-state-warning",
-        (status === "offline" || status === "revoked") &&
-          "bg-muted-foreground/40",
+        status === "offline" && "bg-muted-foreground/40",
       )}
     />
-  );
-}
-
-/** A pending machine: approved once the pasted fingerprint is the one its terminal printed. */
-function Approval({ machine }: { machine: MachineView }) {
-  const { t: translateText } = useTranslation(["machines", "common"] as const);
-  const approve = useApproveMachine();
-  const [fingerprint, setFingerprint] = useState("");
-  const submit = () => {
-    if (!fingerprint.trim() || approve.isPending) return;
-    approve.mutate(
-      { machineId: machine.id, fingerprint: fingerprint.trim() },
-      {
-        onSuccess: () =>
-          toast(translateText("approval.approved", { name: machine.name })),
-        onError: showError,
-      },
-    );
-  };
-  return (
-    <form
-      className="space-y-1.5 bg-muted px-3 py-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        submit();
-      }}
-    >
-      <p className="text-xs text-muted-foreground">
-        {translateText("approval.request", { name: machine.name })}
-      </p>
-      <div className="flex items-center gap-2">
-        <Input
-          aria-label={translateText("approval.label", { name: machine.name })}
-          placeholder={translateText("approval.placeholder")}
-          value={fingerprint}
-          onChange={(event) => setFingerprint(event.target.value)}
-          spellCheck={false}
-          autoComplete="off"
-          className="font-mono"
-        />
-        <Button
-          type="submit"
-          size="sm"
-          disabled={!fingerprint.trim() || approve.isPending}
-        >
-          {translateText("common:actions.approve")}
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-function Step({
-  n,
-  title,
-  active,
-  children,
-}: {
-  n: number;
-  title: string;
-  active: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <li
-      aria-current={active ? "step" : undefined}
-      className="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-x-2 gap-y-1.5"
-    >
-      <span
-        aria-hidden="true"
-        className={cn(
-          "flex size-5 items-center justify-center text-xs tabular-nums",
-          active
-            ? "bg-primary text-primary-foreground"
-            : "bg-muted text-muted-foreground",
-        )}
-      >
-        {n}
-      </span>
-      <p
-        className={cn(
-          "self-center text-sm font-medium",
-          !active && "text-muted-foreground",
-        )}
-      >
-        {title}
-      </p>
-      <div className="col-start-2 space-y-2">{children}</div>
-    </li>
-  );
-}
-
-function CommandBox({ command }: { command: string }) {
-  const { t: translateText } = useTranslation(["machines", "common"] as const);
-  return (
-    <div className="flex items-stretch border">
-      <code className="min-w-0 flex-1 overflow-x-auto px-2 py-1.5 font-mono text-xs whitespace-nowrap">
-        {command}
-      </code>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        className="h-auto shrink-0 border-l"
-        aria-label={translateText("install.copyCommand")}
-        onClick={() =>
-          void navigator.clipboard
-            .writeText(command)
-            .then(() => toast(translateText("common:feedback.copied")))
-        }
-      >
-        <CopyIcon aria-hidden="true" />
-      </Button>
-    </div>
-  );
-}
-
-interface Made {
-  command: string;
-  expiresAt: number;
-  /** The machines that existed when the command was made: the new one is not among them. */
-  known: ReadonlySet<string>;
-}
-
-/**
- * One machine's way in, all three steps in view from the start: a name, the install command, then
- * the machine appearing and being approved.
- */
-function EnrollDialog({
-  machines,
-  onClose,
-}: {
-  machines: readonly MachineView[];
-  onClose: () => void;
-}) {
-  const { t: translateText } = useTranslation(["machines", "common"] as const);
-  const enroll = useEnrollMachine();
-  const [name, setName] = useState("");
-  const [made, setMade] = useState<Made>();
-  const arrived = made
-    ? machines.filter(
-        (machine) =>
-          machine.status === "pending" && !made.known.has(machine.id),
-      )
-    : [];
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[calc(100%-2rem)] gap-4 sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{translateText("install.title")}</DialogTitle>
-          <DialogDescription>
-            {translateText("install.permissionsNotice")}
-          </DialogDescription>
-        </DialogHeader>
-        <ol className="space-y-4">
-          <Step
-            n={1}
-            title={translateText("install.chooseName")}
-            active={!made}
-          >
-            {made ? (
-              <p className="text-sm text-muted-foreground">
-                {name.trim() || "—"}
-              </p>
-            ) : (
-              <form
-                className="flex gap-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  if (enroll.isPending) return;
-                  const known = new Set(machines.map((machine) => machine.id));
-                  enroll.mutate(
-                    {
-                      ...(name.trim() ? { name: name.trim() } : {}),
-                      url: location.origin,
-                    },
-                    {
-                      onSuccess: ({ command, expiresAt }) =>
-                        setMade({ command, expiresAt, known }),
-                      onError: showError,
-                    },
-                  );
-                }}
-              >
-                <Input
-                  aria-label={translateText("fields.nameLabel")}
-                  placeholder={translateText("fields.namePlaceholder")}
-                  maxLength={100}
-                  autoFocus
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                />
-                <Button type="submit" disabled={enroll.isPending}>
-                  {translateText("install.generateCommand")}
-                </Button>
-              </form>
-            )}
-          </Step>
-          <Step
-            n={2}
-            title={translateText("install.runCommand")}
-            active={Boolean(made) && arrived.length === 0}
-          >
-            {made ? (
-              <>
-                <CommandBox command={made.command} />
-                <p className="text-xs text-muted-foreground">
-                  {translateText("install.commandExpiry", {
-                    time: when(made.expiresAt),
-                  })}
-                </p>
-              </>
-            ) : null}
-          </Step>
-          <Step
-            n={3}
-            title={translateText("approval.title")}
-            active={arrived.length > 0}
-          >
-            {arrived.length > 0 ? (
-              <div aria-live="polite" className="space-y-2">
-                {arrived.map((machine) => (
-                  <Approval key={machine.id} machine={machine} />
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                {made
-                  ? translateText("install.waitingForCommand")
-                  : translateText("approval.help")}
-              </p>
-            )}
-          </Step>
-        </ol>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            {made
-              ? translateText("common:actions.close")
-              : translateText("common:actions.cancel")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -440,32 +195,39 @@ function RunsDialog({
 function MachineCard({ machine }: { machine: MachineView }) {
   const { t: translateText } = useTranslation(["machines", "common"] as const);
   const revoke = useRevokeMachine();
+  const upgrade = useUpgradeMachine();
   const [confirming, setConfirming] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [limiting, setLimiting] = useState(false);
   const status = translateText(`status.${machine.status}`);
+  // The line truncates, so what an offline machine's card is there to say, when it was last seen,
+  // goes first. Every machine but the primary runs the daemon, so only the primary is marked. The
+  // build is only worth reading when it is behind, which the header says in words; the exact one
+  // is on hover there.
   const details = [
-    translateText(`kinds.${machine.kind}`),
-    machine.os ? (osLabels[machine.os] ?? machine.os) : null,
-    machine.home,
-    machine.status === "pending" || machine.status === "revoked"
-      ? null
-      : translateText("runs.summary", { count: machine.maxActiveRuns }),
     machine.status === "offline" && machine.lastSeenAt !== null
       ? translateText("lastSeen", { time: when(machine.lastSeenAt) })
       : null,
+    machine.kind === "primary" ? translateText("kinds.primary") : null,
+    machine.os ? (osLabels[machine.os] ?? machine.os) : null,
+    machine.home,
+    machine.status === "pending"
+      ? null
+      : translateText("runs.summary", { count: machine.maxActiveRuns }),
   ]
     .filter(Boolean)
     .join(" · ");
-  const closed = machine.status === "revoked";
+  const build =
+    machine.build === "outdated" || machine.build === "updating"
+      ? translateText(`build.${machine.build}`)
+      : null;
+  const updatable =
+    machine.kind === "daemon" &&
+    machine.status === "online" &&
+    (machine.build === "outdated" || machine.updateError !== null);
 
   return (
-    <li
-      className={cn(
-        "flex min-w-0 flex-col gap-2 border p-3",
-        closed && "text-muted-foreground",
-      )}
-    >
+    <li className="flex min-w-0 flex-col gap-2 border p-3">
       <div className="flex min-w-0 items-center gap-2">
         <StatusDot status={machine.status} label={status} />
         <span
@@ -474,42 +236,78 @@ function MachineCard({ machine }: { machine: MachineView }) {
         >
           {machine.name}
         </span>
-        <span className="text-xs text-muted-foreground">{status}</span>
-        {closed ? null : (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={translateText("common:accessibility.itemActions", {
-                  name: machine.name,
-                })}
+        <span
+          className="text-xs text-muted-foreground"
+          title={
+            machine.version === null
+              ? undefined
+              : translateText("build.version", { version: machine.version })
+          }
+        >
+          {build === null ? status : `${status} · ${build}`}
+        </span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={translateText("common:accessibility.itemActions", {
+                name: machine.name,
+              })}
+            >
+              <DotsThreeIcon aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => setRenaming(true)}>
+              {translateText("actions.rename")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setLimiting(true)}>
+              {translateText("actions.runs")}
+            </DropdownMenuItem>
+            {updatable ? (
+              <DropdownMenuItem
+                disabled={upgrade.isPending}
+                onSelect={() =>
+                  upgrade.mutate(
+                    { machineId: machine.id },
+                    {
+                      onSuccess: () =>
+                        toast(
+                          translateText("upgrade.started", {
+                            name: machine.name,
+                          }),
+                        ),
+                      onError: showError,
+                    },
+                  )
+                }
               >
-                <DotsThreeIcon aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => setRenaming(true)}>
-                {translateText("actions.rename")}
+                {translateText("actions.upgrade")}
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setLimiting(true)}>
-                {translateText("actions.runs")}
+            ) : null}
+            {machine.kind === "primary" ? null : (
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={() => setConfirming(true)}
+              >
+                {translateText("actions.revoke")}
               </DropdownMenuItem>
-              {machine.kind === "primary" ? null : (
-                <DropdownMenuItem
-                  variant="destructive"
-                  onSelect={() => setConfirming(true)}
-                >
-                  {translateText("actions.revoke")}
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {details ? (
         <p className="truncate text-xs text-muted-foreground" title={details}>
           {details}
+        </p>
+      ) : null}
+      {machine.updateError !== null ? (
+        <p
+          className="text-xs break-words text-state-warning"
+          title={machine.updateError}
+        >
+          {machine.updateError}
         </p>
       ) : null}
       {machine.status === "pending" ? <Approval machine={machine} /> : null}
@@ -535,17 +333,18 @@ function MachineCard({ machine }: { machine: MachineView }) {
             </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
+              // The host lists the machine as revoked before it answers, and this card goes with
+              // it, so the answer is waited for here: callbacks given to `mutate` would not run.
               onClick={() =>
-                revoke.mutate(
-                  { machineId: machine.id },
-                  {
-                    onSuccess: () =>
+                void revoke
+                  .mutateAsync({ machineId: machine.id })
+                  .then(
+                    () =>
                       toast(
                         translateText("revoke.success", { name: machine.name }),
                       ),
-                    onError: showError,
-                  },
-                )
+                    showError,
+                  )
               }
             >
               {translateText("actions.revoke")}
@@ -561,19 +360,19 @@ function MachineCard({ machine }: { machine: MachineView }) {
 export function MachineSettings() {
   const { t: translateText } = useTranslation(["machines", "common"] as const);
   const { machines, loaded, error } = useMachines();
-  const [enrolling, setEnrolling] = useState(0);
+  const [adding, setAdding] = useState(false);
+  // A revoked machine can do nothing more, and comes back only as a new machine when added
+  // again, so it is not listed.
+  const shown = machines.filter((machine) => machine.status !== "revoked");
   // The primary is always there; "none yet" is about the others.
-  const others = machines.filter((machine) => machine.kind !== "primary");
+  const others = shown.filter((machine) => machine.kind !== "primary");
+  if (adding) return <AddMachine onBack={() => setAdding(false)} />;
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">{translateText("title")}</h2>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setEnrolling((n) => n + 1)}
-        >
+        <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
           <PlusIcon aria-hidden="true" data-icon="inline-start" />
           {translateText("actions.add")}
         </Button>
@@ -589,7 +388,7 @@ export function MachineSettings() {
               aria-label={translateText("title")}
               className="grid grid-cols-1 gap-2 @lg:grid-cols-2"
             >
-              {machines.map((machine) => (
+              {shown.map((machine) => (
                 <MachineCard key={machine.id} machine={machine} />
               ))}
             </ul>
@@ -601,13 +400,6 @@ export function MachineSettings() {
           ) : null}
         </>
       )}
-      {enrolling > 0 ? (
-        <EnrollDialog
-          key={enrolling}
-          machines={machines}
-          onClose={() => setEnrolling(0)}
-        />
-      ) : null}
     </div>
   );
 }

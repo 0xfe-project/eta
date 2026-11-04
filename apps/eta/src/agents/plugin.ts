@@ -1,4 +1,9 @@
-import type { AgentView, ThinkingLevel } from "@eta/client-contracts";
+import type {
+  AgentRuntime,
+  AgentRuntimeInfo,
+  AgentView,
+  ThinkingLevel,
+} from "@eta/client-contracts";
 import type { CallFrame } from "@eta/client-wire-proto";
 /**
  * The `agents` plugin: the register of who can be talked to.
@@ -21,6 +26,7 @@ import type { MachineStore } from "../machines/store";
 import type { ProjectStore } from "../projects/store";
 import type { AgentRecord, AgentStore } from "./store";
 import { mkdir, rm } from "node:fs/promises";
+import { AGENT_RUNTIMES } from "@eta/client-contracts";
 import { THINKING_LEVELS } from "@eta/core";
 import { summaryOf } from "../conversations/views";
 import { Args, productPlugin, publish } from "../wire";
@@ -40,6 +46,12 @@ export interface AgentsDeps {
   created: (conversationId: string) => void;
   /** An agent is gone: whatever it was given outside the database goes with it. */
   removed: (agentId: string) => void;
+  /** The external runtimes this host has, with their models; absent when it runs none. */
+  runtimes?: ((fresh: boolean) => Promise<AgentRuntimeInfo[]>) | undefined;
+  /** The external runtimes of a daemon machine, asked over its link (which has to be up). */
+  machineRuntimes?:
+    | ((machineId: string, fresh: boolean) => Promise<AgentRuntimeInfo[]>)
+    | undefined;
 }
 
 export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
@@ -58,15 +70,32 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
       name: agent.name,
       instructions: agent.instructions,
       persona: agent.persona,
+      runtime: agent.runtime,
       model: agent.model,
       thinkingLevel: agent.thinkingLevel,
       bundles: agent.bundles,
+      machineId: agent.machineId,
       home,
       homeProjectId: project?.id ?? "",
       status: statuses.get(agent.id) ?? "idle",
       createdAt: agent.createdAt,
       updatedAt: agent.updatedAt,
     };
+  };
+
+  /** A machine an agent can be pinned to: the primary or a daemon that was let in. */
+  const checkMachine = (machineId: string | null | undefined): void => {
+    if (machineId === undefined || machineId === null) return;
+    const machine = machines.get(machineId);
+    if (
+      machine === undefined ||
+      (machine.kind !== "primary" && machine.kind !== "daemon")
+    )
+      throw new Error(`no such machine: ${machineId}`);
+    if (machine.status === "revoked" || machine.status === "pending")
+      throw new Error(
+        `${machine.name} is ${machine.status}: an agent cannot run there`,
+      );
   };
 
   const existing = (id: string): AgentRecord => {
@@ -94,6 +123,8 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
 
         wire.handle("agents", "create", async (call) => {
           const fields = fieldsOf(call, true);
+          checkModel(fields.runtime ?? "eta", fields.model ?? null);
+          checkMachine(fields.machineId);
           const primary = machines.primary();
           if (primary === undefined)
             throw new Error("this host has no machine");
@@ -125,19 +156,30 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
           const id = args.string("agentId");
           const before = existing(id);
           const fields = fieldsOf(call, false);
+          const moved =
+            fields.runtime !== undefined && fields.runtime !== before.runtime;
+          // Another runtime's names mean nothing on this one: a move that names no model clears it.
+          if (moved && fields.model === undefined) fields.model = null;
+          checkModel(
+            fields.runtime ?? before.runtime,
+            fields.model === undefined ? before.model : fields.model,
+          );
+          checkMachine(fields.machineId);
           const agent = agents.update(id, fields)!;
           if (agent.name !== before.name) renameHome(agent);
           // The model and thinking level belong to a session once it exists; an edit of the agent
-          // is the one thing that overrides what the user chose there.
-          await deps.engine.applySettings(id, {
-            ...(agent.model !== null && agent.model !== before.model
-              ? { model: agent.model }
-              : {}),
-            ...(agent.thinkingLevel !== null &&
-            agent.thinkingLevel !== before.thinkingLevel
-              ? { thinkingLevel: agent.thinkingLevel }
-              : {}),
-          });
+          // is the one thing that overrides what the user chose there. An agent that moved to
+          // another runtime gets new sessions instead (`places.ts`), so there is nothing to set.
+          if (!moved)
+            await deps.engine.applySettings(id, {
+              ...(agent.model !== null && agent.model !== before.model
+                ? { model: agent.model }
+                : {}),
+              ...(agent.thinkingLevel !== null &&
+              agent.thinkingLevel !== before.thinkingLevel
+                ? { thinkingLevel: agent.thinkingLevel }
+                : {}),
+            });
           deps.changed("all");
           return { result: { agent: viewOf(agent) } };
         }),
@@ -162,6 +204,28 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
           deps.removed(id);
           deps.changed("all");
           return { result: { agentId: id } };
+        }),
+
+        wire.handle("agents", "runtimes", async (call) => {
+          const fresh =
+            (call.args as { fresh?: unknown } | undefined)?.fresh === true;
+          const machineId = new Args(call).optionalString("machineId");
+          const machine =
+            machineId === undefined ? undefined : machines.get(machineId);
+          if (machineId !== undefined && machine === undefined)
+            throw new Error(`no such machine: ${machineId}`);
+          // The primary's own, unless another machine is asked about.
+          if (machine === undefined || machine.kind === "primary")
+            return {
+              result: { runtimes: (await deps.runtimes?.(fresh)) ?? [] },
+            };
+          if (machine.status !== "online" || deps.machineRuntimes === undefined)
+            throw new Error(`${machine.name} is not online`);
+          return {
+            result: {
+              runtimes: await deps.machineRuntimes(machine.id, fresh),
+            },
+          };
         }),
 
         wire.handle("agents", "direct", (call) => {
@@ -227,11 +291,16 @@ function fieldsOf(
   name?: string;
   instructions?: string;
   persona?: string;
+  runtime?: AgentRuntime;
   model?: string | null;
   thinkingLevel?: ThinkingLevel | null;
   bundles?: string[];
+  machineId?: string | null;
 } {
   const args = new Args(call);
+  const runtime = args.optionalString("runtime");
+  if (runtime !== undefined && !AGENT_RUNTIMES.includes(runtime as never))
+    throw new Error(`unknown runtime: ${runtime}`);
   const name = create ? args.string("name") : args.optionalString("name");
   if (name !== undefined && name.trim() === "")
     throw new Error("an agent needs a name");
@@ -241,6 +310,7 @@ function fieldsOf(
   const level = args.nullableString("thinkingLevel");
   if (typeof level === "string" && !THINKING_LEVELS.includes(level as never))
     throw new Error(`unknown thinking level: ${level}`);
+  const machineId = args.nullableString("machineId");
   const instructions = args.optionalString("instructions");
   const persona = args.optionalString("persona");
   const bundles = (call.args as { bundles?: unknown } | undefined)?.bundles;
@@ -262,9 +332,24 @@ function fieldsOf(
     ...(name === undefined ? {} : { name: name.trim() }),
     ...(instructions === undefined ? {} : { instructions }),
     ...(persona === undefined ? {} : { persona }),
+    ...(runtime === undefined ? {} : { runtime: runtime as AgentRuntime }),
     ...(model === undefined ? {} : { model: model === "" ? null : model }),
     ...(level === undefined
       ? {}
       : { thinkingLevel: level === "" ? null : (level as ThinkingLevel) }),
+    ...(machineId === undefined
+      ? {}
+      : { machineId: machineId === "" ? null : machineId }),
   };
+}
+
+/**
+ * An external runtime's model is one of its own: `runtime:modelId`. An eta model on such an agent
+ * (or the other way round) is a model nobody would run.
+ */
+function checkModel(runtime: AgentRuntime, model: string | null): void {
+  if (model === null) return;
+  const provider = model.slice(0, model.indexOf(":"));
+  if (runtime !== "eta" && provider !== runtime)
+    throw new Error(`a ${runtime} agent runs ${runtime}:<model>, not ${model}`);
 }

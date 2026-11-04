@@ -33,6 +33,13 @@ export interface SessionMeta {
    */
   agentId?: string | undefined;
   conversationId?: string | undefined;
+  /**
+   * The external agent runtime that answers in this session (`claude`, `codex`, ...), fixed
+   * when it is made; absent means eta's own loop. `model` is then `runtime:modelId`.
+   */
+  runtime?: string | undefined;
+  /** That runtime's own session id, so a reopen picks up the same conversation. */
+  runtimeSession?: string | undefined;
   /** Kept at the top of the sidebar. */
   pinned?: boolean | undefined;
   /** Put out of the way without being deleted. */

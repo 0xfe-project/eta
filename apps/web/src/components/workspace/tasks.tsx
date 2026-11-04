@@ -39,14 +39,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -67,6 +59,7 @@ import { cn } from "@/lib/utils";
 import { useAgentList } from "@/queries/agents";
 import { useConversationList } from "@/queries/conversations";
 import { useTaskPulls } from "@/queries/github";
+import { useMachines, useProjects } from "@/queries/projects";
 import {
   useCommentTask,
   useConfirmTaskDraft,
@@ -87,7 +80,7 @@ import {
   actorName,
   ago,
   isActive,
-  queueReasonLabels,
+  queueReasonLabel,
   runStatusLabels,
   statuses,
   statusLabel,
@@ -98,6 +91,7 @@ import { TaskPulls } from "./task-pulls";
 import { RunLog } from "./task-run-log";
 import { StatusIcon } from "./task-status-icon";
 import { SlashMenu } from "./transcript/slash-menu";
+import { TranscriptDialog } from "./transcript/transcript-dialog";
 import { useGroups } from "./use-groups";
 
 const showError = (error: Error) => toast.error(wireErrorMessage(error));
@@ -552,6 +546,11 @@ export function TaskProperties({
   const { t: translateText } = useTranslation(["tasks"] as const);
   const update = useUpdateTask();
   const { agents } = useAgentList();
+  // The executor's latest run says where the work really is. On another machine than the
+  // project's it had no worktree: the row names that machine and where the run started instead.
+  const latest = task.runs.filter((run) => run.agentId === null).at(-1);
+  const away = useAwayMachine(task, latest);
+  const path = away === undefined ? task.workspace.path : latest?.workspace;
   return (
     <dl
       className={cn(
@@ -585,16 +584,18 @@ export function TaskProperties({
           </dd>
           <dt className={propertyLabel}>{translateText("workspace.label")}</dt>
           <dd className="min-w-0 py-1.5 leading-5">
-            {workspaceLabel(task.workspace)}
-            {task.workspace.branch ? (
+            {away === undefined
+              ? workspaceLabel(task.workspace)
+              : translateText("workspace.away", { machine: away })}
+            {away === undefined && task.workspace.branch ? (
               <span className="text-muted-foreground">
                 {" · "}
                 <code>{task.workspace.branch}</code>
               </span>
             ) : null}
-            {task.workspace.path ? (
+            {path ? (
               <span className="block text-xs text-muted-foreground wrap-anywhere">
-                <code>{task.workspace.path}</code>
+                <code>{path}</code>
               </span>
             ) : null}
           </dd>
@@ -947,42 +948,62 @@ function useRunAgent(task: TaskDetail, run: TaskRun) {
   );
 }
 
-/** A run's log, in a dialog: it is as long as the run was, more than a line of the thread holds. */
+/** A machine's name, from a run's `machineId`; undefined when the page does not know the machine. */
+function useMachineName(machineId: string | null | undefined) {
+  const { machines } = useMachines();
+  return machines.find((machine) => machine.id === machineId)?.name;
+}
+
+/**
+ * The machine a run works on when it is not the one the task's project is on: its agent is pinned
+ * to another machine, so the run has no worktree or project directory and starts in that machine's
+ * home. Undefined in the ordinary case, and whenever the page cannot tell, so the planned workspace
+ * is what shows then.
+ */
+function useAwayMachine(task: TaskDetail, run: TaskRun | undefined) {
+  const { projects } = useProjects();
+  const name = useMachineName(run?.machineId);
+  const project = projects.find((candidate) => candidate.id === task.projectId);
+  if (run === undefined || project === undefined) return undefined;
+  return run.machineId === project.machineId ? undefined : name;
+}
+
+/**
+ * A run's log, in a dialog: it is as long as the run was, more than a line of the thread holds. The
+ * frame is fixed (see TranscriptDialog), so a short log and a long one open in the same place.
+ */
 function RunLogButton({ task, run }: { task: TaskDetail; run: TaskRun }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
   const who = useRunAgent(task, run);
+  const away = useAwayMachine(task, run);
+  const scrollRef = useRef<HTMLDivElement>(null);
   if (run.status === "queued") return null;
   return (
-    <Dialog>
-      <DialogTrigger asChild>
+    <TranscriptDialog
+      trigger={
         <button
           type="button"
           className="ml-2 text-xs text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:underline"
         >
           {translateText("log.title")}
         </button>
-      </DialogTrigger>
-      <DialogContent className="grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle className="truncate pr-8">
-            #{task.number} · {who} · {translateText("log.title")}
-          </DialogTitle>
-          <DialogDescription className="wrap-anywhere">
-            {run.workspace ? (
-              <>
-                {translateText("log.workspacePrefix")}
-                <code>{run.workspace}</code>
-              </>
-            ) : (
-              <RunStatusText run={run} />
-            )}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="max-h-[70dvh] min-h-0 overflow-auto">
-          <RunLog run={run} />
-        </div>
-      </DialogContent>
-    </Dialog>
+      }
+      title={`#${task.number} · ${who} · ${translateText("log.title")}`}
+      description={
+        run.workspace ? (
+          <>
+            {translateText("log.workspacePrefix")}
+            {away === undefined ? null : `${away} · `}
+            <code>{run.workspace}</code>
+          </>
+        ) : (
+          <RunStatusText run={run} />
+        )
+      }
+      bodyRef={scrollRef}
+    >
+      <RunLog run={run} scrollRef={scrollRef} />
+    </TranscriptDialog>
   );
 }
 
@@ -990,6 +1011,7 @@ function RunLogButton({ task, run }: { task: TaskDetail; run: TaskRun }) {
 function LiveRun({ task, run }: { task: TaskDetail; run: TaskRun }) {
   const { t: translateText } = useTranslation(["tasks"] as const);
   const who = useRunAgent(task, run);
+  const machine = useMachineName(run.machineId);
   const queued = run.status === "queued";
   const Icon = queued ? ClockIcon : SpinnerIcon;
   const doing = queued
@@ -1013,7 +1035,7 @@ function LiveRun({ task, run }: { task: TaskDetail; run: TaskRun }) {
         {queued && run.queueReason ? (
           <span className="text-muted-foreground">
             {" · "}
-            {queueReasonLabels[run.queueReason]}
+            {queueReasonLabel(run.queueReason, machine)}
           </span>
         ) : null}
       </span>

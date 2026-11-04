@@ -9,7 +9,9 @@
  * contribution leaves no trace, and a broken contribution does not take the frame down.
  */
 
+import type { AgentMessage } from "@eta/core";
 import type { ViewSources } from "../src/view";
+import { Buffer } from "node:buffer";
 import { Runner } from "@eta/core";
 import { SessionLog } from "@eta/core/session";
 import { MemoryStorage } from "@eta/core/storage";
@@ -18,7 +20,11 @@ import { Context } from "cordis";
 import { describe, expect, it } from "vitest";
 import { openSession } from "../src/open";
 import { journaledKernel } from "../src/testing";
-import { builtinViewContributions, ViewService } from "../src/view";
+import {
+  builtinViewContributions,
+  ViewService,
+  withoutImageData,
+} from "../src/view";
 
 const userMsg = (text: string) => ({
   role: "user" as const,
@@ -340,5 +346,103 @@ describe("the built-in contributions, against the sources directly", () => {
     // The revision is the owner's own signature: creating a task moved it.
     expect(byName.get("tasks")?.revision()).toContain("a task");
     void kernel.dispose();
+  });
+});
+
+describe("pictures in the transcript", () => {
+  // 12 bytes encode to 16 characters with no padding, 11 with one "=", 10 with "==".
+  const twelve = Buffer.from("0123456789ab").toString("base64");
+  const eleven = Buffer.from("0123456789a").toString("base64");
+  const ten = Buffer.from("0123456789").toString("base64");
+
+  function transcriptOf(log: SessionLog) {
+    const sources = {
+      session: "s",
+      entries: () => log.graph.pathOldestFirst(),
+      entryVersion: () => log.graph.pathOldestFirst().length,
+      ask: () => undefined,
+    } as unknown as ViewSources;
+    const transcript = builtinViewContributions(sources).find(
+      (c) => c.name === "transcript",
+    );
+    return transcript?.project() as {
+      messages: { entryId: string; message: AgentMessage }[];
+    };
+  }
+
+  it("leaves the bytes out, says how many there were, and keeps the journal whole", () => {
+    const log = SessionLog.create(new MemoryStorage());
+    const user = log.recordMessage({
+      role: "user",
+      content: [
+        { type: "text", text: "look" },
+        { type: "image", data: twelve, mimeType: "image/png" },
+      ],
+      timestamp: 0,
+    });
+    const result = log.recordMessage({
+      role: "toolResult",
+      toolCallId: "t1",
+      toolName: "read",
+      content: [{ type: "image", data: ten, mimeType: "image/jpeg" }],
+      isError: false,
+      timestamp: 0,
+    });
+    const rows = transcriptOf(log).messages;
+    expect(rows.map((row) => row.entryId)).toEqual([user.id, result.id]);
+    expect(
+      rows.map((row) => (row.message as { content: unknown }).content),
+    ).toEqual([
+      [
+        { type: "text", text: "look" },
+        { type: "image", mimeType: "image/png", data: "", bytes: 12 },
+      ],
+      [{ type: "image", mimeType: "image/jpeg", data: "", bytes: 10 }],
+    ]);
+    // The journal's own messages still hold the pictures.
+    expect(user.message).toMatchObject({
+      content: [
+        { type: "text", text: "look" },
+        { type: "image", data: twelve, mimeType: "image/png" },
+      ],
+    });
+    expect(result.message).toMatchObject({
+      content: [{ type: "image", data: ten, mimeType: "image/jpeg" }],
+    });
+  });
+
+  it("hands a message without pictures through as is", () => {
+    const log = SessionLog.create(new MemoryStorage());
+    const plain = log.recordMessage(userMsg("just words"));
+    const text = log.recordMessage({
+      role: "user",
+      content: "a string",
+      timestamp: 0,
+    });
+    const [first, second] = transcriptOf(log).messages;
+    expect(first?.message).toBe(plain.message);
+    expect(second?.message).toBe(text.message);
+  });
+
+  it("counts the padding when it sizes a picture", () => {
+    const message: AgentMessage = {
+      role: "user",
+      content: [
+        { type: "image", data: twelve, mimeType: "image/png" },
+        { type: "image", data: eleven, mimeType: "image/png" },
+        { type: "image", data: ten, mimeType: "image/png" },
+      ],
+      timestamp: 0,
+    };
+    const stripped = withoutImageData(message);
+    expect(stripped).not.toBe(message);
+    expect(
+      (stripped as { content: { bytes?: number }[] }).content.map(
+        (part) => part.bytes,
+      ),
+    ).toEqual([12, 11, 10]);
+    expect(
+      (message.content as { data: string }[]).map((part) => part.data),
+    ).toEqual([twelve, eleven, ten]);
   });
 });

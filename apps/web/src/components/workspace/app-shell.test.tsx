@@ -10,6 +10,7 @@ import { createRoot } from "react-dom/client";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { setWire } from "@/lib/wire";
+import styles from "@/styles.css?raw";
 import {
   agentView,
   buildProductHost,
@@ -20,7 +21,7 @@ import {
 } from "@/test-product";
 import { flush } from "@/test-render";
 import { agentStatusLabels } from "./agent-status";
-import { Sidebar } from "./app-shell";
+import { Sidebar, SidebarShell } from "./app-shell";
 import { GroupList } from "./groups";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -499,6 +500,19 @@ describe("折叠成图标栏", () => {
     expect(header.querySelectorAll("button")).toHaveLength(0);
   });
 
+  it("右缘只留 sidebar-rule，默认 border-r 不再从窗顶画到底", async () => {
+    // The component's default edge is full height. Stacked on `sidebar-rule` (the 1px line that
+    // starts under the band) it reads as one thick rule. The shell zeros that edge; the rule stays.
+    for (const open of [true, false]) {
+      const container = await render(<Sidebar />, { open });
+      const edge = container.querySelector('[data-slot="sidebar-container"]')!;
+      expect(edge.className).toContain("sidebar-rule");
+      expect(edge.className).toContain("group-data-[side=left]:border-r-0");
+      expect(edge.className).not.toContain("group-data-[side=left]:border-r ");
+      expect(edge.className).not.toMatch(/group-data-\[side=left\]:border-r$/);
+    }
+  });
+
   it("开关能折叠也能展开，刷新后还记着", async () => {
     const container = await render(<Sidebar />);
     expect(root(container).getAttribute("data-state")).toBe("expanded");
@@ -667,5 +681,151 @@ describe("邮箱那一行", () => {
     expect(dot.className).toContain("bg-destructive");
     // 4rem holds no button, and the press that matters there is the link's own.
     expect(retry(container)).toBeNull();
+  });
+});
+
+describe("拖左栏右缘调宽", () => {
+  afterEach(() => localStorage.clear());
+
+  /** `render` brings a provider of its own, so the shell's is the inner of the two wrappers. */
+  const wrapper = (container: HTMLElement) =>
+    [
+      ...container.querySelectorAll<HTMLElement>(
+        '[data-slot="sidebar-wrapper"]',
+      ),
+    ].at(-1)!;
+  const divider = (container: HTMLElement) =>
+    container.querySelector<HTMLElement>('[role="separator"]');
+  const shell = () =>
+    render(
+      <SidebarShell>
+        <div />
+      </SidebarShell>,
+    );
+  /** One pointer gesture on the line, in the window's coordinates. */
+  const gesture = async (
+    line: HTMLElement,
+    type: "pointerdown" | "pointermove" | "pointerup",
+    clientX: number,
+  ) => {
+    await act(async () => {
+      line.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          button: 0,
+          clientX,
+          pointerId: 1,
+        }),
+      );
+    });
+  };
+  const press = async (node: Element) =>
+    act(async () => {
+      node.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+  const capturable = (line: HTMLElement) => {
+    line.setPointerCapture = () => undefined;
+    line.releasePointerCapture = () => undefined;
+    return line;
+  };
+
+  it("拖动把宽度写到 --sidebar-width，松手才存下", async () => {
+    localStorage.setItem("eta.sidebar.width", "300");
+    const container = await shell();
+    const line = capturable(divider(container)!);
+    expect(line.getAttribute("aria-label")).toBe("调整左栏宽度");
+
+    await gesture(line, "pointerdown", 300);
+    await gesture(line, "pointermove", 340);
+    expect(wrapper(container).style.getPropertyValue("--sidebar-width")).toBe(
+      "340px",
+    );
+    // The column follows the pointer for as long as the drag lasts, and only that long.
+    expect(wrapper(container).hasAttribute("data-sidebar-dragging")).toBe(true);
+    expect(localStorage.getItem("eta.sidebar.width")).toBe("300");
+
+    await gesture(line, "pointerup", 340);
+    expect(localStorage.getItem("eta.sidebar.width")).toBe("340");
+    expect(wrapper(container).hasAttribute("data-sidebar-dragging")).toBe(
+      false,
+    );
+  });
+
+  it("拖不出 260–420，存下的旧值也夹回这个范围", async () => {
+    localStorage.setItem("eta.sidebar.width", "300");
+    const container = await shell();
+    const line = capturable(divider(container)!);
+    const width = () =>
+      wrapper(container).style.getPropertyValue("--sidebar-width");
+
+    await gesture(line, "pointerdown", 300);
+    await gesture(line, "pointermove", 900);
+    expect(width()).toBe("420px");
+    await gesture(line, "pointermove", 0);
+    expect(width()).toBe("260px");
+    await gesture(line, "pointerup", 0);
+    expect(localStorage.getItem("eta.sidebar.width")).toBe("260");
+
+    localStorage.setItem("eta.sidebar.width", "9000");
+    const again = await shell();
+    expect(wrapper(again).style.getPropertyValue("--sidebar-width")).toBe(
+      "420px",
+    );
+  });
+
+  it("没拖过就什么都不写，默认宽度还是样式表的", async () => {
+    const container = await shell();
+    const line = capturable(divider(container)!);
+    // The provider's own default, and no mark that lets it past the `lg` rule.
+    expect(wrapper(container).style.getPropertyValue("--sidebar-width")).toBe(
+      "16rem",
+    );
+    expect(wrapper(container).hasAttribute("data-sidebar-sized")).toBe(false);
+
+    // A press that never moved chose nothing.
+    await gesture(line, "pointerdown", 288);
+    await gesture(line, "pointerup", 288);
+    expect(wrapper(container).hasAttribute("data-sidebar-sized")).toBe(false);
+    expect(localStorage.getItem("eta.sidebar.width")).toBeNull();
+  });
+
+  it("键盘也能调，每按一下都存下", async () => {
+    localStorage.setItem("eta.sidebar.width", "300");
+    const container = await shell();
+    await act(async () => {
+      divider(container)!.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+      );
+    });
+    expect(wrapper(container).style.getPropertyValue("--sidebar-width")).toBe(
+      "316px",
+    );
+    expect(localStorage.getItem("eta.sidebar.width")).toBe("316");
+  });
+
+  it("折叠成图标栏时没有分隔线，展开回到存下的宽度", async () => {
+    localStorage.setItem("eta.sidebar.width", "340");
+    const container = await shell();
+    expect(divider(container)).not.toBeNull();
+    await press(container.querySelector('[data-slot="sidebar-trigger"]')!);
+    expect(divider(container)).toBeNull();
+    await press(container.querySelector('[data-slot="sidebar-trigger"]')!);
+    expect(divider(container)).not.toBeNull();
+    expect(wrapper(container).style.getPropertyValue("--sidebar-width")).toBe(
+      "340px",
+    );
+  });
+
+  it("裸的 Sidebar 没有分隔线：宽度归 SidebarShell 管", async () => {
+    const container = await render(<Sidebar />);
+    expect(divider(container)).toBeNull();
+  });
+
+  it("从 lg 起的 !important 给拖过的宽度让路", () => {
+    // Inline loses to `!important`, so without this the drag is dead on every wide window. jsdom
+    // applies no stylesheet, so the only way to hold this is to read the rule.
+    expect(styles).toMatch(
+      /\[data-slot="sidebar-wrapper"\]:not\(\[data-sidebar-sized\]\)\s*\{\s*--sidebar-width: 18rem !important;/,
+    );
   });
 });

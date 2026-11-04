@@ -670,8 +670,9 @@ describe("a host started without GitHub", () => {
     const dir = join(loaded.w.host.dataDir, "github");
     await until(() => existsSync(join(dir, "token")));
     expect(fake.requests.length).toBeGreaterThan(0);
-    const left = await filesUnder(dir);
+    // After close: until then each `changed` pokes the keeper into another refresh.
     await loaded.w.host.close();
+    const left = await filesUnder(dir);
     const asked = fake.requests.length;
 
     // The same data directory, with the App still stored: an App to act as, and a login to keep,

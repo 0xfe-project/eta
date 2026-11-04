@@ -67,7 +67,7 @@ export function EmailSessionLog({
                     <Markdown className="text-xs">{block.text}</Markdown>
                   </li>
                 );
-              if (block.type === "user") return null;
+              if (block.type !== "tool") return null;
               const proposalId = (
                 block.details as { emailProposalId?: unknown } | undefined
               )?.emailProposalId;

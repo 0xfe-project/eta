@@ -45,7 +45,28 @@
   "tools": {
     "arguments": "参数",
     "result": "结果",
-    "refused": "被拦"
+    "refused": "被拦",
+    "command": "命令",
+    "printing": "输出中",
+    "plan": "计划",
+    "children": "子代理的步骤",
+    "runtimeTask": "运行时任务",
+    "background": "后台",
+    "added": "新文件",
+    "deleted": "已删除",
+    "exit": "退出 {{code}}",
+    "images": "{{count}} 张图",
+    "images_one": "{{count}} 张图",
+    "images_other": "{{count}} 张图",
+    "steps": "{{count}} 步",
+    "steps_one": "{{count}} 步",
+    "steps_other": "{{count}} 步",
+    "foldMore": "展开全部 {{count}} 行",
+    "foldMore_one": "展开全部 {{count}} 行",
+    "foldMore_other": "展开全部 {{count}} 行",
+    "foldLess": "收起",
+    "truncated": "输出太长，只保留了一部分",
+    "truncatedAt": "输出太长，只保留了一部分；完整输出在 {{path}}"
   },
   "agentSwitcher": {
     "currentDirectChat": "正在与 {{agentName}} 私聊（{{status}}），切换智能体",
@@ -196,6 +217,7 @@
   "history": {
     "loadEarlier": "加载更早的消息…",
     "loading": "正在读取对话…",
+    "noConversations": "还没有对话",
     "empty": "这里还没说过话。说一句就开始。"
   },
   "connection": {
@@ -273,10 +295,6 @@
     "title": "等你处理",
     "more": "还有 {{count}} 条在等你"
   },
-  "context": {
-    "awaitingYou": "等你",
-    "openPending": "去待处理"
-  },
   "new": {
     "title": "新对话",
     "hint": "选一个项目和一位智能体。对话会出现在左栏那个项目下面。",
@@ -284,10 +302,31 @@
     "start": "开始",
     "project": "项目",
     "addPath": "添加目录…",
+    "addPathOn": "在 {{machine}} 上添加目录…",
     "path": "目录路径",
-    "machine": "机器",
-    "pathHint": "在所选机器上的绝对路径，必须是已存在的目录。成员在这里干活。",
-    "chooseFolder": "选择目录…"
+    "pickPrompt": "选择目录…",
+    "picker": {
+      "title": "选择目录",
+      "hint": "成员会在这个目录里干活。",
+      "machine": "机器",
+      "crumbs": "当前路径",
+      "typePath": "输入路径",
+      "filter": "筛选",
+      "hidden": "隐藏目录",
+      "recent": "最近用过",
+      "home": "主目录",
+      "added": "已添加",
+      "empty": "这里没有子目录，可以直接选择当前目录",
+      "noMatch": "没有匹配的目录",
+      "truncated": "目录太多，只列出前 {{limit}} 个。用筛选或输入路径。",
+      "up": "回到上一级",
+      "choose": "选择此目录",
+      "problems": {
+        "notFound": "这个目录不存在",
+        "denied": "没有权限读取这个目录",
+        "offline": "连不上这台机器"
+      }
+    }
   },
   "chat": {},
   "steward": {
@@ -341,5 +380,13 @@
     "pullBackAction": "拉回",
     "pullBack": "拉回输入框：{{text}}",
     "drop": "丢掉这条：{{text}}"
+  },
+  "images": {
+    "open": "查看第 {{index}} 张图（共 {{count}} 张）",
+    "title": "第 {{index}} 张图，共 {{count}} 张",
+    "hint": "点击图片切换原始大小，左右方向键切换图片，Esc 关闭。",
+    "previous": "上一张",
+    "next": "下一张",
+    "failed": "图片读取失败"
   }
 }

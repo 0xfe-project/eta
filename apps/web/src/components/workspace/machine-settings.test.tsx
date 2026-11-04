@@ -37,6 +37,9 @@ async function type(input: HTMLInputElement, value: string) {
 const input = (label: string) =>
   document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
 
+const back = () =>
+  document.querySelector<HTMLButtonElement>('button[aria-label="返回"]')!;
+
 const submit = async (form: Element) => {
   await act(async () => {
     form.dispatchEvent(
@@ -81,7 +84,7 @@ describe("机器设置", () => {
     productHost({
       machines: [
         primary,
-        laptop,
+        { ...laptop, version: "d5f93964f3e9", build: "outdated" },
         machineView({
           id: "m3",
           name: "旧电脑",
@@ -105,56 +108,99 @@ describe("机器设置", () => {
     });
     await mount(<MachineSettings />);
     await flush();
+    const card = (name: string) =>
+      [...document.querySelectorAll("li")].find((item) =>
+        item.textContent?.includes(name),
+      );
     const status = (name: string) =>
-      [...document.querySelectorAll("li")]
-        .find((item) => item.textContent?.includes(name))
-        ?.querySelector('[role="img"]')
-        ?.getAttribute("aria-label");
+      card(name)?.querySelector('[role="img"]')?.getAttribute("aria-label");
+    const details = (name: string) =>
+      card(name)?.querySelector("p")?.textContent;
     expect(status("主机")).toBe("在线");
     expect(status("旧电脑")).toBe("离线");
     expect(status("新电脑")).toBe("待批准");
-    expect(status("弃用")).toBe("已撤销");
-    expect(text()).toContain("macOS");
-    expect(text()).toContain("上次在线");
-    // Only the pending machine asks for a fingerprint, and a revoked one has no menu.
+    // A revoked machine can do nothing more, so it is not listed at all.
+    expect(card("弃用")).toBeUndefined();
+    // Only the primary is marked, and an offline machine leads with when it was last seen, so
+    // that is not what the line cuts off.
+    expect(details("主机")).toBe(
+      "主机器 · Linux · /home/me · 同时运行 2 个任务",
+    );
+    expect(details("笔记本")).toBe("macOS · /Users/me · 同时运行 2 个任务");
+    expect(details("旧电脑")).toMatch(/^上次在线 今天 \d\d:\d\d · Linux/);
+    expect(text()).not.toContain("Daemon");
+    // The build is said in words when it is behind; the build itself is only on hover.
+    expect(text()).not.toContain("d5f93964f3e9");
+    expect(
+      card("笔记本")?.querySelector('[title="版本 d5f93964f3e9"]')?.textContent,
+    ).toBe("在线 · 需要更新");
+    // Only the pending machine asks for a fingerprint.
     expect(
       document.querySelectorAll('input[aria-label$="的指纹"]'),
     ).toHaveLength(1);
-    expect(document.querySelector('[aria-label="弃用 的操作"]')).toBeNull();
   });
 
-  it("enrolls: asks for the command with this page's origin and shows it with its expiry", async () => {
+  it("says there are no other machines when the only other one was revoked", async () => {
+    productHost({
+      machines: [
+        primary,
+        machineView({
+          id: "m5",
+          name: "弃用",
+          kind: "daemon",
+          status: "revoked",
+        }),
+      ],
+    });
+    await mount(<MachineSettings />);
+    await flush();
+    expect(document.querySelectorAll("li")).toHaveLength(1);
+    expect(text()).not.toContain("弃用");
+    expect(text()).toContain("还没有接入其他机器");
+  });
+
+  it("adding turns the panel into the way in: a command to run, with this page's origin", async () => {
     const fake = productHost({ machines: [primary] });
+    fake.handle("machines.addresses", () => ({ tailnet: null }));
     fake.handle("machines.enroll", () => ({
       code: "c0de",
       expiresAt: Date.now() + 3_600_000,
       url: location.origin,
-      command: "curl -fsSL https://eta.test/install | sh -s -- c0de",
+      command:
+        "curl -fsSL 'https://eta.test/machines/install.sh?code=c0de' | sh",
     }));
     await mount(<MachineSettings />);
     await flush();
     await click(button(document.body, "添加机器"));
-    await type(input("机器名称"), " 书房 ");
-    await submit(document.querySelector("[role=dialog] form")!);
-    expect(fake.calls.at(-1)).toMatchObject({
+    // Not a dialog over the panel: the panel itself, with a way back.
+    expect(document.querySelector("[role=dialog]")).toBeNull();
+    expect(back()).toBeTruthy();
+    // No name up front: the host names the machine after its hostname, and the card renames it.
+    expect(text()).not.toContain("机器名称");
+    await click(button(document.body, "生成安装命令"));
+    expect(fake.calls.at(-1)).toEqual({
       target: "machines",
       action: "enroll",
-      args: { name: "书房", url: location.origin },
+      args: { url: location.origin },
     });
     expect(text()).toContain(
-      "curl -fsSL https://eta.test/install | sh -s -- c0de",
+      "curl -fsSL 'https://eta.test/machines/install.sh?code=c0de' | sh",
     );
     expect(text()).toContain("命令只能用一次");
-    expect(text()).toContain("前有效");
+    // With no tailnet address there is nothing to choose.
+    expect(document.getElementById("machine-address")).toBeNull();
+    await click(back());
+    expect(button(document.body, "添加机器")).toBeTruthy();
   });
 
   it("approves a machine that shows up after the command, with the pasted fingerprint", async () => {
     const fake = productHost({ machines: [primary] });
+    fake.handle("machines.addresses", () => ({ tailnet: null }));
     fake.handle("machines.enroll", () => ({
       code: "c0de",
       expiresAt: Date.now() + 3_600_000,
       url: location.origin,
-      command: "eta-daemon enroll c0de",
+      command: "curl -fsSL x | sh",
     }));
     fake.handle("machines.approve", () => ({
       machine: { ...laptop, status: "online" },
@@ -162,17 +208,16 @@ describe("机器设置", () => {
     await mount(<MachineSettings />);
     await flush();
     await click(button(document.body, "添加机器"));
-    await submit(document.querySelector("[role=dialog] form")!);
-    expect(document.querySelectorAll("[role=dialog] input")).toHaveLength(0);
+    await click(button(document.body, "生成安装命令"));
+    expect(text()).toContain("等待那台机器运行命令");
     await act(async () =>
       fake.set("machines", {
         list: [primary, { ...laptop, status: "pending", fingerprint: "ABCD" }],
+        installs: [],
       }),
     );
     await flush();
-    const field = document.querySelector<HTMLInputElement>(
-      '[role=dialog] input[aria-label="笔记本 的指纹"]',
-    )!;
+    const field = input("笔记本 的指纹");
     await type(field, "abcd efgh:ijkl");
     await submit(field.closest("form")!);
     expect(fake.calls.at(-1)).toMatchObject({
@@ -214,9 +259,17 @@ describe("机器设置", () => {
 
   it("revokes after confirming, and the primary cannot be revoked", async () => {
     const fake = productHost({ machines: [primary, laptop] });
-    fake.handle("machines.revoke", () => ({
-      machine: { ...laptop, status: "revoked" },
-    }));
+    let answer = () => {};
+    fake.handle("machines.revoke", async () => {
+      // The host pushes the revoked machine before it answers, so the card is gone by then.
+      fake.set("machines", {
+        list: [primary, { ...laptop, status: "revoked" }],
+      });
+      await new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+      return { machine: { ...laptop, status: "revoked" } };
+    });
     await mount(<MachineSettings />);
     await flush();
     await openMenu("主机");
@@ -240,6 +293,10 @@ describe("机器设置", () => {
       action: "revoke",
       args: { machineId: "m2" },
     });
+    expect(text()).not.toContain("笔记本");
+    await act(async () => answer());
+    await flush();
+    expect(toasts.message).toHaveBeenCalledWith("已撤销 笔记本");
   });
 
   it("renames a machine", async () => {

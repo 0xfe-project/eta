@@ -1,9 +1,12 @@
 import type {
   AgentMessage,
   SessionArgs,
+  SessionImage,
   SessionViewSections,
+  ViewMessageRow,
 } from "@eta/client-contracts";
-import { useEffect, useMemo, useState } from "react";
+import type { LogBlock, RunImage } from "@/lib/run";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { logBlocks, runBlocks } from "@/lib/run";
 import { getWire } from "@/lib/wire";
@@ -158,28 +161,257 @@ function useStreamedMessage(
   return streamed?.sessionId === sessionId ? streamed?.message : undefined;
 }
 
-/** The run in flight on a session, as blocks to draw: thinking, text and tool calls in order. */
-export function useRunBlocks(sessionId: string | undefined) {
+/**
+ * The run in flight on a session, as blocks to draw: thinking, text and tool calls in order.
+ * `runFrom` is where the run starts in the session, from the reply's row. A view that has nothing
+ * past it has not caught up with the run, so what it says is streaming is the last run's (the
+ * events are this run's: they only arrive while the page listens).
+ */
+export function useRunBlocks(
+  sessionId: string | undefined,
+  runFrom?: number | undefined,
+) {
   const session = useSession(sessionId);
   const streamed = useStreamedMessage(sessionId);
   const rows = session?.transcript?.messages;
-  const streaming = streamed ?? session?.core?.streaming;
-  return useMemo(() => runBlocks(rows ?? [], streaming), [rows, streaming]);
+  const behind = runFrom !== undefined && (rows?.at(-1)?.seq ?? 0) <= runFrom;
+  const streaming = streamed ?? (behind ? undefined : session?.core?.streaming);
+  return useMemo(
+    () => runBlocks(rows ?? [], streaming, runFrom),
+    [rows, streaming, runFrom],
+  );
+}
+
+/** How many older messages one page back asks for: the size of the view's own window. */
+const HISTORY_PAGE = 200;
+
+/** A session's log, with the messages older than the view's window as far back as it has paged. */
+export interface SessionLog {
+  /** Undefined until the session's view arrives (a run that has not started has no session). */
+  blocks: LogBlock[] | undefined;
+  /** Messages exist before the oldest one the page has. */
+  earlier: boolean;
+  /** A page back is on its way. */
+  loadingEarlier: boolean;
+  /** Ask for the page before the oldest message the page has. */
+  loadEarlier: () => void;
+  /** What each running call has printed so far, by call id. */
+  progress: ReadonlyMap<string, string>;
 }
 
 /**
- * A whole session as blocks, for a task run's log; undefined until the session's view arrives (a
- * run that has not started has no session).
+ * The view keeps the newest 200 messages; a log reads the whole session. Older pages come from
+ * `sessions.history` when the reader scrolls up to them, and every row the window has shown is
+ * kept too, so a long run that pushes rows out of the window while the reader is paging does not
+ * leave a hole between the two.
  */
-export function useLogBlocks(sessionId: string | null | undefined) {
+export function useSessionLog(
+  sessionId: string | null | undefined,
+): SessionLog {
   const session = useSession(sessionId);
   const streamed = useStreamedMessage(sessionId ?? undefined);
-  const rows = session?.transcript?.messages;
+  const progress = useToolProgress(sessionId ?? undefined);
+  const window = session?.transcript?.messages;
+  const before = session?.transcript?.messagesBefore ?? 0;
   const streaming = streamed ?? session?.core?.streaming;
-  return useMemo(
+  const [older, setOlder] = useState<{
+    sessionId: string;
+    rows: readonly ViewMessageRow[];
+    /** The host had no more: a page came back short. */
+    done: boolean;
+    loading: boolean;
+  }>();
+  const pages = older?.sessionId === sessionId ? older : undefined;
+  const seenRef = useRef<{
+    sessionId: string;
+    rows: Map<string, ViewMessageRow>;
+  }>(undefined);
+  const rows = useMemo(() => {
+    if (window === undefined || sessionId === null || sessionId === undefined)
+      return undefined;
+    if (seenRef.current?.sessionId !== sessionId)
+      seenRef.current = { sessionId, rows: new Map() };
+    const kept = seenRef.current.rows;
+    for (const row of window) kept.set(row.entryId, row);
+    if (pages === undefined && kept.size === window.length) return window;
+    const all = new Map(kept);
+    for (const row of pages?.rows ?? []) all.set(row.entryId, row);
+    return [...all.values()].sort((a, b) => a.seq - b.seq);
+  }, [window, pages, sessionId]);
+  const oldestInWindow = window?.[0]?.seq ?? Infinity;
+  const olderHeld = rows?.filter((row) => row.seq < oldestInWindow).length ?? 0;
+  const earlier = pages?.done !== true && olderHeld < before;
+  const oldest = rows?.[0]?.seq;
+  const loadEarlier = useCallback(() => {
+    if (sessionId === null || sessionId === undefined) return;
+    if (!earlier || pages?.loading === true || oldest === undefined) return;
+    setOlder({
+      sessionId,
+      rows: pages?.rows ?? [],
+      done: false,
+      loading: true,
+    });
+    getWire()
+      .call<{ rows?: ViewMessageRow[] }>("sessions", "history", {
+        session: sessionId,
+        beforeSeq: oldest,
+        limit: HISTORY_PAGE,
+      })
+      .then(
+        (page) => {
+          const got = page.rows ?? [];
+          setOlder((was) =>
+            was?.sessionId === sessionId
+              ? {
+                  sessionId,
+                  rows: [...got, ...was.rows],
+                  done: got.length < HISTORY_PAGE,
+                  loading: false,
+                }
+              : was,
+          );
+        },
+        () =>
+          setOlder((was) =>
+            was?.sessionId === sessionId ? { ...was, loading: false } : was,
+          ),
+      );
+  }, [sessionId, earlier, pages, oldest]);
+  const blocks = useMemo(
     () => (rows === undefined ? undefined : logBlocks(rows, streaming)),
     [rows, streaming],
   );
+  return {
+    blocks,
+    earlier,
+    loadingEarlier: pages?.loading === true,
+    loadEarlier,
+    progress,
+  };
+}
+
+/** No call is printing anything. */
+const NO_PROGRESS: ReadonlyMap<string, string> = new Map();
+
+/**
+ * What the calls at work have printed so far, from the session's `tool:update` events (a Codex
+ * command streams its output; a call that prints nothing until it ends has none). A call's entry
+ * goes when it ends, because its result is in the transcript from then on.
+ */
+function useToolProgress(
+  sessionId: string | undefined,
+): ReadonlyMap<string, string> {
+  const [progress, setProgress] = useState<{
+    sessionId: string;
+    outputs: ReadonlyMap<string, string>;
+  }>();
+  useEffect(() => {
+    if (sessionId === undefined) return undefined;
+    const outputs = new Map<string, string>();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const off = getWire().onEvent(sessionTarget(sessionId), (event) => {
+      const data = event.data as
+        | {
+            toolCallId?: unknown;
+            partialResult?: { content?: { type?: string; text?: string }[] };
+          }
+        | undefined;
+      if (
+        event.name === "tool:update" &&
+        typeof data?.toolCallId === "string"
+      ) {
+        const text = (data.partialResult?.content ?? [])
+          .filter((part) => part.type === "text")
+          .map((part) => part.text ?? "")
+          .join("\n");
+        if (text === "") return;
+        outputs.set(data.toolCallId, text);
+      } else if (
+        event.name === "tool:end" &&
+        typeof data?.toolCallId === "string"
+      )
+        outputs.delete(data.toolCallId);
+      else if (event.name === "turn:run-end") outputs.clear();
+      else return;
+      timer ??= setTimeout(() => {
+        timer = undefined;
+        setProgress({ sessionId, outputs: new Map(outputs) });
+      }, 100);
+    });
+    return () => {
+      off();
+      clearTimeout(timer);
+    };
+  }, [sessionId]);
+  return progress !== undefined && progress.sessionId === sessionId
+    ? progress.outputs
+    : NO_PROGRESS;
+}
+
+/** Pictures fetched from the host, by session, row and part: a picture never changes. */
+const pictures = new Map<string, Promise<string>>();
+
+/**
+ * A picture as something an `<img>` can show. One the view carried whole is shown as it is; one
+ * it left out (to keep the view small) is asked for once with `sessions.image`, when `wanted` says
+ * it is on screen, and kept for the rest of the page's life.
+ */
+export function useSessionImage(
+  sessionId: string | null | undefined,
+  image: RunImage,
+  wanted = true,
+): { src: string | undefined; failed: boolean } {
+  const inline =
+    image.data === ""
+      ? undefined
+      : `data:${image.mimeType};base64,${image.data}`;
+  const key =
+    sessionId === null || sessionId === undefined
+      ? undefined
+      : `${sessionId}:${image.entryId}:${image.index}`;
+  const [loaded, setLoaded] = useState<{
+    key: string;
+    src?: string;
+    failed?: boolean;
+  }>();
+  useEffect(() => {
+    if (
+      !wanted ||
+      inline !== undefined ||
+      key === undefined ||
+      sessionId === null ||
+      sessionId === undefined
+    )
+      return undefined;
+    let cancelled = false;
+    let request = pictures.get(key);
+    if (request === undefined) {
+      request = getWire()
+        .call<SessionImage>("sessions", "image", {
+          session: sessionId,
+          entryId: image.entryId,
+          index: image.index,
+        })
+        .then((picture) => `data:${picture.mimeType};base64,${picture.data}`);
+      // A failed fetch is not kept: the next time the picture is drawn it asks again.
+      request.catch(() => pictures.delete(key));
+      pictures.set(key, request);
+    }
+    request.then(
+      (src) => {
+        if (!cancelled) setLoaded({ key, src });
+      },
+      () => {
+        if (!cancelled) setLoaded({ key, failed: true });
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [wanted, inline, key, sessionId, image.entryId, image.index]);
+  if (inline !== undefined) return { src: inline, failed: false };
+  const mine = loaded?.key === key ? loaded : undefined;
+  return { src: mine?.src, failed: mine?.failed === true };
 }
 
 /** The actions on a session, each as a mutation. */

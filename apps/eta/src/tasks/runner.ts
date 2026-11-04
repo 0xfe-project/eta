@@ -13,13 +13,15 @@ import type { SshTransport } from "@eta/ssh";
  * A run is one attempt of the agent that made the task, in a session of its own: opened fresh, so
  * it remembers nothing of the conversation the task came from (the task says what that was), and
  * made the way the agent's conversation sessions are (its model, persona, instructions, tools,
- * skills, MCP servers, bundles and memory), on the machine the task's project is on. The session's
- * transcript is the run's log; there is no second record of what it did.
+ * skills, MCP servers, bundles and memory), on the machine the agent works on: the one it is pinned
+ * to, else the one the task's project is on. A run on another machine than the project's has no
+ * project directory or worktree there: it starts in that machine's home and is told so. The
+ * session's transcript is the run's log; there is no second record of what it did.
  *
- * - **A run is a row, and the table is the queue.** A run starts when its machine has a free slot
- *   (`machine.maxActiveRuns` runs at once) and the task's previous run has ended; until then it
- *   says which of the two it waits for. `pump` looks at the queue and is called by everything that
- *   can change the answer (a run asked for, a run ended, a machine came up, the limit moved).
+ * - **A run is a row, and the table is the queue.** A run starts when its machine is online with a
+ *   free slot (`machine.maxActiveRuns` runs at once) and the task's previous run has ended; until
+ *   then it says which it waits for. `pump` looks at the queue and is called by everything that can
+ *   change the answer (a run asked for, a run ended, a machine came up, the limit moved).
  * - **A run ends with `finish_task`.** The executor calls it to say what it did: the task moves to
  *   review (or `blocked`), its summary is a comment, and the same words are posted in the
  *   conversation the task came from, as the agent. A run that goes quiet without it is reminded
@@ -54,6 +56,7 @@ import type { ProjectStore } from "../projects/store";
 import type { TaskBoard, TaskRuns } from "./board";
 import type { RunRecord, TaskRunStore } from "./runs";
 import type { TaskRecord, TaskStore } from "./store";
+import { homedir } from "node:os";
 import { LinkError } from "@eta/daemon";
 import { shellQuote } from "@eta/ssh";
 import { workable } from "./board";
@@ -84,7 +87,14 @@ export interface TaskRunnerDeps {
       machine: MachineRecord;
       cwd: string;
       created: (sessionId: string) => void;
+      /** The machine the task's project is on, when the session is made on another one. */
+      awayFrom?: MachineRecord | undefined;
     }) => Promise<SessionHandle>;
+    /** The machine an agent works on in a project: its own when it is pinned, else the project's. */
+    machineFor: (
+      agent: NonNullable<ReturnType<AgentStore["get"]>>,
+      projectMachineId: string,
+    ) => MachineRecord | undefined;
   };
   /** A way to run a script on a machine: this process's shell, or the daemon over the link. */
   transport: (machine: MachineRecord) => SshTransport;
@@ -162,11 +172,21 @@ const mentionsOf = (activity: TaskActivityView): string[] => {
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
-/** Where a run works, in the words it is told. */
-const workingIn = (cwd: string, branch: string | null): string =>
-  branch === null
-    ? `You work in the project's directory, ${cwd}, itself: your changes are made in place.`
-    : `You work in ${cwd}, a git worktree of the project on the branch ${branch}. Commit your work there; the worktree stays after you finish, for the user to review.`;
+/**
+ * Where a run works, in the words it is told. A run on another machine than the project's has no
+ * project directory there: it is told where it starts and nothing it cannot know (its system prompt
+ * says whose machine the context is).
+ */
+const workingIn = (
+  cwd: string,
+  branch: string | null,
+  elsewhere: boolean,
+): string =>
+  elsewhere
+    ? `You start in ${cwd}.`
+    : branch === null
+      ? `You work in the project's directory, ${cwd}, itself: your changes are made in place.`
+      : `You work in ${cwd}, a git worktree of the project on the branch ${branch}. Commit your work there; the worktree stays after you finish, for the user to review.`;
 
 export class TaskRunner implements TaskRuns {
   readonly #deps: TaskRunnerDeps;
@@ -562,12 +582,14 @@ export class TaskRunner implements TaskRuns {
       options.continues === true
         ? runs.lastSessionOf(task.id, agentId)
         : undefined;
-    const run = runs.create(
-      task.id,
-      project.machineId,
-      continued?.id ?? null,
-      agentId,
-    );
+    // The run is on the machine its agent works on: a pinned agent's, else the project's.
+    const runner = agents.get(agentId ?? task.createdBy.agentId ?? "");
+    const machineId =
+      runner === undefined
+        ? project.machineId
+        : (this.#deps.engine.machineFor(runner, project.machineId)?.id ??
+          project.machineId);
+    const run = runs.create(task.id, machineId, continued?.id ?? null, agentId);
     board.runEvent(task.id, {
       kind: "run_queued",
       runId: run.id,
@@ -722,10 +744,17 @@ export class TaskRunner implements TaskRuns {
         ended: { status: "failed", error: "The task's project is gone." },
       };
 
-    // Where it works.
-    let cwd = project.path;
+    // Where it works. A run on another machine than the project's (its agent is pinned there) has
+    // no project directory to work in: it starts in that machine's home and is told so.
+    const elsewhere = machine.id !== project.machineId;
+    const awayFrom = elsewhere
+      ? this.#deps.machines.get(project.machineId)
+      : undefined;
+    let cwd = elsewhere
+      ? (machine.home ?? (machine.kind === "primary" ? homedir() : "/"))
+      : project.path;
     let branch: string | null = null;
-    if (task.workspaceMode === "worktree") {
+    if (task.workspaceMode === "worktree" && !elsewhere) {
       const made = await prepareWorktree(this.#deps.transport(machine), {
         projectPath: project.path,
         projectId: project.id,
@@ -768,6 +797,7 @@ export class TaskRunner implements TaskRuns {
       machine,
       cwd,
       created: (sessionId) => runs.setSession(run.id, sessionId, cwd, key),
+      awayFrom,
     });
     runs.setSession(run.id, handle.id, cwd, key);
     // Whether there is something to carry on from: a session whose journal was lost comes back as a
@@ -796,10 +826,17 @@ export class TaskRunner implements TaskRuns {
     const words = [...this.#unpark(run), ...live.pending.splice(0)];
     live.read = true;
     const told = mentioned
-      ? this.#mentionedOf(task, agent.name, cwd, branch, carriesOn)
+      ? // The work is in the project, whichever machine this agent answers from.
+        this.#mentionedOf(
+          task,
+          agent.name,
+          elsewhere ? project.path : cwd,
+          branch,
+          carriesOn,
+        )
       : carriesOn === true
-        ? this.#carryOnOf(task, cwd, branch, words.length > 0)
-        : this.#promptOf(task, cwd, branch);
+        ? this.#carryOnOf(task, cwd, branch, words.length > 0, elsewhere)
+        : this.#promptOf(task, cwd, branch, elsewhere);
     const conversationId = task.originConversationId ?? key;
     const info: RunInfo = {
       conversationId,
@@ -884,7 +921,12 @@ export class TaskRunner implements TaskRuns {
   }
 
   /** What the executor is told first: the task, where it works, and how it reports. */
-  #promptOf(task: TaskRecord, cwd: string, branch: string | null): string {
+  #promptOf(
+    task: TaskRecord,
+    cwd: string,
+    branch: string | null,
+    elsewhere: boolean,
+  ): string {
     const conversation =
       task.originConversationId === null
         ? undefined
@@ -895,7 +937,7 @@ export class TaskRunner implements TaskRuns {
       conversation === undefined
         ? undefined
         : `It came from the conversation "${conversation.name}" (id ${conversation.id}); your result is posted there.`,
-      `## Where you work\n\n${workingIn(cwd, branch)}`,
+      `## Where you work\n\n${workingIn(cwd, branch, elsewhere)}`,
       `## Reporting\n\n- comment_task posts a progress note or a question on the task.\n- When the work is done, or you cannot go on without the user, call finish_task with a summary: what you did, the result, and what the user should check. It moves the task to review and posts the summary in the conversation. A run that stops without calling it is reminded once, then fails.\n- The user may comment on the task while you work; their comments reach you as messages, and a comment left once this run has ended wakes another one, in this session. Other agents the user mentions on the task answer in its thread; their answers reach you while you work.\n- Merging (opening a pull request) is decided after review: do not merge into the main branch unless the task says to.\n- get_task shows the whole task with its timeline.`,
     ]
       .filter((part) => part !== undefined)
@@ -914,6 +956,7 @@ export class TaskRunner implements TaskRuns {
     cwd: string,
     branch: string | null,
     hasWords: boolean,
+    elsewhere: boolean,
   ): string {
     const standing: Record<string, string> = {
       in_review:
@@ -929,7 +972,7 @@ export class TaskRunner implements TaskRuns {
         standing[task.status] ??
         `It is [${task.status}] and being worked on: what follows is what people on the task want of it now.`
       }\n\nRead what is above before you read the project again, and do not redo what you already did. get_task shows the whole task with its timeline, including anything changed since you were first briefed.`,
-      `## Where you work\n\n${workingIn(cwd, branch)}`,
+      `## Where you work\n\n${workingIn(cwd, branch, elsewhere)}`,
       `## Reporting\n\n- comment_task posts a progress note or a question on the task.\n- When this round is done, or you cannot go on without the user, call finish_task with a summary: what you did, the result, and what the user should check. It moves the task to review and posts the summary in the conversation. A run that stops without calling it is reminded once, then fails.\n- Merging (opening a pull request) is decided after review: do not merge into the main branch unless the task says to.`,
       hasWords
         ? "What was said on the task is below."
