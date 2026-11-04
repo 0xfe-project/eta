@@ -62,6 +62,18 @@ export interface ToolsSink {
   ask: (question: string) => Promise<string>;
 }
 
+/**
+ * `eta.state`: the one container whose values outlive the realm. The host
+ * decides where it lives (eta keeps it in the session journal); the realm only
+ * sees strings in and strings out.
+ */
+export interface StateSink {
+  get: (key: string) => Promise<string | undefined>;
+  /** `null` deletes the key. */
+  set: (key: string, value: string | null) => Promise<void>;
+  keys: () => Promise<string[]>;
+}
+
 export interface MemorySink {
   append: (text: string) => Promise<void>;
   read: (query: string) => Promise<string>;
@@ -142,7 +154,16 @@ export interface Hooks {
   emit?: Partial<EmitSink>;
   tools?: Partial<ToolsSink>;
   memory?: MemorySink;
-  platform?: Record<string, PlatformCall>;
+  /**
+   * `eta.platform`: the host's services, one function each. A function form is
+   * read when the `eta` module is first imported in a realm, so a host whose
+   * services are registered after the agent was built still gets all of them.
+   */
+  platform?:
+    | Record<string, PlatformCall>
+    | (() => Record<string, PlatformCall>);
+  /** `eta.state`. Absent means the realm has no state that survives it. */
+  state?: StateSink;
   /** A real sub-turn. Recursion, budget and cycles are the host's to enforce. */
   spawn?: (request: SpawnRequest) => Promise<SpawnResult>;
   /** Call the current agent with a new turn. Supports recursion and sees full history. */

@@ -20,6 +20,11 @@ export interface AgentOptions {
   hooks?: Hooks;
   /** Approval store for shared layer capabilities (optional). Defaults to file-based store. */
   approvalStore?: ApprovalStore;
+  /**
+   * The working directory a script sees: relative paths in `node:fs`, `$`,
+   * `search`/`view`/`edit` resolve here. Defaults to the host process cwd.
+   */
+  cwd?: string;
 }
 
 /**
@@ -41,6 +46,7 @@ export class Agent {
   readonly env: EnvFile;
   readonly #hooks: Hooks;
   readonly #approvalStore: ApprovalStore;
+  readonly #cwd: string | undefined;
   #realm: Realm | undefined;
   #waking: { hash: string; done: Promise<void> } | undefined;
   #woken = false;
@@ -49,6 +55,7 @@ export class Agent {
   constructor(options: AgentOptions) {
     this.root = options.root;
     this.#hooks = options.hooks ?? {};
+    this.#cwd = options.cwd;
     this.layers = new EnvLayers({
       self: options.root,
       project: options.project,
@@ -165,22 +172,23 @@ export class Agent {
           layers: this.layers,
           hooks: this.#hooks,
           approvalStore: this.#approvalStore,
+          ...(this.#cwd === undefined ? {} : { cwd: this.#cwd }),
         }),
       onConsole: hooks.onConsole,
       onEffect: hooks.onEffect,
       authorize: hooks.authorize,
     });
     mountGlobals(realm);
-    mountShell(realm);
-    mountFileOps(realm);
+    mountShell(realm, this.#cwd);
+    mountFileOps(realm, this.#cwd);
     mountNonEtaHooks(realm, hooks);
     return realm;
   }
 }
 
 /**
- * `ctx`, `emit`, `tools`, `platform` — the surface a script may use.
- * (`eta` is now a module, not a global.)
+ * `ctx`, `emit`, `tools` — the surface a script may use besides `eta`.
+ * (`eta`, and with it `eta.platform` and `eta.state`, is a module, not a global.)
  *
  * Only the slots the host filled are mounted. A half-wired host gets a realm
  * that works and simply does not have the parts it did not provide, which keeps
@@ -225,15 +233,5 @@ function mountNonEtaHooks(realm: Realm, hooks: Hooks): void {
         tools.ask?.(question),
       ),
     });
-  }
-
-  if (hooks.platform !== undefined) {
-    const platform: Record<string, unknown> = {};
-    for (const [name, call] of Object.entries(hooks.platform)) {
-      platform[name] = realm.binding(`platform.${name}`, (input: unknown) =>
-        call(input),
-      );
-    }
-    realm.global("platform", platform);
   }
 }

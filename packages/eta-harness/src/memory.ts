@@ -450,8 +450,8 @@ export async function extractMemoryAtRunEnd(
 /** Memory on the local disk, through `node:fs`. Missing files read as undefined. */
 export function nodeMemoryFs(): MemoryFs {
   const missing = (error: unknown): boolean =>
-    (error as NodeJS.ErrnoException).code === "ENOENT"
-    || (error as NodeJS.ErrnoException).code === "ENOTDIR";
+    (error as NodeJS.ErrnoException).code === "ENOENT" ||
+    (error as NodeJS.ErrnoException).code === "ENOTDIR";
   return {
     async readFile(path) {
       try {

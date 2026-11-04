@@ -244,7 +244,7 @@ describe("hooks", () => {
       `import eta from "eta";
 emit.progress("go");
 const last = (await ctx.messages(1))[0];
-const label = await platform.classify({});
+const label = await eta.platform.classify({});
 const note = await eta.memory.read("x");
 const child = await eta.spawn({ prompt: "y" });
 const asked = await tools.ask("z");
@@ -257,7 +257,7 @@ export default [last.text, label, note, child.text, asked].join("|");`,
     expect(result.effects.map((effect) => effect.name)).toEqual([
       "emit.progress",
       "ctx.messages",
-      "platform.classify",
+      "eta.platform.classify",
       "eta.memory.read",
       "eta.spawn",
       "tools.ask",
@@ -392,7 +392,7 @@ describe("waking", () => {
   it("two runs arriving at once wake the realm once", async () => {
     await writeFile(
       join(root, "env.js"),
-      `import eta from "eta"; const marked = await platform.mark(); eta.define("seen", () => marked);\n`,
+      `import eta from "eta"; const marked = await eta.platform.mark(); eta.define("seen", () => marked);\n`,
     );
     let marks = 0;
     const agent = new Agent({
@@ -462,6 +462,30 @@ describe("$", () => {
       .catch((e: Error) => e)) as Error;
     // Bun and Node word the same failure differently; both name the code.
     expect(error.message).toMatch(/zx error|exit code:? 3/);
+  });
+
+  it("the chained methods a prompt promises work inside the realm", async () => {
+    const agent = new Agent({ root });
+    const script = [
+      "const started = Date.now();",
+      "let timedOut = false;",
+      "try { await $`sleep 5`.timeout('300ms'); } catch { timedOut = true; }",
+      "const elapsed = Date.now() - started;",
+      "const failed = await $`exit 3`.nothrow();",
+      "const quiet = await $`echo hi`.quiet();",
+      "const piped = await $`echo a b c`.pipe($`wc -w`);",
+      "export default { timedOut, fast: elapsed < 3000, code: failed.exitCode, quiet: quiet.stdout.trim(), words: piped.stdout.trim() };",
+    ].join("\n");
+    const result = await agent.run(script, {
+      identifier: join(root, "probe.js"),
+    });
+    expect(result.value).toEqual({
+      timedOut: true,
+      fast: true,
+      code: 3,
+      quiet: "hi",
+      words: "3",
+    });
   });
 
   it("a command is not a binding call, so it leaves no row", async () => {

@@ -15,6 +15,7 @@ import type {
 } from "@eta/harness";
 import type { Settings } from "./settings";
 import type { SessionListing, SessionMeta, SessionStore } from "./store";
+import { join } from "node:path";
 /**
  * SessionManager — several sessions in one process (REFACTOR.md §5b).
  *
@@ -400,6 +401,19 @@ export class SessionManager {
     const session = await openSession({
       storage: (await this.store.open(meta.id))!.storage,
       models,
+      // The ESM realm: scripts resolve in the project; the session's own directory is the
+      // personal layer, the project's .eta the shared one, ~/.eta/global the global one.
+      cwd: meta.cwd,
+      sessionId: meta.id,
+      ...(platform?.sessionDir === undefined
+        ? {}
+        : {
+            esm: {
+              root: platform.sessionDir,
+              project: join(meta.cwd, ".eta"),
+              global: join(platform.home, ".eta", "global"),
+            },
+          }),
       ...(agentPrompt === undefined ? {} : { agentPrompt }),
       // The app's own facts: the words are the harness's, the paths are this app's.
       ...(platform === undefined ? {} : { platform }),

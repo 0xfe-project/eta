@@ -155,6 +155,7 @@ export function TaskDraftRow({
           {translateText("draft.notCreatedHint", {
             workspace: workspaceLabel({
               mode: draft.workspace,
+              base: null,
               path: null,
               branch: null,
             }),

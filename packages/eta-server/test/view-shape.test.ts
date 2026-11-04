@@ -7,10 +7,7 @@
  * building, which is cheaper than a client that receives frames it cannot read.
  */
 
-import type {
-  GoalState,
-  StoredTask,
-} from "@eta/client-contracts";
+import type { GoalState, StoredTask } from "@eta/client-contracts";
 import type { StatePatch, StateSnapshot } from "@eta/client-wire-proto";
 import type {
   GoalState as RuntimeGoal,

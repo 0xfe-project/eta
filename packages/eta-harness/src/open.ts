@@ -48,6 +48,7 @@ import type {
 import type { GoalEntry } from "@eta/core/session";
 import type { StorageService } from "@eta/core/storage";
 import type { TSchema } from "typebox";
+import type { EsmSession } from "./esm";
 import type { MemoryExtractionOutcome, MemoryFile, MemoryFs } from "./memory";
 import type {
   EtaPromptSection,
@@ -67,6 +68,7 @@ import {
 import { recordGoalEntries, SessionLog } from "@eta/core/session";
 import { AskRegistry, createAskUserTool } from "./ask";
 import { CompactionService } from "./compaction-service";
+import { openEsmSession } from "./esm";
 import { imageLimitsFor } from "./image-limits";
 import { JournalingService, SESSION_CONFIG, TASKS_STATE } from "./journaling";
 import { extractMemoryAtRunEnd, MemoryCache } from "./memory";
@@ -84,7 +86,7 @@ import {
 import { convertToLlm } from "./prompts/summaries";
 import { RunPump } from "./pump";
 import { TaskReminderService } from "./reminder";
-import { MODEL_STATE } from "./state";
+import { MODEL_STATE, sessionStateKV } from "./state";
 import { createStepTools } from "./tools/tasks";
 import { toKernelTool } from "./tools/tool";
 import { describeRepair, repairTranscript } from "./transcript-repair";
@@ -178,6 +180,17 @@ export interface OpenSessionOptions {
   cwd?: string | undefined;
   /** Turns without a task-tool call before the reminder nudge is due. */
   reminderInterval?: number | undefined;
+  /**
+   * The ESM realm (`esmrun` / `esmrunandkeep`). `root` is the personal layer
+   * (the session's own directory); scripts resolve paths in `cwd`.
+   */
+  esm?:
+    | {
+        root: string;
+        project?: string | undefined;
+        global?: string | undefined;
+      }
+    | undefined;
 }
 
 /** The project's memory, as a session needs it: where it is, and how to write it. */
@@ -267,6 +280,8 @@ export interface OpenSession {
   view: ViewService;
   /** Stop the journaling this assembly wired (the host may want to take over). */
   stop: () => void;
+  /** The session's ESM realm, when `esm` was given. */
+  esm: EsmSession | undefined;
 }
 
 /**
@@ -373,7 +388,23 @@ export async function openSession(
         ? undefined
         : options.ask;
 
+  const esm =
+    options.esm === undefined
+      ? undefined
+      : openEsmSession({
+          kernel,
+          models: options.models,
+          // eslint-disable-next-line ts/no-use-before-define -- read when a script runs, after assembly
+          runner: () => runner,
+          state: sessionStateKV(log, journaling),
+          root: options.esm.root,
+          project: options.esm.project,
+          global: options.esm.global,
+          cwd: options.cwd,
+        });
+
   const installedTools: HarnessTool<unknown, TSchema, unknown>[] = [
+    ...(esm?.tools ?? []),
     ...(createStepTools(kernel.tasks) as HarnessTool<
       unknown,
       TSchema,
@@ -397,13 +428,17 @@ export async function openSession(
     ...(options.tools ?? []),
   ];
   for (const tool of installedTools) {
-    kernel.tools.register(
-      // Whatever the run resolved for tools is handed through as it is.
-      toKernelTool(tool, (toolContext) => toolContext) as KernelTool<
-        unknown,
-        ToolResult<unknown>
-      >,
-    );
+    // Whatever the run resolved for tools is handed through as it is.
+    const adapted = toKernelTool(tool, (toolContext) => toolContext);
+    // A description that is a getter (esmrun's d.ts) is read per request, so it
+    // sees the tools a host registers after the session opened.
+    const described = Object.getOwnPropertyDescriptor(tool, "description");
+    if (described?.get !== undefined)
+      Object.defineProperty(adapted, "description", {
+        get: () => tool.description,
+        enumerable: true,
+      });
+    kernel.tools.register(adapted as KernelTool<unknown, ToolResult<unknown>>);
   }
   // A question that was waiting when the process died is waiting again.
   ask?.replay(log.graph.pathOldestFirst());
@@ -670,6 +705,17 @@ export async function openSession(
     })();
   });
 
+  // Capability delta (ESMMODE-IMPL): what the realm's layers gained or lost since
+  // the last run goes into that run as a user message — journaled like any other,
+  // never in the system prompt. The runner adopts the inbox right after this event.
+  const stopDelta =
+    esm === undefined
+      ? undefined
+      : kernelOn(kernel.ctx)("turn:run-start", () => {
+          const text = esm.delta();
+          if (text !== undefined) kernel.nextRun(text);
+        });
+
   const pump = new RunPump(kernel, runner, options.pump);
 
   // The view: a container plus every section its owner contributes. Nothing here
@@ -788,7 +834,10 @@ export async function openSession(
     }),
     configRestored: storedConfig !== undefined,
     tasks,
+    esm,
     stop: () => {
+      stopDelta?.();
+      esm?.dispose();
       stopMediaRepair();
       stopExtraction?.();
       stopPromptRefresh();

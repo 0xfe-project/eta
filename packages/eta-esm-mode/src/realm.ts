@@ -151,7 +151,7 @@ export class Realm {
     this.#name = options.name ?? "realm";
     this.#onEffect = options.onEffect;
     this.#authorize = options.authorize;
-    // eslint-disable-next-line react/naming-convention-context-name -- not a React context
+
     this.#context = vm.createContext({});
     this.#installConsole(options.onConsole);
     this.#linker = options.mounts?.(this);
@@ -159,6 +159,41 @@ export class Realm {
 
   get context(): vm.Context {
     return this.#context;
+  }
+
+  /**
+   * A host value copied into the realm as plain data. What a host service
+   * answers with carries the host's prototypes; a JSON copy made by the realm's
+   * own `JSON.parse` does not, so `Array.isArray` and `instanceof` answer the
+   * way a script expects. Functions and cycles do not survive, by design.
+   */
+  own(value: unknown): unknown {
+    if (value === undefined) return undefined;
+    const parse = vm.runInContext(
+      "(json) => JSON.parse(json)",
+      this.#context,
+    ) as (json: string) => unknown;
+    return parse(JSON.stringify(value));
+  }
+
+  /**
+   * Whether `source` parses as a module. Nothing is linked or run, so asking
+   * has no effects; that is what lets a caller try one reading of a snippet
+   * and fall back to another without running anything twice.
+   */
+  parses(source: string): boolean {
+    try {
+      // eslint-disable-next-line no-new -- constructing is the parse
+      new vm.SourceTextModule(source, { context: this.#context });
+      return true;
+    } catch (error) {
+      if (
+        error instanceof SyntaxError ||
+        (error as Error).name === "SyntaxError"
+      )
+        return false;
+      throw error;
+    }
   }
 
   /** Effects recorded since the last {@link takeEffects}. */

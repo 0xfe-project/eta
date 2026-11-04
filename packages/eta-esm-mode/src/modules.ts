@@ -203,6 +203,8 @@ export interface ModuleMountOptions {
   hooks?: Hooks;
   /** Approval store for shared layer capability authorization */
   approvalStore?: ApprovalStore;
+  /** Where relative `node:fs` paths resolve. Defaults to the host process cwd. */
+  cwd?: string;
 }
 
 /**
@@ -221,7 +223,7 @@ export function mountModules(
   realm: Realm,
   options: ModuleMountOptions,
 ): Linker {
-  const node = mountNodeModules(realm);
+  const node = mountNodeModules(realm, options.cwd);
   const files = new Map<string, vm.Module>();
   const { layers, hooks, approvalStore } = options;
 
@@ -330,9 +332,28 @@ export function mountModules(
 
     const file = specifier.startsWith("file://")
       ? specifier.slice("file://".length)
-      : await resolveSpecifier(specifier, from, options, realm);
+      : await resolveSpecifier(
+          specifier,
+          from,
+          { root: installRoot(from) },
+          realm,
+        );
     if (file === undefined) return undefined;
     return load(file);
+  }
+
+  /**
+   * Where a bare import is installed: the layer the importing file lives under
+   * (a project capability's packages belong to the project), else the agent root.
+   */
+  function installRoot(from: string): string {
+    for (const layer of ["project", "global"] as const) {
+      const env = layers?.get(layer);
+      if (env === undefined) continue;
+      const dir = dirname(env.path);
+      if (from === env.path || from.startsWith(`${dir}/`)) return dir;
+    }
+    return options.root;
   }
 
   function loadEtaModule(specifier: string, fromPath: string): vm.Module {
@@ -429,6 +450,8 @@ export function mountModules(
     if (hooks?.memory) exports.push("memory");
     if (hooks?.spawn) exports.push("spawn");
     if (hooks?.ask) exports.push("ask");
+    if (hooks?.platform) exports.push("platform");
+    if (hooks?.state) exports.push("state");
 
     return new vm.SyntheticModule(
       exports,
@@ -542,6 +565,38 @@ export function mountModules(
           );
         }
 
+        if (hooks?.platform) {
+          const services =
+            typeof hooks.platform === "function"
+              ? hooks.platform()
+              : hooks.platform;
+          const platform: Record<string, unknown> = {};
+          for (const [name, call] of Object.entries(services)) {
+            platform[name] = realm.binding(
+              `eta.platform.${name}`,
+              async (input?: unknown) => realm.own(await call(input ?? {})),
+            );
+          }
+          etaObject.platform = platform;
+        }
+
+        if (hooks?.state) {
+          const state = hooks.state;
+          etaObject.state = {
+            get: realm.binding("eta.state.get", (key: string) =>
+              state.get(key),
+            ),
+            set: realm.binding(
+              "eta.state.set",
+              (key: string, value: string | null) => state.set(key, value),
+              (key) => key,
+            ),
+            keys: realm.binding("eta.state.keys", async () =>
+              realm.own(await state.keys()),
+            ),
+          };
+        }
+
         // Export default as the eta object
         this.setExport("default", etaObject);
         // Also export named exports for backward compat
@@ -550,6 +605,8 @@ export function mountModules(
         if (hooks?.memory) this.setExport("memory", etaObject.memory);
         if (hooks?.spawn) this.setExport("spawn", etaObject.spawn);
         if (hooks?.ask) this.setExport("ask", etaObject.ask);
+        if (hooks?.platform) this.setExport("platform", etaObject.platform);
+        if (hooks?.state) this.setExport("state", etaObject.state);
       },
       { context: realm.context, identifier },
     );

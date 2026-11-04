@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
+import process from "node:process";
 
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -24,47 +25,49 @@ import { $ } from "zx";
  * authorizer the host installed at {@link RealmOptions.authorize}; this file
  * only makes sure there is no way around the question.
  */
-export function mountNodeModules(realm: Realm): Linker {
+export function mountNodeModules(realm: Realm, cwd?: string): Linker {
   const cache = new Map<string, unknown>();
 
   return (specifier) => {
     const cached = cache.get(specifier);
     if (cached !== undefined) return cached as ReturnType<Linker>;
-    const module = nodeModule(realm, specifier);
+    const module = nodeModule(realm, specifier, cwd);
     if (module !== undefined) cache.set(specifier, module);
     return module as ReturnType<Linker>;
   };
 }
 
-function nodeModule(realm: Realm, specifier: string) {
+function nodeModule(realm: Realm, specifier: string, cwd?: string) {
+  // A relative path means the session's working directory, not the host process's.
+  const at = (p: string): string => path.resolve(cwd ?? process.cwd(), p);
   switch (specifier) {
     case "node:fs/promises":
       return realm.synthetic(specifier, {
         readFile: realm.binding(
           "fs.readFile",
           async (path: string, encoding = "utf8") =>
-            fsp.readFile(path, encoding as BufferEncoding),
+            fsp.readFile(at(path), encoding as BufferEncoding),
         ),
         writeFile: realm.binding(
           "fs.writeFile",
           async (path: string, data: string) => {
-            await fsp.writeFile(path, data, "utf8");
+            await fsp.writeFile(at(path), data, "utf8");
             return data.length;
           },
         ),
         appendFile: realm.binding(
           "fs.appendFile",
           async (path: string, data: string) =>
-            fsp.appendFile(path, data, "utf8"),
+            fsp.appendFile(at(path), data, "utf8"),
         ),
         mkdir: realm.binding("fs.mkdir", async (path: string) =>
-          fsp.mkdir(path, { recursive: true }),
+          fsp.mkdir(at(path), { recursive: true }),
         ),
         readdir: realm.binding("fs.readdir", async (path: string) =>
-          fsp.readdir(path),
+          fsp.readdir(at(path)),
         ),
         stat: realm.binding("fs.stat", async (path: string) => {
-          const stat = await fsp.stat(path);
+          const stat = await fsp.stat(at(path));
           return {
             size: stat.size,
             isFile: stat.isFile(),
@@ -73,17 +76,17 @@ function nodeModule(realm: Realm, specifier: string) {
           };
         }),
         rm: realm.binding("fs.rm", async (path: string) =>
-          fsp.rm(path, { recursive: true, force: true }),
+          fsp.rm(at(path), { recursive: true, force: true }),
         ),
         rename: realm.binding("fs.rename", async (from: string, to: string) =>
-          fsp.rename(from, to),
+          fsp.rename(at(from), at(to)),
         ),
         copyFile: realm.binding(
           "fs.copyFile",
-          async (from: string, to: string) => fsp.copyFile(from, to),
+          async (from: string, to: string) => fsp.copyFile(at(from), at(to)),
         ),
         realpath: realm.binding("fs.realpath", async (path: string) =>
-          fsp.realpath(path),
+          fsp.realpath(at(path)),
         ),
       });
     case "node:fs":
@@ -91,26 +94,26 @@ function nodeModule(realm: Realm, specifier: string) {
         readFileSync: realm.binding(
           "fs.readFileSync",
           (path: string, encoding = "utf8") =>
-            fs.readFileSync(path, encoding as BufferEncoding),
+            fs.readFileSync(at(path), encoding as BufferEncoding),
         ),
         writeFileSync: realm.binding(
           "fs.writeFileSync",
           (path: string, data: string) => {
-            fs.writeFileSync(path, data, "utf8");
+            fs.writeFileSync(at(path), data, "utf8");
             return data.length;
           },
         ),
         existsSync: realm.binding("fs.existsSync", (path: string) =>
-          fs.existsSync(path),
+          fs.existsSync(at(path)),
         ),
         readdirSync: realm.binding("fs.readdirSync", (path: string) =>
-          fs.readdirSync(path),
+          fs.readdirSync(at(path)),
         ),
         mkdirSync: realm.binding("fs.mkdirSync", (path: string) =>
-          fs.mkdirSync(path, { recursive: true }),
+          fs.mkdirSync(at(path), { recursive: true }),
         ),
         statSync: realm.binding("fs.statSync", (path: string) => {
-          const stat = fs.statSync(path);
+          const stat = fs.statSync(at(path));
           return {
             size: stat.size,
             isFile: stat.isFile(),
@@ -119,14 +122,15 @@ function nodeModule(realm: Realm, specifier: string) {
           };
         }),
         rmSync: realm.binding("fs.rmSync", (path: string) =>
-          fs.rmSync(path, { recursive: true, force: true }),
+          fs.rmSync(at(path), { recursive: true, force: true }),
         ),
         appendFileSync: realm.binding(
           "fs.appendFileSync",
-          (path: string, data: string) => fs.appendFileSync(path, data, "utf8"),
+          (path: string, data: string) =>
+            fs.appendFileSync(at(path), data, "utf8"),
         ),
         realpathSync: realm.binding("fs.realpathSync", (path: string) =>
-          fs.realpathSync(path),
+          fs.realpathSync(at(path)),
         ),
       });
     case "node:path":
@@ -135,7 +139,7 @@ function nodeModule(realm: Realm, specifier: string) {
           path.join(...parts),
         ),
         resolve: realm.binding("path.resolve", (...parts: string[]) =>
-          path.resolve(...parts),
+          path.resolve(cwd ?? process.cwd(), ...parts),
         ),
         relative: realm.binding("path.relative", (from: string, to: string) =>
           path.relative(from, to),
@@ -186,9 +190,11 @@ function nodeModule(realm: Realm, specifier: string) {
  * effects and none of them can be authorised. The ledger says a command ran
  * and nothing about what was inside it — the gap ESMMODE §1 already names.
  */
-export function mountShell(realm: Realm): void {
+export function mountShell(realm: Realm, cwd?: string): void {
+  // Commands run in the session's working directory; `$.cwd` is not changed for the host.
+  const shell = cwd === undefined ? $ : $({ cwd });
   const tag = realm.wrap(
-    $ as unknown as (...args: unknown[]) => unknown,
+    shell as unknown as (...args: unknown[]) => unknown,
   ) as unknown as Record<string, unknown>;
   // `$.nothrow()` and friends are properties on the function itself; without
   // them the shell is there but every failure is fatal.

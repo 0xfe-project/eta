@@ -32,6 +32,7 @@ const first = taskDetail({
   runStatus: "running",
   workspace: {
     mode: "worktree",
+    base: null,
     path: "/data/worktrees/p1/task-1",
     branch: "eta/task-1",
   },

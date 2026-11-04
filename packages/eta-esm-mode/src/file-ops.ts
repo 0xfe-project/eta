@@ -104,11 +104,12 @@ export async function search(
 export async function view(
   path: string,
   options: ViewOptions = {},
+  base: string = cwd(),
 ): Promise<string> {
   const { start = 1, limit = 50 } = options;
   if (start < 1) throw new Error(`start must be >= 1, got ${start}`);
 
-  const content = await readFile(resolve(path), "utf-8");
+  const content = await readFile(resolve(base, path), "utf-8");
   const lines = content.split("\n");
   if (start > lines.length) return "";
 
@@ -122,8 +123,9 @@ export async function edit(
   path: string,
   oldText: string,
   newText: string,
+  base: string = cwd(),
 ): Promise<void> {
-  const resolved = resolve(path);
+  const resolved = resolve(base, path);
   const content = await readFile(resolved, "utf-8");
 
   let count = 0;
@@ -147,12 +149,18 @@ export async function edit(
 }
 
 /** Mounts `search` / `view` / `edit` as realm top-level globals. */
-export function mountFileOps(realm: Realm): void {
+export function mountFileOps(realm: Realm, base?: string): void {
   realm.global(
     "search",
     realm.binding(
       "search",
-      (pattern: string, options?: SearchOptions) => search(pattern, options),
+      (pattern: string, options?: SearchOptions) =>
+        search(pattern, {
+          ...options,
+          ...(base !== undefined && options?.cwd === undefined
+            ? { cwd: base }
+            : {}),
+        }),
       (pattern, options) =>
         `${pattern}${options?.glob !== undefined ? ` glob:${options.glob}` : ""}${options?.cwd !== undefined ? ` in:${options.cwd}` : ""}`,
     ),
@@ -161,7 +169,7 @@ export function mountFileOps(realm: Realm): void {
     "view",
     realm.binding(
       "view",
-      (path: string, options?: ViewOptions) => view(path, options),
+      (path: string, options?: ViewOptions) => view(path, options, base),
       (path, options) =>
         `${path}${options?.start !== undefined ? ` :${options.start}` : ""}${options?.limit !== undefined ? `+${options.limit}` : ""}`,
     ),
@@ -171,7 +179,7 @@ export function mountFileOps(realm: Realm): void {
     realm.binding(
       "edit",
       (path: string, oldText: string, newText: string) =>
-        edit(path, oldText, newText),
+        edit(path, oldText, newText, base),
       (path) => path,
     ),
   );
