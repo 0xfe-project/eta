@@ -86,7 +86,15 @@
   "machine": {
     "label": "Runs on",
     "followProject": "Follow the project",
-    "primarySuffix": " (primary)"
+    "primarySuffix": " (primary)",
+    "followHint": "Runs on the machine the project is on",
+    "followNote": "Runtimes are listed from the primary for now, and may differ if the project is on another machine.",
+    "offlineHint": "Can't reach it to confirm its runtimes",
+    "runtimesUnknown": "Couldn't confirm its runtimes",
+    "running": "{{count}} running",
+    "runtimeMissing": "{{machine}} doesn't have {{runtime}}, so this switched to {{next}}",
+    "runtimeUnknown": "Couldn't confirm what {{machine}} has, so this switched to {{next}}",
+    "wentOffline": "{{machine}} went offline. Choose another machine."
   },
   "runtime": {
     "label": "Runtime",

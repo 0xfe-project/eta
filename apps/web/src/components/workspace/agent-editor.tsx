@@ -40,7 +40,6 @@ import { useBundles } from "@/queries/bundles";
 import {
   BundlesField,
   InstructionsField,
-  MachineField,
   ModelField,
   NameField,
   PersonaField,
@@ -50,6 +49,7 @@ import {
 import { agentDraft, agentFormSchema } from "./agent-form";
 import { AgentAvatar } from "./agent-identity";
 import { CreateAgentWizard } from "./create-agent-wizard";
+import { MachinePicker } from "./machine-picker";
 import { useReturnFocus } from "./return-focus";
 import { SettingsNav } from "./settings-nav";
 import { useAgents } from "./use-agents";
@@ -255,7 +255,7 @@ function AgentEditorForm({
           {tab === "general" ? (
             <>
               <NameField form={form} />
-              <MachineField form={form} />
+              <MachinePicker form={form} />
               <RuntimeField form={form} runtimes={runtimes} />
               <ModelField
                 form={form}

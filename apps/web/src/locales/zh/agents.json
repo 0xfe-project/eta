@@ -86,7 +86,15 @@
   "machine": {
     "label": "运行机器",
     "followProject": "跟随项目",
-    "primarySuffix": "（主机器）"
+    "primarySuffix": "（主机器）",
+    "followHint": "在项目所在的机器上运行",
+    "followNote": "运行方式先按主机器列出，项目在别的机器上时可能不同。",
+    "offlineHint": "连不上，无法确认运行方式",
+    "runtimesUnknown": "无法确认运行方式",
+    "running": "{{count}} 个运行中",
+    "runtimeMissing": "{{machine}} 上没有 {{runtime}}，已换成 {{next}}",
+    "runtimeUnknown": "无法确认 {{machine}} 有哪些运行方式，已换成 {{next}}",
+    "wentOffline": "{{machine}} 已经离线，请换一台机器。"
   },
   "runtime": {
     "label": "运行方式",

@@ -4,9 +4,10 @@ import type {
   AgentRuntime,
   AgentRuntimeInfo,
   AgentView,
+  MachineView,
 } from "@eta/client-contracts";
 import type { Model } from "@/queries/providers";
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";
 import { translate } from "@/lib/i18n";
 import { getWire } from "@/lib/wire";
 import { useMachines } from "@/queries/projects";
@@ -68,8 +69,8 @@ export function useDirectChat() {
  * when no machine is named. Asking can start a runtime to list its models, so the answer is kept
  * for a while; the host keeps its own.
  */
-function useAgentRuntimes(machineId: string | undefined) {
-  return useQuery({
+const runtimesQuery = (machineId: string | undefined) =>
+  queryOptions({
     queryKey: ["wire", "agents", "runtimes", machineId ?? ""],
     queryFn: async () =>
       (
@@ -82,6 +83,31 @@ function useAgentRuntimes(machineId: string | undefined) {
     staleTime: 5 * 60_000,
     retry: false,
   });
+
+// A refetch that fails keeps the list it had: only a machine that never answered is unknown.
+const knownRuntimes = ({
+  data,
+  isError,
+}: {
+  data: AgentRuntimeInfo[] | undefined;
+  isError: boolean;
+}) => data ?? (isError ? null : undefined);
+
+/**
+ * What each of these machines has, by machine id, each undefined until it answers and null when it
+ * could not be asked. They are asked one by one, so a slow machine holds up only its own answer.
+ */
+export function useRuntimesByMachine(
+  machines: readonly MachineView[],
+): ReadonlyMap<string, AgentRuntimeInfo[] | null | undefined> {
+  const answers = useQueries({
+    queries: machines.map((machine) =>
+      runtimesQuery(machine.kind === "primary" ? undefined : machine.id),
+    ),
+  });
+  return new Map(
+    machines.map((machine, at) => [machine.id, knownRuntimes(answers[at]!)]),
+  );
 }
 
 /** A runtime's models as a picker lists them: `runtime:modelId`, under the runtime's name. */
@@ -115,11 +141,13 @@ export function useAgentRuntimeChoices(
   const { machines } = useMachines();
   const { data: providerModels } = useModels();
   const primary = machines.find((machine) => machine.kind === "primary");
-  const { data, isError } = useAgentRuntimes(
-    machineId === "" || machineId === primary?.id ? undefined : machineId,
+  const runtimes = knownRuntimes(
+    useQuery(
+      runtimesQuery(
+        machineId === "" || machineId === primary?.id ? undefined : machineId,
+      ),
+    ),
   );
-  // A refetch that fails keeps the list it had: only a machine that never answered is unknown.
-  const runtimes = data ?? (isError ? null : undefined);
   if (runtime === "eta") return { runtimes, models: providerModels };
   // An external runtime's models come with the machine's list: loading or unknown with it.
   if (!runtimes) return { runtimes, models: runtimes };

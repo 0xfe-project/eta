@@ -13,7 +13,6 @@ import { formatLocale } from "@/lib/i18n";
 import { THINKING_LEVELS } from "@/lib/thinking";
 import { useBundles } from "@/queries/bundles";
 import { usePersonas } from "@/queries/personas";
-import { useMachines } from "@/queries/projects";
 import { modelGroups } from "@/queries/providers";
 import { DESCRIPTION_MAX } from "./agent-form";
 import { Select, SelectGroup, SelectOption } from "./select-field";
@@ -127,54 +126,6 @@ export function NameField({
 }
 
 /**
- * The machine the agent runs on: the project's, or one it is pinned to. Only offered when there is
- * more than one machine to choose from. A change keeps the model: a runtime calls its models the
- * same on every machine, and one the new machine lacks stays in the model select, marked.
- */
-export function MachineField({ form }: { form: Form }) {
-  const { t: translateText } = useTranslation(["agents", "common"] as const);
-  const { machines } = useMachines();
-  const value = useWatch({ control: form.control, name: "machineId" });
-  const choices = machines.filter(
-    (machine) =>
-      (machine.kind === "primary" || machine.kind === "daemon") &&
-      machine.status !== "pending" &&
-      machine.status !== "revoked",
-  );
-  if (choices.length < 2 && value === "") return null;
-  return (
-    <div className="space-y-1.5">
-      <Label htmlFor="agent-machine">
-        {translateText("agents:machine.label")}
-      </Label>
-      <Select
-        id="agent-machine"
-        className="w-full"
-        value={value}
-        onValueChange={(next) =>
-          form.setValue("machineId", next, { shouldDirty: true })
-        }
-      >
-        <SelectOption value="">
-          {translateText("agents:machine.followProject")}
-        </SelectOption>
-        {choices.map((machine) => (
-          <SelectOption key={machine.id} value={machine.id}>
-            {machine.name}
-            {machine.kind === "primary"
-              ? translateText("agents:machine.primarySuffix")
-              : ""}
-            {machine.status === "online"
-              ? ""
-              : translateText("common:status.offlineSuffix")}
-          </SelectOption>
-        ))}
-      </Select>
-    </div>
-  );
-}
-
-/**
  * What answers for the agent: eta's own loop, or an agent runtime on the machine (Claude Code,
  * Codex, ...). Another runtime has other models, so a change clears the model.
  *
@@ -185,15 +136,24 @@ export function MachineField({ form }: { form: Form }) {
 export function RuntimeField({
   form,
   runtimes,
+  note,
+  onChange,
 }: {
   form: Form;
   /** Undefined while the host looks; null when the machine could not be asked. */
   runtimes: AgentRuntimeInfo[] | null | undefined;
+  /** Why the runtime is not the one that was chosen. */
+  note?: string | undefined;
+  onChange?: (() => void) | undefined;
 }) {
   const { t: translateText } = useTranslation(["agents", "common"] as const);
   const value = useWatch({ control: form.control, name: "runtime" });
   const listed =
     value === "eta" || (runtimes ?? []).some((runtime) => runtime.id === value);
+  const hints = [
+    runtimes === null ? "agent-runtime-hint" : null,
+    note ? "agent-runtime-note" : null,
+  ].filter(Boolean);
   return (
     <div className="space-y-1.5">
       <Label htmlFor="agent-runtime">
@@ -203,8 +163,9 @@ export function RuntimeField({
         id="agent-runtime"
         className="w-full"
         value={value}
-        aria-describedby={runtimes === null ? "agent-runtime-hint" : undefined}
+        aria-describedby={hints.length ? hints.join(" ") : undefined}
         onValueChange={(next) => {
+          onChange?.();
           form.setValue("runtime", next as AgentForm["runtime"], {
             shouldDirty: true,
           });
@@ -247,6 +208,15 @@ export function RuntimeField({
       {runtimes === null ? (
         <p id="agent-runtime-hint" className="text-xs text-muted-foreground">
           {translateText("agents:runtime.unreachable")}
+        </p>
+      ) : null}
+      {note ? (
+        <p
+          id="agent-runtime-note"
+          role="status"
+          className="text-xs text-state-warning"
+        >
+          {note}
         </p>
       ) : null}
     </div>
