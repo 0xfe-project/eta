@@ -4,7 +4,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { SidebarProvider } from "@/components/ui/sidebar";
 import { draftText, EMPTY_DRAFT } from "@/lib/composer";
 import { mentionedMembers } from "@/lib/mentions";
 import { cn } from "@/lib/utils";
@@ -25,7 +24,7 @@ import { useSessionActions } from "@/queries/sessions";
 import { useConnectionLost } from "@/queries/wire";
 import { ChatHeader, MobileChatHeader } from "./agent-bar";
 import { AgentEditor } from "./agent-editor";
-import { BottomNav, Sidebar } from "./app-shell";
+import { BottomNav, SidebarShell } from "./app-shell";
 import { ChatPanel, ComposerNotice } from "./chat-panel";
 import { GroupList } from "./groups";
 import { NewConversationDialog } from "./new-conversation-dialog";
@@ -215,8 +214,7 @@ export function Workspace({
       workspaceButtonRef.current?.focus();
   }, [drawerOpen]);
   return (
-    <SidebarProvider className="h-dvh min-h-0 bg-background">
-      <Sidebar />
+    <SidebarShell>
       <div
         className={cn(
           "min-h-0 min-w-0 flex-1 flex-col md:hidden",
@@ -429,6 +427,6 @@ export function Workspace({
       <SettingsDialog />
       <AgentEditor />
       <NewConversationDialog />
-    </SidebarProvider>
+    </SidebarShell>
   );
 }

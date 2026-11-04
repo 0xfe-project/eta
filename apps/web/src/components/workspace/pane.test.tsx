@@ -51,3 +51,39 @@ it("grows a right-hand pane when ArrowLeft is pressed on its divider", async () 
   });
   expect(divider?.getAttribute("aria-valuenow")).toBe("720");
 });
+
+function Fallback({ fallback }: { fallback: number }) {
+  const pane = usePaneWidth({
+    storageKey: "test.pane.width",
+    min: 320,
+    max: 720,
+    fallback,
+  });
+  return (
+    <div aria-label="resize" data-sized={pane.sized} {...pane.dividerProps} />
+  );
+}
+
+it("follows a moving fallback until a width is chosen, and keeps the width after", async () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  cleanup.push(() => {
+    root.unmount();
+    host.remove();
+  });
+  const divider = () => host.querySelector<HTMLElement>('[role="separator"]');
+  await act(async () => root.render(<Fallback fallback={400} />));
+  expect(divider()?.getAttribute("data-sized")).toBe("false");
+  await act(async () => root.render(<Fallback fallback={480} />));
+  expect(divider()?.getAttribute("aria-valuenow")).toBe("480");
+
+  await act(async () => {
+    divider()?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+    );
+  });
+  expect(divider()?.getAttribute("data-sized")).toBe("true");
+  await act(async () => root.render(<Fallback fallback={400} />));
+  expect(divider()?.getAttribute("aria-valuenow")).toBe("496");
+});
