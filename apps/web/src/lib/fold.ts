@@ -3,8 +3,8 @@ import { useSyncExternalStore } from "react";
 /**
  * Which cards the reader has opened and folded, kept by the row they were drawn from.
  *
- * A card's default is a guess the page makes from the thing around it: a task draft is open while
- * the turn that wrote it is still at work and folded to one line once that turn has settled. A guess
+ * A card's default is a guess the page makes from the thing around it: a task draft is one folded
+ * line from the moment its row exists, and a task card is open until the reader says otherwise. A guess
  * is no match for a choice, so from the moment the reader opens or folds a card themselves that
  * stands — here, by the row's id, and through a reload. A card with no choice of its own follows the
  * guess, which can still move under it while its turn finishes.
@@ -89,9 +89,9 @@ export function rememberFold(id: string, open: boolean): void {
  * A fold the reader owns: `[open, fold]`, where `open` is their choice when they have made one and
  * `defaultOpen` until they do, and `fold` both applies the choice and remembers it.
  *
- * `defaultOpen` moves — a draft folds when the turn that wrote it ends — and a card that has heard no
- * opinion follows it. One that has does not. Nothing is held in the component: the store is the
- * answer, so the same row drawn in two places shows one fold and changes as one.
+ * `defaultOpen` can still move, and a card that has heard no opinion follows it. One that has
+ * does not. Nothing is held in the component: the store is the answer, so the same row drawn in
+ * two places shows one fold and changes as one.
  */
 const nothingSaid = () => undefined;
 

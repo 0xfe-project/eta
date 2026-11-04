@@ -17,7 +17,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useFold } from "@/lib/fold";
-import { ACTIVE_STATUSES } from "@/lib/timeline";
 import { cn } from "@/lib/utils";
 import { muted } from "./activity-card";
 import { ArtifactButton } from "./artifact-dialog";
@@ -32,16 +31,13 @@ import { useSectionLink } from "./workspace-search";
 //
 // Both fold the way a turn's thinking and its tool calls do — one line with a chevron, opened in
 // place — because to a reader skimming a conversation they are the same kind of thing: worth reading
-// while they are news, something to step over afterwards. A draft is open while the turn that wrote
-// it is still at work and folded to one line once that turn settles; a card, which exists because the
-// reader asked for it, is open until they say otherwise. Either way the folded line says what the row
-// is, what it proposes, and what it still waits for, and keeps the way to act on it on that line:
-// folding hides a draft's prose and never its question. A choice the reader made themselves outranks
-// both defaults and outlives the reload (see `lib/fold.ts`).
-
-/** Whether the turn a row came out of is still at work — or the row does not say whose turn it was. */
-const turnActive = (turn: MessageView | undefined) =>
-  turn === undefined || ACTIVE_STATUSES.has(turn.status);
+// when they open them, something to step over otherwise. A draft arrives already folded to one line.
+// While its arguments were still streaming there was no card beside the answer at all (the call lived
+// in the process, like any other tool); once the row lands it stays one line — title, that it waits,
+// and the way to the form — instead of opening its prose and then folding again when the turn ends.
+// A card, which exists because the reader asked for it, is open until they say otherwise. Folding
+// hides a draft's prose and never its question. A choice the reader made themselves outranks both
+// defaults and outlives the reload (see `lib/fold.ts`).
 
 /**
  * The fold, and who it really belongs to.
@@ -115,16 +111,12 @@ function TaskFoldHead({
 }
 
 /** A task an agent proposed, to confirm: its words as written, and the way to the form. */
-export function TaskDraftRow({
-  message,
-  turn,
-}: {
-  message: MessageView;
-  /** The reply that wrote this draft, when the draft says which turn it came out of. */
-  turn?: MessageView;
-}) {
+export function TaskDraftRow({ message }: { message: MessageView }) {
   const { t: translateText } = useTranslation(["tasks", "common"] as const);
-  const [open, fold] = useFold(message.id, turnActive(turn));
+  // Folded from the moment the row exists. Opening it while the turn is still at work, then
+  // folding it when the turn ends, is the same card shown twice; the call itself stays in the
+  // process while its arguments stream.
+  const [open, fold] = useFold(message.id, false);
   const [form, setForm] = useState(false);
   const draft = message.data as unknown as TaskDraftData;
   return (
@@ -187,9 +179,10 @@ export function TaskDraftRow({
 /**
  * A task as the conversation last heard of it: the whole line opens the task.
  *
- * No turn is asked for here. A draft is folded away when its turn ends because it was a moment in
- * that turn; a card is left open because it is only here at all in place of the draft the reader
- * confirmed, and what it has to say afterwards is the task's, not the turn's.
+ * No turn is asked for here. A draft is one folded line from the moment it exists, because opening
+ * it while the turn is still at work and folding it when the turn ends is the same card twice; a
+ * card is left open because it is only here at all in place of the draft the reader confirmed, and
+ * what it has to say afterwards is the task's, not the turn's.
  */
 export function TaskCardRow({ message }: { message: MessageView }) {
   const { t: translateText } = useTranslation([

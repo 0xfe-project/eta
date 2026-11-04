@@ -362,13 +362,10 @@ function emailProposalIds(blocks: readonly RunBlock[]): string[] {
  * arguments and result that go with it; its card is not repeated there.
  */
 function TurnCards({
-  turn,
   saved,
   sessionId,
   taskRows,
 }: {
-  /** The turn drawing these: a draft names the agent that proposed it and when. */
-  turn: MessageView;
   /** The tool calls a finished reply kept on its row. */
   saved: readonly ToolBlock[];
   /** The session of a reply that is at work: its publishes come from the run, not from the row. */
@@ -397,7 +394,7 @@ function TurnCards({
       {rows.map((row) => (
         <div key={row.id} id={`msg-${row.id}`} data-mid={row.id}>
           {row.kind === "task_draft" ? (
-            <TaskDraftRow message={row} turn={turn} />
+            <TaskDraftRow message={row} />
           ) : (
             <TaskCardRow message={row} />
           )}
@@ -862,7 +859,6 @@ const Turn = memo(
         {/* The turn's own card layer: what it left for the reader to open, outside the process
             (see `TurnCards`). Inside the turn's frame, so its author and its time are the turn's. */}
         <TurnCards
-          turn={message}
           saved={tools}
           sessionId={running ? sessionId : undefined}
           taskRows={taskRowsOf}
