@@ -277,6 +277,7 @@ function realmLines(): string[] {
     "- Each call is its own module. Top-level `const`/`let` are gone in the next call; put what the next call needs on `eta.state`, never on `globalThis`.",
     "- Every script is saved under the session's runs/ directory, so what you did can be read and replayed.",
     '- A bare import (`import x from "some-package"`) installs that package from npm on first use. Before writing a helper, check whether a package already does it: a driver, a parser, a browser, an SDK.',
+    "- That install is checked: known malware is refused (OSV), and so is anything published in the last 3 days, so a bare name gets the newest version that is old enough. Only npm names install, not URLs or git specifiers. A refused import says why. Do not get around it with another name or with `$`; tell the user.",
     "- For files use `search`, `view` and `edit`. Do not reach for `$` with cat/sed/grep to read or change a file.",
     "",
     "Shell (`$`, zx):",

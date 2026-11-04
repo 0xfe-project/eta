@@ -4,13 +4,13 @@ import type { AskRequest, AskResult, Hooks } from "./hooks";
 import type { EnvLayers, Layer } from "./layers";
 import type { MemoryApi, MemorySection } from "./memory";
 import type { Linker, Realm } from "./realm";
-import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import * as vm from "node:vm";
 import { authorize } from "./authorize";
 import { mountNodeModules } from "./host-modules";
+import { inInstallTurn, installPackage, registryPackage } from "./install";
 import { createMemoryModule, MEMORY_FILE } from "./memory";
 
 /**
@@ -734,33 +734,54 @@ export async function resolveSpecifier(
   if (installed !== undefined) return installed;
 
   const at = { identifier: from, line: 0, column: 0 };
+  const target = registryPackage(specifier);
+  if (target === undefined) {
+    const reason = "only npm package names install on import";
+    realm.note("packages.install", `${specifier}: ${reason}`, at, "blocked");
+    throw new Error(
+      `cannot import "${specifier}": ${reason}. URLs and git specifiers would skip the security checks. Do not install it another way.`,
+    );
+  }
+
   const refusal = await realm.authorize("packages.install", [specifier], at);
   if (refusal !== undefined) {
     realm.note("packages.install", `${specifier}: ${refusal}`, at, "blocked");
     return undefined;
   }
 
-  const started = performance.now();
-  const added = spawnSync("bun", ["add", specifier], {
-    cwd: options.root,
-    encoding: "utf8",
-    timeout: 120_000,
-  });
-  const detail =
-    added.status === 0
-      ? `${specifier} into ${options.root}`
-      : `bun add ${specifier} failed: ${(added.stderr || added.stdout || "no output").trim().split("\n").at(-1)}`;
-  realm.note(
-    "packages.install",
-    detail,
-    at,
-    added.status === 0 ? "ok" : "failed",
-    performance.now() - started,
-  );
+  return await inInstallTurn(options.root, async () => {
+    // The import ahead of this one in the queue may have brought it in.
+    const arrived = installedPath(specifier, options.root);
+    if (arrived !== undefined) return arrived;
 
-  const after = installedPath(specifier, options.root);
-  if (after === undefined) return undefined;
-  return after;
+    const started = performance.now();
+    const result = await installPackage(target.install, options.root);
+    const ms = performance.now() - started;
+    if (!result.ok) {
+      const detail = `${specifier}: ${result.reason}`;
+      realm.note("packages.install", detail, at, result.status, ms);
+      throw new Error(
+        `cannot import "${specifier}": ${result.reason}. ${result.advice}`,
+      );
+    }
+
+    const installed = result.installed ?? target.install;
+    realm.note(
+      "packages.install",
+      `${installed} into ${options.root}`,
+      at,
+      "ok",
+      ms,
+    );
+    const subpath = target.subpath === "" ? "" : `/${target.subpath}`;
+    const after = installedPath(`${target.name}${subpath}`, options.root);
+    if (after === undefined) {
+      throw new Error(
+        `cannot import "${specifier}": ${installed} installed, but it has no such entry to load`,
+      );
+    }
+    return after;
+  });
 }
 
 /**

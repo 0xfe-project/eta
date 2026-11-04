@@ -267,7 +267,7 @@ function askHistory(transcript: readonly AgentMessage[]): Message[] {
 
 const ESMRUN_DESCRIPTION = [
   "Run JavaScript in this session's ESM realm. The script is a module (imports, top-level await); its last expression is the result, or `export default` it. Relative paths, `$` and `search` resolve in the session cwd. Every script is saved under the session's runs/ directory.",
-  'Prefer search/view/edit over `$` for files. Bare imports (`import pg from "pg"`) are installed from npm on first use.',
+  'Prefer search/view/edit over `$` for files. Bare imports (`import pg from "pg"`) are installed from npm on first use, past a malware and release-age check.',
   "Default to esmrun; use esmrunandkeep only for something you will call again.",
 ].join(" ");
 
