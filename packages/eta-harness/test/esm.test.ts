@@ -6,6 +6,7 @@ import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
+import { ESM_TOOL_NAMES } from "../src/esm";
 import { openSession } from "../src/open";
 import { Agent } from "../src/realm";
 import { defineTool } from "../src/tools/tool";
@@ -320,6 +321,169 @@ describe("realm cwd", () => {
     session.kernel.nextRun(userMsg("go"));
     await session.runner.run();
     expect(resultOf(session, "c-esmrun")).toContain("a.txt");
+    session.stop();
+  });
+});
+
+describe("a session opened with the realm", () => {
+  /** A storage that counts what lands in it, because a replay must add nothing. */
+  class CountingStorage extends MemoryStorage {
+    writes = 0;
+
+    override async commit(...args: Parameters<MemoryStorage["commit"]>) {
+      this.writes += args[0].length;
+      return await super.commit(...args);
+    }
+  }
+
+  /** A journal from before the realm: its session pinned `activeToolNames` back then. */
+  const journalPinned = async (activeToolNames: string[]) => {
+    const storage = new CountingStorage();
+    const first = await openSession({
+      storage,
+      models: fakeModels([]) as never,
+    });
+    first.kernel.config.update({ activeToolNames });
+    await first.journaling.flush();
+    await first.kernel.dispose();
+    first.stop();
+    return storage;
+  };
+
+  const offered = (models: ReturnType<typeof fakeModels>) =>
+    models.calls[0]?.context.tools?.map((tool) => tool.name) ?? [];
+
+  it("offers the realm to a new session", async () => {
+    const { session, models } = await open([stop()]);
+    expect(session.config.activeToolNames).toEqual(
+      expect.arrayContaining([...ESM_TOOL_NAMES]),
+    );
+    session.kernel.nextRun(userMsg("go"));
+    await session.runner.run();
+    expect(offered(models)).toEqual(
+      expect.arrayContaining([...ESM_TOOL_NAMES]),
+    );
+    session.stop();
+  });
+
+  it("gives a pin that still names the tools the realm replaced the realm instead", async () => {
+    const storage = await journalPinned([
+      "create_step",
+      "read",
+      "bash",
+      "Agent",
+      "echo",
+    ]);
+    const { session, models } = await open(
+      [
+        call("esmrun", {
+          script:
+            'import eta from "eta";\nawait eta.platform.echo({ text: "x" })',
+        }),
+        stop(),
+      ],
+      {
+        storage,
+        root: await mkdtemp(join(tmpdir(), "esm-root-")),
+        cwd: await mkdtemp(join(tmpdir(), "esm-cwd-")),
+      },
+    );
+    expect(session.config.activeToolNames).toEqual([
+      "create_step",
+      "echo",
+      ...ESM_TOOL_NAMES,
+    ]);
+    session.kernel.nextRun(userMsg("go"));
+    await session.runner.run();
+    expect(offered(models)).toEqual(
+      expect.arrayContaining([...ESM_TOOL_NAMES]),
+    );
+    expect(resultOf(session, "c-esmrun")).toContain("echo:x");
+    session.stop();
+  });
+
+  // The session the realm's rollout left behind: the opening that dropped `read` and `bash` is
+  // already in its journal, so nothing is left to drop and the gap has to be read off the pin.
+  it("gives the realm to a pin that already lost those tools, once", async () => {
+    const storage = await journalPinned(["create_step", "echo"]);
+    const reuse = {
+      storage,
+      root: await mkdtemp(join(tmpdir(), "esm-root-")),
+      cwd: await mkdtemp(join(tmpdir(), "esm-cwd-")),
+    };
+    const first = await open([stop()], reuse);
+    expect(first.session.config.activeToolNames).toEqual([
+      "create_step",
+      "echo",
+      ...ESM_TOOL_NAMES,
+    ]);
+    first.session.kernel.nextRun(userMsg("go"));
+    await first.session.runner.run();
+    expect(offered(first.models)).toEqual(
+      expect.arrayContaining([...ESM_TOOL_NAMES]),
+    );
+    await first.session.journaling.flush();
+    await first.session.kernel.dispose();
+    first.session.stop();
+
+    const writes = storage.writes;
+    const second = await open([], reuse);
+    await second.session.journaling.flush();
+    expect(second.session.config.activeToolNames).toEqual([
+      "create_step",
+      "echo",
+      ...ESM_TOOL_NAMES,
+    ]);
+    expect(storage.writes).toBe(writes);
+    await second.session.kernel.dispose();
+    second.session.stop();
+  });
+
+  it("briefs a reopened session on the realm, with the tools it was pinned to in the d.ts", async () => {
+    const storage = await journalPinned(["create_step", "echo"]);
+    const cwd = await mkdtemp(join(tmpdir(), "esm-cwd-"));
+    const models = fakeModels([stop()]);
+    const echo = defineTool({
+      name: "echo",
+      description: "Echo the text back.",
+      parameters: Type.Object({ text: Type.String() }),
+      execute: (args) => ({
+        content: [{ type: "text", text: args.text }],
+        details: {},
+      }),
+    });
+    const session = await openSession({
+      storage,
+      models: models as never,
+      cwd,
+      esm: { root: await mkdtemp(join(tmpdir(), "esm-root-")) },
+      platform: {
+        cwd,
+        home: cwd,
+        configPath: join(cwd, "config.json"),
+        memoryTarget: join(cwd, ".eta", "MEMORY.md"),
+        memoryExists: false,
+      },
+      tools: [echo as never],
+    });
+    session.kernel.nextRun(userMsg("go"));
+    await session.runner.run();
+    const request = models.calls[0]?.context;
+    expect(request?.systemPrompt).toContain("You act through code.");
+    const esmrun = request?.tools?.find((tool) => tool.name === "esmrun");
+    expect(esmrun?.description).toContain("echo(input: {");
+    expect(esmrun?.description).toContain("create_step(input: {");
+    session.stop();
+  });
+
+  it("leaves a pin alone when the session has no realm", async () => {
+    const storage = await journalPinned(["create_step"]);
+    const session = await openSession({
+      storage,
+      models: fakeModels([]) as never,
+    });
+    expect(session.config.activeToolNames).toEqual(["create_step"]);
+    await session.kernel.dispose();
     session.stop();
   });
 });
