@@ -49,7 +49,7 @@ import { buildMenu, hashAt, mentionAt } from "@/lib/composer-menu";
 import { translate } from "@/lib/i18n";
 import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { firstVisible } from "@/lib/rail";
-import { savedTools } from "@/lib/run";
+import { runFromOf, savedTools } from "@/lib/run";
 import { readTheme, setTheme } from "@/lib/theme";
 import {
   ACTIVE_STATUSES,
@@ -377,7 +377,7 @@ function TurnCards({
   /** The task rows this turn wrote, and which are drawn here rather than on the timeline. */
   taskRows: readonly MessageView[] | undefined;
 }) {
-  const live = useRunBlocks(sessionId);
+  const live = useRunBlocks(sessionId, runFromOf(turn.data));
   const published = publishedRefs(sessionId === undefined ? saved : live);
   const proposals = emailProposalIds(sessionId === undefined ? saved : live);
   const rows = taskRows ?? [];
@@ -656,12 +656,15 @@ function FirstToken({ boxed }: { boxed: boolean }) {
 /** A reply that is writing now: what its session has said and done in this run. */
 function LiveReply({
   sessionId,
+  runFrom,
   boxed,
   waiting,
   author,
   time,
 }: {
   sessionId: string;
+  /** Where this reply's run starts in the session. */
+  runFrom: number | undefined;
   /** In a group the thinking and tools go in a fixed-height box. */
   boxed: boolean;
   /** It is waiting on the reader, not working: no first-token placeholder. */
@@ -669,7 +672,7 @@ function LiveReply({
   author?: string | undefined;
   time: string;
 }) {
-  const blocks = useRunBlocks(sessionId);
+  const blocks = useRunBlocks(sessionId, runFrom);
   // Nothing from the run yet: the placeholder holds the place, and the first block replaces it.
   const placeholder =
     blocks.length === 0 && !waiting ? <FirstToken boxed={boxed} /> : null;
@@ -827,6 +830,7 @@ const Turn = memo(
         {running && sessionId !== undefined ? (
           <LiveReply
             sessionId={sessionId}
+            runFrom={runFromOf(message.data)}
             boxed={boxed}
             waiting={message.status === "waiting_for_input"}
             author={author}

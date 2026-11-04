@@ -6,8 +6,8 @@ import type {
 
 // What a member's session is doing in the run that is in flight, as the blocks a reply is drawn
 // from. The timeline's reply row only gets its text when the run ends, so while it works the
-// session is where the words are: the messages the transcript already holds since the last thing
-// the user said, plus the one being streamed.
+// session is where the words are: the messages the transcript already holds since the run began
+// and since the last thing the user said, plus the one being streamed.
 
 /**
  * A picture a message carried, and where it sits: the view may leave its bytes out (`data` is
@@ -65,6 +65,11 @@ export function savedTools(data: Record<string, unknown>): ToolBlock[] {
   );
 }
 
+/** Where a reply's run starts in its session (`data.runFrom`), when its row says. */
+export function runFromOf(data: Record<string, unknown>): number | undefined {
+  return typeof data.runFrom === "number" ? data.runFrom : undefined;
+}
+
 interface Part {
   type?: string;
   text?: string;
@@ -115,19 +120,27 @@ function stampOf(message: AgentMessage | undefined): number {
 /**
  * The blocks of the run in flight, in the order they happened.
  *
- * The run starts after the last user message in the transcript (a steer or the next briefing is a
- * user message, so after one the blocks start over, which is the same moment the agent turns to
- * it). A tool call is `running` until its result lands in the transcript. The streamed message is
+ * The run starts after `runFrom`, the place in the session the reply's row names, and after the
+ * last user message in the transcript (a steer or the next briefing is a user message, so after
+ * one the blocks start over, which is the same moment the agent turns to it). The first is what
+ * keeps the last run out: the reply goes to work before the view has the message that started it,
+ * and until then the newest user message is the last run's. A row that names no place (a daemon
+ * too old to say) has only the second. A tool call is `running` until its result lands in the transcript. The streamed message is
  * drawn only while it is newer than the newest assistant message committed, because the commit
  * and the stream's end do not arrive in the same frame and the text must not show twice.
  */
 export function runBlocks(
   rows: readonly ViewMessageRow[],
   streaming: AgentMessage | undefined,
+  runFrom?: number | undefined,
 ): RunBlock[] {
   let start = 0;
   rows.forEach((row, index) => {
-    if (row.message.role === "user") start = index + 1;
+    if (
+      row.message.role === "user" ||
+      (runFrom !== undefined && row.seq <= runFrom)
+    )
+      start = index + 1;
   });
   return blocksFrom(rows, streaming, start) as RunBlock[];
 }

@@ -95,6 +95,7 @@ daemon 是主 node 的一部分。构建脚本（`apps/daemon/scripts/build.ts`�
 任务的运行也是这样的会话（键是 `task:<任务 id>`，一个任务的多次运行共用它；归属以 primary 的 `task_run` 行为准），每台机器同时运行的任务数是它的设置（`machine.max_active_runs`，默认 2），见[任务](tasks.md)。
 
 - 智能体载入的环境包随会话走：`machine.bundleHave` / `machine.bundlePut` 把 daemon 没有的包的文件送过去，`machine.open` 带上包的哈希和配置值（见[环境包](bundles.md#daemon)）；`machine.which` 让 daemon 回答它的 PATH 上有哪些命令。
+- 回复进入 working 之前，`machine.lastSeq` 问 daemon 这个会话的 journal 写到哪了，记在回复行的 `data.runFrom` 上。页面只把序号比它大的 transcript 行算作这一轮：序号是 journal 自己分配的，不涉及两台机器的时钟。旧版 daemon 没有这个动作时回复照常运行，只是行上没有 `runFrom`。
 - **GitHub 登录**：daemon 机器上的 git 与 gh 登录成 GitHub App（用户授权过就是用户）。daemon 经 `svc` 的 `github.credentials` 向主 node 要令牌（最多一小时，没连接是 `null`），写进自己数据目录的 `github/`，过期前再要；主 node 在 GitHub 连接、授权、断开时发 `machine.githubRefresh` 让它马上再问。App 的私钥、secret 与 refresh token 不出主 node，见 [GitHub](github.md)。
 - 引擎问"位置"（`SessionPlace`）要一个智能体的会话：本机是 `LocalPlace`，远端是 `RemotePlace`：一次 `machine.open` 把会话和智能体对齐，智能体的指令、模型、思考档、persona 卡和产品工具清单随调用送过去（daemon 注册代理工具，调用时回到主 node 执行）。之后一次 run 是一个长调用（`machine.run`），steer/stop 是 daemon 管道上的普通 `sessions.*` 调用。
 - **镜像**：浏览器订阅 `sessions.<id>` 时不需要知道会话在哪台机器。主 node 为远端会话注册同名 target，有人订阅时就订阅 daemon 的同一 target，把它的状态（先整份后 patch）与事件原样再发布；没人看了就取消订阅。链路断开则全部降温，恢复后只重新唤醒仍有人看的。重新订阅时 daemon 会把事件环从头回放一遍；事件帧带 `at`（发生的时刻，毫秒，同一 target 内严格递增，daemon 重启后也不回退），镜像只转发比上次转发的更晚的事件，浏览器不会看到重复的事件。

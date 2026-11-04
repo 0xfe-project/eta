@@ -51,6 +51,14 @@ export function listen(managed: ManagedSession): {
 }
 
 /**
+ * Where the session's journal stands. Whatever is written from here on has a higher `seq`, so this
+ * is the line between what the session said before and what the next run will say.
+ */
+export function lastSeq(managed: ManagedSession): number {
+  return managed.session.journaling.entries().at(-1)?.seq ?? 0;
+}
+
+/**
  * Run the session on `prompt` until it is quiet. Words that reached the inbox after the run's
  * last look (a steer that lost the race) belong to this run too; a run that failed leaves the
  * inbox as it found it, and asking again would only fail again. `keepGoing` lets a caller that

@@ -81,6 +81,10 @@ class RemoteHandle implements SessionHandle {
     return (await this.#link.machine("config", { session: this.id })).model;
   }
 
+  async lastSeq(): Promise<number> {
+    return (await this.#link.machine("lastSeq", { session: this.id })).seq;
+  }
+
   async run(
     prompt: string,
     _keepGoing?: () => boolean,
