@@ -3,6 +3,7 @@ import type {
   InteractionView,
   MessageView,
 } from "@eta/client-contracts";
+import { readFileSync } from "node:fs";
 import {
   afterEach,
   beforeEach,
@@ -417,9 +418,20 @@ describe("a reply that is writing", () => {
       "artifact:看板 #4",
     ]);
     for (const card of cards) {
-      expect(card.closest(".turn-tasks")).not.toBeNull();
+      const layer = card.closest(".turn-tasks") as HTMLElement | null;
+      expect(layer).not.toBeNull();
       expect(card.closest(".process-fold")).toBeNull();
     }
+    // The column sits flush with the answer: no hairline, and no indent that only held one.
+    const styles = readFileSync(
+      new URL("../../styles.css", import.meta.url),
+      "utf8",
+    );
+    const rule = styles.match(/\.turn-tasks \{[^}]*\}/)?.[0] ?? "";
+    expect(rule).not.toMatch(/border-left/);
+    expect(rule).not.toMatch(/margin-left/);
+    expect(rule).not.toMatch(/padding-left/);
+    expect(styles).not.toContain('.turn-tasks[data-only-email-cards="true"]');
     // After the answer it belongs to, not before it.
     const answer = container.querySelector(
       ".message.assistant .message-content",

@@ -357,8 +357,8 @@ function emailProposalIds(blocks: readonly RunBlock[]): string[] {
  * Neither is a step the agent took, so neither is drawn in the process — a group folds that away as
  * soon as the text is written, which used to take an artifact's card out of the conversation with
  * it, leaving only the tool line that no one scrolls to. Both are things the reader is meant to
- * open, so they are drawn where the answer is, inside the turn's own frame and behind the hairline
- * that says where they came from. The `publish_artifact` call itself stays in the process, with the
+ * open, so they are drawn where the answer is, inside the turn's own frame, flush with the answer.
+ * The `publish_artifact` call itself stays in the process, with the
  * arguments and result that go with it; its card is not repeated there.
  */
 function TurnCards({
@@ -382,12 +382,8 @@ function TurnCards({
   const rows = taskRows ?? [];
   if (published.length === 0 && proposals.length === 0 && rows.length === 0)
     return null;
-  const onlyEmailCards = published.length === 0 && rows.length === 0;
   return (
-    <div
-      className="turn-tasks"
-      data-only-email-cards={onlyEmailCards ? "true" : undefined}
-    >
+    <div className="turn-tasks">
       {published.map(({ id, ref }) => (
         <ActivityRefCard key={id} value={ref} />
       ))}
