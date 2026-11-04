@@ -8,7 +8,10 @@
  * that does not.
  */
 import { describe, expect, it } from "vitest";
-import { renderPlatformBlock } from "../src/prompts/platform";
+import {
+  renderPlatformBlock,
+  renderRuntimePlatformBlock,
+} from "../src/prompts/platform";
 
 const base = {
   cwd: "/work/0xts",
@@ -64,6 +67,69 @@ describe("the platform briefing", () => {
   it("leaves the session directory out when nothing is persisted", () => {
     const text = renderPlatformBlock({ ...base, memoryExists: true });
     expect(text).not.toContain("journal.jsonl");
+  });
+});
+
+describe("the board rules an eta session reads", () => {
+  it("keeps its words: the runtime briefing shares them, and must not move them", () => {
+    const text = renderPlatformBlock({ ...base, memoryExists: true });
+    expect(text).toContain(
+      "- A task lives on the board. It outlives the conversation, the user can see it and confirm it, and it runs in a session of its own. `create_task` puts one there; `update_task`, `comment_task` and `finish_task` act on it.\n",
+    );
+    expect(text).toContain(
+      "- Work that changes files, runs a build or tests, needs the user to accept a result, or takes more than a couple of tool rounds is not chat work, and it is not a step either. Propose it with `draft_task` and let the user confirm it. `create_task` is not a shortcut around that, and neither is a step list: draft first, then create.\n",
+    );
+  });
+});
+
+describe("the runtime briefing", () => {
+  const paths = {
+    configPath: base.configPath,
+    sessionDir: "/home/lemon/.eta/sessions/eta-1",
+  };
+
+  it("gives a member of a conversation the draft rule, in the words eta's own sessions read", () => {
+    const text = renderRuntimePlatformBlock({
+      ...paths,
+      tools: ["draft_task", "comment_task"],
+    });
+    expect(text.startsWith("<platform>")).toBe(true);
+    expect(text.endsWith("</platform>")).toBe(true);
+    expect(text).toContain(base.configPath);
+    expect(text).toContain(paths.sessionDir);
+    expect(text).toContain(
+      "takes more than a couple of tool rounds is not chat work. Propose it with `draft_task` and let the user confirm it. `create_task` is not a shortcut around that: draft first, then create.",
+    );
+    expect(text).toContain("mcp__eta__draft_task");
+  });
+
+  it("says nothing of steps, memory, personas or loops", () => {
+    const text = renderRuntimePlatformBlock({
+      configPath: base.configPath,
+      tools: ["draft_task", "comment_task"],
+    });
+    for (const word of ["step", "memory", "persona", "loop"])
+      expect(text.toLowerCase()).not.toContain(word);
+  });
+
+  it("tells a session that is working on a task that it needs no draft", () => {
+    const text = renderRuntimePlatformBlock({
+      ...paths,
+      tools: ["comment_task", "finish_task"],
+    });
+    expect(text).toContain("This session is one of those");
+    expect(text).not.toContain("draft_task");
+    expect(text).not.toContain("create_task");
+  });
+
+  it("leaves the board out of a session that has no board tools", () => {
+    const text = renderRuntimePlatformBlock({ ...paths, tools: ["web_fetch"] });
+    expect(text).toContain(base.configPath);
+    expect(text).not.toContain("board");
+  });
+
+  it("renders nothing when it has nothing to say", () => {
+    expect(renderRuntimePlatformBlock({ tools: [] })).toBe("");
   });
 });
 

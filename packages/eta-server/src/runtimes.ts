@@ -20,8 +20,12 @@ export interface SessionRuntimeInput {
   cwd: string;
   /** The runtime's own session to pick up, when this one has run before. */
   resume?: string | undefined;
-  /** Who the agent is and what it was told: the platform section an eta session would get. */
-  agentPrompt?: string | undefined;
+  /**
+   * Who the agent is, what it was told and what the app around it is: what stands in for an eta
+   * session's platform section. Read when the runtime opens, after the session's tools exist,
+   * because what it says about the board depends on them.
+   */
+  agentPrompt: () => string | undefined;
   /** The runtime opened a session of its own: remember it, so the next open picks it up. */
   remember: (nativeSession: string) => void;
   /**

@@ -55,8 +55,11 @@ export interface OarDelegateOptions {
   cwd: string;
   /** The runtime session to pick up, from an earlier life of this one. */
   resume?: string | undefined;
-  /** Who the agent is and what it was told, appended to the runtime's own system prompt. */
-  agentPrompt?: string | undefined;
+  /**
+   * What the agent and the app around it are, appended to the runtime's own system prompt. Read
+   * when the runtime opens, after the session's tools exist.
+   */
+  agentPrompt: () => string | undefined;
   /** The runtime opened a session of its own: the eta session remembers it. */
   remember: (nativeSession: string) => void;
   /** The tools the host gave the session, by name: what is served to the runtime. */
@@ -166,10 +169,13 @@ export class OarDelegate implements RunDelegate {
         this.#charged,
       );
       let input = inputOf(context.opening);
-      if (!opened.prompted && this.#options.agentPrompt !== undefined) {
+      const agentPrompt = opened.prompted
+        ? undefined
+        : this.#options.agentPrompt();
+      if (agentPrompt !== undefined) {
         input = {
           ...input,
-          text: `<agent>\n${this.#options.agentPrompt}\n</agent>\n\n${input.text}`,
+          text: `<agent>\n${agentPrompt}\n</agent>\n\n${input.text}`,
         };
         opened.prompted = true;
       }
@@ -246,12 +252,13 @@ export class OarDelegate implements RunDelegate {
     model: string | undefined,
     effort: string | undefined,
   ): Promise<Opened> {
-    const { runtime: id, catalog, cwd, agentPrompt } = this.#options;
+    const { runtime: id, catalog, cwd } = this.#options;
     const runtime = catalog.runtime(id);
     const installation = await catalog.installation(id);
     const refused = runtime.refusedSessionOptions ?? {};
     const served =
       refused.mcpServers === undefined ? await this.#serve(context) : undefined;
+    const agentPrompt = this.#options.agentPrompt();
     const appends =
       agentPrompt !== undefined && refused.appendSystemPrompt === undefined;
     const options = (resume: string | undefined): SessionOptions => ({
