@@ -70,9 +70,6 @@ export function ConversationList() {
   );
   const setWorkspace = useWorkspaceStore((state) => state.setWorkspace);
   const open = useOpenGroup();
-  const setFocusedAgent = useWorkspaceStore((state) => state.setFocusedAgent);
-  const focusedAgentId = useWorkspaceStore((state) => state.focusedAgentId);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const { state, isMobile } = useSidebar();
   // The sidebar's own fold, not the agent shelf's: on the rail every card is a glyph with its
   // name under it, and both halves of the list keep the same shape.
@@ -134,33 +131,16 @@ export function ConversationList() {
             )
           ) : (
             directories.flatMap((directory) =>
-              directory.conversations.map((conversation) => {
-                const active = current?.id === conversation.id;
-                return (
-                  <GroupCard
-                    key={conversation.id}
-                    conversation={conversation}
-                    place={directory.place}
-                    active={active}
-                    // The open group shows its members; folding it away is a choice of its own.
-                    open={expanded[conversation.id] ?? active}
-                    onToggle={() =>
-                      setExpanded((state) => ({
-                        ...state,
-                        [conversation.id]: !(state[conversation.id] ?? active),
-                      }))
-                    }
-                    onOpen={() => open(conversation.id)}
-                    focusedAgentId={focusedAgentId}
-                    rail={rail}
-                    onOpenAgent={(agentId) =>
-                      setFocusedAgent(
-                        focusedAgentId === agentId ? null : agentId,
-                      )
-                    }
-                  />
-                );
-              }),
+              directory.conversations.map((conversation) => (
+                <GroupCard
+                  key={conversation.id}
+                  conversation={conversation}
+                  place={directory.place}
+                  active={current?.id === conversation.id}
+                  onOpen={() => open(conversation.id)}
+                  rail={rail}
+                />
+              )),
             )
           )}
         </SidebarMenu>
@@ -265,29 +245,20 @@ export function ConversationList() {
 /**
  * One group as a card: who is in it, what it is called, which conversation it is, where it runs.
  *
- * Three lines are always there. The directory line is the reason a group is not interchangeable
- * with any other: two groups can have the same name and work in different places. Only the member
- * list folds away.
+ * The directory line is the reason a group is not interchangeable with any other: two groups can
+ * have the same name and work in different places.
  */
 function GroupCard({
   conversation,
   place,
   active,
-  open,
-  onToggle,
   onOpen,
-  onOpenAgent,
-  focusedAgentId,
   rail,
 }: {
   conversation: ConversationSummary;
   place: DirectoryGroup["place"];
   active: boolean;
-  open: boolean;
-  onToggle: () => void;
   onOpen: () => void;
-  onOpenAgent: (agentId: string) => void;
-  focusedAgentId: string | null;
   rail: boolean;
 }) {
   const { t: translateText } = useTranslation(["chat", "common"] as const);
@@ -375,10 +346,9 @@ function GroupCard({
       data-active={active}
     >
       {draft === null ? (
-        <div className="relative">
-          {/* The card's own click target, under everything: the caret and the ⋯ are controls of
-           * their own, and a button cannot hold another button. The box around it is the card
-           * without its members, so the target takes the card's height whatever is on it. */}
+        <>
+          {/* The card's own click target, under everything: the ⋯ is a control of its own, and a
+           * button cannot hold another button. */}
           <button
             type="button"
             data-sidebar="menu-button"
@@ -399,25 +369,6 @@ function GroupCard({
           <div className="pointer-events-none relative z-10 px-4 pt-1.5">
             {/* The ⋯ is a corner control, not a column: the row ends before it. */}
             <div className="flex items-center gap-1.5 pr-6">
-              <button
-                type="button"
-                aria-label={
-                  open
-                    ? translateText("chat:groups.members.collapse")
-                    : translateText("chat:groups.members.expand")
-                }
-                aria-expanded={open}
-                onClick={onToggle}
-                className="pointer-events-auto flex size-5 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
-              >
-                <CaretDownIcon
-                  aria-hidden="true"
-                  className={cn(
-                    "size-4 transition-transform",
-                    !open && "-rotate-90",
-                  )}
-                />
-              </button>
               <MemberStack members={members} />
               <span className="min-w-0 flex-1 truncate text-base leading-tight">
                 {conversation.name}
@@ -448,12 +399,12 @@ function GroupCard({
             <p
               data-slot="conversation-path"
               title={place?.full}
-              className="truncate pt-0.5 pl-6 pb-1.5 font-mono text-[10px] text-faint"
+              className="truncate pt-0.5 pb-1.5 font-mono text-[10px] text-faint"
             >
               {place?.short ?? translateText("chat:sections.unknownDirectory")}
             </p>
           </div>
-        </div>
+        </>
       ) : (
         <div className="relative z-10 px-4 py-2">
           <RenameField
@@ -477,53 +428,6 @@ function GroupCard({
           )
         }
       />
-      {open ? (
-        <div className="relative z-10 border-t border-border">
-          {/* The members are inside the group's own box: the line on the left is what makes them
-           * read as belonging to the card rather than as more rows of the list. */}
-          <span
-            aria-hidden="true"
-            className="absolute top-0 bottom-0 left-8 w-px bg-border"
-          />
-          <ul className="py-1">
-            {members.map((member) => (
-              <li key={member.agentId}>
-                <button
-                  type="button"
-                  data-slot="member-row"
-                  onClick={() => onOpenAgent(member.agentId)}
-                  title={translateText("chat:groups.members.talkAlone", {
-                    name: nameOf(member.agentId),
-                  })}
-                  className={cn(
-                    "flex w-full items-center gap-2 py-1.5 pr-4 pl-11 text-left hover:bg-sidebar-accent",
-                    focusedAgentId === member.agentId && "text-foreground",
-                  )}
-                >
-                  <AgentAvatar
-                    agent={{ id: member.agentId }}
-                    className="size-5"
-                  />
-                  <span className="min-w-0 flex-1 truncate text-sm">
-                    {nameOf(member.agentId)}
-                  </span>
-                  {member.status !== "idle" ? (
-                    <>
-                      <span
-                        aria-hidden="true"
-                        className="size-1.5 shrink-0 bg-state-success"
-                      />
-                      <span className="sr-only">
-                        {memberStatusLabel(member.status)}
-                      </span>
-                    </>
-                  ) : null}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
     </SidebarMenuItem>
   );
 }

@@ -109,11 +109,6 @@ export function Workspace({
   const { stop, read } = useConversationActions();
   const { compact, goal: setGoal } = useSessionActions();
   const { choose, abort } = useAnswerQuestion();
-  // Narrowing the chat to one member: the state lives in the store, because the sidebar's member
-  // rows and the panel's member cards are the same action. It resets when the conversation does.
-  const focusAgent = useWorkspaceStore((s) => s.focusedAgentId);
-  const setFocusedAgent = useWorkspaceStore((s) => s.setFocusedAgent);
-  useEffect(() => setFocusedAgent(null), [group?.id, setFocusedAgent]);
   // Which session a goal set from the composer lands on: the member being talked to, or the first
   // one that has a conversation. A group has one goal per member; the composer speaks for the one
   // you are addressing.
@@ -298,15 +293,7 @@ export function Workspace({
               group={group}
               agents={agents}
               blocked={blocked}
-              messages={
-                focusAgent === null
-                  ? conversation.messages
-                  : conversation.messages.filter(
-                      (message) =>
-                        message.author !== "agent" ||
-                        message.agentId === focusAgent,
-                    )
-              }
+              messages={conversation.messages}
               held={conversation.held}
               loading={!listLoaded || !conversation.loaded}
               hasOlder={conversation.hasOlder}
