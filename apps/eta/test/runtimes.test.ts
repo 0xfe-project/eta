@@ -260,4 +260,117 @@ describe("eta's tools, called by an agent on Claude Code", () => {
       ),
     ).toBe("<h1>hi</h1>");
   });
+
+  it("publish_artifact is told as eta's, with its details, on the transcript and on the row", async () => {
+    const publish = (turn: ScriptedTurn, args: Record<string, unknown>) =>
+      turn.tool(
+        "mcp__eta__publish_artifact",
+        JSON.stringify(args),
+        async () => {
+          const result = await callHostTool(turn, "publish_artifact", args);
+          return result.text;
+        },
+      );
+    const { w } = await onClaude(async (turn) => {
+      // Two calls of the one tool at once, over the server the runtime was really given.
+      await Promise.all([
+        publish(turn, { path: "site", title: "Page" }),
+        publish(turn, { path: "other", title: "Other" }),
+      ]);
+      turn.say("published");
+    });
+    const agent = await w.agent("Cody", {
+      runtime: "claude",
+      model: "claude:sonnet",
+    });
+    const project = await w.project({ stewardId: agent.id });
+    for (const dir of ["site", "other"]) {
+      await mkdir(join(project.path, dir), { recursive: true });
+      await writeFile(join(project.path, dir, "index.html"), `<h1>${dir}</h1>`);
+    }
+    const group = await w.group(project.id, [agent.id]);
+    await w.watch(group.id);
+    w.client.subscribe("artifacts");
+    const sent = await w.send(group.id, "publish both", {
+      mentions: [agent.id],
+    });
+    const done = await w.settled(group.id, sent.replies[0]!.id);
+    expect(done.status).toBe("done");
+
+    const artifacts = () =>
+      w.client.section<ArtifactView[]>("artifacts", "list") ?? [];
+    await until(() => artifacts().length === 2);
+    const idOf = (title: string): string =>
+      artifacts().find((artifact) => artifact.title === title)!.id;
+    const activity = (done.data as { activity: ToolActivity[] }).activity;
+    expect(activity.map((call) => call.name)).toEqual([
+      "publish_artifact",
+      "publish_artifact",
+    ]);
+    expect(
+      activity.map((call) => ({
+        status: call.status,
+        title: (call.input as { title: string }).title,
+        details: call.details,
+      })),
+    ).toEqual([
+      {
+        status: "completed",
+        title: "Page",
+        details: {
+          artifactId: idOf("Page"),
+          title: "Page",
+          version: 1,
+          files: 1,
+        },
+      },
+      {
+        status: "completed",
+        title: "Other",
+        details: {
+          artifactId: idOf("Other"),
+          title: "Other",
+          version: 1,
+          files: 1,
+        },
+      },
+    ]);
+  });
+
+  it("publish_artifact on an artifact it already published says the next version", async () => {
+    const versions: unknown[] = [];
+    const publishes: Record<string, unknown>[] = [];
+    const { w } = await onClaude(async (turn) => {
+      const args = publishes.shift()!;
+      await turn.tool(
+        "mcp__eta__publish_artifact",
+        JSON.stringify(args),
+        async () => (await callHostTool(turn, "publish_artifact", args)).text,
+      );
+      turn.say("published");
+    });
+    const agent = await w.agent("Cody", {
+      runtime: "claude",
+      model: "claude:sonnet",
+    });
+    const project = await w.project({ stewardId: agent.id });
+    await mkdir(join(project.path, "site"), { recursive: true });
+    await writeFile(join(project.path, "site", "index.html"), "<h1>hi</h1>");
+    const group = await w.group(project.id, [agent.id]);
+    await w.watch(group.id);
+    const publishOnce = async (args: Record<string, unknown>) => {
+      publishes.push(args);
+      const sent = await w.send(group.id, "publish", { mentions: [agent.id] });
+      const done = await w.settled(group.id, sent.replies[0]!.id);
+      const [call] = (done.data as { activity: ToolActivity[] }).activity;
+      expect(call!.name).toBe("publish_artifact");
+      versions.push((call!.details as { version: number }).version);
+      return (call!.details as { artifactId: string }).artifactId;
+    };
+    const artifactId = await publishOnce({ path: "site", title: "Page" });
+    expect(await publishOnce({ path: "site", title: "Page", artifactId })).toBe(
+      artifactId,
+    );
+    expect(versions).toEqual([1, 2]);
+  });
 });
