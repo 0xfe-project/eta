@@ -124,8 +124,12 @@ export function ConversationList() {
               </SidebarMenuItem>
             ) : (
               // Until `hello`: the rows' outline, so the list does not pop in and push the shelf.
-              <SidebarMenuItem className="px-2 py-1.5">
-                <Loading layout={rail ? "glyphs" : "list"} rows={3} />
+              <SidebarMenuItem className="px-2 pb-1.5">
+                <Loading
+                  layout={rail ? "glyphs" : "list"}
+                  rows={4}
+                  rowClassName="h-[3.1rem]"
+                />
               </SidebarMenuItem>
             )
           ) : (
@@ -371,9 +375,10 @@ function GroupCard({
       data-active={active}
     >
       {draft === null ? (
-        <>
+        <div className="relative">
           {/* The card's own click target, under everything: the caret and the ⋯ are controls of
-           * their own, and a button cannot hold another button. */}
+           * their own, and a button cannot hold another button. The box around it is the card
+           * without its members, so the target takes the card's height whatever is on it. */}
           <button
             type="button"
             data-sidebar="menu-button"
@@ -381,7 +386,7 @@ function GroupCard({
             aria-current={active ? "true" : undefined}
             title={conversation.name}
             onClick={onOpen}
-            className="absolute inset-x-0 top-0 h-11 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+            className="absolute inset-0 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
           >
             <span className="sr-only">
               {conversation.name}
@@ -441,13 +446,6 @@ function GroupCard({
               </span>
             </div>
             <p
-              data-slot="conversation-id"
-              title={conversation.id}
-              className="truncate pt-0.5 pl-6 font-mono text-[10px] text-muted-foreground"
-            >
-              {conversation.id.slice(0, 13)}
-            </p>
-            <p
               data-slot="conversation-path"
               title={place?.full}
               className="truncate pt-0.5 pl-6 pb-1.5 font-mono text-[10px] text-faint"
@@ -455,7 +453,7 @@ function GroupCard({
               {place?.short ?? translateText("chat:sections.unknownDirectory")}
             </p>
           </div>
-        </>
+        </div>
       ) : (
         <div className="relative z-10 px-4 py-2">
           <RenameField

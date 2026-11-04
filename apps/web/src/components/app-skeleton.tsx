@@ -106,8 +106,13 @@ function SidebarSkeleton() {
       </div>
       <div className="min-h-0 flex-1 overflow-hidden p-2 pb-0">
         <SideHeading rail={rail} />
-        <div className="py-1.5">
-          <SideRows rows={4} rail={rail} className="h-9" />
+        {/* The group cards' pitch, rule included, from right under the heading. */}
+        <div className="pb-1.5">
+          <SideRows
+            rows={4}
+            rail={rail}
+            className={rail ? "h-9" : "h-[3.1rem]"}
+          />
         </div>
       </div>
       <div className="mt-auto shrink-0 border-t p-2 pb-0">
