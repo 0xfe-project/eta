@@ -19,7 +19,7 @@ import type { Dirent, FSWatcher } from "node:fs";
 import type { BundleRows, SourceRow } from "./rows";
 import { existsSync, mkdirSync, readdirSync, statSync, watch } from "node:fs";
 import { rm } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   BundleError,
   hashBundle,
@@ -158,9 +158,7 @@ export class BundleRegistry {
     const byName = new Map<string, BundleEntry>();
     for (const found of dirs) {
       const fallback =
-        found.tier === "git"
-          ? found.source.name
-          : (found.dir.split("/").at(-1) ?? found.dir);
+        found.tier === "git" ? found.source.name : basename(found.dir);
       const sourceOf = (): BundleSource =>
         found.tier === "git"
           ? {

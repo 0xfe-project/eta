@@ -11,6 +11,8 @@ export interface PlatformPromptInfo {
   memoryTarget: string;
   /** Whether anything has been remembered for this project yet. */
   memoryExists: boolean;
+  /** Captain temporarily disabled recall, capture and explicit memory tools for this scope. */
+  memoryPaused?: boolean;
   /** Whether the session has a realm (`esmrun`); the realm part of the briefing is only written then. */
   realm?: boolean;
 }
@@ -76,13 +78,16 @@ export function renderPlatformBlock(info: PlatformPromptInfo): string {
   );
   lines.push("");
   lines.push(
-    info.memoryExists
-      ? `Memory belongs to the project, not to the session. This project's memory is ${info.memoryTarget}, and it is loaded above as the memory block. Read it before contradicting it; edit it like any file when a note goes stale — it is re-read every turn, and the app appends to it itself when a run ends.`
-      : `Memory belongs to the project, not to the session, and nothing has been remembered here yet. When something is worth keeping, create ${cwd}/.eta/ and write MEMORY.md in it — the write creates the directory. The app treats the nearest .eta/MEMORY.md up the tree from the working directory as that project's memory, so ${info.memoryTarget} is where yours belongs.`,
+    info.memoryPaused === true
+      ? `Long-term memory is temporarily paused for this conversation or task. Do not call remember or recall, and do not write ${info.memoryTarget}; the host will not recall or capture memory for this scope until the user resumes it.`
+      : info.memoryExists
+        ? `Memory belongs to the project, not to the session. This project's memory is ${info.memoryTarget}, and it is loaded above as the memory block. Read it before contradicting it; edit it like any file when a note goes stale — it is re-read every turn, and the app appends to it itself when a run ends.`
+        : `Memory belongs to the project, not to the session, and nothing has been remembered here yet. When something is worth keeping, create ${cwd}/.eta/ and write MEMORY.md in it — the write creates the directory. The app treats the nearest .eta/MEMORY.md up the tree from the working directory as that project's memory, so ${info.memoryTarget} is where yours belongs.`,
   );
-  lines.push(
-    "What belongs in memory: decisions and why, constraints nobody wrote down, facts about this codebase that were expensive to learn. What does not: what you are doing right now, in-flight plans, anything the next session can re-derive in seconds. A note earns its line when reading it later beats working it out again.",
-  );
+  if (info.memoryPaused !== true)
+    lines.push(
+      "What belongs in memory: decisions and why, constraints nobody wrote down, facts about this codebase that were expensive to learn. What does not: what you are doing right now, in-flight plans, anything the next session can re-derive in seconds. A note earns its line when reading it later beats working it out again.",
+    );
   lines.push("");
   lines.push(
     "A step and a task are two different things, and they are easy to confuse:",
@@ -96,6 +101,9 @@ export function renderPlatformBlock(info: PlatformPromptInfo): string {
   lines.push(`- ${draftRule(true)}`);
   lines.push(
     "- A task runs in a fresh session that cannot see this conversation. Write its goal and acceptance for a reader who knows nothing else, put what is already settled in `decided`, and always give `base`: the branch, commit or `#N` its worktree starts from. Give `assignee` when the work is for another agent; then that agent runs it, not you.",
+  );
+  lines.push(
+    "- A visible Captain message in a group is explicit work authorization. When it assigns implementation work to you, create the task yourself with `create_task`; if the instruction is still missing a choice only the user can make, use `draft_task`. Do not pass `assignee` for work Captain assigned to you: you remain its creator and executor.",
   );
   lines.push("");
   lines.push("Working with others in a conversation:");

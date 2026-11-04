@@ -123,6 +123,24 @@ export class Inbox {
     id: string,
     response: InboxResponse,
   ): Promise<{ interaction: InteractionView; answered: boolean }> {
+    return await this.answerWith(id, response, (sessionId, questionId, value) =>
+      sessions.answer(sessionId, questionId, value),
+    );
+  }
+
+  /**
+   * The same answer path for a Captain, whose session may be local or on a daemon and whose
+   * delivery is therefore supplied by the caller.
+   */
+  async answerWith(
+    id: string,
+    response: InboxResponse,
+    deliver: (
+      sessionId: string,
+      questionId: string,
+      response: InboxResponse,
+    ) => Promise<boolean>,
+  ): Promise<{ interaction: InteractionView; answered: boolean }> {
     const row = this.#interactions.get(id);
     if (row === undefined) throw new Error(`no such question: ${id}`);
     if (row.status !== "pending") return { interaction: row, answered: false };
@@ -130,11 +148,7 @@ export class Inbox {
     this.#answering.set(id, response);
     let delivered: boolean;
     try {
-      delivered = await sessions.answer(
-        row.sessionId,
-        row.questionId,
-        response,
-      );
+      delivered = await deliver(row.sessionId, row.questionId, response);
     } finally {
       this.#answering.delete(id);
     }

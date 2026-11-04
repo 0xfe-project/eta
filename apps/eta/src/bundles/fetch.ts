@@ -22,6 +22,14 @@ export class FetchError extends Error {
 }
 
 const SHA = /^[0-9a-f]{40}$/;
+const WINDOWS_TAR = join(
+  process.env.SystemRoot ?? "C:\\Windows",
+  "System32",
+  "tar.exe",
+);
+/** Git for Windows puts GNU tar on PATH in hooks, where a drive path looks like a remote host. */
+const TAR =
+  process.platform === "win32" && existsSync(WINDOWS_TAR) ? WINDOWS_TAR : "tar";
 
 async function run(
   args: string[],
@@ -66,11 +74,15 @@ export function sourceDir(root: string, repo: string, path: string): string {
 
 /** A path inside the repository: relative, and staying in it. `""` is the root. */
 export function cleanPath(path: string): string {
-  const clean = normalize(path.trim() === "" ? "." : path.trim()).replace(
-    /\/+$/,
-    "",
-  );
-  if (clean.startsWith("/") || clean === ".." || clean.startsWith("../"))
+  const clean = normalize(path.trim() === "" ? "." : path.trim())
+    .replaceAll("\\", "/")
+    .replace(/\/+$/, "");
+  if (
+    clean.startsWith("/") ||
+    /^[A-Z]:\//i.test(clean) ||
+    clean === ".." ||
+    clean.startsWith("../")
+  )
     throw new FetchError(`${path} is not a path inside the repository`);
   return clean === "." ? "" : clean;
 }
@@ -164,7 +176,7 @@ export async function fetchInto(options: {
       scratch,
       `${path === "" ? "the repository" : path} is not in ${repo} at ${sha.slice(0, 12)}`,
     );
-    const untar = Bun.spawn(["tar", "-xf", archive, "-C", tree], {
+    const untar = Bun.spawn([TAR, "-xf", archive, "-C", tree], {
       stdout: "ignore",
       stderr: "pipe",
     });

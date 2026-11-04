@@ -1,6 +1,7 @@
 {
   "lineWidth": 80,
   "indentWidth": 2,
+  "newLineKind": "system",
   "biome": {
     "indentStyle": "space",
     "quoteStyle": "double"

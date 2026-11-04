@@ -88,6 +88,9 @@ export interface BoardTaskView {
   assigneeAgentId: string | null;
   /** The conversation it is discussed in, if linked. */
   conversationId: string | null;
+  /** The Captain instruction that authorized this task, when it came from one. */
+  captainAssignmentId?: string | null;
+  captainMessageId?: string | null;
   /** The status of its newest run; null before the first. */
   runStatus: TaskRunStatus | null;
   comments: number;
@@ -216,6 +219,9 @@ export interface TaskDraftData {
    * proposing agent, which executes it itself, as it always was.
    */
   assignee?: string | undefined;
+  /** The Captain instruction that authorized this draft, when it came from one. */
+  captainAssignmentId?: string | undefined;
+  captainMessageId?: string | undefined;
   /**
    * The reply row this draft came out of — the row the agent was writing when it proposed the
    * work. The page draws the draft inside that turn rather than as a block of its own on the

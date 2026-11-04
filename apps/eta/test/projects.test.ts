@@ -110,7 +110,11 @@ describe("projects", () => {
       w.client.call("projects", "create", { path: dir, stewardId: "nobody" }),
     ).rejects.toThrow(/no such agent/);
     // None of that left a project behind.
-    expect(w.client.section<ProjectView[]>("projects", "list")).toEqual([]);
+    expect(
+      w.client
+        .section<ProjectView[]>("projects", "list")
+        ?.filter((entry) => entry.kind !== "agent_home"),
+    ).toEqual([]);
   });
 
   it("returns the project that is already there, spelled however the path is", async () => {

@@ -214,7 +214,7 @@ describe("moving a bundle's files", () => {
     chmodSync(join(dir, "run"), 0o755);
     const files = snapshotBundle(dir);
     expect(Object.keys(files)).toContain("skills/demo/references/setup.md");
-    expect(files.run!.exec).toBe(true);
+    if (process.platform !== "win32") expect(files.run!.exec).toBe(true);
     const hash = hashBundle(files);
     expect(hashBundle(snapshotBundle(dir))).toBe(hash);
 
@@ -224,7 +224,8 @@ describe("moving a bundle's files", () => {
     expect(store.has(hash)).toBe(true);
     const copy = store.dir(hash);
     expect(readBundle(copy).manifest.name).toBe("demo");
-    expect(statSync(join(copy, "run")).mode & 0o111).not.toBe(0);
+    if (process.platform !== "win32")
+      expect(statSync(join(copy, "run")).mode & 0o111).not.toBe(0);
     // Putting them again is nothing.
     store.put(hash, files);
   });

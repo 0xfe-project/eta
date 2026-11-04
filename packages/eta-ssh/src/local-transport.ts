@@ -14,8 +14,46 @@
 import type { SshResult, SshRunOptions, SshTransport } from "./transport";
 import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import process from "node:process";
+
+const WINDOWS_SHELL = "C:\\Program Files\\Git\\usr\\bin\\sh.exe";
+
+/**
+ * Bun on Windows cannot execute the POSIX literal `/bin/sh`. Git for Windows ships the same
+ * shell the scripts are written for; use it when present, while retaining an explicit override
+ * for a machine whose installation lives elsewhere.
+ */
+const shellCommand =
+  process.platform === "win32"
+    ? (process.env.ETA_LOCAL_SHELL ??
+      (existsSync(WINDOWS_SHELL) ? WINDOWS_SHELL : "/bin/sh"))
+    : "/bin/sh";
+
+const childEnv =
+  process.platform === "win32" && existsSync("C:\\Program Files\\Git\\usr\\bin")
+    ? {
+        PATH: `C:\\Program Files\\Git\\usr\\bin;C:\\Program Files\\Git\\bin;${process.env.PATH ?? ""}`,
+      }
+    : {};
+
+/** Git Bash accepts drive paths with forward slashes; scripts receive shell-quoted paths. */
+function windowsScript(script: string): string {
+  return process.platform === "win32"
+    ? script.replace(
+        /'([a-z]:[^']*)'/gi,
+        (_match, value: string) => `'${value.replaceAll("\\", "/")}'`,
+      )
+    : script;
+}
+
+/** Git Bash prints drive paths as `/c/...`; the product and Node use `C:/...`. */
+function windowsOutput(output: string): string {
+  return process.platform === "win32"
+    ? output.replace(/(^|\n)\/([a-z])\//gi, "$1$2:/")
+    : output;
+}
 
 export interface LocalTransportOptions {
   /** The "remote" home; defaults to this machine's. */
@@ -36,8 +74,8 @@ export class LocalTransport implements SshTransport {
 
   async run(script: string, options: SshRunOptions = {}): Promise<SshResult> {
     return await new Promise<SshResult>((resolve) => {
-      const child = spawn("/bin/sh", ["-c", script], {
-        env: { ...process.env, TMPDIR: this.tempDir },
+      const child = spawn(shellCommand, ["-c", windowsScript(script)], {
+        env: { ...process.env, ...childEnv, TMPDIR: this.tempDir },
         stdio: ["pipe", "pipe", "pipe"],
       });
       let settled = false;
@@ -87,7 +125,7 @@ export class LocalTransport implements SshTransport {
       child.on("close", (code: number | null) =>
         settle({
           code: code ?? 127,
-          stdout: Buffer.concat(stdout).toString("utf8"),
+          stdout: windowsOutput(Buffer.concat(stdout).toString("utf8")),
           stderr: Buffer.concat(stderr).toString("utf8"),
         }),
       );

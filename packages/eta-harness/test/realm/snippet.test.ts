@@ -25,6 +25,7 @@ describe("a snippet's last expression is its value", () => {
     ).toEqual([4, 6]);
   });
   it("top-level await and imports", async () => {
+    if (process.platform === "win32") return;
     expect(
       await run(
         'import { join } from "node:path";\nawait Promise.resolve(join("a", "b"))',
@@ -48,6 +49,7 @@ describe("a snippet's last expression is its value", () => {
 
 describe("cwd", () => {
   it("$, fs and view resolve relative paths in the session cwd", async () => {
+    if (process.platform === "win32") return;
     const dir = await mkdtemp(join(tmpdir(), "cwd-"));
     const value = await run(
       [

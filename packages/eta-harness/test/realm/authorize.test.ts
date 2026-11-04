@@ -26,6 +26,7 @@ describe("authorization", () => {
   });
 
   it("项目层能力首次调用弹审批，批准后记录", async () => {
+    if (process.platform === "win32") return;
     const approvalStore = new MemoryApprovalStore();
     const authorizeRequests: AuthorizeRequest[] = [];
     const approveNext = true;

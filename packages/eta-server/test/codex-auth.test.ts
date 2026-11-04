@@ -52,8 +52,8 @@ describe("the credential store", () => {
 
     // The path is beside the config, as the layout in SERVER-REFACTOR.md §10 says.
     expect(store.path).toBe(join(root, "codex-auth.json"));
-    const mode = (await stat(store.path)).mode & 0o777;
-    expect(mode).toBe(0o600);
+    if (process.platform !== "win32")
+      expect((await stat(store.path)).mode & 0o777).toBe(0o600);
     // And what a UI lists carries no secret: the type, not the token.
     const listed = await store.list();
     expect(listed).toEqual([{ providerId: "openai-codex", type: "api_key" }]);

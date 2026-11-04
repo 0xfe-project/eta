@@ -82,6 +82,10 @@ export interface AssembleOptions {
   network?: boolean | undefined;
   /** The summarizer sessions compact with. Without one they run unbound. */
   compaction?: CompactionSummarizer;
+  /** The base system prompt for local sessions; absent uses the harness default. */
+  baseSystemPromptFor?:
+    | (() => string | undefined | Promise<string | undefined>)
+    | undefined;
   /**
    * The model layer, when the host has one of its own (a test with scripted answers, an
    * embedding that builds providers differently). Omitted, it is built from the providers
@@ -111,6 +115,8 @@ export interface AssembleOptions {
   skillDirsFor?: ((meta: SessionMeta) => readonly string[]) | undefined;
   toolMiddleware?: SessionManagerOptions["toolMiddleware"] | undefined;
   askObserve?: SessionManagerOptions["askObserve"] | undefined;
+  /** Whether a session may read, recall or write project/long-term memory. */
+  memoryEnabledFor?: SessionManagerOptions["memoryEnabledFor"] | undefined;
   /** The external agent runtimes sessions may run on (`runtimes.ts`). */
   runtimes?: SessionManagerOptions["runtimes"] | undefined;
   /**
@@ -413,6 +419,7 @@ export async function assembleServer(
     // lets the agent change its own setup instead of asking a human where things go.
     platformFor: (meta) => {
       const home = options.home ?? homedir();
+      const memoryEnabled = options.memoryEnabledFor?.(meta) ?? true;
       return {
         cwd: meta.cwd,
         home,
@@ -421,7 +428,9 @@ export async function assembleServer(
         memoryTarget: join(meta.cwd, ".eta", "MEMORY.md"),
         // A synchronous stat: the briefing is rendered per generation and a fact about
         // whether a file exists is cheap enough to read then.
-        memoryExists: existsSync(join(meta.cwd, ".eta", "MEMORY.md")),
+        memoryExists:
+          memoryEnabled && existsSync(join(meta.cwd, ".eta", "MEMORY.md")),
+        ...(memoryEnabled ? {} : { memoryPaused: true }),
       };
     },
     // The project's memory, read and written through the session's own filesystem, and the
@@ -462,6 +471,9 @@ export async function assembleServer(
     ...(options.compaction === undefined
       ? {}
       : { compaction: options.compaction }),
+    ...(options.baseSystemPromptFor === undefined
+      ? {}
+      : { baseSystemPromptFor: options.baseSystemPromptFor }),
     ...(options.agentPromptFor === undefined
       ? {}
       : { agentPromptFor: options.agentPromptFor }),
@@ -474,6 +486,9 @@ export async function assembleServer(
     ...(options.askObserve === undefined
       ? {}
       : { askObserve: options.askObserve }),
+    ...(options.memoryEnabledFor === undefined
+      ? {}
+      : { memoryEnabledFor: options.memoryEnabledFor }),
     ...(options.sessionAttach === undefined
       ? {}
       : { sessionAttach: options.sessionAttach }),

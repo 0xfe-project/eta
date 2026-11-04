@@ -53,6 +53,8 @@ daemon 的数据在同一个根里：`~/.eta/daemon/`（见[机器与 daemon](ma
 | 0033               | `credential`（外部集成的凭据：`integration`、`key`、`kind`、`value` 加密；目前是 MCP 服务器的 OAuth 状态，见 [MCP](mcp.md)）                                                                                     |
 | 0034               | `task_run`（任务的运行，同时是队列）；`task` 增加项目、工作区（模式、worktree 路径与分支）、来源对话，去掉 `assignee`；`machine.max_active_runs`（默认 2）；`task_activity` 增加运行类的条目，见[任务](tasks.md) |
 | 0035               | `github_app`、`github_user`（私钥、client secret、用户令牌密封）、`github_pending`（进行中的 manifest 与授权）、`task_pull`（任务交付的 PR），见 [GitHub](github.md)                                             |
+| 0039               | `task.assignee_agent`（可选的执行 Agent；null 回退到创建者）、`task.base_branch`，见[任务](tasks.md)                                                                                                             |
+| 0041               | Captain：`agent.system_role`、`message.author = 'captain'`、assignment/target、task provenance、prompt/settings 版本、memory pause、operations/notifications/retry，见[Captain](captain.md)                      |
 
 外键的取舍：`message.agent_id`、`interaction`、`usage` 里指向智能体和对话的列**没有**外键，因为这些行是历史，比智能体活得久。
 

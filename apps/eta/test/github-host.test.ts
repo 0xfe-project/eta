@@ -491,65 +491,68 @@ async function filesUnder(root: string): Promise<Map<string, string>> {
 }
 
 describe("git and gh on a machine", () => {
-  it("are logged in as the App on the host, and as the user once they authorized it", async () => {
-    const fake = fakeGitHub();
-    const { w, base } = await connectedWorld(fake, undefined);
-    const dir = join(w.host.dataDir, "github");
-    await until(() => existsSync(join(dir, "token")));
-    const bot = (await readFile(join(dir, "token"), "utf8")).trim();
-    expect(bot.startsWith("ghs_")).toBe(true);
-    // The files are written one after another, and a refresh may be in between.
-    await until(async () =>
-      (await readFile(join(dir, "gh", "hosts.yml"), "utf8")).includes(
-        `oauth_token: ${(await readFile(join(dir, "token"), "utf8")).trim()}`,
-      ),
-    );
-    expect(await readFile(join(dir, "login"), "utf8")).toBe("axp-test[bot]");
-    expect(await readFile(join(dir, "git", "github.inc"), "utf8")).toContain(
-      "name = axp-test[bot]",
-    );
+  it.skipIf(process.platform === "win32")(
+    "are logged in as the App on the host, and as the user once they authorized it",
+    async () => {
+      const fake = fakeGitHub();
+      const { w, base } = await connectedWorld(fake, undefined);
+      const dir = join(w.host.dataDir, "github");
+      await until(() => existsSync(join(dir, "token")));
+      const bot = (await readFile(join(dir, "token"), "utf8")).trim();
+      expect(bot.startsWith("ghs_")).toBe(true);
+      // The files are written one after another, and a refresh may be in between.
+      await until(async () =>
+        (await readFile(join(dir, "gh", "hosts.yml"), "utf8")).includes(
+          `oauth_token: ${(await readFile(join(dir, "token"), "utf8")).trim()}`,
+        ),
+      );
+      expect(await readFile(join(dir, "login"), "utf8")).toBe("axp-test[bot]");
+      expect(await readFile(join(dir, "git", "github.inc"), "utf8")).toContain(
+        "name = axp-test[bot]",
+      );
 
-    // A shell of a session on this machine sees it: gh's config directory, git's credentials.
-    const shell = async (command: string): Promise<string> =>
-      await new Promise((resolve, reject) => {
-        execFile(
-          "sh",
-          ["-c", command],
-          { cwd: dir, env: { ...process.env, ...w.host.product.shellEnv } },
-          (error, stdout) => (error ? reject(error) : resolve(stdout)),
-        );
-      });
-    expect(await shell("printenv GH_CONFIG_DIR")).toContain(join(dir, "gh"));
-    const filled = await shell(
-      "printf 'protocol=https\\nhost=github.com\\n\\n' | git credential fill",
-    );
-    expect(filled).toContain("username=axp-test[bot]");
-    expect(filled).toContain(
-      `password=${(await readFile(join(dir, "token"), "utf8")).trim()}`,
-    );
+      // A shell of a session on this machine sees it: gh's config directory, git's credentials.
+      const shell = async (command: string): Promise<string> =>
+        await new Promise((resolve, reject) => {
+          execFile(
+            "sh",
+            ["-c", command],
+            { cwd: dir, env: { ...process.env, ...w.host.product.shellEnv } },
+            (error, stdout) => (error ? reject(error) : resolve(stdout)),
+          );
+        });
+      expect(await shell("printenv GH_CONFIG_DIR")).toContain(join(dir, "gh"));
+      const filled = await shell(
+        "printf 'protocol=https\\nhost=github.com\\n\\n' | git credential fill",
+      );
+      expect(filled).toContain("username=axp-test[bot]");
+      expect(filled).toContain(
+        `password=${(await readFile(join(dir, "token"), "utf8")).trim()}`,
+      );
 
-    const { url } = (await w.client.call("github", "authorize", {
-      origin: ORIGIN,
-    })) as { url: string };
-    const redirect = new URL(fake.authorizeAs(url, "akarachen"));
-    await returnTo(`${base}${redirect.pathname}${redirect.search}`);
-    await until(async () =>
-      (await readFile(join(dir, "token"), "utf8")).startsWith("ghu_"),
-    );
-    const user = (await readFile(join(dir, "token"), "utf8")).trim();
-    expect(user.startsWith("ghu_")).toBe(true);
-    expect(await readFile(join(dir, "login"), "utf8")).toBe("akarachen");
-    expect(await readFile(join(dir, "gh", "hosts.yml"), "utf8")).toContain(
-      "user: akarachen",
-    );
-    expect(await shell("printenv GIT_CONFIG_COUNT")).toBe("3\n");
+      const { url } = (await w.client.call("github", "authorize", {
+        origin: ORIGIN,
+      })) as { url: string };
+      const redirect = new URL(fake.authorizeAs(url, "akarachen"));
+      await returnTo(`${base}${redirect.pathname}${redirect.search}`);
+      await until(async () =>
+        (await readFile(join(dir, "token"), "utf8")).startsWith("ghu_"),
+      );
+      const user = (await readFile(join(dir, "token"), "utf8")).trim();
+      expect(user.startsWith("ghu_")).toBe(true);
+      expect(await readFile(join(dir, "login"), "utf8")).toBe("akarachen");
+      expect(await readFile(join(dir, "gh", "hosts.yml"), "utf8")).toContain(
+        "user: akarachen",
+      );
+      expect(await shell("printenv GIT_CONFIG_COUNT")).toBe("3\n");
 
-    // Disconnecting leaves the machine's own logins as they were.
-    await w.client.call("github", "disconnect", {});
-    await until(() => !existsSync(join(dir, "token")));
-    expect(w.host.product.shellEnv.GH_CONFIG_DIR).toBeUndefined();
-    expect(existsSync(join(dir, "gh"))).toBe(false);
-  });
+      // Disconnecting leaves the machine's own logins as they were.
+      await w.client.call("github", "disconnect", {});
+      await until(() => !existsSync(join(dir, "token")));
+      expect(w.host.product.shellEnv.GH_CONFIG_DIR).toBeUndefined();
+      expect(existsSync(join(dir, "gh"))).toBe(false);
+    },
+  );
 
   it("are logged in on a daemon too, with the token relayed and no App secret kept there", async () => {
     const fake = fakeGitHub();

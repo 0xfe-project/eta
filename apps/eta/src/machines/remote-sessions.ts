@@ -13,6 +13,7 @@ import type { SidebarSession } from "@eta/client-contracts";
 import type { KernelModels } from "@eta/core";
 import type { RemoteSessions } from "@eta/server";
 import type { ConversationStore } from "../conversations/store";
+import type { TaskRunStore } from "../tasks/runs";
 import type { MachineHub, MachineLink } from "./hub";
 import type { MachineRecord, MachineStore } from "./store";
 import { modelSpecOf } from "@eta/daemon";
@@ -31,12 +32,15 @@ interface ForwardArgs {
 
 export class RemoteSessionsRouter implements RemoteSessions {
   readonly #conversations: ConversationStore;
+  readonly #runs: TaskRunStore | undefined;
   readonly #machines: MachineStore;
   readonly #hub: MachineHub;
   readonly #models: () => KernelModels | undefined;
 
   constructor(options: {
     conversations: ConversationStore;
+    /** Task runs are sessions too; their rows say which daemon holds them. */
+    runs?: TaskRunStore | undefined;
     machines: MachineStore;
     hub: MachineHub;
     models: () => KernelModels | undefined;
@@ -45,6 +49,7 @@ export class RemoteSessionsRouter implements RemoteSessions {
   }) {
     this.rows = options.rows;
     this.#conversations = options.conversations;
+    this.#runs = options.runs;
     this.#machines = options.machines;
     this.#hub = options.hub;
     this.#models = options.models;
@@ -53,8 +58,17 @@ export class RemoteSessionsRouter implements RemoteSessions {
   /** The daemon machine a session runs on, if it is a remote one. */
   machineOf(sessionId: string): MachineRecord | undefined {
     const held = this.#conversations.ofSession(sessionId);
-    if (held === undefined) return undefined;
-    const machine = this.#machines.get(held.machineId);
+    const taskRun =
+      held === undefined ? this.#runs?.bySession(sessionId) : undefined;
+    const machineId = held?.machineId ?? taskRun?.machineId;
+    const mirroredName =
+      machineId === undefined || machineId === null
+        ? this.rows().find((row) => row.id === sessionId)?.machine
+        : undefined;
+    const machine =
+      machineId === undefined || machineId === null
+        ? this.#machines.list().find((item) => item.name === mirroredName)
+        : this.#machines.get(machineId);
     return machine?.kind === "daemon" ? machine : undefined;
   }
 

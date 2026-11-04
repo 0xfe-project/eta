@@ -144,61 +144,64 @@ describe("an agent that loads a bundle, on a daemon", () => {
 });
 
 describe("what a bundle requires, per machine", () => {
-  it("asks each machine for itself", async () => {
-    const home = await tempDir("eta-home-");
-    await writeBundle(
-      home,
-      "demo",
-      demoFiles({ requires: ["eta-test-only-here"] }),
-    );
-    const r = await remoteWorld({ dataDir: home });
-    r.client.subscribe("bundles");
-    await until(() =>
-      listed(r.client).some((bundle) => bundle.name === "demo"),
-    );
-    const machines = () =>
-      listed(r.client).find((bundle) => bundle.name === "demo")!.machines;
-    await until(() => machines().length === 2);
-    expect(machines().every((machine) => !machine.ready)).toBe(true);
+  it.skipIf(process.platform === "win32")(
+    "asks each machine for itself",
+    async () => {
+      const home = await tempDir("eta-home-");
+      await writeBundle(
+        home,
+        "demo",
+        demoFiles({ requires: ["eta-test-only-here"] }),
+      );
+      const r = await remoteWorld({ dataDir: home });
+      r.client.subscribe("bundles");
+      await until(() =>
+        listed(r.client).some((bundle) => bundle.name === "demo"),
+      );
+      const machines = () =>
+        listed(r.client).find((bundle) => bundle.name === "demo")!.machines;
+      await until(() => machines().length === 2);
+      expect(machines().every((machine) => !machine.ready)).toBe(true);
 
-    // The command appears on the PATH, and the daemon is asked: it has it.
-    const bin = await tempDir("eta-bin-");
-    const command = join(bin, "eta-test-only-here");
-    await writeFile(command, "#!/bin/sh\n");
-    await chmod(command, 0o755);
-    const path = process.env.PATH;
-    process.env.PATH = `${bin}:${path}`;
-    try {
-      await r.client.call("bundles", "recheck", {});
-    } finally {
-      process.env.PATH = path;
-    }
-    // The primary is looked at whenever the page is made, and no longer has it; the daemon
-    // answered while it was there, and its answer stands until it is asked again. (Any change
-    // makes the page again.)
-    await r.client.call("bundles", "configure", {
-      name: "demo",
-      values: { DEMO_REGION: "eu" },
-    });
-    await until(
-      () =>
-        machines().some((machine) => machine.ready) &&
-        machines().some((machine) => !machine.ready),
-    );
-    const byName = Object.fromEntries(
-      machines().map((machine) => [
-        machine.machineId === r.daemon.machineId ? "daemon" : "primary",
-        machine,
-      ]),
-    );
-    expect(byName.daemon).toMatchObject({
-      ready: true,
-      missing: [],
-      checked: true,
-    });
-    expect(byName.primary).toMatchObject({
-      ready: false,
-      missing: ["eta-test-only-here"],
-    });
-  });
+      // The command appears on the PATH, and the daemon is asked: it has it.
+      const bin = await tempDir("eta-bin-");
+      const command = join(bin, "eta-test-only-here");
+      await writeFile(command, "#!/bin/sh\n");
+      await chmod(command, 0o755);
+      const path = process.env.PATH;
+      process.env.PATH = `${bin}:${path}`;
+      try {
+        await r.client.call("bundles", "recheck", {});
+      } finally {
+        process.env.PATH = path;
+      }
+      // The primary is looked at whenever the page is made, and no longer has it; the daemon
+      // answered while it was there, and its answer stands until it is asked again. (Any change
+      // makes the page again.)
+      await r.client.call("bundles", "configure", {
+        name: "demo",
+        values: { DEMO_REGION: "eu" },
+      });
+      await until(
+        () =>
+          machines().some((machine) => machine.ready) &&
+          machines().some((machine) => !machine.ready),
+      );
+      const byName = Object.fromEntries(
+        machines().map((machine) => [
+          machine.machineId === r.daemon.machineId ? "daemon" : "primary",
+          machine,
+        ]),
+      );
+      expect(byName.daemon).toMatchObject({
+        ready: true,
+        missing: [],
+        checked: true,
+      });
+      expect(byName.primary).toMatchObject({
+        ready: false,
+        missing: ["eta-test-only-here"],
+      });
+    },
+  );
 });

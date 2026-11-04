@@ -11,7 +11,7 @@
 import { execFile } from "node:child_process";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, posix } from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
 
@@ -90,7 +90,7 @@ export function serviceDefinition(
   if (platform === "darwin") {
     return {
       name,
-      path: join(home, "Library", "LaunchAgents", `${name}.plist`),
+      path: posix.join(home, "Library", "LaunchAgents", `${name}.plist`),
       content: `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -110,7 +110,7 @@ export function serviceDefinition(
   if (platform === "linux") {
     return {
       name,
-      path: join(home, ".config", "systemd", "user", `${name}.service`),
+      path: posix.join(home, ".config", "systemd", "user", `${name}.service`),
       content: `[Unit]
 Description=${unit.description}
 After=network-online.target

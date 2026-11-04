@@ -73,7 +73,7 @@ describe("how the daemon was started", () => {
   });
 });
 
-describe("upgrade", () => {
+describe.skipIf(process.platform === "win32")("upgrade", () => {
   it("fetches the build with its credential, tries it, and swaps it in keeping the old one", async () => {
     const { exe, dataDir } = await setting();
     const { fetch, asked } = primary(script("v2"));
@@ -152,86 +152,89 @@ describe("upgrade", () => {
   });
 });
 
-describe("settling an upgrade after the restart", () => {
-  async function upgraded() {
-    const s = await setting();
-    const { fetch } = primary(script("v2"));
-    await upgrade(
-      { version: "v2", sha256: sha256(script("v2")) },
-      {
-        identity,
-        dataDir: s.dataDir,
+describe.skipIf(process.platform === "win32")(
+  "settling an upgrade after the restart",
+  () => {
+    async function upgraded() {
+      const s = await setting();
+      const { fetch } = primary(script("v2"));
+      await upgrade(
+        { version: "v2", sha256: sha256(script("v2")) },
+        {
+          identity,
+          dataDir: s.dataDir,
+          version: "v1",
+          execPath: s.exe,
+          install: "service",
+          fetch,
+        },
+      );
+      return s;
+    }
+
+    it("a new build that gets back in keeps its place, and the old file goes", async () => {
+      const { exe, dataDir } = await upgraded();
+      const rolled: string[] = [];
+      const settled = settleUpgrade({
+        dataDir,
+        version: "v2",
+        execPath: exe,
+        rollBack: (reason) => rolled.push(reason),
+      });
+      settled.admitted();
+      expect(rolled).toEqual([]);
+      expect(existsSync(join(dataDir, "upgrade.json"))).toBe(false);
+      expect(existsSync(`${exe}.prev`)).toBe(false);
+      expect(await readFile(exe, "utf8")).toBe(script("v2"));
+    });
+
+    it("one that does not get back in in time puts the old one back", async () => {
+      const { exe, dataDir } = await upgraded();
+      const rolled: string[] = [];
+      settleUpgrade({
+        dataDir,
+        version: "v2",
+        execPath: exe,
+        settleMs: 10,
+        rollBack: (reason) => rolled.push(reason),
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(rolled).toEqual(["did not get back in"]);
+      expect(await readFile(exe, "utf8")).toBe(script("v1"));
+      expect(existsSync(join(dataDir, "upgrade.json"))).toBe(false);
+    });
+
+    it("one started again and again without getting in is put back at once", async () => {
+      const { exe, dataDir } = await upgraded();
+      const marker = JSON.parse(
+        await readFile(join(dataDir, "upgrade.json"), "utf8"),
+      );
+      await writeFile(
+        join(dataDir, "upgrade.json"),
+        JSON.stringify({ ...marker, starts: 3 }),
+      );
+      const rolled: string[] = [];
+      settleUpgrade({
+        dataDir,
+        version: "v2",
+        execPath: exe,
+        rollBack: (r) => rolled.push(r),
+      });
+      expect(rolled).toHaveLength(1);
+      expect(await readFile(exe, "utf8")).toBe(script("v1"));
+    });
+
+    it("the old build, back after a roll-back, just clears the marker", async () => {
+      const { exe, dataDir } = await upgraded();
+      const rolled: string[] = [];
+      settleUpgrade({
+        dataDir,
         version: "v1",
-        execPath: s.exe,
-        install: "service",
-        fetch,
-      },
-    );
-    return s;
-  }
-
-  it("a new build that gets back in keeps its place, and the old file goes", async () => {
-    const { exe, dataDir } = await upgraded();
-    const rolled: string[] = [];
-    const settled = settleUpgrade({
-      dataDir,
-      version: "v2",
-      execPath: exe,
-      rollBack: (reason) => rolled.push(reason),
+        execPath: exe,
+        rollBack: (r) => rolled.push(r),
+      });
+      expect(rolled).toEqual([]);
+      expect(existsSync(join(dataDir, "upgrade.json"))).toBe(false);
     });
-    settled.admitted();
-    expect(rolled).toEqual([]);
-    expect(existsSync(join(dataDir, "upgrade.json"))).toBe(false);
-    expect(existsSync(`${exe}.prev`)).toBe(false);
-    expect(await readFile(exe, "utf8")).toBe(script("v2"));
-  });
-
-  it("one that does not get back in in time puts the old one back", async () => {
-    const { exe, dataDir } = await upgraded();
-    const rolled: string[] = [];
-    settleUpgrade({
-      dataDir,
-      version: "v2",
-      execPath: exe,
-      settleMs: 10,
-      rollBack: (reason) => rolled.push(reason),
-    });
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(rolled).toEqual(["did not get back in"]);
-    expect(await readFile(exe, "utf8")).toBe(script("v1"));
-    expect(existsSync(join(dataDir, "upgrade.json"))).toBe(false);
-  });
-
-  it("one started again and again without getting in is put back at once", async () => {
-    const { exe, dataDir } = await upgraded();
-    const marker = JSON.parse(
-      await readFile(join(dataDir, "upgrade.json"), "utf8"),
-    );
-    await writeFile(
-      join(dataDir, "upgrade.json"),
-      JSON.stringify({ ...marker, starts: 3 }),
-    );
-    const rolled: string[] = [];
-    settleUpgrade({
-      dataDir,
-      version: "v2",
-      execPath: exe,
-      rollBack: (r) => rolled.push(r),
-    });
-    expect(rolled).toHaveLength(1);
-    expect(await readFile(exe, "utf8")).toBe(script("v1"));
-  });
-
-  it("the old build, back after a roll-back, just clears the marker", async () => {
-    const { exe, dataDir } = await upgraded();
-    const rolled: string[] = [];
-    settleUpgrade({
-      dataDir,
-      version: "v1",
-      execPath: exe,
-      rollBack: (r) => rolled.push(r),
-    });
-    expect(rolled).toEqual([]);
-    expect(existsSync(join(dataDir, "upgrade.json"))).toBe(false);
-  });
-});
+  },
+);

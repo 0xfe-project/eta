@@ -1,6 +1,7 @@
 import enAgents from "./en/agents.json";
 import enArtifacts from "./en/artifacts.json";
 import enBundles from "./en/bundles.json";
+import enCaptain from "./en/captain.json";
 import enChat from "./en/chat.json";
 import enCommon from "./en/common.json";
 import enConnections from "./en/connections.json";
@@ -19,6 +20,7 @@ import enValidation from "./en/validation.json";
 import zhAgents from "./zh/agents.json";
 import zhArtifacts from "./zh/artifacts.json";
 import zhBundles from "./zh/bundles.json";
+import zhCaptain from "./zh/captain.json";
 import zhChat from "./zh/chat.json";
 import zhCommon from "./zh/common.json";
 import zhConnections from "./zh/connections.json";
@@ -41,6 +43,7 @@ export const en = {
   agents: enAgents,
   artifacts: enArtifacts,
   bundles: enBundles,
+  captain: enCaptain,
   chat: enChat,
   llm: enLlm,
   machines: enMachines,
@@ -62,6 +65,7 @@ export const zh = {
   agents: zhAgents,
   artifacts: zhArtifacts,
   bundles: zhBundles,
+  captain: zhCaptain,
   chat: zhChat,
   llm: zhLlm,
   machines: zhMachines,
@@ -85,6 +89,7 @@ export const namespaces = [
   "agents",
   "artifacts",
   "bundles",
+  "captain",
   "chat",
   "machines",
   "mcp",

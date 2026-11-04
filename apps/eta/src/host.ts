@@ -94,6 +94,8 @@ export interface HostOptions {
   routines?: RoutinesOptions;
   /** Whether tasks run; a test that is about the board and not the runs turns them off. */
   tasks?: TasksOptions;
+  /** Whether this host starts El Capitan. Tests that are not about Captain leave it off. */
+  captain?: boolean;
   /**
    * The external agent runtimes (Claude Code, Codex, OpenCode, Pi) agents may run on: oar's, on
    * this machine, by default. A test hands in scripted ones; `false` runs none.
@@ -165,6 +167,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       warn,
       ...(options.routines === undefined ? {} : { routines: options.routines }),
       ...(options.tasks === undefined ? {} : { tasks: options.tasks }),
+      ...(options.captain === undefined ? {} : { captain: options.captain }),
       artifactLimits: options.artifactLimits,
       memoryUrl: options.memoryUrl,
       gateway: () => llm,
@@ -224,6 +227,8 @@ export async function startHost(options: HostOptions): Promise<Host> {
       agentPromptFor: product.engine.agentPromptFor,
       skillDirsFor: product.skillDirsFor,
       ...product.sessionHooks,
+      memoryEnabledFor: product.memoryEnabledFor,
+      baseSystemPromptFor: product.baseSystemPromptFor,
       generated: product.generated,
       // An agent on an external runtime has its sessions' runs taken by it (`@eta/runtime-oar`).
       ...(runtimes === undefined ? {} : { runtimes }),

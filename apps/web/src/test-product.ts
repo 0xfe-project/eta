@@ -31,6 +31,7 @@ export const agentView = (
   thinkingLevel: null,
   bundles: [],
   machineId: null,
+  systemRole: null,
   home: `/data/agents/${fields.id}`,
   homeProjectId: `home-${fields.id}`,
   status: "idle",

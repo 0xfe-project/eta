@@ -153,19 +153,37 @@ def create_app(provider: MemoryProvider):
         if source is not None and source not in {"conversation", "agent", "user"}:
             return _error(400, "INVALID_SOURCE", "无效的记忆种类。")
         group_id = request.query_params.get("group_id") or None
+        include_deleted = request.query_params.get("include_deleted") == "1"
         query = request.query_params.get("q", "").strip()[:MAX_TEXT]
         if query:
             found = await anyio.to_thread.run_sync(
                 lambda: provider.search(
-                    agent, query, SEARCH_LIMIT, source=source, group_id=group_id
+                    agent,
+                    query,
+                    SEARCH_LIMIT,
+                    source=source,
+                    group_id=group_id,
+                    **({"include_deleted": True} if include_deleted else {}),
                 )
             )
-            found = [m for m in found if (m.score or 0) >= RECALL_MIN_SCORE]
+            found = [
+                m
+                for m in found
+                if (m.score or 0) >= RECALL_MIN_SCORE
+                and (include_deleted or m.deleted_at is None)
+            ]
         else:
             found = await anyio.to_thread.run_sync(
-                lambda: provider.list(agent, source=source, group_id=group_id)
+                lambda: provider.list(
+                    agent,
+                    source=source,
+                    group_id=group_id,
+                    **({"include_deleted": True} if include_deleted else {}),
+                )
             )
             # Newest first; ISO 8601 in UTC sorts as text.
+            if not include_deleted:
+                found = [m for m in found if m.deleted_at is None]
             found.sort(key=lambda m: m.created_at or "", reverse=True)
         return JSONResponse({"memories": [_view(m) for m in found]})
 
@@ -178,6 +196,39 @@ def create_app(provider: MemoryProvider):
             request.path_params["memory_id"],
         )
         if not await anyio.to_thread.run_sync(provider.delete, agent, memory_id):
+            return _error(404, "NOT_FOUND", "这条记忆不存在。")
+        return Response(status_code=204)
+
+    @mcp.custom_route(
+        "/api/memory/v1/agents/{agent}/memories/{memory_id}/soft",
+        methods=["DELETE"],
+    )
+    async def soft_delete_route(request: Request) -> Response:
+        agent, memory_id = (
+            request.path_params["agent"],
+            request.path_params["memory_id"],
+        )
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        deleted_by = str(body.get("deleted_by") or "captain")
+        if not await anyio.to_thread.run_sync(
+            provider.soft_delete, agent, memory_id, deleted_by
+        ):
+            return _error(404, "NOT_FOUND", "这条记忆不存在。")
+        return Response(status_code=204)
+
+    @mcp.custom_route(
+        "/api/memory/v1/agents/{agent}/memories/{memory_id}/restore",
+        methods=["POST"],
+    )
+    async def restore_route(request: Request) -> Response:
+        agent, memory_id = (
+            request.path_params["agent"],
+            request.path_params["memory_id"],
+        )
+        if not await anyio.to_thread.run_sync(provider.restore, agent, memory_id):
             return _error(404, "NOT_FOUND", "这条记忆不存在。")
         return Response(status_code=204)
 
@@ -252,6 +303,10 @@ def _view(memory: Memory) -> dict:
         view["source"] = memory.source
     if memory.source_group_id is not None:
         view["source_group_id"] = memory.source_group_id
+    if memory.deleted_at is not None:
+        view["deleted_at"] = memory.deleted_at
+    if memory.deleted_by is not None:
+        view["deleted_by"] = memory.deleted_by
     return view
 
 

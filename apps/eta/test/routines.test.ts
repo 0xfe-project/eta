@@ -319,7 +319,7 @@ describe("a run", () => {
     expect(meta).toMatchObject({
       ok: true,
       meta: {
-        cwd: expect.stringContaining(`routines/${routine.id}`),
+        cwd: expect.stringMatching(new RegExp(`routines[\\\\/]${routine.id}`)),
         archived: true,
       },
     });

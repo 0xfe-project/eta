@@ -4,6 +4,7 @@
  * The models are scripted because the subject is the host; the socket and the frames are real.
  */
 import type { ServerFrame } from "@eta/client-contracts";
+import { join } from "node:path";
 import {
   AGENT_ACTIONS,
   CONVERSATION_ACTIONS,
@@ -149,6 +150,6 @@ describe("the host", () => {
         .query("SELECT name FROM sqlite_master WHERE name = 'eta_migrations'")
         .get(),
     ).toEqual({ name: "eta_migrations" });
-    expect(databasePath(host.dataDir)).toBe(`${host.dataDir}/eta.sqlite`);
+    expect(databasePath(host.dataDir)).toBe(join(host.dataDir, "eta.sqlite"));
   });
 });

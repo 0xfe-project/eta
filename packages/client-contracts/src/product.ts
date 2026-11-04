@@ -49,6 +49,8 @@ export interface AgentView {
    * Null follows the project.
    */
   machineId: string | null;
+  /** `captain` for the one El Capitan agent; null for every ordinary agent. */
+  systemRole: "captain" | null;
   /** The agent's workspace directory (on the primary machine). */
   home: string;
   homeProjectId: string;
@@ -225,7 +227,7 @@ export interface MessageView {
   /** Per conversation, dense, and the order the timeline is read in. A reply keeps the place it started in. */
   seq: number;
   kind: MessageKind;
-  author: "user" | "agent" | "system";
+  author: "user" | "agent" | "system" | "captain";
   /** The author when it is an agent (the agent may have been deleted since). */
   agentId: string | null;
   text: string;

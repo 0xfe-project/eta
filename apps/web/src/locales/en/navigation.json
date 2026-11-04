@@ -1,6 +1,7 @@
 {
   "sections": {
     "chat": "Chat",
+    "captain": "Captain",
     "pending": "Pending",
     "tasks": "Tasks",
     "email": "Email",

@@ -1,11 +1,12 @@
 # 任务
 
-任务是看板上的一件事，也是**一次可以执行的工作**：提出它的智能体就是执行者，在它自己的一个会话里去做，做完交回待验收。任务上后来的评论会把它再叫醒一次，**在同一个会话里继续**（见[运行](#运行)）。代码在 `apps/eta/src/tasks`，契约在 `packages/client-contracts/src/tasks.ts`。
+任务是看板上的一件事，也是**一次可以执行的工作**：默认由提出它的智能体执行；若草稿指定了 `assignee_agent`，则由该 Agent 执行。执行者在自己的一个会话里去做，做完交回待验收。任务上后来的评论会把它再叫醒一次，**在同一个会话里继续**（见[运行](#运行)）。代码在 `apps/eta/src/tasks`，契约在 `packages/client-contracts/src/tasks.ts`。
 
 ## 谁建任务，谁执行
 
 - **用户不能新建任务。** 线上没有 `tasks.create`，界面没有"新建"。任务只来自智能体的工具：`draft_task`（提议，由用户确认）和 `create_task`（用户明确要求时直接建）。
-- **执行者永远是创建它的智能体**（`task.created_by_agent`），没有指派，也没有换执行者。早先用户建的任务没有执行者，是看板上不能运行的笔记。
+- **任务是智能体创建的，执行者由 `assignee_agent` 决定；没有 `assignee_agent` 时回退到创建者**（`assignee_agent ?? created_by_agent`）。普通任务可以由创建者写给另一个 Agent 执行；早先用户建的任务没有执行者，是看板上不能运行的笔记。
+- **Captain 的“指派”不属于上面的 task assignee**：Captain 只在群聊里发一条可见的工作授权，目标 Agent 自己调用 `create_task`，因此该 Agent 同时是创建者和执行者，不需要也不能用 `assignee_agent` 把任务转给别人。
 - 任务有编号（`#12`，`AUTOINCREMENT`，删掉最新的也不复用）、标题、描述、状态 `backlog | todo | in_progress | in_review | done | blocked | cancelled`、所属项目、工作区、来源对话（`origin_conversation_id`，永远是提出它的那个，执行结果发回那里；`conversation_id` 是现在关联的对话，可以改）。
 - **一个入口**：线上 action 与智能体工具是同一组操作（`TaskBoard`）。校验、变更与它留下的活动记录是一次写入，任务的所有卡片在同一次写入里刷新，然后才通知看着的人。
 
@@ -80,4 +81,4 @@
 
 ## 智能体的工具
 
-对话里的智能体：`draft_task`、`list_tasks`、`get_task`、`create_task`、`update_task`、`comment_task`。运行里的执行者：`list_tasks`、`get_task`、`update_task`（不能直接移到 `done`/`cancelled`/`in_review`）、`comment_task`（作用在自己的任务上）、`finish_task`。工具描述承载纪律：`draft_task` 的描述开头是可自检的触发条件（改仓库里的文件、跑构建或测试、结果要人验收、你知道会转好几轮工具），命中任一条就别在聊天里做；留在聊天区的是读、查、解释、问答、表态和一两条命令的验证。`mention` 是把话交给人，`draft_task` 是让工作离开这一轮：它是看板的提案，由用户确认后成为任务，由提出它的智能体在一个看不见这段对话的新会话里执行。
+对话里的智能体：`draft_task`、`list_tasks`、`get_task`、`create_task`、`update_task`、`comment_task`。运行里的执行者：`list_tasks`、`get_task`、`update_task`（不能直接移到 `done`/`cancelled`/`in_review`）、`comment_task`（作用在自己的任务上）、`finish_task`。工具描述承载纪律：`draft_task` 的描述开头是可自检的触发条件（改仓库里的文件、跑构建或测试、结果要人验收、你知道会转好几轮工具），命中任一条就别在聊天里做；留在聊天区的是读、查、解释、问答、表态和一两条命令的验证。`mention` 是把话交给人，`draft_task` 是让工作离开这一轮：它是看板的提案，由用户确认后成为任务，由 `assignee_agent`（没有指定时是提出它的智能体）在一个看不见这段对话的新会话里执行。

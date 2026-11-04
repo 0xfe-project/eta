@@ -112,6 +112,10 @@ export interface EngineOptions {
   runHooks?: RunHooks | undefined;
   /** What an agent's bundles add to the stamp of its sessions: a change reopens them. */
   bundleStamp?: ((agent: AgentRecord) => string) | undefined;
+  /** Product state (memory pause, Captain membership) that makes an open session stale. */
+  sessionStamp?:
+    | ((conversationId: string, agentId: string) => string)
+    | undefined;
   /**
    * Where the sessions of a project on a daemon machine live. Without one, such a project's
    * replies fail as unavailable, which is what a host with no link to other machines should say.
@@ -156,6 +160,7 @@ export class Engine {
   readonly #local: LocalPlace;
   readonly #remote: SessionPlace | undefined;
   readonly #bundleStamp: EngineOptions["bundleStamp"];
+  readonly #sessionStamp: EngineOptions["sessionStamp"];
 
   #closing = false;
   /** Replies waiting their turn on a participant's session, by `conversation:agent`. */
@@ -182,6 +187,7 @@ export class Engine {
     this.#hooks = options.runHooks ?? {};
     this.#remote = options.remote;
     this.#bundleStamp = options.bundleStamp;
+    this.#sessionStamp = options.sessionStamp;
     this.#local = new LocalPlace({
       opened: this.#opened,
       warn: options.warn,
@@ -220,7 +226,7 @@ export class Engine {
       meta.conversationId === undefined
         ? undefined
         : this.#away.get(keyOf(meta.conversationId, meta.agentId));
-    this.#opened.set(meta.id, this.#stamp(agent, away));
+    this.#opened.set(meta.id, this.#stamp(agent, away, meta.conversationId));
     return withAway(
       agentPromptOf(agent, isTaskSession(meta.conversationId)),
       away,
@@ -228,8 +234,12 @@ export class Engine {
   };
 
   /** What a session's prompt, persona and bundles were read from. */
-  #stamp(agent: AgentRecord, away?: string): string {
-    return `${stampOf(agent)}${this.#bundleStamp?.(agent) ?? ""}${away ?? ""}`;
+  #stamp(agent: AgentRecord, away?: string, conversationId?: string): string {
+    return `${stampOf(agent)}${this.#bundleStamp?.(agent) ?? ""}${away ?? ""}${
+      conversationId === undefined || this.#sessionStamp === undefined
+        ? ""
+        : this.#sessionStamp(conversationId, agent.id)
+    }`;
   }
 
   /**
@@ -332,7 +342,7 @@ export class Engine {
       cwd: input.cwd,
       existing: input.existing,
       prompt: withAway(agentPromptOf(input.agent, true), away),
-      stamp: this.#stamp(input.agent, away),
+      stamp: this.#stamp(input.agent, away, input.key),
       created: input.created,
     });
   }
@@ -366,6 +376,22 @@ export class Engine {
   async send(input: {
     conversationId: string;
     text: string;
+    /** Only the host may write a Captain row; the public conversations.send action never sets it. */
+    author?: "user" | "captain" | undefined;
+    /** The Captain agent id when `author` is Captain. */
+    agentId?: string | undefined;
+    /** The discussion root. Captain assignments keep their own root for an independent budget. */
+    rootMessageId?: string | undefined;
+    /**
+     * A host hook after the message and its reply rows are written, but before any reply is
+     * scheduled. Captain uses this to persist assignment provenance before a fast target can run.
+     */
+    dispatched?:
+      | ((input: {
+          message: MessageView;
+          replies: readonly MessageView[];
+        }) => void)
+      | undefined;
     /**
      * Where the sender folded pastes inside `text` (`ConversationArgs["send"]["blocks"]`). Not
      * looked at: written verbatim into the row's `data.blocks`, for renderers. The prompt the
@@ -389,7 +415,7 @@ export class Engine {
       if (earlier !== undefined) {
         if (
           earlier.conversationId !== conversation.id ||
-          earlier.author !== "user"
+          earlier.author !== (input.author ?? "user")
         )
           throw new Error(`clientId ${input.clientId} is taken`);
         return this.#sent(earlier);
@@ -445,10 +471,11 @@ export class Engine {
         id,
         conversationId: conversation.id,
         kind: "message",
-        author: "user",
+        author: input.author ?? "user",
+        agentId: input.agentId,
         text,
         mentions: routing.named,
-        rootMessageId: id,
+        rootMessageId: input.rootMessageId ?? id,
         data: {
           // Held: written, but not a message of the conversation yet — see `held` above. `status`
           // is left alone on purpose: `queued` means "a reply waiting to run", and every in-flight
@@ -499,6 +526,10 @@ export class Engine {
         joined,
       });
     }
+    input.dispatched?.({
+      message: this.#timeline.get(message.id)!,
+      replies: [...replies],
+    });
     for (const reply of replies)
       this.#schedule(conversation.id, reply.agentId!, reply.id);
 
@@ -848,7 +879,7 @@ export class Engine {
             ? participant.sessionId
             : null,
         prompt: withAway(agentPromptOf(agent), away),
-        stamp: this.#stamp(agent, away),
+        stamp: this.#stamp(agent, away, conversation.id),
         created: (id) =>
           this.#conversations.setSession(
             conversation.id,

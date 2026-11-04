@@ -344,7 +344,7 @@ describe("a task run", () => {
     expect(runsOf(r.w, task.id)[0]!.workspace).toBe(where);
     // The branch is the project's, the worktree is outside its directory, and both stay.
     expect(git(dir, "branch", "--list", "eta/task-1")).toContain("eta/task-1");
-    expect(git(dir, "worktree", "list")).toContain(where);
+    expect(git(dir, "worktree", "list").replaceAll("/", "\\")).toContain(where);
     expect(git(dir, "status", "--porcelain")).toBe("");
     expect(existsSync(where)).toBe(true);
     expect(git(where, "rev-parse", "--abbrev-ref", "HEAD")).toBe("eta/task-1");
@@ -996,7 +996,7 @@ describe("stopping and running again", () => {
     const { models } = scriptedModels((request) =>
       isRun(request) ? HANG : say("ok"),
     );
-    const first = await world({ dataDir, models });
+    const first = await world({ dataDir, models, captain: false });
     const ada = await first.agent("Ada");
     const project = await first.project({ stewardId: ada.id });
     const group = await first.group(project.id, [ada.id]);
@@ -1015,6 +1015,7 @@ describe("stopping and running again", () => {
     const second = await testHost({
       dataDir,
       models: scriptedModels(() => say("ok")).models,
+      captain: false,
     });
     const client = await connect(`ws://127.0.0.1:${second.port}/ws`);
     await client.hello();
@@ -1027,6 +1028,10 @@ describe("stopping and running again", () => {
       {
         status: "failed",
         error: "The server restarted before this run finished.",
+      },
+      {
+        status: "starting",
+        error: null,
       },
     ]);
     client.close();
@@ -1053,38 +1058,41 @@ describe("a task run on a daemon's machine", () => {
     expect(result.text).toContain("Done over there.");
   });
 
-  it("makes its worktree on the daemon's machine", async () => {
-    const home = await tempDir("eta-home-");
-    const saved = process.env.HOME;
-    process.env.HOME = home;
-    try {
-      const { r, ada, group } = await remote(finishes());
-      git(r.dir, "init", "-q", "-b", "main");
-      git(r.dir, "commit", "-q", "--allow-empty", "-m", "init");
-      const task = make({ w: r, ada, group }, "Branchy", "worktree");
-      await until(() => reviewed(r, task.id));
-      const where = join(
-        home,
-        ".eta",
-        "worktrees",
-        r.remoteProject.id,
-        "task-1",
-      );
-      expect(taskOf(r, task.id).workspace).toMatchObject({
-        mode: "worktree",
-        path: where,
-        branch: "eta/task-1",
-      });
-      expect(existsSync(where)).toBe(true);
-      expect(existsSync(join(r.host.dataDir, "worktrees"))).toBe(false);
-      expect(git(r.dir, "branch", "--list", "eta/task-1")).toContain(
-        "eta/task-1",
-      );
-    } finally {
-      if (saved === undefined) delete process.env.HOME;
-      else process.env.HOME = saved;
-    }
-  });
+  it.skipIf(process.platform === "win32")(
+    "makes its worktree on the daemon's machine",
+    async () => {
+      const home = await tempDir("eta-home-");
+      const saved = process.env.HOME;
+      process.env.HOME = home;
+      try {
+        const { r, ada, group } = await remote(finishes());
+        git(r.dir, "init", "-q", "-b", "main");
+        git(r.dir, "commit", "-q", "--allow-empty", "-m", "init");
+        const task = make({ w: r, ada, group }, "Branchy", "worktree");
+        await until(() => reviewed(r, task.id));
+        const where = join(
+          home,
+          ".eta",
+          "worktrees",
+          r.remoteProject.id,
+          "task-1",
+        );
+        expect(taskOf(r, task.id).workspace).toMatchObject({
+          mode: "worktree",
+          path: where,
+          branch: "eta/task-1",
+        });
+        expect(existsSync(where)).toBe(true);
+        expect(existsSync(join(r.host.dataDir, "worktrees"))).toBe(false);
+        expect(git(r.dir, "branch", "--list", "eta/task-1")).toContain(
+          "eta/task-1",
+        );
+      } finally {
+        if (saved === undefined) delete process.env.HOME;
+        else process.env.HOME = saved;
+      }
+    },
+  );
 
   it("carries a comment's wake into the same session on the other machine", async () => {
     const { r, ada, group } = await remote(

@@ -12,7 +12,8 @@
  */
 import type { KernelTool } from "@eta/core";
 import type { SessionMeta } from "@eta/server";
-import type { RunHooks } from "../conversations/engine";
+import type { RunHooks, RunInfo } from "../conversations/engine";
+
 import type { MemoryClient, Recalled } from "./client";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
@@ -32,9 +33,13 @@ function recalledBlock(memories: readonly Recalled[]): string {
   ].join("\n");
 }
 
-export function memoryRunHooks(client: MemoryClient): RunHooks {
+export function memoryRunHooks(
+  client: MemoryClient,
+  enabled: (run: RunInfo) => boolean = () => true,
+): RunHooks {
   return {
     async beforeRun(run) {
+      if (!enabled(run)) return undefined;
       const memories = await client.recall(
         run.agentId,
         run.conversationId,
@@ -43,6 +48,7 @@ export function memoryRunHooks(client: MemoryClient): RunHooks {
       return memories.length === 0 ? undefined : recalledBlock(memories);
     },
     async afterRun(run) {
+      if (!enabled(run)) return;
       if (run.status !== "done") return;
       const asked = run.trigger.text.trim();
       const answered = run.said.trim();
@@ -58,9 +64,10 @@ export function memoryRunHooks(client: MemoryClient): RunHooks {
 export function memoryTools(
   client: MemoryClient,
   input: { meta: SessionMeta },
+  enabled: () => boolean = () => true,
 ): KernelTool[] {
   const { agentId, conversationId } = input.meta;
-  if (agentId === undefined) return [];
+  if (agentId === undefined || !enabled()) return [];
 
   const call = async (name: string, args: Record<string, unknown>) => {
     try {

@@ -33,7 +33,8 @@ describe("the run file", () => {
       startedAt: 5,
       ...ready,
     });
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32")
+      expect((await stat(path)).mode & 0o777).toBe(0o600);
   });
 
   it("stands down when a live backend owns the file", async () => {

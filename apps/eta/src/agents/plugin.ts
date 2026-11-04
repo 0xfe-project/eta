@@ -52,6 +52,15 @@ export interface AgentsDeps {
   machineRuntimes?:
     | ((machineId: string, fresh: boolean) => Promise<AgentRuntimeInfo[]>)
     | undefined;
+  /** Append prompt history for user edits as well as Captain edits. */
+  capturePrompt?:
+    | ((input: {
+        agentId: string;
+        kind: "instructions" | "persona";
+        content: string;
+        actorAgentId: string | null;
+      }) => void)
+    | undefined;
 }
 
 export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
@@ -75,6 +84,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
       thinkingLevel: agent.thinkingLevel,
       bundles: agent.bundles,
       machineId: agent.machineId,
+      systemRole: agent.systemRole,
       home,
       homeProjectId: project?.id ?? "",
       status: statuses.get(agent.id) ?? "idle",
@@ -147,6 +157,19 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             await rm(home, { recursive: true, force: true });
             throw error;
           }
+          const made = existing(id);
+          deps.capturePrompt?.({
+            agentId: id,
+            kind: "instructions",
+            content: made.instructions,
+            actorAgentId: null,
+          });
+          deps.capturePrompt?.({
+            agentId: id,
+            kind: "persona",
+            content: made.persona,
+            actorAgentId: null,
+          });
           deps.changed();
           return { result: { agent: viewOf(existing(id)) } };
         }),
@@ -155,6 +178,10 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
           const args = new Args(call);
           const id = args.string("agentId");
           const before = existing(id);
+          if (before.systemRole === "captain")
+            throw new Error(
+              "the Captain is managed through the captain target",
+            );
           const fields = fieldsOf(call, false);
           const moved =
             fields.runtime !== undefined && fields.runtime !== before.runtime;
@@ -166,6 +193,20 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
           );
           checkMachine(fields.machineId);
           const agent = agents.update(id, fields)!;
+          if (agent.instructions !== before.instructions)
+            deps.capturePrompt?.({
+              agentId: id,
+              kind: "instructions",
+              content: agent.instructions,
+              actorAgentId: null,
+            });
+          if (agent.persona !== before.persona)
+            deps.capturePrompt?.({
+              agentId: id,
+              kind: "persona",
+              content: agent.persona,
+              actorAgentId: null,
+            });
           if (agent.name !== before.name) renameHome(agent);
           // The model and thinking level belong to a session once it exists; an edit of the agent
           // is the one thing that overrides what the user chose there. An agent that moved to
@@ -187,6 +228,10 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
         wire.handle("agents", "delete", (call) => {
           const id = new Args(call).string("agentId");
           const agent = existing(id);
+          if (agent.systemRole === "captain")
+            throw new Error(
+              "the Captain cannot be deleted as an ordinary agent",
+            );
           // Running replies first: they would otherwise outlive the agent that is writing them.
           deps.engine.stopAgent(id);
           const primary = machines.primary();

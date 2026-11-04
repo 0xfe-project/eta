@@ -13,6 +13,7 @@ import type {
 
 export * from "./artifacts";
 export * from "./bundles";
+export * from "./captain";
 export type * from "./data";
 export * from "./email";
 export * from "./github";

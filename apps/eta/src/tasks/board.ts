@@ -97,6 +97,8 @@ const viewOf = (task: TaskRecord): BoardTaskView => ({
   createdBy: task.createdBy,
   assigneeAgentId: task.assigneeAgentId,
   conversationId: task.conversationId,
+  captainAssignmentId: task.captainAssignmentId,
+  captainMessageId: task.captainMessageId,
   runStatus: task.runStatus,
   comments: task.comments,
   createdAt: task.createdAt,
@@ -159,6 +161,8 @@ export class TaskBoard {
       base?: string | undefined;
       /** The agent the work is for, when that is not the maker. */
       assignee?: string | undefined;
+      captainAssignmentId?: string | null | undefined;
+      captainMessageId?: string | null | undefined;
     },
     actor: TaskActor,
   ): BoardTaskDetail {
@@ -174,6 +178,8 @@ export class TaskBoard {
       conversationId,
       createdByAgent: actor.agentId,
       assigneeAgent: assignee || undefined,
+      captainAssignmentId: input.captainAssignmentId,
+      captainMessageId: input.captainMessageId,
       baseBranch: base === undefined ? undefined : this.#baseOf(base),
       projectId: this.#deps.conversations.get(conversationId)?.projectId,
       workspaceMode: input.workspace,

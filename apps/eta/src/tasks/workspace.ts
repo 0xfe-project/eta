@@ -17,6 +17,7 @@ import type { ConversationStore } from "../conversations/store";
 import type { MachineRecord, MachineStore } from "../machines/store";
 import type { ProjectStore } from "../projects/store";
 import type { WorkspaceChoice } from "./tools";
+import process from "node:process";
 import { shellQuote } from "@eta/ssh";
 
 const TIMEOUT_MS = 60_000;
@@ -94,7 +95,17 @@ export async function prepareWorktree(
   const [path = "", prefix = ""] = result.stdout.split("\n");
   if (path === "") throw new Error("the worktree has no path");
   const inside = prefix.replace(/\/$/, "");
-  return { path, cwd: inside === "" ? path : `${path}/${inside}`, branch };
+  // Git Bash reports drive paths with forward slashes. The primary's task rows and the Node
+  // process use native Windows separators; a daemon keeps its own POSIX form.
+  const nativePath =
+    transport.overSsh === false && process.platform === "win32"
+      ? path.replaceAll("/", "\\")
+      : path;
+  return {
+    path: nativePath,
+    cwd: inside === "" ? nativePath : `${nativePath}/${inside}`,
+    branch,
+  };
 }
 
 /**

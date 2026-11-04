@@ -1,0 +1,40 @@
+{
+  "title": "El Capitan",
+  "description": "统筹智能体、派工、审批和运营告警。",
+  "tabs": {
+    "chat": "对话",
+    "operations": "运营 · {{count}}"
+  },
+  "notInitialized": "Captain 尚未初始化。",
+  "initialize": "初始化 Captain",
+  "empty": "与 Captain 对话，统筹智能体和运营事项。",
+  "placeholder": "向 Captain 提问或下达运营指令…",
+  "send": "发送",
+  "memoryPause": {
+    "label": "长期记忆",
+    "paused": "已暂停",
+    "pause": "暂停此对话的长期记忆",
+    "resume": "恢复此对话的长期记忆"
+  },
+  "message": {
+    "captain": "Captain",
+    "agent": "智能体",
+    "user": "你",
+    "assignment": "派工指令 · 第 {{round}} 轮"
+  },
+  "operations": {
+    "pending": "待审批操作",
+    "none": "没有待审批操作。",
+    "approve": "批准",
+    "reject": "拒绝"
+  },
+  "notifications": {
+    "title": "运营告警",
+    "none": "没有告警。",
+    "markRead": "标为已读"
+  },
+  "assignments": {
+    "title": "最近派工",
+    "none": "还没有派工。"
+  }
+}

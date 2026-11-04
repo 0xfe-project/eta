@@ -22,6 +22,8 @@ class Memory:
     # user). None for memories from before sources were recorded.
     source: str | None = None
     source_group_id: str | None = None
+    deleted_at: str | None = None
+    deleted_by: str | None = None
 
 
 class MemoryProvider(Protocol):
@@ -49,12 +51,26 @@ class MemoryProvider(Protocol):
         *,
         source: str | None = None,
         group_id: str | None = None,
+        include_deleted: bool = False,
     ) -> list[Memory]: ...
 
     def list(
-        self, agent_id: str, *, source: str | None = None, group_id: str | None = None
+        self,
+        agent_id: str,
+        *,
+        source: str | None = None,
+        group_id: str | None = None,
+        include_deleted: bool = False,
     ) -> list[Memory]: ...
 
     def delete(self, agent_id: str, memory_id: str) -> bool:
         """Forget one of the agent's memories; False if it has no such one."""
+        ...
+
+    def soft_delete(self, agent_id: str, memory_id: str, deleted_by: str) -> bool:
+        """Mark a memory deleted without removing it."""
+        ...
+
+    def restore(self, agent_id: str, memory_id: str) -> bool:
+        """Clear a soft deletion."""
         ...
