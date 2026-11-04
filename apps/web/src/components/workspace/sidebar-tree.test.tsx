@@ -438,6 +438,17 @@ describe("侧边栏的两块", () => {
       agentId: null,
     });
   });
+
+  it("组头的两个 + 只有图标，不带边框，点击区域不变", async () => {
+    const { container } = await tree([group("g1", "装配", "p-eta")]);
+    for (const add of [
+      groupsSection(container)!.querySelector('button[title="新对话"]')!,
+      agentsSection(container)!.querySelector('button[title="新建智能体"]')!,
+    ]) {
+      expect(add.className).not.toContain("border");
+      expect(add.className).toContain("size-6");
+    }
+  });
 });
 
 describe("折叠成图标栏", () => {

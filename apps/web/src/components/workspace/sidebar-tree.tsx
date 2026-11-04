@@ -105,7 +105,7 @@ export function ConversationList() {
             aria-label={translateText("chat:new.title")}
             title={translateText("chat:new.title")}
             onClick={() => setNewConversation({ open: true })}
-            className="flex size-6 items-center justify-center border border-border text-muted-foreground hover:text-foreground"
+            className="flex size-6 items-center justify-center text-muted-foreground hover:text-foreground"
           >
             <PlusIcon aria-hidden="true" className="size-3.5" />
           </button>
@@ -210,7 +210,7 @@ export function ConversationList() {
             aria-label={translateText("chat:sections.newAgent")}
             title={translateText("chat:sections.newAgent")}
             onClick={() => setAgentEditor({ open: true, agentId: null })}
-            className="flex size-6 items-center justify-center border border-border text-muted-foreground hover:text-foreground"
+            className="flex size-6 items-center justify-center text-muted-foreground hover:text-foreground"
           >
             <PlusIcon aria-hidden="true" className="size-3.5" />
           </button>
