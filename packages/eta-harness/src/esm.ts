@@ -36,7 +36,8 @@ import type { TSchema } from "typebox";
 import type { StateKV } from "./state";
 import type { HarnessTool, ToolResult } from "./tools/tool";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { toToolResultMessage } from "@eta/core";
 import { Agent, snippetSource } from "@eta/esm-mode";
@@ -599,26 +600,31 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
           ],
           isError: true,
         };
-      const self = agent.layers.get("self")!;
-      self.reload();
-      if (self.has(args.name))
-        return {
-          content: [
-            {
-              type: "text",
-              text: `capability "${args.name}" already exists; read it before replacing`,
-            },
-          ],
-          isError: true,
-        };
       const entry = args.entry ?? "default";
-      const file = join(capsDir, `${args.name}.js`);
+      // The module file is named by its content: a different script is a different file, so
+      // writing it never clobbers a capability that already has the name. `eta.define` then
+      // decides, by its own rule, whether the name is free (same source is a no-op).
+      const hash = createHash("sha256")
+        .update(args.script)
+        .digest("hex")
+        .slice(0, 12);
+      const file = join(capsDir, `${args.name}.${hash}.js`);
+      const existed = existsSync(file);
       mkdirSync(capsDir, { recursive: true });
       writeFileSync(file, args.script, "utf8");
+      // A function written into the wrapper module, not a string: a string is compiled
+      // outside any module and has no dynamic import. Its literals keep `toString()` (what
+      // define persists) free of outside names.
+      const source = `async (...args) => (await import(${JSON.stringify(file)}))[${JSON.stringify(entry)}](...args)`;
+      // The run goes first; only a run that got through reaches `eta.define`. The define is a
+      // realm call like any other: it is in the ledger, and it updates the registry at once.
       const wrapper = [
+        `import eta from "eta";`,
         `import * as m from ${JSON.stringify(file)};`,
         `const f = m[${JSON.stringify(entry)}];`,
-        `export default typeof f === "function" ? await f(${JSON.stringify(args.args ?? {})}) : f;`,
+        `const value = typeof f === "function" ? await f(${JSON.stringify(args.args ?? {})}) : f;`,
+        `eta.define(${JSON.stringify(args.name)}, ${source}, ${JSON.stringify({ desc: args.desc })});`,
+        `export default value;`,
       ].join("\n");
       const result = await evaluate(
         wrapper,
@@ -627,14 +633,9 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
         undefined,
       );
       if (result.isError === true) {
-        rmSync(file, { force: true });
+        if (!existed) rmSync(file, { force: true });
         return result;
       }
-      self.add(
-        args.name,
-        `async (...args) => (await import(${JSON.stringify(file)}))[${JSON.stringify(entry)}](...args)`,
-        { desc: args.desc },
-      );
       const first = result.content[0] as { type: "text"; text: string };
       return {
         ...result,

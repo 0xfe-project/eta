@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
+import { Agent } from "@eta/esm-mode";
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
 import { openSession } from "../src/open";
@@ -142,7 +143,12 @@ describe("esmrunandkeep", () => {
         "c1",
       ),
       call("esmrunandkeep", keep, "c2"),
-      call("esmrunandkeep", keep, "c3"),
+      call(
+        "esmrunandkeep",
+        { ...keep, script: "export default ({ n }) => n * 3;" },
+        "c3",
+      ),
+      call("esmrunandkeep", keep, "c3b"),
       call(
         "esmrun",
         { script: 'import double from "eta:double";\nawait double({ n: 5 })' },
@@ -156,9 +162,23 @@ describe("esmrunandkeep", () => {
     expect(resultOf(session, "c1")).toContain("no");
     expect(resultOf(session, "c2")).toContain("saved double");
     expect(resultOf(session, "c2")).toContain("42");
+    expect(resultOf(session, "c2")).toMatch(/effects:[\s\S]*define/);
     expect(resultOf(session, "c3")).toContain("already exists");
+    // The same script again is define's no-op, not an error.
+    expect(resultOf(session, "c3b")).toContain("saved double");
     expect(resultOf(session, "c4")).toContain("10");
-    expect(existsSync(join(root, "capabilities", "broken.js"))).toBe(false);
+    expect(
+      readdirSync(join(root, "capabilities")).some((f) =>
+        f.startsWith("broken."),
+      ),
+    ).toBe(false);
+    // What define persisted works in a fresh realm, after a wake from env.js alone.
+    const fresh = new Agent({ root });
+    const again = await fresh.run(
+      'import double from "eta:double";\nexport default await double({ n: 4 });',
+    );
+    expect(again.value).toBe(8);
+    fresh.dispose();
 
     // The next run opens with the delta as a user message.
     session.kernel.nextRun(userMsg("again"));
@@ -194,6 +214,20 @@ describe("eta.ask", () => {
     const nested = models.calls[1]!.context.messages;
     expect(JSON.stringify(nested)).toContain("go");
     expect(nested.some((m) => m.role === "toolResult")).toBe(true);
+    session.stop();
+  });
+});
+
+describe("esmrun across calls", () => {
+  it("does not keep a top-level const from one call to the next", async () => {
+    const { session } = await open([
+      call("esmrun", { script: "const a = 1" }, "r1"),
+      call("esmrun", { script: "const b = a + 1; console.log(b)" }, "r2"),
+      stop(),
+    ]);
+    session.kernel.nextRun(userMsg("go"));
+    await session.runner.run();
+    expect(resultOf(session, "r2")).toContain("a is not defined");
     session.stop();
   });
 });

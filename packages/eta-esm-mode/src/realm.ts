@@ -286,6 +286,7 @@ export class Realm {
     name: string,
     fn: (...args: Args) => R,
     describe?: (...args: Args) => string,
+    options: { authorize?: boolean } = {},
   ): (...args: Args) => R {
     const label =
       describe ?? ((...args: Args) => args.map(summarize).join(", "));
@@ -333,7 +334,10 @@ export class Realm {
         }
       };
 
-      const verdict = this.#authorize?.({ name, input: args, at });
+      const verdict =
+        options.authorize === false
+          ? undefined
+          : this.#authorize?.({ name, input: args, at });
       if (verdict === undefined) return run();
       if (!isPromise(verdict)) return deny(verdict) as R;
       return (async () => {

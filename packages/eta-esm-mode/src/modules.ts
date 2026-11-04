@@ -456,7 +456,10 @@ export function mountModules(
     return new vm.SyntheticModule(
       exports,
       function () {
-        const defineFn = realm.wrap(
+        // A binding, not a bare wrap: a define writes a layer's env.js, so it is an effect
+        // and belongs in the ledger like any other host call.
+        const defineFn = realm.binding(
+          "eta.define",
           (name: string, source: unknown, meta?: unknown) => {
             // source can be a function (passed directly from env.js) or a string (to be compiled)
             let fn: any;
@@ -497,6 +500,11 @@ export function mountModules(
 
             return name;
           },
+          // The row names what was defined and where, not the whole source.
+          (name: string) => `${layer}:${String(name)}`,
+          // Defining is recorded, not gated: env.js defines on every wake, and the
+          // shared-layer gate is on calling a capability (wrapWithAuthorization).
+          { authorize: false },
         );
 
         const etaObject: Record<string, any> = {
