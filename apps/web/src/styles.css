@@ -1454,9 +1454,9 @@
 
 @layer components {
   /* ---- settings, ported from eta-old's settings.css (numbers included) ----
-   * A 196px rail of sections with a 2px current marker, and a content column of rows that are a
-   * label on the left and its control on the right, separated by 1px lines. No cards, no groups of
-   * boxes: a settings page is a list of decisions. */
+   * A 196px rail of sections, and a content column of rows that are a label on the left and its
+   * control on the right, separated by 1px lines. No cards, no groups of boxes: a settings page is
+   * a list of decisions. */
 
   .settings-layout {
     display: grid;
@@ -1470,7 +1470,6 @@
     gap: 2px;
     overflow-y: auto;
     border-right: 1px solid var(--border);
-    background: var(--surface);
     padding: 10px 8px;
   }
 
@@ -1478,7 +1477,6 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    border-left: 2px solid transparent;
     padding: 7px 10px;
     text-align: left;
     font-size: 12px;
@@ -1493,7 +1491,6 @@
     }
   }
   .settings-layout nav button[aria-current="page"] {
-    border-left-color: var(--foreground);
     background: var(--overlay-hover);
     color: var(--foreground);
   }
@@ -1511,14 +1508,8 @@
       overflow-y: hidden;
       border-right: 0;
     }
-    /* The marker turns with the rail: a rule under the current section instead of beside it. */
     .settings-page nav button {
       min-height: 44px;
-      border-left: 0;
-      border-bottom: 2px solid transparent;
-    }
-    .settings-page nav button[aria-current="page"] {
-      border-bottom-color: var(--foreground);
     }
   }
 
