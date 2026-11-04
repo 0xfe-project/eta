@@ -93,6 +93,7 @@ describe("聊天内容宽度", () => {
   });
 
   it.each([
+    ["extra-narrow", "600px"],
     ["narrow", "720px"],
     ["standard", "860px"],
     ["full", "none"],
@@ -105,9 +106,9 @@ describe("聊天内容宽度", () => {
   it("换一个选项立刻生效", async () => {
     const { container } = await panel();
     await act(async () =>
-      useWorkspaceStore.getState().setWorkspace({ chatWidth: "narrow" }),
+      useWorkspaceStore.getState().setWorkspace({ chatWidth: "extra-narrow" }),
     );
-    expect(chatWidth(container)).toBe("720px");
+    expect(chatWidth(container)).toBe("600px");
   });
 
   it("对话记录、输入框上方那行和输入框读同一个值", async () => {
@@ -163,21 +164,28 @@ describe("外观里的聊天内容宽度", () => {
   it("默认选中标准，点一下写进 store 并存到本地", async () => {
     const buttons = await appearance();
     expect(buttons.map((button) => button.textContent)).toEqual([
+      translate("settings:appearance.chatWidthExtraNarrow"),
       translate("settings:appearance.chatWidthNarrow"),
       translate("settings:appearance.chatWidthStandard"),
       translate("settings:appearance.chatWidthFull"),
     ]);
-    expect(pressed(buttons)).toEqual([buttons[1]]);
+    expect(pressed(buttons)).toEqual([buttons[2]]);
 
     await act(async () => buttons[0]!.click());
-    expect(useWorkspaceStore.getState().workspace.chatWidth).toBe("narrow");
+    expect(useWorkspaceStore.getState().workspace.chatWidth).toBe(
+      "extra-narrow",
+    );
     expect(pressed(buttons)).toEqual([buttons[0]]);
     expect(
       JSON.parse(localStorage.getItem("eta.workspace.v1") ?? "{}"),
-    ).toMatchObject({ chatWidth: "narrow" });
+    ).toMatchObject({ chatWidth: "extra-narrow" });
 
-    await act(async () => buttons[2]!.click());
+    await act(async () => buttons[1]!.click());
+    expect(useWorkspaceStore.getState().workspace.chatWidth).toBe("narrow");
+    expect(pressed(buttons)).toEqual([buttons[1]]);
+
+    await act(async () => buttons[3]!.click());
     expect(useWorkspaceStore.getState().workspace.chatWidth).toBe("full");
-    expect(pressed(buttons)).toEqual([buttons[2]]);
+    expect(pressed(buttons)).toEqual([buttons[3]]);
   });
 });
