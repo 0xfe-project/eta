@@ -538,6 +538,104 @@ describe("a reply that is writing", () => {
     ).toHaveLength(0);
   });
 
+  // What the translator writes for a call an agent on Claude Code or Codex made over MCP: the host's
+  // name, the runtime's call id, and the details the tool left, in both places a card is read from.
+  it("draws the card of a publish made on an external runtime, while writing and after", async () => {
+    const user = row({ text: "发布一个页面" });
+    const reply = row({
+      author: "agent",
+      agentId: AGENT,
+      replyToId: user.id,
+      status: "working",
+    });
+    history = [user, reply];
+    const details = {
+      artifactId: "art-1",
+      title: "报告",
+      version: 2,
+      files: 1,
+    };
+    const { container } = await start(undefined, (fake) => {
+      fake.target("sessions.s1", {
+        core: { session: "s1", running: true },
+        transcript: {
+          messages: [
+            {
+              entryId: "e1",
+              seq: 1,
+              at: 1,
+              message: { role: "user", content: "发布一个页面", timestamp: 1 },
+            },
+            {
+              entryId: "e2",
+              seq: 2,
+              at: 2,
+              message: {
+                role: "assistant",
+                api: "oar-claude",
+                provider: "claude",
+                stopReason: "toolUse",
+                timestamp: 2,
+                content: [
+                  {
+                    type: "toolCall",
+                    id: "toolu_01",
+                    name: "publish_artifact",
+                    arguments: { path: "site", title: "报告" },
+                  },
+                ],
+              },
+            },
+            {
+              entryId: "e3",
+              seq: 3,
+              at: 3,
+              message: {
+                role: "toolResult",
+                toolCallId: "toolu_01",
+                toolName: "publish_artifact",
+                content: [{ type: "text", text: 'Published "报告" version 2' }],
+                details,
+                isError: false,
+                timestamp: 3,
+              },
+            },
+          ],
+        },
+      });
+      fake.handle("sessions.resync", () => ({}));
+    });
+    await flush(80);
+    expect(container.querySelector('[data-testid="ref"]')?.textContent).toBe(
+      "artifact:报告 #2",
+    );
+
+    await push([
+      user,
+      {
+        ...reply,
+        status: "done",
+        text: "发布好了",
+        revision: 2,
+        data: {
+          activity: [
+            {
+              id: "toolu_01",
+              name: "publish_artifact",
+              input: { path: "site", title: "报告" },
+              status: "completed",
+              output: 'Published "报告" version 2',
+              details,
+            },
+          ],
+        },
+      },
+    ]);
+    const settled = container.querySelector('[data-testid="ref"]')!;
+    expect(settled.textContent).toBe("artifact:报告 #2");
+    expect(settled.closest(".turn-tasks")).not.toBeNull();
+  });
+
   // A direct conversation has no process box to fold, and the card does not move because of one:
   // the same layer, beside the answer, in both.
   it("draws a publish's card in that same layer where there is no process box", async () => {

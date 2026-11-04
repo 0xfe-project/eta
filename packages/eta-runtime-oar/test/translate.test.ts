@@ -11,6 +11,7 @@ import type { Event, EventBody } from "@botiverse/oar";
 import type { AgentMessage } from "@eta/core";
 import type { OarToolResultDetails, TranslatorTarget } from "../src/translate";
 import { describe, expect, it } from "vitest";
+import { HostCalls } from "../src/host-calls";
 import { Translator } from "../src/translate";
 
 type ToolResult = Extract<AgentMessage, { role: "toolResult" }>;
@@ -31,6 +32,7 @@ function setup() {
     target,
     { provider: "claude", model: "sonnet" },
     undefined,
+    new HostCalls("claude", new Set()),
   );
   let seq = 0;
   const see = (body: EventBody, agentPath: readonly string[] = []): void =>

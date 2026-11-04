@@ -14,7 +14,8 @@
  * - **The abort** interrupts the runtime's turn; the run ends with the turn's own end.
  * - **The host's tools** (a task board, a way to reach other agents) are served to the runtime
  *   over MCP (`serveMcpTools`) and run through the session's own middleware, so a tool's policy
- *   is the same whoever calls it.
+ *   is the same whoever calls it. What the runtime reports of them is told back as the host's own
+ *   (`HostCalls`): the tool's name, and the `details` an MCP answer has no room for.
  * - **Resume:** the runtime's session id is remembered on the eta session, so a restart picks up
  *   the same conversation instead of starting the runtime from nothing.
  */
@@ -44,6 +45,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { serveMcpTools } from "@botiverse/oar";
 import { toToolResultMessage } from "@eta/core";
+import { HOST_SERVER, HostCalls } from "./host-calls";
 import { effortFor } from "./models";
 import { Translator } from "./translate";
 
@@ -116,16 +118,29 @@ function failureOf(outcome: TurnOutcome): string | undefined {
     : undefined;
 }
 
-/** A session tool's result as an MCP tool answer. */
-function hostResultOf(name: string, raw: unknown): HostToolResult {
+/** A session tool's result as an MCP tool answer, and the details that answer cannot carry. */
+function hostResultOf(
+  name: string,
+  raw: unknown,
+): {
+  result: Exclude<HostToolResult, string>;
+  details: unknown;
+} {
   const message = toToolResultMessage({ id: name, name }, raw);
-  if (message.role !== "toolResult") return String(raw);
+  if (message.role !== "toolResult")
+    return {
+      result: { content: [{ type: "text", text: String(raw) }] },
+      details: undefined,
+    };
   const content: HostToolContent[] = message.content.map((block) =>
     block.type === "text"
       ? { type: "text", text: block.text }
       : { type: "image", data: block.data, mimeType: block.mimeType },
   );
-  return { content, isError: message.isError };
+  return {
+    result: { content, isError: message.isError },
+    details: message.details,
+  };
 }
 
 export class OarDelegate implements RunDelegate {
@@ -134,10 +149,14 @@ export class OarDelegate implements RunDelegate {
   #opening: Promise<Opened> | undefined;
   #resume: string | undefined;
   #served: ServedMcpTools | undefined;
+  /** The names of the tools served: the only ones told back as the host's. */
+  #hostTools: ReadonlySet<string> = new Set();
   /** The runtime session's running total charged to messages so far. */
   #charged: TokenTotals | undefined;
   /** The run in flight, for the tools the runtime calls back into. */
   #run: RunDelegateContext | undefined;
+  /** The host tool calls of the run in flight. */
+  #calls: HostCalls | undefined;
   #disposed = false;
 
   constructor(options: OarDelegateOptions) {
@@ -157,6 +176,7 @@ export class OarDelegate implements RunDelegate {
         ?.models.find((entry) => entry.id === model);
       const effort = effortFor(config.thinkingLevel, listed?.efforts);
       const opened = await this.#ensure(context, model, effort);
+      this.#calls = new HostCalls(this.#options.runtime, this.#hostTools);
       const translator = new Translator(
         context,
         {
@@ -164,6 +184,7 @@ export class OarDelegate implements RunDelegate {
           model: model ?? opened.session.model().value ?? this.#options.runtime,
         },
         this.#charged,
+        this.#calls,
       );
       let input = inputOf(context.opening);
       if (!opened.prompted && this.#options.agentPrompt !== undefined) {
@@ -197,6 +218,7 @@ export class OarDelegate implements RunDelegate {
       }
     } finally {
       this.#run = undefined;
+      this.#calls = undefined;
     }
   }
 
@@ -316,7 +338,8 @@ export class OarDelegate implements RunDelegate {
         }) as Record<string, unknown>,
         handler: async (input) => {
           const run = this.#run;
-          if (run === undefined)
+          const calls = this.#calls;
+          if (run === undefined || calls === undefined)
             return {
               content: [{ type: "text", text: "No run is in flight." }],
               isError: true,
@@ -324,11 +347,14 @@ export class OarDelegate implements RunDelegate {
           const raw = await run.executeTool(tool.name, input, {
             toolCallId: `mcp-${crypto.randomUUID()}`,
           });
-          return hostResultOf(tool.name, raw);
+          const { result, details } = hostResultOf(tool.name, raw);
+          calls.answered(tool.name, input, result.content, details);
+          return result;
         },
       }));
     if (tools.length === 0) return undefined;
-    this.#served = await serveMcpTools({ name: "eta", tools });
+    this.#hostTools = new Set(tools.map((tool) => tool.name));
+    this.#served = await serveMcpTools({ name: HOST_SERVER, tools });
     return this.#served;
   }
 
@@ -377,6 +403,8 @@ export class OarDelegate implements RunDelegate {
       };
       const inputId = crypto.randomUUID();
       offs.push(
+        // Observers hear a record in the order they came, and a call's name can be in its frame.
+        session.rawEvents((record) => this.#calls?.see(record)),
         session.events((event: Event) => {
           if (settled) return;
           translator.see(event);

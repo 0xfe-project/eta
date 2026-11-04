@@ -19,6 +19,9 @@
  * its steps ride on that call's result as `details.children` for the run log to draw.
  *
  * Usage is a running total from oar; a message costs what the total grew by since the last one.
+ *
+ * A call to one of the host's tools is told as the host's: under its own name, with the `details`
+ * it left, on the same terms as a call the kernel ran itself (`HostCalls`).
  */
 import type { Event, TokenTotals, ToolOutputPart } from "@botiverse/oar";
 import type {
@@ -28,6 +31,7 @@ import type {
   RunDelegateContext,
   Usage,
 } from "@eta/core";
+import type { HostCalls } from "./host-calls";
 
 type Block = AssistantMessage["content"][number];
 
@@ -190,6 +194,7 @@ function resultContent(
 export class Translator {
   readonly #target: TranslatorTarget;
   readonly #identity: TranslatorIdentity;
+  readonly #calls: HostCalls;
   #open: OpenMessage | undefined;
   readonly #pending = new Map<string, PendingCall>();
   /** The root call each runtime task belongs to, until that call's result is written. */
@@ -205,9 +210,12 @@ export class Translator {
     identity: TranslatorIdentity,
     /** The total charged before this run: usage is counted from the session's opening. */
     charged: TokenTotals | undefined,
+    /** The host's tools, for the calls that are theirs. */
+    calls: HostCalls,
   ) {
     this.#target = target;
     this.#identity = identity;
+    this.#calls = calls;
     this.#model = identity.model;
     this.#charged = charged;
     this.#reported = charged;
@@ -422,14 +430,15 @@ export class Translator {
   #callStarted(callId: string, tool: string, input: string | undefined): void {
     const open = this.#ensure(undefined);
     const args = argumentsOf(input);
+    const name = this.#calls.hostTool(callId, tool) ?? tool;
     open.message.content.push({
       type: "toolCall",
       id: callId,
-      name: tool,
+      name,
       arguments: args,
     });
     this.#pending.set(callId, {
-      name: tool,
+      name,
       args,
       turnId: open.turnId,
       startedAt: Date.now(),
@@ -497,6 +506,7 @@ export class Translator {
       part.type === "other" ? [part.value] : [],
     );
     this.#result(callId, call, resultContent(content), failed, {
+      ...this.#calls.take(call.name, call.args, content ?? []),
       ...(exitCode === undefined ? {} : { exitCode }),
       ...(other.length === 0 ? {} : { other }),
     });
@@ -507,7 +517,8 @@ export class Translator {
     call: PendingCall,
     content: ToolResultContent,
     isError: boolean,
-    reported: Pick<OarToolResultDetails, "exitCode" | "other"> = {},
+    reported: Pick<OarToolResultDetails, "exitCode" | "other"> &
+      Record<string, unknown> = {},
   ): void {
     this.#pending.delete(callId);
     // The result is written once. What a task reports after it (a background command's end, a
@@ -515,7 +526,7 @@ export class Translator {
     // updates are dropped.
     for (const [taskId, owner] of this.#tasks)
       if (owner === callId) this.#tasks.delete(taskId);
-    const details: OarToolResultDetails = {
+    const details: OarToolResultDetails & Record<string, unknown> = {
       ...reported,
       ...(call.children.length === 0 ? {} : { children: call.children }),
       ...(call.runtimeTask === undefined
@@ -621,11 +632,13 @@ export class Translator {
       return undefined;
     };
     switch (event.kind) {
-      case "tool_call_started":
+      case "tool_call_started": {
+        const name =
+          this.#calls.hostTool(event.callId, event.tool) ?? event.tool;
         add({
           kind: "tool",
           id: event.callId,
-          name: event.tool,
+          name,
           ...(event.input === undefined ? {} : { input: event.input }),
           status: "running",
         });
@@ -638,12 +651,13 @@ export class Translator {
             content: [
               {
                 type: "text",
-                text: `→ ${event.tool}${event.input === undefined ? "" : ` ${event.input}`}`,
+                text: `→ ${name}${event.input === undefined ? "" : ` ${event.input}`}`,
               },
             ],
           },
         });
         break;
+      }
       case "tool_call_input": {
         const step = toolStep(event.callId);
         if (step !== undefined) step.input = event.input;
@@ -658,6 +672,12 @@ export class Translator {
       case "tool_call_ended": {
         const step = toolStep(event.callId);
         if (step === undefined) break;
+        // A subagent's call to a host tool spends its answer; a step has no details to put it on.
+        this.#calls.take(
+          step.name,
+          argumentsOf(step.input),
+          event.content ?? [],
+        );
         step.status = event.result === "failed" ? "failed" : "completed";
         const output = (event.content ?? [])
           .flatMap((part) => (part.type === "text" ? [part.text] : []))
