@@ -59,7 +59,6 @@ async function restarted(daemon: TestDaemon, version: string) {
     version,
     primaryUrl: daemon.identity.url,
     home: daemon.dataDir,
-    akhookUserConfig: join(daemon.dataDir, "no-user-akhook.yml"),
     install: "service",
     warn: () => undefined,
   });
@@ -88,7 +87,7 @@ describe("a daemon on another build", () => {
       node: {
         version: "v1",
         install: "service",
-        upgrade: async (wanted) => {
+        upgrade: async (wanted: DaemonServiceParams["upgrade"]) => {
           asked.push(wanted);
           const response = await fetch(
             `http://127.0.0.1:${w.host.port}/machines/daemon/${PLATFORM}`,

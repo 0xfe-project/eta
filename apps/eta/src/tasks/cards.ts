@@ -37,6 +37,17 @@ export interface DraftInput {
   source?: string | undefined;
   /** Where the executor works: a worktree of its own, or the project's directory. */
   workspace: TaskWorkspaceMode;
+  /**
+   * The branch (or `#number` of another task, resolved to its `eta/task-<number>` branch) the
+   * worktree starts at; the board resolves it before making the task. Absent is the project
+   * checkout's HEAD, the old behavior.
+   */
+  base?: string | undefined;
+  /**
+   * The agent the work is for, when it is not the one proposing: an agent id. Absent is the
+   * proposing agent, which executes it itself, as it always was.
+   */
+  assignee?: string | undefined;
 }
 
 /** What the user may have changed on the way to the board. */
@@ -115,6 +126,10 @@ export class TaskCards {
         `来源：对话《${conversation.name}》${source}。`,
       ].join("\n\n"),
       workspace: input.draft.workspace,
+      ...(input.draft.base === undefined ? {} : { base: input.draft.base }),
+      ...(input.draft.assignee === undefined || input.draft.assignee === ""
+        ? {}
+        : { assignee: input.draft.assignee }),
       ...(turn === undefined ? {} : { turnMessageId: turn.id }),
     };
     return timeline.append({
@@ -160,8 +175,10 @@ export class TaskCards {
         title,
         description: input.fields.description ?? draft.description,
         status: input.fields.status,
-        // The agent that proposed it executes it, in the project the conversation is in.
+        // The agent that proposed it executes it, unless the draft says it is for someone else.
         createdByAgent: row.agentId ?? undefined,
+        assigneeAgent: draft.assignee || undefined,
+        baseBranch: draft.base || undefined,
         projectId: this.#deps.conversations.get(input.conversationId)
           ?.projectId,
         workspaceMode: draft.workspace ?? "local",

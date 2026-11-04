@@ -2,7 +2,6 @@
 
 import type { CallFrame } from "@eta/client-wire-proto";
 import type { JsonValue, Task, TaskStatus, ThinkingLevel } from "./data";
-import type { SessionViewBtwThread } from "./types";
 
 /** The actions this target has. One list, so the wire and the plugin cannot disagree. */
 export const SESSION_ACTIONS = [
@@ -17,13 +16,6 @@ export const SESSION_ACTIONS = [
   "archive",
   "fork",
   "compact",
-  "btwOpen",
-  "btwAsk",
-  "btwAnswer",
-  "btwSave",
-  "btwHandoff",
-  "btwClear",
-  "subagentStop",
   "history",
   "image",
   "search",
@@ -81,7 +73,6 @@ export interface ForkSessionInput {
 interface Session {
   session: string;
 }
-type Thread = Session & { threadId: string };
 /**
  * What became of a `/compact` on a session an external runtime answers in. Only `completed` means
  * the context shrank: `unconfirmed` is a wait that ended without the runtime's word, and it may
@@ -122,13 +113,6 @@ export interface SessionArgs {
   archive: Session & { archived: boolean };
   fork: Session & ForkSessionInput;
   compact: Session & { instructions?: string };
-  btwOpen: Session & { kind: SessionViewBtwThread["kind"] };
-  btwAsk: Thread & { question: string };
-  btwAnswer: Thread & { question: string; answer?: string };
-  btwSave: Thread;
-  btwHandoff: Thread;
-  btwClear: Thread;
-  subagentStop: Session & { id: string };
   history: Session & { beforeSeq?: number; limit?: number };
   /**
    * One picture a view left out (`ImageContent.bytes` set, `data` empty): the image part at

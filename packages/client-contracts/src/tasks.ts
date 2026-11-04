@@ -40,6 +40,13 @@ export type BoardTaskStatus = (typeof TASK_STATUSES)[number];
 
 /** Where the executor works: a git worktree of its own, or the project's directory itself. */
 export const TASK_WORKSPACE_MODES = ["worktree", "local"] as const;
+
+/**
+ * Where a worktree starts: a branch name or commit, as the agent that proposed the task wrote it
+ * (a `#number` naming another task is resolved to that task's `eta/task-<number>` branch before
+ * it is stored). Null is the old default: the project checkout's HEAD.
+ */
+export type TaskBaseBranch = string | null;
 export type TaskWorkspaceMode = (typeof TASK_WORKSPACE_MODES)[number];
 
 /** A run is active while it starts or works; the rest are over. */
@@ -74,6 +81,11 @@ export interface BoardTaskView {
    * user here and no executor: it stays a note on the board.
    */
   createdBy: TaskActor & { kind: "user" | "agent" };
+  /**
+   * The agent that executes it, when that is not the maker: a draft can be written on someone
+   * else's behalf. Null (or a task made before this field) is the maker, as it always was.
+   */
+  assigneeAgentId: string | null;
   /** The conversation it is discussed in, if linked. */
   conversationId: string | null;
   /** The status of its newest run; null before the first. */
@@ -98,6 +110,8 @@ export interface TaskArtifactRef {
  */
 export interface TaskWorkspace {
   mode: TaskWorkspaceMode;
+  /** Where the worktree starts: a branch or commit the proposer named; null is the project checkout's HEAD. */
+  base: TaskBaseBranch;
   /** The worktree's directory, once a run has made it; kept after the run. */
   path: string | null;
   /** The worktree's branch (`eta/task-<number>`); null in `local`. */
@@ -191,6 +205,17 @@ export interface TaskDraftData {
   description: string;
   /** Where the executor will work, as the agent chose it. */
   workspace: TaskWorkspaceMode;
+  /**
+   * The branch (or `#number` of another task) the worktree starts at; the board resolves a
+   * `#number` to `eta/task-<number>` when it makes the task. Absent is the project checkout's
+   * HEAD, the old behavior.
+   */
+  base?: string | undefined;
+  /**
+   * The agent the work is for, when it is not the one proposing: an agent id. Absent is the
+   * proposing agent, which executes it itself, as it always was.
+   */
+  assignee?: string | undefined;
   /**
    * The reply row this draft came out of — the row the agent was writing when it proposed the
    * work. The page draws the draft inside that turn rather than as a block of its own on the

@@ -1,7 +1,5 @@
 /** Public plugin contracts. Runtime services and module loading belong to the host. */
 import type { CallFrame, StateSnapshot } from "@eta/client-wire-proto";
-import type { ExecutionEnv } from "@eta/execution";
-import type { MemoryFs } from "@eta/harness";
 
 /** What a handler is given besides the call. */
 export interface OpContext {
@@ -68,19 +66,6 @@ export interface SessionsListener {
 export interface SessionsApi {
   /** Subscribe to session facts. Dispose the subscription when the plugin unloads. */
   subscribe: (listener: SessionsListener) => () => void;
-}
-
-export interface SessionEnvironment {
-  env: ExecutionEnv;
-  /** Defaults to memory access through the environment's own filesystem. */
-  memoryFs?: MemoryFs | undefined;
-}
-
-/** An extension resolves a session's environment before the host opens it. */
-export interface SessionEnvironments<
-  E extends SessionEnvironment = SessionEnvironment,
-> {
-  for: (session: string) => E | undefined | Promise<E | undefined>;
 }
 
 export type PluginDisposer = () => void | Promise<void>;

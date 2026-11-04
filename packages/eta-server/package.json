@@ -12,7 +12,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "test": "bun --bun vitest --run --passWithNoTests",
-    "typecheck": "bun check",
+    "typecheck": "tsc --noEmit",
     "smoke": "ETA_SMOKE_CONFIG=\"${ETA_SMOKE_CONFIG:-$HOME/.eta/config.json}\" bun --bun vitest --run test/session.e2e.test.ts test/server-smoke.test.ts",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
   },
@@ -21,14 +21,12 @@
     "@eta/client-contracts": "*",
     "@eta/client-wire-proto": "*",
     "@eta/core": "*",
-    "@eta/execution-node": "*",
     "@eta/harness": "*",
     "@eta/plugin-sdk": "*",
     "@eta/storage-jsonl": "*",
     "cordis": "4.0.0-rc.10"
   },
   "devDependencies": {
-    "@eta/ssh": "*",
     "@types/node": "22.19.19",
     "bun-types": "1.4.2",
     "typescript": "5.9.3",

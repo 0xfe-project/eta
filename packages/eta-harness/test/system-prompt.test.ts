@@ -128,19 +128,16 @@ describe("the composer", () => {
       "update_step",
       "list_steps",
       "get_step",
-      "read",
-      "edit",
-      "write",
-      "bash",
-      "update_state",
-      "check_state",
-      "list_state",
-      "Agent",
-      "get_subagent_result",
-      "steer_subagent",
+      "esmrun",
+      "esmrunandkeep",
+      "list_capabilities",
+      "read_state",
       "ask_user",
     ])
       expect(DEFAULT_SYSTEM_PROMPT).toMatch(new RegExp(`\\b${tool}\\b`));
+    // The tools the realm replaced are gone from it.
+    for (const tool of ["bash", "update_state", "check_state", "Agent"])
+      expect(DEFAULT_SYSTEM_PROMPT).not.toMatch(new RegExp(`\\b${tool}\\b`));
     // And no tool that does not exist.
     expect(DEFAULT_SYSTEM_PROMPT).not.toContain("multi_tool_use");
     expect(DEFAULT_SYSTEM_PROMPT).not.toContain("update_todos");

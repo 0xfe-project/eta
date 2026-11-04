@@ -300,6 +300,45 @@ function MemberPicker({
   );
 }
 
+/**
+ * The host tools a script called through `eta.platform`, as the blocks a direct call would have
+ * left. `esmrun` puts them in its `details.calls`; a card (an artifact, an email proposal) that
+ * only knew tool blocks would otherwise vanish when the model calls the tool from code.
+ */
+function withRealmCalls(blocks: readonly RunBlock[]): RunBlock[] {
+  return blocks.flatMap((block): RunBlock[] => {
+    if (
+      block.type !== "tool" ||
+      (block.name !== "esmrun" && block.name !== "esmrunandkeep")
+    )
+      return [block];
+    const calls = (block.details as { calls?: unknown } | undefined)?.calls;
+    if (!Array.isArray(calls)) return [block];
+    return [
+      block,
+      ...calls.flatMap((call, at): RunBlock[] => {
+        const { tool, details, isError } = (call ?? {}) as {
+          tool?: unknown;
+          details?: unknown;
+          isError?: unknown;
+        };
+        return typeof tool === "string"
+          ? [
+              {
+                type: "tool",
+                id: `${block.id}.${at}`,
+                name: tool,
+                input: undefined,
+                details,
+                status: isError === true ? "failed" : "completed",
+              },
+            ]
+          : [];
+      }),
+    ];
+  });
+}
+
 /** What `publish_artifact` returns in its result's `details`. */
 function publishedArtifact(block: ToolBlock) {
   if (block.name !== "publish_artifact" || block.status !== "completed")
@@ -378,8 +417,9 @@ function TurnCards({
   taskRows: readonly MessageView[] | undefined;
 }) {
   const live = useRunBlocks(sessionId, runFrom);
-  const published = publishedRefs(sessionId === undefined ? saved : live);
-  const proposals = emailProposalIds(sessionId === undefined ? saved : live);
+  const blocks = withRealmCalls(sessionId === undefined ? saved : live);
+  const published = publishedRefs(blocks);
+  const proposals = emailProposalIds(blocks);
   const rows = taskRows ?? [];
   if (published.length === 0 && proposals.length === 0 && rows.length === 0)
     return null;
@@ -1565,7 +1605,7 @@ export function ChatPanel({
                   <p className="px-1 py-2 text-xs text-muted-foreground">
                     {translateText(
                       groupId === undefined
-                        ? "history.noConversations"
+                        ? "groups.empty.title"
                         : "history.empty",
                     )}
                   </p>

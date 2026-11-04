@@ -21,7 +21,8 @@ import { call, say, scriptedModels } from "./support/models";
 import { remoteWorld } from "./support/remote";
 
 describe("an agent that loads a bundle, on a daemon", () => {
-  it("gets the skills, the MCP tools and the rules there, and the secret only in their processes", async () => {
+  // TOBEREFR: see packages/TOBEREFR/TODO.md
+  it.skip("gets the skills, the MCP tools and the rules there, and the secret only in their processes", async () => {
     const home = await tempDir("eta-home-");
     await writeBundle(home, "demo", demoFiles());
     const { models, requests } = scriptedModels((request) => {

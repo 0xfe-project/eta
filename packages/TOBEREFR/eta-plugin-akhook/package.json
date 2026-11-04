@@ -1,0 +1,40 @@
+{
+  "name": "@eta/plugin-akhook",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Declarative akhook rules for eta sessions: tool-call rules as middleware, lifecycle rules around runs, and streaming rules that interrupt and regenerate.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "embed": "bun scripts/embed-presets.ts",
+    "test": "bun --bun vitest --run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@ast-grep/lang-bash": "0.0.8",
+    "@ast-grep/lang-go": "0.0.6",
+    "@ast-grep/lang-json": "0.0.7",
+    "@ast-grep/lang-python": "0.0.6",
+    "@ast-grep/lang-rust": "0.0.7",
+    "@ast-grep/lang-yaml": "0.0.6",
+    "@ast-grep/napi": "0.51.0",
+    "@eta/core": "*",
+    "@eta/harness": "*",
+    "picomatch": "4.0.7",
+    "tree-sitter-bash": "0.25.1",
+    "web-tree-sitter": "0.27.1",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.19",
+    "@types/picomatch": "^4.0.0",
+    "bun-types": "1.4.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}

@@ -11,21 +11,17 @@
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { NodeEnvironment } from "@eta/execution-node";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { formatSkillInvocation } from "../src/prompt-blocks";
 import { loadSkills, loadSourcedSkills } from "../src/skills";
 
 let root = "";
-let env: NodeEnvironment;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "eta-skills-"));
-  env = new NodeEnvironment({ cwd: root });
 });
 
 afterAll(async () => {
-  await env.cleanup();
   await rm(root, { recursive: true, force: true });
 });
 
@@ -48,7 +44,9 @@ disable-model-invocation: true
 Use this skill.
 `,
     );
-    const { skills, diagnostics } = await loadSkills(env, ".agents/skills");
+    const { skills, diagnostics } = await loadSkills(
+      join(root, ".agents/skills"),
+    );
     expect(diagnostics).toEqual([]);
     expect(skills).toEqual([
       {
@@ -71,7 +69,7 @@ description: A skill whose name disagrees with where it lives
 Body.
 `,
     );
-    const loaded = await loadSkills(env, ".agents/skills/other");
+    const loaded = await loadSkills(join(root, ".agents/skills/other"));
     // The card is usable, and the inconsistency is visible rather than silent.
     expect(loaded.skills.map((skill) => skill.name)).toEqual([
       "not-the-directory",
@@ -83,7 +81,7 @@ Body.
   });
 
   it("keeps a missing directory quiet, and a broken SKILL.md loud", async () => {
-    const missing = await loadSkills(env, "no/such/dir");
+    const missing = await loadSkills(join(root, "no/such/dir"));
     expect(missing).toEqual({ skills: [], diagnostics: [] });
 
     await put(
@@ -95,7 +93,7 @@ description: "unterminated [yaml
 Body.
 `,
     );
-    const broken = await loadSkills(env, ".agents/skills/broken");
+    const broken = await loadSkills(join(root, ".agents/skills/broken"));
     expect(broken.skills).toEqual([]);
     expect(broken.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       "parse_failed",
@@ -116,7 +114,7 @@ Body.
       ".agents/skills/node_modules/pkg/SKILL.md",
       "---\nname: pkg\ndescription: dependency\n---\nBody.\n",
     );
-    const loaded = await loadSkills(env, ".agents/skills");
+    const loaded = await loadSkills(join(root, ".agents/skills"));
     expect(loaded.skills.map((skill) => skill.name).sort()).toEqual([
       "example",
       "not-the-directory",
@@ -136,7 +134,7 @@ Body.
       ".agents/skills/example/nested/notes.md",
       "---\nname: nested-notes\ndescription: nested markdown is not a skill\n---\nBody.\n",
     );
-    const names = (await loadSkills(env, ".agents/skills")).skills.map(
+    const names = (await loadSkills(join(root, ".agents/skills"))).skills.map(
       (skill) => skill.name,
     );
     expect(names).toContain("root-is-a-skill");
@@ -152,7 +150,7 @@ Body.
       "---\nname: pack\ndescription: through a link\n---\nBody.\n",
     );
     await symlink(join(root, "real"), join(root, "linked"));
-    const loaded = await loadSkills(env, "linked");
+    const loaded = await loadSkills(join(root, "linked"));
     expect(loaded.skills.map((skill) => skill.name)).toEqual(["pack"]);
   });
 
@@ -163,8 +161,7 @@ Body.
     );
     await put("sourced/bad/SKILL.md", "---\nname: bad\n---\nBody.\n");
     const { skills, diagnostics } = await loadSourcedSkills(
-      env,
-      [{ path: "sourced", source: "user" }],
+      [{ path: join(root, "sourced"), source: "user" }],
       undefined,
     );
     expect(skills.map((entry) => [entry.skill.name, entry.source])).toEqual([

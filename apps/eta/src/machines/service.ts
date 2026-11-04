@@ -7,12 +7,9 @@
  * - **Generation** (`model.stream`). The primary resolves the model, adds the credentials, streams
  *   from the provider and sends each event back. Keys and Codex tokens never leave this process,
  *   and usage is counted here.
- * - **Product tools** (`tool.call`). The real tool runs on the primary for that session, with an
- *   execution environment whose scripts run on the daemon (the SSH environment over the link), so
- *   a tool that reads the session's files reads the machine's.
+ * - **Product tools** (`tool.call`). The real tool runs on the primary for that session. (It used
+ *   to get an SSH environment over the link to read the machine's files; that went to TOBEREFR.)
  * - **The approval list** (`tool.gate`): does the user want to be asked before this tool runs?
- * - **MCP credentials** (`mcp.credential`): the OAuth tokens of MCP servers are kept here, once
- *   per server URL; a daemon reads them for its connections and saves the ones it refreshes.
  * - **GitHub credentials** (`github.credentials`): the token for git and gh on the machine, the
  *   user's once they authorized the GitHub App, else the App's; the App's secrets stay here, and
  *   the machine asks again before the token (an hour old at most) expires.
@@ -24,10 +21,7 @@
  * the session works for.
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import type {
-  GitHubCredentials,
-  McpCredentialCall,
-} from "@eta/client-contracts";
+import type { GitHubCredentials } from "@eta/client-contracts";
 import type { KernelModels, KernelTool } from "@eta/core";
 import type { SessionMeta } from "@eta/server";
 import type { ConversationStore } from "../conversations/store";
@@ -36,8 +30,6 @@ import type { SessionHooks } from "../session-hooks";
 import type { MachineLink } from "./hub";
 import type { MachineStore } from "./store";
 import { forwardedOptions } from "@eta/daemon";
-import { SshEnvironment } from "@eta/ssh";
-import { LinkTransport } from "./link-transport";
 
 export interface LinkServiceDeps {
   conversations: ConversationStore;
@@ -59,8 +51,6 @@ export interface LinkServiceDeps {
   hooks: () => Required<SessionHooks> | undefined;
   /** The tools the user wants to be asked about. */
   approvals: () => readonly string[];
-  /** A daemon's read or write of an MCP server's OAuth state; the credentials are the primary's. */
-  mcpCredential: (call: McpCredentialCall) => Promise<unknown>;
   /** The token for git and gh on the daemon's machine; null while GitHub is not connected. */
   githubCredentials: () => Promise<GitHubCredentials | null>;
   /** A generation ended: count it. */
@@ -152,10 +142,6 @@ export function serveLink(link: MachineLink, deps: LinkServiceDeps): void {
     return { ask: deps.approvals().includes(name) };
   });
 
-  link.peer.handle("mcp.credential", (raw) =>
-    deps.mcpCredential(raw as McpCredentialCall),
-  );
-
   link.peer.handle("github.credentials", () => deps.githubCredentials());
 
   link.peer.handle("tool.call", async (raw, { signal }) => {
@@ -180,17 +166,13 @@ export function serveLink(link: MachineLink, deps: LinkServiceDeps): void {
     }
     const tool = set.find((candidate) => candidate.name === params.name);
     if (tool === undefined) throw new Error(`no such tool: ${params.name}`);
-    const home = deps.machines.get(link.machineId)?.home ?? "/";
-    const env = new SshEnvironment({
-      transport: new LinkTransport(link, home),
-      cwd: found.cwd,
-      warn: deps.warn,
-    });
+    // TOBEREFR: this used to hand the tool an SshEnvironment over the link, so a primary's tool
+    // read the remote machine's files. That environment went with @eta/execution.
     return await tool.execute(params.args, {
       turn: 0,
       toolCallId: params.toolCallId,
       signal,
-      toolContext: { env },
+      toolContext: {},
     });
   });
 

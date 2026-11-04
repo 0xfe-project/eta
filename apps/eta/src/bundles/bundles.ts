@@ -1,14 +1,11 @@
 import type { OpenedBundle } from "@eta/client-contracts";
-import type { McpConfigSource } from "@eta/mcp";
 /**
  * Bundles on the host: everything the product needs from them, in one place.
  *
  * It owns the registry, the sealed values, the services and the readiness of machines, and answers
- * the questions the rest of the product has: which skill directories, MCP servers and akhook
- * layers does this agent's session get, what is its stamp, and what is sent to a daemon so that
+ * the questions the rest of the product has: which skill directories does this agent's session get, what is its stamp, and what is sent to a daemon so that
  * the same agent works there. The product builds one and hands out the pieces.
  */
-import type { ConfigInput } from "@eta/plugin-akhook";
 import type { SessionMeta } from "@eta/server";
 import type { Database } from "bun:sqlite";
 import type { Buffer } from "node:buffer";
@@ -17,11 +14,7 @@ import type { MachineStore } from "../machines/store";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
-import {
-  bundleHookLayer,
-  bundleMcpServers,
-  bundleSkillDirs,
-} from "@eta/daemon";
+import { bundleSkillDirs } from "@eta/daemon";
 import { resourcePath } from "../resources";
 import { Readiness } from "./plugin";
 import { BundleRegistry } from "./registry";
@@ -130,27 +123,8 @@ export class Bundles {
     return KEY_SCOPE.test(agentId) ? gateway.scopedKey(agentId) : undefined;
   }
 
-  /** The MCP servers of the bundles an agent loads, one source each, for a session in `cwd`. */
-  mcpSourcesFor(
-    agentId: string | undefined,
-    cwd: string | undefined,
-  ): McpConfigSource[] {
-    return this.#active(agentId).map((active) => ({
-      name: `bundle:${active.bundle.manifest.name}`,
-      servers: bundleMcpServers(active, { cwd: cwd ?? this.#home }, this.#warn),
-    }));
-  }
-
   skillDirsFor(meta: SessionMeta): string[] {
     return this.#active(meta.agentId).flatMap(bundleSkillDirs);
-  }
-
-  /** The bundles' hook rules, as akhook layers, for a session or a run of this agent. */
-  layersFor(agentId: string | undefined, cwd: string): ConfigInput[] {
-    return this.#active(agentId).flatMap((active) => {
-      const layer = bundleHookLayer(active, { cwd });
-      return layer === undefined ? [] : [layer];
-    });
   }
 
   /** What an agent's sessions were opened with, as far as bundles go. */

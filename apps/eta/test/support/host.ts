@@ -57,11 +57,6 @@ export async function testHost(
     // runtimes hands in scripted ones.
     runtimes: false,
     ...overrides,
-    // The real user's akhook file is not this test's business either.
-    akhook: {
-      userConfigPath: join(dataDir, "no-user-akhook.yml"),
-      ...overrides.akhook,
-    },
   });
   hosts.push(host);
   return host;

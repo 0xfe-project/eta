@@ -18,8 +18,6 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   BundleError,
-  bundleHookLayer,
-  bundleMcpServers,
   bundleSkillDirs,
   BundleStore,
   checkValue,
@@ -203,87 +201,9 @@ describe("what a session is given", () => {
     expect(isConfigured(read.manifest, { DEMO_KEY: "abcd" })).toBe(true);
   });
 
-  it("starts a stdio server with the config as its environment and the variables filled", () => {
-    const a = active(
-      { DEMO_KEY: "k-secret", DEMO_REGION: "eu" },
-      "http://127.0.0.1:9",
-    );
-    const servers = bundleMcpServers(a, { cwd: "/work" });
-    const local = servers.local!;
-    expect(local).toMatchObject({
-      command: `${a.bundle.dir}/run`,
-      args: ["--region", "eu", "--cwd", "/work"],
-    });
-    expect(local.env).toEqual({
-      DEMO_KEY: "k-secret",
-      DEMO_REGION: "eu",
-      EXTRA: "x-eu",
-    });
-    // An HTTP server gets the value in its header and the service's address.
-    expect(servers.remote).toMatchObject({
-      url: "http://127.0.0.1:9/mcp",
-      headers: { Authorization: "Bearer k-secret" },
-    });
-  });
-
-  it("leaves out a server that needs what the machine does not have, and says so", () => {
-    const warnings: string[] = [];
-    const servers = bundleMcpServers(
-      active({ DEMO_KEY: "abcd" }),
-      { cwd: "/work" },
-      (message) => warnings.push(message),
-    );
-    expect(Object.keys(servers)).toEqual(["local"]);
-    expect(warnings.join()).toContain("ETA_SERVICE_URL");
-  });
-
-  it("gives the gateway's address and the agent's key to the servers that name them, and drops them where there is none", () => {
-    const read = readBundle(
-      bundle({
-        "plugin.json": JSON.stringify({ name: "gw", version: "1.0.0" }),
-        "mcp.json": JSON.stringify({
-          mcpServers: {
-            gw: {
-              command: "tool",
-              args: ["--base-url", "${ETA_GATEWAY_URL}/v1"],
-              env: { API_KEY: "${ETA_AGENT_KEY}" },
-            },
-          },
-        }),
-      }),
-    );
-    const base = { bundle: read, config: {}, configured: true };
-    const gateway = { url: "http://primary:1/llm", key: "etak.a.mac" };
-    expect(
-      bundleMcpServers({ ...base, gateway }, { cwd: "/w" }).gw,
-    ).toMatchObject({
-      command: "tool",
-      args: ["--base-url", "http://primary:1/llm/v1"],
-      env: { API_KEY: "etak.a.mac" },
-    });
-    const warnings: string[] = [];
-    expect(
-      bundleMcpServers(base, { cwd: "/w" }, (message) =>
-        warnings.push(message),
-      ),
-    ).toEqual({});
-    expect(warnings.join()).toContain("has no value here");
-  });
-
-  it("starts nothing and hooks nothing until the bundle is configured, but keeps its skills", () => {
+  it("keeps its skills before the bundle is configured", () => {
     const a = active({});
-    expect(bundleMcpServers(a, { cwd: "/w" })).toEqual({});
-    expect(bundleHookLayer(a, { cwd: "/w" })).toBeUndefined();
     expect(bundleSkillDirs(a)).toEqual([join(a.bundle.dir, "skills")]);
-  });
-
-  it("gives the hooks a layer with the paths in the text and the values only in the env", () => {
-    const a = active({ DEMO_KEY: "k-secret" });
-    const layer = bundleHookLayer(a, { cwd: "/w" })!;
-    expect(layer.text).toContain(`${a.bundle.dir}/hook`);
-    expect(layer.text).not.toContain("k-secret");
-    expect(layer.env).toEqual({ DEMO_KEY: "k-secret" });
-    expect(layer.idPrefix).toBe("demo/");
   });
 });
 

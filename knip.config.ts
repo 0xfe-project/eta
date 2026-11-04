@@ -4,11 +4,15 @@ import type { KnipConfig } from "knip";
 // sidecar only uses package.json for Turbo scripts.
 export default {
   // System tools the Turbo scripts call (uv for the Python sidecar).
-  // `bun check` (Bun's built-in type checker) reads as a binary named `check`.
-  ignoreBinaries: ["uv", "check", "hutch"],
+  ignoreBinaries: ["uv", "hutch"],
   // Built-in bundles: scripts the host starts by path (an MCP server, a service), not imports.
-  // `.eta` is the session's own directory (memory, scratch copies of packages), not source.
-  ignore: ["bundles/**", ".eta/**"],
+  // `packages/TOBEREFR` holds plugins parked until the ESM rework is done (TODO.md there).
+  ignore: [
+    "bundles/**",
+    ".eta/**",
+    "**/test/**/fixtures/**",
+    "packages/TOBEREFR/**",
+  ],
   // CSS files are part of the module graph: their @imports reference
   // packages (fonts, tw-animate-css, shadcn) and other stylesheets.
   compilers: {

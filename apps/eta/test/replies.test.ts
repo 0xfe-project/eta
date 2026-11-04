@@ -404,7 +404,7 @@ describe("the tool calls of a reply", () => {
     const { models } = scriptedModels((request) =>
       request.lastRole === "toolResult"
         ? say("done")
-        : call("bash", { command: `echo ${long}` }, "call-one"),
+        : call("create_step", { content: long }, "call-one"),
     );
     const w = await world({ models });
     const { group } = await ada(w);
@@ -415,11 +415,11 @@ describe("the tool calls of a reply", () => {
     expect(activity).toHaveLength(1);
     expect(activity[0]).toMatchObject({
       id: "call-one",
-      name: "bash",
+      name: "create_step",
       status: "completed",
     });
     expect(
-      (activity[0]!.input as { command: string }).command.length,
+      (activity[0]!.input as { content: string }).content.length,
     ).toBeLessThan(500);
     expect(activity[0]!.output!.length).toBeLessThanOrEqual(2001);
   });

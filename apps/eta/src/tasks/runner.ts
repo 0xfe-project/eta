@@ -316,7 +316,7 @@ export class TaskRunner implements TaskRuns {
         : (this.#deps.agents.get(activity.actor.agentId ?? "")?.name ??
           "another agent");
     const text = `A comment from ${who} on task #${task.number}:\n\n${activity.body}`;
-    const executor = task.createdBy.agentId;
+    const executor = this.#executorOf(task);
     // Only the user calls agents in: agents mentioning each other could wake one another forever.
     const mentions = activity.actor.kind === "user" ? mentionsOf(activity) : [];
     for (const agentId of mentions) {
@@ -502,7 +502,7 @@ export class TaskRunner implements TaskRuns {
     const task = this.#task(run.taskId);
     const executor: TaskActor = {
       kind: "agent",
-      agentId: task.createdBy.agentId,
+      agentId: this.#executorOf(task),
     };
     const summary = submission.summary.trim();
     if (summary === "") throw new Error("finish_task needs a summary");
@@ -545,6 +545,15 @@ export class TaskRunner implements TaskRuns {
   }
 
   /**
+   * The agent that executes a task: the assignee when one was named (a draft can be written on
+   * someone else's behalf), else the maker. A task made before assignees existed has none, so it
+   * keeps its maker, as it always was.
+   */
+  #executorOf(task: TaskRecord): string | null {
+    return task.assigneeAgentId ?? task.createdBy.agentId;
+  }
+
+  /**
    * Queue a run of a task, or say why it cannot have one. A run that continues the task carries on
    * in the session of the newest run that made one; a rerun and a task's first run open their own.
    */
@@ -559,9 +568,10 @@ export class TaskRunner implements TaskRuns {
       if (agents.get(agentId) === undefined)
         throw new Error("the agent mentioned on this task is gone");
     } else {
-      if (task.createdBy.kind !== "agent" || task.createdBy.agentId === null)
+      const executor = this.#executorOf(task);
+      if (task.createdBy.kind !== "agent" || executor === null)
         throw new Error("this task has no executor: only an agent's task runs");
-      if (agents.get(task.createdBy.agentId) === undefined)
+      if (agents.get(executor) === undefined)
         throw new Error("the agent that made this task is gone");
     }
     const project =
@@ -716,7 +726,7 @@ export class TaskRunner implements TaskRuns {
       return { ended: { status: "failed", error: "The task is gone." } };
     // The executor, or the agent this lane is: a mentioned agent answers, it does not execute.
     const mentioned = run.agentId !== null;
-    const agentId = run.agentId ?? task.createdBy.agentId;
+    const agentId = run.agentId ?? this.#executorOf(task);
     const agent = agentId === null ? undefined : agents.get(agentId);
     if (agent === undefined)
       return {
@@ -724,7 +734,7 @@ export class TaskRunner implements TaskRuns {
           status: "failed",
           error: mentioned
             ? "The agent mentioned on this task is gone."
-            : "The agent that made this task is gone.",
+            : "The agent that was to execute this task is gone.",
         },
       };
     const project =
@@ -749,6 +759,7 @@ export class TaskRunner implements TaskRuns {
         projectPath: project.path,
         projectId: project.id,
         number: task.number,
+        base: task.baseBranch,
         root:
           machine.kind === "primary"
             ? shellQuote(this.#deps.dataDir)
@@ -981,9 +992,9 @@ export class TaskRunner implements TaskRuns {
     carriesOn: boolean,
   ): string {
     const executor =
-      task.createdBy.agentId === null
+      this.#executorOf(task) === null
         ? undefined
-        : this.#deps.agents.get(task.createdBy.agentId)?.name;
+        : this.#deps.agents.get(this.#executorOf(task)!)?.name;
     return [
       carriesOn
         ? `You were mentioned on task #${task.number}, "${task.title}", again. This is the session you answered in before: what is above is your own reading and your own answers.`

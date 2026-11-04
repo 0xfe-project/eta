@@ -147,6 +147,7 @@ export function TaskDraftRow({ message }: { message: MessageView }) {
           {translateText("draft.notCreatedHint", {
             workspace: workspaceLabel({
               mode: draft.workspace,
+              base: null,
               path: null,
               branch: null,
             }),

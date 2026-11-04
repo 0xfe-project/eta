@@ -1,11 +1,9 @@
 import type { TaskActor } from "@eta/client-contracts";
 import type { KernelTool } from "@eta/core";
-import type { ExecutionEnv } from "@eta/harness";
 /**
  * Publishing from a session: the `publish_artifact` tool.
  *
- * The directory is read through the session's own execution environment, so a session that runs on
- * another machine publishes what is on that machine and the tool needs no idea where that is. What
+ * The directory is read from this machine's disk, relative to the session's working directory. What
  * is packed is judged by the service (`site.ts`) and stored as a new version. A version published
  * for a task goes on the task's timeline and into its cards.
  */
@@ -17,14 +15,10 @@ import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
 import { ArtifactError, collectSite } from "./site";
 
-/** What the session's run hands its tools: an environment, when this runtime could make one. */
-interface Context {
-  env: ExecutionEnv | undefined;
-}
+/** The tool needs nothing from the run: where it reads is the session's own directory. */
+type Context = Record<string, never>;
 
-const contextOf = (toolContext: unknown): Context => ({
-  env: (toolContext as { env?: ExecutionEnv } | undefined)?.env,
-});
+const contextOf = (): Context => ({});
 
 const parameters = () =>
   Type.Object({
@@ -69,13 +63,6 @@ export function artifactSessionTools(deps: {
         "anything else of the user's.",
       parameters: parameters(),
       async execute(args, run) {
-        if (run.context.env === undefined) {
-          // The files are read on eta's side, through the environment the host gave this
-          // session, not through whatever the agent itself can reach.
-          return toolError(
-            "eta has no execution environment for this session to read the directory from, so it cannot publish it",
-          );
-        }
         try {
           const task =
             args.taskId === undefined
@@ -84,7 +71,7 @@ export function artifactSessionTools(deps: {
           if (args.taskId !== undefined && task === undefined)
             throw new ArtifactError(`no such task: ${args.taskId}`);
           const files = await collectSite(
-            run.context.env,
+            meta.cwd,
             args.path,
             deps.limits,
             run.call.signal,

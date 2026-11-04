@@ -1,14 +1,14 @@
 /**
  * What an artifact is made of: a static site, as a list of files.
  *
- * It is read out of a directory through the session's own execution environment (so a session on
- * another machine publishes what is on its machine), judged here, and only then stored. The rules
+ * It is read out of a directory on this machine's disk, judged here, and only then stored. The rules
  * about what a site is are the product's: an `index.html` at the root, every path a clean relative
  * path, no links, within limits. A site that fails any of them is refused whole, with a message
  * that says what to fix: an artifact that is half there looks like a working site, and that is
  * worse than none.
  */
-import type { ExecutionEnv } from "@eta/harness";
+import { lstat, readdir, readFile, realpath, stat } from "node:fs/promises";
+import { isAbsolute, join, resolve } from "node:path";
 import { zipSync } from "fflate";
 
 /** What a site may hold. */
@@ -44,39 +44,36 @@ const SKIPPED = new Set([".git", "node_modules", ".DS_Store"]);
 const mib = (bytes: number): string =>
   `${Math.round((bytes / 1024 / 1024) * 10) / 10} MiB`;
 
-/** What the environment answers, without naming its `Result` type. */
-type Answer<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: { message: string } };
-
-async function ask<T>(what: string, pending: Promise<Answer<T>>): Promise<T> {
-  const answer = await pending;
-  if (!answer.ok) throw new ArtifactError(`${what}: ${answer.error.message}`);
-  return answer.value;
+/** A filesystem failure, said as a refusal the publisher can act on. */
+async function ask<T>(what: string, pending: Promise<T>): Promise<T> {
+  try {
+    return await pending;
+  } catch (error) {
+    throw new ArtifactError(
+      `${what}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 /**
- * Read a directory as a site through an execution environment.
+ * Read a directory as a site. A relative `path` is taken against `cwd`.
  *
  * Symbolic links are refused rather than followed: a site that has one is a site whose contents
  * depend on where it was packed. `.git` and `node_modules` are left out. The limits are checked
- * against the sizes the environment reports, before a file is read, so a huge tree is refused
+ * against the sizes the filesystem reports, before a file is read, so a huge tree is refused
  * without being loaded.
  */
 export async function collectSite(
-  env: ExecutionEnv,
+  cwd: string,
   path: string,
   limits: SiteLimits,
   signal?: AbortSignal,
 ): Promise<SiteFile[]> {
-  const options = { signal };
+  const absolute = isAbsolute(path) ? path : resolve(cwd, path);
   // The directory itself may be reached through a link; what is inside it may not.
-  const root = await ask(
-    `cannot read ${path}`,
-    env.canonicalPath(path, options),
-  );
-  const info = await ask(`cannot read ${path}`, env.fileInfo(root, options));
-  if (info.kind !== "directory") {
+  const root = await ask(`cannot read ${path}`, realpath(absolute));
+  const info = await ask(`cannot read ${path}`, stat(root));
+  if (!info.isDirectory()) {
     throw new ArtifactError(
       `${path} is not a directory: publish a directory that has index.html at its root`,
     );
@@ -85,34 +82,35 @@ export async function collectSite(
   const files: SiteFile[] = [];
   let declared = 0;
   const walk = async (directory: string, prefix: string): Promise<void> => {
+    signal?.throwIfAborted();
     const entries = await ask(
       `cannot read ${prefix === "" ? path : prefix}`,
-      env.listDir(directory, options),
+      readdir(directory, { withFileTypes: true }),
     );
     entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
     for (const entry of entries) {
       if (SKIPPED.has(entry.name)) continue;
       const name = `${prefix}${entry.name}`;
-      if (entry.kind === "symlink")
+      const full = join(directory, entry.name);
+      if (entry.isSymbolicLink())
         throw new ArtifactError(`symbolic links cannot be published: ${name}`);
-      if (entry.kind === "directory") {
-        await walk(entry.path, `${name}/`);
+      if (entry.isDirectory()) {
+        await walk(full, `${name}/`);
         continue;
       }
       if (files.length >= limits.files)
         throw new ArtifactError(
           `a site may have at most ${limits.files} files`,
         );
-      declared += entry.size;
+      declared += (await ask(`cannot read ${name}`, lstat(full))).size;
       if (declared > limits.bytes)
         throw new ArtifactError(
           `a site may be at most ${mib(limits.bytes)} in all`,
         );
       files.push({
         name,
-        bytes: await ask(
-          `cannot read ${name}`,
-          env.readBinaryFile(entry.path, options),
+        bytes: new Uint8Array(
+          await ask(`cannot read ${name}`, readFile(full, { signal })),
         ),
       });
     }

@@ -26,35 +26,11 @@ export {
   normalizeAskOptions,
 } from "./ask";
 export {
-  type BtwBuildContext,
-  type BtwExchange,
-  BtwManager,
-  type BtwManagerOptions,
-  type BtwSaveState,
-  type BtwSideAnswer,
-  type BtwSideAsk,
-  btwSideAsk,
-  type BtwSideAskDeps,
-  type BtwSideRequest,
-  type BtwThread,
-  type BtwToolStep,
-  handoffText,
-  SIDE_EXCLUDED_TOOLS,
-  SIDE_MAX_TOKENS,
-  SIDE_MAX_TOOL_TURNS,
-  SIDE_TOKEN_BUDGET,
-} from "./btw";
-export {
   type CompactionEntrySource,
   CompactionMisconfigured,
   CompactionService,
   type CompactionServiceOptions,
 } from "./compaction-service";
-export {
-  MemoryEnvironment,
-  type MemoryEnvironmentOptions,
-  type MemoryShellCall,
-} from "./env/memory";
 export {
   calculateContextTokens,
   type ContextUsageEstimate,
@@ -85,7 +61,6 @@ export {
 } from "./journaling";
 export {
   applyExtraction,
-  envMemoryFs,
   extractionTranscript,
   extractMemory,
   extractMemoryAtRunEnd,
@@ -104,6 +79,7 @@ export {
   type MemoryLoaded,
   type MemoryScan,
   type MemorySection,
+  nodeMemoryFs,
   parseMemory,
   renderMemory,
   renderMemoryBlock,
@@ -146,86 +122,12 @@ export {
 } from "./skills";
 export { MODEL_STATE, sessionStateKV, type StateKV } from "./state";
 export {
-  DEFAULT_POOL_SIZE,
-  DEPTH_CAP,
-  type SubagentApi,
-  type SubagentBus,
-  type SubagentEventName,
-  SubagentManager,
-  type SubagentRecord,
-  type SubagentRunner,
-  type SubagentSpec,
-  type SubagentStatus,
-  type SubagentUsage,
-} from "./subagent";
-export {
-  asReport,
-  extractJsonBlock,
-  parsePlan,
-  parseReport,
-  type Plan,
-  PLANNER_PROMPT,
-  type PlannerObserver,
-  type PlannerReport,
-  type PlanTask,
-  type PlanTaskRecord,
-  type PlanTaskResult,
-  type PlanTaskStatus,
-  planWaves,
-  replan,
-  type ReplanOptions,
-  runPlan,
-  type RunPlanOptions,
-  statusesOf,
-  type SubagentTaskRunner,
-  TASK_REPORT_PROMPT,
-  taskPrompt,
-  taskSpec,
-  validatePlan,
-} from "./subagent-plan";
-export {
-  type BashExecution,
-  type BashPrepare,
-  bashSchema,
-  type BashToolDetails,
-  type BashToolInput,
-  type BashToolOptions,
-  createBashTool,
-} from "./tools/bash";
-export { executionContext, type ExecutionToolContext } from "./tools/context";
-export {
-  createEditTool,
-  editSchema,
-  type EditToolDetails,
-  type EditToolInput,
-  prepareEditArguments,
-} from "./tools/edit";
-export {
-  applyEditsToNormalizedContent,
-  type Edit,
-  generateDiffString,
-  generateUnifiedPatch,
-} from "./tools/edit-diff";
-export { withFileMutationQueue } from "./tools/file-mutation-queue";
-export {
   base64ByteLength,
   decodeBase64,
   detectSupportedImageMimeType,
   encodeBase64,
   readImageSize,
 } from "./tools/image";
-export { resolveReadToolPath, resolveToolPath } from "./tools/path-utils";
-export {
-  createReadTool,
-  type ReadImageProcessor,
-  type ReadImageProcessorResult,
-  readSchema,
-  type ReadToolDetails,
-  type ReadToolInput,
-  type ReadToolOptions,
-} from "./tools/read";
-export { createStateTools, stateToolSchemas } from "./tools/state";
-export { createSubagentTools, SUBAGENT_TOOL_NAMES } from "./tools/subagents";
 export {
   createStepTools,
   STEP_TOOL_NAMES,
@@ -241,11 +143,6 @@ export {
   type ToolResult,
   type ToolRun,
 } from "./tools/tool";
-export {
-  createWriteTool,
-  writeSchema,
-  type WriteToolInput,
-} from "./tools/write";
 export {
   describeRepair,
   repairTranscript,
@@ -270,48 +167,3 @@ export {
   type ViewSystemRow,
   withoutImageData,
 } from "./view";
-export {
-  type EnvCallOptions,
-  err,
-  type ExecutionEnv,
-  ExecutionError,
-  type ExecutionErrorCode,
-  FileError,
-  type FileErrorCode,
-  type FileInfo,
-  type FileKind,
-  type FileSystem,
-  getOrThrow,
-  getOrUndefined,
-  ok,
-  type Result,
-  type Shell,
-  type ShellExecOptions,
-  type ShellExecResult,
-  type ShellOutputLimits,
-  type ShellTruncation,
-  type TextLine,
-  type TextLineReader,
-} from "@eta/execution";
-export {
-  AdaptivePublisher,
-  type AdaptivePublisherOptions,
-  applyShellOutputUpdate,
-  DEFAULT_MAX_BYTES,
-  DEFAULT_MAX_LINES,
-  formatSize,
-  GREP_MAX_LINE_LENGTH,
-  LiveOutput,
-  type LiveOutputOptions,
-  OUTPUT_MIN_EMIT_INTERVAL_MS,
-  OUTPUT_TARGET_BYTES_PER_SECOND,
-  OutputBuffer,
-  type OutputBufferOptions,
-  sanitizeShellOutput,
-  truncateHead,
-  truncateLine,
-  truncateTail,
-  type TruncationOptions,
-  type TruncationResult,
-  utf8ByteLength,
-} from "@eta/execution/output";

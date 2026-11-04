@@ -232,11 +232,6 @@ export type {
   StoredSession,
 } from "./store";
 export {
-  type SessionSubagentOptions,
-  sessionSubagentRunner,
-  SubagentFailed,
-} from "./subagent";
-export {
   createConnection,
   type EndpointConnection,
   type EndpointSocket,
