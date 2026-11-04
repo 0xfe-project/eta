@@ -82,6 +82,7 @@ export function CardSkeleton({ rows = 5 }: { rows?: number }) {
  * title and text, `lines` a few lines of text for small places, `messages` a
  * conversation's turns, `cards` the phone's conversation rows, `glyphs` a
  * folded sidebar's column of icons.
+ * `rowClassName` is for a `list` whose rows are not the usual height.
  * `immediate` drops the 180ms hold, for a place that only shows up once
  * something is already known to be slow.
  */
@@ -91,12 +92,14 @@ export function Loading({
   label,
   immediate = false,
   className,
+  rowClassName,
 }: {
   layout?: "list" | "detail" | "lines" | "messages" | "cards" | "glyphs";
   rows?: number;
   label?: string;
   immediate?: boolean;
   className?: string;
+  rowClassName?: string;
 }) {
   const { t: translateText } = useTranslation("common");
   const lines = Array.from({ length: rows }, (_, i) => widths[i % 5]);
@@ -116,7 +119,10 @@ export function Loading({
       {layout === "list" ? (
         <div className="grid">
           {lines.map((width, i) => (
-            <div key={i} className="flex h-9 items-center gap-3 px-2">
+            <div
+              key={i}
+              className={cn("flex h-9 items-center gap-3 px-2", rowClassName)}
+            >
               <Skeleton className="size-3.5 shrink-0" />
               <Skeleton className={width} />
               <Skeleton className="ml-auto w-10 shrink-0" />

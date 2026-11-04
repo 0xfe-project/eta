@@ -171,15 +171,6 @@ const cards = (container: HTMLElement) =>
     text: node.textContent,
     title: node.getAttribute("title"),
   }));
-const conversationIds = (container: HTMLElement) =>
-  [
-    ...(groupsSection(container)?.querySelectorAll(
-      "[data-slot=conversation-id]",
-    ) ?? []),
-  ].map((node) => ({
-    text: node.textContent,
-    title: node.getAttribute("title"),
-  }));
 const groupRows = (container: HTMLElement) =>
   [
     ...(groupsSection(container)?.querySelectorAll(
@@ -242,13 +233,13 @@ describe("hello 之前的侧边栏", () => {
 });
 
 describe("侧边栏的两块", () => {
-  it("卡片上写着会话 id 和缩写路径，悬停给全路径", async () => {
-    const { container } = await tree([group("g1", "装配", "p-eta")]);
+  it("卡片上写着缩写路径，悬停给全路径，不写会话 id", async () => {
+    const { container } = await tree([group("group-id", "装配", "p-eta")]);
     // The directory the group runs in is part of what the group is, so it is on the card.
     expect(cards(container)).toEqual([
       { text: "~/Desktop/eta", title: "/Users/me/Desktop/eta" },
     ]);
-    expect(conversationIds(container)[0]?.title).toBe("g1");
+    expect(groupsSection(container)?.textContent).not.toContain("group-id");
   });
 
   it("别的机器上的目录带着机器名，按那台机器的 home 缩写", async () => {
@@ -353,6 +344,19 @@ describe("侧边栏的两块", () => {
     )!;
     await click(row.querySelector('[aria-label="展开成员"]'));
     expect(row.querySelectorAll("[data-slot=member-row]")).toHaveLength(2);
+  });
+
+  it("点击区铺满卡片，不盖到展开的成员上", async () => {
+    useWorkspaceStore.setState({ workspace: { selectedGroupId: "g1" } });
+    const { container } = await tree([group("g1", "装配", "p-eta")]);
+    const target = container.querySelector<HTMLElement>('[title="装配"]')!;
+    expect(target.className).toContain("inset-0");
+    const card = target.parentElement!;
+    expect(card.querySelector("[data-slot=conversation-path]")).not.toBeNull();
+    expect(card.querySelector("[data-slot=member-row]")).toBeNull();
+    expect(
+      card.parentElement?.querySelectorAll("[data-slot=member-row]"),
+    ).toHaveLength(2);
   });
 
   it("忙着的成员不只是一个色块，读屏能听到状态", async () => {
