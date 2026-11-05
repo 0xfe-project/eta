@@ -1,11 +1,13 @@
 import type { JSX } from "nsh";
-import { Text, View } from "nsh";
+import { keyboardFrame, safeArea, Text, View } from "nsh";
 import { Dialog } from "nsh/base";
 import { Button } from "./Button";
-import { INSET_BOTTOM } from "./Page";
 import { t } from "../i18n";
 
-/** A sheet from the bottom over the scrim, as 03p, 05c, 06c–06g. */
+/**
+ * A sheet from the bottom over the scrim, as 03p, 05c, 06c–06g. It sits on the keyboard: the host's
+ * own pan stops at the focused input and leaves a sheet's buttons under it.
+ */
 export function Sheet(props: {
   open: boolean;
   onClose: () => void;
@@ -21,7 +23,8 @@ export function Sheet(props: {
         if (!open) props.onClose();
       }}
       backdropClass="bg-scrim"
-      class={`mt-auto w-full bg-background ${INSET_BOTTOM}`}
+      class="mt-auto w-full bg-background"
+      style={{ paddingBottom: keyboardFrame().height > 0 ? keyboardFrame().height : safeArea().bottom }}
     >
       {props.children}
     </Dialog>

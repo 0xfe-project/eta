@@ -209,10 +209,15 @@ function installConversationOps(host: FakeHost): void {
     return { conversation: change(host, conversationId, { participants }) };
   });
 
-  host.on("conversations.setSteward", ({ conversationId, agentId }) => {
+  host.on("conversations.setSteward", ({ conversationId, agentId, none }) => {
     const row = existing(host, conversationId);
-    const stewardId = agentId ?? findProject(host, row.projectId)?.stewardId ?? null;
-    return { conversation: change(host, conversationId, { stewardId }, { stewardOverrideId: agentId }) };
+    const noSteward = agentId === null && none === true;
+    const stewardId = noSteward
+      ? null
+      : (agentId ?? findProject(host, row.projectId)?.stewardId ?? null);
+    return {
+      conversation: change(host, conversationId, { stewardId }, { stewardOverrideId: agentId, noSteward }),
+    };
   });
 
   if (!host.ops.has("conversations.stop")) {
@@ -391,6 +396,7 @@ export function installGroup(host: FakeHost): void {
       archived: row.archived,
       stewardId: row.stewardId,
       stewardOverrideId: held?.stewardOverrideId ?? null,
+      noSteward: held?.noSteward ?? false,
       readSeq: row.readSeq,
       lastSeq: row.lastSeq,
       createdAt: row.createdAt,

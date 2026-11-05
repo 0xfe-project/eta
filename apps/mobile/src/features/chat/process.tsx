@@ -369,7 +369,7 @@ export function ProcessScreen(props: { chat: Chat; messageId: string }) {
           other.type === "tool" && other.id === block.id,
       );
     open(`tool:${block.id}`, () => (
-      <ToolScreen block={block} lookup={lookup} />
+      <ToolScreen block={block} lookup={lookup} sessionId={chat.sessionOf(message()?.agentId ?? null)} />
     ));
   };
   return (
@@ -490,7 +490,7 @@ export function ProcessView(props: { sessionId: string }) {
           other.type === "tool" && other.id === block.id,
       );
     open(`tool:${block.id}`, () => (
-      <ToolScreen block={block} lookup={lookup} />
+      <ToolScreen block={block} lookup={lookup} sessionId={props.sessionId} />
     ));
   };
   return (

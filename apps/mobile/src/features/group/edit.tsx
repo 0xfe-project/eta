@@ -14,8 +14,8 @@ import { call, useTarget } from "../../wire/target";
 import { act } from "./shared";
 
 const FIELD = "text-input text-foreground";
-/** The frame gives the two long fields what is left of an 844 screen; the page has to scroll under a keyboard. */
-const LONG_FIELD_HEIGHT = 203;
+/** The two long fields share what is left of the screen; under a keyboard they stop here and the page scrolls. */
+const LONG_FIELD_HEIGHT = 120;
 
 function Label(props: { text: string }) {
   return <Text class="text-sm leading-[18px] text-muted-foreground">{props.text}</Text>;
@@ -48,7 +48,7 @@ export function EditGroupScreen(props: { id: string }) {
       () => nav.pop(),
     );
   return (
-    <Page>
+    <Page form>
       <View class="h-12 shrink-0 flex-row items-center px-2">
         <View
           role="button"
@@ -61,7 +61,7 @@ export function EditGroupScreen(props: { id: string }) {
         </View>
       </View>
       <If when={ready()} else={<Loading />}>
-        <Body class="gap-4 px-4">
+        <Body fill class="gap-4 px-4">
           <View class="gap-1 pt-1">
             <Text class="text-title leading-[30px] tracking-[-0.01em] text-foreground">{t("group.edit.title")}</Text>
             <Text class="text-md leading-[20px] text-muted-foreground">{t("group.edit.hint")}</Text>
@@ -75,26 +75,24 @@ export function EditGroupScreen(props: { id: string }) {
               class={`h-11 border border-border-strong px-3 ${FIELD}`}
             />
           </View>
-          <View class="gap-[6px]">
+          <View class="grow basis-0 gap-[6px]" style={{ minHeight: LONG_FIELD_HEIGHT }}>
             <Label text={t("group.edit.goal")} />
             <Input
               testID="edit-goal"
               multiline
               value={goal()}
               onChange={(event) => goal.set(event.value)}
-              class={`border border-border-strong px-3 py-[10px] ${FIELD}`}
-              style={{ height: LONG_FIELD_HEIGHT }}
+              class={`grow basis-0 border border-border-strong px-3 py-[10px] ${FIELD}`}
             />
           </View>
-          <View class="gap-[6px]">
+          <View class="grow basis-0 gap-[6px]" style={{ minHeight: LONG_FIELD_HEIGHT }}>
             <Label text={t("group.edit.decided")} />
             <Input
               testID="edit-decided"
               multiline
               value={decided()}
               onChange={(event) => decided.set(event.value)}
-              class={`border border-border-strong px-3 py-[10px] ${FIELD}`}
-              style={{ height: LONG_FIELD_HEIGHT }}
+              class={`grow basis-0 border border-border-strong px-3 py-[10px] ${FIELD}`}
             />
           </View>
         </Body>

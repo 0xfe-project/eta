@@ -29,7 +29,7 @@ type Kind = "groups" | "directs";
 
 const failed = (error: unknown) => toast(t("common.failed", { message: reason(error) }));
 
-const counted = (label: string, count: number) => (count === 0 ? label : `${label} ${count}`);
+const counted = (count: number) => (count === 0 ? undefined : count);
 
 function Line(props: { line: StatusLine }) {
   return (
@@ -193,8 +193,8 @@ export function ConversationsTab() {
       <View class="shrink-0 px-4 pb-2">
         <Segmented
           options={[
-            { value: "groups", label: counted(t("conversations.groups"), waitingGroups()) },
-            { value: "directs", label: counted(t("conversations.directs"), waitingDirects()) },
+            { value: "groups", label: t("conversations.groups"), count: counted(waitingGroups()) },
+            { value: "directs", label: t("conversations.directs"), count: counted(waitingDirects()) },
           ]}
           value={kind()}
           onChange={(next: Kind) => kind.set(next)}

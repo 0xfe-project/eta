@@ -12,6 +12,8 @@ const start = async (scenario = "", network?: Parameters<typeof open>[1] extends
   });
   await app.waitFor("id:machines-online");
   await app.press("id:machines-online");
+  await app.waitFor("mac-studio");
+  await app.press("外观");
   await app.waitFor("颜色模式");
   return app;
 };

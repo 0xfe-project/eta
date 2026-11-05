@@ -34,7 +34,7 @@ export function EditTaskScreen(props: { task: TaskDetailSections["task"] }) {
       .finally(() => saving.set(false));
   };
   return (
-    <Page>
+    <Page form>
       <View class="h-12 shrink-0 flex-row items-center justify-between px-4">
         <Text onPress={() => nav.pop()} class="text-base leading-[18px] text-muted-foreground">
           {t("common.cancel")}

@@ -15,9 +15,9 @@ use objc2_av_foundation::{
     AVMediaTypeVideo, AVMetadataMachineReadableCodeObject, AVMetadataObject,
     AVMetadataObjectTypeQRCode,
 };
-use objc2_foundation::{NSArray, NSString};
+use objc2_foundation::{NSArray, NSString, NSURL};
 use objc2_ui_kit::{
-    UIApplication, UIButton, UIButtonType, UIColor, UIControlEvents, UIControlState,
+    UIActivityViewController, UIApplication, UIButton, UIButtonType, UIColor, UIControlEvents, UIControlState,
     UIModalPresentationStyle, UIViewController, UIWindow, UIWindowScene,
 };
 
@@ -197,6 +197,30 @@ fn top_controller(mtm: MainThreadMarker) -> Option<Retained<UIViewController>> {
         controller = next;
     }
     Some(controller)
+}
+
+/// Show the share sheet for a file, over whatever is on top.
+pub fn share(path: String) {
+    DispatchQueue::main().exec_async(move || {
+        let mtm = MainThreadMarker::new().expect("the main queue");
+        let Some(presenter) = top_controller(mtm) else {
+            return;
+        };
+        let url = NSURL::fileURLWithPath(&NSString::from_str(&path));
+        let items = NSArray::from_retained_slice(&[Retained::into_super(Retained::into_super(url))]);
+        let sheet = unsafe {
+            UIActivityViewController::initWithActivityItems_applicationActivities(
+                UIActivityViewController::alloc(mtm),
+                &items,
+                None,
+            )
+        };
+        // On an iPad the sheet is a popover and has to hang from something.
+        if let (Some(popover), Some(view)) = (sheet.popoverPresentationController(), presenter.view()) {
+            popover.setSourceView(Some(&view));
+        }
+        presenter.presentViewController_animated_completion(&sheet, true, None);
+    });
 }
 
 /// Ask for the camera if nobody has yet, then show it. The answer is `None` when refused.

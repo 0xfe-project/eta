@@ -90,12 +90,22 @@ const result = (
   text: string,
   details?: object,
   isError = false,
+  images = 0,
 ): AgentMessage =>
   ({
     role: "toolResult",
     toolCallId,
     toolName: "tool",
-    content: [{ type: "text", text }],
+    // A picture the view left out: `data` is empty and `sessions.image` has it.
+    content: [
+      { type: "text", text },
+      ...Array.from({ length: images }, () => ({
+        type: "image",
+        mimeType: "image/png",
+        data: "",
+        bytes: 68,
+      })),
+    ],
     isError,
     details,
     timestamp: next(),
@@ -108,6 +118,7 @@ interface Call {
   output: string;
   details?: object;
   error?: boolean;
+  images?: number;
 }
 
 /** One session's transcript: the calls of a run, each message a row. */
@@ -125,7 +136,7 @@ const calls = (list: Call[]): AgentMessage[] =>
     assistant([
       { type: "toolCall", id: call.id, name: call.name, arguments: call.input },
     ]),
-    result(call.id, call.output, call.details, call.error === true),
+    result(call.id, call.output, call.details, call.error === true, call.images),
   ]);
 
 /** A patch whose first lines are 03i's, and as long as +64 −12 says. */
@@ -283,6 +294,7 @@ function boardRun(from: number): ViewMessageRow[] {
           fullOutputPath: "/tmp/eta/out-41.log",
         },
         error: true,
+        images: 1,
       },
     ]),
   ]);
@@ -545,6 +557,7 @@ class Conversation {
         archived: summary?.archived ?? false,
         stewardId: summary?.stewardId ?? null,
         stewardOverrideId: null,
+        noSteward: false,
         readSeq: summary?.readSeq ?? 0,
         lastSeq: summary?.lastSeq ?? 0,
         createdAt: minutesAgo(9000),
@@ -805,6 +818,10 @@ export function installChat(host: FakeHost): void {
   };
 
   host.on("sessions.goal", () => ({ ok: true }));
+  host.on("sessions.image", () => ({
+    mimeType: "image/png",
+    data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+  }));
   host.on("sessions.compact", ({ session: id }: { session: string }) => ({
     session: id,
     compacted: true,

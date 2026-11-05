@@ -83,12 +83,11 @@ test("03l sets the conversation's steward and follows the project again", async 
   await app.waitFor("text:阿澈 主理人 · 等待确认");
 });
 
-test("no steward needs the project: the row leads to its level", async () => {
+test("no steward is the conversation's own", async () => {
   const app = await start("group:wire");
   await app.waitFor("主理人");
   await app.press("label:主理人");
   await app.press("id:steward-none");
-  await app.press("id:project-steward-none");
   await app.waitFor("text:没有主理人");
   expect(app.shows("text:阿澈 主理人 · 等待确认")).toBe(false);
 });
@@ -97,9 +96,9 @@ test("03k member sheet: stats, invite, remove with a confirmation", async () => 
   const app = await start("group:wire");
   await app.waitFor("id:member-agent-ache");
   await app.press("id:member-agent-ache");
-  await app.waitFor("text:in 48.2k · out 6.1k · cache 210.0k");
+  await app.waitFor("text:in 48.2k · out 6.1k · cache 210k");
   expect(app.texts()).toContain("42 tok/s");
-  expect(app.texts()).toContain("tools 23");
+  expect(app.shows("text:/回合.*tools 23/")).toBe(true);
   expect(app.texts()).toContain("单独和 阿澈 说");
   await app.press("移出群");
   await app.waitFor("text:把「阿澈」移出群？");

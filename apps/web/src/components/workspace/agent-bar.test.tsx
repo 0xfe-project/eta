@@ -226,6 +226,7 @@ describe("主理人芯片", () => {
       ...conversationSections(groups[2]!).info,
       stewardId: "a2",
       stewardOverrideId: "a2",
+      noSteward: false,
     };
     const project = projectView({ id: "p1", name: "eta", stewardId: "a1" });
     const { container } = await mount(

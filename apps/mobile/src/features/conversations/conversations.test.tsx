@@ -18,8 +18,6 @@ test("02: groups under their project, with what each is doing", async () => {
   const app = await start();
   const texts = app.texts();
   for (const text of [
-    "群聊 2",
-    "私聊 1",
     "eta",
     "mac-studio",
     "官网",
@@ -32,6 +30,8 @@ test("02: groups under their project, with what each is doing", async () => {
     "刚刚",
   ])
     expect(texts).toContain(text);
+  expect(app.shows("label:群聊 2")).toBe(true);
+  expect(app.shows("label:私聊 1")).toBe(true);
   expect(texts).not.toContain("发布流程");
 });
 
@@ -69,7 +69,7 @@ test("03p, 03p2: archiving moves a row to 已归档, and back", async () => {
   await app.longPress("id:conversation-wire");
   await app.press("归档");
   await app.waitUntil(() => app.count("wire 重连") === 0);
-  expect(app.texts()).toContain("群聊 1");
+  expect(app.shows("label:群聊 1")).toBe(true);
   await app.press("已归档");
   await app.waitFor("wire 重连");
   expect(app.texts()).toContain("eta · 10月2日");

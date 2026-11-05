@@ -8,7 +8,7 @@ mod ios;
 
 #[native_module("eta/native")]
 fn native(registry: &mut Registry) {
-    registry.module::<Scanner>();
+    registry.module::<Scanner>().module::<Sharing>();
 }
 
 /// The camera, as a QR code reader.
@@ -34,5 +34,27 @@ impl Scanner {
         }
         #[cfg(not(target_os = "ios"))]
         None
+    }
+}
+
+/// The system's share sheet.
+#[module]
+pub struct Sharing;
+
+#[module]
+impl Sharing {
+    /// Offers a file to the rest of the phone: save to Files, AirDrop, another app. False where
+    /// there is no share sheet.
+    pub fn file(path: String) -> bool {
+        #[cfg(target_os = "ios")]
+        {
+            ios::share(path);
+            return true;
+        }
+        #[cfg(not(target_os = "ios"))]
+        {
+            let _ = path;
+            false
+        }
     }
 }

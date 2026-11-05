@@ -75,7 +75,7 @@ export function NewGroupScreen(_props: {}) {
   };
 
   return (
-    <Page>
+    <Page form>
       <TopBar />
       <Body>
         <Title title={t("create.group.title")} hint={t("create.group.hint")} />

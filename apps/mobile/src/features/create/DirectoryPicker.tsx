@@ -55,7 +55,8 @@ const list = (machineId: string, path: string | undefined): Promise<Listing> =>
     ...(path === undefined ? {} : { path }),
   } satisfies ProjectArgs["directories"]);
 
-function Row(props: { name: string; tags: string[]; last?: boolean; onPress: () => void }) {
+/** A row that is a project already has nothing further to offer the eye: 07a draws it without the caret. */
+function Row(props: { name: string; tags: string[]; caret?: boolean; onPress: () => void }) {
   return (
     <View
       role="button"
@@ -69,7 +70,9 @@ function Row(props: { name: string; tags: string[]; last?: boolean; onPress: () 
       <Each of={props.tags} key="index">
         {(tag) => <Text class="shrink-0 text-sm leading-4 text-muted-foreground">{tag()}</Text>}
       </Each>
-      <Icon name="caretRight" size={14} color="faint" />
+      <If when={props.caret !== false}>
+        <Icon name="caretRight" size={14} color="faint" />
+      </If>
     </View>
   );
 }
@@ -196,7 +199,7 @@ export function DirectoryPicker(props: {
   const crumbs = () => crumbsOf(current() ?? "/", home());
 
   return (
-    <Page>
+    <Page form>
       <Header title={t("create.picker.title")} border={false} />
       <If when={usableMachines().length > 1}>
         <View
@@ -221,24 +224,28 @@ export function DirectoryPicker(props: {
         <If
           when={typing() !== undefined}
           else={
-            // Pinned to the end: a long path gives up its start, the part that matters least.
-            <View class="min-w-0 grow basis-0 flex-row items-center justify-end gap-[6px] overflow-hidden">
-              <Each of={crumbs()} key={(crumb) => crumb.path}>
-                {(crumb, index) => (
-                  <>
-                    <If when={index() > 0 && crumbs()[index() - 1]?.name !== "/"}>
-                      <Text class="shrink-0 text-md leading-4 text-faint">/</Text>
-                    </If>
-                    <Text
-                      role="button"
-                      onPress={() => go({ path: crumb().path })}
-                      class={`shrink-0 text-md leading-4 active:opacity-60 ${index() === crumbs().length - 1 ? "text-foreground" : "text-muted-foreground"}`}
-                    >
-                      {crumb().name}
-                    </Text>
-                  </>
-                )}
-              </Each>
+            // From the left, but pinned to the end once it is too long: a long path gives up its
+            // start, the part that matters least. The spacer is what is left when it fits.
+            <View class="min-w-0 grow basis-0 flex-row items-center justify-end overflow-hidden">
+              <View class="shrink-0 flex-row items-center gap-[6px]">
+                <Each of={crumbs()} key={(crumb) => crumb.path}>
+                  {(crumb, index) => (
+                    <>
+                      <If when={index() > 0 && crumbs()[index() - 1]?.name !== "/"}>
+                        <Text class="shrink-0 text-md leading-4 text-faint">/</Text>
+                      </If>
+                      <Text
+                        role="button"
+                        onPress={() => go({ path: crumb().path })}
+                        class={`shrink-0 text-md leading-4 active:opacity-60 ${index() === crumbs().length - 1 ? "text-foreground" : "text-muted-foreground"}`}
+                      >
+                        {crumb().name}
+                      </Text>
+                    </>
+                  )}
+                </Each>
+              </View>
+              <View class="grow" />
             </View>
           }
         >
@@ -296,7 +303,7 @@ export function DirectoryPicker(props: {
           <Text class="text-sm leading-4 text-muted-foreground">{t("create.picker.hidden")}</Text>
         </View>
       </View>
-      <Scroll style={{ flex: 1 }} keyboardDismissMode="interactive">
+      <Scroll style={{ flex: 1 }} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled">
         <If when={listing() !== undefined}>
           <If
             when={!empty()}
@@ -309,6 +316,7 @@ export function DirectoryPicker(props: {
                   <Row
                     name={shortenPath(path(), listing()?.home)}
                     tags={added(path()) ? [t("create.picker.added")] : []}
+                    caret={!added(path())}
                     onPress={() => go({ path: path() })}
                   />
                 )}
@@ -325,6 +333,7 @@ export function DirectoryPicker(props: {
                     ...(entry().git ? ["git"] : []),
                     ...(entry().projectId === null ? [] : [t("create.picker.added")]),
                   ]}
+                  caret={entry().projectId === null}
                   onPress={() => {
                     const base = listing()?.path ?? "";
                     go({ path: `${base === "/" ? "" : base}/${entry().name}` });

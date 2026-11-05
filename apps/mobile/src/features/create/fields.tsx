@@ -1,7 +1,7 @@
 // The parts every 新建 page is made of.
 
 import type { JSX } from "nsh";
-import { Text, View } from "nsh";
+import { Keyboard, Text, View } from "nsh";
 import { Input } from "nsh/base";
 import { t } from "../../i18n";
 import { nav } from "../../nav/stack";
@@ -61,7 +61,10 @@ export function Cta(props: {
         accessibilityLabel={props.title}
         testID={props.testID}
         disabled={props.disabled === true}
-        onPress={props.onPress}
+        onPress={() => {
+          Keyboard.dismiss();
+          props.onPress();
+        }}
         class={`h-[52px] grow basis-0 items-center justify-center ${props.disabled ? "bg-muted" : "bg-primary active:opacity-80"}`}
       >
         <Text
@@ -84,15 +87,17 @@ export function TextField(props: {
   placeholder?: string;
   maxLength?: number;
   multiline?: boolean;
-  /** A multiline field's height. */
+  /** A multiline field's height, or its least when it `grow`s into what the page leaves. */
   height?: number;
+  grow?: boolean;
   autoFocus?: boolean;
   error?: string | undefined;
   testID?: string;
+  onFocus?: () => void;
 }) {
   return (
     <View
-      class="shrink-0 gap-[2px] border-t border-border px-4 py-[10px]"
+      class={`shrink-0 gap-[2px] border-t border-border px-4 py-[10px] ${props.grow ? "grow" : ""}`}
       style={props.height === undefined ? undefined : { minHeight: props.height }}
     >
       <Text class={CAPTION}>{props.label}</Text>
@@ -104,6 +109,7 @@ export function TextField(props: {
         maxLength={props.maxLength}
         multiline={props.multiline}
         autoFocus={props.autoFocus}
+        onFocus={props.onFocus}
         class={`${INPUT} ${props.multiline ? "grow" : ""}`}
       />
       <If when={props.error !== undefined}>

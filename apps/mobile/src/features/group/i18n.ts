@@ -30,6 +30,8 @@ export const i18n = {
 
     "group.member.noSession": "在这个群里还没和它说过话",
     "group.member.stop": "停止",
+    "group.member.turns": "{count} 回合",
+    "group.member.blocked": "被拦 {count}",
     "group.member.talkAlone": "单独和 {name} 说",
     "group.member.only": "只看 {name}",
     "group.member.basics": "基本信息",
@@ -54,7 +56,6 @@ export const i18n = {
     "group.steward.followHint": "项目「{name}」的主理人：{steward}",
     "group.steward.projectRow": "项目「{name}」的主理人",
     "group.steward.projectHint": "所有跟随项目的对话都会换人",
-    "group.steward.noneHint": "对话不能单独设为没有，要把项目的主理人也改成没有",
 
     "group.edit.title": "编辑群信息",
     "group.edit.hint": "记录当前目标和已经达成的决定。",
@@ -126,6 +127,8 @@ export const i18n = {
 
     "group.member.noSession": "You haven't talked to it in this group yet",
     "group.member.stop": "Stop",
+    "group.member.turns": "{count} turns",
+    "group.member.blocked": "{count} blocked",
     "group.member.talkAlone": "Talk to {name} alone",
     "group.member.only": "Only {name}",
     "group.member.basics": "Basic info",
@@ -150,7 +153,6 @@ export const i18n = {
     "group.steward.followHint": "Project {name}'s steward: {steward}",
     "group.steward.projectRow": "Steward of project {name}",
     "group.steward.projectHint": "Changes every conversation that follows the project",
-    "group.steward.noneHint": "A conversation can't go without on its own: clear the project's steward too",
 
     "group.edit.title": "Edit group info",
     "group.edit.hint": "Keep the current goal and what has been decided.",

@@ -17,6 +17,10 @@ import { toast } from "../../ui/toast";
 import { call, useTarget } from "../../wire/target";
 import { act, SheetRow, SheetTitle } from "./shared";
 
+/** A page with no address, the fake host's: a web view only navigates to http(s), so it takes the markup. */
+const inlinePage = (url: string): string | undefined =>
+  url.startsWith("data:text/html") ? decodeURIComponent(url.slice(url.indexOf(",") + 1)) : undefined;
+
 /** What this app can show in its frame. A version of anything else is its ZIP, as on the web. */
 const framed = (version: ArtifactVersionView | undefined): boolean =>
   version?.viewer === "iframe" && version.kind === "site";
@@ -215,7 +219,9 @@ export function ArtifactScreen(props: { id: string; version?: number | undefined
                   {(url) => (
                     <WebView
                       testID="artifact-page"
-                      src={hostUrl(url())}
+                      {...(inlinePage(url()) === undefined
+                        ? { src: hostUrl(url()) }
+                        : { html: inlinePage(url()) as string })}
                       style={{ flex: 1 }}
                       onError={(error) => failure.set(error.message)}
                     />

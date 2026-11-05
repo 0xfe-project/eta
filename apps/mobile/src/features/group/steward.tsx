@@ -1,8 +1,6 @@
 // 03l 选主理人. The effective steward is the conversation's own pick, else its project's, so there are
-// two levels, as on the web: this conversation (an agent, or follow the project) and the project.
-//
-// The host has no "none" of a conversation's own: `setSteward(null)` means follow the project. So
-// 没有主理人 is only true when the project has none, and otherwise the row leads to the project's level.
+// two levels, as on the web: this conversation (an agent, follow the project, or none at all) and
+// the project.
 
 import type { ConversationInfo, ProjectView } from "@eta/client-contracts";
 import { Scroll, signal, Text, View } from "nsh";
@@ -58,13 +56,16 @@ function ConversationLevel(props: {
   onDone: () => void;
 }) {
   const override = () => props.info?.stewardOverrideId ?? null;
-  const pick = (agentId: string | null) =>
-    act(call("conversations", "setSteward", { conversationId: props.id, agentId }), props.onDone);
+  const pick = (agentId: string | null, none = false) =>
+    act(
+      call("conversations", "setSteward", { conversationId: props.id, agentId, none }),
+      props.onDone,
+    );
   const projectSteward = () => {
     const steward = props.project?.stewardId ?? null;
     return steward === null ? t("group.steward.none") : agentName(steward);
   };
-  const noSteward = () => props.info?.stewardId === null;
+  const noSteward = () => props.info?.noSteward === true;
   return (
     <>
       <SheetTitle title={t("group.steward.title")} body={t("group.steward.hint")} />
@@ -95,14 +96,9 @@ function ConversationLevel(props: {
         <SheetRow
           title={t("group.steward.none")}
           testID="steward-none"
-          subtitle={noSteward() ? undefined : t("group.steward.noneHint")}
           leading={<NoAvatar />}
           trailing={noSteward() ? <Check /> : undefined}
-          onPress={() => {
-            if (noSteward()) return;
-            if (props.project === undefined) pick(null);
-            else props.onProject();
-          }}
+          onPress={() => pick(null, true)}
         />
         <If when={props.project}>
           {(project) => (

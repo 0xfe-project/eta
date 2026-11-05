@@ -95,6 +95,7 @@ test("03i: a failed command says how, and where the rest is", async () => {
     "text:输出太长，只保留了一部分；完整输出在 /tmp/eta/out-41.log",
   );
   expect(app.texts()).toContain("退出 1");
+  await app.waitFor("id:tool-image");
 });
 
 test("03h: a direct chat draws its steps inline and streams its words", async () => {

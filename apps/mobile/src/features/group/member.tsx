@@ -1,3 +1,4 @@
+import type { TranscriptSection } from "@eta/client-contracts";
 // 03k 成员详情: one member's numbers and what can be done about it, and 只看, its side of the group.
 
 import type {
@@ -144,7 +145,10 @@ function MemberBody(props: {
             </If>
           </View>
           <Text class="text-sm leading-[18px] text-muted-foreground">
-            {`tools ${session()?.tools?.length ?? "—"}`}
+            {[
+              ...activity(session()?.transcript),
+              `tools ${session()?.tools?.length ?? "—"}`,
+            ].join(" · ")}
           </Text>
         </View>
         <If when={(session()?.tasks?.length ?? 0) > 0}>
@@ -187,6 +191,27 @@ function MemberBody(props: {
       </If>
     </View>
   );
+}
+
+/**
+ * 回合 and 被拦, counted from the transcript the view holds. Older rows may lie outside its window;
+ * then the count is a floor, and says so with a `+`.
+ */
+function activity(transcript: TranscriptSection | undefined): string[] {
+  if (transcript === undefined) return [];
+  const more = (transcript.messagesBefore ?? 0) > 0 ? "+" : "";
+  const roles = transcript.messages.map((row) => row.message);
+  const turns = roles.filter((message) => message.role === "user").length;
+  const blocked = roles.filter(
+    (message) =>
+      message.role === "toolResult" &&
+      message.isError &&
+      JSON.stringify(message.content).includes("blocked by "),
+  ).length;
+  return [
+    t("group.member.turns", { count: `${turns}${more}` }),
+    ...(blocked === 0 ? [] : [t("group.member.blocked", { count: `${blocked}${more}` })]),
+  ];
 }
 
 export function MemberSheet(props: {

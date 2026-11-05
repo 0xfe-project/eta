@@ -1,5 +1,6 @@
 import type { JSX } from "nsh";
-import { Scroll, Text, View } from "nsh";
+import type { ScrollRef } from "nsh";
+import { keyboardFrame, safeArea, Scroll, Text, View } from "nsh";
 import { NavPage } from "nsh/base";
 import { t } from "../i18n";
 import { ConnectionBanner } from "./ConnectionBanner";
@@ -9,10 +10,24 @@ import { nav } from "../nav/stack";
 const INSET_TOP = "pt-[env(safe-area-inset-top)]";
 export const INSET_BOTTOM = "pb-[env(safe-area-inset-bottom)]";
 
-/** A pushed page: the design draws every header itself, so the system's is off. */
-export function Page(props: { children?: JSX.Element; bottom?: boolean }) {
+/**
+ * A pushed page: the design draws every header itself, so the system's is off.
+ *
+ * A `form` makes room for the keyboard itself: what is at its foot rides on the keyboard and the body
+ * shrinks, instead of the host's pan sliding the whole page, header and all.
+ */
+export function Page(props: { children?: JSX.Element; bottom?: boolean; form?: boolean }) {
+  const inset = () => (props.bottom === false || props.form ? "" : INSET_BOTTOM);
   return (
-    <NavPage headerVisible={false} class={`flex-1 bg-background ${INSET_TOP} ${props.bottom === false ? "" : INSET_BOTTOM}`}>
+    <NavPage
+      headerVisible={false}
+      class={`flex-1 bg-background ${INSET_TOP} ${inset()}`}
+      style={
+        props.form
+          ? { paddingBottom: keyboardFrame().height > 0 ? keyboardFrame().height : safeArea().bottom }
+          : undefined
+      }
+    >
       <ConnectionBanner />
       {props.children}
     </NavPage>
@@ -73,11 +88,26 @@ export function SectionLabel(props: { title: string; border?: boolean }) {
   );
 }
 
-/** A vertically scrolling page body that keeps inputs clear of the keyboard. */
-export function Body(props: { children?: JSX.Element; class?: string }) {
+/**
+ * A vertically scrolling page body that keeps inputs clear of the keyboard, and lets a tap on a row
+ * through while it is up. `fill` makes it at least as tall as the page, for a field that takes what
+ * is left: under the keyboard the field gives way to its own minimum and the page scrolls.
+ */
+export function Body(props: {
+  children?: JSX.Element;
+  class?: string;
+  fill?: boolean;
+  ref?: (scroll: ScrollRef) => void;
+}) {
   return (
-    <Scroll style={{ flex: 1 }} keyboardDismissMode="interactive">
-      <View class={props.class ?? ""}>{props.children}</View>
+    <Scroll
+      ref={props.ref}
+      style={{ flex: 1 }}
+      contentStyle={props.fill ? { flexGrow: 1 } : undefined}
+      keyboardDismissMode="interactive"
+      keyboardShouldPersistTaps="handled"
+    >
+      <View class={`${props.fill ? "grow" : ""} ${props.class ?? ""}`}>{props.children}</View>
     </Scroll>
   );
 }

@@ -16,7 +16,7 @@ import type {
  * empty, `bytes` says how big it is), and then `sessions.image` with the row and part index is
  * how the page gets it.
  */
-interface RunImage {
+export interface RunImage {
   mimeType: string;
   data: string;
   bytes?: number | undefined;

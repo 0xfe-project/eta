@@ -2,6 +2,7 @@ import type { Signal } from "nsh";
 import type { ToolBlock } from "./run";
 import { computed, Scroll, signal, Text, View } from "nsh";
 import { t } from "../../i18n";
+import { ToolImages } from "./ToolImages";
 import { Header, Page } from "../../ui/Page";
 import { Counts } from "./ProcessBox";
 import { sentence, stepOf, summarize } from "./steps";
@@ -116,6 +117,8 @@ function SectionHead(props: { title: string; aside?: string | undefined }) {
 export function ToolScreen(props: {
   block: ToolBlock;
   lookup: () => ToolBlock | undefined;
+  /** Where the pictures it returned can be asked for. */
+  sessionId?: string | undefined;
 }) {
   const block = computed(() => props.lookup() ?? props.block);
   const shape = computed(() => shapeOf(block()));
@@ -214,11 +217,18 @@ export function ToolScreen(props: {
             </View>
           </If>
           <If when={(block().images?.length ?? 0) > 0}>
-            <View class="px-4 py-2">
-              <Text class="text-sm leading-[18px] text-muted-foreground">
-                {t("chat.tool.images", { count: block().images?.length ?? 0 })}
-              </Text>
-            </View>
+            <If
+              when={props.sessionId !== undefined}
+              else={
+                <View class="px-4 py-2">
+                  <Text class="text-sm leading-[18px] text-muted-foreground">
+                    {t("chat.tool.images", { count: block().images?.length ?? 0 })}
+                  </Text>
+                </View>
+              }
+            >
+              <ToolImages sessionId={props.sessionId ?? ""} images={block().images ?? []} />
+            </If>
           </If>
         </View>
       </Scroll>

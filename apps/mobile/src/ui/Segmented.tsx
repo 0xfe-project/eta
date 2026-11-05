@@ -2,25 +2,26 @@ import { Text, View } from "nsh";
 
 /** 群聊 / 私聊, 外观 / 机器 / 连接: 36 high on a muted strip, the chosen one lifted to the page. */
 export function Segmented<T extends string>(props: {
-  options: { value: T; label: string }[];
+  options: { value: T; label: string; count?: number | undefined }[];
   value: T;
   onChange: (value: T) => void;
 }) {
+  const tone = (value: T) =>
+    `text-md leading-[18px] ${props.value === value ? "text-foreground" : "text-muted-foreground"}`;
   return (
     <View class="h-9 shrink-0 flex-row bg-muted p-[3px]">
       <Each of={props.options}>
         {(option) => (
           <View
             role="tab"
-            accessibilityLabel={option().label}
+            accessibilityLabel={option().count === undefined ? option().label : `${option().label} ${option().count}`}
             onPress={() => props.onChange(option().value)}
-            class={`grow basis-0 items-center justify-center ${props.value === option().value ? "bg-background" : ""}`}
+            class={`grow basis-0 flex-row items-center justify-center gap-[6px] ${props.value === option().value ? "bg-background" : ""}`}
           >
-            <Text
-              class={`text-md leading-[18px] ${props.value === option().value ? "text-foreground" : "text-muted-foreground"}`}
-            >
-              {option().label}
-            </Text>
+            <Text class={tone(option().value)}>{option().label}</Text>
+            <If when={option().count !== undefined}>
+              <Text class={tone(option().value)}>{option().count}</Text>
+            </If>
           </View>
         )}
       </Each>

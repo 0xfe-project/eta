@@ -6,6 +6,7 @@ import type {
   MachineView,
   ThinkingLevel,
 } from "@eta/client-contracts";
+import type { ScrollRef } from "nsh";
 import type { SelectOption } from "../../ui/SelectSheet";
 import type { Model } from "./models";
 import { computed, effect, signal, Text, untracked, View } from "nsh";
@@ -362,7 +363,7 @@ export function NewAgentScreen(_props: {}) {
   };
 
   return (
-    <Page>
+    <Page form>
       <TopBar />
       <Body>
         <Title title={t("create.agent.title")}>
@@ -425,7 +426,7 @@ export function NewAgentScreen(_props: {}) {
           disabled={draft.models() === undefined}
           onPress={() => picking.set("model")}
         />
-        <View class="border-y border-border">
+        <View class="border-b border-border">
           <ChoiceField
             testID="agent-thinking"
             label={t("create.agent.thinking")}
@@ -469,6 +470,10 @@ function InstructionsStep(props: { draft: Draft }) {
   const picking = signal(false);
   const sending = signal(false);
   const failure = signal<string | undefined>(undefined);
+  // The field fills the page when it takes the focus, so the host scrolls its caption out of sight
+  // on the way to showing it; once the keyboard is up everything fits from the top.
+  let body: ScrollRef | undefined;
+  const showField = () => setTimeout(() => body?.scrollTo({ y: 0 }), 350);
 
   const create = async () => {
     if (sending()) return;
@@ -503,9 +508,9 @@ function InstructionsStep(props: { draft: Draft }) {
   };
 
   return (
-    <Page>
+    <Page form>
       <TopBar icon="caretLeft" />
-      <Body>
+      <Body fill ref={(scroll) => (body = scroll)}>
         <Title title={t("create.agent.title")}>
           <Steps step={2} />
         </Title>
@@ -520,13 +525,15 @@ function InstructionsStep(props: { draft: Draft }) {
         />
         <TextField
           testID="agent-instructions"
+          onFocus={showField}
           label={t("create.agent.instructions")}
           value={draft.instructions()}
           onChange={(value) => draft.instructions.set(value)}
           placeholder={t("create.agent.instructionsPlaceholder")}
           maxLength={INSTRUCTIONS_MAX}
           multiline
-          height={200}
+          grow
+          height={140}
         />
         <View class="shrink-0 border-t border-border px-4 py-[10px]">
           <Text class="text-sm leading-[18px] text-muted-foreground">

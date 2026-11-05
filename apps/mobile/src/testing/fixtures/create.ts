@@ -119,6 +119,7 @@ export function installCreate(host: FakeHost): void {
       archived: false,
       stewardId: conversation.stewardId,
       stewardOverrideId: null,
+        noSteward: false,
       readSeq: 0,
       lastSeq: 0,
       createdAt: conversation.createdAt,
