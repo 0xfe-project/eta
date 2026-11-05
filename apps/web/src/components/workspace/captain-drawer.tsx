@@ -1,6 +1,8 @@
+import type { CaptainIdentityView } from "@eta/client-contracts";
 import { CrownSimpleIcon } from "@phosphor-icons/react/CrownSimple";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -14,7 +16,9 @@ import { cn } from "@/lib/utils";
 import { useCaptain, useCaptainActions } from "@/queries/captain";
 import { useConversation } from "@/queries/conversations";
 import { useOutboxActions } from "@/queries/outbox";
+import { useModels } from "@/queries/providers";
 import { useTarget } from "@/queries/wire";
+import { ModelSelect } from "./agent-fields";
 
 export function CaptainDrawer({
   open,
@@ -102,6 +106,13 @@ export function CaptainDrawer({
             })}
           </Button>
         </div>
+
+        {captain.identity === null ? null : (
+          <CaptainModelPicker
+            key={`${captain.identity.agentId}:${captain.identity.model ?? "none"}`}
+            identity={captain.identity}
+          />
+        )}
 
         {view === "chat" ? (
           <>
@@ -310,6 +321,52 @@ export function CaptainDrawer({
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+function CaptainModelPicker({ identity }: { identity: CaptainIdentityView }) {
+  const { t: translateText } = useTranslation("captain");
+  const actions = useCaptainActions();
+  const { data: models } = useModels();
+  const [model, setModel] = useState(identity.model ?? "");
+  const saveModel = () => {
+    if (model === "") return;
+    void actions.setModel
+      .mutateAsync({ model })
+      .then(() => toast.success(translateText("model.saved")))
+      .catch((error: Error) => toast.error(error.message));
+  };
+
+  return (
+    <div className="shrink-0 border-b px-3 py-2">
+      <div className="flex items-end gap-2">
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="text-xs font-medium">{translateText("model.label")}</p>
+          <ModelSelect
+            id="captain-model"
+            value={model}
+            models={models}
+            aria-describedby="captain-model-help"
+            onValueChange={setModel}
+          />
+          <p id="captain-model-help" className="text-xs text-muted-foreground">
+            {translateText("model.help")}
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          disabled={
+            model === "" ||
+            model === identity.model ||
+            actions.setModel.isPending
+          }
+          onClick={saveModel}
+        >
+          {translateText("model.save")}
+        </Button>
+      </div>
+    </div>
   );
 }
 

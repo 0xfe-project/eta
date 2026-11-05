@@ -44,6 +44,15 @@ export function captainPlugin(deps: CaptainPluginDeps, applied: () => void) {
           result: await service.direct(),
         })),
 
+        wire.handle("captain", "setModel", async (call) => {
+          const model = new Args(call).string("model");
+          return {
+            result: {
+              identity: await service.setModel(model),
+            },
+          };
+        }),
+
         wire.handle("captain", "assign", async (call) => {
           const args = new Args(call);
           const mode = args.optionalString("mode");

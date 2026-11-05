@@ -44,7 +44,7 @@ describe("captain identity", () => {
     await expect(
       w.client.call("agents", "update", {
         agentId: identity.identity.agentId,
-        name: "Not Captain",
+        model: "fake:not-captain",
       }),
     ).rejects.toThrow(/Captain/);
     await expect(
@@ -255,6 +255,51 @@ describe("captain assignment", () => {
 });
 
 describe("captain controls", () => {
+  it("sets Captain's model through its own target and updates the open session", async () => {
+    const { w } = await captainWorld();
+    const direct = await w.host.product.captain.direct();
+    const captainId = direct.agentId;
+    await w.watch(direct.conversationId);
+    const sent = await w.send(direct.conversationId, "hello");
+    await w.settled(direct.conversationId, sent.replies[0]!.id);
+    const sessionId = w.client.section<{ sessionId: string }[]>(
+      `conversations.${direct.conversationId}`,
+      "members",
+    )![0]!.sessionId;
+    const config = () =>
+      w.host.server.sessions
+        .openSessions()
+        .find((entry) => entry.meta.id === sessionId)!.session.kernel.config;
+
+    await expect(
+      w.client.call("captain", "setModel", { model: "not-a-model" }),
+    ).rejects.toThrow(/provider:modelId/);
+    const saved = (await w.client.call("captain", "setModel", {
+      model: "fake:chosen",
+    })) as { identity: CaptainIdentityView };
+
+    expect(saved.identity).toMatchObject({
+      agentId: captainId,
+      model: "fake:chosen",
+    });
+    expect(
+      w.host.db
+        .query<{ model: string | null }, [string]>(
+          "SELECT model FROM agent WHERE id = ?",
+        )
+        .get(captainId),
+    ).toEqual({ model: "fake:chosen" });
+    expect(config().read("model")).toEqual({
+      provider: "fake",
+      modelId: "chosen",
+    });
+    expect(
+      w.host.server.sessions
+        .openSessions()
+        .some((entry) => entry.meta.id === sessionId),
+    ).toBe(true);
+  });
+
   it("pauses memory for conversations and task runs", async () => {
     const { w } = await captainWorld();
     const ada = await w.agent("Ada");

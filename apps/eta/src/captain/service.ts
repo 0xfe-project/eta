@@ -27,6 +27,7 @@ import type { CaptainMemory } from "./memory";
 import type { CaptainStore } from "./store";
 import { mkdir } from "node:fs/promises";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/harness";
+import { checkModel } from "../agents/model";
 import { agentHome } from "../agents/store";
 import { isTaskSession, taskOfKey } from "../tasks/session-key";
 
@@ -173,6 +174,24 @@ export class CaptainService {
       this.#deps.changed([conversation.id]);
     }
     return { ...identity, conversationId: conversation.id };
+  }
+
+  /**
+   * Choose what answers for Captain. The model is stored on the Captain agent and pushed into
+   * every Captain session already open, so a corrected provider takes effect without deleting the
+   * identity or its conversation.
+   */
+  async setModel(model: string): Promise<CaptainIdentityView> {
+    const { identity } = await this.ensure();
+    const captain = this.#deps.agents.get(identity.agentId);
+    if (captain === undefined) throw new Error("Captain is not initialized");
+    const chosen = model.trim();
+    checkModel(captain.runtime, chosen === "" ? null : chosen);
+    if (chosen === "") throw new Error("Captain needs a model");
+    const updated = this.#deps.agents.update(captain.id, { model: chosen })!;
+    await this.#deps.engine.applySettings(captain.id, { model: chosen });
+    this.#deps.changed();
+    return this.#viewOf(updated);
   }
 
   /** A Captain instruction in a group: a Captain message plus durable assignment provenance. */
@@ -739,6 +758,7 @@ export class CaptainService {
       agentId: agent.id,
       name: agent.name,
       home,
+      model: agent.model,
       conversationId: direct?.id ?? null,
       createdAt: agent.createdAt,
     };

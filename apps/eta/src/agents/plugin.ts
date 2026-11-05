@@ -30,6 +30,7 @@ import { AGENT_RUNTIMES } from "@eta/client-contracts";
 import { THINKING_LEVELS } from "@eta/core";
 import { summaryOf } from "../conversations/views";
 import { Args, productPlugin, publish } from "../wire";
+import { checkModel } from "./model";
 import { agentHome } from "./store";
 
 export interface AgentsDeps {
@@ -350,8 +351,6 @@ function fieldsOf(
   if (name !== undefined && name.trim() === "")
     throw new Error("an agent needs a name");
   const model = args.nullableString("model");
-  if (typeof model === "string" && !model.includes(":"))
-    throw new Error("model must be provider:modelId");
   const level = args.nullableString("thinkingLevel");
   if (typeof level === "string" && !THINKING_LEVELS.includes(level as never))
     throw new Error(`unknown thinking level: ${level}`);
@@ -386,15 +385,4 @@ function fieldsOf(
       ? {}
       : { machineId: machineId === "" ? null : machineId }),
   };
-}
-
-/**
- * An external runtime's model is one of its own: `runtime:modelId`. An eta model on such an agent
- * (or the other way round) is a model nobody would run.
- */
-function checkModel(runtime: AgentRuntime, model: string | null): void {
-  if (model === null) return;
-  const provider = model.slice(0, model.indexOf(":"));
-  if (runtime !== "eta" && provider !== runtime)
-    throw new Error(`a ${runtime} agent runs ${runtime}:<model>, not ${model}`);
 }

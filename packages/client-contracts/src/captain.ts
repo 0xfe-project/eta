@@ -4,6 +4,7 @@ import type { BoardTaskDetail, BoardTaskStatus } from "./tasks";
 export const CAPTAIN_ACTIONS = [
   "ensure",
   "direct",
+  "setModel",
   "assign",
   "decideOperation",
   "setMemoryPaused",
@@ -50,6 +51,8 @@ export interface CaptainIdentityView {
   agentId: string;
   name: string;
   home: string;
+  /** `provider:modelId`, or null until the user chooses what answers for Captain. */
+  model: string | null;
   conversationId: string | null;
   createdAt: number;
 }
@@ -151,6 +154,7 @@ export interface CaptainAssignInput {
 export interface CaptainArgs {
   ensure: Record<string, never>;
   direct: Record<string, never>;
+  setModel: { model: string };
   assign: CaptainAssignInput;
   decideOperation: {
     operationId: string;
@@ -194,6 +198,7 @@ export interface CaptainArgs {
 export interface CaptainResults {
   ensure: { identity: CaptainIdentityView; created: boolean };
   direct: { identity: CaptainIdentityView; conversationId: string };
+  setModel: { identity: CaptainIdentityView };
   assign: {
     assignment: CaptainAssignmentView;
     messageId: string;

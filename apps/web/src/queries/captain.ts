@@ -54,6 +54,10 @@ export function useCaptainActions() {
       "captain",
       "direct",
     ),
+    setModel: useWireMutation<
+      CaptainArgs["setModel"],
+      CaptainResults["setModel"]
+    >("captain", "setModel"),
     assign: useWireMutation<CaptainArgs["assign"], CaptainResults["assign"]>(
       "captain",
       "assign",

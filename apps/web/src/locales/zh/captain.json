@@ -10,6 +10,12 @@
   "empty": "与 Captain 对话，统筹智能体和运营事项。",
   "placeholder": "向 Captain 提问或下达运营指令…",
   "send": "发送",
+  "model": {
+    "label": "Captain 模型",
+    "help": "选择 Captain 自己回答问题所使用的模型。",
+    "save": "保存模型",
+    "saved": "Captain 模型已保存。"
+  },
   "memoryPause": {
     "label": "长期记忆",
     "paused": "已暂停",

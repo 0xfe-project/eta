@@ -10,6 +10,12 @@
   "empty": "Talk to Captain to coordinate agents and operations.",
   "placeholder": "Ask Captain or give an operational instruction…",
   "send": "Send",
+  "model": {
+    "label": "Captain model",
+    "help": "Choose the model used for Captain's own answers.",
+    "save": "Save model",
+    "saved": "Captain model saved."
+  },
   "memoryPause": {
     "label": "Long-term memory",
     "paused": "Paused",
