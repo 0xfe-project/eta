@@ -53,7 +53,7 @@ function GiveUp(props: { width?: number; testID: string; onPress: () => void }) 
       accessibilityLabel={t("inbox.ask.giveUp")}
       testID={props.testID}
       onPress={props.onPress}
-      class={`items-center justify-center active:opacity-60 ${props.width === undefined ? "h-[24px] w-12 self-end" : "h-10 shrink-0"}`}
+      class={`items-center justify-center active:opacity-60 ${props.width === undefined ? "h-[24px] w-12 items-end self-end" : "h-10 shrink-0"}`}
       style={props.width === undefined ? undefined : { width: props.width }}
     >
       <Text class="text-md leading-4 text-muted-foreground">{t("inbox.ask.giveUp")}</Text>

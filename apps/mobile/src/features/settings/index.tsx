@@ -24,7 +24,7 @@ const primary = (): MachineView | undefined =>
 function Title(props: { text: string; class: string }) {
   return (
     <View class={`shrink-0 px-4 ${props.class}`}>
-      <Text class="truncate text-gauge-sm leading-[34px] tracking-[-0.02em] text-foreground">
+      <Text class="h-[34px] truncate text-gauge-sm leading-[34px] tracking-[-0.02em] text-foreground">
         {props.text}
       </Text>
     </View>

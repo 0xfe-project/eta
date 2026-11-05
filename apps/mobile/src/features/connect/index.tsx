@@ -1,7 +1,8 @@
 import type { JSX } from "nsh";
 import type { ProvidersView } from "@eta/client-contracts";
 import type { TextKey } from "../../i18n";
-import { Text, View } from "nsh";
+import { Keyboard, keyboardFrame, safeArea, Text, View } from "nsh";
+import type { InputRef } from "nsh";
 import { Input } from "nsh/base";
 import { agents, machines } from "../../app/lists";
 import {
@@ -79,7 +80,8 @@ function Field(props: {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  onSubmit?: () => void;
+  onSubmit: () => void;
+  inputRef?: (ref: InputRef) => void;
   masked?: boolean;
   error?: boolean;
   placeholder?: string;
@@ -93,6 +95,7 @@ function Field(props: {
         {props.label}
       </Text>
       <Input
+        ref={props.inputRef}
         testID={props.testID}
         accessibilityLabel={props.label}
         value={props.value}
@@ -104,6 +107,7 @@ function Field(props: {
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType={props.masked ? "go" : "next"}
+        submitBehavior={props.masked ? "blurAndSubmit" : "submit"}
         class={`min-w-0 grow basis-0 text-input leading-[20px] text-foreground placeholder:text-faint ${props.masked && props.value !== "" ? "tracking-[0.14em]" : ""}`}
       />
     </View>
@@ -119,16 +123,23 @@ export function ConnectScreen() {
     const link = parseConnectLink(typed);
     form.set(link ?? { ...form(), ...next });
   };
+  let tokenInput: InputRef | undefined;
   const failed = () => phase() === "failed";
   const connecting = () => phase() === "connecting";
   const ready = () => form().address.trim() !== "" && !connecting();
   const connect = () => {
-    if (ready()) connectTo({ address: form().address.trim(), token: form().token.trim() });
+    if (!ready()) return;
+    Keyboard.dismiss();
+    connectTo({ address: form().address.trim(), token: form().token.trim() });
   };
   const failureKey = (): TextKey => FAILURES[failure() ?? "network"];
 
+  // Makes room itself: the host's own pan loses the token field when its taller keyboard comes up.
   return (
-    <View class={SCREEN}>
+    <View
+      class="flex-1 bg-background pt-[env(safe-area-inset-top)]"
+      style={{ paddingBottom: keyboardFrame().height > 0 ? keyboardFrame().height : safeArea().bottom }}
+    >
       <If
         when={failed()}
         else={
@@ -155,10 +166,14 @@ export function ConnectScreen() {
           value={form().address}
           placeholder={t("connect.addressHint")}
           onChange={(address) => edit({ address }, address)}
+          onSubmit={() => tokenInput?.focus()}
         />
         <Field
           label={t("connect.token")}
           testID="connect-token"
+          inputRef={(ref) => {
+            tokenInput = ref;
+          }}
           masked
           error={failed() && failure() === "token"}
           value={form().token}

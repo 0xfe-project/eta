@@ -102,7 +102,7 @@ export function InboxTab() {
           role="button"
           accessibilityLabel={t("inbox.machinesOnline", { count: online() })}
           testID="machines-online"
-          onPress={() => go.settings()}
+          onPress={() => go.settings("machines")}
           class="h-11 flex-row items-center gap-2 active:opacity-60"
         >
           <Text class="text-sm leading-4 text-muted-foreground">

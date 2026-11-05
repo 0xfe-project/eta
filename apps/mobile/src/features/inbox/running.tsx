@@ -115,13 +115,28 @@ export function useRuns() {
         run,
       })),
     );
+  /** When it started; a member's is known once its row has opened the session. */
+  const startedAt = (run: Run): number => {
+    if (run.since !== undefined) return run.since;
+    if (run.sessionId === null) return Number.MAX_SAFE_INTEGER;
+    const transcript = connection.section<SessionViewSections["transcript"]>(
+      `sessions.${run.sessionId}`,
+      "transcript",
+    );
+    return (
+      transcript?.messages.findLast((row) => row.message.role === "user")?.at ??
+      Number.MAX_SAFE_INTEGER
+    );
+  };
   return {
-    running: (): Run[] => [
-      ...members("working").map(({ conversation, member }) => memberRun(conversation, member)),
-      ...taskRuns()
-        .filter(({ run }) => ACTIVE.has(run.status))
-        .map(({ task, run }) => taskRun(task, run)),
-    ],
+    /** The longest running first. */
+    running: (): Run[] =>
+      [
+        ...members("working").map(({ conversation, member }) => memberRun(conversation, member)),
+        ...taskRuns()
+          .filter(({ run }) => ACTIVE.has(run.status))
+          .map(({ task, run }) => taskRun(task, run)),
+      ].toSorted((a, b) => startedAt(a) - startedAt(b)),
     /** The runs waiting for a slot or for their machine to come back. */
     queued: (): TaskRunView[] =>
       taskRuns()

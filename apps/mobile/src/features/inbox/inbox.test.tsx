@@ -119,7 +119,7 @@ test("a row opens the conversation or task it is about", async () => {
   await app.press("id:back");
   await app.waitFor("id:machines-online");
   await app.press("id:machines-online");
-  await app.waitFor("颜色模式");
+  await app.waitFor("mac-studio");
 });
 
 test("08b: while reconnecting a question can't be answered, then it can", async () => {

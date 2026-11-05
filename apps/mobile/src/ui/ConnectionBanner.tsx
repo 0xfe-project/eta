@@ -6,8 +6,8 @@ import { t } from "../i18n";
 export function ConnectionBanner() {
   return (
     <If when={wire().status() === "reconnecting"}>
-      <View class="h-9 shrink-0 justify-center bg-muted px-4">
-        <Text class="text-sm leading-4 text-foreground">{t("connect.reconnecting")}</Text>
+      <View class="shrink-0 justify-center bg-muted px-4 py-2">
+        <Text class="text-md leading-[20px] text-foreground">{t("connect.reconnecting")}</Text>
       </View>
     </If>
   );

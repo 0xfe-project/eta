@@ -6,7 +6,7 @@
   "description": "The phone client: a Native Shell app that talks to the host over the wire.",
   "scripts": {
     "dev": "nsh run DevApp.tsx --target ios",
-    "ios": "nsh package App.tsx --target ios-simulator --run",
+    "ios": "scripts/package-ios.sh simulator",
     "mobile:check": "nsh check",
     "mobile:test": "nsh test"
   },
