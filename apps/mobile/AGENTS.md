@@ -17,6 +17,7 @@ Native Shell（nsh，TSX on QuickJS）写的 iOS/Android 客户端。设计稿�
 | `h-band`                                     | `h-11`（44）                                          |
 | `px-5` `gap-5` 等 `-5`                       | `-[24px]`（Paper 的 5 = 24，不是 20）                 |
 | `-6`                                         | `-[32px]`（Paper 的 6 = 32）                          |
+| `leading-5` `leading-6` `w-6`                | 同上：Paper 的间距令牌（24、32、32）                  |
 | `bg-foreground/scrim`                        | `bg-scrim`                                            |
 | `[color:var(--color-primary-foreground)]`    | `text-primary-foreground`                             |
 | `border-t border-t-solid border-t-border`    | `border-t border-border`                              |
@@ -50,7 +51,8 @@ Native Shell（nsh，TSX on QuickJS）写的 iOS/Android 客户端。设计稿�
 
 `src/testing/fake-host.ts` 在 app 自己的 VM 里说同样的帧：`DevApp.tsx` 用它在模拟器和 `nsh test` 里跑，不需要网络。
 数据和 op 写在 `src/testing/fixtures/<feature>.ts`，数据用设计稿里的（阿澈、Mori、小满、#128…）。
-类型由 contracts 约束，op 的回答方式要和 `apps/eta` 一致。`host.scenario`（storage 的 `eta.fake.scenario`）切变体。
+类型由 contracts 约束，op 的回答方式要和 `apps/eta` 一致。`host.scenario`（storage 的 `eta.fake.scenario`）切变体，
+`eta.fake.route`（如 `group:wire`、`artifact:reconnect`）让 DevApp 直接开到某一页。入口文件要放在 app 根目录，否则主题加载不到。
 
 测试写在 `src/features/<feature>/*.test.tsx`：
 

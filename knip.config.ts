@@ -51,6 +51,12 @@ export default {
       // expected.
       ignore: ["src/components/ui/**"],
     },
+    "apps/mobile": {
+      // `nsh` builds it: the entries are named in its commands, and `nsh`, `nsh/*` and the runtime's
+      // `websocket` are provided by the runtime, not by a package.
+      entry: ["App.tsx", "DevApp.tsx", "src/**/*.test.tsx"],
+      ignoreUnresolved: [/^nsh(\/.*)?$/, "websocket", "eta/native"],
+    },
     "apps/desktop": {
       // Electrobun reads the configs by path and bundles both processes from
       // their entrypoints; nothing imports them.

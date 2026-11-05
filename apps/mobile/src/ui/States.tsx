@@ -5,8 +5,8 @@ import { Button } from "./Button";
 /** 这个任务已不存在 and its kin: says what happened and stops. */
 export function Empty(props: { title: string; body?: string }) {
   return (
-    <View class="gap-1 px-4 py-[20px]">
-      <Text class="text-lead leading-[22px] text-foreground">{props.title}</Text>
+    <View class="gap-1 px-4 py-[24px]">
+      <Text class="text-input leading-[20px] text-foreground">{props.title}</Text>
       <If when={props.body !== undefined}>
         <Text class="text-md leading-[18px] text-muted-foreground">{props.body}</Text>
       </If>
@@ -29,9 +29,9 @@ export function Loading() {
 /** 无法加载任务: what failed, and the one thing to do about it. */
 export function Failed(props: { title: string; body?: string; onRetry?: () => void }) {
   return (
-    <View class="gap-3 px-4 py-[20px]">
+    <View class="gap-3 px-4 py-[24px]">
       <View class="gap-1">
-        <Text class="text-lead leading-[22px] text-foreground">{props.title}</Text>
+        <Text class="text-input leading-[20px] text-foreground">{props.title}</Text>
         <Text class="text-md leading-[18px] text-muted-foreground">
           {props.body ?? t("common.lostConnection")}
         </Text>

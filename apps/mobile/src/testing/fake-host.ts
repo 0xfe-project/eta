@@ -5,8 +5,8 @@
 //
 // Each feature adds its data and ops in `fixtures/<feature>.ts`.
 
-import type { ServerFrame } from "@eta/client-contracts";
-import type { ClientFrame } from "@eta/client-wire-proto";
+import type { MountedPlugin, ServerFrame } from "@eta/client-contracts";
+import type { ClientFrame, ErrorProblem } from "@eta/client-wire-proto";
 import type { RefusedBy, WireSocket } from "../wire/wire";
 import { Storage } from "nsh";
 import { useSocketFactory } from "../app/session";
@@ -32,6 +32,8 @@ export class FakeHost {
   readonly eager = new Set<string>();
   readonly ops = new Map<string, Op>();
   scenario = "";
+  /** `hello.mounted`: the plugins this host has. */
+  mounted: MountedPlugin[] = [];
   private revision = 0;
   private versions = new Map<string, number>();
   private subscribers = new Set<string>();
@@ -109,6 +111,7 @@ export class FakeHost {
         requestId: frame.requestId,
         ok: false,
         error: error instanceof Error ? error.message : String(error),
+        problem: (error as { problem?: ErrorProblem }).problem,
       });
     }
   }
@@ -123,7 +126,7 @@ export class FakeHost {
           return { name, target, action };
         });
         const state = Object.fromEntries([...this.eager].map((t) => [t, this.snapshot(t)]));
-        this.emit({ type: "hello", ops, mounted: [], state });
+        this.emit({ type: "hello", ops, mounted: this.mounted, state });
       }, 0);
     }
     return {

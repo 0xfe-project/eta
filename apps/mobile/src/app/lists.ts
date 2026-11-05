@@ -1,4 +1,5 @@
-// The eager lists every screen joins against. `hello` carries them, pushes keep them current.
+// The eager lists every screen joins against. `hello` carries them, and the session subscribes to
+// each, so pushes keep them current.
 
 import type {
   AgentsSections,

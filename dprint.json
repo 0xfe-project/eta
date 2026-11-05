@@ -17,6 +17,7 @@
     "**/.output",
     "**/.tanstack",
     "**/.turbo",
+    "**/.nsh",
     "**/*.gen.ts",
     "packages/eta-plugin-akhook/presets",
     "**/*-lock.json",

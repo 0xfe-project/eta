@@ -7,6 +7,8 @@ import { nativeSocket } from "../wire/native-socket";
 import { Wire } from "../wire/wire";
 
 const STORAGE_KEY = "eta.host";
+/** The lists every screen joins against, for as long as the connection lives. */
+const EAGER_TARGETS = ["agents", "machines", "projects", "conversations", "inbox", "tasks"];
 /** How long a dropped connection may keep retrying before the app says so with a whole screen. */
 const GIVE_UP_MS = 30_000;
 
@@ -48,8 +50,23 @@ export function wire(): Wire {
   return current;
 }
 
+/** The give-up clock of the wire in use. */
+let giveUp: ReturnType<typeof setTimeout> | undefined;
+
+function stopGiveUp(): void {
+  clearTimeout(giveUp);
+  giveUp = undefined;
+}
+
+function startGiveUp(): void {
+  if (giveUp !== undefined) return;
+  giveUp = setTimeout(() => {
+    giveUp = undefined;
+    phase.set("disconnected");
+  }, GIVE_UP_MS);
+}
+
 function watch(next: Wire): void {
-  let giveUp: ReturnType<typeof setTimeout> | undefined;
   effect(() => {
     const status = next.status();
     const seen = next.lastSeenAt();
@@ -57,8 +74,7 @@ function watch(next: Wire): void {
     if (untracked(() => currentWire()) !== next) return;
     const now = untracked(() => phase());
     if (status === "open") {
-      clearTimeout(giveUp);
-      giveUp = undefined;
+      stopGiveUp();
       if (now !== "ready") {
         phase.set("ready");
         const target = untracked(() => host());
@@ -67,26 +83,26 @@ function watch(next: Wire): void {
       return;
     }
     if (status !== "reconnecting") return;
-    if (now === "connecting") {
-      // The first attempt failed: say so at once, a wrong token will not fix itself.
-      failure.set(next.refused() ?? "network");
+    const refused = next.refused();
+    // A wrong token will not fix itself, whether it was just typed or the host changed it since.
+    if (now === "connecting" || refused === "token") {
+      stopGiveUp();
+      failure.set(refused ?? "network");
       phase.set("failed");
       next.close();
       return;
     }
-    if (now === "ready" && giveUp === undefined) {
-      giveUp = setTimeout(() => {
-        giveUp = undefined;
-        phase.set("disconnected");
-      }, GIVE_UP_MS);
-    }
+    if (now === "ready") startGiveUp();
   });
 }
 
 function start(target: HostAddress): void {
+  stopGiveUp();
   untracked(() => currentWire())?.close();
   host.set(target);
   const next = new Wire({ open: () => openSocket(target) });
+  // `hello` carries these once; only a subscription keeps them current.
+  for (const name of EAGER_TARGETS) next.subscribe(name);
   currentWire.set(next);
   watch(next);
   next.connect();
@@ -119,16 +135,21 @@ export function connectTo(target: HostAddress): void {
 export function retry(): void {
   const current = untracked(() => currentWire());
   if (current === undefined) return;
+  stopGiveUp();
   phase.set("ready");
   current.retryNow();
+  // Still down after this try: back to 08b′ after the same wait.
+  if (untracked(() => current.status()) !== "open") startGiveUp();
 }
 
 /** Forget the host and go back to the form (设置 → 连接 → 断开连接, 换一台主机). */
 export function disconnect(): void {
+  stopGiveUp();
+  failure.set(undefined);
+  // The form first: the screens read the wire until they are gone.
+  phase.set("form");
   untracked(() => currentWire())?.close();
   currentWire.set(undefined);
   void Storage.removeItem(STORAGE_KEY);
-  failure.set(undefined);
-  phase.set("form");
 }
 

@@ -31,7 +31,7 @@ export function Header(props: {
 }) {
   return (
     <View
-      class={`h-12 shrink-0 flex-row items-center pr-4 ${props.border === false ? "" : "border-b border-border"}`}
+      class={`h-12 shrink-0 flex-row items-center gap-2 pr-4 pl-2 ${props.border === false ? "" : "border-b border-border"}`}
     >
       <View
         role="button"
