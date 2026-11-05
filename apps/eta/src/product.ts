@@ -632,6 +632,7 @@ export function createProduct(options: {
     captain,
     board,
     runs: runRows,
+    machines,
     runner: taskRunner,
     inbox,
     timer: options.routines?.timer ?? true,

@@ -1,5 +1,6 @@
 import type { BoardTaskView, InteractionView } from "@eta/client-contracts";
 import type { Inbox } from "../inbox/inbox";
+import type { MachineStore } from "../machines/store";
 import type { TaskBoard } from "../tasks/board";
 import type { TaskRunner } from "../tasks/runner";
 import type { TaskRunStore } from "../tasks/runs";
@@ -13,6 +14,7 @@ export interface CaptainSupervisorDeps {
   captain: CaptainService;
   board: TaskBoard;
   runs: TaskRunStore;
+  machines: MachineStore;
   runner: TaskRunner;
   inbox: Inbox;
   now?: (() => number) | undefined;
@@ -266,11 +268,62 @@ export class CaptainSupervisor {
       if (!ACTIVE.has(task.status)) continue;
       const open = this.#deps.runs.openOf(task.id);
       if (open.length > 0) {
-        const lastEvent = open
+        const offline = open.filter((run) => {
+          if (run.queueReason === "machine_offline") return true;
+          return (
+            run.machineId !== null &&
+            this.#deps.machines.get(run.machineId)?.status === "offline"
+          );
+        });
+        if (offline.length > 0) {
+          const machineDetails = offline.flatMap((run) => {
+            if (run.machineId === null) return [];
+            const machine = this.#deps.machines.get(run.machineId);
+            return [
+              {
+                runId: run.id,
+                machineId: run.machineId,
+                machineName: machine?.name ?? run.machineId,
+                machineStatus: machine?.status ?? "missing",
+                lastSeenAt: machine?.lastSeenAt ?? null,
+                queueReason: run.queueReason,
+                status: run.status,
+              },
+            ];
+          });
+          const ids = offline.map((run) => run.id).sort();
+          const machineState = machineDetails
+            .map(
+              (entry) =>
+                `${entry.machineId}:${entry.lastSeenAt ?? 0}:${entry.machineStatus}`,
+            )
+            .sort()
+            .join(",");
+          this.#deps.store.createReview({
+            kind: "task_run_offline",
+            dedupeKey: `task-run-offline:${task.id}:${ids.join(",")}:${machineState}`,
+            taskId: task.id,
+            body: `Task #${task.number} “${task.title}” is waiting for an offline machine, not stuck. Reconnecting the machine is the safe next step; interrupting the run would discard it.`,
+            data: {
+              taskId: task.id,
+              runIds: ids,
+              runs: machineDetails,
+              queueReason: offline.some(
+                (run) => run.queueReason === "machine_offline",
+              )
+                ? "machine_offline"
+                : null,
+              updatedAt: task.updatedAt,
+            },
+          });
+        }
+        const online = open.filter((run) => !offline.includes(run));
+        if (online.length === 0) continue;
+        const lastEvent = online
           .map((run) => run.lastEventAt ?? run.startedAt ?? run.createdAt)
           .reduce((left, right) => Math.max(left, right), 0);
         if (now - lastEvent < minutes * MINUTE) continue;
-        const ids = open.map((run) => run.id).sort();
+        const ids = online.map((run) => run.id).sort();
         this.#deps.store.createReview({
           kind: "task_run_stuck",
           dedupeKey: `task-run-stuck:${task.id}:${ids.join(",")}:${lastEvent}`,

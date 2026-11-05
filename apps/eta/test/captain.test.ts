@@ -795,6 +795,96 @@ describe("captain controls", () => {
     ).toBe(true);
   });
 
+  it("diagnoses offline machines before calling their runs stuck", async () => {
+    const { w } = await captainWorld();
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id], "offline-runs");
+    const offlineId = crypto.randomUUID();
+    const lastSeenAt = Date.now() - 60_000;
+    w.host.db
+      .query(
+        `INSERT INTO machine
+           (id, kind, name, status, created_at, last_seen_at, max_active_runs)
+         VALUES (?, 'daemon', ?, 'offline', ?, ?, 2)`,
+      )
+      .run(offlineId, "Offline box", Date.now() - 120_000, lastSeenAt);
+    const makeTask = (title: string) =>
+      w.host.product.board.create(
+        {
+          title,
+          conversationId: group.id,
+          workspace: "local",
+          status: "in_progress",
+        },
+        { kind: "agent", agentId: ada.id },
+      );
+    const running = makeTask("Running on an offline machine");
+    const queued = makeTask("Queued for an offline machine");
+    const old = Date.now() - 31 * 60_000;
+    w.host.db
+      .query(
+        `INSERT INTO task_run
+           (id, task_id, machine_id, status, created_at, started_at, last_event_at)
+         VALUES (?, ?, ?, 'running', ?, ?, ?)`,
+      )
+      .run(crypto.randomUUID(), running.id, offlineId, old, old, old);
+    w.host.db
+      .query(
+        `INSERT INTO task_run
+           (id, task_id, machine_id, status, queue_reason, created_at, last_event_at)
+         VALUES (?, ?, ?, 'queued', 'machine_offline', ?, ?)`,
+      )
+      .run(crypto.randomUUID(), queued.id, offlineId, old, old);
+
+    w.host.product.captainSupervisor.tick();
+    const reviews = w.host.product.captain.store.reviews();
+    const offline = reviews.filter(
+      (review) => review.kind === "task_run_offline",
+    );
+    expect(offline).toHaveLength(2);
+    expect(
+      reviews.some(
+        (review) =>
+          review.kind === "task_run_stuck" &&
+          (review.taskId === running.id || review.taskId === queued.id),
+      ),
+    ).toBe(false);
+    expect(offline).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          taskId: running.id,
+          data: expect.objectContaining({
+            queueReason: null,
+            runs: [
+              expect.objectContaining({
+                machineId: offlineId,
+                machineStatus: "offline",
+                lastSeenAt,
+                queueReason: null,
+                status: "running",
+              }),
+            ],
+          }),
+        }),
+        expect.objectContaining({
+          taskId: queued.id,
+          data: expect.objectContaining({
+            queueReason: "machine_offline",
+            runs: [
+              expect.objectContaining({
+                machineId: offlineId,
+                machineStatus: "offline",
+                queueReason: "machine_offline",
+                status: "queued",
+              }),
+            ],
+          }),
+        }),
+      ]),
+    );
+  });
+
   it("wakes Captain once when an assignment settles without a task", async () => {
     const { models } = scriptedModels(() => say("Verified."));
     const w = await world({ ...options, models });
