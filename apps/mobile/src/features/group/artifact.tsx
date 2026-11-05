@@ -15,6 +15,7 @@ import { reason } from "../../ui/format";
 import { hostUrl } from "../../ui/hostUrl";
 import { toast } from "../../ui/toast";
 import { call, useTarget } from "../../wire/target";
+import { saveArchive } from "./download";
 import { act, SheetRow, SheetTitle } from "./shared";
 
 /** A page with no address, the fake host's: a web view only navigates to http(s), so it takes the markup. */
@@ -149,11 +150,12 @@ export function ArtifactScreen(props: { id: string; version?: number | undefined
     );
   };
 
-  // The app's own ZIP is behind the token and the system browser has none: only a public one opens.
+  // The app's own ZIP is behind the token, so the app fetches it; the share sheet then saves it.
   const download = () => {
-    const link = shareLink();
-    if (link === null) toast(t("group.artifact.downloadNeedsShare"));
-    else act(openUrl(hostUrl(`${link}archive.zip`)));
+    const version = current();
+    if (version === undefined) return;
+    toast(t("group.artifact.downloading"));
+    act(saveArchive(hostUrl(version.archiveUrl), `${props.id}-v${version.number}.zip`));
   };
   const openOutside = () => {
     const url = preview();

@@ -16,7 +16,6 @@ function Connected() {
       <NavStack state={nav} style={{ flex: 1 }}>
         {(route, index) => (index() === 0 ? <Tabs /> : route.page())}
       </NavStack>
-      <ToastHost />
     </View>
   );
 }
@@ -52,6 +51,7 @@ export function Root() {
         <If when={phase() === "form" || phase() === "connecting" || phase() === "failed"}>
           <ConnectScreen />
         </If>
+        <ToastHost />
       </View>
     </ErrorBoundary>
   );

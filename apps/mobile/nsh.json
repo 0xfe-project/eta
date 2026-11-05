@@ -17,5 +17,6 @@
       "gauge-sm": 28,
       "gauge": 64
     }
-  }
+  },
+  "rust": "native"
 }

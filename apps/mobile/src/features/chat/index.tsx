@@ -28,6 +28,7 @@ export function ChatScreen(props: { id: string }) {
   void loadOutbox();
   const chat = useChat(props.id);
   const modes = signal(false);
+  const menuOpen = signal(false);
   let toBottom = () => undefined as void;
   let resend: (text: string, agentId: string | null) => void = () => undefined;
 
@@ -129,12 +130,15 @@ export function ChatScreen(props: { id: string }) {
             </Each>
           </View>
         </If>
-        <Each of={chat.questions()} key={(question) => question.id}>
-          {(question) => <QuestionCard interaction={question()} compact />}
-        </Each>
+        <View class="shrink-0" style={{ display: menuOpen() ? "none" : "flex", flexDirection: "column" }}>
+          <Each of={chat.questions()} key={(question) => question.id}>
+            {(question) => <QuestionCard interaction={question()} compact />}
+          </Each>
+        </View>
         <Composer
           chat={chat}
           modes={modes}
+          menuOpen={menuOpen}
           onSent={() => toBottom()}
           bindResend={(fn) => {
             resend = fn;

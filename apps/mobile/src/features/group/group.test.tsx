@@ -149,7 +149,7 @@ test("03n picks a version, 03o shares, copies and revokes", async () => {
   expect(app.openedUrls()).toEqual(["http://fake/preview/1.9999.sig/index.html"]);
 
   await app.press("下载");
-  await app.waitFor("text:手机上只能下载已公开分享的版本，私有版本请在电脑上下载。");
+  await app.waitFor("text:正在下载…");
 
   await app.press("公开分享");
   await app.waitFor("text:fake/share/7f3a91c2/");
@@ -161,12 +161,6 @@ test("03n picks a version, 03o shares, copies and revokes", async () => {
 
   await app.press("公开分享");
   await app.waitFor("text:fake/share/7f3a91c2/");
-  await app.back();
-  await app.press("下载");
-  expect(app.openedUrls()).toEqual([
-    "http://fake/preview/1.9999.sig/index.html",
-    "http://fake/share/7f3a91c2/archive.zip",
-  ]);
 });
 
 test("a download-only version says so", async () => {

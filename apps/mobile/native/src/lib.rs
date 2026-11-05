@@ -43,18 +43,31 @@ pub struct Sharing;
 
 #[module]
 impl Sharing {
-    /// Offers a file to the rest of the phone: save to Files, AirDrop, another app. False where
-    /// there is no share sheet.
-    pub fn file(path: String) -> bool {
+    /// Fetches a file (with these headers) into the temporary directory and offers it to the rest
+    /// of the phone: save to Files, AirDrop, another app. Rejects with why it could not.
+    pub async fn download(
+        url: String,
+        name: String,
+        token: Option<String>,
+    ) -> Result<(), String> {
+        let mut request = HttpRequest::get(url);
+        if let Some(token) = token {
+            request = request.header("X-Eta-Token", token);
+        }
+        let response = fetch(request).await?;
+        if !response.ok() {
+            return Err(format!("HTTP {}", response.status()));
+        }
+        // The name comes from the host: keep only its last part.
+        let name = name.rsplit('/').next().unwrap_or("download");
+        let path = std::env::temp_dir().join(name);
+        std::fs::write(&path, &response.body).map_err(|error| error.to_string())?;
         #[cfg(target_os = "ios")]
         {
-            ios::share(path);
-            return true;
+            ios::share(path.to_string_lossy().into_owned());
+            return Ok(());
         }
         #[cfg(not(target_os = "ios"))]
-        {
-            let _ = path;
-            false
-        }
+        Err("no share sheet here".to_owned())
     }
 }

@@ -302,6 +302,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "eta-mobile-native"
+version = "0.1.0"
+dependencies = [
+ "block2",
+ "dispatch2",
+ "nsh-base",
+ "nsh-core",
+ "objc2",
+ "objc2-av-foundation",
+ "objc2-foundation",
+ "objc2-quartz-core",
+ "objc2-ui-kit",
+]
+
+[[package]]
 name = "fancy-regex"
 version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -873,21 +888,6 @@ name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
-
-[[package]]
-name = "eta-mobile-native"
-version = "0.1.0"
-dependencies = [
- "block2",
- "dispatch2",
- "nsh-base",
- "nsh-core",
- "objc2",
- "objc2-av-foundation",
- "objc2-foundation",
- "objc2-quartz-core",
- "objc2-ui-kit",
-]
 
 [[package]]
 name = "nsh-base"

@@ -285,6 +285,8 @@ export function Composer(props: {
   chat: Chat;
   /** The menu of send modes is open; the screen dismisses it on a press outside. */
   modes: Signal<boolean>;
+  /** The @ / # menu is open: over the keyboard it takes the room the screen has. */
+  menuOpen: Signal<boolean>;
   /** Sending jumps back to the live end, as in a terminal. */
   onSent: () => void;
   /** Send a failed reply's message again goes through the same target rules. */
@@ -421,6 +423,7 @@ export function Composer(props: {
       () => undefined,
     );
   });
+  effect(() => props.menuOpen.set(menu() !== null));
 
   const menu = computed((): MenuState | null =>
     buildMenu({
