@@ -6,8 +6,12 @@
  * themselves are exercised through the scripted model in the assignment tests, so the important
  * distinction is observable: Captain sends the instruction; the assigned agent creates the task.
  */
-import type { CaptainIdentityView } from "@eta/client-contracts";
-import { describe, expect, it } from "vitest";
+import type {
+  CaptainIdentityView,
+  InboxResponse,
+  InteractionView,
+} from "@eta/client-contracts";
+import { describe, expect, it, vi } from "vitest";
 import { until } from "./support/client";
 import { call, HANG, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
@@ -72,6 +76,72 @@ describe("captain identity", () => {
 });
 
 describe("captain assignment", () => {
+  it("addresses the group steward when no agent is named", async () => {
+    const { models } = scriptedModels(() => say("On it."));
+    const w = await world({ ...options, models });
+    const ada = await w.agent("Ada");
+    const bola = await w.agent("Bola");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [bola.id], "steward-default");
+    await w.watch(group.id);
+
+    const assigned = await w.host.product.captain.assign({
+      conversationId: group.id,
+      text: "Please handle this.",
+    });
+    await w.settled(group.id, assigned.replyIds[0]!);
+    expect(assigned.assignment.targets.map((target) => target.agentId)).toEqual(
+      [ada.id],
+    );
+    expect(
+      w.host.product.captain.store
+        .assignment(assigned.assignment.id)!
+        .targets.map((target) => target.agentId),
+    ).toEqual([ada.id]);
+    expect(
+      w.host.db
+        .query<{ n: number }, [string, string]>(
+          `SELECT COUNT(*) AS n FROM participant
+            WHERE conversation_id = ? AND agent_id = ?`,
+        )
+        .get(group.id, ada.id)!.n,
+    ).toBe(1);
+  });
+
+  it("lets Captain omit agentIds and address the steward through its tool", async () => {
+    let targetGroupId = "";
+    const { models } = scriptedModels((request) => {
+      if (request.agent === "Captain")
+        return request.lastRole === "toolResult"
+          ? say("Instruction sent.")
+          : call("assign_in_group", {
+              conversationId: targetGroupId,
+              text: "Please own the next step.",
+            });
+      return say("On it.");
+    });
+    const w = await world({ ...options, models });
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id], "captain-tool-steward");
+    targetGroupId = group.id;
+    await w.watch(group.id);
+    const captain = await w.host.product.captain.direct();
+    await w.watch(captain.conversationId);
+
+    const sent = await w.send(captain.conversationId, "Handle the group.");
+    await w.settled(captain.conversationId, sent.replies[0]!.id);
+    const assignment = w.host.product.captain.store.assignments()[0]!;
+    expect(assignment.targets.map((target) => target.agentId)).toEqual([
+      ada.id,
+    ]);
+    await until(() =>
+      w
+        .rows(group.id)
+        .some((row) => row.author === "captain" && row.status === "done"),
+    );
+  });
+
   it("authorizes an agent to create its own task without task.assignee", async () => {
     const { models } = scriptedModels((request) =>
       request.lastRole === "toolResult"
@@ -754,13 +824,320 @@ describe("captain controls", () => {
     expect(
       w.host.product.captain.store
         .reviews()
-        .find((review) => review.assignmentId === assigned.assignment.id),
+        .find(
+          (review) =>
+            review.kind === "assignment_settled" &&
+            Array.isArray(review.data.assignmentIds) &&
+            review.data.assignmentIds.includes(assigned.assignment.id),
+        ),
     ).toMatchObject({
       kind: "assignment_settled",
       data: {
+        assignmentIds: [assigned.assignment.id],
         lastAuthor: "agent",
         lastTextHead: "Verified.",
       },
+    });
+  });
+
+  it("groups assignments in one conversation into one review", async () => {
+    const { models } = scriptedModels(() => say("Done."));
+    const w = await world({ ...options, models });
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id], "grouped");
+    await w.watch(group.id);
+    const store = w.host.product.captain.store;
+    store.setSetting("supervisorEnabled", false, null);
+    const first = await w.host.product.captain.assign({
+      conversationId: group.id,
+      text: "Ada, first pass.",
+      agentIds: [ada.id],
+    });
+    await w.settled(group.id, first.replyIds[0]!);
+    const second = await w.host.product.captain.assign({
+      conversationId: group.id,
+      text: "Ada, second pass.",
+      agentIds: [ada.id],
+    });
+    await w.settled(group.id, second.replyIds[0]!);
+
+    store.setSetting("supervisorEnabled", true, null);
+    w.host.product.captainSupervisor.tick();
+    const reviews = store
+      .reviews()
+      .filter(
+        (review) =>
+          review.kind === "assignment_settled" &&
+          review.conversationId === group.id,
+      );
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]!.data.assignmentIds).toEqual(
+      expect.arrayContaining([first.assignment.id, second.assignment.id]),
+    );
+  });
+
+  it("relays an assigned agent's Inbox question through the user", async () => {
+    const { models } = scriptedModels((request) => {
+      if (request.agent === "Captain") {
+        const interactionId = (key: string) =>
+          new RegExp(`"${key}"\\s*:\\s*"([^"]+)"`).exec(
+            request.transcript.join("\n"),
+          )?.[1];
+        if (request.lastRole === "toolResult") {
+          if (request.last.includes("Use relay_inbox_to_user"))
+            return interactionId("interactionId") === undefined
+              ? say("No Inbox question.")
+              : call("relay_inbox_to_user", {
+                  interactionId: interactionId("interactionId"),
+                });
+          return say("Relayed.");
+        }
+        if (request.last.includes("[inbox_decision]"))
+          return call("answer_inbox", {
+            interactionId: interactionId("sourceInteractionId"),
+            selections: ["safe"],
+          });
+        if (request.last.includes("[task_stalled]"))
+          return say("Other review handled.");
+        return interactionId("interactionId") === undefined
+          ? say("No Inbox question.")
+          : call("answer_inbox", {
+              interactionId: interactionId("interactionId"),
+              text: "guess",
+            });
+      }
+      if (request.agent === "Ada")
+        return request.lastRole === "toolResult"
+          ? say(`Ada received: ${request.last}`)
+          : call(
+              "ask_user",
+              {
+                question: "Which route should the task take?",
+                options: [{ title: "fast" }, { title: "safe" }],
+              },
+              "ada-question",
+            );
+      return say("ok");
+    });
+    const w = await world({ ...options, models });
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id], "relay-inbox");
+    await w.watch(group.id);
+    w.client.subscribe("inbox");
+    const captain = await w.host.product.captain.direct();
+    await w.watch(captain.conversationId);
+
+    const assigned = await w.host.product.captain.assign({
+      conversationId: group.id,
+      text: "Ada, choose the route.",
+      agentIds: [ada.id],
+    });
+    const inbox = (): InteractionView[] =>
+      w.client.section<InteractionView[]>("inbox", "list") ?? [];
+    const sourceRow = () =>
+      w.host.db
+        .query<
+          {
+            id: string;
+            prompt: string;
+            options: string;
+            status: string;
+            answer: string | null;
+          },
+          [string, string]
+        >(
+          `SELECT id, prompt, options, status, answer FROM interaction
+            WHERE agent_id = ? AND conversation_id = ?
+            ORDER BY created_at DESC LIMIT 1`,
+        )
+        .get(ada.id, group.id);
+    await until(() => sourceRow()?.status === "pending");
+    const source = sourceRow()!;
+
+    await until(() =>
+      inbox().some(
+        (item) =>
+          item.status === "pending" &&
+          item.agentId === captain.agentId &&
+          item.conversationId === captain.conversationId,
+      ),
+    );
+    const relay = inbox().find(
+      (item) =>
+        item.status === "pending" &&
+        item.agentId === captain.agentId &&
+        item.conversationId === captain.conversationId,
+    )!;
+    expect(relay.prompt).toBe(source.prompt);
+    expect(relay.options).toEqual(JSON.parse(source.options) as string[]);
+    expect(inbox().some((item) => item.id === source.id)).toBe(false);
+    await until(() =>
+      w.host.product.captain.store
+        .reviews()
+        .some(
+          (review) =>
+            review.kind === "assignment_inbox" &&
+            review.data.interactionId === source.id &&
+            review.status === "completed",
+        ),
+    );
+
+    const store = w.host.product.captain.store;
+    const other = store.createReview({
+      kind: "task_stalled",
+      dedupeKey: "test:while-user-decides",
+      body: "This review must not wait for the user's answer.",
+    });
+    await w.host.product.captain.observeReviews();
+    await until(() => store.review(other.id)?.status === "completed");
+    expect(
+      w.host.product.captain.store
+        .reviews()
+        .some(
+          (review) =>
+            review.kind === "assignment_blocked" &&
+            review.conversationId === group.id,
+        ),
+    ).toBe(false);
+
+    const response: InboxResponse = {
+      kind: "selection",
+      selections: ["safe"],
+    };
+    await w.client.call("inbox", "answer", {
+      id: relay.id,
+      response,
+    });
+    await w.settled(group.id, assigned.replyIds[0]!);
+    await until(() =>
+      store
+        .reviews()
+        .some(
+          (review) =>
+            review.kind === "inbox_decision" &&
+            review.data.sourceInteractionId === source.id &&
+            review.status === "completed",
+        ),
+    );
+
+    const settledSource = sourceRow()!;
+    expect(settledSource.status).toBe("answered");
+    expect(JSON.parse(settledSource.answer!)).toEqual(response);
+    expect(
+      w.host.product.captain.store
+        .notifications()
+        .some(
+          (notification) =>
+            notification.kind === "inbox_pending" &&
+            notification.data.interactionId === source.id,
+        ),
+    ).toBe(false);
+  });
+
+  it("lets Captain re-ask after the user cancels a relayed question", async () => {
+    const { models } = scriptedModels((request) => {
+      if (request.agent === "Captain") {
+        const field = (key: string) =>
+          new RegExp(`"${key}"\\s*:\\s*"([^"]+)"`).exec(
+            request.transcript.join("\n"),
+          )?.[1];
+        if (request.lastRole === "toolResult") return say("Captain continued.");
+        if (request.last.includes("[inbox_decision]")) {
+          const sourceInteractionId = field("sourceInteractionId");
+          if (request.last.includes('"kind": "none"'))
+            return call("relay_inbox_to_user", {
+              interactionId: sourceInteractionId,
+            });
+          return call("answer_inbox", {
+            interactionId: sourceInteractionId,
+            selections: ["safe"],
+          });
+        }
+        return call("relay_inbox_to_user", {
+          interactionId: field("interactionId"),
+        });
+      }
+      if (request.agent === "Ada")
+        return request.lastRole === "toolResult"
+          ? say(`Ada received: ${request.last}`)
+          : call(
+              "ask_user",
+              {
+                question: "Which route should the task take?",
+                options: [{ title: "fast" }, { title: "safe" }],
+              },
+              "ada-cancel-question",
+            );
+      return say("ok");
+    });
+    const w = await world({ ...options, models });
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id], "relay-cancel");
+    await w.watch(group.id);
+    w.client.subscribe("inbox");
+    const captain = await w.host.product.captain.direct();
+    await w.watch(captain.conversationId);
+    const assigned = await w.host.product.captain.assign({
+      conversationId: group.id,
+      text: "Ada, choose the route.",
+      agentIds: [ada.id],
+    });
+    const inbox = (): InteractionView[] =>
+      w.client.section<InteractionView[]>("inbox", "list") ?? [];
+    const pendingCaptain = () =>
+      inbox().filter(
+        (item) =>
+          item.status === "pending" &&
+          item.agentId === captain.agentId &&
+          item.conversationId === captain.conversationId,
+      );
+    const sourceRow = () =>
+      w.host.db
+        .query<
+          { id: string; status: string; answer: string | null },
+          [string, string]
+        >(
+          `SELECT id, status, answer FROM interaction
+            WHERE agent_id = ? AND conversation_id = ?
+            ORDER BY created_at DESC LIMIT 1`,
+        )
+        .get(ada.id, group.id);
+
+    await until(() => pendingCaptain().length === 1);
+    const first = pendingCaptain()[0]!;
+    await w.client.call("inbox", "answer", {
+      id: first.id,
+      response: { kind: "none" },
+    });
+    await until(() => pendingCaptain().some((item) => item.id !== first.id));
+    const second = pendingCaptain().find((item) => item.id !== first.id)!;
+    expect(second.prompt).toBe(first.prompt);
+    expect(second.questionId).not.toBe(first.questionId);
+    await until(() =>
+      w.host.product.captain.store
+        .reviews()
+        .some(
+          (review) =>
+            review.kind === "inbox_decision" &&
+            review.data.relayInteractionId === first.id &&
+            review.data.userDecision !== null &&
+            (review.data.userDecision as { kind?: string }).kind === "none" &&
+            review.status === "completed",
+        ),
+    );
+
+    await w.client.call("inbox", "answer", {
+      id: second.id,
+      response: { kind: "selection", selections: ["safe"] },
+    });
+    await w.settled(group.id, assigned.replyIds[0]!);
+    await until(() => sourceRow()?.status === "answered");
+    expect(JSON.parse(sourceRow()!.answer!)).toEqual({
+      kind: "selection",
+      selections: ["safe"],
     });
   });
 
@@ -797,12 +1174,133 @@ describe("captain controls", () => {
         .some(
           (review) =>
             review.kind === "assignment_stalled" &&
-            review.assignmentId === assigned.assignment.id,
+            Array.isArray(review.data.assignmentIds) &&
+            review.data.assignmentIds.includes(assigned.assignment.id),
+        ),
+    ).toBe(false);
+
+    const latestMessage = w.host.db
+      .query<{ id: string }, [string]>(
+        `SELECT id FROM message WHERE conversation_id = ?
+          ORDER BY seq DESC LIMIT 1`,
+      )
+      .get(group.id)!.id;
+    w.host.db
+      .query("UPDATE message SET updated_at = ? WHERE id = ?")
+      .run(Date.now() - 31 * 60_000, latestMessage);
+    w.host.product.captainSupervisor.tick();
+    expect(
+      w.host.product.captain.store
+        .reviews()
+        .some(
+          (review) =>
+            review.kind === "assignment_stalled" &&
+            Array.isArray(review.data.assignmentIds) &&
+            review.data.assignmentIds.includes(assigned.assignment.id),
         ),
     ).toBe(true);
   });
 
-  it("does not advance an assignment checkpoint when its review failed", async () => {
+  it("does not raise a stalled alarm after that assignment sequence was reviewed", async () => {
+    const { models } = scriptedModels(() => say("Reviewed."));
+    const w = await world({ ...options, models });
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id], "reviewed");
+    await w.watch(group.id);
+    const assigned = await w.host.product.captain.assign({
+      conversationId: group.id,
+      text: "Ada, inspect it.",
+      agentIds: [ada.id],
+    });
+    await w.settled(group.id, assigned.replyIds[0]!);
+    const throughSeq = w.host.db
+      .query<{ last_seq: number }, [string]>(
+        "SELECT last_seq FROM conversation WHERE id = ?",
+      )
+      .get(group.id)!.last_seq;
+    const review = w.host.product.captain.store.createReview({
+      kind: "assignment_settled",
+      dedupeKey: `conversation:${group.id}:assignment_settled:${throughSeq}`,
+      assignmentId: assigned.assignment.id,
+      conversationId: group.id,
+      checkpointSeq: throughSeq,
+      body: "Already reviewed.",
+    });
+    w.host.product.captain.store.finishReview(review.id, "completed");
+    const latest = w.host.db
+      .query<{ id: string }, [string]>(
+        `SELECT id FROM message WHERE conversation_id = ?
+          ORDER BY seq DESC LIMIT 1`,
+      )
+      .get(group.id)!.id;
+    w.host.db
+      .query("UPDATE message SET updated_at = ? WHERE id = ?")
+      .run(Date.now() - 31 * 60_000, latest);
+
+    w.host.product.captainSupervisor.tick();
+    expect(
+      w.host.product.captain.store
+        .reviews()
+        .some(
+          (item) =>
+            item.kind === "assignment_stalled" &&
+            Array.isArray(item.data.assignmentIds) &&
+            item.data.assignmentIds.includes(assigned.assignment.id),
+        ),
+    ).toBe(false);
+  });
+
+  it("does not let a blocked review suppress a later stall at the same sequence", async () => {
+    const { models } = scriptedModels(() => say("Blocked."));
+    const w = await world({ ...options, models });
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id], "blocked-then-stalled");
+    await w.watch(group.id);
+    const assigned = await w.host.product.captain.assign({
+      conversationId: group.id,
+      text: "Ada, inspect it.",
+      agentIds: [ada.id],
+    });
+    await w.settled(group.id, assigned.replyIds[0]!);
+    const throughSeq = w.host.db
+      .query<{ last_seq: number }, [string]>(
+        "SELECT last_seq FROM conversation WHERE id = ?",
+      )
+      .get(group.id)!.last_seq;
+    const blocked = w.host.product.captain.store.createReview({
+      kind: "assignment_blocked",
+      dedupeKey: `conversation:${group.id}:assignment_blocked:${throughSeq}`,
+      assignmentId: assigned.assignment.id,
+      conversationId: group.id,
+      checkpointSeq: throughSeq,
+      body: "Blocked.",
+    });
+    w.host.product.captain.store.finishReview(blocked.id, "completed");
+    const latest = w.host.db
+      .query<{ id: string }, [string]>(
+        `SELECT id FROM message WHERE conversation_id = ?
+          ORDER BY seq DESC LIMIT 1`,
+      )
+      .get(group.id)!.id;
+    w.host.db
+      .query("UPDATE message SET updated_at = ? WHERE id = ?")
+      .run(Date.now() - 31 * 60_000, latest);
+
+    w.host.product.captainSupervisor.tick();
+    expect(
+      w.host.product.captain.store
+        .reviews()
+        .some(
+          (review) =>
+            review.kind === "assignment_stalled" &&
+            review.conversationId === group.id,
+        ),
+    ).toBe(true);
+  });
+
+  it("does not advance a conversation checkpoint when its review failed", async () => {
     const { w } = await captainWorld();
     const ada = await w.agent("Ada");
     const project = await w.project({ stewardId: ada.id });
@@ -825,9 +1323,9 @@ describe("captain controls", () => {
       "failed",
       "model unavailable",
     );
-    expect(
-      w.host.product.captain.store.assignmentCheckpoint(assigned.assignment.id),
-    ).toBe(0);
+    expect(w.host.product.captain.store.conversationCheckpoint(group.id)).toBe(
+      0,
+    );
     w.host.db
       .query("UPDATE captain_review SET next_attempt_at = 0 WHERE id = ?")
       .run(review.id);
@@ -836,6 +1334,89 @@ describe("captain controls", () => {
         .pendingReviews()
         .some((item) => item.id === review.id),
     ).toBe(true);
+  });
+
+  it("stops retrying after six failed attempts to start Captain", async () => {
+    const { w } = await captainWorld();
+    const direct = await w.host.product.captain.direct();
+    await w.watch(direct.conversationId);
+    const store = w.host.product.captain.store;
+    const review = store.createReview({
+      kind: "task_stalled",
+      dedupeKey: "test:delivery-failure",
+      body: "Captain cannot start for this review.",
+    });
+    const send = vi
+      .spyOn(w.host.product.engine, "send")
+      .mockRejectedValue(new Error("send unavailable"));
+
+    try {
+      for (let attempt = 1; attempt <= 6; attempt += 1) {
+        await w.host.product.captain.observeReviews();
+        expect(store.review(review.id)?.attempts).toBe(attempt);
+        if (attempt < 6)
+          w.host.db
+            .query("UPDATE captain_review SET next_attempt_at = 0 WHERE id = ?")
+            .run(review.id);
+      }
+    } finally {
+      send.mockRestore();
+    }
+
+    expect(store.review(review.id)).toMatchObject({
+      status: "failed",
+      attempts: 6,
+      error: "send unavailable",
+    });
+    expect(
+      store
+        .notifications()
+        .filter(
+          (notification) =>
+            notification.data.reviewId === review.id &&
+            notification.data.abandoned === true,
+        ),
+    ).toEqual([
+      expect.objectContaining({
+        kind: "review_failed",
+        body: expect.stringContaining("after 6 attempts"),
+      }),
+    ]);
+
+    await w.host.product.captain.observeReviews();
+    expect(store.review(review.id)?.attempts).toBe(6);
+  });
+
+  it("recovers a review stranded at the attempt ceiling", async () => {
+    const { w } = await captainWorld();
+    const store = w.host.product.captain.store;
+    const review = store.createReview({
+      kind: "task_stalled",
+      dedupeKey: "test:interrupted-delivery",
+      body: "The process stopped while this review was being sent.",
+    });
+    for (let attempt = 0; attempt < 6; attempt += 1)
+      store.beginReviews([review.id]);
+
+    expect(store.review(review.id)?.attempts).toBe(6);
+    expect(store.pendingReviews().some((item) => item.id === review.id)).toBe(
+      false,
+    );
+
+    w.host.product.captain.recoverExhaustedReviews();
+    expect(store.review(review.id)).toMatchObject({
+      status: "failed",
+      attempts: 6,
+    });
+    expect(
+      store
+        .notifications()
+        .filter(
+          (notification) =>
+            notification.data.reviewId === review.id &&
+            notification.data.abandoned === true,
+        ),
+    ).toHaveLength(1);
   });
 
   it("waits while Captain is busy and then delivers a batched review", async () => {
@@ -895,7 +1476,12 @@ describe("captain controls", () => {
         kind: "task_stalled",
         dedupeKey: `test:large-batch:${index}`,
         body: `Review ${index}`,
-        data: { detail: "x".repeat(5_000) },
+        data: Object.fromEntries(
+          Array.from({ length: 20 }, (_, item) => [
+            `detail-${item}`,
+            "x".repeat(item % 2 === 0 ? 500 : 5_000),
+          ]),
+        ),
       });
 
     await w.host.product.captain.observeReviews();
@@ -906,6 +1492,12 @@ describe("captain controls", () => {
       .rows(direct.conversationId)
       .find((row) => row.author === "system")!;
     expect(prompt.text.length).toBeLessThanOrEqual(13_000);
+    const dataLines = prompt.text
+      .split("\n")
+      .filter((line) => line.startsWith('{"truncated":true'));
+    expect(dataLines.length).toBeGreaterThan(0);
+    for (const line of dataLines)
+      expect(() => JSON.parse(line) as unknown).not.toThrow();
     expect(
       w.host.product.captain.store
         .reviews()

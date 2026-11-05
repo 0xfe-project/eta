@@ -58,10 +58,14 @@ export function captainPlugin(deps: CaptainPluginDeps, applied: () => void) {
           const mode = args.optionalString("mode");
           if (mode !== undefined && mode !== "queue" && mode !== "steer")
             throw new Error("captain.assign: mode must be queue or steer");
+          const rawAgentIds = (call.args as { agentIds?: unknown } | undefined)
+            ?.agentIds;
           const result = await service.assign({
             conversationId: args.string("conversationId"),
             text: args.string("text"),
-            agentIds: args.strings("agentIds"),
+            ...(rawAgentIds === undefined
+              ? {}
+              : { agentIds: args.strings("agentIds") }),
             ...(mode === undefined ? {} : { mode }),
             rootMessageId: args.nullableString("rootMessageId") ?? null,
           });

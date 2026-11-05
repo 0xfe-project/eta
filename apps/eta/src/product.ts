@@ -622,6 +622,10 @@ export function createProduct(options: {
     changed,
     warn,
   });
+  inbox.onOpened((interaction) => captain.inboxOpened(interaction));
+  inbox.onSettled((interaction, sourceInteractionId) =>
+    captain.inboxSettled(interaction, sourceInteractionId),
+  );
   const captainSupervisor = new CaptainSupervisor({
     store: captainStore,
     audit: captainAudit,
@@ -635,10 +639,10 @@ export function createProduct(options: {
     changed: () => wire?.pushNow("captain"),
   });
   later.captainSupervisor = captainSupervisor;
-  captainChangeObserver = captainSupervisor.tick;
+  captainChangeObserver = () => captainSupervisor.requestTick();
   board.onChange(() => {
     captain.refreshAssignments();
-    captainSupervisor.tick();
+    captainSupervisor.requestTick();
     wire?.pushNow("captain");
   });
   // Nothing is running yet, so the runs the last process left going cannot be.
@@ -980,7 +984,18 @@ export function createProduct(options: {
         "artifacts",
         artifactsPlugin({ artifacts, board }, applied("artifacts")),
       );
-      server.mount("inbox", inboxPlugin({ inbox }, applied("inbox")));
+      server.mount(
+        "inbox",
+        inboxPlugin(
+          {
+            inbox,
+            visible: (interaction) =>
+              interaction.status !== "pending" ||
+              captain.assignmentForInbox(interaction) === undefined,
+          },
+          applied("inbox"),
+        ),
+      );
       server.mount(
         "email",
         emailPlugin(

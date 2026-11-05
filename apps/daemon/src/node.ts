@@ -15,6 +15,7 @@
  */
 import type {
   DaemonInstall,
+  DaemonRunEvent,
   DaemonServiceParams,
   DaemonServiceResults,
   GitHubCredentials,
@@ -37,6 +38,7 @@ import { homedir, hostname, platform } from "node:os";
 import { isAbsolute, join } from "node:path";
 import process from "node:process";
 import { LINK_PROTOCOL } from "@eta/client-contracts";
+import { kernelOn } from "@eta/core";
 import { createOarRuntimes } from "@eta/runtime-oar";
 import {
   createConnection,
@@ -301,10 +303,36 @@ export class DaemonNode {
     this.#current = { socket, connection };
     // The things that can take a while are not pipe calls, which a connection applies one at a
     // time: they are calls of their own, and a stop on the pipe can overtake them.
-    peer.handle("run", async (raw) => {
-      const { session, text, images } = raw as DaemonServiceParams["run"];
+    peer.handle("run", async (raw, { emit }) => {
+      const {
+        session,
+        text,
+        images,
+        activity: wantsActivity,
+      } = raw as DaemonServiceParams["run"];
       const { managed } = await this.#service().open(session);
-      return await runAndWait(managed, text, undefined, images);
+      if (wantsActivity !== true)
+        return await runAndWait(managed, text, undefined, images);
+      const on = kernelOn(managed.session.kernel.ctx);
+      const activity = (kind: DaemonRunEvent["kind"]): void => {
+        try {
+          emit({ kind });
+        } catch {
+          // The run keeps going if a dying link can no longer carry its liveness signal.
+        }
+      };
+      const offs = [
+        on("tool:start", () => activity("tool-start")),
+        on("tool:update", () => activity("tool-update")),
+        on("tool:end", () => activity("tool-end")),
+        on("message:start", () => activity("message")),
+        on("message:end", () => activity("message")),
+      ];
+      try {
+        return await runAndWait(managed, text, undefined, images);
+      } finally {
+        for (const off of offs) off();
+      }
     });
     peer.handle("exec", async (raw, { signal }) => {
       const args = raw as DaemonServiceParams["exec"];

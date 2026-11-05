@@ -10,6 +10,7 @@
  * chains, steering, stopping and recovery are the same for both.
  */
 import type {
+  DaemonRunEvent,
   PromptImage,
   RunOutcome,
   ThinkingLevel,
@@ -17,6 +18,7 @@ import type {
 import type { ManagedSession, SessionsService } from "@eta/server";
 import type { AgentRecord } from "../agents/store";
 import type { MachineRecord } from "../machines/store";
+import { kernelOn } from "@eta/core";
 import { lastSeq, runAndWait } from "@eta/daemon";
 import { formatModelId } from "@eta/server";
 
@@ -42,6 +44,8 @@ export interface SessionHandle {
   ) => Promise<RunOutcome>;
   /** Ask the run in flight to stop. */
   abort: () => void;
+  /** Observe run activity while a caller needs liveness evidence. */
+  onActivity?: (listener: (kind: DaemonRunEvent["kind"]) => void) => () => void;
 }
 
 /** What a place needs to find or make an agent's session in a conversation. */
@@ -141,6 +145,21 @@ class LocalHandle implements SessionHandle {
 
   abort(): void {
     this.#managed.session.runner.abort();
+  }
+
+  onActivity(listener: (kind: DaemonRunEvent["kind"]) => void): () => void {
+    const ctx = this.#managed.session.kernel.ctx;
+    const offs = [
+      kernelOn(ctx)("tool:start", () => listener("tool-start")),
+      kernelOn(ctx)("tool:update", () => listener("tool-update")),
+      kernelOn(ctx)("tool:end", () => listener("tool-end")),
+      kernelOn(ctx)("message:start", () => listener("message")),
+      kernelOn(ctx)("message:update", () => listener("message")),
+      kernelOn(ctx)("message:end", () => listener("message")),
+    ];
+    return () => {
+      for (const off of offs) off();
+    };
   }
 }
 

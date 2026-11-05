@@ -14,6 +14,8 @@ import type {
 import type { Database } from "bun:sqlite";
 import type { AgentRecord } from "../agents/store";
 
+export const MAX_CAPTAIN_REVIEW_ATTEMPTS = 6;
+
 const jsonObject = (raw: string | null): Record<string, unknown> => {
   if (raw === null) return {};
   try {
@@ -759,6 +761,24 @@ export class CaptainStore {
     return row === null ? undefined : reviewOf(row);
   }
 
+  review(id: string): CaptainReviewRecord | undefined {
+    const row = this.#db
+      .query<ReviewRow, [string]>("SELECT * FROM captain_review WHERE id = ?")
+      .get(id);
+    return row === null ? undefined : reviewOf(row);
+  }
+
+  exhaustedReviews(): CaptainReviewRecord[] {
+    return this.#db
+      .query<ReviewRow, [number]>(
+        `SELECT * FROM captain_review
+          WHERE status IN ('pending', 'failed') AND attempts >= ?
+          ORDER BY created_at, rowid`,
+      )
+      .all(MAX_CAPTAIN_REVIEW_ATTEMPTS)
+      .map(reviewOf);
+  }
+
   reviews(limit = 100): CaptainReviewRecord[] {
     return this.#db
       .query<ReviewRow, [number]>(
@@ -771,13 +791,13 @@ export class CaptainStore {
   pendingReviews(limit = 20): CaptainReviewRecord[] {
     const now = Date.now();
     return this.#db
-      .query<ReviewRow, [number, number]>(
+      .query<ReviewRow, [number, number, number, number]>(
         `SELECT * FROM captain_review
-          WHERE status = 'pending'
-             OR (status = 'failed' AND next_attempt_at <= ?)
+          WHERE (status = 'pending' AND attempts < ?)
+             OR (status = 'failed' AND next_attempt_at <= ? AND attempts < ?)
           ORDER BY created_at, rowid LIMIT ?`,
       )
-      .all(now, limit)
+      .all(MAX_CAPTAIN_REVIEW_ATTEMPTS, now, MAX_CAPTAIN_REVIEW_ATTEMPTS, limit)
       .map(reviewOf);
   }
 
@@ -790,17 +810,31 @@ export class CaptainStore {
       .map(reviewOf);
   }
 
-  /** The highest conversation sequence already reviewed for an assignment. */
-  assignmentCheckpoint(assignmentId: string): number {
+  /** The highest conversation sequence already reviewed for a conversation. */
+  conversationCheckpoint(conversationId: string): number {
     return (
       this.#db
         .query<{ seq: number }, [string]>(
           `SELECT COALESCE(MAX(checkpoint_seq), 0) AS seq
              FROM captain_review
-            WHERE assignment_id = ?
+            WHERE conversation_id = ?
               AND status IN ('pending', 'running', 'completed')`,
         )
-        .get(assignmentId)?.seq ?? 0
+        .get(conversationId)?.seq ?? 0
+    );
+  }
+
+  conversationReviewedAt(conversationId: string, seq: number): boolean {
+    return (
+      this.#db
+        .query<{ found: number }, [string, number]>(
+          `SELECT 1 AS found FROM captain_review
+            WHERE conversation_id = ? AND checkpoint_seq = ?
+              AND kind IN ('assignment_settled', 'assignment_stalled')
+              AND status IN ('pending', 'running', 'completed')
+            LIMIT 1`,
+        )
+        .get(conversationId, seq) !== null
     );
   }
 
@@ -816,11 +850,26 @@ export class CaptainStore {
           .query(
             `UPDATE captain_review
                 SET status = 'running', message_id = ?, reply_id = ?, updated_at = ?,
-                    delivered_at = ?, error = NULL, attempts = attempts + 1,
-                    next_attempt_at = 0
+                    delivered_at = ?, error = NULL, next_attempt_at = 0
               WHERE id = ? AND status IN ('pending', 'failed')`,
           )
           .run(messageId, replyId, now, now, id);
+      }
+    })();
+  }
+
+  /** Count a delivery attempt before asking the engine to start Captain. */
+  beginReviews(ids: readonly string[]): void {
+    const now = Date.now();
+    this.#db.transaction(() => {
+      for (const id of ids) {
+        this.#db
+          .query(
+            `UPDATE captain_review
+                SET attempts = attempts + 1, updated_at = ?
+              WHERE id = ? AND status IN ('pending', 'failed')`,
+          )
+          .run(now, id);
       }
     })();
   }

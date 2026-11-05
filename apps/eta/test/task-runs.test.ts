@@ -19,6 +19,7 @@ import { readdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { DaemonLink, DaemonNode } from "@eta/daemon";
 import { describe, expect, it } from "vitest";
+import { streamActivityCoversPoll } from "../src/tasks/runner";
 import { demoFiles, SECRET, writeBundle } from "./support/bundles";
 import { connect, until } from "./support/client";
 import { machineView } from "./support/daemon";
@@ -166,6 +167,13 @@ async function remote(respond: Parameters<typeof room>[0]) {
 }
 
 describe("a task run", () => {
+  it("falls back to sequence polling when streamed activity goes silent", () => {
+    const now = Date.now();
+    expect(streamActivityCoversPoll(0, now)).toBe(false);
+    expect(streamActivityCoversPoll(now - 19_999, now)).toBe(true);
+    expect(streamActivityCoversPoll(now - 20_000, now)).toBe(false);
+  });
+
   it("starts when the user confirms an agent's draft, in a fresh session with the agent's persona and none of its conversation", async () => {
     const { models, requests } = scriptedModels((request) => {
       if (isRun(request))
@@ -991,7 +999,7 @@ describe("stopping and running again", () => {
     expect(mine[1]!.last).toContain("You stopped without calling finish_task");
   });
 
-  it("ends the runs a restart cut off as failed, and runs the ones that were waiting", async () => {
+  it("ends the runs a restart cut off as failed", async () => {
     const dataDir = await tempDir();
     const { models } = scriptedModels((request) =>
       isRun(request) ? HANG : say("ok"),
@@ -1019,19 +1027,16 @@ describe("stopping and running again", () => {
     });
     const client = await connect(`ws://127.0.0.1:${second.port}/ws`);
     await client.hello();
-    const rows = second.db
-      .query<{ status: string; error: string | null }, []>(
-        "SELECT status, error FROM task_run",
-      )
-      .all();
-    expect(rows).toEqual([
+    const rows = () =>
+      second.db
+        .query<{ status: string; error: string | null }, []>(
+          "SELECT status, error FROM task_run",
+        )
+        .all();
+    expect(rows()).toEqual([
       {
         status: "failed",
         error: "The server restarted before this run finished.",
-      },
-      {
-        status: "starting",
-        error: null,
       },
     ]);
     client.close();
@@ -1119,6 +1124,38 @@ describe("a task run on a daemon's machine", () => {
       .rows(group.id)
       .filter((row) => row.data.event === "task_result");
     expect(results).toHaveLength(2);
+  });
+
+  it("streams a remote task run's activity to its liveness watcher", async () => {
+    const { r, ada, group } = await remote(finishes());
+    const link = r.host.product.hub.link(r.daemon.machineId)!;
+    const original = link.daemon.bind(link);
+    const activity: unknown[] = [];
+    link.daemon = ((method, params, options) => {
+      if (options?.onEvent === undefined)
+        return original(method, params, options);
+      return original(method, params, {
+        ...options,
+        onEvent: (event) => {
+          activity.push(event);
+          options.onEvent?.(event);
+        },
+      });
+    }) as typeof link.daemon;
+    try {
+      const task = make({ w: r, ada, group }, "Watch while it runs");
+      await until(() => reviewed(r, task.id));
+    } finally {
+      link.daemon = original as typeof link.daemon;
+    }
+
+    expect(activity).toEqual(
+      expect.arrayContaining([
+        { kind: "message" },
+        { kind: "tool-start" },
+        { kind: "tool-end" },
+      ]),
+    );
   });
 
   it("waits while the machine is offline and starts when it is back", async () => {

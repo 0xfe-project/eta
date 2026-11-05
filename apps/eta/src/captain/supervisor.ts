@@ -1,3 +1,4 @@
+import type { BoardTaskView, InteractionView } from "@eta/client-contracts";
 import type { Inbox } from "../inbox/inbox";
 import type { TaskBoard } from "../tasks/board";
 import type { TaskRunner } from "../tasks/runner";
@@ -23,6 +24,7 @@ export interface CaptainSupervisorDeps {
 
 const MINUTE = 60_000;
 const TICK = MINUTE;
+const CHANGE_DEBOUNCE_MS = 150;
 const ACTIVE = new Set(["todo", "in_progress"]);
 
 /** Reserved signal from a future proactive source. No source is enabled in this release. */
@@ -35,7 +37,10 @@ export class CaptainSupervisor {
   readonly #deps: CaptainSupervisorDeps;
   readonly #now: () => number;
   #timer: ReturnType<typeof setInterval> | undefined;
+  #requestTimer: ReturnType<typeof setTimeout> | undefined;
   #running = false;
+  #requested = false;
+  #stopped = true;
   #lastPatrol = 0;
   readonly #eventListeners = new Set<(event: CaptainWakeEvent) => void>();
 
@@ -46,6 +51,7 @@ export class CaptainSupervisor {
 
   start(): void {
     if (this.#timer !== undefined) return;
+    this.#stopped = false;
     this.tick();
     this.#lastPatrol = this.#now();
     this.#timer = setInterval(() => this.tick(), TICK);
@@ -57,8 +63,26 @@ export class CaptainSupervisor {
   }
 
   stop(): void {
+    this.#stopped = true;
     if (this.#timer !== undefined) clearInterval(this.#timer);
+    if (this.#requestTimer !== undefined) clearTimeout(this.#requestTimer);
     this.#timer = undefined;
+    this.#requestTimer = undefined;
+    this.#requested = false;
+  }
+
+  /** A domain change happened: coalesce work instead of scanning product state on every write. */
+  requestTick(delayMs = CHANGE_DEBOUNCE_MS): void {
+    if (this.#stopped) return;
+    this.#requested = true;
+    if (this.#requestTimer !== undefined) return;
+    this.#requestTimer = setTimeout(() => {
+      this.#requestTimer = undefined;
+      if (!this.#requested) return;
+      this.#requested = false;
+      this.tick();
+    }, delayMs);
+    this.#requestTimer.unref?.();
   }
 
   /**
@@ -77,30 +101,42 @@ export class CaptainSupervisor {
 
   /** Look at failures, inactivity, Inbox age and the patrol interval. Re-entrant calls coalesce. */
   tick = (): void => {
-    if (this.#running) return;
-    const settings = this.#deps.store.settings();
-    if (!settings.supervisorEnabled) return;
+    if (this.#stopped) return;
+    if (this.#requestTimer !== undefined) {
+      clearTimeout(this.#requestTimer);
+      this.#requestTimer = undefined;
+    }
+    this.#requested = false;
+    if (this.#running) {
+      this.#requested = true;
+      return;
+    }
     this.#running = true;
     try {
+      const settings = this.#deps.store.settings();
+      if (!settings.supervisorEnabled) return;
+      const tasks = this.#deps.board.list();
+      const inbox = this.#deps.inbox.list();
       this.#notifyPendingOperations();
-      this.#handleFailures(settings.retryLimit);
-      this.#handleStuck(settings.stuckMinutes);
-      this.#handleInbox(settings.inboxMinutes);
-      void this.#deps.captain.observeReviews().catch((error: unknown) => {
-        this.#deps.warn?.(
-          `[eta] Captain review observer failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      });
+      this.#handleFailures(tasks, settings.retryLimit);
+      this.#handleStuck(tasks, settings.stuckMinutes);
+      this.#handleInbox(inbox, settings.inboxMinutes);
+      void this.#deps.captain
+        .observeReviews({ tasks, inbox, settings })
+        .catch((error: unknown) => {
+          this.#deps.warn?.(
+            `[eta] Captain review observer failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
       const now = this.#now();
       if (now - this.#lastPatrol >= settings.patrolMinutes * MINUTE) {
         this.#lastPatrol = now;
         void this.#deps.audit.record({
           action: "captain.patrol",
           data: {
-            tasks: this.#deps.board.list().length,
-            pendingInbox: this.#deps.inbox
-              .list()
-              .filter((item) => item.status === "pending").length,
+            tasks: tasks.length,
+            pendingInbox: inbox.filter((item) => item.status === "pending")
+              .length,
             pendingOperations: this.#deps.store
               .operations()
               .filter((operation) => operation.status === "pending").length,
@@ -114,6 +150,7 @@ export class CaptainSupervisor {
     } finally {
       this.#running = false;
       this.#deps.changed?.();
+      if (this.#requested) this.requestTick(0);
     }
   };
 
@@ -129,8 +166,8 @@ export class CaptainSupervisor {
     }
   }
 
-  #handleFailures(limit: number): void {
-    for (const task of this.#deps.board.list()) {
+  #handleFailures(tasks: readonly BoardTaskView[], limit: number): void {
+    for (const task of tasks) {
       if (
         task.status === "backlog" ||
         task.status === "done" ||
@@ -213,9 +250,9 @@ export class CaptainSupervisor {
     }
   }
 
-  #handleStuck(minutes: number): void {
+  #handleStuck(tasks: readonly BoardTaskView[], minutes: number): void {
     const now = this.#now();
-    for (const task of this.#deps.board.list()) {
+    for (const task of tasks) {
       if (task.status === "blocked") {
         this.#deps.store.createReview({
           kind: "task_blocked",
@@ -259,10 +296,26 @@ export class CaptainSupervisor {
     }
   }
 
-  #handleInbox(minutes: number): void {
+  #handleInbox(inbox: readonly InteractionView[], minutes: number): void {
     const now = this.#now();
-    for (const item of this.#deps.inbox.list()) {
+    for (const item of inbox) {
       if (item.status !== "pending") continue;
+      if (this.#deps.inbox.relayOf(item.id) !== null) {
+        if (now - item.createdAt < minutes * MINUTE) continue;
+        this.#deps.store.addNotificationOnce({
+          key: `inbox-relay:${item.id}:${item.revision}`,
+          kind: "inbox_relay_waiting",
+          body: `Captain is waiting for the user's decision: ${item.prompt}`,
+          data: {
+            interactionId: item.id,
+            sessionId: item.sessionId,
+            conversationId: item.conversationId,
+          },
+        });
+        continue;
+      }
+      // Captain-assigned questions are relayed immediately and tracked as their own review.
+      if (this.#deps.captain.assignmentForInbox(item) !== undefined) continue;
       if (now - item.createdAt < minutes * MINUTE) continue;
       this.#deps.store.createReview({
         kind: "inbox_pending",

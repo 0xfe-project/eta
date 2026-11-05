@@ -15,6 +15,7 @@ import type { CaptainService } from "./service";
 import { readFile } from "node:fs/promises";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
+import { interactionId } from "../inbox/store";
 import { redactJson, redactText, redactValue } from "./redact";
 
 export interface CaptainToolDeps {
@@ -321,11 +322,11 @@ export function captainSessionTools(
     const assign = defineTool({
       name: "assign_in_group",
       description:
-        "Send a visible Captain instruction to one or more members of an existing group. This only chats and authorizes work; the target agents create and execute their own tasks.",
+        "Send a visible Captain instruction to one or more members of an existing group. With no agentIds, speak to the group's steward, like a user message without mentions. This only chats and authorizes work; the target agents create and execute their own tasks.",
       parameters: Type.Object({
         conversationId: Type.String(),
         text: Type.String(),
-        agentIds: Type.Array(Type.String(), { minItems: 1 }),
+        agentIds: Type.Optional(Type.Array(Type.String())),
         mode: Type.Optional(
           Type.Union([Type.Literal("queue"), Type.Literal("steer")]),
         ),
@@ -428,7 +429,7 @@ export function captainSessionTools(
     const answerInbox = defineTool({
       name: "answer_inbox",
       description:
-        "Answer a pending Inbox question. Prefer a freeform answer. Escalate important decisions to the user through ask_user instead of guessing.",
+        "Answer an Inbox question that does not belong to Captain-dispatched work. Questions from assigned agents must use relay_inbox_to_user.",
       parameters: Type.Object({
         interactionId: Type.String(),
         text: Type.Optional(Type.String()),
@@ -436,6 +437,23 @@ export function captainSessionTools(
       }),
       execute: async (args) => {
         try {
+          const source = deps.inbox.get(args.interactionId);
+          if (source !== undefined && deps.service.assignmentForInbox(source)) {
+            const relay = deps.inbox.relayQuestionOf(source.id);
+            const decision =
+              relay === undefined
+                ? undefined
+                : deps.service.store.reviewByDedupe(
+                    `inbox-decision:${relay.id}:${relay.revision}`,
+                  );
+            if (
+              decision === undefined ||
+              (decision.status !== "pending" && decision.status !== "running")
+            )
+              return toolError(
+                "This question belongs to Captain-dispatched work. Use relay_inbox_to_user and answer it only in the resulting inbox_decision review.",
+              );
+          }
           const response: InboxResponse =
             args.selections !== undefined && args.selections.length > 0
               ? { kind: "selection", selections: args.selections }
@@ -448,6 +466,56 @@ export function captainSessionTools(
               ? "Inbox answer delivered."
               : "The question is no longer waiting.",
             result,
+          );
+        } catch (error) {
+          return toolError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    });
+
+    const relayInboxToUser = defineTool({
+      name: "relay_inbox_to_user",
+      description:
+        "Send a Captain-assigned agent's question to the user and finish this turn. The user's answer later starts an inbox_decision review that writes the decision back to the original question.",
+      parameters: Type.Object({ interactionId: Type.String() }),
+      execute: async (args) => {
+        try {
+          const source = deps.inbox.get(args.interactionId);
+          if (source === undefined) return toolError("No such Inbox question.");
+          if (source.status !== "pending")
+            return text("That Inbox question is no longer waiting.");
+          if (deps.service.assignmentForInbox(source) === undefined)
+            return toolError(
+              "This Inbox question does not belong to Captain-dispatched work.",
+            );
+
+          const server = deps.server();
+          if (server === undefined)
+            return toolError("The session host is starting.");
+          const managed = await server.sessions.session(meta.id);
+          const ask = managed?.session.ask;
+          if (ask === undefined)
+            return toolError("Captain's question channel is unavailable.");
+
+          const questionId = `relay:${source.id}:${source.revision}:${crypto.randomUUID()}`;
+          const waiting = ask.ask({
+            questionId,
+            question: source.prompt,
+            ...(source.options.length === 0 ? {} : { options: source.options }),
+            ...(source.multi ? { multi: true } : {}),
+          });
+          const relay = deps.inbox.get(interactionId(meta.id, questionId));
+          if (relay === undefined || relay.status !== "pending") {
+            ask.abort(questionId);
+            return toolError("The relay question did not open for the user.");
+          }
+          deps.inbox.setRelayOf(relay.id, source.id);
+          void waiting.catch(() => undefined);
+          return text(
+            "The question is now waiting in the user's Inbox. This turn can finish; the user's answer will start an inbox_decision review.",
+            { interactionId: source.id, relayInteractionId: relay.id },
           );
         } catch (error) {
           return toolError(
@@ -833,6 +901,7 @@ export function captainSessionTools(
       controlTask,
       updateTask,
       answerInbox,
+      relayInboxToUser,
       promptHistory,
       diffPrompt,
       setPrompt,

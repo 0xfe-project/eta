@@ -183,7 +183,13 @@ export interface MachineActionResults {
 /** What the primary asks of the daemon that may take a while (`svc` calls). */
 export interface DaemonServiceParams {
   /** Give the session some words as its next run and wait until it is quiet. */
-  run: { session: string; text: string; images?: PromptImage[] };
+  run: {
+    session: string;
+    text: string;
+    images?: PromptImage[];
+    /** Stream low-frequency liveness events back while the run is in flight. */
+    activity?: boolean;
+  };
   /** Run a script on the machine, the way the SSH transport does. */
   exec: { script: string; inputBase64?: string; timeoutMs?: number };
   /**
@@ -196,6 +202,12 @@ export interface DaemonServiceParams {
   /** The external agent runtimes this machine has, with their models; `fresh` asks them again. */
   runtimes: { fresh?: boolean };
 }
+
+/** Evidence that a remote run is alive, streamed while it is in flight. */
+export interface DaemonRunEvent {
+  kind: "tool-start" | "tool-update" | "tool-end" | "message";
+}
+
 export interface DaemonServiceResults {
   run: RunOutcome;
   upgrade: { ok: true } | { ok: false; reason: string };

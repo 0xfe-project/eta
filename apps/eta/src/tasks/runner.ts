@@ -138,6 +138,16 @@ interface Ended {
 }
 
 const ACTIVITY_POLL_MS = 10_000;
+const ACTIVITY_STREAM_STALE_MS = ACTIVITY_POLL_MS * 2;
+
+export function streamActivityCoversPoll(
+  lastStreamedAt: number,
+  now: number,
+): boolean {
+  return (
+    lastStreamedAt !== 0 && now - lastStreamedAt < ACTIVITY_STREAM_STALE_MS
+  );
+}
 
 const NUDGE =
   "You stopped without calling finish_task. If the task is done, or you cannot go on without " +
@@ -1065,25 +1075,63 @@ export class TaskRunner implements TaskRuns {
   #watchActivity(runId: string, handle: SessionHandle): () => void {
     let stopped = false;
     let seen = -1;
-    const look = async (): Promise<void> => {
-      if (stopped) return;
-      try {
-        const seq = await handle.lastSeq();
-        if (stopped || seq <= seen) return;
-        seen = seq;
-        this.#deps.runs.touch(runId);
-      } catch (error) {
-        this.#deps.warn(
-          `[eta] could not read run activity: ${messageOf(error)}`,
-        );
-      }
+    let lastStreamedAt = 0;
+    let failures = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const touch = (): void => {
+      if (!stopped) this.#deps.runs.touch(runId);
     };
-    void look();
-    const timer = setInterval(() => void look(), ACTIVITY_POLL_MS);
-    timer.unref?.();
+    const off = handle.onActivity?.(() => {
+      // Only a new event is progress. An in-flight tool that never updates is exactly the silent
+      // hang the Supervisor needs to catch, so the start event must not keep renewing the run.
+      lastStreamedAt = Date.now();
+      touch();
+    });
+    // Starting the run is itself progress. Until an activity stream proves it is available, the
+    // sequence poll below remains the fallback for daemons and session hosts that cannot stream.
+    touch();
+    let look: () => Promise<void>;
+    const schedule = (delay: number): void => {
+      if (stopped) return;
+      timer = setTimeout(() => void look(), delay);
+      timer.unref?.();
+    };
+    look = async (): Promise<void> => {
+      if (stopped) return;
+      let delay = ACTIVITY_POLL_MS;
+      try {
+        if (streamActivityCoversPoll(lastStreamedAt, Date.now())) {
+          // The session's event stream is live: polling another machine's journal would only add
+          // an RPC every ten seconds while the stream already carries the liveness evidence.
+        } else {
+          // A dead event stream must not disable the fallback permanently.
+          lastStreamedAt = 0;
+          const seq = await handle.lastSeq();
+          if (stopped) return;
+          if (seq > seen) {
+            seen = seq;
+            touch();
+          }
+        }
+        failures = 0;
+      } catch (error) {
+        failures += 1;
+        delay = Math.min(
+          5 * 60_000,
+          ACTIVITY_POLL_MS * 2 ** Math.min(failures - 1, 6),
+        );
+        if (failures === 1 || (failures & (failures - 1)) === 0)
+          this.#deps.warn(
+            `[eta] could not read run activity (failure ${failures}): ${messageOf(error)}`,
+          );
+      }
+      schedule(delay);
+    };
+    schedule(ACTIVITY_POLL_MS);
     return () => {
       stopped = true;
-      clearInterval(timer);
+      if (timer !== undefined) clearTimeout(timer);
+      off?.();
     };
   }
 
