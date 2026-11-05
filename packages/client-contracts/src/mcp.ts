@@ -1,7 +1,7 @@
 /**
  * The `mcp` target: the MCP servers of every agent on the primary, as the settings page sees them.
  *
- * One section, `list`: for each agent and each source its servers come from (a bundle, the user's
+ * One section, `list`: for each agent and each source its servers come from (the user's
  * `~/.eta/mcp.json`, a project's `.mcp.json`), the server's name, how it is reached, whether it is
  * connected, how many tools it has, its last error and, for an OAuth server, whether anyone has
  * signed in. Credentials never leave the host: a sign-in is a URL to open and a redirect URL to
@@ -34,7 +34,7 @@ export interface McpServerView {
   agentId: string;
   agentName: string;
   server: string;
-  /** Where the server is declared: `bundle:<name>`, `~/.eta/mcp.json` or `.mcp.json`. */
+  /** Where the server is declared: `~/.eta/mcp.json` or `.mcp.json`. */
   source: string;
   transport: McpTransport;
   lifecycle: McpLifecycleKind;

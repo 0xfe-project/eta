@@ -104,7 +104,7 @@ export interface LifecycleRun {
   sessionId?: string | undefined;
   turnId?: string | undefined;
   model?: string | undefined;
-  /** Layers for this run alone, after the host's (the rules of the bundles its agent loads). */
+  /** Layers for this run alone, after the host's. */
   extra?: readonly ConfigInput[] | undefined;
 }
 

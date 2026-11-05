@@ -41,8 +41,6 @@ export interface AgentView {
    */
   model: string | null;
   thinkingLevel: ThinkingLevel | null;
-  /** The bundles it loads, by name. */
-  bundles: string[];
   /**
    * The machine it runs on, when it is pinned to one: its sessions are made there whatever
    * machine the conversation's or task's project is on, and an external runtime is that machine's.
@@ -349,8 +347,6 @@ export interface AgentFields {
   /** `provider:modelId` (`runtime:modelId` on an external runtime); null clears it. */
   model?: string | null;
   thinkingLevel?: ThinkingLevel | null;
-  /** The bundles to load, by name. */
-  bundles?: string[];
   /** The machine to run on; null follows the project. */
   machineId?: string | null;
 }

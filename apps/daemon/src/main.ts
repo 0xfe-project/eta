@@ -159,7 +159,6 @@ async function run(): Promise<void> {
   node = new DaemonNode({
     dataDir,
     version: VERSION,
-    primaryUrl: identity.url,
     upgrade: async (wanted) => {
       const done = await upgrade(wanted, {
         identity,

@@ -3,8 +3,7 @@
  * number of owners, and `scope()` to get one owner's view of its servers.
  *
  * A host (the primary node, or a daemon) creates one `McpManager`. For each agent session it asks
- * for a scope with the sources that apply (the agent's bundles, the user's file, the session's
- * project file); scopes of the same owner share connections, so a second session of an agent does
+ * for a scope with the sources that apply (the user's file, the session's project file); scopes of the same owner share connections, so a second session of an agent does
  * not start the agent's servers again.
  */
 

@@ -37,8 +37,6 @@ WebSocket 管道会在这台电脑上以运行 host 的用户身份执行命令�
 
 `/machines/enroll` 与 `/machines/connect` 同样不经这两道检查：daemon 没有 cookie，也不发 origin。它们各自校验自己携带的东西（安装码、设备凭据），见[机器与 daemon](machines.md)。
 
-`/llm/v1/*` 同理：daemon 上的会话经它用 LLM 网关，凭据是智能体 key（`Authorization: Bearer etak.…`，只开网关的 `/v1`），宿主自己的 key 在这里无效，其他路径不可达，见[环境包](bundles.md#llm-网关的-key)。
-
 ## 放在反向代理后面
 
 代理需要：升级 WebSocket（`/ws`、`/machines/connect`）、传 `Host` 与 `X-Forwarded-Proto`。如果代理改写了 `Host`，把页面的外部地址加进 `--allow-origin`（如 `--allow-origin https://eta.example.com`）。令牌门由 host 自己管，代理处不必重复，但终止 TLS 后别让 host 直接暴露在公网。

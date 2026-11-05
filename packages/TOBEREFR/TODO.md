@@ -30,10 +30,6 @@ git checkout 2d4d160d -- <path> # 取回原文件
   - `toolMiddleware`、`sessionAttach`（akhook）和 `envFor` 被删掉。
   - 删掉的方法：`#akhook()`、`#needsApproval()`（`tool.gate` 的调用方）。
   - 删掉的选项：`DaemonNodeOptions.akhookUserConfig`、`DaemonNodeOptions.mcp`、`Opening.akhook`。
-- `src/bundle.ts`：
-  - 删掉了 `bundleMcpServers`、`bundleHookLayer`，以及 `SessionVars`、`expand`、`varsOf` 等变量展开逻辑。
-  - `readBundle` 仍读 `mcp.json` 和 `akhook.yml`，只做形状检查（名字、mapping、command 或 url 必须有一个），读进来的值保留在 `Bundle.mcp` / `Bundle.hooks`，但没有人启动或应用它们。
-  - 恢复时直接从 2d4d160d 取回这两个函数。
 - `package.json`：去掉了 `@eta/mcp`、`@eta/plugin-akhook` 依赖。
 
 ## apps/eta 被删的接入点
@@ -47,7 +43,6 @@ git checkout 2d4d160d -- <path> # 取回原文件
 - `src/access.ts`：去掉了 `MCP_CALLBACK_PATH`（`/mcp/oauth/callback`）这条免 token 路径。
 - `src/machines/service.ts`：去掉了 `mcp.credential` 这个 link handler 和 `mcpCredential` 依赖。`tool.gate` handler 保留，但 daemon 侧已经没人调用。
 - `src/machines/remote-place.ts`：远程会话 open 时不再带 `akhook` 层。
-- `src/bundles/bundles.ts`：删掉了 `mcpSourcesFor`、`layersFor`，只剩 `skillDirsFor`。
 - `package.json`：去掉了 `@eta/mcp`、`@eta/plugin-akhook` 依赖。
 
 ## 跟着变的测试
@@ -60,13 +55,11 @@ git checkout 2d4d160d -- <path> # 取回原文件
 - `apps/eta/test/remote-mcp.test.ts`
 - `apps/daemon/test/mcp-host.test.ts`
 
-还有 `apps/eta/test/approvals.test.ts` 末尾 `akhookMiddleware` 的单测，以及 `apps/daemon/test/bundle.test.ts` 里测 `bundleMcpServers` / `bundleHookLayer` 的用例。
+还有 `apps/eta/test/approvals.test.ts` 末尾 `akhookMiddleware` 的单测。
 
 用 `describe.skip` / `it.skip` 跳过、并标了 `// TOBEREFR: see packages/TOBEREFR/TODO.md` 的（能力回来后去掉 skip）：
 
 - `approvals.test.ts`：审批列表会拦截工具。原来靠 akhook 中间件拦截，要等 authorize 接回来。
-- `bundles.test.ts`、`bundles-remote.test.ts`、`bundles-gateway.test.ts`：bundle 的 MCP 工具、hook 规则、网关 key 下发。
-- `task-runs.test.ts`：任务运行带上 bundle 的 MCP 工具和 hook 规则。
 - `github-host.test.ts`：akhook 的 `gh pr create` 规则，以及 daemon shell 带 GitHub 登录（用的是 `bash` 工具）。
 - `remote-conversations.test.ts`：daemon 上的 `bash` 工具、审批、`publish_artifact` 通过 link 读远端文件。
 
@@ -82,5 +75,4 @@ git checkout 2d4d160d -- <path> # 取回原文件
 
 1. MCP 工具放在 realm 里（`binding()`）还是保留成静态工具？这要和工具面动态化（#279）一起定。
 2. 审批：`approvals` 列表（inbox `setApprovals`）怎样接到 `binding()` 的 authorize 上？daemon 上的会话还走 `tool.gate` 吗？
-3. bundle 里的 `mcp.json` / `akhook.yml` 还保留吗？不保留的话 `readBundle` 的读取和 `Bundle.mcp`/`hooks` 字段一起删。
-4. 远程会话的文件和 shell：`ExecutionEnv` 没了以后，daemon 上的 realm 直接用 node:fs 和 `$`，primary 侧的工具（如 `publish_artifact`）怎样读远端文件？
+3. 远程会话的文件和 shell：`ExecutionEnv` 没了以后，daemon 上的 realm 直接用 node:fs 和 `$`，primary 侧的工具（如 `publish_artifact`）怎样读远端文件？

@@ -16,8 +16,7 @@
   "editor": {
     "tabs": {
       "general": "常规",
-      "instructions": "指令",
-      "environment": "环境包"
+      "instructions": "指令"
     },
     "sectionsLabel": "智能体设置分类"
   },

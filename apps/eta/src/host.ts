@@ -31,7 +31,6 @@ import {
 import { createWebRoutes } from "./http";
 import { GatewayModels } from "./llm/models";
 import { llmPlugin } from "./llm/plugin";
-import { LLM_ROUTE } from "./llm/route";
 import { openLlm } from "./llm/runtime";
 import { DaemonBuilds, defaultBuildsDir } from "./machines/builds";
 import { Tailscale } from "./machines/tailscale";
@@ -167,7 +166,6 @@ export async function startHost(options: HostOptions): Promise<Host> {
       ...(options.tasks === undefined ? {} : { tasks: options.tasks }),
       artifactLimits: options.artifactLimits,
       memoryUrl: options.memoryUrl,
-      gateway: () => llm,
       publicUrl: options.publicUrl,
       github: options.github,
       ...(options.web === undefined || options.web === false
@@ -203,12 +201,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       hostname,
       // The product's pages (artifacts) first; they answer for their own paths, found or not.
       fetch: async (request) =>
-        (llm !== undefined &&
-        new URL(request.url).pathname.startsWith(LLM_ROUTE)
-          ? await llm.forward(request)
-          : undefined) ??
-        (await product.fetch(request)) ??
-        (await web(request)),
+        (await product.fetch(request)) ?? (await web(request)),
       authorize: access.authorize,
       endpoints: product.endpoints,
       remoteSessions: product.remote,
@@ -222,7 +215,6 @@ export async function startHost(options: HostOptions): Promise<Host> {
       // What the product adds to every session it owns: the agent's words in the system prompt,
       // and, from each of its features, tools, tool middleware and an ear for questions.
       agentPromptFor: product.engine.agentPromptFor,
-      skillDirsFor: product.skillDirsFor,
       ...product.sessionHooks,
       generated: product.generated,
       // An agent on an external runtime has its sessions' runs taken by it (`@eta/runtime-oar`).
@@ -243,7 +235,6 @@ export async function startHost(options: HostOptions): Promise<Host> {
         llm = await openLlm({
           ...(options.llm === true ? {} : options.llm),
           dataDir: options.dataDir,
-          hostOrigin: localOrigin(hostname, server.server.port),
           models: gatewayModels,
           warn,
         });
@@ -289,15 +280,4 @@ export async function startHost(options: HostOptions): Promise<Host> {
       return closing;
     },
   };
-}
-
-/** The host's address as this machine reaches it: a wildcard bind is reached on loopback. */
-function localOrigin(hostname: string, port: number | undefined): string {
-  const host =
-    hostname === "0.0.0.0" || hostname === "::" || hostname === ""
-      ? "127.0.0.1"
-      : hostname.includes(":")
-        ? `[${hostname}]`
-        : hostname;
-  return `http://${host}:${String(port)}`;
 }

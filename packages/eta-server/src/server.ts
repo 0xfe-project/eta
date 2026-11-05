@@ -107,8 +107,6 @@ export interface AssembleOptions {
    */
   agentPromptFor?: SessionManagerOptions["agentPromptFor"] | undefined;
   sessionTools?: SessionManagerOptions["sessionTools"] | undefined;
-  /** Skill directories a session has beyond the ones found by walking its directory. */
-  skillDirsFor?: ((meta: SessionMeta) => readonly string[]) | undefined;
   toolMiddleware?: SessionManagerOptions["toolMiddleware"] | undefined;
   askObserve?: SessionManagerOptions["askObserve"] | undefined;
   /** The external agent runtimes sessions may run on (`runtimes.ts`). */
@@ -403,9 +401,6 @@ export async function assembleServer(
       return await renderSkillsBlock({
         cwd: meta.cwd,
         home: options.home ?? homedir(),
-        ...(options.skillDirsFor === undefined
-          ? {}
-          : { extraDirs: options.skillDirsFor(meta) }),
         warn,
       });
     },

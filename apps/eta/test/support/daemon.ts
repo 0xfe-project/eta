@@ -69,7 +69,6 @@ export async function startDaemon(
   const node = new DaemonNode({
     dataDir,
     version: "test",
-    primaryUrl: identity.url,
     // The real home (its personas, its `~/.eta/mcp.json`) is not this test's business.
     home: dataDir,
     warn: options.warn ?? (() => undefined),

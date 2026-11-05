@@ -67,7 +67,7 @@ describe("resolveServers", () => {
   it("lets a later source replace an earlier one's server as a whole", () => {
     const { servers, issues } = resolveServers([
       {
-        name: "bundle",
+        name: "base",
         servers: {
           a: { command: "one", lifecycle: "keep-alive" },
           b: { command: "b" },
@@ -80,8 +80,8 @@ describe("resolveServers", () => {
     expect(servers.get("a")).toMatchObject({ command: "two", source: "user" });
     // Nothing of the replaced entry survives.
     expect(servers.get("a")?.lifecycle).toBeUndefined();
-    expect(servers.get("b")?.source).toBe("bundle");
-    expect(issues).toEqual(['server "a": "user" overrides "bundle"']);
+    expect(servers.get("b")?.source).toBe("base");
+    expect(issues).toEqual(['server "a": "user" overrides "base"']);
   });
 });
 

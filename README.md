@@ -170,7 +170,7 @@ bun run host:install -- --host tailscale --port 8790
 ```
 
 This builds the web, stages the compiled host the way the desktop app carries it (page, migrations,
-bundles, CLIProxyAPI and the daemon for every platform), puts it in `~/.local/share/eta/host`, and runs
+CLIProxyAPI and the daemon for every platform), puts it in `~/.local/share/eta/host`, and runs
 `eta-host install-service <flags>`: a systemd user unit (`io.eta.host`) or launchd agent that starts at
 login and restarts on failure, with the PATH you installed from (so agents find git, gh, Claude Code,
 Codex). Running it again after `git pull` is the upgrade; the daemons follow on their next connect. On a

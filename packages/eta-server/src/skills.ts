@@ -88,8 +88,6 @@ export function gitRepoChain(cwd: string): string[] {
 export interface RenderSkillsOptions {
   cwd: string;
   home: string;
-  /** Skill directories beyond the discovered ones (a bundle's), looked at after them. */
-  extraDirs?: readonly string[] | undefined;
   /** Diagnostics from the loader: a skill that would not parse, a directory that would not list. */
   warn?: ((message: string) => void) | undefined;
 }
@@ -109,10 +107,9 @@ export async function renderSkillsBlock(
   const { formatSkillsForSystemPrompt, loadSkills } = await import(
     "@eta/harness"
   );
-  const { skills, diagnostics } = await loadSkills([
-    ...discoverSkillDirs(options.cwd, options.home),
-    ...(options.extraDirs ?? []),
-  ]);
+  const { skills, diagnostics } = await loadSkills(
+    discoverSkillDirs(options.cwd, options.home),
+  );
   for (const diagnostic of diagnostics)
     options.warn?.(`[eta-skills] ${diagnostic.path}: ${diagnostic.message}`);
   return formatSkillsForSystemPrompt(skills);

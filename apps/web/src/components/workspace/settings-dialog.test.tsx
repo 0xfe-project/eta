@@ -95,6 +95,21 @@ describe("设置左侧那一列", () => {
     expect(rail()).not.toContain("需先确认的工具");
   });
 
+  it("?settings= 指向不存在的分区：打开默认分区，不报错", async () => {
+    host([]);
+    useWorkspaceStore
+      .getState()
+      .setSettings({ open: false, section: "agents" });
+    window.history.replaceState(null, "", "/?settings=gone");
+    await mount(<Dialog />);
+    await flush();
+    expect(useWorkspaceStore.getState().settings).toEqual({
+      open: true,
+      section: "agents",
+    });
+    expect(window.location.search).toBe("");
+  });
+
   it("上次停在 approvals 时重开：内容照画，那一列上没有任何高亮", async () => {
     host(["bash"]);
     useWorkspaceStore

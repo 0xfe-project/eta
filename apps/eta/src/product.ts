@@ -20,7 +20,6 @@ import type {
 } from "@eta/server";
 import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/files";
-import type { GatewayKeys } from "./bundles/bundles";
 import type { GithubTuning } from "./github/service";
 import type { DaemonBuilds } from "./machines/builds";
 import type { SshRunner } from "./machines/install";
@@ -42,8 +41,6 @@ import { createArtifactRoutes } from "./artifacts/routes";
 import { ArtifactService } from "./artifacts/service";
 import { ArtifactStore } from "./artifacts/store";
 import { artifactSessionTools } from "./artifacts/tools";
-import { Bundles } from "./bundles/bundles";
-import { bundlesPlugin } from "./bundles/plugin";
 import { AttachmentStore } from "./conversations/attachments";
 import { combineRunHooks, Engine, RESTART_TEXT } from "./conversations/engine";
 import { conversationsPlugin } from "./conversations/plugin";
@@ -131,8 +128,6 @@ export interface Product {
   readonly generated: (meta: SessionMeta, message: AssistantMessage) => void;
   /** Mount the plugins on an assembled server; resolves when every one of them is in place. */
   mount: (server: AssembledServer) => Promise<void>;
-  /** Skill directories an agent's sessions have beyond the ones found in their directories. */
-  readonly skillDirsFor: (meta: SessionMeta) => readonly string[];
   /**
    * The environment sessions' shells get beyond the process's: GitHub's login, once connected.
    * Empty when the host has no GitHub.
@@ -144,7 +139,7 @@ export interface Product {
   readonly remote: RemoteSessions;
   /** The product's own WebSocket routes: the link daemons dial. */
   readonly endpoints: readonly WebSocketEndpoint[];
-  /** Cut the links to other machines and stop the bundles' services (the host is stopping). */
+  /** Cut the links to other machines (the host is stopping). */
   close: () => Promise<void>;
 }
 
@@ -156,12 +151,6 @@ export function createProduct(options: {
   dataDir: string;
   /** The memory sidecar's address. Without one there is no memory: no plugin, no tools, no calls. */
   memoryUrl?: string | undefined;
-  /** The LLM gateway, once it is up (it starts after the product): bundles hand agents keys for it. */
-  gateway?:
-    | (() =>
-        | (GatewayKeys & { revoke: (agentId: string) => Promise<void> })
-        | undefined)
-    | undefined;
   warn: (message: string) => void;
   /** The interface the host listens on, for the address a new machine is told to dial. */
   hostname?: string | undefined;
@@ -365,22 +354,8 @@ export function createProduct(options: {
       }),
   });
   const mirrors = new SessionMirrors(hub, (id) => machines.get(id)?.name);
-  // The bundles agents load: their files, values, services and the readiness of each machine.
   const secretKey = loadSecretKey(dataDir);
   const emailCredentials = new EmailCredentials(db, secretKey);
-  const bundles = new Bundles({
-    db,
-    dataDir,
-    key: secretKey,
-    home: options.home ?? homedir(),
-    machines,
-    hub,
-    agentBundles: (agentId) =>
-      agentId === undefined ? [] : (agents.get(agentId)?.bundles ?? []),
-    gateway: options.gateway,
-    changed: () => wire?.pushNow("bundles"),
-    warn,
-  });
   const router = new RemoteSessionsRouter({
     conversations,
     machines,
@@ -394,7 +369,6 @@ export function createProduct(options: {
     models: () => running?.models,
     defaults: async () => (await running?.defaults()) ?? {},
     hooks: () => later.hooks,
-    bundles,
     home: options.home ?? homedir(),
     forward: (action, args) => router.forward(action, args),
     warn,
@@ -506,7 +480,6 @@ export function createProduct(options: {
     changed,
     warn,
     remote: remotePlace,
-    bundleStamp: (agent) => bundles.stampOf(agent.bundles),
     runHooks,
   });
   // The executors of tasks: a fresh session of the agent that made a task for each run, on the
@@ -620,12 +593,10 @@ export function createProduct(options: {
     scheduler,
     sessionHooks,
     generated,
-    skillDirsFor: (meta) => bundles.skillDirsFor(meta),
     shellEnv: githubLogin?.env ?? {},
     fetch: async (request) =>
       (await hub.route(request)) ??
       (await githubCallbacks(request)) ??
-      (await bundles.route(request)) ??
       (await artifactRoutes(request)),
     remote: router,
     endpoints: [hub.endpoint],
@@ -636,7 +607,6 @@ export function createProduct(options: {
       mirrors.detach();
       await githubLogin?.stop();
       email.stop();
-      await bundles.close();
       await web?.close();
     },
     async mount(server) {
@@ -665,7 +635,6 @@ export function createProduct(options: {
         "artifacts",
         "inbox",
         "usage",
-        "bundles",
         "email",
         // Not mounted, so not waited for: github would otherwise cost the startup one
         // `MOUNT_TIMEOUT_MS` and then a failure.
@@ -705,15 +674,6 @@ export function createProduct(options: {
               );
               return runtimes;
             },
-            removed: (agentId) =>
-              void options
-                .gateway?.()
-                ?.revoke(agentId)
-                .catch((error) =>
-                  warn(
-                    `[eta] llm: could not end the keys of ${agentId}: ${String(error)}`,
-                  ),
-                ),
           },
           applied("agents"),
         ),
@@ -797,19 +757,6 @@ export function createProduct(options: {
         ),
       );
       server.mount("usage", usagePlugin(usage, applied("usage")));
-      server.mount(
-        "bundles",
-        bundlesPlugin(
-          {
-            registry: bundles.registry,
-            rows: bundles.rows,
-            services: bundles.services,
-            readiness: bundles.readiness,
-            changed: () => wire?.pushNow("bundles"),
-          },
-          applied("bundles"),
-        ),
-      );
       if (github !== undefined)
         server.mount("github", githubPlugin({ github }, applied("github")));
       if (memory !== undefined)
@@ -834,7 +781,6 @@ export function createProduct(options: {
       } finally {
         clearTimeout(timer);
       }
-      bundles.start();
       // Everything the runs need is in place: the queue is looked at now.
       if (options.tasks?.runs !== false) taskRunner.attach();
       githubLogin?.start();

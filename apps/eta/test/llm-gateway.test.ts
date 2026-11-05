@@ -116,7 +116,6 @@ async function open(
 ): Promise<LlmRuntime> {
   const llm = await openLlm({
     dataDir,
-    hostOrigin: "http://127.0.0.1:1",
     models: new GatewayModels(),
     warn: () => {},
     endpoints,

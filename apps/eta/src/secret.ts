@@ -1,5 +1,5 @@
 /**
- * Sealing: what the host stores secrets as (a bundle's configuration, MCP OAuth credentials).
+ * Sealing: what the host stores secrets as (email, GitHub and MCP OAuth credentials).
  *
  * AES-256-GCM under the host's key. The key is a file next to the database that never leaves the
  * host, so the database can be copied, backed up or read by a tool without the values in it

@@ -5,7 +5,6 @@
 import type { AuthFileEntry, CooldownView } from "@cpajs/cpa/client";
 import { describe, expect, it } from "vitest";
 import { codexPlanName } from "../src/llm/codex";
-import { AgentKeys } from "../src/llm/keys";
 import {
   connectionReason,
   fileConnection,
@@ -214,25 +213,6 @@ describe("a model's state", () => {
         params: { provider: "Google AI Studio" },
       },
     );
-  });
-});
-
-describe("agent keys", () => {
-  it("are derived, checked and revoked", () => {
-    const keys = new AgentKeys();
-    const ada = keys.of("ada");
-    expect(ada).toMatch(/^etak\.ada\.[0-9a-f]{64}$/);
-    expect(keys.of("ada")).toBe(ada);
-    expect(keys.scopeOf(ada)).toBe("ada");
-    expect(
-      keys.scopeOf(`${ada.slice(0, -1)}${ada.endsWith("0") ? "1" : "0"}`),
-    ).toBeUndefined();
-    expect(keys.scopeOf(new AgentKeys().of("ada"))).toBeUndefined();
-    expect(keys.scopeOf("etak.a.b.c")).toBeUndefined();
-    expect(() => keys.of("a.b")).toThrow();
-    keys.revoke("ada");
-    expect(keys.scopeOf(ada)).toBeUndefined();
-    expect(keys.scopeOf(keys.of("bo"))).toBe("bo");
   });
 });
 

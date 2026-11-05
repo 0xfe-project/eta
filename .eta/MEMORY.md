@@ -102,7 +102,7 @@
 - [77] Squash-merged Eta PR branches can still show commits in `main..branch`; use tree equality or `git merge-tree` to detect already-merged content, then close the branch/task instead of creating an empty merge.
 - [78] When Eta's GitHub plugin is disabled, also omit akhook's GitHub layer; otherwise `gh pr create` remains blocked even though GitHub is not loaded/connected.
 - [79] Eta backend plugin mounts and task-comment continuation only take effect after restarting the running host; frontend hiding depends on `hello.mounted` plus rebuilt web assets/refresh.
-- [80] Eta full-check flakiness is not limited to @eta/web: `@eta/app` `bundles-gateway` has shown concurrency-sensitive 401-vs-200 failures; isolate reproductions before treating them as regressions.
+- [80] Eta full-check flakiness is not limited to @eta/web: `@eta/app` has shown concurrency-sensitive failures too; isolate reproductions before treating them as regressions.
 - [84] 新增 Eta 插件开关后需 grep 部署配置是否重复定义同名 env/flag；#8 的 ETA_GITHUB 曾在 deploy/compose.yaml 写了两遍。
 - [86] Eta task comment continuation must key sessions to the task and carry the established session across runs; run-level keys make continued context and finish_task/working-run attribution brittle.
 - [87] Optional Eta plugins must also make their configured agent tools visibly unavailable/offline; otherwise agents may try them and fail with configured_tools_unavailable (e.g., GitHub open_pull_request/draft_issue after GitHub is hidden).

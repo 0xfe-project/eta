@@ -7,7 +7,6 @@
  *
  *   eta-host        the host itself
  *   migrations/     apps/eta/src/migrations
- *   bundles/        the built-in bundles
  *   Eta-Logo.png    the logo the mail template embeds
  *   web/            apps/web/dist, the page (built first: `bun run --cwd apps/web build`)
  *   cli-proxy-api   CLIProxyAPI for this platform, and `cpa-launcher` next to it
@@ -49,7 +48,6 @@ await $`bun build --compile --target=bun ${externals} ${join(app, "src", "main.t
 cpSync(join(app, "src", "migrations"), join(out, "migrations"), {
   recursive: true,
 });
-cpSync(join(root, "bundles"), join(out, "bundles"), { recursive: true });
 cpSync(
   join(root, "apps", "web", "public", "Eta-Logo.png"),
   join(out, "Eta-Logo.png"),

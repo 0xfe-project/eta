@@ -54,7 +54,7 @@ const server = (
 ): McpServerView => ({
   agentId: "a1",
   agentName: "Ada",
-  source: "bundle:github",
+  source: "~/.eta/mcp.json",
   transport: "stdio",
   lifecycle: "lazy",
   state: "not-connected",
@@ -117,7 +117,6 @@ describe("MCP 服务器设置", () => {
         section.getAttribute("aria-label"),
       ),
     ).toEqual(["Ada", "Bob"]);
-    expect(text()).toContain("bundle:github");
     expect(text()).toContain("~/.eta/mcp.json");
     expect(text()).toContain(".mcp.json");
     expect(text()).toContain("已连接");

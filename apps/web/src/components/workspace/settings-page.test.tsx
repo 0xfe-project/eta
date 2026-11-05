@@ -153,6 +153,17 @@ describe("设置整页", () => {
     expect(document.body.textContent).toContain("颜色模式");
   });
 
+  it("an address naming a section that does not exist shows the default one", async () => {
+    host();
+    await open("/settings?section=gone");
+    expect(rail()).toContain(labelsOf("agents")[0]);
+    expect(document.body.textContent).not.toContain("Something went wrong");
+    expect(
+      document.querySelector(".settings-layout nav [aria-current='page']")
+        ?.textContent,
+    ).toBe(labelsOf("agents")[0]);
+  });
+
   it("picking a section puts it in the address", async () => {
     host();
     const { router } = await open("/settings");

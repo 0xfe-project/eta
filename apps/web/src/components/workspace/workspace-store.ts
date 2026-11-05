@@ -41,7 +41,6 @@ export type SettingsSection =
   | "providers"
   | "approvals"
   | "machines"
-  | "bundles"
   | "mcp"
   | "email"
   | "connections"

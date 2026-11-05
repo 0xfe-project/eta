@@ -110,8 +110,6 @@ export function combineRunHooks(hooks: readonly RunHooks[]): RunHooks {
 
 export interface EngineOptions {
   runHooks?: RunHooks | undefined;
-  /** What an agent's bundles add to the stamp of its sessions: a change reopens them. */
-  bundleStamp?: ((agent: AgentRecord) => string) | undefined;
   /**
    * Where the sessions of a project on a daemon machine live. Without one, such a project's
    * replies fail as unavailable, which is what a host with no link to other machines should say.
@@ -155,7 +153,6 @@ export class Engine {
   readonly #hooks: RunHooks;
   readonly #local: LocalPlace;
   readonly #remote: SessionPlace | undefined;
-  readonly #bundleStamp: EngineOptions["bundleStamp"];
 
   #closing = false;
   /** Replies waiting their turn on a participant's session, by `conversation:agent`. */
@@ -181,7 +178,6 @@ export class Engine {
     this.#warn = options.warn;
     this.#hooks = options.runHooks ?? {};
     this.#remote = options.remote;
-    this.#bundleStamp = options.bundleStamp;
     this.#local = new LocalPlace({
       opened: this.#opened,
       warn: options.warn,
@@ -227,9 +223,9 @@ export class Engine {
     );
   };
 
-  /** What a session's prompt, persona and bundles were read from. */
+  /** What a session's prompt and persona were read from. */
   #stamp(agent: AgentRecord, away?: string): string {
-    return `${stampOf(agent)}${this.#bundleStamp?.(agent) ?? ""}${away ?? ""}`;
+    return `${stampOf(agent)}${away ?? ""}`;
   }
 
   /**
@@ -296,7 +292,7 @@ export class Engine {
   /**
    * The task's session, on the machine and in the directory the task works in: the one this run
    * continues, or a new one made the way a conversation's session is made (the agent's model,
-   * persona, instructions, skills, MCP servers, bundles and memory) and nothing of what that
+   * persona, instructions, skills, MCP servers and memory) and nothing of what that
    * session remembers: no history, no participant row. Where it lives is the machine's: this
    * process, or a daemon over the link.
    *

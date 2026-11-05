@@ -4,7 +4,6 @@ import { ArchiveIcon } from "@phosphor-icons/react/Archive";
 import { DesktopIcon } from "@phosphor-icons/react/Desktop";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/EnvelopeSimple";
 import { LinkIcon } from "@phosphor-icons/react/Link";
-import { PackageIcon } from "@phosphor-icons/react/Package";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
 import { PlugIcon } from "@phosphor-icons/react/Plug";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/PlugsConnected";
@@ -47,13 +46,6 @@ export const settingsSections: {
       return translate("machines:title");
     },
     icon: DesktopIcon,
-  },
-  {
-    value: "bundles",
-    get label() {
-      return translate("bundles:title");
-    },
-    icon: PackageIcon,
   },
   {
     value: "mcp",
