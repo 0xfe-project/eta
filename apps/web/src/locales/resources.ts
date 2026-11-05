@@ -10,6 +10,7 @@ import enMcp from "./en/mcp.json";
 import enNavigation from "./en/navigation.json";
 import enOnboard from "./en/onboard.json";
 import enOverview from "./en/overview.json";
+import enPlugins from "./en/plugins.json";
 import enProviders from "./en/providers.json";
 import enRoutines from "./en/routines.json";
 import enSettings from "./en/settings.json";
@@ -27,6 +28,7 @@ import zhMcp from "./zh/mcp.json";
 import zhNavigation from "./zh/navigation.json";
 import zhOnboard from "./zh/onboard.json";
 import zhOverview from "./zh/overview.json";
+import zhPlugins from "./zh/plugins.json";
 import zhProviders from "./zh/providers.json";
 import zhRoutines from "./zh/routines.json";
 import zhSettings from "./zh/settings.json";
@@ -47,6 +49,7 @@ export const en = {
   navigation: enNavigation,
   onboard: enOnboard,
   overview: enOverview,
+  plugins: enPlugins,
   providers: enProviders,
   routines: enRoutines,
   settings: enSettings,
@@ -67,6 +70,7 @@ export const zh = {
   navigation: zhNavigation,
   onboard: zhOnboard,
   overview: zhOverview,
+  plugins: zhPlugins,
   providers: zhProviders,
   routines: zhRoutines,
   settings: zhSettings,
@@ -89,6 +93,7 @@ export const namespaces = [
   "navigation",
   "onboard",
   "overview",
+  "plugins",
   "providers",
   "routines",
   "settings",

@@ -100,6 +100,29 @@ describe("tool service", () => {
     dispose();
   });
 
+  it("middleware after sees what a tool threw, as the result the model will read", async () => {
+    const { tools } = withTools();
+    tools.register({
+      name: "boom",
+      execute: () => {
+        throw new Error("the secret is hunter2");
+      },
+    });
+    tools.use({
+      name: "scrub",
+      after: (_name, _args, result) => ({
+        ...(result as object),
+        content: "scrubbed",
+      }),
+    });
+    expect(
+      await tools.execute("boom", {}, { turn: 1, toolCallId: "c1" }),
+    ).toEqual({
+      isError: true,
+      content: "scrubbed",
+    });
+  });
+
   it("middleware ordering: before runs outer→inner, after runs inner→outer", async () => {
     const { tools, dispose } = withTools();
     const order: string[] = [];

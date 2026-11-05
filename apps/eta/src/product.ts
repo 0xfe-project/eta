@@ -14,6 +14,7 @@ import type {
 import type {
   AssembledServer,
   RemoteSessions,
+  RuntimeExtras,
   SessionMeta,
   WebSocketEndpoint,
   WireService,
@@ -30,7 +31,7 @@ import type { WebOptions } from "./web/service";
 import { homedir, hostname, platform } from "node:os";
 import { join } from "node:path";
 import { GitHubKeeper } from "@eta/daemon";
-import { peerAddressOf } from "@eta/server";
+import { peerAddressOf, redactionMiddleware } from "@eta/server";
 import { agentsPlugin } from "./agents/plugin";
 import { AgentStore } from "./agents/store";
 import { loadKey } from "./artifacts/capability";
@@ -73,6 +74,9 @@ import { MachineStore } from "./machines/store";
 import { MemoryClient } from "./memory/client";
 import { memoryRunHooks, memoryTools } from "./memory/hooks";
 import { memoryPlugin } from "./memory/plugin";
+import { pluginsPlugin } from "./plugins/plugin";
+import { Plugins } from "./plugins/service";
+import { pluginSessionTools } from "./plugins/tools";
 import { projectsPlugin } from "./projects/plugin";
 import { ProjectStore } from "./projects/store";
 import { routinesPlugin } from "./routines/plugin";
@@ -128,6 +132,10 @@ export interface Product {
   readonly generated: (meta: SessionMeta, message: AssistantMessage) => void;
   /** Mount the plugins on an assembled server; resolves when every one of them is in place. */
   mount: (server: AssembledServer) => Promise<void>;
+  /** Skill directories an agent's sessions have beyond the ones found in their directories. */
+  readonly skillDirsFor: (meta: SessionMeta) => readonly string[];
+  /** What a session on an external runtime gets from the agent's plugins. */
+  readonly runtimeExtrasFor: (meta: SessionMeta) => Promise<RuntimeExtras>;
   /**
    * The environment sessions' shells get beyond the process's: GitHub's login, once connected.
    * Empty when the host has no GitHub.
@@ -226,7 +234,13 @@ export function createProduct(options: {
   /** Say that product state moved, to whoever is looking at it. */
   const changed = (touched?: readonly string[] | "all"): void => {
     if (wire === undefined) return;
-    for (const target of ["agents", "machines", "projects", "conversations"])
+    for (const target of [
+      "agents",
+      "machines",
+      "projects",
+      "conversations",
+      "plugins",
+    ])
       wire.pushNow(target);
     const ids =
       touched === "all"
@@ -356,6 +370,20 @@ export function createProduct(options: {
   const mirrors = new SessionMirrors(hub, (id) => machines.get(id)?.name);
   const secretKey = loadSecretKey(dataDir);
   const emailCredentials = new EmailCredentials(db, secretKey);
+  // The plugins agents use: what is on disk, what the user configured and what each may read.
+  const plugins = new Plugins({
+    db,
+    dataDir,
+    key: secretKey,
+    agents,
+    machines,
+    hub,
+    changed: () => {
+      wire?.pushNow("plugins");
+      wire?.pushNow("agents");
+    },
+    warn,
+  });
   const router = new RemoteSessionsRouter({
     conversations,
     machines,
@@ -369,6 +397,7 @@ export function createProduct(options: {
     models: () => running?.models,
     defaults: async () => (await running?.defaults()) ?? {},
     hooks: () => later.hooks,
+    plugins,
     home: options.home ?? homedir(),
     forward: (action, args) => router.forward(action, args),
     warn,
@@ -480,6 +509,8 @@ export function createProduct(options: {
     changed,
     warn,
     remote: remotePlace,
+    pluginStamp: (agent) => plugins.stampOf(agent.id),
+    pluginsRead: () => plugins.registry.refresh(),
     runHooks,
   });
   // The executors of tasks: a fresh session of the agent that made a task for each run, on the
@@ -543,6 +574,26 @@ export function createProduct(options: {
       }),
     },
     { sessionTools: artifactSessionTools({ artifacts, board, limits }) },
+    {
+      sessionTools: pluginSessionTools({
+        plugins,
+        transportOf: (meta) => {
+          // Where the session runs: its row knows, and a session with no row is this process's.
+          const machineId =
+            conversations.ofSession(meta.id)?.machineId ??
+            runRows.bySession(meta.id)?.machineId;
+          const machine =
+            machineId === undefined || machineId === null
+              ? machines.primary()
+              : machines.get(machineId);
+          if (machine === undefined) throw new Error("no such machine");
+          return transport(machine);
+        },
+      }),
+      toolMiddleware: ({ meta }) => [
+        redactionMiddleware(() => plugins.redactionsFor(meta.agentId)),
+      ],
+    },
     // Without GitHub the tools are not there to offer: an agent's list does not mention them.
     ...(github === undefined
       ? []
@@ -593,6 +644,8 @@ export function createProduct(options: {
     scheduler,
     sessionHooks,
     generated,
+    skillDirsFor: (meta) => plugins.skillDirsFor(meta),
+    runtimeExtrasFor: (meta) => plugins.runtimeExtrasFor(meta),
     shellEnv: githubLogin?.env ?? {},
     fetch: async (request) =>
       (await hub.route(request)) ??
@@ -605,6 +658,7 @@ export function createProduct(options: {
       await taskRunner.detach();
       hub.close();
       mirrors.detach();
+      plugins.close();
       await githubLogin?.stop();
       email.stop();
       await web?.close();
@@ -636,6 +690,7 @@ export function createProduct(options: {
         "inbox",
         "usage",
         "email",
+        "plugins",
         // Not mounted, so not waited for: github would otherwise cost the startup one
         // `MOUNT_TIMEOUT_MS` and then a failure.
         ...(github === undefined ? [] : ["github"]),
@@ -650,6 +705,11 @@ export function createProduct(options: {
         if (pending.size === 0) ready();
       };
       const shared = { agents, machines, projects, conversations, timeline };
+      await plugins.start();
+      server.mount(
+        "plugins",
+        pluginsPlugin({ plugins, agents }, applied("plugins")),
+      );
       server.mount(
         "agents",
         agentsPlugin(
@@ -658,6 +718,7 @@ export function createProduct(options: {
             dataDir,
             db,
             engine,
+            plugins,
             changed,
             created,
             runtimes: options.runtimes,

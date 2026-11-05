@@ -8,6 +8,10 @@
  * ~/.eta/plugins/<name>/    user plugins (hot-reloaded; see reload.ts)
  * ```
  *
+ * `plugins/` is shared with the product's Agent Plugins, which have a `plugin.json` and keep their
+ * data in `plugins/data/`. Those are not plugins of this kind, broken or otherwise: they are left
+ * alone here, and the product leaves these alone in turn.
+ *
  * A plugin is a directory with a `package.json` that says `"eta-plugin": ...`. That manifest is
  * the whole discovery rule: a directory without one is not a plugin, and a directory with one is
  * loaded even if it is also a perfectly ordinary npm package. The entry point is whatever the
@@ -28,6 +32,7 @@ import type {
   PluginPanelDescriptor,
 } from "@eta/client-contracts";
 import type { Context } from "cordis";
+import { existsSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -169,6 +174,10 @@ function hash(value: string): string {
   }
   return (h >>> 0).toString(36);
 }
+
+/** An Agent Plugin, or where they keep their data: what shares `plugins/` with user plugins. */
+const isAgentPlugins = (directory: string, name: string): boolean =>
+  name === "data" || existsSync(join(directory, "plugin.json"));
 
 /** The manifest key that marks a directory as a plugin. */
 export const PLUGIN_MANIFEST_KEY = "eta-plugin";
@@ -338,6 +347,7 @@ export class PluginManager {
       const directory = join(root, entry.name);
       if (this.loaded.some((plugin) => plugin.directory === directory))
         continue;
+      if (source === "user" && isAgentPlugins(directory, entry.name)) continue;
       await this.loadOne(ctx, directory, source);
     }
   }

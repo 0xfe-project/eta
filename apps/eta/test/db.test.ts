@@ -200,4 +200,32 @@ describe("loadMigrations", () => {
     const shipped = loadMigrations();
     expect(applyMigrations(db, shipped)).toEqual(shipped.map((m) => m.id));
   });
+
+  it("adds the plugin tables to a database that has data, and leaves the data", async () => {
+    const db = await database();
+    const shipped = loadMigrations();
+    const at = shipped.findIndex((m) => m.id === "0043-plugins");
+    applyMigrations(db, shipped.slice(0, at));
+    db.query(
+      `INSERT INTO agent (id, name, instructions, persona, runtime, created_at, updated_at)
+       VALUES ('a1', 'Ada', 'Be kind.', '', 'eta', 1, 2)`,
+    ).run();
+    expect(applyMigrations(db, shipped)).toEqual(
+      shipped.slice(at).map((m) => m.id),
+    );
+    expect(db.query("SELECT id, name, instructions FROM agent").all()).toEqual([
+      { id: "a1", name: "Ada", instructions: "Be kind." },
+    ]);
+    // An agent's plugins go with it; the record of what it read does not.
+    db.query("INSERT INTO agent_plugin VALUES ('a1', 'hello')").run();
+    db.query(
+      `INSERT INTO plugin_audit (at, session_id, agent_id, plugin, field, level)
+       VALUES (1, 's', 'a1', 'hello', 'key', 'file')`,
+    ).run();
+    db.query("DELETE FROM agent WHERE id = 'a1'").run();
+    expect(db.query("SELECT * FROM agent_plugin").all()).toEqual([]);
+    expect(db.query("SELECT COUNT(*) AS n FROM plugin_audit").get()).toEqual({
+      n: 1,
+    });
+  });
 });

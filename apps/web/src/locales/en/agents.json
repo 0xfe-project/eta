@@ -16,7 +16,8 @@
   "editor": {
     "tabs": {
       "general": "General",
-      "instructions": "Instructions"
+      "instructions": "Instructions",
+      "plugins": "Plugins"
     },
     "sectionsLabel": "Agent settings sections"
   },
@@ -106,5 +107,11 @@
       "missing": " (not installed)",
       "error": " (unavailable)"
     }
+  },
+  "plugins": {
+    "empty": "No plugins yet.",
+    "openSettings": "Add one in settings",
+    "skipped": "Its configuration no longer fits: this agent's sessions skip it.",
+    "noMcpOnEta": "eta's own loop does not support MCP yet: these servers will not start, and its skills work."
   }
 }

@@ -1,0 +1,88 @@
+{
+  "title": "Plugins",
+  "description": "Plugins give agents skills and MCP servers, from directories under ~/.eta/plugins/ or from git. One must be configured before it can be enabled. Its configuration is global; each agent chooses which plugins to use.",
+  "empty": {
+    "title": "No plugins yet",
+    "description": "Put a plugin in ~/.eta/plugins/<name>/, or add one from a git repository."
+  },
+  "state": {
+    "needsConfig": "Needs configuring",
+    "ready": "Can be enabled"
+  },
+  "source": {
+    "local": "Local directory"
+  },
+  "summary": {
+    "parts": "{{skills}} skills · {{servers}} MCP servers"
+  },
+  "transport": {
+    "stdio": "stdio",
+    "http": "HTTP",
+    "sse": "SSE"
+  },
+  "skipped": "{{agents}} enabled this, but its configuration no longer fits. It is skipped until that is fixed.",
+  "requires": {
+    "missing": "{{machine}} is missing {{commands}}"
+  },
+  "actions": {
+    "add": "Add from git",
+    "configure": "Configure",
+    "update": "Update",
+    "updated": "Updated",
+    "remove": "Remove",
+    "recheck": "Check again"
+  },
+  "add": {
+    "title": "Add a plugin from git",
+    "description": "It is resolved to one commit and stays there until you update it.",
+    "repo": "Repository",
+    "rev": "Branch, tag or commit (HEAD by default)",
+    "path": "Path inside the repository (root by default)",
+    "submit": "Add",
+    "done": "Added {{name}}"
+  },
+  "remove": {
+    "confirmTitle": "Remove {{name}}?",
+    "confirmDescription": "Its fetched files are deleted. Its configuration and PLUGIN_DATA stay, for when it is added again."
+  },
+  "configure": {
+    "title": "Configure {{name}}",
+    "description": "Fill in the fields this plugin declares. These values go to its MCP servers.",
+    "secretSet": "Set",
+    "secretKept": "Saved. Leave blank to keep it",
+    "incomplete": "Something required is missing: it will still need configuring.",
+    "savedReady": "Saved. The plugin can be enabled",
+    "savedIncomplete": "Saved. It still needs configuring",
+    "encryptionHelp": "The configuration is stored encrypted on the host, and secrets are not shown again."
+  },
+  "level": {
+    "label": "Agent access",
+    "none": "None (plugin process only)",
+    "read": "Can read",
+    "file": "Temporary file (stays out of context)",
+    "value": "Plain value (enters context)"
+  },
+  "servers": {
+    "title": "Runs",
+    "env": "Environment set: {{names}}",
+    "headers": "Headers added: {{names}}",
+    "etaNote": "These servers start for agents on an external runtime. eta's own loop does not support MCP yet."
+  },
+  "audit": {
+    "title": "Reads by agents",
+    "deletedAgent": "Deleted agent"
+  },
+  "issue": {
+    "required": "Required",
+    "type": "Not the right format",
+    "pattern": "Does not match the required format",
+    "minLength": "At least {{limit}} characters",
+    "maxLength": "At most {{limit}} characters",
+    "int": "Must be a whole number",
+    "min": "Cannot be less than {{limit}}",
+    "max": "Cannot be more than {{limit}}",
+    "option": "Not one of the options",
+    "minItems": "Choose at least {{limit}}",
+    "maxItems": "Choose at most {{limit}}"
+  }
+}

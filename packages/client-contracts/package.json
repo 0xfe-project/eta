@@ -5,7 +5,8 @@
   "private": true,
   "description": "Serializable client views and bundled operation contracts.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./plugin-fields": "./src/plugin-fields.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -15,7 +16,8 @@
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
   },
   "dependencies": {
-    "@eta/client-wire-proto": "*"
+    "@eta/client-wire-proto": "*",
+    "re2js": "2.9.1"
   },
   "devDependencies": {
     "@types/node": "22.19.19",

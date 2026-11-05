@@ -88,6 +88,8 @@ export function gitRepoChain(cwd: string): string[] {
 export interface RenderSkillsOptions {
   cwd: string;
   home: string;
+  /** Skill directories beyond the ones found from `cwd`: a plugin's, after the nearer ones. */
+  extraDirs?: readonly string[] | undefined;
   /** Diagnostics from the loader: a skill that would not parse, a directory that would not list. */
   warn?: ((message: string) => void) | undefined;
 }
@@ -107,10 +109,28 @@ export async function renderSkillsBlock(
   const { formatSkillsForSystemPrompt, loadSkills } = await import(
     "@eta/harness"
   );
-  const { skills, diagnostics } = await loadSkills(
-    discoverSkillDirs(options.cwd, options.home),
-  );
+  const { skills, diagnostics } = await loadSkills([
+    ...discoverSkillDirs(options.cwd, options.home),
+    ...(options.extraDirs ?? []),
+  ]);
   for (const diagnostic of diagnostics)
     options.warn?.(`[eta-skills] ${diagnostic.path}: ${diagnostic.message}`);
+  return formatSkillsForSystemPrompt(skills);
+}
+
+/**
+ * The same block for these directories alone: what a session on an external runtime is told about
+ * a plugin's skills. The runtime finds its own; the file it reads is the one the block points at.
+ */
+export async function renderSkillDirs(
+  dirs: readonly string[],
+  warn?: (message: string) => void,
+): Promise<string> {
+  const { formatSkillsForSystemPrompt, loadSkills } = await import(
+    "@eta/harness"
+  );
+  const { skills, diagnostics } = await loadSkills([...dirs]);
+  for (const diagnostic of diagnostics)
+    warn?.(`[eta-skills] ${diagnostic.path}: ${diagnostic.message}`);
   return formatSkillsForSystemPrompt(skills);
 }

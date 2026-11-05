@@ -28,6 +28,8 @@ export const agentFormSchema = z.object({
   thinkingLevel: z.string(),
   // The machine it runs on; "" follows the project's.
   machineId: z.string(),
+  // The plugins it has enabled.
+  plugins: z.array(z.string()),
 });
 export type AgentForm = z.infer<typeof agentFormSchema>;
 
@@ -43,6 +45,7 @@ export function agentDraft({
   thinkingLevel,
   name,
   machineId,
+  plugins,
 }: AgentForm): AgentFields {
   return {
     name,
@@ -52,5 +55,6 @@ export function agentDraft({
     model: model || null,
     thinkingLevel: (thinkingLevel || null) as ThinkingLevel | null,
     machineId: machineId || null,
+    plugins,
   };
 }

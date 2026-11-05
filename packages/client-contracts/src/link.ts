@@ -157,6 +157,12 @@ export interface MachineActionArgs {
   lastSeq: { session: string };
   /** GitHub was connected, authorized or disconnected: ask the primary for the token again now. */
   githubRefresh: Record<string, never>;
+  /** Which of these commands are on the machine's PATH (what plugins say they need). */
+  which: { commands: string[] };
+  /** Which plugin contents the machine does not keep yet. */
+  pluginHave: { hashes: string[] };
+  /** Some of a plugin's files; `done` says that was the last of them. */
+  pluginPut: { hash: string; files: PluginFileChunk[]; done: boolean };
 }
 export interface MachineActionResults {
   info: MachineFacts;
@@ -166,6 +172,9 @@ export interface MachineActionResults {
   config: { model: string | undefined; thinkingLevel: string };
   lastSeq: { seq: number };
   githubRefresh: Record<string, never>;
+  which: { found: string[] };
+  pluginHave: { missing: string[] };
+  pluginPut: Record<string, never>;
 }
 
 /** What the primary asks of the daemon that may take a while (`svc` calls). */
@@ -213,6 +222,49 @@ export type ModelSpec = Record<string, unknown> & {
   lookup?: { provider: string; id: string };
 };
 
+/** A piece of one file of a plugin, base64 to fit a frame; `append` continues the file. */
+export interface PluginFileChunk {
+  path: string;
+  executable: boolean;
+  append: boolean;
+  base64: string;
+}
+
+/** One MCP server as a session's runtime attaches it (oar's `McpServer`). */
+export type SessionMcpServer =
+  | {
+      name: string;
+      command: string;
+      args?: string[];
+      env?: Record<string, string>;
+    }
+  | {
+      name: string;
+      type: "http";
+      url: string;
+      headers?: Record<string, string>;
+    };
+
+/**
+ * A plugin a session is opened with, in a copy the machine already keeps. `servers` is what its MCP
+ * servers are given, by server; it stays in the daemon's memory and reaches them as they start.
+ */
+export interface OpenedPlugin {
+  name: string;
+  hash: string;
+  servers: Record<
+    string,
+    { env?: Record<string, string>; headers?: Record<string, string> }
+  >;
+}
+
+/** A value to take out of what a session keeps and what it sends to a model. */
+export interface Redaction {
+  value: string;
+  /** What stands in its place. */
+  label: string;
+}
+
 export interface OpenSessionArgs {
   /** Reopen this session; absent means make a new one. */
   session?: string;
@@ -238,6 +290,10 @@ export interface OpenSessionArgs {
   /** The model's definition, so the daemon can resolve it without a catalog. */
   modelSpec?: ModelSpec;
   tools: ToolSpec[];
+  /** The plugins the agent has that can run, sent ahead with `pluginPut`. */
+  plugins?: OpenedPlugin[];
+  /** The secrets a session on eta's own loop must not pass on; kept in memory. */
+  redactions?: Redaction[];
   /**
    * The primary's akhook layers, as text: rules the daemon applies after its own user and project
    * files, which cannot disable or replace them. Sent with every open, so a change reaches a

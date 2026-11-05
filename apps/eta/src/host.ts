@@ -214,6 +214,8 @@ export async function startHost(options: HostOptions): Promise<Host> {
       // What the product adds to every session it owns: the agent's words in the system prompt,
       // and, from each of its features, tools, tool middleware and an ear for questions.
       agentPromptFor: product.engine.agentPromptFor,
+      skillDirsFor: product.skillDirsFor,
+      runtimeExtrasFor: product.runtimeExtrasFor,
       ...product.sessionHooks,
       generated: product.generated,
       // An agent on an external runtime has its sessions' runs taken by it (`@eta/runtime-oar`).

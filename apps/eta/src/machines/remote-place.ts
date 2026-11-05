@@ -20,6 +20,7 @@ import type {
   SessionPlace,
   SessionSettings,
 } from "../conversations/places";
+import type { Plugins } from "../plugins/service";
 import type { SessionHooks } from "../session-hooks";
 import type { MachineHub, MachineLink } from "./hub";
 import type { SessionMirrors } from "./mirror";
@@ -37,6 +38,8 @@ export interface RemotePlaceDeps {
   defaults: () => Promise<Settings>;
   /** The product's per-session hooks; not there until the product is made. */
   hooks: () => Required<SessionHooks> | undefined;
+  /** What an agent's sessions load; the files and values go along with the session. */
+  plugins: Plugins;
   /** The primary's home: where the user's own persona cards are. */
   home: string;
   /** A `sessions.*` action on a session of a daemon, the way the browser's are sent. */
@@ -162,6 +165,8 @@ export class RemotePlace implements SessionPlace {
             }),
           }),
       tools: this.#tools(conversation.id, agent.id, input.cwd),
+      plugins: await this.#deps.plugins.openOn(link, agent.id, external),
+      redactions: this.#deps.plugins.redactionsFor(agent.id),
     });
     if (session !== input.existing) input.created(session);
     mirrors.register(session, machine.id);

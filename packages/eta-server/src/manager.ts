@@ -14,7 +14,11 @@ import type {
   PlatformPromptInfo,
   SessionMemoryOptions,
 } from "@eta/harness";
-import type { SessionRuntime, SessionRuntimes } from "./runtimes";
+import type {
+  RuntimeExtras,
+  SessionRuntime,
+  SessionRuntimes,
+} from "./runtimes";
 import type { Settings } from "./settings";
 import type { SessionListing, SessionMeta, SessionStore } from "./store";
 import { join } from "node:path";
@@ -124,6 +128,13 @@ export interface SessionManagerOptions {
    * session opens, and stable for its life, which is where the prompt layer wants it.
    */
   skillsFor?: ((meta: SessionMeta) => Promise<string>) | undefined;
+  /**
+   * What a session on an external runtime is given beyond the host's tools. Such a session has no
+   * `skillsFor`: the runtime finds its own skills, and what is here is what it cannot find.
+   */
+  runtimeExtrasFor?:
+    | ((meta: SessionMeta) => Promise<RuntimeExtras>)
+    | undefined;
   /** Where the app's files live, for the memory a session reads and writes. */
   memoryFor?:
     | ((meta: SessionMeta) => SessionMemoryWiring | undefined)
@@ -223,6 +234,7 @@ export class SessionManager {
   private readonly platformFor: SessionManagerOptions["platformFor"];
   private readonly personasFor: SessionManagerOptions["personasFor"];
   private readonly skillsFor: SessionManagerOptions["skillsFor"];
+  private readonly runtimeExtrasFor: SessionManagerOptions["runtimeExtrasFor"];
   private readonly memoryFor: SessionManagerOptions["memoryFor"];
   private readonly agentPromptFor: SessionManagerOptions["agentPromptFor"];
   private readonly toolMiddleware: SessionManagerOptions["toolMiddleware"];
@@ -244,6 +256,7 @@ export class SessionManager {
     this.platformFor = options.platformFor;
     this.personasFor = options.personasFor;
     this.skillsFor = options.skillsFor;
+    this.runtimeExtrasFor = options.runtimeExtrasFor;
     this.memoryFor = options.memoryFor;
     this.agentPromptFor = options.agentPromptFor;
     this.toolMiddleware = options.toolMiddleware;
@@ -556,11 +569,14 @@ export class SessionManager {
     const tools: { names: readonly string[] } = { names: [] };
     const agentPrompt = this.agentPromptFor?.(meta);
     const platform = this.platformFor?.(meta);
+    const extras = await this.runtimeExtrasFor?.(meta);
     const runtime = this.runtimes?.open({
       sessionId: meta.id,
       runtime: runtimeId,
       cwd: meta.cwd,
       resume: meta.runtimeSession,
+      mcpServers: extras?.mcpServers,
+      launchArgs: extras?.launchArgs,
       // Same channel, same order as an eta session's platform section: who it is, then the app.
       agentPrompt: () => {
         const parts = [
@@ -570,6 +586,7 @@ export class SessionManager {
             sessionDir: platform?.sessionDir,
             tools: tools.names,
           }),
+          ...(extras?.skills === undefined ? [] : [extras.skills]),
         ].filter((part) => part.length > 0);
         return parts.length === 0 ? undefined : parts.join("\n\n");
       },

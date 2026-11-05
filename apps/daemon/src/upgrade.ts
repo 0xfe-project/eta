@@ -18,7 +18,13 @@ import type { DaemonInstall, DaemonPlatform } from "@eta/client-contracts";
 import type { Identity } from "./identity";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, renameSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { chmod, rename, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import process from "node:process";
@@ -220,10 +226,8 @@ export function settleUpgrade(options: {
     putBack(`started ${marker.starts} times without getting back in`);
     return none;
   }
-  void writeFile(
-    path,
-    JSON.stringify({ ...marker, starts: marker.starts + 1 }),
-  );
+  // Now, not later: a write still in flight would bring the marker back after `admitted` removes it.
+  writeFileSync(path, JSON.stringify({ ...marker, starts: marker.starts + 1 }));
   const timer = setTimeout(
     putBack,
     options.settleMs ?? SETTLE_MS,
