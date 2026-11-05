@@ -243,6 +243,7 @@ export function conversationSections(
     archived: summary.archived,
     stewardId: summary.stewardId,
     stewardOverrideId: null,
+    noSteward: false,
     readSeq: summary.readSeq,
     lastSeq: summary.lastSeq,
     createdAt: summary.createdAt,
