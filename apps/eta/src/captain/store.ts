@@ -270,6 +270,9 @@ function validSetting<K extends keyof CaptainSettingsView>(
   );
 }
 
+// TODO(captain-refactor): Split persistence by aggregate before adding another Captain table or
+// workflow. Assignment, review, prompt/settings, operation/notification and memory-pause state
+// currently share one store; cross-aggregate transactions should stay in a coordinating service.
 export class CaptainStore {
   readonly #db: Database;
 

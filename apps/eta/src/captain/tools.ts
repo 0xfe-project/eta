@@ -40,6 +40,9 @@ export interface CaptainToolDeps {
 
 const json = (value: unknown): string => redactJson(value);
 
+// TODO(captain-refactor): Consolidate Captain tools and wire handlers behind shared action
+// descriptors so schemas, authorization and execution are defined once. Until then, avoid adding
+// another duplicated tool/wire adapter with only a presentation-layer difference.
 export function captainSessionTools(
   deps: CaptainToolDeps,
 ): (input: { meta: SessionMeta }) => KernelTool[] {

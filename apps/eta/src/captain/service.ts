@@ -90,6 +90,9 @@ export interface CaptainReviewSnapshot {
   settings?: CaptainSettingsView;
 }
 
+// TODO(captain-refactor): Before adding more Captain responsibilities, split this service by domain:
+// assignments, reviews/supervision, settings/prompts, operations, Inbox relay and task control.
+// Keep cross-domain orchestration thin instead of continuing to grow one service class.
 export class CaptainService {
   readonly #deps: CaptainServiceDeps;
   #deliveringReviews = false;
