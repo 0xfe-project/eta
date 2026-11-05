@@ -1,4 +1,8 @@
-import type { BoardTaskStatus, TaskDetailSections, TaskRunView } from "@eta/client-contracts";
+import type {
+  BoardTaskStatus,
+  TaskDetailSections,
+  TaskRunView,
+} from "@eta/client-contracts";
 import type { ScrollRef } from "nsh";
 import type { TaskDetail } from "./format";
 import { computed, effect, Scroll, signal, Text, View } from "nsh";
@@ -29,7 +33,8 @@ import { openRunLog, openRuns } from "./runs";
 import { LinkSheet, PropertiesSheet, SheetOption, StatusSheet } from "./sheets";
 import { openQuestion, Thread } from "./thread";
 
-const showError = (error: unknown) => toast(t("common.failed", { message: failure(error) }));
+const showError = (error: unknown) =>
+  toast(t("common.failed", { message: failure(error) }));
 
 /** The one question a blocked task waits on, and the way to the box to answer it. */
 function Question(props: { task: () => TaskDetail; onReply: () => void }) {
@@ -38,7 +43,8 @@ function Question(props: { task: () => TaskDetail; onReply: () => void }) {
       {(question) => (
         <View class="shrink-0 gap-[6px] bg-muted px-4 py-3">
           <Text class="text-sm leading-[18px] text-muted-foreground">
-            <Text class="text-foreground">{actorName(question().actor)}</Text> {t("tasks.waiting")}
+            <Text class="text-foreground">{actorName(question().actor)}</Text>{" "}
+            {t("tasks.waiting")}
           </Text>
           <Markdown text={question().body ?? ""} />
           <View class="flex-row justify-end">
@@ -48,7 +54,9 @@ function Question(props: { task: () => TaskDetail; onReply: () => void }) {
               onPress={props.onReply}
               class="h-8 flex-row items-center px-2 active:opacity-60"
             >
-              <Text class="text-md leading-4 text-foreground">{t("tasks.reply")}</Text>
+              <Text class="text-md leading-4 text-foreground">
+                {t("tasks.reply")}
+              </Text>
             </View>
           </View>
         </View>
@@ -64,17 +72,23 @@ function LiveRun(props: { task: () => TaskDetail; run: TaskRunView }) {
   const who = () => actorName(runActor(props.task(), run()));
   const doing = () => {
     if (queued()) return t("tasks.live.queued", { name: who() });
-    if (run().status === "starting") return t("tasks.live.starting", { name: who() });
+    if (run().status === "starting")
+      return t("tasks.live.starting", { name: who() });
     return run().agentId === null
       ? t("tasks.live.working", { name: who() })
       : t("tasks.live.answering", { name: who() });
   };
   const why = () => {
     const code = run().queueReason;
-    return queued() && code !== null ? queueReason(code, run().machineId) : undefined;
+    return queued() && code !== null
+      ? queueReason(code, run().machineId)
+      : undefined;
   };
   const stop = () => {
-    call("tasks", "interrupt", { taskId: props.task().id, runId: run().id }).catch(showError);
+    call("tasks", "interrupt", {
+      taskId: props.task().id,
+      runId: run().id,
+    }).catch(showError);
   };
   return (
     <View class="min-h-8 flex-row items-center gap-[6px]">
@@ -147,14 +161,20 @@ function TaskView(props: { task: () => TaskDetail }) {
   };
   const remove = (): void => {
     close();
-    call("tasks", "delete", { taskId: task().id }).then(() => nav.pop(), showError);
+    call("tasks", "delete", { taskId: task().id }).then(
+      () => nav.pop(),
+      showError,
+    );
   };
   const edit = () => {
     close();
     openEditTask(task());
   };
   return (
-    <View class="flex-1" style={{ paddingBottom: "env(keyboard-inset-height)" }}>
+    <View
+      class="flex-1"
+      style={{ paddingBottom: "env(keyboard-inset-height)" }}
+    >
       <Header
         crumb={`#${task().number}`}
         border={false}
@@ -172,7 +192,9 @@ function TaskView(props: { task: () => TaskDetail }) {
                 size={14}
                 color={statusColor(task().status)}
               />
-              <Text class="text-md leading-4 text-foreground">{statusLabel(task().status)}</Text>
+              <Text class="text-md leading-4 text-foreground">
+                {statusLabel(task().status)}
+              </Text>
               <Icon name="caretDown" size={12} color="muted-foreground" />
             </View>
             <View
@@ -233,9 +255,17 @@ function TaskView(props: { task: () => TaskDetail }) {
         onChange={setStatus}
         onClose={close}
       />
-      <PropertiesSheet open={sheet() === "properties"} task={task} onClose={close} />
+      <PropertiesSheet
+        open={sheet() === "properties"}
+        task={task}
+        onClose={close}
+      />
       <Sheet open={sheet() === "more"} onClose={close}>
-        <SheetOption label={t("tasks.more.edit")} testID="more-edit" onPress={edit} />
+        <SheetOption
+          label={t("tasks.more.edit")}
+          testID="more-edit"
+          onPress={edit}
+        />
         <SheetOption
           label={t("tasks.log.title")}
           testID="more-runs"
@@ -289,13 +319,18 @@ export function TaskScreen(props: { id: string }) {
             <Header crumb={t("tasks.title")} border={false} />
             <If when={target.missing()}>
               <View class="border-b border-border">
-                <Empty title={t("tasks.gone.title")} body={t("tasks.gone.body")} />
+                <Empty
+                  title={t("tasks.gone.title")}
+                  body={t("tasks.gone.body")}
+                />
               </View>
             </If>
             <If when={!target.missing()}>
               <If
                 when={wire().status() === "open"}
-                else={<Failed title={t("tasks.failed.title")} onRetry={retry} />}
+                else={
+                  <Failed title={t("tasks.failed.title")} onRetry={retry} />
+                }
               >
                 <Loading />
               </If>

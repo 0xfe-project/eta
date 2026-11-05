@@ -13,7 +13,7 @@ import { Icon } from "../ui/Icon";
 
 export type TabName = "inbox" | "conversations" | "tasks";
 
-export const tab = signal<TabName>("inbox");
+const tab = signal<TabName>("inbox");
 
 const TABS: { name: TabName; icon: IconName; label: TextKey }[] = [
   { name: "inbox", icon: "bell", label: "common.tab.inbox" },
@@ -23,7 +23,11 @@ const TABS: { name: TabName; icon: IconName; label: TextKey }[] = [
 
 /** A tab keeps its state and scroll while another shows. */
 function Pane(props: { name: TabName; children: JSX.Element }) {
-  return <View style={{ flex: 1, display: tab() === props.name ? "flex" : "none" }}>{props.children}</View>;
+  return (
+    <View style={{ flex: 1, display: tab() === props.name ? "flex" : "none" }}>
+      {props.children}
+    </View>
+  );
 }
 
 /** 待处理 6 on the other tabs; on its own tab the count is the page's headline. */
@@ -35,7 +39,10 @@ function label(name: TabName, text: string): string {
 
 export function Tabs() {
   return (
-    <NavPage headerVisible={false} class="flex-1 bg-background pt-[env(safe-area-inset-top)]">
+    <NavPage
+      headerVisible={false}
+      class="flex-1 bg-background pt-[env(safe-area-inset-top)]"
+    >
       <ConnectionBanner />
       <View class="flex-1">
         <Pane name="inbox">

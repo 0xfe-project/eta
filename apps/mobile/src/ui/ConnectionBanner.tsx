@@ -7,7 +7,9 @@ export function ConnectionBanner() {
   return (
     <If when={wire().status() === "reconnecting"}>
       <View class="shrink-0 justify-center bg-muted px-4 py-2">
-        <Text class="text-md leading-[20px] text-foreground">{t("connect.reconnecting")}</Text>
+        <Text class="text-md leading-[20px] text-foreground">
+          {t("connect.reconnecting")}
+        </Text>
       </View>
     </If>
   );

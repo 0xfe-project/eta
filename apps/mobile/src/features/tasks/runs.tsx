@@ -17,9 +17,10 @@ const useTask = (id: string) => {
 };
 
 /** 06h: a run's own record, its session drawn as the chat draws one. */
-export function RunLogScreen(props: { taskId: string; runId: string }) {
+function RunLogScreen(props: { taskId: string; runId: string }) {
   const task = useTask(props.taskId);
-  const run = () => task()?.runs.find((candidate) => candidate.id === props.runId);
+  const run = () =>
+    task()?.runs.find((candidate) => candidate.id === props.runId);
   const heading = () => {
     const current = task();
     const found = run();
@@ -34,7 +35,9 @@ export function RunLogScreen(props: { taskId: string; runId: string }) {
     const found = run();
     return found?.workspace === null || found?.workspace === undefined
       ? undefined
-      : t("tasks.log.workspace", { path: shortPath(found.workspace, found.machineId) });
+      : t("tasks.log.workspace", {
+          path: shortPath(found.workspace, found.machineId),
+        });
   };
   return (
     <Page>
@@ -49,9 +52,13 @@ export function RunLogScreen(props: { taskId: string; runId: string }) {
           <Icon name="caretLeft" size={20} />
         </View>
         <View class="min-w-0 grow basis-0">
-          <Text class="truncate text-lead leading-[20px] text-foreground">{heading()}</Text>
+          <Text class="truncate text-lead leading-[20px] text-foreground">
+            {heading()}
+          </Text>
           <If when={place() !== undefined}>
-            <Text class="truncate text-xs leading-4 text-muted-foreground">{place()}</Text>
+            <Text class="truncate text-xs leading-4 text-muted-foreground">
+              {place()}
+            </Text>
           </If>
         </View>
       </View>
@@ -74,10 +81,15 @@ export function RunLogScreen(props: { taskId: string; runId: string }) {
 }
 
 export function openRunLog(taskId: string, runId: string): void {
-  open(`task-run:${taskId}:${runId}`, () => <RunLogScreen taskId={taskId} runId={runId} />);
+  open(`task-run:${taskId}:${runId}`, () => (
+    <RunLogScreen taskId={taskId} runId={runId} />
+  ));
 }
 
-function RunRow(props: { task: () => NonNullable<ReturnType<ReturnType<typeof useTask>>>; run: TaskRunView }) {
+function RunRow(props: {
+  task: () => NonNullable<ReturnType<ReturnType<typeof useTask>>>;
+  run: TaskRunView;
+}) {
   const run = () => props.run;
   const opens = () => run().sessionId !== null;
   return (
@@ -95,7 +107,9 @@ function RunRow(props: { task: () => NonNullable<ReturnType<ReturnType<typeof us
         <Text class="truncate text-sm leading-4 text-muted-foreground">
           {[
             moment(run().startedAt ?? run().createdAt),
-            run().continuesRunId === null ? undefined : t("tasks.log.continues"),
+            run().continuesRunId === null
+              ? undefined
+              : t("tasks.log.continues"),
             run().status === "failed" ? (run().error ?? undefined) : undefined,
           ]
             .filter((part) => part !== undefined)
@@ -110,14 +124,20 @@ function RunRow(props: { task: () => NonNullable<ReturnType<ReturnType<typeof us
 }
 
 /** Every run of a task, newest first; each opens its log. */
-export function RunsScreen(props: { id: string }) {
+function RunsScreen(props: { id: string }) {
   const task = useTask(props.id);
   return (
     <Page>
-      <If when={task()} else={<Header crumb={t("tasks.title")} border={false} />}>
+      <If
+        when={task()}
+        else={<Header crumb={t("tasks.title")} border={false} />}
+      >
         {(current) => (
           <>
-            <Header title={t("tasks.log.title")} subtitle={`#${current().number} ${current().title}`} />
+            <Header
+              title={t("tasks.log.title")}
+              subtitle={`#${current().number} ${current().title}`}
+            />
             <If
               when={current().runs.length > 0}
               else={<Empty title={t("tasks.log.empty")} />}
@@ -145,4 +165,3 @@ export function openRuns(task: TaskDetail): void {
   }
   open(`task-runs:${task.id}`, () => <RunsScreen id={task.id} />);
 }
-

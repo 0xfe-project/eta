@@ -399,12 +399,13 @@ export function Composer(props: {
       }
     }
     // A null model follows the settings' default: it is only missing when the host has no model.
-    const unset = models()?.length === 0
-      ? reach().filter((agentId) => {
-          const agent = agentById(agentId);
-          return agent?.runtime === "eta" && agent.model === null;
-        })
-      : [];
+    const unset =
+      models()?.length === 0
+        ? reach().filter((agentId) => {
+            const agent = agentById(agentId);
+            return agent?.runtime === "eta" && agent.model === null;
+          })
+        : [];
     return unset.length === 0
       ? undefined
       : t("chat.composer.noModel", { names: unset.map(agentName).join("、") });

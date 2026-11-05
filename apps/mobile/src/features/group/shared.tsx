@@ -10,13 +10,16 @@ import { toast } from "../../ui/toast";
 
 /** A call a press made: on success what comes next, on failure the host's own words. */
 export function act<T>(call: Promise<T>, done?: (result: T) => void): void {
-  call.then(done, (error: unknown) => toast(t("common.failed", { message: reason(error) })));
+  call.then(done, (error: unknown) =>
+    toast(t("common.failed", { message: reason(error) })),
+  );
 }
 
 export const agentName = (id: string | null | undefined): string =>
   agentById(id)?.name ?? t("group.deletedAgent");
 
-export const statusLabel = (status: MemberStatus): string => t(`group.status.${status}`);
+export const statusLabel = (status: MemberStatus): string =>
+  t(`group.status.${status}`);
 
 /** `anthropic:claude-opus-5-5` is `provider:modelId`; the phone shows the model. */
 export const modelName = (id: string): string => id.slice(id.indexOf(":") + 1);
@@ -33,10 +36,17 @@ export function tokens(count: number | undefined): string {
 /** `sessions.<id>` is only a target once asked for, so ask once before subscribing. */
 const opened = new Set<string>();
 
-type Session = Partial<Pick<SessionViewSections, "usage" | "model" | "tools" | "metrics" | "tasks" | "transcript">>;
+type Session = Partial<
+  Pick<
+    SessionViewSections,
+    "usage" | "model" | "tools" | "metrics" | "tasks" | "transcript"
+  >
+>;
 
 /** One member's session, kept live while the calling component lives. As the web's `useSessionView`. */
-export function useSession(id: () => string | null | undefined): () => Session | undefined {
+export function useSession(
+  id: () => string | null | undefined,
+): () => Session | undefined {
   const connection = wire();
   effect(() => {
     const session = id();
@@ -50,7 +60,10 @@ export function useSession(id: () => string | null | undefined): () => Session |
     else {
       connection
         .call("sessions", "resync", { session })
-        .then(() => opened.add(session), () => undefined)
+        .then(
+          () => opened.add(session),
+          () => undefined,
+        )
         .finally(attach);
     }
     cleanup(() => {
@@ -61,18 +74,24 @@ export function useSession(id: () => string | null | undefined): () => Session |
   return () => {
     const session = id();
     if (session === null || session === undefined) return undefined;
-    return connection.target(`sessions.${session}`)?.sections as Session | undefined;
+    return connection.target(`sessions.${session}`)?.sections as
+      | Session
+      | undefined;
   };
 }
 
 /** The 14 caret at a row's end. */
-export const RowCaret = () => <Icon name="caretRight" size={14} color="faint" />;
+export const RowCaret = () => (
+  <Icon name="caretRight" size={14} color="faint" />
+);
 
 /** A 36-high caption over a group of rows: 任务 2, 2 位成员 and 邀请 beside it. */
 export function Caption(props: { title: string; right?: JSX.Element }) {
   return (
     <View class="h-9 shrink-0 flex-row items-end justify-between px-4 pb-[6px]">
-      <Text class="text-sm leading-[18px] text-muted-foreground">{props.title}</Text>
+      <Text class="text-sm leading-[18px] text-muted-foreground">
+        {props.title}
+      </Text>
       {props.right}
     </View>
   );
@@ -99,11 +118,15 @@ export function SheetRow(props: {
     >
       {props.leading}
       <View class="min-w-0 grow basis-0">
-        <Text class={`truncate text-lead leading-[20px] ${props.danger ? "text-state-error" : "text-foreground"}`}>
+        <Text
+          class={`truncate text-lead leading-[20px] ${props.danger ? "text-state-error" : "text-foreground"}`}
+        >
           {props.title}
         </Text>
         <If when={props.subtitle !== undefined}>
-          <Text class="truncate text-sm leading-4 text-muted-foreground">{props.subtitle}</Text>
+          <Text class="truncate text-sm leading-4 text-muted-foreground">
+            {props.subtitle}
+          </Text>
         </If>
       </View>
       {props.trailing}
@@ -117,7 +140,9 @@ export function SheetTitle(props: { title: string; body?: string }) {
     <View class="gap-[2px] px-4 pt-4 pb-3">
       <Text class="text-[17px] leading-5 text-foreground">{props.title}</Text>
       <If when={props.body !== undefined}>
-        <Text class="text-md leading-[20px] text-muted-foreground">{props.body}</Text>
+        <Text class="text-md leading-[20px] text-muted-foreground">
+          {props.body}
+        </Text>
       </If>
     </View>
   );

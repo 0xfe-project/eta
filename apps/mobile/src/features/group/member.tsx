@@ -22,10 +22,22 @@ import { Sheet } from "../../ui/Sheet";
 import { Empty, Loading } from "../../ui/States";
 import { moment } from "../../ui/format";
 import { call, useTarget } from "../../wire/target";
-import { act, agentName, modelName, SheetRow, statusLabel, tokens, useSession } from "./shared";
+import {
+  act,
+  agentName,
+  modelName,
+  SheetRow,
+  statusLabel,
+  tokens,
+  useSession,
+} from "./shared";
 
 /** A reply a stop can still reach. */
-const IN_FLIGHT = new Set<MessageView["status"]>(["queued", "working", "waiting_for_input"]);
+const IN_FLIGHT = new Set<MessageView["status"]>([
+  "queued",
+  "working",
+  "waiting_for_input",
+]);
 
 const MARK: Record<TaskStatus, string> = {
   pending: "·",
@@ -33,14 +45,20 @@ const MARK: Record<TaskStatus, string> = {
   completed: "✓",
   cancelled: "×",
 };
-const ORDER: readonly TaskStatus[] = ["pending", "in_progress", "completed", "cancelled"];
+const ORDER: readonly TaskStatus[] = [
+  "pending",
+  "in_progress",
+  "completed",
+  "cancelled",
+];
 
 /** A press moves a step on, as on the web. */
 const next = (status: TaskStatus): TaskStatus =>
   ORDER[(ORDER.indexOf(status) + 1) % ORDER.length] as TaskStatus;
 
 function Steps(props: { session: string; tasks: StoredTask[] }) {
-  const done = () => props.tasks.filter((task) => task.status === "completed").length;
+  const done = () =>
+    props.tasks.filter((task) => task.status === "completed").length;
   return (
     <View class="gap-1 border-t border-border px-4 py-3">
       <Text class="text-sm leading-[18px] text-muted-foreground">
@@ -62,8 +80,12 @@ function Steps(props: { session: string; tasks: StoredTask[] }) {
             }
             class="flex-row items-center gap-2 active:opacity-60"
           >
-            <Text class="w-3 text-md leading-[18px] text-muted-foreground">{MARK[task().status]}</Text>
-            <Text class="truncate grow basis-0 text-md leading-[18px] text-foreground">{task().content}</Text>
+            <Text class="w-3 text-md leading-[18px] text-muted-foreground">
+              {MARK[task().status]}
+            </Text>
+            <Text class="truncate grow basis-0 text-md leading-[18px] text-foreground">
+              {task().content}
+            </Text>
           </View>
         )}
       </Each>
@@ -86,10 +108,15 @@ function MemberBody(props: {
   const session = useSession(() => props.member.sessionId);
   const known = () => agentById(id()) !== undefined;
   const reply = () =>
-    props.messages.findLast((message) => message.agentId === id() && IN_FLIGHT.has(message.status));
+    props.messages.findLast(
+      (message) => message.agentId === id() && IN_FLIGHT.has(message.status),
+    );
   const status = () =>
-    props.steward ? `${t("group.steward")} · ${statusLabel(props.member.status)}` : statusLabel(props.member.status);
-  const rate = () => Math.round((session()?.metrics?.tokensPerSec ?? 0) * 10) / 10;
+    props.steward
+      ? `${t("group.steward")} · ${statusLabel(props.member.status)}`
+      : statusLabel(props.member.status);
+  const rate = () =>
+    Math.round((session()?.metrics?.tokensPerSec ?? 0) * 10) / 10;
   const cache = () => {
     const usage = session()?.usage;
     return usage === undefined ? undefined : usage.cacheRead + usage.cacheWrite;
@@ -107,8 +134,12 @@ function MemberBody(props: {
       <View class="flex-row items-center gap-3 p-4">
         <AgentAvatar id={id()} size={40} />
         <View class="min-w-0 grow basis-0">
-          <Text class="truncate text-[17px] leading-5 text-foreground">{name()}</Text>
-          <Text class="truncate text-md leading-[18px] text-muted-foreground">{status()}</Text>
+          <Text class="truncate text-[17px] leading-5 text-foreground">
+            {name()}
+          </Text>
+          <Text class="truncate text-md leading-[18px] text-muted-foreground">
+            {status()}
+          </Text>
         </View>
         <If when={reply() !== undefined}>
           <Button
@@ -130,7 +161,9 @@ function MemberBody(props: {
         when={props.member.sessionId !== null}
         else={
           <View class="border-t border-border px-4 py-3">
-            <Text class="text-sm leading-[18px] text-muted-foreground">{t("group.member.noSession")}</Text>
+            <Text class="text-sm leading-[18px] text-muted-foreground">
+              {t("group.member.noSession")}
+            </Text>
           </View>
         }
       >
@@ -152,15 +185,21 @@ function MemberBody(props: {
           </Text>
         </View>
         <If when={(session()?.tasks?.length ?? 0) > 0}>
-          <Steps session={props.member.sessionId as string} tasks={session()?.tasks ?? []} />
+          <Steps
+            session={props.member.sessionId as string}
+            tasks={session()?.tasks ?? []}
+          />
         </If>
       </If>
       <If when={known()}>
         <SheetRow
           title={t("group.member.talkAlone", { name: name() })}
           onPress={() =>
-            act(call<{ conversation: { id: string } }>("agents", "direct", { agentId: id() }), (result) =>
-              leave(() => go.chat(result.conversation.id)),
+            act(
+              call<{ conversation: { id: string } }>("agents", "direct", {
+                agentId: id(),
+              }),
+              (result) => leave(() => go.chat(result.conversation.id)),
             )
           }
         />
@@ -172,7 +211,10 @@ function MemberBody(props: {
           const conversationId = props.conversationId;
           leave(() =>
             open(`member-only:${conversationId}:${agentId}`, () => (
-              <MemberOnlyScreen conversationId={conversationId} agentId={agentId} />
+              <MemberOnlyScreen
+                conversationId={conversationId}
+                agentId={agentId}
+              />
             )),
           );
         }}
@@ -187,7 +229,11 @@ function MemberBody(props: {
         />
       </If>
       <If when={props.removable}>
-        <SheetRow title={t("group.member.remove")} danger onPress={props.onRemove} />
+        <SheetRow
+          title={t("group.member.remove")}
+          danger
+          onPress={props.onRemove}
+        />
       </If>
     </View>
   );
@@ -209,8 +255,12 @@ function activity(transcript: TranscriptSection | undefined): string[] {
       JSON.stringify(message.content).includes("blocked by "),
   ).length;
   return [
-    t("group.member.turns", { count: `${turns}${more}` }),
-    ...(blocked === 0 ? [] : [t("group.member.blocked", { count: `${blocked}${more}` })]),
+    ...(turns === 0
+      ? []
+      : [t("group.member.turns", { count: `${turns}${more}` })]),
+    ...(blocked === 0
+      ? []
+      : [t("group.member.blocked", { count: `${blocked}${more}` })]),
   ];
 }
 
@@ -231,10 +281,19 @@ export function MemberSheet(props: {
   };
   const remove = (agentId: string) => {
     close();
-    act(call("conversations", "remove", { conversationId: props.conversationId, agentId }));
+    act(
+      call("conversations", "remove", {
+        conversationId: props.conversationId,
+        agentId,
+      }),
+    );
   };
   return (
-    <Sheet open={props.member !== undefined} onClose={close} testID="member-sheet">
+    <Sheet
+      open={props.member !== undefined}
+      onClose={close}
+      testID="member-sheet"
+    >
       <If when={props.member}>
         {(member) => (
           <If
@@ -253,12 +312,20 @@ export function MemberSheet(props: {
           >
             <View class="gap-[6px] px-4 pt-[20px] pb-4">
               <Text class="text-title leading-[30px] tracking-[-0.01em] text-foreground">
-                {t("group.member.removeTitle", { name: agentName(member().agentId) })}
+                {t("group.member.removeTitle", {
+                  name: agentName(member().agentId),
+                })}
               </Text>
-              <Text class="text-base leading-[23px] text-muted-foreground">{t("group.member.removeBody")}</Text>
+              <Text class="text-base leading-[23px] text-muted-foreground">
+                {t("group.member.removeBody")}
+              </Text>
             </View>
             <View class="flex-row gap-2 px-4 pb-2">
-              <Button title={t("common.cancel")} height={44} onPress={() => removing.set(false)} />
+              <Button
+                title={t("common.cancel")}
+                height={44}
+                onPress={() => removing.set(false)}
+              />
               <Button
                 title={t("group.member.remove")}
                 height={44}
@@ -274,14 +341,19 @@ export function MemberSheet(props: {
 }
 
 /** 只看: one member's rows of the conversation, newest first. The web has no such view; it reads the same timeline. */
-export function MemberOnlyScreen(props: { conversationId: string; agentId: string }) {
+function MemberOnlyScreen(props: {
+  conversationId: string;
+  agentId: string;
+}) {
   const target = useTarget(`conversations.${props.conversationId}`);
   const timeline = () => target.section<TimelineSection>("timeline");
   const older = signal<MessageView[]>([]);
   const noMore = signal(false);
   const rows = computed(() =>
     [...older(), ...(timeline()?.messages ?? [])]
-      .filter((message) => message.agentId === props.agentId && message.text !== "")
+      .filter(
+        (message) => message.agentId === props.agentId && message.text !== "",
+      )
       .reverse(),
   );
   const canPage = () => (timeline()?.hasMore ?? false) && !noMore();
@@ -312,7 +384,9 @@ export function MemberOnlyScreen(props: { conversationId: string; agentId: strin
           <Each of={rows()} key={(message) => message.id}>
             {(message) => (
               <View class="shrink-0 gap-1 border-b border-border px-4 py-3">
-                <Text class="text-sm leading-4 text-muted-foreground">{moment(message().createdAt)}</Text>
+                <Text class="text-sm leading-4 text-muted-foreground">
+                  {moment(message().createdAt)}
+                </Text>
                 <Markdown text={message().text} />
               </View>
             )}

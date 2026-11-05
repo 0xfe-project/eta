@@ -1,7 +1,12 @@
 import type { JSX } from "nsh";
 import { Text, View } from "nsh";
 
-export type ButtonVariant = "primary" | "outline" | "danger" | "ghost" | "disabled";
+export type ButtonVariant =
+  | "primary"
+  | "outline"
+  | "danger"
+  | "ghost"
+  | "disabled";
 
 const box: Record<ButtonVariant, string> = {
   primary: "bg-primary active:opacity-80",
@@ -30,7 +35,8 @@ export function Button(props: {
   icon?: JSX.Element;
   testID?: string;
 }) {
-  const variant = (): ButtonVariant => (props.disabled ? "disabled" : (props.variant ?? "outline"));
+  const variant = (): ButtonVariant =>
+    props.disabled ? "disabled" : (props.variant ?? "outline");
   return (
     <View
       role="button"
@@ -43,7 +49,9 @@ export function Button(props: {
       style={{ height: props.height ?? 40 }}
     >
       {props.icon}
-      <Text class={`text-base leading-[18px] ${label[variant()]}`}>{props.title}</Text>
+      <Text class={`text-base leading-[18px] ${label[variant()]}`}>
+        {props.title}
+      </Text>
     </View>
   );
 }

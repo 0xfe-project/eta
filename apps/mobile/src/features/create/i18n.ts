@@ -23,7 +23,8 @@ export const i18n = {
     "create.agent.machine": "运行机器",
     "create.agent.followProject": "跟随项目",
     "create.agent.followHint": "在项目所在的机器上运行",
-    "create.agent.followNote": "运行方式先按主机器列出，项目在别的机器上时可能不同。",
+    "create.agent.followNote":
+      "运行方式先按主机器列出，项目在别的机器上时可能不同。",
     "create.agent.primarySuffix": "（主机器）",
     "create.agent.online": "在线",
     "create.agent.offline": "离线",
@@ -34,9 +35,11 @@ export const i18n = {
     "create.agent.runtime": "运行方式",
     "create.agent.runtimeEta": "eta 内置",
     "create.agent.runtimeLoading": "正在检测 Claude Code、Codex…",
-    "create.agent.runtimeUnreachable": "这台机器现在连不上，查不到它装了哪些运行方式。",
+    "create.agent.runtimeUnreachable":
+      "这台机器现在连不上，查不到它装了哪些运行方式。",
     "create.agent.runtimeMissing": "{machine} 上没有 {runtime}，已换成 {next}",
-    "create.agent.runtimeUnknown": "无法确认 {machine} 有哪些运行方式，已换成 {next}",
+    "create.agent.runtimeUnknown":
+      "无法确认 {machine} 有哪些运行方式，已换成 {next}",
     "create.agent.status.unauthenticated": "（未登录）",
     "create.agent.status.missing": "（未安装）",
     "create.agent.status.error": "（不可用）",
@@ -51,8 +54,10 @@ export const i18n = {
     "create.agent.persona": "人格",
     "create.agent.personaDefault": "项目默认",
     "create.agent.instructions": "指令",
-    "create.agent.instructionsPlaceholder": "职责、工作方式和约束。例如：你负责审查 Pull Request，只指出会导致错误的问题。",
-    "create.agent.instructionsHelp": "注入智能体的上下文；修改在空闲时生效，不打断进行中的回复。",
+    "create.agent.instructionsPlaceholder":
+      "职责、工作方式和约束。例如：你负责审查 Pull Request，只指出会导致错误的问题。",
+    "create.agent.instructionsHelp":
+      "注入智能体的上下文；修改在空闲时生效，不打断进行中的回复。",
     "create.agent.next": "下一步",
     "create.agent.create": "创建",
     "create.agent.creating": "正在创建…",
@@ -73,7 +78,8 @@ export const i18n = {
     "create.picker.added": "已添加",
     "create.picker.empty": "这里没有子目录，可以直接选择当前目录",
     "create.picker.noMatch": "没有匹配的目录",
-    "create.picker.truncated": "目录太多，只列出前 {limit} 个。用筛选或输入路径。",
+    "create.picker.truncated":
+      "目录太多，只列出前 {limit} 个。用筛选或输入路径。",
     "create.picker.notFound": "这个目录不存在",
     "create.picker.denied": "没有权限读取这个目录",
     "create.picker.offline": "连不上这台机器",
@@ -105,7 +111,8 @@ export const i18n = {
     "create.agent.machine": "Runs on",
     "create.agent.followProject": "Follow the project",
     "create.agent.followHint": "Runs on the machine the project is on",
-    "create.agent.followNote": "Runtimes are listed for the primary machine; a project elsewhere may differ.",
+    "create.agent.followNote":
+      "Runtimes are listed for the primary machine; a project elsewhere may differ.",
     "create.agent.primarySuffix": " (primary)",
     "create.agent.online": "Online",
     "create.agent.offline": "Offline",
@@ -116,9 +123,12 @@ export const i18n = {
     "create.agent.runtime": "Runtime",
     "create.agent.runtimeEta": "eta built-in",
     "create.agent.runtimeLoading": "Looking for Claude Code, Codex…",
-    "create.agent.runtimeUnreachable": "This machine is out of reach, so its runtimes are unknown.",
-    "create.agent.runtimeMissing": "{machine} has no {runtime}; switched to {next}",
-    "create.agent.runtimeUnknown": "Could not ask {machine} for its runtimes; switched to {next}",
+    "create.agent.runtimeUnreachable":
+      "This machine is out of reach, so its runtimes are unknown.",
+    "create.agent.runtimeMissing":
+      "{machine} has no {runtime}; switched to {next}",
+    "create.agent.runtimeUnknown":
+      "Could not ask {machine} for its runtimes; switched to {next}",
     "create.agent.status.unauthenticated": " (not signed in)",
     "create.agent.status.missing": " (not installed)",
     "create.agent.status.error": " (unavailable)",
@@ -133,8 +143,10 @@ export const i18n = {
     "create.agent.persona": "Persona",
     "create.agent.personaDefault": "Project default",
     "create.agent.instructions": "Instructions",
-    "create.agent.instructionsPlaceholder": "Role, way of working and limits. For example: you review pull requests and only point out what would cause a bug.",
-    "create.agent.instructionsHelp": "Added to the agent's context. Changes apply when it is idle and don't interrupt a reply.",
+    "create.agent.instructionsPlaceholder":
+      "Role, way of working and limits. For example: you review pull requests and only point out what would cause a bug.",
+    "create.agent.instructionsHelp":
+      "Added to the agent's context. Changes apply when it is idle and don't interrupt a reply.",
     "create.agent.next": "Next",
     "create.agent.create": "Create",
     "create.agent.creating": "Creating…",
@@ -153,9 +165,11 @@ export const i18n = {
     "create.picker.recent": "Recent",
     "create.picker.home": "Home",
     "create.picker.added": "Added",
-    "create.picker.empty": "No subdirectories here. You can choose this directory.",
+    "create.picker.empty":
+      "No subdirectories here. You can choose this directory.",
     "create.picker.noMatch": "No matching directories",
-    "create.picker.truncated": "Too many directories; showing the first {limit}. Filter or type a path.",
+    "create.picker.truncated":
+      "Too many directories; showing the first {limit}. Filter or type a path.",
     "create.picker.notFound": "This directory doesn't exist",
     "create.picker.denied": "No permission to read this directory",
     "create.picker.offline": "Can't reach this machine",

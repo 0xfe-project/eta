@@ -9,7 +9,13 @@ import type {
   MemberView,
 } from "@eta/client-contracts";
 import type { TextKey } from "../../i18n";
-import { agentById, agents, conversations, machineById, projectById } from "../../app/lists";
+import {
+  agentById,
+  agents,
+  conversations,
+  machineById,
+  projectById,
+} from "../../app/lists";
 import { t } from "../../i18n";
 
 export const activityOf = (conversation: ConversationSummary): number =>
@@ -31,7 +37,8 @@ export function groupSections(): GroupSection[] {
   for (const conversation of conversations()) {
     if (conversation.archived || conversation.kind === "direct") continue;
     const rows = byProject.get(conversation.projectId);
-    if (rows === undefined) byProject.set(conversation.projectId, [conversation]);
+    if (rows === undefined)
+      byProject.set(conversation.projectId, [conversation]);
     else rows.push(conversation);
   }
   return [...byProject.entries()]
@@ -44,7 +51,9 @@ export function groupSections(): GroupSection[] {
         rows: rows.sort(newestFirst),
       };
     })
-    .sort((left, right) => activityOf(right.rows[0]!) - activityOf(left.rows[0]!));
+    .sort(
+      (left, right) => activityOf(right.rows[0]!) - activityOf(left.rows[0]!),
+    );
 }
 
 export interface DirectEntry {
@@ -81,15 +90,25 @@ export const archivedConversations = (): ConversationSummary[] =>
     .sort((left, right) => right.updatedAt - left.updatedAt);
 
 const waiting = (conversation: ConversationSummary | undefined): boolean =>
-  conversation?.participants.some((member) => member.status === "waiting_for_input") === true;
+  conversation?.participants.some(
+    (member) => member.status === "waiting_for_input",
+  ) === true;
 
 /** The segment's number: 02 and 02a count the conversations that wait for the user. */
 export const waitingGroups = (): number =>
-  groupSections().reduce((sum, section) => sum + section.rows.filter(waiting).length, 0);
+  groupSections().reduce(
+    (sum, section) => sum + section.rows.filter(waiting).length,
+    0,
+  );
 export const waitingDirects = (): number =>
   directEntries().filter((entry) => waiting(entry.conversation)).length;
 
-const BUSY: Exclude<MemberStatus, "idle">[] = ["waiting_for_input", "working", "stopping", "queued"];
+const BUSY: Exclude<MemberStatus, "idle">[] = [
+  "waiting_for_input",
+  "working",
+  "stopping",
+  "queued",
+];
 
 const STATUS_TEXT: Record<MemberStatus, TextKey> = {
   idle: "conversations.status.idle",
@@ -102,7 +121,9 @@ const STATUS_TEXT: Record<MemberStatus, TextKey> = {
 /** The member a row speaks of: whoever waits for the user first, then whoever is at work. */
 function busiest(conversation: ConversationSummary): MemberView | undefined {
   for (const status of BUSY) {
-    const member = conversation.participants.find((each) => each.status === status);
+    const member = conversation.participants.find(
+      (each) => each.status === status,
+    );
     if (member !== undefined) return member;
   }
   return undefined;
@@ -119,7 +140,8 @@ export function statusLine(conversation: ConversationSummary): StatusLine {
   const member = busiest(conversation);
   if (member !== undefined) {
     const status = t(STATUS_TEXT[member.status]);
-    const name = agentById(member.agentId)?.name ?? t("conversations.deletedAgent");
+    const name =
+      agentById(member.agentId)?.name ?? t("conversations.deletedAgent");
     return {
       text: conversation.kind === "direct" ? status : `${name} ${status}`,
       strong: member.status === "waiting_for_input",
@@ -128,7 +150,9 @@ export function statusLine(conversation: ConversationSummary): StatusLine {
   if (conversation.preview !== "" || conversation.kind === "direct")
     return { text: conversation.preview, strong: false };
   return {
-    text: t("conversations.memberCount", { count: conversation.participants.length }),
+    text: t("conversations.memberCount", {
+      count: conversation.participants.length,
+    }),
     strong: false,
   };
 }

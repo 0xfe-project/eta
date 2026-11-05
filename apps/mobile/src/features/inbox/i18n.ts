@@ -41,7 +41,8 @@ export const i18n = {
     "inbox.task.blocked": "Blocked",
     "inbox.task.waitingForYou": "{agent} is waiting for your reply",
     "inbox.empty.title": "Nothing is waiting for you",
-    "inbox.empty.body": "What agents ask you to confirm and tasks handed to you show up here.",
+    "inbox.empty.body":
+      "What agents ask you to confirm and tasks handed to you show up here.",
     "inbox.giveUpNote": "Giving up ends the run waiting for this answer.",
     "inbox.ask.who": "Question · {agent}",
     "inbox.ask.giveUp": "Give up",

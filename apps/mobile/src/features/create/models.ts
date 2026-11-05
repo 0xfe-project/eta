@@ -57,13 +57,16 @@ function modelsOf(view: ProvidersView): Model[] {
   );
 }
 
-const gatewayModels = (models: readonly LlmModel[], accounts: LlmAccounts | undefined): Model[] =>
+const gatewayModels = (
+  models: readonly LlmModel[],
+  accounts: LlmAccounts | undefined,
+): Model[] =>
   models.map((model) => ({
     id: `${LLM_PROVIDER_ID}:${model.id}`,
     provider: LLM_PROVIDER_ID,
     providerName:
-      accounts?.connectors.find((connector) => connector.id === model.connector)?.name ??
-      model.connector,
+      accounts?.connectors.find((connector) => connector.id === model.connector)
+        ?.name ?? model.connector,
     name: model.name,
     available: model.available,
     default: false,
@@ -98,7 +101,8 @@ export function useModels(): () => Model[] | null | undefined {
         llm?.section<LlmAccounts>("accounts"),
       ),
     ];
-    const fallback = merged.find((model) => model.id === config.defaultModel) ?? merged[0];
+    const fallback =
+      merged.find((model) => model.id === config.defaultModel) ?? merged[0];
     return merged.map((model) => ({ ...model, default: model === fallback }));
   };
 }

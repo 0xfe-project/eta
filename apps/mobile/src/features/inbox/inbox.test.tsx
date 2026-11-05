@@ -1,6 +1,9 @@
 import { expect, open, test } from "nsh/test";
 
-const HOST = JSON.stringify({ address: "mac-studio.tail3f2a.ts.net", token: "secret" });
+const HOST = JSON.stringify({
+  address: "mac-studio.tail3f2a.ts.net",
+  token: "secret",
+});
 const start = (scenario = "", extra: Record<string, string> = {}) =>
   open("../../../DevApp.tsx", {
     storage: {

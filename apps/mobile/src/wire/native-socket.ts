@@ -12,9 +12,10 @@ function refusedBy(error: unknown): RefusedBy {
 }
 
 /** `wss://host/ws` for a name, `ws://` for a loopback or explicit `http://` address. */
-export function wsUrl(address: string): string {
+function wsUrl(address: string): string {
   const trimmed = address.trim().replace(/\/+$/, "");
-  if (/^https?:\/\//.test(trimmed)) return `${trimmed.replace(/^http/, "ws")}/ws`;
+  if (/^https?:\/\//.test(trimmed))
+    return `${trimmed.replace(/^http/, "ws")}/ws`;
   if (/^wss?:\/\//.test(trimmed)) return `${trimmed}/ws`;
   return `ws://${trimmed}/ws`;
 }
@@ -34,7 +35,8 @@ export function nativeSocket(address: string, token: string): WireSocket {
     done = true;
     close(refused);
   };
-  const headers: Record<string, string> = token === "" ? {} : { [TOKEN_HEADER]: token };
+  const headers: Record<string, string> =
+    token === "" ? {} : { [TOKEN_HEADER]: token };
   connect(wsUrl(address), { headers }).then(
     async (opened) => {
       socket = opened;

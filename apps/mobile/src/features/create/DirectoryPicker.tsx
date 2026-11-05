@@ -22,7 +22,9 @@ type Listing = ProjectResults["directories"];
 /** The host says why in `problem.code`; its message reads `directory: <code>`. No word: nobody answered. */
 function problemOf(error: unknown): DirectoryProblem {
   const failure = error as Partial<WireError>;
-  const code = failure.problem?.code ?? /^directory: (\w+)$/.exec(failure.message ?? "")?.[1];
+  const code =
+    failure.problem?.code ??
+    /^directory: (\w+)$/.exec(failure.message ?? "")?.[1];
   return code === "not_found" || code === "denied" ? code : "offline";
 }
 
@@ -35,7 +37,9 @@ const PROBLEM_TEXT = {
 /** The path as steps to press: from `~` inside the home, from `/` outside it. */
 function crumbsOf(path: string, home: string | undefined) {
   const inside =
-    home !== undefined && home !== "/" && (path === home || path.startsWith(`${home}/`));
+    home !== undefined &&
+    home !== "/" &&
+    (path === home || path.startsWith(`${home}/`));
   const root = inside ? home : "/";
   const crumbs = [{ name: inside ? "~" : "/", path: root }];
   let at = inside ? home : "";
@@ -56,7 +60,12 @@ const list = (machineId: string, path: string | undefined): Promise<Listing> =>
   } satisfies ProjectArgs["directories"]);
 
 /** A row that is a project already has nothing further to offer the eye: 07a draws it without the caret. */
-function Row(props: { name: string; tags: string[]; caret?: boolean; onPress: () => void }) {
+function Row(props: {
+  name: string;
+  tags: string[];
+  caret?: boolean;
+  onPress: () => void;
+}) {
   return (
     <View
       role="button"
@@ -68,7 +77,11 @@ function Row(props: { name: string; tags: string[]; caret?: boolean; onPress: ()
         {props.name}
       </Text>
       <Each of={props.tags} key="index">
-        {(tag) => <Text class="shrink-0 text-sm leading-4 text-muted-foreground">{tag()}</Text>}
+        {(tag) => (
+          <Text class="shrink-0 text-sm leading-4 text-muted-foreground">
+            {tag()}
+          </Text>
+        )}
       </Each>
       <If when={props.caret !== false}>
         <Icon name="caretRight" size={14} color="faint" />
@@ -90,7 +103,11 @@ function Note(props: { text: string; muted?: boolean }) {
   );
 }
 
-function Problem(props: { text: string; action?: string | undefined; onAction: () => void }) {
+function Problem(props: {
+  text: string;
+  action?: string | undefined;
+  onAction: () => void;
+}) {
   return (
     <View class="flex-row items-center gap-3 border-y border-border px-4 py-[14px]">
       <Text class="min-w-0 grow basis-0 text-base leading-[22px] text-state-error">
@@ -124,7 +141,9 @@ export function DirectoryPicker(props: {
   const problem = signal<DirectoryProblem | undefined>(undefined);
   const filter = signal("");
   const showHidden = signal(false);
-  const typing = signal<{ value: string; problem?: DirectoryProblem } | undefined>(undefined);
+  const typing = signal<
+    { value: string; problem?: DirectoryProblem } | undefined
+  >(undefined);
   const pickingMachine = signal(false);
   // Only the newest question counts: an answer left behind says nothing.
   let attempt = 0;
@@ -167,7 +186,8 @@ export function DirectoryPicker(props: {
       problem.set(undefined);
       listing.set(found);
     } catch (error) {
-      if (mine === typedAttempt) typing.set({ value, problem: problemOf(error) });
+      if (mine === typedAttempt)
+        typing.set({ value, problem: problemOf(error) });
     }
   };
 
@@ -185,16 +205,22 @@ export function DirectoryPicker(props: {
   const entries = computed(() =>
     (listing()?.entries ?? []).filter(
       (entry: DirectoryEntry) =>
-        (showHidden() || !entry.hidden) && entry.name.toLowerCase().includes(needle()),
+        (showHidden() || !entry.hidden) &&
+        entry.name.toLowerCase().includes(needle()),
     ),
   );
   const recents = computed(() => {
     const listed = listing();
-    if (listed === undefined || listed.path !== listed.home || needle() !== "") return [];
-    return (recentDirectories()[place().machineId] ?? []).filter((path) => path !== listed.path);
+    if (listed === undefined || listed.path !== listed.home || needle() !== "")
+      return [];
+    return (recentDirectories()[place().machineId] ?? []).filter(
+      (path) => path !== listed.path,
+    );
   });
   const added = (path: string) =>
-    projects().some((each) => each.machineId === place().machineId && each.path === path);
+    projects().some(
+      (each) => each.machineId === place().machineId && each.path === path,
+    );
   const empty = () => entries().length === 0 && recents().length === 0;
   const crumbs = () => crumbsOf(current() ?? "/", home());
 
@@ -231,8 +257,14 @@ export function DirectoryPicker(props: {
                 <Each of={crumbs()} key={(crumb) => crumb.path}>
                   {(crumb, index) => (
                     <>
-                      <If when={index() > 0 && crumbs()[index() - 1]?.name !== "/"}>
-                        <Text class="shrink-0 text-md leading-4 text-faint">/</Text>
+                      <If
+                        when={
+                          index() > 0 && crumbs()[index() - 1]?.name !== "/"
+                        }
+                      >
+                        <Text class="shrink-0 text-md leading-4 text-faint">
+                          /
+                        </Text>
                       </If>
                       <Text
                         role="button"
@@ -273,7 +305,9 @@ export function DirectoryPicker(props: {
           }}
           class="shrink-0 text-sm leading-4 text-muted-foreground active:opacity-60"
         >
-          {typing() === undefined ? t("create.picker.typePath") : t("common.cancel")}
+          {typing() === undefined
+            ? t("create.picker.typePath")
+            : t("common.cancel")}
         </Text>
       </View>
       <If when={typing()?.problem !== undefined}>
@@ -300,14 +334,28 @@ export function DirectoryPicker(props: {
           class="flex-row items-center gap-[6px] active:opacity-60"
         >
           <CheckBox checked={showHidden()} size={16} />
-          <Text class="text-sm leading-4 text-muted-foreground">{t("create.picker.hidden")}</Text>
+          <Text class="text-sm leading-4 text-muted-foreground">
+            {t("create.picker.hidden")}
+          </Text>
         </View>
       </View>
-      <Scroll style={{ flex: 1 }} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled">
+      <Scroll
+        style={{ flex: 1 }}
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
+      >
         <If when={listing() !== undefined}>
           <If
             when={!empty()}
-            else={<Note text={needle() === "" ? t("create.picker.empty") : t("create.picker.noMatch")} />}
+            else={
+              <Note
+                text={
+                  needle() === ""
+                    ? t("create.picker.empty")
+                    : t("create.picker.noMatch")
+                }
+              />
+            }
           >
             <If when={recents().length > 0}>
               <Caption title={t("create.picker.recent")} height={30} />
@@ -331,7 +379,9 @@ export function DirectoryPicker(props: {
                   name={entry().name}
                   tags={[
                     ...(entry().git ? ["git"] : []),
-                    ...(entry().projectId === null ? [] : [t("create.picker.added")]),
+                    ...(entry().projectId === null
+                      ? []
+                      : [t("create.picker.added")]),
                   ]}
                   caret={entry().projectId === null}
                   onPress={() => {
@@ -345,7 +395,9 @@ export function DirectoryPicker(props: {
             <If when={listing()?.truncated === true}>
               <Note
                 muted
-                text={t("create.picker.truncated", { limit: listing()?.entries.length ?? 0 })}
+                text={t("create.picker.truncated", {
+                  limit: listing()?.entries.length ?? 0,
+                })}
               />
             </If>
           </If>
@@ -373,7 +425,8 @@ export function DirectoryPicker(props: {
         disabled={listing() === undefined || typing() !== undefined}
         onPress={() => {
           const listed = listing();
-          if (listed !== undefined) props.onPick(listed.path, place().machineId);
+          if (listed !== undefined)
+            props.onPick(listed.path, place().machineId);
         }}
       />
       <SelectSheet
@@ -381,7 +434,9 @@ export function DirectoryPicker(props: {
         title={t("create.picker.machine")}
         value={place().machineId}
         options={machines()
-          .filter((each) => each.status === "online" || each.status === "offline")
+          .filter(
+            (each) => each.status === "online" || each.status === "offline",
+          )
           .map((each) => ({
             value: each.id,
             label: each.name,

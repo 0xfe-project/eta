@@ -27,7 +27,8 @@ import {
 
 type Kind = "groups" | "directs";
 
-const failed = (error: unknown) => toast(t("common.failed", { message: reason(error) }));
+const failed = (error: unknown) =>
+  toast(t("common.failed", { message: reason(error) }));
 
 const counted = (count: number) => (count === 0 ? undefined : count);
 
@@ -58,7 +59,10 @@ function GroupRow(props: {
       class="h-[62px] shrink-0 justify-center gap-[2px] border-b border-border px-4 active:bg-muted"
     >
       <View class="flex-row items-center gap-[6px]">
-        <Each of={props.conversation.participants.slice(0, 3)} key={(member) => member.agentId}>
+        <Each
+          of={props.conversation.participants.slice(0, 3)}
+          key={(member) => member.agentId}
+        >
           {(member) => <AgentAvatar id={member().agentId} size={20} />}
         </Each>
         <Text class="min-w-0 grow basis-0 truncate text-lead leading-[22px] text-foreground">
@@ -90,7 +94,9 @@ function Section(props: {
       <View
         class={`shrink-0 flex-row items-end justify-between border-b border-border px-4 pb-[6px] ${props.first ? "h-[30px]" : "h-[38px]"}`}
       >
-        <Text class="text-sm leading-[18px] text-foreground">{props.section.project ?? ""}</Text>
+        <Text class="text-sm leading-[18px] text-foreground">
+          {props.section.project ?? ""}
+        </Text>
         <Text class="text-sm leading-[18px] text-muted-foreground">
           {props.section.machine ?? ""}
         </Text>
@@ -126,10 +132,14 @@ function DirectRow(props: {
     >
       <AgentAvatar id={props.agentId} size={32} />
       <View class="min-w-0 grow basis-0">
-        <Text class="truncate text-lead leading-[22px] text-foreground">{props.name}</Text>
+        <Text class="truncate text-lead leading-[22px] text-foreground">
+          {props.name}
+        </Text>
         <Line line={props.line} />
       </View>
-      <Text class="shrink-0 text-sm leading-4 text-muted-foreground">{props.time}</Text>
+      <Text class="shrink-0 text-sm leading-4 text-muted-foreground">
+        {props.time}
+      </Text>
     </View>
   );
 }
@@ -137,7 +147,11 @@ function DirectRow(props: {
 /** The chat with an agent is made the first time it is asked for, and found after that. */
 async function openDirect(agentId: string): Promise<void> {
   try {
-    const { conversation } = await call<AgentResults["direct"]>("agents", "direct", { agentId });
+    const { conversation } = await call<AgentResults["direct"]>(
+      "agents",
+      "direct",
+      { agentId },
+    );
     go.chat(conversation.id);
   } catch (error) {
     failed(error);
@@ -193,8 +207,16 @@ export function ConversationsTab() {
       <View class="shrink-0 px-4 pb-2">
         <Segmented
           options={[
-            { value: "groups", label: t("conversations.groups"), count: counted(waitingGroups()) },
-            { value: "directs", label: t("conversations.directs"), count: counted(waitingDirects()) },
+            {
+              value: "groups",
+              label: t("conversations.groups"),
+              count: counted(waitingGroups()),
+            },
+            {
+              value: "directs",
+              label: t("conversations.directs"),
+              count: counted(waitingDirects()),
+            },
           ]}
           value={kind()}
           onChange={(next: Kind) => kind.set(next)}
@@ -212,11 +234,20 @@ export function ConversationsTab() {
                     <DirectRow
                       agentId={entry().agent.id}
                       name={entry().agent.name}
-                      line={chat() === undefined ? agentLine(entry().agent) : statusLine(chat()!)}
-                      time={chat() === undefined ? "" : ago(activityOf(chat()!), now())}
+                      line={
+                        chat() === undefined
+                          ? agentLine(entry().agent)
+                          : statusLine(chat()!)
+                      }
+                      time={
+                        chat() === undefined
+                          ? ""
+                          : ago(activityOf(chat()!), now())
+                      }
                       onPress={() => {
                         const conversation = chat();
-                        if (conversation !== undefined) go.chat(conversation.id);
+                        if (conversation !== undefined)
+                          go.chat(conversation.id);
                         else void openDirect(entry().agent.id);
                       }}
                       onLongPress={() => {
@@ -230,7 +261,10 @@ export function ConversationsTab() {
             </View>
           }
         >
-          <If when={groupSections().length > 0} else={<Empty title={t("conversations.empty")} />}>
+          <If
+            when={groupSections().length > 0}
+            else={<Empty title={t("conversations.empty")} />}
+          >
             <Each of={groupSections()} key={(section) => section.projectId}>
               {(section, index) => (
                 <Section
@@ -256,7 +290,10 @@ export function ConversationsTab() {
 
 function when(at: number): string {
   const date = new Date(at);
-  return t("conversations.date", { month: date.getMonth() + 1, day: date.getDate() });
+  return t("conversations.date", {
+    month: date.getMonth() + 1,
+    day: date.getDate(),
+  });
 }
 
 function ArchivedRow(props: { conversation: ConversationSummary }) {
@@ -282,13 +319,16 @@ function ArchivedRow(props: { conversation: ConversationSummary }) {
         role="button"
         accessibilityLabel={`${t("conversations.unarchive")} ${props.conversation.name}`}
         onPress={() => {
-          updateConversation({ conversationId: props.conversation.id, archived: false }).catch(
-            failed,
-          );
+          updateConversation({
+            conversationId: props.conversation.id,
+            archived: false,
+          }).catch(failed);
         }}
         class="h-9 items-center justify-center border border-border-strong px-3 active:bg-muted"
       >
-        <Text class="text-md leading-4 text-foreground">{t("conversations.unarchive")}</Text>
+        <Text class="text-md leading-4 text-foreground">
+          {t("conversations.unarchive")}
+        </Text>
       </View>
     </View>
   );

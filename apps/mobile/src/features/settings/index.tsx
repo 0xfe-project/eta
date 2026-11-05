@@ -14,7 +14,11 @@ import { leaveHost } from "../connect";
 import { RunRow, useRuns } from "../inbox/running";
 import { hostVersion } from "./version";
 
-const OS_LABELS: Record<string, string> = { darwin: "macOS", linux: "Linux", windows: "Windows" };
+const OS_LABELS: Record<string, string> = {
+  darwin: "macOS",
+  linux: "Linux",
+  windows: "Windows",
+};
 /** Past this many slots a meter says more than it shows: the numbers beside it are enough. */
 const MAX_METER = 8;
 
@@ -32,7 +36,13 @@ function Title(props: { text: string; class: string }) {
 }
 
 function Option(props: { title: string; on: boolean; onPress: () => void }) {
-  return <Button title={props.title} variant={props.on ? "primary" : "outline"} onPress={props.onPress} />;
+  return (
+    <Button
+      title={props.title}
+      variant={props.on ? "primary" : "outline"}
+      onPress={props.onPress}
+    />
+  );
 }
 
 /** 10. */
@@ -40,7 +50,9 @@ function Appearance() {
   return (
     <View class="gap-[20px] px-4 pt-4">
       <View class="gap-2">
-        <Text class="text-sm leading-[18px] text-muted-foreground">{t("settings.scheme")}</Text>
+        <Text class="text-sm leading-[18px] text-muted-foreground">
+          {t("settings.scheme")}
+        </Text>
         <View class="flex-row gap-2">
           <Option
             title={t("settings.scheme.system")}
@@ -60,18 +72,33 @@ function Appearance() {
         </View>
       </View>
       <View class="gap-2">
-        <Text class="text-sm leading-[18px] text-muted-foreground">{t("settings.language")}</Text>
+        <Text class="text-sm leading-[18px] text-muted-foreground">
+          {t("settings.language")}
+        </Text>
         <View class="flex-row gap-2">
-          <Option title="简体中文" on={language() === "zh"} onPress={() => setLanguage("zh")} />
-          <Option title="English" on={language() === "en"} onPress={() => setLanguage("en")} />
+          <Option
+            title="简体中文"
+            on={language() === "zh"}
+            onPress={() => setLanguage("zh")}
+          />
+          <Option
+            title="English"
+            on={language() === "en"}
+            onPress={() => setLanguage("en")}
+          />
         </View>
       </View>
     </View>
   );
 }
 
-function versionText(machine: MachineView, hostBuild: string | undefined): string | undefined {
-  return machine.kind === "primary" ? hostBuild : (machine.version ?? undefined);
+function versionText(
+  machine: MachineView,
+  hostBuild: string | undefined,
+): string | undefined {
+  return machine.kind === "primary"
+    ? hostBuild
+    : (machine.version ?? undefined);
 }
 
 function buildNote(machine: MachineView): string | undefined {
@@ -83,11 +110,16 @@ function buildNote(machine: MachineView): string | undefined {
 function lastOnline(at: number | null): string | undefined {
   if (at === null) return undefined;
   const minutes = Math.floor((Date.now() - at) / 60_000);
-  const ago = (when: string) => t("settings.lastOnline", { when: t("settings.ago", { when }) });
-  if (minutes < 60) return ago(t("common.minutesAgo", { count: Math.max(minutes, 1) }));
-  if (minutes < 24 * 60) return ago(t("common.hoursAgo", { count: Math.floor(minutes / 60) }));
+  const ago = (when: string) =>
+    t("settings.lastOnline", { when: t("settings.ago", { when }) });
+  if (minutes < 60)
+    return ago(t("common.minutesAgo", { count: Math.max(minutes, 1) }));
+  if (minutes < 24 * 60)
+    return ago(t("common.hoursAgo", { count: Math.floor(minutes / 60) }));
   const date = new Date(at);
-  return t("settings.lastOnline", { when: `${date.getMonth() + 1}/${date.getDate()}` });
+  return t("settings.lastOnline", {
+    when: `${date.getMonth() + 1}/${date.getDate()}`,
+  });
 }
 
 function Meter(props: { used: number; slots: number }) {
@@ -96,7 +128,9 @@ function Meter(props: { used: number; slots: number }) {
       <View class="flex-row gap-[3px]">
         <Each of={Array.from({ length: props.slots }, (_, slot) => slot)}>
           {(slot) => (
-            <View class={`h-[18px] w-[10px] shrink-0 ${slot() < props.used ? "bg-foreground" : "bg-border"}`} />
+            <View
+              class={`h-[18px] w-[10px] shrink-0 ${slot() < props.used ? "bg-foreground" : "bg-border"}`}
+            />
           )}
         </Each>
       </View>
@@ -120,7 +154,9 @@ function MachineRow(props: {
       return [
         t("settings.offline"),
         lastOnline(machine.lastSeenAt),
-        props.waiting > 0 ? t("settings.tasksWaiting", { count: props.waiting }) : undefined,
+        props.waiting > 0
+          ? t("settings.tasksWaiting", { count: props.waiting })
+          : undefined,
       ]
         .filter((part) => part !== undefined)
         .join(" · ");
@@ -143,10 +179,14 @@ function MachineRow(props: {
       class={`h-[60px] shrink-0 flex-row items-center gap-3 border-t border-border px-4 active:bg-muted ${props.last ? "border-b" : ""}`}
     >
       <View class="min-w-0 grow basis-0">
-        <Text class={`truncate text-lead leading-[22px] ${offline() ? "text-muted-foreground" : "text-foreground"}`}>
+        <Text
+          class={`truncate text-lead leading-[22px] ${offline() ? "text-muted-foreground" : "text-foreground"}`}
+        >
           {props.machine.name}
         </Text>
-        <Text class={`truncate text-sm leading-4 ${offline() ? "text-state-error" : "text-muted-foreground"}`}>
+        <Text
+          class={`truncate text-sm leading-4 ${offline() ? "text-state-error" : "text-muted-foreground"}`}
+        >
           {line()}
         </Text>
       </View>
@@ -163,12 +203,15 @@ function MachineRow(props: {
 /** 10b: look, don't touch. Machines are managed on the computer. */
 function Machines(props: { build: string | undefined }) {
   const { running, queued } = useRuns();
-  const shown = () => machines().filter((machine) => machine.status !== "revoked");
+  const shown = () =>
+    machines().filter((machine) => machine.status !== "revoked");
   const taskRuns = () => running().filter((run) => run.task);
   return (
     <View>
       <View class="h-[34px] shrink-0 flex-row items-end justify-between px-4 pb-[6px]">
-        <Text class="text-sm leading-[18px] text-muted-foreground">{t("settings.machines")}</Text>
+        <Text class="text-sm leading-[18px] text-muted-foreground">
+          {t("settings.machines")}
+        </Text>
         <Text class="text-sm leading-[18px] text-muted-foreground">
           {t("settings.runs", { count: taskRuns().length })}
         </Text>
@@ -177,8 +220,12 @@ function Machines(props: { build: string | undefined }) {
         {(machine, index) => (
           <MachineRow
             machine={machine()}
-            used={taskRuns().filter((run) => run.machineId === machine().id).length}
-            waiting={queued().filter((run) => run.machineId === machine().id).length}
+            used={
+              taskRuns().filter((run) => run.machineId === machine().id).length
+            }
+            waiting={
+              queued().filter((run) => run.machineId === machine().id).length
+            }
             build={props.build}
             last={index() === shown().length - 1}
           />
@@ -193,8 +240,12 @@ function InfoRow(props: { label: string; value: string; last?: boolean }) {
     <View
       class={`h-12 shrink-0 flex-row items-center justify-between gap-4 border-t border-border px-4 ${props.last ? "border-b" : ""}`}
     >
-      <Text class="shrink-0 text-base leading-[18px] text-muted-foreground">{props.label}</Text>
-      <Text class="min-w-0 truncate text-base leading-[18px] text-foreground">{props.value}</Text>
+      <Text class="shrink-0 text-base leading-[18px] text-muted-foreground">
+        {props.label}
+      </Text>
+      <Text class="min-w-0 truncate text-base leading-[18px] text-foreground">
+        {props.value}
+      </Text>
     </View>
   );
 }
@@ -205,16 +256,36 @@ function Connection(props: { build: string | undefined }) {
     <View class="pt-2">
       <InfoRow
         label={t("settings.status")}
-        value={wire().status() === "open" ? t("settings.connected") : t("settings.reconnecting")}
+        value={
+          wire().status() === "open"
+            ? t("settings.connected")
+            : t("settings.reconnecting")
+        }
       />
-      <InfoRow label={t("settings.host")} value={primary()?.name ?? t("settings.unknown")} />
-      <InfoRow label={t("settings.address")} value={host()?.address ?? t("settings.unknown")} />
-      <InfoRow label={t("settings.versionLabel")} value={props.build ?? t("settings.unknown")} last />
+      <InfoRow
+        label={t("settings.host")}
+        value={primary()?.name ?? t("settings.unknown")}
+      />
+      <InfoRow
+        label={t("settings.address")}
+        value={host()?.address ?? t("settings.unknown")}
+      />
+      <InfoRow
+        label={t("settings.versionLabel")}
+        value={props.build ?? t("settings.unknown")}
+        last
+      />
       <View class="gap-[10px] px-4 pt-[24px]">
         <View class="flex-row">
-          <Button title={t("settings.disconnect")} height={44} onPress={leaveHost} />
+          <Button
+            title={t("settings.disconnect")}
+            height={44}
+            onPress={leaveHost}
+          />
         </View>
-        <Text class="text-sm leading-[18px] text-muted-foreground">{t("settings.stillRunning")}</Text>
+        <Text class="text-sm leading-[18px] text-muted-foreground">
+          {t("settings.stillRunning")}
+        </Text>
       </View>
     </View>
   );
@@ -257,7 +328,8 @@ export function SettingsScreen(props: { tab: SettingsTab }) {
 function useBuild() {
   const build = signal<string | undefined>(undefined);
   const target = host();
-  if (target !== undefined) void hostVersion(target).then((version) => build.set(version));
+  if (target !== undefined)
+    void hostVersion(target).then((version) => build.set(version));
   return build;
 }
 
@@ -288,10 +360,17 @@ export function MachineScreen(props: { id: string }) {
       >
         <Title text={machine()?.name ?? ""} class="pb-4" />
         <Body>
-          <InfoRow label={t("settings.status")} value={statusText(machine()?.status ?? "pending")} />
+          <InfoRow
+            label={t("settings.status")}
+            value={statusText(machine()?.status ?? "pending")}
+          />
           <InfoRow
             label={t("settings.system")}
-            value={OS_LABELS[machine()?.os ?? ""] ?? machine()?.os ?? t("settings.unknown")}
+            value={
+              OS_LABELS[machine()?.os ?? ""] ??
+              machine()?.os ??
+              t("settings.unknown")
+            }
           />
           <If when={machine() !== undefined}>
             <InfoRow
@@ -311,7 +390,13 @@ export function MachineScreen(props: { id: string }) {
               </Text>
             </View>
             <Each of={runs()} key={(run) => run.key}>
-              {(run, index) => <RunRow run={run()} plain last={index() === runs().length - 1} />}
+              {(run, index) => (
+                <RunRow
+                  run={run()}
+                  plain
+                  last={index() === runs().length - 1}
+                />
+              )}
             </Each>
           </If>
         </Body>

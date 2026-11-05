@@ -8,7 +8,9 @@ export interface Route {
 }
 
 /** The first route is the tabs; `Root` renders it. */
-export const nav = createNavStack<Route>([{ key: "tabs", page: () => null as never }]);
+export const nav = createNavStack<Route>([
+  { key: "tabs", page: () => null as never },
+]);
 
 /** Push a page, unless the same page is on top already. */
 export function open(key: string, page: () => JSX.Element): void {

@@ -134,16 +134,19 @@ export const i18n = {
     "group.member.basics": "Basic info",
     "group.member.remove": "Remove from group",
     "group.member.removeTitle": "Remove {name} from the group?",
-    "group.member.removeBody": "It stops getting this group's messages. You can invite it back later.",
+    "group.member.removeBody":
+      "It stops getting this group's messages. You can invite it back later.",
     "group.member.steps": "Steps {done}/{total}",
     "group.only.empty": "It hasn't said anything in this group yet",
     "group.only.earlier": "Earlier",
 
     "group.invite.title": "Invite an agent",
-    "group.invite.body": "Once in, it can read the group and reply when @-mentioned.",
+    "group.invite.body":
+      "Once in, it can read the group and reply when @-mentioned.",
     "group.invite.empty": "Every agent is already in the group.",
 
-    "group.related.help": "A task links to one group; linking it again replaces the old one.",
+    "group.related.help":
+      "A task links to one group; linking it again replaces the old one.",
     "group.related.unlink": "Unlink",
     "group.related.link": "Link",
 
@@ -152,7 +155,8 @@ export const i18n = {
     "group.steward.follow": "Follow the project",
     "group.steward.followHint": "Project {name}'s steward: {steward}",
     "group.steward.projectRow": "Steward of project {name}",
-    "group.steward.projectHint": "Changes every conversation that follows the project",
+    "group.steward.projectHint":
+      "Changes every conversation that follows the project",
 
     "group.edit.title": "Edit group info",
     "group.edit.hint": "Keep the current goal and what has been decided.",
@@ -175,7 +179,8 @@ export const i18n = {
     "group.share.hint": "Anyone with the link can open this version",
     "group.share.copy": "Copy",
     "group.share.revoke": "Stop sharing",
-    "group.share.revokeHint": "The link dies at once; sharing again makes a new one",
+    "group.share.revokeHint":
+      "The link dies at once; sharing again makes a new one",
     "group.share.revoked": "Public link revoked",
 
     "group.agent.gone": "This agent no longer exists",

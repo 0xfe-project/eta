@@ -136,7 +136,13 @@ const calls = (list: Call[]): AgentMessage[] =>
     assistant([
       { type: "toolCall", id: call.id, name: call.name, arguments: call.input },
     ]),
-    result(call.id, call.output, call.details, call.error === true, call.images),
+    result(
+      call.id,
+      call.output,
+      call.details,
+      call.error === true,
+      call.images,
+    ),
   ]);
 
 /** A patch whose first lines are 03i's, and as long as +64 −12 says. */

@@ -10,7 +10,12 @@ import { toast } from "../../ui/toast";
 import { call } from "../../wire/target";
 import { enterChat } from "./enter";
 import { Caption, Cta, Title, TopBar } from "./fields";
-import { choosableProjects, folderName, placeLine, useProjectChoice } from "./project";
+import {
+  choosableProjects,
+  folderName,
+  placeLine,
+  useProjectChoice,
+} from "./project";
 
 function ProjectRow(props: {
   name: string;
@@ -26,8 +31,12 @@ function ProjectRow(props: {
       class={`h-[60px] shrink-0 flex-row items-center gap-3 border-t border-border px-4 ${props.selected ? "bg-muted" : "active:bg-muted"}`}
     >
       <View class="min-w-0 grow basis-0">
-        <Text class="truncate text-lead leading-[22px] text-foreground">{props.name}</Text>
-        <Text class="truncate text-sm leading-4 text-muted-foreground">{props.place}</Text>
+        <Text class="truncate text-lead leading-[22px] text-foreground">
+          {props.name}
+        </Text>
+        <Text class="truncate text-sm leading-4 text-muted-foreground">
+          {props.place}
+        </Text>
       </View>
       <If when={props.selected}>
         <Icon name="check" size={18} />
@@ -66,7 +75,10 @@ export function NewConversationScreen(_props: {}) {
     <Page>
       <TopBar />
       <Body>
-        <Title title={t("create.conversation.title")} hint={t("create.conversation.hint")} />
+        <Title
+          title={t("create.conversation.title")}
+          hint={t("create.conversation.hint")}
+        />
         <Caption title={t("create.project")} height={30} />
         <If when={projects.adding() && projects.choice().path.trim() !== ""}>
           <ProjectRow
@@ -82,7 +94,12 @@ export function NewConversationScreen(_props: {}) {
               name={project().name}
               place={placeLine(project())}
               selected={projects.project()?.id === project().id}
-              onPress={() => projects.choice.set({ ...projects.choice(), projectId: project().id })}
+              onPress={() =>
+                projects.choice.set({
+                  ...projects.choice(),
+                  projectId: project().id,
+                })
+              }
             />
           )}
         </Each>
@@ -92,7 +109,9 @@ export function NewConversationScreen(_props: {}) {
           onPress={projects.browse}
           class="h-[52px] shrink-0 flex-row items-center justify-between border-y border-border px-4 active:bg-muted"
         >
-          <Text class="text-base leading-[18px] text-foreground">{t("create.addPath")}</Text>
+          <Text class="text-base leading-[18px] text-foreground">
+            {t("create.addPath")}
+          </Text>
           <Icon name="caretRight" size={14} color="faint" />
         </View>
         <Caption title={t("create.agents")} height={42} />

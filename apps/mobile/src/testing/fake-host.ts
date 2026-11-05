@@ -22,9 +22,9 @@ import { installTasks } from "./fixtures/tasks";
 export type Op = (args: any) => unknown;
 
 /** `eta.fake.refuse` in storage makes every attempt fail, for the connect screens. */
-export const REFUSE_KEY = "eta.fake.refuse";
+const REFUSE_KEY = "eta.fake.refuse";
 /** `eta.fake.scenario` picks a fixture's variant: "empty", "uninitialized", … */
-export const SCENARIO_KEY = "eta.fake.scenario";
+const SCENARIO_KEY = "eta.fake.scenario";
 
 export class FakeHost {
   /** target → section → value. */
@@ -40,7 +40,11 @@ export class FakeHost {
   private receiver: ((text: string) => void) | undefined;
 
   /** Give a target its sections; `eager` ones go out with `hello`. */
-  set(target: string, sections: Record<string, unknown>, options: { eager?: boolean } = {}): void {
+  set(
+    target: string,
+    sections: Record<string, unknown>,
+    options: { eager?: boolean } = {},
+  ): void {
     this.state.set(target, sections);
     if (options.eager) this.eager.add(target);
     this.push(target);
@@ -79,7 +83,12 @@ export class FakeHost {
     if (!this.subscribers.has(target)) return;
     const version = (this.versions.get(target) ?? 0) + 1;
     this.versions.set(target, version);
-    this.emit({ type: "state", target, version, snapshot: this.snapshot(target) });
+    this.emit({
+      type: "state",
+      target,
+      version,
+      snapshot: this.snapshot(target),
+    });
   }
 
   private emit(frame: ServerFrame): void {
@@ -91,7 +100,13 @@ export class FakeHost {
     if (frame.op === "subscribe") {
       this.subscribers.add(frame.target);
       if (this.state.has(frame.target)) this.push(frame.target);
-      else this.emit({ type: "event", target: frame.target, name: "target:missing", data: null });
+      else
+        this.emit({
+          type: "event",
+          target: frame.target,
+          name: "target:missing",
+          data: null,
+        });
       return;
     }
     if (frame.op === "unsubscribe") {
@@ -103,8 +118,16 @@ export class FakeHost {
     const handler = this.ops.get(name);
     try {
       if (handler === undefined) throw new Error(`unknown op: ${name}`);
-      const result = await handler({ ...(frame.args as object), target: frame.target });
-      this.emit({ type: "reply", requestId: frame.requestId, ok: true, result });
+      const result = await handler({
+        ...(frame.args as object),
+        target: frame.target,
+      });
+      this.emit({
+        type: "reply",
+        requestId: frame.requestId,
+        ok: true,
+        result,
+      });
     } catch (error) {
       this.emit({
         type: "reply",
@@ -125,7 +148,9 @@ export class FakeHost {
           const [target = "", action = ""] = name.split(".");
           return { name, target, action };
         });
-        const state = Object.fromEntries([...this.eager].map((t) => [t, this.snapshot(t)]));
+        const state = Object.fromEntries(
+          [...this.eager].map((t) => [t, this.snapshot(t)]),
+        );
         this.emit({ type: "hello", ops, mounted: this.mounted, state });
       }, 0);
     }
@@ -145,9 +170,9 @@ export class FakeHost {
   }
 }
 
-export const fake = new FakeHost();
+const fake = new FakeHost();
 
-export function installFixtures(host: FakeHost): void {
+function installFixtures(host: FakeHost): void {
   installBase(host);
   installConnect(host);
   installInbox(host);

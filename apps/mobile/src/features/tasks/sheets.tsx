@@ -22,12 +22,15 @@ import {
 } from "./format";
 import { TaskDelivery } from "./pulls";
 
-const showError = (error: unknown) => toast(t("common.failed", { message: failure(error) }));
+const showError = (error: unknown) =>
+  toast(t("common.failed", { message: failure(error) }));
 
 function SheetTitle(props: { title: string }) {
   return (
     <View class="h-[52px] shrink-0 flex-row items-center px-4">
-      <Text class="text-lead leading-[18px] text-foreground">{props.title}</Text>
+      <Text class="text-lead leading-[18px] text-foreground">
+        {props.title}
+      </Text>
     </View>
   );
 }
@@ -75,7 +78,11 @@ export function StatusSheet(props: {
             onPress={() => props.onChange(status())}
             class={`h-[52px] shrink-0 flex-row items-center gap-[10px] border-t border-border px-4 active:bg-muted ${props.value === status() ? "bg-muted" : ""}`}
           >
-            <Icon name={STATUS_ICONS[status()]} size={18} color="muted-foreground" />
+            <Icon
+              name={STATUS_ICONS[status()]}
+              size={18}
+              color="muted-foreground"
+            />
             <Text class="grow basis-0 text-lead leading-[18px] text-foreground">
               {statusLabel(status())}
             </Text>
@@ -92,7 +99,9 @@ export function StatusSheet(props: {
 function Row(props: { label: string; children: JSX.Element }) {
   return (
     <View class="flex-row gap-3 border-t border-border px-4 py-3">
-      <Text class="w-12 shrink-0 text-sm leading-[20px] text-muted-foreground">{props.label}</Text>
+      <Text class="w-12 shrink-0 text-sm leading-[20px] text-muted-foreground">
+        {props.label}
+      </Text>
       {props.children}
     </View>
   );
@@ -116,7 +125,9 @@ function RunsRow(props: { task: () => TaskDetail; onDone: () => void }) {
     const run = latest();
     if (run === undefined) return t("tasks.run.never");
     const label = runLabel(run.status);
-    return run.status === "failed" && run.error ? `${label}：${run.error}` : label;
+    return run.status === "failed" && run.error
+      ? `${label}：${run.error}`
+      : label;
   };
   return (
     <Row label={t("tasks.fields.runs")}>
@@ -124,7 +135,10 @@ function RunsRow(props: { task: () => TaskDetail; onDone: () => void }) {
         <View class="flex-row items-center gap-2">
           <View class="min-w-0 grow basis-0 flex-row items-center gap-1">
             <If when={going()}>
-              <Icon name={latest()?.status === "queued" ? "clock" : "spinner"} size={14} />
+              <Icon
+                name={latest()?.status === "queued" ? "clock" : "spinner"}
+                size={14}
+              />
             </If>
             <Text
               class={`min-w-0 shrink text-base leading-[20px] ${latest()?.status === "failed" ? "text-state-error" : "text-foreground"}`}
@@ -141,7 +155,9 @@ function RunsRow(props: { task: () => TaskDetail; onDone: () => void }) {
             >
               <Icon name="arrowClockwise" size={14} />
               <Text class="text-md leading-4 text-foreground">
-                {latest() === undefined ? t("tasks.run.start") : t("tasks.run.rerun")}
+                {latest() === undefined
+                  ? t("tasks.run.start")
+                  : t("tasks.run.rerun")}
               </Text>
             </View>
           </If>
@@ -165,16 +181,27 @@ export function PropertiesSheet(props: {
   const task = props.task;
   // The latest run says where the work really is. On another machine than the project's it had no
   // worktree: the row names that machine and where the run started instead.
-  const latest = () => task().runs.filter((run) => run.agentId === null).at(-1);
+  const latest = () =>
+    task()
+      .runs.filter((run) => run.agentId === null)
+      .at(-1);
   const away = () => {
     const run = latest();
     const project = projectById(task().projectId);
-    if (run === undefined || project === undefined || run.machineId === project.machineId)
+    if (
+      run === undefined ||
+      project === undefined ||
+      run.machineId === project.machineId
+    )
       return undefined;
     return machineById(run.machineId)?.name;
   };
-  const machineId = () => (away() === undefined ? projectById(task().projectId)?.machineId : latest()?.machineId);
-  const path = () => (away() === undefined ? task().workspace.path : latest()?.workspace);
+  const machineId = () =>
+    away() === undefined
+      ? projectById(task().projectId)?.machineId
+      : latest()?.machineId;
+  const path = () =>
+    away() === undefined ? task().workspace.path : latest()?.workspace;
   const mode = () =>
     task().workspace.mode === "worktree"
       ? t("tasks.workspace.worktree")
@@ -191,9 +218,16 @@ export function PropertiesSheet(props: {
         <Row label={t("tasks.fields.workspace")}>
           <View class="min-w-0 grow basis-0">
             <Text class="text-base leading-[20px] text-foreground">
-              {away() === undefined ? mode() : t("tasks.workspace.away", { machine: away() ?? "" })}
-              <If when={away() === undefined && task().workspace.branch !== null}>
-                <Text class="text-muted-foreground"> · {task().workspace.branch}</Text>
+              {away() === undefined
+                ? mode()
+                : t("tasks.workspace.away", { machine: away() ?? "" })}
+              <If
+                when={away() === undefined && task().workspace.branch !== null}
+              >
+                <Text class="text-muted-foreground">
+                  {" "}
+                  · {task().workspace.branch}
+                </Text>
               </If>
             </Text>
             <If when={path()}>
@@ -224,11 +258,15 @@ export function LinkSheet(props: {
   onClose: () => void;
 }) {
   const groups = () =>
-    conversations().filter((group) => group.kind === "group" && !group.archived);
+    conversations().filter(
+      (group) => group.kind === "group" && !group.archived,
+    );
   const link = (conversationId: string | null): void => {
     props.onClose();
     if (conversationId === props.task().conversationId) return;
-    call("tasks", "link", { taskId: props.task().id, conversationId }).catch(showError);
+    call("tasks", "link", { taskId: props.task().id, conversationId }).catch(
+      showError,
+    );
   };
   return (
     <Sheet open={props.open} onClose={props.onClose}>

@@ -8,7 +8,14 @@ import { Wire } from "../wire/wire";
 
 const STORAGE_KEY = "eta.host";
 /** The lists every screen joins against, for as long as the connection lives. */
-const EAGER_TARGETS = ["agents", "machines", "projects", "conversations", "inbox", "tasks"];
+const EAGER_TARGETS = [
+  "agents",
+  "machines",
+  "projects",
+  "conversations",
+  "inbox",
+  "tasks",
+];
 /** How long a dropped connection may keep retrying before the app says so with a whole screen. */
 const GIVE_UP_MS = 30_000;
 
@@ -25,7 +32,13 @@ export interface HostAddress {
  * - `ready`: the app shows; while the wire is `reconnecting` it shows the banner (08b).
  * - `disconnected`: retried for a while and gave up (08b′).
  */
-export type Phase = "boot" | "form" | "connecting" | "failed" | "ready" | "disconnected";
+export type Phase =
+  | "boot"
+  | "form"
+  | "connecting"
+  | "failed"
+  | "ready"
+  | "disconnected";
 
 export const phase = signal<Phase>("boot");
 export const failure = signal<RefusedBy | undefined>(undefined);
@@ -39,7 +52,9 @@ const currentWire = signal<Wire | undefined>(undefined);
 let openSocket: (target: HostAddress) => WireSocket = (target) =>
   nativeSocket(target.address, target.token);
 
-export function useSocketFactory(open: (target: HostAddress) => WireSocket): void {
+export function useSocketFactory(
+  open: (target: HostAddress) => WireSocket,
+): void {
   openSocket = open;
 }
 
@@ -78,7 +93,8 @@ function watch(next: Wire): void {
       if (now !== "ready") {
         phase.set("ready");
         const target = untracked(() => host());
-        if (target !== undefined) void Storage.setItem(STORAGE_KEY, JSON.stringify(target));
+        if (target !== undefined)
+          void Storage.setItem(STORAGE_KEY, JSON.stringify(target));
       }
       return;
     }
@@ -152,4 +168,3 @@ export function disconnect(): void {
   currentWire.set(undefined);
   void Storage.removeItem(STORAGE_KEY);
 }
-

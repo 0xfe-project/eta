@@ -24,7 +24,12 @@ export function Sheet(props: {
       }}
       backdropClass="bg-scrim"
       class="mt-auto w-full bg-background"
-      style={{ paddingBottom: keyboardFrame().height > 0 ? keyboardFrame().height : safeArea().bottom }}
+      style={{
+        paddingBottom:
+          keyboardFrame().height > 0
+            ? keyboardFrame().height
+            : safeArea().bottom,
+      }}
     >
       {props.children}
     </Dialog>
@@ -44,13 +49,21 @@ export function ConfirmSheet(props: {
   return (
     <Sheet open={props.open} onClose={props.onClose}>
       <View class="gap-[6px] px-4 pt-[20px] pb-4">
-        <Text class="text-title leading-[30px] tracking-[-0.01em] text-foreground">{props.title}</Text>
+        <Text class="text-title leading-[30px] tracking-[-0.01em] text-foreground">
+          {props.title}
+        </Text>
         <If when={props.body !== undefined}>
-          <Text class="text-base leading-[23px] text-muted-foreground">{props.body}</Text>
+          <Text class="text-base leading-[23px] text-muted-foreground">
+            {props.body}
+          </Text>
         </If>
       </View>
       <View class="flex-row gap-2 px-4 pb-2">
-        <Button title={t("common.cancel")} height={44} onPress={props.onClose} />
+        <Button
+          title={t("common.cancel")}
+          height={44}
+          onPress={props.onClose}
+        />
         <Button
           title={props.confirm}
           height={44}

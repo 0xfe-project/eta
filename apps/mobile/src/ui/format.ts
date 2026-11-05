@@ -26,7 +26,8 @@ export function ago(at: number, now = Date.now()): string {
   if (minutes < 1) return t("common.justNow");
   if (minutes < 60) return t("common.minutesAgo", { count: minutes });
   const days = Math.round((startOfDay(now) - startOfDay(at)) / DAY);
-  if (days === 0) return t("common.hoursAgo", { count: Math.floor(minutes / 60) });
+  if (days === 0)
+    return t("common.hoursAgo", { count: Math.floor(minutes / 60) });
   if (days === 1) return t("common.yesterday");
   const date = new Date(at);
   return `${date.getMonth() + 1}/${date.getDate()}`;

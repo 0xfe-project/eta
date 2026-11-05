@@ -1,4 +1,8 @@
-import type { GitHubPull, GitHubSections, TaskPullView } from "@eta/client-contracts";
+import type {
+  GitHubPull,
+  GitHubSections,
+  TaskPullView,
+} from "@eta/client-contracts";
 import type { TaskDetail } from "./format";
 import { cleanup, effect, openUrl, signal, Text, View } from "nsh";
 import { wire } from "../../app/session";
@@ -41,7 +45,8 @@ function usePullState(url: string) {
           if (!alive) return;
           pull.set(answer);
           unavailable.set(false);
-          if (answer.merge === "pending") timer = setTimeout(read, PENDING_POLL_MS);
+          if (answer.merge === "pending")
+            timer = setTimeout(read, PENDING_POLL_MS);
         },
         () => {
           if (alive && pull() === undefined) unavailable.set(true);
@@ -65,13 +70,16 @@ function Facts(props: { pull: GitHubPull | undefined; unavailable: boolean }) {
       when={props.pull}
       else={
         <Text class="text-sm leading-4 text-muted-foreground">
-          {props.unavailable ? t("tasks.pr.unavailable") : t("tasks.pr.reading")}
+          {props.unavailable
+            ? t("tasks.pr.unavailable")
+            : t("tasks.pr.reading")}
         </Text>
       }
     >
       {(pull) => (
         <Text class="text-sm leading-4 text-muted-foreground">
-          {stateLabel(pull().state)} <Text class="text-state-success">+{pull().additions}</Text>{" "}
+          {stateLabel(pull().state)}{" "}
+          <Text class="text-state-success">+{pull().additions}</Text>{" "}
           <Text class="text-state-error">−{pull().deletions}</Text>
         </Text>
       )}
@@ -108,10 +116,16 @@ function PullRow(props: { task: () => TaskDetail; pull: TaskPullView }) {
       .then(
         () => {
           unfinished.set(undefined);
-          toast(mergedHere ? t("tasks.pr.mergedAndCompleted") : t("tasks.pr.completed"));
+          toast(
+            mergedHere
+              ? t("tasks.pr.mergedAndCompleted")
+              : t("tasks.pr.completed"),
+          );
         },
         (error: unknown) => {
-          unfinished.set(t("tasks.pr.incompleteWith", { message: failure(error) }));
+          unfinished.set(
+            t("tasks.pr.incompleteWith", { message: failure(error) }),
+          );
           toast(t("tasks.pr.incomplete"));
         },
       )
@@ -123,7 +137,12 @@ function PullRow(props: { task: () => TaskDetail; pull: TaskPullView }) {
     if (data === undefined || !mergeable()) return;
     merging.set(true);
     wire()
-      .call<GitHubPull>("github", "merge", { url, headSha: data.headSha }, { timeoutMs: MERGE_MS })
+      .call<GitHubPull>(
+        "github",
+        "merge",
+        { url, headSha: data.headSha },
+        { timeoutMs: MERGE_MS },
+      )
       .then(
         (answer) => {
           pull.set(answer);
@@ -135,7 +154,9 @@ function PullRow(props: { task: () => TaskDetail; pull: TaskPullView }) {
         },
         (error: unknown) => {
           merging.set(false);
-          const message = unanswered(error) ? t("tasks.pr.unknown") : failure(error);
+          const message = unanswered(error)
+            ? t("tasks.pr.unknown")
+            : failure(error);
           unfinished.set(message);
           toast(message);
           read();
@@ -146,7 +167,9 @@ function PullRow(props: { task: () => TaskDetail; pull: TaskPullView }) {
   const problem = () => (finished() ? undefined : unfinished());
   const note = () => {
     const data = pull();
-    return data?.merge !== undefined && data.merge !== "ready" ? data.reason : undefined;
+    return data?.merge !== undefined && data.merge !== "ready"
+      ? data.reason
+      : undefined;
   };
   const tall = () => problem() !== undefined || note() !== undefined;
   return (
@@ -163,7 +186,9 @@ function PullRow(props: { task: () => TaskDetail; pull: TaskPullView }) {
           <Icon
             name="gitPullRequest"
             size={18}
-            color={pull()?.state === "open" ? "state-success" : "muted-foreground"}
+            color={
+              pull()?.state === "open" ? "state-success" : "muted-foreground"
+            }
           />
           <View class="min-w-0 grow basis-0">
             <Text class="truncate text-base leading-[20px] text-foreground">
@@ -217,7 +242,9 @@ function PullRow(props: { task: () => TaskDetail; pull: TaskPullView }) {
             onPress={complete}
             class="h-9 shrink-0 flex-row items-center border border-border-strong px-3 active:bg-muted"
           >
-            <Text class="text-base leading-[18px] text-foreground">{t("tasks.pr.complete")}</Text>
+            <Text class="text-base leading-[18px] text-foreground">
+              {t("tasks.pr.complete")}
+            </Text>
           </View>
         </If>
       </View>
@@ -225,11 +252,15 @@ function PullRow(props: { task: () => TaskDetail; pull: TaskPullView }) {
         <Text class="text-sm leading-[18px] text-state-error">{problem()}</Text>
       </If>
       <If when={problem() === undefined && note() !== undefined}>
-        <Text class="text-sm leading-[18px] text-muted-foreground">{note()}</Text>
+        <Text class="text-sm leading-[18px] text-muted-foreground">
+          {note()}
+        </Text>
       </If>
       <Sheet open={options()} onClose={() => options.set(false)}>
         <View class="h-16 shrink-0 justify-center px-4">
-          <Text class="text-lead leading-[22px] text-foreground">{t("tasks.pr.moreOptions")}</Text>
+          <Text class="text-lead leading-[22px] text-foreground">
+            {t("tasks.pr.moreOptions")}
+          </Text>
           <Text class="truncate text-sm leading-[18px] text-muted-foreground">
             {pullName(props.pull)}
           </Text>
@@ -250,7 +281,9 @@ function PullRow(props: { task: () => TaskDetail; pull: TaskPullView }) {
               }}
               class="h-[52px] shrink-0 flex-row items-center border-t border-border px-4 active:bg-muted"
             >
-              <Text class="text-lead leading-[18px] text-foreground">{option().label}</Text>
+              <Text class="text-lead leading-[18px] text-foreground">
+                {option().label}
+              </Text>
             </View>
           )}
         </Each>
@@ -281,7 +314,9 @@ function DeliveredPull(props: { pull: TaskPullView }) {
   const { pull, unavailable } = usePullState(props.pull.url);
   return (
     <View class="min-w-0">
-      <Text class="text-base leading-[20px] text-foreground">{pullName(props.pull)}</Text>
+      <Text class="text-base leading-[20px] text-foreground">
+        {pullName(props.pull)}
+      </Text>
       <Facts pull={pull()} unavailable={unavailable()} />
     </View>
   );

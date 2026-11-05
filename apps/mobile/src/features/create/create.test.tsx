@@ -18,7 +18,11 @@ const start = async (storage: Record<string, string> = {}) => {
 
 test("04: the three ways in", async () => {
   const app = await start();
-  for (const text of ["选一个项目和一位智能体", "选几位智能体，一起讨论一件事", "你对话、交代任务的对象"])
+  for (const text of [
+    "选一个项目和一位智能体",
+    "选几位智能体，一起讨论一件事",
+    "你对话、交代任务的对象",
+  ])
     expect(app.texts()).toContain(text);
 });
 
@@ -26,7 +30,11 @@ test("07: starts with the first project and agent, and back from the chat is the
   const app = await start();
   await app.press("label:新对话");
   await app.waitFor("id:start");
-  for (const text of ["mac-studio · ~/Developer/eta", "mb-air · ~/site", "添加目录…"])
+  for (const text of [
+    "mac-studio · ~/Developer/eta",
+    "mb-air · ~/site",
+    "添加目录…",
+  ])
     expect(app.texts()).toContain(text);
   await app.press("label:官网");
   await app.press("label:Mori");
@@ -35,7 +43,9 @@ test("07: starts with the first project and agent, and back from the chat is the
   await app.back();
   await app.waitFor("id:tab-conversations");
   // A new group named by nobody bears the project's name.
-  expect(app.texts().filter((text) => text === "官网").length).toBeGreaterThan(1);
+  expect(app.texts().filter((text) => text === "官网").length).toBeGreaterThan(
+    1,
+  );
 });
 
 test("07a: walks to a directory, adds it as a project on start", async () => {
@@ -107,7 +117,9 @@ test("07b: a typed name and a goal; empty members can't go", async () => {
   const app = await start();
   await app.press("label:新建群");
   await app.waitFor("id:group-name");
-  await expect(app.press("id:create-group")).rejects.toMatchObject({ code: "ERR_NSH_TEST_DISABLED" });
+  await expect(app.press("id:create-group")).rejects.toMatchObject({
+    code: "ERR_NSH_TEST_DISABLED",
+  });
   await app.type("id:group-name", "迁移小组");
   await app.type("id:group-goal", "这周把重连和迁移都发出去");
   await app.press("label:阿澈");
@@ -128,7 +140,9 @@ test("07b: a name left empty is the project's", async () => {
   await app.waitUntil(() => app.count("id:create-group") === 0);
   await app.back();
   await app.waitFor("id:tab-conversations");
-  expect(app.texts().filter((text) => text === "官网").length).toBeGreaterThan(1);
+  expect(app.texts().filter((text) => text === "官网").length).toBeGreaterThan(
+    1,
+  );
 });
 
 test("07c, 07d: an agent, then its private chat", async () => {
@@ -151,7 +165,10 @@ test("07c, 07d: an agent, then its private chat", async () => {
   expect(app.texts()).toContain("项目默认");
   await app.press("id:agent-persona");
   await app.press("label:工程师");
-  await app.type("id:agent-instructions", "你负责审查 Pull Request，只指出会导致错误的问题。");
+  await app.type(
+    "id:agent-instructions",
+    "你负责审查 Pull Request，只指出会导致错误的问题。",
+  );
   await app.press("id:agent-create");
   await app.waitUntil(() => app.count("id:agent-create") === 0);
   await app.back();

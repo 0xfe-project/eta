@@ -309,7 +309,11 @@ function Reply(props: {
           other.type === "tool" && other.id === block.id,
       );
     open(`tool:${block.id}`, () => (
-      <ToolScreen block={block} lookup={lookup} sessionId={chat.sessionOf(m().agentId)} />
+      <ToolScreen
+        block={block}
+        lookup={lookup}
+        sessionId={chat.sessionOf(m().agentId)}
+      />
     ));
   };
   return (

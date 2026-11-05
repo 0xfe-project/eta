@@ -4,7 +4,11 @@
 // connection is retried with a growing pause and the new socket subscribes again to every target
 // that still has users; a call whose reply can no longer arrive is rejected, never replayed.
 
-import type { HelloFrame, MountedPlugin, ServerFrame } from "@eta/client-contracts";
+import type {
+  HelloFrame,
+  MountedPlugin,
+  ServerFrame,
+} from "@eta/client-contracts";
 import type {
   CallFrame,
   ClientFrame,
@@ -68,7 +72,7 @@ export interface WireEvent {
 }
 
 /** Fold a state frame into what the client holds for its target (see apps/web/src/lib/wire.ts). */
-export function applyState(
+function applyState(
   previous: TargetState | undefined,
   frame: { version: number; snapshot?: StateSnapshot; patch?: StatePatch },
 ): TargetState | undefined {
@@ -83,9 +87,15 @@ export function applyState(
   const sections: Record<string, unknown> = {};
   for (const name of Object.keys(frame.patch.revisions)) {
     sections[name] =
-      name in frame.patch.sections ? frame.patch.sections[name] : previous.sections[name];
+      name in frame.patch.sections
+        ? frame.patch.sections[name]
+        : previous.sections[name];
   }
-  return { sections, revisions: { ...frame.patch.revisions }, version: frame.version };
+  return {
+    sections,
+    revisions: { ...frame.patch.revisions },
+    version: frame.version,
+  };
 }
 
 function isServerFrame(value: unknown): value is ServerFrame {
@@ -128,7 +138,10 @@ export class Wire {
   private eager = new Set<string>();
   /** One signal per target, so a push redraws what reads that target and nothing else. */
   private readonly slots = new Map<string, Signal<TargetState | undefined>>();
-  private readonly listeners = new Map<string, Set<(event: WireEvent) => void>>();
+  private readonly listeners = new Map<
+    string,
+    Set<(event: WireEvent) => void>
+  >();
 
   constructor(options: WireOptions) {
     this.openSocket = options.open;
@@ -179,7 +192,9 @@ export class Wire {
 
   /** Whether a plugin is mounted. Reactive. */
   isMounted(plugin: string): boolean {
-    return this.mounted().some((entry) => entry.name === plugin && entry.error === undefined);
+    return this.mounted().some(
+      (entry) => entry.name === plugin && entry.error === undefined,
+    );
   }
 
   /**
@@ -219,7 +234,10 @@ export class Wire {
         clearTimeout(timer);
         this.pending.delete(requestId);
         reject(
-          new WireError("disconnected", error instanceof Error ? error.message : String(error)),
+          new WireError(
+            "disconnected",
+            error instanceof Error ? error.message : String(error),
+          ),
         );
       }
     });
@@ -312,7 +330,10 @@ export class Wire {
         return;
       case "event":
         if (frame.name === TARGET_MISSING) {
-          this.missing.update((missing) => ({ ...missing, [frame.target]: true }));
+          this.missing.update((missing) => ({
+            ...missing,
+            [frame.target]: true,
+          }));
           return;
         }
         for (const listener of [...(this.listeners.get(frame.target) ?? [])]) {
@@ -331,7 +352,8 @@ export class Wire {
       const before = this.eager;
       this.eager = new Set(Object.keys(frame.state));
       for (const target of before) {
-        if (!this.eager.has(target) && !this.users.has(target)) this.slot(target).set(undefined);
+        if (!this.eager.has(target) && !this.users.has(target))
+          this.slot(target).set(undefined);
       }
       for (const [target, snapshot] of Object.entries(frame.state)) {
         this.slot(target).set({
@@ -348,14 +370,18 @@ export class Wire {
       this.lastSeenAt.set(Date.now());
     });
     // A fresh socket holds no subscriptions: ask again for everything somebody still reads.
-    for (const target of this.users.keys()) this.send({ op: "subscribe", target });
+    for (const target of this.users.keys())
+      this.send({ op: "subscribe", target });
   }
 
   private state(frame: Extract<ServerFrame, { type: "state" }>): void {
     this.lastSeenAt.set(Date.now());
     if (!this.users.has(frame.target)) return;
     const slot = this.slot(frame.target);
-    const next = applyState(untracked(() => slot()), frame);
+    const next = applyState(
+      untracked(() => slot()),
+      frame,
+    );
     if (next === undefined) return;
     batch(() => {
       slot.set(next);

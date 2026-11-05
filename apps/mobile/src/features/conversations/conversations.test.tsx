@@ -10,7 +10,9 @@ const start = async (storage: Record<string, string> = {}) => {
   });
   await app.waitFor("id:tab-conversations");
   await app.press("id:tab-conversations");
-  await app.waitFor(storage["eta.fake.scenario"] === "empty" ? "还没有对话。" : "wire 重连");
+  await app.waitFor(
+    storage["eta.fake.scenario"] === "empty" ? "还没有对话。" : "wire 重连",
+  );
   return app;
 };
 
@@ -47,7 +49,14 @@ test("02a: every agent has a row, and one nobody talked to gets its chat on the 
 test("02a: the private chats, a waiting one strong and the busy status over the preview", async () => {
   const app = await start();
   await app.press("label:私聊 1");
-  for (const text of ["小满", "等待确认", "阿澈", "工作中", "Mori", "列宽的方案写好了，你看下。"])
+  for (const text of [
+    "小满",
+    "等待确认",
+    "阿澈",
+    "工作中",
+    "Mori",
+    "列宽的方案写好了，你看下。",
+  ])
     expect(app.texts()).toContain(text);
   expect(app.texts()).not.toContain("周报发给谁？");
 });
@@ -55,7 +64,8 @@ test("02a: the private chats, a waiting one strong and the busy status over the 
 test("03p: a long press renames", async () => {
   const app = await start();
   await app.longPress("id:conversation-wire");
-  for (const text of ["eta · mac-studio", "改名", "归档"]) expect(app.texts()).toContain(text);
+  for (const text of ["eta · mac-studio", "改名", "归档"])
+    expect(app.texts()).toContain(text);
   await app.press("改名");
   await app.clear("id:rename-input");
   await app.type("id:rename-input", "重连收尾");

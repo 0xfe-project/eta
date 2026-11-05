@@ -1,4 +1,9 @@
-import type { TaskActivityKind, TaskActivityView, TaskActor, TaskRunView } from "@eta/client-contracts";
+import type {
+  TaskActivityKind,
+  TaskActivityView,
+  TaskActor,
+  TaskRunView,
+} from "@eta/client-contracts";
 import type { JSX } from "nsh";
 import type { TaskDetail } from "./format";
 import { signal, Text, View } from "nsh";
@@ -11,7 +16,8 @@ import { Markdown } from "../../ui/Markdown";
 import { actorName, executor, isActive, statusLabel } from "./format";
 import { openRunLog } from "./runs";
 
-const str = (value: unknown): string => (typeof value === "string" ? value : "");
+const str = (value: unknown): string =>
+  typeof value === "string" ? value : "";
 
 /** One line for what is not a comment. */
 function describe(a: TaskActivityView): string | null {
@@ -28,12 +34,17 @@ function describe(a: TaskActivityView): string | null {
     case "description":
       return t("tasks.activity.descriptionChanged");
     case "conversation":
-      return d.to ? t("tasks.activity.groupLinked") : t("tasks.activity.groupUnlinked");
+      return d.to
+        ? t("tasks.activity.groupLinked")
+        : t("tasks.activity.groupUnlinked");
     case "artifact":
       return t("tasks.activity.artifact", {
         title:
           typeof d.version === "number"
-            ? t("tasks.activity.artifactVersion", { title: str(d.title), version: d.version })
+            ? t("tasks.activity.artifactVersion", {
+                title: str(d.title),
+                version: d.version,
+              })
             : str(d.title),
       });
     case "run_started":
@@ -65,7 +76,8 @@ type Entry =
   | { kind: "line"; id: string; activity: TaskActivityView }
   | { kind: "fold"; id: string; items: TaskActivityView[] };
 
-const sameActor = (a: TaskActor, b: TaskActor) => a.kind === b.kind && a.agentId === b.agentId;
+const sameActor = (a: TaskActor, b: TaskActor) =>
+  a.kind === b.kind && a.agentId === b.agentId;
 
 function entries(items: TaskActivityView[]): Entry[] {
   const out: Entry[] = [];
@@ -73,8 +85,10 @@ function entries(items: TaskActivityView[]): Entry[] {
   const flush = () => {
     const first = loose[0];
     if (first === undefined) return;
-    if (loose.length > LOOSE_LINES) out.push({ kind: "fold", id: first.id, items: loose });
-    else for (const a of loose) out.push({ kind: "line", id: a.id, activity: a });
+    if (loose.length > LOOSE_LINES)
+      out.push({ kind: "fold", id: first.id, items: loose });
+    else
+      for (const a of loose) out.push({ kind: "line", id: a.id, activity: a });
     loose = [];
   };
   for (const a of items) {
@@ -98,7 +112,8 @@ function entries(items: TaskActivityView[]): Entry[] {
 
 /** A face: an agent's own, a filled square for me, a muted one for eta. */
 function Face(props: { actor: TaskActor }) {
-  const agent = () => (props.actor.kind === "agent" ? props.actor.agentId : null);
+  const agent = () =>
+    props.actor.kind === "agent" ? props.actor.agentId : null;
   return (
     <If
       when={agent()}
@@ -109,7 +124,11 @@ function Face(props: { actor: TaskActor }) {
           <Icon
             name="user"
             size={16}
-            color={props.actor.kind === "user" ? "primary-foreground" : "muted-foreground"}
+            color={
+              props.actor.kind === "user"
+                ? "primary-foreground"
+                : "muted-foreground"
+            }
           />
         </View>
       }
@@ -120,13 +139,20 @@ function Face(props: { actor: TaskActor }) {
 }
 
 /** Long text folds to its opening; `preview` says how, or that it needs no folding. */
-function Folded(props: { text: string; preview?: string | undefined; lines: number }) {
+function Folded(props: {
+  text: string;
+  preview?: string | undefined;
+  lines: number;
+}) {
   const open = signal(false);
   const folded = () => props.preview !== undefined && !open();
   return (
     <>
       <If when={folded()} else={<Markdown text={props.text} />}>
-        <Text style={{ numberOfLines: props.lines }} class="text-base leading-[23px] text-foreground">
+        <Text
+          style={{ numberOfLines: props.lines }}
+          class="text-base leading-[23px] text-foreground"
+        >
           {props.preview}
         </Text>
       </If>
@@ -145,9 +171,14 @@ function Folded(props: { text: string; preview?: string | undefined; lines: numb
 /** A description opens on its first paragraph. */
 function descriptionPreview(text: string): string | undefined {
   // Past the headings a draft's description is built from (`## 目标`): they say nothing yet.
-  const body = text.trim().replace(/^#{1,6}\s.*$/gm, "").trim();
+  const body = text
+    .trim()
+    .replace(/^#{1,6}\s.*$/gm, "")
+    .trim();
   const first = body.split(/\n\s*\n/)[0] ?? "";
-  return first.length < text.trim().length || first.length > 120 ? first : undefined;
+  return first.length < text.trim().length || first.length > 120
+    ? first
+    : undefined;
 }
 
 const commentPreview = (text: string) => (text.length > 240 ? text : undefined);
@@ -167,8 +198,12 @@ function Message(props: {
       <View class="min-w-0 grow basis-0 gap-[2px]">
         <If when={props.head}>
           <View class="flex-row items-baseline gap-2">
-            <Text class="text-md leading-[20px] text-foreground">{actorName(props.actor)}</Text>
-            <Text class="text-sm leading-[20px] text-muted-foreground">{moment(props.at)}</Text>
+            <Text class="text-md leading-[20px] text-foreground">
+              {actorName(props.actor)}
+            </Text>
+            <Text class="text-sm leading-[20px] text-muted-foreground">
+              {moment(props.at)}
+            </Text>
           </View>
         </If>
         {props.children}
@@ -183,8 +218,12 @@ function Line(props: { task: () => TaskDetail; activity: TaskActivityView }) {
   const run = (): TaskRunView | undefined => {
     const kind = a().kind;
     if (kind !== "run_started" && kind !== "run_failed") return undefined;
-    const found = props.task().runs.find((candidate) => candidate.id === a().runId);
-    return found !== undefined && found.sessionId !== null && !isActive(found.status)
+    const found = props
+      .task()
+      .runs.find((candidate) => candidate.id === a().runId);
+    return found !== undefined &&
+      found.sessionId !== null &&
+      !isActive(found.status)
       ? found
       : undefined;
   };
@@ -192,9 +231,10 @@ function Line(props: { task: () => TaskDetail; activity: TaskActivityView }) {
     const what = describe(a()) ?? "";
     if (a().kind === "run_failed") return what;
     // A run's events read as the executor's, unless they are a mentioned agent's own.
-    const who = a().kind.startsWith("run_") && a().actor.kind !== "agent"
-      ? executor(props.task())
-      : a().actor;
+    const who =
+      a().kind.startsWith("run_") && a().actor.kind !== "agent"
+        ? executor(props.task())
+        : a().actor;
     return `${actorName(who)} ${what}`;
   };
   return (
@@ -205,7 +245,9 @@ function Line(props: { task: () => TaskDetail; activity: TaskActivityView }) {
             ? () =>
                 go.artifact(
                   str(a().data.artifactId),
-                  typeof a().data.version === "number" ? (a().data.version as number) : undefined,
+                  typeof a().data.version === "number"
+                    ? (a().data.version as number)
+                    : undefined,
                 )
             : undefined
         }
@@ -237,7 +279,11 @@ function Changes(props: { task: () => TaskDetail; items: TaskActivityView[] }) {
         onPress={() => open.update((value) => !value)}
         class="h-8 shrink-0 flex-row items-center gap-[6px] pl-[54px] pr-4 active:opacity-60"
       >
-        <Icon name={open() ? "caretDown" : "caretRight"} size={12} color="faint" />
+        <Icon
+          name={open() ? "caretDown" : "caretRight"}
+          size={12}
+          color="faint"
+        />
         <Text class="text-sm leading-4 text-muted-foreground">
           {t("tasks.changes", { count: props.items.length })}
         </Text>
@@ -278,7 +324,9 @@ export function Thread(props: {
   const replies = () => listed().filter((a) => a.kind === "comment").length;
   const caption = () => {
     if (replies() > 0) return t("tasks.replies", { count: replies() });
-    return listed().length > 1 ? t("tasks.changes", { count: listed().length }) : undefined;
+    return listed().length > 1
+      ? t("tasks.changes", { count: listed().length })
+      : undefined;
   };
   return (
     <>
@@ -291,7 +339,10 @@ export function Thread(props: {
         <If
           when={task().description.trim() !== ""}
           else={
-            <Text onPress={props.onEdit} class="text-sm leading-[20px] text-muted-foreground">
+            <Text
+              onPress={props.onEdit}
+              class="text-sm leading-[20px] text-muted-foreground"
+            >
               {t("tasks.addDescription")}
             </Text>
           }
@@ -306,7 +357,9 @@ export function Thread(props: {
       <If when={caption()}>
         {(text) => (
           <View class="shrink-0 flex-row items-center gap-2 px-4 pb-2 pt-1">
-            <Text class="text-sm leading-4 text-muted-foreground">{text()}</Text>
+            <Text class="text-sm leading-4 text-muted-foreground">
+              {text()}
+            </Text>
             <View class="h-px grow basis-0 bg-border" />
           </View>
         )}
@@ -316,9 +369,12 @@ export function Thread(props: {
           // The key holds the kind, so a row keeps it; what it says may grow.
           const kind = entry().kind;
           const fold = () => entry() as Extract<Entry, { kind: "fold" }>;
-          const said = () => entry() as Extract<Entry, { kind: "comment" | "line" }>;
-          if (kind === "fold") return <Changes task={task} items={fold().items} />;
-          if (kind === "line") return <Line task={task} activity={said().activity} />;
+          const said = () =>
+            entry() as Extract<Entry, { kind: "comment" | "line" }>;
+          if (kind === "fold")
+            return <Changes task={task} items={fold().items} />;
+          if (kind === "line")
+            return <Line task={task} activity={said().activity} />;
           return (
             <Message
               actor={said().activity.actor}

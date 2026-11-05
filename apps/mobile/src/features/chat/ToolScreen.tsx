@@ -222,12 +222,17 @@ export function ToolScreen(props: {
               else={
                 <View class="px-4 py-2">
                   <Text class="text-sm leading-[18px] text-muted-foreground">
-                    {t("chat.tool.images", { count: block().images?.length ?? 0 })}
+                    {t("chat.tool.images", {
+                      count: block().images?.length ?? 0,
+                    })}
                   </Text>
                 </View>
               }
             >
-              <ToolImages sessionId={props.sessionId ?? ""} images={block().images ?? []} />
+              <ToolImages
+                sessionId={props.sessionId ?? ""}
+                images={block().images ?? []}
+              />
             </If>
           </If>
         </View>

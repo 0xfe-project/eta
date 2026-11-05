@@ -13,10 +13,10 @@ export function toast(text: string): void {
 export function ToastHost() {
   return (
     <If when={message() !== undefined}>
-      <View
-        class="absolute left-4 right-4 bottom-[96px] bg-primary px-3 py-[10px]"
-      >
-        <Text class="text-md leading-[18px] text-primary-foreground">{message()}</Text>
+      <View class="absolute left-4 right-4 bottom-[96px] bg-primary px-3 py-[10px]">
+        <Text class="text-md leading-[18px] text-primary-foreground">
+          {message()}
+        </Text>
       </View>
     </If>
   );

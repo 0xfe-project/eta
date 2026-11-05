@@ -71,7 +71,7 @@ test("答完一个问题", async () => {
 ```sh
 nsh check                 # 类型检查
 nsh test                  # 无头测试
-nsh package DevApp.tsx --target ios-simulator --run   # 模拟器（假 host）
-nsh package App.tsx --target ios-simulator --run      # 模拟器（真 host）
-xcrun simctl io booted screenshot /tmp/x.png          # 截图
+nsh test <file> --target ios   # 在模拟器里驱动界面，app.screenshot 截图；先设 BINDGEN_EXTRA_CLANG_ARGS，见 docs/architecture/mobile.md
+scripts/package-ios.sh simulator   # 正式包（真 host），含相机和 http 例外
+xcrun simctl io booted screenshot /tmp/x.png   # 含键盘的整屏截图；app.screenshot 拍不到键盘
 ```

@@ -14,7 +14,11 @@ export function Segmented<T extends string>(props: {
         {(option) => (
           <View
             role="tab"
-            accessibilityLabel={option().count === undefined ? option().label : `${option().label} ${option().count}`}
+            accessibilityLabel={
+              option().count === undefined
+                ? option().label
+                : `${option().label} ${option().count}`
+            }
             onPress={() => props.onChange(option().value)}
             class={`grow basis-0 flex-row items-center justify-center gap-[6px] ${props.value === option().value ? "bg-background" : ""}`}
           >

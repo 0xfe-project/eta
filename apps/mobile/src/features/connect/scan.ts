@@ -6,8 +6,6 @@ import { t } from "../../i18n";
 import { toast } from "../../ui/toast";
 import { parseConnectLink } from "./link";
 
-export { parseConnectLink } from "./link";
-
 /** What the connect form holds. A pasted or scanned link fills it. */
 export const form = signal<HostAddress>({ address: "", token: "" });
 

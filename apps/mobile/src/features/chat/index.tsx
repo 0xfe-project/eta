@@ -130,7 +130,13 @@ export function ChatScreen(props: { id: string }) {
             </Each>
           </View>
         </If>
-        <View class="shrink-0" style={{ display: menuOpen() ? "none" : "flex", flexDirection: "column" }}>
+        <View
+          class="shrink-0"
+          style={{
+            display: menuOpen() ? "none" : "flex",
+            flexDirection: "column",
+          }}
+        >
           <Each of={chat.questions()} key={(question) => question.id}>
             {(question) => <QuestionCard interaction={question()} compact />}
           </Each>

@@ -15,7 +15,8 @@ import type {
 import type { FakeHost } from "../fake-host";
 import { CONVERSATIONS, minutesAgo, PROJECTS } from "./base";
 
-const today = (hour: number, minute: number) => new Date().setHours(hour, minute, 0, 0);
+const today = (hour: number, minute: number) =>
+  new Date().setHours(hour, minute, 0, 0);
 
 const ask = (
   id: string,
@@ -53,11 +54,14 @@ const QUESTIONS: InteractionView[] = [
     "想把分支推到远端\ngit push origin redesign --force-with-lease",
     ["allow", "deny"],
   ),
-  ask("q-migrate", "agent-ache", "wire", today(9, 29), "迁移脚本要直接在生产库上跑吗？", [
-    "先备份再跑",
-    "直接跑",
-    "先不跑",
-  ]),
+  ask(
+    "q-migrate",
+    "agent-ache",
+    "wire",
+    today(9, 29),
+    "迁移脚本要直接在生产库上跑吗？",
+    ["先备份再跑", "直接跑", "先不跑"],
+  ),
 ];
 
 const MULTI: InteractionView[] = [
@@ -73,7 +77,12 @@ const MULTI: InteractionView[] = [
 ];
 
 const MANY: InteractionView[] = [
-  ask("q-window", "agent-ache", "wire", today(9, 29), "什么时候跑迁移？", ["现在", "今晚", "周末", "下周"]),
+  ask("q-window", "agent-ache", "wire", today(9, 29), "什么时候跑迁移？", [
+    "现在",
+    "今晚",
+    "周末",
+    "下周",
+  ]),
 ];
 
 const task = (
@@ -137,7 +146,11 @@ function setRun(
   host.set(`tasks.${row.id}`, { task: detail, activity: [] });
 }
 
-const member = (agentId: string, status: "idle" | "working", sessionId: string) => ({
+const member = (
+  agentId: string,
+  status: "idle" | "working",
+  sessionId: string,
+) => ({
   agentId,
   sessionId,
   lastSeq: 10,
@@ -180,14 +193,26 @@ function setSession(
 function installAnswered(host: FakeHost): void {
   const conversations: ConversationSummary[] = CONVERSATIONS.map((row) => {
     if (row.id === "board")
-      return { ...row, participants: [member("agent-mori", "working", "s-board")] };
+      return {
+        ...row,
+        participants: [member("agent-mori", "working", "s-board")],
+      };
     if (row.id === "wire")
-      return { ...row, participants: [member("agent-ache", "working", "s-wire")] };
+      return {
+        ...row,
+        participants: [member("agent-ache", "working", "s-wire")],
+      };
     if (row.id === "redesign")
-      return { ...row, participants: [member("agent-mori", "working", "s-redesign")] };
+      return {
+        ...row,
+        participants: [member("agent-mori", "working", "s-redesign")],
+      };
     return {
       ...row,
-      participants: row.participants.map((one) => ({ ...one, status: "idle" as const })),
+      participants: row.participants.map((one) => ({
+        ...one,
+        status: "idle" as const,
+      })),
     };
   });
   host.patch("conversations", "list", conversations);
@@ -195,12 +220,30 @@ function installAnswered(host: FakeHost): void {
     row.id === "site" ? { ...row, machineId: "gpu-box" } : row,
   );
   host.patch("projects", "list", projects);
-  setSession(host, "s-board", 8, { name: "Edit", arguments: { file_path: "src/task-board.tsx" } });
-  setSession(host, "s-wire", 2, { name: "bash", arguments: { command: "bun test wire" } });
-  setSession(host, "s-redesign", 0.5, { name: "Read", arguments: { file_path: "src/hero.tsx" } });
-  const row = task(133, "运行记录支持分页", "in_progress", "agent-xiaoman", "running");
+  setSession(host, "s-board", 8, {
+    name: "Edit",
+    arguments: { file_path: "src/task-board.tsx" },
+  });
+  setSession(host, "s-wire", 2, {
+    name: "bash",
+    arguments: { command: "bun test wire" },
+  });
+  setSession(host, "s-redesign", 0.5, {
+    name: "Read",
+    arguments: { file_path: "src/hero.tsx" },
+  });
+  const row = task(
+    133,
+    "运行记录支持分页",
+    "in_progress",
+    "agent-xiaoman",
+    "running",
+  );
   host.patch("tasks", "list", [row]);
-  setRun(host, row, "running", "mac-studio", { sessionId: "s-133", startedAt: minutesAgo(1) });
+  setRun(host, row, "running", "mac-studio", {
+    sessionId: "s-133",
+    startedAt: minutesAgo(1),
+  });
   setSession(host, "s-133", 1);
 }
 
@@ -229,14 +272,18 @@ function clearAttention(host: FakeHost): void {
   host.patch(
     "tasks",
     "list",
-    board.filter((row) => row.status !== "in_review" && row.status !== "blocked"),
+    board.filter(
+      (row) => row.status !== "in_review" && row.status !== "blocked",
+    ),
   );
 }
 
 /** The board is the tasks fixture's; what 01 needs of it goes in if that left it out. */
 function ensureAttention(host: FakeHost): void {
   const board = host.section<BoardTaskView[]>("tasks", "list") ?? [];
-  const missing = ATTENTION.filter((row) => !board.some((one) => one.number === row.number));
+  const missing = ATTENTION.filter(
+    (row) => !board.some((one) => one.number === row.number),
+  );
   host.patch("tasks", "list", [...board, ...missing]);
 }
 
@@ -244,55 +291,68 @@ export function installInbox(host: FakeHost): void {
   const questions = () => {
     if (host.scenario === "multi") return MULTI;
     if (host.scenario === "many") return MANY;
-    if (host.scenario === "answered" || host.scenario === "uninitialized") return [];
+    if (host.scenario === "answered" || host.scenario === "uninitialized")
+      return [];
     return QUESTIONS;
   };
   host.patch("inbox", "list", questions());
 
   // As `inbox.answer`: a settled row stays in the list, behind the pending ones, and the run goes on.
-  host.on("inbox.answer", ({ id, response }: { id: string; response: InboxResponse }) => {
-    const list = host.section<InteractionView[]>("inbox", "list");
-    const row = list.find((one) => one.id === id);
-    if (row === undefined) throw new Error(`no such question: ${id}`);
-    if (row.status !== "pending") return { interaction: row, answered: false };
-    const settled: InteractionView = {
-      ...row,
-      status: response.kind === "none" ? "canceled" : "answered",
-      answer: response,
-      revision: row.revision + 1,
-      updatedAt: Date.now(),
-    };
-    host.patch("inbox", "list", [
-      ...list.filter((one) => one.status === "pending" && one.id !== id),
-      settled,
-      ...list.filter((one) => one.status !== "pending"),
-    ]);
-    const conversations = host.section<ConversationSummary[]>("conversations", "list");
-    host.patch(
-      "conversations",
-      "list",
-      conversations.map((one) =>
-        one.id === row.conversationId
-          ? {
-              ...one,
-              participants: one.participants.map((person) =>
-                person.agentId === row.agentId && person.status === "waiting_for_input"
-                  ? { ...person, status: response.kind === "none" ? "idle" : "working" }
-                  : person,
-              ),
-            }
-          : one,
-      ),
-    );
-    return { interaction: settled, answered: true };
-  });
+  host.on(
+    "inbox.answer",
+    ({ id, response }: { id: string; response: InboxResponse }) => {
+      const list = host.section<InteractionView[]>("inbox", "list");
+      const row = list.find((one) => one.id === id);
+      if (row === undefined) throw new Error(`no such question: ${id}`);
+      if (row.status !== "pending")
+        return { interaction: row, answered: false };
+      const settled: InteractionView = {
+        ...row,
+        status: response.kind === "none" ? "canceled" : "answered",
+        answer: response,
+        revision: row.revision + 1,
+        updatedAt: Date.now(),
+      };
+      host.patch("inbox", "list", [
+        ...list.filter((one) => one.status === "pending" && one.id !== id),
+        settled,
+        ...list.filter((one) => one.status !== "pending"),
+      ]);
+      const conversations = host.section<ConversationSummary[]>(
+        "conversations",
+        "list",
+      );
+      host.patch(
+        "conversations",
+        "list",
+        conversations.map((one) =>
+          one.id === row.conversationId
+            ? {
+                ...one,
+                participants: one.participants.map((person) =>
+                  person.agentId === row.agentId &&
+                  person.status === "waiting_for_input"
+                    ? {
+                        ...person,
+                        status: response.kind === "none" ? "idle" : "working",
+                      }
+                    : person,
+                ),
+              }
+            : one,
+        ),
+      );
+      return { interaction: settled, answered: true };
+    },
+  );
   host.on("sessions.resync", () => ({}));
 
   // After every fixture has run, the tasks one included, and before `hello` goes out.
   void Promise.resolve().then(() => {
     if (host.scenario === "answered") installAnswered(host);
     else if (host.scenario === "machines") installLoad(host);
-    else if (host.scenario === "multi" || host.scenario === "many") clearAttention(host);
+    else if (host.scenario === "multi" || host.scenario === "many")
+      clearAttention(host);
     else if (host.scenario !== "uninitialized") ensureAttention(host);
   });
 }

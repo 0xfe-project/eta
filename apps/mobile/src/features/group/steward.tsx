@@ -17,7 +17,10 @@ const NoAvatar = () => <View class="size-5 shrink-0" />;
 
 function ProjectLevel(props: { project: ProjectView; onDone: () => void }) {
   const pick = (agentId: string | null) =>
-    act(call("projects", "setSteward", { projectId: props.project.id, agentId }), props.onDone);
+    act(
+      call("projects", "setSteward", { projectId: props.project.id, agentId }),
+      props.onDone,
+    );
   return (
     <>
       <SheetTitle
@@ -31,7 +34,9 @@ function ProjectLevel(props: { project: ProjectView; onDone: () => void }) {
               title={agent().name}
               testID={`project-steward-${agent().id}`}
               leading={<AgentAvatar id={agent().id} size={20} />}
-              trailing={props.project.stewardId === agent().id ? <Check /> : undefined}
+              trailing={
+                props.project.stewardId === agent().id ? <Check /> : undefined
+              }
               onPress={() => pick(agent().id)}
             />
           )}
@@ -58,7 +63,11 @@ function ConversationLevel(props: {
   const override = () => props.info?.stewardOverrideId ?? null;
   const pick = (agentId: string | null, none = false) =>
     act(
-      call("conversations", "setSteward", { conversationId: props.id, agentId, none }),
+      call("conversations", "setSteward", {
+        conversationId: props.id,
+        agentId,
+        none,
+      }),
       props.onDone,
     );
   const projectSteward = () => {
@@ -68,7 +77,10 @@ function ConversationLevel(props: {
   const noSteward = () => props.info?.noSteward === true;
   return (
     <>
-      <SheetTitle title={t("group.steward.title")} body={t("group.steward.hint")} />
+      <SheetTitle
+        title={t("group.steward.title")}
+        body={t("group.steward.hint")}
+      />
       <Scroll style={{ maxHeight: 416 }}>
         <SheetRow
           title={t("group.steward.follow")}
@@ -76,7 +88,10 @@ function ConversationLevel(props: {
           subtitle={
             props.project === undefined
               ? undefined
-              : t("group.steward.followHint", { name: props.project.name, steward: projectSteward() })
+              : t("group.steward.followHint", {
+                  name: props.project.name,
+                  steward: projectSteward(),
+                })
           }
           leading={<NoAvatar />}
           trailing={override() === null ? <Check /> : undefined}
@@ -122,7 +137,9 @@ function ConversationLevel(props: {
 }
 
 function AgentName(props: { name: string }) {
-  return <Text class="text-md leading-4 text-muted-foreground">{props.name}</Text>;
+  return (
+    <Text class="text-md leading-4 text-muted-foreground">{props.name}</Text>
+  );
 }
 
 export function StewardSheet(props: {
@@ -151,7 +168,9 @@ export function StewardSheet(props: {
           />
         }
       >
-        {(project) => <ProjectLevel project={project() as ProjectView} onDone={close} />}
+        {(project) => (
+          <ProjectLevel project={project() as ProjectView} onDone={close} />
+        )}
       </If>
     </Sheet>
   );

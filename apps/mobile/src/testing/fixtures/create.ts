@@ -23,7 +23,10 @@ import { minutesAgo, PROJECTS } from "./base";
 
 const HOME = "/Users/eric";
 
-const dir = (name: string, fields: Partial<DirectoryEntry> = {}): DirectoryEntry => ({
+const dir = (
+  name: string,
+  fields: Partial<DirectoryEntry> = {},
+): DirectoryEntry => ({
   name,
   hidden: name.startsWith("."),
   git: false,
@@ -32,15 +35,32 @@ const dir = (name: string, fields: Partial<DirectoryEntry> = {}): DirectoryEntry
 });
 
 const TREE: Record<string, DirectoryEntry[]> = {
-  [HOME]: [dir(".config"), dir("Developer"), dir("Documents"), dir("big"), dir("locked"), dir("site", { git: true, projectId: "site" })],
-  [`${HOME}/Developer`]: [dir("eta", { git: true, projectId: "eta" }), dir("hutch", { git: true, projectId: "hutch" }), dir("notes")],
-  [`${HOME}/Developer/eta`]: [dir("apps"), dir("docs"), dir("packages"), dir("scripts")],
+  [HOME]: [
+    dir(".config"),
+    dir("Developer"),
+    dir("Documents"),
+    dir("big"),
+    dir("locked"),
+    dir("site", { git: true, projectId: "site" }),
+  ],
+  [`${HOME}/Developer`]: [
+    dir("eta", { git: true, projectId: "eta" }),
+    dir("hutch", { git: true, projectId: "hutch" }),
+    dir("notes"),
+  ],
+  [`${HOME}/Developer/eta`]: [
+    dir("apps"),
+    dir("docs"),
+    dir("packages"),
+    dir("scripts"),
+  ],
   [`${HOME}/Developer/notes`]: [],
   [`${HOME}/Documents`]: [],
   [`${HOME}/big`]: Array.from({ length: 1000 }, (_, at) => dir(`dir-${at}`)),
 };
 
-const failure = (code: "not_found" | "denied" | "offline") => new Error(`directory: ${code}`);
+const failure = (code: "not_found" | "denied" | "offline") =>
+  new Error(`directory: ${code}`);
 
 const parentOf = (path: string) => path.slice(0, path.lastIndexOf("/")) || "/";
 
@@ -76,12 +96,23 @@ const RUNTIMES: AgentRuntimeInfo[] = [
 ];
 
 const PERSONAS = [
-  { id: "engineer", name: "工程师", description: "写代码、改代码", custom: false },
-  { id: "designer", name: "设计师", description: "做界面和交互", custom: false },
+  {
+    id: "engineer",
+    name: "工程师",
+    description: "写代码、改代码",
+    custom: false,
+  },
+  {
+    id: "designer",
+    name: "设计师",
+    description: "做界面和交互",
+    custom: false,
+  },
 ];
 
 export function installCreate(host: FakeHost): void {
-  const conversations = () => host.section<ConversationSummary[]>("conversations", "list");
+  const conversations = () =>
+    host.section<ConversationSummary[]>("conversations", "list");
   const projects = () => host.section<ProjectView[]>("projects", "list");
   const agents = () => host.section<AgentView[]>("agents", "list");
   let made = 0;
@@ -95,9 +126,19 @@ export function installCreate(host: FakeHost): void {
     ),
     ...(site === undefined
       ? []
-      : [{ ...site, id: "hutch", name: "hutch", machineId: "mac-studio", path: `${HOME}/Developer/hutch`, archived: true }]),
+      : [
+          {
+            ...site,
+            id: "hutch",
+            name: "hutch",
+            machineId: "mac-studio",
+            path: `${HOME}/Developer/hutch`,
+            archived: true,
+          },
+        ]),
   ]);
-  if (host.scenario !== "uninitialized") host.set("providers", { config: PROVIDERS });
+  if (host.scenario !== "uninitialized")
+    host.set("providers", { config: PROVIDERS });
   host.set("personas", { cards: PERSONAS });
   void Storage.getItem("eta.recentDirectories").then((stored) => {
     if (stored === null || stored === undefined)
@@ -119,13 +160,17 @@ export function installCreate(host: FakeHost): void {
       archived: false,
       stewardId: conversation.stewardId,
       stewardOverrideId: null,
-        noSteward: false,
+      noSteward: false,
       readSeq: 0,
       lastSeq: 0,
       createdAt: conversation.createdAt,
       updatedAt: conversation.updatedAt,
     };
-    const timeline: TimelineSection = { messages: [], hasMore: false, held: [] };
+    const timeline: TimelineSection = {
+      messages: [],
+      hasMore: false,
+      held: [],
+    };
     host.set(`conversations.${conversation.id}`, { info, timeline });
   };
 
@@ -172,10 +217,13 @@ export function installCreate(host: FakeHost): void {
     const agent = agents().find((each) => each.id === agentId);
     if (agent === undefined) throw new Error("no such agent");
     const found = conversations().find(
-      (each) => each.kind === "direct" && each.participants[0]?.agentId === agentId,
+      (each) =>
+        each.kind === "direct" && each.participants[0]?.agentId === agentId,
     );
     if (found === undefined) {
-      const made = conversation(agent.homeProjectId, "direct", agent.name, [agentId]);
+      const made = conversation(agent.homeProjectId, "direct", agent.name, [
+        agentId,
+      ]);
       open(made);
       return { conversation: made };
     }
@@ -220,11 +268,14 @@ export function installCreate(host: FakeHost): void {
   });
 
   host.on("agents.runtimes", ({ machineId }: AgentArgs["runtimes"]) => {
-    if (machineId === undefined || machineId === "mac-studio") return { runtimes: RUNTIMES };
+    if (machineId === undefined || machineId === "mac-studio")
+      return { runtimes: RUNTIMES };
     // A daemon that has its own: Claude Code only on the primary.
     return {
       runtimes: RUNTIMES.map((runtime) =>
-        runtime.id === "claude" ? { ...runtime, status: "missing", models: [] } : runtime,
+        runtime.id === "claude"
+          ? { ...runtime, status: "missing", models: [] }
+          : runtime,
       ),
     };
   });
@@ -233,7 +284,8 @@ export function installCreate(host: FakeHost): void {
     const machine = host
       .section<MachineView[]>("machines", "list")
       .find((each) => each.id === (args.machineId ?? "mac-studio"));
-    if (machine === undefined || machine.id === "gpu-box") throw failure("offline");
+    if (machine === undefined || machine.id === "gpu-box")
+      throw failure("offline");
     const raw = args.path ?? HOME;
     const path = raw === "~" ? HOME : raw.replace(/\/+$/, "") || "/";
     if (path === `${HOME}/locked`) throw failure("denied");
@@ -251,8 +303,11 @@ export function installCreate(host: FakeHost): void {
 
   host.on("projects.create", (args: ProjectArgs["create"]) => {
     const machineId = args.machineId ?? "mac-studio";
-    if (!args.path.startsWith("/")) throw new Error(`the path must be absolute: ${args.path}`);
-    const found = projects().find((each) => each.machineId === machineId && each.path === args.path);
+    if (!args.path.startsWith("/"))
+      throw new Error(`the path must be absolute: ${args.path}`);
+    const found = projects().find(
+      (each) => each.machineId === machineId && each.path === args.path,
+    );
     if (found !== undefined) {
       const back = { ...found, archived: false };
       host.patch(
@@ -266,7 +321,8 @@ export function installCreate(host: FakeHost): void {
       id: id("project"),
       machineId,
       path: args.path,
-      name: args.name?.trim() || args.path.slice(args.path.lastIndexOf("/") + 1),
+      name:
+        args.name?.trim() || args.path.slice(args.path.lastIndexOf("/") + 1),
       kind: "project",
       stewardId: args.stewardId ?? null,
       archived: false,

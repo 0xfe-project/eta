@@ -6,7 +6,11 @@ const form = (extra: Record<string, string> = {}) =>
   open(DEV, { storage: { "eta.language": "zh", ...extra } });
 
 test("parseConnectLink reads the host's link and nothing else", () => {
-  expect(parseConnectLink("eta://connect?address=https%3A%2F%2Fmac-studio.ts.net&token=a%2Bb")).toEqual({
+  expect(
+    parseConnectLink(
+      "eta://connect?address=https%3A%2F%2Fmac-studio.ts.net&token=a%2Bb",
+    ),
+  ).toEqual({
     address: "https://mac-studio.ts.net",
     token: "a+b",
   });
@@ -22,7 +26,9 @@ test("08: connecting with an address opens the app", async () => {
   const app = await form();
   await app.waitFor("连一次主机，所有机器都在。");
   await app.press("连接");
-  expect(app.texts()).toContain("手机只是一块屏。智能体、记忆和对话都留在你的机器上。");
+  expect(app.texts()).toContain(
+    "手机只是一块屏。智能体、记忆和对话都留在你的机器上。",
+  );
   await app.type("id:connect-address", "mac-studio.tail3f2a.ts.net");
   await app.type("id:connect-token", "secret");
   await app.press("连接");
@@ -47,7 +53,7 @@ test("the scan button says it can't yet", async () => {
   const app = await form();
   await app.waitFor("扫电脑上的二维码");
   await app.press("扫电脑上的二维码");
-  await app.waitFor("暂时还不能扫码，请粘贴连接链接或手动填写。");
+  await app.waitFor("这台设备不能扫码，请粘贴连接链接或手动填写。");
 });
 
 for (const [refuse, message] of [
@@ -73,14 +79,23 @@ test("08b′: it gives up after a while, keeps the host, and can change it", asy
     clock: {},
     storage: {
       "eta.language": "zh",
-      "eta.host": JSON.stringify({ address: "mac-studio.tail3f2a.ts.net", token: "secret" }),
+      "eta.host": JSON.stringify({
+        address: "mac-studio.tail3f2a.ts.net",
+        token: "secret",
+      }),
       "eta.fake.scenario": "drop",
     },
   });
   await app.waitFor("id:tab-inbox");
   await app.waitFor("与宿主的连接已断开。", { timeout: 40_000 });
   expect(app.texts()).toContain("智能体还在主机上继续运行。");
-  expect(app.texts().some((text) => text.startsWith("mac-studio.tail3f2a.ts.net · 上次在线 "))).toBe(true);
+  expect(
+    app
+      .texts()
+      .some((text) =>
+        text.startsWith("mac-studio.tail3f2a.ts.net · 上次在线 "),
+      ),
+  ).toBe(true);
   await app.press("换一台主机");
   await app.waitFor("连一次主机，所有机器都在。");
   expect(app.storage()["eta.host"]).toBeUndefined();

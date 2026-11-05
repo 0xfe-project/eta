@@ -8,7 +8,10 @@ import type {
 import type { FakeHost } from "../fake-host";
 import { minutesAgo } from "./base";
 
-const member = (agentId: string, status: ConversationSummary["participants"][number]["status"]) => ({
+const member = (
+  agentId: string,
+  status: ConversationSummary["participants"][number]["status"],
+) => ({
   agentId,
   sessionId: `session-${agentId}`,
   lastSeq: 10,
@@ -41,32 +44,57 @@ const row = (
 });
 
 const EXTRA: ConversationSummary[] = [
-  row("dm-ache", "阿澈", "home-agent-ache", "direct", [member("agent-ache", "working")], {
-    lastMessageAt: minutesAgo(2),
-  }),
-  row("dm-mori", "Mori", "home-agent-mori", "direct", [member("agent-mori", "idle")], {
-    preview: "列宽的方案写好了，你看下。",
-    lastMessageAt: minutesAgo(1500),
-  }),
+  row(
+    "dm-ache",
+    "阿澈",
+    "home-agent-ache",
+    "direct",
+    [member("agent-ache", "working")],
+    {
+      lastMessageAt: minutesAgo(2),
+    },
+  ),
+  row(
+    "dm-mori",
+    "Mori",
+    "home-agent-mori",
+    "direct",
+    [member("agent-mori", "idle")],
+    {
+      preview: "列宽的方案写好了，你看下。",
+      lastMessageAt: minutesAgo(1500),
+    },
+  ),
   row("release", "发布流程", "eta", "group", [member("agent-ache", "idle")], {
     archived: true,
     updatedAt: new Date(new Date().getFullYear(), 9, 2).getTime(),
   }),
-  row("landing", "落地页文案", "site", "group", [member("agent-mori", "idle")], {
-    archived: true,
-    updatedAt: new Date(new Date().getFullYear(), 8, 18).getTime(),
-  }),
+  row(
+    "landing",
+    "落地页文案",
+    "site",
+    "group",
+    [member("agent-mori", "idle")],
+    {
+      archived: true,
+      updatedAt: new Date(new Date().getFullYear(), 8, 18).getTime(),
+    },
+  ),
 ];
 
 /** `●` alone is one unread row: the design's dot without a number. */
 const UNREAD: Record<string, number> = { board: 1, redesign: 1 };
 
 export function installConversations(host: FakeHost): void {
-  const list = () => host.section<ConversationSummary[]>("conversations", "list");
+  const list = () =>
+    host.section<ConversationSummary[]>("conversations", "list");
   if (host.scenario === "empty") host.patch("conversations", "list", []);
   else if (host.scenario !== "uninitialized")
     host.patch("conversations", "list", [
-      ...list().map((each) => ({ ...each, unread: UNREAD[each.id] ?? each.unread })),
+      ...list().map((each) => ({
+        ...each,
+        unread: UNREAD[each.id] ?? each.unread,
+      })),
       ...EXTRA,
     ]);
 

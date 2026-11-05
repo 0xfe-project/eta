@@ -1,7 +1,15 @@
 import type { TaskResults } from "@eta/client-contracts";
 import type { InputRef } from "nsh";
 import type { TaskDetail } from "./format";
-import { cleanup, computed, keyboardFrame, safeArea, signal, Text, View } from "nsh";
+import {
+  cleanup,
+  computed,
+  keyboardFrame,
+  safeArea,
+  signal,
+  Text,
+  View,
+} from "nsh";
 import { Input } from "nsh/base";
 import { agents, conversations } from "../../app/lists";
 import { t } from "../../i18n";
@@ -36,7 +44,9 @@ export function useComments(task: () => TaskDetail) {
     alive = false;
   });
   const waiting = computed(() =>
-    items().filter((item) => !task().activity.some((a) => a.data.clientId === item.id)),
+    items().filter(
+      (item) => !task().activity.some((a) => a.data.clientId === item.id),
+    ),
   );
   const deliver = (item: Outgoing): void => {
     const args = {
@@ -45,16 +55,20 @@ export function useComments(task: () => TaskDetail) {
       clientId: item.id,
       ...(item.mentions.length > 0 ? { mentions: item.mentions } : {}),
     };
-    call<TaskResults["comment"]>("tasks", "comment", args).catch((error: unknown) => {
-      const message = failure(error);
-      if (!alive) {
-        toast(t("tasks.comment.deliveryFailed", { message }));
-        return;
-      }
-      items.update((all) =>
-        all.map((other) => (other.id === item.id ? { ...other, failure: message } : other)),
-      );
-    });
+    call<TaskResults["comment"]>("tasks", "comment", args).catch(
+      (error: unknown) => {
+        const message = failure(error);
+        if (!alive) {
+          toast(t("tasks.comment.deliveryFailed", { message }));
+          return;
+        }
+        items.update((all) =>
+          all.map((other) =>
+            other.id === item.id ? { ...other, failure: message } : other,
+          ),
+        );
+      },
+    );
   };
   return {
     waiting,
@@ -68,7 +82,9 @@ export function useComments(task: () => TaskDetail) {
       const item = items().find((other) => other.id === id);
       if (item === undefined) return;
       const { failure: _failure, ...again } = item;
-      items.update((all) => all.map((other) => (other.id === id ? again : other)));
+      items.update((all) =>
+        all.map((other) => (other.id === id ? again : other)),
+      );
       deliver(again);
     },
     discard(id: string): void {
@@ -82,7 +98,9 @@ export function useComments(task: () => TaskDetail) {
  * direct chat, any agent. Labelled as the chat's composer labels them.
  */
 function mentionable(task: TaskDetail) {
-  const origin = conversations().find((c) => c.id === task.originConversationId);
+  const origin = conversations().find(
+    (c) => c.id === task.originConversationId,
+  );
   const members =
     origin?.kind === "group"
       ? new Set(origin.participants.map((member) => member.agentId))
@@ -145,7 +163,9 @@ export function Composer(props: {
   return (
     <View
       class="shrink-0"
-      style={{ paddingBottom: keyboardFrame().height > 0 ? 0 : safeArea().bottom }}
+      style={{
+        paddingBottom: keyboardFrame().height > 0 ? 0 : safeArea().bottom,
+      }}
     >
       <If when={items().length > 0}>
         <View class="border-t border-border">
@@ -157,7 +177,10 @@ export function Composer(props: {
                 onPress={() => choose(index())}
                 class="h-11 shrink-0 flex-row items-center gap-[10px] px-4 active:bg-muted"
               >
-                <If when={memberId(index())} else={<View style={{ width: 20, height: 20 }} />}>
+                <If
+                  when={memberId(index())}
+                  else={<View style={{ width: 20, height: 20 }} />}
+                >
                   {(agent) => <AgentAvatar id={agent()} size={20} />}
                 </If>
                 <Text class="grow basis-0 truncate text-md leading-4 text-foreground">
@@ -217,17 +240,23 @@ export function Composer(props: {
 }
 
 /** 06b: what is on its way, with what went wrong and what to do about it. */
-export function OutgoingComments(props: { comments: ReturnType<typeof useComments> }) {
+export function OutgoingComments(props: {
+  comments: ReturnType<typeof useComments>;
+}) {
   return (
     <If when={props.comments.waiting().length > 0}>
       <View class="shrink-0 flex-row items-center gap-2 px-4 pb-2 pt-3">
-        <Text class="text-sm leading-4 text-muted-foreground">{t("tasks.comment.queued")}</Text>
+        <Text class="text-sm leading-4 text-muted-foreground">
+          {t("tasks.comment.queued")}
+        </Text>
         <View class="h-px grow basis-0 bg-border" />
       </View>
       <Each of={props.comments.waiting()} key={(item) => item.id}>
         {(item) => (
           <View class="shrink-0 gap-[2px] py-[6px] pl-[54px] pr-4">
-            <Text class="text-base leading-[23px] text-foreground">{item().body}</Text>
+            <Text class="text-base leading-[23px] text-foreground">
+              {item().body}
+            </Text>
             <If
               when={item().failure}
               else={
@@ -246,7 +275,9 @@ export function OutgoingComments(props: { comments: ReturnType<typeof useComment
                     onPress={() => props.comments.retry(item().id)}
                     class="h-8 flex-row items-center active:opacity-60"
                   >
-                    <Text class="text-md leading-4 text-foreground">{t("common.retry")}</Text>
+                    <Text class="text-md leading-4 text-foreground">
+                      {t("common.retry")}
+                    </Text>
                   </View>
                   <View
                     role="button"

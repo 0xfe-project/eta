@@ -1,4 +1,7 @@
-import type { ConversationArgs, ConversationSummary } from "@eta/client-contracts";
+import type {
+  ConversationArgs,
+  ConversationSummary,
+} from "@eta/client-contracts";
 import { signal, Text, View } from "nsh";
 import { Input } from "nsh/base";
 import { machineById, projectById } from "../../app/lists";
@@ -9,14 +12,17 @@ import { Sheet } from "../../ui/Sheet";
 import { toast } from "../../ui/toast";
 import { call } from "../../wire/target";
 
-export const updateConversation = (args: ConversationArgs["update"]): Promise<unknown> =>
-  call("conversations", "update", args);
+export const updateConversation = (
+  args: ConversationArgs["update"],
+): Promise<unknown> => call("conversations", "update", args);
 
 function place(conversation: ConversationSummary | undefined): string {
   const project = projectById(conversation?.projectId);
   if (conversation?.kind === "direct" || project === undefined) return "";
   const machine = machineById(project.machineId);
-  return machine === undefined ? project.name : `${project.name} · ${machine.name}`;
+  return machine === undefined
+    ? project.name
+    : `${project.name} · ${machine.name}`;
 }
 
 function Action(props: { title: string; onPress: () => void }) {
@@ -27,7 +33,9 @@ function Action(props: { title: string; onPress: () => void }) {
       onPress={props.onPress}
       class="h-[52px] shrink-0 flex-row items-center border-t border-border px-4 active:bg-muted"
     >
-      <Text class="text-lead leading-[18px] text-foreground">{props.title}</Text>
+      <Text class="text-lead leading-[18px] text-foreground">
+        {props.title}
+      </Text>
     </View>
   );
 }
@@ -78,12 +86,17 @@ export function ConversationSheet(props: {
                 }}
               />
             </If>
-            <Action title={t("conversations.archive")} onPress={() => update({ archived: true })} />
+            <Action
+              title={t("conversations.archive")}
+              onPress={() => update({ archived: true })}
+            />
           </>
         }
       >
         <View class="gap-3 p-4">
-          <Text class="text-[17px] leading-5 text-foreground">{t("conversations.rename")}</Text>
+          <Text class="text-[17px] leading-5 text-foreground">
+            {t("conversations.rename")}
+          </Text>
           <Input
             testID="rename-input"
             autoFocus

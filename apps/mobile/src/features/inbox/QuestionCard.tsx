@@ -26,7 +26,9 @@ function Choice(props: {
 }) {
   const box = () => {
     if (props.stale) return props.primary ? "bg-muted" : "border border-border";
-    return props.primary ? "bg-primary active:opacity-80" : "border border-border-strong active:bg-muted";
+    return props.primary
+      ? "bg-primary active:opacity-80"
+      : "border border-border-strong active:bg-muted";
   };
   const label = () => {
     if (props.stale) return "text-faint";
@@ -46,7 +48,11 @@ function Choice(props: {
   );
 }
 
-function GiveUp(props: { width?: number; testID: string; onPress: () => void }) {
+function GiveUp(props: {
+  width?: number;
+  testID: string;
+  onPress: () => void;
+}) {
   return (
     <View
       role="button"
@@ -56,15 +62,24 @@ function GiveUp(props: { width?: number; testID: string; onPress: () => void }) 
       class={`items-center justify-center active:opacity-60 ${props.width === undefined ? "h-[24px] w-12 items-end self-end" : "h-10 shrink-0"}`}
       style={props.width === undefined ? undefined : { width: props.width }}
     >
-      <Text class="text-md leading-4 text-muted-foreground">{t("inbox.ask.giveUp")}</Text>
+      <Text class="text-md leading-4 text-muted-foreground">
+        {t("inbox.ask.giveUp")}
+      </Text>
     </View>
   );
 }
 
-function Check(props: { title: string; on: boolean; stale: boolean; onPress: () => void }) {
+function Check(props: {
+  title: string;
+  on: boolean;
+  stale: boolean;
+  onPress: () => void;
+}) {
   const border = () => {
     if (props.stale) return "border border-border";
-    return props.on ? "bg-muted border border-foreground" : "border border-border-strong active:bg-muted";
+    return props.on
+      ? "bg-muted border border-foreground"
+      : "border border-border-strong active:bg-muted";
   };
   return (
     <View
@@ -78,13 +93,25 @@ function Check(props: { title: string; on: boolean; stale: boolean; onPress: () 
     >
       <If
         when={props.on}
-        else={<View class={`size-[18px] shrink-0 border ${props.stale ? "border-border" : "border-border-strong"}`} />}
+        else={
+          <View
+            class={`size-[18px] shrink-0 border ${props.stale ? "border-border" : "border-border-strong"}`}
+          />
+        }
       >
-        <View class={`size-[18px] shrink-0 items-center justify-center ${props.stale ? "bg-muted" : "bg-primary"}`}>
-          <Icon name="check" size={12} color={props.stale ? "faint" : "primary-foreground"} />
+        <View
+          class={`size-[18px] shrink-0 items-center justify-center ${props.stale ? "bg-muted" : "bg-primary"}`}
+        >
+          <Icon
+            name="check"
+            size={12}
+            color={props.stale ? "faint" : "primary-foreground"}
+          />
         </View>
       </If>
-      <Text class={`text-base leading-[18px] ${props.stale ? "text-faint" : "text-foreground"}`}>
+      <Text
+        class={`text-base leading-[18px] ${props.stale ? "text-faint" : "text-foreground"}`}
+      >
         {props.title}
       </Text>
     </View>
@@ -92,7 +119,10 @@ function Check(props: { title: string; on: boolean; stale: boolean; onPress: () 
 }
 
 /** A pending question, answerable where it stands: in the inbox and over a chat's composer. */
-export function QuestionCard(props: { interaction: InteractionView; compact?: boolean }) {
+export function QuestionCard(props: {
+  interaction: InteractionView;
+  compact?: boolean;
+}) {
   const picked = signal<string[]>([]);
   const text = signal("");
   const sending = signal(false);
@@ -100,7 +130,8 @@ export function QuestionCard(props: { interaction: InteractionView; compact?: bo
   const stale = () => wire().status() !== "open";
 
   const headline = () => props.interaction.prompt.split("\n")[0] ?? "";
-  const details = () => props.interaction.prompt.split("\n").slice(1).join("\n").trim();
+  const details = () =>
+    props.interaction.prompt.split("\n").slice(1).join("\n").trim();
   const approval = () => isApproval(props.interaction);
   const options = () => props.interaction.options;
   const freeform = () => options().length === 0;
@@ -112,9 +143,13 @@ export function QuestionCard(props: { interaction: InteractionView; compact?: bo
 
   const who = () => agentById(props.interaction.agentId)?.name;
   const where = () => {
-    const conversation = conversations().find((row) => row.id === props.interaction.conversationId);
+    const conversation = conversations().find(
+      (row) => row.id === props.interaction.conversationId,
+    );
     if (conversation === undefined) return "";
-    return conversation.kind === "direct" ? t("inbox.direct") : conversation.name;
+    return conversation.kind === "direct"
+      ? t("inbox.direct")
+      : conversation.name;
   };
 
   const send = async (response: InboxResponse) => {
@@ -128,7 +163,8 @@ export function QuestionCard(props: { interaction: InteractionView; compact?: bo
       sending.set(false);
     }
   };
-  const choose = (selections: string[]) => send({ kind: "selection", selections });
+  const choose = (selections: string[]) =>
+    send({ kind: "selection", selections });
   const giveUp = () => send({ kind: "none" });
   const reply = () => {
     const answer = text().trim();
@@ -136,7 +172,9 @@ export function QuestionCard(props: { interaction: InteractionView; compact?: bo
   };
   const toggle = (option: string) =>
     picked.update((now) =>
-      now.includes(option) ? now.filter((item) => item !== option) : [...now, option],
+      now.includes(option)
+        ? now.filter((item) => item !== option)
+        : [...now, option],
     );
   const label = (option: string) => {
     if (!approval()) return option;
@@ -169,9 +207,14 @@ export function QuestionCard(props: { interaction: InteractionView; compact?: bo
           when={props.compact}
           else={
             <View class="flex-row items-center gap-2">
-              <AgentAvatar id={props.interaction.agentId ?? props.interaction.sessionId} size={20} />
+              <AgentAvatar
+                id={props.interaction.agentId ?? props.interaction.sessionId}
+                size={20}
+              />
               <If when={who() !== undefined}>
-                <Text class="text-md leading-[18px] text-foreground">{who()}</Text>
+                <Text class="text-md leading-[18px] text-foreground">
+                  {who()}
+                </Text>
               </If>
               <Text class="min-w-0 grow basis-0 truncate text-sm leading-[18px] text-muted-foreground">
                 {where()}
@@ -199,10 +242,16 @@ export function QuestionCard(props: { interaction: InteractionView; compact?: bo
       <If when={details() !== ""}>
         <If
           when={approval()}
-          else={<Text class="text-base leading-[23px] text-muted-foreground">{details()}</Text>}
+          else={
+            <Text class="text-base leading-[23px] text-muted-foreground">
+              {details()}
+            </Text>
+          }
         >
           <View class="bg-muted px-[10px] py-2">
-            <Text class="text-sm leading-[18px] text-foreground">{details()}</Text>
+            <Text class="text-sm leading-[18px] text-foreground">
+              {details()}
+            </Text>
           </View>
         </If>
       </If>
@@ -229,10 +278,18 @@ export function QuestionCard(props: { interaction: InteractionView; compact?: bo
             }
             primary
             stale={stale() || picked().length === 0}
-            onPress={() => void choose(options().filter((option) => picked().includes(option)))}
+            onPress={() =>
+              void choose(
+                options().filter((option) => picked().includes(option)),
+              )
+            }
           />
           <If when={!stale()}>
-            <GiveUp width={64} testID={giveUpID()} onPress={() => void giveUp()} />
+            <GiveUp
+              width={64}
+              testID={giveUpID()}
+              onPress={() => void giveUp()}
+            />
           </If>
         </View>
       </If>
@@ -249,9 +306,18 @@ export function QuestionCard(props: { interaction: InteractionView; compact?: bo
             accessibilityLabel={t("inbox.ask.reply")}
             class={`h-10 min-w-0 grow basis-0 bg-muted px-3 text-input leading-[20px] placeholder:text-faint ${stale() ? "text-muted-foreground" : "text-foreground"}`}
           />
-          <Choice title={t("common.send")} hug stale={stale()} onPress={reply} />
+          <Choice
+            title={t("common.send")}
+            hug
+            stale={stale()}
+            onPress={reply}
+          />
           <If when={!stale()}>
-            <GiveUp width={48} testID={giveUpID()} onPress={() => void giveUp()} />
+            <GiveUp
+              width={48}
+              testID={giveUpID()}
+              onPress={() => void giveUp()}
+            />
           </If>
         </View>
       </If>
@@ -263,7 +329,11 @@ export function QuestionCard(props: { interaction: InteractionView; compact?: bo
             <View class="flex-row gap-2">
               {choices()}
               <If when={!giveUpBelow() && !stale()}>
-                <GiveUp width={64} testID={giveUpID()} onPress={() => void giveUp()} />
+                <GiveUp
+                  width={64}
+                  testID={giveUpID()}
+                  onPress={() => void giveUp()}
+                />
               </If>
             </View>
           }

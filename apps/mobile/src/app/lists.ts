@@ -29,12 +29,24 @@ export const interactions = (): InteractionView[] =>
 export const boardTasks = (): BoardTaskView[] =>
   eager<BoardTaskView[]>("tasks", "list") ?? [];
 
-export const agentById = (id: string | null | undefined): AgentView | undefined =>
-  id === null || id === undefined ? undefined : agents().find((agent) => agent.id === id);
-export const projectById = (id: string | null | undefined): ProjectView | undefined =>
-  id === null || id === undefined ? undefined : projects().find((project) => project.id === id);
-export const machineById = (id: string | null | undefined): MachineView | undefined =>
-  id === null || id === undefined ? undefined : machines().find((machine) => machine.id === id);
+export const agentById = (
+  id: string | null | undefined,
+): AgentView | undefined =>
+  id === null || id === undefined
+    ? undefined
+    : agents().find((agent) => agent.id === id);
+export const projectById = (
+  id: string | null | undefined,
+): ProjectView | undefined =>
+  id === null || id === undefined
+    ? undefined
+    : projects().find((project) => project.id === id);
+export const machineById = (
+  id: string | null | undefined,
+): MachineView | undefined =>
+  id === null || id === undefined
+    ? undefined
+    : machines().find((machine) => machine.id === id);
 
 /** The questions waiting for the user, newest first. */
 export const pendingInteractions = (): InteractionView[] =>

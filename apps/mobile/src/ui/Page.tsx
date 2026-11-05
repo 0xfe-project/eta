@@ -8,7 +8,7 @@ import { Icon } from "./Icon";
 import { nav } from "../nav/stack";
 
 const INSET_TOP = "pt-[env(safe-area-inset-top)]";
-export const INSET_BOTTOM = "pb-[env(safe-area-inset-bottom)]";
+const INSET_BOTTOM = "pb-[env(safe-area-inset-bottom)]";
 
 /**
  * A pushed page: the design draws every header itself, so the system's is off.
@@ -16,15 +16,25 @@ export const INSET_BOTTOM = "pb-[env(safe-area-inset-bottom)]";
  * A `form` makes room for the keyboard itself: what is at its foot rides on the keyboard and the body
  * shrinks, instead of the host's pan sliding the whole page, header and all.
  */
-export function Page(props: { children?: JSX.Element; bottom?: boolean; form?: boolean }) {
-  const inset = () => (props.bottom === false || props.form ? "" : INSET_BOTTOM);
+export function Page(props: {
+  children?: JSX.Element;
+  bottom?: boolean;
+  form?: boolean;
+}) {
+  const inset = () =>
+    props.bottom === false || props.form ? "" : INSET_BOTTOM;
   return (
     <NavPage
       headerVisible={false}
       class={`flex-1 bg-background ${INSET_TOP} ${inset()}`}
       style={
         props.form
-          ? { paddingBottom: keyboardFrame().height > 0 ? keyboardFrame().height : safeArea().bottom }
+          ? {
+              paddingBottom:
+                keyboardFrame().height > 0
+                  ? keyboardFrame().height
+                  : safeArea().bottom,
+            }
           : undefined
       }
     >
@@ -69,7 +79,9 @@ export function Header(props: {
           </Text>
         </If>
         <If when={props.crumb !== undefined}>
-          <Text class="text-md leading-4 text-muted-foreground">{props.crumb}</Text>
+          <Text class="text-md leading-4 text-muted-foreground">
+            {props.crumb}
+          </Text>
         </If>
       </View>
       {props.right}
@@ -83,7 +95,9 @@ export function SectionLabel(props: { title: string; border?: boolean }) {
     <View
       class={`h-[34px] shrink-0 flex-row items-end px-4 pb-[6px] ${props.border === false ? "" : "border-b border-border"}`}
     >
-      <Text class="text-sm leading-[18px] text-muted-foreground">{props.title}</Text>
+      <Text class="text-sm leading-[18px] text-muted-foreground">
+        {props.title}
+      </Text>
     </View>
   );
 }
@@ -107,7 +121,9 @@ export function Body(props: {
       keyboardDismissMode="interactive"
       keyboardShouldPersistTaps="handled"
     >
-      <View class={`${props.fill ? "grow" : ""} ${props.class ?? ""}`}>{props.children}</View>
+      <View class={`${props.fill ? "grow" : ""} ${props.class ?? ""}`}>
+        {props.children}
+      </View>
     </Scroll>
   );
 }

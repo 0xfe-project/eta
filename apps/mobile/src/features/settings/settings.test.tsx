@@ -1,7 +1,14 @@
 import { expect, open, test } from "nsh/test";
 
 const ADDRESS = "mac-studio.tail3f2a.ts.net";
-const start = async (scenario = "", network?: Parameters<typeof open>[1] extends infer O ? O extends { network?: infer N } ? N : never : never) => {
+const start = async (
+  scenario = "",
+  network?: Parameters<typeof open>[1] extends infer O
+    ? O extends { network?: infer N }
+      ? N
+      : never
+    : never,
+) => {
   const app = await open("../../../DevApp.tsx", {
     ...(network === undefined ? {} : { network }),
     storage: {
@@ -79,12 +86,17 @@ test("10c: what it is connected to, and leaving it", async () => {
 
 test("10c: the version comes from GET /version with the token", async () => {
   const app = await start("real-version", {
-    "GET http://mac-studio.tail3f2a.ts.net/version": { status: 200, body: "mh3k2x\n" },
+    "GET http://mac-studio.tail3f2a.ts.net/version": {
+      status: 200,
+      body: "mh3k2x\n",
+    },
   });
   await app.press("label:连接");
   await app.waitFor("mh3k2x");
   const request = app.requests().find((one) => one.url.endsWith("/version"));
-  expect(request?.headers?.["x-eta-token"] ?? request?.headers?.["X-Eta-Token"]).toBe("secret");
+  expect(
+    request?.headers?.["x-eta-token"] ?? request?.headers?.["X-Eta-Token"],
+  ).toBe("secret");
 });
 
 test("10c: a host without /version shows a dash, not an error", async () => {

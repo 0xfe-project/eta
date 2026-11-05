@@ -36,7 +36,10 @@ export function rememberDirectory(machineId: string, path: string): void {
   const earlier = recentDirectories()[machineId] ?? [];
   const next = {
     ...recentDirectories(),
-    [machineId]: [path, ...earlier.filter((seen) => seen !== path)].slice(0, RECENT_DIRECTORIES),
+    [machineId]: [path, ...earlier.filter((seen) => seen !== path)].slice(
+      0,
+      RECENT_DIRECTORIES,
+    ),
   };
   recentDirectories.set(next);
   void Storage.setItem(RECENT_KEY, JSON.stringify(next));

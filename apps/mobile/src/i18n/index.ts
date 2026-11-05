@@ -42,7 +42,8 @@ const en: Record<keyof typeof zh, string> = {
 
 export type TextKey = keyof typeof zh;
 
-const systemLanguage = (): Language => (locale().toLowerCase().startsWith("zh") ? "zh" : "en");
+const systemLanguage = (): Language =>
+  locale().toLowerCase().startsWith("zh") ? "zh" : "en";
 
 export const language = signal<Language>(systemLanguage());
 
@@ -56,7 +57,10 @@ export async function loadLanguage(): Promise<void> {
   if (stored === "zh" || stored === "en") language.set(stored);
 }
 
-export function t(key: TextKey, params?: Record<string, string | number>): string {
+export function t(
+  key: TextKey,
+  params?: Record<string, string | number>,
+): string {
   const text = (language() === "zh" ? zh : en)[key];
   if (params === undefined) return text;
   return text.replace(/\{(\w+)\}/g, (whole, name: string) =>

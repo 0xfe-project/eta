@@ -29,7 +29,12 @@ async function followRoute(): Promise<void> {
   const [screen = "", id = ""] = route.split(":");
   let done = false;
   effect(() => {
-    if (phase() !== "ready" || wire().lastSeenAt() === undefined || agents().length === 0) return;
+    if (
+      phase() !== "ready" ||
+      wire().lastSeenAt() === undefined ||
+      agents().length === 0
+    )
+      return;
     if (untracked(() => done)) return;
     done = true;
     if (screen === "group") go.groupInfo(id);
@@ -47,7 +52,10 @@ const GOALS: Record<string, { goal: string; decided: string }> = {
   },
 };
 
-const version = (number: number, fields: Partial<ArtifactVersionView> = {}): ArtifactVersionView => ({
+const version = (
+  number: number,
+  fields: Partial<ArtifactVersionView> = {},
+): ArtifactVersionView => ({
   number,
   kind: "site",
   viewer: "iframe",
@@ -78,7 +86,13 @@ const ARTIFACTS: ArtifactView[] = [
     publisherAgentId: "agent-mori",
     taskId: null,
     conversationId: "board",
-    versions: [version(1, { kind: "bundle", viewer: "download", archiveUrl: "/artifacts/scripts/1/archive.zip" })],
+    versions: [
+      version(1, {
+        kind: "bundle",
+        viewer: "download",
+        archiveUrl: "/artifacts/scripts/1/archive.zip",
+      }),
+    ],
     createdAt: minutesAgo(800),
     updatedAt: minutesAgo(800),
   },
@@ -104,7 +118,10 @@ const usage = (input: number, output: number, cache: number) => ({
 });
 
 const tools = (count: number) =>
-  Array.from({ length: count }, (_, index) => ({ name: `tool-${index}`, description: "" }));
+  Array.from({ length: count }, (_, index) => ({
+    name: `tool-${index}`,
+    description: "",
+  }));
 
 /** The page 03n draws. The real host answers `/preview/<capability>/…`; here nothing could serve it. */
 const PAGE = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -114,7 +131,13 @@ const PAGE = `<!doctype html><meta charset="utf-8"><meta name="viewport" content
 <div style="height:180px;background:#f5f5f5;margin:0 0 12px"></div>
 <p style="margin:0">200 次强杀重连，没有丢帧，也没有重复帧。</p>`;
 
-const reply = (id: string, conversationId: string, agentId: string, status: MessageView["status"], text: string): MessageView => ({
+const reply = (
+  id: string,
+  conversationId: string,
+  agentId: string,
+  status: MessageView["status"],
+  text: string,
+): MessageView => ({
   id,
   conversationId,
   seq: 12,
@@ -134,8 +157,24 @@ const reply = (id: string, conversationId: string, agentId: string, status: Mess
 });
 
 const replies: Record<string, MessageView[]> = {
-  wire: [reply("wire-ache", "wire", "agent-ache", "waiting_for_input", "迁移会锁 message 表大约 40 秒，得你定。")],
-  board: [reply("board-mori", "board", "agent-mori", "working", "列宽放进 localStorage，换设备不跟着走。")],
+  wire: [
+    reply(
+      "wire-ache",
+      "wire",
+      "agent-ache",
+      "waiting_for_input",
+      "迁移会锁 message 表大约 40 秒，得你定。",
+    ),
+  ],
+  board: [
+    reply(
+      "board-mori",
+      "board",
+      "agent-mori",
+      "working",
+      "列宽放进 localStorage，换设备不跟着走。",
+    ),
+  ],
 };
 
 function list(host: FakeHost): ConversationSummary[] {
@@ -143,11 +182,16 @@ function list(host: FakeHost): ConversationSummary[] {
 }
 
 function info(host: FakeHost, id: string): ConversationInfo | undefined {
-  return host.section<ConversationInfo | undefined>(`conversations.${id}`, "info");
+  return host.section<ConversationInfo | undefined>(
+    `conversations.${id}`,
+    "info",
+  );
 }
 
 function findProject(host: FakeHost, id: string): ProjectView | undefined {
-  return host.section<ProjectView[]>("projects", "list").find((project) => project.id === id);
+  return host
+    .section<ProjectView[]>("projects", "list")
+    .find((project) => project.id === id);
 }
 
 /** What the list and the conversation's target both say, kept the same, as `summary` does on the host. */
@@ -157,13 +201,18 @@ function change(
   summary: Partial<ConversationSummary>,
   own: Partial<ConversationInfo> = {},
 ): ConversationSummary {
-  const next = list(host).map((row) => (row.id === id ? { ...row, ...summary } : row));
+  const next = list(host).map((row) =>
+    row.id === id ? { ...row, ...summary } : row,
+  );
   host.patch("conversations", "list", next);
   const current = info(host, id);
   const rest = Object.fromEntries(
-    Object.entries(summary).filter(([key]) => key === "name" || key === "archived" || key === "stewardId"),
+    Object.entries(summary).filter(
+      ([key]) => key === "name" || key === "archived" || key === "stewardId",
+    ),
   );
-  if (current !== undefined) host.patch(`conversations.${id}`, "info", { ...current, ...rest, ...own });
+  if (current !== undefined)
+    host.patch(`conversations.${id}`, "info", { ...current, ...rest, ...own });
   const row = next.find((conversation) => conversation.id === id);
   if (row === undefined) throw new Error(`unknown conversation: ${id}`);
   return row;
@@ -176,35 +225,54 @@ function existing(host: FakeHost, id: string): ConversationSummary {
 }
 
 function installConversationOps(host: FakeHost): void {
-  host.on("conversations.update", ({ conversationId, name, goal, decided, archived }) => {
-    const trimmed = (name as string | undefined)?.trim();
-    if (trimmed === "") throw new Error("a conversation needs a name");
-    const own: Partial<ConversationInfo> = {};
-    if (goal !== undefined) own.goal = goal;
-    if (decided !== undefined) own.decided = decided;
-    const summary: Partial<ConversationSummary> = {};
-    if (trimmed !== undefined) summary.name = trimmed;
-    if (archived !== undefined) summary.archived = archived;
-    return { conversation: change(host, conversationId, summary, own) };
-  });
+  host.on(
+    "conversations.update",
+    ({ conversationId, name, goal, decided, archived }) => {
+      const trimmed = (name as string | undefined)?.trim();
+      if (trimmed === "") throw new Error("a conversation needs a name");
+      const own: Partial<ConversationInfo> = {};
+      if (goal !== undefined) own.goal = goal;
+      if (decided !== undefined) own.decided = decided;
+      const summary: Partial<ConversationSummary> = {};
+      if (trimmed !== undefined) summary.name = trimmed;
+      if (archived !== undefined) summary.archived = archived;
+      return { conversation: change(host, conversationId, summary, own) };
+    },
+  );
 
   host.on("conversations.invite", ({ conversationId, agentId }) => {
     const row = existing(host, conversationId);
-    if (row.kind === "direct") throw new Error("a private chat is the agent and the user");
-    const participants = row.participants.some((member) => member.agentId === agentId)
+    if (row.kind === "direct")
+      throw new Error("a private chat is the agent and the user");
+    const participants = row.participants.some(
+      (member) => member.agentId === agentId,
+    )
       ? row.participants
-      : [...row.participants, { agentId, sessionId: null, lastSeq: 0, status: "idle" as const }];
+      : [
+          ...row.participants,
+          { agentId, sessionId: null, lastSeq: 0, status: "idle" as const },
+        ];
     return { conversation: change(host, conversationId, { participants }) };
   });
 
   host.on("conversations.remove", ({ conversationId, agentId }) => {
     const row = existing(host, conversationId);
-    if (row.kind === "direct") throw new Error("a private chat is the agent and the user");
-    const participants = row.participants.filter((member) => member.agentId !== agentId);
+    if (row.kind === "direct")
+      throw new Error("a private chat is the agent and the user");
+    const participants = row.participants.filter(
+      (member) => member.agentId !== agentId,
+    );
     const own = info(host, conversationId);
     if (own?.stewardOverrideId === agentId) {
       const stewardId = findProject(host, row.projectId)?.stewardId ?? null;
-      return { conversation: change(host, conversationId, { participants, stewardId }, { stewardOverrideId: null }) };
+      return {
+        conversation: change(
+          host,
+          conversationId,
+          { participants, stewardId },
+          { stewardOverrideId: null },
+        ),
+      };
     }
     return { conversation: change(host, conversationId, { participants }) };
   });
@@ -216,13 +284,21 @@ function installConversationOps(host: FakeHost): void {
       ? null
       : (agentId ?? findProject(host, row.projectId)?.stewardId ?? null);
     return {
-      conversation: change(host, conversationId, { stewardId }, { stewardOverrideId: agentId, noSteward }),
+      conversation: change(
+        host,
+        conversationId,
+        { stewardId },
+        { stewardOverrideId: agentId, noSteward },
+      ),
     };
   });
 
   if (!host.ops.has("conversations.stop")) {
     host.on("conversations.stop", ({ conversationId, messageId }) => {
-      const timeline = host.section<TimelineSection>(`conversations.${conversationId}`, "timeline");
+      const timeline = host.section<TimelineSection>(
+        `conversations.${conversationId}`,
+        "timeline",
+      );
       const stopped: MessageView[] = [];
       const messages = timeline.messages.map((message) => {
         if (message.id !== messageId) return message;
@@ -230,13 +306,20 @@ function installConversationOps(host: FakeHost): void {
         stopped.push(next);
         return next;
       });
-      host.patch(`conversations.${conversationId}`, "timeline", { ...timeline, messages });
+      host.patch(`conversations.${conversationId}`, "timeline", {
+        ...timeline,
+        messages,
+      });
       return { stopped };
     });
   }
 
   if (!host.ops.has("conversations.history")) {
-    host.on("conversations.history", ({ conversationId }) => ({ conversationId, messages: [], hasMore: false }));
+    host.on("conversations.history", ({ conversationId }) => ({
+      conversationId,
+      messages: [],
+      hasMore: false,
+    }));
   }
 
   host.on("projects.setSteward", ({ projectId, agentId }) => {
@@ -244,11 +327,14 @@ function installConversationOps(host: FakeHost): void {
     host.patch(
       "projects",
       "list",
-      projects.map((project) => (project.id === projectId ? { ...project, stewardId: agentId } : project)),
+      projects.map((project) =>
+        project.id === projectId ? { ...project, stewardId: agentId } : project,
+      ),
     );
     for (const row of list(host)) {
       const follows = (info(host, row.id)?.stewardOverrideId ?? null) === null;
-      if (row.projectId === projectId && row.kind === "group" && follows) change(host, row.id, { stewardId: agentId });
+      if (row.projectId === projectId && row.kind === "group" && follows)
+        change(host, row.id, { stewardId: agentId });
     }
     return { project: findProject(host, projectId) };
   });
@@ -256,16 +342,22 @@ function installConversationOps(host: FakeHost): void {
   if (!host.ops.has("agents.direct")) {
     host.on("agents.direct", ({ agentId }) => {
       const conversation = list(host).find(
-        (row) => row.kind === "direct" && row.participants[0]?.agentId === agentId,
+        (row) =>
+          row.kind === "direct" && row.participants[0]?.agentId === agentId,
       );
       if (conversation !== undefined) return { conversation };
-      const name = host.section<AgentView[]>("agents", "list").find((agent) => agent.id === agentId)?.name ?? "";
+      const name =
+        host
+          .section<AgentView[]>("agents", "list")
+          .find((agent) => agent.id === agentId)?.name ?? "";
       const made: ConversationSummary = {
         ...existing(host, "dm-xiaoman"),
         id: `dm-${agentId}`,
         projectId: `home-${agentId}`,
         name,
-        participants: [{ agentId, sessionId: null, lastSeq: 0, status: "idle" }],
+        participants: [
+          { agentId, sessionId: null, lastSeq: 0, status: "idle" },
+        ],
       };
       host.patch("conversations", "list", [...list(host), made]);
       return { conversation: made };
@@ -274,25 +366,38 @@ function installConversationOps(host: FakeHost): void {
 }
 
 function installArtifactOps(host: FakeHost): void {
-  const edit = (artifactId: string, number: number, fields: Partial<ArtifactVersionView>): ArtifactView => {
+  const edit = (
+    artifactId: string,
+    number: number,
+    fields: Partial<ArtifactVersionView>,
+  ): ArtifactView => {
     const artifacts = host.section<ArtifactView[]>("artifacts", "list");
     const next = artifacts.map((artifact) =>
       artifact.id !== artifactId
         ? artifact
         : {
             ...artifact,
-            versions: artifact.versions.map((item) => (item.number === number ? { ...item, ...fields } : item)),
+            versions: artifact.versions.map((item) =>
+              item.number === number ? { ...item, ...fields } : item,
+            ),
           },
     );
     host.patch("artifacts", "list", next);
     const changed = next.find((artifact) => artifact.id === artifactId);
-    if (changed === undefined) throw new Error(`unknown artifact: ${artifactId}`);
+    if (changed === undefined)
+      throw new Error(`unknown artifact: ${artifactId}`);
     return changed;
   };
 
   host.on("artifacts.share", ({ artifactId, version: number }) => {
     const url = `/share/${SHARE_TOKEN}/`;
-    return { artifact: edit(artifactId, number, { shareUrl: url, sharedAt: Date.now() }), url };
+    return {
+      artifact: edit(artifactId, number, {
+        shareUrl: url,
+        sharedAt: Date.now(),
+      }),
+      url,
+    };
   });
   host.on("artifacts.unshare", ({ artifactId, version: number }) => ({
     artifact: edit(artifactId, number, { shareUrl: null, sharedAt: null }),
@@ -343,7 +448,11 @@ function installSessions(host: FakeHost): void {
   host.on("sessions.taskUpdate", ({ session, id, status }) => {
     const target = `sessions.${session}`;
     const tasks = host.section<{ id: string }[]>(target, "tasks");
-    host.patch(target, "tasks", tasks.map((item) => (item.id === id ? { ...item, status } : item)));
+    host.patch(
+      target,
+      "tasks",
+      tasks.map((item) => (item.id === id ? { ...item, status } : item)),
+    );
     return {};
   });
 }
@@ -359,7 +468,9 @@ export function installGroup(host: FakeHost): void {
         : {
             ...row,
             participants: row.participants.map((member) =>
-              member.agentId === "agent-mori" ? { ...member, sessionId: null } : member,
+              member.agentId === "agent-mori"
+                ? { ...member, sessionId: null }
+                : member,
             ),
           },
     ),
@@ -377,7 +488,8 @@ export function installGroup(host: FakeHost): void {
             model: "openai-codex:gpt-5.1-codex",
             thinkingLevel: null,
             persona: "",
-            instructions: "你负责每周把任务汇总成周报，只写做完的和受阻的，下周计划单列一节。",
+            instructions:
+              "你负责每周把任务汇总成周报，只写做完的和受阻的，下周计划单列一节。",
           },
     ),
   );
@@ -402,12 +514,21 @@ export function installGroup(host: FakeHost): void {
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
-    const timeline: TimelineSection = { messages: replies[row.id] ?? [], hasMore: false, held: [] };
+    const timeline: TimelineSection = {
+      messages: replies[row.id] ?? [],
+      hasMore: false,
+      held: [],
+    };
     host.set(target, {
       members: row.participants,
       timeline,
       ...sections,
-      info: { ...facts, ...held, goal: facts.goal || (held?.goal ?? ""), decided: facts.decided || (held?.decided ?? "") },
+      info: {
+        ...facts,
+        ...held,
+        goal: facts.goal || (held?.goal ?? ""),
+        decided: facts.decided || (held?.decided ?? ""),
+      },
     });
   }
 

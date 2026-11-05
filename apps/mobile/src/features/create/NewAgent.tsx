@@ -32,7 +32,13 @@ interface PersonaCard {
 }
 
 /** What the pickers offer; `xhigh` and `max` only some models accept. */
-const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high"] as const satisfies readonly ThinkingLevel[];
+const THINKING_LEVELS = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+] as const satisfies readonly ThinkingLevel[];
 
 const INSTRUCTIONS_MAX = 10_000;
 
@@ -131,7 +137,12 @@ function useDraft() {
 
   // The runtime is here but its model is not: the runtime's own default stands in.
   effect(() => {
-    if (external() && models() && model() !== "" && !usable().some((item) => item.id === model()))
+    if (
+      external() &&
+      models() &&
+      model() !== "" &&
+      !usable().some((item) => item.id === model())
+    )
       model.set("");
   });
 
@@ -149,7 +160,9 @@ function useDraft() {
     // Agents can be created before any account is connected, not after.
     const unchosen = !external() && model() === "" && usable().length > 0;
     modelError.set(unchosen ? t("create.agent.modelRequired") : undefined);
-    return trimmed !== "" && machineError() === undefined && !unchosen && !checking();
+    return (
+      trimmed !== "" && machineError() === undefined && !unchosen && !checking()
+    );
   };
 
   const fields = (): AgentFields => ({
@@ -216,9 +229,15 @@ export function NewAgentScreen(_props: {}) {
   const sentinel = "__follow__";
 
   const running = (id: string) =>
-    agents().filter((agent) => agent.machineId === id && agent.status === "working").length;
+    agents().filter(
+      (agent) => agent.machineId === id && agent.status === "working",
+    ).length;
   const machineState = (machine: MachineView) => {
-    const status = t(machine.status === "online" ? "create.agent.online" : "create.agent.offline");
+    const status = t(
+      machine.status === "online"
+        ? "create.agent.online"
+        : "create.agent.offline",
+    );
     return machine.status === "online" && running(machine.id) > 0
       ? `${status} · ${t("create.agent.running", { count: running(machine.id) })}`
       : status;
@@ -230,12 +249,15 @@ export function NewAgentScreen(_props: {}) {
     if (answer === null) return t("create.agent.runtimesUnknown");
     return [
       t("create.agent.runtimeEta"),
-      ...answer.filter((each) => each.status === "available").map((each) => each.label),
+      ...answer
+        .filter((each) => each.status === "available")
+        .map((each) => each.label),
     ].join(" · ");
   };
   const machineLabel = (machine: MachineView) =>
     `${machine.name}${machine.kind === "primary" ? t("create.agent.primarySuffix") : ""}`;
-  const chosenMachine = () => draft.listed().find((each) => each.id === draft.machineId());
+  const chosenMachine = () =>
+    draft.listed().find((each) => each.id === draft.machineId());
 
   const machineOptions = (): SelectOption<string>[] => [
     {
@@ -258,7 +280,11 @@ export function NewAgentScreen(_props: {}) {
       { value: "eta", label: t("create.agent.runtimeEta") },
     ];
     if (known === undefined)
-      options.push({ value: "__loading__", label: t("create.agent.runtimeLoading"), disabled: true });
+      options.push({
+        value: "__loading__",
+        label: t("create.agent.runtimeLoading"),
+        disabled: true,
+      });
     for (const runtime of known ?? []) {
       options.push({
         value: runtime.id,
@@ -282,7 +308,9 @@ export function NewAgentScreen(_props: {}) {
       const group = `${model.provider}\n${model.providerName}`;
       options.push({
         value: model.id,
-        label: model.available ? model.name : `${model.name}${t("create.agent.unavailable")}`,
+        label: model.available
+          ? model.name
+          : `${model.name}${t("create.agent.unavailable")}`,
         disabled: !model.available && model.id !== draft.model(),
         ...(seen.has(group) ? {} : { group: model.providerName }),
       });
@@ -297,7 +325,9 @@ export function NewAgentScreen(_props: {}) {
   ];
 
   const modelLabel = () => {
-    const chosen = (draft.models() ?? []).find((each) => each.id === draft.model());
+    const chosen = (draft.models() ?? []).find(
+      (each) => each.id === draft.model(),
+    );
     if (chosen !== undefined) return chosen.name;
     if (draft.model() !== "") return draft.model();
     if (draft.external()) return t("create.agent.modelDefault");
@@ -405,11 +435,15 @@ export function NewAgentScreen(_props: {}) {
           label={t("create.agent.runtime")}
           value={
             draft.external()
-              ? (draft.runtimes()?.find((each) => each.id === draft.runtime())?.label ??
-                draft.runtime())
+              ? (draft.runtimes()?.find((each) => each.id === draft.runtime())
+                  ?.label ?? draft.runtime())
               : t("create.agent.runtimeEta")
           }
-          hint={draft.runtimes() === null ? t("create.agent.runtimeUnreachable") : undefined}
+          hint={
+            draft.runtimes() === null
+              ? t("create.agent.runtimeUnreachable")
+              : undefined
+          }
           note={draft.note()}
           onPress={() => picking.set("runtime")}
         />
@@ -418,7 +452,8 @@ export function NewAgentScreen(_props: {}) {
           label={t("create.agent.model")}
           value={modelLabel()}
           hint={
-            !draft.external() && draft.models()?.some((each) => each.available) === false
+            !draft.external() &&
+            draft.models()?.some((each) => each.available) === false
               ? t("create.agent.modelNone")
               : undefined
           }
@@ -447,7 +482,10 @@ export function NewAgentScreen(_props: {}) {
         testID="agent-next"
         disabled={draft.checking()}
         onPress={() => {
-          if (draft.valid()) open("new:agent:instructions", () => <InstructionsStep draft={draft} />);
+          if (draft.valid())
+            open("new:agent:instructions", () => (
+              <InstructionsStep draft={draft} />
+            ));
         }}
       />
       <SelectSheet
@@ -487,7 +525,11 @@ function InstructionsStep(props: { draft: Draft }) {
     const fields = draft.fields();
     let made: AgentResults["create"]["agent"];
     try {
-      ({ agent: made } = await call<AgentResults["create"]>("agents", "create", fields));
+      ({ agent: made } = await call<AgentResults["create"]>(
+        "agents",
+        "create",
+        fields,
+      ));
     } catch (error) {
       failure.set(reason(error));
       sending.set(false);
@@ -496,9 +538,13 @@ function InstructionsStep(props: { draft: Draft }) {
     if (fields.model && fields.runtime === "eta") rememberModel(fields.model);
     toast(t("create.agent.created", { name: made.name }));
     try {
-      const { conversation } = await call<AgentResults["direct"]>("agents", "direct", {
-        agentId: made.id,
-      });
+      const { conversation } = await call<AgentResults["direct"]>(
+        "agents",
+        "direct",
+        {
+          agentId: made.id,
+        },
+      );
       enterChat(conversation.id, 2);
     } catch (error) {
       // The agent exists: going again here would make a second one.
@@ -572,7 +618,9 @@ function InstructionsStep(props: { draft: Draft }) {
             hint: card.description,
           })),
         ]}
-        onChange={(value) => draft.persona.set(value === "__default__" ? "" : value)}
+        onChange={(value) =>
+          draft.persona.set(value === "__default__" ? "" : value)
+        }
         onClose={() => picking.set(false)}
       />
     </Page>

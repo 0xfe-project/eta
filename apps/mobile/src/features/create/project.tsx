@@ -2,7 +2,11 @@
 // use-project-choice: `projectId` undefined is the first project, "" is adding `path` on
 // `machineId` (undefined is the primary), and adding a path that is a project finds that project.
 
-import type { MachineView, ProjectResults, ProjectView } from "@eta/client-contracts";
+import type {
+  MachineView,
+  ProjectResults,
+  ProjectView,
+} from "@eta/client-contracts";
 import { signal } from "nsh";
 import { machineById, machines, projects } from "../../app/lists";
 import { nav, open } from "../../nav/stack";
@@ -24,7 +28,9 @@ export const usableMachines = (): MachineView[] =>
 
 /** The projects a conversation can start in: not an agent's own workspace, not put away. */
 export const choosableProjects = (): ProjectView[] =>
-  projects().filter((project) => project.kind === "project" && !project.archived);
+  projects().filter(
+    (project) => project.kind === "project" && !project.archived,
+  );
 
 export function folderName(path: string): string {
   const trimmed = path.replace(/\/+$/, "");
@@ -33,10 +39,15 @@ export function folderName(path: string): string {
   return name.length === 0 ? trimmed : name;
 }
 
-export function shortenPath(path: string, home: string | null | undefined): string {
+export function shortenPath(
+  path: string,
+  home: string | null | undefined,
+): string {
   if (home === null || home === undefined) return path;
   if (path === home) return "~";
-  return path.startsWith(`${home}/`) ? `~/${path.slice(home.length + 1)}` : path;
+  return path.startsWith(`${home}/`)
+    ? `~/${path.slice(home.length + 1)}`
+    : path;
 }
 
 /** `mac-studio · ~/Developer/eta`. */
@@ -49,7 +60,8 @@ export function placeLine(place: { machineId: string; path: string }): string {
 /** The choice's state, and the way to the directory picker and back. */
 export function useProjectChoice() {
   const choice = signal<ProjectChoice>({ projectId: undefined, path: "" });
-  const adding = () => choice().projectId === "" || choosableProjects().length === 0;
+  const adding = () =>
+    choice().projectId === "" || choosableProjects().length === 0;
   const project = (): ProjectView | undefined => {
     if (adding()) return undefined;
     const list = choosableProjects();
@@ -57,7 +69,10 @@ export function useProjectChoice() {
   };
   const chosenPlace = () => {
     const { machineId, path } = choice();
-    return { machineId: machineId ?? primaryMachine()?.id ?? "", path: path.trim() };
+    return {
+      machineId: machineId ?? primaryMachine()?.id ?? "",
+      path: path.trim(),
+    };
   };
   const browse = () => {
     const { machineId, path } = chosenPlace();
@@ -87,11 +102,15 @@ export function useProjectChoice() {
     const found = project();
     if (found !== undefined) return found;
     const { path, machineId } = choice();
-    const { project: made } = await call<ProjectResults["create"]>("projects", "create", {
-      path: path.trim(),
-      ...(machineId === undefined ? {} : { machineId }),
-      ...(stewardId === null ? {} : { stewardId }),
-    });
+    const { project: made } = await call<ProjectResults["create"]>(
+      "projects",
+      "create",
+      {
+        path: path.trim(),
+        ...(machineId === undefined ? {} : { machineId }),
+        ...(stewardId === null ? {} : { stewardId }),
+      },
+    );
     return made;
   };
   return { choice, adding, project, chosenPlace, browse, missing, resolve };

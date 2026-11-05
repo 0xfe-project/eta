@@ -12,7 +12,13 @@ import type {
   ViewMessageRow,
 } from "@eta/client-contracts";
 import { cleanup, computed, effect, Text, View } from "nsh";
-import { agentById, boardTasks, conversations, machineById, projectById } from "../../app/lists";
+import {
+  agentById,
+  boardTasks,
+  conversations,
+  machineById,
+  projectById,
+} from "../../app/lists";
 import { wire } from "../../app/session";
 import { t } from "../../i18n";
 import { go } from "../../nav/links";
@@ -50,21 +56,31 @@ const members = (status: MemberView["status"]) =>
 export function runCounts(): { running: number; queued: number } {
   const tasks = boardTasks();
   return {
-    running: members("working").length + tasks.filter((task) => ACTIVE.has(task.runStatus)).length,
+    running:
+      members("working").length +
+      tasks.filter((task) => ACTIVE.has(task.runStatus)).length,
     queued:
-      members("queued").length + tasks.filter((task) => task.runStatus === "queued").length,
+      members("queued").length +
+      tasks.filter((task) => task.runStatus === "queued").length,
   };
 }
 
-const memberRun = (conversation: ConversationSummary, member: MemberView): Run => {
+const memberRun = (
+  conversation: ConversationSummary,
+  member: MemberView,
+): Run => {
   const agent = agentById(member.agentId);
-  const where = conversation.kind === "direct" ? t("inbox.direct") : conversation.name;
+  const where =
+    conversation.kind === "direct" ? t("inbox.direct") : conversation.name;
   return {
     key: `member:${conversation.id}:${member.agentId}`,
     agentId: member.agentId,
     title: `${agent?.name ?? member.agentId} · ${where}`,
     sessionId: member.sessionId,
-    machineId: agent?.machineId ?? projectById(conversation.projectId)?.machineId ?? null,
+    machineId:
+      agent?.machineId ??
+      projectById(conversation.projectId)?.machineId ??
+      null,
     task: false,
     open: () => go.chat(conversation.id),
   };
@@ -93,7 +109,9 @@ export function useRuns() {
   const connection = wire();
   const held = new Map<string, () => void>();
   const unfinished = () =>
-    boardTasks().filter((task) => ACTIVE.has(task.runStatus) || task.runStatus === "queued");
+    boardTasks().filter(
+      (task) => ACTIVE.has(task.runStatus) || task.runStatus === "queued",
+    );
   effect(() => {
     const ids = new Set(unfinished().map((task) => task.id));
     for (const id of ids) {
@@ -110,7 +128,10 @@ export function useRuns() {
   });
   const taskRuns = () =>
     unfinished().flatMap((task) =>
-      (connection.section<BoardTaskDetail>(`tasks.${task.id}`, "task")?.runs ?? []).map((run) => ({
+      (
+        connection.section<BoardTaskDetail>(`tasks.${task.id}`, "task")?.runs ??
+        []
+      ).map((run) => ({
         task,
         run,
       })),
@@ -132,7 +153,9 @@ export function useRuns() {
     /** The longest running first. */
     running: (): Run[] =>
       [
-        ...members("working").map(({ conversation, member }) => memberRun(conversation, member)),
+        ...members("working").map(({ conversation, member }) =>
+          memberRun(conversation, member),
+        ),
         ...taskRuns()
           .filter(({ run }) => ACTIVE.has(run.status))
           .map(({ task, run }) => taskRun(task, run)),
@@ -170,15 +193,21 @@ function useSession(run: () => string | null) {
     const session = id();
     return session === null
       ? undefined
-      : connection.section<SessionViewSections[K]>(`sessions.${session}`, section);
+      : connection.section<SessionViewSections[K]>(
+          `sessions.${session}`,
+          section,
+        );
   };
 }
 
-const baseName = (path: string): string => path.split("/").filter(Boolean).at(-1) ?? path;
+const baseName = (path: string): string =>
+  path.split("/").filter(Boolean).at(-1) ?? path;
 
 function describeTool(name: string, args: Record<string, unknown>): string {
   const text = (...keys: string[]): string | undefined => {
-    const value = keys.map((key) => args[key]).find((item) => typeof item === "string");
+    const value = keys
+      .map((key) => args[key])
+      .find((item) => typeof item === "string");
     return value as string | undefined;
   };
   const path = text("file_path", "path");
@@ -187,7 +216,8 @@ function describeTool(name: string, args: Record<string, unknown>): string {
     const command = text("command", "cmd")?.split("\n")[0];
     if (command !== undefined) return t("inbox.run.bash", { what: command });
   }
-  if (tool === "read" && path !== undefined) return t("inbox.run.read", { what: baseName(path) });
+  if (tool === "read" && path !== undefined)
+    return t("inbox.run.read", { what: baseName(path) });
   if ((tool === "edit" || tool === "write") && path !== undefined)
     return t("inbox.run.edit", { what: baseName(path) });
   return t("inbox.run.tool", { what: name });
@@ -199,7 +229,10 @@ interface Progress {
 }
 
 /** The tool call with no result yet, newest first, or thinking; since the run's last prompt. */
-export function progressOf(messages: ViewMessageRow[], streaming?: unknown): Progress {
+function progressOf(
+  messages: ViewMessageRow[],
+  streaming?: unknown,
+): Progress {
   const rows = messages.map((row) => row.message as unknown as RawMessage);
   if (streaming !== undefined) rows.push(streaming as RawMessage);
   const finished = new Set(
@@ -210,7 +243,9 @@ export function progressOf(messages: ViewMessageRow[], streaming?: unknown): Pro
     if (row.role === "user") break;
     if (row.role !== "assistant") continue;
     const content = Array.isArray(row.content) ? row.content : [];
-    const open = content.findLast((block) => block.type === "toolCall" && !finished.has(block.id));
+    const open = content.findLast(
+      (block) => block.type === "toolCall" && !finished.has(block.id),
+    );
     if (open !== undefined) {
       return {
         doing: describeTool(open.name ?? "", open.arguments ?? {}),
@@ -227,7 +262,12 @@ export function progressOf(messages: ViewMessageRow[], streaming?: unknown): Pro
 interface RawMessage {
   role: string;
   toolCallId?: string;
-  content?: { type: string; id?: string; name?: string; arguments?: Record<string, unknown> }[];
+  content?: {
+    type: string;
+    id?: string;
+    name?: string;
+    arguments?: Record<string, unknown>;
+  }[];
 }
 
 /** `30 秒`, `8 分钟`, `2 小时`. */
@@ -257,8 +297,12 @@ export function RunRow(props: { run: Run; plain?: boolean; last?: boolean }) {
     const machine = machineById(props.run.machineId);
     const since = props.run.since ?? known?.since;
     return [
-      !props.plain && machine !== undefined && machine.kind !== "primary" ? machine.name : undefined,
-      props.plain ? t("inbox.run.working") : (known?.doing ?? t("inbox.run.working")),
+      !props.plain && machine !== undefined && machine.kind !== "primary"
+        ? machine.name
+        : undefined,
+      props.plain
+        ? t("inbox.run.working")
+        : (known?.doing ?? t("inbox.run.working")),
       since === undefined ? undefined : elapsed(since),
     ]
       .filter((part) => part !== undefined)
@@ -275,8 +319,12 @@ export function RunRow(props: { run: Run; plain?: boolean; last?: boolean }) {
         <AgentAvatar id={props.run.agentId ?? ""} size={20} />
       </If>
       <View class="min-w-0 grow basis-0">
-        <Text class="truncate text-base leading-[20px] text-foreground">{props.run.title}</Text>
-        <Text class="truncate text-sm leading-4 text-muted-foreground">{line()}</Text>
+        <Text class="truncate text-base leading-[20px] text-foreground">
+          {props.run.title}
+        </Text>
+        <Text class="truncate text-sm leading-4 text-muted-foreground">
+          {line()}
+        </Text>
       </View>
       <Icon name="caretRight" size={14} color="faint" />
     </View>

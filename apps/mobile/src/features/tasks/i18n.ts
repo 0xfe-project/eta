@@ -19,7 +19,8 @@ export const i18n = {
     "tasks.run.never": "还没运行过",
     "tasks.run.start": "运行",
     "tasks.run.rerun": "从头重跑",
-    "tasks.run.fromScratchHint": "评论会让执行者接着上次往下做；这样是开一个它什么都不记得的新会话。",
+    "tasks.run.fromScratchHint":
+      "评论会让执行者接着上次往下做；这样是开一个它什么都不记得的新会话。",
     "tasks.queue.taskBusy": "等这个任务上一次运行结束",
     "tasks.queue.machineFull": "{machine} 同时运行的任务数已满，等空位",
     "tasks.queue.machineOffline": "{machine} 不在线，连上后开始",
@@ -31,7 +32,8 @@ export const i18n = {
     "tasks.daysAgo": "{count} 天",
     "tasks.lastWeek": "上周",
     "tasks.empty.title": "还没有任务",
-    "tasks.empty.description": "智能体在对话里提出任务，你确认后它会自己动手，并在时间线里记下每一步。",
+    "tasks.empty.description":
+      "智能体在对话里提出任务，你确认后它会自己动手，并在时间线里记下每一步。",
     "tasks.gone.title": "这个任务已不存在",
     "tasks.gone.body": "它可能已被删除。",
     "tasks.failed.title": "无法加载任务",
@@ -111,7 +113,8 @@ export const i18n = {
     "tasks.pr.mergedAndCompleted": "PR 已合并，任务已完成",
     "tasks.pr.incomplete": "PR 已合并，任务未完成",
     "tasks.pr.incompleteWith": "PR 已合并，任务未完成：{message}",
-    "tasks.pr.unknown": "没有得到合并结果，已重新读取 PR 状态，请确认后再决定是否重试。",
+    "tasks.pr.unknown":
+      "没有得到合并结果，已重新读取 PR 状态，请确认后再决定是否重试。",
     "tasks.error.timeout": "宿主没有及时回应。",
   },
   en: {
@@ -137,8 +140,10 @@ export const i18n = {
     "tasks.run.fromScratchHint":
       "A comment lets the executor carry on from where it left off; this opens a new session that remembers nothing.",
     "tasks.queue.taskBusy": "Waiting for this task's previous run",
-    "tasks.queue.machineFull": "{machine} is at its run limit, waiting for a slot",
-    "tasks.queue.machineOffline": "{machine} is offline, starts once it connects",
+    "tasks.queue.machineFull":
+      "{machine} is at its run limit, waiting for a slot",
+    "tasks.queue.machineOffline":
+      "{machine} is offline, starts once it connects",
     "tasks.queue.thisMachine": "This machine",
     "tasks.scope.all": "All groups",
     "tasks.scope.title": "Show tasks from",
@@ -182,7 +187,8 @@ export const i18n = {
     "tasks.activity.artifactVersion": "{title} v{version}",
     "tasks.activity.started": "started working",
     "tasks.activity.turnCompleted": "finished this turn",
-    "tasks.activity.nudged": "ended the turn without reporting and was reminded once",
+    "tasks.activity.nudged":
+      "ended the turn without reporting and was reminded once",
     "tasks.activity.turnFailed": "This turn failed{reason}",
     "tasks.activity.turnStopped": "stopped this turn{reason}",
     "tasks.live.working": "{name} is working",
@@ -212,7 +218,8 @@ export const i18n = {
     "tasks.edit.title": "Edit description",
     "tasks.edit.hint": "Markdown is supported.",
     "tasks.delete.title": "Delete task #{number}?",
-    "tasks.delete.body": "Its description, comments and activity go with it. This can't be undone.",
+    "tasks.delete.body":
+      "Its description, comments and activity go with it. This can't be undone.",
     "tasks.pr.open": "Open",
     "tasks.pr.draft": "Draft",
     "tasks.pr.merged": "Merged",

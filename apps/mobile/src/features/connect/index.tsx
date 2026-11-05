@@ -14,7 +14,7 @@ import {
   phase,
   retry,
 } from "../../app/session";
-import { t } from "../../i18n";
+import { language, t } from "../../i18n";
 import { nav } from "../../nav/stack";
 import { clock } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
@@ -23,7 +23,8 @@ import { eager, useTarget } from "../../wire/target";
 import { parseConnectLink } from "./link";
 import { form, scanHostCode } from "./scan";
 
-const SCREEN = "flex-1 bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]";
+const SCREEN =
+  "flex-1 bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]";
 const FAILURES = {
   token: "connect.failure.token",
   network: "connect.failure.network",
@@ -50,7 +51,9 @@ function Wide(props: {
 }) {
   const box = () => {
     if (props.disabled) return "bg-muted";
-    return props.primary ? "bg-primary active:opacity-80" : "border border-border-strong active:bg-muted";
+    return props.primary
+      ? "bg-primary active:opacity-80"
+      : "border border-border-strong active:bg-muted";
   };
   const label = () => {
     if (props.disabled) return "text-muted-foreground";
@@ -73,7 +76,11 @@ function Wide(props: {
 }
 
 function Mark() {
-  return <Text class="text-gauge leading-[64px] tracking-[0.14em] text-foreground">ETA</Text>;
+  return (
+    <Text class="text-gauge leading-[64px] tracking-[0.14em] text-foreground">
+      ETA
+    </Text>
+  );
 }
 
 function Field(props: {
@@ -91,7 +98,9 @@ function Field(props: {
     <View
       class={`h-[56px] shrink-0 flex-row items-center gap-3 border-t px-4 ${props.error ? "border-b border-state-error" : "border-border"}`}
     >
-      <Text class={`w-[32px] shrink-0 text-sm leading-4 ${props.error ? "text-state-error" : "text-muted-foreground"}`}>
+      <Text
+        class={`${language() === "zh" ? "w-[32px]" : "w-[52px]"} shrink-0 text-sm leading-4 ${props.error ? "text-state-error" : "text-muted-foreground"}`}
+      >
         {props.label}
       </Text>
       <Input
@@ -117,7 +126,8 @@ function Field(props: {
 /** 08 and 08a: one form, whether this is the first try or the last one failed. */
 export function ConnectScreen() {
   // Back from 设置: the address may help, the token stays with the host that was left.
-  if (phase() === "form") form.set({ address: host()?.address ?? "", token: "" });
+  if (phase() === "form")
+    form.set({ address: host()?.address ?? "", token: "" });
 
   const edit = (next: { address?: string; token?: string }, typed: string) => {
     const link = parseConnectLink(typed);
@@ -138,7 +148,12 @@ export function ConnectScreen() {
   return (
     <View
       class="flex-1 bg-background pt-[env(safe-area-inset-top)]"
-      style={{ paddingBottom: keyboardFrame().height > 0 ? keyboardFrame().height : safeArea().bottom }}
+      style={{
+        paddingBottom:
+          keyboardFrame().height > 0
+            ? keyboardFrame().height
+            : safeArea().bottom,
+      }}
     >
       <If
         when={failed()}
@@ -148,7 +163,9 @@ export function ConnectScreen() {
             <Text class="text-title leading-[32px] tracking-[-0.01em] text-foreground">
               {t("connect.tagline")}
             </Text>
-            <Text class="text-base leading-[23px] text-muted-foreground">{t("connect.intro")}</Text>
+            <Text class="text-base leading-[23px] text-muted-foreground">
+              {t("connect.intro")}
+            </Text>
           </View>
         }
       >
@@ -156,7 +173,9 @@ export function ConnectScreen() {
           <Text class="text-gauge-sm leading-[34px] tracking-[-0.02em] text-foreground">
             {t("connect.failed")}
           </Text>
-          <Text class="text-base leading-[23px] text-state-error">{t(failureKey())}</Text>
+          <Text class="text-base leading-[23px] text-state-error">
+            {t(failureKey())}
+          </Text>
         </View>
       </If>
       <View class="shrink-0">
@@ -187,7 +206,11 @@ export function ConnectScreen() {
           disabled={!ready()}
           testID="connect-submit"
           title={
-            connecting() ? t("connect.connecting") : failed() ? t("common.retry") : t("connect.connect")
+            connecting()
+              ? t("connect.connecting")
+              : failed()
+                ? t("common.retry")
+                : t("connect.connect")
           }
           onPress={connect}
         />
@@ -222,8 +245,12 @@ export function DisconnectedScreen() {
         <Text class="text-title leading-[32px] tracking-[-0.01em] text-foreground">
           {t("connect.lost")}
         </Text>
-        <Text class="text-md leading-[20px] text-muted-foreground">{line()}</Text>
-        <Text class="text-md leading-[20px] text-muted-foreground">{t("connect.stillRunning")}</Text>
+        <Text class="text-md leading-[20px] text-muted-foreground">
+          {line()}
+        </Text>
+        <Text class="text-md leading-[20px] text-muted-foreground">
+          {t("connect.stillRunning")}
+        </Text>
       </View>
       <View class="shrink-0 gap-2 px-4 py-2">
         <Wide primary title={t("common.retry")} onPress={retry} />
@@ -241,7 +268,8 @@ function Step(props: {
   done?: boolean;
   last?: boolean;
 }) {
-  const color = () => (props.current ? "text-foreground" : "text-muted-foreground");
+  const color = () =>
+    props.current ? "text-foreground" : "text-muted-foreground";
   return (
     <View
       class={`h-[76px] shrink-0 flex-row items-center gap-3 border-t border-border px-4 ${props.last ? "border-b" : ""}`}
@@ -249,14 +277,20 @@ function Step(props: {
       <View class="w-[20px] shrink-0">
         <If
           when={props.done}
-          else={<Text class={`text-md leading-4 ${color()}`}>{String(props.number)}</Text>}
+          else={
+            <Text class={`text-md leading-4 ${color()}`}>
+              {String(props.number)}
+            </Text>
+          }
         >
           <Icon name="check" size={14} color="muted-foreground" />
         </If>
       </View>
       <View class="min-w-0 grow basis-0">
         <Text class={`text-lead leading-[22px] ${color()}`}>{props.title}</Text>
-        <Text class="text-sm leading-[18px] text-muted-foreground">{props.body}</Text>
+        <Text class="text-sm leading-[18px] text-muted-foreground">
+          {props.body}
+        </Text>
       </View>
     </View>
   );
@@ -272,7 +306,8 @@ export function UninitializedScreen() {
     (providers.section<ProvidersView>("config")?.providers.length ?? 0) > 0 ||
     (eager<unknown[]>("llm", "models")?.length ?? 0) > 0;
   const hostName = () =>
-    machines().find((machine) => machine.kind === "primary")?.name ?? t("connect.thisHost");
+    machines().find((machine) => machine.kind === "primary")?.name ??
+    t("connect.thisHost");
   const stepsLeft = () => (bound() ? 1 : 2) - (agents().length > 0 ? 1 : 0);
 
   return (
@@ -289,7 +324,9 @@ export function UninitializedScreen() {
         <Step
           number={1}
           title={t("connect.step.model")}
-          body={t(bound() ? "connect.step.modelDone" : "connect.step.modelTodo")}
+          body={t(
+            bound() ? "connect.step.modelDone" : "connect.step.modelTodo",
+          )}
           current={!bound()}
           done={bound()}
         />
@@ -303,7 +340,9 @@ export function UninitializedScreen() {
       </View>
       <View class="grow" />
       <View class="shrink-0 px-4 py-3">
-        <Text class="text-md leading-[20px] text-muted-foreground">{t("connect.autoUpdate")}</Text>
+        <Text class="text-md leading-[20px] text-muted-foreground">
+          {t("connect.autoUpdate")}
+        </Text>
       </View>
     </View>
   );

@@ -14,7 +14,8 @@ export function useTarget(name: string) {
   const connection = wire();
   cleanup(connection.subscribe(name));
   return {
-    section: <T>(section: string): T | undefined => connection.section<T>(name, section),
+    section: <T>(section: string): T | undefined =>
+      connection.section<T>(name, section),
     /** State has arrived. */
     loaded: (): boolean => connection.target(name) !== undefined,
     /** The host says there is nothing behind the name. */
@@ -28,6 +29,10 @@ export function eager<T>(target: string, section: string): T | undefined {
 }
 
 /** `target.action`, with the current connection. */
-export function call<T = unknown>(target: string, action: string, args?: unknown): Promise<T> {
+export function call<T = unknown>(
+  target: string,
+  action: string,
+  args?: unknown,
+): Promise<T> {
   return wire().call<T>(target, action, args);
 }

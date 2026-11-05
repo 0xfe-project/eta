@@ -52,7 +52,9 @@ function RunState(props: { task: BoardTaskView }) {
         </View>
       </If>
       <If when={status() === "failed"}>
-        <Text class="text-sm leading-4 text-state-error">{runLabel("failed")}</Text>
+        <Text class="text-sm leading-4 text-state-error">
+          {runLabel("failed")}
+        </Text>
       </If>
     </>
   );
@@ -96,7 +98,9 @@ function TaskRow(props: { task: BoardTaskView }) {
           <If when={props.task.comments > 0}>
             <View class="flex-row items-center gap-1">
               <Icon name="chatCircle" size={13} color="muted-foreground" />
-              <Text class="text-sm leading-4 text-muted-foreground">{props.task.comments}</Text>
+              <Text class="text-sm leading-4 text-muted-foreground">
+                {props.task.comments}
+              </Text>
             </View>
           </If>
         </View>
@@ -116,9 +120,15 @@ function PastRow(props: { task: BoardTaskView }) {
       onPress={() => go.task(task().id)}
       class="h-14 shrink-0 flex-row items-center gap-[10px] border-t border-border px-4 active:bg-muted"
     >
-      <Icon name={STATUS_ICONS[task().status]} size={18} color="muted-foreground" />
+      <Icon
+        name={STATUS_ICONS[task().status]}
+        size={18}
+        color="muted-foreground"
+      />
       <View class="min-w-0 grow basis-0">
-        <Text class="truncate text-base leading-[20px] text-foreground">{task().title}</Text>
+        <Text class="truncate text-base leading-[20px] text-foreground">
+          {task().title}
+        </Text>
         <Text class="truncate text-sm leading-4 text-muted-foreground">
           {`#${task().number} · ${actorName(executor(task()))} · ${past(task().updatedAt)}`}
         </Text>
@@ -127,7 +137,11 @@ function PastRow(props: { task: BoardTaskView }) {
   );
 }
 
-function Fold(props: { status: BoardTaskStatus; tasks: BoardTaskView[]; first: boolean }) {
+function Fold(props: {
+  status: BoardTaskStatus;
+  tasks: BoardTaskView[];
+  first: boolean;
+}) {
   const open = signal(false);
   const all = signal(false);
   const shown = () => (all() ? props.tasks : props.tasks.slice(0, FOLD_ROWS));
@@ -144,8 +158,14 @@ function Fold(props: { status: BoardTaskStatus; tasks: BoardTaskView[]; first: b
         <Text class="grow basis-0 text-base leading-[18px] text-foreground">
           {statusLabel(props.status)}
         </Text>
-        <Text class="text-sm leading-4 text-muted-foreground">{props.tasks.length}</Text>
-        <Icon name={open() ? "caretDown" : "caretRight"} size={14} color="faint" />
+        <Text class="text-sm leading-4 text-muted-foreground">
+          {props.tasks.length}
+        </Text>
+        <Icon
+          name={open() ? "caretDown" : "caretRight"}
+          size={14}
+          color="faint"
+        />
       </View>
       <If when={open()}>
         <Each of={shown()} key={(task) => task.id}>
@@ -180,9 +200,13 @@ function ScopeSheet(props: {
       .map((group) => ({
         id: group.id,
         name: group.name,
-        count: boardTasks().filter((task) => task.conversationId === group.id).length,
+        count: boardTasks().filter((task) => task.conversationId === group.id)
+          .length,
       }));
-    return [...counted.filter((g) => g.count > 0), ...counted.filter((g) => g.count === 0)];
+    return [
+      ...counted.filter((g) => g.count > 0),
+      ...counted.filter((g) => g.count === 0),
+    ];
   };
   const pick = (id: string | undefined) => {
     props.onChange(id);
@@ -191,7 +215,9 @@ function ScopeSheet(props: {
   return (
     <Sheet open={props.open} onClose={props.onClose}>
       <View class="h-[52px] shrink-0 flex-row items-center px-4">
-        <Text class="text-lead leading-[18px] text-foreground">{t("tasks.scope.title")}</Text>
+        <Text class="text-lead leading-[18px] text-foreground">
+          {t("tasks.scope.title")}
+        </Text>
       </View>
       <Scroll style={{ maxHeight: 480 }}>
         <View
@@ -202,8 +228,14 @@ function ScopeSheet(props: {
           <Text class="grow basis-0 text-lead leading-[18px] text-foreground">
             {t("tasks.scope.all")}
           </Text>
-          <Text class="text-sm leading-4 text-muted-foreground">{boardTasks().length}</Text>
-          <Icon name="check" size={16} color={props.value === undefined ? "foreground" : "faint"} />
+          <Text class="text-sm leading-4 text-muted-foreground">
+            {boardTasks().length}
+          </Text>
+          <Icon
+            name="check"
+            size={16}
+            color={props.value === undefined ? "foreground" : "faint"}
+          />
         </View>
         <Each of={groups()} key={(group) => group.id}>
           {(group) => (
@@ -226,7 +258,9 @@ function ScopeSheet(props: {
                 </If>
               </View>
               <If when={group().count > 0}>
-                <Text class="text-sm leading-4 text-muted-foreground">{group().count}</Text>
+                <Text class="text-sm leading-4 text-muted-foreground">
+                  {group().count}
+                </Text>
               </If>
               <If when={props.value === group().id}>
                 <Icon name="check" size={16} />
@@ -250,15 +284,18 @@ export function TasksTab() {
       ? boardTasks()
       : boardTasks().filter((task) => task.conversationId === id);
   });
-  const of = (status: BoardTaskStatus) => tasks().filter((task) => task.status === status);
-  const sections = () => OPEN_STATUSES.filter((status) => of(status).length > 0);
+  const of = (status: BoardTaskStatus) =>
+    tasks().filter((task) => task.status === status);
+  const sections = () =>
+    OPEN_STATUSES.filter((status) => of(status).length > 0);
   const folds = () => FOLDED_STATUSES.filter((status) => of(status).length > 0);
   const bar = () => BAR.filter((part) => of(part.status).length > 0);
   const scopeName = () => {
     const id = scope();
     return id === undefined
       ? t("tasks.scope.all")
-      : (conversations().find((group) => group.id === id)?.name ?? t("tasks.scope.all"));
+      : (conversations().find((group) => group.id === id)?.name ??
+          t("tasks.scope.all"));
   };
   return (
     <View class="flex-1">
@@ -285,7 +322,10 @@ export function TasksTab() {
         <View class="h-1 shrink-0 flex-row gap-[2px] px-4">
           <Each of={bar()} key={(part) => part.status}>
             {(part) => (
-              <View class={part().class} style={{ flexGrow: of(part().status).length, flexBasis: 0 }} />
+              <View
+                class={part().class}
+                style={{ flexGrow: of(part().status).length, flexBasis: 0 }}
+              />
             )}
           </Each>
         </View>
@@ -296,7 +336,12 @@ export function TasksTab() {
           <View class="grow basis-0 border-t border-border">
             <If
               when={boardTasks().length > 0}
-              else={<Empty title={t("tasks.empty.title")} body={t("tasks.empty.description")} />}
+              else={
+                <Empty
+                  title={t("tasks.empty.title")}
+                  body={t("tasks.empty.description")}
+                />
+              }
             >
               <Empty title={t("tasks.scope.emptyGroup")} />
             </If>
@@ -310,7 +355,9 @@ export function TasksTab() {
                 <View
                   class={`shrink-0 flex-row items-end justify-between px-4 pb-[6px] ${index() === 0 ? "h-9" : "h-[42px] border-t border-border"}`}
                 >
-                  <Text class="text-sm leading-[18px] text-foreground">{statusLabel(status())}</Text>
+                  <Text class="text-sm leading-[18px] text-foreground">
+                    {statusLabel(status())}
+                  </Text>
                   <Text class="text-sm leading-[18px] text-muted-foreground">
                     {of(status()).length}
                   </Text>
@@ -325,7 +372,11 @@ export function TasksTab() {
             <View class="border-t border-border-strong bg-surface">
               <Each of={folds()} key={(status) => status}>
                 {(status, index) => (
-                  <Fold status={status()} tasks={of(status())} first={index() === 0} />
+                  <Fold
+                    status={status()}
+                    tasks={of(status())}
+                    first={index() === 0}
+                  />
                 )}
               </Each>
             </View>

@@ -18,7 +18,11 @@ const FIELD = "text-input text-foreground";
 const LONG_FIELD_HEIGHT = 120;
 
 function Label(props: { text: string }) {
-  return <Text class="text-sm leading-[18px] text-muted-foreground">{props.text}</Text>;
+  return (
+    <Text class="text-sm leading-[18px] text-muted-foreground">
+      {props.text}
+    </Text>
+  );
 }
 
 export function EditGroupScreen(props: { id: string }) {
@@ -63,8 +67,12 @@ export function EditGroupScreen(props: { id: string }) {
       <If when={ready()} else={<Loading />}>
         <Body fill class="gap-4 px-4">
           <View class="gap-1 pt-1">
-            <Text class="text-title leading-[30px] tracking-[-0.01em] text-foreground">{t("group.edit.title")}</Text>
-            <Text class="text-md leading-[20px] text-muted-foreground">{t("group.edit.hint")}</Text>
+            <Text class="text-title leading-[30px] tracking-[-0.01em] text-foreground">
+              {t("group.edit.title")}
+            </Text>
+            <Text class="text-md leading-[20px] text-muted-foreground">
+              {t("group.edit.hint")}
+            </Text>
           </View>
           <View class="gap-[6px]">
             <Label text={t("group.edit.name")} />
@@ -75,7 +83,10 @@ export function EditGroupScreen(props: { id: string }) {
               class={`h-11 border border-border-strong px-3 ${FIELD}`}
             />
           </View>
-          <View class="grow basis-0 gap-[6px]" style={{ minHeight: LONG_FIELD_HEIGHT }}>
+          <View
+            class="grow basis-0 gap-[6px]"
+            style={{ minHeight: LONG_FIELD_HEIGHT }}
+          >
             <Label text={t("group.edit.goal")} />
             <Input
               testID="edit-goal"
@@ -85,7 +96,10 @@ export function EditGroupScreen(props: { id: string }) {
               class={`grow basis-0 border border-border-strong px-3 py-[10px] ${FIELD}`}
             />
           </View>
-          <View class="grow basis-0 gap-[6px]" style={{ minHeight: LONG_FIELD_HEIGHT }}>
+          <View
+            class="grow basis-0 gap-[6px]"
+            style={{ minHeight: LONG_FIELD_HEIGHT }}
+          >
             <Label text={t("group.edit.decided")} />
             <Input
               testID="edit-decided"

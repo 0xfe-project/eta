@@ -4,7 +4,12 @@ import { go } from "../../nav/links";
 import { Icon } from "../../ui/Icon";
 import { Sheet } from "../../ui/Sheet";
 
-function Entry(props: { title: string; hint: string; first?: boolean; onPress: () => void }) {
+function Entry(props: {
+  title: string;
+  hint: string;
+  first?: boolean;
+  onPress: () => void;
+}) {
   return (
     <View
       role="button"
@@ -13,8 +18,12 @@ function Entry(props: { title: string; hint: string; first?: boolean; onPress: (
       class={`h-[72px] shrink-0 flex-row items-center gap-3 px-4 active:bg-muted ${props.first ? "" : "border-t border-border"}`}
     >
       <View class="min-w-0 grow basis-0">
-        <Text class="text-lead leading-[22px] text-foreground">{props.title}</Text>
-        <Text class="text-sm leading-[18px] text-muted-foreground">{props.hint}</Text>
+        <Text class="text-lead leading-[22px] text-foreground">
+          {props.title}
+        </Text>
+        <Text class="text-sm leading-[18px] text-muted-foreground">
+          {props.hint}
+        </Text>
       </View>
       <Icon name="caretRight" size={14} color="faint" />
     </View>

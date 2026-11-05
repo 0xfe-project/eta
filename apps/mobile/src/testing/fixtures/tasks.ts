@@ -53,7 +53,11 @@ function entry(
   kind: TaskActivityKind,
   actor: TaskActor,
   createdAt: number,
-  fields: { body?: string; runId?: string; data?: Record<string, unknown> } = {},
+  fields: {
+    body?: string;
+    runId?: string;
+    data?: Record<string, unknown>;
+  } = {},
 ): TaskActivityView {
   return {
     id: nextId("activity"),
@@ -111,7 +115,10 @@ interface Fixture {
   path?: string;
 }
 
-function detail(task: Fixture): { task: BoardTaskDetail; activity: TaskActivityView[] } {
+function detail(task: Fixture): {
+  task: BoardTaskDetail;
+  activity: TaskActivityView[];
+} {
   const runs = task.runs ?? [];
   const activity = task.activity ?? [];
   const conversationId = task.conversationId ?? null;
@@ -207,20 +214,28 @@ const FEATURED: Fixture[] = [
     path: WORKTREE_128,
     runs: [replay],
     activity: [
-      entry("created", agent("ache"), at(1, 18, 20), { data: { status: "todo" } }),
+      entry("created", agent("ache"), at(1, 18, 20), {
+        data: { status: "todo" },
+      }),
       entry("run_queued", SYSTEM, at(1, 18, 20), { runId: "run-128" }),
-      entry("status", agent("ache"), at(1, 18, 21), { data: { from: "todo", to: "in_progress" } }),
+      entry("status", agent("ache"), at(1, 18, 21), {
+        data: { from: "todo", to: "in_progress" },
+      }),
       entry("run_started", SYSTEM, at(1, 18, 22), { runId: "run-128" }),
       entry("title", agent("ache"), at(1, 18, 30), {
         data: { from: "补发丢失的帧", to: "重连后补发丢失的帧" },
       }),
       entry("description", agent("ache"), at(1, 18, 31)),
-      entry("conversation", USER, at(1, 19, 0), { data: { from: null, to: "wire" } }),
+      entry("conversation", USER, at(1, 19, 0), {
+        data: { from: null, to: "wire" },
+      }),
       entry("run_nudged", SYSTEM, at(0, 8, 58), { runId: "run-128" }),
       entry("comment", agent("ache"), at(0, 9, 12), {
         body: "杀进程重连 200 次，没有丢帧。测试全过，等你验收。",
       }),
-      entry("status", agent("ache"), at(0, 9, 12), { data: { from: "in_progress", to: "in_review" } }),
+      entry("status", agent("ache"), at(0, 9, 12), {
+        data: { from: "in_progress", to: "in_review" },
+      }),
     ],
   },
   {
@@ -243,8 +258,13 @@ const FEATURED: Fixture[] = [
     ],
     activity: [
       entry("created", agent("ache"), at(1, 22, 4)),
-      entry("run_failed", SYSTEM, minutesAgo(30), { runId: "run-129", body: "nas 连接超时" }),
-      entry("status", agent("ache"), minutesAgo(29), { data: { from: "in_progress", to: "blocked" } }),
+      entry("run_failed", SYSTEM, minutesAgo(30), {
+        runId: "run-129",
+        body: "nas 连接超时",
+      }),
+      entry("status", agent("ache"), minutesAgo(29), {
+        data: { from: "in_progress", to: "blocked" },
+      }),
       entry("comment", agent("ache"), minutesAgo(20), {
         body: "nas 从昨晚起连不上。要等它回来，还是先把归档存到 gpu-box？",
       }),
@@ -311,8 +331,16 @@ const FEATURED: Fixture[] = [
 
 /** The board's long tail: 05 counts 38 tasks, and 05c splits them between the groups. */
 function filler(): Fixture[] {
-  const groups = [...Array(1).fill("wire"), ...Array(3).fill("board"), ...Array(7).fill("redesign")];
-  const row = (number: number, status: BoardTaskStatus, title: string): Fixture => ({
+  const groups = [
+    ...Array(1).fill("wire"),
+    ...Array(3).fill("board"),
+    ...Array(7).fill("redesign"),
+  ];
+  const row = (
+    number: number,
+    status: BoardTaskStatus,
+    title: string,
+  ): Fixture => ({
     id: `task-${number}`,
     number,
     title,
@@ -336,7 +364,12 @@ function replayLog(): unknown[] {
   let seq = 0;
   const say = (message: object) => {
     seq += 1;
-    return { entryId: `entry-${seq}`, seq, at: at(1, 18, 22) + seq * 1000, message };
+    return {
+      entryId: `entry-${seq}`,
+      seq,
+      at: at(1, 18, 22) + seq * 1000,
+      message,
+    };
   };
   const text = (words: string) =>
     say({
@@ -345,7 +378,13 @@ function replayLog(): unknown[] {
       timestamp: at(1, 18, 22),
       stopReason: "stop",
     });
-  const tool = (id: string, name: string, input: object, output: string, isError = false) => [
+  const tool = (
+    id: string,
+    name: string,
+    input: object,
+    output: string,
+    isError = false,
+  ) => [
     say({
       role: "assistant",
       content: [{ type: "toolCall", id, name, arguments: input }],
@@ -363,11 +402,23 @@ function replayLog(): unknown[] {
   ];
   return [
     text("先看现在的重连路径，再决定补发从哪里接。"),
-    ...["wire.ts", "reconnect.ts", "replay.ts", "hello.ts"].flatMap((file, index) =>
-      tool(`read-${index}`, "read", { file_path: `src/${file}` }, "…"),
+    ...["wire.ts", "reconnect.ts", "replay.ts", "hello.ts"].flatMap(
+      (file, index) =>
+        tool(`read-${index}`, "read", { file_path: `src/${file}` }, "…"),
     ),
-    ...tool("bash-1", "bash", { command: "bun test wire" }, "51 pass 0 fail [4.21s]"),
-    ...tool("bash-2", "bash", { command: "bun run migrate" }, "index missing", true),
+    ...tool(
+      "bash-1",
+      "bash",
+      { command: "bun test wire" },
+      "51 pass 0 fail [4.21s]",
+    ),
+    ...tool(
+      "bash-2",
+      "bash",
+      { command: "bun run migrate" },
+      "index missing",
+      true,
+    ),
     text("迁移在测试库上要先建索引，改完重跑。"),
     ...["0042_seq.sql", "replay.ts"].flatMap((file, index) =>
       tool(`edit-${index}`, "edit", { file_path: `src/${file}` }, "ok"),
@@ -406,7 +457,15 @@ function pull(
 
 const REPLAY = () => pull(472, "重放缺失的帧", "open", 182, 40, "ready");
 const NOT_READY = () =>
-  pull(470, "迁移脚本", "open", 20, 0, "blocked", "检查还没过，GitHub 现在不让合并。");
+  pull(
+    470,
+    "迁移脚本",
+    "open",
+    20,
+    0,
+    "blocked",
+    "检查还没过，GitHub 现在不让合并。",
+  );
 
 function pulls(scenario: string): Record<string, PullFixture[]> {
   if (scenario === "pr-states")
@@ -442,19 +501,21 @@ function installGithub(host: FakeHost): void {
       .flat()
       .map((fixture) => [fixture.url, fixture]),
   );
-  const views: TaskPullView[] = Object.entries(byTask).flatMap(([taskId, list]) =>
-    list.map((fixture) => ({
-      taskId,
-      url: fixture.url,
-      title: fixture.title,
-      number: fixture.number,
-      openedAt: minutesAgo(90),
-    })),
+  const views: TaskPullView[] = Object.entries(byTask).flatMap(
+    ([taskId, list]) =>
+      list.map((fixture) => ({
+        taskId,
+        url: fixture.url,
+        title: fixture.title,
+        number: fixture.number,
+        openedAt: minutesAgo(90),
+      })),
   );
   host.set("github", { state: CONNECTED, pulls: views });
   host.on("github.pull", (args: { url: string }) => {
     const found = fixtures.get(args.url);
-    if (found === undefined || found.number === 460) throw new Error("GITHUB_UNAVAILABLE");
+    if (found === undefined || found.number === 460)
+      throw new Error("GITHUB_UNAVAILABLE");
     return found;
   });
   host.on("github.merge", async (args: { url: string; headSha: string }) => {
@@ -463,7 +524,8 @@ function installGithub(host: FakeHost): void {
     if (found.headSha !== args.headSha) throw new Error("STALE_HEAD");
     await new Promise((done) => setTimeout(done, 300));
     // No answer comes back: the wire's own timeout tells the page.
-    if (scenario === "pr-states" && found.number === 472) await new Promise(() => undefined);
+    if (scenario === "pr-states" && found.number === 472)
+      await new Promise(() => undefined);
     const { merge: _merge, reason: _reason, ...open } = found;
     const merged: PullFixture = { ...open, state: "merged" };
     fixtures.set(args.url, merged);
@@ -505,7 +567,10 @@ function installBoard(host: FakeHost): void {
   };
   const record = (id: string, added: TaskActivityView): void =>
     host.patch(target(id), "activity", [...activity(id), added]);
-  const withRuns = (task: BoardTaskDetail, runs: TaskRunView[]): BoardTaskDetail => ({
+  const withRuns = (
+    task: BoardTaskDetail,
+    runs: TaskRunView[],
+  ): BoardTaskDetail => ({
     ...task,
     runs,
     runStatus: newestOwn(runs),
@@ -513,9 +578,15 @@ function installBoard(host: FakeHost): void {
   const active = (status: TaskRunStatus) =>
     status === "queued" || status === "starting" || status === "running";
   const workable = (status: BoardTaskStatus) =>
-    status === "todo" || status === "in_progress" || status === "in_review" || status === "blocked";
+    status === "todo" ||
+    status === "in_progress" ||
+    status === "in_review" ||
+    status === "blocked";
 
-  const startRun = (task: BoardTaskDetail, fields: Partial<TaskRunView> = {}): TaskRunView => {
+  const startRun = (
+    task: BoardTaskDetail,
+    fields: Partial<TaskRunView> = {},
+  ): TaskRunView => {
     const id = nextId("run");
     const created = run(id, "queued", {
       machineId: "mac-studio",
@@ -530,14 +601,28 @@ function installBoard(host: FakeHost): void {
   const stopRuns = (task: BoardTaskDetail, why: string): BoardTaskDetail => {
     const runs = task.runs.map((item) => {
       if (!active(item.status)) return item;
-      record(task.id, entry("run_interrupted", SYSTEM, Date.now(), { runId: item.id, body: why }));
-      return { ...item, status: "interrupted" as const, finishedAt: Date.now() };
+      record(
+        task.id,
+        entry("run_interrupted", SYSTEM, Date.now(), {
+          runId: item.id,
+          body: why,
+        }),
+      );
+      return {
+        ...item,
+        status: "interrupted" as const,
+        finishedAt: Date.now(),
+      };
     });
     return withRuns(task, runs);
   };
 
   host.on("tasks.update", (args: TaskArgs["update"]): TaskResults["update"] => {
-    if (scenario === "pr-states" && args.status === "done" && !completionFailed) {
+    if (
+      scenario === "pr-states" &&
+      args.status === "done" &&
+      !completionFailed
+    ) {
       completionFailed = true;
       throw new Error("宿主没有及时回应。");
     }
@@ -546,7 +631,12 @@ function installBoard(host: FakeHost): void {
     if (args.title !== undefined) {
       const title = args.title.trim();
       if (title === "") throw new Error("a task needs a title");
-      record(task.id, entry("title", USER, Date.now(), { data: { from: task.title, to: title } }));
+      record(
+        task.id,
+        entry("title", USER, Date.now(), {
+          data: { from: task.title, to: title },
+        }),
+      );
       task = { ...task, title };
     }
     if (args.description !== undefined) {
@@ -556,12 +646,18 @@ function installBoard(host: FakeHost): void {
     if (args.status !== undefined && args.status !== task.status) {
       record(
         task.id,
-        entry("status", USER, Date.now(), { data: { from: task.status, to: args.status } }),
+        entry("status", USER, Date.now(), {
+          data: { from: task.status, to: args.status },
+        }),
       );
       task = { ...task, status: args.status };
       if (task.status === "done" || task.status === "cancelled")
         task = stopRuns(task, `The task is ${task.status}.`);
-      else if (workable(task.status) && !workable(before.status) && task.runs.length === 0)
+      else if (
+        workable(task.status) &&
+        !workable(before.status) &&
+        task.runs.length === 0
+      )
         task = withRuns(task, [startRun(task)]);
     }
     return { task: write(task) };
@@ -571,56 +667,73 @@ function installBoard(host: FakeHost): void {
   let completionFailed = false;
   const delivered = new Set<string>();
 
-  host.on("tasks.comment", async (args: TaskArgs["comment"]): Promise<TaskResults["comment"]> => {
-    await new Promise((done) => setTimeout(done, 150));
-    if (failures.comment) {
-      failures.comment = false;
-      throw new Error("网络连接失败。");
-    }
-    let task = read(args.taskId);
-    const body = args.body;
-    if (body.trim() === "") throw new Error("a comment needs some text");
-    if (args.clientId !== undefined && delivered.has(args.clientId)) {
-      const earlier = activity(task.id).find((a) => a.data.clientId === args.clientId);
-      if (earlier !== undefined) return { task, activity: earlier };
-    }
-    if (args.clientId !== undefined) delivered.add(args.clientId);
-    const mentions = [...new Set(args.mentions ?? [])];
-    const added = entry("comment", USER, Date.now(), {
-      body,
-      data: {
-        ...(args.clientId === undefined ? {} : { clientId: args.clientId }),
-        ...(mentions.length === 0 ? {} : { mentions }),
-      },
-    });
-    record(task.id, added);
-    task = { ...task, comments: task.comments + 1 };
-    // A run that is going reads it; with none, it wakes the executor in the same session.
-    const executorId = task.assigneeAgentId ?? task.createdBy.agentId;
-    const others = mentions.filter((id) => id !== executorId);
-    const wakesExecutor = mentions.length === 0 || mentions.includes(executorId ?? "");
-    const runs = [...task.runs];
-    for (const agentId of others) runs.push(startRun(task, { agentId }));
-    const going = task.runs.some((item) => item.agentId === null && active(item.status));
-    if (wakesExecutor && !going && workable(task.status) && task.runs.length > 0) {
-      const last = task.runs.filter((item) => item.agentId === null).at(-1);
-      runs.push(
-        startRun(task, {
-          continuesRunId: last?.id ?? null,
-          sessionId: last?.sessionId ?? null,
-          machineId: last?.machineId ?? "mac-studio",
-        }),
+  host.on(
+    "tasks.comment",
+    async (args: TaskArgs["comment"]): Promise<TaskResults["comment"]> => {
+      await new Promise((done) => setTimeout(done, 150));
+      if (failures.comment) {
+        failures.comment = false;
+        throw new Error("网络连接失败。");
+      }
+      let task = read(args.taskId);
+      const body = args.body;
+      if (body.trim() === "") throw new Error("a comment needs some text");
+      if (args.clientId !== undefined && delivered.has(args.clientId)) {
+        const earlier = activity(task.id).find(
+          (a) => a.data.clientId === args.clientId,
+        );
+        if (earlier !== undefined) return { task, activity: earlier };
+      }
+      if (args.clientId !== undefined) delivered.add(args.clientId);
+      const mentions = [...new Set(args.mentions ?? [])];
+      const added = entry("comment", USER, Date.now(), {
+        body,
+        data: {
+          ...(args.clientId === undefined ? {} : { clientId: args.clientId }),
+          ...(mentions.length === 0 ? {} : { mentions }),
+        },
+      });
+      record(task.id, added);
+      task = { ...task, comments: task.comments + 1 };
+      // A run that is going reads it; with none, it wakes the executor in the same session.
+      const executorId = task.assigneeAgentId ?? task.createdBy.agentId;
+      const others = mentions.filter((id) => id !== executorId);
+      const wakesExecutor =
+        mentions.length === 0 || mentions.includes(executorId ?? "");
+      const runs = [...task.runs];
+      for (const agentId of others) runs.push(startRun(task, { agentId }));
+      const going = task.runs.some(
+        (item) => item.agentId === null && active(item.status),
       );
-    }
-    return { task: write(withRuns(task, runs)), activity: added };
-  });
+      if (
+        wakesExecutor &&
+        !going &&
+        workable(task.status) &&
+        task.runs.length > 0
+      ) {
+        const last = task.runs.filter((item) => item.agentId === null).at(-1);
+        runs.push(
+          startRun(task, {
+            continuesRunId: last?.id ?? null,
+            sessionId: last?.sessionId ?? null,
+            machineId: last?.machineId ?? "mac-studio",
+          }),
+        );
+      }
+      return { task: write(withRuns(task, runs)), activity: added };
+    },
+  );
 
   host.on("tasks.delete", (args: TaskArgs["delete"]): TaskResults["delete"] => {
     const task = read(args.taskId);
     if (task.runs.some((item) => active(item.status)))
       throw new Error("a run is working on this task; stop it before deleting");
     host.state.delete(target(task.id));
-    host.patch("tasks", "list", list().filter((other) => other.id !== task.id));
+    host.patch(
+      "tasks",
+      "list",
+      list().filter((other) => other.id !== task.id),
+    );
     host.event(target(task.id), "target:missing", null);
     return { taskId: task.id };
   });
@@ -636,87 +749,120 @@ function installBoard(host: FakeHost): void {
     return { task: write({ ...task, conversationId: args.conversationId }) };
   });
 
-  host.on("tasks.interrupt", (args: TaskArgs["interrupt"]): TaskResults["interrupt"] => {
-    const task = read(args.taskId);
-    const target = task.runs.find((item) => item.id === args.runId);
-    if (target === undefined) throw new Error(`no such run: ${args.runId}`);
-    if (!active(target.status)) throw new Error("this run has already ended");
-    const runs = task.runs.map((item) =>
-      item.id === args.runId
-        ? { ...item, status: "interrupted" as const, finishedAt: Date.now() }
-        : item,
-    );
-    record(task.id, entry("run_interrupted", USER, Date.now(), { runId: args.runId }));
-    return { task: write(withRuns(task, runs)) };
-  });
+  host.on(
+    "tasks.interrupt",
+    (args: TaskArgs["interrupt"]): TaskResults["interrupt"] => {
+      const task = read(args.taskId);
+      const target = task.runs.find((item) => item.id === args.runId);
+      if (target === undefined) throw new Error(`no such run: ${args.runId}`);
+      if (!active(target.status)) throw new Error("this run has already ended");
+      const runs = task.runs.map((item) =>
+        item.id === args.runId
+          ? { ...item, status: "interrupted" as const, finishedAt: Date.now() }
+          : item,
+      );
+      record(
+        task.id,
+        entry("run_interrupted", USER, Date.now(), { runId: args.runId }),
+      );
+      return { task: write(withRuns(task, runs)) };
+    },
+  );
 
   host.on("tasks.rerun", (args: TaskArgs["rerun"]): TaskResults["rerun"] => {
     const task = read(args.taskId);
     if (task.runs.some((item) => item.agentId === null && active(item.status)))
       throw new Error("this task already has a run that has not ended");
     const created = startRun(task);
-    return { task: write(withRuns(task, [...task.runs, created])), run: created };
+    return {
+      task: write(withRuns(task, [...task.runs, created])),
+      run: created,
+    };
   });
 
   // A `task_draft` row becomes the task, and the row its card. The same row confirmed again is
   // the same task.
   const confirmed = new Map<string, string>();
-  host.on("tasks.confirmDraft", (args: TaskArgs["confirmDraft"]): TaskResults["confirmDraft"] => {
-    const target_ = `conversations.${args.conversationId}`;
-    const timeline = host.section<{ messages: { id: string; data: unknown }[] }>(
-      target_,
-      "timeline",
-    );
-    const row = timeline?.messages.find((message) => message.id === args.messageId);
-    if (row === undefined) throw new Error(`no such draft: ${args.messageId}`);
-    const known = confirmed.get(args.messageId);
-    if (known !== undefined)
-      return { task: read(known), message: row as TaskResults["confirmDraft"]["message"] };
-    const draft = row.data as TaskDraftData;
-    const number = Math.max(...list().map((task) => task.number)) + 1;
-    const id = `task-${number}`;
-    const status = args.edits?.status ?? "todo";
-    const made = detail({
-      id,
-      number,
-      title: args.edits?.title ?? draft.title,
-      status,
-      by: agent("ache"),
-      conversationId: args.conversationId,
-      updatedAt: Date.now(),
-      description: args.edits?.description ?? draft.description,
-      activity: [entry("created", agent("ache"), Date.now(), { data: { status } })],
-    });
-    host.set(target(id), made);
-    const task = workable(status) ? withRuns(made.task, [startRun(made.task)]) : made.task;
-    confirmed.set(args.messageId, id);
-    const card = {
-      ...row,
-      kind: "task_card",
-      data: {
-        taskId: id,
+  host.on(
+    "tasks.confirmDraft",
+    (args: TaskArgs["confirmDraft"]): TaskResults["confirmDraft"] => {
+      const target_ = `conversations.${args.conversationId}`;
+      const timeline = host.section<{
+        messages: { id: string; data: unknown }[];
+      }>(target_, "timeline");
+      const row = timeline?.messages.find(
+        (message) => message.id === args.messageId,
+      );
+      if (row === undefined)
+        throw new Error(`no such draft: ${args.messageId}`);
+      const known = confirmed.get(args.messageId);
+      if (known !== undefined)
+        return {
+          task: read(known),
+          message: row as TaskResults["confirmDraft"]["message"],
+        };
+      const draft = row.data as TaskDraftData;
+      const number = Math.max(...list().map((task) => task.number)) + 1;
+      const id = `task-${number}`;
+      const status = args.edits?.status ?? "todo";
+      const made = detail({
+        id,
         number,
-        title: task.title,
-        status: task.status,
-        runStatus: task.runStatus,
+        title: args.edits?.title ?? draft.title,
+        status,
+        by: agent("ache"),
         conversationId: args.conversationId,
-        comments: 0,
-        summary: "",
-        artifacts: [],
-        ...(draft.turnMessageId === undefined ? {} : { turnMessageId: draft.turnMessageId }),
-      },
-    };
-    host.patch(target_, "timeline", {
-      ...timeline,
-      messages: timeline?.messages.map((message) =>
-        message.id === args.messageId ? card : message,
-      ),
-    });
-    return { task: write(task), message: card as unknown as TaskResults["confirmDraft"]["message"] };
-  });
+        updatedAt: Date.now(),
+        description: args.edits?.description ?? draft.description,
+        activity: [
+          entry("created", agent("ache"), Date.now(), { data: { status } }),
+        ],
+      });
+      host.set(target(id), made);
+      const task = workable(status)
+        ? withRuns(made.task, [startRun(made.task)])
+        : made.task;
+      confirmed.set(args.messageId, id);
+      const card = {
+        ...row,
+        kind: "task_card",
+        data: {
+          taskId: id,
+          number,
+          title: task.title,
+          status: task.status,
+          runStatus: task.runStatus,
+          conversationId: args.conversationId,
+          comments: 0,
+          summary: "",
+          artifacts: [],
+          ...(draft.turnMessageId === undefined
+            ? {}
+            : { turnMessageId: draft.turnMessageId }),
+        },
+      };
+      host.patch(target_, "timeline", {
+        ...timeline,
+        messages: timeline?.messages.map((message) =>
+          message.id === args.messageId ? card : message,
+        ),
+      });
+      return {
+        task: write(task),
+        message: card as unknown as TaskResults["confirmDraft"]["message"],
+      };
+    },
+  );
 }
 
-const BOARD_SCENARIOS = ["", "no-github", "pr-states", "comment-fails", "task-gone", "task-loading"];
+const BOARD_SCENARIOS = [
+  "",
+  "no-github",
+  "pr-states",
+  "comment-fails",
+  "task-gone",
+  "task-loading",
+];
 
 export function installTasks(host: FakeHost): void {
   installGithub(host);
@@ -727,7 +873,8 @@ export function installTasks(host: FakeHost): void {
   });
   const scenario = host.scenario;
   // Queued behind the inbox fixture's, which puts 01's tasks on any board it finds without them.
-  if (scenario === "empty") void Promise.resolve().then(() => host.patch("tasks", "list", []));
+  if (scenario === "empty")
+    void Promise.resolve().then(() => host.patch("tasks", "list", []));
   // The other scenarios are other fixtures': they keep the board they laid out.
   if (!BOARD_SCENARIOS.includes(scenario)) return;
   const details = [...FEATURED, ...filler()]

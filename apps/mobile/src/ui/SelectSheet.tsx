@@ -34,7 +34,9 @@ export function SelectSheet<T extends string>(props: {
             <>
               <If when={option().group !== undefined}>
                 <View class="h-[30px] shrink-0 flex-row items-end border-t border-border px-4 pb-[6px]">
-                  <Text class="text-sm leading-[18px] text-muted-foreground">{option().group}</Text>
+                  <Text class="text-sm leading-[18px] text-muted-foreground">
+                    {option().group}
+                  </Text>
                 </View>
               </If>
               <View
@@ -54,7 +56,9 @@ export function SelectSheet<T extends string>(props: {
                     {option().label}
                   </Text>
                   <If when={option().hint !== undefined}>
-                    <Text class="text-sm leading-[18px] text-muted-foreground">{option().hint}</Text>
+                    <Text class="text-sm leading-[18px] text-muted-foreground">
+                      {option().hint}
+                    </Text>
                   </If>
                 </View>
                 <If when={option().aside !== undefined}>

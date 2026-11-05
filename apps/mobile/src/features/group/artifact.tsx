@@ -2,8 +2,23 @@
 // for the version. That address carries an hour's capability, so it is asked for each time a version
 // is shown and kept nowhere else. Every page under it is served in a sandbox by the host.
 
-import type { ArtifactArgs, ArtifactResults, ArtifactVersionView, ArtifactView } from "@eta/client-contracts";
-import { Clipboard, computed, effect, openUrl, Scroll, signal, Text, View, WebView } from "nsh";
+import type {
+  ArtifactArgs,
+  ArtifactResults,
+  ArtifactVersionView,
+  ArtifactView,
+} from "@eta/client-contracts";
+import {
+  Clipboard,
+  computed,
+  effect,
+  openUrl,
+  Scroll,
+  signal,
+  Text,
+  View,
+  WebView,
+} from "nsh";
 import { t } from "../../i18n";
 import { nav } from "../../nav/stack";
 import { Button } from "../../ui/Button";
@@ -20,13 +35,20 @@ import { act, SheetRow, SheetTitle } from "./shared";
 
 /** A page with no address, the fake host's: a web view only navigates to http(s), so it takes the markup. */
 const inlinePage = (url: string): string | undefined =>
-  url.startsWith("data:text/html") ? decodeURIComponent(url.slice(url.indexOf(",") + 1)) : undefined;
+  url.startsWith("data:text/html")
+    ? decodeURIComponent(url.slice(url.indexOf(",") + 1))
+    : undefined;
 
 /** What this app can show in its frame. A version of anything else is its ZIP, as on the web. */
 const framed = (version: ArtifactVersionView | undefined): boolean =>
   version?.viewer === "iframe" && version.kind === "site";
 
-function BarButton(props: { title: string; first?: boolean; disabled?: boolean; onPress: () => void }) {
+function BarButton(props: {
+  title: string;
+  first?: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
   return (
     <View
       role="button"
@@ -36,16 +58,25 @@ function BarButton(props: { title: string; first?: boolean; disabled?: boolean; 
       }}
       class={`h-[52px] grow basis-0 items-center justify-center active:bg-muted ${props.first ? "" : "border-l border-border"}`}
     >
-      <Text class={`text-base leading-[18px] ${props.disabled ? "text-muted-foreground" : "text-foreground"}`}>
+      <Text
+        class={`text-base leading-[18px] ${props.disabled ? "text-muted-foreground" : "text-foreground"}`}
+      >
         {props.title}
       </Text>
     </View>
   );
 }
 
-function ShareSheet(props: { open: boolean; link: string; onRevoke: () => void; onClose: () => void }) {
+function ShareSheet(props: {
+  open: boolean;
+  link: string;
+  onRevoke: () => void;
+  onClose: () => void;
+}) {
   const copy = () =>
-    act(Clipboard.writeText(hostUrl(props.link)), () => toast(t("common.copied")));
+    act(Clipboard.writeText(hostUrl(props.link)), () =>
+      toast(t("common.copied")),
+    );
   return (
     <Sheet open={props.open} onClose={props.onClose} testID="share-sheet">
       <SheetTitle title={t("group.share.title")} body={t("group.share.hint")} />
@@ -55,7 +86,13 @@ function ShareSheet(props: { open: boolean; link: string; onRevoke: () => void; 
             {hostUrl(props.link).replace(/^https?:\/\//, "")}
           </Text>
         </View>
-        <Button title={t("group.share.copy")} variant="primary" grow={false} height={44} onPress={copy} />
+        <Button
+          title={t("group.share.copy")}
+          variant="primary"
+          grow={false}
+          height={44}
+          onPress={copy}
+        />
       </View>
       <View
         role="button"
@@ -63,27 +100,44 @@ function ShareSheet(props: { open: boolean; link: string; onRevoke: () => void; 
         onPress={props.onRevoke}
         class="gap-[2px] border-t border-border px-4 py-3 active:bg-muted"
       >
-        <Text class="text-lead leading-[22px] text-state-error">{t("group.share.revoke")}</Text>
-        <Text class="text-sm leading-[18px] text-muted-foreground">{t("group.share.revokeHint")}</Text>
+        <Text class="text-lead leading-[22px] text-state-error">
+          {t("group.share.revoke")}
+        </Text>
+        <Text class="text-sm leading-[18px] text-muted-foreground">
+          {t("group.share.revokeHint")}
+        </Text>
       </View>
     </Sheet>
   );
 }
 
-export function ArtifactScreen(props: { id: string; version?: number | undefined }) {
+export function ArtifactScreen(props: {
+  id: string;
+  version?: number | undefined;
+}) {
   const target = useTarget("artifacts");
   const artifact = () =>
-    (target.section<ArtifactView[]>("list") ?? []).find((item) => item.id === props.id);
+    (target.section<ArtifactView[]>("list") ?? []).find(
+      (item) => item.id === props.id,
+    );
   const versions = () => artifact()?.versions ?? [];
   const chosen = signal(props.version);
-  const current = () => versions().find((version) => version.number === chosen()) ?? versions()[0];
+  const current = () =>
+    versions().find((version) => version.number === chosen()) ?? versions()[0];
   const latest = () => versions()[0]?.number;
   const label = (version: ArtifactVersionView) =>
-    t(version.number === latest() && versions().length > 1 ? "group.artifact.latest" : "group.artifact.version", {
-      version: version.number,
-    });
+    t(
+      version.number === latest() && versions().length > 1
+        ? "group.artifact.latest"
+        : "group.artifact.version",
+      {
+        version: version.number,
+      },
+    );
 
-  const shown = computed(() => (framed(current()) ? current()?.number : undefined));
+  const shown = computed(() =>
+    framed(current()) ? current()?.number : undefined,
+  );
   const preview = signal<string | undefined>(undefined);
   const failure = signal<string | undefined>(undefined);
   const attempt = signal(0);
@@ -100,7 +154,10 @@ export function ArtifactScreen(props: { id: string; version?: number | undefined
     preview.set(undefined);
     failure.set(undefined);
     if (number === undefined) return;
-    const args: ArtifactArgs["preview"] = { artifactId: props.id, version: number };
+    const args: ArtifactArgs["preview"] = {
+      artifactId: props.id,
+      version: number,
+    };
     call<ArtifactResults["preview"]>("artifacts", "preview", args).then(
       (result) => {
         if (ask === latestAsk) preview.set(result.url);
@@ -131,7 +188,9 @@ export function ArtifactScreen(props: { id: string; version?: number | undefined
       }),
       (result) => {
         justShared.set(
-          result.artifact.versions.find((item) => item.number === version.number)?.shareUrl ?? null,
+          result.artifact.versions.find(
+            (item) => item.number === version.number,
+          )?.shareUrl ?? null,
         );
         sharing.set(true);
       },
@@ -141,7 +200,10 @@ export function ArtifactScreen(props: { id: string; version?: number | undefined
     const version = current();
     if (version === undefined) return;
     act(
-      call("artifacts", "unshare", { artifactId: props.id, version: version.number }),
+      call("artifacts", "unshare", {
+        artifactId: props.id,
+        version: version.number,
+      }),
       () => {
         justShared.set(null);
         sharing.set(false);
@@ -155,7 +217,12 @@ export function ArtifactScreen(props: { id: string; version?: number | undefined
     const version = current();
     if (version === undefined) return;
     toast(t("group.artifact.downloading"));
-    act(saveArchive(hostUrl(version.archiveUrl), `${props.id}-v${version.number}.zip`));
+    act(
+      saveArchive(
+        hostUrl(version.archiveUrl),
+        `${(artifact()?.title ?? props.id).replaceAll("/", "-")}-v${version.number}.zip`,
+      ),
+    );
   };
   const openOutside = () => {
     const url = preview();
@@ -179,7 +246,9 @@ export function ArtifactScreen(props: { id: string; version?: number | undefined
         >
           <Icon name="x" size={20} />
         </View>
-        <Text class="truncate grow basis-0 text-lead leading-[20px] text-foreground">{artifact()?.title ?? ""}</Text>
+        <Text class="truncate grow basis-0 text-lead leading-[20px] text-foreground">
+          {artifact()?.title ?? ""}
+        </Text>
         <If when={current()}>
           {(version) => (
             <View
@@ -191,7 +260,9 @@ export function ArtifactScreen(props: { id: string; version?: number | undefined
               }}
               class="h-6 flex-row items-center gap-1 border border-border px-2 active:bg-muted"
             >
-              <Text class="text-md leading-4 text-foreground">{label(version())}</Text>
+              <Text class="text-md leading-4 text-foreground">
+                {label(version())}
+              </Text>
               <If when={versions().length > 1}>
                 <Icon name="caretDown" size={12} color="muted-foreground" />
               </If>
@@ -202,10 +273,18 @@ export function ArtifactScreen(props: { id: string; version?: number | undefined
 
       <View class="min-h-0 grow basis-0 bg-surface">
         <If when={target.loaded()} else={<Loading />}>
-          <If when={current() !== undefined} else={<Empty title={t("group.artifact.gone")} />}>
+          <If
+            when={current() !== undefined}
+            else={<Empty title={t("group.artifact.gone")} />}
+          >
             <If
               when={framed(current())}
-              else={<Empty title={t("group.artifact.downloadOnly")} body={t("group.artifact.downloadOnlyBody")} />}
+              else={
+                <Empty
+                  title={t("group.artifact.downloadOnly")}
+                  body={t("group.artifact.downloadOnlyBody")}
+                />
+              }
             >
               <If
                 when={failure() === undefined}
@@ -247,7 +326,11 @@ export function ArtifactScreen(props: { id: string; version?: number | undefined
         </View>
       </If>
 
-      <Sheet open={picking()} onClose={() => picking.set(false)} testID="version-sheet">
+      <Sheet
+        open={picking()}
+        onClose={() => picking.set(false)}
+        testID="version-sheet"
+      >
         <SheetTitle title={t("group.artifact.versions")} />
         <Scroll style={{ maxHeight: 416 }}>
           <Each of={versions()} key={(version) => version.number}>
@@ -255,7 +338,11 @@ export function ArtifactScreen(props: { id: string; version?: number | undefined
               <SheetRow
                 title={label(version())}
                 testID={`version-${version().number}`}
-                trailing={version().number === current()?.number ? <Icon name="check" size={16} /> : undefined}
+                trailing={
+                  version().number === current()?.number ? (
+                    <Icon name="check" size={16} />
+                  ) : undefined
+                }
                 onPress={() => pick(version().number)}
               />
             )}

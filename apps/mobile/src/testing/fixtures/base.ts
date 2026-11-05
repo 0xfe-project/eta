@@ -1,12 +1,25 @@
 // The cast of the design: three agents, three machines, two projects.
 
-import type { AgentView, ConversationSummary, MachineView, MemberView, ProjectView } from "@eta/client-contracts";
+import type {
+  AgentView,
+  ConversationSummary,
+  MachineView,
+  MemberView,
+  ProjectView,
+} from "@eta/client-contracts";
 import type { FakeHost } from "../fake-host";
 
 const now = Date.now();
 export const minutesAgo = (minutes: number) => now - minutes * 60_000;
+/** Reads as 昨天 whatever time it is now. */
+const yesterdayNoon = new Date(now).setHours(12, 0, 0, 0) - 24 * 60 * 60 * 1000;
 
-const agent = (id: string, name: string, status: AgentView["status"], persona: string): AgentView => ({
+const agent = (
+  id: string,
+  name: string,
+  status: AgentView["status"],
+  persona: string,
+): AgentView => ({
   id,
   name,
   instructions: "",
@@ -61,7 +74,12 @@ export const MACHINES: MachineView[] = [
   machine("nas", "nas", "ssh", "online"),
 ];
 
-const project = (id: string, name: string, machineId: string, stewardId: string): ProjectView => ({
+const project = (
+  id: string,
+  name: string,
+  machineId: string,
+  stewardId: string,
+): ProjectView => ({
   id,
   machineId,
   path: `/Users/eric/Developer/${id}`,
@@ -111,22 +129,48 @@ const conversation = (
 });
 
 export const CONVERSATIONS: ConversationSummary[] = [
-  conversation("wire", "wire 重连", "eta", "group", [member("agent-ache", "waiting_for_input"), member("agent-mori", "queued")], {
-    unread: 2,
-    lastSeq: 12,
-    lastMessageAt: minutesAgo(0),
-    preview: "迁移会锁 message 表大约 40 秒，得你定。",
-  }),
-  conversation("board", "任务看板改版", "eta", "group", [member("agent-mori", "working")]),
-  conversation("artifacts", "产物版本", "eta", "group", [member("agent-ache", "idle"), member("agent-xiaoman", "idle")], {
-    preview: "site 走 SPA 回退，版本里带上 manifest。",
-    lastMessageAt: minutesAgo(1500),
-  }),
-  conversation("redesign", "官网改版", "site", "group", [member("agent-mori", "waiting_for_input"), member("agent-xiaoman", "idle")]),
-  conversation("dm-xiaoman", "小满", "home-agent-xiaoman", "direct", [member("agent-xiaoman", "waiting_for_input")], {
-    preview: "周报发给谁？",
-    lastMessageAt: minutesAgo(1),
-  }),
+  conversation(
+    "wire",
+    "wire 重连",
+    "eta",
+    "group",
+    [member("agent-ache", "waiting_for_input"), member("agent-mori", "queued")],
+    {
+      unread: 2,
+      lastSeq: 12,
+      lastMessageAt: minutesAgo(0),
+      preview: "迁移会锁 message 表大约 40 秒，得你定。",
+    },
+  ),
+  conversation("board", "任务看板改版", "eta", "group", [
+    member("agent-mori", "working"),
+  ]),
+  conversation(
+    "artifacts",
+    "产物版本",
+    "eta",
+    "group",
+    [member("agent-ache", "idle"), member("agent-xiaoman", "idle")],
+    {
+      preview: "site 走 SPA 回退，版本里带上 manifest。",
+      lastMessageAt: yesterdayNoon,
+    },
+  ),
+  conversation("redesign", "官网改版", "site", "group", [
+    member("agent-mori", "waiting_for_input"),
+    member("agent-xiaoman", "idle"),
+  ]),
+  conversation(
+    "dm-xiaoman",
+    "小满",
+    "home-agent-xiaoman",
+    "direct",
+    [member("agent-xiaoman", "waiting_for_input")],
+    {
+      preview: "周报发给谁？",
+      lastMessageAt: minutesAgo(1),
+    },
+  ),
 ];
 
 /** Everything the app reads from `hello`. An "uninitialized" host has no agents yet. */
@@ -135,7 +179,11 @@ export function installBase(host: FakeHost): void {
   host.set("agents", { list: bare ? [] : AGENTS }, { eager: true });
   host.set("machines", { list: MACHINES, installs: [] }, { eager: true });
   host.set("projects", { list: PROJECTS }, { eager: true });
-  host.set("conversations", { list: bare ? [] : CONVERSATIONS }, { eager: true });
+  host.set(
+    "conversations",
+    { list: bare ? [] : CONVERSATIONS },
+    { eager: true },
+  );
   host.set("tasks", { list: [] }, { eager: true });
   host.set("inbox", { list: [], approvals: { tools: [] } }, { eager: true });
 }

@@ -31,16 +31,19 @@ export const i18n = {
     "connect.autoUpdate": "完成后这里会自动更新。",
   },
   en: {
-    "connect.reconnecting": "Connection lost, reconnecting… What you see may be out of date.",
+    "connect.reconnecting":
+      "Connection lost, reconnecting… What you see may be out of date.",
     "connect.tagline": "Connect to one host, reach every machine.",
-    "connect.intro": "The phone is only a screen. Agents, memory and conversations stay on your machines.",
+    "connect.intro":
+      "The phone is only a screen. Agents, memory and conversations stay on your machines.",
     "connect.address": "Address",
     "connect.token": "Token",
     "connect.addressHint": "mac-studio.tail3f2a.ts.net",
     "connect.connect": "Connect",
     "connect.connecting": "Connecting",
     "connect.scan": "Scan the code on your computer",
-    "connect.scanUnavailable": "This device can't scan. Paste the connect link or fill in the form.",
+    "connect.scanUnavailable":
+      "This device can't scan. Paste the connect link or fill in the form.",
     "connect.scanInvalid": "That isn't an Eta connect code.",
     "connect.failed": "Can't reach this host",
     "connect.failure.token": "The token is wrong.",
@@ -52,10 +55,13 @@ export const i18n = {
     "connect.switchHost": "Use another host",
     "connect.notReady": "{host} isn't ready yet",
     "connect.thisHost": "This host",
-    "connect.stepsLeft.2": "Two steps left. Open Eta on your computer to finish them.",
-    "connect.stepsLeft.1": "One step left. Open Eta on your computer to finish it.",
+    "connect.stepsLeft.2":
+      "Two steps left. Open Eta on your computer to finish them.",
+    "connect.stepsLeft.1":
+      "One step left. Open Eta on your computer to finish it.",
     "connect.step.model": "Bind a model",
-    "connect.step.modelTodo": "There is no provider yet. Add one so the host has something to run on.",
+    "connect.step.modelTodo":
+      "There is no provider yet. Add one so the host has something to run on.",
     "connect.step.modelDone": "A model is bound.",
     "connect.step.agent": "Install an agent",
     "connect.step.agentTodo": "Agents are who you talk to and hand tasks to.",

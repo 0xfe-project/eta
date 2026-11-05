@@ -9,9 +9,10 @@ import { call, useTarget } from "../../wire/target";
 import { failure } from "./format";
 
 /** 06f: the title and the description, saved together. */
-export function EditTaskScreen(props: { task: TaskDetailSections["task"] }) {
+function EditTaskScreen(props: { task: TaskDetailSections["task"] }) {
   const target = useTarget(`tasks.${props.task.id}`);
-  const current = () => target.section<TaskDetailSections["task"]>("task") ?? props.task;
+  const current = () =>
+    target.section<TaskDetailSections["task"]>("task") ?? props.task;
   const title = signal(props.task.title);
   const description = signal(props.task.description);
   const saving = signal(false);
@@ -20,7 +21,8 @@ export function EditTaskScreen(props: { task: TaskDetailSections["task"] }) {
     if (!canSave()) return;
     const fields: TaskArgs["update"] = { taskId: props.task.id };
     if (title().trim() !== current().title) fields.title = title().trim();
-    if (description() !== current().description) fields.description = description();
+    if (description() !== current().description)
+      fields.description = description();
     if (fields.title === undefined && fields.description === undefined) {
       nav.pop();
       return;
@@ -29,17 +31,23 @@ export function EditTaskScreen(props: { task: TaskDetailSections["task"] }) {
     call("tasks", "update", fields)
       .then(
         () => nav.pop(),
-        (error: unknown) => toast(t("common.failed", { message: failure(error) })),
+        (error: unknown) =>
+          toast(t("common.failed", { message: failure(error) })),
       )
       .finally(() => saving.set(false));
   };
   return (
     <Page form>
       <View class="h-12 shrink-0 flex-row items-center justify-between px-4">
-        <Text onPress={() => nav.pop()} class="text-base leading-[18px] text-muted-foreground">
+        <Text
+          onPress={() => nav.pop()}
+          class="text-base leading-[18px] text-muted-foreground"
+        >
           {t("common.cancel")}
         </Text>
-        <Text class="text-base leading-[18px] text-foreground">{t("tasks.edit.title")}</Text>
+        <Text class="text-base leading-[18px] text-foreground">
+          {t("tasks.edit.title")}
+        </Text>
         <View
           role="button"
           testID="task-save"
@@ -55,7 +63,9 @@ export function EditTaskScreen(props: { task: TaskDetailSections["task"] }) {
         </View>
       </View>
       <View class="shrink-0 gap-1 border-t border-border px-4 py-3">
-        <Text class="text-sm leading-[18px] text-muted-foreground">{t("tasks.fields.title")}</Text>
+        <Text class="text-sm leading-[18px] text-muted-foreground">
+          {t("tasks.fields.title")}
+        </Text>
         <Input
           testID="task-title"
           value={title()}
@@ -78,7 +88,9 @@ export function EditTaskScreen(props: { task: TaskDetailSections["task"] }) {
         />
       </View>
       <View class="h-10 shrink-0 flex-row items-center border-t border-border px-4">
-        <Text class="text-sm leading-4 text-muted-foreground">{t("tasks.edit.hint")}</Text>
+        <Text class="text-sm leading-4 text-muted-foreground">
+          {t("tasks.edit.hint")}
+        </Text>
       </View>
     </Page>
   );

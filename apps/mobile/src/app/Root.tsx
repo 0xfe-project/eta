@@ -1,6 +1,10 @@
 import { ErrorBoundary, Text, View } from "nsh";
 import { NavStack } from "nsh/base";
-import { ConnectScreen, DisconnectedScreen, UninitializedScreen } from "../features/connect";
+import {
+  ConnectScreen,
+  DisconnectedScreen,
+  UninitializedScreen,
+} from "../features/connect";
 import { loadLanguage } from "../i18n";
 import { nav } from "../nav/stack";
 import { Tabs } from "../nav/Tabs";
@@ -48,7 +52,13 @@ export function Root() {
         <If when={phase() === "disconnected"}>
           <DisconnectedScreen />
         </If>
-        <If when={phase() === "form" || phase() === "connecting" || phase() === "failed"}>
+        <If
+          when={
+            phase() === "form" ||
+            phase() === "connecting" ||
+            phase() === "failed"
+          }
+        >
           <ConnectScreen />
         </If>
         <ToastHost />

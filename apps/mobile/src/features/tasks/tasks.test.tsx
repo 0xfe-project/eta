@@ -70,7 +70,9 @@ test("06: a task reads as a thread, its description folded", async () => {
   expect(app.shows("重连后补发丢失的帧")).toBe(true);
   expect(app.shows("1 条回复")).toBe(true);
   expect(app.shows("6 条动态")).toBe(true);
-  expect(app.shows("杀进程重连 200 次，没有丢帧。测试全过，等你验收。")).toBe(true);
+  expect(app.shows("杀进程重连 200 次，没有丢帧。测试全过，等你验收。")).toBe(
+    true,
+  );
   expect(app.shows("阿澈 把状态从「进行中」改为「待验收」")).toBe(true);
   await app.press("展开全文");
   await app.waitFor("收起");
@@ -102,7 +104,11 @@ test("06: @ offers the group's members and fills the name in", async () => {
 test("06a: a blocked task asks over the thread and the reply goes to the box", async () => {
   const app = await task(129);
   expect(app.shows("阿澈 在等你回复")).toBe(true);
-  expect(app.count("text:nas 从昨晚起连不上。要等它回来，还是先把归档存到 gpu-box？")).toBe(1);
+  expect(
+    app.count(
+      "text:nas 从昨晚起连不上。要等它回来，还是先把归档存到 gpu-box？",
+    ),
+  ).toBe(1);
   expect(app.shows("这一轮失败了：nas 连接超时")).toBe(true);
   expect(app.shows("2 条动态")).toBe(true);
   expect(app.shows("阿澈 排队中 · nas 不在线，连上后开始")).toBe(true);
@@ -197,9 +203,12 @@ test("06e2: a merge that gets no answer says so and reads the PR again", async (
   await app.waitFor("id:pr-merge");
   await app.press("id:pr-merge");
   await app.waitFor("合并中…");
-  await app.waitFor("没有得到合并结果，已重新读取 PR 状态，请确认后再决定是否重试。", {
-    timeout: 130_000,
-  });
+  await app.waitFor(
+    "没有得到合并结果，已重新读取 PR 状态，请确认后再决定是否重试。",
+    {
+      timeout: 130_000,
+    },
+  );
   expect(app.shows("id:pr-merge")).toBe(true);
 });
 
@@ -238,7 +247,9 @@ test("06g: a task with a run going says why it stays", async () => {
   await app.press("id:more-delete");
   await app.press("role:button[删除]");
   await app.waitFor("id:task-comment");
-  await app.waitFor("没有成功：a run is working on this task; stop it before deleting");
+  await app.waitFor(
+    "没有成功：a run is working on this task; stop it before deleting",
+  );
 });
 
 test("06h: the runs of a task, each opening its log", async () => {

@@ -13,7 +13,9 @@ export function TopBar(props: { icon?: "x" | "caretLeft" }) {
     <View class="h-12 shrink-0 flex-row items-center pl-2 pr-4">
       <View
         role="button"
-        accessibilityLabel={props.icon === "caretLeft" ? t("common.back") : t("create.close")}
+        accessibilityLabel={
+          props.icon === "caretLeft" ? t("common.back") : t("create.close")
+        }
         testID="back"
         onPress={() => nav.pop()}
         class="h-11 w-10 items-center justify-center active:opacity-60"
@@ -24,14 +26,22 @@ export function TopBar(props: { icon?: "x" | "caretLeft" }) {
   );
 }
 
-export function Title(props: { title: string; hint?: string; children?: JSX.Element }) {
+export function Title(props: {
+  title: string;
+  hint?: string;
+  children?: JSX.Element;
+}) {
   return (
-    <View class={`shrink-0 px-4 pt-1 pb-[20px] ${props.hint === undefined ? "gap-[10px]" : "gap-1"}`}>
+    <View
+      class={`shrink-0 px-4 pt-1 pb-[20px] ${props.hint === undefined ? "gap-[10px]" : "gap-1"}`}
+    >
       <Text class="text-gauge-sm leading-[34px] tracking-[-0.02em] text-foreground">
         {props.title}
       </Text>
       <If when={props.hint !== undefined}>
-        <Text class="text-md leading-[20px] text-muted-foreground">{props.hint}</Text>
+        <Text class="text-md leading-[20px] text-muted-foreground">
+          {props.hint}
+        </Text>
       </If>
       {props.children}
     </View>
@@ -41,8 +51,13 @@ export function Title(props: { title: string; hint?: string; children?: JSX.Elem
 /** The caption over a list. */
 export function Caption(props: { title: string; height: number }) {
   return (
-    <View class="shrink-0 flex-row items-end px-4 pb-[6px]" style={{ height: props.height }}>
-      <Text class="text-sm leading-[18px] text-muted-foreground">{props.title}</Text>
+    <View
+      class="shrink-0 flex-row items-end px-4 pb-[6px]"
+      style={{ height: props.height }}
+    >
+      <Text class="text-sm leading-[18px] text-muted-foreground">
+        {props.title}
+      </Text>
     </View>
   );
 }
@@ -98,7 +113,9 @@ export function TextField(props: {
   return (
     <View
       class={`shrink-0 gap-[2px] border-t border-border px-4 py-[10px] ${props.grow ? "grow" : ""}`}
-      style={props.height === undefined ? undefined : { minHeight: props.height }}
+      style={
+        props.height === undefined ? undefined : { minHeight: props.height }
+      }
     >
       <Text class={CAPTION}>{props.label}</Text>
       <Input
@@ -113,7 +130,9 @@ export function TextField(props: {
         class={`${INPUT} ${props.multiline ? "grow" : ""}`}
       />
       <If when={props.error !== undefined}>
-        <Text class="text-sm leading-[18px] text-state-error">{props.error}</Text>
+        <Text class="text-sm leading-[18px] text-state-error">
+          {props.error}
+        </Text>
       </If>
     </View>
   );
@@ -146,10 +165,14 @@ export function ChoiceField(props: {
           <Text class={CAPTION}>{props.hint}</Text>
         </If>
         <If when={props.note !== undefined}>
-          <Text class="text-sm leading-[18px] text-state-warning">{props.note}</Text>
+          <Text class="text-sm leading-[18px] text-state-warning">
+            {props.note}
+          </Text>
         </If>
         <If when={props.error !== undefined}>
-          <Text class="text-sm leading-[18px] text-state-error">{props.error}</Text>
+          <Text class="text-sm leading-[18px] text-state-error">
+            {props.error}
+          </Text>
         </If>
       </View>
       <Icon name="caretRight" size={14} color="faint" />

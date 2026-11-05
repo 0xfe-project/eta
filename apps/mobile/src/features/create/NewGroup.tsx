@@ -1,4 +1,7 @@
-import type { ConversationArgs, ConversationResults } from "@eta/client-contracts";
+import type {
+  ConversationArgs,
+  ConversationResults,
+} from "@eta/client-contracts";
 import type { SelectOption } from "../../ui/SelectSheet";
 import { signal, Text, View } from "nsh";
 import { agents, machineById } from "../../app/lists";
@@ -10,7 +13,15 @@ import { SelectSheet } from "../../ui/SelectSheet";
 import { toast } from "../../ui/toast";
 import { call } from "../../wire/target";
 import { enterChat } from "./enter";
-import { Caption, CheckBox, ChoiceField, Cta, TextField, Title, TopBar } from "./fields";
+import {
+  Caption,
+  CheckBox,
+  ChoiceField,
+  Cta,
+  TextField,
+  Title,
+  TopBar,
+} from "./fields";
 import { choosableProjects, folderName, useProjectChoice } from "./project";
 
 const ADD = "__add__";
@@ -26,7 +37,9 @@ export function NewGroupScreen(_props: {}) {
 
   const toggle = (id: string) =>
     chosen.set(
-      chosen().includes(id) ? chosen().filter((each) => each !== id) : [...chosen(), id],
+      chosen().includes(id)
+        ? chosen().filter((each) => each !== id)
+        : [...chosen(), id],
     );
 
   const projectLabel = () => {

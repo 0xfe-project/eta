@@ -4,7 +4,7 @@ import type { KnipConfig } from "knip";
 // sidecar only uses package.json for Turbo scripts.
 export default {
   // System tools the Turbo scripts call (uv for the Python sidecar).
-  ignoreBinaries: ["uv", "hutch"],
+  ignoreBinaries: ["uv", "hutch", "nsh"],
   // `packages/TOBEREFR` holds plugins parked until the ESM rework is done (TODO.md there).
   ignore: [".eta/**", "**/test/**/fixtures/**", "packages/TOBEREFR/**"],
   // CSS files are part of the module graph: their @imports reference
@@ -52,10 +52,8 @@ export default {
       ignore: ["src/components/ui/**"],
     },
     "apps/mobile": {
-      // `nsh` builds it: the entries are named in its commands, and `nsh`, `nsh/*` and the runtime's
-      // `websocket` are provided by the runtime, not by a package.
+      // `nsh` builds it: the entries are named in its commands.
       entry: ["App.tsx", "DevApp.tsx", "src/**/*.test.tsx"],
-      ignoreUnresolved: [/^nsh(\/.*)?$/, "websocket", "eta/native"],
     },
     "apps/desktop": {
       // Electrobun reads the configs by path and bundles both processes from
