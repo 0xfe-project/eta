@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "oomol": {
-      "command": "node",
-      "args": ["${PLUGIN_ROOT}/server/oo-mcp.mjs"],
-      "env": { "OO_NO_SELF_UPDATE": "1", "OO_SKILLS_SYNC_DISABLED": "1" }
-    }
-  }
-}

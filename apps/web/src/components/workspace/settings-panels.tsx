@@ -10,7 +10,6 @@ import { cn } from "@/lib/utils";
 import { useGitHubMounted } from "@/queries/github";
 import { AgentSettings } from "./agent-settings";
 import { ApprovalSettings } from "./approval-settings";
-import { BundleSettings } from "./bundle-settings";
 import { ConnectionSettings } from "./connection-settings";
 import { EmailSettings } from "./email-settings";
 import { ArchivedGroups } from "./groups";
@@ -26,15 +25,11 @@ import { useWorkspaceStore } from "./workspace-store";
 // hiding rules and the panels themselves are written once, here.
 
 /**
- * The sections the rail does not offer, by choice: 环境包 and 连接 are off in this build, and
- * 审批 is the editor's only. The settings stay in force — `?settings=bundles` still opens one —
- * because hiding the door is not the same as turning the feature off.
+ * The sections the rail does not offer, by choice: 连接 is off in this build, and 审批 is the
+ * editor's only. The settings stay in force — `?settings=connections` still opens one — because
+ * hiding the door is not the same as turning the feature off.
  */
-const hiddenSettings = new Set<SettingsSection>([
-  "approvals",
-  "bundles",
-  "connections",
-]);
+const hiddenSettings = new Set<SettingsSection>(["approvals", "connections"]);
 
 const colorModes = [
   {
@@ -214,8 +209,6 @@ function SectionContent({
     <ApprovalSettings />
   ) : section === "machines" ? (
     <MachineSettings />
-  ) : section === "bundles" ? (
-    <BundleSettings />
   ) : section === "connections" && githubMounted ? (
     <ConnectionSettings />
   ) : section === "mcp" ? (

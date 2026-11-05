@@ -25,7 +25,7 @@ rules:
   - id: recall
     on: prompt_submit
     run:
-      argv: [sh, -c, 'printf "{\\"context\\": \\"%s|%s\\"}" "$BUNDLE_SECRET" "$ALSO"']
+      argv: [sh, -c, 'printf "{\\"context\\": \\"%s|%s\\"}" "$LAYER_SECRET" "$ALSO"']
 `;
 
 describe("a layer with env and an id prefix", () => {
@@ -36,15 +36,15 @@ describe("a layer with env and an id prefix", () => {
       userConfigPath: join(cwd(), "none.yml"),
       additional: [
         {
-          name: "bundle:x",
+          name: "layer:x",
           text: TEXT,
-          env: { BUNDLE_SECRET: "s" },
+          env: { LAYER_SECRET: "s" },
           idPrefix: "x/",
         },
       ],
     });
     expect(loaded.rules.map((rule) => rule.id)).toEqual(["x/recall"]);
-    expect(loaded.rules[0]!.run!.env).toEqual({ BUNDLE_SECRET: "s" });
+    expect(loaded.rules[0]!.run!.env).toEqual({ LAYER_SECRET: "s" });
   });
 
   it("runs the command with the variables, and only that layer's commands get them", async () => {
@@ -60,7 +60,7 @@ describe("a layer with env and an id prefix", () => {
           {
             name: "a",
             text: TEXT,
-            env: { BUNDLE_SECRET: "hush", ALSO: "yes" },
+            env: { LAYER_SECRET: "hush", ALSO: "yes" },
           },
         ],
       },

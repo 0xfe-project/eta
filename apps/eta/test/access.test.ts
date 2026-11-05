@@ -289,13 +289,9 @@ describe("a host beyond loopback", () => {
     expect(
       access.authorize(new Request("http://eta.example/up")),
     ).toBeUndefined();
-    // A daemon's session reaches the LLM gateway under /llm with an agent's key, not a cookie;
-    // the route checks the key itself.
+    // The gateway has no route of its own: /llm is behind the gate like any other path.
     expect(
-      access.authorize(new Request("http://eta.example/llm/v1/models")),
-    ).toBeUndefined();
-    expect(
-      access.authorize(new Request("http://eta.example/llmx"))?.status,
+      access.authorize(new Request("http://eta.example/llm/v1/models"))?.status,
     ).toBe(401);
     // GitHub sends the browser back to exactly two paths, with no cookie of ours, to read only.
     for (const path of [

@@ -1,6 +1,6 @@
 // Ported from pi-mcp-adapter/config.ts, utils.ts and metadata-cache.ts#computeServerHash (MIT, see ../NOTICE); no file discovery, imports from other tools or trust prompts.
 /**
- * Servers come from sources the caller lists (a bundle's `mcp.json`, the user's, a project's
+ * Servers come from sources the caller lists (the user's `mcp.json`, a project's
  * `.mcp.json`); this merges them and fingerprints each result.
  *
  * Ported from pi-mcp-adapter's `config.ts`, `utils.ts` and `metadata-cache.ts#computeServerHash`

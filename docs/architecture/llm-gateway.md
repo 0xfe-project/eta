@@ -6,7 +6,7 @@ LLM 网关让主 node 能用模型**订阅**（ChatGPT Codex、Grok）和 **Goog
 
 ```text
 Bun 进程（host）  apps/eta/src/llm/                         子进程
-  runtime.ts   启动、/llm/v1 转发、智能体 key ─ HTTP 127.0.0.1:N /v1 ─────────▶  CLIProxyAPI v8.0.43
+  runtime.ts   启动、接上模型层 ─────────────── HTTP 127.0.0.1:N /v1 ─────────▶  CLIProxyAPI v8.0.43
   cpa.ts       经 @cpajs/cpa 启动并看管 CPA ─── HTTP 127.0.0.1:N /v8/management ▶  （@cpajs/<平台> 的二进制）
   gateway.ts   账号、目录、额度、登录
   state.ts     由 CPA 的冷却视图推导状态
@@ -24,7 +24,7 @@ Bun 进程（host）  apps/eta/src/llm/                         子进程
 只用 CPA 的 HTTP 接口：`/v1`（模型流量）和 v8 管理 API（`/v8/management`，经 cpajs 的类型化客户端），不依赖它的内部包或 SDK。
 
 - **配置**：`<状态目录>/config.yaml` 在每次启动前由 `config` 函数重写：host 的设置（回环、`/v1` 的 key、关闭控制面板与请求日志、`request-retry: 1`）加上一次运行留在配置里的 `api-keys`（运行时经管理 API 改动的就是这一段），测试再合并 `cpaExtra`。所以 API key 的唯一真源是 CPA 的配置。改 key 时（`connectors.ts` 的 `updateKeys`）读 `api-keys/<provider>` 节点和它的 ETag，去掉读时注入的 `auth_index`，带 `If-Match` 写回，412 时重读重改（最多 3 次）；不加进程内锁，并发靠 ETag。CPA 写配置不是原子的，读恰好落在重写中间会得到 500 `invalid_config`：这里不重试，每 5 秒的同步下一轮就好，用户操作则报一次 `gateway_unavailable`。
-- **鉴权**：CPA 的 `/v1` 只认一个每次启动随机生成、不出 host 进程的 key；host 自己的模型层直接用它调 CPA。智能体 key `etak.<智能体 id>.<HMAC-SHA256(host key, id)>` 在 host 里校验（`keys.ts`，常量时间比较，id 只允许字母数字下划线连字符），通过后换成 CPA 的 key 转发。会话（本机的和 daemon 上的）一律经 host 端口上的 `/llm/v1/*`，只放行智能体 key 和 `/v1`。key 是派生的所以不存表，吊销记在内存里，host 重启即全部失效。环境包经它用订阅账号，见[环境包](bundles.md#llm-网关的-key)。
+- **鉴权**：CPA 的 `/v1` 只认一个每次启动随机生成、不出 host 进程的 key；host 自己的模型层直接用它调 CPA。
 - **管理 API**：管理密钥由 cpajs 每次启动随机生成，只有 bcrypt 哈希（cost 4）进配置，明文留在 `server.client()` 里，host 不经手；远程管理关闭。CPA 每个管理请求都校验一次哈希，cost 4 下约 1 ms（cost 10 时约 65 ms CPU，而网关每几秒就要读几次）。
 - **日志**：CPA 每个请求都打 info 日志；转给 host stderr（前缀 `[cpa]`）的只有 warn 及以上（按 cpajs 解析出的 `LogLine.level` 过滤），和 stderr 上不带级别的行（例如 panic），stdout 上不带级别的启动横幅不转。完整的近期输出在 cpajs 的 `recentLogs` 里，CPA 意外退出时会附在警告里。
 
@@ -78,6 +78,6 @@ action：`refresh`（检查所有账号并读额度）、`loginStart`、`loginPo
 
 不需要构建：`bun install` 装上 `@cpajs/cpa` 和当前平台的 CPA 二进制。升级 CPA 即升级 `apps/eta/package.json` 里 `@cpajs/cpa` 的版本（它固定内置一个 CPA 版本），升级后跑下面的测试。
 
-- **状态推导**（`apps/eta/test/llm-state.test.ts`，纯函数）：冷却视图到账号状态与模型状态的映射、智能体 key 的派生校验吊销、Codex 凭据文件格式与套餐名。
+- **状态推导**（`apps/eta/test/llm-state.test.ts`，纯函数）：冷却视图到账号状态与模型状态的映射、Codex 凭据文件格式与套餐名。
 - **网关对真实 CPA**（`apps/eta/test/llm-gateway.test.ts`，假的 Google 与 OpenAI 登录）：Google AI Studio key 的校验（空、无效、重复）、写入配置后出现账号与模型、检查、停用与启用、重启后仍在、移除后模型保留为不可用；Go 网关的 `providers.json` 迁入配置；Codex 设备码登录成为 CPA 的凭据文件、模型上线、停用与删除；CPA 被 SIGKILL 后重新启动并通知，`/v1` 的 key 和管理客户端在新进程上可用。
-- **host 测试**（`apps/eta/test/llm.test.ts`、`bundles-gateway.test.ts`，真实 CPA，假上游）：`llm` target 与模型上线，经 `host.server.models` 流式生成并拿到 token，用量记录得到提供商 `llm`，中途停止取消上游，上游 500/429 只让那次生成失败；环境包在本机和 daemon 上拿到网关地址和智能体 key，`/llm` 只为智能体 key 转发 `/v1`，智能体删除后 key 失效。
+- **host 测试**（`apps/eta/test/llm.test.ts`，真实 CPA，假上游）：`llm` target 与模型上线，经 `host.server.models` 流式生成并拿到 token，用量记录得到提供商 `llm`，中途停止取消上游，上游 500/429 只让那次生成失败。

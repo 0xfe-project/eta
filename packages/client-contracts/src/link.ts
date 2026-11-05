@@ -155,15 +155,6 @@ export interface MachineActionArgs {
   config: { session: string };
   /** How far the session's journal has got: what its next run writes comes after this. */
   lastSeq: { session: string };
-  /** Which of these bundle contents (by hash) are not on the machine yet. */
-  bundleHave: { hashes: string[] };
-  /** Keep a bundle's files (path to base64 data) under their hash. */
-  bundlePut: {
-    hash: string;
-    files: Record<string, { data: string; exec?: boolean | undefined }>;
-  };
-  /** Which of these commands are on the machine's PATH. */
-  which: { commands: string[] };
   /** GitHub was connected, authorized or disconnected: ask the primary for the token again now. */
   githubRefresh: Record<string, never>;
 }
@@ -174,9 +165,6 @@ export interface MachineActionResults {
   catalog: Record<string, never>;
   config: { model: string | undefined; thinkingLevel: string };
   lastSeq: { seq: number };
-  bundleHave: { missing: string[] };
-  bundlePut: Record<string, never>;
-  which: { found: string[] };
   githubRefresh: Record<string, never>;
 }
 
@@ -256,27 +244,6 @@ export interface OpenSessionArgs {
    * session that is already there at its next wake.
    */
   akhook?: { name: string; text: string }[];
-  /**
-   * The bundles the agent loads, already on the machine (`bundleHave`, `bundlePut`). The config
-   * values are what its MCP servers and hook commands are started with: they go no further, and
-   * the machine does not write them down.
-   */
-  bundles?: OpenedBundle[];
-  /**
-   * The agent's key for the primary's LLM gateway (`/llm/v1` on the primary's address), when it
-   * has one. It opens `/v1` and nothing else; the bundles' MCP servers get it as
-   * `${ETA_AGENT_KEY}`, held in memory like the config values.
-   */
-  gatewayKey?: string;
-}
-
-/** A bundle in an `open`: which contents, and the values its processes get. */
-export interface OpenedBundle {
-  name: string;
-  hash: string;
-  config: Record<string, string>;
-  /** Its required values are all there; when not, only its skills load. */
-  configured: boolean;
 }
 
 export interface RunOutcome {

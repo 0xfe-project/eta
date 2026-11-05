@@ -28,14 +28,12 @@ import type { KernelTool, PersonaCard, ThinkingLevel } from "@eta/core";
 import type { AskObserver } from "@eta/harness";
 import type { OarRuntimes } from "@eta/runtime-oar";
 import type { SessionMeta, SessionsService, Socket } from "@eta/server";
-import type { ActiveBundle } from "./bundle";
 import type { Peer } from "./link/peer";
 import { Buffer } from "node:buffer";
 import { mkdirSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { homedir, hostname, platform } from "node:os";
 import { isAbsolute, join } from "node:path";
-import process from "node:process";
 import { LINK_PROTOCOL } from "@eta/client-contracts";
 import { createOarRuntimes } from "@eta/runtime-oar";
 import {
@@ -50,12 +48,6 @@ import {
 } from "@eta/server";
 import { LocalTransport } from "@eta/ssh";
 import { Context } from "cordis";
-import {
-  bundleSkillDirs,
-  BundleStore,
-  isConfigured,
-  readBundle,
-} from "./bundle";
 import { GitHubKeeper } from "./github";
 import { ModelCatalog, remoteModels } from "./models";
 import { Reports } from "./reports";
@@ -67,11 +59,6 @@ export interface DaemonNodeOptions {
   /** Where sessions live: `<dataDir>/sessions`. */
   dataDir: string;
   version: string;
-  /**
-   * The primary's address (`http(s)://host:port`), where its LLM gateway is reached under
-   * `/llm`. Without it a session gets no gateway, and the MCP servers that need it are dropped.
-   */
-  primaryUrl?: string | undefined;
   warn?: ((message: string) => void) | undefined;
   /** The user's home on this machine (personas, `~/.eta/mcp.json`); the real one by default. */
   home?: string | undefined;
@@ -96,8 +83,6 @@ interface Opening {
   stamp: string;
   tools: readonly ToolSpec[];
   cards: PersonaCard[];
-  /** The bundles the agent loads, read from this machine's copies. */
-  bundles: ActiveBundle[];
 }
 
 const keyOf = (conversationId: string, agentId: string): string =>
@@ -132,8 +117,6 @@ export class DaemonNode {
   readonly #runtimes: OarRuntimes;
   /** git and gh on this machine, logged in as the primary's GitHub App. */
   readonly #github: GitHubKeeper;
-  /** The bundles the primary sent, by contents. */
-  readonly #bundles: BundleStore;
   /** The openings the primary sent, by `conversation:agent`; read when a session opens. */
   readonly #openings = new Map<string, Opening>();
   /** What happened to the questions; kept for the next link when there is none. */
@@ -159,7 +142,6 @@ export class DaemonNode {
       warn,
     });
     const home = options.home ?? homedir();
-    this.#bundles = new BundleStore(join(options.dataDir, "bundles"));
     // The token is the primary's to give; what stays here is at most an hour old.
     this.#github = new GitHubKeeper({
       dir: join(options.dataDir, "github"),
@@ -198,9 +180,6 @@ export class DaemonNode {
         return await renderSkillsBlock({
           cwd: meta.cwd,
           home,
-          extraDirs: (this.#openingOf(meta)?.bundles ?? []).flatMap(
-            bundleSkillDirs,
-          ),
           warn,
         });
       },
@@ -385,19 +364,6 @@ export class DaemonNode {
         for (const spec of models) this.#catalog.add(spec);
         return {};
       },
-      bundleHave: ({ hashes }) => ({
-        missing: hashes.filter((hash) => !this.#bundles.has(hash)),
-      }),
-      bundlePut: ({ hash, files }) => {
-        this.#bundles.put(hash, files);
-        return {};
-      },
-      which: ({ commands }) => ({
-        found: commands.filter(
-          (command) =>
-            Bun.which(command, { PATH: process.env.PATH ?? "" }) !== null,
-        ),
-      }),
       githubRefresh: () => {
         void this.#github.poke();
         return {};
@@ -425,33 +391,6 @@ export class DaemonNode {
     );
   }
 
-  /** The bundles an open names, from the copies kept here; one that is missing is left out. */
-  #activeBundles(args: OpenSessionArgs): ActiveBundle[] {
-    const active: ActiveBundle[] = [];
-    const { primaryUrl } = this.#options;
-    const gateway =
-      args.gatewayKey === undefined || primaryUrl === undefined
-        ? undefined
-        : { url: `${new URL(primaryUrl).origin}/llm`, key: args.gatewayKey };
-    for (const opened of args.bundles ?? []) {
-      try {
-        const bundle = readBundle(this.#bundles.dir(opened.hash));
-        active.push({
-          bundle,
-          config: opened.config,
-          configured:
-            opened.configured && isConfigured(bundle.manifest, opened.config),
-          gateway,
-        });
-      } catch (error) {
-        this.#warn(
-          `[eta-daemon] bundle ${opened.name} is not usable: ${messageOf(error)}`,
-        );
-      }
-    }
-    return active;
-  }
-
   #service(): SessionsService {
     if (this.#sessions === undefined) throw new Error("the daemon is starting");
     return this.#sessions;
@@ -470,7 +409,6 @@ export class DaemonNode {
       stamp: args.stamp,
       tools: args.tools,
       cards: (args.personaCards ?? []) as PersonaCard[],
-      bundles: this.#activeBundles(args),
     });
     const thinking = (id: string): Promise<unknown> =>
       args.thinkingLevel === undefined

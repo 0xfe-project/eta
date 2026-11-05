@@ -16,8 +16,7 @@
   "editor": {
     "tabs": {
       "general": "General",
-      "instructions": "Instructions",
-      "environment": "Bundles"
+      "instructions": "Instructions"
     },
     "sectionsLabel": "Agent settings sections"
   },

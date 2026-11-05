@@ -2,7 +2,7 @@
 
 产品数据在 SQLite（`bun:sqlite`），会话照上游存成文件。所有东西在**一个数据目录**里：`$HOME/.eta`，不是开关。想要别的位置就换 `HOME`；Docker 镜像里 `HOME=/data`，卷挂在 `/data`，所以内容在 `/data/.eta/`，由非 root 用户 `bun`（uid 1000）拥有，host 与会话的 bash 都以它运行。
 
-这里不许再有第二个根。曾经有过一个 `--data-dir`：它只挪走配置、数据库和会话，persona 卡片仍然从真实的 `~/.eta/persona` 读，于是换一个目录启动的进程看起来像「模型配置丢了」。persona、环境包、MCP 配置这些用户级的东西也跟着 `$HOME` 走之后，一个根就够了。
+这里不许再有第二个根。曾经有过一个 `--data-dir`：它只挪走配置、数据库和会话，persona 卡片仍然从真实的 `~/.eta/persona` 读，于是换一个目录启动的进程看起来像「模型配置丢了」。persona、MCP 配置这些用户级的东西也跟着 `$HOME` 走之后，一个根就够了。
 
 ## 目录布局
 
@@ -19,14 +19,11 @@
   artifacts/<产物 id>/<版本>/   archive.zip 与解压后的 files/；artifacts/.preview-key 是预览地址的签名密钥
   plugins/、modules/        用户插件（热重载）
   access-token              令牌门的令牌（开启时；0600）
-  secret.key                环境包配置、MCP 与 GitHub 的密封密钥（0600，第一次用时生成）
+  secret.key                邮箱、MCP 与 GitHub 的密封密钥（0600，第一次用时生成）
   github/                   这台机器上 git 与 gh 的 GitHub 登录（令牌最多一小时，见 [GitHub](github.md)）：gh/hosts.yml、token、login、git/github.inc
-  bundles/<包名>/           环境包服务的数据目录（`ETA_BUNDLE_DATA`）
 ```
 
-环境包的目录不在数据目录里：内置的在仓库的 `bundles/`，用户的在 `~/.eta/bundles/<name>/`，来自 git 的在 `~/.eta/bundles/git/<哈希>/`（见[环境包](bundles.md)）。
-
-daemon 的数据在同一个根里：`~/.eta/daemon/`（见[机器与 daemon](machines.md)），它收到的环境包在 `daemon/bundles/<哈希>/`，GitHub 登录在 `daemon/github/`，会话在 `daemon/sessions/`。和宿主共用 `$HOME`，各自占一个子目录。记忆边车的数据在它自己的 PostgreSQL，不在这里。
+daemon 的数据在同一个根里：`~/.eta/daemon/`（见[机器与 daemon](machines.md)），GitHub 登录在 `daemon/github/`，会话在 `daemon/sessions/`。和宿主共用 `$HOME`，各自占一个子目录。记忆边车的数据在它自己的 PostgreSQL，不在这里。
 
 ## SQLite
 
@@ -49,7 +46,6 @@ daemon 的数据在同一个根里：`~/.eta/daemon/`（见[机器与 daemon](ma
 | 0011–0013          | `routine`、`routine_run`（同一定时任务同一时刻最多一次运行，由唯一索引保证）、`routine_feedback`、`routine_brief`（简报的版本）                                                                                  |
 | 0014               | `machine_enrollment`（一次性安装码，只存摘要）                                                                                                                                                                   |
 | 0028               | `attachment`（附件：属于哪个对话、名字、类型、大小、被哪条消息认领；未发送的 24 小时后清理）                                                                                                                     |
-| 0032               | `bundle_config`（环境包的配置，加密）、`bundle_source`（来自 git 的包：仓库、rev、路径、解析出的提交）、`agent.bundles`（智能体载入的包，JSON 名单）                                                             |
 | 0033               | `credential`（外部集成的凭据：`integration`、`key`、`kind`、`value` 加密；目前是 MCP 服务器的 OAuth 状态，见 [MCP](mcp.md)）                                                                                     |
 | 0034               | `task_run`（任务的运行，同时是队列）；`task` 增加项目、工作区（模式、worktree 路径与分支）、来源对话，去掉 `assignee`；`machine.max_active_runs`（默认 2）；`task_activity` 增加运行类的条目，见[任务](tasks.md) |
 | 0035               | `github_app`、`github_user`（私钥、client secret、用户令牌密封）、`github_pending`（进行中的 manifest 与授权）、`task_pull`（任务交付的 PR），见 [GitHub](github.md)                                             |

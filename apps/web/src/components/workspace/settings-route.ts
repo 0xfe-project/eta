@@ -1,9 +1,5 @@
 import type { SettingsSection } from "./workspace-store";
-import {
-  createStandardSchemaV1,
-  parseAsStringEnum,
-  useQueryStates,
-} from "nuqs";
+import { parseAsStringEnum, useQueryStates } from "nuqs";
 import { settingsSections } from "./settings-sections";
 
 // Where the settings page is inside itself: `/settings?section=<value>`. In the address rather
@@ -16,9 +12,15 @@ const navParsers = {
   ),
 };
 
-export const validateSettingsSearch = createStandardSchemaV1(navParsers, {
-  partialOutput: true,
-});
+/** A section that does not exist is the default one: an old link must not be an error page. */
+export function validateSettingsSearch(search: Record<string, unknown>): {
+  section?: SettingsSection;
+} {
+  const section = settingsSections.find(
+    ({ value }) => value === search.section,
+  );
+  return section === undefined ? {} : { section: section.value };
+}
 
 export function useSettingsSection() {
   return useQueryStates(navParsers, { history: "replace" });

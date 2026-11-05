@@ -14,7 +14,6 @@
 import type { PromptImage, RunOutcome, ToolSpec } from "@eta/client-contracts";
 import type { KernelModels, KernelTool } from "@eta/core";
 import type { Settings } from "@eta/server";
-import type { Bundles } from "../bundles/bundles";
 import type {
   EnsureInput,
   SessionHandle,
@@ -38,8 +37,6 @@ export interface RemotePlaceDeps {
   defaults: () => Promise<Settings>;
   /** The product's per-session hooks; not there until the product is made. */
   hooks: () => Required<SessionHooks> | undefined;
-  /** The bundles; what an agent loads is sent along with its session. */
-  bundles: Bundles;
   /** The primary's home: where the user's own persona cards are. */
   home: string;
   /** A `sessions.*` action on a session of a daemon, the way the browser's are sent. */
@@ -143,7 +140,6 @@ export class RemotePlace implements SessionPlace {
     const known = external
       ? undefined
       : this.#deps.models()?.getModel(identity.provider, identity.modelId);
-    const gatewayKey = this.#deps.bundles.gatewayKey(agent.id);
     const { session } = await link.machine("open", {
       ...(input.existing === null ? {} : { session: input.existing }),
       cwd: input.cwd,
@@ -166,8 +162,6 @@ export class RemotePlace implements SessionPlace {
             }),
           }),
       tools: this.#tools(conversation.id, agent.id, input.cwd),
-      bundles: await this.#deps.bundles.openOn(link, agent.bundles),
-      ...(gatewayKey === undefined ? {} : { gatewayKey }),
     });
     if (session !== input.existing) input.created(session);
     mirrors.register(session, machine.id);

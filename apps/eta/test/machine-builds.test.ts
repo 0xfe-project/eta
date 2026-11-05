@@ -57,7 +57,6 @@ async function restarted(daemon: TestDaemon, version: string) {
   const node = new DaemonNode({
     dataDir: daemon.dataDir,
     version,
-    primaryUrl: daemon.identity.url,
     home: daemon.dataDir,
     install: "service",
     warn: () => undefined,

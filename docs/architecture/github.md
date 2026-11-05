@@ -125,10 +125,6 @@ GitHub 的失败一律是 424（不是 502，Cloudflare 会把源站的 502/504 
 
 两条回调是免令牌门的**精确路径、只读**（见[访问控制](access.md)）：`/github/manifest/callback`、`/github/authorization/callback`，浏览器从 github.com 回来不带我们的 cookie。凭据是 host 发出的 `state`：没有、不对、已用过、过期的，什么都不改变，只重定向到设置页并带上原因。它们不做别的事。
 
-## 环境包
-
-`bundles/github` 只剩技能（沿用主分支的 `github` 技能文字，AXP 换成 eta）和 `requires: [git, gh]`；没有 MCP 服务器、没有配置项、没有令牌。技能的 `references/setup.md` 指向“设置 → 连接”。
-
 ## 界面
 
 设置 → 连接（`connection-settings.tsx`）：一行 GitHub，右边“开始连接”或“管理”，状态徽章和一句话（以谁的身份、待安装、出错）。向导（`github-wizard.tsx`）是对话框，带步骤条。GitHub 的回调把 `?settings=connections&github=created|authorized|…` 带回首页，设置对话框据此打开，向导读到 `github`、`github_error`、`setup_action` 就提示并重开在当前步骤，然后从地址里去掉这些参数。host 没有 `github` 插件时，这个设置项隐藏。

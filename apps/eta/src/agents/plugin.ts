@@ -44,8 +44,6 @@ export interface AgentsDeps {
   changed: (conversations?: readonly string[] | "all") => void;
   /** A conversation exists now: its target has to be published. */
   created: (conversationId: string) => void;
-  /** An agent is gone: whatever it was given outside the database goes with it. */
-  removed: (agentId: string) => void;
   /** The external runtimes this host has, with their models; absent when it runs none. */
   runtimes?: ((fresh: boolean) => Promise<AgentRuntimeInfo[]>) | undefined;
   /** The external runtimes of a daemon machine, asked over its link (which has to be up). */
@@ -73,7 +71,6 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
       runtime: agent.runtime,
       model: agent.model,
       thinkingLevel: agent.thinkingLevel,
-      bundles: agent.bundles,
       machineId: agent.machineId,
       home,
       homeProjectId: project?.id ?? "",
@@ -201,7 +198,6 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             // Stewards and memberships go with the row (ON DELETE SET NULL / CASCADE).
             agents.remove(agent.id);
           })();
-          deps.removed(id);
           deps.changed("all");
           return { result: { agentId: id } };
         }),
@@ -294,7 +290,6 @@ function fieldsOf(
   runtime?: AgentRuntime;
   model?: string | null;
   thinkingLevel?: ThinkingLevel | null;
-  bundles?: string[];
   machineId?: string | null;
 } {
   const args = new Args(call);
@@ -313,22 +308,7 @@ function fieldsOf(
   const machineId = args.nullableString("machineId");
   const instructions = args.optionalString("instructions");
   const persona = args.optionalString("persona");
-  const bundles = (call.args as { bundles?: unknown } | undefined)?.bundles;
-  if (
-    bundles !== undefined &&
-    (!Array.isArray(bundles) ||
-      !bundles.every(
-        (name) =>
-          typeof name === "string" && /^[a-z0-9][a-z0-9-]{0,63}$/.test(name),
-      ))
-  )
-    throw new TypeError(
-      `${call.target}.${call.action}: bundles must be a list of bundle names`,
-    );
   return {
-    ...(bundles === undefined
-      ? {}
-      : { bundles: [...new Set(bundles as string[])] }),
     ...(name === undefined ? {} : { name: name.trim() }),
     ...(instructions === undefined ? {} : { instructions }),
     ...(persona === undefined ? {} : { persona }),

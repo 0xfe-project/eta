@@ -13,7 +13,7 @@ import type { SshTransport } from "@eta/ssh";
  * A run is one attempt of the agent that made the task, in a session of its own: opened fresh, so
  * it remembers nothing of the conversation the task came from (the task says what that was), and
  * made the way the agent's conversation sessions are (its model, persona, instructions, tools,
- * skills, MCP servers, bundles and memory), on the machine the agent works on: the one it is pinned
+ * skills, MCP servers and memory), on the machine the agent works on: the one it is pinned
  * to, else the one the task's project is on. A run on another machine than the project's has no
  * project directory or worktree there: it starts in that machine's home and is told so. The
  * session's transcript is the run's log; there is no second record of what it did.

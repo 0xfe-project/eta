@@ -19,7 +19,6 @@ import { readdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { DaemonLink, DaemonNode } from "@eta/daemon";
 import { describe, expect, it } from "vitest";
-import { demoFiles, SECRET, writeBundle } from "./support/bundles";
 import { connect, until } from "./support/client";
 import { machineView } from "./support/daemon";
 import { tempDir, testHost } from "./support/host";
@@ -255,31 +254,6 @@ describe("a task run", () => {
     expect(result).toMatchObject({ author: "agent", agentId: ada.id });
     expect(result.text).toContain("#1 Fix login");
     expect(result.text).toContain("Login works again, on a branch.");
-  });
-
-  // TOBEREFR: see packages/TOBEREFR/TODO.md
-  it.skip("is equipped as the agent's conversation sessions are: its bundles' skills, MCP tools and hook rules", async () => {
-    const home = await tempDir("eta-home-");
-    await writeBundle(home, "demo", demoFiles());
-    const { models, requests } = scriptedModels(finishes());
-    const w = await world({ dataDir: home, models });
-    const ada = await w.agent("Ada", { bundles: ["demo"] });
-    await w.client.call("bundles", "configure", {
-      name: "demo",
-      values: { DEMO_TOKEN: SECRET },
-    });
-    const project = await w.project({ stewardId: ada.id });
-    const group = await w.group(project.id, [ada.id], "login");
-    const task = make({ w, ada, group }, "With a bundle");
-    await until(() => reviewed(w, task.id));
-    const [first] = requests.filter(isRun);
-    expect(first!.system).toContain("demo-skill");
-    expect(first!.tools).toEqual(
-      expect.arrayContaining(["mcp", "finish_task"]),
-    );
-    expect(first!.transcript.join("\n")).toContain(
-      `hook-token-len:${SECRET.length}`,
-    );
   });
 
   it("is run by the agent it was assigned to, which is not always the agent that made it", async () => {

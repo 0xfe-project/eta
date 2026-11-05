@@ -29,7 +29,6 @@ export const agentView = (
   runtime: "eta",
   model: "p:m",
   thinkingLevel: null,
-  bundles: [],
   machineId: null,
   home: `/data/agents/${fields.id}`,
   homeProjectId: `home-${fields.id}`,

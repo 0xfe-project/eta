@@ -8,7 +8,7 @@
 
 宿主自己带一层规则，排在最前，用户的与项目的文件关不掉也盖不掉：`eta:github`（`apps/eta/src/github/akhook.ts`），其中 `gh-pr-create` 拦下 `gh pr create`，提示改用 `open_pull_request` 工具（见 [GitHub](github.md)）。这一层属于 GitHub 那条链，所以只有 host 加载了它（`--github`，默认关）才注册：没加载时智能体手里只有 `gh`，提示它用一个不存在的工具反而是干扰。
 
-宿主的附加配置有三处，按此顺序；之后还有智能体载入的[环境包](bundles.md)各自的一层（`akhook.yml`，规则 id 前缀是包名，规则的命令带上包的配置作为环境变量，只对载入它的智能体的会话有效）：环境变量 `AKHOOK_ADDITIONAL_CONFIG_PATH`（路径列表，文件不存在算配置错误）、数据目录里的 `akhook.yml`（有才读）、嵌入方传给 `startHost({ akhook: { additional } })` 的文本（环境包带的那份就走这里）。文件改了，下一次工具调用就生效，不用重开会话。
+宿主的附加配置有三处，按此顺序：环境变量 `AKHOOK_ADDITIONAL_CONFIG_PATH`（路径列表，文件不存在算配置错误）、数据目录里的 `akhook.yml`（有才读）、嵌入方传给 `startHost({ akhook: { additional } })` 的文本。文件改了，下一次工具调用就生效，不用重开会话。
 
 远端机器（daemon）上的会话在 daemon 那台机器上读用户级文件和项目的 `.akhook.yml`，再叠上主 node 的附加配置：主 node 在每次 `machine.open` 时把这些层以文本发过去，所以两边的规则一致。`prompt_submit` / `stop` 属于一次回复，由主 node 的引擎执行，所以对远端项目只有用户级和附加配置生效（主 node 读不到远端的项目目录）。
 

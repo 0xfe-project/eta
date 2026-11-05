@@ -2,7 +2,6 @@ import type { AgentView } from "@eta/client-contracts";
 import type { Icon } from "@phosphor-icons/react";
 import type { AgentForm } from "./agent-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PackageIcon } from "@phosphor-icons/react/Package";
 import { ScrollIcon } from "@phosphor-icons/react/Scroll";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/SlidersHorizontal";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
@@ -36,9 +35,7 @@ import {
   useDeleteAgent,
   useUpdateAgent,
 } from "@/queries/agents";
-import { useBundles } from "@/queries/bundles";
 import {
-  BundlesField,
   InstructionsField,
   ModelField,
   NameField,
@@ -114,7 +111,7 @@ export function DeleteAgentDialog({
   );
 }
 
-type Tab = "general" | "instructions" | "environment";
+type Tab = "general" | "instructions";
 // The editor's tabs and the fields on each, to show where errors are.
 const tabs: {
   value: Tab;
@@ -138,14 +135,6 @@ const tabs: {
     icon: ScrollIcon,
     fields: ["description"],
   },
-  {
-    value: "environment",
-    get label() {
-      return translate("agents:editor.tabs.environment");
-    },
-    icon: PackageIcon,
-    fields: ["bundles"],
-  },
 ];
 
 function AgentEditorForm({
@@ -162,10 +151,6 @@ function AgentEditorForm({
   ] as const);
   const setWorkspace = useWorkspaceStore((s) => s.setWorkspace);
   const setSettings = useWorkspaceStore((s) => s.setSettings);
-  const { mounted: hasBundles } = useBundles();
-  const shownTabs = tabs.filter(
-    (item) => item.value !== "environment" || hasBundles,
-  );
   const updateAgent = useUpdateAgent();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [tab, setTab] = useState<Tab>("general");
@@ -178,7 +163,6 @@ function AgentEditorForm({
       model: agent.model ?? "",
       persona: agent.persona,
       thinkingLevel: agent.thinkingLevel ?? "",
-      bundles: agent.bundles,
       machineId: agent.machineId ?? "",
     },
   });
@@ -243,7 +227,7 @@ function AgentEditorForm({
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <SettingsNav
           label={translateText("editor.sectionsLabel")}
-          sections={shownTabs.map((t) => ({
+          sections={tabs.map((t) => ({
             ...t,
             attention: t.fields.some((name) => errors[name]),
             hint: translateText("common:states.hasErrors"),
@@ -266,10 +250,8 @@ function AgentEditorForm({
               <ThinkingField form={form} />
               <PersonaField form={form} />
             </>
-          ) : tab === "instructions" ? (
-            <InstructionsField form={form} />
           ) : (
-            <BundlesField form={form} />
+            <InstructionsField form={form} />
           )}
         </section>
       </div>

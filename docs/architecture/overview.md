@@ -8,7 +8,7 @@ eta 是一个人用来指挥多个智能体的工作台。服务端是**一个 B
    ▼
 主 node  apps/eta                              ← 唯一的进程；SQLite + 文件在一个数据目录里
    ├─ 上游地板  packages/eta-server：sessions、providers、settings、personas
-   ├─ 产品插件  agents machines projects conversations inbox usage tasks artifacts routines bundles [memory] [llm]
+   ├─ 产品插件  agents machines projects conversations inbox usage tasks artifacts routines [memory] [llm]
    ├─ LLM 网关  apps/eta/src/llm：CLIProxyAPI 子进程（@cpajs/cpa）与账号、目录、额度（订阅账号、Gemini key）
    ├─ 读网页    apps/eta/src/web：web_fetch / web_search，进程内调用 sex 库；托管的 SearXNG 是子进程（见 [读网页与搜索](web.md)）
    ├─ 本机会话  harness（packages/eta-core、eta-harness…）直接在进程里跑
@@ -34,7 +34,7 @@ eta 是一个人用来指挥多个智能体的工作台。服务端是**一个 B
 apps/
   eta/        host：入口 main.ts、host.ts（组装）、product.ts（产品插件）、access.ts（访问控制）、
               db.ts + migrations/（SQLite），以及 agents、machines、projects、conversations、inbox、usage、
-              memory、tasks、artifacts、routines、bundles、web 各一个目录
+              memory、tasks、artifacts、routines、web 各一个目录
   daemon/     eta-daemon：setup / run / install-service
   web/        React 界面，通过 WebSocket 读写
   memory/     Python 边车
@@ -45,7 +45,6 @@ packages/
   eta-plugin-akhook   声明式规则（akhook 的配置）与流式规则，见 [akhook](akhook.md)
   eta-mcp             MCP 库：代理工具、懒连接、元数据缓存、直接工具、OAuth，见 [MCP](mcp.md)
   client-wire-proto、client-contracts   线上的帧，以及产品 target 的类型（Web 与 host 共用）
-bundles/      内置的环境包（github、grok、oomol），见[环境包](bundles.md)；github 的 App、令牌与向导见 [GitHub](github.md)（那条链默认不加载，`--github` 才挂上）
 deploy/       Dockerfile、memory.Dockerfile、compose.yaml
 ```
 

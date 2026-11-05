@@ -4,7 +4,7 @@
  *   bun run host:install -- [host flags]     e.g. -- --host tailscale --port 8790
  *
  * 1. builds the page (`apps/web`) and stages the host the way the desktop app carries it
- *    (`apps/desktop/scripts/stage-host.ts`: the compiled host, its migrations, bundles, page,
+ *    (`apps/desktop/scripts/stage-host.ts`: the compiled host, its migrations, page,
  *    CLIProxyAPI, and the daemon for every platform);
  * 2. puts it in `~/.local/share/eta/host` (the old one is swapped out, not edited in place, so a
  *    running host keeps the files it started with until it restarts);

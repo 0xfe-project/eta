@@ -12,11 +12,10 @@
 
 后面的盖住前面的同名服务器：
 
-| 来源              | 位置                            | 说明                                         |
-| ----------------- | ------------------------------- | -------------------------------------------- |
-| `bundle:<名>`     | 智能体载入的环境包的 `mcp.json` | 可写 `directTools` 等，`${变量}` 由包展开    |
-| `~/.eta/mcp.json` | 这台机器的用户目录              | 对这台机器上的所有智能体                     |
-| `.mcp.json`       | 会话工作目录                    | 直接加载，不需要批准（它在用户自己的项目里） |
+| 来源              | 位置               | 说明                                         |
+| ----------------- | ------------------ | -------------------------------------------- |
+| `~/.eta/mcp.json` | 这台机器的用户目录 | 对这台机器上的所有智能体                     |
+| `.mcp.json`       | 会话工作目录       | 直接加载，不需要批准（它在用户自己的项目里） |
 
 格式是常见的 `{ "mcpServers": { ... } }`，另有 `lifecycle`（`lazy` / `keep-alive` / `lazy-keep-alive`）、`directTools`、`approveTools`、`auth`（`oauth` / `bearer`）、`includeTools` / `excludeTools` 等，见库的 `McpServerEntry`。会话打开时读一次这些文件；改了之后新开的会话生效。
 
@@ -36,7 +35,7 @@
 
 远端 HTTP 服务器写 `"auth": "oauth"`。
 
-- **凭据**在主 node 的 `credential` 表（迁移 0033，`integration = 'mcp'`），每个值是 JSON，用数据目录里的 `secret.key`（同环境包的配置）做 AES-256-GCM 加密，随机 12 字节 IV，存 `iv | tag | 密文`；篡改或换了密钥读不出来，按没登录处理。存的是 `tokens`、`clientInformation`、`discoveryState` 和登录进行中的 `codeVerifier`。
+- **凭据**在主 node 的 `credential` 表（迁移 0033，`integration = 'mcp'`），每个值是 JSON，用数据目录里的 `secret.key` 做 AES-256-GCM 加密，随机 12 字节 IV，存 `iv | tag | 密文`；篡改或换了密钥读不出来，按没登录处理。存的是 `tokens`、`clientInformation`、`discoveryState` 和登录进行中的 `codeVerifier`。
 - **服务器键**是服务器 URL（去掉 fragment）的 SHA-256：与智能体和配置来源无关，所以一次登录对所有智能体、所有机器都有效。
 - 连接时用 connect 模式的 provider（从不自己注册客户端或跳转，缺登录就报“需要登录”），并发刷新同一个 refresh token 合并成一次请求。
 - **登录**：`mcp.login` 返回 `{ pendingId, authorizationUrl }`，浏览器去授权；授权方把浏览器送回 `GET /mcp/oauth/callback?code&state`（免令牌门，见[访问控制](access.md)），宿主按 `state` 找到自己在等的登录并完成，回一页“可以关闭这个标签页”。宿主不在浏览器能回到的地址上（无头、远程）时，用户把授权方最后停在的地址粘贴进 `mcp.completeLogin`。登录完成后，等着这次登录的服务器立刻重连。
@@ -45,7 +44,7 @@
 
 ## wire：`mcp` target
 
-`list` 一个 section，每项（`McpServerView`）：`agentId`、`agentName`、`server`、`source`、`transport`（`stdio` | `http` | `sse`）、`lifecycle`、`state`（`connected` | `cached` | `not-connected` | `failed` | `needs-auth` | `disabled`）、`toolCount`、`error`、`auth`（`none` | `signed_in` | `needs_login`）。内容是每个智能体按“环境包 + 用户文件”能得到的服务器，加上正在运行的会话从项目 `.mcp.json` 读到的。目前只列主 node 上的配置；daemon 上项目独有的服务器不在列表里。
+`list` 一个 section，每项（`McpServerView`）：`agentId`、`agentName`、`server`、`source`、`transport`（`stdio` | `http` | `sse`）、`lifecycle`、`state`（`connected` | `cached` | `not-connected` | `failed` | `needs-auth` | `disabled`）、`toolCount`、`error`、`auth`（`none` | `signed_in` | `needs_login`）。内容是每个智能体从用户文件得到的服务器，加上正在运行的会话从项目 `.mcp.json` 读到的。目前只列主 node 上的配置；daemon 上项目独有的服务器不在列表里。
 
 | 动作            | 说明                                                                            |
 | --------------- | ------------------------------------------------------------------------------- |

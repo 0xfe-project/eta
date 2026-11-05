@@ -1,9 +1,9 @@
 {
   "title": "MCP 服务器",
-  "description": "智能体经 MCP 使用的工具，来自环境包、~/.eta/mcp.json 和项目里的 .mcp.json。服务器在第一次用到时才启动。",
+  "description": "智能体经 MCP 使用的工具，来自 ~/.eta/mcp.json 和项目里的 .mcp.json。服务器在第一次用到时才启动。",
   "empty": {
     "title": "没有 MCP 服务器",
-    "description": "在 ~/.eta/mcp.json、项目的 .mcp.json 或环境包的 mcp.json 里添加。"
+    "description": "在 ~/.eta/mcp.json 或项目的 .mcp.json 里添加。"
   },
   "transport": {
     "stdio": "stdio",

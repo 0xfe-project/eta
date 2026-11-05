@@ -1,9 +1,9 @@
 {
   "title": "MCP servers",
-  "description": "The tools agents reach through MCP, from their bundles, ~/.eta/mcp.json and project .mcp.json files. Servers start on first use.",
+  "description": "The tools agents reach through MCP, from ~/.eta/mcp.json and project .mcp.json files. Servers start on first use.",
   "empty": {
     "title": "No MCP servers",
-    "description": "Add servers to ~/.eta/mcp.json, a project’s .mcp.json or a bundle’s mcp.json."
+    "description": "Add servers to ~/.eta/mcp.json or a project’s .mcp.json."
   },
   "transport": {
     "stdio": "stdio",

@@ -53,7 +53,8 @@ export function SettingsMenuItem({ rail }: { rail: boolean }) {
 
 /**
  * `?settings=<section>` opens settings there, once: how links into a
- * settings section work. The parameter is dropped from the address.
+ * settings section work. A section that does not exist opens the default one. The parameter is
+ * dropped from the address.
  */
 function useSettingsLink() {
   const setSettings = useWorkspaceStore((s) => s.setSettings);
@@ -65,7 +66,10 @@ function useSettingsLink() {
     );
     url.searchParams.delete("settings");
     window.history.replaceState(window.history.state, "", url);
-    if (section) setSettings({ open: true, section: section.value });
+    setSettings((state) => ({
+      open: true,
+      section: section?.value ?? state.section,
+    }));
   }, [setSettings]);
 }
 
