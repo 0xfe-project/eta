@@ -252,8 +252,11 @@ export function createProduct(options: {
   const usage = new UsageStore(db);
   usage.prune();
 
+  let captainChangeObserver: (() => void) | undefined;
+
   /** Say that product state moved, to whoever is looking at it. */
   const changed = (touched?: readonly string[] | "all"): void => {
+    captainChangeObserver?.();
     if (wire === undefined) return;
     for (const target of ["agents", "machines", "projects", "conversations"])
       wire.pushNow(target);
@@ -452,7 +455,10 @@ export function createProduct(options: {
     interactions,
     settings: new SettingStore(db),
     timeline,
-    changed: () => wire?.pushNow("inbox"),
+    changed: () => {
+      wire?.pushNow("inbox");
+      captainChangeObserver?.();
+    },
     warn,
   });
   const captainStore = new CaptainStore(db);
@@ -605,6 +611,7 @@ export function createProduct(options: {
     conversations,
     timeline,
     attachments,
+    inbox,
     memory: captainMemory,
     engine,
     created,
@@ -628,6 +635,7 @@ export function createProduct(options: {
     changed: () => wire?.pushNow("captain"),
   });
   later.captainSupervisor = captainSupervisor;
+  captainChangeObserver = captainSupervisor.tick;
   board.onChange(() => {
     captain.refreshAssignments();
     captainSupervisor.tick();

@@ -55,6 +55,7 @@ daemon 的数据在同一个根里：`~/.eta/daemon/`（见[机器与 daemon](ma
 | 0035               | `github_app`、`github_user`（私钥、client secret、用户令牌密封）、`github_pending`（进行中的 manifest 与授权）、`task_pull`（任务交付的 PR），见 [GitHub](github.md)                                             |
 | 0039               | `task.assignee_agent`（可选的执行 Agent；null 回退到创建者）、`task.base_branch`，见[任务](tasks.md)                                                                                                             |
 | 0041               | Captain：`agent.system_role`、`message.author = 'captain'`、assignment/target、task provenance、prompt/settings 版本、memory pause、operations/notifications/retry，见[Captain](captain.md)                      |
+| 0042               | Captain review 队列：失败、卡住、Inbox 与 assignment 的待复核事件，记录去重键、checkpoint、投递消息与 Captain reply，见[Captain](captain.md)                                                                     |
 
 外键的取舍：`message.agent_id`、`interaction`、`usage` 里指向智能体和对话的列**没有**外键，因为这些行是历史，比智能体活得久。
 

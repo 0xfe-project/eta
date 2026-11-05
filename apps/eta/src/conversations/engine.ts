@@ -376,8 +376,11 @@ export class Engine {
   async send(input: {
     conversationId: string;
     text: string;
-    /** Only the host may write a Captain row; the public conversations.send action never sets it. */
-    author?: "user" | "captain" | undefined;
+    /**
+     * Only the host may write a Captain or system row; the public conversations.send action
+     * never sets either.
+     */
+    author?: "user" | "captain" | "system" | undefined;
     /** The Captain agent id when `author` is Captain. */
     agentId?: string | undefined;
     /** The discussion root. Captain assignments keep their own root for an independent budget. */

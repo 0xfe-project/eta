@@ -16,6 +16,7 @@ import type { AttachmentStore } from "../conversations/attachments";
 import type { Engine } from "../conversations/engine";
 import type { ConversationStore } from "../conversations/store";
 import type { Timeline } from "../conversations/timeline";
+import type { Inbox } from "../inbox/inbox";
 import type { MachineStore } from "../machines/store";
 import type { ProjectStore } from "../projects/store";
 import type { TaskBoard } from "../tasks/board";
@@ -24,14 +25,17 @@ import type { TaskRunStore } from "../tasks/runs";
 import type { TaskStore } from "../tasks/store";
 import type { CaptainAudit } from "./audit";
 import type { CaptainMemory } from "./memory";
-import type { CaptainStore } from "./store";
+import type { CaptainReviewRecord, CaptainStore } from "./store";
 import { mkdir } from "node:fs/promises";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/harness";
 import { checkModel } from "../agents/model";
 import { agentHome } from "../agents/store";
 import { isTaskSession, taskOfKey } from "../tasks/session-key";
+import { redactJson, redactText } from "./redact";
 
 const GLOBAL_PROMPT_ID = "global";
+const ACTIVE_MEMBER = new Set(["queued", "working", "stopping"]);
+const ACTIVE_TASK = new Set(["todo", "in_progress"]);
 
 const CAPTAIN_INSTRUCTIONS = [
   "You are El Capitan, eta's global operations agent.",
@@ -50,6 +54,7 @@ export interface CaptainServiceDeps {
   conversations: ConversationStore;
   timeline: Timeline;
   attachments: AttachmentStore;
+  inbox: Inbox;
   memory: CaptainMemory;
   engine: Engine;
   /** A conversation exists now: its wire target has to be published. */
@@ -71,6 +76,7 @@ export interface CaptainOperationRequest {
 
 export class CaptainService {
   readonly #deps: CaptainServiceDeps;
+  #deliveringReviews = false;
 
   constructor(deps: CaptainServiceDeps) {
     this.#deps = deps;
@@ -743,6 +749,186 @@ export class CaptainService {
     }
   }
 
+  /** Find settled assignments and durable operational reviews, then wake Captain when it is idle. */
+  async observeReviews(): Promise<void> {
+    this.#reviewAssignments();
+    this.#reconcileReviews();
+    if (!this.#deliveringReviews) {
+      this.#deliveringReviews = true;
+      try {
+        await this.#deliverReviews();
+      } finally {
+        this.#deliveringReviews = false;
+      }
+    }
+  }
+
+  #reviewAssignments(): void {
+    const captain = this.identity();
+    if (captain === undefined) return;
+    for (const assignment of this.#deps.store.assignments(100)) {
+      if (assignment.status === "cancelled") continue;
+      const conversation = this.#deps.conversations.get(
+        assignment.conversationId,
+      );
+      if (conversation === undefined) continue;
+      const checkpoint = Math.max(
+        this.#deps.store.assignmentCheckpoint(assignment.id),
+        this.#deps.timeline.get(assignment.messageId)?.seq ?? 0,
+      );
+      if (conversation.lastSeq <= checkpoint) continue;
+
+      const memberStatus = this.#deps.timeline.memberStatuses(conversation.id);
+      const targets = assignment.targets.map((target) => target.agentId);
+      if (
+        targets.some((agentId) =>
+          ACTIVE_MEMBER.has(memberStatus.get(agentId) ?? ""),
+        )
+      )
+        continue;
+      const waiting = targets.some(
+        (agentId) => memberStatus.get(agentId) === "waiting_for_input",
+      );
+      const tasks = this.#deps.board
+        .list()
+        .filter((task) => task.captainAssignmentId === assignment.id);
+      const taskBusy = tasks.some(
+        (task) =>
+          ACTIVE_TASK.has(task.status) ||
+          this.#deps.runs.openOf(task.id).length > 0,
+      );
+      if (taskBusy) continue;
+      const taskBlocked = tasks.some((task) => task.status === "blocked");
+      const scopes = new Set([
+        conversation.id,
+        ...tasks.map((task) => `task:${task.id}`),
+      ]);
+      const pendingInbox = this.#deps.inbox
+        .list()
+        .filter(
+          (item) =>
+            item.status === "pending" &&
+            item.conversationId !== null &&
+            scopes.has(item.conversationId),
+        );
+      const blocked = waiting || taskBlocked || pendingInbox.length > 0;
+      const throughSeq = conversation.lastSeq;
+      this.#deps.store.createReview({
+        kind: blocked ? "assignment_blocked" : "assignment_settled",
+        dedupeKey: `assignment:${assignment.id}:${throughSeq}`,
+        conversationId: conversation.id,
+        assignmentId: assignment.id,
+        checkpointSeq: throughSeq,
+        body: blocked
+          ? `Assignment ${assignment.id} in “${conversation.name}” has settled with a block: ${waiting ? "an agent is waiting for input" : "a task or Inbox item needs a decision"}.`
+          : `Assignment ${assignment.id} in “${conversation.name}” has new activity and all assigned agents are idle.`,
+        data: {
+          assignmentId: assignment.id,
+          conversationId: conversation.id,
+          fromSeq: checkpoint,
+          throughSeq,
+          targets,
+          memberStatuses: Object.fromEntries(
+            targets.map((agentId) => [
+              agentId,
+              memberStatus.get(agentId) ?? "idle",
+            ]),
+          ),
+          taskIds: tasks.map((task) => task.id),
+          inboxIds: pendingInbox.map((item) => item.id),
+        },
+      });
+    }
+  }
+
+  #reconcileReviews(): void {
+    for (const review of this.#deps.store.runningReviews()) {
+      if (review.replyId === null) {
+        this.#failReview(review, "the review message did not start Captain");
+        continue;
+      }
+      const reply = this.#deps.timeline.get(review.replyId);
+      if (reply === undefined) {
+        this.#failReview(review, "the Captain reply disappeared");
+      } else if (reply.status === "done") {
+        this.#deps.store.finishReview(review.id, "completed");
+      } else if (reply.status === "failed" || reply.status === "stopped") {
+        this.#failReview(
+          review,
+          reply.text || `Captain review ended as ${reply.status}`,
+        );
+      }
+    }
+  }
+
+  #failReview(review: CaptainReviewRecord, error: string): void {
+    const message = redactText(error);
+    this.#deps.store.finishReview(review.id, "failed", message);
+    this.#deps.store.addNotificationOnce({
+      key: `review-failed:${review.id}`,
+      kind: "review_failed",
+      body: `Captain could not complete review ${review.kind}: ${message}`,
+      data: {
+        reviewId: review.id,
+        kind: review.kind,
+        taskId: review.taskId,
+        assignmentId: review.assignmentId,
+      },
+    });
+  }
+
+  async #deliverReviews(): Promise<void> {
+    const pending = this.#deps.store.pendingReviews(20);
+    if (pending.length === 0) return;
+    const { identity } = await this.ensure();
+    const director = await this.direct();
+    const captainStatus = this.#deps.timeline
+      .memberStatuses(director.conversationId)
+      .get(identity.agentId);
+    const anywhere = this.#deps.timeline.agentStatuses().get(identity.agentId);
+    if (
+      anywhere === "working" ||
+      anywhere === "waiting_for_input" ||
+      captainStatus === "queued" ||
+      captainStatus === "working" ||
+      captainStatus === "waiting_for_input" ||
+      captainStatus === "stopping"
+    )
+      return;
+
+    const ids = pending.map((review) => review.id);
+    try {
+      const sent = await this.#deps.engine.send({
+        conversationId: director.conversationId,
+        text: reviewPrompt(pending),
+        author: "system",
+        mentions: [],
+        mode: "queue",
+        dispatched: ({ message, replies }) => {
+          const reply = replies.find(
+            (candidate) => candidate.agentId === identity.agentId,
+          );
+          if (reply !== undefined)
+            this.#deps.store.markReviewsRunning(ids, message.id, reply.id);
+        },
+      });
+      const reply = sent.replies.find(
+        (candidate) => candidate.agentId === identity.agentId,
+      );
+      if (reply === undefined) {
+        for (const review of pending)
+          this.#failReview(review, "the review woke no Captain reply");
+      } else {
+        this.#deps.store.markReviewsRunning(ids, sent.message.id, reply.id);
+      }
+      this.#deps.changed([director.conversationId]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      for (const review of pending) this.#failReview(review, message);
+      this.#deps.changed();
+    }
+  }
+
   #viewOf(agent: AgentRecord): CaptainIdentityView {
     const primary = this.#deps.machines.primary();
     const home = agentHome(this.#deps.dataDir, agent.id);
@@ -763,6 +949,21 @@ export class CaptainService {
       createdAt: agent.createdAt,
     };
   }
+}
+
+function reviewPrompt(reviews: readonly CaptainReviewRecord[]): string {
+  return [
+    "<captain-review>",
+    "The platform Supervisor queued the following observations. This turn was not started by the user.",
+    "Inspect the referenced conversations, tasks, runs and Inbox before deciding what happened.",
+    "Idle does not mean success. Verify completion, report blocked work, and silently ignore anything that is still running.",
+    "",
+    ...reviews.map(
+      (review, index) =>
+        `${index + 1}. [${review.kind}] ${redactText(review.body)}\n${redactJson(review.data)}`,
+    ),
+    "</captain-review>",
+  ].join("\n");
 }
 
 function lineDiff(before: string, after: string): string {

@@ -72,6 +72,44 @@ interface NotificationRow {
   created_at: number;
 }
 
+export interface CaptainReviewRecord {
+  id: string;
+  dedupeKey: string;
+  kind: string;
+  conversationId: string | null;
+  taskId: string | null;
+  assignmentId: string | null;
+  checkpointSeq: number;
+  body: string;
+  data: Record<string, unknown>;
+  status: "pending" | "running" | "completed" | "failed";
+  messageId: string | null;
+  replyId: string | null;
+  error: string | null;
+  createdAt: number;
+  updatedAt: number;
+  deliveredAt: number | null;
+}
+
+interface ReviewRow {
+  id: string;
+  dedupe_key: string;
+  kind: string;
+  conversation_id: string | null;
+  task_id: string | null;
+  assignment_id: string | null;
+  checkpoint_seq: number;
+  body: string;
+  data: string;
+  status: CaptainReviewRecord["status"];
+  message_id: string | null;
+  reply_id: string | null;
+  error: string | null;
+  created_at: number;
+  updated_at: number;
+  delivered_at: number | null;
+}
+
 interface PauseRow {
   scope_type: "conversation" | "task";
   scope_id: string;
@@ -142,6 +180,25 @@ const notificationOf = (row: NotificationRow): CaptainNotificationView => ({
   data: jsonObject(row.data),
   readAt: row.read_at,
   createdAt: row.created_at,
+});
+
+const reviewOf = (row: ReviewRow): CaptainReviewRecord => ({
+  id: row.id,
+  dedupeKey: row.dedupe_key,
+  kind: row.kind,
+  conversationId: row.conversation_id,
+  taskId: row.task_id,
+  assignmentId: row.assignment_id,
+  checkpointSeq: row.checkpoint_seq,
+  body: row.body,
+  data: jsonObject(row.data),
+  status: row.status,
+  messageId: row.message_id,
+  replyId: row.reply_id,
+  error: row.error,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+  deliveredAt: row.delivered_at,
 });
 
 const pauseOf = (row: PauseRow): CaptainMemoryPauseView => ({
@@ -647,6 +704,126 @@ export class CaptainStore {
         )
         .run(Date.now(), id).changes > 0
     );
+  }
+
+  /** Keep one observation for Captain. A repeated scan with the same identity changes nothing. */
+  createReview(input: {
+    kind: string;
+    dedupeKey: string;
+    conversationId?: string | null;
+    taskId?: string | null;
+    assignmentId?: string | null;
+    checkpointSeq?: number;
+    body: string;
+    data?: Record<string, unknown>;
+    now?: number;
+  }): CaptainReviewRecord {
+    const id = crypto.randomUUID();
+    const now = input.now ?? Date.now();
+    this.#db
+      .query(
+        `INSERT INTO captain_review
+           (id, dedupe_key, kind, conversation_id, task_id, assignment_id, checkpoint_seq,
+            body, data, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+         ON CONFLICT(dedupe_key) DO NOTHING`,
+      )
+      .run(
+        id,
+        input.dedupeKey,
+        input.kind,
+        input.conversationId ?? null,
+        input.taskId ?? null,
+        input.assignmentId ?? null,
+        input.checkpointSeq ?? 0,
+        input.body,
+        JSON.stringify(input.data ?? {}),
+        now,
+        now,
+      );
+    return this.reviewByDedupe(input.dedupeKey)!;
+  }
+
+  reviewByDedupe(dedupeKey: string): CaptainReviewRecord | undefined {
+    const row = this.#db
+      .query<ReviewRow, [string]>(
+        "SELECT * FROM captain_review WHERE dedupe_key = ?",
+      )
+      .get(dedupeKey);
+    return row === null ? undefined : reviewOf(row);
+  }
+
+  reviews(limit = 100): CaptainReviewRecord[] {
+    return this.#db
+      .query<ReviewRow, [number]>(
+        "SELECT * FROM captain_review ORDER BY created_at DESC, rowid DESC LIMIT ?",
+      )
+      .all(limit)
+      .map(reviewOf);
+  }
+
+  pendingReviews(limit = 20): CaptainReviewRecord[] {
+    return this.#db
+      .query<ReviewRow, [number]>(
+        `SELECT * FROM captain_review WHERE status = 'pending'
+          ORDER BY created_at, rowid LIMIT ?`,
+      )
+      .all(limit)
+      .map(reviewOf);
+  }
+
+  runningReviews(): CaptainReviewRecord[] {
+    return this.#db
+      .query<ReviewRow, []>(
+        "SELECT * FROM captain_review WHERE status = 'running' ORDER BY created_at, rowid",
+      )
+      .all()
+      .map(reviewOf);
+  }
+
+  /** The highest conversation sequence already reviewed for an assignment. */
+  assignmentCheckpoint(assignmentId: string): number {
+    return (
+      this.#db
+        .query<{ seq: number }, [string]>(
+          `SELECT COALESCE(MAX(checkpoint_seq), 0) AS seq
+             FROM captain_review WHERE assignment_id = ?`,
+        )
+        .get(assignmentId)?.seq ?? 0
+    );
+  }
+
+  markReviewsRunning(
+    ids: readonly string[],
+    messageId: string,
+    replyId: string,
+  ): void {
+    const now = Date.now();
+    this.#db.transaction(() => {
+      for (const id of ids) {
+        this.#db
+          .query(
+            `UPDATE captain_review
+                SET status = 'running', message_id = ?, reply_id = ?, updated_at = ?,
+                    delivered_at = ?, error = NULL
+              WHERE id = ? AND status = 'pending'`,
+          )
+          .run(messageId, replyId, now, now, id);
+      }
+    })();
+  }
+
+  finishReview(
+    id: string,
+    status: "completed" | "failed",
+    error: string | null = null,
+  ): void {
+    this.#db
+      .query(
+        `UPDATE captain_review SET status = ?, error = ?, updated_at = ?
+          WHERE id = ? AND status IN ('pending', 'running')`,
+      )
+      .run(status, error, Date.now(), id);
   }
 
   setMemoryPaused(input: {

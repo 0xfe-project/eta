@@ -23,7 +23,9 @@ export interface CaptainSupervisorDeps {
 
 const MINUTE = 60_000;
 const TICK = MINUTE;
-const WORKABLE = new Set(["todo", "in_progress", "in_review", "blocked"]);
+const ACTIVE = new Set(["todo", "in_progress"]);
+const NON_RETRYABLE =
+  /api[_ -]?key|authentication|authorization|unauthorized|forbidden|permission|credential|oauth|login|401|403|invalid[_ -]?config|configuration|not configured|model_unavailable|model (?:not found|unavailable)|context[_ -]?length|quota|billing|insufficient (?:credit|quota)/i;
 
 /** Reserved signal from a future proactive source. No source is enabled in this release. */
 interface CaptainWakeEvent {
@@ -86,6 +88,7 @@ export class CaptainSupervisor {
       this.#handleFailures(settings.retryLimit);
       this.#handleStuck(settings.stuckMinutes);
       this.#handleInbox(settings.inboxMinutes);
+      void this.#deps.captain.observeReviews();
       const now = this.#now();
       if (now - this.#lastPatrol >= settings.patrolMinutes * MINUTE) {
         this.#lastPatrol = now;
@@ -147,7 +150,8 @@ export class CaptainSupervisor {
       const latestFailure = latest;
       if (retry.lastRunId === latestFailure.id) continue;
       const attempts = retry.attempts + 1;
-      const stopped = attempts >= limit;
+      const nonRetryable = nonRetryableTaskError(latestFailure.error);
+      const stopped = nonRetryable || attempts >= limit;
       this.#deps.store.recordRetry(
         task.id,
         latestFailure.id,
@@ -165,15 +169,32 @@ export class CaptainSupervisor {
         },
       });
       if (stopped) {
+        this.#deps.store.createReview({
+          kind: nonRetryable ? "task_failure_non_retryable" : "task_failure",
+          dedupeKey: `task-failure:${task.id}:${latestFailure.id}`,
+          taskId: task.id,
+          body: `Task #${task.number} “${task.title}” failed ${attempts} time(s)${nonRetryable ? " with a non-retryable error" : ""}: ${latestFailure.error ?? "no error text"}.`,
+          data: {
+            taskId: task.id,
+            taskNumber: task.number,
+            runId: latestFailure.id,
+            attempts,
+            nonRetryable,
+            error: latestFailure.error,
+          },
+        });
         this.#deps.store.addNotificationOnce({
           key: `retry-stop:${task.id}:${latestFailure.id}`,
           kind: "task_retry_stopped",
-          body: `Task #${task.number} failed ${attempts} times; automatic retries stopped.`,
+          body: nonRetryable
+            ? `Task #${task.number} failed with a non-retryable error; automatic retries stopped.`
+            : `Task #${task.number} failed ${attempts} times; automatic retries stopped.`,
           data: {
             taskId: task.id,
             runId: latestFailure.id,
             attempts,
             error: latestFailure.error,
+            nonRetryable,
           },
         });
         continue;
@@ -191,13 +212,44 @@ export class CaptainSupervisor {
   #handleStuck(minutes: number): void {
     const now = this.#now();
     for (const task of this.#deps.board.list()) {
-      if (!WORKABLE.has(task.status)) continue;
+      if (task.status === "blocked") {
+        this.#deps.store.createReview({
+          kind: "task_blocked",
+          dedupeKey: `task-blocked:${task.id}:${task.updatedAt}`,
+          taskId: task.id,
+          body: `Task #${task.number} “${task.title}” is blocked.`,
+          data: { taskId: task.id, updatedAt: task.updatedAt },
+        });
+        continue;
+      }
+      if (!ACTIVE.has(task.status)) continue;
+      const open = this.#deps.runs.openOf(task.id);
+      if (open.length > 0) {
+        const oldest = open
+          .map((run) => run.startedAt ?? run.createdAt)
+          .reduce((left, right) => Math.min(left, right), now);
+        if (now - oldest < minutes * MINUTE) continue;
+        const ids = open.map((run) => run.id).sort();
+        this.#deps.store.createReview({
+          kind: "task_run_stuck",
+          dedupeKey: `task-run-stuck:${task.id}:${ids.join(",")}:${oldest}`,
+          taskId: task.id,
+          body: `Task #${task.number} “${task.title}” has an open run with no progress for ${minutes} minutes.`,
+          data: {
+            taskId: task.id,
+            runIds: ids,
+            startedAt: oldest,
+            updatedAt: task.updatedAt,
+          },
+        });
+        continue;
+      }
       if (now - task.updatedAt < minutes * MINUTE) continue;
-      if (this.#deps.runs.openOf(task.id).length > 0) continue;
-      this.#deps.store.addNotificationOnce({
-        key: `stuck:${task.id}:${task.updatedAt}`,
-        kind: "task_stuck",
-        body: `Task #${task.number} “${task.title}” has had no activity for ${minutes} minutes.`,
+      this.#deps.store.createReview({
+        kind: "task_stalled",
+        dedupeKey: `task-stalled:${task.id}:${task.updatedAt}`,
+        taskId: task.id,
+        body: `Task #${task.number} “${task.title}” stopped without an open run and has had no activity for ${minutes} minutes.`,
         data: { taskId: task.id, updatedAt: task.updatedAt },
       });
     }
@@ -208,6 +260,18 @@ export class CaptainSupervisor {
     for (const item of this.#deps.inbox.list()) {
       if (item.status !== "pending") continue;
       if (now - item.createdAt < minutes * MINUTE) continue;
+      this.#deps.store.createReview({
+        kind: "inbox_pending",
+        dedupeKey: `inbox:${item.id}`,
+        conversationId: item.conversationId,
+        body: `An Inbox question has waited more than ${minutes} minutes: ${item.prompt}`,
+        data: {
+          interactionId: item.id,
+          sessionId: item.sessionId,
+          agentId: item.agentId,
+          conversationId: item.conversationId,
+        },
+      });
       this.#deps.store.addNotificationOnce({
         key: `inbox:${item.id}`,
         kind: "inbox_pending",
@@ -216,4 +280,8 @@ export class CaptainSupervisor {
       });
     }
   }
+}
+
+function nonRetryableTaskError(error: string | null): boolean {
+  return NON_RETRYABLE.test(error ?? "");
 }

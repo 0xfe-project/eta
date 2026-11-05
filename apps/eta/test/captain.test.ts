@@ -9,7 +9,7 @@
 import type { CaptainIdentityView } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
 import { until } from "./support/client";
-import { call, say, scriptedModels } from "./support/models";
+import { call, HANG, say, scriptedModels } from "./support/models";
 import { world } from "./support/world";
 
 const options = { captain: true, tasks: { runs: false } } as const;
@@ -509,6 +509,10 @@ describe("captain controls", () => {
         .run(crypto.randomUUID(), task.id, primary.id, Date.now() + attempt);
       w.host.product.captainSupervisor.tick();
       expect(runs.retryState(task.id).attempts).toBe(attempt);
+      const failures = w.host.product.captain.store
+        .reviews()
+        .filter((review) => review.kind === "task_failure");
+      expect(failures).toHaveLength(attempt < 5 ? 0 : 1);
     }
     expect(runs.retryState(task.id).stoppedAt).not.toBeNull();
     expect(
@@ -516,6 +520,55 @@ describe("captain controls", () => {
         .notifications()
         .some((notification) => notification.kind === "task_retry_stopped"),
     ).toBe(true);
+  });
+
+  it("asks Captain immediately for a non-retryable task failure", async () => {
+    const { w } = await captainWorld();
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id], "credentials");
+    const task = w.host.product.board.create(
+      {
+        title: "Needs a key",
+        conversationId: group.id,
+        workspace: "local",
+        status: "todo",
+      },
+      { kind: "agent", agentId: ada.id },
+    );
+    const primary = w.host.db
+      .query<{ id: string }, []>(
+        "SELECT id FROM machine WHERE kind = 'primary'",
+      )
+      .get()!;
+    w.host.db
+      .query(
+        `INSERT INTO task_run
+           (id, task_id, machine_id, status, error, created_at, started_at, finished_at)
+         VALUES (?, ?, ?, 'failed', ?, ?, ?, ?)`,
+      )
+      .run(
+        crypto.randomUUID(),
+        task.id,
+        primary.id,
+        "OpenAI API error (401): api_key_revoked",
+        Date.now(),
+        Date.now(),
+        Date.now(),
+      );
+
+    w.host.product.captainSupervisor.tick();
+    const review = w.host.product.captain.store
+      .reviews()
+      .find((item) => item.taskId === task.id)!;
+    expect(review).toMatchObject({
+      kind: "task_failure_non_retryable",
+      status: expect.stringMatching(/pending|running|completed/),
+    });
+    expect(
+      w.host.product.captain.store.retryState(task.id).stoppedAt,
+    ).not.toBeNull();
+    expect(w.host.product.captain.store.retryState(task.id).attempts).toBe(1);
   });
 
   it("marks an inactive task stuck and reserves proactive wake events", async () => {
@@ -538,11 +591,10 @@ describe("captain controls", () => {
     w.host.product.captainSupervisor.tick();
     expect(
       w.host.product.captain.store
-        .notifications()
+        .reviews()
         .some(
-          (notification) =>
-            notification.kind === "task_stuck" &&
-            notification.data.taskId === task.id,
+          (review) =>
+            review.kind === "task_stalled" && review.taskId === task.id,
         ),
     ).toBe(true);
 
@@ -554,5 +606,158 @@ describe("captain controls", () => {
     off();
     w.host.product.captainSupervisor.wake({ kind: "ignored" });
     expect(events).toEqual(["reserved"]);
+  });
+
+  it("distinguishes a stopped task from a run with no progress", async () => {
+    const { w } = await captainWorld();
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id], "stuck-run");
+    const task = w.host.product.board.create(
+      {
+        title: "Hung run",
+        conversationId: group.id,
+        workspace: "local",
+        status: "in_progress",
+      },
+      { kind: "agent", agentId: ada.id },
+    );
+    const primary = w.host.db
+      .query<{ id: string }, []>(
+        "SELECT id FROM machine WHERE kind = 'primary'",
+      )
+      .get()!;
+    const started = Date.now() - 31 * 60_000;
+    w.host.db
+      .query(
+        `INSERT INTO task_run
+           (id, task_id, machine_id, status, created_at, started_at)
+         VALUES (?, ?, ?, 'running', ?, ?)`,
+      )
+      .run(crypto.randomUUID(), task.id, primary.id, started, started);
+    w.host.db
+      .query("UPDATE task SET updated_at = ? WHERE id = ?")
+      .run(started, task.id);
+
+    w.host.product.captainSupervisor.tick();
+    expect(
+      w.host.product.captain.store
+        .reviews()
+        .some(
+          (review) =>
+            review.kind === "task_run_stuck" && review.taskId === task.id,
+        ),
+    ).toBe(true);
+  });
+
+  it("wakes Captain once when an assignment settles without a task", async () => {
+    const { models } = scriptedModels(() => say("Verified."));
+    const w = await world({ ...options, models });
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id], "settled");
+    await w.watch(group.id);
+    const assigned = await w.host.product.captain.assign({
+      conversationId: group.id,
+      text: "Ada, inspect it and report.",
+      agentIds: [ada.id],
+    });
+    await w.settled(group.id, assigned.replyIds[0]!);
+    const direct = await w.host.product.captain.direct();
+    await w.watch(direct.conversationId);
+
+    w.host.product.captainSupervisor.tick();
+    await until(() =>
+      w
+        .rows(direct.conversationId)
+        .some(
+          (row) =>
+            row.author === "system" && row.text.includes("<captain-review>"),
+        ),
+    );
+    w.host.product.captainSupervisor.tick();
+    expect(
+      w.host.product.captain.store
+        .reviews()
+        .filter((review) => review.assignmentId === assigned.assignment.id),
+    ).toHaveLength(1);
+  });
+
+  it("waits while Captain is busy and then delivers a batched review", async () => {
+    const { models } = scriptedModels((request) =>
+      request.index === 0 ? HANG : say("Reviewed."),
+    );
+    const w = await world({ ...options, models });
+    const direct = await w.host.product.captain.direct();
+    await w.watch(direct.conversationId);
+    const sent = await w.send(direct.conversationId, "stay busy");
+    await until(
+      () =>
+        w.row(direct.conversationId, sent.replies[0]!.id)?.status === "working",
+    );
+
+    const store = w.host.product.captain.store;
+    const first = store.createReview({
+      kind: "task_stalled",
+      dedupeKey: "test:batch:1",
+      body: "First review.",
+    });
+    const second = store.createReview({
+      kind: "task_run_stuck",
+      dedupeKey: "test:batch:2",
+      body: "Second review.",
+    });
+    await w.host.product.captain.observeReviews();
+    expect(
+      w.rows(direct.conversationId).some((row) => row.author === "system"),
+    ).toBe(false);
+
+    w.host.product.engine.stopAgent(direct.agentId);
+    await w.settled(direct.conversationId, sent.replies[0]!.id);
+    await until(() =>
+      w
+        .rows(direct.conversationId)
+        .some(
+          (row) =>
+            row.author === "system" && row.text.includes("<captain-review>"),
+        ),
+    );
+    const reviews = store.reviews();
+    const batch = reviews.filter(
+      (review) => review.id === first.id || review.id === second.id,
+    );
+    expect(batch).toHaveLength(2);
+    expect(new Set(batch.map((review) => review.messageId)).size).toBe(1);
+    expect(batch[0]!.messageId).not.toBeNull();
+  });
+
+  it("notifies the user when a Captain review run cannot complete", async () => {
+    const { models } = scriptedModels(() => HANG);
+    const w = await world({ ...options, models });
+    const direct = await w.host.product.captain.direct();
+    await w.watch(direct.conversationId);
+    const review = w.host.product.captain.store.createReview({
+      kind: "task_stalled",
+      dedupeKey: "test:review-failure",
+      body: "Review that will fail.",
+    });
+
+    await w.host.product.captain.observeReviews();
+    await until(
+      () =>
+        w.host.product.captain.store
+          .reviews()
+          .find((item) => item.id === review.id)?.status === "running",
+    );
+    w.host.product.engine.stopAgent(direct.agentId);
+    await until(() =>
+      w.host.product.captain.store
+        .notifications()
+        .some(
+          (notification) =>
+            notification.kind === "review_failed" &&
+            notification.data.reviewId === review.id,
+        ),
+    );
   });
 });
