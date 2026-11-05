@@ -16,6 +16,7 @@ function hello(name) {
     cwd: process.cwd(),
     root: process.env.PLUGIN_ROOT,
     data: process.env.PLUGIN_DATA,
+    pid: process.pid,
     // Proves the server got the key without saying what it is.
     keySha256: createHash("sha256").update(key).digest("hex"),
   };

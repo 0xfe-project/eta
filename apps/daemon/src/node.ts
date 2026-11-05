@@ -32,7 +32,7 @@ import type { SessionMeta, SessionsService, Socket } from "@eta/server";
 import type { Peer } from "./link/peer";
 import type { ActivePlugin } from "./plugin-launch";
 import { Buffer } from "node:buffer";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { homedir, hostname, platform } from "node:os";
 import { isAbsolute, join } from "node:path";
@@ -45,6 +45,7 @@ import {
   FileSessionStore,
   formatModelId,
   redactionMiddleware,
+  redactor,
   renderSkillsBlock,
   SessionManager,
   sessionsPlugin,
@@ -56,6 +57,7 @@ import { GitHubKeeper } from "./github";
 import { ModelCatalog, remoteModels } from "./models";
 import { PluginStore } from "./plugin-files";
 import { runtimeExtras } from "./plugin-launch";
+import { pluginPlatformGroup } from "./plugin-mcp";
 import { loadPlugin } from "./plugin-package";
 import { Reports } from "./reports";
 import { lastSeq, runAndWait } from "./run";
@@ -203,6 +205,28 @@ export class DaemonNode {
           runtime: meta.runtime,
           warn,
         }),
+      // The briefing, and with it the realm: a session here works on this machine's files, with
+      // `$`, `search` and `view`, and its plugins' servers run here. There is no config to name.
+      platformFor: (meta) => ({
+        cwd: meta.cwd,
+        home,
+        sessionDir: join(options.dataDir, "sessions", meta.id),
+        memoryTarget: join(meta.cwd, ".eta", "MEMORY.md"),
+        memoryExists: existsSync(join(meta.cwd, ".eta", "MEMORY.md")),
+      }),
+      memoryFor: () => ({ home }),
+      platformGroupsFor: async (meta, sessionDir) => {
+        const group = await pluginPlatformGroup(
+          this.#openingOf(meta)?.plugins ?? [],
+          {
+            dataDir: options.dataDir,
+            sessionDir,
+            clean: redactor(() => this.#openingOf(meta)?.redact ?? []),
+            warn,
+          },
+        );
+        return group === undefined ? [] : [group];
+      },
       toolMiddleware: ({ meta }) => [
         redactionMiddleware(() => this.#openingOf(meta)?.redact ?? []),
       ],
@@ -216,8 +240,8 @@ export class DaemonNode {
         const { meta } = input;
         const opening = this.#openingOf(meta);
         if (opening === undefined) return [];
-        // The product's tools are the primary's. (MCP servers and akhook rules started here
-        // until they moved to TOBEREFR; see packages/TOBEREFR/TODO.md.)
+        // The product's tools are the primary's. (akhook rules started here until they moved to
+        // TOBEREFR; see packages/TOBEREFR/TODO.md.)
         return proxyTools({
           session: meta.id,
           specs: opening.tools,

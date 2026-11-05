@@ -15,10 +15,15 @@ import type {
   PluginView,
   SessionMcpServer,
 } from "@eta/client-contracts";
+import type { Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import type { World } from "./support/world";
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { join } from "node:path";
+import process from "node:process";
 import { createRuntimeRegistry } from "@botiverse/oar";
 import { scriptedRuntime } from "@botiverse/oar/testing";
 import { createOarRuntimes } from "@eta/runtime-oar";
@@ -429,7 +434,7 @@ describe("an upgrade that breaks the configuration", () => {
 });
 
 describe("a session on eta's own loop", () => {
-  it("has the plugin's skill, a file it can read, and no MCP server", async () => {
+  it("has the plugin's skill and a file it can read, and no secret in its prompt", async () => {
     const { models, requests } = scriptedModels(() => say("ok"));
     const w = await installed({ models });
     await configure(w, fullConfig);
@@ -621,6 +626,350 @@ await eta.platform.get_plugin_config({ plugin: "${NAME}", fields: ["team", "api_
     expect(told).toContain("ops");
     expect(told).toContain("Not readable");
     expect(told).not.toContain(API_KEY);
+  });
+});
+
+/** What a script's call of `say_hello` answered. */
+interface Greeting {
+  greeting: string;
+  max: string;
+  cwd: string;
+  root: string;
+  data: string;
+  pid: number;
+  keySha256: string;
+}
+
+/** The model that runs `scripts` in order, one per message, and hands back what each returned. */
+function scripted(...scripts: string[]) {
+  const results: string[] = [];
+  let next = 0;
+  const made = scriptedModels((request) => {
+    if (request.lastRole === "toolResult") {
+      results.push(request.last);
+      return say("done");
+    }
+    const script = scripts[next++];
+    return script === undefined
+      ? say("nothing to run")
+      : call("esmrun", { script });
+  });
+  return { ...made, results };
+}
+
+const SAY_HELLO = `import eta from "eta";
+await eta.platform.mcp.hello_plugin_hello.say_hello({ name: "Ada" })`;
+
+const greetingOf = (result: string): Greeting =>
+  JSON.parse(result.slice(0, result.indexOf("\n\n"))) as Greeting;
+
+const alive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** A remote MCP server on this machine that wants `Authorization: <key>`, or anyone when absent. */
+async function remoteServer(key?: string): Promise<{
+  url: string;
+  auth: (string | undefined)[];
+  close: () => void;
+}> {
+  const auth: (string | undefined)[] = [];
+  const server: Server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => (body += String(chunk)));
+    request.on("end", () => {
+      auth.push(request.headers.authorization);
+      if (key !== undefined && request.headers.authorization !== key) {
+        response.writeHead(401);
+        response.end();
+        return;
+      }
+      if (request.method !== "POST") {
+        response.writeHead(405);
+        response.end();
+        return;
+      }
+      const { id, method, params } = JSON.parse(body) as {
+        id?: number;
+        method: string;
+        params: { protocolVersion?: string; arguments?: { text?: string } };
+      };
+      if (id === undefined) {
+        response.writeHead(202);
+        response.end();
+        return;
+      }
+      const result =
+        method === "initialize"
+          ? {
+              protocolVersion: params.protocolVersion,
+              capabilities: { tools: {} },
+              serverInfo: { name: "echo", version: "1.0.0" },
+            }
+          : method === "tools/list"
+            ? {
+                tools: [
+                  {
+                    name: "shout",
+                    description: "Say it louder.",
+                    inputSchema: { type: "object" },
+                  },
+                ],
+              }
+            : {
+                content: [
+                  {
+                    type: "text",
+                    text: String(params.arguments?.text).toUpperCase(),
+                  },
+                ],
+              };
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ jsonrpc: "2.0", id, result }));
+    });
+  });
+  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+  const { port } = server.address() as AddressInfo;
+  return {
+    url: `http://127.0.0.1:${port}/mcp`,
+    auth,
+    close: () => server.close(),
+  };
+}
+
+/** A plugin with one remote server; `field` is what its header is made from, when it has one. */
+async function installRemote(
+  dataDir: string,
+  url: string,
+  field?: string,
+): Promise<void> {
+  const dir = join(dataDir, "plugins", "echo-plugin");
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, "plugin.json"),
+    JSON.stringify({
+      $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+      name: "echo-plugin",
+      version: "1.0.0",
+      description: "Echoes, from elsewhere.",
+      ...(field === undefined
+        ? {}
+        : {
+            extensions: {
+              "tech.0xfe.eta": {
+                config: {
+                  [field]: {
+                    type: "string",
+                    title: "Token",
+                    required: true,
+                    secret: true,
+                  },
+                },
+                mcp: {
+                  echo: { headers: { Authorization: `Bearer {${field}}` } },
+                },
+              },
+            },
+          }),
+    }),
+  );
+  await writeFile(
+    join(dir, "mcp.json"),
+    JSON.stringify({
+      $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+      mcpServers: { echo: { type: "streamable-http", url } },
+    }),
+  );
+}
+
+describe("mCP on eta's own loop", () => {
+  async function ready(
+    models: Parameters<typeof installed>[0],
+    edit?: (dataDir: string) => Promise<void>,
+  ) {
+    const dataDir = await tempDir();
+    await install(dataDir);
+    await edit?.(dataDir);
+    const w = await world({ ...models, dataDir });
+    w.client.subscribe("plugins");
+    await until(() => views(w).length > 0);
+    await configure(w, fullConfig);
+    await until(() => view(w).state === "ready");
+    const agent = await enable(w, await w.agent("Ada"));
+    return { w, agent, chat: await direct(w, agent) };
+  }
+
+  it("runs a stdio tool from a script, with the configuration in place and out of sight", async () => {
+    const { models, requests, results } = scripted(SAY_HELLO);
+    const { w, chat } = await ready({ models });
+    const data = join(w.host.dataDir, "plugins", "data", NAME);
+    await ask(w, chat, "greet Ada");
+    const got = greetingOf(results[0]!);
+    expect(got.greeting).toBe("Hello Ada from ops");
+    expect(got.max).toBe("3");
+    expect(got.keySha256).toBe(
+      createHash("sha256").update(API_KEY).digest("hex"),
+    );
+    expect(got.root).toBe(join(w.host.dataDir, "plugins", NAME));
+    expect(got.data).toBe(data);
+    expect(readFileSync(join(data, "greetings.log"), "utf8")).toBe("Ada\n");
+    expect(requests.at(-1)!.system).not.toContain(API_KEY);
+    expect(framesHold(w, API_KEY)).toBe(false);
+    expectNowhere(join(w.host.dataDir, "sessions"), [API_KEY]);
+    expectNowhere(join(w.host.dataDir, "plugin-runtime"), [API_KEY]);
+  });
+
+  it("shows the call in the ledger and on the tool's card", async () => {
+    const { models, results } = scripted(SAY_HELLO);
+    const { w, chat } = await ready({ models });
+    const reply = await ask(w, chat, "greet Ada");
+    expect(results[0]).toContain(
+      'eta.platform.mcp.hello_plugin_hello.say_hello {"name":"Ada"}',
+    );
+    expect(JSON.stringify(reply.data)).toContain(
+      '"tool":"mcp.hello_plugin_hello.say_hello"',
+    );
+  });
+
+  it("does not add to the model's tool list", async () => {
+    const { models, requests } = scripted();
+    const { w, chat } = await ready({ models });
+    await ask(w, chat, "hello");
+    const withPlugin = requests.at(-1)!.tools;
+    const bare = await w.agent("Bea");
+    await ask(w, await direct(w, bare), "hello");
+    expect([...withPlugin].sort()).toEqual([...requests.at(-1)!.tools].sort());
+    expect(withPlugin.some((name) => name.includes("say_hello"))).toBe(false);
+  });
+
+  it("gives a server that will not start as an error the script can catch", async () => {
+    const { models, results } = scripted(
+      `import eta from "eta";
+await eta.platform.mcp.hello_plugin_hello
+  .say_hello({ name: "Ada" })
+  .catch((error) => "caught: " + error.message)`,
+      `1 + 1`,
+    );
+    const { w, chat } = await ready({ models }, async (dataDir) => {
+      await writeFile(
+        join(dataDir, "plugins", NAME, "server", "hello-mcp.mjs"),
+        `console.error("the licence ran out"); process.exit(3);`,
+      );
+    });
+    await ask(w, chat, "greet Ada");
+    expect(results[0]).toContain("caught: MCP server hello_plugin_hello");
+    expect(results[0]).toContain("the licence ran out");
+    await ask(w, chat, "still there?");
+    expect(results[1]).toMatch(/^2\n/);
+  });
+
+  it("survives a server that dies between calls, and starts it again", async () => {
+    const { models, results } = scripted(
+      `import eta from "eta";
+const got = JSON.parse(await eta.platform.mcp.hello_plugin_hello.say_hello({ name: "One" }));
+eta.state.pid = got.pid;
+got.pid`,
+      `import eta from "eta";
+await $\`kill -9 \${eta.state.pid}\`;
+await new Promise((done) => setTimeout(done, 100));
+JSON.parse(await eta.platform.mcp.hello_plugin_hello.say_hello({ name: "Two" })).pid`,
+    );
+    const { w, chat } = await ready({ models });
+    await ask(w, chat, "one");
+    await ask(w, chat, "two");
+    const first = Number.parseInt(results[0]!, 10);
+    const second = Number.parseInt(results[1]!, 10);
+    expect(second).toBeGreaterThan(0);
+    expect(second).not.toBe(first);
+  });
+
+  it("stops the server when the session closes", async () => {
+    const { models, results } = scripted(SAY_HELLO);
+    const { w, chat } = await ready({ models });
+    await ask(w, chat, "greet Ada");
+    const { pid } = greetingOf(results[0]!);
+    expect(alive(pid)).toBe(true);
+    const [session] = w.host.server.sessions.openSessions();
+    await w.host.server.sessions.close(session!.meta.id);
+    await until(() => !alive(pid));
+  });
+
+  it("reads its tools on demand, and knows them in the next session's description", async () => {
+    const { models, results } = scripted(
+      `import eta from "eta";
+(await eta.platform.mcp.hello_plugin_hello.$tools()).map((tool) => tool.name)`,
+    );
+    const { w, chat } = await ready({ models });
+    await ask(w, chat, "what can it do?");
+    expect(results[0]).toContain("say_hello");
+    expect(
+      filesUnder(join(w.host.dataDir, "plugin-runtime", "mcp-tools")),
+    ).toHaveLength(1);
+  });
+
+  it("reaches a remote server with the configured header", async () => {
+    const server = await remoteServer("Bearer tok-remoteSentinel");
+    const { models, results } = scripted(`import eta from "eta";
+await eta.platform.mcp.echo_plugin_echo.shout({ text: "quiet" })`);
+    const dataDir = await tempDir();
+    await installRemote(dataDir, server.url, "token");
+    const w = await world({ models, dataDir });
+    w.client.subscribe("plugins");
+    await until(() => views(w).length > 0);
+    await w.client.call("plugins", "configure", {
+      name: "echo-plugin",
+      values: { token: "tok-remoteSentinel" },
+    });
+    await until(() => view(w, "echo-plugin").state === "ready");
+    const { agent: updated } = (await w.client.call("agents", "update", {
+      agentId: (await w.agent("Ada")).id,
+      plugins: ["echo-plugin"],
+    })) as { agent: AgentView };
+    await ask(w, await direct(w, updated), "shout");
+    server.close();
+    expect(results[0]).toMatch(/^QUIET\n/);
+    expect(server.auth).toContain("Bearer tok-remoteSentinel");
+    expectNowhere(join(w.host.dataDir, "sessions"), ["tok-remoteSentinel"]);
+  });
+
+  it("marks a remote server that wants a sign-in as not supported, and tells a script so", async () => {
+    const server = await remoteServer("Bearer only-after-oauth");
+    const { models, results } = scripted(`import eta from "eta";
+await eta.platform.mcp.echo_plugin_echo.shout({ text: "quiet" })`);
+    const dataDir = await tempDir();
+    await installRemote(dataDir, server.url);
+    const w = await world({ models, dataDir });
+    w.client.subscribe("plugins");
+    await until(() => views(w).length > 0);
+    await until(
+      () =>
+        view(w, "echo-plugin").servers[0]?.problem?.includes("OAuth") === true,
+    );
+    const { agent: updated } = (await w.client.call("agents", "update", {
+      agentId: (await w.agent("Ada")).id,
+      plugins: ["echo-plugin"],
+    })) as { agent: AgentView };
+    await ask(w, await direct(w, updated), "shout");
+    server.close();
+    expect(results[0]).toContain("needs an OAuth sign-in");
+  });
+
+  it("leaves a remote server that needs no sign-in alone", async () => {
+    const server = await remoteServer();
+    const dataDir = await tempDir();
+    await installRemote(dataDir, server.url);
+    const w = await world({ dataDir });
+    w.client.subscribe("plugins");
+    await until(() => views(w).length > 0);
+    await until(() => server.auth.length > 0);
+    await recheck(w);
+    server.close();
+    expect(view(w, "echo-plugin").servers[0]?.problem).toBeNull();
   });
 });
 
@@ -868,9 +1217,12 @@ async function callServer(
 }
 
 describe("a session on a daemon's machine", () => {
-  async function remote(runtime: "eta" | "claude") {
+  async function remote(
+    runtime: "eta" | "claude",
+    scriptedAnswers = scriptedModels(() => say("ok")),
+  ) {
     const turns: ScriptedTurn[] = [];
-    const { models, requests } = scriptedModels(() => say("ok"));
+    const { models, requests } = scriptedAnswers;
     const r = await remoteWorld(
       { models },
       {
@@ -916,9 +1268,37 @@ describe("a session on a daemon's machine", () => {
     const skill = inStore(r.daemon.dataDir, "skills", "greet", "SKILL.md");
     expect(statSync(skill).isFile()).toBe(true);
     expect(requests.at(-1)!.system).toContain(skill);
-    // eta's own loop starts no server, so the values have no reason to cross.
-    expect(r.traffic.in.join("").includes(API_KEY)).toBe(true); // redactions
-    expect(r.traffic.in.join("").includes("HELLO_API_KEY")).toBe(false);
+  });
+
+  it("runs a script on that machine, whose tools start the server there", async () => {
+    const answers = scripted(SAY_HELLO);
+    const { r, group, requests } = await remote("eta", answers);
+    await ask(r, group.id, "greet Ada");
+    expect(requests[0]!.tools).toContain("esmrun");
+    const got = greetingOf(answers.results[0]!);
+    expect(got.greeting).toBe("Hello Ada from ops");
+    expect(got.keySha256).toBe(
+      createHash("sha256").update(API_KEY).digest("hex"),
+    );
+    expect(got.root).toBe(inStore(r.daemon.dataDir));
+    expect(got.data).toBe(join(r.daemon.dataDir, "plugins", "data", NAME));
+    expect(answers.results[0]).toContain(
+      "eta.platform.mcp.hello_plugin_hello.say_hello",
+    );
+    // The values are in the daemon's memory, and nowhere on its disk or in what it sent back.
+    expectNowhere(r.daemon.dataDir, [API_KEY, SCRIPT_KEY, PLAIN_KEY]);
+    expect(r.traffic.out.join("").includes(API_KEY)).toBe(false);
+    expect(framesHold(r, API_KEY)).toBe(false);
+  });
+
+  it("stops the server there when the session closes", async () => {
+    const answers = scripted(SAY_HELLO);
+    const { r, group } = await remote("eta", answers);
+    await ask(r, group.id, "greet Ada");
+    const { pid } = greetingOf(answers.results[0]!);
+    expect(alive(pid)).toBe(true);
+    await r.daemon.node.close();
+    await until(() => !alive(pid));
   });
 
   it("gives a runtime there the server, with paths of that machine, and keeps nothing on disk", async () => {

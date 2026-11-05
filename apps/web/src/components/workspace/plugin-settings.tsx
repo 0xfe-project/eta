@@ -307,9 +307,6 @@ function ConfigureDialog({
                   servers={plugin.servers}
                   label={translateText("servers.title")}
                 />
-                <p className="text-xs text-muted-foreground">
-                  {translateText("servers.etaNote")}
-                </p>
               </section>
             ) : null}
           </div>
@@ -500,6 +497,19 @@ function PluginRow({ plugin }: { plugin: PluginView }) {
       </div>
       {plugin.problem === null ? null : (
         <p className="text-xs break-words text-destructive">{plugin.problem}</p>
+      )}
+      {/* In the row: a plugin with nothing to configure has no form to say this in. */}
+      {plugin.servers.flatMap((server) =>
+        server.problem === null
+          ? []
+          : [
+              <p
+                key={server.name}
+                className="text-xs break-words text-destructive"
+              >
+                {server.name}: {server.problem}
+              </p>,
+            ],
       )}
       {skippedBy === undefined ? null : (
         <p className="text-xs text-destructive">

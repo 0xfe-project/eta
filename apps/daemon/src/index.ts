@@ -42,6 +42,7 @@ export {
   serverSupported,
   sessionServerName,
 } from "./plugin-launch";
+export { pluginPlatformGroup } from "./plugin-mcp";
 export {
   loadPlugin,
   PluginError,

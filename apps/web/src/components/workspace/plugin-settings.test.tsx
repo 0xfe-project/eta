@@ -201,6 +201,31 @@ describe("the plugin list", () => {
   });
 });
 
+describe("a server that cannot be used", () => {
+  it("is said in the row, for a plugin with no form to say it in", async () => {
+    host([
+      plugin({
+        state: "ready",
+        fields: [],
+        servers: [
+          {
+            name: "atlassian",
+            transport: "streamable-http",
+            url: "https://mcp.example/v1",
+            env: [],
+            headers: [],
+            problem: "needs an OAuth sign-in, which eta does not support",
+          },
+        ],
+      }),
+    ]);
+    await mount(<PluginSettings />);
+    expect(text()).toContain(
+      "atlassian: needs an OAuth sign-in, which eta does not support",
+    );
+  });
+});
+
 describe("the form", () => {
   it("draws a password box for a secret, and shows what will run", async () => {
     host([plugin()]);
@@ -209,7 +234,7 @@ describe("the form", () => {
     expect(passwordInput()).not.toBeNull();
     expect(text()).toContain("node ${PLUGIN_ROOT}/server.mjs");
     expect(text()).toContain("HELLO_KEY");
-    expect(text()).toContain("自带内核暂不支持 MCP");
+    expect(text()).not.toContain("自带内核");
     expect(text()).toContain("智能体访问");
   });
 

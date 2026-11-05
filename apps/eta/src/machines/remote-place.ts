@@ -165,7 +165,7 @@ export class RemotePlace implements SessionPlace {
             }),
           }),
       tools: this.#tools(conversation.id, agent.id, input.cwd),
-      plugins: await this.#deps.plugins.openOn(link, agent.id, external),
+      plugins: await this.#deps.plugins.openOn(link, agent.id),
       redactions: this.#deps.plugins.redactionsFor(agent.id),
     });
     if (session !== input.existing) input.created(session);

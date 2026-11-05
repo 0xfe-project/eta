@@ -19,6 +19,7 @@ import type {
   PluginView,
   Redaction,
 } from "@eta/client-contracts";
+import type { PlatformGroup } from "@eta/harness";
 import type { RuntimeExtras, SessionMeta } from "@eta/server";
 import type { Database } from "bun:sqlite";
 import type { Buffer } from "node:buffer";
@@ -36,10 +37,13 @@ import {
 } from "@eta/client-contracts/plugin-fields";
 import {
   pluginChunks,
+  pluginPlatformGroup,
   runtimeExtras,
   serversConfig,
   serverSupported,
 } from "@eta/daemon";
+import { needsOAuth } from "@eta/mcp";
+import { redactor } from "@eta/server";
 import { PluginRegistry } from "./registry";
 import { PluginRows } from "./store";
 
@@ -85,6 +89,8 @@ export class Plugins {
   readonly #found = new Map<string, Set<string>>();
   /** The sends in flight, by `machine:hash`. */
   readonly #sending = new Map<string, Promise<void>>();
+  /** The remote servers found to want a sign-in, as `plugin/server`. */
+  #oauth = new Set<string>();
 
   constructor(options: PluginsOptions) {
     this.rows = new PluginRows(options.db, options.key);
@@ -187,18 +193,39 @@ export class Plugins {
     );
   }
 
+  #activePlugins(agentId: string) {
+    return this.active(agentId).map((entry) => ({
+      plugin: entry.plugin!,
+      hash: entry.hash!,
+      config: serversConfig(entry.plugin!, this.rows.values(entry.name)),
+    }));
+  }
+
   /** A session of this machine's on an external runtime: skills to tell it of, servers to attach. */
   async runtimeExtrasFor(meta: SessionMeta): Promise<RuntimeExtras> {
     const { agentId } = meta;
     if (agentId === undefined) return {};
-    return await runtimeExtras(
-      this.active(agentId).map((entry) => ({
-        plugin: entry.plugin!,
-        hash: entry.hash!,
-        config: serversConfig(entry.plugin!, this.rows.values(entry.name)),
-      })),
-      { dataDir: this.#dataDir, runtime: meta.runtime, warn: this.#warn },
-    );
+    return await runtimeExtras(this.#activePlugins(agentId), {
+      dataDir: this.#dataDir,
+      runtime: meta.runtime,
+      warn: this.#warn,
+    });
+  }
+
+  /** A session of this machine's on eta's own loop: its servers, as `eta.platform.mcp`. */
+  async platformGroupsFor(
+    meta: SessionMeta,
+    sessionDir: string,
+  ): Promise<PlatformGroup[]> {
+    const { agentId } = meta;
+    if (agentId === undefined) return [];
+    const group = await pluginPlatformGroup(this.#activePlugins(agentId), {
+      dataDir: this.#dataDir,
+      sessionDir,
+      clean: redactor(() => this.redactionsFor(agentId)),
+      warn: this.#warn,
+    });
+    return group === undefined ? [] : [group];
   }
 
   /**
@@ -232,11 +259,7 @@ export class Plugins {
    * The agent's plugins on a daemon's machine: the files it does not keep yet are sent, and the
    * open says what its servers get. A plugin that cannot be sent is left out and reported.
    */
-  async openOn(
-    link: MachineLink,
-    agentId: string,
-    external: boolean,
-  ): Promise<OpenedPlugin[]> {
+  async openOn(link: MachineLink, agentId: string): Promise<OpenedPlugin[]> {
     const active = this.active(agentId);
     if (active.length === 0) return [];
     const { missing } = await link.machine("pluginHave", {
@@ -255,10 +278,7 @@ export class Plugins {
       opened.push({
         name: entry.name,
         hash: entry.hash!,
-        // Only a runtime starts servers; eta's own loop has no use for the values yet.
-        servers: external
-          ? serversConfig(entry.plugin!, this.rows.values(entry.name))
-          : {},
+        servers: serversConfig(entry.plugin!, this.rows.values(entry.name)),
       });
     }
     return opened;
@@ -332,9 +352,11 @@ export class Plugins {
             : { url: config.url }),
           env: Object.keys(binding?.env ?? {}),
           headers: Object.keys(binding?.headers ?? {}),
-          problem: serverSupported(server)
-            ? null
-            : "legacy HTTP+SSE is not supported",
+          problem: !serverSupported(server)
+            ? "legacy HTTP+SSE is not supported"
+            : this.#oauth.has(`${entry.name}/${server.name}`)
+              ? "needs an OAuth sign-in, which eta does not support"
+              : null,
         };
       }),
       requires,
@@ -384,8 +406,43 @@ export class Plugins {
     return views;
   }
 
+  /**
+   * Ask the remote servers that are given no credentials whether they want a sign-in, so the user
+   * reads that on the settings page before an agent finds it out. Nothing configured is sent. It
+   * runs apart from the check of commands: a slow server should not hold that up.
+   */
+  async #probeServers(): Promise<void> {
+    const found = new Set<string>();
+    await Promise.all(
+      this.registry.entries().flatMap(({ name, plugin }) =>
+        (plugin?.servers ?? []).map(async ({ name: server, config }) => {
+          if (
+            config.type !== "streamable-http" ||
+            Object.keys(plugin?.bindings[server]?.headers ?? {}).length > 0
+          )
+            return;
+          const asks = await needsOAuth({
+            name: server,
+            type: "http",
+            url: config.url,
+            headers: config.headers,
+          });
+          if (asks) found.add(`${name}/${server}`);
+        }),
+      ),
+    );
+    const same =
+      found.size === this.#oauth.size &&
+      [...found].every((key) => this.#oauth.has(key));
+    this.#oauth = found;
+    if (!same) this.#changed();
+  }
+
   /** Read the plugins again and ask every machine that can be asked what it has. */
   async recheck(): Promise<void> {
+    void this.#probeServers().catch((error: unknown) =>
+      this.#warn(`[eta] could not check plugin servers: ${messageOf(error)}`),
+    );
     const commands = [
       ...new Set(
         this.registry

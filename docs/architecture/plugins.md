@@ -70,7 +70,7 @@
 
 | 运行方式            | Skill                                                | MCP                                  |
 | ------------------- | ---------------------------------------------------- | ------------------------------------ |
-| 自带内核            | 目录接到 `skillDirsFor`，进系统提示的 skills 块      | 这一版不启动，界面标明，下一个任务接 |
+| 自带内核            | 目录接到 `skillDirsFor`，进系统提示的 skills 块      | `eta.platform.mcp`，见 [MCP](mcp.md) |
 | Claude Code         | `--plugin-dir` 原生加载一个只含合法 skill 的生成目录 | oar 的 `mcpServers`                  |
 | Codex、OpenCode、Pi | 名字、描述和路径写进系统提示，agent 自己读文件       | oar 的 `mcpServers`                  |
 
@@ -86,7 +86,7 @@ Claude Code 不能直接拿插件目录：`--plugin-dir` 会把它当 Claude 插
 
 会话开在 daemon 上时，`RemotePlace` 先用 `machine.pluginHave` 问它缺哪些内容哈希，再用 `machine.pluginPut` 分块发文件（每批不超过一帧，符号链接跟随，离开插件根的跳过），daemon 校验哈希后才放进 `<dataDir>/plugins/store/<hash>/`。
 
-`machine.open` 带上 `plugins`（哈希和给每个 server 的值）和 `redactions`。这些只在 daemon 内存里，启动 server 时注入，不落盘。自带内核的会话不起 MCP，所以不发 server 的值，但 `redactions` 仍含 secret。
+`machine.open` 带上 `plugins`（哈希和给每个 server 的值）和 `redactions`。这些只在 daemon 内存里，启动 server 时注入，不落盘。自带内核的会话也一样：realm 跑在 daemon 上，server 由它在那台机器上启动。
 
 ## agent 读取配置
 

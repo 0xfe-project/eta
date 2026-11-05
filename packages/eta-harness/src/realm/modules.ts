@@ -1,6 +1,6 @@
 import type { ApprovalStore, AuthorizeRequest } from "./authorize";
 import type { CapabilityMeta } from "./env-file";
-import type { AskRequest, AskResult, Hooks } from "./hooks";
+import type { AskRequest, AskResult, Hooks, PlatformEntry } from "./hooks";
 import type { EnvLayers, Layer } from "./layers";
 import type { MemoryApi, MemorySection } from "./memory";
 import type { Linker, Realm } from "./realm";
@@ -579,12 +579,12 @@ export function mountModules(
               ? hooks.platform()
               : hooks.platform;
           const platform: Record<string, unknown> = {};
-          for (const [name, call] of Object.entries(services)) {
-            platform[name] = realm.binding(
+          for (const [name, entry] of Object.entries(services))
+            platform[name] = platformEntry(
+              realm,
               `eta.platform.${name}`,
-              async (input?: unknown) => realm.own(await call(input ?? {})),
+              entry,
             );
-          }
           etaObject.platform = platform;
         }
 
@@ -700,6 +700,27 @@ export function mountModules(
 }
 
 /** `Linker` speaks in identifiers; `vm.ModuleLinker` hands over the module. */
+/** A platform call as a binding, or a branch as an object whose calls become bindings as they are read. */
+function platformEntry(
+  realm: Realm,
+  path: string,
+  entry: PlatformEntry,
+): unknown {
+  if (typeof entry === "function")
+    return realm.binding(path, async (input?: unknown) =>
+      realm.own(await entry(input ?? {})),
+    );
+  const members = new Map<string, unknown>();
+  return realm.lazy((name) => {
+    if (members.has(name)) return members.get(name);
+    const member = entry.get(name);
+    if (member === undefined) return undefined;
+    const value = platformEntry(realm, `${path}.${name}`, member);
+    members.set(name, value);
+    return value;
+  }, entry.keys);
+}
+
 function asModuleLinker(link: Linker): vm.ModuleLinker {
   return async (specifier, referencing) => {
     const resolved = await link(specifier, referencing.identifier);

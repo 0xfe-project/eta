@@ -31,6 +31,7 @@ export {
   CompactionService,
   type CompactionServiceOptions,
 } from "./compaction-service";
+export { type PlatformGroup, schemaToTs } from "./esm";
 export {
   calculateContextTokens,
   type ContextUsageEstimate,
@@ -98,6 +99,7 @@ export {
 export { dirnameEnvPath, formatSkillInvocation } from "./prompt-blocks";
 export * from "./prompts";
 export { RunPump, type RunPumpOptions } from "./pump";
+export type { PlatformEntry } from "./realm";
 export {
   TaskReminderService,
   type TaskReminderServiceOptions,

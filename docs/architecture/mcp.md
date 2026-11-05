@@ -1,63 +1,57 @@
 # MCP
 
-智能体经 MCP 使用外部工具。库在 `packages/eta-mcp`（`@eta/mcp`，架构取自 pi-mcp-adapter，不依赖任何 harness）；`apps/daemon/src/mcp-host.ts` 的 `McpHost` 把它接到会话上，主 node 和每个 daemon 各用一个，所以 MCP 进程总起在会话所在的那台机器上。
+智能体的 MCP 服务器来自它启用的[插件](plugins.md)的 `mcp.json`，没有别的来源。外部运行时的会话把 server 交给运行时自己启动；自带内核的会话走这里说的路径。
 
-## 会话拿到什么
+客户端在 `packages/eta-mcp`（`@eta/mcp`），不依赖 harness：`McpServers` 是一个会话的全部 server。接进 realm 的部分在 `apps/daemon/src/plugin-mcp.ts`，主 node 和 daemon 共用，所以 server 总是跑在会话所在的机器上。
 
-- **一个 `mcp` 代理工具**（约 200 token）：状态、列出某服务器的工具、搜索、描述、`instructions`、调用、连接。没有任何配置的服务器时，会话一个 MCP 工具都不带。
-- **直接工具**：配置里写 `directTools`（`true` 或工具名列表）的服务器，其工具以 `mcp__<server>__<tool>` 直接出现在工具列表里。定义取自元数据缓存，不连服务器；还没缓存的服务器在会话打开后台预热一次（同一智能体的预热一个接一个），读完把直接工具补进正在运行的会话。
-- 服务器**懒连接**（第一次调用才连，空闲 10 分钟断开），打开会话从不等它们。
+## 只进 realm
 
-## 配置来源
+MCP 工具不进模型的工具列表，脚本这样调用：
 
-后面的盖住前面的同名服务器：
+```js
+import eta from "eta";
+await eta.platform.mcp.hello_plugin_hello.say_hello({ name: "Ada" });
+```
 
-| 来源              | 位置               | 说明                                         |
-| ----------------- | ------------------ | -------------------------------------------- |
-| `~/.eta/mcp.json` | 这台机器的用户目录 | 对这台机器上的所有智能体                     |
-| `.mcp.json`       | 会话工作目录       | 直接加载，不需要批准（它在用户自己的项目里） |
+- server 名是 `<插件>-<server>` 里非单词字符换成 `_`，重名时加序号。工具名不是合法标识符时用方括号：`eta.platform.mcp.oma_context7["resolve-library-id"](input)`。
+- 工具解析成它的 `structuredContent`，没有就是文本。图片等二进制写到会话目录的 `mcp-output/`，文本里带路径。
+- 工具报错、server 崩溃、启动失败都让调用 reject，错误带 `failure` 和 server 的 stderr 结尾。会话和其他 server 不受影响。
+- 工具名在 server 启动前不一定知道，所以 `eta.platform.mcp.<server>` 是按属性读取解析的对象（`Realm.lazy`），调用不需要先列工具。
 
-格式是常见的 `{ "mcpServers": { ... } }`，另有 `lifecycle`（`lazy` / `keep-alive` / `lazy-keep-alive`）、`directTools`、`approveTools`、`auth`（`oauth` / `bearer`）、`includeTools` / `excludeTools` 等，见库的 `McpServerEntry`。会话打开时读一次这些文件；改了之后新开的会话生效。
+每次调用都是 `realm.binding`，所以进 effect ledger，出现在 `esmrun` 的结果和工具卡片里。authorize 的调用点也在这里：host 给 `Hooks.authorize` 后，它会收到 `eta.platform.mcp.<server>.<tool>` 这个名字和输入。现在没有接，不做审批。
 
-元数据缓存、`npx`/`bunx`/`uvx` 的解析结果和超长输出的落盘目录在各机器自己的状态目录的 `mcp/` 下（主 node 是数据目录，daemon 是它自己的）。
+## `esmrun` 描述
 
-## 隔离与共享
+server 的类型写进 `esmrun` 描述里的 d.ts，总量不超过 6000 字符（`DTS_CHARS`）。每个 server 有三档详细程度：工具数量、工具名（最多 40 个）、完整签名。所有 server 从最低一档开始，占用小的先升档，所以一个有几百个工具的 server 不会挤掉小 server 的签名。server 多到放不下时只写还剩几个，脚本用 `Object.keys(eta.platform.mcp)` 列全。
 
-连接按（智能体，服务器名）划分：同一智能体在这台机器上的所有会话共享连接，两个智能体永远不共享。一个智能体在这台机器上的最后一个会话关掉后，它的连接再留一分钟才关，宿主关闭时全部关掉。
+详情按需读取：`eta.platform.mcp.<server>.$tools({ tool? })`。
 
-## 接进会话的钩子
+server 懒启动，第一次开会话时还不知道工具，d.ts 只写 server 名，`$tools()` 才会启动它。读到的列表缓存在 `<dataDir>/plugin-runtime/mcp-tools/`，键是插件内容哈希加 server 名，不含配置值，所以之后的会话不用启动就有签名。缓存只是提示，连接时用实时列表覆盖。列表第一次读到时 `esmrun` 描述会变一次，这一轮的 prompt 缓存失效。
 
-- **审批**：`approveTools`（`true`、工具名或通配、`"destructive"`）命中时，在会话的 ask 通道里问（选项 `allow` / `deny`），也就是收件箱里的一张卡片，不管会话在哪台机器上。
-- **表单（elicitation）**：服务器中途要输入时，扁平表单按字段逐个提问：枚举是选项，布尔是 yes/no，文本和数字是自由输入（可选字段回答 `-` 跳过）。用户拒绝是 `decline`；嵌套、多选、URL 模式的表单取消，并在这次调用的结果里追加一句原因，让模型知道。
-- **akhook**：经代理或直接工具发起的每次调用，都以 `mcp__<server>__<tool>` 和工具参数交给 akhook 的工具调用中间件，所以 `on: tool_call` 的规则（`tools: ["mcp__github__*"]`）、`ask` 规则和审批名单都能命中底层的 MCP 工具；被拦下的调用把规则的话返回给模型，服务器不会收到请求。
+## 生命周期
+
+server 在第一次用到时启动，随会话关闭。
+
+- 进程退出后，下一次调用重新启动。不自动重试失败的调用，工具不一定幂等。
+- 启动失败后 5 秒内不再尝试，同样的错误直接返回，脚本循环调用不会一次起一个进程。
+- 启动上限 90 秒（`npx` 可能在下载），调用上限 5 分钟，收到进度通知时重新计时。
+- 脚本的工具调用被取消时，进行中的 MCP 请求一起取消。
+- 关闭会话时：stdio 依次关 stdin、SIGTERM、SIGKILL；远程 server 发 `DELETE` 结束会话。
+
+stdio server 只继承 `HOME`、`PATH` 等 SDK 默认的几个环境变量，加上配置注入的值，拿不到 host 进程自己的环境。
+
+## secret
+
+server 说的一切（结果、错误、stderr、工具列表）在离开 `McpServers` 之前都过一遍 `clean`，把这个会话不能看到的 secret 换掉，再交给脚本。这比 `redactionMiddleware` 更早：工具结果的中间件只管 `esmrun` 的返回值，而脚本能把值写进 `eta.state` 或文件。缓存到磁盘的工具列表也是清过的。
+
+和其他脱敏一样，这只防意外，见[插件的安全边界](plugins.md#安全边界)。
 
 ## OAuth
 
-远端 HTTP 服务器写 `"auth": "oauth"`。
+不支持。需要登录的远程 server 这样处理：
 
-- **凭据**在主 node 的 `credential` 表（迁移 0033，`integration = 'mcp'`），每个值是 JSON，用数据目录里的 `secret.key` 做 AES-256-GCM 加密，随机 12 字节 IV，存 `iv | tag | 密文`；篡改或换了密钥读不出来，按没登录处理。存的是 `tokens`、`clientInformation`、`discoveryState` 和登录进行中的 `codeVerifier`。
-- **服务器键**是服务器 URL（去掉 fragment）的 SHA-256：与智能体和配置来源无关，所以一次登录对所有智能体、所有机器都有效。
-- 连接时用 connect 模式的 provider（从不自己注册客户端或跳转，缺登录就报“需要登录”），并发刷新同一个 refresh token 合并成一次请求。
-- **登录**：`mcp.login` 返回 `{ pendingId, authorizationUrl }`，浏览器去授权；授权方把浏览器送回 `GET /mcp/oauth/callback?code&state`（免令牌门，见[访问控制](access.md)），宿主按 `state` 找到自己在等的登录并完成，回一页“可以关闭这个标签页”。宿主不在浏览器能回到的地址上（无头、远程）时，用户把授权方最后停在的地址粘贴进 `mcp.completeLogin`。登录完成后，等着这次登录的服务器立刻重连。
-- **重定向地址**是 `<origin>/mcp/oauth/callback`。origin 取启动参数 `--public-url`（或环境变量 `ETA_PUBLIC_URL`），没有就用 web 客户端在 `login` 里报来的 `location.origin`：那一定是用户的浏览器打得开的地址，也是页面本来就信任的地址；两者都没有，登录报错并提示设置 `--public-url`。授权方注册的客户端记着重定向地址，换了地址下次登录会重新注册。
-- **daemon 不存凭据。** 它的 provider 的存取经 `svc` 的 `mcp.credential` 问主 node：`get` / `set` / `delete`，只放行 `tokens`、`clientInformation`、`discoveryState`（不含登录的 `codeVerifier`），键必须是 64 位十六进制（URL 的哈希，所以 daemon 只能碰它知道 URL 的服务器）。daemon 刷新令牌后新的令牌就存在主 node，下一个会话（在哪台机器上）都读得到。登录只发生在主 node：daemon 上需要登录的服务器报“需要登录”，在设置里登录后重连。
+- 主 node 在读插件时向没有配置凭据的远程 server 发一次 `initialize`（不带任何配置值）。回 401 的，设置页和智能体编辑器的 server 列表显示不支持。
+- 脚本调用时也会得到 `needs_oauth` 的错误。配了 header 还回 401 的是 `start_failed`，说明凭据被拒绝。
+- 探测在主 node 上跑。只有 daemon 能访问的 server，主 node 探测不到，只有脚本调用时才知道。
 
-## wire：`mcp` target
-
-`list` 一个 section，每项（`McpServerView`）：`agentId`、`agentName`、`server`、`source`、`transport`（`stdio` | `http` | `sse`）、`lifecycle`、`state`（`connected` | `cached` | `not-connected` | `failed` | `needs-auth` | `disabled`）、`toolCount`、`error`、`auth`（`none` | `signed_in` | `needs_login`）。内容是每个智能体从用户文件得到的服务器，加上正在运行的会话从项目 `.mcp.json` 读到的。目前只列主 node 上的配置；daemon 上项目独有的服务器不在列表里。
-
-| 动作            | 说明                                                                            |
-| --------------- | ------------------------------------------------------------------------------- |
-| `connect`       | `{ agentId, server }`：现在连接，回 `{ ok, message }`                           |
-| `reconnect`     | 同上，先断开并清掉失败记忆                                                      |
-| `login`         | `{ agentId, server, redirectOrigin? }` → `{ pendingId, authorizationUrl }`      |
-| `completeLogin` | `{ pendingId, callbackUrl }`：用重定向 URL 完成登录，`state` 不对时什么都不改变 |
-| `logout`        | `{ agentId, server }`：忘掉这个 URL 的全部凭据（所有智能体都会失去登录）        |
-
-## 界面
-
-设置 → MCP 服务器：按智能体、再按来源分组，每个服务器一行：名字、传输和生命周期、状态、工具数、最近一次错误；OAuth 服务器有登录 / 退出登录。登录在新标签页打开授权方，同时弹出一个可以粘贴重定向 URL 的对话框；回调把服务器登录好后对话框自己关闭。
-
-## 旧实现
-
-`apps/daemon/src/mcp.ts`（每个会话各连各的、一次性读工具列表、表单一律取消、工具名 `server__tool`、引擎要等 `settled`）已删除。工具名变成了代理工具的 `tool` 参数或 `mcp__<server>__<tool>` 的直接工具；会话打开不再等服务器；连接在同一智能体的会话间共享，会话关掉不再杀进程。
+`sse` 传输不支持，和外部运行时一样跳过。

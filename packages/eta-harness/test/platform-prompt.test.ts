@@ -21,6 +21,16 @@ const base = {
 };
 
 describe("the platform briefing", () => {
+  it("names no config on a machine that has none", () => {
+    const text = renderPlatformBlock({
+      ...base,
+      configPath: undefined,
+      memoryExists: false,
+    });
+    expect(text).not.toContain("Config:");
+    expect(text).toContain(base.memoryTarget);
+  });
+
   it("tells the agent where the app keeps its own files", () => {
     const text = renderPlatformBlock({
       ...base,

@@ -32,15 +32,23 @@ function scrub(value: unknown, redactions: readonly Redaction[]): unknown {
   return value;
 }
 
+/** Longest first: one secret can be part of another. */
+const applicable = (redactions: readonly Redaction[]): Redaction[] =>
+  redactions
+    .filter(({ value }) => value.length >= MIN_LENGTH)
+    .sort((a, b) => b.value.length - a.value.length);
+
+/** A value with every secret taken out, wherever in it they are. `read` is asked at each call. */
+export const redactor =
+  (read: () => readonly Redaction[]) =>
+  <T>(value: T): T =>
+    scrub(value, applicable(read())) as T;
+
 /** `read` is asked at each call, so a value saved while a session is open counts from then on. */
 export function redactionMiddleware(
   read: () => readonly Redaction[],
 ): ToolMiddleware {
-  /** Longest first: one secret can be part of another. */
-  const current = (): Redaction[] =>
-    read()
-      .filter(({ value }) => value.length >= MIN_LENGTH)
-      .sort((a, b) => b.value.length - a.value.length);
+  const current = (): Redaction[] => applicable(read());
   return {
     name: "redact",
     before: (_name, args, call) => {

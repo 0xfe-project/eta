@@ -271,7 +271,6 @@ function AgentEditorForm({
             <AgentPluginsField
               form={form}
               skipped={agent.skippedPlugins}
-              external={runtime !== "eta"}
               onOpenSettings={openPlugins}
             />
           )}

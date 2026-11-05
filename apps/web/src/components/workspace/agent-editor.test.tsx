@@ -524,16 +524,12 @@ describe("the plugins tab", () => {
     expect(dialogText()).toContain("待配置");
   });
 
-  it("says what it will run, and that eta's own loop will not", async () => {
+  it("says what it will run, on any runtime", async () => {
     await openOn({}, [plugin({})]);
     expect(dialogText()).toContain("node server.mjs");
-    expect(dialogText()).toContain("自带内核暂不支持 MCP");
-  });
-
-  it("does not say that on an external runtime", async () => {
+    expect(dialogText()).not.toContain("自带内核");
     await openOn({ runtime: "claude", model: null }, [plugin({})]);
     expect(dialogText()).toContain("node server.mjs");
-    expect(dialogText()).not.toContain("自带内核暂不支持 MCP");
   });
 
   it("keeps one that fell back ticked, says it is skipped, and lets it go", async () => {

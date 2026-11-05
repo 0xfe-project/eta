@@ -109,6 +109,7 @@ export interface AssembleOptions {
   /** Skill directories a session has beyond the ones found in its directories: its plugins'. */
   skillDirsFor?: ((meta: SessionMeta) => readonly string[]) | undefined;
   runtimeExtrasFor?: SessionManagerOptions["runtimeExtrasFor"] | undefined;
+  platformGroupsFor?: SessionManagerOptions["platformGroupsFor"] | undefined;
   sessionTools?: SessionManagerOptions["sessionTools"] | undefined;
   toolMiddleware?: SessionManagerOptions["toolMiddleware"] | undefined;
   askObserve?: SessionManagerOptions["askObserve"] | undefined;
@@ -467,6 +468,9 @@ export async function assembleServer(
     ...(options.runtimeExtrasFor === undefined
       ? {}
       : { runtimeExtrasFor: options.runtimeExtrasFor }),
+    ...(options.platformGroupsFor === undefined
+      ? {}
+      : { platformGroupsFor: options.platformGroupsFor }),
     ...(options.sessionTools === undefined
       ? {}
       : { sessionTools: options.sessionTools }),

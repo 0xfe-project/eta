@@ -22,6 +22,7 @@
     "@eta/core": "*",
     "@eta/daemon": "*",
     "@eta/harness": "*",
+    "@eta/mcp": "*",
     "@eta/runtime-oar": "*",
     "@eta/server": "*",
     "@eta/ssh": "*",

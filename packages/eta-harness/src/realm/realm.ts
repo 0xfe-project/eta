@@ -364,6 +364,36 @@ export class Realm {
   }
 
   /**
+   * An object of the realm whose properties are asked for as they are read. Nothing of the host is
+   * reachable from it: the proxy and its target are made inside the context, and `get` and `keys`
+   * exist only in its closure. `get` must answer with values that already belong to the realm.
+   */
+  lazy(
+    get: (name: string) => unknown,
+    keys: () => readonly string[],
+  ): Record<string, unknown> {
+    const factory = vm.runInContext(
+      `(get, keys) => new Proxy(Object.create(null), {
+        get: (_, name) => (typeof name === "string" ? get(name) : undefined),
+        has: (_, name) => typeof name === "string" && keys().includes(name),
+        ownKeys: () => keys(),
+        getOwnPropertyDescriptor: (_, name) =>
+          typeof name === "string" && keys().includes(name)
+            ? { value: get(name), enumerable: true, configurable: true }
+            : undefined,
+      })`,
+      this.#context,
+    ) as (
+      get: (name: string) => unknown,
+      keys: () => readonly string[],
+    ) => Record<string, unknown>;
+    return factory(
+      this.wrap(get),
+      this.wrap(() => this.own(keys()) as readonly string[]),
+    );
+  }
+
+  /**
    * Sets a global in the realm. The value must already belong to the realm —
    * pass it through {@link wrap}, {@link binding} or {@link object} first.
    */

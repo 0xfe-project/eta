@@ -11,6 +11,7 @@ import type {
   AskObserver,
   MemoryExtractionOutcome,
   OpenSession,
+  PlatformGroup,
   PlatformPromptInfo,
   SessionMemoryOptions,
 } from "@eta/harness";
@@ -135,6 +136,16 @@ export interface SessionManagerOptions {
   runtimeExtrasFor?:
     | ((meta: SessionMeta) => Promise<RuntimeExtras>)
     | undefined;
+  /**
+   * What a session on eta's own loop has under `eta.platform` beyond the tools, read when it opens.
+   * Each group is closed with the session. `sessionDir` is the session's own directory.
+   */
+  platformGroupsFor?:
+    | ((
+        meta: SessionMeta,
+        sessionDir: string,
+      ) => Promise<readonly PlatformGroup[]>)
+    | undefined;
   /** Where the app's files live, for the memory a session reads and writes. */
   memoryFor?:
     | ((meta: SessionMeta) => SessionMemoryWiring | undefined)
@@ -232,6 +243,9 @@ export class SessionManager {
   private readonly defaults: SessionManagerOptions["defaults"];
   private readonly settings: (() => Promise<Settings>) | undefined;
   private readonly platformFor: SessionManagerOptions["platformFor"];
+  private readonly platformGroupsFor: SessionManagerOptions["platformGroupsFor"];
+  /** The platform groups of the sessions that have some, by session. */
+  private readonly groupsOf = new Map<string, readonly PlatformGroup[]>();
   private readonly personasFor: SessionManagerOptions["personasFor"];
   private readonly skillsFor: SessionManagerOptions["skillsFor"];
   private readonly runtimeExtrasFor: SessionManagerOptions["runtimeExtrasFor"];
@@ -254,6 +268,7 @@ export class SessionManager {
     this.defaults = options.defaults;
     this.settings = options.settings;
     this.platformFor = options.platformFor;
+    this.platformGroupsFor = options.platformGroupsFor;
     this.personasFor = options.personasFor;
     this.skillsFor = options.skillsFor;
     this.runtimeExtrasFor = options.runtimeExtrasFor;
@@ -460,6 +475,10 @@ export class SessionManager {
             onAnswer: (payload) => recordAnswer?.(payload),
           });
     const agentPrompt = this.agentPromptFor?.(meta);
+    const groups =
+      platform?.sessionDir === undefined
+        ? []
+        : ((await this.platformGroupsFor?.(meta, platform.sessionDir)) ?? []);
     const session = await openSession({
       storage: (await this.store.open(meta.id))!.storage,
       models,
@@ -474,6 +493,7 @@ export class SessionManager {
               root: platform.sessionDir,
               project: join(meta.cwd, ".eta"),
               global: join(platform.home, ".eta", "global"),
+              groups,
             },
           }),
       ...(agentPrompt === undefined ? {} : { agentPrompt }),
@@ -550,6 +570,7 @@ export class SessionManager {
     session.pump.start();
     const managed: ManagedSession = { meta, session };
     this.open.set(meta.id, managed);
+    if (groups.length > 0) this.groupsOf.set(meta.id, groups);
     return managed;
   }
 
@@ -658,6 +679,19 @@ export class SessionManager {
     }
     managed.session.stop();
     await managed.session.kernel.dispose();
+    const groups = this.groupsOf.get(managed.meta.id) ?? [];
+    this.groupsOf.delete(managed.meta.id);
+    await Promise.all(
+      groups.map((group) =>
+        group
+          .close()
+          .catch((error: unknown) =>
+            this.warn(
+              `[eta-server] could not close ${group.name} of ${managed.meta.id}: ${String(error)}`,
+            ),
+          ),
+      ),
+    );
     const runtime = this.runtimeOf.get(managed.meta.id);
     if (runtime !== undefined) {
       this.runtimeOf.delete(managed.meta.id);

@@ -52,7 +52,6 @@
 | tasks         | `tasks`、`tasks.<id>`                 | `update` `comment` `delete` `link` `confirmDraft` `interrupt` `rerun`（没有 `create`，见[任务](tasks.md)）           |
 | artifacts     | `artifacts`                           | `share` `unshare` `delete` `preview`                                                                                 |
 | routines      | `routines`、`routines.<id>`           | `create` `update` `delete` `run` `seen` `feedback` `restoreBrief`                                                    |
-| mcp           | `mcp`                                 | `connect` `reconnect` `login` `completeLogin` `logout`，见 [MCP](mcp.md)                                             |
 | plugins       | `list` `audit`                        | `configure` `setLevel` `add` `update` `remove` `recheck`，见[插件](plugins.md)                                       |
 | github        | `github`（仅加载时挂载，默认不加载）  | `refresh` `createApp` `setOAuthClient` `authorize` `unauthorize` `disconnect` `pull` `merge`，见 [GitHub](github.md) |
 | memory        | `memory`（仅有边车时挂载）            | `list` `remember` `forget`                                                                                           |

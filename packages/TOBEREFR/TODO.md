@@ -14,12 +14,13 @@ git checkout 2d4d160d -- <path> # 取回原文件
 
 | 包                  | 原来做什么                                                       | 改写方向（待定）                                                      |
 | ------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `eta-mcp`           | MCP 客户端、服务器管理、OAuth、`mcp` 代理工具                    | 作为 realm 内能力（`binding()` 包一层，走 authorize），不再是静态工具 |
 | `eta-plugin-akhook` | 工具调用前后的规则（akhook.yml）、审批中间件、prompt_submit 钩子 | 审批并入 `binding()` 内的 authorize（#186、#285）；规则层看是否还需要 |
 | `eta-plugin-git`    | git 工具插件                                                     | 未定                                                                  |
 | `eta-plugin-ssh`    | SSH 执行环境插件                                                 | `ExecutionEnv` 已删除（#382），多半整包作废                           |
 
 `packages/eta-ssh` 已经移回 workspace，只保留 transport（`LocalTransport`、SSH transport），task worktree 和远程机器仍要靠它跑 `sh`。`SshEnvironment`（`src/env.ts`）已删除。
+
+`packages/eta-mcp` 也移回了 workspace（任务 #38），只留一个会话的 stdio 和远程连接，见 `docs/architecture/mcp.md`。代理工具、搜索、直接工具、元数据缓存的旧实现、OAuth 和 `npx`/`uvx` 解析都删了，要用时从 2d4d160d 取回。MCP 现在只来自插件，下面 `mcp-host.ts`、`mcp.json` 配置来源那些接入点不再恢复。
 
 ## apps/daemon 被删的接入点
 
@@ -73,6 +74,7 @@ git checkout 2d4d160d -- <path> # 取回原文件
 
 ## 恢复时要回答的问题
 
-1. MCP 工具放在 realm 里（`binding()`）还是保留成静态工具？这要和工具面动态化（#279）一起定。
-2. 审批：`approvals` 列表（inbox `setApprovals`）怎样接到 `binding()` 的 authorize 上？daemon 上的会话还走 `tool.gate` 吗？
-3. 远程会话的文件和 shell：`ExecutionEnv` 没了以后，daemon 上的 realm 直接用 node:fs 和 `$`，primary 侧的工具（如 `publish_artifact`）怎样读远端文件？
+1. ~~MCP 工具放在 realm 里还是保留成静态工具？~~ 放在 realm 里，`eta.platform.mcp.<server>.<tool>`，不进模型的工具列表。见 `docs/architecture/mcp.md`。
+2. 审批：`approvals` 列表（inbox `setApprovals`）怎样接到 `binding()` 的 authorize 上？daemon 上的会话还走 `tool.gate` 吗？MCP 调用已经走 binding，authorize 接上就能拦到，名字是 `eta.platform.mcp.<server>.<tool>`。
+3. ~~bundle 里的 `mcp.json` / `akhook.yml` 还保留吗？~~ 环境包已经整个删除（#471），MCP 来自插件。
+4. ~~远程会话的文件和 shell：`ExecutionEnv` 没了以后怎么办？~~ daemon 上的 realm 直接用本机的 `node:fs` 和 `$`（任务 #38 给 daemon 接上了 `platformFor`，之前自带内核的远端会话没有 realm）。还没回答的是另一半：primary 侧的工具（如 `publish_artifact`）怎样读远端文件。

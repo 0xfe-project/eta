@@ -11,6 +11,7 @@ import type {
   AgentRuntimeInfo,
   GitHubCredentials,
 } from "@eta/client-contracts";
+import type { PlatformGroup } from "@eta/harness";
 import type {
   AssembledServer,
   RemoteSessions,
@@ -136,6 +137,11 @@ export interface Product {
   readonly skillDirsFor: (meta: SessionMeta) => readonly string[];
   /** What a session on an external runtime gets from the agent's plugins. */
   readonly runtimeExtrasFor: (meta: SessionMeta) => Promise<RuntimeExtras>;
+  /** What a session on eta's own loop gets from them, under `eta.platform`. */
+  readonly platformGroupsFor: (
+    meta: SessionMeta,
+    sessionDir: string,
+  ) => Promise<readonly PlatformGroup[]>;
   /**
    * The environment sessions' shells get beyond the process's: GitHub's login, once connected.
    * Empty when the host has no GitHub.
@@ -646,6 +652,8 @@ export function createProduct(options: {
     generated,
     skillDirsFor: (meta) => plugins.skillDirsFor(meta),
     runtimeExtrasFor: (meta) => plugins.runtimeExtrasFor(meta),
+    platformGroupsFor: (meta, sessionDir) =>
+      plugins.platformGroupsFor(meta, sessionDir),
     shellEnv: githubLogin?.env ?? {},
     fetch: async (request) =>
       (await hub.route(request)) ??

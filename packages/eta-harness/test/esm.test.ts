@@ -1,3 +1,4 @@
+import type { PlatformGroup } from "../src/esm";
 import { existsSync, readdirSync } from "node:fs";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -41,6 +42,7 @@ const resultOf = (
 const open = async (
   script: ReturnType<typeof stop>[],
   reuse?: { storage: MemoryStorage; root: string; cwd: string },
+  groups?: readonly PlatformGroup[],
 ) => {
   const root = reuse?.root ?? (await mkdtemp(join(tmpdir(), "esm-root-")));
   const cwd = reuse?.cwd ?? (await mkdtemp(join(tmpdir(), "esm-cwd-")));
@@ -59,7 +61,7 @@ const open = async (
     storage,
     models: models as never,
     cwd,
-    esm: { root },
+    esm: { root, groups },
     tools: [echo as never],
   });
   return { session, models, root, cwd, storage };
@@ -126,6 +128,119 @@ describe("esmrun", () => {
     await session.runner.run();
     expect(resultOf(session, "c-esmrun")).toContain("boom");
     session.stop();
+  });
+});
+
+describe("a platform group", () => {
+  const signals: (AbortSignal | undefined)[] = [];
+  const group: PlatformGroup = {
+    name: "things",
+    declarations: () => "      things: { box: { open(input: {}): string } };",
+    close: async () => undefined,
+    root: {
+      keys: () => ["box"],
+      get: (name) =>
+        name !== "box"
+          ? undefined
+          : {
+              keys: () => ["open"],
+              get: (member) => async (input, context) => {
+                signals.push(context?.signal);
+                if (member === "broken") throw new Error("it broke");
+                return { member, input };
+              },
+            },
+    },
+  };
+
+  it("is reached through eta.platform, and lengthens the description and not the tool list", async () => {
+    const plain = await open([]);
+    const { session } = await open([], undefined, [group]);
+    expect(session.tools).toEqual(plain.session.tools);
+    expect(session.kernel.tools.get("esmrun")!.description).toContain(
+      "things: { box:",
+    );
+    plain.session.stop();
+    session.stop();
+  });
+
+  it("resolves a member that only exists once it is asked for, and hands the call its signal", async () => {
+    const script = `import eta from "eta";
+const box = eta.platform.things.box;
+({ keys: Object.keys(box), has: "open" in box, nothing: eta.platform.things.other === undefined, got: await box.anything({ a: 1 }) })`;
+    const { session } = await open(
+      [call("esmrun", { script }), stop()],
+      undefined,
+      [group],
+    );
+    signals.length = 0;
+    session.kernel.nextRun(userMsg("go"));
+    await session.runner.run();
+    const text = resultOf(session, "c-esmrun");
+    expect(JSON.parse(text.slice(0, text.indexOf("\n\neffects:")))).toEqual({
+      keys: ["open"],
+      has: true,
+      nothing: true,
+      got: { member: "anything", input: { a: 1 } },
+    });
+    expect(signals[0]).toBeInstanceOf(AbortSignal);
+    session.stop();
+  });
+
+  it("is in the ledger and the tool's details, failures too", async () => {
+    const script = `import eta from "eta";
+await eta.platform.things.box.open({ a: 1 });
+await eta.platform.things.box.broken({});`;
+    const { session } = await open(
+      [call("esmrun", { script }), stop()],
+      undefined,
+      [group],
+    );
+    session.kernel.nextRun(userMsg("go"));
+    await session.runner.run();
+    const found = session.runner
+      .getTranscript()
+      .find((m) => m.role === "toolResult") as {
+      isError?: boolean;
+      details: { calls: unknown[] };
+    };
+    expect(found.isError).toBe(true);
+    expect(resultOf(session, "c-esmrun")).toContain("it broke");
+    expect(found.details.calls).toEqual([
+      { tool: "things.box.open", isError: false },
+      { tool: "things.box.broken", isError: true },
+    ]);
+    session.stop();
+  });
+
+  it("asks the authorizer about each call, by its full name, before it reaches the host", async () => {
+    const asked: string[] = [];
+    let reached = 0;
+    const agent = new Agent({
+      root: await mkdtemp(join(tmpdir(), "esm-root-")),
+      hooks: {
+        authorize: ({ name }) => {
+          asked.push(name);
+          return "not allowed";
+        },
+        platform: {
+          things: {
+            keys: () => ["open"],
+            get: () => async () => {
+              reached++;
+              return "opened";
+            },
+          },
+        },
+      },
+    });
+    await expect(
+      agent.run(`import eta from "eta";
+await eta.platform.things.open({})`),
+    ).rejects.toThrow("not allowed");
+    expect(asked).toContain("eta.platform.things.open");
+    expect(reached).toBe(0);
+    agent.dispose();
   });
 });
 

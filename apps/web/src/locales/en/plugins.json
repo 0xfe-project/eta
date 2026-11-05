@@ -65,8 +65,7 @@
   "servers": {
     "title": "Runs",
     "env": "Environment set: {{names}}",
-    "headers": "Headers added: {{names}}",
-    "etaNote": "These servers start for agents on an external runtime. eta's own loop does not support MCP yet."
+    "headers": "Headers added: {{names}}"
   },
   "audit": {
     "title": "Reads by agents",

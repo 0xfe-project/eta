@@ -216,6 +216,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       agentPromptFor: product.engine.agentPromptFor,
       skillDirsFor: product.skillDirsFor,
       runtimeExtrasFor: product.runtimeExtrasFor,
+      platformGroupsFor: product.platformGroupsFor,
       ...product.sessionHooks,
       generated: product.generated,
       // An agent on an external runtime has its sessions' runs taken by it (`@eta/runtime-oar`).

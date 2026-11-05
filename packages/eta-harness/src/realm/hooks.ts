@@ -85,9 +85,29 @@ export interface MemorySink {
  * call that also draws down `ctx.budget`.
  */
 export interface PlatformCall {
-  (input: unknown): Promise<unknown>;
+  (input: unknown, context?: PlatformCallContext): Promise<unknown>;
   kind?: "det" | "opaque" | "cost";
 }
+
+export interface PlatformCallContext {
+  /** Fires when the tool call running the script is given up. */
+  signal?: AbortSignal | undefined;
+}
+
+/**
+ * A name under `eta.platform` that holds more names, read as a script asks for them.
+ *
+ * For what a host cannot list in advance: `get` is asked at each property read, so a call can exist
+ * before anyone knows what is behind it. Everything a branch leads to is still a binding: a call
+ * through one is in the ledger and asks the authorizer like any other.
+ */
+export interface PlatformBranch {
+  get: (name: string) => PlatformEntry | undefined;
+  /** The names a script can enumerate. */
+  keys: () => readonly string[];
+}
+
+export type PlatformEntry = PlatformCall | PlatformBranch;
 
 export interface SpawnRequest {
   prompt: string;
@@ -158,8 +178,8 @@ export interface Hooks {
    * services are registered after the agent was built still gets all of them.
    */
   platform?:
-    | Record<string, PlatformCall>
-    | (() => Record<string, PlatformCall>);
+    | Record<string, PlatformEntry>
+    | (() => Record<string, PlatformEntry>);
   /** `eta.state`, shared by every layer's `eta`. Absent means there is none. */
   state?: StateObject;
   /** A real sub-turn. Recursion, budget and cycles are the host's to enforce. */

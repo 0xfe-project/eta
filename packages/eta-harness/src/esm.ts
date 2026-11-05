@@ -10,6 +10,8 @@
  *   in `esmrun`'s description are read from, so the three cannot drift);
  *   `finish_task` is not mirrored, because it ends the turn;
  * - `eta.platform.llm`, a bare model call;
+ * - the host's platform groups, as `eta.platform.<group>`: calls that are never tools, so what a
+ *   group holds does not lengthen the model's tool list;
  * - `eta.state`, the session's journaled KV;
  * - `eta.ask`, a nested turn of this same agent, with tools and the history;
  * - `search` / `view` / `edit` / `$` and `node:*`, resolved in the session cwd.
@@ -31,7 +33,9 @@ import type {
   AskResult,
   Effect,
   Layer,
+  PlatformBranch,
   PlatformCall,
+  PlatformEntry,
 } from "./realm";
 import type { StateKV } from "./state";
 import type { HarnessTool, ToolResult } from "./tools/tool";
@@ -54,6 +58,20 @@ export const ESM_TOOL_NAMES = [
 /** Tools a script cannot call through `eta.platform`. */
 const NOT_MIRRORED = new Set<string>([...ESM_TOOL_NAMES, "finish_task"]);
 
+/** A group of calls a host adds under `eta.platform`. */
+export interface PlatformGroup {
+  /** `eta.platform.<name>`. */
+  name: string;
+  root: PlatformBranch;
+  /**
+   * Its surface as the members of the d.ts's `platform`, read per request. It is the host's to keep
+   * small: this text goes into `esmrun`'s description as it is.
+   */
+  declarations: () => string;
+  /** Let go of what it holds. The host that made a group closes it, with the session. */
+  close: () => Promise<void>;
+}
+
 /** Past this, a result goes to a file and the model is handed the path. */
 const RESULT_CHARS = 20_000;
 /** A nested turn that keeps calling tools is stopped here; the text so far is returned. */
@@ -71,6 +89,7 @@ export interface EsmSessionOptions {
   global?: string | undefined;
   /** Where relative paths, `$` and `search` resolve. */
   cwd?: string | undefined;
+  groups?: readonly PlatformGroup[] | undefined;
 }
 
 export interface EsmSession {
@@ -196,7 +215,10 @@ function mirrored(kernel: Kernel) {
 }
 
 /** The realm's surface as declarations, generated from the live tool table. */
-export function platformDts(kernel: Kernel): string {
+export function platformDts(
+  kernel: Kernel,
+  groups: readonly PlatformGroup[] = [],
+): string {
   const calls = mirrored(kernel).map((tool) => {
     const params = (tool as { parameters?: unknown }).parameters;
     const first =
@@ -209,6 +231,7 @@ export function platformDts(kernel: Kernel): string {
     "    /** The session's tools as functions. Resolves to the tool's text; a tool error rejects. */",
     "    platform: {",
     ...calls.map((c) => `  ${c.replace(/\n/g, "\n  ")}`),
+    ...groups.map((group) => group.declarations()),
     "      /** A bare model call: no tools, no history. */",
     "      llm(input: { prompt: string; system?: string }): Promise<string>;",
     "    };",
@@ -272,11 +295,15 @@ const ESMRUN_DESCRIPTION = [
 ].join(" ");
 
 /** `esmrun`'s description: the fixed text plus the realm's surface, read from the live tool table. */
-export function esmrunDescription(kernel: Kernel): string {
-  return `${ESMRUN_DESCRIPTION}\n\nThe realm:\n\`\`\`ts\n${platformDts(kernel)}\n\`\`\``;
+export function esmrunDescription(
+  kernel: Kernel,
+  groups: readonly PlatformGroup[] = [],
+): string {
+  return `${ESMRUN_DESCRIPTION}\n\nThe realm:\n\`\`\`ts\n${platformDts(kernel, groups)}\n\`\`\``;
 }
 export function openEsmSession(options: EsmSessionOptions): EsmSession {
   const { kernel, models, state, root } = options;
+  const groups = options.groups ?? [];
   const frames = new AsyncLocalStorage<Frame>();
   // The eta.ask stack a tool call runs under; empty at the top of the session.
   const askStack = new AsyncLocalStorage<string[]>();
@@ -289,8 +316,36 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
     return model;
   };
 
-  const platform = (): Record<string, PlatformCall> => {
-    const calls: Record<string, PlatformCall> = {};
+  /** A group's entry, with the calls in it tied to the script that makes them. */
+  const inFrame = (path: string, entry: PlatformEntry): PlatformEntry => {
+    if (typeof entry !== "function")
+      return {
+        keys: entry.keys,
+        get: (name) => {
+          const member = entry.get(name);
+          return member === undefined
+            ? undefined
+            : inFrame(`${path}.${name}`, member);
+        },
+      };
+    return async (input) => {
+      const frame = frames.getStore();
+      const finished = (isError: boolean): void => {
+        frame?.calls.push({ tool: path, details: undefined, isError });
+      };
+      try {
+        const value = await entry(input, { signal: frame?.signal });
+        finished(false);
+        return value;
+      } catch (error) {
+        finished(true);
+        throw error;
+      }
+    };
+  };
+
+  const platform = (): Record<string, PlatformEntry> => {
+    const calls: Record<string, PlatformEntry> = {};
     for (const tool of mirrored(kernel)) {
       calls[tool.name] = async (input: unknown) => {
         const frame = frames.getStore();
@@ -309,7 +364,7 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
         return result.text;
       };
     }
-    calls.llm = async (input: unknown) => {
+    const llm: PlatformCall = async (input: unknown) => {
       const { prompt, system } = (input ?? {}) as {
         prompt?: string;
         system?: string;
@@ -329,7 +384,10 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
         throw new Error(reply.errorMessage ?? "llm call failed");
       return textOf(reply);
     };
-    calls.llm.kind = "cost";
+    llm.kind = "cost";
+    calls.llm = llm;
+    for (const group of groups)
+      calls[group.name] = inFrame(group.name, group.root);
     return calls;
   };
   /**
@@ -590,7 +648,7 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
     name: "esmrun",
     label: "esmrun",
     get description() {
-      return esmrunDescription(kernel);
+      return esmrunDescription(kernel, groups);
     },
     parameters: Type.Object({
       script: Type.String({

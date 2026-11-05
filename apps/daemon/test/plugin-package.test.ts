@@ -270,6 +270,17 @@ describe("skills", () => {
     expect(loaded.skills.map((item) => item.name)).toEqual(["a"]);
   });
 
+  it("passes over a file beside the skills, as Atlassian's plugin has", async () => {
+    const root = await plugin({
+      "skills/README.md": "# Skills\n",
+      "skills/greet/SKILL.md":
+        "---\nname: greet\ndescription: Greets.\n---\n\nBody.\n",
+    });
+    const { skills, reports } = await loadPlugin(root);
+    expect(skills.map((skill) => skill.name)).toEqual(["greet"]);
+    expect(reports).toEqual([]);
+  });
+
   it("skips a skill that breaks the Agent Skills spec and keeps the others", async () => {
     const loaded = await loadPlugin(
       await plugin({

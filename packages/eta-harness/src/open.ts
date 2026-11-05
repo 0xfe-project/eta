@@ -48,7 +48,7 @@ import type {
 import type { GoalEntry } from "@eta/core/session";
 import type { StorageService } from "@eta/core/storage";
 import type { TSchema } from "typebox";
-import type { EsmSession } from "./esm";
+import type { EsmSession, PlatformGroup } from "./esm";
 import type { MemoryExtractionOutcome, MemoryFile, MemoryFs } from "./memory";
 import type {
   EtaPromptSection,
@@ -189,6 +189,8 @@ export interface OpenSessionOptions {
         root: string;
         project?: string | undefined;
         global?: string | undefined;
+        /** What the host adds under `eta.platform`. */
+        groups?: readonly PlatformGroup[] | undefined;
       }
     | undefined;
 }
@@ -400,6 +402,7 @@ export async function openSession(
           root: options.esm.root,
           project: options.esm.project,
           global: options.esm.global,
+          groups: options.esm.groups,
           cwd: options.cwd,
         });
 

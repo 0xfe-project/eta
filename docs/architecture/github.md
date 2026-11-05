@@ -35,7 +35,7 @@ App 是 public 的（用户可以把它装到自己的其他账号和组织）�
 4. **授权**（可选，也是装完时 GitHub 顺带问的）：见下。
 5. **断开**：`github.disconnect` 删掉 App 的凭据和用户的授权（GitHub 上的 App 不会被删，提示里有去删除的链接）。
 
-重定向地址的 origin 取 `--public-url`（或 `ETA_PUBLIC_URL`），没有就用页面报来的 `location.origin`，和 [MCP 的 OAuth 回调](mcp.md#oauth)一致。
+重定向地址的 origin 取 `--public-url`（或 `ETA_PUBLIC_URL`），没有就用页面报来的 `location.origin`。
 
 ## 用户的授权
 

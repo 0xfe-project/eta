@@ -20,6 +20,7 @@
     "@eta/client-wire-proto": "*",
     "@eta/core": "*",
     "@eta/harness": "*",
+    "@eta/mcp": "*",
     "@eta/runtime-oar": "*",
     "@eta/server": "*",
     "@eta/ssh": "*",

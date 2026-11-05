@@ -167,7 +167,7 @@ export {
   publicView,
   revisionOf,
 } from "./providers/store";
-export { redactionMiddleware } from "./redact";
+export { redactionMiddleware, redactor } from "./redact";
 export {
   createTargetRegistry,
   type OpContext,

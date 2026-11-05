@@ -392,6 +392,8 @@ async function loadSkillDirs(
   const skills: PluginSkill[] = [];
   for (const name of readdirSync(location).sort()) {
     const dir = join(location, name);
+    // A README beside the skills is common, and under Bun a stat through a file throws.
+    if (!statSync(dir, { throwIfNoEntry: false })?.isDirectory()) continue;
     const file = join(dir, "SKILL.md");
     if (!statSync(file, { throwIfNoEntry: false })?.isFile()) continue;
     if (!isWithin(root, await resolvedPath(file))) {
