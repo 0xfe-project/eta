@@ -37,13 +37,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { listSeparator } from "@/lib/i18n";
 import { THINKING_LEVELS } from "@/lib/thinking";
 import {
@@ -55,6 +48,7 @@ import {
   useProviders,
   useSaveProvider,
 } from "@/queries/providers";
+import { Select, SelectOption } from "./select-field";
 import { useAgents } from "./use-agents";
 
 const KINDS: ProviderKind[] = [
@@ -228,28 +222,37 @@ function ModelCard({
           <span>{translateText("editor.reasoning")}</span>
         ) : null}
       </div>
-      <label className="settings-row">
-        <span>{translateText("editor.defaultThinking")}</span>
-        <select
-          aria-label={`${translateText("editor.defaultThinking")} ${title}`}
-          value={row.defaultThinking ?? ""}
-          onChange={(event) =>
-            onUpdate({
-              defaultThinking:
-                event.target.value === ""
-                  ? undefined
-                  : (event.target.value as ModelRow["defaultThinking"]),
-            })
-          }
-        >
-          <option value="">{translateText("editor.followProvider")}</option>
-          {THINKING_LEVELS.map((level) => (
-            <option key={level} value={level}>
-              {level}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <label htmlFor={`model-thinking-${index}`}>
+            {translateText("editor.defaultThinking")}
+          </label>
+        </div>
+        <div className="settings-control">
+          <Select
+            id={`model-thinking-${index}`}
+            aria-label={`${translateText("editor.defaultThinking")} ${title}`}
+            value={row.defaultThinking ?? ""}
+            onValueChange={(value) =>
+              onUpdate({
+                defaultThinking:
+                  value === ""
+                    ? undefined
+                    : (value as ModelRow["defaultThinking"]),
+              })
+            }
+          >
+            <SelectOption value="">
+              {translateText("editor.followProvider")}
+            </SelectOption>
+            {THINKING_LEVELS.map((level) => (
+              <SelectOption key={level} value={level}>
+                {level}
+              </SelectOption>
+            ))}
+          </Select>
+        </div>
+      </div>
       {custom ? (
         <details>
           <summary>{translateText("editor.modelSettings")}</summary>
@@ -496,19 +499,15 @@ export function ProviderEditor({
         <div className="settings-field">
           <Label htmlFor="provider-kind">{translateText("editor.kind")}</Label>
           <Select
+            id="provider-kind"
             value={kind}
             onValueChange={(next) => setKind(next as ProviderKind)}
           >
-            <SelectTrigger id="provider-kind">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {KINDS.map((choice) => (
-                <SelectItem key={choice} value={choice}>
-                  <span className="font-mono">{choice}</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
+            {KINDS.map((choice) => (
+              <SelectOption key={choice} value={choice}>
+                <span className="font-mono">{choice}</span>
+              </SelectOption>
+            ))}
           </Select>
         </div>
         <div className="settings-field">

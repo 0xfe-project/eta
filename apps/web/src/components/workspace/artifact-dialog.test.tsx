@@ -91,14 +91,19 @@ describe("an artifact's dialog", () => {
     expect(frame()?.getAttribute("src")).toBe(
       "/preview/cap1-v2/files/index.html",
     );
-    const select = document.querySelector<HTMLSelectElement>("select")!;
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(
-        HTMLSelectElement.prototype,
-        "value",
-      )!.set!.call(select, "1");
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    const trigger = document.querySelector<HTMLElement>('[role="combobox"]')!;
+    await act(async () =>
+      trigger.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+    );
+    // Listed latest first: the second option is version 1.
+    const older = document.querySelectorAll<HTMLElement>('[role="option"]')[1];
+    await act(async () =>
+      older.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+    );
     await flush();
     expect(frame()?.getAttribute("src")).toBe(
       "/preview/cap2-v1/files/index.html",

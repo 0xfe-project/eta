@@ -1609,7 +1609,6 @@
     max-width: 55%;
   }
   .settings-control button,
-  .settings-row select,
   .settings-row input:not([type="checkbox"]) {
     max-width: 100%;
     border: 1px solid var(--border);
@@ -1709,9 +1708,6 @@
   .settings-model-fields > .settings-check,
   .settings-model-fields > .settings-hint {
     grid-column: 1 / -1;
-  }
-  .settings-model .settings-row select {
-    max-width: 65%;
   }
 
   .settings-add-model {

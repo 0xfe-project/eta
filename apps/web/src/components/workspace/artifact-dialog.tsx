@@ -23,6 +23,7 @@ import {
   useUnshareArtifact,
 } from "@/queries/artifacts";
 import { wireErrorMessage } from "@/queries/wire";
+import { Select, SelectOption } from "./select-field";
 
 /**
  * An artifact's page in a dialog: large on a desktop, nearly the whole
@@ -85,14 +86,15 @@ function ArtifactDialog({
           {current && artifact ? (
             <div className="flex w-full items-center gap-1 sm:w-auto">
               {versions.length > 1 ? (
-                <select
+                <Select
                   aria-label={translateText("version.title")}
-                  value={current.number}
-                  onChange={(e) => setChosen(Number(e.target.value))}
-                  className="h-7 border bg-background px-1.5 text-xs tabular-nums"
+                  value={String(current.number)}
+                  onValueChange={(value) => setChosen(Number(value))}
+                  size="sm"
+                  className="tabular-nums"
                 >
                   {versions.map((v) => (
-                    <option key={v.number} value={v.number}>
+                    <SelectOption key={v.number} value={v.number}>
                       {translateText("version.option", {
                         version: v.number,
                         latestLabel:
@@ -100,9 +102,9 @@ function ArtifactDialog({
                             ? translateText("version.latestSuffix")
                             : "",
                       })}
-                    </option>
+                    </SelectOption>
                   ))}
-                </select>
+                </Select>
               ) : (
                 <span className="px-1 text-xs text-muted-foreground tabular-nums">
                   {translateText("version.label", {
