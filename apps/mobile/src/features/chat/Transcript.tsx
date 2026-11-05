@@ -375,11 +375,11 @@ function Reply(props: {
       <If when={answer() !== undefined}>
         <Answer id={`answer:${m().id}`} text={answer() ?? ""} chat={chat} />
       </If>
-      <Each of={artifacts()} key={(artifact) => artifact.id}>
-        {(artifact) => <ArtifactCard artifact={artifact()} />}
-      </Each>
       <Each of={under()} key={(row) => row.id}>
         {(row) => <TaskRow message={row()} chat={chat} />}
+      </Each>
+      <Each of={artifacts()} key={(artifact) => artifact.id}>
+        {(artifact) => <ArtifactCard artifact={artifact()} />}
       </Each>
       <If when={m().status === "stopped"}>
         <Text class="text-sm leading-[18px] text-muted-foreground">
