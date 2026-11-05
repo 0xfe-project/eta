@@ -17,7 +17,11 @@
   routines/<定时任务 id>/   定时任务每次运行的工作目录
   worktrees/<项目 id>/task-<编号>/   任务在 primary 上的 git worktree（运行后保留；daemon 机器上在 ~/.eta/worktrees/）
   artifacts/<产物 id>/<版本>/   archive.zip 与解压后的 files/；artifacts/.preview-key 是预览地址的签名密钥
-  plugins/、modules/        用户插件（热重载）
+  plugins/<目录>/           Agent Plugins（有 plugin.json，见[插件](plugins.md)）和 eta-server 的用户插件（package.json 里有 eta-plugin），两种各认各的
+  plugins/data/<插件名>/    插件的 PLUGIN_DATA，更新时保留
+  plugin-sources/           从 git 取回的插件，固定在一个 commit
+  plugin-runtime/           给 Claude Code 的生成目录，只有合法的 skill（符号链接）
+  modules/                  官方插件
   access-token              令牌门的令牌（开启时；0600）
   secret.key                邮箱、MCP 与 GitHub 的密封密钥（0600，第一次用时生成）
   github/                   这台机器上 git 与 gh 的 GitHub 登录（令牌最多一小时，见 [GitHub](github.md)）：gh/hosts.yml、token、login、git/github.inc

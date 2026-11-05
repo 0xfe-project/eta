@@ -83,6 +83,8 @@ export class Plugins {
   readonly #warn: (message: string) => void;
   /** What a daemon has, by machine, of the commands asked about. */
   readonly #found = new Map<string, Set<string>>();
+  /** The sends in flight, by `machine:hash`. */
+  readonly #sending = new Map<string, Promise<void>>();
 
   constructor(options: PluginsOptions) {
     this.rows = new PluginRows(options.db, options.key);
@@ -262,7 +264,19 @@ export class Plugins {
     return opened;
   }
 
+  /** Send a plugin's files; two sessions opening at once wait for the same send. */
   async #send(link: MachineLink, entry: PluginEntry): Promise<void> {
+    const key = `${link.machineId}:${entry.hash!}`;
+    const sending = this.#sending.get(key);
+    if (sending !== undefined) return await sending;
+    const send = this.#sendFiles(link, entry).finally(() =>
+      this.#sending.delete(key),
+    );
+    this.#sending.set(key, send);
+    await send;
+  }
+
+  async #sendFiles(link: MachineLink, entry: PluginEntry): Promise<void> {
     const hash = entry.hash!;
     const chunks = pluginChunks(entry.dir);
     let next = chunks.next();

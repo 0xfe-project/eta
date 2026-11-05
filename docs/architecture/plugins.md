@@ -6,7 +6,7 @@
 
 ## 从哪里来
 
-- **本地**：`~/.eta/plugins/<目录>/`，改了就重读。主 node 每 2 秒比一次文件签名（路径、大小、修改时间），开会话前再比一次。`data` 这个目录名被 `PLUGIN_DATA` 占用，不算插件。
+- **本地**：`~/.eta/plugins/<目录>/`，改了就重读。主 node 每 2 秒比一次文件签名（路径、大小、修改时间），开会话前再比一次。`data` 这个目录名被 `PLUGIN_DATA` 占用，不算插件。这个目录也是 eta-server 用户插件的位置：有 `plugin.json` 的归这里，`package.json` 带 `eta-plugin` 的归它，互不打扰。
 - **git**：`{ repo, rev, path }`。`rev` 解析成 commit 后固定下来，要用户手动「更新」才移动。文件在 `<dataDir>/plugin-sources/`。
 
 插件的身份是 manifest 的 `name`。被规范拒绝的插件也会列出来，用目录名显示，并说明原因。
@@ -96,7 +96,7 @@ Claude Code 不能直接拿插件目录：`--plugin-dir` 会把它当 Claude 插
 | ------- | --------- | ------------------------------------ |
 | `read`  | 非 secret | 值                                   |
 | `file`  | secret    | 0600 临时文件的路径，值不进结果      |
-| `value` | secret    | 明文                                 |
+| `value` | secret    | 明文，会进 journal 和回复的工具记录  |
 | `none`  | 两者      | 「不可读」，并说明插件进程已经拿到了 |
 
 非 secret 默认 `read`，secret 默认 `none`。manifest 声明的是上限，用户可以调低，不能调高。

@@ -24,8 +24,8 @@ import { scriptedRuntime } from "@botiverse/oar/testing";
 import { createOarRuntimes } from "@eta/runtime-oar";
 import { describe, expect, it } from "vitest";
 import { databasePath, openDatabase } from "../src/db";
-import { until } from "./support/client";
-import { tempDir } from "./support/host";
+import { connect, until } from "./support/client";
+import { tempDir, testHost } from "./support/host";
 import { call, say, scriptedModels } from "./support/models";
 import { remoteWorld } from "./support/remote";
 import { world } from "./support/world";
@@ -204,13 +204,36 @@ describe("a plugin in settings", () => {
     });
   });
 
-  it("is not confused by the data directory that lives beside the plugins", async () => {
+  it("is not confused by what else lives in that directory", async () => {
     const w = await installed();
     await mkdir(join(w.host.dataDir, "plugins", "data", NAME), {
       recursive: true,
     });
+    const server = join(w.host.dataDir, "plugins", "server-plugin");
+    await mkdir(server);
+    await writeFile(
+      join(server, "package.json"),
+      JSON.stringify({ name: "server-plugin", "eta-plugin": {} }),
+    );
     await recheck(w);
     expect(views(w).map((plugin) => plugin.name)).toEqual([NAME]);
+  });
+
+  it("is no broken plugin to the server that shares the directory", async () => {
+    const warnings: string[] = [];
+    const dataDir = await tempDir();
+    await install(dataDir);
+    await mkdir(join(dataDir, "plugins", "data", NAME), { recursive: true });
+    const host = await testHost({
+      dataDir,
+      warn: (message) => warnings.push(message),
+    });
+    const client = await connect(`ws://127.0.0.1:${host.port}/ws`);
+    const hello = await client.hello();
+    expect(hello.mounted.map((plugin) => plugin.name)).not.toContain(NAME);
+    expect(hello.mounted.map((plugin) => plugin.name)).not.toContain("data");
+    expect(warnings.filter((text) => text.includes("not running"))).toEqual([]);
+    client.close();
   });
 });
 
@@ -539,6 +562,7 @@ describe("get_plugin_config", () => {
     const { result, isError, w } = await reading({ plugin: NAME }, false);
     expect(isError).toBe(true);
     expect(result).toContain("not enabled");
+    expect(result).toContain("Enabled: none.");
     const db = openDatabase(databasePath(w.host.dataDir));
     expect(db.query("SELECT COUNT(*) AS n FROM plugin_audit").get()).toEqual({
       n: 0,
@@ -573,6 +597,30 @@ describe("get_plugin_config", () => {
     expect(result).not.toContain(PLAIN_KEY);
     expect(result).not.toContain(SCRIPT_KEY);
     expect(result).not.toContain("ops");
+  });
+});
+
+describe("eta.platform.get_plugin_config", () => {
+  it("is there for a script, and keeps to the same levels", async () => {
+    let told = "";
+    const { models } = scriptedModels((request) => {
+      if (request.lastRole === "toolResult") {
+        told = request.last;
+        return say("done");
+      }
+      return call("esmrun", {
+        script: `import eta from "eta";
+await eta.platform.get_plugin_config({ plugin: "${NAME}", fields: ["team", "api_key"] })`,
+      });
+    });
+    const w = await installed({ models });
+    await configure(w, fullConfig);
+    await until(() => view(w).state === "ready");
+    const agent = await enable(w, await w.agent("Ada"));
+    await ask(w, await direct(w, agent), "read it from a script");
+    expect(told).toContain("ops");
+    expect(told).toContain("Not readable");
+    expect(told).not.toContain(API_KEY);
   });
 });
 

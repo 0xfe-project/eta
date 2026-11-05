@@ -121,7 +121,12 @@ export function pluginSessionTools(deps: {
         const readable = deps.plugins.readable(agentId, args.plugin);
         if (readable === undefined)
           return toolError(
-            `Plugin ${args.plugin} is not enabled for this agent, or needs configuring first.`,
+            `Plugin ${args.plugin} is not enabled for this agent, or needs configuring first. Enabled: ${
+              deps.plugins
+                .active(agentId)
+                .map((entry) => entry.name)
+                .join(", ") || "none"
+            }.`,
           );
         const wanted =
           args.fields ?? readable.fields.map(({ field }) => field.name);

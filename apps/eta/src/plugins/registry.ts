@@ -14,7 +14,13 @@
 import type { PluginSource } from "@eta/client-contracts";
 import type { PluginPackage } from "@eta/daemon";
 import type { GitSourceRow, PluginRows } from "./store";
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+} from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -42,6 +48,23 @@ const POLL_MS = 2_000;
 
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+/**
+ * `plugins/` is also where the server's own user plugins live (`package.json` with `eta-plugin`,
+ * see `plugins.ts` in `@eta/server`). One of those has no `plugin.json`, and is not a rejected
+ * Agent Plugin.
+ */
+function isServerPlugin(dir: string): boolean {
+  if (existsSync(join(dir, "plugin.json"))) return false;
+  try {
+    const manifest = JSON.parse(
+      readFileSync(join(dir, "package.json"), "utf8"),
+    ) as Record<string, unknown>;
+    return manifest["eta-plugin"] !== undefined;
+  } catch {
+    return false;
+  }
+}
 
 export class PluginRegistry {
   readonly #root: string;
@@ -90,7 +113,10 @@ export class PluginRegistry {
     for (const name of readdirSync(this.#root).sort()) {
       if (name === DATA_DIR || name.startsWith(".")) continue;
       const dir = join(this.#root, name);
-      if (statSync(dir, { throwIfNoEntry: false })?.isDirectory())
+      if (
+        statSync(dir, { throwIfNoEntry: false })?.isDirectory() &&
+        !isServerPlugin(dir)
+      )
         found.push({ dir, source: { kind: "local", path: dir }, key: name });
     }
     for (const row of this.#rows.sources()) {
