@@ -1,5 +1,6 @@
 import type { ConversationSummary } from "@eta/client-contracts";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { act } from "react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { translate } from "@/lib/i18n";
 import { setWire } from "@/lib/wire";
@@ -435,7 +436,7 @@ describe("折叠成图标栏", () => {
     expect(name.className).toContain("text-[10px]");
     expect(name.className).toContain("truncate");
     expect(card.querySelectorAll("img").length).toBeGreaterThan(0);
-    // ⋯ 菜单在 rail 上没有地方，也就不在了：卡片就是一个按钮。
+    // 卡片就是一个按钮，菜单挂在它的右键上。
     expect(card.querySelectorAll("button")).toHaveLength(0);
     // 「●」只是颜字，不该读进按钮名里。
     expect(card.textContent).not.toContain("●");
@@ -529,5 +530,146 @@ describe("折叠成图标栏", () => {
     expect(useWorkspaceStore.getState().newConversation).toEqual({
       open: true,
     });
+  });
+});
+
+describe("卡片的右键菜单", () => {
+  const card = (container: HTMLElement) =>
+    groupsSection(container)!.querySelector<HTMLElement>(
+      '[data-sidebar="menu-button"]',
+    )!;
+  const rightClick = async (element: Element) => {
+    const event = new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => element.dispatchEvent(event));
+    return event;
+  };
+  const menuItems = () => [
+    ...document.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+  ];
+  const item = (name: string) =>
+    menuItems().find((node) => node.textContent === name);
+  const field = (container: HTMLElement) =>
+    groupsSection(container)!.querySelector<HTMLInputElement>("input");
+  const press = async (input: HTMLInputElement, key: string) => {
+    await act(async () =>
+      input.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })),
+    );
+  };
+  const type = async (input: HTMLInputElement, text: string) => {
+    const set = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )!.set!;
+    await act(async () => {
+      set.call(input, text);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+  const updates = (host: { calls: { action: string; args: unknown }[] }) =>
+    host.calls.filter((call) => call.action === "update");
+
+  it("卡片上没有 ⋯，那一行也不再给它留位置", async () => {
+    const { container } = await tree([group("g1", "装配", "p-eta")]);
+    const section = groupsSection(container)!;
+    expect(section.querySelector("[data-sidebar=menu-action]")).toBeNull();
+    expect(section.querySelector(".pr-6")).toBeNull();
+  });
+
+  for (const open of [true, false]) {
+    const shape = open ? "展开" : "图标栏";
+
+    it(`${shape}：右键打开菜单，不进群，也不留给浏览器`, async () => {
+      const { container } = await tree([group("g1", "装配", "p-eta")], {
+        open,
+      });
+      const event = await rightClick(card(container));
+      expect(event.defaultPrevented).toBe(true);
+      expect(menuItems().map((node) => node.textContent)).toEqual([
+        "改名",
+        "归档",
+      ]);
+      expect(navigation.navigate).not.toHaveBeenCalled();
+    });
+
+    it(`${shape}：改名变成输入框并拿到焦点，回车提交`, async () => {
+      const { container, host } = await tree([group("g1", "装配", "p-eta")], {
+        open,
+      });
+      host.handle("conversations.update", () => ({}));
+      await rightClick(card(container));
+      await click(item("改名"));
+      await flush();
+      const input = field(container)!;
+      expect(input.value).toBe("装配");
+      expect(document.activeElement).toBe(input);
+      // 输入框不在触发器里：右键是它自己的浏览器菜单。
+      expect((await rightClick(input)).defaultPrevented).toBe(false);
+      expect(menuItems()).toHaveLength(0);
+      await type(input, "总装");
+      await press(input, "Enter");
+      await flush();
+      expect(updates(host).map((call) => call.args)).toEqual([
+        { conversationId: "g1", name: "总装" },
+      ]);
+      expect(field(container)).toBeNull();
+      expect(card(container)).not.toBeNull();
+    });
+
+    it(`${shape}：Esc 取消改名，什么也不发`, async () => {
+      const { container, host } = await tree([group("g1", "装配", "p-eta")], {
+        open,
+      });
+      await rightClick(card(container));
+      await click(item("改名"));
+      await flush();
+      await type(field(container)!, "总装");
+      await press(field(container)!, "Escape");
+      await flush();
+      expect(field(container)).toBeNull();
+      expect(updates(host)).toHaveLength(0);
+    });
+
+    it(`${shape}：归档`, async () => {
+      const { container, host } = await tree([group("g1", "装配", "p-eta")], {
+        open,
+      });
+      host.handle("conversations.update", () => ({}));
+      await rightClick(card(container));
+      await click(item("归档"));
+      await flush();
+      expect(updates(host).map((call) => call.args)).toEqual([
+        { conversationId: "g1", archived: true },
+      ]);
+    });
+  }
+
+  // Safari 点按钮不给它焦点，长按也一样：菜单关上时焦点要还给原来的地方，不能抢走改名框。
+  it("焦点原本在别处时，改名框也留得住", async () => {
+    const { container, host } = await tree([group("g1", "装配", "p-eta")]);
+    const elsewhere = document.body.appendChild(
+      document.createElement("textarea"),
+    );
+    elsewhere.focus();
+    await rightClick(card(container));
+    await click(item("改名"));
+    await flush();
+    const input = field(container);
+    elsewhere.remove();
+    expect(input).not.toBeNull();
+    expect(document.activeElement).toBe(input);
+    expect(updates(host)).toHaveLength(0);
+  });
+
+  it("左键还是进群", async () => {
+    const { container } = await tree([group("g1", "装配", "p-eta")]);
+    await click(card(container));
+    expect(navigation.navigate).toHaveBeenCalledWith({
+      to: "/",
+      search: { group: "g1" },
+    });
+    expect(menuItems()).toHaveLength(0);
   });
 });
