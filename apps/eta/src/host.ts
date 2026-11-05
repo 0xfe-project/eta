@@ -10,7 +10,7 @@ import type { AssembledServer, AssembleOptions } from "@eta/server";
  * before the floor, because the floor's per-session hooks are its, and mounted on the floor after.
  */
 import type { Database } from "bun:sqlite";
-import type { SiteLimits } from "./artifacts/site";
+import type { SiteLimits } from "./artifacts/files";
 import type { GithubTuning } from "./github/service";
 import type { LlmOptions, LlmRuntime } from "./llm/runtime";
 import type { SshRunner } from "./machines/install";

@@ -174,6 +174,8 @@ export const artifactView = (
   versions: [
     {
       number: 1,
+      kind: "site",
+      viewer: "iframe",
       files: 1,
       bytes: 10,
       size: 10,

@@ -381,6 +381,151 @@ describe("the artifacts target and its pages", () => {
     );
   });
 
+  describe("a single-page app", () => {
+    const INDEX =
+      '<!doctype html><html><head><title>App</title><script type="module" src="./assets/app.js"></script></head><body></body></html>';
+
+    async function app(spa: boolean, index = INDEX) {
+      const r = await room();
+      await r.write({
+        "dist/index.html": index,
+        "dist/assets/app.js": "1",
+        "dist/about/index.html": "the about page",
+      });
+      const [result] = await r.play("Ada", [
+        publish({ path: "dist", title: "App", spa }),
+      ]);
+      expect(result).toContain("Published");
+      await until(() => list(r.w).length === 1);
+      const artifact = list(r.w)[0]!;
+      const base = `http://127.0.0.1:${r.w.host.port}`;
+      const { url } = (await r.w.client.call("artifacts", "preview", {
+        artifactId: artifact.id,
+        version: 1,
+      })) as { url: string };
+      const html = { accept: "text/html,application/xhtml+xml,*/*;q=0.8" };
+      return { ...r, artifact, base, url, html };
+    }
+
+    it("opens at the root of the site, where a router finds its first route", async () => {
+      const a = await app(true);
+      expect(a.url).toMatch(/^\/preview\/[^/]+\/files\/$/);
+      expect(await (await fetch(a.base + a.url)).text()).toBe(INDEX);
+    });
+
+    it("answers a navigation with index.html, pointed back at the root of the site", async () => {
+      const a = await app(true);
+      const deep = await fetch(`${a.base}${a.url}users/42`, {
+        headers: a.html,
+      });
+      expect(deep.status).toBe(200);
+      expect(deep.headers.get("content-type")).toContain("text/html");
+      expect(deep.headers.get("content-security-policy")).toContain("sandbox");
+      const page = await deep.text();
+      expect(page).toContain('<head><base href="../"><title>App</title>');
+      // A relative address of the page lands on the real file from there.
+      expect(
+        (await fetch(new URL("assets/app.js", `${a.base}${a.url}`))).status,
+      ).toBe(200);
+      expect(
+        await (
+          await fetch(`${a.base}${a.url}a/b/c/`, { headers: a.html })
+        ).text(),
+      ).toContain('<base href="../../../">');
+      // One level down there is nothing to correct.
+      expect(await (await fetch(`${a.base}${a.url}users`)).text()).toBe(INDEX);
+      // Without an extension it counts as a navigation, whatever it accepts.
+      expect(
+        (
+          await fetch(`${a.base}${a.url}users/42`, {
+            headers: { accept: "*/*" },
+          })
+        ).status,
+      ).toBe(200);
+      // A dotted route is still a route when the browser navigates to it.
+      expect(
+        (await fetch(`${a.base}${a.url}users/j.doe`, { headers: a.html }))
+          .status,
+      ).toBe(200);
+    });
+
+    it("keeps real files real, and a missing asset a 404", async () => {
+      const a = await app(true);
+      expect(await (await fetch(`${a.base}${a.url}assets/app.js`)).text()).toBe(
+        "1",
+      );
+      expect(await (await fetch(`${a.base}${a.url}about/`)).text()).toBe(
+        "the about page",
+      );
+      for (const name of ["assets/gone.js", "site.css", "logo.png"]) {
+        const missing = await fetch(`${a.base}${a.url}${name}`, {
+          headers: { accept: "*/*" },
+        });
+        expect(missing.status, name).toBe(404);
+      }
+      // The way out stays closed.
+      expect(
+        (
+          await fetch(`${a.base}${a.url}%2e%2e/archive.zip`, {
+            headers: a.html,
+          })
+        ).status,
+      ).toBe(404);
+    });
+
+    it("works through a share too", async () => {
+      const a = await app(true);
+      const { url } = (await a.w.client.call("artifacts", "share", {
+        artifactId: a.artifact.id,
+        version: 1,
+      })) as { url: string };
+      const shell = await (await fetch(a.base + url)).text();
+      expect(shell).toContain(`<iframe src="${url}files/"`);
+      const deep = await fetch(`${a.base}${url}files/users/42`, {
+        headers: a.html,
+      });
+      expect(deep.status).toBe(200);
+      expect(deep.headers.get("cache-control")).toBe("no-store");
+      expect(await deep.text()).toContain('<base href="../">');
+    });
+
+    it("changes nothing without `spa`", async () => {
+      const a = await app(false);
+      expect(a.url).toMatch(/\/files\/index\.html$/);
+      expect(
+        (await fetch(new URL("users/42", a.base + a.url), { headers: a.html }))
+          .status,
+      ).toBe(404);
+      expect(
+        new TextDecoder().decode(
+          await (await fetch(a.base + a.url)).arrayBuffer(),
+        ),
+      ).toBe(INDEX);
+    });
+
+    it("refuses root paths in index.html, and says how to fix them", async () => {
+      const r = await room();
+      await r.write({
+        "root/index.html":
+          '<script type="module" src="/assets/app.js"></script>',
+        "link/index.html": "<link rel=stylesheet href=/site.css>",
+        "cdn/index.html":
+          '<script src="//cdn.example/x.js"></script><img data-src="/lazy.png"><!-- <img src="/old.png"> -->',
+      });
+      const [script, link, cdn, plain] = await r.play("Ada", [
+        publish({ path: "root", title: "a", spa: true }),
+        publish({ path: "link", title: "b", spa: true }),
+        publish({ path: "cdn", title: "c", spa: true }),
+        // The check is for a site that promised to be an app; a plain site stays as it was.
+        publish({ path: "root", title: "d" }),
+      ]);
+      expect(script).toMatch(/\/assets\/app\.js.*base: '\.\/'/);
+      expect(link).toMatch(/\/site\.css.*base: '\.\/'/);
+      expect(cdn).toContain("Published");
+      expect(plain).toContain("Published");
+    });
+  });
+
   it("gives the app the ZIP of a version, and keeps a new version from touching an old share", async () => {
     const p = await published();
     const shared = (await p.w.client.call("artifacts", "share", {

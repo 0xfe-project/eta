@@ -2,13 +2,17 @@
  * The artifacts over HTTP, next to the socket:
  *
  *   GET /preview/<capability>/files/<path>   the app's own sandboxed iframe
- *   GET /share/<token>/                      a public page around the site (title, download)
- *   GET /share/<token>/files/<path>          the site, public
+ *   GET /share/<token>/                      a public page around it (title, download)
+ *   GET /share/<token>/files/<path>          the version, public
  *   GET /share/<token>/archive.zip           its ZIP, public
  *   GET /artifacts/<id>/<version>/archive.zip   the ZIP for the app, behind the normal access
  *
- * A published site is someone else's HTML served from our origin, so every file carries
- * `Content-Security-Policy: sandbox` without `allow-same-origin`: the page runs in an opaque
+ * These routes decide who may open a version; its kind (`kinds/`) decides what the answer is. The
+ * limits on that answer are here, set after the kind has answered and over whatever it said, so
+ * neither a kind nor its manifest can loosen them (`seal`).
+ *
+ * A published page is someone else's HTML served from our origin, so everything under `files/`
+ * carries `Content-Security-Policy: sandbox` without `allow-same-origin`: the page runs in an opaque
  * origin, cannot read cookies or storage and cannot call this host as the user, whether it is in
  * an iframe or opened on its own. `Referrer-Policy: no-referrer` because the address is itself a
  * credential. `Access-Control-Allow-Origin: *` because an opaque origin's requests are cross-origin
@@ -17,8 +21,9 @@
  * Everything under `/preview/` and `/share/` answers here, found or not (a missing share must not
  * fall through to the web's page), and says nothing about *why* a capability or token is no good.
  */
+import type { ArtifactViewer } from "@eta/client-contracts";
 import type { ArtifactService } from "./service";
-import { stat } from "node:fs/promises";
+import type { VersionRecord } from "./store";
 
 const SANDBOX =
   "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads";
@@ -36,28 +41,20 @@ const notFound = (): Response =>
     },
   });
 
-async function isFile(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isFile();
-  } catch {
-    return false;
-  }
-}
-
-/** A file of a site, with the headers that keep it in its sandbox. */
-async function siteFile(path: string, cache: string): Promise<Response> {
-  if (!(await isFile(path))) return notFound();
-  const file = Bun.file(path);
-  return new Response(file, {
-    headers: {
-      "content-type": file.type,
-      "content-security-policy": SANDBOX,
-      "referrer-policy": "no-referrer",
-      "access-control-allow-origin": "*",
-      "x-content-type-options": "nosniff",
-      "cache-control": cache,
-    },
-  });
+/**
+ * What a kind answered, in its sandbox. How long it may be kept is here too: a share can be taken
+ * back and a capability runs out, whatever the kind thinks of its content. A cookie would land on
+ * the host's own origin, so none gets out.
+ */
+function seal(response: Response, cache: string): Response {
+  const { headers } = response;
+  headers.set("content-security-policy", SANDBOX);
+  headers.set("referrer-policy", "no-referrer");
+  headers.set("access-control-allow-origin", "*");
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("cache-control", response.ok ? cache : "no-store");
+  headers.delete("set-cookie");
+  return response;
 }
 
 function zipResponse(path: string, title: string, version: number): Response {
@@ -73,9 +70,15 @@ function zipResponse(path: string, title: string, version: number): Response {
   });
 }
 
-/** The shell of a public share: no script, and it loads nothing of ours but the site. */
-function shell(title: string, version: number): string {
+/** The shell of a public share: no script, and it loads nothing of ours but the version. */
+function shell(
+  title: string,
+  version: number,
+  viewer: ArtifactViewer,
+  entry: string,
+): string {
   const safe = escapeHtml(title);
+  const framed = viewer === "iframe";
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -94,10 +97,10 @@ function shell(title: string, version: number): string {
 <body>
 <header>
   <h1>${safe} <span style="opacity:.6">· v${version}</span></h1>
-  <a href="files/index.html" target="_blank" rel="noopener">Open</a>
+  ${framed ? `<a href="${entry}" target="_blank" rel="noopener">Open</a>` : ""}
   <a href="archive.zip" download>Download</a>
 </header>
-<iframe src="files/index.html" sandbox="${SANDBOX}"></iframe>
+${framed ? `<iframe src="${entry}" sandbox="${SANDBOX}"></iframe>` : ""}
 </body>
 </html>
 `;
@@ -109,11 +112,7 @@ function relativePath(segments: string[]): string | undefined {
     const parts = segments.map(decodeURIComponent);
     if (parts.some((p) => p === ".." || p === "." || /[\\\0]/.test(p)))
       return undefined;
-    const joined = parts.join("/");
-    // A directory (or nothing) is its index.
-    return joined === "" || joined.endsWith("/")
-      ? `${joined}index.html`
-      : joined;
+    return parts.join("/");
   } catch {
     return undefined;
   }
@@ -123,6 +122,28 @@ function relativePath(segments: string[]): string | undefined {
 export function createArtifactRoutes(
   artifacts: ArtifactService,
 ): (request: Request) => Promise<Response | undefined> {
+  /** A request for a page of a version somebody may open: the kind's to answer, inside the seal. */
+  const page = async (
+    request: Request,
+    version: VersionRecord,
+    segments: string[],
+    cache: string,
+  ): Promise<Response> => {
+    const path = relativePath(segments);
+    const kind = artifacts.kindOf(version);
+    if (path === undefined || kind === undefined) return notFound();
+    const response = await kind.respond(
+      {
+        http: request,
+        path,
+        file: (name) => artifacts.fileOf(version, name),
+      },
+      version,
+      JSON.parse(version.manifest),
+    );
+    return seal(response, cache);
+  };
+
   return async (request) => {
     const { pathname } = new URL(request.url);
     const parts = pathname.split("/");
@@ -141,12 +162,13 @@ export function createArtifactRoutes(
     if (area === "preview") {
       if (parts[3] !== "files") return notFound();
       const opened = artifacts.byCapability(key);
-      const name = relativePath(parts.slice(4));
-      if (opened === undefined || name === undefined) return notFound();
-      const path = artifacts.fileOf(opened.version, name);
-      return path === undefined
-        ? notFound()
-        : siteFile(path, "private, max-age=3600");
+      if (opened === undefined) return notFound();
+      return page(
+        request,
+        opened.version,
+        parts.slice(4),
+        "private, max-age=3600",
+      );
     }
 
     if (area === "share") {
@@ -155,7 +177,12 @@ export function createArtifactRoutes(
       const rest = parts.slice(3);
       if (rest.length === 0 || (rest.length === 1 && rest[0] === "")) {
         return new Response(
-          shell(opened.artifact.title, opened.version.number),
+          shell(
+            opened.artifact.title,
+            opened.version.number,
+            artifacts.kindOf(opened.version)?.viewer ?? "download",
+            artifacts.shareEntry(key, opened.version),
+          ),
           {
             headers: {
               "content-type": "text/html; charset=utf-8",
@@ -176,10 +203,7 @@ export function createArtifactRoutes(
         );
       }
       if (rest[0] !== "files") return notFound();
-      const name = relativePath(rest.slice(1));
-      const path =
-        name === undefined ? undefined : artifacts.fileOf(opened.version, name);
-      return path === undefined ? notFound() : siteFile(path, "no-store");
+      return page(request, opened.version, rest.slice(1), "no-store");
     }
 
     // /artifacts/<id>/<version>/archive.zip: the app's own, behind the access check upstream.

@@ -99,6 +99,8 @@ async function chat(
         versions: [
           {
             number: 3,
+            kind: "site",
+            viewer: "iframe",
             files: 4,
             bytes: 10,
             size: 10,

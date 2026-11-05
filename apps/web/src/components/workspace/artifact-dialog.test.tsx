@@ -8,6 +8,8 @@ import { ArtifactButton } from "./artifact-dialog";
 const id = "0b7e2b1c-58f8-4a3c-9d3c-1f0e2a9b6c11";
 const version = (number: number, shareUrl: string | null = null) => ({
   number,
+  kind: "site",
+  viewer: "iframe" as const,
   files: 3,
   bytes: 10,
   size: 10,
@@ -149,6 +151,35 @@ describe("an artifact's dialog", () => {
     });
     await act(async () => host.set("artifacts", { list: [report()] }));
     expect(document.body.textContent).not.toContain("/share/tok/");
+  });
+
+  it.each([
+    ["a kind this app does not know", { kind: "react" }],
+    ["a kind that opens only as a download", { viewer: "download" as const }],
+  ])("offers only the ZIP of %s", async (_name, fields) => {
+    const host = productHost({
+      artifacts: [
+        artifactView({
+          id,
+          title: "季度报告",
+          versions: [{ ...version(1), ...fields }],
+        }),
+      ],
+    });
+    host.hello();
+    const { container } = await mount(
+      <ArtifactButton id={id}>季度报告</ArtifactButton>,
+    );
+    await click(container.querySelector("button"));
+    await flush();
+    expect(frame()).toBeNull();
+    expect(host.calls.filter((c) => c.action === "preview")).toEqual([]);
+    expect(document.body.textContent).toContain("这个版本不能在这里打开");
+    expect(document.body.textContent).not.toContain("新窗口");
+    const downloads = [...document.querySelectorAll("a")].filter(
+      (a) => a.getAttribute("href") === `/artifacts/${id}/1/archive.zip`,
+    );
+    expect(downloads.length).toBeGreaterThan(0);
   });
 
   it("says so when the artifact is gone", async () => {
