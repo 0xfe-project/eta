@@ -1,10 +1,5 @@
 import type { ComponentProps } from "react";
-import type {
-  AnimateOptions,
-  Components,
-  ExtraProps,
-  PluginConfig,
-} from "streamdown";
+import type { Components, ExtraProps, PluginConfig } from "streamdown";
 import { CheckIcon } from "@phosphor-icons/react/Check";
 import { CopyIcon } from "@phosphor-icons/react/Copy";
 import { cjk } from "@streamdown/cjk";
@@ -108,23 +103,14 @@ const components: Components = {
   ),
 };
 const linkSafety = { enabled: false };
-// Text being written comes in character by character, each one fading in out
-// of a blur (sd-grapheme in styles.css).
-const animated: AnimateOptions = {
-  animation: "grapheme",
-  sep: "char",
-  duration: 90,
-  easing: "cubic-bezier(.215, .61, .355, 1)",
-  stagger: 30,
-};
 // Without rehype-raw, raw HTML shows as text instead of elements; sanitize
 // still drops unsafe URLs.
 const rehypePlugins = [defaultRehypePlugins.sanitize];
 
 /**
  * Markdown from agents and people; raw HTML is not rendered. `streaming` is for
- * text still being written: it closes unfinished syntax at the end, only
- * reparses the last block as it grows, and fades new characters in.
+ * text still being written: it closes unfinished syntax at the end and only
+ * reparses the last block as it grows.
  */
 export const Markdown = memo(
   ({
@@ -141,7 +127,6 @@ export const Markdown = memo(
         // space-y-3 replaces Streamdown's space-y-4, to match `.markdown`.
         className={cn("markdown space-y-3", className)}
         mode={streaming ? "streaming" : "static"}
-        animated={streaming ? animated : false}
         isAnimating={streaming}
         plugins={plugins}
         components={components}

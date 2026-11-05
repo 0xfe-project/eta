@@ -189,7 +189,7 @@ describe("the run in flight", () => {
   });
 
   // The page draws a block as one element for as long as its id holds: one that changes when the
-  // message lands draws its words again from scratch, and they all fade in again.
+  // message lands draws its words again from scratch.
   it("keeps a message's block ids from its first streamed frame to its row", () => {
     const rows = [user("go")];
     const ids = (blocks: { id: string }[]) => blocks.map((b) => b.id);

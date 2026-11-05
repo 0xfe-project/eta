@@ -118,27 +118,28 @@ describe("Markdown", () => {
   it("renders the same finished text in either mode", () => {
     const source =
       "# 标题\n\n见 https://example.com/a，然后\n\n**加粗**中文\n\n- x\n- y";
-    // Streaming renders block by block, without newlines between them, and
-    // wraps each character in a span that fades it in.
-    const html = (root: HTMLElement) => {
-      for (const span of root.querySelectorAll("[data-sd-animate]"))
-        span.replaceWith(...span.childNodes);
-      for (const el of root.querySelectorAll("[data-sd-animated]")) {
-        el.removeAttribute("data-sd-animated");
-        if (el.hasAttribute("data-sd-animate-marker")) {
-          el.removeAttribute("data-sd-animate-marker");
-          el.removeAttribute("style");
-        }
-      }
-      root.normalize();
-      return root.innerHTML.replaceAll(">\n<", "><");
-    };
-    const streamed = render(source, true);
-    expect(streamed.querySelector("[data-sd-animate]")!.textContent).toBe("标");
-    expect(html(streamed)).toBe(html(render(source)));
+    // Streaming renders block by block, without newlines between them.
+    const html = (root: HTMLElement) => root.innerHTML.replaceAll(">\n<", "><");
+    expect(html(render(source, true))).toBe(html(render(source)));
     expect(render(source, true).querySelector("strong")!.textContent).toBe(
       "加粗",
     );
+  });
+
+  it("does not animate text or list markers being streamed", () => {
+    const root = render("# 标题\n\n**加粗**中文\n\n- x\n- y", true);
+    expect(root.querySelector("li")!.textContent).toBe("x");
+    expect(root.innerHTML).not.toContain("data-sd-animate");
+  });
+
+  it("closes unfinished bold and code while they are streamed", () => {
+    expect(
+      render("前面 **加粗", true).querySelector("strong")!.textContent,
+    ).toBe("加粗");
+    expect(
+      render("```ts\nconst a = 1", true).querySelector("pre > code")!
+        .textContent,
+    ).toBe("const a = 1\n");
   });
 
   it("gives a link still being streamed no destination", () => {

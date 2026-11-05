@@ -12,33 +12,21 @@ import {
 } from "@/test-product";
 import { cleanup, flush, mount } from "@/test-render";
 
-// The words of a reply fade in one character at a time, and Streamdown only knows which ones it
-// has shown while its component lives: drawn again from scratch, every character fades in again.
-// These run the real Markdown and read what the browser would animate: a character's animation
-// plays when its element is put on the page, so the ones that fade are the elements new since the
-// last look that still have a duration (Streamdown gives the ones it has shown none).
+// Text already on the page stays the same elements while the reply grows and lands: drawn again
+// from scratch, it would flash and lose any selection in it. These run the real Markdown and
+// compare the elements themselves. Streamed text comes in plain, with no animation on it.
 
 const AGENT = "a1";
 let conversations = 0;
 
-let seen = new WeakSet<Element>();
-
-/** The characters of the block saying `text` that fade in since the last look. */
-function fading(container: HTMLElement, text: string) {
+/** The paragraph of the block saying `text`, which comes in without an animation. */
+function paragraph(container: HTMLElement, text: string) {
   const block = [...container.querySelectorAll(".message-content")].find(
     (element) => element.textContent === text,
   );
   if (block === undefined) throw new Error(`no block says ${text}`);
-  const spans = [...block.querySelectorAll<HTMLElement>("[data-sd-animate]")];
-  const fresh = spans
-    .filter(
-      (span) =>
-        !seen.has(span) && !span.style.cssText.includes("--sd-duration: 0ms"),
-    )
-    .map((span) => span.textContent)
-    .join("");
-  for (const span of spans) seen.add(span);
-  return fresh;
+  expect(block.outerHTML).not.toContain("data-sd-animate");
+  return block.querySelector("p")!;
 }
 
 const said = (timestamp: number, content: object[]) => ({
@@ -119,7 +107,6 @@ async function opened(
 }
 
 afterEach(async () => {
-  seen = new WeakSet();
   await cleanup();
   setWire(undefined);
 });
@@ -127,7 +114,7 @@ afterEach(async () => {
 describe.each(["group", "direct"] as const)(
   "a reply that is writing, in a %s",
   (kind) => {
-    it("fades in only the words that are new, across the turns of a run", async () => {
+    it("keeps the elements of the words it has shown, across the turns of a run", async () => {
       const { container, stream, commit } = await opened(kind, [asked]);
       const call = {
         type: "toolCall",
@@ -137,15 +124,15 @@ describe.each(["group", "direct"] as const)(
       };
 
       await stream(said(10, [{ type: "text", text: "我先" }]));
-      expect(fading(container, "我先")).toBe("我先");
+      const shown = paragraph(container, "我先");
       await stream(said(10, [{ type: "text", text: "我先看看" }]));
-      expect(fading(container, "我先看看")).toBe("看看");
+      expect(paragraph(container, "我先看看")).toBe(shown);
 
       // The message lands in the transcript, and the tool it called runs and answers.
       const first = said(10, [{ type: "text", text: "我先看看" }, call]);
       await stream(first);
       await commit([entry(2, first)]);
-      expect(fading(container, "我先看看")).toBe("");
+      expect(paragraph(container, "我先看看")).toBe(shown);
       await commit([
         entry(2, first),
         entry(3, {
@@ -157,16 +144,16 @@ describe.each(["group", "direct"] as const)(
           timestamp: 11,
         }),
       ]);
-      expect(fading(container, "我先看看")).toBe("");
+      expect(paragraph(container, "我先看看")).toBe(shown);
 
-      // The next turn's words are new from their first character.
+      // The next turn's words are a block of their own.
       await stream(said(20, [{ type: "text", text: "看完了" }]));
-      expect(fading(container, "我先看看")).toBe("");
-      expect(fading(container, "看完了")).toBe("看完了");
+      expect(paragraph(container, "我先看看")).toBe(shown);
+      expect(paragraph(container, "看完了")).not.toBe(shown);
     });
 
     // The row goes to work before the view has the message that started the run: for a moment the
-    // newest things the session holds are the last run's, and drawn here they would fade in again.
+    // newest things the session holds are the last run's, and drawn here they would show twice.
     it("draws nothing of the last reply before this one's first block", async () => {
       const lastAnswer = said(5, [{ type: "text", text: "上一轮的回答" }]);
       const { container, stream, commit } = await opened(
@@ -186,7 +173,7 @@ describe.each(["group", "direct"] as const)(
       const answer = said(10, [{ type: "text", text: "这一轮的回答" }]);
       await stream(answer);
       expect(reply.textContent).not.toContain("上一轮的回答");
-      expect(fading(container, "这一轮的回答")).toBe("这一轮的回答");
+      expect(reply.textContent).toContain("这一轮的回答");
       expect(reply.querySelector('[role="status"]')).toBeNull();
     });
 
