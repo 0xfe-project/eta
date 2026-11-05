@@ -45,7 +45,12 @@ export async function openLlm(
   mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   let cpa: Cpa;
   try {
-    cpa = await Cpa.start({ stateDir, extra: options.cpaExtra, warn });
+    cpa = await Cpa.start({
+      dataDir: options.dataDir,
+      stateDir,
+      extra: options.cpaExtra,
+      warn,
+    });
   } catch (error) {
     warn(`[eta] llm: the gateway did not start: ${String(error)}`);
     return undefined;

@@ -114,7 +114,7 @@ export class MachineStore {
     if (existing === undefined) {
       this.#db
         .query(
-          `INSERT INTO machine (id, kind, name, status, home, os, created_at, last_seen_at)
+          `INSERT OR IGNORE INTO machine (id, kind, name, status, home, os, created_at, last_seen_at)
            VALUES (?, 'primary', ?, 'online', ?, ?, ?, ?)`,
         )
         .run(crypto.randomUUID(), facts.name, facts.home, facts.os, now, now);

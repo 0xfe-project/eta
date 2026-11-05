@@ -10,21 +10,17 @@ import type { EmailPayloadInput, EtaMailEnvelope } from "./context";
 import type { EmailCredentials } from "./credentials";
 import type { EmailStore } from "./store";
 import { Buffer } from "node:buffer";
+import { readFileSync } from "node:fs";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
-import { resourcePath } from "../resources";
+import { resource } from "../resources";
 import {
   decodeEmailMeta,
   encodeContextPackets,
   encodePayloadHeaders,
 } from "./context";
 import { PIXEL_PNG_BASE64, renderMail } from "./template";
-
-const LOGO_PATH = resourcePath(
-  "Eta-Logo.png",
-  new URL("../../../web/public/Eta-Logo.png", import.meta.url),
-);
 
 interface PollResult {
   checked: number;
@@ -671,7 +667,13 @@ export class EmailService {
           ...payloadHeaders,
         },
         attachments: [
-          { filename: "eta-logo.png", path: LOGO_PATH, cid: "eta-logo@eta" },
+          // Its bytes, not a path: nodemailer opens a path with `createReadStream`, which cannot
+          // see into an executable.
+          {
+            filename: "eta-logo.png",
+            content: readFileSync(resource("Eta-Logo.png")),
+            cid: "eta-logo@eta",
+          },
           {
             filename: "eta-data.png",
             content: Buffer.from(PIXEL_PNG_BASE64, "base64"),

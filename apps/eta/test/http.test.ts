@@ -1,6 +1,8 @@
 /** The HTTP side of the host: the built web, `/up` and `/version`. */
 import { connect as dial } from "node:net";
-import { describe, expect, it } from "vitest";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { embedResources, resource, resourceNames } from "../src/resources";
 import { connect } from "./support/client";
 import { fakeWeb, testHost } from "./support/host";
 
@@ -135,5 +137,76 @@ describe("/up and /version", () => {
         404,
       );
     }
+  });
+});
+
+describe("the page a compiled host carries", () => {
+  afterEach(() => {
+    embedResources(undefined);
+  });
+
+  /** A page embedded the way a compiled host has it: nothing is called what it was. */
+  async function carried(): Promise<void> {
+    const dir = await fakeWeb();
+    const migrations = Object.fromEntries(
+      resourceNames("migrations").map((name) => [name, resource(name)]),
+    );
+    embedResources({
+      files: {
+        ...migrations,
+        "web/index.html": join(dir, "index.html"),
+        "web/assets/app-abc123.js": join(dir, "assets", "app-abc123.js"),
+        "web/sw.js": join(dir, "sw.js"),
+        "web/BUILD": join(dir, "BUILD"),
+      },
+      digests: {},
+    });
+  }
+
+  it("answers like a directory: types, cache headers, client routes, missing assets", async () => {
+    await carried();
+    const host = await testHost();
+    const origin = `http://127.0.0.1:${host.port}`;
+
+    for (const path of ["/", "/index.html", "/workspace/tasks/12"]) {
+      const page = await fetch(`${origin}${path}`);
+      expect(page.status).toBe(200);
+      expect(page.headers.get("content-type")).toContain("text/html");
+      expect(page.headers.get("cache-control")).toBe("no-cache");
+      expect(await page.text()).toContain("<title>eta</title>");
+    }
+
+    const asset = await fetch(`${origin}/assets/app-abc123.js`);
+    expect(asset.headers.get("content-type")).toContain("javascript");
+    expect(asset.headers.get("cache-control")).toBe(
+      "public, max-age=31536000, immutable",
+    );
+    expect(await asset.text()).toBe("console.log(1)");
+
+    const worker = await fetch(`${origin}/sw.js`);
+    expect(worker.headers.get("cache-control")).toBe("no-cache");
+
+    expect((await fetch(`${origin}/assets/gone-0000.js`)).status).toBe(404);
+    expect(
+      (await fetch(`${origin}/assets`)).headers.get("content-type"),
+    ).toContain("text/html");
+    expect(await (await fetch(`${origin}/version`)).text()).toBe("b1");
+  });
+
+  it("has nothing outside the page to give", async () => {
+    await carried();
+    const host = await testHost();
+    const response = await fetch(
+      `http://127.0.0.1:${host.port}/%2e%2e/%2e%2e/etc/passwd`,
+    );
+    expect(await response.text()).not.toContain("root:");
+  });
+
+  it("gives way to --web-dir", async () => {
+    await carried();
+    const dir = await fakeWeb("from-the-directory");
+    const host = await testHost({ webDir: dir });
+    const response = await fetch(`http://127.0.0.1:${host.port}/version`);
+    expect(await response.text()).toBe("from-the-directory");
   });
 });

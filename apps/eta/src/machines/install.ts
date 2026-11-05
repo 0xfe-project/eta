@@ -181,7 +181,7 @@ export async function installDaemon(
   await step(
     "Sending the daemon",
     `mkdir -p "$HOME/.eta/bin" && cat > ${BIN}.part && chmod 755 ${BIN}.part && mv -f ${BIN}.part ${BIN}`,
-    Bun.file(build.path),
+    Bun.file(await build.path()),
   );
   deps.onStep?.("register");
   await step(

@@ -32,7 +32,7 @@ import { createWebRoutes } from "./http";
 import { GatewayModels } from "./llm/models";
 import { llmPlugin } from "./llm/plugin";
 import { openLlm } from "./llm/runtime";
-import { DaemonBuilds, defaultBuildsDir } from "./machines/builds";
+import { buildsIn, defaultBuilds } from "./machines/builds";
 import { Tailscale } from "./machines/tailscale";
 import { createProduct } from "./product";
 
@@ -106,9 +106,9 @@ export interface HostOptions {
   tailscale?: boolean | Tailscale;
   /**
    * The daemon builds this primary carries (`apps/daemon/scripts/build.ts`): `true` looks where
-   * they are kept (the checkout's `apps/daemon/out/dist`, or `daemon/` beside a compiled host), a
-   * string is a directory of them. Off by default, so a host made for a test leaves daemons at
-   * whatever build they are; `main.ts` turns it on.
+   * they are kept (the checkout's `apps/daemon/out/dist`, or inside a compiled host), a string is
+   * a directory of them. Off by default, so a host made for a test leaves daemons at whatever
+   * build they are; `main.ts` turns it on.
    */
   daemonBuilds?: boolean | string;
   /** How a daemon is put on another computer; the user's `ssh` by default (a test fakes it). */
@@ -185,11 +185,10 @@ export async function startHost(options: HostOptions): Promise<Host> {
       ...(options.daemonBuilds === undefined || options.daemonBuilds === false
         ? {}
         : {
-            daemonBuilds: new DaemonBuilds(
+            daemonBuilds:
               options.daemonBuilds === true
-                ? defaultBuildsDir()
-                : options.daemonBuilds,
-            ),
+                ? defaultBuilds(options.dataDir)
+                : buildsIn(options.daemonBuilds),
           }),
       ...(options.ssh === undefined ? {} : { ssh: options.ssh }),
     });

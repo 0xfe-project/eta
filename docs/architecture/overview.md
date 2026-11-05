@@ -19,12 +19,12 @@ eta 是一个人用来指挥多个智能体的工作台。服务端是**一个 B
 
 ## 进程
 
-| 进程           | 位置          | 作用                                                                                                     |
-| -------------- | ------------- | -------------------------------------------------------------------------------------------------------- |
-| host           | `apps/eta`    | 唯一必需的进程。`bun apps/eta/src/main.ts`，开发时 `bun run dev`                                         |
-| web 开发服务器 | `apps/web`    | 只在开发时需要（vite，把 `/ws` 代理给 host）。生产由 host 用 `--web-dir` 直接提供构建好的静态页          |
-| eta-daemon     | `apps/daemon` | 可选，每台额外的机器一个。`bun build --compile` 出的单文件，不含 Web、数据库、产品插件和模型配置         |
-| 记忆边车       | `apps/memory` | 可选。Python（mem0 + fastembed），自己的 PostgreSQL（pgvector）。没有它，host 不挂载记忆，界面隐藏记忆页 |
+| 进程           | 位置          | 作用                                                                                                                             |
+| -------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| host           | `apps/eta`    | 唯一必需的进程。`bun apps/eta/src/main.ts`，开发时 `bun run dev`                                                                 |
+| web 开发服务器 | `apps/web`    | 只在开发时需要（vite，把 `/ws` 代理给 host）。生产由 host 直接提供构建好的静态页（打包的 host 自带，`--web-dir` 可指定别的目录） |
+| eta-daemon     | `apps/daemon` | 可选，每台额外的机器一个。`bun build --compile` 出的单文件，不含 Web、数据库、产品插件和模型配置                                 |
+| 记忆边车       | `apps/memory` | 可选。Python（mem0 + fastembed），自己的 PostgreSQL（pgvector）。没有它，host 不挂载记忆，界面隐藏记忆页                         |
 
 没有别的服务：没有控制面、消息队列、容器编排或主库。LLM 网关不是独立服务：CLIProxyAPI 是 host 启动并看管的子进程，随 host 退出（见 [LLM 网关](llm-gateway.md)）。搜索用的 SearXNG 也一样：没给外部地址时，它是 host 在第一次搜索时启动的子进程，随 host 退出（见[读网页与搜索](web.md)）。
 

@@ -484,8 +484,8 @@ export class MachineHub {
   async route(request: Request): Promise<Response | undefined> {
     return (
       (await this.enroll(request)) ??
-      this.download(request) ??
-      this.install(request)
+      (await this.download(request)) ??
+      (await this.install(request))
     );
   }
 
@@ -493,7 +493,7 @@ export class MachineHub {
    * The install script and the build it fetches, for whoever holds a good install code. A wrong
    * code counts against the same limit as a wrong code at the enrol door.
    */
-  install(request: Request): Response | undefined {
+  async install(request: Request): Promise<Response | undefined> {
     const url = new URL(request.url);
     const script = url.pathname === INSTALL_SCRIPT_PATH;
     if (!script && !url.pathname.startsWith(`${INSTALL_DOWNLOAD_PATH}/`))
@@ -530,7 +530,7 @@ export class MachineHub {
           status: 404,
         },
       );
-    return new Response(Bun.file(build.path), {
+    return new Response(Bun.file(await build.path()), {
       headers: {
         "content-type": "application/octet-stream",
         "cache-control": "no-store",
@@ -539,7 +539,7 @@ export class MachineHub {
   }
 
   /** `GET /machines/daemon/<platform>`, for a daemon that has been let in. */
-  download(request: Request): Response | undefined {
+  async download(request: Request): Promise<Response | undefined> {
     const { pathname } = new URL(request.url);
     if (!pathname.startsWith(`${DAEMON_DOWNLOAD_PATH}/`)) return undefined;
     if (request.method !== "GET")
@@ -552,7 +552,7 @@ export class MachineHub {
     );
     if (build === undefined)
       return new Response("no such build", { status: 404 });
-    return new Response(Bun.file(build.path), {
+    return new Response(Bun.file(await build.path()), {
       headers: {
         "content-type": "application/octet-stream",
         "cache-control": "no-store",

@@ -1,5 +1,5 @@
 import { mkdirSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 /**
  * The product's database: `<dataDir>/eta.sqlite`, as `bun:sqlite` in this process.
  *
@@ -13,7 +13,7 @@ import { dirname, join } from "node:path";
  * when they merge, not at runtime on somebody's data.
  */
 import { Database } from "bun:sqlite";
-import { resourcePath } from "./resources";
+import { resource, resourceNames } from "./resources";
 
 export interface Migration {
   /** The file name without `.sql`: `0001-agents`. The number orders it, the whole name identifies it. */
@@ -25,11 +25,6 @@ export interface Migration {
 const MIGRATION_TABLE = "eta_migrations";
 
 const MIGRATION_FILE = /^(\d{4})-[a-z0-9-]+\.sql$/;
-
-const MIGRATIONS_DIR = resourcePath(
-  "migrations",
-  new URL("migrations/", import.meta.url),
-);
 
 /** Where a data directory keeps its database. */
 export function databasePath(dataDir: string): string {
@@ -45,21 +40,32 @@ export function databasePath(dataDir: string): string {
 export function openDatabase(path: string): Database {
   mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path, { create: true, strict: true });
+  // First: moving a new database to WAL takes a lock another process may be holding.
+  db.exec("PRAGMA busy_timeout = 5000");
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA foreign_keys = ON");
-  db.exec("PRAGMA busy_timeout = 5000");
   return db;
 }
 
 /**
- * Every migration in a directory, in the order they have to run. A `.sql` file that is not
- * named `NNNN-<name>.sql`, or a number used twice, is an error: a migration the runner skips
- * silently is a table that is missing in production only.
+ * Every migration the host carries, or those in a directory, in the order they have to run. A
+ * `.sql` file that is not named `NNNN-<name>.sql`, or a number used twice, is an error: a migration
+ * the runner skips silently is a table that is missing in production only. The file name is the
+ * migration's id, so it is the original name, whatever the file is called inside an executable.
  */
-export function loadMigrations(dir: string = MIGRATIONS_DIR): Migration[] {
+export function loadMigrations(dir?: string): Migration[] {
+  const paths =
+    dir === undefined
+      ? resourceNames("migrations").map((name) => ({
+          file: basename(name),
+          path: resource(name),
+        }))
+      : readdirSync(dir)
+          .sort()
+          .map((file) => ({ file, path: join(dir, file) }));
   const migrations: Migration[] = [];
   const numbers = new Set<string>();
-  for (const file of readdirSync(dir).sort()) {
+  for (const { file, path } of paths) {
     if (!file.endsWith(".sql")) continue;
     const match = MIGRATION_FILE.exec(file);
     if (match === null) {
@@ -72,7 +78,7 @@ export function loadMigrations(dir: string = MIGRATIONS_DIR): Migration[] {
     numbers.add(number);
     migrations.push({
       id: file.replace(/\.sql$/, ""),
-      sql: readFileSync(join(dir, file), "utf8"),
+      sql: readFileSync(path, "utf8"),
     });
   }
   return migrations;
@@ -86,24 +92,23 @@ export function applyMigrations(
   db.exec(
     `CREATE TABLE IF NOT EXISTS ${MIGRATION_TABLE} (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)`,
   );
-  const done = new Set(
-    db
-      .query<{ id: string }, []>(`SELECT id FROM ${MIGRATION_TABLE}`)
-      .all()
-      .map((row) => row.id),
+  const isDone = db.query<{ id: string }, [string]>(
+    `SELECT id FROM ${MIGRATION_TABLE} WHERE id = ?`,
   );
   const applied: string[] = [];
   for (const migration of migrations) {
-    if (done.has(migration.id)) continue;
     // One transaction per migration: a half-applied migration is a database nobody can reason
     // about, so the statements and the record of having run them land together or not at all.
+    // Immediate, and asked inside it: two hosts starting on a new database take turns, and the
+    // second finds the first's work done.
     db.transaction(() => {
+      if (isDone.get(migration.id) !== null) return;
       db.exec(migration.sql);
       db.query(
         `INSERT INTO ${MIGRATION_TABLE} (id, applied_at) VALUES (?, ?)`,
       ).run(migration.id, new Date().toISOString());
-    })();
-    applied.push(migration.id);
+      applied.push(migration.id);
+    }).immediate();
   }
   return applied;
 }

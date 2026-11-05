@@ -2,23 +2,24 @@
  * Stage the host a packaged app carries: `dist/host/`, which `electrobun.config.ts` copies into
  * the bundle as `host/`.
  *
- * The host (`apps/eta`) compiled to one executable, `eta-host`, and beside it, flat, the files it
- * reads at run time (`apps/eta/src/resources.ts` is where it looks):
+ * One file, `eta-host`: the host (`apps/eta`) compiled with everything it reads at run time inside
+ * it. `apps/eta/scripts/embed.ts` generates the entry that embeds them, and
+ * `apps/eta/src/resources.ts` is how the host finds them:
  *
- *   eta-host        the host itself
  *   migrations/     apps/eta/src/migrations
  *   Eta-Logo.png    the logo the mail template embeds
  *   web/            apps/web/dist, the page (built first: `bun run --cwd apps/web build`)
- *   cli-proxy-api   CLIProxyAPI for this platform, and `cpa-launcher` next to it
- *   daemon/         eta-daemon for every platform, with its manifest
+ *   cpa/            CLIProxyAPI for this platform, and `cpa-launcher` next to it
+ *   daemon/         eta-daemon for every platform, compressed, with its manifest
  *
  * The cpajs platform packages are external to the bundle: their table names every platform, the
  * install has one, and the compiled host is handed its binary by path instead.
  */
-import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { $ } from "bun";
+import { writeEmbedded } from "../../eta/scripts/embed";
 
 const root = resolve(import.meta.dir, "../../..");
 const app = join(root, "apps", "eta");
@@ -35,6 +36,24 @@ if (!existsSync(join(web, "index.html"))) {
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
+// The daemon for every platform it runs on: what this host keeps its machines at and installs new
+// ones from (`apps/eta/src/machines/builds.ts`).
+await $`bun run --cwd ${join(root, "apps", "daemon")} build:all`;
+
+// cpajs's own lookup, from where the host resolves it: the binary of the installed platform.
+const server = (await import(Bun.resolveSync("@cpajs/cpa/server", app))) as {
+  resolveBinary: () => { path: string };
+};
+const cpa = server.resolveBinary().path;
+const launcher = join(dirname(cpa), "cpa-launcher");
+
+const entry = await writeEmbedded({
+  out: join(app, "out", "embed"),
+  web,
+  daemons: join(root, "apps", "daemon", "out", "dist"),
+  cpa: existsSync(launcher) ? [cpa, launcher] : [cpa],
+});
+
 const externals = [
   "darwin",
   "win32",
@@ -43,31 +62,6 @@ const externals = [
   "openbsd",
   "netbsd",
 ].flatMap((os) => ["--external", `@cpajs/${os}-*`]);
-await $`bun build --compile --target=bun ${externals} ${join(app, "src", "main.ts")} --outfile ${join(out, "eta-host")}`;
-
-cpSync(join(app, "src", "migrations"), join(out, "migrations"), {
-  recursive: true,
-});
-cpSync(
-  join(root, "apps", "web", "public", "Eta-Logo.png"),
-  join(out, "Eta-Logo.png"),
-);
-cpSync(web, join(out, "web"), { recursive: true });
-
-// The daemon for every platform it runs on: what this host keeps its machines at and installs new
-// ones from (`apps/eta/src/machines/builds.ts`).
-await $`bun run --cwd ${join(root, "apps", "daemon")} build:all`;
-cpSync(join(root, "apps", "daemon", "out", "dist"), join(out, "daemon"), {
-  recursive: true,
-});
-
-// cpajs's own lookup, from where the host resolves it: the binary of the installed platform.
-const server = (await import(Bun.resolveSync("@cpajs/cpa/server", app))) as {
-  resolveBinary: () => { path: string };
-};
-const cpa = server.resolveBinary().path;
-cpSync(cpa, join(out, "cli-proxy-api"));
-const launcher = join(dirname(cpa), "cpa-launcher");
-if (existsSync(launcher)) cpSync(launcher, join(out, "cpa-launcher"));
+await $`bun build --compile --target=bun ${externals} ${entry} --outfile ${join(out, "eta-host")}`;
 
 console.log(`staged the host in ${out}`);
