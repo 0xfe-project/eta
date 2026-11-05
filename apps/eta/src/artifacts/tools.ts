@@ -4,16 +4,16 @@ import type { KernelTool } from "@eta/core";
  * Publishing from a session: the `publish_artifact` tool.
  *
  * The directory is read from this machine's disk, relative to the session's working directory. What
- * is packed is judged by the service (`site.ts`) and stored as a new version. A version published
+ * is packed is judged by the service (`kinds/site.ts`) and stored as a new version. A version published
  * for a task goes on the task's timeline and into its cards.
  */
 import type { SessionHooks } from "../session-hooks";
 import type { TaskBoard } from "../tasks/board";
+import type { SiteLimits } from "./files";
 import type { ArtifactService } from "./service";
-import type { SiteLimits } from "./site";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
-import { ArtifactError, collectSite } from "./site";
+import { ArtifactError, collectSite } from "./files";
 
 /** The tool needs nothing from the run: where it reads is the session's own directory. */
 type Context = Record<string, never>;
@@ -27,6 +27,12 @@ const parameters = () =>
         "The directory to publish, relative to the working directory. Its root must have index.html.",
     }),
     title: Type.String({ description: "What this site is called" }),
+    spa: Type.Optional(
+      Type.Boolean({
+        description:
+          "This is a single-page app with path routes: a navigation to an address with no file gets index.html (a missing .js, .css or image is still a 404). Off by default",
+      }),
+    ),
     artifactId: Type.Optional(
       Type.String({
         description:
@@ -60,7 +66,13 @@ export function artifactSessionTools(deps: {
         "again with `artifactId` adds a version to the artifact you published, instead of making " +
         "a second one. Symbolic links are refused; .git and node_modules are left out. The page " +
         "runs in a sandbox: it can use scripts, but it cannot reach the host's API, cookies or " +
-        "anything else of the user's.",
+        "anything else of the user's. localStorage, cookies, IndexedDB and Service Workers are " +
+        "not available, and there is no backend: only GET requests for the published files.\n\n" +
+        "Building for it: the site is served under a path of its own, so use relative asset " +
+        "paths. For a Vite project set `base: './'`, run `vite build` yourself and publish " +
+        "`dist`. Route with the hash, or set `spa: true` for path routes; with `spa` a root path " +
+        "such as `/assets/app.js` in index.html is refused, and the router needs " +
+        '`basename={new URL(".", document.baseURI).pathname}`.',
       parameters: parameters(),
       async execute(args, run) {
         try {
@@ -79,6 +91,7 @@ export function artifactSessionTools(deps: {
           const { artifact, version } = await deps.artifacts.publish({
             title: args.title,
             files,
+            options: args.spa === true ? { fallback: "index.html" } : {},
             artifactId: args.artifactId,
             taskId: task?.id,
             conversationId,

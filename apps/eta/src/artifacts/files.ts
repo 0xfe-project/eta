@@ -1,11 +1,11 @@
 /**
- * What an artifact is made of: a static site, as a list of files.
+ * What an artifact is made of: a list of files.
  *
- * It is read out of a directory on this machine's disk, judged here, and only then stored. The rules
- * about what a site is are the product's: an `index.html` at the root, every path a clean relative
- * path, no links, within limits. A site that fails any of them is refused whole, with a message
- * that says what to fix: an artifact that is half there looks like a working site, and that is
- * worse than none.
+ * They are read out of a directory on this machine's disk, judged here, and only then stored. The
+ * rules here hold for every kind of artifact: every path a clean relative path, no links, within
+ * limits. What else makes them a site is the kind's (`kinds/`). Files that fail any rule are
+ * refused whole, with a message that says what to fix: an artifact that is half there looks like a
+ * working site, and that is worse than none.
  */
 import { lstat, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
@@ -137,10 +137,10 @@ function checkName(name: string): void {
 }
 
 /**
- * Judge a site, whole, before a byte of it is stored. Throws an `ArtifactError` saying what to
- * fix; returns the files' total size.
+ * Judge the files, whole, before a byte of them is stored. Throws an `ArtifactError` saying what to
+ * fix; returns their total size.
  */
-export function checkSite(
+export function checkFiles(
   files: readonly SiteFile[],
   limits: SiteLimits,
 ): number {
@@ -159,18 +159,6 @@ export function checkSite(
     throw new ArtifactError(
       `a site may be at most ${mib(limits.bytes)} in all`,
     );
-  if (!seen.has("index.html")) {
-    // The common mistake is a directory one level too high; say how to fix it.
-    for (const name of seen) {
-      const parts = name.split("/");
-      if (parts.length === 2 && parts[1] === "index.html") {
-        throw new ArtifactError(
-          `index.html must be at the root of the site, and it is in ${parts[0]}/: publish ${parts[0]} itself`,
-        );
-      }
-    }
-    throw new ArtifactError("the root of the site has no index.html");
-  }
   return total;
 }
 

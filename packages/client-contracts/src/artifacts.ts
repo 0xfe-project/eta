@@ -1,5 +1,6 @@
 /**
- * Artifacts: static sites an agent publishes, as versioned and shareable pages.
+ * Artifacts: what an agent publishes, as versioned and shareable pages. Each version has a kind;
+ * today that is `site`, a static site.
  *
  * The `artifacts` target publishes the `list` of them (not eager). Publishing is not an action:
  * an agent does it with the `publish_artifact` tool of its session, which packs a directory
@@ -23,9 +24,16 @@
  */
 import type { CallFrame } from "@eta/client-wire-proto";
 
+/** How the app opens a version: in the sandboxed frame, or only as its ZIP. */
+export type ArtifactViewer = "iframe" | "download";
+
 export interface ArtifactVersionView {
   /** From 1, per artifact; a version never changes once published. */
   number: number;
+  /** What it is. A client that does not know the kind offers the ZIP and no more. */
+  kind: string;
+  /** How to open it. `download` too for a kind this host no longer has. */
+  viewer: ArtifactViewer;
   files: number;
   /** The files' total size. */
   bytes: number;

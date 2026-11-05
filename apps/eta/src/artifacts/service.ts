@@ -1,11 +1,13 @@
 import type { ArtifactVersionView, ArtifactView } from "@eta/client-contracts";
 import type { Buffer } from "node:buffer";
-import type { SiteFile, SiteLimits } from "./site";
+import type { SiteFile, SiteLimits } from "./files";
+import type { ArtifactKinds } from "./kinds";
+import type { ArtifactKind } from "./kinds/kind";
 /**
- * Artifacts: publishing a site, its versions, who may see it.
+ * Artifacts: publishing one, its versions, who may see it.
  *
- * What an artifact is: a title, the agent that publishes it, and versions, each one a static site
- * judged before a byte of it was stored. What a share is: a token bound to one version, taken back
+ * What an artifact is: a title, the agent that publishes it, and versions, each one of a kind
+ * (`kinds/`) and judged by it before a byte was stored. What a share is: a token bound to one version, taken back
  * for good by unsharing. What a preview is: an address with an hour's capability in it, because a
  * sandboxed iframe sends no cookie (`capability.ts`).
  *
@@ -18,13 +20,16 @@ import { randomBytes } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { CAPABILITY_TTL_MS, sign, verify } from "./capability";
-import { ArtifactError, checkSite, packSite } from "./site";
+import { ArtifactError, checkFiles, packSite } from "./files";
+import { DEFAULT_KIND } from "./kinds";
 
 export interface ArtifactServiceDeps {
   store: ArtifactStore;
   /** Where the bytes go: `<dataDir>/artifacts`. */
   root: string;
   limits: SiteLimits;
+  /** What a version can be. */
+  kinds: ArtifactKinds;
   /** The key capabilities are signed with. */
   key: Buffer;
   /** The list of artifacts moved. */
@@ -34,6 +39,10 @@ export interface ArtifactServiceDeps {
 export interface PublishInput {
   title: string;
   files: readonly SiteFile[];
+  /** What this version is; a site when absent. */
+  kind?: string | undefined;
+  /** What the kind is asked for, which it judges and turns into the manifest. */
+  options?: unknown;
   /** The artifact to add a version to; absent makes a new one. */
   artifactId?: string | undefined;
   taskId?: string | undefined;
@@ -44,6 +53,8 @@ export interface PublishInput {
 
 /** Where a version's public page is. */
 const shareUrl = (token: string): string => `/share/${token}/`;
+/** What is under a capability or a share is the version, from here on. */
+const FILES = "files/";
 /** The app's own download of a version's ZIP. */
 const archiveUrl = (artifactId: string, version: number): string =>
   `/artifacts/${artifactId}/${version}/archive.zip`;
@@ -109,6 +120,16 @@ export class ArtifactService {
     return share === undefined ? undefined : this.#opened(share.versionId);
   }
 
+  /** The code that answers for a version. A host that lacks it can only offer the ZIP. */
+  kindOf(version: VersionRecord): ArtifactKind | undefined {
+    return this.#deps.kinds.get(version.kind);
+  }
+
+  /** How a version's public page starts. */
+  shareEntry(token: string, version: VersionRecord): string {
+    return `${shareUrl(token)}${this.#entry(version)}`;
+  }
+
   /**
    * A file of a version, as a path on disk, or nothing for a name that leaves the site. The names
    * were checked on the way in; this is the second lock on the same door, because a name from a
@@ -133,14 +154,17 @@ export class ArtifactService {
     const version = this.#version(artifactId, number);
     const expiresAt = now + CAPABILITY_TTL_MS;
     const capability = sign(this.#deps.key, version.id, expiresAt);
-    return { url: `/preview/${capability}/files/index.html`, expiresAt };
+    return {
+      url: `/preview/${capability}/${this.#entry(version)}`,
+      expiresAt,
+    };
   }
 
   /* ---------------------------------------------------------------- changes */
 
   /**
-   * Publish a site: a new artifact, or a new version of one. The site is judged whole first, so a
-   * bad one costs nothing and leaves nothing.
+   * Publish a new artifact, or a new version of one. It is judged whole first, so a bad one costs
+   * nothing and leaves nothing.
    */
   publish(
     input: PublishInput,
@@ -191,7 +215,12 @@ export class ArtifactService {
     const { store, root } = this.#deps;
     const title = input.title.trim();
     if (title === "") throw new ArtifactError("an artifact needs a title");
-    const total = checkSite(input.files, this.#deps.limits);
+    const kindId = input.kind ?? DEFAULT_KIND;
+    const kind = this.#deps.kinds.get(kindId);
+    if (kind === undefined)
+      throw new ArtifactError(`no such kind of artifact: ${kindId}`);
+    const total = checkFiles(input.files, this.#deps.limits);
+    const manifest = kind.prepare(input.files, input.options);
     const existing =
       input.artifactId === undefined ? undefined : store.get(input.artifactId);
     if (input.artifactId !== undefined && existing === undefined)
@@ -211,6 +240,8 @@ export class ArtifactService {
       id: crypto.randomUUID(),
       artifactId: id,
       number: store.nextNumber(id),
+      kind: kind.id,
+      manifest: JSON.stringify(manifest),
       files: input.files.length,
       bytes: total,
       size: archive.byteLength,
@@ -256,6 +287,12 @@ export class ArtifactService {
     return join(this.#deps.root, version.artifactId, String(version.number));
   }
 
+  /** Where a version opens, under its capability or share: said here and nowhere else. */
+  #entry(version: VersionRecord): string {
+    const entry = this.kindOf(version)?.entry(JSON.parse(version.manifest));
+    return `${FILES}${entry ?? "index.html"}`;
+  }
+
   #version(artifactId: string, number: number): VersionRecord {
     const version = this.#deps.store.version(artifactId, number);
     if (version === undefined)
@@ -291,6 +328,8 @@ export class ArtifactService {
         const share = shares.get(version.id);
         return {
           number: version.number,
+          kind: version.kind,
+          viewer: this.kindOf(version)?.viewer ?? "download",
           files: version.files,
           bytes: version.bytes,
           size: version.size,

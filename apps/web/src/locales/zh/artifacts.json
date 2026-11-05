@@ -24,5 +24,9 @@
     "title": "还没有 Artifacts",
     "description": "智能体在这个群里发布的页面会出现在这里。"
   },
+  "downloadOnly": {
+    "title": "这个版本不能在这里打开",
+    "description": "可以下载 ZIP 查看内容。"
+  },
   "gone": "这个 Artifact 已不存在"
 }

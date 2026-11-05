@@ -19,7 +19,7 @@ import type {
   WireService,
 } from "@eta/server";
 import type { Database } from "bun:sqlite";
-import type { SiteLimits } from "./artifacts/site";
+import type { SiteLimits } from "./artifacts/files";
 import type { GatewayKeys } from "./bundles/bundles";
 import type { GithubTuning } from "./github/service";
 import type { DaemonBuilds } from "./machines/builds";
@@ -35,10 +35,11 @@ import { peerAddressOf } from "@eta/server";
 import { agentsPlugin } from "./agents/plugin";
 import { AgentStore } from "./agents/store";
 import { loadKey } from "./artifacts/capability";
+import { DEFAULT_LIMITS } from "./artifacts/files";
+import { KINDS } from "./artifacts/kinds";
 import { artifactsPlugin } from "./artifacts/plugin";
 import { createArtifactRoutes } from "./artifacts/routes";
 import { ArtifactService } from "./artifacts/service";
-import { DEFAULT_LIMITS } from "./artifacts/site";
 import { ArtifactStore } from "./artifacts/store";
 import { artifactSessionTools } from "./artifacts/tools";
 import { Bundles } from "./bundles/bundles";
@@ -537,6 +538,7 @@ export function createProduct(options: {
     store: artifactRows,
     root: artifactsRoot,
     limits,
+    kinds: KINDS,
     key: loadKey(join(artifactsRoot, ".preview-key")),
     changed: () => wire?.pushNow("artifacts"),
   });

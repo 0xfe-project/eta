@@ -34,6 +34,12 @@ import { wireErrorMessage } from "@/queries/wire";
 const SANDBOX =
   "allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads";
 
+/** What this app knows how to show in its frame. A version of anything else is its ZIP. */
+const FRAMED_KINDS = new Set(["site"]);
+
+const opensInFrame = (version: ArtifactVersion): boolean =>
+  version.viewer === "iframe" && FRAMED_KINDS.has(version.kind);
+
 function ArtifactDialog({
   id,
   version,
@@ -56,10 +62,12 @@ function ArtifactDialog({
   // The address the frame loads from carries a capability that works for an hour, so it is asked
   // for each time a version is shown and kept nowhere but here.
   const { mutate: ask, data: preview, error: previewError } = usePreview();
-  const shown = current?.number;
+  const framed = current !== null && opensInFrame(current);
+  const shown = framed ? current.number : undefined;
   useEffect(() => {
     if (open && shown !== undefined) ask({ artifactId: id, version: shown });
   }, [open, id, shown, ask]);
+  const failed = error ?? (framed ? previewError : null);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[calc(100dvh-1rem)] max-w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden p-0 sm:h-[calc(100dvh-4rem)] sm:max-w-[min(96rem,calc(100%-4rem))]">
@@ -104,23 +112,25 @@ function ArtifactDialog({
               )}
               <span className="flex-1 sm:hidden" />
               <ShareControl id={id} version={current} />
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={preview === undefined}
-                asChild
-              >
-                <a
-                  href={preview?.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+              {framed ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={preview === undefined}
+                  asChild
                 >
-                  <ArrowSquareOutIcon aria-hidden="true" />
-                  <span className="max-sm:sr-only">
-                    {translateText("common:actions.openInNewWindow")}
-                  </span>
-                </a>
-              </Button>
+                  <a
+                    href={preview?.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ArrowSquareOutIcon aria-hidden="true" />
+                    <span className="max-sm:sr-only">
+                      {translateText("common:actions.openInNewWindow")}
+                    </span>
+                  </a>
+                </Button>
+              ) : null}
               <Button variant="ghost" size="sm" asChild>
                 <a href={current.archiveUrl} download>
                   <DownloadSimpleIcon aria-hidden="true" />
@@ -133,23 +143,37 @@ function ArtifactDialog({
           ) : null}
         </div>
         {current?.shareUrl ? <ShareLink url={current.shareUrl} /> : null}
-        <div className="relative min-h-0 flex-1 bg-white">
-          {error || previewError ? (
+        <div className={cn("relative min-h-0 flex-1", framed && "bg-white")}>
+          {failed ? (
             <LoadError
               what={translateText("loadTarget")}
-              error={(error ?? previewError)!}
+              error={failed}
               onRetry={
                 current
                   ? () => ask({ artifactId: id, version: current.number })
                   : undefined
               }
             />
-          ) : !loaded || (current && preview === undefined) ? (
+          ) : !loaded || (framed && preview === undefined) ? (
             <Loading
               layout="detail"
               className="p-6"
               label={translateText("common:states.opening")}
             />
+          ) : current && !framed ? (
+            <Empty
+              icon={DownloadSimpleIcon}
+              title={translateText("downloadOnly.title")}
+              action={
+                <Button variant="outline" size="sm" asChild>
+                  <a href={current.archiveUrl} download>
+                    {translateText("common:actions.download")}
+                  </a>
+                </Button>
+              }
+            >
+              {translateText("downloadOnly.description")}
+            </Empty>
           ) : current && preview && artifact ? (
             <iframe
               key={`${current.number}:${preview.url}`}

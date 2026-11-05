@@ -19,6 +19,10 @@ export interface VersionRecord {
   id: string;
   artifactId: string;
   number: number;
+  /** The kind that judged it and answers for it (`kinds/`). */
+  kind: string;
+  /** What that kind stored when it was published, as JSON. */
+  manifest: string;
   files: number;
   bytes: number;
   size: number;
@@ -45,6 +49,8 @@ interface VersionRow {
   id: string;
   artifact_id: string;
   number: number;
+  kind: string;
+  manifest: string;
   files: number;
   bytes: number;
   size: number;
@@ -71,6 +77,8 @@ const versionOf = (row: VersionRow): VersionRecord => ({
   id: row.id,
   artifactId: row.artifact_id,
   number: row.number,
+  kind: row.kind,
+  manifest: row.manifest,
   files: row.files,
   bytes: row.bytes,
   size: row.size,
@@ -196,13 +204,15 @@ export class ArtifactStore {
       }
       this.#db
         .query(
-          `INSERT INTO artifact_version (id, artifact_id, number, files, bytes, size, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO artifact_version (id, artifact_id, number, kind, manifest, files, bytes, size, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           version.id,
           version.artifactId,
           version.number,
+          version.kind,
+          version.manifest,
           version.files,
           version.bytes,
           version.size,

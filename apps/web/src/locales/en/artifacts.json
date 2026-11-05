@@ -24,5 +24,9 @@
     "title": "No Artifacts yet",
     "description": "Pages published by agents in this group appear here."
   },
+  "downloadOnly": {
+    "title": "This version can’t be opened here",
+    "description": "Download the ZIP to see what’s in it."
+  },
   "gone": "This artifact no longer exists"
 }
