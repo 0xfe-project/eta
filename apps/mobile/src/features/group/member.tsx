@@ -341,10 +341,7 @@ export function MemberSheet(props: {
 }
 
 /** 只看: one member's rows of the conversation, newest first. The web has no such view; it reads the same timeline. */
-function MemberOnlyScreen(props: {
-  conversationId: string;
-  agentId: string;
-}) {
+function MemberOnlyScreen(props: { conversationId: string; agentId: string }) {
   const target = useTarget(`conversations.${props.conversationId}`);
   const timeline = () => target.section<TimelineSection>("timeline");
   const older = signal<MessageView[]>([]);

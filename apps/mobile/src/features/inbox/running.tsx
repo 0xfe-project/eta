@@ -229,10 +229,7 @@ interface Progress {
 }
 
 /** The tool call with no result yet, newest first, or thinking; since the run's last prompt. */
-function progressOf(
-  messages: ViewMessageRow[],
-  streaming?: unknown,
-): Progress {
+function progressOf(messages: ViewMessageRow[], streaming?: unknown): Progress {
   const rows = messages.map((row) => row.message as unknown as RawMessage);
   if (streaming !== undefined) rows.push(streaming as RawMessage);
   const finished = new Set(
