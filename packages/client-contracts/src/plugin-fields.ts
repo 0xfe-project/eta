@@ -1,5 +1,5 @@
 /**
- * What a plugin asks the user for: the `config` of `extensions["moe.akr.eta"]`, and whether values
+ * What a plugin asks the user for: the `config` of `extensions["tech.0xfe.eta"]`, and whether values
  * fit it.
  *
  * Pure functions, shared by the host and the web client, so the two cannot disagree; the host's
@@ -15,7 +15,7 @@
 import { RE2JS } from "re2js";
 
 /** The namespace of eta's private data in a plugin's `extensions`. */
-export const ETA_EXTENSION = "moe.akr.eta";
+export const ETA_EXTENSION = "tech.0xfe.eta";
 
 export const PLUGIN_FIELD_LIMITS = {
   fields: 64,

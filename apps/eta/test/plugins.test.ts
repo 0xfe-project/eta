@@ -169,7 +169,7 @@ describe("a plugin in settings", () => {
     const manifest = JSON.parse(
       await readFile(join(dir, "plugin.json"), "utf8"),
     ) as { extensions: Record<string, { requires: string[] }> };
-    manifest.extensions["moe.akr.eta"]!.requires = ["no-such-command-here"];
+    manifest.extensions["tech.0xfe.eta"]!.requires = ["no-such-command-here"];
     await writeFile(join(dir, "plugin.json"), JSON.stringify(manifest));
     await recheck(w);
     await until(() => views(w).length > 0);
@@ -352,10 +352,10 @@ describe("an upgrade that breaks the configuration", () => {
     const path = join(w.host.dataDir, "plugins", NAME, "plugin.json");
     const manifest = JSON.parse(await readFile(path, "utf8")) as {
       extensions: {
-        "moe.akr.eta": { config: Record<string, Record<string, unknown>> };
+        "tech.0xfe.eta": { config: Record<string, Record<string, unknown>> };
       };
     };
-    change(manifest.extensions["moe.akr.eta"].config);
+    change(manifest.extensions["tech.0xfe.eta"].config);
     await writeFile(path, JSON.stringify(manifest));
     await recheck(w);
   }

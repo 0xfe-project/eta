@@ -5,7 +5,7 @@
   "description": "Says hello, and shows what eta gives a plugin.",
   "license": "MIT",
   "extensions": {
-    "moe.akr.eta": {
+    "tech.0xfe.eta": {
       "config": {
         "api_key": {
           "type": "string",

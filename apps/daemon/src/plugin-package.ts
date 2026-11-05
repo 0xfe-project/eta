@@ -3,7 +3,7 @@
  * Reading an Agent Plugin (spec 1.0.0), the part the primary and a daemon share.
  *
  * ```
- * plugin.json              the manifest; eta's own data is under extensions["moe.akr.eta"]
+ * plugin.json              the manifest; eta's own data is under extensions["tech.0xfe.eta"]
  * skills/<name>/SKILL.md   Agent Skills
  * mcp.json                 MCP servers
  * ```
@@ -413,7 +413,7 @@ async function loadSkillDirs(
   return skills;
 }
 
-/** `extensions["moe.akr.eta"]`. Other namespaces are not ours to look at. */
+/** `extensions["tech.0xfe.eta"]`. Other namespaces are not ours to look at. */
 function parseExtension(
   raw: unknown,
   servers: PluginServer[],

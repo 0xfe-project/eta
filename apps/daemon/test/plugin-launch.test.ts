@@ -41,7 +41,7 @@ async function plugin(servers: unknown, extension: unknown = {}) {
     JSON.stringify({
       $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
       name: "demo.plugin",
-      extensions: { "moe.akr.eta": extension },
+      extensions: { "tech.0xfe.eta": extension },
     }),
   );
   await writeFile(

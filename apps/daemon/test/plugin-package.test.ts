@@ -11,7 +11,7 @@ import { loadPlugin, PluginError } from "../src";
 
 const PLUGIN = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
 const MCP = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json";
-const ETA = "moe.akr.eta";
+const ETA = "tech.0xfe.eta";
 
 const dirs: string[] = [];
 afterEach(async () => {

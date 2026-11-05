@@ -1,6 +1,6 @@
 # 插件
 
-插件给智能体带来 skill 和 MCP 服务器，格式是 [Agent Plugins 1.0.0](https://agent-plugins.org)：根目录一个 `plugin.json`，`skills/<name>/SKILL.md` 和 `mcp.json` 在固定位置。eta 的私有数据放在 `extensions["moe.akr.eta"]` 里，不认识这个扩展的客户端把它当普通插件加载。
+插件给智能体带来 skill 和 MCP 服务器，格式是 [Agent Plugins 1.0.0](https://agent-plugins.org)：根目录一个 `plugin.json`，`skills/<name>/SKILL.md` 和 `mcp.json` 在固定位置。eta 的私有数据放在 `extensions["tech.0xfe.eta"]` 里，不认识这个扩展的客户端把它当普通插件加载。
 
 代码在 `apps/daemon/src/plugin-*.ts`（主 node 和 daemon 共用的读取、启动、文件同步）和 `apps/eta/src/plugins/`（来源、配置、工具、wire）。字段校验是纯函数，在 `packages/client-contracts/src/plugin-fields.ts`，host 和前端共用，host 的结果是权威。
 
@@ -28,7 +28,7 @@
 
 ## 配置
 
-`extensions["moe.akr.eta"]`：
+`extensions["tech.0xfe.eta"]`：
 
 ```json
 {
