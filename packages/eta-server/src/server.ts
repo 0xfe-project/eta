@@ -106,6 +106,9 @@ export interface AssembleOptions {
    * hears about its questions. Passed straight through; the server never decides any of them.
    */
   agentPromptFor?: SessionManagerOptions["agentPromptFor"] | undefined;
+  /** Skill directories a session has beyond the ones found in its directories: its plugins'. */
+  skillDirsFor?: ((meta: SessionMeta) => readonly string[]) | undefined;
+  runtimeExtrasFor?: SessionManagerOptions["runtimeExtrasFor"] | undefined;
   sessionTools?: SessionManagerOptions["sessionTools"] | undefined;
   toolMiddleware?: SessionManagerOptions["toolMiddleware"] | undefined;
   askObserve?: SessionManagerOptions["askObserve"] | undefined;
@@ -401,6 +404,7 @@ export async function assembleServer(
       return await renderSkillsBlock({
         cwd: meta.cwd,
         home: options.home ?? homedir(),
+        extraDirs: options.skillDirsFor?.(meta),
         warn,
       });
     },
@@ -460,6 +464,9 @@ export async function assembleServer(
     ...(options.agentPromptFor === undefined
       ? {}
       : { agentPromptFor: options.agentPromptFor }),
+    ...(options.runtimeExtrasFor === undefined
+      ? {}
+      : { runtimeExtrasFor: options.runtimeExtrasFor }),
     ...(options.sessionTools === undefined
       ? {}
       : { sessionTools: options.sessionTools }),

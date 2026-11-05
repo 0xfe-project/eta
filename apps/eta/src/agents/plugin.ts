@@ -23,6 +23,7 @@ import type { Engine } from "../conversations/engine";
 import type { ConversationStore } from "../conversations/store";
 import type { Timeline } from "../conversations/timeline";
 import type { MachineStore } from "../machines/store";
+import type { Plugins } from "../plugins/service";
 import type { ProjectStore } from "../projects/store";
 import type { AgentRecord, AgentStore } from "./store";
 import { mkdir, rm } from "node:fs/promises";
@@ -41,6 +42,7 @@ export interface AgentsDeps {
   conversations: ConversationStore;
   timeline: Timeline;
   engine: Engine;
+  plugins: Plugins;
   changed: (conversations?: readonly string[] | "all") => void;
   /** A conversation exists now: its target has to be published. */
   created: (conversationId: string) => void;
@@ -53,7 +55,7 @@ export interface AgentsDeps {
 }
 
 export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
-  const { agents, projects, machines, conversations, timeline } = deps;
+  const { agents, projects, machines, conversations, timeline, plugins } = deps;
 
   const viewOf = (
     agent: AgentRecord,
@@ -72,6 +74,8 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
       model: agent.model,
       thinkingLevel: agent.thinkingLevel,
       machineId: agent.machineId,
+      plugins: plugins.rows.enabled(agent.id),
+      skippedPlugins: plugins.skipped(agent.id),
       home,
       homeProjectId: project?.id ?? "",
       status: statuses.get(agent.id) ?? "idle",
@@ -93,6 +97,20 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
       throw new Error(
         `${machine.name} is ${machine.status}: an agent cannot run there`,
       );
+  };
+
+  /** What an agent can be set to use: what it has already, and what can be enabled. */
+  const checkPlugins = (
+    agentId: string | undefined,
+    wanted: readonly string[] | undefined,
+  ): void => {
+    if (wanted === undefined) return;
+    const has = agentId === undefined ? [] : plugins.rows.enabled(agentId);
+    for (const name of wanted)
+      if (!has.includes(name) && !plugins.canEnable(name))
+        throw new Error(
+          `plugin ${name} cannot be enabled: it needs configuring`,
+        );
   };
 
   const existing = (id: string): AgentRecord => {
@@ -122,6 +140,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
           const fields = fieldsOf(call, true);
           checkModel(fields.runtime ?? "eta", fields.model ?? null);
           checkMachine(fields.machineId);
+          checkPlugins(undefined, fields.plugins);
           const primary = machines.primary();
           if (primary === undefined)
             throw new Error("this host has no machine");
@@ -139,6 +158,8 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
                 kind: "agent_home",
                 stewardId: id,
               });
+              if (fields.plugins !== undefined)
+                plugins.rows.setEnabled(id, fields.plugins);
             })();
           } catch (error) {
             await rm(home, { recursive: true, force: true });
@@ -162,7 +183,10 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             fields.model === undefined ? before.model : fields.model,
           );
           checkMachine(fields.machineId);
+          checkPlugins(id, fields.plugins);
           const agent = agents.update(id, fields)!;
+          if (fields.plugins !== undefined)
+            plugins.rows.setEnabled(id, fields.plugins);
           if (agent.name !== before.name) renameHome(agent);
           // The model and thinking level belong to a session once it exists; an edit of the agent
           // is the one thing that overrides what the user chose there. An agent that moved to
@@ -291,8 +315,16 @@ function fieldsOf(
   model?: string | null;
   thinkingLevel?: ThinkingLevel | null;
   machineId?: string | null;
+  plugins?: string[];
 } {
   const args = new Args(call);
+  const { plugins } = (call.args ?? {}) as { plugins?: unknown };
+  if (
+    plugins !== undefined &&
+    (!Array.isArray(plugins) ||
+      plugins.some((name) => typeof name !== "string"))
+  )
+    throw new TypeError("plugins must be a list of names");
   const runtime = args.optionalString("runtime");
   if (runtime !== undefined && !AGENT_RUNTIMES.includes(runtime as never))
     throw new Error(`unknown runtime: ${runtime}`);
@@ -320,6 +352,7 @@ function fieldsOf(
     ...(machineId === undefined
       ? {}
       : { machineId: machineId === "" ? null : machineId }),
+    ...(plugins === undefined ? {} : { plugins: plugins as string[] }),
   };
 }
 

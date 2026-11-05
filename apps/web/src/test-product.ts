@@ -30,6 +30,8 @@ export const agentView = (
   model: "p:m",
   thinkingLevel: null,
   machineId: null,
+  plugins: [],
+  skippedPlugins: [],
   home: `/data/agents/${fields.id}`,
   homeProjectId: `home-${fields.id}`,
   status: "idle",

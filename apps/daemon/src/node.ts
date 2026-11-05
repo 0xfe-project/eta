@@ -21,6 +21,7 @@ import type {
   MachineActionArgs,
   MachineActionResults,
   OpenSessionArgs,
+  Redaction,
   ToolSpec,
 } from "@eta/client-contracts";
 import type { CallFrame, ServerFrame } from "@eta/client-wire-proto";
@@ -29,11 +30,13 @@ import type { AskObserver } from "@eta/harness";
 import type { OarRuntimes } from "@eta/runtime-oar";
 import type { SessionMeta, SessionsService, Socket } from "@eta/server";
 import type { Peer } from "./link/peer";
+import type { ActivePlugin } from "./plugin-launch";
 import { Buffer } from "node:buffer";
 import { mkdirSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { homedir, hostname, platform } from "node:os";
 import { isAbsolute, join } from "node:path";
+import process from "node:process";
 import { LINK_PROTOCOL } from "@eta/client-contracts";
 import { createOarRuntimes } from "@eta/runtime-oar";
 import {
@@ -41,6 +44,7 @@ import {
   discoverPersonas,
   FileSessionStore,
   formatModelId,
+  redactionMiddleware,
   renderSkillsBlock,
   SessionManager,
   sessionsPlugin,
@@ -50,6 +54,9 @@ import { LocalTransport } from "@eta/ssh";
 import { Context } from "cordis";
 import { GitHubKeeper } from "./github";
 import { ModelCatalog, remoteModels } from "./models";
+import { PluginStore } from "./plugin-files";
+import { runtimeExtras } from "./plugin-launch";
+import { loadPlugin } from "./plugin-package";
 import { Reports } from "./reports";
 import { lastSeq, runAndWait } from "./run";
 import { proxyTools } from "./tools";
@@ -83,6 +90,9 @@ interface Opening {
   stamp: string;
   tools: readonly ToolSpec[];
   cards: PersonaCard[];
+  /** The agent's plugins, read from this machine's copies. */
+  plugins: ActivePlugin[];
+  redact: readonly Redaction[];
 }
 
 const keyOf = (conversationId: string, agentId: string): string =>
@@ -117,6 +127,8 @@ export class DaemonNode {
   readonly #runtimes: OarRuntimes;
   /** git and gh on this machine, logged in as the primary's GitHub App. */
   readonly #github: GitHubKeeper;
+  /** The plugins the primary sent, by contents. */
+  readonly #plugins: PluginStore;
   /** The openings the primary sent, by `conversation:agent`; read when a session opens. */
   readonly #openings = new Map<string, Opening>();
   /** What happened to the questions; kept for the next link when there is none. */
@@ -142,6 +154,7 @@ export class DaemonNode {
       warn,
     });
     const home = options.home ?? homedir();
+    this.#plugins = new PluginStore(join(options.dataDir, "plugins", "store"));
     // The token is the primary's to give; what stays here is at most an hour old.
     this.#github = new GitHubKeeper({
       dir: join(options.dataDir, "github"),
@@ -180,9 +193,19 @@ export class DaemonNode {
         return await renderSkillsBlock({
           cwd: meta.cwd,
           home,
+          extraDirs: this.#skillDirsOf(meta),
           warn,
         });
       },
+      runtimeExtrasFor: async (meta) =>
+        await runtimeExtras(this.#openingOf(meta)?.plugins ?? [], {
+          dataDir: options.dataDir,
+          runtime: meta.runtime,
+          warn,
+        }),
+      toolMiddleware: ({ meta }) => [
+        redactionMiddleware(() => this.#openingOf(meta)?.redact ?? []),
+      ],
       agentPromptFor: (meta) => {
         const opening = this.#openingOf(meta);
         if (opening === undefined) return undefined;
@@ -332,6 +355,31 @@ export class DaemonNode {
     return this.#openings.get(keyOf(meta.conversationId, meta.agentId));
   }
 
+  #skillDirsOf(meta: SessionMeta): string[] {
+    return (this.#openingOf(meta)?.plugins ?? []).flatMap(({ plugin }) =>
+      plugin.skills.map((skill) => skill.dir),
+    );
+  }
+
+  /** The plugins an open names, from the copies kept here; one that cannot be read is left out. */
+  async #openedPlugins(args: OpenSessionArgs): Promise<Opening["plugins"]> {
+    const opened: Opening["plugins"] = [];
+    for (const { name, hash, servers } of args.plugins ?? []) {
+      try {
+        opened.push({
+          plugin: await loadPlugin(this.#plugins.dir(hash)),
+          hash,
+          config: servers,
+        });
+      } catch (error) {
+        this.#warn(
+          `[eta-daemon] plugin ${name} is not usable: ${messageOf(error)}`,
+        );
+      }
+    }
+    return opened;
+  }
+
   /* ------------------------------------------------------------ machine.* */
 
   #register(wire: WireService): (() => void)[] {
@@ -366,6 +414,19 @@ export class DaemonNode {
       },
       githubRefresh: () => {
         void this.#github.poke();
+        return {};
+      },
+      which: ({ commands }) => ({
+        found: commands.filter(
+          (command) =>
+            Bun.which(command, { PATH: process.env.PATH ?? "" }) !== null,
+        ),
+      }),
+      pluginHave: ({ hashes }) => ({
+        missing: hashes.filter((hash) => !this.#plugins.has(hash)),
+      }),
+      pluginPut: ({ hash, files, done }) => {
+        this.#plugins.put(hash, files, done);
         return {};
       },
       config: async ({ session }) => {
@@ -409,6 +470,8 @@ export class DaemonNode {
       stamp: args.stamp,
       tools: args.tools,
       cards: (args.personaCards ?? []) as PersonaCard[],
+      plugins: await this.#openedPlugins(args),
+      redact: args.redactions ?? [],
     });
     const thinking = (id: string): Promise<unknown> =>
       args.thinkingLevel === undefined

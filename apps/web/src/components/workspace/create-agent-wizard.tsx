@@ -66,6 +66,7 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
       persona: "",
       thinkingLevel: "",
       machineId: "",
+      plugins: [],
     },
   });
   const model = useWatch({ control: form.control, name: "model" });

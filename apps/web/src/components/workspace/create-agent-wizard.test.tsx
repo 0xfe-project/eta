@@ -209,6 +209,7 @@ describe("creating an agent step by step", () => {
         model: "c:m1",
         thinkingLevel: null,
         machineId: null,
+        plugins: [],
       },
     ]);
     expect(api.select).toHaveBeenCalledWith("new");
@@ -244,6 +245,7 @@ describe("creating an agent step by step", () => {
         model: "claude:sonnet",
         thinkingLevel: null,
         machineId: null,
+        plugins: [],
       },
     ]);
   });

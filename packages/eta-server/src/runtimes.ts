@@ -9,7 +9,10 @@
  * The manager does not know what a runtime is or how it is reached; it knows the shape below. A
  * host that supplies none simply cannot open such a session, and says so.
  */
-import type { RuntimeCompaction } from "@eta/client-contracts";
+import type {
+  RuntimeCompaction,
+  SessionMcpServer,
+} from "@eta/client-contracts";
 import type { KernelConfig, KernelModels, RunDelegate } from "@eta/core";
 
 export type { RuntimeCompaction };
@@ -36,6 +39,18 @@ export interface SessionRuntimeInput {
    * (a task board, a way to reach other agents). Read when the runtime opens, after they exist.
    */
   hostTools: () => readonly string[];
+  /** MCP servers the runtime starts for this session itself: what its agent's plugins bring. */
+  mcpServers?: readonly SessionMcpServer[] | undefined;
+  /** Arguments for the runtime's process; a runtime's own way of being told something. */
+  launchArgs?: readonly string[] | undefined;
+}
+
+/** What a session on an external runtime gets from the host beyond its tools. */
+export interface RuntimeExtras {
+  /** The skills it can read, as a block of its system prompt; empty when it has none. */
+  skills?: string | undefined;
+  mcpServers?: readonly SessionMcpServer[] | undefined;
+  launchArgs?: readonly string[] | undefined;
 }
 
 export interface SessionRuntime {

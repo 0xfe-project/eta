@@ -48,9 +48,6 @@ export {
   settingsPlugin,
   type SettingsPluginOptions,
 } from "./bundled/settings";
-
-/* ------------------------------------------------------------------ the floor */
-
 export {
   CODEX_PROVIDER_ID,
   codexAuthPath,
@@ -61,6 +58,9 @@ export {
   LOGIN_TIMEOUT_MS,
   piCodexLogin,
 } from "./codex-auth";
+
+/* ------------------------------------------------------------------ the floor */
+
 export { codexCatalog, codexRuntimeProvider } from "./codex-provider";
 export {
   FileSessionStore,
@@ -167,6 +167,7 @@ export {
   publicView,
   revisionOf,
 } from "./providers/store";
+export { redactionMiddleware } from "./redact";
 export {
   createTargetRegistry,
   type OpContext,
@@ -185,6 +186,7 @@ export {
 } from "./ring";
 export type {
   RuntimeCompaction,
+  RuntimeExtras,
   SessionRuntime,
   SessionRuntimeInput,
   SessionRuntimes,
@@ -215,6 +217,7 @@ export {
 export {
   discoverSkillDirs,
   gitRepoChain,
+  renderSkillDirs,
   renderSkillsBlock,
   type RenderSkillsOptions,
 } from "./skills";

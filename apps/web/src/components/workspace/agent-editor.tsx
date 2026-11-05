@@ -2,6 +2,7 @@ import type { AgentView } from "@eta/client-contracts";
 import type { Icon } from "@phosphor-icons/react";
 import type { AgentForm } from "./agent-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { PuzzlePieceIcon } from "@phosphor-icons/react/PuzzlePiece";
 import { ScrollIcon } from "@phosphor-icons/react/Scroll";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/SlidersHorizontal";
 import { TrashIcon } from "@phosphor-icons/react/Trash";
@@ -45,6 +46,7 @@ import {
 } from "./agent-fields";
 import { agentDraft, agentFormSchema } from "./agent-form";
 import { AgentAvatar } from "./agent-identity";
+import { AgentPluginsField } from "./agent-plugins";
 import { CreateAgentWizard } from "./create-agent-wizard";
 import { MachinePicker } from "./machine-picker";
 import { useReturnFocus } from "./return-focus";
@@ -111,7 +113,7 @@ export function DeleteAgentDialog({
   );
 }
 
-type Tab = "general" | "instructions";
+type Tab = "general" | "instructions" | "plugins";
 // The editor's tabs and the fields on each, to show where errors are.
 const tabs: {
   value: Tab;
@@ -134,6 +136,14 @@ const tabs: {
     },
     icon: ScrollIcon,
     fields: ["description"],
+  },
+  {
+    value: "plugins",
+    get label() {
+      return translate("agents:editor.tabs.plugins");
+    },
+    icon: PuzzlePieceIcon,
+    fields: ["plugins"],
   },
 ];
 
@@ -164,6 +174,7 @@ function AgentEditorForm({
       persona: agent.persona,
       thinkingLevel: agent.thinkingLevel ?? "",
       machineId: agent.machineId ?? "",
+      plugins: agent.plugins,
     },
   });
   // A field with an error, to focus once its tab shows.
@@ -174,6 +185,10 @@ function AgentEditorForm({
   const openProviders = () => {
     onDone();
     setSettings({ open: true, section: "providers" });
+  };
+  const openPlugins = () => {
+    onDone();
+    setSettings({ open: true, section: "plugins" });
   };
 
   // Fields on other tabs are not mounted: open the error's tab first.
@@ -250,8 +265,15 @@ function AgentEditorForm({
               <ThinkingField form={form} />
               <PersonaField form={form} />
             </>
-          ) : (
+          ) : tab === "instructions" ? (
             <InstructionsField form={form} />
+          ) : (
+            <AgentPluginsField
+              form={form}
+              skipped={agent.skippedPlugins}
+              external={runtime !== "eta"}
+              onOpenSettings={openPlugins}
+            />
           )}
         </section>
       </div>

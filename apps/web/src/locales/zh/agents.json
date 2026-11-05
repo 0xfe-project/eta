@@ -16,7 +16,8 @@
   "editor": {
     "tabs": {
       "general": "常规",
-      "instructions": "指令"
+      "instructions": "指令",
+      "plugins": "插件"
     },
     "sectionsLabel": "智能体设置分类"
   },
@@ -106,5 +107,11 @@
       "missing": "（未安装）",
       "error": "（不可用）"
     }
+  },
+  "plugins": {
+    "empty": "还没有插件。",
+    "openSettings": "去设置里添加",
+    "skipped": "配置不再合法，这个智能体的会话正在跳过它。",
+    "noMcpOnEta": "自带内核暂不支持 MCP，这些服务器不会启动，skill 可以用。"
   }
 }

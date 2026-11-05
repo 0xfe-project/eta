@@ -252,7 +252,7 @@ export class ToolService extends Service {
       // call's own signal, never by what the error says.
       const cancelled = cancellationOf(call.signal);
       if (cancelled !== undefined) throw cancelled;
-      return {
+      result = {
         isError: true,
         content: error instanceof Error ? error.message : String(error),
       };

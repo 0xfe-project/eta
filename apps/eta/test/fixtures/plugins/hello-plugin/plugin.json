@@ -1,0 +1,74 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "hello-plugin",
+  "version": "1.0.0",
+  "description": "Says hello, and shows what eta gives a plugin.",
+  "license": "MIT",
+  "extensions": {
+    "moe.akr.eta": {
+      "config": {
+        "api_key": {
+          "type": "string",
+          "title": "API key",
+          "description": "Only the plugin's own server gets this.",
+          "required": true,
+          "secret": true,
+          "pattern": "^sk-[A-Za-z0-9]{8,}$"
+        },
+        "script_key": {
+          "type": "string",
+          "title": "Script key",
+          "description": "For the skill's scripts, through a private file.",
+          "secret": true,
+          "agent": "file"
+        },
+        "plain_key": {
+          "type": "string",
+          "title": "Plain key",
+          "description": "An agent can read this in the clear.",
+          "secret": true,
+          "agent": "value"
+        },
+        "team": {
+          "type": "string",
+          "title": "Team",
+          "maxLength": 64
+        },
+        "max_greetings": {
+          "type": "number",
+          "title": "Greetings per call",
+          "int": true,
+          "min": 1,
+          "max": 10,
+          "default": 3
+        },
+        "loud": {
+          "type": "boolean",
+          "title": "Shout",
+          "default": false
+        },
+        "languages": {
+          "type": "select",
+          "title": "Languages",
+          "multiple": true,
+          "minItems": 1,
+          "default": ["en"],
+          "options": [
+            { "value": "en", "label": "English" },
+            { "value": "zh", "label": "中文" }
+          ]
+        }
+      },
+      "mcp": {
+        "hello": {
+          "env": {
+            "HELLO_API_KEY": "api_key",
+            "HELLO_TEAM": "team",
+            "HELLO_MAX": "max_greetings"
+          }
+        }
+      },
+      "requires": ["node"]
+    }
+  }
+}

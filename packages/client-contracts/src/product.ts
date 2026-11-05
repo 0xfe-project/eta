@@ -47,6 +47,10 @@ export interface AgentView {
    * Null follows the project.
    */
   machineId: string | null;
+  /** The plugins it has enabled, by name. */
+  plugins: string[];
+  /** Those of them its sessions skip for now: they need configuring, or are gone. */
+  skippedPlugins: string[];
   /** The agent's workspace directory (on the primary machine). */
   home: string;
   homeProjectId: string;
@@ -349,6 +353,8 @@ export interface AgentFields {
   thinkingLevel?: ThinkingLevel | null;
   /** The machine to run on; null follows the project. */
   machineId?: string | null;
+  /** The plugins it has enabled. Adding one that cannot be enabled is refused. */
+  plugins?: string[];
 }
 
 /** Valid requests from a client. The server still validates untrusted JSON at runtime. */

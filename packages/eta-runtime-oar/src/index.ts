@@ -58,6 +58,8 @@ export function createOarRuntimes(
         agentPrompt: input.agentPrompt,
         remember: input.remember,
         hostTools: input.hostTools,
+        mcpServers: input.mcpServers,
+        launchArgs: input.launchArgs,
         warn,
       });
       return {

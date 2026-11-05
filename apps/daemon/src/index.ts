@@ -27,6 +27,27 @@ export {
 } from "./link/peer";
 export { forwardedOptions, modelSpecOf } from "./models";
 export { DaemonNode, type DaemonNodeOptions } from "./node";
+export {
+  pluginChunks,
+  pluginHash,
+  pluginSignature,
+  PluginStore,
+} from "./plugin-files";
+export {
+  type ActivePlugin,
+  pluginDataDir,
+  runtimeExtras,
+  type ServersConfig,
+  serversConfig,
+  serverSupported,
+  sessionServerName,
+} from "./plugin-launch";
+export {
+  loadPlugin,
+  PluginError,
+  type PluginPackage,
+  type PluginServer,
+} from "./plugin-package";
 export { lastSeq, listen, runAndWait } from "./run";
 export {
   installedEnv,

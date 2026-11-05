@@ -1,3 +1,4 @@
+import type { AgentView, PluginView } from "@eta/client-contracts";
 import {
   afterEach,
   beforeEach,
@@ -76,6 +77,8 @@ const click = async (button: HTMLButtonElement) => {
   await settle();
 };
 const save = () => click(buttons().find((b) => b.textContent === "保存")!);
+const dialogText = () =>
+  document.querySelector('[role="dialog"]')?.textContent ?? "";
 
 beforeEach(async () => {
   host = new FakeHost()
@@ -156,6 +159,7 @@ describe("editing an agent in tabs", () => {
         model: "c:m1",
         thinkingLevel: null,
         machineId: null,
+        plugins: [],
       },
     ]);
   });
@@ -427,5 +431,120 @@ describe("an agent's machine and its runtimes", () => {
       runtime: "claude",
       model: "claude:opus",
     });
+  });
+});
+
+describe("the plugins tab", () => {
+  const plugin = (fields: Partial<PluginView>): PluginView => ({
+    name: "hello",
+    version: "1.0.0",
+    description: "",
+    source: { kind: "local", path: "/p" },
+    state: "ready",
+    problem: null,
+    reports: [],
+    skills: [],
+    servers: [
+      {
+        name: "hello",
+        transport: "stdio",
+        command: ["node", "server.mjs"],
+        env: [],
+        headers: [],
+        problem: null,
+      },
+    ],
+    requires: [],
+    machines: [],
+    fields: [],
+    agents: [],
+    ...fields,
+  });
+
+  async function openOn(
+    agent: Partial<AgentView>,
+    plugins: PluginView[],
+  ): Promise<void> {
+    host = new FakeHost()
+      .target(
+        "agents",
+        { list: [agentView({ id: "a", ...agent })] },
+        {
+          eager: true,
+        },
+      )
+      .target(
+        "machines",
+        { list: [machineView({ id: "m1" })] },
+        {
+          eager: true,
+        },
+      )
+      .target("plugins", { list: plugins, audit: [] })
+      .target("providers", { config: providers, catalog: [] })
+      .handle("agents.update", () => ({}))
+      .plugins([
+        { name: "agents", source: "bundled" },
+        { name: "plugins", source: "bundled" },
+      ]);
+    host.install();
+    host.hello();
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <AgentEditor />
+        </QueryClientProvider>,
+      );
+    });
+    useWorkspaceStore.setState((state) => ({
+      ...state,
+      agentEditor: { open: true, agentId: "a" },
+    }));
+    await settle();
+    await click(tab("插件"));
+    await settle();
+  }
+
+  const box = (name: string) =>
+    [...document.querySelectorAll('[role="dialog"] li')]
+      .find((row) => row.textContent?.includes(name))
+      ?.querySelector<HTMLButtonElement>('[role="checkbox"]');
+
+  it("ticks one that can be enabled, and saves it with the rest", async () => {
+    await openOn({}, [plugin({})]);
+    await click(box("hello")!);
+    await save();
+    await settle();
+    expect(updates().at(-1)).toMatchObject({ plugins: ["hello"] });
+  });
+
+  it("cannot tick one that needs configuring", async () => {
+    await openOn({}, [plugin({ state: "needs_config" })]);
+    expect(box("hello")?.hasAttribute("disabled")).toBe(true);
+    expect(dialogText()).toContain("待配置");
+  });
+
+  it("says what it will run, and that eta's own loop will not", async () => {
+    await openOn({}, [plugin({})]);
+    expect(dialogText()).toContain("node server.mjs");
+    expect(dialogText()).toContain("自带内核暂不支持 MCP");
+  });
+
+  it("does not say that on an external runtime", async () => {
+    await openOn({ runtime: "claude", model: null }, [plugin({})]);
+    expect(dialogText()).toContain("node server.mjs");
+    expect(dialogText()).not.toContain("自带内核暂不支持 MCP");
+  });
+
+  it("keeps one that fell back ticked, says it is skipped, and lets it go", async () => {
+    await openOn({ plugins: ["hello"], skippedPlugins: ["hello"] }, [
+      plugin({ state: "needs_config" }),
+    ]);
+    expect(dialogText()).toContain("正在跳过它");
+    expect(box("hello")?.hasAttribute("disabled")).toBe(false);
+    await click(box("hello")!);
+    await save();
+    await settle();
+    expect(updates().at(-1)).toMatchObject({ plugins: [] });
   });
 });

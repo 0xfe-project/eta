@@ -34,7 +34,7 @@ eta 是一个人用来指挥多个智能体的工作台。服务端是**一个 B
 apps/
   eta/        host：入口 main.ts、host.ts（组装）、product.ts（产品插件）、access.ts（访问控制）、
               db.ts + migrations/（SQLite），以及 agents、machines、projects、conversations、inbox、usage、
-              memory、tasks、artifacts、routines、web 各一个目录
+              memory、tasks、artifacts、routines、plugins、web 各一个目录
   daemon/     eta-daemon：setup / run / install-service
   web/        React 界面，通过 WebSocket 读写
   memory/     Python 边车

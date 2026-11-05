@@ -42,6 +42,7 @@ export type SettingsSection =
   | "approvals"
   | "machines"
   | "mcp"
+  | "plugins"
   | "email"
   | "connections"
   | "archived"

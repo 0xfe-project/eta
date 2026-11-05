@@ -110,6 +110,10 @@ export function combineRunHooks(hooks: readonly RunHooks[]): RunHooks {
 
 export interface EngineOptions {
   runHooks?: RunHooks | undefined;
+  /** What an agent's plugins add to the stamp of its sessions: a change reopens them. */
+  pluginStamp?: ((agent: AgentRecord) => string) | undefined;
+  /** Look at the plugins on disk again; waited for before a session is brought in line. */
+  pluginsRead?: (() => Promise<void>) | undefined;
   /**
    * Where the sessions of a project on a daemon machine live. Without one, such a project's
    * replies fail as unavailable, which is what a host with no link to other machines should say.
@@ -153,6 +157,8 @@ export class Engine {
   readonly #hooks: RunHooks;
   readonly #local: LocalPlace;
   readonly #remote: SessionPlace | undefined;
+  readonly #pluginStamp: EngineOptions["pluginStamp"];
+  readonly #pluginsRead: EngineOptions["pluginsRead"];
 
   #closing = false;
   /** Replies waiting their turn on a participant's session, by `conversation:agent`. */
@@ -178,6 +184,8 @@ export class Engine {
     this.#warn = options.warn;
     this.#hooks = options.runHooks ?? {};
     this.#remote = options.remote;
+    this.#pluginStamp = options.pluginStamp;
+    this.#pluginsRead = options.pluginsRead;
     this.#local = new LocalPlace({
       opened: this.#opened,
       warn: options.warn,
@@ -223,9 +231,9 @@ export class Engine {
     );
   };
 
-  /** What a session's prompt and persona were read from. */
+  /** What a session's prompt, persona and plugins were read from. */
   #stamp(agent: AgentRecord, away?: string): string {
-    return `${stampOf(agent)}${away ?? ""}`;
+    return `${stampOf(agent)}${this.#pluginStamp?.(agent) ?? ""}${away ?? ""}`;
   }
 
   /**
@@ -321,6 +329,7 @@ export class Engine {
         ? undefined
         : awayNote(input.machine.name, input.awayFrom.name, true);
     this.#setAway(input.key, input.agent.id, away);
+    await this.#pluginsRead?.();
     return await place.ensure({
       conversation: { id: input.key, name: input.title },
       agent: input.agent,
@@ -832,6 +841,7 @@ export class Engine {
 
     let handle: SessionHandle;
     try {
+      await this.#pluginsRead?.();
       handle = await place.ensure({
         conversation,
         agent,

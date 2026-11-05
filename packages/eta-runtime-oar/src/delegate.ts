@@ -31,6 +31,7 @@ import type {
   HostToolContent,
   HostToolResult,
   InputImage,
+  McpServer,
   ServedMcpTools,
   Session,
   SessionOptions,
@@ -73,6 +74,10 @@ export interface OarDelegateOptions {
   remember: (nativeSession: string) => void;
   /** The tools the host gave the session, by name: what is served to the runtime. */
   hostTools: () => readonly string[];
+  /** MCP servers the runtime starts itself, beside the one serving the host's tools. */
+  mcpServers?: readonly McpServer[] | undefined;
+  /** Arguments for the runtime's process, on every open. */
+  launchArgs?: readonly string[] | undefined;
   warn: (message: string) => void;
 }
 
@@ -368,7 +373,7 @@ export class OarDelegate implements RunDelegate {
       .runtime(id)
       .session(
         await catalog.installation(id),
-        this.#sessionOptions(this.#settings(config), this.#resume, undefined),
+        this.#sessionOptions(this.#settings(config), this.#resume, []),
       );
   }
 
@@ -437,8 +442,9 @@ export class OarDelegate implements RunDelegate {
   #sessionOptions(
     { model, effort }: Settings,
     resume: string | undefined,
-    served: ServedMcpTools | undefined,
+    mcpServers: readonly McpServer[],
   ): SessionOptions {
+    const { launchArgs } = this.#options;
     const systemPrompt = this.#systemPrompt();
     return {
       cwd: this.#options.cwd,
@@ -450,7 +456,10 @@ export class OarDelegate implements RunDelegate {
       ...(systemPrompt === undefined
         ? {}
         : { appendSystemPrompt: systemPrompt }),
-      ...(served === undefined ? {} : { mcpServers: [served.server] }),
+      ...(mcpServers.length === 0 ? {} : { mcpServers }),
+      ...(launchArgs === undefined || launchArgs.length === 0
+        ? {}
+        : { launchArgs }),
     };
   }
 
@@ -461,12 +470,18 @@ export class OarDelegate implements RunDelegate {
     const { runtime: id, catalog } = this.#options;
     const runtime = catalog.runtime(id);
     const installation = await catalog.installation(id);
-    const served =
-      runtime.refusedSessionOptions?.mcpServers === undefined
-        ? await this.#serve(context)
-        : undefined;
+    const refused = runtime.refusedSessionOptions?.mcpServers !== undefined;
+    const served = refused ? undefined : await this.#serve(context);
+    const plugins = this.#options.mcpServers ?? [];
+    if (refused && plugins.length > 0)
+      this.#options.warn(
+        `[eta-runtime-oar] ${id} takes no MCP servers; ${plugins.map((server) => server.name).join(", ")} left out`,
+      );
+    const mcpServers = refused
+      ? []
+      : [...(served === undefined ? [] : [served.server]), ...plugins];
     const options = (resume: string | undefined): SessionOptions =>
-      this.#sessionOptions(settings, resume, served);
+      this.#sessionOptions(settings, resume, mcpServers);
     let session: Session;
     try {
       session = await runtime.session(installation, options(this.#resume));
