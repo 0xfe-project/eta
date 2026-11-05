@@ -7,6 +7,7 @@ import type {
 import type { CSSProperties, ReactNode } from "react";
 import type { WorkspaceState } from "./workspace-store";
 import type { Draft, FilePart, PasteRange } from "@/lib/composer";
+import type { ComposerTarget, StickyTarget } from "@/lib/mentions";
 import type { RunBlock, ToolBlock } from "@/lib/run";
 import type { Outgoing, SendMode } from "@/queries/outbox";
 import type { Question } from "@/queries/questions";
@@ -47,7 +48,7 @@ import {
 } from "@/lib/composer";
 import { buildMenu, hashAt, mentionAt } from "@/lib/composer-menu";
 import { translate } from "@/lib/i18n";
-import { mentionedMembers, mentionLabel } from "@/lib/mentions";
+import { mentionLabel } from "@/lib/mentions";
 import { firstVisible } from "@/lib/rail";
 import { runFromOf, savedTools } from "@/lib/run";
 import { readTheme, setTheme } from "@/lib/theme";
@@ -82,6 +83,7 @@ import { ProcessBox } from "./transcript/process-box";
 import { SlashMenu } from "./transcript/slash-menu";
 import { ThinkingBlock } from "./transcript/thinking-block";
 import { ToolDetailCard } from "./transcript/tool-detail";
+import { useComposerTarget } from "./use-composer-target";
 import { useWorkspaceStore } from "./workspace-store";
 
 type SlashName =
@@ -235,20 +237,40 @@ function UserText({
 }
 
 /**
- * Who a message is for, as a composer control. Groups only: a direct conversation wakes its
- * one member without an @, so there is no second person to pick. 所有人 comes first because it
- * is a real choice, not a convenience.
+ * Who a message is for, as a composer control: the button says who the next message reaches, and
+ * picking replaces that for this group until it is changed. Groups only: a direct conversation
+ * wakes its one member without an @, so there is no second person to pick. The steward comes first
+ * as the state you return to, then 所有人, which is a real choice, not a convenience.
  */
 function MemberPicker({
   members,
-  mentioned,
+  steward,
+  target,
   onPick,
 }: {
   members: readonly { id: string; name: string }[];
-  mentioned: readonly string[];
-  onPick: (label: string) => void;
+  steward: { id: string; name: string } | undefined;
+  target: ComposerTarget;
+  onPick: (sticky: StickyTarget | undefined) => void;
 }) {
   const { t: translateText } = useTranslation(["chat"] as const);
+  const everyone = `@${translateText("mentions.everyoneCommand")}`;
+  const people =
+    steward === undefined || members.some((member) => member.id === steward.id)
+      ? members
+      : [steward, ...members];
+  const names = target.ids
+    .flatMap((id) => people.filter((person) => person.id === id))
+    .map((person) => mentionLabel(person, people))
+    .join("、");
+  const pickTargets = translateText("mentions.pickTargets");
+  const notify =
+    target.kind === "none"
+      ? pickTargets
+      : translateText("mentions.notifyTargets", { names });
+  const chosen = (id: string) =>
+    target.kind !== "everyone" && target.ids.includes(id);
+  const check = <span aria-hidden="true">✓</span>;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -256,45 +278,45 @@ function MemberPicker({
           type="button"
           data-testid="composer-members"
           className="composer-control"
-          title={translateText("mentions.notifyTargets", {
-            names: members
-              .filter((member) => mentioned.includes(member.id))
-              .map((member) => member.name)
-              .join("、"),
-          })}
+          aria-label={notify}
+          title={notify}
         >
-          <span className="composer-control-label">
-            {translateText("mentions.pickTargets")}
+          <span className="composer-control-label max-w-40 truncate">
+            {target.kind === "none"
+              ? pickTargets
+              : target.kind === "everyone"
+                ? everyone
+                : names}
           </span>
           <CaretDownIcon aria-hidden="true" className="size-3" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-48">
-        {/*
-         * `everyoneCommand` is the word *after* the @ ("所有人", "everyone"), not a mention with
-         * its own @: the menu writes the @ and so does the insert, and a label that carried one
-         * read "@@所有人" and inserted a mention the parser does not match (an @ is not
-         * whitespace), so the item looked right and woke nobody.
-         */}
-        <DropdownMenuItem
-          onSelect={() => onPick(translateText("mentions.everyoneCommand"))}
-        >
-          <span className="font-mono">
-            @{translateText("mentions.everyoneCommand")}
-          </span>
-        </DropdownMenuItem>
-        {members.map((member) => (
-          <DropdownMenuItem
-            key={member.id}
-            disabled={mentioned.includes(member.id)}
-            onSelect={() => onPick(member.name)}
-          >
-            <span className="min-w-0 flex-1 truncate">{member.name}</span>
-            {mentioned.includes(member.id) ? (
-              <span aria-hidden="true">✓</span>
-            ) : null}
+        {steward === undefined ? null : (
+          <DropdownMenuItem onSelect={() => onPick(undefined)}>
+            <span className="min-w-0 flex-1 truncate">
+              {mentionLabel(steward, people)}
+            </span>
+            {chosen(steward.id) ? check : null}
           </DropdownMenuItem>
-        ))}
+        )}
+        <DropdownMenuItem onSelect={() => onPick("everyone")}>
+          <span className="min-w-0 flex-1 truncate font-mono">{everyone}</span>
+          {target.kind === "everyone" ? check : null}
+        </DropdownMenuItem>
+        {members
+          .filter((member) => member.id !== steward?.id)
+          .map((member) => (
+            <DropdownMenuItem
+              key={member.id}
+              onSelect={() => onPick([member.id])}
+            >
+              <span className="min-w-0 flex-1 truncate">
+                {mentionLabel(member, people)}
+              </span>
+              {chosen(member.id) ? check : null}
+            </DropdownMenuItem>
+          ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -1244,7 +1266,7 @@ export function ChatPanel({
   const [menuIndex, setMenuIndex] = useState(0);
   const [menuDismissed, setMenuDismissed] = useState(false);
   const text = draftText(draft);
-  const mentioned = mentionedMembers(text, members);
+  const { steward, targetOf, remember } = useComposerTarget(group, agents);
   // The files in the draft, and how far each upload has got.
   const uploads = useOutbox((state) => state.uploads);
   const fileParts = draftFiles(draft);
@@ -1807,13 +1829,9 @@ export function ChatPanel({
                   {group?.kind === "direct" ? null : (
                     <MemberPicker
                       members={members}
-                      mentioned={mentioned}
-                      onPick={(label) =>
-                        setDraft([
-                          ...draft,
-                          { type: "text", text: ` @${label} ` },
-                        ])
-                      }
+                      steward={steward}
+                      target={targetOf(text)}
+                      onPick={remember}
                     />
                   )}
                   <button

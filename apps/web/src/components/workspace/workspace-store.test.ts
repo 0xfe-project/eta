@@ -67,6 +67,24 @@ describe("workspace store persistence", () => {
     );
   });
 
+  it("remembers who each group's messages go to across a reload", async () => {
+    const stickyTargets = { g1: "everyone", g2: ["a1", "a2"] };
+    localStorage.setItem(key, JSON.stringify({ ...saved, stickyTargets }));
+    await useWorkspaceStore.persist.rehydrate();
+    expect(useWorkspaceStore.getState().workspace.stickyTargets).toEqual(
+      stickyTargets,
+    );
+  });
+
+  it("ignores a saved target that is neither everyone nor a list", async () => {
+    localStorage.setItem(
+      key,
+      JSON.stringify({ ...saved, stickyTargets: { g1: "a1" } }),
+    );
+    await useWorkspaceStore.persist.rehydrate();
+    expect(useWorkspaceStore.getState().workspace).toEqual({});
+  });
+
   it("drops a task scope saved before the board had none", async () => {
     localStorage.setItem(
       key,

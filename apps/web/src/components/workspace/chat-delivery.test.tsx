@@ -208,17 +208,17 @@ describe("sending a message", () => {
     ]);
   });
 
-  it("names who it is for by @, and leaves a bare message to the host", async () => {
+  it("leaves a bare message to the host, and names who it is for by @", async () => {
     const { container: c } = await start();
-    await type("@研究员 看一下");
+    await type("没人叫");
     await enter(c);
-    expect(sends[0]!.args.mentions).toEqual([AGENT]);
+    expect(sends[0]!.args.mentions).toEqual([]);
     // One conversation's messages go out one at a time.
     await act(async () => sends[0]!.resolve(accepted(sends[0]!.args)));
     await flush();
-    await type("没人叫");
+    await type("@研究员 看一下");
     await enter(c);
-    expect(sends[1]!.args.mentions).toEqual([]);
+    expect(sends[1]!.args.mentions).toEqual([AGENT]);
   });
 
   it("leaves the next draft alone when the last message arrives", async () => {
