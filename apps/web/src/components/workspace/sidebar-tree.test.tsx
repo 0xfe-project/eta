@@ -286,20 +286,6 @@ describe("侧边栏的两块", () => {
     expect(groupRows(container)).toEqual(["新的", "旧的", "别处"]);
   });
 
-  it("选中的那张卡片带着成员，其余只收起成员", async () => {
-    useWorkspaceStore.setState({ workspace: { selectedGroupId: "g2" } });
-    const { container } = await tree([
-      group("g1", "装配", "p-eta"),
-      group("g2", "装修", "p-eta"),
-    ]);
-    const members = (id: string) =>
-      container.querySelectorAll(
-        `[data-sidebar="menu-item"]:has([title="${id}"]) [data-slot=member-row]`,
-      );
-    expect(members("装修")).toHaveLength(2);
-    expect(members("装配")).toHaveLength(0);
-  });
-
   it("卡片是平铺的行：不套框、不铺底，行间一条线，线贴到侧栏两边", async () => {
     useWorkspaceStore.setState({ workspace: { selectedGroupId: "g2" } });
     const { container } = await tree([
@@ -333,34 +319,15 @@ describe("侧边栏的两块", () => {
     }
   });
 
-  it("三角能把没选中的群也打开", async () => {
-    useWorkspaceStore.setState({ workspace: { selectedGroupId: "g2" } });
-    const { container } = await tree([
-      group("g1", "装配", "p-eta"),
-      group("g2", "装修", "p-eta"),
-    ]);
-    const row = container.querySelector(
-      '[data-sidebar="menu-item"]:has([title="装配"])',
-    )!;
-    await click(row.querySelector('[aria-label="展开成员"]'));
-    expect(row.querySelectorAll("[data-slot=member-row]")).toHaveLength(2);
-  });
-
-  it("点击区铺满卡片，不盖到展开的成员上", async () => {
-    useWorkspaceStore.setState({ workspace: { selectedGroupId: "g1" } });
+  it("点击区铺满卡片", async () => {
     const { container } = await tree([group("g1", "装配", "p-eta")]);
     const target = container.querySelector<HTMLElement>('[title="装配"]')!;
     expect(target.className).toContain("inset-0");
     const card = target.parentElement!;
     expect(card.querySelector("[data-slot=conversation-path]")).not.toBeNull();
-    expect(card.querySelector("[data-slot=member-row]")).toBeNull();
-    expect(
-      card.parentElement?.querySelectorAll("[data-slot=member-row]"),
-    ).toHaveLength(2);
   });
 
-  it("忙着的成员不只是一个色块，读屏能听到状态", async () => {
-    useWorkspaceStore.setState({ workspace: { selectedGroupId: "g1" } });
+  it("有成员在忙时不只是一个绿点，读屏能听到状态", async () => {
     const { container } = await tree([
       group("g1", "装配", "p-eta", {
         participants: [
@@ -369,10 +336,8 @@ describe("侧边栏的两块", () => {
         ],
       }),
     ]);
-    const rows = [...container.querySelectorAll("[data-slot=member-row]")];
-    expect(
-      rows.map((row) => row.querySelector(".sr-only")?.textContent),
-    ).toEqual(["工作中", undefined]);
+    const target = container.querySelector('[title="装配"]')!;
+    expect(target.querySelector(".sr-only")?.textContent).toContain("工作中");
   });
 
   it("智能体带 persona 和模型，没配的就不显示那一行", async () => {
@@ -470,9 +435,8 @@ describe("折叠成图标栏", () => {
     expect(name.className).toContain("text-[10px]");
     expect(name.className).toContain("truncate");
     expect(card.querySelectorAll("img").length).toBeGreaterThan(0);
-    // 成员行和 ⋯ 菜单在 rail 上没有地方，也就不在了：卡片就是一个按钮。
+    // ⋯ 菜单在 rail 上没有地方，也就不在了：卡片就是一个按钮。
     expect(card.querySelectorAll("button")).toHaveLength(0);
-    expect(section.querySelectorAll("[data-slot=member-row]")).toHaveLength(0);
     // 「●」只是颜字，不该读进按钮名里。
     expect(card.textContent).not.toContain("●");
     await click(card);

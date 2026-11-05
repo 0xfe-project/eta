@@ -528,8 +528,6 @@ export function GroupMembers() {
   const [removing, setRemoving] = useState<string>();
   /** Whose tasks are open under its card: one at a time, and the same press closes it. */
   const [tasksFor, setTasksFor] = useState<string | null>(null);
-  const focused = useWorkspaceStore((state) => state.focusedAgentId);
-  const setFocusedAgent = useWorkspaceStore((state) => state.setFocusedAgent);
   if (!group) return null;
   const members = group.participants;
   const linked = board.filter((t) => t.conversationId === group.id);
@@ -599,15 +597,7 @@ export function GroupMembers() {
           const name = agentName(agents, p.agentId);
           const removable = group.kind === "group" && members.length > 1;
           return (
-            <li
-              key={p.agentId}
-              className={cn(
-                "min-w-0",
-                // Focused is the row's fill, not a different row: the numbers stay where they
-                // were, so comparing two members does not mean re-learning the layout.
-                focused === p.agentId && "bg-accent",
-              )}
-            >
+            <li key={p.agentId} className="min-w-0">
               <div className="flex min-w-0 items-start gap-2 px-3 py-1.5">
                 {/* The row's first thing was the member's avatar; the gauge wraps that one instead
                   of adding a second avatar beside the numbers. A member with no session yet has
@@ -619,18 +609,7 @@ export function GroupMembers() {
                     <AgentAvatar agent={{ id: p.agentId }} />
                   </MemberRing>
                 )}
-                {/* Pressing the member is the same action as pressing its card anywhere else: the
-                  chat narrows to it. The menu beside it is the other thing a member has. */}
-                <button
-                  type="button"
-                  // Press to focus, press again to let go. The fill is the whole state: a filled
-                  // row = narrowed to this member, and the same press takes it back.
-                  onClick={() =>
-                    setFocusedAgent(focused === p.agentId ? null : p.agentId)
-                  }
-                  title={translateText("groups.members.focus", { name })}
-                  className="min-w-0 flex-1 text-left text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                >
+                <div className="min-w-0 flex-1 text-sm">
                   <span className="block truncate" title={name}>
                     {name}{" "}
                     <span className="text-xs text-muted-foreground">
@@ -643,7 +622,7 @@ export function GroupMembers() {
                   </span>
                   {/* What this member has spent, is producing, and is chasing. */}
                   <MemberStats sessionId={p.sessionId ?? undefined} />
-                </button>
+                </div>
                 <div className="flex shrink-0 items-center gap-1">
                   {p.sessionId === null ? null : (
                     <MemberTasksButton

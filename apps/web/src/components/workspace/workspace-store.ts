@@ -66,16 +66,6 @@ interface WorkspaceStore {
   /** Persisted in this browser. */
   workspace: WorkspaceState;
   mobilePanel: "chat" | "workspace";
-  /**
-   * The member the conversation is narrowed to, or null for everyone.
-   *
-   * Kept here rather than in one component because two panels write it: the member rows in the
-   * sidebar and the member cards in the panel are the same action, and a focus that lives in
-   * either one would be a focus the other cannot see. Not persisted — a reload is not a reason to
-   * still be looking at one agent.
-   */
-  focusedAgentId: string | null;
-  setFocusedAgent: (agentId: string | null) => void;
   settings: SettingsState;
   agentEditor: AgentEditorState;
   newConversation: NewConversationState;
@@ -125,8 +115,6 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
     (set) => ({
       workspace: {},
       mobilePanel: "chat",
-      focusedAgentId: null,
-      setFocusedAgent: (focusedAgentId) => set({ focusedAgentId }),
       settings: { open: false, section: "agents" },
       agentEditor: { open: false, agentId: null },
       newConversation: { open: false },
