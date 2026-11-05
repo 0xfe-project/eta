@@ -509,32 +509,6 @@
   }
 }
 
-/* Streamdown's animate plugin wraps each new character of streamed text in a
-   span and sets these variables on it (markdown.tsx). */
-@keyframes sd-grapheme {
-  from {
-    opacity: 0;
-    filter: blur(6px);
-  }
-}
-
-[data-sd-animate] {
-  animation: var(--sd-animation) var(--sd-duration) var(--sd-easing)
-    var(--sd-delay, 0ms) both;
-}
-
-/* A list item's marker can't blur or fade, only change colour. */
-@keyframes sd-marker-in {
-  from {
-    color: transparent;
-  }
-}
-
-[data-sd-animate-marker]::marker {
-  animation: sd-marker-in var(--sd-marker-duration, 90ms)
-    var(--sd-marker-easing, linear) var(--sd-marker-delay, 0ms) both;
-}
-
 /* ==========================================================================
  * Ported from eta-old (`packages/eta-client/src/styles/graphite.css`).
  *
