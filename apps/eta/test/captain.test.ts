@@ -544,14 +544,16 @@ describe("captain controls", () => {
     w.host.db
       .query(
         `INSERT INTO task_run
-           (id, task_id, machine_id, status, error, created_at, started_at, finished_at)
-         VALUES (?, ?, ?, 'failed', ?, ?, ?, ?)`,
+           (id, task_id, machine_id, status, error, error_code, retryable,
+            created_at, started_at, finished_at, last_event_at)
+         VALUES (?, ?, ?, 'failed', ?, 'auth', 0, ?, ?, ?, ?)`,
       )
       .run(
         crypto.randomUUID(),
         task.id,
         primary.id,
         "OpenAI API error (401): api_key_revoked",
+        Date.now(),
         Date.now(),
         Date.now(),
         Date.now(),
@@ -569,6 +571,23 @@ describe("captain controls", () => {
       w.host.product.captain.store.retryState(task.id).stoppedAt,
     ).not.toBeNull();
     expect(w.host.product.captain.store.retryState(task.id).attempts).toBe(1);
+  });
+
+  it("classifies a missing configuration from the error code, not its text", async () => {
+    const { failureFromThrown } = await import("../src/tasks/runner");
+    expect(
+      failureFromThrown(
+        Object.assign(new Error("ENOENT backend/config/stitching.local.json"), {
+          code: "ENOENT",
+        }),
+      ),
+    ).toMatchObject({
+      code: "configuration_missing",
+      retryable: false,
+    });
+    expect(
+      failureFromThrown(new Error("test_permission_denied failed")),
+    ).toBeUndefined();
   });
 
   it("marks an inactive task stuck and reserves proactive wake events", async () => {
@@ -650,6 +669,62 @@ describe("captain controls", () => {
     ).toBe(true);
   });
 
+  it("does not call a long run stuck while its journal is still moving", async () => {
+    const { w } = await captainWorld();
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id], "long-build");
+    const task = w.host.product.board.create(
+      {
+        title: "Long but alive",
+        conversationId: group.id,
+        workspace: "local",
+        status: "in_progress",
+      },
+      { kind: "agent", agentId: ada.id },
+    );
+    const primary = w.host.db
+      .query<{ id: string }, []>(
+        "SELECT id FROM machine WHERE kind = 'primary'",
+      )
+      .get()!;
+    const started = Date.now() - 2 * 60 * 60_000;
+    const runId = crypto.randomUUID();
+    w.host.db
+      .query(
+        `INSERT INTO task_run
+           (id, task_id, machine_id, status, created_at, started_at, last_event_at)
+         VALUES (?, ?, ?, 'running', ?, ?, ?)`,
+      )
+      .run(runId, task.id, primary.id, started, started, Date.now() - 60_000);
+    w.host.db
+      .query("UPDATE task SET updated_at = ? WHERE id = ?")
+      .run(started, task.id);
+
+    w.host.product.captainSupervisor.tick();
+    expect(
+      w.host.product.captain.store
+        .reviews()
+        .some(
+          (review) =>
+            review.kind === "task_run_stuck" && review.taskId === task.id,
+        ),
+    ).toBe(false);
+
+    w.host.db
+      .query("UPDATE task_run SET last_event_at = ? WHERE id = ?")
+      .run(Date.now() - 31 * 60_000, runId);
+    w.host.product.captainSupervisor.tick();
+    expect(
+      w.host.product.captain.store
+        .reviews()
+        .some(
+          (review) =>
+            review.kind === "task_run_stuck" && review.taskId === task.id,
+        ),
+    ).toBe(true);
+  });
+
   it("wakes Captain once when an assignment settles without a task", async () => {
     const { models } = scriptedModels(() => say("Verified."));
     const w = await world({ ...options, models });
@@ -679,8 +754,88 @@ describe("captain controls", () => {
     expect(
       w.host.product.captain.store
         .reviews()
-        .filter((review) => review.assignmentId === assigned.assignment.id),
-    ).toHaveLength(1);
+        .find((review) => review.assignmentId === assigned.assignment.id),
+    ).toMatchObject({
+      kind: "assignment_settled",
+      data: {
+        lastAuthor: "agent",
+        lastTextHead: "Verified.",
+      },
+    });
+  });
+
+  it("reviews an assignment with no new messages after it has been silent", async () => {
+    const { models } = scriptedModels(() => say("Still here."));
+    const w = await world({ ...options, models });
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id], "silent");
+    await w.watch(group.id);
+    const assigned = await w.host.product.captain.assign({
+      conversationId: group.id,
+      text: "Ada, work quietly.",
+      agentIds: [ada.id],
+    });
+    await w.settled(group.id, assigned.replyIds[0]!);
+    const baseline = w.host.product.captain.store.assignment(
+      assigned.assignment.id,
+    )!.messageId;
+    const baselineSeq = w.host.db
+      .query<{ seq: number }, [string]>("SELECT seq FROM message WHERE id = ?")
+      .get(baseline)!.seq;
+    w.host.db
+      .query("UPDATE conversation SET last_seq = ? WHERE id = ?")
+      .run(baselineSeq, group.id);
+    w.host.db
+      .query("UPDATE captain_assignment SET created_at = ? WHERE id = ?")
+      .run(Date.now() - 31 * 60_000, assigned.assignment.id);
+
+    w.host.product.captainSupervisor.tick();
+    expect(
+      w.host.product.captain.store
+        .reviews()
+        .some(
+          (review) =>
+            review.kind === "assignment_stalled" &&
+            review.assignmentId === assigned.assignment.id,
+        ),
+    ).toBe(true);
+  });
+
+  it("does not advance an assignment checkpoint when its review failed", async () => {
+    const { w } = await captainWorld();
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id], "review-retry");
+    const assigned = await w.host.product.captain.assign({
+      conversationId: group.id,
+      text: "Ada, wait.",
+      agentIds: [ada.id],
+    });
+    const review = w.host.product.captain.store.createReview({
+      kind: "assignment_settled",
+      dedupeKey: "test:failed-checkpoint",
+      assignmentId: assigned.assignment.id,
+      conversationId: group.id,
+      checkpointSeq: 42,
+      body: "Needs another attempt.",
+    });
+    w.host.product.captain.store.finishReview(
+      review.id,
+      "failed",
+      "model unavailable",
+    );
+    expect(
+      w.host.product.captain.store.assignmentCheckpoint(assigned.assignment.id),
+    ).toBe(0);
+    w.host.db
+      .query("UPDATE captain_review SET next_attempt_at = 0 WHERE id = ?")
+      .run(review.id);
+    expect(
+      w.host.product.captain.store
+        .pendingReviews()
+        .some((item) => item.id === review.id),
+    ).toBe(true);
   });
 
   it("waits while Captain is busy and then delivers a batched review", async () => {
@@ -729,6 +884,33 @@ describe("captain controls", () => {
     expect(batch).toHaveLength(2);
     expect(new Set(batch.map((review) => review.messageId)).size).toBe(1);
     expect(batch[0]!.messageId).not.toBeNull();
+  });
+
+  it("caps a review batch by count and prompt characters", async () => {
+    const { w } = await captainWorld();
+    const direct = await w.host.product.captain.direct();
+    await w.watch(direct.conversationId);
+    for (let index = 0; index < 25; index += 1)
+      w.host.product.captain.store.createReview({
+        kind: "task_stalled",
+        dedupeKey: `test:large-batch:${index}`,
+        body: `Review ${index}`,
+        data: { detail: "x".repeat(5_000) },
+      });
+
+    await w.host.product.captain.observeReviews();
+    await until(() =>
+      w.rows(direct.conversationId).some((row) => row.author === "system"),
+    );
+    const prompt = w
+      .rows(direct.conversationId)
+      .find((row) => row.author === "system")!;
+    expect(prompt.text.length).toBeLessThanOrEqual(13_000);
+    expect(
+      w.host.product.captain.store
+        .reviews()
+        .filter((review) => review.messageId !== null).length,
+    ).toBeLessThan(25);
   });
 
   it("notifies the user when a Captain review run cannot complete", async () => {

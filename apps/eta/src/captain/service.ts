@@ -36,6 +36,10 @@ import { redactJson, redactText } from "./redact";
 const GLOBAL_PROMPT_ID = "global";
 const ACTIVE_MEMBER = new Set(["queued", "working", "stopping"]);
 const ACTIVE_TASK = new Set(["todo", "in_progress"]);
+const REVIEW_BATCH_MAX = 20;
+const REVIEW_PROMPT_CHARS = 12_000;
+const REVIEW_BODY_CHARS = 600;
+const REVIEW_DATA_CHARS = 2_000;
 
 const CAPTAIN_INSTRUCTIONS = [
   "You are El Capitan, eta's global operations agent.",
@@ -766,6 +770,7 @@ export class CaptainService {
   #reviewAssignments(): void {
     const captain = this.identity();
     if (captain === undefined) return;
+    const settings = this.#deps.store.settings();
     for (const assignment of this.#deps.store.assignments(100)) {
       if (assignment.status === "cancelled") continue;
       const conversation = this.#deps.conversations.get(
@@ -776,7 +781,7 @@ export class CaptainService {
         this.#deps.store.assignmentCheckpoint(assignment.id),
         this.#deps.timeline.get(assignment.messageId)?.seq ?? 0,
       );
-      if (conversation.lastSeq <= checkpoint) continue;
+      const hasNew = conversation.lastSeq > checkpoint;
 
       const memberStatus = this.#deps.timeline.memberStatuses(conversation.id);
       const targets = assignment.targets.map((target) => target.agentId);
@@ -813,15 +818,31 @@ export class CaptainService {
         );
       const blocked = waiting || taskBlocked || pendingInbox.length > 0;
       const throughSeq = conversation.lastSeq;
+      const stalled =
+        Date.now() - assignment.createdAt >= settings.stuckMinutes * 60_000;
+      if (!blocked && !hasNew && !stalled) continue;
+      const last = this.#deps.timeline.latest(conversation.id);
+      const kind = blocked
+        ? "assignment_blocked"
+        : hasNew
+          ? "assignment_settled"
+          : "assignment_stalled";
+      const dedupeKey =
+        kind === "assignment_stalled"
+          ? `assignment-stalled:${assignment.id}:${assignment.createdAt}`
+          : `assignment:${assignment.id}:${throughSeq}`;
       this.#deps.store.createReview({
-        kind: blocked ? "assignment_blocked" : "assignment_settled",
-        dedupeKey: `assignment:${assignment.id}:${throughSeq}`,
+        kind,
+        dedupeKey,
         conversationId: conversation.id,
         assignmentId: assignment.id,
         checkpointSeq: throughSeq,
-        body: blocked
-          ? `Assignment ${assignment.id} in “${conversation.name}” has settled with a block: ${waiting ? "an agent is waiting for input" : "a task or Inbox item needs a decision"}.`
-          : `Assignment ${assignment.id} in “${conversation.name}” has new activity and all assigned agents are idle.`,
+        body:
+          kind === "assignment_blocked"
+            ? `Assignment ${assignment.id} in “${conversation.name}” has settled with a block: ${waiting ? "an agent is waiting for input" : "a task or Inbox item needs a decision"}.`
+            : kind === "assignment_settled"
+              ? `Assignment ${assignment.id} in “${conversation.name}” has new activity and all assigned agents are idle.`
+              : `Assignment ${assignment.id} in “${conversation.name}” has had no new activity for ${settings.stuckMinutes} minutes and all assigned agents are idle; it may have stopped silently.`,
         data: {
           assignmentId: assignment.id,
           conversationId: conversation.id,
@@ -836,6 +857,16 @@ export class CaptainService {
           ),
           taskIds: tasks.map((task) => task.id),
           inboxIds: pendingInbox.map((item) => item.id),
+          lastSeq: last?.seq ?? throughSeq,
+          lastAuthor: last?.author ?? null,
+          lastTextHead:
+            last === undefined
+              ? ""
+              : redactText(last.text)
+                  .replaceAll(/\s+/g, " ")
+                  .trim()
+                  .slice(0, 80),
+          lastSeqAt: last?.updatedAt ?? null,
         },
       });
     }
@@ -865,9 +896,9 @@ export class CaptainService {
     const message = redactText(error);
     this.#deps.store.finishReview(review.id, "failed", message);
     this.#deps.store.addNotificationOnce({
-      key: `review-failed:${review.id}`,
+      key: `review-failed:${review.id}:${review.attempts}`,
       kind: "review_failed",
-      body: `Captain could not complete review ${review.kind}: ${message}`,
+      body: `Captain could not complete review ${review.kind} (attempt ${review.attempts}): ${message}`,
       data: {
         reviewId: review.id,
         kind: review.kind,
@@ -878,8 +909,17 @@ export class CaptainService {
   }
 
   async #deliverReviews(): Promise<void> {
-    const pending = this.#deps.store.pendingReviews(20);
-    if (pending.length === 0) return;
+    const candidates = this.#deps.store.pendingReviews(50);
+    if (candidates.length === 0) return;
+    const pending: CaptainReviewRecord[] = [];
+    let chars = 0;
+    for (const review of candidates) {
+      if (pending.length >= REVIEW_BATCH_MAX) break;
+      const cost = reviewLine(review).length;
+      if (pending.length > 0 && chars + cost > REVIEW_PROMPT_CHARS) break;
+      pending.push(review);
+      chars += cost;
+    }
     const { identity } = await this.ensure();
     const director = await this.direct();
     const captainStatus = this.#deps.timeline
@@ -958,12 +998,15 @@ function reviewPrompt(reviews: readonly CaptainReviewRecord[]): string {
     "Inspect the referenced conversations, tasks, runs and Inbox before deciding what happened.",
     "Idle does not mean success. Verify completion, report blocked work, and silently ignore anything that is still running.",
     "",
-    ...reviews.map(
-      (review, index) =>
-        `${index + 1}. [${review.kind}] ${redactText(review.body)}\n${redactJson(review.data)}`,
-    ),
+    ...reviews.map((review, index) => `${index + 1}. ${reviewLine(review)}`),
     "</captain-review>",
   ].join("\n");
+}
+
+function reviewLine(review: CaptainReviewRecord): string {
+  const body = redactText(review.body).slice(0, REVIEW_BODY_CHARS);
+  const data = redactJson(review.data).slice(0, REVIEW_DATA_CHARS);
+  return `[${review.kind}] ${body}\n${data}`;
 }
 
 function lineDiff(before: string, after: string): string {

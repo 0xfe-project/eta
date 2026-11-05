@@ -2,6 +2,7 @@ import type {
   BoardTaskDetail,
   BoardTaskStatus,
   MessageView,
+  RunFailureView,
   TaskActivityView,
   TaskActor,
   TaskQueueReason,
@@ -133,7 +134,10 @@ interface Live {
 interface Ended {
   status: "completed" | "failed" | "interrupted";
   error?: string | undefined;
+  failure?: RunFailureView | undefined;
 }
+
+const ACTIVITY_POLL_MS = 10_000;
 
 const NUDGE =
   "You stopped without calling finish_task. If the task is done, or you cannot go on without " +
@@ -171,6 +175,28 @@ const mentionsOf = (activity: TaskActivityView): string[] => {
 
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+export function failureFromThrown(error: unknown): RunFailureView | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error))
+    return undefined;
+  const code = error.code;
+  if (typeof code !== "string") return undefined;
+  if (code === "ENOENT")
+    return {
+      code: "configuration_missing",
+      attempt: 1,
+      retryable: false,
+      providerMessage: messageOf(error),
+    };
+  if (code === "EACCES" || code === "EPERM")
+    return {
+      code: "permission",
+      attempt: 1,
+      retryable: false,
+      providerMessage: messageOf(error),
+    };
+  return undefined;
+}
 
 /**
  * Where a run works, in the words it is told. A run on another machine than the project's has no
@@ -680,6 +706,15 @@ export class TaskRunner implements TaskRuns {
         error: lost
           ? `The link to ${machine.name} failed while this run was working, so what it did there is unknown. Nothing was run again. (${error.message})`
           : messageOf(error),
+        ...(lost
+          ? {
+              failure: {
+                code: "unknown_outcome",
+                attempt: 1,
+                retryable: false,
+              },
+            }
+          : failureFromThrown(error)),
       };
     }
     if (live.stopped === "closing")
@@ -691,6 +726,7 @@ export class TaskRunner implements TaskRuns {
       run.id,
       ended.status,
       ended.error ?? null,
+      ended.failure,
     );
     if (done !== undefined) {
       this.#deps.board.runEvent(run.taskId, {
@@ -872,10 +908,12 @@ export class TaskRunner implements TaskRuns {
       if (live.stopped !== undefined)
         return { ended: { status: "interrupted" }, info };
       live.inFlight = true;
+      const stopActivity = this.#watchActivity(run.id, handle);
       let result;
       try {
         result = await handle.run(prompt, () => !this.#closing);
       } finally {
+        stopActivity();
         live.inFlight = false;
       }
       if (result.text.trim() !== "") live.said = result.text;
@@ -883,7 +921,11 @@ export class TaskRunner implements TaskRuns {
         return { ended: { status: "interrupted" }, info };
       if (result.status === "failed")
         return {
-          ended: { status: "failed", error: result.error ?? "The run failed." },
+          ended: {
+            status: "failed",
+            error: result.error ?? "The run failed.",
+            failure: result.failure,
+          },
           info,
         };
       // Comments that came while the turn was ending go in with the next.
@@ -1018,6 +1060,31 @@ export class TaskRunner implements TaskRuns {
       this.#deps.warn(`[eta] beforeRun failed: ${messageOf(error)}`);
       return undefined;
     }
+  }
+
+  #watchActivity(runId: string, handle: SessionHandle): () => void {
+    let stopped = false;
+    let seen = -1;
+    const look = async (): Promise<void> => {
+      if (stopped) return;
+      try {
+        const seq = await handle.lastSeq();
+        if (stopped || seq <= seen) return;
+        seen = seq;
+        this.#deps.runs.touch(runId);
+      } catch (error) {
+        this.#deps.warn(
+          `[eta] could not read run activity: ${messageOf(error)}`,
+        );
+      }
+    };
+    void look();
+    const timer = setInterval(() => void look(), ACTIVITY_POLL_MS);
+    timer.unref?.();
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
   }
 
   /** Tell the features how the run ended, without waiting for them or letting them fail it. */

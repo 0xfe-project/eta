@@ -282,10 +282,23 @@ export interface OpenedBundle {
 export interface RunOutcome {
   status: "completed" | "aborted" | "failed";
   error?: string;
+  /** The provider or host's classified failure, when the run had one. */
+  failure?: RunFailureView | undefined;
   text: string;
   thinking: string;
   /** The tool calls the run made, shortened for the reply's row; absent when there were none. */
   activity?: ToolActivity[];
+}
+
+export interface RunFailureView {
+  code: string;
+  provider?: string | undefined;
+  modelId?: string | undefined;
+  httpStatus?: number | undefined;
+  providerMessage?: string | undefined;
+  attempt: number;
+  retryable: boolean;
+  remedy?: string | undefined;
 }
 
 /** What the daemon asks of the primary (`svc` calls). */

@@ -24,8 +24,6 @@ export interface CaptainSupervisorDeps {
 const MINUTE = 60_000;
 const TICK = MINUTE;
 const ACTIVE = new Set(["todo", "in_progress"]);
-const NON_RETRYABLE =
-  /api[_ -]?key|authentication|authorization|unauthorized|forbidden|permission|credential|oauth|login|401|403|invalid[_ -]?config|configuration|not configured|model_unavailable|model (?:not found|unavailable)|context[_ -]?length|quota|billing|insufficient (?:credit|quota)/i;
 
 /** Reserved signal from a future proactive source. No source is enabled in this release. */
 interface CaptainWakeEvent {
@@ -88,7 +86,11 @@ export class CaptainSupervisor {
       this.#handleFailures(settings.retryLimit);
       this.#handleStuck(settings.stuckMinutes);
       this.#handleInbox(settings.inboxMinutes);
-      void this.#deps.captain.observeReviews();
+      void this.#deps.captain.observeReviews().catch((error: unknown) => {
+        this.#deps.warn?.(
+          `[eta] Captain review observer failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
       const now = this.#now();
       if (now - this.#lastPatrol >= settings.patrolMinutes * MINUTE) {
         this.#lastPatrol = now;
@@ -150,7 +152,7 @@ export class CaptainSupervisor {
       const latestFailure = latest;
       if (retry.lastRunId === latestFailure.id) continue;
       const attempts = retry.attempts + 1;
-      const nonRetryable = nonRetryableTaskError(latestFailure.error);
+      const nonRetryable = latestFailure.retryable === false;
       const stopped = nonRetryable || attempts >= limit;
       this.#deps.store.recordRetry(
         task.id,
@@ -180,6 +182,7 @@ export class CaptainSupervisor {
             runId: latestFailure.id,
             attempts,
             nonRetryable,
+            errorCode: latestFailure.errorCode,
             error: latestFailure.error,
           },
         });
@@ -195,6 +198,7 @@ export class CaptainSupervisor {
             attempts,
             error: latestFailure.error,
             nonRetryable,
+            errorCode: latestFailure.errorCode,
           },
         });
         continue;
@@ -225,20 +229,20 @@ export class CaptainSupervisor {
       if (!ACTIVE.has(task.status)) continue;
       const open = this.#deps.runs.openOf(task.id);
       if (open.length > 0) {
-        const oldest = open
-          .map((run) => run.startedAt ?? run.createdAt)
-          .reduce((left, right) => Math.min(left, right), now);
-        if (now - oldest < minutes * MINUTE) continue;
+        const lastEvent = open
+          .map((run) => run.lastEventAt ?? run.startedAt ?? run.createdAt)
+          .reduce((left, right) => Math.max(left, right), 0);
+        if (now - lastEvent < minutes * MINUTE) continue;
         const ids = open.map((run) => run.id).sort();
         this.#deps.store.createReview({
           kind: "task_run_stuck",
-          dedupeKey: `task-run-stuck:${task.id}:${ids.join(",")}:${oldest}`,
+          dedupeKey: `task-run-stuck:${task.id}:${ids.join(",")}:${lastEvent}`,
           taskId: task.id,
           body: `Task #${task.number} “${task.title}” has an open run with no progress for ${minutes} minutes.`,
           data: {
             taskId: task.id,
             runIds: ids,
-            startedAt: oldest,
+            lastEventAt: lastEvent,
             updatedAt: task.updatedAt,
           },
         });
@@ -280,8 +284,4 @@ export class CaptainSupervisor {
       });
     }
   }
-}
-
-function nonRetryableTaskError(error: string | null): boolean {
-  return NON_RETRYABLE.test(error ?? "");
 }

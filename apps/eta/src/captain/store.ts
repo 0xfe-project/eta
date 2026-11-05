@@ -83,6 +83,8 @@ export interface CaptainReviewRecord {
   body: string;
   data: Record<string, unknown>;
   status: "pending" | "running" | "completed" | "failed";
+  attempts: number;
+  nextAttemptAt: number;
   messageId: string | null;
   replyId: string | null;
   error: string | null;
@@ -102,6 +104,8 @@ interface ReviewRow {
   body: string;
   data: string;
   status: CaptainReviewRecord["status"];
+  attempts: number;
+  next_attempt_at: number;
   message_id: string | null;
   reply_id: string | null;
   error: string | null;
@@ -193,6 +197,8 @@ const reviewOf = (row: ReviewRow): CaptainReviewRecord => ({
   body: row.body,
   data: jsonObject(row.data),
   status: row.status,
+  attempts: row.attempts,
+  nextAttemptAt: row.next_attempt_at,
   messageId: row.message_id,
   replyId: row.reply_id,
   error: row.error,
@@ -763,12 +769,15 @@ export class CaptainStore {
   }
 
   pendingReviews(limit = 20): CaptainReviewRecord[] {
+    const now = Date.now();
     return this.#db
-      .query<ReviewRow, [number]>(
-        `SELECT * FROM captain_review WHERE status = 'pending'
+      .query<ReviewRow, [number, number]>(
+        `SELECT * FROM captain_review
+          WHERE status = 'pending'
+             OR (status = 'failed' AND next_attempt_at <= ?)
           ORDER BY created_at, rowid LIMIT ?`,
       )
-      .all(limit)
+      .all(now, limit)
       .map(reviewOf);
   }
 
@@ -787,7 +796,9 @@ export class CaptainStore {
       this.#db
         .query<{ seq: number }, [string]>(
           `SELECT COALESCE(MAX(checkpoint_seq), 0) AS seq
-             FROM captain_review WHERE assignment_id = ?`,
+             FROM captain_review
+            WHERE assignment_id = ?
+              AND status IN ('pending', 'running', 'completed')`,
         )
         .get(assignmentId)?.seq ?? 0
     );
@@ -805,8 +816,9 @@ export class CaptainStore {
           .query(
             `UPDATE captain_review
                 SET status = 'running', message_id = ?, reply_id = ?, updated_at = ?,
-                    delivered_at = ?, error = NULL
-              WHERE id = ? AND status = 'pending'`,
+                    delivered_at = ?, error = NULL, attempts = attempts + 1,
+                    next_attempt_at = 0
+              WHERE id = ? AND status IN ('pending', 'failed')`,
           )
           .run(messageId, replyId, now, now, id);
       }
@@ -818,12 +830,26 @@ export class CaptainStore {
     status: "completed" | "failed",
     error: string | null = null,
   ): void {
+    const now = Date.now();
+    const current =
+      status === "failed"
+        ? this.#db
+            .query<{ attempts: number }, [string]>(
+              "SELECT attempts FROM captain_review WHERE id = ?",
+            )
+            .get(id)
+        : null;
+    const delay =
+      current === null
+        ? 0
+        : Math.min(60, 2 ** Math.max(0, current.attempts - 1)) * 60_000;
     this.#db
       .query(
-        `UPDATE captain_review SET status = ?, error = ?, updated_at = ?
+        `UPDATE captain_review
+            SET status = ?, error = ?, updated_at = ?, next_attempt_at = ?
           WHERE id = ? AND status IN ('pending', 'running')`,
       )
-      .run(status, error, Date.now(), id);
+      .run(status, error, now, status === "failed" ? now + delay : 0, id);
   }
 
   setMemoryPaused(input: {
