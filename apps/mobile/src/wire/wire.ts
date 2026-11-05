@@ -303,7 +303,6 @@ export class Wire {
       return;
     }
     if (!isServerFrame(frame)) return;
-    this.lastSeenAt.set(Date.now());
     switch (frame.type) {
       case "hello":
         this.hello(frame);
@@ -346,12 +345,14 @@ export class Wire {
       this.missing.set({});
       this.refused.set(undefined);
       this.status.set("open");
+      this.lastSeenAt.set(Date.now());
     });
     // A fresh socket holds no subscriptions: ask again for everything somebody still reads.
     for (const target of this.users.keys()) this.send({ op: "subscribe", target });
   }
 
   private state(frame: Extract<ServerFrame, { type: "state" }>): void {
+    this.lastSeenAt.set(Date.now());
     if (!this.users.has(frame.target)) return;
     const slot = this.slot(frame.target);
     const next = applyState(untracked(() => slot()), frame);

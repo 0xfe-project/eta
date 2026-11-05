@@ -144,7 +144,9 @@ function Folded(props: { text: string; preview?: string | undefined; lines: numb
 
 /** A description opens on its first paragraph. */
 function descriptionPreview(text: string): string | undefined {
-  const first = text.trim().split(/\n\s*\n/)[0] ?? "";
+  // Past the headings a draft's description is built from (`## 目标`): they say nothing yet.
+  const body = text.trim().replace(/^#{1,6}\s.*$/gm, "").trim();
+  const first = body.split(/\n\s*\n/)[0] ?? "";
   return first.length < text.trim().length || first.length > 120 ? first : undefined;
 }
 

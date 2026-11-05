@@ -703,7 +703,7 @@ export function installChat(host: FakeHost): void {
         participants: [member("agent-ache", "working", "session-ache-site")],
       },
     });
-  if (scenario === "chat-no-model")
+  if (scenario === "chat-no-model") {
     host.patch(
       "agents",
       "list",
@@ -712,6 +712,11 @@ export function installChat(host: FakeHost): void {
           agent.id === "agent-ache" ? { ...agent, model: null } : agent,
       ),
     );
+    // After every fixture: `create` installs the providers later than this.
+    queueMicrotask(() =>
+      host.patch("providers", "config", { revision: "r0", providers: [] }),
+    );
+  }
   if (scenario === "chat-queue") {
     const wire = conversations.get("wire");
     if (wire !== undefined)

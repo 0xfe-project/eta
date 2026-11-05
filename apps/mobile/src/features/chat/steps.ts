@@ -153,6 +153,7 @@ export function stepOf(block: ToolBlock): Step {
           : t("chat.step.searchHits", { query: what, count: hits }),
     };
   }
+  if (name === "ask_user") return { ...base, verb: t("chat.step.asked"), text: what };
   if (/read|cat|view|fetch|open/.test(name) && what !== "")
     return { ...base, verb: t("chat.step.read"), text: what };
   return {
