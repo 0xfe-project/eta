@@ -72,7 +72,10 @@ export function artifactSessionTools(deps: {
         "paths. For a Vite project set `base: './'`, run `vite build` yourself and publish " +
         "`dist`. Route with the hash, or set `spa: true` for path routes; with `spa` a root path " +
         "such as `/assets/app.js` in index.html is refused, and the router needs " +
-        '`basename={new URL(".", document.baseURI).pathname}`.',
+        '`basename={new URL(".", document.baseURI).pathname}`.\n\n' +
+        "The user sees the artifact as a card beside your reply, so the reply should not repeat " +
+        "it. Say what it is in a line, then only what it does not carry: what failed, what to " +
+        "watch for, what needs a decision.",
       parameters: parameters(),
       async execute(args, run) {
         try {
