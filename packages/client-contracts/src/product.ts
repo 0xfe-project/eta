@@ -399,6 +399,7 @@ export const MACHINE_ACTIONS = [
   "discover",
   "install",
   "addresses",
+  "phoneLink",
 ] as const;
 export type MachineAction = (typeof MACHINE_ACTIONS)[number];
 
@@ -409,6 +410,11 @@ export interface MachineArgs {
    * should dial: what the user's browser sees, because the host cannot know its public name.
    */
   enroll: { name?: string; url?: string };
+  /**
+   * What the phone app scans to connect once. `url` is the address the phone should dial: what the
+   * user's browser sees, because the host cannot know its public name.
+   */
+  phoneLink: { url?: string };
   /** Let a pending machine in. `fingerprint` must be the one the machine printed. */
   approve: { machineId: string; fingerprint: string };
   /** Close the door on a machine. Sessions already running there are not stopped. */
@@ -464,6 +470,8 @@ export interface TailnetPeerView {
 export interface MachineResults {
   rename: { machine: MachineView };
   enroll: { code: string; expiresAt: number; url: string; command: string };
+  /** `link` carries the access token, so it is shown, never logged. */
+  phoneLink: { link: string; url: string };
   approve: { machine: MachineView };
   revoke: { machine: MachineView };
   setMaxActiveRuns: { machine: MachineView };

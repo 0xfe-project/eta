@@ -63,6 +63,8 @@ export interface Access {
   authorize: (request: Request) => Response | undefined;
   /** The token file in use, or `undefined` when the gate is off. */
   readonly tokenFile: string | undefined;
+  /** The token itself, or `undefined` when the gate is off: for the phone's connect link. */
+  readonly token: string | undefined;
 }
 
 /** Whether an interface or `Host` name can only be reached from this machine. */
@@ -175,11 +177,11 @@ export function createAccess(options: AccessOptions): Access {
   const tokenFile = gated
     ? (options.tokenFile ?? join(options.dataDir, "access-token"))
     : undefined;
+  const token = tokenFile === undefined ? undefined : loadToken(tokenFile);
   const gate =
-    tokenFile === undefined
+    token === undefined
       ? undefined
       : (() => {
-          const token = loadToken(tokenFile);
           // What the cookie holds: derived from the token, so a leaked cookie is not the token.
           const cookie = createHash("sha256")
             .update(`eta-cookie:${token}`)
@@ -206,6 +208,7 @@ export function createAccess(options: AccessOptions): Access {
 
   return {
     tokenFile,
+    token,
     authorize(request) {
       const url = new URL(request.url);
       if (url.pathname === "/up" || isMachineRoute(url.pathname))

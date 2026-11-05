@@ -167,6 +167,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       artifactLimits: options.artifactLimits,
       memoryUrl: options.memoryUrl,
       publicUrl: options.publicUrl,
+      accessToken: access.token,
       github: options.github,
       ...(options.web === undefined || options.web === false
         ? {}

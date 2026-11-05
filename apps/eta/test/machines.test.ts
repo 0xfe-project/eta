@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { DaemonLink, enroll } from "@eta/daemon";
 import { describe, expect, it } from "vitest";
 import { MachineStore } from "../src/machines/store";
-import { until } from "./support/client";
+import { connect, until } from "./support/client";
 import { approve, machineView, makeCode, startDaemon } from "./support/daemon";
 import { tempDir, testHost } from "./support/host";
 import { world } from "./support/world";
@@ -24,6 +24,26 @@ async function enrollRaw(port: number, body: Record<string, unknown>) {
     body: JSON.stringify(body),
   });
 }
+
+describe("the phone's link", () => {
+  it("carries the address asked for and the token", async () => {
+    const dir = await tempDir();
+    const tokenFile = join(dir, "token");
+    await writeFile(tokenFile, "a-token-of-sixteen-or-more\n");
+    const host = await testHost({ tokenFile });
+    const client = await connect(`ws://127.0.0.1:${host.port}/ws`, {
+      "x-eta-token": "a-token-of-sixteen-or-more",
+    });
+    await client.hello();
+    const result = await client.call("machines", "phoneLink", {
+      url: "https://eta.example.com/settings",
+    });
+    const link = new URL((result as { link: string }).link);
+    expect(link.protocol).toBe("eta:");
+    expect(link.searchParams.get("address")).toBe("https://eta.example.com");
+    expect(link.searchParams.get("token")).toBe("a-token-of-sixteen-or-more");
+  });
+});
 
 describe("enrolling", () => {
   it("an install code makes a pending machine with the fingerprint the daemon printed", async () => {

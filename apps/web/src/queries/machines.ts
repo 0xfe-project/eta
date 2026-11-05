@@ -16,6 +16,14 @@ export function useEnrollMachine() {
   );
 }
 
+/** The link the phone app scans; it carries the access token. */
+export function usePhoneLink() {
+  return useWireMutation<MachineArgs["phoneLink"], MachineResults["phoneLink"]>(
+    "machines",
+    "phoneLink",
+  );
+}
+
 /** Only succeeds when `fingerprint` is the one the machine printed; the host does the comparing. */
 export function useApproveMachine() {
   return useWireMutation<MachineArgs["approve"], MachineResults["approve"]>(

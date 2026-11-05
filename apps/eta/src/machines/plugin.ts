@@ -37,6 +37,8 @@ export interface MachinesDeps {
   builds?: DaemonBuilds | undefined;
   /** How `install` reaches a computer. */
   ssh: SshRunner;
+  /** The token a client needs, when the host asks for one. */
+  accessToken?: string | undefined;
   now?: (() => number) | undefined;
 }
 
@@ -117,6 +119,20 @@ export function machinesPlugin(deps: MachinesDeps, applied: () => void) {
               command: installCommand(url, code),
             },
           };
+        }),
+        // The token goes to a client that is already in: this socket can do all the token can.
+        wire.handle("machines", "phoneLink", async (call) => {
+          const url = await urlFor(
+            new Args(call).optionalString("url"),
+            "phoneLink",
+          );
+          const query = new URLSearchParams({
+            address: url,
+            ...(deps.accessToken === undefined
+              ? {}
+              : { token: deps.accessToken }),
+          });
+          return { result: { link: `eta://connect?${query}`, url } };
         }),
         wire.handle("machines", "approve", (call) => {
           const args = new Args(call);

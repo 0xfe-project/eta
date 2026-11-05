@@ -41,6 +41,7 @@ import {
 import { useMachines } from "@/queries/projects";
 import { wireErrorMessage } from "@/queries/wire";
 import { AddMachine, Approval } from "./add-machine";
+import { PhoneLinkButton } from "./phone-link";
 import { when } from "./routine-format";
 
 // Settings → 机器: the primary and the machines that run the daemon. Adding one turns this panel
@@ -372,10 +373,13 @@ export function MachineSettings() {
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">{translateText("title")}</h2>
-        <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
-          <PlusIcon aria-hidden="true" data-icon="inline-start" />
-          {translateText("actions.add")}
-        </Button>
+        <div className="flex items-center gap-2">
+          <PhoneLinkButton />
+          <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+            <PlusIcon aria-hidden="true" data-icon="inline-start" />
+            {translateText("actions.add")}
+          </Button>
+        </div>
       </div>
       {error ? (
         <LoadError what={translateText("title")} error={error} />
