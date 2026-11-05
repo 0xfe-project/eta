@@ -6,9 +6,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { compactionNotice } from "@/lib/compaction-notice";
 import { draftText, EMPTY_DRAFT } from "@/lib/composer";
-import { mentionedMembers } from "@/lib/mentions";
 import { cn } from "@/lib/utils";
-import { agentName } from "@/queries/agents";
 import {
   useConversation,
   useConversationActions,
@@ -32,6 +30,7 @@ import { NewConversationDialog } from "./new-conversation-dialog";
 import { usePaneWidth } from "./pane";
 import { SettingsDialog } from "./settings-dialog";
 import { useAgents } from "./use-agents";
+import { useComposerTarget } from "./use-composer-target";
 import { useGroups } from "./use-groups";
 import { WorkspacePanel } from "./workspace-panel";
 import { useShowLinkedView } from "./workspace-search";
@@ -97,15 +96,7 @@ export function Workspace({
     (o) => o.conversationId === group?.id && !arrived.has(o.id),
   );
   const members = group?.participants ?? [];
-  // Who the text names. Naming nobody is a message for the steward, which the host decides.
-  const targets = (text: string) =>
-    mentionedMembers(
-      text,
-      members.map((member) => ({
-        id: member.agentId,
-        name: agentName(agents, member.agentId),
-      })),
-    );
+  const { targetOf, remember } = useComposerTarget(group, agents);
   const { stop, read } = useConversationActions();
   const { compact, goal: setGoal } = useSessionActions();
   const { choose, abort } = useAnswerQuestion();
@@ -116,7 +107,7 @@ export function Workspace({
     members.find((member) => member.agentId === agentId)?.sessionId ??
     undefined;
   const goalSessionId =
-    (targets(draftText(draft)).map(sessionOf).find(Boolean) ??
+    (targetOf(draftText(draft)).ids.map(sessionOf).find(Boolean) ??
       members.find((member) => member.sessionId !== null)?.sessionId) ||
     undefined;
   const onError = (error: Error) => toast.error(error.message);
@@ -311,7 +302,7 @@ export function Workspace({
                   group.id,
                   text,
                   "queue",
-                  agentId ? [agentId] : targets(text),
+                  agentId ? [agentId] : targetOf(text).mentions,
                 );
               }}
               onReload={conversation.loadOlder}
@@ -337,12 +328,24 @@ export function Workspace({
               onDraftChange={setDraft}
               onSend={(text, mode, files, blocks) => {
                 if (!group) return openEditor();
-                outbox.send(group.id, text, mode, targets(text), files, blocks);
+                const target = targetOf(text);
+                outbox.send(
+                  group.id,
+                  text,
+                  mode,
+                  target.mentions,
+                  files,
+                  blocks,
+                );
+                remember(target.sticky);
                 setDraft([]);
               }}
               onCompact={() => {
                 const text = draftText(draft);
-                const named = targets(text).map(sessionOf);
+                // Who the composer says it is talking to, the steward included.
+                const named = targetOf(text)
+                  .ids.map(sessionOf)
+                  .filter((id) => id !== undefined);
                 const sessions = named.length
                   ? named
                   : members.length === 1

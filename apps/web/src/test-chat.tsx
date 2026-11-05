@@ -4,9 +4,9 @@
 import type { Draft } from "@/lib/composer";
 import { useMemo } from "react";
 import { ChatPanel } from "@/components/workspace/chat-panel";
+import { useComposerTarget } from "@/components/workspace/use-composer-target";
 import { EMPTY_DRAFT } from "@/lib/composer";
-import { mentionedMembers } from "@/lib/mentions";
-import { agentName, useAgentList } from "@/queries/agents";
+import { useAgentList } from "@/queries/agents";
 import {
   useConversation,
   useConversationActions,
@@ -35,14 +35,7 @@ export function Chat({ conversationId }: { conversationId: string }) {
   const outbox = useOutboxActions();
   const { stop } = useConversationActions();
   const { choose, abort } = useAnswerQuestion();
-  const targets = (text: string) =>
-    mentionedMembers(
-      text,
-      (group?.participants ?? []).map((m) => ({
-        id: m.agentId,
-        name: agentName(agents, m.agentId),
-      })),
-    );
+  const { targetOf, remember } = useComposerTarget(group, agents);
   return (
     <ChatPanel
       groupId={conversationId}
@@ -62,7 +55,9 @@ export function Chat({ conversationId }: { conversationId: string }) {
       }
       // Fresh handlers every render, as Workspace passes them.
       onSend={(text, mode, files, blocks) => {
-        outbox.send(conversationId, text, mode, targets(text), files, blocks);
+        const target = targetOf(text);
+        outbox.send(conversationId, text, mode, target.mentions, files, blocks);
+        remember(target.sticky);
         useOutbox.getState().setDraft(conversationId, []);
       }}
       outgoing={all.filter(
@@ -76,7 +71,7 @@ export function Chat({ conversationId }: { conversationId: string }) {
           conversationId,
           text,
           "queue",
-          agentId ? [agentId] : targets(text),
+          agentId ? [agentId] : targetOf(text).mentions,
         )
       }
       onCompact={() => {}}

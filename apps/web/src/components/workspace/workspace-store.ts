@@ -26,6 +26,13 @@ const workspaceSchema = z.object({
   recentDirectories: z
     .record(z.string().max(64), z.array(z.string().max(4096)).max(5))
     .optional(),
+  // Who each group's messages keep going to (lib/mentions.ts); no entry is the steward.
+  stickyTargets: z
+    .record(
+      z.string().max(64),
+      z.union([z.literal("everyone"), z.array(z.string().max(64))]),
+    )
+    .optional(),
 });
 
 export type WorkspaceState = z.infer<typeof workspaceSchema>;
