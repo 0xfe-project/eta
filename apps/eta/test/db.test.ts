@@ -4,7 +4,8 @@
  */
 import type { Database } from "bun:sqlite";
 import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import process from "node:process";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   applyMigrations,
@@ -12,6 +13,7 @@ import {
   loadMigrations,
   openDatabase,
 } from "../src/db";
+import { embedResources } from "../src/resources";
 import { tempDir } from "./support/host";
 
 const open: Database[] = [];
@@ -114,6 +116,41 @@ describe("applyMigrations", () => {
   });
 });
 
+describe("two processes on a new database", () => {
+  it("apply each migration once", async () => {
+    const dir = await tempDir();
+    const path = join(dir, "eta.sqlite");
+    const program = join(dir, "migrate.ts");
+    await writeFile(
+      program,
+      `import { applyMigrations, loadMigrations, openDatabase } from ${JSON.stringify(resolve(import.meta.dirname, "../src/db.ts"))};
+const db = openDatabase(${JSON.stringify(path)});
+console.log(applyMigrations(db, loadMigrations()).length);
+`,
+    );
+    const runs = Array.from({ length: 4 }, () =>
+      Bun.spawn([process.execPath, program], {
+        stdout: "pipe",
+        stderr: "pipe",
+      }),
+    );
+    const results = await Promise.all(
+      runs.map(async (run) => {
+        const [stdout, stderr, code] = await Promise.all([
+          new Response(run.stdout).text(),
+          new Response(run.stderr).text(),
+          run.exited,
+        ]);
+        expect(stderr).toBe("");
+        expect(code).toBe(0);
+        return Number(stdout);
+      }),
+    );
+    const total = loadMigrations().length;
+    expect(results.reduce((sum, count) => sum + count, 0)).toBe(total);
+  });
+});
+
 describe("loadMigrations", () => {
   it("reads NNNN-<name>.sql files in number order and ignores other files", async () => {
     const dir = await tempDir();
@@ -135,6 +172,27 @@ describe("loadMigrations", () => {
     await writeFile(join(duplicated, "0001-a.sql"), "SELECT 1");
     await writeFile(join(duplicated, "0001-b.sql"), "SELECT 1");
     expect(() => loadMigrations(duplicated)).toThrow(/0001/);
+  });
+
+  it("keeps a migration's original name when the file inside an executable has another", async () => {
+    const dir = await tempDir();
+    await writeFile(join(dir, "0001-first-tsyv6076.sql"), "SELECT 1");
+    await writeFile(join(dir, "0002-second-n93k08rt.sql"), "SELECT 2");
+    embedResources({
+      files: {
+        "migrations/0002-second.sql": join(dir, "0002-second-n93k08rt.sql"),
+        "migrations/0001-first.sql": join(dir, "0001-first-tsyv6076.sql"),
+      },
+      digests: {},
+    });
+    try {
+      expect(loadMigrations()).toEqual([
+        { id: "0001-first", sql: "SELECT 1" },
+        { id: "0002-second", sql: "SELECT 2" },
+      ]);
+    } finally {
+      embedResources(undefined);
+    }
   });
 
   it("loads the migrations this package ships, and they apply", async () => {

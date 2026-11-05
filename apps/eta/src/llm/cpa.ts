@@ -17,14 +17,16 @@ import type { CpaClient, CpaConfig } from "@cpajs/cpa/client";
 import type { CpaServer } from "@cpajs/cpa/server";
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import process from "node:process";
 import { startServer } from "@cpajs/cpa/server";
-import { besideExecutable, COMPILED } from "../resources";
+import { embeddedFiles, unpack } from "../resources";
 
 type ApiKeys = NonNullable<CpaConfig["api-keys"]>;
 
 export interface CpaOptions {
+  /** The data directory: where a compiled host unpacks the binary. */
+  dataDir: string;
   stateDir: string;
   /**
    * Merged over the generated config; `api-keys` provider by provider. How a test points an
@@ -137,17 +139,30 @@ export class Cpa {
   }
 }
 
-function launch(
-  { stateDir, extra = {}, warn }: CpaOptions,
+/**
+ * A compiled host has no node_modules to find the platform package in: it carries the binary and
+ * `cpa-launcher`, unpacked into one directory because cpajs looks for the launcher next to the
+ * binary. On every launch, so a directory that was deleted comes back. Undefined from source.
+ */
+async function embeddedBinary(dataDir: string): Promise<string | undefined> {
+  const files = embeddedFiles("cpa");
+  if (files === undefined) return undefined;
+  const paths = await Promise.all(
+    Object.keys(files).map((file) => unpack(dataDir, `cpa/${file}`)),
+  );
+  return paths.find((path) => basename(path) === "cli-proxy-api");
+}
+
+async function launch(
+  { dataDir, stateDir, extra = {}, warn }: CpaOptions,
   accessKey: string,
   legacy?: string,
 ): Promise<CpaServer> {
   const { "api-keys": extraKeys, ...rest } = extra;
+  const binaryPath = await embeddedBinary(dataDir);
   return startServer({
     stateDir,
-    // A compiled host has no node_modules to find the platform package in: the binary (and
-    // `cpa-launcher`, which cpajs looks for next to it) travel beside the executable.
-    ...(COMPILED ? { binaryPath: besideExecutable("cli-proxy-api") } : {}),
+    ...(binaryPath === undefined ? {} : { binaryPath }),
     host: "127.0.0.1",
     config: ({ existing }) => ({
       access: { "api-keys": [accessKey] },

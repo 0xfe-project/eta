@@ -142,8 +142,8 @@ const APP_MENU: ApplicationMenuItemConfig[] = [
 if (process.platform === "darwin") ApplicationMenu.setApplicationMenu(APP_MENU);
 
 /**
- * The host the app carries: `host/` beside the main process's bundle, with the compiled host and
- * the page in it. Only a packaged build has one — `build.copy` never lands in the dev bundle.
+ * The host the app carries: `host/` beside the main process's bundle, with the compiled host in
+ * it. Only a packaged build has one — `build.copy` never lands in the dev bundle.
  */
 function packagedHost(): string | undefined {
   const dir = join(dirname(Bun.main), "..", "host");
@@ -270,7 +270,7 @@ async function startHost(): Promise<Launch> {
   let cwd: string;
   let built: boolean;
   if (packaged !== undefined) {
-    command = [join(packaged, "eta-host"), "--web-dir", join(packaged, "web")];
+    command = [join(packaged, "eta-host")];
     cwd = homedir();
     built = true;
   } else {

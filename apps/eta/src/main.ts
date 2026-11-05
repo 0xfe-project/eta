@@ -17,14 +17,12 @@
  * `--host tailscale` listens on this computer's tailnet address, which is how the other computers
  * of the tailnet reach it (and the address they are told to dial when added as machines).
  *
- * A compiled host serves the page beside it (`web/`, as `stage-host.ts` lays it out) unless told
- * another `--web-dir`.
+ * A compiled host serves the page it carries (`resources.ts`) unless told another `--web-dir`.
  *
  * The data directory is `~/.eta` and is not a flag. A second one was a second half: personas went
  * on being read from the real home while the config came from somewhere else, so a process pointed
  * at another directory looked like a config that had gone missing. One root, `$HOME` decides it.
  */
-import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
@@ -32,7 +30,7 @@ import { parseArgs } from "node:util";
 import { installedEnv, installService, uninstallService } from "@eta/daemon";
 import { startHost } from "./host";
 import { Tailscale } from "./machines/tailscale";
-import { besideExecutable, COMPILED } from "./resources";
+import { COMPILED, embeddedFiles } from "./resources";
 
 /** The host as a user service: one per user, like the daemon. */
 const HOST_UNIT = { name: "io.eta.host", description: "eta host", args: [] };
@@ -128,15 +126,9 @@ const host = await startHost({
   dataDir: join(homedir(), ".eta"),
   port,
   hostname: listen,
-  // The page beside a compiled host, unless another was named.
-  ...(values["web-dir"] === undefined &&
-  COMPILED &&
-  existsSync(join(besideExecutable("web"), "index.html"))
-    ? { webDir: besideExecutable("web") }
-    : {}),
   // The tailnet's computers can be found and added as machines, and the user's own let in.
   tailscale: true,
-  // The daemon builds carried beside this host (or in the checkout): daemons are kept at them.
+  // The daemon builds this host carries (or the checkout's): daemons are kept at them.
   daemonBuilds: true,
   ...(values["web-dir"] === undefined
     ? {}
@@ -167,7 +159,8 @@ console.log(
     host: host.hostname,
     port: host.port,
     dataDir: host.dataDir,
-    webDir: host.webDir ?? null,
+    webDir:
+      host.webDir ?? (embeddedFiles("web") === undefined ? null : "(embedded)"),
     tokenFile: host.tokenFile ?? null,
     plugins: host.server
       .mounted()
