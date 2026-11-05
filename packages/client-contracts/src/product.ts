@@ -170,8 +170,10 @@ export interface ConversationInfo {
   archived: boolean;
   /** The effective steward (see `ConversationSummary.stewardId`). */
   stewardId: string | null;
-  /** The conversation's own pick; null means it follows its project. */
+  /** The conversation's own pick; null means it follows its project, unless `noSteward`. */
   stewardOverrideId: string | null;
+  /** The conversation said it has no steward: it does not follow its project either. */
+  noSteward: boolean;
   readSeq: number;
   lastSeq: number;
   createdAt: number;
@@ -399,6 +401,7 @@ export const MACHINE_ACTIONS = [
   "discover",
   "install",
   "addresses",
+  "phoneLink",
 ] as const;
 export type MachineAction = (typeof MACHINE_ACTIONS)[number];
 
@@ -409,6 +412,11 @@ export interface MachineArgs {
    * should dial: what the user's browser sees, because the host cannot know its public name.
    */
   enroll: { name?: string; url?: string };
+  /**
+   * What the phone app scans to connect once. `url` is the address the phone should dial: what the
+   * user's browser sees, because the host cannot know its public name.
+   */
+  phoneLink: { url?: string };
   /** Let a pending machine in. `fingerprint` must be the one the machine printed. */
   approve: { machineId: string; fingerprint: string };
   /** Close the door on a machine. Sessions already running there are not stopped. */
@@ -464,6 +472,8 @@ export interface TailnetPeerView {
 export interface MachineResults {
   rename: { machine: MachineView };
   enroll: { code: string; expiresAt: number; url: string; command: string };
+  /** `link` carries the access token, so it is shown, never logged. */
+  phoneLink: { link: string; url: string };
   approve: { machine: MachineView };
   revoke: { machine: MachineView };
   setMaxActiveRuns: { machine: MachineView };
@@ -592,7 +602,12 @@ export interface ConversationArgs {
   /** Takes a member out. Not for a direct chat, which is the agent and the user. */
   remove: { conversationId: string; agentId: string };
   /** Null makes the conversation follow its project again. */
-  setSteward: { conversationId: string; agentId: string | null };
+  /** Null follows the project; with `none` too it has no steward at all. */
+  setSteward: {
+    conversationId: string;
+    agentId: string | null;
+    none?: boolean;
+  };
   /**
    * Say something. `mentions` are agent ids; a message that names nobody goes to the steward.
    * `mode` is how it joins an agent that is already answering: `queue` (the default) waits for

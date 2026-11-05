@@ -83,5 +83,11 @@
       "register": "Register",
       "service": "Start service"
     }
+  },
+  "phone": {
+    "open": "Connect phone",
+    "title": "Scan with your phone",
+    "hint": "In Eta on your phone, tap “Scan the code on your computer”. The code holds your access token, so keep it to yourself.",
+    "unreachable": "A phone can't reach this address. Have the host listen on your LAN or Tailscale address, then open this page from there."
   }
 }

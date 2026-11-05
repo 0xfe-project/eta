@@ -1,0 +1,55 @@
+[package]
+name = "eta-mobile-native"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nsh-base = { git = "https://github.com/longbridge/nsh", tag = "v0.4.0" }
+nsh-core = { git = "https://github.com/longbridge/nsh", tag = "v0.4.0" }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+block2 = "0.6"
+dispatch2 = "0.3"
+objc2 = "0.6"
+objc2-av-foundation = { version = "0.3", features = [
+  "AVCaptureDevice",
+  "AVCaptureInput",
+  "AVCaptureMetadataOutput",
+  "AVCaptureOutputBase",
+  "AVCaptureSession",
+  "AVCaptureVideoPreviewLayer",
+  "AVMediaFormat",
+  "AVMetadataObject",
+  "AVAnimation",
+  "block2",
+  "objc2-quartz-core",
+  "dispatch2",
+] }
+objc2-foundation = { version = "0.3", features = [
+  "NSArray",
+  "NSError",
+  "NSGeometry",
+  "NSString",
+  "NSObject",
+  "NSURL",
+] }
+objc2-quartz-core = { version = "0.3", features = ["CALayer"] }
+objc2-ui-kit = { version = "0.3", features = [
+  "UIActivityViewController",
+  "UIPopoverPresentationController",
+  "UIPresentationController",
+  "UIApplication",
+  "UIButton",
+  "UIColor",
+  "UIControl",
+  "UIResponder",
+  "UIScene",
+  "UIView",
+  "UIViewController",
+  "UIWindow",
+  "UIWindowScene",
+  "UIGeometry",
+] }

@@ -79,7 +79,7 @@ export function StewardChip({
           <span className="min-w-0 flex-1 truncate">
             {translateText("chat:steward.followProject")}
           </span>
-          {info.stewardOverrideId === null ? (
+          {info.stewardOverrideId === null && !info.noSteward ? (
             <CheckIcon aria-label={translateText("common:labels.current")} />
           ) : null}
         </DropdownMenuItem>

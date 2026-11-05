@@ -123,6 +123,7 @@ describe("the product's targets on the generic pipe", () => {
         archived: false,
         stewardId: "a1",
         stewardOverrideId: null,
+        noSteward: false,
         readSeq: 0,
         lastSeq: 2,
         createdAt: 1,

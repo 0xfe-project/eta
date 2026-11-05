@@ -126,6 +126,7 @@ Architecture notes:
 - [Wire protocol and targets](docs/architecture/wire-protocol.md): WebSocket pipe, frames, targets and actions
 - [Product model](docs/architecture/product-model.md): agents, machines, projects, conversations, the lead agent, wake-up rules
 - [Data](docs/architecture/data.md): SQLite and migrations, session files, data directory layout
+- [Phone app](docs/architecture/mobile.md): the Native Shell client, connecting, scanning, packaging
 - [Machines and daemon](docs/architecture/machines.md): pairing, epochs, model and tool proxying, remote sessions
 - [Access control](docs/architecture/access.md): origin checks, token gate, capability routing
 - [LLM gateway](docs/architecture/llm-gateway.md): subscription accounts (Codex, Grok) and Gemini keys, CLIProxyAPI run as a child process of the host

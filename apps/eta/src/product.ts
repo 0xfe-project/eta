@@ -170,6 +170,8 @@ export function createProduct(options: {
   artifactLimits?: Partial<SiteLimits> | undefined;
   /** The address the user's browser reaches the host at, for MCP sign-in callbacks. */
   publicUrl?: string | undefined;
+  /** The token the gate asks for, when there is a gate. */
+  accessToken?: string | undefined;
   /**
    * The GitHub chain: `true` loads it, and a `GithubTuning` (where GitHub is and what time it is,
    * for a test with a fake GitHub) loads it pointed at that. Absent or false means none of it:
@@ -765,6 +767,7 @@ export function createProduct(options: {
             tailscale: options.tailscale,
             builds: options.daemonBuilds,
             ssh: options.ssh ?? sshRunner(join(dataDir, "run")),
+            accessToken: options.accessToken,
           },
           applied("machines"),
         ),

@@ -15,8 +15,10 @@ export interface ConversationRecord {
   name: string;
   goal: string;
   decided: string;
-  /** The conversation's own steward; null follows the project's. */
+  /** The conversation's own steward; null follows the project's, unless `noSteward`. */
   stewardId: string | null;
+  /** It said it has none: a message that names nobody goes to nobody. */
+  noSteward: boolean;
   archived: boolean;
   readSeq: number;
   lastSeq: number;
@@ -42,6 +44,7 @@ interface ConversationRow {
   goal: string;
   decided: string;
   steward_id: string | null;
+  no_steward: number;
   archived: number;
   read_seq: number;
   last_seq: number;
@@ -66,6 +69,7 @@ const conversationOf = (row: ConversationRow): ConversationRecord => ({
   goal: row.goal,
   decided: row.decided,
   stewardId: row.steward_id,
+  noSteward: row.no_steward === 1,
   archived: row.archived === 1,
   readSeq: row.read_seq,
   lastSeq: row.last_seq,
@@ -180,12 +184,13 @@ export class ConversationStore {
   setSteward(
     id: string,
     agentId: string | null,
+    none = false,
   ): ConversationRecord | undefined {
     const changed = this.#db
       .query(
-        "UPDATE conversation SET steward_id = ?, updated_at = ? WHERE id = ?",
+        "UPDATE conversation SET steward_id = ?, no_steward = ?, updated_at = ? WHERE id = ?",
       )
-      .run(agentId, Date.now(), id).changes;
+      .run(agentId, none ? 1 : 0, Date.now(), id).changes;
     return changed === 0 ? undefined : this.get(id);
   }
 

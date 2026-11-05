@@ -17,7 +17,8 @@ WebSocket 管道会在这台电脑上以运行 host 的用户身份执行命令�
 开启后，**除 `/up` 外**所有请求都需要令牌，两种方式：
 
 - 脚本：`Authorization: Bearer <令牌>`。
-- 浏览器：打开一次 `/?token=<令牌>`，host 回一个 303 重定向到去掉令牌的地址，并种下 cookie（`HttpOnly`、`SameSite=Strict`，https 下加 `Secure`，30 天）。cookie 里是令牌派生的哈希，不是令牌本身，泄漏 cookie 不等于泄漏令牌。令牌比较都是比较哈希，耗时不透露令牌的内容。`/ws` 不接受 `?token=`（socket 不能跟随重定向），它带 cookie 或 bearer。
+- 手机 app：`X-Eta-Token: <令牌>`。它的运行时不让 WebSocket 握手带凭据类的头，所以用这个自定义头；比较方式与 bearer 相同。
+- 浏览器：打开一次 `/?token=<令牌>`，host 回一个 303 重定向到去掉令牌的地址，并种下 cookie（`HttpOnly`、`SameSite=Strict`，https 下加 `Secure`，30 天）。cookie 里是令牌派生的哈希，不是令牌本身，泄漏 cookie 不等于泄漏令牌。令牌比较都是比较哈希，耗时不透露令牌的内容。`/ws` 不接受 `?token=`（socket 不能跟随重定向），它带 cookie、bearer 或 `X-Eta-Token`。
 
 这是上游开发网关（`scripts/dev/gateway.ts`）的令牌门搬进了 host。
 

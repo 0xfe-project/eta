@@ -24,7 +24,8 @@ import { dirname, join } from "node:path";
  *
  * **Token gate.** On when a token file is given or the host listens beyond loopback, because
  * then anything that can route to the port can use it. Everything but `/up` needs the token:
- * as `Authorization: Bearer …` (a script), or as a cookie (a browser), which `/?token=…`
+ * as `Authorization: Bearer …` (a script), as `X-Eta-Token` (the phone app, whose runtime refuses
+ * credential headers on a WebSocket handshake), or as a cookie (a browser), which `/?token=…`
  * trades the token for once. The cookie holds a hash of the token, never the token, and is
  * `SameSite=Strict` so another site's request does not carry it. This is the dev gateway of the
  * upstream repository (scripts/dev/gateway.ts) moved into the host.
@@ -62,6 +63,8 @@ export interface Access {
   authorize: (request: Request) => Response | undefined;
   /** The token file in use, or `undefined` when the gate is off. */
   readonly tokenFile: string | undefined;
+  /** The token itself, or `undefined` when the gate is off: for the phone's connect link. */
+  readonly token: string | undefined;
 }
 
 /** Whether an interface or `Host` name can only be reached from this machine. */
@@ -174,11 +177,11 @@ export function createAccess(options: AccessOptions): Access {
   const tokenFile = gated
     ? (options.tokenFile ?? join(options.dataDir, "access-token"))
     : undefined;
+  const token = tokenFile === undefined ? undefined : loadToken(tokenFile);
   const gate =
-    tokenFile === undefined
+    token === undefined
       ? undefined
       : (() => {
-          const token = loadToken(tokenFile);
           // What the cookie holds: derived from the token, so a leaked cookie is not the token.
           const cookie = createHash("sha256")
             .update(`eta-cookie:${token}`)
@@ -205,6 +208,7 @@ export function createAccess(options: AccessOptions): Access {
 
   return {
     tokenFile,
+    token,
     authorize(request) {
       const url = new URL(request.url);
       if (url.pathname === "/up" || isMachineRoute(url.pathname))
@@ -217,7 +221,8 @@ export function createAccess(options: AccessOptions): Access {
       if (carriesOwnCapability(request, url.pathname)) return undefined;
 
       // `/?token=…`: trade the token for the cookie and leave a URL without it behind. A socket
-      // cannot follow a redirect, so this is for pages; a socket brings the cookie or a bearer.
+      // cannot follow a redirect, so this is for pages; a socket brings the cookie, a bearer or
+      // `X-Eta-Token`.
       const offered = url.searchParams.get("token");
       if (offered !== null && url.pathname !== "/ws") {
         if (!matches(offered, gate.token)) return refuse(401, "unauthorized");
@@ -241,6 +246,7 @@ export function createAccess(options: AccessOptions): Access {
         ?.replace(/^Bearer\s+/i, "");
       if (
         matches(bearer, gate.token) ||
+        matches(request.headers.get("x-eta-token"), gate.token) ||
         matches(cookieOf(request, COOKIE), gate.cookieDigest)
       ) {
         return undefined;

@@ -162,7 +162,11 @@ export function conversationsPlugin(
             throw new Error("conversations.setSteward needs agentId (or null)");
           if (agentId !== null) agent(agentId);
           const before = effectiveSteward(projects, conversation);
-          const changed = conversations.setSteward(conversation.id, agentId)!;
+          const changed = conversations.setSteward(
+            conversation.id,
+            agentId,
+            agentId === null && args.optionalBoolean("none") === true,
+          )!;
           announceSteward(
             { agents, timeline },
             conversation.id,

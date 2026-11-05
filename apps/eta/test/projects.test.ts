@@ -16,6 +16,24 @@ import { tempDir, testHost } from "./support/host";
 import { world } from "./support/world";
 
 describe("the primary machine", () => {
+  it("a conversation can have no steward, its project's or its own", async () => {
+    const w = await world();
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id], "nobody leads");
+    const said = (await w.client.call("conversations", "setSteward", {
+      conversationId: group.id,
+      agentId: null,
+      none: true,
+    })) as { conversation: ConversationSummary };
+    expect(said.conversation.stewardId).toBeNull();
+    const back = (await w.client.call("conversations", "setSteward", {
+      conversationId: group.id,
+      agentId: null,
+    })) as { conversation: ConversationSummary };
+    expect(back.conversation.stewardId).toBe(ada.id);
+  });
+
   it("is there from the first start, and is the same machine on the next", async () => {
     const dataDir = await tempDir();
     const first = await testHost({ dataDir });

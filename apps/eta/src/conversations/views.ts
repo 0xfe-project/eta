@@ -30,11 +30,15 @@ export function defaultGroupName(
   return memberNames.filter((name) => name !== undefined).join(", ");
 }
 
-/** Who takes a message that names nobody: the conversation's own pick, else its project's. */
+/**
+ * Who takes a message that names nobody: the conversation's own pick, else its project's, unless
+ * the conversation said it has none.
+ */
 export function effectiveSteward(
   projects: ProjectStore,
   conversation: ConversationRecord,
 ): string | null {
+  if (conversation.noSteward) return null;
   return (
     conversation.stewardId ??
     projects.get(conversation.projectId)?.stewardId ??
@@ -92,6 +96,7 @@ export function infoOf(
     archived: conversation.archived,
     stewardId: effectiveSteward(deps.projects, conversation),
     stewardOverrideId: conversation.stewardId,
+    noSteward: conversation.noSteward,
     readSeq: conversation.readSeq,
     lastSeq: conversation.lastSeq,
     createdAt: conversation.createdAt,

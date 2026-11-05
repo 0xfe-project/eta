@@ -192,7 +192,8 @@ export function projectsPlugin(deps: ProjectsDeps, applied: () => void) {
             if (
               conversation.kind === "direct" ||
               conversation.archived ||
-              conversation.stewardId !== null
+              conversation.stewardId !== null ||
+              conversation.noSteward
             )
               continue;
             if (

@@ -1,0 +1,22 @@
+{
+  "name": "Eta",
+  "id": "dev.eta.mobile",
+  "version": "0.1.0",
+  "build": 1,
+  "theme": "theme.json",
+  "tailwind": {
+    "fontSize": {
+      "micro": 10,
+      "xs": 11,
+      "sm": 12,
+      "md": 13,
+      "base": 14,
+      "lead": 15,
+      "input": 16,
+      "title": 22,
+      "gauge-sm": 28,
+      "gauge": 64
+    }
+  },
+  "rust": "native"
+}

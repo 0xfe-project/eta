@@ -1,0 +1,43 @@
+{
+  "cssVars": {
+    "theme": {
+      "radius": "0px"
+    },
+    "light": {
+      "background": "oklch(100% 0 0)",
+      "foreground": "oklch(14.5% 0 0)",
+      "surface": "oklch(98.5% 0 0)",
+      "muted": "oklch(97% 0 0)",
+      "muted-foreground": "oklch(54% 0 0)",
+      "faint": "oklch(64% 0 0)",
+      "primary": "oklch(20.5% 0 0)",
+      "primary-foreground": "oklch(98.5% 0 0)",
+      "border": "oklch(92.2% 0 0)",
+      "border-strong": "oklch(85% 0 0)",
+      "overlay": "oklch(14.5% 0 0 / 6%)",
+      "scrim": "oklch(14.5% 0 0 / 40%)",
+      "state-warning": "oklch(62% 0.180 75)",
+      "state-error": "oklch(57.7% 0.245 27.3)",
+      "state-success": "oklch(52.7% 0.154 150.1)",
+      "state-info": "oklch(52% 0.180 240)"
+    },
+    "dark": {
+      "background": "oklch(10% 0 0)",
+      "foreground": "oklch(98% 0 0)",
+      "surface": "oklch(14% 0 0)",
+      "muted": "oklch(20% 0 0)",
+      "muted-foreground": "oklch(72% 0 0)",
+      "faint": "oklch(98% 0 0 / 38%)",
+      "primary": "oklch(98% 0 0)",
+      "primary-foreground": "oklch(10% 0 0)",
+      "border": "oklch(98% 0 0 / 10%)",
+      "border-strong": "oklch(98% 0 0 / 28%)",
+      "overlay": "oklch(98% 0 0 / 6%)",
+      "scrim": "oklch(0% 0 0 / 40%)",
+      "state-warning": "oklch(72% 0.160 75)",
+      "state-error": "oklch(68% 0.190 25)",
+      "state-success": "oklch(65% 0.160 150)",
+      "state-info": "oklch(65% 0.160 240)"
+    }
+  }
+}
