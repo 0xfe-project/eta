@@ -13,6 +13,8 @@ export interface PlatformPromptInfo {
   memoryExists: boolean;
   /** Whether the session has a realm (`esmrun`); the realm part of the briefing is only written then. */
   realm?: boolean;
+  /** Configured MCP server names, for the realm MCP prompt section. When absent or empty, the section is omitted. */
+  mcpServers?: readonly string[];
 }
 
 /** What a session on an external runtime is told about the app; see `renderRuntimePlatformBlock`. */
@@ -112,7 +114,7 @@ export function renderPlatformBlock(info: PlatformPromptInfo): string {
   lines.push(
     "Loops and schedules run in the app rather than in a shell you hold open: a loop you created fires on its own clock and returns to this session as an injected message, so a run ending is not the loop ending.",
   );
-  if (info.realm === true) lines.push("", ...realmLines());
+  if (info.realm === true) lines.push("", ...realmLines(info.mcpServers ?? []));
   lines.push("</platform>");
   return lines.join("\n");
 }
@@ -265,10 +267,30 @@ export const REALM_EXAMPLES: RealmExample[] = [
     ],
   },
 ];
+
+/**
+ * The MCP example, shown only when servers are configured. It is apart from
+ * `REALM_EXAMPLES` because it needs an MCP sink to run; its test supplies one.
+ */
+export const MCP_EXAMPLE: RealmExample = {
+  title:
+    "MCP: find the tool from cached metadata, read its types, then import the server and call it with one argument object",
+  scripts: [
+    [
+      'import eta from "eta";',
+      'const [hit] = eta.mcp.search("read file");',
+      "eta.mcp.describe(hit.server);",
+    ].join("\n"),
+    [
+      'import fs from "mcp:fs";',
+      'await fs.read_file({ path: "README.md" });',
+    ].join("\n"),
+  ],
+};
 /* eslint-enable no-template-curly-in-string */
 
 /** The realm part of the platform briefing: how to work in `esmrun`, then the examples. */
-function realmLines(): string[] {
+function realmLines(mcpServers: readonly string[]): string[] {
   return [
     "You act through code. `esmrun` runs JavaScript in a realm that belongs to this session; its description carries the realm's declarations. The realm is a full JS runtime with top-level await, so when the work is more than one call, write the loop, the retry or the fan-out in code and make one call, not a tool call per step.",
     "",
@@ -291,15 +313,28 @@ function realmLines(): string[] {
     "Making tools:",
     '- When you write the same code a second time, make it a capability with `esmrunandkeep`: it saves the module, runs it once, and keeps it only if that run succeeds. Afterwards it is `import f from "eta:<name>"`. `list_capabilities` shows what exists in this session, the project and globally; look there before building.',
     "- A capability is the plugin system: wrap a package or an API in one, and every later session can call it. Keep only what you will call again; one-off work stays in esmrun.",
+    ...(mcpServers.length === 0 ? [] : ["", ...mcpLines(mcpServers)]),
     "",
-    renderExamples(),
+    renderExamples(mcpServers.length > 0),
+  ];
+}
+
+/** The MCP part of the realm briefing; only written when servers are configured. */
+function mcpLines(mcpServers: readonly string[]): string[] {
+  return [
+    `MCP servers on this machine: ${mcpServers.map((name) => `\`${name}\``).join(", ")}. Their tools are reached from code, not as tools of yours:`,
+    "- `eta.mcp.servers()`, `eta.mcp.search(query)` and `eta.mcp.describe(server)` read cached metadata and never start a server. `describe` returns the server's tools as a d.ts with input and output types; read it before the first call.",
+    '- `import gh from "mcp:<server>"` connects the server and gives every tool as an async function that takes one argument object; tools named like identifiers are also named exports. A call resolves to the structured result, else the text; a tool error rejects.',
+    "- Each call is an effect named `mcp.<server>.<tool>` and may need the user's approval, like any other host call.",
   ];
 }
 
 /** The examples as they appear in the prompt. */
-function renderExamples(): string {
-  return REALM_EXAMPLES.map(
-    (example) =>
-      `${example.title}:\n${example.scripts.map((s) => `\`\`\`js\n${s}\n\`\`\``).join("\nnext call:\n")}`,
-  ).join("\n\n");
+function renderExamples(mcp: boolean): string {
+  return [...REALM_EXAMPLES, ...(mcp ? [MCP_EXAMPLE] : [])]
+    .map(
+      (example) =>
+        `${example.title}:\n${example.scripts.map((s) => `\`\`\`js\n${s}\n\`\`\``).join("\nnext call:\n")}`,
+    )
+    .join("\n\n");
 }

@@ -3,7 +3,7 @@
   "type": "module",
   "version": "0.1.0",
   "private": true,
-  "description": "MCP for agents: a small proxy tool, lazy shared connections, a metadata cache, direct tools and OAuth. Harness-agnostic.",
+  "description": "MCP for agents: lazy shared connections, a metadata cache, tool search, TS shapes and OAuth. Harness-agnostic.",
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts"

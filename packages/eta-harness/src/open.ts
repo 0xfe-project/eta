@@ -56,6 +56,7 @@ import type {
   PlatformPromptInfo,
 } from "./prompts";
 import type { RunPumpOptions } from "./pump";
+import type { McpSink } from "./realm/hooks";
 import type { HarnessTool, ToolResult } from "./tools/tool";
 import {
   applyGoalEntries,
@@ -189,6 +190,8 @@ export interface OpenSessionOptions {
         root: string;
         project?: string | undefined;
         global?: string | undefined;
+        /** MCP on this machine: `import "mcp:<server>"` and `eta.mcp`. Absent for remote sessions. */
+        mcp?: McpSink | undefined;
       }
     | undefined;
 }
@@ -401,6 +404,7 @@ export async function openSession(
           project: options.esm.project,
           global: options.esm.global,
           cwd: options.cwd,
+          mcp: options.esm.mcp,
         });
 
   const installedTools: HarnessTool<unknown, TSchema, unknown>[] = [
@@ -601,6 +605,13 @@ export async function openSession(
             renderPlatformBlock({
               ...options.platform,
               realm: esm !== undefined,
+              ...(options.esm?.mcp === undefined
+                ? {}
+                : {
+                    mcpServers: options.esm.mcp
+                      .servers()
+                      .map((server) => server.name),
+                  }),
             }),
           ]),
     ]

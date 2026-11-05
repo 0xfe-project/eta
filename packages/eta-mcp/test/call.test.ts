@@ -1,11 +1,10 @@
 import type { McpHooks, McpToolResult } from "../src/types";
 /**
- * Calls: delivery semantics, output schema validation, `_meta`, the output guard, approval,
+ * Calls: delivery semantics, output schema validation, `_meta`, approval,
  * the veto hook, elicitation, reconnecting and cancelling.
  */
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createProxyTool } from "../src";
 import { cleanupAll, setup, tool } from "./helpers/harness";
 
 afterEach(cleanupAll);
@@ -30,17 +29,22 @@ async function one(
     sources: [h.source({ s: h.stdio(spec, options.extra) })],
     ...(options.hooks ? { hooks: options.hooks } : {}),
   });
-  const proxy = createProxyTool(scope);
   const call = async (
     name: string,
     args: Record<string, unknown> = {},
     signal?: AbortSignal,
-  ) =>
-    await proxy.execute(
-      { tool: name, server: "s", args },
-      signal ? { signal } : {},
-    );
-  return { h, scope, proxy, call };
+    toolCallId?: string,
+  ) => {
+    const known = await scope.toolsOrConnect("s", signal);
+    const meta = (known.ok ? known.tools : []).find(
+      (candidate) => candidate.name === name,
+    ) ?? { name, description: "", inputSchema: { type: "object" } };
+    return await scope.callTool("s", meta, args, {
+      ...(signal ? { signal } : {}),
+      ...(toolCallId ? { toolCallId } : {}),
+    });
+  };
+  return { h, scope, call };
 }
 
 describe("delivery", () => {
@@ -158,7 +162,7 @@ describe("delivery", () => {
     });
     const result = await call("bad");
     expect(result.isError).toBe(true);
-    expect(text(result)).toBe("Error: file not found");
+    expect(text(result)).toBe("file not found");
     expect(result.details).toMatchObject({
       error: "tool_error",
       server: "s",
@@ -235,21 +239,6 @@ describe("results", () => {
     expect(result.details._meta).toEqual({ "com.example/trace": "t-1" });
   });
 
-  it("keeps a huge _meta out of the details", async () => {
-    const { call } = await one({
-      tools: [
-        tool("meta", {
-          result: {
-            content: [{ type: "text", text: "x" }],
-            _meta: { blob: "z".repeat(40_000) },
-          },
-        }),
-      ],
-    });
-    const result = await call("meta");
-    expect(result.details._meta).toMatchObject({ omitted: true });
-  });
-
   it("falls back to structuredContent when there is no content", async () => {
     const { call } = await one({
       tools: [
@@ -264,80 +253,6 @@ describe("results", () => {
       tools: [tool("nothing", { result: { content: [] } })],
     });
     expect(text(await call("nothing"))).toBe("(empty result)");
-  });
-});
-
-describe("output guard", () => {
-  it("saves a result over the limits to a file and gives the model the head and the path", async () => {
-    const lines = Array.from(
-      { length: 400 },
-      (_, index) => `line ${index} ${"x".repeat(40)}`,
-    ).join("\n");
-    const { call, h } = await one(
-      {
-        tools: [
-          tool("big", { result: { content: [{ type: "text", text: lines }] } }),
-        ],
-      },
-      { setupOptions: { maxOutputBytes: 4000, maxOutputLines: 50 } },
-    );
-    const result = await call("big");
-    const guard = result.details.outputGuard as {
-      fullOutputPath: string;
-      originalLines: number;
-      returnedBytes: number;
-    };
-    expect(guard.originalLines).toBe(400);
-    expect(guard.returnedBytes).toBeLessThanOrEqual(4000);
-    expect(guard.fullOutputPath.startsWith(`${h.dir}/outputs/`)).toBe(true);
-    expect(readFileSync(guard.fullOutputPath, "utf8")).toBe(lines);
-    expect(text(result)).toContain("line 0 ");
-    expect(text(result)).not.toContain("line 399 ");
-    expect(text(result)).toContain(
-      `Full output saved to: ${guard.fullOutputPath}`,
-    );
-  });
-
-  it("leaves images alone and a result within the limits untouched", async () => {
-    const lines = Array.from(
-      { length: 400 },
-      (_, index) => `line ${index} ${"x".repeat(40)}`,
-    ).join("\n");
-    const { call } = await one(
-      {
-        tools: [
-          tool("both", {
-            result: {
-              content: [
-                { type: "text", text: lines },
-                { type: "image", data: "AAAA", mimeType: "image/png" },
-              ],
-            },
-          }),
-          tool("small"),
-        ],
-      },
-      { setupOptions: { maxOutputBytes: 4000, maxOutputLines: 50 } },
-    );
-    const big = await call("both");
-    expect(big.content.some((block) => block.type === "image")).toBe(true);
-    const small = await call("small");
-    expect(small.details.outputGuard).toBeUndefined();
-  });
-
-  it("saves an oversized description too, when it is described", async () => {
-    const description = Array.from(
-      { length: 500 },
-      (_, index) => `rule ${index}: do the thing carefully`,
-    ).join("\n");
-    const { proxy } = await one(
-      { tools: [tool("wordy", { description })] },
-      { setupOptions: { maxOutputBytes: 3000, maxOutputLines: 40 } },
-    );
-    await proxy.execute({ connect: "s" });
-    const result = await proxy.execute({ describe: "wordy" });
-    expect(text(result)).toContain("description saved to:");
-    expect(text(result).length).toBeLessThan(3500);
   });
 });
 
@@ -419,17 +334,6 @@ describe("approval", () => {
     expect(asked).toEqual(['write:{"destructiveHint":true}', "plain:null"]);
   });
 
-  it("marks gated tools in listings", async () => {
-    const { proxy } = await one(
-      { tools },
-      { extra: { approveTools: ["write"] } },
-    );
-    const listed = await proxy.execute({ connect: "s" });
-    expect(text(listed)).toContain("- write(");
-    expect(text(listed)).toContain("(requires approval)");
-    expect(text(listed).match(/requires approval/g)).toHaveLength(1);
-  });
-
   it("an approval waiting keeps the server from idling out", async () => {
     let release: (value: boolean) => void = () => undefined;
     const waiting = new Promise<boolean>((resolve) => {
@@ -460,7 +364,7 @@ describe("onToolCall", () => {
       args: Record<string, unknown>;
       toolCallId: string | undefined;
     }> = [];
-    const { proxy } = await one(
+    const { call } = await one(
       {
         tools: [
           tool("danger", { behavior: "echo" }),
@@ -480,10 +384,7 @@ describe("onToolCall", () => {
         },
       },
     );
-    const blocked = await proxy.execute(
-      { tool: "danger", server: "s", args: { x: 1 } },
-      { toolCallId: "t1" },
-    );
+    const blocked = await call("danger", { x: 1 }, undefined, "t1");
     expect(blocked.isError).toBe(true);
     expect(blocked.details).toMatchObject({
       error: "blocked",
@@ -493,11 +394,7 @@ describe("onToolCall", () => {
     expect(text(blocked)).toContain("mcp__s__danger");
     expect(text(blocked)).toContain("policy forbids it");
 
-    const allowed = await proxy.execute({
-      tool: "fine",
-      server: "s",
-      args: { y: 2 },
-    });
+    const allowed = await call("fine", { y: 2 });
     expect(text(allowed)).toBe('{"y":2}');
     expect(seen).toEqual([
       { name: "mcp__s__danger", args: { x: 1 }, toolCallId: "t1" },

@@ -8,7 +8,6 @@
  * not start the agent's servers again.
  */
 
-import type { OutputGuardOptions } from "./output-guard";
 import type { ObservedOutputs } from "./output-shape";
 import type { ScopeHost, ScopeOptions } from "./scope";
 import type { Connection, ManagerOptions } from "./server-manager";
@@ -21,13 +20,8 @@ import { ServerManager } from "./server-manager";
 export interface McpManagerOptions extends ManagerOptions {
   /** The metadata cache file; a function gives each owner its own. */
   cacheFile: string | ((owner: string) => string);
-  /** A directory for results and descriptions too large to hand to the model; they are saved here. */
-  outputDir: string;
   /** Where launch resolutions (npx, bunx, uvx) are remembered for 24 hours. */
   resolverCacheFile?: string;
-  /** Output limits; defaults are 50 KiB and 2000 lines. */
-  maxOutputBytes?: number;
-  maxOutputLines?: number;
 }
 
 export class McpManager {
@@ -58,11 +52,6 @@ export class McpManager {
               ...options.resolvers,
             },
     });
-    const guard: OutputGuardOptions = {
-      dir: options.outputDir,
-      maxBytes: options.maxOutputBytes,
-      maxLines: options.maxOutputLines,
-    };
     this.host = {
       manager: this.servers,
       cacheFor: (owner) => this.cacheFor(owner),
@@ -70,7 +59,6 @@ export class McpManager {
       entryOf: (connection) => this.entryOf(connection),
       persist: (connection) => this.persist(connection),
       unregister: (scope) => this.scopes.get(scope.owner)?.delete(scope),
-      guard,
       hooks: options.hooks ?? {},
       now: this.now,
     };

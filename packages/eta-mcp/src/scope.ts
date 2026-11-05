@@ -10,7 +10,6 @@
  */
 
 import type { MetadataCache } from "./metadata-cache";
-import type { OutputGuardOptions } from "./output-guard";
 import type { ObservedOutputs } from "./output-shape";
 import type { SearchEntry } from "./search-ranking";
 import type { Connection, ServerManager } from "./server-manager";
@@ -36,7 +35,6 @@ import { lifecycleOf, resolveServers } from "./config";
 import { classifyCallError, DeliveryError, describeDelivery } from "./delivery";
 import { schemaViolation } from "./json-schema";
 import { isToolAllowed, matchesToolPattern, qualifiedToolName } from "./names";
-import { boundDetails, guardContent, guardText } from "./output-guard";
 import {
   getObservedOutput,
   outputShapeKey,
@@ -58,7 +56,6 @@ export interface ScopeHost {
   /** Writes it to the owner's cache. */
   persist: (connection: Connection) => void;
   unregister: (scope: McpScope) => void;
-  guard: OutputGuardOptions;
   hooks: McpHooks;
   now: () => number;
 }
@@ -246,11 +243,6 @@ export class McpScope {
     return definition
       ? this.host.observedFor(this.owner, definition)
       : new Map();
-  }
-
-  /** Where this scope's oversized outputs go, and the limits. */
-  guardOptions(): OutputGuardOptions {
-    return this.host.guard;
   }
 
   failure(server: string): string | undefined {
@@ -524,7 +516,7 @@ export class McpScope {
 
   /**
    * Runs one tool call: argument check, the caller's veto and approval hooks, a lazy connection,
-   * the request, result validation, and the output guard. Returns a result for every failure
+   * the request and result validation. Returns a result for every failure
    * (with `delivery` where the outcome of the request matters); aborts are returned too.
    */
   async callTool(
@@ -653,13 +645,13 @@ export class McpScope {
     tool: ToolMeta,
     reason: string,
   ): Promise<McpToolResult> {
-    const guarded = guardText(
-      `Failed to call tool: ${reason}\n\nInput schema:\n${JSON.stringify(tool.inputSchema, null, 2)}`,
-      "output",
-      this.host.guard,
-    );
     return {
-      content: [{ type: "text", text: guarded.text }],
+      content: [
+        {
+          type: "text",
+          text: `Failed to call tool: ${reason}\n\nInput schema:\n${JSON.stringify(tool.inputSchema, null, 2)}`,
+        },
+      ],
       isError: true,
       details: {
         mode: "call",
@@ -669,7 +661,6 @@ export class McpScope {
         tool: tool.name,
         name: qualifiedToolName(server, tool.name),
         message: reason,
-        ...(guarded.guard ? { outputGuard: guarded.guard } : {}),
       },
     };
   }
@@ -829,9 +820,8 @@ export class McpScope {
     code = "call_failed",
   ): McpToolResult {
     const text = describeDelivery(error, server, tool.name);
-    const guarded = guardText(text, "output", this.host.guard);
     return {
-      content: [{ type: "text", text: guarded.text }],
+      content: [{ type: "text", text }],
       isError: true,
       details: {
         mode: "call",
@@ -844,7 +834,6 @@ export class McpScope {
         ...(error.protocolCode === undefined
           ? {}
           : { protocolCode: error.protocolCode }),
-        ...(guarded.guard ? { outputGuard: guarded.guard } : {}),
       },
     };
   }
@@ -881,25 +870,15 @@ export class McpScope {
     }
 
     const content = resultContent(result);
-    const meta =
-      result._meta === undefined ? {} : { _meta: boundDetails(result._meta) };
+    const meta = result._meta === undefined ? {} : { _meta: result._meta };
     if (result.isError === true) {
-      const guarded = guardContent(
-        content.length > 0
-          ? content
-          : [{ type: "text", text: "(empty result)" }],
-        this.host.guard,
-        { prefix: "Error: " },
-      );
       return {
-        content: guarded.content,
+        content:
+          content.length > 0
+            ? content
+            : [{ type: "text", text: "(empty result)" }],
         isError: true,
-        details: {
-          ...identity,
-          error: "tool_error",
-          ...meta,
-          ...(guarded.guard ? { outputGuard: guarded.guard } : {}),
-        },
+        details: { ...identity, error: "tool_error", ...meta },
       };
     }
 
@@ -919,16 +898,17 @@ export class McpScope {
       }
     }
 
-    const guarded = guardContent(
-      content.length > 0 ? content : [{ type: "text", text: "(empty result)" }],
-      this.host.guard,
-    );
     return {
-      content: guarded.content,
+      content:
+        content.length > 0
+          ? content
+          : [{ type: "text", text: "(empty result)" }],
       details: {
         ...identity,
         ...meta,
-        ...(guarded.guard ? { outputGuard: guarded.guard } : {}),
+        ...(result.structuredContent === undefined
+          ? {}
+          : { structuredContent: result.structuredContent }),
       },
     };
   }

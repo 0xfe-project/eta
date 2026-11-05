@@ -3,40 +3,23 @@
  *
  * - `McpManager` holds connections, metadata caches and observed output shapes; `manager.scope()`
  *   gives one owner's view of its servers, from the config sources the caller lists.
- * - `createProxyTool(scope)` is the single `mcp` tool a model sees; `createDirectTools(scope)` are
- *   the tools a config exposes directly. Both are plain `{ name, description, parameters, execute }`.
+ * - The model now calls MCP tools via the realm (`import gh from "mcp:github"`), not static proxy tools.
  * - Hooks (`approve`, `elicit`, `onToolCall`) and `authProviderFor` are injected by the caller.
  */
 
-import type { DirectToolOptions } from "./direct-tools";
-import type { McpScope } from "./scope";
-import type { McpToolDefinition } from "./types";
-import { directToolDefinitions } from "./direct-tools";
-import { McpProxy } from "./proxy";
-
-/** The `mcp` proxy tool for a scope. Its description depends only on the configured server names. */
-export function createProxyTool(scope: McpScope): McpToolDefinition {
-  return new McpProxy(scope).definition();
-}
-
-/** Definitions for the `directTools` of a scope's servers, from cached metadata (no connection). */
-export function createDirectTools(
-  scope: McpScope,
-  options?: DirectToolOptions,
-): McpToolDefinition[] {
-  return directToolDefinitions(scope, options);
-}
-
 export { parseMcpServers, resolveServers } from "./config";
 export { DeliveryError } from "./delivery";
-export type { DirectToolOptions } from "./direct-tools";
+
+export { describeServerTools } from "./describe";
 export { resolveLaunch } from "./launch";
 export type { LaunchCommand, ResolverEnv } from "./launch";
 export { McpManager } from "./manager";
 export type { McpManagerOptions } from "./manager";
-export { directToolName, qualifiedToolName } from "./names";
+export { qualifiedToolName } from "./names";
 export * from "./oauth";
-export { PROXY_TOOL_NAME } from "./proxy";
+export { createMcpRealmAdapter } from "./realm";
+export type { McpSink } from "./realm";
+
 export { McpScope, requiresApproval } from "./scope";
 export type {
   ConnectOutcome,
