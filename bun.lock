@@ -93,6 +93,15 @@
     "apps/memory": {
       "name": "@eta/memory",
     },
+    "apps/mobile": {
+      "name": "@eta/mobile",
+      "version": "0.1.0",
+      "dependencies": {
+        "@eta/client-contracts": "*",
+        "@eta/client-wire-proto": "*",
+        "blobatar": "^2.7.0",
+      },
+    },
     "apps/web": {
       "name": "@eta/web",
       "dependencies": {
@@ -573,6 +582,8 @@
     "@eta/harness": ["@eta/harness@workspace:packages/eta-harness"],
 
     "@eta/memory": ["@eta/memory@workspace:apps/memory"],
+
+    "@eta/mobile": ["@eta/mobile@workspace:apps/mobile"],
 
     "@eta/plugin-sdk": ["@eta/plugin-sdk@workspace:packages/eta-plugin-sdk"],
 

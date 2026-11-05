@@ -139,6 +139,18 @@ describe("the token gate", () => {
     expect(host.server.server.clients).toBe(0);
   });
 
+  it("accepts the token as X-Eta-Token, for the phone's socket", async () => {
+    const host = await testHost({
+      webDir: await fakeWeb(),
+      tokenFile: await tokenFile(),
+    });
+    const socket = `ws://127.0.0.1:${host.port}/ws`;
+    expect(await handshake(socket, { "x-eta-token": TOKEN })).toBe("open");
+    expect(await handshake(socket, { "x-eta-token": `${TOKEN}x` })).toBe(
+      "refused",
+    );
+  });
+
   it("accepts the token as a bearer, for pages and for the socket", async () => {
     const host = await testHost({
       webDir: await fakeWeb(),
