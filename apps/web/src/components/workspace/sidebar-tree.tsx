@@ -3,26 +3,25 @@ import type {
   ConversationSummary,
   MemberView,
 } from "@eta/client-contracts";
+import type { ReactNode } from "react";
 import type { DirectoryGroup } from "./use-chat-list";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
-import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Loading } from "@/components/states";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Input } from "@/components/ui/input";
 import {
   SidebarGroup,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
@@ -275,6 +274,18 @@ function GroupCard({
   const members = conversation.participants;
   const nameOf = (agentId: string) => agentName(agents, agentId);
   const busy = members.filter((member) => member.status !== "idle");
+  const menu = {
+    onRename: () => setDraft(conversation.name),
+    archived: conversation.archived,
+    onArchive: () =>
+      update.mutate(
+        {
+          conversationId: conversation.id,
+          archived: !conversation.archived,
+        },
+        { onError },
+      ),
+  };
 
   // On the rail a group is a glyph with its name under it: the member stack says who is in it,
   // the name says which one it is. Everything the wide card writes out has nowhere to go here, so
@@ -283,92 +294,108 @@ function GroupCard({
     return (
       <SidebarMenuItem
         className={cn(
-          "group/menu-item relative transition-colors duration-75",
-          "hover:bg-sidebar-accent",
+          "group/menu-item relative transition-colors duration-75 select-none",
+          "hover:bg-sidebar-accent has-data-[state=open]:bg-sidebar-accent",
           active && "bg-sidebar-accent",
         )}
         data-active={active}
       >
-        <button
-          type="button"
-          data-sidebar="menu-button"
-          data-active={active}
-          aria-current={active ? "true" : undefined}
-          title={conversation.name}
-          onClick={onOpen}
-          className="relative flex w-full flex-col items-center gap-1 px-1 py-1.5 hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
-        >
-          {members.length === 0 ? (
-            <ChatsCircleIcon
-              aria-hidden="true"
-              className="size-5 text-muted-foreground"
+        {draft === null ? (
+          <RowMenu {...menu}>
+            <button
+              type="button"
+              data-sidebar="menu-button"
+              data-active={active}
+              aria-current={active ? "true" : undefined}
+              title={conversation.name}
+              onClick={onOpen}
+              className="relative flex w-full flex-col items-center gap-1 px-1 py-1.5 hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+            >
+              {members.length === 0 ? (
+                <ChatsCircleIcon
+                  aria-hidden="true"
+                  className="size-5 text-muted-foreground"
+                />
+              ) : (
+                <MemberStack members={members} compact />
+              )}
+              <span
+                data-slot="conversation-name"
+                className="w-full truncate text-center text-[10px] leading-tight"
+              >
+                {conversation.name}
+              </span>
+              {busy.length > 0 ? (
+                <span className="sr-only">{` ${memberStatusLabel("working")}`}</span>
+              ) : null}
+              {busy.length > 0 ? (
+                <span
+                  aria-hidden="true"
+                  className="absolute top-0.5 left-0.5 font-mono text-[10px] text-state-success"
+                  title={busy
+                    .map((member) => nameOf(member.agentId))
+                    .join("、")}
+                >
+                  ●
+                </span>
+              ) : null}
+              {conversation.unread > 0 ? (
+                <span
+                  data-slot="conversation-unread"
+                  className="pointer-events-none absolute top-1 right-1 border border-border bg-sidebar px-0.5 font-mono text-[9px] leading-3 tabular-nums"
+                >
+                  {conversation.unread}
+                </span>
+              ) : null}
+            </button>
+          </RowMenu>
+        ) : (
+          <div className="px-1 py-1.5">
+            <RenameField
+              value={draft}
+              onChange={setDraft}
+              onCommit={commitRename}
+              onCancel={() => setDraft(null)}
             />
-          ) : (
-            <MemberStack members={members} compact />
-          )}
-          <span
-            data-slot="conversation-name"
-            className="w-full truncate text-center text-[10px] leading-tight"
-          >
-            {conversation.name}
-          </span>
-          {busy.length > 0 ? (
-            <span className="sr-only">{` ${memberStatusLabel("working")}`}</span>
-          ) : null}
-          {busy.length > 0 ? (
-            <span
-              aria-hidden="true"
-              className="absolute top-0.5 left-0.5 font-mono text-[10px] text-state-success"
-              title={busy.map((member) => nameOf(member.agentId)).join("、")}
-            >
-              ●
-            </span>
-          ) : null}
-          {conversation.unread > 0 ? (
-            <span
-              data-slot="conversation-unread"
-              className="pointer-events-none absolute top-1 right-1 border border-border bg-sidebar px-0.5 font-mono text-[9px] leading-3 tabular-nums"
-            >
-              {conversation.unread}
-            </span>
-          ) : null}
-        </button>
+          </div>
+        )}
       </SidebarMenuItem>
     );
 
   return (
     <SidebarMenuItem
       className={cn(
-        "group/menu-item relative transition-colors duration-75",
-        "hover:bg-sidebar-accent",
+        "group/menu-item relative transition-colors duration-75 select-none",
+        "hover:bg-sidebar-accent has-data-[state=open]:bg-sidebar-accent",
         active && "bg-sidebar-accent",
       )}
       data-active={active}
     >
       {draft === null ? (
         <>
-          {/* The card's own click target, under everything: the ⋯ is a control of its own, and a
-           * button cannot hold another button. */}
-          <button
-            type="button"
-            data-sidebar="menu-button"
-            data-active={active}
-            aria-current={active ? "true" : undefined}
-            title={conversation.name}
-            onClick={onOpen}
-            className="absolute inset-0 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
-          >
-            <span className="sr-only">
-              {conversation.name}
-              {conversation.unread > 0
-                ? ` ${translateText("chat:groups.unreadCount", { count: conversation.unread })}`
-                : null}
-              {busy.length > 0 ? ` ${memberStatusLabel("working")}` : null}
-            </span>
-          </button>
+          {/* The card's own click target, under everything: it spans the card, so a right-click
+           * anywhere on it lands here. */}
+          <RowMenu {...menu}>
+            <button
+              type="button"
+              data-sidebar="menu-button"
+              data-active={active}
+              aria-current={active ? "true" : undefined}
+              title={conversation.name}
+              onClick={onOpen}
+              className="absolute inset-0 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden"
+            >
+              <span className="sr-only">
+                {conversation.name}
+                {conversation.unread > 0
+                  ? ` ${translateText("chat:groups.unreadCount", { count: conversation.unread })}`
+                  : null}
+                {busy.length > 0 ? ` ${memberStatusLabel("working")}` : null}
+              </span>
+            </button>
+          </RowMenu>
           <div className="pointer-events-none relative z-10 px-4 pt-1.5">
-            {/* The ⋯ is a corner control, not a column: the row ends before it. */}
-            <div className="flex items-center gap-1.5 pr-6">
+            <div className="flex items-center gap-1.5">
               <MemberStack members={members} />
               <span className="min-w-0 flex-1 truncate text-base leading-tight">
                 {conversation.name}
@@ -415,19 +442,6 @@ function GroupCard({
           />
         </div>
       )}
-      <RowMenu
-        onRename={() => setDraft(conversation.name)}
-        archived={conversation.archived}
-        onArchive={() =>
-          update.mutate(
-            {
-              conversationId: conversation.id,
-              archived: !conversation.archived,
-            },
-            { onError },
-          )
-        }
-      />
     </SidebarMenuItem>
   );
 }
@@ -569,40 +583,49 @@ function MemberStack({
   );
 }
 
+/** What a card can do, on the card itself: right-click, long-press, or the keyboard's menu key. */
 function RowMenu({
+  children,
   onRename,
   archived,
   onArchive,
 }: {
+  children: ReactNode;
   onRename: (() => void) | undefined;
   archived: boolean;
   onArchive: () => void;
 }) {
   const { t: translateText } = useTranslation(["chat", "common"] as const);
+  // Renaming starts once the menu has finished closing. Radix hands focus back at that moment,
+  // and a field that was already up would lose it, which its blur reads as a commit.
+  const renamingRef = useRef(false);
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <SidebarMenuAction
-          showOnHover
-          aria-label={translateText("chat:groups.accessibility.actions")}
-          className="top-1.5 right-3 z-20"
-        >
-          <DotsThreeIcon aria-hidden="true" />
-        </SidebarMenuAction>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-32">
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent
+        onCloseAutoFocus={(event) => {
+          if (!renamingRef.current) return;
+          renamingRef.current = false;
+          event.preventDefault();
+          onRename?.();
+        }}
+      >
         {onRename === undefined ? null : (
-          <DropdownMenuItem onSelect={onRename}>
+          <ContextMenuItem
+            onSelect={() => {
+              renamingRef.current = true;
+            }}
+          >
             {translateText("chat:groups.actions.rename")}
-          </DropdownMenuItem>
+          </ContextMenuItem>
         )}
-        <DropdownMenuItem onSelect={onArchive}>
+        <ContextMenuItem onSelect={onArchive}>
           {archived
             ? translateText("chat:groups.actions.unarchive")
             : translateText("chat:groups.actions.archive")}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
