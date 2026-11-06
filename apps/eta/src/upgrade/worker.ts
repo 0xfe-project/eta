@@ -27,6 +27,10 @@ const PASSED_ENV = [
   "PATH",
   "GH_TOKEN",
   "GITHUB_TOKEN",
+  "GH_ENTERPRISE_TOKEN",
+  "GITHUB_ENTERPRISE_TOKEN",
+  "GH_CONFIG_DIR",
+  "XDG_CONFIG_HOME",
   "ETA_RELEASES_URL",
   "ETA_RELEASES_TOKEN",
   "http_proxy",
@@ -47,6 +51,8 @@ export interface WorkerRequest {
   /** The build that file is. */
   from: string;
   wanted?: string | undefined;
+  /** `--repo`, for this upgrade alone. */
+  repo?: string | undefined;
   force: boolean;
   waitMinutes: number;
   run?: typeof exec;
@@ -54,7 +60,7 @@ export interface WorkerRequest {
 
 /** Start the worker, or find the one running; its id. */
 export async function startWorker(request: WorkerRequest): Promise<string> {
-  const { dataDir, force, from, program, waitMinutes, wanted } = request;
+  const { dataDir, force, from, program, repo, waitMinutes, wanted } = request;
   const running = readStatus(dataDir);
   if (running?.state === "running") return running.id;
   const id = randomUUID();
@@ -77,6 +83,7 @@ export async function startWorker(request: WorkerRequest): Promise<string> {
     program,
     "upgrade",
     ...(wanted === undefined ? [] : [wanted]),
+    ...(repo === undefined ? [] : ["--repo", repo]),
     ...(force ? ["--force"] : []),
     "--wait",
     String(waitMinutes),

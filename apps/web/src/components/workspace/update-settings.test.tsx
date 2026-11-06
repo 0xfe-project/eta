@@ -1,8 +1,10 @@
 import type {
+  UpgradeArgs,
   UpgradeCheckView,
   UpgradeStatusView,
 } from "@eta/client-contracts";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
+import { act } from "react";
 import { setWire } from "@/lib/wire";
 import { buildProductHost } from "@/test-product";
 import { cleanup, click, flush, mount } from "@/test-render";
@@ -29,6 +31,12 @@ const checked: UpgradeCheckView = {
   available: true,
   blocked: null,
   busy: [],
+  upstream: {
+    label: "0xfe-project/eta",
+    source: "build",
+    saved: null,
+    fallback: "0xfe-project/eta",
+  },
   error: null,
 };
 
@@ -41,15 +49,21 @@ async function open(
     Response.json(status)) as unknown as typeof globalThis.fetch;
   const start = rstest.fn((_args: unknown) => ({ id: "u1" }));
   const cancel = rstest.fn((_args: unknown) => ({ cancelled: true }));
+  const setUpstream = rstest.fn((args: unknown) => {
+    if ((args as UpgradeArgs["setUpstream"]).upstream === "nonsense")
+      throw new Error("not a repository");
+    return checked.upstream;
+  });
   const host = buildProductHost({}, ["upgrade"])
     .handle("upgrade.check", () => ({ ...checked, ...check }))
     .handle("upgrade.start", start)
-    .handle("upgrade.cancel", cancel);
+    .handle("upgrade.cancel", cancel)
+    .handle("upgrade.setUpstream", setUpstream);
   host.install();
   host.hello();
   await mount(<UpdateSettings />);
   await flush();
-  return { start, cancel };
+  return { start, cancel, setUpstream };
 }
 
 const running = (
@@ -126,6 +140,73 @@ describe("Settings → 更新", () => {
     expect(button("更新到 1.1.0")).toBeUndefined();
     await click(button("取消更新")!);
     expect(cancel).toHaveBeenCalled();
+  });
+
+  describe("where updates come from", () => {
+    const fork = {
+      label: "someone/fork",
+      source: "setting",
+      saved: "someone/fork",
+      fallback: "0xfe-project/eta",
+    } as const;
+    const type = async (value: string) => {
+      const input = document.querySelector("input")!;
+      await act(() => {
+        Object.getOwnPropertyDescriptor(
+          HTMLInputElement.prototype,
+          "value",
+        )?.set?.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    };
+
+    it("warns whose code this is, and saves what is typed", async () => {
+      const { setUpstream } = await open();
+      expect(text()).toContain("0xfe-project/eta");
+      expect(text()).toContain("默认");
+      await click(button("修改")!);
+      expect(text()).toContain("这决定这台服务器运行谁的代码");
+      expect(button("保存")?.disabled).toBe(true);
+      expect(text()).not.toContain("恢复默认");
+      await type(" someone/fork ");
+      await click(button("保存")!);
+      await flush();
+      expect(setUpstream).toHaveBeenCalledWith({ upstream: "someone/fork" });
+      expect(text()).not.toContain("这决定这台服务器运行谁的代码");
+    });
+
+    it("goes back to the default", async () => {
+      const { setUpstream } = await open({ upstream: fork });
+      await click(button("修改")!);
+      expect(document.querySelector("input")?.value).toBe("someone/fork");
+      await click(button("恢复默认（0xfe-project/eta）")!);
+      await flush();
+      expect(setUpstream).toHaveBeenCalledWith({});
+    });
+
+    it("stays open on what the host refuses", async () => {
+      const { setUpstream } = await open();
+      await click(button("修改")!);
+      await type("nonsense");
+      await click(button("保存")!);
+      await flush();
+      expect(setUpstream).toHaveBeenCalled();
+      expect(text()).toContain("这决定这台服务器运行谁的代码");
+    });
+
+    it("offers no change the environment would overrule", async () => {
+      await open({
+        upstream: { ...fork, label: "other/one", source: "env" },
+      });
+      expect(text()).toContain("other/one");
+      expect(text()).toContain("ETA_RELEASES_URL");
+      expect(button("修改")).toBeUndefined();
+    });
+
+    it("leaves it alone while an upgrade runs", async () => {
+      await open({}, running("waiting"));
+      expect(button("修改")?.disabled).toBe(true);
+    });
   });
 
   it("cannot stop one past the point of no return", async () => {

@@ -11,7 +11,10 @@ import type {
   UpgradeBusy,
   UpgradeCheckView,
   UpgradeResults,
+  UpgradeUpstreamSource,
+  UpgradeUpstreamView,
 } from "@eta/client-contracts";
+import type { SettingStore } from "../inbox/setting";
 import type { HostService } from "./service";
 import { realpathSync } from "node:fs";
 import process from "node:process";
@@ -22,6 +25,13 @@ import { Releases } from "./releases";
 import { findHostService } from "./service";
 import { readStatus } from "./status";
 import { versionOrder } from "./upgrade";
+import {
+  BUILT_UPSTREAM,
+  chooseUpstream,
+  parseUpstream,
+  UPSTREAM_SETTING,
+  upstreamLabel,
+} from "./upstream";
 import { cancelWorker, startWorker } from "./worker";
 
 const STATUS_PATH = "/upgrade/status";
@@ -32,6 +42,7 @@ export interface UpgradePluginOptions {
   dataDir: string;
   /** What a restart would stop. */
   busy: () => UpgradeBusy[];
+  settings: Pick<SettingStore, "get" | "set" | "delete">;
   /** The rest is here for a test. */
   version?: string;
   compiled?: boolean;
@@ -64,17 +75,34 @@ async function blockedBy(
     : { blocked: "other-file" };
 }
 
+/** Which upstream counts here, and what the page needs to say about it. */
+function currentUpstream({ settings }: UpgradePluginOptions): {
+  text: string;
+  view: UpgradeUpstreamView;
+} {
+  const stored = settings.get(UPSTREAM_SETTING);
+  const saved = typeof stored === "string" ? stored : undefined;
+  const { source, text } = chooseUpstream({ saved });
+  return {
+    text,
+    view: {
+      label: upstreamLabel(text),
+      // `chooseUpstream` only says `flag` when given one, and no page can.
+      source: source as UpgradeUpstreamSource,
+      saved: saved === undefined ? null : upstreamLabel(saved),
+      fallback: upstreamLabel(BUILT_UPSTREAM),
+    },
+  };
+}
+
 async function check(options: UpgradePluginOptions): Promise<UpgradeCheckView> {
   const version = options.version ?? VERSION;
   const { blocked } = await blockedBy(options).catch(() => ({
     blocked: "no-service" as const,
   }));
-  const releases =
-    options.releases ??
-    new Releases(
-      process.env.ETA_RELEASES_URL ? { url: process.env.ETA_RELEASES_URL } : {},
-    );
+  const { text, view: upstream } = currentUpstream(options);
   try {
+    const releases = options.releases ?? new Releases({ upstream: text });
     const latest = (await releases.latest()).version;
     const order = versionOrder(latest, version);
     return {
@@ -83,6 +111,7 @@ async function check(options: UpgradePluginOptions): Promise<UpgradeCheckView> {
       available: latest !== version && (order === undefined || order > 0),
       blocked,
       busy: options.busy(),
+      upstream,
       error: null,
     };
   } catch (error) {
@@ -92,6 +121,7 @@ async function check(options: UpgradePluginOptions): Promise<UpgradeCheckView> {
       available: false,
       blocked,
       busy: options.busy(),
+      upstream,
       error: error instanceof Error ? error.message : String(error),
     };
   }
@@ -121,6 +151,14 @@ export function upgradePlugin(
             waitMinutes: WAIT_MINUTES,
           });
           const result: UpgradeResults["start"] = { id };
+          return { result };
+        }),
+        wire.handle("upgrade", "setUpstream", async (call) => {
+          const given = new Args(call).optionalString("upstream");
+          if (given === undefined) options.settings.delete(UPSTREAM_SETTING);
+          else options.settings.set(UPSTREAM_SETTING, parseUpstream(given).api);
+          const result: UpgradeResults["setUpstream"] =
+            currentUpstream(options).view;
           return { result };
         }),
         wire.handle("upgrade", "cancel", async () => {

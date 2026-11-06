@@ -34,4 +34,8 @@ export class SettingStore {
       )
       .run(key, JSON.stringify(value), Date.now());
   }
+
+  delete(key: string): void {
+    this.#db.query("DELETE FROM setting WHERE key = ?").run(key);
+  }
 }

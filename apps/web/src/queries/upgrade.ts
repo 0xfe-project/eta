@@ -44,6 +44,7 @@ export function busyLabels(busy: readonly UpgradeBusy[]): string[] {
 
 const POLL_MS = 1500;
 const STATUS_KEY = ["upgrade", "status"];
+const CHECK_KEY = ["wire", "upgrade", "check"];
 
 export interface UpgradeWatch {
   /** Whether the host answered. */
@@ -97,7 +98,7 @@ export function useUpgradeWatch(): UpgradeWatch | undefined {
 
 export function useUpgradeCheck() {
   return useQuery({
-    queryKey: ["wire", "upgrade", "check"],
+    queryKey: CHECK_KEY,
     queryFn: async () =>
       await getWire().call<UpgradeResults["check"]>("upgrade", "check", {}),
     staleTime: 0,
@@ -113,6 +114,16 @@ export function useStartUpgrade() {
       onSuccess: () => void client.invalidateQueries({ queryKey: STATUS_KEY }),
     },
   );
+}
+
+export function useSetUpstream() {
+  const client = useQueryClient();
+  return useWireMutation<
+    UpgradeArgs["setUpstream"],
+    UpgradeResults["setUpstream"]
+  >("upgrade", "setUpstream", {
+    onSuccess: () => void client.invalidateQueries({ queryKey: CHECK_KEY }),
+  });
 }
 
 export function useCancelUpgrade() {

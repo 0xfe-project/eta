@@ -37,6 +37,19 @@
   "update": {
     "version": "This version",
     "latest": "Latest version",
+    "upstream": "Updates from",
+    "upstreamFrom": {
+      "build": "Default",
+      "setting": "Set here",
+      "env": "Set by ETA_RELEASES_URL on the server"
+    },
+    "upstreamChange": "Change",
+    "upstreamTitle": "Change where updates come from",
+    "upstreamWarning": "This decides whose code this server runs. An update downloads what is published there and runs it, and the checksum comes from the same place, so it cannot protect you from the source itself. Only use a repository you trust.",
+    "upstreamInput": "Repository",
+    "upstreamPlaceholder": "owner/name",
+    "upstreamHint": "owner/name, or a whole address such as https://<host>/api/v3/repos/owner/name. A private repository needs a token on the server: gh's login, or GH_TOKEN.",
+    "upstreamReset": "Restore default ({{fallback}})",
     "unknown": "Unknown",
     "upToDate": "Up to date",
     "install": "Update to {{version}}",

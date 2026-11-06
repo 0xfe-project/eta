@@ -499,7 +499,12 @@ export type MachineCall = {
 
 /* ------------------------------------------------------------------ upgrade */
 
-export const UPGRADE_ACTIONS = ["check", "start", "cancel"] as const;
+export const UPGRADE_ACTIONS = [
+  "check",
+  "start",
+  "cancel",
+  "setUpstream",
+] as const;
 export type UpgradeAction = (typeof UPGRADE_ACTIONS)[number];
 
 /** Where a running upgrade is, in order. Until `stopping` the host goes on serving. */
@@ -553,6 +558,20 @@ export interface UpgradeStatusView {
 /** Why this host cannot upgrade itself from the page. */
 export type UpgradeBlock = "source" | "no-service" | "other-file";
 
+/** Who says where releases come from: the host's environment, the user's setting, or the build. */
+export type UpgradeUpstreamSource = "env" | "setting" | "build";
+
+/** The repository this host takes its releases from, which is whose code it would run. */
+export interface UpgradeUpstreamView {
+  /** The one in use: `owner/name`, or an address. */
+  label: string;
+  source: UpgradeUpstreamSource;
+  /** What the user saved, in use or not. */
+  saved: string | null;
+  /** What this build follows with nothing saved. */
+  fallback: string;
+}
+
 export interface UpgradeCheckView {
   /** This build. */
   version: string;
@@ -562,6 +581,7 @@ export interface UpgradeCheckView {
   blocked: UpgradeBlock | null;
   /** What a restart would stop right now. */
   busy: UpgradeBusy[];
+  upstream: UpgradeUpstreamView;
   error: string | null;
 }
 
@@ -570,12 +590,15 @@ export interface UpgradeArgs {
   /** `force` restarts over working agents instead of waiting for them. */
   start: { force?: boolean };
   cancel: Record<string, never>;
+  /** Save where releases come from; without `upstream`, go back to what the build follows. */
+  setUpstream: { upstream?: string };
 }
 
 export interface UpgradeResults {
   check: UpgradeCheckView;
   start: { id: string };
   cancel: { cancelled: boolean };
+  setUpstream: UpgradeUpstreamView;
 }
 
 /* ------------------------------------------------------------------ projects */

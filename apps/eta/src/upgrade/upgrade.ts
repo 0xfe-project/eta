@@ -115,6 +115,8 @@ export interface UpgradeOptions {
   execPath: string;
   dataDir: string;
   releases: Releases;
+  /** Who the releases are from, to say so, when it is not who this build follows anyway. */
+  upstream?: string | undefined;
   findService: () => Promise<HostService | undefined>;
   log: (line: string) => void;
   report?: UpgradeReport;
@@ -361,6 +363,8 @@ export async function upgradeHost(options: UpgradeOptions): Promise<void> {
   const from = options.version;
   const timing = { ...TIMING, ...options.timing };
 
+  if (options.upstream !== undefined)
+    log(`Taking releases from ${options.upstream}.`);
   const release =
     wanted === undefined
       ? await releases.latest()

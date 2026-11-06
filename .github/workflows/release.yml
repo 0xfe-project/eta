@@ -100,6 +100,8 @@ jobs:
       ASSET: eta-host-${{ matrix.platform }}${{ matrix.exe }}
       DESKTOP: ${{ matrix.desktop }}
       ETA_DAEMON_VERSION: ${{ needs.prepare.outputs.version }}
+      # The repository a build upgrades from: this one, so a fork's builds follow the fork.
+      ETA_HOST_UPSTREAM: ${{ github.api_url }}/repos/${{ github.repository }}
     steps:
       # What is built is what is in git: Windows runners would check out CRLF.
       - run: git config --global core.autocrlf false
@@ -127,6 +129,11 @@ jobs:
           actual=$("./$ASSET" --version)
           if [[ $actual != "$expected" ]]; then
             echo "::error::--version says '$actual', not '$expected'."
+            exit 1
+          fi
+
+          if ! "./$ASSET" upgrade --help | grep "this build follows:" | grep -qF "$GH_REPO"; then
+            echo "::error::The build does not follow $GH_REPO."
             exit 1
           fi
 

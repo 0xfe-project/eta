@@ -22,6 +22,8 @@ import {
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { databasePath } from "../db";
+import { SettingStore } from "../inbox/setting";
+import { UPSTREAM_SETTING } from "./upstream";
 
 /** Backups kept in `<dataDir>/backups`, newest first; each is as big as the database. */
 export const BACKUPS_KEPT = 3;
@@ -38,6 +40,25 @@ function readonly<T>(dataDir: string, read: (db: Database) => T): T {
     return read(db);
   } finally {
     db.close();
+  }
+}
+
+/**
+ * The upstream saved in the settings, for a process that is not the host. Only a database that has
+ * no settings yet comes to nothing: anything else has to stop an upgrade, or one that could not
+ * read this would go on to some other repository's code.
+ */
+export function savedUpstream(dataDir: string): string | undefined {
+  if (!existsSync(databasePath(dataDir))) return undefined;
+  try {
+    const saved = readonly(dataDir, (db) =>
+      new SettingStore(db).get(UPSTREAM_SETTING),
+    );
+    return typeof saved === "string" ? saved : undefined;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("no such table"))
+      return undefined;
+    throw error;
   }
 }
 

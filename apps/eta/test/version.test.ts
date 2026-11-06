@@ -53,7 +53,21 @@ describe("eta-host --help", () => {
     expect(run.status).toBe(0);
     expect(run.stdout).toContain("~/.eta/backups");
     expect(run.stdout).toContain("--force");
+    expect(run.stdout).toContain("--repo");
+    expect(run.stdout).toContain("this build follows: 0xfe-project/eta");
+    expect(run.stdout).toContain("ETA_RELEASES_TOKEN");
   });
+
+  it.each(["nothing", "https://me:s3cret@ghe.corp/api/v3/repos/o/r"])(
+    "refuses --repo %s before asking anything",
+    async (repo) => {
+      const home = await tempDir("eta-help-");
+      const run = host(["upgrade", "--repo", repo, "--check"], home);
+      expect(run.status).toBe(2);
+      expect(run.stderr).toContain("--repo");
+      expect(run.stderr).not.toContain("s3cret");
+    },
+  );
 });
 
 describe("what the host does not know", () => {
