@@ -7,6 +7,7 @@
  */
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { get } from "node:http";
 import { homedir } from "node:os";
 import process from "node:process";
 import { parseArgs, promisify } from "node:util";
@@ -33,6 +34,8 @@ interface ServiceStatus {
   running: boolean;
   /** It exited on its own: waiting to be started again, or given up on. */
   crashed: boolean;
+  /** Down for now: systemd will start it again, from whatever file is there then. */
+  restarting: boolean;
   pid: number;
 }
 
@@ -109,6 +112,23 @@ export async function upUrl(args: readonly string[]): Promise<string> {
 export const inServiceCgroup = (cgroup: string): boolean =>
   cgroup.includes(UNIT_FILE);
 
+/**
+ * `node:http`, not `fetch`: Bun's `fetch` honours `http_proxy` for anything but loopback, and a
+ * proxy cannot reach a tailnet address, which would read as a host that did not come up.
+ */
+export const askUp = (url: string): Promise<boolean> =>
+  new Promise((resolve) => {
+    const request = get(url, { timeout: UP_TIMEOUT_MS }, (answer) => {
+      answer.resume();
+      resolve(answer.statusCode === 200);
+    });
+    request.on("error", () => resolve(false));
+    request.on("timeout", () => {
+      request.destroy();
+      resolve(false);
+    });
+  });
+
 function insideService(): boolean {
   try {
     return inServiceCgroup(readFileSync("/proc/self/cgroup", "utf8"));
@@ -154,6 +174,7 @@ export async function findHostService(): Promise<HostService | undefined> {
           ActiveState === "failed" ||
           ActiveState === "inactive" ||
           SubState === "auto-restart",
+        restarting: ActiveState === "activating",
         pid: Number(MainPID ?? 0),
       };
     },
@@ -163,15 +184,6 @@ export async function findHostService(): Promise<HostService | undefined> {
     start: async () => {
       await systemctl("start", UNIT_FILE);
     },
-    up: async () => {
-      try {
-        const answer = await fetch(url, {
-          signal: AbortSignal.timeout(UP_TIMEOUT_MS),
-        });
-        return answer.ok;
-      } catch {
-        return false;
-      }
-    },
+    up: () => askUp(url),
   };
 }

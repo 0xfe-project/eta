@@ -67,14 +67,14 @@ eta-host upgrade --check      # 只报告有没有新版本，什么都不改
 
 第一个带 `upgrade` 的版本要用 `bun run host:install` 或手动替换文件装上，更早的版本没有这条命令。
 
-下载走 GitHub API，公开仓库不需要 token；私有仓库按 `GH_TOKEN`、`GITHUB_TOKEN`、`gh` 的登录依次取 token。`ETA_RELEASES_URL` 可以换一个仓库（`https://api.github.com/repos/<owner>/<repo>`），这时不会用 `gh` 的登录。
+下载走 GitHub API，公开仓库不需要 token；私有仓库按 `GH_TOKEN`、`GITHUB_TOKEN`、`gh` 的登录依次取 token。`ETA_RELEASES_URL` 可以换一个仓库（`https://api.github.com/repos/<owner>/<repo>`）。指向 GitHub 以外的服务器时，这些 GitHub 凭据都不会发出去，只用 `ETA_RELEASES_TOKEN`。
 
 顺序是这样，前一半不影响正在运行的 host：
 
 1. 找到版本。已经是这个版本就结束。比当前版本旧的拒绝，要回退用下面的办法。
 2. 下载到可执行文件旁边的 `eta-host.next`，核对 `SHA256SUMS`。
-3. 试运行：`--version` 要和版本对上；`--migrations` 列出它带的迁移，数据库里有它不认识的迁移就拒绝（数据库比这个版本新，比如 host 是从更新的 main 构建的）。
-4. 等智能体：`task_run`、`routine_run` 和正在进行的回复（包括等用户回答的）都结束才继续，默认等 10 分钟（`--wait <分钟>`），等不到就退出，什么都没改。`--force` 不等，重启会杀掉它们。
+3. 试运行：`--version` 要和版本对上；`--migrations` 列出它带的迁移，数据库里有它不认识的迁移就拒绝（数据库比这个版本新，比如 host 是从更新的 main 构建的）。`v0.1.0` 列不出迁移：从 checkout 构建的 host 不能升到它，因为无法判断数据库是否更新。
+4. 等智能体：`task_run`、`routine_run` 和进行中的回复（包括刚排队和等用户回答的）都结束才继续，默认等 10 分钟（`--wait <分钟>`），等不到就退出，什么都没改。`--force` 不等，重启会杀掉它们。
 5. 停服务，备份数据库，替换文件（旧文件留作 `eta-host.prev`），启动。
 6. 验证：`/up` 要在 2 分钟内应答，之后 5 秒里继续应答且进程不变，新版本的迁移都在数据库里。
 
@@ -82,7 +82,7 @@ eta-host upgrade --check      # 只报告有没有新版本，什么都不改
 
 第 5 步之前按 Ctrl-C 可以放弃，什么都不会留下。从第 5 步开始 `SIGINT`、`SIGTERM`、`SIGHUP` 都被忽略，中途断开终端不会把服务留在半路。
 
-重启只发生在 `io.eta.host` 正在运行、而且运行的就是这个文件时：
+重启只发生在 `io.eta.host` 正在运行（或崩溃后等 systemd 重新启动）、而且运行的就是这个文件时：
 
 - 服务运行的是别的文件：拒绝，要用那个文件的 `upgrade`。
 - 在服务内部运行（比如 host 下面的智能体）：拒绝，因为重启会把 `upgrade` 自己杀掉。智能体可以用 `systemd-run --user --scope <文件的完整路径> upgrade --force` 跳出去，它自己算正在运行，所以要 `--force`，重启时也会被杀掉，结果要从外面看。

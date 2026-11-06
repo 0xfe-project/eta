@@ -50,6 +50,9 @@ import { parseSums } from "./releases";
 const SUMS_FILE = "SHA256SUMS";
 const SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
 
+/** The newest release that cannot say which migrations it carries. */
+const LAST_WITHOUT_MIGRATIONS = "0.1.0";
+
 /** `0.2.0` or `0.2.0-rc.1`, what a tag can be (`release.yml`). */
 const RELEASE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9a-z.-]+)?$/i;
 
@@ -233,6 +236,32 @@ async function replaceService(
   }
 }
 
+/** What the staged build carries; undefined for one too old to say, if that is safe. */
+async function listMigrations(
+  options: UpgradeOptions,
+  version: string,
+): Promise<string[] | undefined> {
+  try {
+    const listed = await tryBuild(stagedPath(options.execPath), [
+      "--migrations",
+    ]);
+    return listed.split("\n").filter((line) => line !== "");
+  } catch (error) {
+    if (Bun.semver.order(version, LAST_WITHOUT_MIGRATIONS) > 0)
+      throw new Error(`the new build did not run: ${message(error)}`);
+  }
+  // Releases come in order, so a newer one carries what an older one ran. A checkout's build may
+  // have run anything, and nothing here would notice a database ahead of this file.
+  if (!isReleaseVersion(options.version))
+    throw new Error(
+      `${version} cannot say which migrations it carries, and this build (${options.version}) is not a release, so the database may be ahead of it.`,
+    );
+  options.log(
+    `${version} does not list its migrations: /up is the only check.`,
+  );
+  return undefined;
+}
+
 /** Download, check and try the release's file, as `<exe>.next`. */
 async function stage(
   options: UpgradeOptions,
@@ -271,16 +300,8 @@ async function stage(
       `the new build says "${says || "nothing"}", not ${release.version}`,
     );
 
-  // A build from before `--migrations` cannot say; `/up` is all there is to go on then.
-  let carried: string[] | undefined;
-  try {
-    carried = (await tryBuild(staged, ["--migrations"]))
-      .split("\n")
-      .filter((line) => line !== "");
-  } catch {
-    log("This build does not list its migrations, so they are not checked.");
-    return undefined;
-  }
+  const carried = await listMigrations(options, release.version);
+  if (carried === undefined) return undefined;
   const known = new Set(carried);
   const ahead = appliedMigrations(dataDir).filter((id) => !known.has(id));
   if (ahead.length > 0)
@@ -326,7 +347,11 @@ export async function upgradeHost(options: UpgradeOptions): Promise<void> {
     );
 
   const service = await findService();
-  const running = service !== undefined && (await service.status()).running;
+  const status = await service?.status();
+  // Between two starts is running: what is swapped in now would start with nobody watching.
+  const running =
+    service !== undefined &&
+    (status?.running === true || status?.restarting === true);
   if (running && service.inside)
     throw new Error(
       `this process runs inside the service, and the restart would stop the upgrade halfway. Run it from outside; an agent under the host can get out with \`systemd-run --user --scope ${execPath} upgrade --force\`, which stops that agent too.`,

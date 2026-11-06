@@ -10,6 +10,7 @@ import type { UpgradeOptions } from "../src/upgrade/upgrade";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
+import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -21,7 +22,7 @@ import {
   restoreDatabase,
 } from "../src/upgrade/database";
 import { parseSums, Releases, releaseToken } from "../src/upgrade/releases";
-import { inServiceCgroup, upUrl } from "../src/upgrade/service";
+import { askUp, inServiceCgroup, upUrl } from "../src/upgrade/service";
 import { upgradeHost } from "../src/upgrade/upgrade";
 import { tempDir } from "./support/host";
 
@@ -142,11 +143,17 @@ function fakeService(
     status: () => {
       if (running && dies(current)) {
         running = false;
-        return Promise.resolve({ running: false, crashed: true, pid: 0 });
+        return Promise.resolve({
+          running: false,
+          crashed: true,
+          restarting: false,
+          pid: 0,
+        });
       }
       return Promise.resolve({
         running,
         crashed: false,
+        restarting: false,
         pid: running ? pid : 0,
       });
     },
@@ -406,6 +413,35 @@ describe("eta-host upgrade", () => {
       expect(calls).toEqual([]);
     });
 
+    it("refuses a build that can run but not list its migrations", async () => {
+      github.publish("1.1.0", {
+        body: build("1.1.0").replace(
+          "--migrations)",
+          "--migrations) exit 3 ;; x)",
+        ),
+      });
+      const { service, calls } = fakeService(exe, dataDir);
+      await expect(upgrade({ service })).rejects.toThrow(/did not run/);
+      expect(calls).toEqual([]);
+    });
+
+    it("cannot tell with the one release that does not list them", async () => {
+      const old = build("0.1.0").replace(
+        "--migrations)",
+        "--migrations) exit 3 ;; x)",
+      );
+      github.publish("0.1.0", { body: old });
+      // From a checkout's build, whose database may be anything.
+      await expect(upgrade({ version: "abc123def456" })).rejects.toThrow(
+        /database may be ahead/,
+      );
+      expect(await readFile(exe, "utf8")).toBe(build("1.0.0"));
+      // From an older release, which it follows.
+      await upgrade({ version: "0.0.9" });
+      expect(await readFile(exe, "utf8")).toBe(old);
+      expect(said()).toContain("does not list its migrations");
+    });
+
     it("does not touch a service that runs another file", async () => {
       github.publish("1.1.0", { body: build("1.1.0") });
       const other = join(dir, "other");
@@ -474,6 +510,22 @@ describe("eta-host upgrade", () => {
       expect(backups()).toHaveLength(1);
       expect(backups()[0]).toMatch(/^upgrade-\d{8}T\d{6}Z-1\.0\.0\.sqlite$/);
       expect(said()).toContain("The service runs 1.1.0");
+    });
+
+    it("takes a service between two starts as running", async () => {
+      github.publish("1.1.0", { body: next });
+      const fake = fakeService(exe, dataDir);
+      const { status } = fake.service;
+      let looks = 0;
+      fake.service.status = async () => {
+        looks += 1;
+        return looks === 1
+          ? { running: false, crashed: true, restarting: true, pid: 0 }
+          : await status();
+      };
+      await upgrade({ service: fake.service });
+      expect(fake.calls).toEqual(["stop", "start"]);
+      expect(fake.runs()).toBe(next);
     });
 
     it("goes back when /up never answers: the file, the database, the service", async () => {
@@ -571,6 +623,7 @@ describe("eta-host upgrade", () => {
         INSERT INTO conversation VALUES ('c1', 'eta');
         INSERT INTO message VALUES ('m1', 'c1', 'waiting_for_input');
         INSERT INTO message VALUES ('m2', 'c1', 'done');
+        INSERT INTO message VALUES ('m3', 'c1', 'failed');
       `);
       db.close();
     };
@@ -583,6 +636,16 @@ describe("eta-host upgrade", () => {
         "routine digest",
         "a reply in eta",
       ]);
+    });
+
+    it("counts a reply still starting, which a restart fails too", () => {
+      const db = new Database(databasePath(dataDir));
+      db.exec(`
+        INSERT INTO conversation VALUES ('c1', 'eta');
+        INSERT INTO message VALUES ('m1', 'c1', 'queued');
+      `);
+      db.close();
+      expect(busyAgents(dataDir)).toEqual(["a reply in eta"]);
     });
 
     it("gives up after --wait, with nothing changed", async () => {
@@ -687,14 +750,43 @@ describe("the pieces", () => {
     );
   });
 
-  it("takes a token from the environment, and gh's login only for GitHub", async () => {
-    const elsewhere = "http://fork.example/repos/o/r";
-    expect(await releaseToken(elsewhere, { GH_TOKEN: "a" })).toBe("a");
-    expect(await releaseToken(elsewhere, { GITHUB_TOKEN: "b" })).toBe("b");
+  it("gives GitHub's tokens to GitHub, and another server only its own", async () => {
+    const fork = "https://api.github.com/repos/someone/fork";
+    expect(await releaseToken(fork, { GH_TOKEN: "a" })).toBe("a");
+    expect(await releaseToken(fork, { GITHUB_TOKEN: "b" })).toBe("b");
+    expect(await releaseToken(fork, { GH_TOKEN: "a", GITHUB_TOKEN: "b" })).toBe(
+      "a",
+    );
+
+    const mirror = "http://mirror.example/repos/o/r";
     expect(
-      await releaseToken(elsewhere, { GH_TOKEN: "a", GITHUB_TOKEN: "b" }),
-    ).toBe("a");
-    expect(await releaseToken(elsewhere, {})).toBeUndefined();
+      await releaseToken(mirror, { GH_TOKEN: "a", GITHUB_TOKEN: "b" }),
+    ).toBeUndefined();
+    expect(
+      await releaseToken(mirror, { GH_TOKEN: "a", ETA_RELEASES_TOKEN: "c" }),
+    ).toBe("c");
+  });
+
+  it("asks /up directly, whatever proxy the shell has", async () => {
+    const server = Bun.serve({
+      port: 0,
+      hostname: "0.0.0.0",
+      fetch: () => new Response("ok"),
+    });
+    const address = Object.values(networkInterfaces())
+      .flat()
+      .find((entry) => entry?.family === "IPv4" && !entry.internal)?.address;
+    const url = `http://${address ?? "127.0.0.1"}:${server.port}/up`;
+    const saved = process.env.http_proxy;
+    process.env.http_proxy = "http://127.0.0.1:1";
+    try {
+      expect(await askUp(url)).toBe(true);
+      await server.stop(true);
+      expect(await askUp(url)).toBe(false);
+    } finally {
+      if (saved === undefined) delete process.env.http_proxy;
+      else process.env.http_proxy = saved;
+    }
   });
 
   it("knows the service's cgroup, as systemd spells it", () => {

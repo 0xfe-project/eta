@@ -5,7 +5,8 @@
  * filesystem; it is run once (`tryBuild`) to see that it starts and says what it should; then
  * `swapIn` keeps the file as `<exe>.prev` and renames the new one over it. The name always holds a
  * whole program: a running process keeps the file it started from, and a start finds either build,
- * never neither.
+ * never neither. Where a hard link cannot be made (a filesystem without them, a file owned by
+ * someone else) the old file is moved aside instead, and for a moment the name is empty.
  */
 import { execFile } from "node:child_process";
 import { chmod, link, rename, rm } from "node:fs/promises";
@@ -30,11 +31,16 @@ export async function tryBuild(
 export async function swapIn(execPath: string): Promise<void> {
   const previous = previousPath(execPath);
   await rm(previous, { force: true });
-  await link(execPath, previous);
+  const linked = await link(execPath, previous).then(
+    () => true,
+    () => false,
+  );
+  if (!linked) await rename(execPath, previous);
   try {
     await rename(stagedPath(execPath), execPath);
   } catch (error) {
-    await rm(previous, { force: true });
+    if (linked) await rm(previous, { force: true });
+    else await rename(previous, execPath);
     throw error;
   }
 }

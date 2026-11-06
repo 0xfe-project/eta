@@ -108,9 +108,11 @@ export function appliedMigrations(dataDir: string): string[] {
 
 /**
  * What a restart would interrupt, in words, from the rows the host keeps for the work it is doing:
- * task runs, routine runs, and replies in a conversation (one waiting for the user's answer too,
- * since the question dies with its session). Rows, not processes, so that the answer also covers
- * agents on other machines, whose runs are lost track of when the host goes.
+ * task runs, routine runs, and replies in a conversation, every status a start fails
+ * (`Timeline.failInterrupted`): one still `queued` is starting its session, and one waiting for the
+ * user's answer loses the question. A queued task run is not here, because a restart leaves it
+ * queued. Rows, not processes, so that the answer also covers agents on other machines, whose runs
+ * are lost track of when the host goes.
  */
 export function busyAgents(dataDir: string): string[] {
   if (!existsSync(databasePath(dataDir))) return [];
@@ -135,7 +137,7 @@ export function busyAgents(dataDir: string): string[] {
       .query<{ name: string }, []>(
         `SELECT conversation.name FROM message
            JOIN conversation ON conversation.id = message.conversation_id
-          WHERE message.status IN ('working', 'waiting_for_input', 'stopping')`,
+          WHERE message.status IN ('queued', 'working', 'waiting_for_input', 'stopping')`,
       )
       .all()
       .map((row) => `a reply in ${row.name}`),

@@ -34,7 +34,8 @@ The old build stays beside this file as <file>.prev.
 
 A private repository needs a token: GH_TOKEN, GITHUB_TOKEN, or a logged-in gh.
 ETA_RELEASES_URL names another repository's API address, as in
-https://api.github.com/repos/<owner>/<repo>.
+https://api.github.com/repos/<owner>/<repo>. A server other than GitHub gets ETA_RELEASES_TOKEN,
+and none of the above.
 `;
 
 function fail(what: string): number {

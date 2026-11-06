@@ -4,7 +4,8 @@
  * The API serves a private repository and a public one the same way, so there is one path and the
  * only difference is a token: `GH_TOKEN`, `GITHUB_TOKEN`, or what `gh` is logged in with. Without
  * any it asks anonymously, which is all a public repository needs. `ETA_RELEASES_URL` points it at
- * another repository (a fork) or at a test's fake; `gh`'s own login is only for GitHub.
+ * another repository (a fork) or at another server altogether, which is not given GitHub's
+ * credentials: it gets `ETA_RELEASES_TOKEN`, and only that.
  *
  * What is checked here is that a download is whole, against the `SHA256SUMS` of the same release.
  * That says the file is the one that was published, as far as GitHub is believed.
@@ -50,9 +51,10 @@ export async function releaseToken(
   url: string,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<string | undefined> {
+  if (new URL(url).host !== new URL(GITHUB_RELEASES).host)
+    return env.ETA_RELEASES_TOKEN || undefined;
   const given = env.GH_TOKEN || env.GITHUB_TOKEN;
   if (given) return given;
-  if (url !== GITHUB_RELEASES) return undefined;
   try {
     const { stdout } = await run(
       "gh",
