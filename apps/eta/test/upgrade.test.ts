@@ -163,6 +163,7 @@ function fakeService(
   const calls: string[] = [];
   const service: HostService = {
     program: exe,
+    startCommand: "systemctl --user start io.eta.host",
     status: () => {
       if (running && dies(current)) {
         running = false;

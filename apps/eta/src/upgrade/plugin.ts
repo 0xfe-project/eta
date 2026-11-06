@@ -17,14 +17,13 @@ import type {
 } from "@eta/client-contracts";
 import type { SettingStore } from "../inbox/setting";
 import type { HostService } from "./service";
-import { realpathSync } from "node:fs";
 import process from "node:process";
 import { COMPILED } from "../resources";
 import { loadSecretKey } from "../secret";
 import { VERSION } from "../version";
 import { Args, productPlugin } from "../wire";
 import { Releases, releaseToken } from "./releases";
-import { findHostService } from "./service";
+import { findHostService, sameFile } from "./service";
 import { readStatus } from "./status";
 import {
   cleanToken,
@@ -56,6 +55,7 @@ export interface UpgradePluginOptions {
   version?: string;
   compiled?: boolean;
   execPath?: string;
+  platform?: NodeJS.Platform;
   releases?: Pick<Releases, "latest">;
   findToken?: typeof releaseToken;
   findService?: () => Promise<HostService | undefined>;
@@ -63,13 +63,12 @@ export interface UpgradePluginOptions {
   cancel?: typeof cancelWorker;
 }
 
-function sameFile(one: string, other: string): boolean {
-  try {
-    return realpathSync(one) === realpathSync(other);
-  } catch {
-    return false;
-  }
-}
+/** The desktop app's host is in the app: a service is not the way for it, on any platform. */
+const noService = (options: UpgradePluginOptions): UpgradeBlock =>
+  (options.platform ?? process.platform) === "win32" &&
+  process.env.ETA_DESKTOP_SUMMARY === undefined
+    ? "no-windows-service"
+    : "no-service";
 
 /** Only a compiled host that its own running service runs can be restarted from the page. */
 async function blockedBy(
@@ -79,7 +78,7 @@ async function blockedBy(
   const service = await (options.findService ?? findHostService)();
   const status = await service?.status();
   if (service === undefined || status?.running !== true)
-    return { blocked: "no-service" };
+    return { blocked: noService(options) };
   return sameFile(service.program, options.execPath ?? process.execPath)
     ? { blocked: null, service }
     : { blocked: "other-file" };
@@ -108,7 +107,7 @@ function currentUpstream({ settings }: UpgradePluginOptions): {
 async function check(options: UpgradePluginOptions): Promise<UpgradeCheckView> {
   const version = options.version ?? VERSION;
   const { blocked } = await blockedBy(options).catch(() => ({
-    blocked: "no-service" as const,
+    blocked: noService(options),
   }));
   const { text, view: upstream } = currentUpstream(options);
   const stored = options.settings.get(TOKEN_SETTING);

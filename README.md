@@ -179,9 +179,15 @@ Codex). Running it again after `git pull` is one way to upgrade; the daemons fol
 On a headless Linux box, `loginctl enable-linger` keeps user services up without a login.
 `~/.local/share/eta/host/eta-host uninstall-service` removes the service; the data stays in `~/.eta`.
 
+On Windows a downloaded `eta-host.exe` runs as a real Windows service, started at boot: run
+`eta-host install-service <flags>` in an Administrator terminal. It asks for your Windows password once,
+because the service runs as you (so agents can read your Claude, Codex and gh logins), and hands it to
+Windows without storing it. [docs/release.md](docs/release.md) has the details.
+
 `--host tailscale` listens on the tailnet address only, which is what other machines join over.
 
-A tagged version is that same `eta-host` as one file on GitHub Releases, for Linux x64 so far:
+A tagged version is that same `eta-host` as one file on GitHub Releases, for Linux x64, macOS arm64 and
+Windows x64:
 [docs/release.md](docs/release.md) says how to cut one and how to fetch it. An installed file upgrades
 itself with no checkout:
 

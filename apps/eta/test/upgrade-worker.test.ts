@@ -2,10 +2,11 @@
  * The upgrade as something that outlives whoever asked: the worker's status on disk, starting and
  * cancelling the unit, and the `upgrade` target and `/upgrade/status` of a real host.
  *
- * systemd is not in these: what is checked is what would be asked of it. It being asked for real
- * is the sandbox's job.
+ * The service manager is not in these: what is checked is what would be asked of it. It being
+ * asked for real is the sandbox's and CI's job.
  */
 import type { UpgradeResults } from "@eta/client-contracts";
+import type { DetachedRunner } from "@eta/daemon";
 import type { HostService } from "../src/upgrade/service";
 import { existsSync, realpathSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
@@ -24,24 +25,32 @@ import { tempDir, testHost } from "./support/host";
 const quiet = () => undefined;
 const busy = { kind: "task", number: 45, name: "x" } as const;
 
-/** Stands in for `execFile`, remembering what it was asked. */
+/** Stands in for the service manager, remembering what it was asked. */
 function recorder(fails = false) {
-  const calls: { file: string; args: string[] }[] = [];
-  const run = (async (file: string, args: string[]) => {
-    calls.push({ file, args });
-    if (fails) throw new Error("no systemd here");
-    return { stdout: "", stderr: "" };
-  }) as never;
-  return { calls, run };
+  const started: Parameters<DetachedRunner["start"]>[0][] = [];
+  const stopped: string[] = [];
+  const runner: DetachedRunner = {
+    start: (job) => {
+      started.push(job);
+      return fails
+        ? Promise.reject(new Error("no systemd here"))
+        : Promise.resolve();
+    },
+    stop: (name) => {
+      stopped.push(name);
+      return Promise.resolve();
+    },
+  };
+  return { started, stopped, runner };
 }
 
-const request = (dataDir: string, run: never) => ({
+const request = (dataDir: string, runner: DetachedRunner) => ({
   dataDir,
   program: "/opt/eta-host",
   from: "1.0.0",
   force: false,
   waitMinutes: 10,
-  run,
+  runner,
 });
 
 describe("the status on disk", () => {
@@ -116,56 +125,48 @@ describe("the status on disk", () => {
 describe("starting the worker", () => {
   it("hands on --repo, and what gh needs to find its login", async () => {
     const dir = await tempDir();
-    const { calls, run } = recorder();
+    const { runner, started } = recorder();
     process.env.GH_CONFIG_DIR = "/somewhere";
     process.env.GH_ENTERPRISE_TOKEN = "s3cret";
     try {
-      await startWorker({ ...request(dir, run), repo: "someone/fork" });
+      await startWorker({ ...request(dir, runner), repo: "someone/fork" });
     } finally {
       delete process.env.GH_CONFIG_DIR;
       delete process.env.GH_ENTERPRISE_TOKEN;
     }
-    const args = calls[0]?.args ?? [];
-    expect(args.slice(args.indexOf("--repo"))).toContain("someone/fork");
-    expect(args).toContain("--setenv=GH_CONFIG_DIR");
-    expect(args).toContain("--setenv=GH_ENTERPRISE_TOKEN");
-    expect(args.join(" ")).not.toContain("s3cret");
+    const [job] = started;
+    const argv = job?.argv ?? [];
+    expect(argv.slice(argv.indexOf("--repo"))).toContain("someone/fork");
+    expect(job?.passEnv).toContain("GH_CONFIG_DIR");
+    expect(job?.passEnv).toContain("GH_ENTERPRISE_TOKEN");
+    expect(argv.join(" ")).not.toContain("s3cret");
   });
 
   it("leaves the repository to the worker unless told", async () => {
     const dir = await tempDir();
-    const { calls, run } = recorder();
-    await startWorker(request(dir, run));
-    expect(calls[0]?.args).not.toContain("--repo");
+    const { runner, started } = recorder();
+    await startWorker(request(dir, runner));
+    expect(started[0]?.argv).not.toContain("--repo");
   });
 
   it("asks for a unit of its own, with no token on the command line", async () => {
     const dir = await tempDir();
-    const { calls, run } = recorder();
+    const { runner, started } = recorder();
     process.env.GH_TOKEN = "s3cret";
     try {
       await startWorker({
-        ...request(dir, run),
+        ...request(dir, runner),
         wanted: "1.2.0-rc.1",
         force: true,
       });
     } finally {
       delete process.env.GH_TOKEN;
     }
-    const [call] = calls;
-    expect(call?.file).toBe("systemd-run");
-    expect(call?.args).toEqual(
-      expect.arrayContaining([
-        "--user",
-        "--unit=io.eta.host-upgrade",
-        "--collect",
-        "--property=KillMode=mixed",
-        "--property=TimeoutStopSec=infinity",
-        "--setenv=GH_TOKEN",
-      ]),
-    );
-    expect(call?.args.join(" ")).not.toContain("s3cret");
-    expect(call?.args.slice(call.args.indexOf("--") + 1)).toEqual([
+    const [job] = started;
+    expect(job?.name).toBe("io.eta.host-upgrade");
+    expect(job?.passEnv).toContain("GH_TOKEN");
+    expect(job?.argv.join(" ")).not.toContain("s3cret");
+    expect(job?.argv).toEqual([
       "/opt/eta-host",
       "upgrade",
       "1.2.0-rc.1",
@@ -174,28 +175,30 @@ describe("starting the worker", () => {
       "10",
       "--worker",
       expect.any(String),
+      "--target",
+      "/opt/eta-host",
     ]);
   });
 
   it("is visible at once, before the worker has said anything", async () => {
     const dir = await tempDir();
-    const id = await startWorker(request(dir, recorder().run));
+    const id = await startWorker(request(dir, recorder().runner));
     expect(readStatus(dir)).toMatchObject({ id, state: "running" });
   });
 
   it("finds the one running instead of starting a second", async () => {
     const dir = await tempDir();
-    const { calls, run } = recorder();
-    const first = await startWorker(request(dir, run));
-    expect(await startWorker(request(dir, run))).toBe(first);
-    expect(calls).toHaveLength(1);
+    const { runner, started } = recorder();
+    const first = await startWorker(request(dir, runner));
+    expect(await startWorker(request(dir, runner))).toBe(first);
+    expect(started).toHaveLength(1);
   });
 
   it("says so when the unit cannot start", async () => {
     const dir = await tempDir();
-    await expect(startWorker(request(dir, recorder(true).run))).rejects.toThrow(
-      /no systemd/,
-    );
+    await expect(
+      startWorker(request(dir, recorder(true).runner)),
+    ).rejects.toThrow(/no systemd/);
     expect(readStatus(dir)).toMatchObject({
       state: "failed",
       error: "no systemd here",
@@ -207,28 +210,23 @@ describe("cancelling", () => {
   it("stops a worker that has not touched the service", async () => {
     const dir = await tempDir();
     new StatusWriter(dir, "u1", "1.0.0").phase("waiting", [busy]);
-    const { calls, run } = recorder();
-    expect(await cancelWorker(dir, run)).toBe(true);
-    expect(calls[0]?.args).toEqual([
-      "--user",
-      "stop",
-      "--no-block",
-      "io.eta.host-upgrade",
-    ]);
+    const { runner, stopped } = recorder();
+    expect(await cancelWorker(dir, runner)).toBe(true);
+    expect(stopped).toEqual(["io.eta.host-upgrade"]);
   });
 
   it("leaves one past that point alone", async () => {
     const dir = await tempDir();
     new StatusWriter(dir, "u1", "1.0.0").phase("stopping");
-    const { calls, run } = recorder();
-    expect(await cancelWorker(dir, run)).toBe(false);
-    expect(calls).toEqual([]);
+    const { runner, stopped } = recorder();
+    expect(await cancelWorker(dir, runner)).toBe(false);
+    expect(stopped).toEqual([]);
   });
 
   it("has nothing to do with nothing running", async () => {
-    const { calls, run } = recorder();
-    expect(await cancelWorker(await tempDir(), run)).toBe(false);
-    expect(calls).toEqual([]);
+    const { runner, stopped } = recorder();
+    expect(await cancelWorker(await tempDir(), runner)).toBe(false);
+    expect(stopped).toEqual([]);
   });
 });
 
@@ -265,6 +263,7 @@ describe("the update button's target", () => {
   const exe = realpathSync(process.execPath);
   const service = (running = true, program = exe): HostService => ({
     program,
+    startCommand: "",
     status: () =>
       Promise.resolve({
         running,
@@ -510,6 +509,13 @@ describe("the update button's target", () => {
     ["source", { compiled: false }],
     ["no-service", { findService: () => Promise.resolve(undefined) }],
     ["no-service", { findService: () => Promise.resolve(service(false)) }],
+    [
+      "no-windows-service",
+      {
+        findService: () => Promise.resolve(undefined),
+        platform: "win32" as const,
+      },
+    ],
     [
       "other-file",
       { findService: () => Promise.resolve(service(true, "/bin/sh")) },

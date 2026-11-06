@@ -22,6 +22,8 @@ import process from "node:process";
 /** The worker gets this long to start and say its pid. */
 const START_GRACE_MS = 30_000;
 const LOG_LINES = 200;
+const RENAME_TRIES = 25;
+const RENAME_RETRY_MS = 20;
 
 /** What is on disk: the view, and who to ask whether it is still true. */
 interface StoredStatus extends UpgradeStatusView {
@@ -37,7 +39,16 @@ function write(dataDir: string, status: StoredStatus): void {
   const path = statusPath(dataDir);
   const part = `${path}.${process.pid}.part`;
   writeFileSync(part, JSON.stringify(status), { mode: 0o600 });
-  renameSync(part, path);
+  for (let tries = 1; ; tries += 1) {
+    try {
+      renameSync(part, path);
+      return;
+    } catch (error) {
+      // On Windows a reader in that instant refuses the rename: the page and the command poll this.
+      if (process.platform !== "win32" || tries === RENAME_TRIES) throw error;
+      Bun.sleepSync(RENAME_RETRY_MS);
+    }
+  }
 }
 
 function alive(pid: number): boolean {

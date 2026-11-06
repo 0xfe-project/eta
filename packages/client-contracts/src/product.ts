@@ -557,7 +557,12 @@ export interface UpgradeStatusView {
 }
 
 /** Why this host cannot upgrade itself from the page. */
-export type UpgradeBlock = "source" | "no-service" | "other-file";
+export type UpgradeBlock =
+  | "source"
+  | "no-service"
+  /** The same, on Windows, where installing the service takes an Administrator. */
+  | "no-windows-service"
+  | "other-file";
 
 /** Who says where releases come from: the host's environment, the user's setting, or the build. */
 export type UpgradeUpstreamSource = "env" | "setting" | "build";

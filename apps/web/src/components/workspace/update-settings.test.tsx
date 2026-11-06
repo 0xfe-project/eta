@@ -119,6 +119,7 @@ describe("Settings → 更新", () => {
   it.each([
     ["source", "从源码运行"],
     ["no-service", "不是作为服务运行"],
+    ["no-windows-service", "管理员终端"],
     ["other-file", "另一个文件"],
   ] as const)("says why it cannot: %s", async (blocked, words) => {
     await open({ blocked });

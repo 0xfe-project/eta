@@ -74,6 +74,7 @@
     "blocked": {
       "source": "这个服务器从源码运行，更新代码就行。",
       "noService": "服务器不是作为服务运行的，更新后没法自动重启。在服务器上运行 eta-host upgrade。",
+      "noWindowsService": "服务器不是作为 Windows 服务运行的，更新后没法自动重启。在服务器的管理员终端运行 eta-host install-service 装成服务，或者运行 eta-host upgrade 只替换文件。",
       "otherFile": "服务运行的是另一个文件，要用那个文件更新。"
     },
     "confirmTitle": "更新到 {{version}}",

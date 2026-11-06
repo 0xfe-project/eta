@@ -47,6 +47,7 @@ import { wireErrorMessage } from "@/queries/wire";
 const blockKeys = {
   source: "source",
   "no-service": "noService",
+  "no-windows-service": "noWindowsService",
   "other-file": "otherFile",
 } as const;
 

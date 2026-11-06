@@ -3,26 +3,22 @@
  *
  * Both ways in live under something the restart kills or can kill: the host itself for the page's
  * button, and for `eta-host upgrade` a shell that may be an agent under the host, or a terminal
- * that goes away. So neither does the work: it hands it to a transient user unit of its own
- * (`io.eta.host-upgrade`), a sibling of the service in systemd and not its child. Stopping the
- * service kills every process in the service's cgroup, and this one is not there.
+ * that goes away. So neither does the work: it hands it to the service manager, as a run of its
+ * own named `io.eta.host-upgrade` (`DetachedRunner`), and stopping the service does not reach that.
  *
- * What asked then only reads `upgrade-status.json`. The unit runs `eta-host upgrade --worker <id>`
+ * What asked then only reads `upgrade-status.json`. The run is `eta-host upgrade --worker <id>`
  * from the file about to be replaced, which is fine: the process keeps the file it started from.
+ * On Windows it is a copy of the file: `--target` is always what is replaced.
  */
-import { execFile } from "node:child_process";
+import type { DetachedRunner } from "@eta/daemon";
 import { randomUUID } from "node:crypto";
-import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
-import { promisify } from "node:util";
+import { hostRunner, WORKER_NAME } from "./service";
 import { abandonUpgrade, announceUpgrade, readStatus } from "./status";
 
-const exec = promisify(execFile);
-
-const WORKER_UNIT = "io.eta.host-upgrade";
 const FOLLOW_MS = 300;
 
-/** What the worker needs from the environment of whoever started it. A user unit starts bare. */
+/** What the worker needs from the environment of whoever started it. A service starts bare. */
 const PASSED_ENV = [
   "PATH",
   "GH_TOKEN",
@@ -55,7 +51,7 @@ export interface WorkerRequest {
   repo?: string | undefined;
   force: boolean;
   waitMinutes: number;
-  run?: typeof exec;
+  runner?: DetachedRunner;
 }
 
 /** Start the worker, or find the one running; its id. */
@@ -65,33 +61,24 @@ export async function startWorker(request: WorkerRequest): Promise<string> {
   if (running?.state === "running") return running.id;
   const id = randomUUID();
   announceUpgrade(dataDir, id, from);
-  // A name alone takes the value from this process, so a token is not on any command line. A stop
-  // goes to the worker alone, not to the `systemctl` it may be waiting for, and waits as long as it
-  // takes: past the point of no return the worker ignores it, and a kill there would leave the
-  // service down with nobody watching.
-  const started = (request.run ?? exec)("systemd-run", [
-    "--user",
-    `--unit=${WORKER_UNIT}`,
-    "--collect",
-    "--quiet",
-    "--property=KillMode=mixed",
-    "--property=TimeoutStopSec=infinity",
-    ...PASSED_ENV.filter((name) => process.env[name] !== undefined).map(
-      (name) => `--setenv=${name}`,
-    ),
-    "--",
-    program,
-    "upgrade",
-    ...(wanted === undefined ? [] : [wanted]),
-    ...(repo === undefined ? [] : ["--repo", repo]),
-    ...(force ? ["--force"] : []),
-    "--wait",
-    String(waitMinutes),
-    "--worker",
-    id,
-  ]);
   try {
-    await started;
+    await (request.runner ?? hostRunner()).start({
+      name: WORKER_NAME,
+      argv: [
+        program,
+        "upgrade",
+        ...(wanted === undefined ? [] : [wanted]),
+        ...(repo === undefined ? [] : ["--repo", repo]),
+        ...(force ? ["--force"] : []),
+        "--wait",
+        String(waitMinutes),
+        "--worker",
+        id,
+        "--target",
+        program,
+      ],
+      passEnv: PASSED_ENV,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     abandonUpgrade(dataDir, id, message);
@@ -103,12 +90,12 @@ export async function startWorker(request: WorkerRequest): Promise<string> {
 /** Stop a worker that has not touched the service yet; false when it is too late, or nothing runs. */
 export async function cancelWorker(
   dataDir: string,
-  run: typeof exec = exec,
+  runner: DetachedRunner = hostRunner(),
 ): Promise<boolean> {
   const status = readStatus(dataDir);
   if (status?.state !== "running" || !CANCELLABLE.has(status.phase))
     return false;
-  await run("systemctl", ["--user", "stop", "--no-block", WORKER_UNIT]);
+  await runner.stop(WORKER_NAME);
   return true;
 }
 

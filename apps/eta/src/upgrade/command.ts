@@ -1,17 +1,17 @@
 /* eslint-disable no-console -- a command line */
 /** `eta-host upgrade`: its flags, what `--help` says, and an exit code. */
 import type { UpgradeOptions } from "./upgrade";
-import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { parseArgs } from "node:util";
 import { parseFailure } from "../cli";
 import { COMPILED } from "../resources";
+import { listenForStop } from "../stop";
 import { VERSION } from "../version";
 import { BACKUPS_KEPT, savedToken, savedUpstream } from "./database";
 import { Releases } from "./releases";
-import { findHostService } from "./service";
+import { findHostService, sameFile } from "./service";
 import { readStatus, StatusWriter } from "./status";
 import { isReleaseVersion, UpgradeFailure, upgradeHost } from "./upgrade";
 import {
@@ -31,9 +31,10 @@ Replace this file with a release, the latest full one unless given a version; a 
 be named (0.2.0-rc.1). The download is checked against SHA256SUMS and run once before anything
 changes, and a release older than this build is refused.
 
-If the service (io.eta.host) runs this file, the work is handed to a process of its own, the user
-unit io.eta.host-upgrade, and this command only follows it: closing the terminal, or killing this
-command or the host, does not stop it. That process waits for working agents, stops the service,
+If the service (io.eta.host) runs this file, the work is handed to a process of its own,
+io.eta.host-upgrade, which the service manager runs (a systemd user unit, a launchd job, a Windows
+service), and this command only follows it: closing the terminal, or killing this command or the
+host, does not stop it. That process waits for working agents, stops the service,
 backs up the database, swaps the file, starts it, and checks /up and the migrations. If that fails,
 the old build and the database go back and the service is started again.
 Otherwise only the file is replaced and restarting is up to you.
@@ -109,6 +110,7 @@ async function handOver(
 
 /** The worker itself, in its own unit: everything it does goes to the status file. */
 async function work(options: UpgradeOptions, id: string): Promise<number> {
+  listenForStop();
   const writer = new StatusWriter(options.dataDir, id, options.version);
   try {
     await upgradeHost({
@@ -162,6 +164,7 @@ export async function upgradeCommand(args: string[]): Promise<number> {
         cancel: { type: "boolean", default: false },
         // What `worker.ts` runs. Not in the usage.
         worker: { type: "string" },
+        target: { type: "string" },
         help: { type: "boolean", short: "h", default: false },
       },
       allowPositionals: true,
@@ -222,7 +225,7 @@ export async function upgradeCommand(args: string[]): Promise<number> {
       force: values.force === true,
       waitMs: minutes * 60_000,
       version: VERSION,
-      execPath: process.execPath,
+      execPath: values.target ?? process.execPath,
       dataDir,
       releases,
       upstream: chosen.source === "build" ? undefined : releases.upstream.label,
@@ -238,7 +241,7 @@ export async function upgradeCommand(args: string[]): Promise<number> {
         service !== undefined &&
         (status?.running === true || status?.restarting === true)
       ) {
-        if (realpathSync(service.program) !== realpathSync(process.execPath))
+        if (!sameFile(service.program, process.execPath))
           throw new Error(
             `the service runs ${service.program}, not this file. Run that one's upgrade.`,
           );
