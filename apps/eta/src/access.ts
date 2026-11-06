@@ -42,6 +42,7 @@ import {
   GITHUB_MANIFEST_CALLBACK_PATH,
 } from "./github/path";
 import { LLM_ROUTE } from "./llm/route";
+import { MCP_CALLBACK_PATH } from "./mcp/path";
 
 const COOKIE = "eta_session";
 /** Thirty days: a browser that was let in once should not be asked again on Monday. */
@@ -140,6 +141,7 @@ function carriesOwnCapability(request: Request, pathname: string): boolean {
     (request.method === "GET" || request.method === "HEAD") &&
     (pathname.startsWith("/preview/") ||
       pathname.startsWith("/share/") ||
+      pathname === MCP_CALLBACK_PATH ||
       pathname === GITHUB_MANIFEST_CALLBACK_PATH ||
       pathname === GITHUB_AUTHORIZATION_CALLBACK_PATH)
   );

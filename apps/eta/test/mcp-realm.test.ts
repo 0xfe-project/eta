@@ -26,7 +26,7 @@ async function projectWithEcho(): Promise<string> {
 describe("mCP in a host's sessions", () => {
   it("a project's server is an import in the session's realm", async () => {
     const host = await testHost({
-      mcp: { resolvers: false, checkIntervalMs: 0 },
+      mcp: { manager: { resolvers: false, checkIntervalMs: 0 } },
     });
     const cwd = await projectWithEcho();
     const { session } = await host.server.sessions.create({ cwd });
@@ -46,7 +46,7 @@ describe("mCP in a host's sessions", () => {
 
   it("a session with no server declared is told MCP is not connected", async () => {
     const host = await testHost({
-      mcp: { resolvers: false, checkIntervalMs: 0 },
+      mcp: { manager: { resolvers: false, checkIntervalMs: 0 } },
     });
     const cwd = await tempDir("eta-mcp-empty-");
     await mkdir(join(cwd, ".eta"), { recursive: true });

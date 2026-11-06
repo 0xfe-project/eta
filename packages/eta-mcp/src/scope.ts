@@ -14,7 +14,6 @@ import type { ObservedOutputs } from "./output-shape";
 import type { SearchEntry } from "./search-ranking";
 import type { Connection, ServerManager } from "./server-manager";
 import type {
-  ApproveTools,
   ContentBlock,
   McpConfigSource,
   McpDelivery,
@@ -34,7 +33,7 @@ import {
 import { lifecycleOf, resolveServers } from "./config";
 import { classifyCallError, DeliveryError, describeDelivery } from "./delivery";
 import { schemaViolation } from "./json-schema";
-import { isToolAllowed, matchesToolPattern, qualifiedToolName } from "./names";
+import { isToolAllowed, qualifiedToolName } from "./names";
 import {
   getObservedOutput,
   outputShapeKey,
@@ -114,28 +113,6 @@ function isAbort(error: unknown, signal: AbortSignal | undefined): boolean {
 /** A 404 on a request carrying a session id: the server forgot the session and did not run the call. */
 function isTerminatedSession(error: unknown, hadSessionId: boolean): boolean {
   return hadSessionId && error instanceof SdkHttpError && error.status === 404;
-}
-
-/**
- * Whether the server's `approveTools` (or the default) gates this tool. MCP treats a tool as
- * possibly destructive unless it says otherwise, so `"destructive"` gates everything that is not
- * marked read-only or non-destructive.
- */
-export function requiresApproval(
-  approval: ApproveTools | undefined,
-  server: string,
-  tool: ToolMeta,
-): boolean {
-  if (approval === undefined || approval === false) return false;
-  if (approval === "destructive") {
-    return (
-      tool.annotations?.readOnlyHint !== true &&
-      tool.annotations?.destructiveHint !== false
-    );
-  }
-  // Values from unvalidated sources fail closed.
-  if (!Array.isArray(approval)) return true;
-  return matchesToolPattern(server, tool.name, approval);
 }
 
 export class McpScope {
@@ -594,37 +571,7 @@ export class McpScope {
       );
     }
 
-    if (requiresApproval(definition.approveTools, server, tool)) {
-      let approved = false;
-      try {
-        approved =
-          (await this.hooks.approve?.({
-            server,
-            tool: tool.name,
-            name,
-            args,
-            annotations: tool.annotations,
-            toolCallId: context.toolCallId,
-            signal,
-          })) ?? false;
-      } catch (error) {
-        if (isAbort(error, signal)) return this.aborted(server, tool.name);
-        approved = false;
-      }
-      if (!approved) {
-        const headless = this.hooks.approve === undefined;
-        return this.failureResult(
-          headless ? "approval_required" : "approval_denied",
-          headless
-            ? `MCP tool "${tool.name}" on server "${server}" needs approval and no approver is available.`
-            : `The user declined approval to run MCP tool "${tool.name}" on server "${server}".`,
-          server,
-          tool.name,
-          { delivery: "not_sent" satisfies McpDelivery },
-        );
-      }
-    }
-
+    // `approveTools` is parsed but no longer gates a call: MCP tools run without approval.
     return await this.send(definition, tool, args, context);
   }
 
