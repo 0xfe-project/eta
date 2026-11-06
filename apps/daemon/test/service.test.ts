@@ -8,7 +8,12 @@ import {
   loadIdentity,
   saveIdentity,
 } from "../src/identity";
-import { installedEnv, serviceArgv, serviceDefinition } from "../src/service";
+import {
+  installedEnv,
+  launchdArgv,
+  serviceArgv,
+  serviceDefinition,
+} from "../src/service";
 
 const command = { program: "/opt/eta daemon/eta-daemon", args: [] };
 
@@ -68,9 +73,40 @@ describe("the service definition", () => {
     ).toEqual({ PATH: "/usr/bin:/bin" });
   });
 
-  it("has no Windows service: a host there is started by hand", () => {
-    expect(() => serviceDefinition(command, "win32")).toThrow(
-      /no service support on win32/,
+  it("is a file for the service shell on Windows", () => {
+    const host = {
+      name: "io.eta.host",
+      description: "eta host",
+      args: [],
+      env: { PATH: "C:\\bin;C:\\Git\\cmd" },
+    };
+    const { content, path } = serviceDefinition(
+      { program: "C:\\eta\\eta-host.exe", args: ["--port", "8790"] },
+      "win32",
+      "/Users/u",
+      host,
+    );
+    expect(path).toBe("/Users/u/.eta/service/io.eta.host.json");
+    expect(JSON.parse(content)).toEqual({
+      argv: ["C:\\eta\\eta-host.exe", "--port", "8790"],
+      env: host.env,
+      log: "/Users/u/.eta/service/io.eta.host.log",
+      state: "/Users/u/.eta/service/io.eta.host.state.json",
+      once: false,
+    });
+  });
+
+  it("splits a PATH by what separates it on the computer it came from", () => {
+    expect(
+      installedEnv({ PATH: "C:\\repo\\node_modules\\.bin;C:\\bin" }, ";"),
+    ).toEqual({ PATH: "C:\\bin" });
+  });
+
+  it("gives launchd as long to stop it as systemd has, and somewhere to write", () => {
+    const { content } = serviceDefinition(command, "darwin", "/Users/u");
+    expect(content).toContain("<key>ExitTimeOut</key><integer>90</integer>");
+    expect(content).toContain(
+      "<key>StandardOutPath</key><string>/Users/u/Library/Logs/eta/io.eta.daemon.log</string>",
     );
   });
 });
@@ -91,6 +127,18 @@ describe("what a unit runs", () => {
       { name: "io.eta.host", description: "eta host", args: [] },
     );
     expect(serviceArgv(definition.content)).toEqual(argv);
+  });
+
+  it("reads a plist back the same way", () => {
+    const argv = ["/Users/a b/eta-host", "--token-file", `/x/<&>"'`];
+    const { content } = serviceDefinition(
+      { program: argv[0] as string, args: argv.slice(1) },
+      "darwin",
+      "/Users/u",
+      { name: "io.eta.host", description: "eta host", args: [] },
+    );
+    expect(launchdArgv(content)).toEqual(argv);
+    expect(launchdArgv("<plist/>")).toBeUndefined();
   });
 
   it("reads a line written by hand, and says when there is none", () => {

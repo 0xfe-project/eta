@@ -3,7 +3,8 @@
  *
  *   eta-host --version                 the version and commit it was built from, and nothing else
  *   eta-host install-service [flags]   run with these flags at login (systemd user unit, launchd
- *                                       agent), and now; again replaces the flags and restarts
+ *                                       agent) or boot (Windows service), and now; again replaces
+ *                                       the flags and restarts
  *   eta-host uninstall-service
  *   eta-host upgrade [version]         replace this file with a release (`upgrade/command.ts`)
  *   eta-host --help                    the usage; a flag it does not know gets it too, on stderr
@@ -30,14 +31,15 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
 import { parseArgs } from "node:util";
-import { installedEnv, installService, uninstallService } from "@eta/daemon";
+import { installedEnv } from "@eta/daemon";
 import { parseFailure, RUN_OPTIONS, USAGE } from "./cli";
 import { loadMigrations } from "./db";
 import { startHost } from "./host";
 import { Tailscale } from "./machines/tailscale";
 import { COMPILED, embeddedFiles } from "./resources";
+import { listenForStop } from "./stop";
 import { upgradeCommand } from "./upgrade/command";
-import { HOST_UNIT } from "./upgrade/service";
+import { HOST_UNIT, hostManager } from "./upgrade/service";
 import { VERSION_LINE } from "./version";
 
 // A subcommand comes first; every other argument is a flag of the run.
@@ -87,20 +89,31 @@ if (serviceCommand !== undefined) {
   const self = COMPILED
     ? { program: process.execPath, args: flags }
     : { program: process.execPath, args: [Bun.main, ...flags] };
-  if (serviceCommand === "uninstall-service") {
-    const definition = await uninstallService(self, HOST_UNIT);
-    console.log(`Removed ${definition.name}.`);
-  } else {
-    const definition = await installService(self, {
-      ...HOST_UNIT,
-      env: installedEnv(),
-    });
-    console.log(`Installed ${definition.name} (${definition.path}).`);
-    console.log(
-      values.host === "127.0.0.1" || values.host === "localhost"
-        ? `It listens on http://127.0.0.1:${port}.`
-        : `It asks for a token beyond loopback: open the page once with ?token=<the token in ${join(homedir(), ".eta", "access-token")}>.`,
+  if (process.platform === "win32" && !COMPILED) {
+    console.error(
+      `eta-host ${serviceCommand}: a Windows service runs a compiled host, and this one runs from source`,
     );
+    process.exit(1);
+  }
+  try {
+    if (serviceCommand === "uninstall-service") {
+      const definition = await hostManager().uninstall(self);
+      console.log(`Removed ${definition.name}.`);
+    } else {
+      const manager = hostManager({ ...HOST_UNIT, env: installedEnv() });
+      const definition = await manager.install(self);
+      console.log(`Installed ${definition.name} (${definition.path}).`);
+      console.log(
+        values.host === "127.0.0.1" || values.host === "localhost"
+          ? `It listens on http://127.0.0.1:${port}.`
+          : `It asks for a token beyond loopback: open the page once with ?token=<the token in ${join(homedir(), ".eta", "access-token")}>.`,
+      );
+    }
+  } catch (error) {
+    console.error(
+      `eta-host ${serviceCommand}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    process.exit(1);
   }
   process.exit(0);
 }
@@ -192,3 +205,4 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     void host.close().then(() => process.exit(0));
   });
 }
+listenForStop();

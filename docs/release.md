@@ -47,6 +47,8 @@ host 是一个不压缩的文件，页面、数据库迁移、CLIProxyAPI 和所
 
 host 带的 CLIProxyAPI 跟构建它的机器相关，hutch 也只为所在的机器打包，所以每个平台要在对应的 runner 上构建。加平台就是在 `build` 的矩阵里加一行，加之前要先验证过这个平台的编译。没有 `darwin-x64`，也没有 Windows 的 daemon（`apps/daemon/scripts/build.ts` 的平台表里没有它）。
 
+发布前还要过 `upgrade`：`upgrade-e2e.yml` 在真实的 macOS 和 Windows runner 上，用假的 Release 服务器（`scripts/upgrade-e2e/fake-releases.ts`）从旧构建升到新构建，覆盖成功、各种失败回退和卸载。改到服务或升级相关代码的 PR 也会跑。这个工作流只能证明 runner 上能测到的部分：重启后自启和真实登录用户的凭据要在真机上试。
+
 ## 没有签名
 
 这些文件都没有签名和公证，也没有自动更新：新版本要重新下载安装。macOS 和 Windows 第一次打开时都会拦下来，放行一次之后就正常了。
@@ -83,7 +85,50 @@ chmod +x eta-host-linux-x64
 
 运行和装成服务都和 checkout 里构建出来的一样，见 README 的 “Running in production”。
 
-Windows 上 host 只能手动运行：`install-service` 只有 systemd 和 launchd，在 Windows 上会报错。
+## 装成服务
+
+`eta-host install-service <参数>` 把这个文件注册成服务，开机或登录时启动，崩溃了会重启。再运行一次就是换参数并重启。`eta-host uninstall-service` 去掉服务，数据留在 `~/.eta`。
+
+| 平台    | 是什么                          | 什么时候启动          | 要什么权限     |
+| ------- | ------------------------------- | --------------------- | -------------- |
+| Linux   | systemd 用户 unit `io.eta.host` | 登录时，linger 后开机 | 不用           |
+| macOS   | LaunchAgent `io.eta.host`       | 登录时                | 不用           |
+| Windows | Windows 服务 `io.eta.host`      | 开机                  | 安装时要管理员 |
+
+### Windows 服务
+
+在**管理员终端**里运行（开始菜单搜 Terminal，右键“以管理员身份运行”）：
+
+```powershell
+.\eta-host.exe install-service --port 8787
+```
+
+文件放在自己能写的目录里，比如 `%LOCALAPPDATA%\eta`，不要放 `Program Files`：host 升级时要替换它旁边的文件，host 本身没有管理员权限。
+
+服务以**运行这条命令的账号**运行。host 下面的智能体要读这个用户的 Claude、Codex 和 `gh` 登录状态和 `~/.eta`，换成 LocalSystem 既读不到，智能体以 SYSTEM 运行也太危险。所以安装时要输入一次 Windows 密码：
+
+- 密码从控制台读取，不回显，通过 `CreateServiceW` 交给 Windows 保存，不进命令行、日志和磁盘文件。脚本里可以从标准输入传一行。
+- 这个账号会得到“作为服务登录”权限。卸载时收回，账号原来就有的不动。
+- 这个账号可以不用管理员启动和停止这两个服务，所以 `eta-host upgrade` 和设置里的按钮都不需要管理员。
+- **账号是管理员时，host 和智能体都带完整的管理员权限**，没有 UAC 提示：UAC 只拆分交互登录，服务拿到的是完整令牌。这比 Linux、macOS 的用户服务权限大。不能用受限令牌解决：在 session 0 里，受限令牌启动不了控制台程序（`0xC0000142`），而 host 要启动 git、gh 和智能体。介意的话，用一个普通账号（不在 Administrators 组）装服务。
+- 改了 Windows 密码之后服务登录不上。运行 `uninstall-service` 再 `install-service`。
+- 用微软账号登录的电脑，输入的是微软账号的密码，不是 PIN。
+
+Windows 服务要响应系统的服务控制，这部分用 `bun:ffi` 直接调 `advapi32.dll`（`apps/daemon/src/windows-api.ts`），没有别的二进制，还是一个文件。Windows 运行的是 `eta-host.exe service-run`（`windows-shell.ts`），它只做三件事：启动 `eta-host.exe <参数>`；把“停止”转成 host 的优雅停止，90 秒没结束才强杀；host 崩溃时 10 秒后重启。host 和它启动的所有进程都在一个 job object 里，所以 CLIProxyAPI 这些子进程不会残留。
+
+host 是子进程而不在服务进程里，是因为 Windows 自己的崩溃重启取消不掉，可能正好落在回退恢复数据库的时候；服务没有 stdout，崩溃输出会丢；host 卡死时，它自己的计时器也不会走。
+
+Windows 没有 SIGTERM。壳每次启动时生成一个命名管道的名字，通过 `ETA_STOP_PIPE` 告诉 host（host 读完就从环境里删掉，不传给智能体），host 收到一行就走和 SIGTERM 一样的退出流程。
+
+出问题时看这些：
+
+| 看什么       | 在哪                                                                  |
+| ------------ | --------------------------------------------------------------------- |
+| host 的输出  | `~/.eta/service/io.eta.host.log`                                      |
+| 升级的输出   | `~/.eta/service/io.eta.host-upgrade.log`                              |
+| 服务配置     | `~/.eta/service/io.eta.host.json`：运行的命令、环境变量、停止等待时间 |
+| 运行状态     | `~/.eta/service/io.eta.host.state.json`，`sc query io.eta.host`       |
+| Windows 记录 | 事件查看器：Windows 日志 → 系统，来源 Service Control Manager         |
 
 ## 升级
 
@@ -101,9 +146,19 @@ eta-host upgrade --cancel     # 取消正在进行的升级，服务已经停了
 
 第一个带 `upgrade` 的版本要用 `bun run host:install` 或手动替换文件装上，更早的版本没有这条命令。
 
+Windows 上要在装服务的那个账号下运行，不需要管理员。别的账号运行会被拒绝，提示是谁装的。
+
 下载走 GitHub API，公开仓库不需要 token；私有仓库按 `GH_TOKEN`、`GITHUB_TOKEN`、`gh` 的登录依次取 token。`ETA_RELEASES_URL` 可以换一个仓库（`https://api.github.com/repos/<owner>/<repo>`）。指向 GitHub 以外的服务器时，这些 GitHub 凭据都不会发出去，只用 `ETA_RELEASES_TOKEN`。
 
-服务在运行时，升级交给一个单独的用户 unit `io.eta.host-upgrade` 来做，它不在 host 的 cgroup 里。`eta-host upgrade` 只是跟着打印进度：关掉终端、杀掉这条命令、host 停掉，都不影响它。进度写在 `~/.eta/upgrade-status.json`，日志在 `journalctl --user -u io.eta.host-upgrade`。这个文件不放数据库，因为回退时数据库会被换掉。
+服务在运行时，升级交给一个单独的 worker `io.eta.host-upgrade` 来做。它由服务管理器启动，不是 host 的子进程，所以停服务不会杀掉它。`eta-host upgrade` 只是跟着打印进度：关掉终端、杀掉这条命令、host 停掉，都不影响它。进度写在 `~/.eta/upgrade-status.json`。这个文件不放数据库，因为回退时数据库会被换掉。
+
+| 平台    | worker 是什么                                   | 日志                                         |
+| ------- | ----------------------------------------------- | -------------------------------------------- |
+| Linux   | 临时用户 unit，不在 host 的 cgroup 里           | `journalctl --user -u io.eta.host-upgrade`   |
+| macOS   | 临时 launchd 任务，有自己的进程组               | `~/Library/Logs/eta/io.eta.host-upgrade.log` |
+| Windows | 安装时一起注册的一次性服务，不在 host 的 job 里 | `~/.eta/service/io.eta.host-upgrade.log`     |
+
+Windows 上运行中的 exe 不能覆盖或删除，但能改名，所以有两点不同：worker 从 `~/.eta/service` 里的临时副本运行，结束后删除；换文件总是先把旧文件改名成 `.prev`。上一次的 `.prev` 如果还有进程在用（比如还没退出的 `eta-host upgrade`），会先改名成 `.prev.<pid>.old`。回退时同样先把失败的版本改名成 `.prev.<pid>.failed.old`，再换回旧版本：刚运行过的文件可能被占用一阵子，这时能改名，但不能被覆盖。这些 `.old` 文件下次升级时清理，每个约 390 MB。下载的新文件要经过杀毒软件扫描，所以试运行的超时是 2 分钟，其它平台是 20 秒。
 
 顺序是这样，前一半不影响正在运行的 host：
 
@@ -120,7 +175,7 @@ eta-host upgrade --cancel     # 取消正在进行的升级，服务已经停了
 
 按 Ctrl-C 只是不再跟着看，升级继续。
 
-重启只发生在 `io.eta.host` 正在运行（或崩溃后等 systemd 重新启动）、而且运行的就是这个文件时：
+重启只发生在 `io.eta.host` 正在运行（或崩溃后等服务管理器重新启动）、而且运行的就是这个文件时：
 
 - 服务运行的是别的文件：拒绝，要用那个文件的 `upgrade`。
 - 服务没装或者没在运行：备份数据库并替换文件，重启由你来做，不做验证和回退。
@@ -135,7 +190,9 @@ host 下面的智能体也可以直接运行 `upgrade`。它自己算在运行�
 
 下载和等智能体的时候页面照常可用，这时候可能还需要回答智能体。服务一停就显示全屏的等待页，host 回来后读结果：成功就重新载入页面，回退了就说明原因。别的标签页如果在 host 停掉之前没读到进度，看到的是平常的断线提示，host 回来后会提示刷新。
 
-只有编译出来的 host，而且 `io.eta.host` 正在运行这个文件时才有按钮。从源码运行、没装服务、服务运行别的文件时只显示原因。
+只有编译出来的 host，而且 `io.eta.host` 正在运行这个文件时才有按钮，三个平台都一样。从源码运行、没装服务、服务运行别的文件时只显示原因；Windows 上没装服务时还会说要用管理员终端运行 `install-service`。桌面应用的 host 在 app 里，不是服务，继续只显示原因。
+
+Windows 上按钮由服务发起，host 没有管理员权限也够用：安装时已经给这个账号授了启动和停止两个服务的权限。
 
 ### 备份
 
@@ -153,6 +210,16 @@ cd ~/.local/share/eta/host && mv eta-host.prev eta-host
 cp ~/.eta/backups/upgrade-<时间>-<旧版本>.sqlite ~/.eta/eta.sqlite
 rm -f ~/.eta/eta.sqlite-wal ~/.eta/eta.sqlite-shm
 systemctl --user start io.eta.host
+```
+
+macOS 上第一行和最后一行换成 `launchctl bootout gui/$(id -u)/io.eta.host` 和 `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.eta.host.plist`。Windows 上是 `sc stop io.eta.host` 和 `sc start io.eta.host`，中间换文件：
+
+```powershell
+sc stop io.eta.host
+Move-Item -Force eta-host.exe.prev eta-host.exe
+Copy-Item -Force "$HOME\.eta\backups\upgrade-<时间>-<旧版本>.sqlite" "$HOME\.eta\eta.sqlite"
+Remove-Item -Force "$HOME\.eta\eta.sqlite-wal", "$HOME\.eta\eta.sqlite-shm" -ErrorAction SilentlyContinue
+sc start io.eta.host
 ```
 
 升级之后写入的数据不在备份里，手动回退会丢掉。

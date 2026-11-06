@@ -1,27 +1,87 @@
 /**
- * Registering a program as a service of the user: a systemd user unit on Linux, a launchd agent
- * on macOS. A user service, so no root is needed and the program runs as the same user whose files
- * its sessions touch. Windows has neither: a host there is started by hand.
+ * Registering a program as a service of the user: what a service is, whichever kind this computer
+ * has. A systemd user unit on Linux and a launchd agent on macOS need no root; a Windows service
+ * does, once, to install it. All three run the program as the same user whose files its sessions
+ * touch. The kinds themselves are in `service-systemd.ts`, `service-launchd.ts` and
+ * `service-windows.ts`, and `serviceManager` picks one; the layering is that of kardianos/service,
+ * a `ServiceManager` for the service and a `DetachedRunner` for what has to outlive it.
  *
  * Two programs are registered this way, each under a name of its own: the daemon (`io.eta.daemon`,
  * `eta-daemon run`) and the host (`io.eta.host`, `eta-host install-service`). The PATH they were
  * installed from goes into the unit: a service manager starts its services with a bare one, and
  * what the sessions run (git, gh, Claude Code, Codex, tailscale) lives on the user's.
  */
-import { execFile } from "node:child_process";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, join } from "node:path";
 import process from "node:process";
-import { promisify } from "node:util";
-
-const run = promisify(execFile);
 
 export interface ServiceDefinition {
   name: string;
   path: string;
   content: string;
 }
+
+export interface ServiceStatus {
+  /** Started and not exited. */
+  running: boolean;
+  /** It exited on its own: waiting to be started again, or given up on. */
+  crashed: boolean;
+  /** Down for now: the manager will start it again, from whatever file is there then. */
+  restarting: boolean;
+  pid: number;
+}
+
+/** One service, seen from outside it. Stopping and starting wait for that to have happened. */
+export interface ServiceManager {
+  readonly name: string;
+  install: (command: ServiceCommand) => Promise<ServiceDefinition>;
+  uninstall: (command: ServiceCommand) => Promise<ServiceDefinition>;
+  /** The command it is registered to run; undefined when it is not installed. */
+  installed: () => Promise<string[] | undefined>;
+  status: () => Promise<ServiceStatus>;
+  start: () => Promise<void>;
+  stop: () => Promise<void>;
+  /** What a person types to start it. */
+  readonly startCommand: string;
+}
+
+/** A run of a program that has to outlive whatever started it. */
+interface DetachedJob {
+  /** The one run of this name: a second one replaces what is left of the first. */
+  name: string;
+  argv: string[];
+  /** Taken from this process, by name: a run starts bare, and a token stays off command lines. */
+  passEnv: readonly string[];
+}
+
+/**
+ * Runs a job under the service manager, not under the caller. A child would not do: a stop kills
+ * what the service started, and what starts the job may be the service or an agent under it.
+ */
+export interface DetachedRunner {
+  start: (job: DetachedJob) => Promise<void>;
+  /** Asks it to stop and does not wait: past some point a job may not want to. */
+  stop: (name: string) => Promise<void>;
+}
+
+/** `execFile` as a promise, or what stands in for it in a test. */
+export type Exec = (
+  file: string,
+  args: readonly string[],
+  options?: { timeout?: number },
+) => Promise<{ stdout: string; stderr: string }>;
+
+/** The values of the names a job passes along that this process has. */
+export const passedValues = (
+  names: readonly string[],
+  env: NodeJS.ProcessEnv = process.env,
+): Record<string, string> =>
+  Object.fromEntries(
+    names.flatMap((name) => {
+      const value = env[name];
+      return value === undefined ? [] : [[name, value]];
+    }),
+  );
 
 const xml = (value: string): string =>
   value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -42,6 +102,19 @@ export function serviceArgv(content: string): string[] | undefined {
     (word.startsWith('"') ? word.slice(1, -1) : word)
       .replace(/\\(.)/g, "$1")
       .replace(/%%/g, "%"),
+  );
+}
+
+/** The command a launchd plist runs: what `xml` escaped, escaped back. */
+export function launchdArgv(content: string): string[] | undefined {
+  const array = /<key>ProgramArguments<\/key><array>(.*?)<\/array>/s.exec(
+    content,
+  )?.[1];
+  if (array === undefined) return undefined;
+  return [...array.matchAll(/<string>(.*?)<\/string>/gs)].map(([, value]) =>
+    (value ?? "").replace(/&#(\d+);/g, (_, code: string) =>
+      String.fromCharCode(Number(code)),
+    ),
   );
 }
 
@@ -80,18 +153,23 @@ export const DAEMON_UNIT: ServiceUnit = {
  */
 export function installedEnv(
   env: NodeJS.ProcessEnv = process.env,
+  separator: string = delimiter,
 ): Record<string, string> {
   const path = (env.PATH ?? "")
-    .split(":")
+    .split(separator)
     .filter(
       (dir, index, all) =>
         dir !== "" &&
         !/[/\\]node_modules[/\\]\.bin$/.test(dir) &&
         all.indexOf(dir) === index,
     )
-    .join(":");
+    .join(separator);
   return path === "" ? {} : { PATH: path };
 }
+
+/** Where launchd puts what a job prints: it keeps no log of its own. */
+export const launchdLog = (home: string, name: string): string =>
+  join(home, "Library", "Logs", "eta", `${name}.log`);
 
 export function serviceDefinition(
   command: ServiceCommand,
@@ -103,6 +181,7 @@ export function serviceDefinition(
   const argv = [command.program, ...command.args, ...unit.args];
   const env = Object.entries(unit.env ?? {});
   if (platform === "darwin") {
+    const log = launchdLog(home, name);
     return {
       name,
       path: join(home, "Library", "LaunchAgents", `${name}.plist`),
@@ -118,6 +197,9 @@ export function serviceDefinition(
 <key>RunAtLoad</key><true/>
 <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
 <key>ThrottleInterval</key><integer>30</integer>
+<key>ExitTimeOut</key><integer>90</integer>
+<key>StandardOutPath</key><string>${xml(log)}</string>
+<key>StandardErrorPath</key><string>${xml(log)}</string>
 </dict></plist>
 `,
     };
@@ -142,64 +224,25 @@ WantedBy=default.target
 `,
     };
   }
+  if (platform === "win32") {
+    const path = join(home, ".eta", "service", `${name}.json`);
+    return {
+      name,
+      path,
+      content: JSON.stringify(
+        {
+          argv,
+          env: unit.env ?? {},
+          log: `${path.slice(0, -".json".length)}.log`,
+          state: `${path.slice(0, -".json".length)}.state.json`,
+          once: false,
+        },
+        null,
+        2,
+      ),
+    };
+  }
   throw new Error(
-    `no service support on ${platform}: only systemd (Linux) and launchd (macOS), so start it by hand`,
+    `no service support on ${platform}: only systemd (Linux), launchd (macOS) and Windows services, so start it by hand`,
   );
-}
-
-export async function installService(
-  command: ServiceCommand,
-  unit: ServiceUnit = DAEMON_UNIT,
-): Promise<ServiceDefinition> {
-  const definition = serviceDefinition(
-    command,
-    process.platform,
-    homedir(),
-    unit,
-  );
-  await mkdir(dirname(definition.path), { recursive: true });
-  await writeFile(definition.path, definition.content, { mode: 0o600 });
-  if (process.platform === "darwin") {
-    const domain = `gui/${process.getuid?.() ?? 501}`;
-    await run("launchctl", ["bootout", `${domain}/${definition.name}`]).catch(
-      () => undefined,
-    );
-    await run("launchctl", ["bootstrap", domain, definition.path]);
-  } else {
-    await run("systemctl", ["--user", "daemon-reload"]);
-    await run("systemctl", ["--user", "enable", `${definition.name}.service`]);
-    // A restart, not `--now`: a unit that is already running (an install over an older one) has
-    // to start again on the new file and identity.
-    await run("systemctl", ["--user", "restart", `${definition.name}.service`]);
-  }
-  return definition;
-}
-
-export async function uninstallService(
-  command: ServiceCommand,
-  unit: ServiceUnit = DAEMON_UNIT,
-): Promise<ServiceDefinition> {
-  const definition = serviceDefinition(
-    command,
-    process.platform,
-    homedir(),
-    unit,
-  );
-  if (process.platform === "darwin") {
-    await run("launchctl", [
-      "bootout",
-      `gui/${process.getuid?.() ?? 501}/${definition.name}`,
-    ]).catch(() => undefined);
-  } else {
-    await run("systemctl", [
-      "--user",
-      "disable",
-      "--now",
-      `${definition.name}.service`,
-    ]).catch(() => undefined);
-  }
-  await unlink(definition.path).catch(() => undefined);
-  if (process.platform === "linux")
-    await run("systemctl", ["--user", "daemon-reload"]).catch(() => undefined);
-  return definition;
 }

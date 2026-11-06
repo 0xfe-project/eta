@@ -45,6 +45,7 @@
     "blocked": {
       "source": "This server runs from source. Update the code instead.",
       "noService": "The server is not running as a service, so it could not restart after updating. Run eta-host upgrade on it.",
+      "noWindowsService": "The server is not running as a Windows service, so it could not restart after updating. Run eta-host install-service in an Administrator terminal on it, or eta-host upgrade to only replace the file.",
       "otherFile": "The service runs a different file. Update from that one."
     },
     "confirmTitle": "Update to {{version}}",

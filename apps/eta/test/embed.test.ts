@@ -128,9 +128,14 @@ describe("the generated table", () => {
     expect(Bun.zstdDecompressSync(packed).toString()).toBe(build);
 
     // The table before the host: this order is what makes it visible to the host's modules.
-    const lines = readFileSync(entry, "utf8").split("\n");
-    expect(lines[1]).toContain("embedded.ts");
-    expect(lines[2]).toContain("src/main.ts");
+    const generated = readFileSync(entry, "utf8");
+    expect(generated.indexOf("embedded.ts")).toBeLessThan(
+      generated.indexOf("src/main.ts"),
+    );
+    // A Windows service's process loads none of the host.
+    expect(generated.indexOf("windows-shell.ts")).toBeLessThan(
+      generated.indexOf("src/main.ts"),
+    );
   });
 });
 

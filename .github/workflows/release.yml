@@ -29,8 +29,12 @@ jobs:
     with:
       command: check
 
+  # On the real service managers: a release is what people upgrade to.
+  upgrade:
+    uses: ./.github/workflows/upgrade-e2e.yml
+
   prepare:
-    needs: check
+    needs: [check, upgrade]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

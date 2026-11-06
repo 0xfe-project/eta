@@ -28,7 +28,6 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
-  realpathSync,
   rmSync,
   writeSync,
 } from "node:fs";
@@ -36,11 +35,11 @@ import { join } from "node:path";
 import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
-  daemonPlatform,
   previousPath,
   stagedPath,
   swapBack,
   swapIn,
+  sweepPrevious,
   tryBuild,
 } from "@eta/daemon";
 import {
@@ -51,8 +50,19 @@ import {
   restoreDatabase,
 } from "./database";
 import { parseSums } from "./releases";
+import { sameFile } from "./service";
 
 const SUMS_FILE = "SHA256SUMS";
+
+/** What a release calls this computer: `release.yml`'s names, not Node's. */
+const hostAsset = (
+  platform: NodeJS.Platform = process.platform,
+  arch: string = process.arch,
+): string =>
+  platform === "win32"
+    ? `eta-host-windows-${arch}.exe`
+    : `eta-host-${platform}-${arch}`;
+
 const SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
 
 /** The newest release that cannot say which migrations it carries. */
@@ -311,10 +321,12 @@ async function stage(
   release: Release,
 ): Promise<string[] | undefined> {
   const { execPath, log, releases, dataDir, report } = options;
-  const name = `eta-host-${daemonPlatform()}`;
+  const name = hostAsset();
   const asset = release.assets.find((file) => file.name === name);
   if (asset === undefined)
-    throw new Error(`${release.version} has no build for ${daemonPlatform()}`);
+    throw new Error(
+      `${release.version} has no build for this computer: ${name}`,
+    );
   const sumsAsset = release.assets.find((file) => file.name === SUMS_FILE);
   if (sumsAsset === undefined)
     throw new Error(`${release.version} has no ${SUMS_FILE}`);
@@ -395,13 +407,14 @@ export async function upgradeHost(options: UpgradeOptions): Promise<void> {
   const running =
     service !== undefined &&
     (status?.running === true || status?.restarting === true);
-  if (running && realpathSync(service.program) !== realpathSync(execPath))
+  if (running && !sameFile(service.program, execPath))
     throw new Error(
       `the service runs ${service.program}, not this file. Run that one's upgrade.`,
     );
 
   const unlock = takeLock(dataDir);
   const staged = stagedPath(execPath);
+  sweepPrevious(execPath);
   // Giving up is free until the service is stopped; nothing is left behind.
   let freeSignals = onSignals(() => {
     rmSync(staged, { force: true });
@@ -427,7 +440,7 @@ export async function upgradeHost(options: UpgradeOptions): Promise<void> {
       log(
         service === undefined
           ? `${execPath} is now ${version}. No service runs it: restart the host yourself.`
-          : `${execPath} is now ${version}. The service is stopped: \`systemctl --user start io.eta.host\`.`,
+          : `${execPath} is now ${version}. The service is stopped: \`${service.startCommand}\`.`,
       );
     }
     log(`The old build is ${previousPath(execPath)}.`);

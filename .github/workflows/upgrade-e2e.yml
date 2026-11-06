@@ -1,0 +1,133 @@
+# `eta-host upgrade` from a real build to a real build, on each platform's real service manager:
+# launchd on macOS, a Windows service on Windows.
+#
+# It runs for what can break it, and before every release (release.yml).
+name: Upgrade end to end
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/upgrade-e2e.yml
+      - apps/daemon/src/service*.ts
+      - apps/daemon/src/swap.ts
+      - apps/daemon/src/windows-*.ts
+      - apps/eta/src/stop.ts
+      - apps/eta/src/upgrade/**
+      - scripts/upgrade-e2e/**
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upgrade:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: darwin-arm64
+          - os: windows-latest
+            platform: windows-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: bash
+    env:
+      BUILDS: ${{ github.workspace }}/e2e-builds
+    steps:
+      - run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - run: bun install --frozen-lockfile --ignore-scripts
+
+      # Five hosts take a while and only change with the code they are built from, not with the
+      # scenarios: a rerun for a scenario should not wait for them.
+      - name: Find the builds
+        id: builds
+        uses: actions/cache/restore@v6
+        with:
+          path: e2e-builds
+          key: upgrade-e2e-${{ matrix.platform }}-${{ hashFiles('bun.lock', 'apps/daemon/src/**', 'apps/desktop/scripts/stage-host.ts', 'apps/eta/scripts/**', 'apps/eta/src/**', 'apps/web/src/**', 'scripts/upgrade-e2e/build.ts') }}
+
+      - name: Build the hosts
+        if: steps.builds.outputs.cache-hit != 'true'
+        run: |
+          bun run --cwd apps/web build
+          bun scripts/upgrade-e2e/build.ts "$BUILDS"
+
+      # Now, not at the end of the job: a run that fails is the one that gets rerun.
+      - name: Keep the builds
+        if: steps.builds.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: e2e-builds
+          key: ${{ steps.builds.outputs.cache-primary-key }}
+
+      # A password this run makes up: the runner's account has none anyone knows, and a Windows
+      # service cannot log on without one.
+      - name: Give the account a password
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $password = "Eta-" + [guid]::NewGuid().ToString("N") + "-1a"
+          Write-Output "::add-mask::$password"
+          net user $env:USERNAME $password | Out-Null
+          "ETA_E2E_PASSWORD=$password" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      # To press the real button in the runner's Chrome, for this run only.
+      - run: bun add --no-save playwright-core@1
+
+      - name: Run it
+        run: bun scripts/upgrade-e2e/drive.ts "$BUILDS"
+
+      # For people testing on a real Windows computer: the fake server is compiled so they need
+      # nothing but this. Not for a release, which has no use for a copy of every build.
+      - name: Pack what a tester needs
+        if: runner.os == 'Windows' && github.event_name != 'workflow_call'
+        run: |
+          mkdir -p e2e-pack/builds
+          cp -r "$BUILDS/0.9.0" "$BUILDS/0.9.1" "$BUILDS/0.9.2" "$BUILDS/0.9.3" e2e-pack/builds/
+          bun build --compile scripts/upgrade-e2e/fake-releases.ts --outfile e2e-pack/fake-releases.exe
+
+      - uses: actions/upload-artifact@v7
+        if: runner.os == 'Windows' && github.event_name != 'workflow_call'
+        with:
+          name: eta-host-windows-test
+          path: e2e-pack
+          retention-days: 30
+          compression-level: 1
+
+      - name: What the service left
+        if: always()
+        run: |
+          mkdir -p e2e-logs
+          cp upgrade-e2e-results.json e2e-logs/ || true
+          cp -r e2e-shots e2e-logs/ || true
+          cp ~/.eta/upgrade-status.json e2e-logs/ || true
+          cp ~/.eta/service/*.log e2e-logs/ || true
+          cp ~/Library/Logs/eta/*.log e2e-logs/ || true
+
+      - name: What Windows said
+        if: always() && runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'} -MaxEvents 40 |
+            Format-List TimeCreated,Id,Message | Out-File e2e-logs/scm-events.txt
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: upgrade-e2e-${{ matrix.platform }}
+          path: e2e-logs
+          retention-days: 14
