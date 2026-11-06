@@ -19,7 +19,8 @@
   },
   "sections": {
     "approvals": "Tools that ask first",
-    "appearance": "Appearance"
+    "appearance": "Appearance",
+    "update": "Update"
   },
   "approvals": {
     "description": "A listed tool asks in the inbox before every call: allow or deny. Applies to every conversation.",
@@ -32,5 +33,54 @@
     "needsAttention": "Settings (accounts need attention)",
     "sections": "Settings sections",
     "accountsNeedAttention": "Accounts need attention"
+  },
+  "update": {
+    "version": "This version",
+    "latest": "Latest version",
+    "unknown": "Unknown",
+    "upToDate": "Up to date",
+    "install": "Update to {{version}}",
+    "recheck": "Check again",
+    "checkFailed": "Could not find the latest version: {{error}}",
+    "blocked": {
+      "source": "This server runs from source. Update the code instead.",
+      "noService": "The server is not running as a service, so it could not restart after updating. Run eta-host upgrade on it.",
+      "otherFile": "The service runs a different file. Update from that one."
+    },
+    "confirmTitle": "Update to {{version}}",
+    "confirm": "The server restarts and is unreachable for about a minute. It goes back by itself if something is wrong.",
+    "start": "Update",
+    "waitForAgents": "Update when they finish",
+    "force": "Update now",
+    "cancel": "Cancel update",
+    "phase": {
+      "starting": "Getting ready",
+      "downloading": "Downloading",
+      "waiting": "Waiting for agents to finish",
+      "stopping": "Stopping the service",
+      "backingUp": "Backing up the database",
+      "restarting": "Starting the new version",
+      "verifying": "Checking the new version",
+      "rollingBack": "The new version has a problem. Going back"
+    },
+    "waitingFor": "Waiting for: {{list}}",
+    "lastFailed": "The last update failed: {{error}}",
+    "screen": {
+      "updating": "Updating to {{version}}",
+      "updatingUnknown": "Updating",
+      "offline": "The server is restarting",
+      "slow": "This is taking longer than expected. The server may need a hand.",
+      "done": "Updated to {{version}}",
+      "reloading": "Reloading",
+      "rolledBack": "The update did not work",
+      "rolledBackDetail": "Back on {{version}}, with your data restored.",
+      "broken": "The update failed and the server needs a hand",
+      "help": "Run journalctl --user -u io.eta.host-upgrade on the server to see what happened.",
+      "dismiss": "OK"
+    },
+    "busy": "The restart would stop:",
+    "busyTask": "Task #{{number}} {{name}}",
+    "busyRoutine": "Routine {{name}}",
+    "busyReply": "A reply in {{name}}"
   }
 }

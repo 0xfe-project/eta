@@ -19,10 +19,11 @@ import {
   backupDatabase,
   BACKUPS_KEPT,
   busyAgents,
+  busyText,
   restoreDatabase,
 } from "../src/upgrade/database";
 import { parseSums, Releases, releaseToken } from "../src/upgrade/releases";
-import { askUp, inServiceCgroup, upUrl } from "../src/upgrade/service";
+import { askUp, upUrl } from "../src/upgrade/service";
 import { upgradeHost } from "../src/upgrade/upgrade";
 import { tempDir } from "./support/host";
 
@@ -137,9 +138,8 @@ function fakeService(
   let current = "";
   let pid = 100;
   const calls: string[] = [];
-  const service: HostService & { inside: boolean } = {
+  const service: HostService = {
     program: exe,
-    inside: false,
     status: () => {
       if (running && dies(current)) {
         running = false;
@@ -451,17 +451,6 @@ describe("eta-host upgrade", () => {
       expect(calls).toEqual([]);
     });
 
-    it("does not restart the service it runs inside", async () => {
-      github.publish("1.1.0", { body: build("1.1.0") });
-      const { service, calls } = fakeService(exe, dataDir);
-      service.inside = true;
-      await expect(upgrade({ service, force: true })).rejects.toThrow(
-        /inside the service/,
-      );
-      expect(calls).toEqual([]);
-      expect(await readFile(exe, "utf8")).toBe(build("1.0.0"));
-    });
-
     it("runs one at a time, and takes over a lock left by a dead process", async () => {
       github.publish("1.1.0", { body: build("1.1.0") });
       const lock = join(dataDir, "upgrade.lock");
@@ -510,6 +499,49 @@ describe("eta-host upgrade", () => {
       expect(backups()).toHaveLength(1);
       expect(backups()[0]).toMatch(/^upgrade-\d{8}T\d{6}Z-1\.0\.0\.sqlite$/);
       expect(said()).toContain("The service runs 1.1.0");
+    });
+
+    it("reports where it is, in order", async () => {
+      github.publish("1.1.0", { body: next });
+      const fake = fakeService(exe, dataDir);
+      const seen: string[] = [];
+      let to: string | undefined;
+      await upgrade({
+        service: fake.service,
+        report: {
+          target: (version) => {
+            to = version;
+          },
+          phase: (phase) => seen.push(phase),
+          cancelled: () => undefined,
+        },
+      });
+      expect(to).toBe("1.1.0");
+      expect(seen).toEqual([
+        "downloading",
+        "stopping",
+        "backing-up",
+        "restarting",
+        "verifying",
+      ]);
+    });
+
+    it("says rolled back when it went back", async () => {
+      github.publish("1.1.0", { body: next });
+      const fake = fakeService(exe, dataDir, {
+        comesUp: (text) => text !== next,
+      });
+      await expect(upgrade({ service: fake.service })).rejects.toMatchObject({
+        state: "rolled-back",
+      });
+    });
+
+    it("says broken when it could not", async () => {
+      github.publish("1.1.0", { body: next });
+      const fake = fakeService(exe, dataDir, { comesUp: () => false });
+      await expect(upgrade({ service: fake.service })).rejects.toMatchObject({
+        state: "broken",
+      });
     });
 
     it("takes a service between two starts as running", async () => {
@@ -583,12 +615,32 @@ describe("eta-host upgrade", () => {
       );
     });
 
+    it("asks systemctl again when one of them dies", async () => {
+      github.publish("1.1.0", { body: next });
+      const fake = fakeService(exe, dataDir);
+      const { start, stop } = fake.service;
+      const onceFailing = (step: () => Promise<void>) => {
+        let failed = false;
+        return async () => {
+          if (failed) return await step();
+          failed = true;
+          throw new Error("systemctl was killed");
+        };
+      };
+      fake.service.stop = onceFailing(stop);
+      fake.service.start = onceFailing(start);
+      await upgrade({ service: fake.service });
+      expect(fake.runs()).toBe(next);
+      expect(said()).toContain("The service runs 1.1.0");
+    });
+
     it("starts the old build again when the stop fails", async () => {
       github.publish("1.1.0", { body: next });
       const fake = fakeService(exe, dataDir);
       const { stop } = fake.service;
       fake.service.stop = async () => {
         await stop();
+        fake.calls.pop();
         throw new Error("systemctl timed out");
       };
       await expect(upgrade({ service: fake.service })).rejects.toThrow(
@@ -631,11 +683,15 @@ describe("eta-host upgrade", () => {
     it("names what is working, and nothing that is not", () => {
       expect(busyAgents(dataDir)).toEqual([]);
       working();
-      expect(busyAgents(dataDir)).toEqual([
-        "task #45 host upgrade",
-        "routine digest",
-        "a reply in eta",
+      const busy = busyAgents(dataDir);
+      expect(busy).toEqual([
+        { kind: "task", number: 45, name: "host upgrade" },
+        { kind: "routine", name: "digest" },
+        { kind: "reply", name: "eta" },
       ]);
+      expect(busyText(busy)).toBe(
+        "task #45 host upgrade; routine digest; a reply in eta",
+      );
     });
 
     it("counts a reply still starting, which a restart fails too", () => {
@@ -645,7 +701,7 @@ describe("eta-host upgrade", () => {
         INSERT INTO message VALUES ('m1', 'c1', 'queued');
       `);
       db.close();
-      expect(busyAgents(dataDir)).toEqual(["a reply in eta"]);
+      expect(busyAgents(dataDir)).toEqual([{ kind: "reply", name: "eta" }]);
     });
 
     it("gives up after --wait, with nothing changed", async () => {
@@ -787,13 +843,6 @@ describe("the pieces", () => {
       if (saved === undefined) delete process.env.http_proxy;
       else process.env.http_proxy = saved;
     }
-  });
-
-  it("knows the service's cgroup, as systemd spells it", () => {
-    const user = "0::/user.slice/user-1000.slice/user@1000.service/app.slice";
-    expect(inServiceCgroup(`${user}/_io.eta.host.service\n`)).toBe(true);
-    expect(inServiceCgroup(`${user}/io.eta.daemon.service\n`)).toBe(false);
-    expect(inServiceCgroup(`${user}/run-r1.scope\n`)).toBe(false);
   });
 
   it("finds the service's port in its flags", async () => {

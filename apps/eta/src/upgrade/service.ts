@@ -42,8 +42,6 @@ interface ServiceStatus {
 export interface HostService {
   /** The file the service runs. */
   readonly program: string;
-  /** Whether this process runs inside the service, and goes down with it. */
-  readonly inside: boolean;
   status: () => Promise<ServiceStatus>;
   stop: () => Promise<void>;
   start: () => Promise<void>;
@@ -108,10 +106,6 @@ export async function upUrl(args: readonly string[]): Promise<string> {
   return `http://${host}:${port}/up`;
 }
 
-/** systemd writes the unit as `_io.eta.host.service` here: `io` is the name of a controller. */
-export const inServiceCgroup = (cgroup: string): boolean =>
-  cgroup.includes(UNIT_FILE);
-
 /**
  * `node:http`, not `fetch`: Bun's `fetch` honours `http_proxy` for anything but loopback, and a
  * proxy cannot reach a tailnet address, which would read as a host that did not come up.
@@ -128,14 +122,6 @@ export const askUp = (url: string): Promise<boolean> =>
       resolve(false);
     });
   });
-
-function insideService(): boolean {
-  try {
-    return inServiceCgroup(readFileSync("/proc/self/cgroup", "utf8"));
-  } catch {
-    return false;
-  }
-}
 
 /** The installed service, whether it is running or not; undefined when there is none. */
 export async function findHostService(): Promise<HostService | undefined> {
@@ -165,7 +151,6 @@ export async function findHostService(): Promise<HostService | undefined> {
   const url = await upUrl(argv?.slice(1) ?? []);
   return {
     program,
-    inside: insideService(),
     status: async () => {
       const { ActiveState, SubState, MainPID } = await show();
       return {

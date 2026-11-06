@@ -1,4 +1,3 @@
-import type { Release, Releases } from "./releases";
 /**
  * The host replacing its own file with a release, and the service that runs it.
  *
@@ -17,7 +16,12 @@ import type { Release, Releases } from "./releases";
  *
  * With no service running there is nothing to restart or watch: the file is replaced after a
  * backup, and the next start is the user's.
+ *
+ * Restarting the service must not take this process with it, so a restart runs in a worker of its
+ * own, outside the service (`worker.ts`); `report` is how it says where it is.
  */
+import type { UpgradeBusy, UpgradePhase } from "@eta/client-contracts";
+import type { Release, Releases } from "./releases";
 import type { HostService } from "./service";
 import {
   closeSync,
@@ -43,6 +47,7 @@ import {
   appliedMigrations,
   backupDatabase,
   busyAgents,
+  busyText,
   restoreDatabase,
 } from "./database";
 import { parseSums } from "./releases";
@@ -70,6 +75,32 @@ interface UpgradeTiming {
 
 const TIMING: UpgradeTiming = { pollMs: 1000, upMs: 120_000, holdMs: 5000 };
 
+/** 1 when `version` is newer than `than`; undefined for a build outside the releases, which has no order. */
+export const versionOrder = (
+  version: string,
+  than: string,
+): -1 | 0 | 1 | undefined =>
+  isReleaseVersion(than) ? Bun.semver.order(version, than) : undefined;
+
+/** Told as an upgrade moves, for whoever watches it from outside this process. */
+interface UpgradeReport {
+  /** The release is found. */
+  target: (version: string) => void;
+  phase: (phase: UpgradePhase, busy?: UpgradeBusy[]) => void;
+  /** A signal ended it before the service was touched. */
+  cancelled: () => void;
+}
+
+/** An upgrade that got as far as the service, and how that went. */
+export class UpgradeFailure extends Error {
+  readonly state: "rolled-back" | "broken";
+
+  constructor(state: "rolled-back" | "broken", message: string) {
+    super(message);
+    this.state = state;
+  }
+}
+
 export interface UpgradeOptions {
   /** The version asked for, without a `v`; the latest full release if not. */
   wanted: string | undefined;
@@ -86,6 +117,7 @@ export interface UpgradeOptions {
   releases: Releases;
   findService: () => Promise<HostService | undefined>;
   log: (line: string) => void;
+  report?: UpgradeReport;
   timing?: Partial<UpgradeTiming>;
 }
 
@@ -141,13 +173,14 @@ async function waitForAgents(
   for (;;) {
     const busy = busyAgents(dataDir);
     if (busy.length === 0) return;
-    const list = busy.join("; ");
+    const list = busyText(busy);
     if (Date.now() >= deadline)
       throw new Error(
         `still working, and a restart would stop them: ${list}. Nothing has changed: run it again later, or with --force to stop them.`,
       );
     if (list !== said) {
       log(`Waiting for what a restart would stop: ${list}.`);
+      options.report?.phase("waiting", busy);
       said = list;
     }
     await sleep(pollMs);
@@ -187,6 +220,9 @@ async function watch(
     throw new Error(`migrations did not run: ${missing.join(", ")}`);
 }
 
+/** A `systemctl` that dies is not a service that failed, and leaving here leaves the service down. */
+const twice = (step: () => Promise<void>): Promise<void> => step().catch(step);
+
 /** The service on the staged build, or on the old one again and an error that says what happened. */
 async function replaceService(
   options: UpgradeOptions,
@@ -195,42 +231,49 @@ async function replaceService(
   migrations: readonly string[] | undefined,
   timing: UpgradeTiming,
 ): Promise<void> {
-  const { dataDir, execPath, log } = options;
+  const { dataDir, execPath, log, report } = options;
   const from = options.version;
 
   let backup: string | undefined;
   try {
     log("Stopping the service.");
-    await service.stop();
+    report?.phase("stopping");
+    await twice(service.stop);
+    report?.phase("backing-up");
     backup = backupDatabase(dataDir, from);
     if (backup !== undefined) log(`Database backed up to ${backup}.`);
     await swapIn(execPath);
   } catch (error) {
     log(`Starting ${from} again.`);
-    await service.start();
+    await twice(service.start);
     throw error;
   }
 
   try {
     log(`Starting ${version}.`);
-    await service.start();
+    report?.phase("restarting");
+    await twice(service.start);
+    report?.phase("verifying");
     await watch(service, migrations, dataDir, timing);
   } catch (error) {
     const why = message(error);
     log(`${version} did not hold: ${why}. Going back to ${from}.`);
+    report?.phase("rolling-back");
     const restored = backup === undefined ? "" : `, database restored`;
     try {
-      await service.stop();
+      await twice(service.stop);
       await swapBack(execPath);
       if (backup !== undefined) restoreDatabase(dataDir, backup);
-      await service.start();
+      await twice(service.start);
       await watch(service, undefined, dataDir, timing);
     } catch (again) {
-      throw new Error(
+      throw new UpgradeFailure(
+        "broken",
         `${version} did not hold (${why}), and going back failed too: ${message(again)}. The old build is ${execPath} or ${previousPath(execPath)}; the database backup is ${backup ?? "not there"}. The service needs a hand.`,
       );
     }
-    throw new Error(
+    throw new UpgradeFailure(
+      "rolled-back",
       `${version} did not hold (${why}). The service is back on ${from}${restored}.`,
     );
   }
@@ -267,7 +310,7 @@ async function stage(
   options: UpgradeOptions,
   release: Release,
 ): Promise<string[] | undefined> {
-  const { execPath, log, releases, dataDir } = options;
+  const { execPath, log, releases, dataDir, report } = options;
   const name = `eta-host-${daemonPlatform()}`;
   const asset = release.assets.find((file) => file.name === name);
   if (asset === undefined)
@@ -283,6 +326,7 @@ async function stage(
 
   const staged = stagedPath(execPath);
   log(`Downloading ${name} ${release.version}.`);
+  report?.phase("downloading");
   const digest = await releases.download(asset, staged);
   if (digest !== expected)
     throw new Error(
@@ -322,10 +366,9 @@ export async function upgradeHost(options: UpgradeOptions): Promise<void> {
       ? await releases.latest()
       : await releases.byVersion(wanted);
   const { version } = release;
+  options.report?.target(version);
   // Builds outside a release (a checkout's, named after a commit) have no order.
-  const order = isReleaseVersion(from)
-    ? Bun.semver.order(version, from)
-    : undefined;
+  const order = versionOrder(version, from);
 
   if (version === from) {
     log(`eta-host ${from} is up to date.`);
@@ -352,10 +395,6 @@ export async function upgradeHost(options: UpgradeOptions): Promise<void> {
   const running =
     service !== undefined &&
     (status?.running === true || status?.restarting === true);
-  if (running && service.inside)
-    throw new Error(
-      `this process runs inside the service, and the restart would stop the upgrade halfway. Run it from outside; an agent under the host can get out with \`systemd-run --user --scope ${execPath} upgrade --force\`, which stops that agent too.`,
-    );
   if (running && realpathSync(service.program) !== realpathSync(execPath))
     throw new Error(
       `the service runs ${service.program}, not this file. Run that one's upgrade.`,
@@ -367,6 +406,7 @@ export async function upgradeHost(options: UpgradeOptions): Promise<void> {
   let freeSignals = onSignals(() => {
     rmSync(staged, { force: true });
     unlock();
+    options.report?.cancelled();
     process.exit(130);
   });
   try {

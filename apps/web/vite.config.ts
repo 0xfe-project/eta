@@ -101,6 +101,7 @@ export default defineConfig(({ mode }) => {
       // and the bundle's in another, which is how every tab ends up claiming an
       // update is waiting.
       proxy: {
+        "/upgrade": env.ETA_HOST_ORIGIN || "http://127.0.0.1:8787",
         "/ws": {
           target: env.ETA_HOST_ORIGIN || "http://127.0.0.1:8787",
           ws: true,

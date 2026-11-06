@@ -15,6 +15,7 @@ import type { GithubTuning } from "./github/service";
 import type { LlmOptions, LlmRuntime } from "./llm/runtime";
 import type { SshRunner } from "./machines/install";
 import type { Product, RoutinesOptions, TasksOptions } from "./product";
+import type { UpgradePluginOptions } from "./upgrade/plugin";
 import type { WebOptions } from "./web/service";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -113,6 +114,8 @@ export interface HostOptions {
   daemonBuilds?: boolean | string;
   /** How a daemon is put on another computer; the user's `ssh` by default (a test fakes it). */
   ssh?: SshRunner;
+  /** What the update button works with, for a test. */
+  upgrade?: Partial<UpgradePluginOptions>;
   warn?: (message: string) => void;
 }
 
@@ -192,6 +195,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
                 : buildsIn(options.daemonBuilds),
           }),
       ...(options.ssh === undefined ? {} : { ssh: options.ssh }),
+      ...(options.upgrade === undefined ? {} : { upgrade: options.upgrade }),
     });
     const web = createWebRoutes(options.webDir);
     server = await assembleServer({

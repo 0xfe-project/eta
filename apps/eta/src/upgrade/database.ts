@@ -1,13 +1,3 @@
-import {
-  chmodSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  renameSync,
-  rmSync,
-} from "node:fs";
-import { join } from "node:path";
 /**
  * What an upgrade asks of the database: a backup and its way back, which migrations have run, and
  * whether an agent is working.
@@ -19,6 +9,17 @@ import { join } from "node:path";
  * All of it is read from another process, while the host may be up: the host's own connection and
  * its pragmas are not involved.
  */
+import type { UpgradeBusy } from "@eta/client-contracts";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+} from "node:fs";
+import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { databasePath } from "../db";
 
@@ -107,14 +108,14 @@ export function appliedMigrations(dataDir: string): string[] {
 }
 
 /**
- * What a restart would interrupt, in words, from the rows the host keeps for the work it is doing:
+ * What a restart would interrupt, from the rows the host keeps for the work it is doing:
  * task runs, routine runs, and replies in a conversation, every status a start fails
  * (`Timeline.failInterrupted`): one still `queued` is starting its session, and one waiting for the
  * user's answer loses the question. A queued task run is not here, because a restart leaves it
  * queued. Rows, not processes, so that the answer also covers agents on other machines, whose runs
  * are lost track of when the host goes.
  */
-export function busyAgents(dataDir: string): string[] {
+export function busyAgents(dataDir: string): UpgradeBusy[] {
   if (!existsSync(databasePath(dataDir))) return [];
   return readonly(dataDir, (db) => [
     ...db
@@ -124,7 +125,11 @@ export function busyAgents(dataDir: string): string[] {
           WHERE task_run.status IN ('starting', 'running')`,
       )
       .all()
-      .map((row) => `task #${row.number} ${row.title}`),
+      .map((row) => ({
+        kind: "task" as const,
+        number: row.number,
+        name: row.title,
+      })),
     ...db
       .query<{ name: string }, []>(
         `SELECT routine.name FROM routine_run
@@ -132,7 +137,7 @@ export function busyAgents(dataDir: string): string[] {
           WHERE routine_run.status = 'running'`,
       )
       .all()
-      .map((row) => `routine ${row.name}`),
+      .map((row) => ({ kind: "routine" as const, name: row.name })),
     ...db
       .query<{ name: string }, []>(
         `SELECT conversation.name FROM message
@@ -140,6 +145,18 @@ export function busyAgents(dataDir: string): string[] {
           WHERE message.status IN ('queued', 'working', 'waiting_for_input', 'stopping')`,
       )
       .all()
-      .map((row) => `a reply in ${row.name}`),
+      .map((row) => ({ kind: "reply" as const, name: row.name })),
   ]);
 }
+
+/** The same for a command line. */
+export const busyText = (busy: readonly UpgradeBusy[]): string =>
+  busy
+    .map((item) =>
+      item.kind === "task"
+        ? `task #${item.number} ${item.name}`
+        : item.kind === "routine"
+          ? `routine ${item.name}`
+          : `a reply in ${item.name}`,
+    )
+    .join("; ");

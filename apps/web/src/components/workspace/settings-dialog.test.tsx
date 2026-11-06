@@ -73,6 +73,7 @@ describe("设置左侧那一列", () => {
         "email",
         "archived",
         "appearance",
+        "update",
       ),
     );
     expect(rail().join("")).not.toContain("需先确认的工具");

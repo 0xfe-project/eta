@@ -191,7 +191,9 @@ itself with no checkout:
 ```
 
 It checks the download, waits for working agents (`--force` does not), backs up the database to
-`~/.eta/backups`, restarts the service, and goes back on its own if the new build does not hold.
+`~/.eta/backups`, restarts the service, and goes back on its own if the new build does not hold. A
+process of its own does this, so it outlives the terminal and the host. Settings has the same thing
+as a button.
 [docs/release.md](docs/release.md) has the details.
 
 Or run the host by hand:

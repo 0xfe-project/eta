@@ -497,6 +497,87 @@ export type MachineCall = {
   };
 }[MachineAction];
 
+/* ------------------------------------------------------------------ upgrade */
+
+export const UPGRADE_ACTIONS = ["check", "start", "cancel"] as const;
+export type UpgradeAction = (typeof UPGRADE_ACTIONS)[number];
+
+/** Where a running upgrade is, in order. Until `stopping` the host goes on serving. */
+export type UpgradePhase =
+  | "starting"
+  | "downloading"
+  | "waiting"
+  | "stopping"
+  | "backing-up"
+  | "restarting"
+  | "verifying"
+  | "rolling-back";
+
+/**
+ * How it ended: `failed` before the service was touched, `rolled-back` on the old build with its
+ * database, `broken` when going back failed too and the service needs a person, `lost` when the
+ * process doing it died.
+ */
+export type UpgradeState =
+  | "running"
+  | "done"
+  | "failed"
+  | "rolled-back"
+  | "broken"
+  | "cancelled"
+  | "lost";
+
+/** One thing a restart would stop. A task has its number; `name` is its title, or the routine's or conversation's name. */
+export interface UpgradeBusy {
+  kind: "task" | "routine" | "reply";
+  name: string;
+  number?: number;
+}
+
+/** An upgrade, as the process doing it reports it: on disk, so it outlasts the host. */
+export interface UpgradeStatusView {
+  id: string;
+  state: UpgradeState;
+  phase: UpgradePhase;
+  from: string;
+  /** Known once the release is found. */
+  to?: string;
+  startedAt: number;
+  finishedAt?: number;
+  /** What it is waiting for, in the `waiting` phase. */
+  busy?: UpgradeBusy[];
+  error?: string;
+  log: string[];
+}
+
+/** Why this host cannot upgrade itself from the page. */
+export type UpgradeBlock = "source" | "no-service" | "other-file";
+
+export interface UpgradeCheckView {
+  /** This build. */
+  version: string;
+  /** The latest full release; null when it could not be found out. */
+  latest: string | null;
+  available: boolean;
+  blocked: UpgradeBlock | null;
+  /** What a restart would stop right now. */
+  busy: UpgradeBusy[];
+  error: string | null;
+}
+
+export interface UpgradeArgs {
+  check: Record<string, never>;
+  /** `force` restarts over working agents instead of waiting for them. */
+  start: { force?: boolean };
+  cancel: Record<string, never>;
+}
+
+export interface UpgradeResults {
+  check: UpgradeCheckView;
+  start: { id: string };
+  cancel: { cancelled: boolean };
+}
+
 /* ------------------------------------------------------------------ projects */
 
 export const PROJECT_ACTIONS = [
