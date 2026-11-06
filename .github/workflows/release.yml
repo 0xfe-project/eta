@@ -1,5 +1,5 @@
-# A `v*` tag becomes a GitHub Release: the host as one file for each platform, and
-# SHA256SUMS. How to cut one is in docs/release.md.
+# A `v*` tag becomes a GitHub Release: for each platform the host as one file and the
+# desktop app's installer, and SHA256SUMS. How to cut one is in docs/release.md.
 name: Release
 
 on:
@@ -66,20 +66,44 @@ jobs:
   build:
     needs: prepare
     strategy:
+      # The others finish, so a rerun is only of the one that failed.
+      fail-fast: false
       matrix:
         # Each platform builds on a runner of its own: the host carries the CLIProxyAPI
-        # of the machine that compiled it. macOS is not here until that has been tried.
+        # of the machine that compiled it, and hutch packages for the machine it is on.
         include:
           - platform: linux-x64
             runner: ubuntu-latest
+            installer: linux-x64-eta-Setup.tar.gz
+            desktop: eta-desktop-linux-x64.tar.gz
+            # The runner has no screen, and the app wants one to start.
+            display: xvfb-run -a
+          - platform: darwin-arm64
+            runner: macos-latest
+            installer: macos-arm64-eta.dmg
+            desktop: eta-desktop-darwin-arm64.dmg
+          - platform: windows-x64
+            runner: windows-latest
+            exe: .exe
+            installer: win-x64-eta-Setup.zip
+            desktop: eta-desktop-windows-x64.zip
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     permissions:
       contents: write
+    defaults:
+      run:
+        # Git's bash on Windows, so every platform runs the same steps.
+        shell: bash
     env:
-      ASSET: eta-host-${{ matrix.platform }}
+      HOST: eta-host${{ matrix.exe }}
+      ASSET: eta-host-${{ matrix.platform }}${{ matrix.exe }}
+      DESKTOP: ${{ matrix.desktop }}
       ETA_DAEMON_VERSION: ${{ needs.prepare.outputs.version }}
     steps:
+      # What is built is what is in git: Windows runners would check out CRLF.
+      - run: git config --global core.autocrlf false
+
       # Dependencies' code runs here too, in a job that can write releases.
       - uses: actions/checkout@v7
         with:
@@ -93,6 +117,31 @@ jobs:
       - run: bun run --cwd apps/web build
       - run: bun apps/desktop/scripts/stage-host.ts
 
+      - name: Run the file on its own
+        run: |
+          expected="eta-host $ETA_DAEMON_VERSION ($(git rev-parse --short=12 HEAD))"
+          mkdir -p "$RUNNER_TEMP/try/home"
+          cp "apps/desktop/dist/host/$HOST" "$RUNNER_TEMP/try/$ASSET"
+          cd "$RUNNER_TEMP/try"
+
+          actual=$("./$ASSET" --version)
+          if [[ $actual != "$expected" ]]; then
+            echo "::error::--version says '$actual', not '$expected'."
+            exit 1
+          fi
+
+          # USERPROFILE is what a home directory is on Windows.
+          HOME="$PWD/home" USERPROFILE="$PWD/home" "./$ASSET" --port 18787 &
+          curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:18787/up
+          curl -fsS -o /dev/null http://127.0.0.1:18787/
+          kill $!
+
+      - name: Package the app
+        working-directory: apps/desktop
+        run: |
+          node_modules/.bin/electrobun build --env=stable
+          cp "artifacts/${{ matrix.installer }}" "$RUNNER_TEMP/try/$DESKTOP"
+
       - name: The build left the checkout as it was
         run: |
           changed=$(git status --porcelain)
@@ -102,28 +151,30 @@ jobs:
             exit 1
           fi
 
-      - name: Run the file on its own
+      # A screen and WebKit, which the runner has neither of. Ubuntu's mirror has taken
+      # twenty minutes over these, and does not get to hold up a release: the Linux app
+      # then goes out without having been started here, and the run says so.
+      - name: What the app needs to open on Linux
+        id: screen
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        timeout-minutes: 8
         run: |
-          expected="eta-host $ETA_DAEMON_VERSION ($(git rev-parse --short=12 HEAD))"
-          mkdir -p "$RUNNER_TEMP/try/home"
-          cp apps/desktop/dist/host/eta-host "$RUNNER_TEMP/try/$ASSET"
-          cd "$RUNNER_TEMP/try"
+          sudo apt-get update
+          sudo apt-get install -y xvfb libwebkit2gtk-4.1-0 libayatana-appindicator3-1
 
-          actual=$("./$ASSET" --version)
-          if [[ $actual != "$expected" ]]; then
-            echo "::error::--version says '$actual', not '$expected'."
-            exit 1
-          fi
+      - name: Install the app and see it start
+        if: steps.screen.outcome != 'failure'
+        run: ${{ matrix.display }} bun apps/desktop/scripts/try-app.ts "$RUNNER_TEMP/try/$DESKTOP"
 
-          HOME="$PWD/home" "./$ASSET" --port 18787 &
-          curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:18787/up
-          curl -fsS -o /dev/null http://127.0.0.1:18787/
-          kill $!
+      - name: Say the app was not started
+        if: steps.screen.outcome == 'failure'
+        run: echo "::warning::$DESKTOP was packaged but not started on the runner."
 
-      - name: Upload it to the draft
+      - name: Upload them to the draft
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" "$RUNNER_TEMP/try/$ASSET" --clobber
+        run: gh release upload "$TAG" "$RUNNER_TEMP/try/$ASSET" "$RUNNER_TEMP/try/$DESKTOP" --clobber
 
   publish:
     needs: build
@@ -137,9 +188,9 @@ jobs:
       # From the draft, so the sums are of what people will download.
       - name: Add SHA256SUMS
         run: |
-          gh release download "$TAG" --pattern 'eta-host-*' --dir assets
+          gh release download "$TAG" --pattern 'eta-*' --dir assets
           cd assets
-          sha256sum eta-host-* | tee SHA256SUMS
+          sha256sum eta-* | tee SHA256SUMS
           gh release upload "$TAG" SHA256SUMS --clobber
 
       - run: gh release edit "$TAG" --draft=false
