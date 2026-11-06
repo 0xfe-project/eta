@@ -98,6 +98,12 @@ export {
 export { dirnameEnvPath, formatSkillInvocation } from "./prompt-blocks";
 export * from "./prompts";
 export { RunPump, type RunPumpOptions } from "./pump";
+export type {
+  McpSearchResult,
+  McpServerInfo,
+  McpSink,
+  McpToolInfo,
+} from "./realm/hooks";
 export {
   TaskReminderService,
   type TaskReminderServiceOptions,

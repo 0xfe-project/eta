@@ -107,6 +107,8 @@ export interface AssembleOptions {
    */
   agentPromptFor?: SessionManagerOptions["agentPromptFor"] | undefined;
   sessionTools?: SessionManagerOptions["sessionTools"] | undefined;
+  /** MCP for a session's realm (`import "mcp:<server>"`); see `SessionManagerOptions.mcpFor`. */
+  mcpFor?: SessionManagerOptions["mcpFor"] | undefined;
   /** Skill directories a session has beyond the ones found by walking its directory. */
   skillDirsFor?: ((meta: SessionMeta) => readonly string[]) | undefined;
   toolMiddleware?: SessionManagerOptions["toolMiddleware"] | undefined;
@@ -465,6 +467,7 @@ export async function assembleServer(
     ...(options.agentPromptFor === undefined
       ? {}
       : { agentPromptFor: options.agentPromptFor }),
+    ...(options.mcpFor === undefined ? {} : { mcpFor: options.mcpFor }),
     ...(options.sessionTools === undefined
       ? {}
       : { sessionTools: options.sessionTools }),

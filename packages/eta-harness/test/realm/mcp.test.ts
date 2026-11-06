@@ -89,6 +89,11 @@ describe("mcp: modules", () => {
     `);
     expect(result.value).toContain("refused: not allowed");
     expect(calls).toHaveLength(0);
+    expect(
+      result.effects
+        .filter((effect) => effect.name === "mcp.fs.read_file")
+        .map((effect) => effect.status),
+    ).toEqual(["blocked"]);
   });
 });
 

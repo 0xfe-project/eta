@@ -76,6 +76,7 @@ export {
   registerSessionTools,
   SessionManager,
   type SessionManagerOptions,
+  type SessionMcpWiring,
 } from "./manager";
 export { MemorySessionStore, type SessionStorageFactory } from "./memory-store";
 export {

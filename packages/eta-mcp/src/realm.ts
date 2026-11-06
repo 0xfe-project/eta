@@ -5,7 +5,7 @@
  * The sink gives the realm linker enough to build `mcp:<server>` imports and `eta.mcp` exports.
  */
 import type { McpScope } from "./scope";
-import type { ToolMeta } from "./types";
+import type { ServerState, ToolMeta } from "./types";
 import { describeServerTools } from "./describe";
 import { rankTools } from "./search-ranking";
 
@@ -14,7 +14,7 @@ export interface McpSink {
   servers: () => {
     name: string;
     toolCount: number;
-    status: string;
+    status: ServerState;
     error?: string;
   }[];
   load: (server: string) => Promise<ToolMeta[]>;

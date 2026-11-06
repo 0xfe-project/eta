@@ -14,9 +14,11 @@ import type { SiteLimits } from "./artifacts/site";
 import type { GithubTuning } from "./github/service";
 import type { LlmOptions, LlmRuntime } from "./llm/runtime";
 import type { SshRunner } from "./machines/install";
+import type { McpHostOptions } from "./mcp/host";
 import type { Product, RoutinesOptions, TasksOptions } from "./product";
 import type { WebOptions } from "./web/service";
 import { mkdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { etaCompaction } from "@eta/compaction";
 import { createOarRuntimes } from "@eta/runtime-oar";
@@ -35,6 +37,7 @@ import { LLM_ROUTE } from "./llm/route";
 import { openLlm } from "./llm/runtime";
 import { DaemonBuilds, defaultBuildsDir } from "./machines/builds";
 import { Tailscale } from "./machines/tailscale";
+import { McpHost } from "./mcp/host";
 import { createProduct } from "./product";
 
 export interface HostOptions {
@@ -67,6 +70,11 @@ export interface HostOptions {
   models?: AssembleOptions["models"];
   /** Where the agent's home is, for personas. Defaults to the real one. */
   home?: string;
+  /**
+   * MCP for the sessions this host runs (`~/.eta/mcp.json`, the project's `.mcp.json`). `false`
+   * turns it off; an object overrides the library's manager (a test turns its timers off).
+   */
+  mcp?: false | McpHostOptions["manager"];
   /** What a published site may hold; the defaults are for real use, a test makes them small. */
   artifactLimits?: Partial<SiteLimits> | undefined;
   /**
@@ -151,6 +159,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
   let server: AssembledServer;
   let product: Product;
   let llm: LlmRuntime | undefined;
+  let mcp: McpHost | undefined;
   const gatewayModels = new GatewayModels();
   try {
     applyMigrations(db, loadMigrations());
@@ -196,6 +205,16 @@ export async function startHost(options: HostOptions): Promise<Host> {
       ...(options.ssh === undefined ? {} : { ssh: options.ssh }),
     });
     const web = createWebRoutes(options.webDir);
+    // This machine's MCP servers, for the realm of the sessions opened here.
+    mcp =
+      options.mcp === false
+        ? undefined
+        : new McpHost({
+            dataDir: options.dataDir,
+            home: options.home ?? homedir(),
+            warn,
+            manager: options.mcp,
+          });
     server = await assembleServer({
       dataDir: options.dataDir,
       configPath: join(options.dataDir, "config.json"),
@@ -223,6 +242,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       // and, from each of its features, tools, tool middleware and an ear for questions.
       agentPromptFor: product.engine.agentPromptFor,
       skillDirsFor: product.skillDirsFor,
+      ...(mcp === undefined ? {} : { mcpFor: mcp.sessionMcp }),
       ...product.sessionHooks,
       generated: product.generated,
       // An agent on an external runtime has its sessions' runs taken by it (`@eta/runtime-oar`).
@@ -263,6 +283,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       throw error;
     }
   } catch (error) {
+    await mcp?.close();
     db.close();
     throw error;
   }
@@ -283,6 +304,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       closing ??= (async () => {
         await product.close();
         await server.close();
+        await mcp?.close();
         await llm?.close();
         db.close();
       })();
