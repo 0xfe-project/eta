@@ -15,7 +15,9 @@
  *
  * The host is the same build as the daemons it carries: it takes their version from their manifest
  * (`ETA_DAEMON_VERSION`, or what `apps/daemon/scripts/build.ts` makes of the commit) and the commit
- * from git, by `--define` (`apps/eta/src/version.ts`).
+ * from git, by `--define` (`apps/eta/src/version.ts`). `ETA_HOST_UPSTREAM` is the repository the
+ * build takes its upgrades from (`apps/eta/src/upgrade/upstream.ts`): `release.yml` names its own,
+ * which is how a fork's builds come to follow the fork.
  *
  * The cpajs platform packages are external to the bundle: their table names every platform, the
  * install has one, and the compiled host is handed its binary by path instead.
@@ -32,6 +34,7 @@ import process from "node:process";
 import { $ } from "bun";
 import { writeEmbedded } from "../../eta/scripts/embed";
 import { thirdPartyNotices } from "../../eta/scripts/notices";
+import { parseUpstream } from "../../eta/src/upgrade/upstream";
 
 const root = resolve(import.meta.dir, "../../..");
 const app = join(root, "apps", "eta");
@@ -86,9 +89,14 @@ const externals = [
   "openbsd",
   "netbsd",
 ].flatMap((os) => ["--external", `@cpajs/${os}-*`]);
+const upstream = process.env.ETA_HOST_UPSTREAM?.trim();
 const defines = [
   `ETA_HOST_VERSION=${JSON.stringify(version)}`,
   `ETA_HOST_COMMIT=${JSON.stringify(commit)}`,
+  // Read now: a build that cannot upgrade would only find out in the field.
+  ...(upstream
+    ? [`ETA_HOST_UPSTREAM=${JSON.stringify(parseUpstream(upstream).api)}`]
+    : []),
 ].flatMap((define) => ["--define", define]);
 const outfile = process.platform === "win32" ? "eta-host.exe" : "eta-host";
 await $`bun build --compile --target=bun ${defines} ${externals} ${entry} --outfile ${join(out, outfile)}`;

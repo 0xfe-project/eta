@@ -11,17 +11,36 @@ import type {
   UpgradeBusy,
   UpgradeCheckView,
   UpgradeResults,
+  UpgradeTokenView,
+  UpgradeUpstreamSource,
+  UpgradeUpstreamView,
 } from "@eta/client-contracts";
+import type { SettingStore } from "../inbox/setting";
 import type { HostService } from "./service";
 import { realpathSync } from "node:fs";
 import process from "node:process";
 import { COMPILED } from "../resources";
+import { loadSecretKey } from "../secret";
 import { VERSION } from "../version";
 import { Args, productPlugin } from "../wire";
-import { Releases } from "./releases";
+import { Releases, releaseToken } from "./releases";
 import { findHostService } from "./service";
 import { readStatus } from "./status";
+import {
+  cleanToken,
+  openToken,
+  sealToken,
+  TOKEN_SETTING,
+  tokenHost,
+} from "./token";
 import { versionOrder } from "./upgrade";
+import {
+  BUILT_UPSTREAM,
+  chooseUpstream,
+  parseUpstream,
+  UPSTREAM_SETTING,
+  upstreamLabel,
+} from "./upstream";
 import { cancelWorker, startWorker } from "./worker";
 
 const STATUS_PATH = "/upgrade/status";
@@ -32,11 +51,13 @@ export interface UpgradePluginOptions {
   dataDir: string;
   /** What a restart would stop. */
   busy: () => UpgradeBusy[];
+  settings: Pick<SettingStore, "get" | "set" | "delete">;
   /** The rest is here for a test. */
   version?: string;
   compiled?: boolean;
   execPath?: string;
   releases?: Pick<Releases, "latest">;
+  findToken?: typeof releaseToken;
   findService?: () => Promise<HostService | undefined>;
   start?: typeof startWorker;
   cancel?: typeof cancelWorker;
@@ -64,17 +85,52 @@ async function blockedBy(
     : { blocked: "other-file" };
 }
 
+/** Which upstream counts here, and what the page needs to say about it. */
+function currentUpstream({ settings }: UpgradePluginOptions): {
+  text: string;
+  view: UpgradeUpstreamView;
+} {
+  const stored = settings.get(UPSTREAM_SETTING);
+  const saved = typeof stored === "string" ? stored : undefined;
+  const { source, text } = chooseUpstream({ saved });
+  return {
+    text,
+    view: {
+      label: upstreamLabel(text),
+      // `chooseUpstream` only says `flag` when given one, and no page can.
+      source: source as UpgradeUpstreamSource,
+      saved: saved === undefined ? null : upstreamLabel(saved),
+      fallback: upstreamLabel(BUILT_UPSTREAM),
+    },
+  };
+}
+
 async function check(options: UpgradePluginOptions): Promise<UpgradeCheckView> {
   const version = options.version ?? VERSION;
   const { blocked } = await blockedBy(options).catch(() => ({
     blocked: "no-service" as const,
   }));
-  const releases =
-    options.releases ??
-    new Releases(
-      process.env.ETA_RELEASES_URL ? { url: process.env.ETA_RELEASES_URL } : {},
-    );
+  const { text, view: upstream } = currentUpstream(options);
+  const stored = options.settings.get(TOKEN_SETTING);
+  const token: UpgradeTokenView = {
+    host: null,
+    from: null,
+    saved: tokenHost(stored) ?? null,
+  };
   try {
+    const parsed = parseUpstream(text);
+    if (parsed.kind !== "other") token.host = parsed.host;
+    const found = await (options.findToken ?? releaseToken)(
+      parsed,
+      process.env,
+      stored === undefined
+        ? undefined
+        : openToken(loadSecretKey(options.dataDir), stored),
+    );
+    token.from = found.from ?? null;
+    const releases =
+      options.releases ??
+      new Releases({ upstream: text, token: () => Promise.resolve(found) });
     const latest = (await releases.latest()).version;
     const order = versionOrder(latest, version);
     return {
@@ -83,6 +139,8 @@ async function check(options: UpgradePluginOptions): Promise<UpgradeCheckView> {
       available: latest !== version && (order === undefined || order > 0),
       blocked,
       busy: options.busy(),
+      upstream,
+      token,
       error: null,
     };
   } catch (error) {
@@ -92,6 +150,8 @@ async function check(options: UpgradePluginOptions): Promise<UpgradeCheckView> {
       available: false,
       blocked,
       busy: options.busy(),
+      upstream,
+      token,
       error: error instanceof Error ? error.message : String(error),
     };
   }
@@ -121,6 +181,33 @@ export function upgradePlugin(
             waitMinutes: WAIT_MINUTES,
           });
           const result: UpgradeResults["start"] = { id };
+          return { result };
+        }),
+        wire.handle("upgrade", "setUpstream", async (call) => {
+          const given = new Args(call).optionalString("upstream");
+          if (given === undefined) options.settings.delete(UPSTREAM_SETTING);
+          else options.settings.set(UPSTREAM_SETTING, parseUpstream(given).api);
+          const result: UpgradeResults["setUpstream"] =
+            currentUpstream(options).view;
+          return { result };
+        }),
+        wire.handle("upgrade", "setToken", async (call) => {
+          const given = new Args(call).optionalString("token");
+          const { settings, dataDir } = options;
+          if (given === undefined) settings.delete(TOKEN_SETTING);
+          else {
+            const { host, kind } = parseUpstream(currentUpstream(options).text);
+            if (kind === "other")
+              throw new Error(
+                "this upstream is not GitHub: it takes ETA_RELEASES_TOKEN",
+              );
+            const token = cleanToken(given);
+            const key = loadSecretKey(dataDir);
+            settings.set(TOKEN_SETTING, sealToken(key, { host, token }));
+          }
+          const result: UpgradeResults["setToken"] = {
+            saved: tokenHost(settings.get(TOKEN_SETTING)) ?? null,
+          };
           return { result };
         }),
         wire.handle("upgrade", "cancel", async () => {

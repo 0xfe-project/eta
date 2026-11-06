@@ -5,26 +5,49 @@
  * upgrade runs before a restart. What a build does once started is the fake service's script: the
  * file it finds under the executable's name decides whether `/up` answers. The database is real.
  */
+import type { ReleaseToken } from "../src/upgrade/releases";
 import type { HostService } from "../src/upgrade/service";
 import type { UpgradeOptions } from "../src/upgrade/upgrade";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { databasePath, openDatabase } from "../src/db";
+import {
+  applyMigrations,
+  databasePath,
+  loadMigrations,
+  openDatabase,
+} from "../src/db";
+import { SettingStore } from "../src/inbox/setting";
+import { loadSecretKey } from "../src/secret";
 import {
   backupDatabase,
   BACKUPS_KEPT,
   busyAgents,
   busyText,
   restoreDatabase,
+  savedToken,
+  savedUpstream,
 } from "../src/upgrade/database";
 import { parseSums, Releases, releaseToken } from "../src/upgrade/releases";
 import { askUp, upUrl } from "../src/upgrade/service";
+import {
+  openToken,
+  sealToken,
+  TOKEN_SETTING,
+  tokenHost,
+} from "../src/upgrade/token";
 import { upgradeHost } from "../src/upgrade/upgrade";
+import {
+  BUILT_UPSTREAM,
+  chooseUpstream,
+  parseUpstream,
+  UPSTREAM_SETTING,
+  upstreamLabel,
+} from "../src/upgrade/upstream";
 import { tempDir } from "./support/host";
 
 const PLATFORM = `eta-host-${process.platform}-${process.arch}`;
@@ -228,8 +251,8 @@ describe("eta-host upgrade", () => {
       execPath: exe,
       dataDir,
       releases: new Releases({
-        url: github.url,
-        token: () => Promise.resolve(undefined),
+        upstream: github.url,
+        token: () => Promise.resolve({}),
       }),
       findService: () => Promise.resolve(overrides.service),
       log: (line) => lines.push(line),
@@ -320,12 +343,12 @@ describe("eta-host upgrade", () => {
       github.stop();
       github = fakeGitHub({ requireToken: "s3cret" });
       github.publish("1.1.0", { body: build("1.1.0") });
-      await expect(upgrade()).rejects.toThrow(/not found.*GH_TOKEN/);
+      await expect(upgrade()).rejects.toThrow(/not found.*ETA_RELEASES_TOKEN/);
 
       await upgrade({
         releases: new Releases({
-          url: github.url,
-          token: () => Promise.resolve("s3cret"),
+          upstream: github.url,
+          token: () => Promise.resolve({ token: "s3cret" }),
         }),
       });
       expect(await readFile(exe, "utf8")).toBe(build("1.1.0"));
@@ -335,8 +358,8 @@ describe("eta-host upgrade", () => {
       github.publish("1.1.0", { body: build("1.1.0") });
       const asked: (string | null)[] = [];
       const releases = new Releases({
-        url: github.url,
-        token: () => Promise.resolve("stale"),
+        upstream: github.url,
+        token: () => Promise.resolve({ token: "stale" }),
         fetch: (async (url: string, init?: RequestInit) => {
           const authorization = new Headers(init?.headers).get("authorization");
           asked.push(authorization);
@@ -354,8 +377,8 @@ describe("eta-host upgrade", () => {
     it("does not carry the token to the signed address", async () => {
       github.publish("1.1.0", { body: build("1.1.0") });
       const releases = new Releases({
-        url: github.url,
-        token: () => Promise.resolve("s3cret"),
+        upstream: github.url,
+        token: () => Promise.resolve({ token: "s3cret" }),
       });
       const release = await releases.latest();
       const path = join(dir, "file");
@@ -806,23 +829,6 @@ describe("the pieces", () => {
     );
   });
 
-  it("gives GitHub's tokens to GitHub, and another server only its own", async () => {
-    const fork = "https://api.github.com/repos/someone/fork";
-    expect(await releaseToken(fork, { GH_TOKEN: "a" })).toBe("a");
-    expect(await releaseToken(fork, { GITHUB_TOKEN: "b" })).toBe("b");
-    expect(await releaseToken(fork, { GH_TOKEN: "a", GITHUB_TOKEN: "b" })).toBe(
-      "a",
-    );
-
-    const mirror = "http://mirror.example/repos/o/r";
-    expect(
-      await releaseToken(mirror, { GH_TOKEN: "a", GITHUB_TOKEN: "b" }),
-    ).toBeUndefined();
-    expect(
-      await releaseToken(mirror, { GH_TOKEN: "a", ETA_RELEASES_TOKEN: "c" }),
-    ).toBe("c");
-  });
-
   it("asks /up directly, whatever proxy the shell has", async () => {
     const server = Bun.serve({
       port: 0,
@@ -858,5 +864,506 @@ describe("the pieces", () => {
       "http://127.0.0.1:1/up",
     );
     await expect(upUrl(["--port", "0"])).rejects.toThrow(/any free port/);
+  });
+});
+
+describe("where releases come from", () => {
+  const SHAPES: [string, string, string, string][] = [
+    [
+      "someone/fork",
+      "github",
+      "https://api.github.com/repos/someone/fork",
+      "someone/fork",
+    ],
+    [
+      "  someone/fork.js ",
+      "github",
+      "https://api.github.com/repos/someone/fork.js",
+      "someone/fork.js",
+    ],
+    [
+      "https://github.com/someone/fork",
+      "github",
+      "https://api.github.com/repos/someone/fork",
+      "someone/fork",
+    ],
+    [
+      "https://github.com/someone/fork.git",
+      "github",
+      "https://api.github.com/repos/someone/fork",
+      "someone/fork",
+    ],
+    [
+      "github.com/someone/fork/",
+      "github",
+      "https://api.github.com/repos/someone/fork",
+      "someone/fork",
+    ],
+    [
+      "https://api.github.com/repos/someone/fork/",
+      "github",
+      "https://api.github.com/repos/someone/fork",
+      "someone/fork",
+    ],
+    [
+      "https://ghe.corp/api/v3/repos/someone/fork",
+      "enterprise",
+      "https://ghe.corp/api/v3/repos/someone/fork",
+      "https://ghe.corp/api/v3/repos/someone/fork",
+    ],
+    [
+      "https://ghe.corp:8443/api/v3/repos/someone/fork/",
+      "enterprise",
+      "https://ghe.corp:8443/api/v3/repos/someone/fork",
+      "https://ghe.corp:8443/api/v3/repos/someone/fork",
+    ],
+    [
+      "http://127.0.0.1:9900/repos/o/r",
+      "other",
+      "http://127.0.0.1:9900/repos/o/r",
+      "http://127.0.0.1:9900/repos/o/r",
+    ],
+  ];
+
+  it.each(SHAPES)("reads %s", (text, kind, api, label) => {
+    expect(parseUpstream(text)).toMatchObject({ kind, api, label });
+    expect(parseUpstream(label).api).toBe(api);
+  });
+
+  it("tells gh the server, and keeps a token on the API", () => {
+    expect(parseUpstream("o/r")).toMatchObject({
+      host: "github.com",
+      root: "https://api.github.com",
+    });
+    expect(
+      parseUpstream("https://ghe.corp:8443/api/v3/repos/o/r"),
+    ).toMatchObject({
+      host: "ghe.corp:8443",
+      root: "https://ghe.corp:8443/api/v3",
+    });
+  });
+
+  it("gives GitHub's credentials to nothing that only looks like it", () => {
+    for (const lookalike of [
+      "http://api.github.com/repos/o/r",
+      "https://api.github.com.evil.example/repos/o/r",
+      "https://evil.example/repos/o/r",
+      "http://ghe.corp/api/v3/repos/o/r",
+      "https://ghe.corp/api/v3/o/r",
+      "https://ghe.corp/api/v4/repos/o/r",
+      "https://api.github.com:8443/repos/o/r",
+    ])
+      expect(parseUpstream(lookalike).kind).toBe("other");
+  });
+
+  it.each([
+    "",
+    "nothing",
+    "mirror.example/o/r",
+    "https://mirror.example",
+    "a/b/c/d/",
+    "git@github.com:o/r.git",
+    "ftp://github.com/o/r",
+    "file:///etc/passwd",
+    "https://github.com/o",
+    "https://github.com/o/r/releases",
+    "https://api.github.com/users/o",
+    "https://github.com/o/..",
+    "o/..",
+    "o/.git",
+    "https://mirror.example/repos/o/r?token=x",
+    "https://mirror.example/repos/o/r#x",
+  ])("refuses %j", (text) => {
+    expect(() => parseUpstream(text)).toThrow(/not a repository/);
+  });
+
+  it("refuses an address that carries a login, and does not repeat it", () => {
+    for (const text of [
+      "https://me:s3cret@ghe.corp/api/v3/repos/o/r",
+      "https://s3cret@mirror.example/repos/o/r",
+    ]) {
+      expect(() => parseUpstream(text)).toThrow(/cannot carry a login/);
+      expect(() => parseUpstream(text)).not.toThrow(/s3cret/);
+    }
+  });
+
+  it("names something unreadable as it is", () => {
+    expect(upstreamLabel("nothing")).toBe("nothing");
+    expect(upstreamLabel("https://github.com/o/r")).toBe("o/r");
+  });
+
+  it.each([
+    "https://me:s3cret@ghe.corp:not-a-port/api/v3/repos/o/r",
+    "https://me:s3cret/more@ghe.corp:not-a-port/api/v3/repos/o/r",
+    "https://mirror.example/repos/o/r?token=s3cret",
+    "https://mirror.example/repos/o/r#s3cret",
+  ])("repeats no secret of what it cannot read: %s", (text) => {
+    expect(() => parseUpstream(text)).toThrow(/not a repository/);
+    expect(() => parseUpstream(text)).not.toThrow(/s3cret/);
+    expect(upstreamLabel(text)).not.toContain("s3cret");
+  });
+
+  it("takes the first that is given", () => {
+    const env = { ETA_RELEASES_URL: "from/env" };
+    const all = { flag: "from/flag", saved: "from/setting", env };
+    expect(chooseUpstream(all)).toEqual({ text: "from/flag", source: "flag" });
+    expect(chooseUpstream({ ...all, flag: undefined })).toEqual({
+      text: "from/env",
+      source: "env",
+    });
+    expect(chooseUpstream({ saved: "from/setting", env: {} })).toEqual({
+      text: "from/setting",
+      source: "setting",
+    });
+    expect(
+      chooseUpstream({
+        saved: "from/setting",
+        env: { ETA_RELEASES_URL: "" },
+      }).source,
+    ).toBe("setting");
+    expect(chooseUpstream({ env: {} })).toEqual({
+      text: BUILT_UPSTREAM,
+      source: "build",
+    });
+    expect(BUILT_UPSTREAM).toBe("0xfe-project/eta");
+  });
+});
+
+describe("the saved upstream, from outside the host", () => {
+  it("is nothing without a database, or a settings table", async () => {
+    const dir = await tempDir();
+    expect(savedUpstream(dir)).toBeUndefined();
+    new Database(join(dir, "eta.sqlite")).close();
+    expect(savedUpstream(dir)).toBeUndefined();
+  });
+
+  it("is what the host saved", async () => {
+    const dir = await tempDir();
+    const db = openDatabase(databasePath(dir));
+    applyMigrations(db, loadMigrations());
+    new SettingStore(db).set(UPSTREAM_SETTING, "someone/fork");
+    expect(savedUpstream(dir)).toBe("someone/fork");
+    new SettingStore(db).delete(UPSTREAM_SETTING);
+    expect(savedUpstream(dir)).toBeUndefined();
+    db.close();
+  });
+
+  it("stops an upgrade rather than guess past a damaged database", async () => {
+    const dir = await tempDir();
+    await writeFile(join(dir, "eta.sqlite"), "this is not a database at all");
+    expect(() => savedUpstream(dir)).toThrow();
+  });
+});
+
+describe("which token", () => {
+  const github = parseUpstream("someone/fork");
+  const enterprise = parseUpstream("https://ghe.corp/api/v3/repos/o/r");
+  const mirror = parseUpstream("http://mirror.example/repos/o/r");
+
+  /** A `gh` on the PATH: what it answers for `auth token`, and whether it has a user in its config. */
+  async function gh(script: string): Promise<NodeJS.ProcessEnv> {
+    const bin = await tempDir("eta-gh-");
+    await writeFile(join(bin, "gh"), `#!/bin/sh\n${script}\n`, { mode: 0o755 });
+    return { PATH: `${bin}:${process.env.PATH}` };
+  }
+
+  it("takes GitHub's from the environment, in order", async () => {
+    expect(await releaseToken(github, { GH_TOKEN: "a" })).toEqual({
+      token: "a",
+      from: "GH_TOKEN",
+    });
+    expect(await releaseToken(github, { GITHUB_TOKEN: "b" })).toEqual({
+      token: "b",
+      from: "GITHUB_TOKEN",
+    });
+    expect(
+      await releaseToken(github, { GH_TOKEN: "a", GITHUB_TOKEN: "b" }),
+    ).toMatchObject({ token: "a" });
+  });
+
+  it("does not ask gh about what the environment answers", async () => {
+    const env = await gh("exit 7");
+    expect(await releaseToken(github, { ...env, GH_TOKEN: "a" })).toMatchObject(
+      { token: "a" },
+    );
+  });
+
+  it("takes GitHub Enterprise's own first", async () => {
+    expect(
+      await releaseToken(enterprise, {
+        GH_TOKEN: "a",
+        GITHUB_TOKEN: "b",
+        GH_ENTERPRISE_TOKEN: "c",
+      }),
+    ).toEqual({ token: "c", from: "GH_ENTERPRISE_TOKEN" });
+    expect(await releaseToken(enterprise, { GH_TOKEN: "a" })).toMatchObject({
+      token: "a",
+    });
+  });
+
+  it("gives another server only its own, and never asks gh", async () => {
+    const env = await gh('echo "from-gh"');
+    const all = {
+      ...env,
+      GH_TOKEN: "a",
+      GITHUB_TOKEN: "b",
+      GH_ENTERPRISE_TOKEN: "c",
+    };
+    expect(await releaseToken(mirror, all)).toEqual({});
+    expect(
+      await releaseToken(mirror, { ...all, ETA_RELEASES_TOKEN: "d" }),
+    ).toEqual({ token: "d", from: "ETA_RELEASES_TOKEN" });
+    expect(
+      await releaseToken(github, { ETA_RELEASES_TOKEN: "d", ...env }),
+    ).toEqual({
+      token: "from-gh",
+      from: "gh",
+    });
+  });
+
+  describe("one the user saved", () => {
+    const saved = { host: "github.com", token: "saved" };
+
+    it("comes after the environment and before gh", async () => {
+      const env = await gh('echo "from-gh"');
+      expect(
+        await releaseToken(github, { ...env, GH_TOKEN: "a" }, saved),
+      ).toEqual({ token: "a", from: "GH_TOKEN" });
+      expect(await releaseToken(github, env, saved)).toEqual({
+        token: "saved",
+        from: "Settings",
+      });
+    });
+
+    it("goes to its own host and nowhere else", async () => {
+      const env = await gh('echo "from-gh"');
+      expect(await releaseToken(enterprise, env, saved)).toEqual({
+        token: "from-gh",
+        from: "gh",
+      });
+      expect(await releaseToken(mirror, env, saved)).toEqual({});
+      const lookalike = parseUpstream("http://github.com/repos/o/r");
+      expect(lookalike.host).toBe("github.com");
+      expect(await releaseToken(lookalike, env, saved)).toEqual({});
+    });
+
+    it("does not open under another host's key", () => {
+      const stored = sealToken(randomBytes(32), saved);
+      expect(tokenHost(stored)).toBe("github.com");
+      expect(openToken(randomBytes(32), stored)).toBeUndefined();
+      expect(JSON.stringify(stored)).not.toContain('saved"');
+    });
+
+    it("is read back outside the host", async () => {
+      const dir = await tempDir();
+      expect(savedToken(dir)).toBeUndefined();
+      const db = openDatabase(databasePath(dir));
+      applyMigrations(db, loadMigrations());
+      expect(savedToken(dir)).toBeUndefined();
+      expect(existsSync(join(dir, "secret.key"))).toBe(false);
+      new SettingStore(db).set(
+        TOKEN_SETTING,
+        sealToken(loadSecretKey(dir), saved),
+      );
+      expect(savedToken(dir)).toEqual(saved);
+      db.close();
+    });
+
+    it("is named by where it came from when it is refused", async () => {
+      const releases = new Releases({
+        upstream: "o/r",
+        saved,
+        fetch: ((_url: string, init: RequestInit) =>
+          Promise.resolve(
+            new Response("", {
+              status: new Headers(init.headers).has("authorization")
+                ? 401
+                : 404,
+            }),
+          )) as unknown as typeof fetch,
+        token: () => releaseToken(parseUpstream("o/r"), {}, saved),
+      });
+      await expect(releases.latest()).rejects.toThrow(
+        /token from Settings was refused/,
+      );
+    });
+  });
+
+  it("asks gh about the upstream's own host", async () => {
+    const env = await gh(
+      '[ "$1 $2 $3" = "auth token --hostname" ] && echo "for $4"',
+    );
+    expect(await releaseToken(github, env)).toMatchObject({
+      token: "for github.com",
+    });
+    expect(await releaseToken(enterprise, env)).toMatchObject({
+      token: "for ghe.corp",
+    });
+  });
+
+  it("knows gh without a login from gh that cannot read one", async () => {
+    expect(
+      await releaseToken(
+        github,
+        await gh('echo "no oauth token found for github.com" >&2; exit 1'),
+      ),
+    ).toEqual({ gh: "logged-out" });
+    expect(
+      await releaseToken(
+        github,
+        await gh('[ "$1" = config ] && echo someone && exit 0; exit 1'),
+      ),
+    ).toEqual({ gh: "unreadable" });
+  });
+
+  it("knows when there is no gh", async () => {
+    const empty = await tempDir("eta-gh-");
+    expect(await releaseToken(github, { PATH: empty })).toEqual({
+      gh: "missing",
+    });
+  });
+});
+
+describe("what a repository that cannot be read says", () => {
+  /** A GitHub that answers `status` for releases and `repository` for the repository itself. */
+  const answering = (status: number, repository = 404, body = "") =>
+    ((url: string) =>
+      Promise.resolve(
+        new Response(body, {
+          status: url.endsWith("/repos/o/r") ? repository : status,
+        }),
+      )) as unknown as typeof fetch;
+  const latest = (
+    token: ReleaseToken,
+    fetcher: typeof fetch,
+    upstream = "o/r",
+  ) =>
+    new Releases({
+      upstream,
+      token: () => Promise.resolve(token),
+      fetch: fetcher,
+    }).latest();
+
+  it("without a token, says why there is none", async () => {
+    await expect(latest({ gh: "logged-out" }, answering(404))).rejects.toThrow(
+      /private.*gh auth login.*GH_TOKEN/,
+    );
+    await expect(latest({ gh: "missing" }, answering(404))).rejects.toThrow(
+      /gh is not on this process's PATH/,
+    );
+    await expect(latest({ gh: "unreadable" }, answering(404))).rejects.toThrow(
+      /cannot read.*--insecure-storage.*GH_TOKEN/,
+    );
+  });
+
+  it("says GitHub Enterprise's own way to log in", async () => {
+    await expect(
+      latest(
+        { gh: "logged-out" },
+        answering(404),
+        "https://ghe.corp/api/v3/repos/o/r",
+      ),
+    ).rejects.toThrow(
+      /gh auth login --hostname ghe\.corp.*GH_ENTERPRISE_TOKEN/,
+    );
+  });
+
+  it("with a token, blames the token, by where it came from", async () => {
+    await expect(
+      latest({ token: "s3cret", from: "gh" }, answering(404)),
+    ).rejects.toThrow(
+      /o\/r does not exist, or the token from gh cannot read it/,
+    );
+    await expect(
+      latest({ token: "s3cret", from: "GH_TOKEN" }, answering(403)),
+    ).rejects.toThrow(/403.*the token from GH_TOKEN is not allowed/);
+  });
+
+  it("tells a token that was refused from one that is missing", async () => {
+    const fetcher = ((url: string, init: RequestInit) =>
+      Promise.resolve(
+        new Response("", {
+          status: new Headers(init.headers).has("authorization") ? 401 : 404,
+        }),
+      )) as unknown as typeof fetch;
+    await expect(
+      latest({ token: "old", from: "GH_TOKEN" }, fetcher),
+    ).rejects.toThrow(/token from GH_TOKEN was refused/);
+  });
+
+  it("tells a repository with no release from one it cannot see", async () => {
+    await expect(
+      latest({ token: "s3cret", from: "gh" }, answering(404, 200)),
+    ).rejects.toThrow(/o\/r has no such release/);
+    await expect(latest({}, answering(404, 200))).rejects.not.toThrow(/token/);
+  });
+
+  it("tells another server about its own token, not about gh", async () => {
+    const mirror = "https://mirror.example/repos/o/r";
+    await expect(latest({}, answering(401), mirror)).rejects.toThrow(
+      /401 \(set ETA_RELEASES_TOKEN\)/,
+    );
+    await expect(latest({}, answering(403), mirror)).rejects.not.toThrow(
+      /gh|GH_TOKEN|GitHub/,
+    );
+    await expect(latest({}, answering(404), mirror)).rejects.toThrow(
+      /ETA_RELEASES_TOKEN/,
+    );
+  });
+
+  it("never repeats a token, even one the server echoes", async () => {
+    const echo = answering(500, 404, "bad s3cret here");
+    const error = await latest({ token: "s3cret", from: "gh" }, echo).catch(
+      (caught: unknown) => caught as Error,
+    );
+    expect(String(error)).not.toContain("s3cret");
+    expect(String(error)).toContain("[token]");
+  });
+
+  it("carries a token on the API alone", async () => {
+    const seen: [string, string | null][] = [];
+    const fetcher = ((url: string, init: RequestInit) => {
+      seen.push([url, new Headers(init.headers).get("authorization")]);
+      return Promise.resolve(
+        seen.length === 1
+          ? new Response(null, {
+              status: 302,
+              headers: { location: "/storage/signed?sig=1" },
+            })
+          : new Response("{}"),
+      );
+    }) as unknown as typeof fetch;
+    const releases = new Releases({
+      upstream: "https://ghe.corp/api/v3/repos/o/r",
+      token: () => Promise.resolve({ token: "s3cret", from: "gh" }),
+      fetch: fetcher,
+    });
+    await releases.text({
+      name: "SHA256SUMS",
+      url: "https://ghe.corp/api/v3/repos/o/r/releases/assets/1",
+    });
+    expect(seen).toEqual([
+      ["https://ghe.corp/api/v3/repos/o/r/releases/assets/1", "Bearer s3cret"],
+      ["https://ghe.corp/storage/signed?sig=1", null],
+    ]);
+  });
+
+  it("does not follow an asset off the API with a token", async () => {
+    const seen: (string | null)[] = [];
+    const fetcher = ((_url: string, init: RequestInit) => {
+      seen.push(new Headers(init.headers).get("authorization"));
+      return Promise.resolve(new Response("{}"));
+    }) as unknown as typeof fetch;
+    const releases = new Releases({
+      upstream: "o/r",
+      token: () => Promise.resolve({ token: "s3cret", from: "gh" }),
+      fetch: fetcher,
+    });
+    await releases.text({ name: "x", url: "https://evil.example/x" });
+    await releases.text({
+      name: "x",
+      url: "https://api.github.com.evil.example/x",
+    });
+    expect(seen).toEqual([null, null]);
   });
 });

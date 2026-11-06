@@ -101,8 +101,6 @@ eta-host upgrade --cancel     # 取消正在进行的升级，服务已经停了
 
 第一个带 `upgrade` 的版本要用 `bun run host:install` 或手动替换文件装上，更早的版本没有这条命令。
 
-下载走 GitHub API，公开仓库不需要 token；私有仓库按 `GH_TOKEN`、`GITHUB_TOKEN`、`gh` 的登录依次取 token。`ETA_RELEASES_URL` 可以换一个仓库（`https://api.github.com/repos/<owner>/<repo>`）。指向 GitHub 以外的服务器时，这些 GitHub 凭据都不会发出去，只用 `ETA_RELEASES_TOKEN`。
-
 服务在运行时，升级交给一个单独的用户 unit `io.eta.host-upgrade` 来做，它不在 host 的 cgroup 里。`eta-host upgrade` 只是跟着打印进度：关掉终端、杀掉这条命令、host 停掉，都不影响它。进度写在 `~/.eta/upgrade-status.json`，日志在 `journalctl --user -u io.eta.host-upgrade`。这个文件不放数据库，因为回退时数据库会被换掉。
 
 顺序是这样，前一半不影响正在运行的 host：
@@ -128,6 +126,75 @@ eta-host upgrade --cancel     # 取消正在进行的升级，服务已经停了
 host 下面的智能体也可以直接运行 `upgrade`。它自己算在运行的智能体里，所以要加 `--force`，重启时它会被杀掉，升级继续。
 
 服务重启后 daemon 重新连上，host 会把它们换成自己带的版本。
+
+## 升级的来源
+
+上游决定这台 host 运行谁的代码。`SHA256SUMS` 和文件来自同一个地方，只能说明文件完整，防不了上游本身有问题。
+
+按顺序取第一个有的：
+
+1. 命令行 `--repo`，只管这一次。
+2. 环境变量 `ETA_RELEASES_URL`。
+3. 设置里“更新”一节保存的值，存在 host 的数据库里，服务和后台 worker 都读得到。
+4. 编译时写进二进制的默认值：CI 构建的是它自己所在的仓库，本地构建是 `0xfe-project/eta`。`eta-host upgrade --help` 会显示这个值。
+
+设置里只有用户能改，智能体的工具碰不到。服务的环境里有 `ETA_RELEASES_URL` 时它优先，设置页会说明，不提供修改。
+
+四种来源的写法相同：
+
+| 写法                                      | 是什么                               |
+| ----------------------------------------- | ------------------------------------ |
+| `owner/name`                              | github.com 上的仓库                  |
+| `https://github.com/owner/name`           | 同上                                 |
+| `https://api.github.com/repos/owner/name` | 同上                                 |
+| `https://<主机>/api/v3/repos/owner/name`  | GitHub Enterprise                    |
+| 其它 `http(s)` 地址                       | 其它服务器，要答和 GitHub 一样的 API |
+
+地址里不能带账号密码或查询参数：它会显示在页面上，也会写进日志。
+
+取第一个有的 token：
+
+| 上游              | 顺序                                                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| github.com        | `GH_TOKEN`、`GITHUB_TOKEN`、设置里保存的、`gh auth token --hostname github.com`，都没有就匿名                    |
+| GitHub Enterprise | `GH_ENTERPRISE_TOKEN`、`GH_TOKEN`、`GITHUB_TOKEN`、设置里保存的、`gh auth token --hostname <主机>`，都没有就匿名 |
+| 其它服务器        | 只用 `ETA_RELEASES_TOKEN`                                                                                        |
+
+环境变量和 `gh` 每次现取，不保存。设置里的“访问令牌”是 eta 唯一保存的 token，适合服务够不着 `gh` 登录的情况：
+
+- 它用 host 的密钥（`~/.eta/secret.key`）加密，存在数据库的 `setting` 表里。数据库备份里也是密文。
+- 保存时绑定当时上游的主机，只发给这个主机。之后把上游换到别的主机，它就不再使用，页面会说明。
+- 保存后不再显示，页面只知道它属于哪个主机。
+- 服务器环境变量里的 token 优先于它，页面会说明。上游是其它服务器时不能保存，也不显示这一行。
+
+token 不进日志、状态文件和错误信息。
+
+GitHub 的凭据不会发给其它服务器，也不会发给下载重定向到的签名地址。只有 `https` 且路径是 `/api/v3/repos/<owner>/<name>` 的地址才算 GitHub Enterprise，所以这个判断只看地址：填了一个这样的地址，`GH_TOKEN` 就会发过去。
+
+服务能走通 `gh`，前提是 `gh` 在它的 `PATH` 上（`PATH` 是 `install-service` 时的 shell 给的），而且读得到登录状态。读不到时错误信息会分开说：
+
+- 没有 `gh`：装上，在设置里保存一个 token，或者给服务设置 `GH_TOKEN`。
+- `gh` 没有这个主机的登录：用服务的用户运行 `gh auth login`（Enterprise 加 `--hostname <主机>`），或者在设置里保存一个 token。
+- `gh` 有登录但读不到：登录存在钥匙串里，服务够不着。运行 `gh auth login --insecure-storage`，在设置里保存一个 token，或者给服务设置 `GH_TOKEN`。
+- 有 token 但读不到仓库：token 没有这个仓库的权限，或者仓库不存在。
+- token 被拒绝：过期或者被吊销了。
+
+## Fork 怎么发版
+
+fork 用同一份 `release.yml`，什么都不用改：工作流把 `github.repository` 写进二进制，所以 fork 打 tag 发出的版本默认从 fork 自己升级，用户不用配置。
+
+1. 在 fork 的 Actions 页面启用工作流。private fork 默认是关的。
+2. 打 tag 并推到 fork：
+
+   ```sh
+   git tag v0.2.0
+   git push <fork 的 remote> v0.2.0
+   ```
+
+3. 等 Release 发布。`check` 里 Turborepo Remote Cache 只属于上游，那一步在 fork 上失败不影响结果，只是第一次跑得久一些。macOS 和 Windows runner 在 private 仓库按倍数计算 Actions 分钟数。
+4. 下载 fork 的 `eta-host` 安装，或者已经在跑上游版本的 host 用 `eta-host upgrade --repo <owner>/<name>` 升上来。之后这台 host 默认跟着 fork。
+
+版本要比正在运行的新：比当前版本旧的 release 会被拒绝。fork 是 private 时，host 上要有读得到它的 token，见上一节。
 
 ### 设置里的更新按钮
 

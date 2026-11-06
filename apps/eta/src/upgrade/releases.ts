@@ -1,15 +1,23 @@
 /**
- * Where a release comes from: the repository's GitHub Releases, through the REST API.
+ * Where a release comes from: the repository's GitHub Releases, through the REST API. Which
+ * repository is `upstream.ts`.
  *
  * The API serves a private repository and a public one the same way, so there is one path and the
- * only difference is a token: `GH_TOKEN`, `GITHUB_TOKEN`, or what `gh` is logged in with. Without
- * any it asks anonymously, which is all a public repository needs. `ETA_RELEASES_URL` points it at
- * another repository (a fork) or at another server altogether, which is not given GitHub's
- * credentials: it gets `ETA_RELEASES_TOKEN`, and only that.
+ * only difference is a token: `GH_TOKEN`, `GITHUB_TOKEN` (first `GH_ENTERPRISE_TOKEN`, on GitHub
+ * Enterprise), one the user saved for that host (`token.ts`), or what `gh` is logged in with there.
+ * Without any it asks anonymously, which is all a public repository needs. Any other server is not
+ * given GitHub's credentials: it gets `ETA_RELEASES_TOKEN`, and only that.
+ *
+ * A token is found again for every `Releases`, and only one the user saved is kept. It is never
+ * put in an error: they end up in the status file and on the page. What they say instead is where
+ * the token came from, because the user has to tell an absent token from one that cannot read the
+ * repository, and from a `gh` that is logged in somewhere this process cannot reach.
  *
  * What is checked here is that a download is whole, against the `SHA256SUMS` of the same release.
  * That says the file is the one that was published, as far as GitHub is believed.
  */
+import type { SavedToken } from "./token";
+import type { Upstream } from "./upstream";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
@@ -17,16 +25,17 @@ import process from "node:process";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
+import { SAVED_TOKEN } from "./token";
+import { BUILT_UPSTREAM, parseUpstream } from "./upstream";
 
 const run = promisify(execFile);
-
-const GITHUB_RELEASES = "https://api.github.com/repos/0xfe-project/eta";
 
 const USER_AGENT = "eta-host";
 /** How long a request may go without a byte, on a file too big for a limit on the whole. */
 const STALL_MS = 60_000;
 const API_TIMEOUT_MS = 30_000;
 const MAX_REDIRECTS = 5;
+const GH_TIMEOUT_MS = 5000;
 
 export interface ReleaseAsset {
   name: string;
@@ -40,31 +49,73 @@ export interface Release {
   assets: ReleaseAsset[];
 }
 
+/** What `gh` had to say when it gave no token. */
+type GhTrouble =
+  /** It is not on this process's PATH. */
+  | "missing"
+  /** It has no login for the host. */
+  | "logged-out"
+  /** It has one and cannot read it: the keychain is out of a service's reach. */
+  | "unreadable";
+
+export interface ReleaseToken {
+  token?: string;
+  /** The name to say it by: an environment variable, `gh`, or `SAVED_TOKEN`. */
+  from?: string;
+  gh?: GhTrouble;
+}
+
 export interface ReleasesOptions {
-  url?: string;
-  token?: () => Promise<string | undefined>;
+  /** How the repository was given (`parseUpstream`); what the build says if not. */
+  upstream?: string;
+  /** What the user saved, if anything; it only counts on its own host. */
+  saved?: SavedToken | undefined;
+  token?: () => Promise<ReleaseToken>;
   fetch?: typeof fetch;
 }
 
-/** The token to ask with, if there is one. */
-export async function releaseToken(
-  url: string,
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<string | undefined> {
-  if (new URL(url).host !== new URL(GITHUB_RELEASES).host)
-    return env.ETA_RELEASES_TOKEN || undefined;
-  const given = env.GH_TOKEN || env.GITHUB_TOKEN;
-  if (given) return given;
+/** `gh`'s token for `host`, or why it has none. Its own words are not passed on. */
+async function askGh(
+  host: string,
+  env: NodeJS.ProcessEnv,
+): Promise<ReleaseToken> {
+  const gh = (...args: string[]) =>
+    run("gh", args, { env, timeout: GH_TIMEOUT_MS });
   try {
-    const { stdout } = await run(
-      "gh",
-      ["auth", "token", "--hostname", "github.com"],
-      { timeout: 5000 },
-    );
-    return stdout.trim() || undefined;
-  } catch {
-    return undefined;
+    const token = (await gh("auth", "token", "--hostname", host)).stdout.trim();
+    if (token !== "") return { token, from: "gh" };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT")
+      return { gh: "missing" };
+    // It says the same whether it has no login or cannot read one. Its config knows which.
   }
+  const user = await gh("config", "get", "user", "--host", host).then(
+    ({ stdout }) => stdout.trim(),
+    () => "",
+  );
+  return { gh: user === "" ? "logged-out" : "unreadable" };
+}
+
+/** The token to ask `upstream` with, if there is one. */
+export async function releaseToken(
+  upstream: Upstream,
+  env: NodeJS.ProcessEnv = process.env,
+  saved?: SavedToken,
+): Promise<ReleaseToken> {
+  const names =
+    upstream.kind === "other"
+      ? ["ETA_RELEASES_TOKEN"]
+      : upstream.kind === "enterprise"
+        ? ["GH_ENTERPRISE_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"]
+        : ["GH_TOKEN", "GITHUB_TOKEN"];
+  for (const name of names) {
+    const token = env[name];
+    if (token) return { token, from: name };
+  }
+  if (upstream.kind === "other") return {};
+  if (saved?.host === upstream.host)
+    return { token: saved.token, from: SAVED_TOKEN };
+  return await askGh(upstream.host, env);
 }
 
 /** `<sha256>  <file>` lines, as `sha256sum` writes them. */
@@ -79,14 +130,19 @@ export function parseSums(text: string): Map<string, string> {
 }
 
 export class Releases {
-  readonly #url: string;
+  readonly upstream: Upstream;
   readonly #fetch: typeof fetch;
-  #token: Promise<string | undefined>;
+  #token: Promise<ReleaseToken>;
+  /** The token the server refused, kept to say so and to keep it out of what it answers. */
+  #refusedToken: ReleaseToken | undefined;
 
   constructor(options: ReleasesOptions = {}) {
-    this.#url = (options.url ?? GITHUB_RELEASES).replace(/\/+$/, "");
+    this.upstream = parseUpstream(options.upstream ?? BUILT_UPSTREAM);
     this.#fetch = options.fetch ?? fetch;
-    this.#token = (options.token ?? (() => releaseToken(this.#url)))();
+    this.#token = (
+      options.token ??
+      (() => releaseToken(this.upstream, process.env, options.saved))
+    )();
   }
 
   /** The newest published release that is not a pre-release: what the API means by latest. */
@@ -148,7 +204,7 @@ export class Releases {
 
   async #release(path: string, what: string): Promise<Release> {
     const answer = await this.#get(
-      `${this.#url}/${path}`,
+      `${this.upstream.api}/${path}`,
       "application/vnd.github+json",
       AbortSignal.timeout(API_TIMEOUT_MS),
     );
@@ -176,8 +232,8 @@ export class Releases {
     signal: AbortSignal,
     hops = 0,
   ): Promise<Response> {
-    const onApi = new URL(url).origin === new URL(this.#url).origin;
-    const token = onApi ? await this.#token : undefined;
+    const onApi = new URL(url).href.startsWith(`${this.upstream.root}/`);
+    const { token } = onApi ? await this.#token : ({} as ReleaseToken);
     const answer = await this.#fetch(url, {
       headers: {
         accept,
@@ -189,7 +245,8 @@ export class Releases {
     });
     // A token gone stale is no reason to fail on a repository anyone may read.
     if (answer.status === 401 && token !== undefined) {
-      this.#token = Promise.resolve(undefined);
+      this.#refusedToken = await this.#token;
+      this.#token = Promise.resolve({});
       return await this.#get(url, accept, signal, hops);
     }
     const location = answer.headers.get("location");
@@ -204,21 +261,70 @@ export class Releases {
     );
   }
 
+  /** What would give this host a token, or the fact that the one it had was refused. */
+  #noToken(gh: GhTrouble | undefined): string {
+    const { host, kind } = this.upstream;
+    const refused = this.#refusedToken?.from;
+    if (refused !== undefined)
+      return `the token from ${refused} was refused: it has expired or been revoked`;
+    if (kind === "other") return "set ETA_RELEASES_TOKEN";
+    const hostname = kind === "enterprise" ? ` --hostname ${host}` : "";
+    const env = kind === "enterprise" ? "GH_ENTERPRISE_TOKEN" : "GH_TOKEN";
+    if (gh === "missing")
+      return `gh is not on this process's PATH: install it, save a token under Settings, or set ${env}`;
+    if (gh === "unreadable")
+      return `gh has a login for ${host} that this process cannot read, as happens to a service when the login is in a keychain: run \`gh auth login${hostname} --insecure-storage\`, save a token under Settings, or set ${env} in the service's environment`;
+    return `gh has no login for ${host} here: run \`gh auth login${hostname}\` as this user, save a token under Settings, or set ${env}`;
+  }
+
+  /** Whether the repository itself can be seen with what this has. A guess at worst: it only words an error. */
+  async #seesRepository(): Promise<boolean> {
+    if (this.upstream.kind === "other") return false;
+    return await this.#get(
+      this.upstream.api,
+      "application/vnd.github+json",
+      AbortSignal.timeout(API_TIMEOUT_MS),
+    ).then(
+      (answer) => answer.ok,
+      () => false,
+    );
+  }
+
   async #refused(what: string, answer: Response): Promise<Error> {
-    const anonymous = (await this.#token) === undefined;
-    if (answer.status === 404)
+    const { from, gh, token } = await this.#token;
+    const { kind, label } = this.upstream;
+    if (answer.status === 404) {
+      if (await this.#seesRepository())
+        return new Error(`${what}: not found: ${label} has no such release`);
+      if (token === undefined)
+        return new Error(
+          kind === "other" && this.#refusedToken === undefined
+            ? `${what}: not found (if this server wants a token: set ETA_RELEASES_TOKEN)`
+            : `${what}: not found: ${label} does not exist or is private, and there is no token to read it with: ${this.#noToken(gh)}`,
+        );
       return new Error(
-        anonymous
-          ? `${what}: not found (a private repository needs a token: set GH_TOKEN or \`gh auth login\`)`
-          : `${what}: not found`,
+        kind === "other"
+          ? `${what}: not found`
+          : `${what}: not found: ${label} does not exist, or the token from ${from} cannot read it`,
       );
-    const detail = await answer.text().catch(() => "");
+    }
+    let detail = await answer.text().catch(() => "");
+    for (const spent of [token, this.#refusedToken?.token])
+      if (spent !== undefined) detail = detail.replaceAll(spent, "[token]");
+    let why = "";
+    if ([401, 403, 429].includes(answer.status)) {
+      if (token === undefined)
+        why =
+          kind === "other"
+            ? ` (${this.#noToken(gh)})`
+            : ` (GitHub limits requests without a token: ${this.#noToken(gh)})`;
+      else if (kind !== "other")
+        why = ` (the token from ${from} is not allowed to read this, or has hit a limit)`;
+    }
     return new Error(
-      `${what}: the server answered ${answer.status}${
-        anonymous && (answer.status === 403 || answer.status === 429)
-          ? " (GitHub limits requests without a token: set GH_TOKEN or `gh auth login`)"
-          : ""
-      }${detail === "" ? "" : `: ${detail.slice(0, 200)}`}`,
+      `${what}: the server answered ${answer.status}${why}${
+        detail === "" ? "" : `: ${detail.slice(0, 200)}`
+      }`,
     );
   }
 }

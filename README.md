@@ -194,6 +194,10 @@ It checks the download, waits for working agents (`--force` does not), backs up 
 `~/.eta/backups`, restarts the service, and goes back on its own if the new build does not hold. A
 process of its own does this, so it outlives the terminal and the host. Settings has the same thing
 as a button.
+
+Releases come from the repository the build was released from, so a fork's builds follow the fork.
+`--repo <owner>/<name>` or Settings names another one, a private one included, with `gh`'s login,
+`GH_TOKEN`, or a token saved in Settings. That choice decides whose code the host runs: see [docs/release.md](docs/release.md).
 [docs/release.md](docs/release.md) has the details.
 
 Or run the host by hand:
