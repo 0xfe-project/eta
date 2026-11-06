@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Serializable client views and bundled operation contracts.",
+  "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
     "./plugin-fields": "./src/plugin-fields.ts"

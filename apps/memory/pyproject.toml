@@ -2,6 +2,7 @@
 name = "axp-memory-service"
 version = "0.1.0"
 description = "Agents' long-term memory: the sidecar of the eta host."
+license = "MIT"
 requires-python = ">=3.13,<3.14"
 dependencies = [
   "fastembed>=0.7",

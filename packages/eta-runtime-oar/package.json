@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "External agent runtimes (Claude Code, Codex, OpenCode, Pi) as an eta session's run, through oar.",
+  "license": "MIT",
   "exports": {
     ".": "./src/index.ts"
   },

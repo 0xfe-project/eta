@@ -261,7 +261,8 @@
      iPhone's home indicator. The real inset is a later task, and it changes this one line. */
   --bottom-inset: 34px;
   --font-heading: var(--font-sans);
-  /* The app ships one face (public/AKRDWGSCNFM-Regular.woff2, declared in index.html) and uses it
+  /* The app ships one face (public/AKRDWGSCNFM-Regular.woff2, declared in index.html: what it is
+     merged from and under which terms is in THIRD_PARTY_NOTICES.md at the root) and uses it
      for everything it says: interface, message text, everything. There is deliberately no setting
      that swaps it — the previous build let a person type a font name into settings, and the result
      was two people looking at two different products while reporting the same bug. */

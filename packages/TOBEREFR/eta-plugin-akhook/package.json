@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Declarative akhook rules for eta sessions: tool-call rules as middleware, lifecycle rules around runs, and streaming rules that interrupt and regenerate.",
+  "license": "MIT",
   "exports": {
     ".": "./src/index.ts"
   },

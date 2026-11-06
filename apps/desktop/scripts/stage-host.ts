@@ -8,18 +8,20 @@
  *
  *   migrations/     apps/eta/src/migrations
  *   Eta-Logo.png    the logo the mail template embeds
- *   web/            apps/web/dist, the page (built first: `bun run --cwd apps/web build`)
+ *   web/            apps/web/dist, the page (built first: `bun run --cwd apps/web build`), and
+ *                   THIRD_PARTY_NOTICES.md, written here next to it
  *   cpa/            CLIProxyAPI for this platform, and `cpa-launcher` next to it
  *   daemon/         eta-daemon for every platform, compressed, with its manifest
  *
  * The cpajs platform packages are external to the bundle: their table names every platform, the
  * install has one, and the compiled host is handed its binary by path instead.
  */
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { $ } from "bun";
 import { writeEmbedded } from "../../eta/scripts/embed";
+import { thirdPartyNotices } from "../../eta/scripts/notices";
 
 const root = resolve(import.meta.dir, "../../..");
 const app = join(root, "apps", "eta");
@@ -35,6 +37,9 @@ if (!existsSync(join(web, "index.html"))) {
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
+
+// With the page, so the one file carries its notices and the host serves them.
+writeFileSync(join(web, "THIRD_PARTY_NOTICES.md"), thirdPartyNotices(root));
 
 // The daemon for every platform it runs on: what this host keeps its machines at and installs new
 // ones from (`apps/eta/src/machines/builds.ts`).

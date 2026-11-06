@@ -3,6 +3,7 @@
   "type": "module",
   "private": true,
   "packageManager": "bun@1.4.3",
+  "license": "MIT",
   "workspaces": ["apps/*", "packages/*"],
   "engines": {
     "node": ">=22.12.0"

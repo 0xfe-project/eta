@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "The eta server: many sessions in one process, each one a harness session behind a store.",
+  "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
     "./testing": "./src/testing/index.ts"

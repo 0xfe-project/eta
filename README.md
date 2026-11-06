@@ -17,7 +17,8 @@
   <a href="#what-it-is">What it is</a> ·
   <a href="#the-part-where-we-disagree">The part where we disagree</a> ·
   <a href="#run-it">Run it</a> ·
-  <a href="#manual">Manual</a>
+  <a href="#manual">Manual</a> ·
+  <a href="#license">License</a>
 </p>
 
 ## TL;DR
@@ -250,3 +251,9 @@ the install, it travels with `$HOME/.eta`, and a row you delete stays deleted. S
 Origin checks on the pipe, a token gate that comes up automatically on a non-loopback bind, and
 capability routing so a daemon sees only what it needs. The full story is in
 [Access control](docs/architecture/access.md).
+
+## License
+
+eta is under the [MIT License](LICENSE). What it carries from others keeps its own terms: the Eta Sans
+font is not covered by the MIT License, and a compiled host embeds SearXNG, which is AGPL-3.0-or-later.
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
