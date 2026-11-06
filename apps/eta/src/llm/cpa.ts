@@ -143,6 +143,7 @@ export class Cpa {
  * A compiled host has no node_modules to find the platform package in: it carries the binary and
  * `cpa-launcher`, unpacked into one directory because cpajs looks for the launcher next to the
  * binary. On every launch, so a directory that was deleted comes back. Undefined from source.
+ * On Windows the binary is `cli-proxy-api.exe` and there is no launcher: cpajs has none to run.
  */
 async function embeddedBinary(dataDir: string): Promise<string | undefined> {
   const files = embeddedFiles("cpa");
@@ -150,7 +151,7 @@ async function embeddedBinary(dataDir: string): Promise<string | undefined> {
   const paths = await Promise.all(
     Object.keys(files).map((file) => unpack(dataDir, `cpa/${file}`)),
   );
-  return paths.find((path) => basename(path) === "cli-proxy-api");
+  return paths.find((path) => basename(path, ".exe") === "cli-proxy-api");
 }
 
 async function launch(

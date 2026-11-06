@@ -2,8 +2,8 @@
  * Stage the host a packaged app carries: `dist/host/`, which `electrobun.config.ts` copies into
  * the bundle as `host/`.
  *
- * One file, `eta-host`: the host (`apps/eta`) compiled with everything it reads at run time inside
- * it. `apps/eta/scripts/embed.ts` generates the entry that embeds them, and
+ * One file, `eta-host` (`eta-host.exe` on Windows): the host (`apps/eta`) compiled with everything
+ * it reads at run time inside it. `apps/eta/scripts/embed.ts` generates the entry that embeds them, and
  * `apps/eta/src/resources.ts` is how the host finds them:
  *
  *   migrations/     apps/eta/src/migrations
@@ -90,6 +90,7 @@ const defines = [
   `ETA_HOST_VERSION=${JSON.stringify(version)}`,
   `ETA_HOST_COMMIT=${JSON.stringify(commit)}`,
 ].flatMap((define) => ["--define", define]);
-await $`bun build --compile --target=bun ${defines} ${externals} ${entry} --outfile ${join(out, "eta-host")}`;
+const outfile = process.platform === "win32" ? "eta-host.exe" : "eta-host";
+await $`bun build --compile --target=bun ${defines} ${externals} ${entry} --outfile ${join(out, outfile)}`;
 
 console.log(`staged the host ${version} in ${out}`);
