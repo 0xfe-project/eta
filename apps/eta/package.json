@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "The eta host: one Bun process that serves the web, the product database and the upstream WebSocket server.",
+  "license": "MIT",
   "scripts": {
     "dev": "bun --watch src/main.ts --allow-origin http://127.0.0.1:${ETA_WEB_PORT:-3000} --github",
     "email:demo": "bun scripts/email-demo.ts",

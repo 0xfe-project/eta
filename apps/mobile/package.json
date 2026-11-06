@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "The phone client: a Native Shell app that talks to the host over the wire.",
+  "license": "MIT",
   "scripts": {
     "dev": "nsh run DevApp.tsx --target ios",
     "ios": "scripts/package-ios.sh simulator",

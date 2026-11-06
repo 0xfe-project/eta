@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "The pipe protocol between eta-server and any client: calls in, replies/state/events out. No op vocabulary, no business semantics.",
+  "license": "MIT",
   "exports": {
     ".": "./src/index.ts"
   },

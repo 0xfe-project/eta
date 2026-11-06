@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Eta kernel: cordis bus, three privileged primitives (goal/persona/tasks), the runner, and the type surface.",
+  "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
     "./testing": "./src/testing/index.ts",

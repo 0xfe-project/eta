@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "The git plugin: a checkout's branch and dirty state, as a fact about a session.",
+  "license": "MIT",
   "exports": {
     ".": "./src/index.ts"
   },
