@@ -53,6 +53,9 @@ import { configureWindowsWindow } from "./platform/windows";
 /** Kept in step with package.json and electrobun.config.ts; the page may show it. */
 const APP_VERSION = "0.1.0";
 
+/** What an executable's name ends in here. */
+const EXE = process.platform === "win32" ? ".exe" : "";
+
 /**
  * The menu bar, which on macOS is the input system rather than decoration.
  *
@@ -142,12 +145,13 @@ const APP_MENU: ApplicationMenuItemConfig[] = [
 if (process.platform === "darwin") ApplicationMenu.setApplicationMenu(APP_MENU);
 
 /**
- * The host the app carries: `host/` beside the main process's bundle, with the compiled host in
- * it. Only a packaged build has one — `build.copy` never lands in the dev bundle.
+ * The host the app carries: the compiled host in `host/`, beside the main process's bundle. Only
+ * a packaged build has one — `build.copy` never lands in the dev bundle.
  */
 function packagedHost(): string | undefined {
   const dir = join(dirname(Bun.main), "..", "host");
-  return existsSync(join(dir, "eta-host")) ? dir : undefined;
+  const file = join(dir, `eta-host${EXE}`);
+  return existsSync(file) ? file : undefined;
 }
 
 const packaged = packagedHost();
@@ -197,7 +201,7 @@ function repoRoot(): string {
 
 /** `bun` beside this runtime when there is one, else whatever `bun` is on PATH. */
 function bunBinary(): string {
-  const beside = join(dirname(process.execPath), "bun");
+  const beside = join(dirname(process.execPath), `bun${EXE}`);
   return existsSync(beside) ? beside : "bun";
 }
 
@@ -270,7 +274,7 @@ async function startHost(): Promise<Launch> {
   let cwd: string;
   let built: boolean;
   if (packaged !== undefined) {
-    command = [join(packaged, "eta-host")];
+    command = [packaged];
     cwd = homedir();
     built = true;
   } else {

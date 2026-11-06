@@ -68,8 +68,10 @@ describe("the service definition", () => {
     ).toEqual({ PATH: "/usr/bin:/bin" });
   });
 
-  it("has no Windows service: that is WSL", () => {
-    expect(() => serviceDefinition(command, "win32")).toThrow(/WSL/);
+  it("has no Windows service: a host there is started by hand", () => {
+    expect(() => serviceDefinition(command, "win32")).toThrow(
+      /no service support on win32/,
+    );
   });
 });
 

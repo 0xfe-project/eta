@@ -29,6 +29,9 @@ bun run --cwd apps/desktop package
 这一个文件。最后 `hutch run build` 把它作为 `host/` 打进 app。产物在 `artifacts/`，打好的 app
 不依赖仓库，可以装到 `/Applications`。
 
+Release 里的安装包由 CI 在各平台自己的 runner 上打（`.github/workflows/release.yml`），打完用
+`scripts/try-app.ts` 装上启动一次。没有签名，放行方式见 `docs/release.md`。
+
 不先 stage 直接 `hutch run build` 打出来的 app 不带 host，只能在仓库里打开（和开发时一样往上
 找 checkout）。
 

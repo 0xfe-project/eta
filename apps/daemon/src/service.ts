@@ -1,7 +1,7 @@
 /**
  * Registering a program as a service of the user: a systemd user unit on Linux, a launchd agent
  * on macOS. A user service, so no root is needed and the program runs as the same user whose files
- * its sessions touch. Windows goes through WSL.
+ * its sessions touch. Windows has neither: a host there is started by hand.
  *
  * Two programs are registered this way, each under a name of its own: the daemon (`io.eta.daemon`,
  * `eta-daemon run`) and the host (`io.eta.host`, `eta-host install-service`). The PATH they were
@@ -127,7 +127,9 @@ WantedBy=default.target
 `,
     };
   }
-  throw new Error(`no service support on ${platform}; on Windows use WSL`);
+  throw new Error(
+    `no service support on ${platform}: only systemd (Linux) and launchd (macOS), so start it by hand`,
+  );
 }
 
 export async function installService(

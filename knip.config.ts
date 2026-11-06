@@ -3,8 +3,8 @@ import type { KnipConfig } from "knip";
 // Dead code check for the TypeScript workspaces (`turbo run knip`). The Python
 // sidecar only uses package.json for Turbo scripts.
 export default {
-  // System tools the Turbo scripts call (uv for the Python sidecar).
-  ignoreBinaries: ["uv", "hutch", "nsh"],
+  // System tools the scripts call (uv for the Python sidecar, hdiutil and ditto on macOS).
+  ignoreBinaries: ["uv", "hutch", "nsh", "hdiutil", "ditto"],
   // `packages/TOBEREFR` holds plugins parked until the ESM rework is done (TODO.md there).
   ignore: [".eta/**", "**/test/**/fixtures/**", "packages/TOBEREFR/**"],
   // CSS files are part of the module graph: their @imports reference
@@ -59,10 +59,11 @@ export default {
     },
     "apps/desktop": {
       // Electrobun reads the configs by path and bundles both processes from
-      // their entrypoints; nothing imports them.
+      // their entrypoints; nothing imports them. release.yml runs try-app.
       entry: [
         "electrobun.config.ts",
         "hutch.config.ts",
+        "scripts/try-app.ts",
         "src/bun/index.ts",
         "src/mainview/index.ts",
       ],

@@ -1,5 +1,8 @@
 import type { ElectrobunConfig } from "electrobun";
 import { existsSync } from "node:fs";
+import process from "node:process";
+
+const HOST = process.platform === "win32" ? "eta-host.exe" : "eta-host";
 
 export default {
   app: {
@@ -31,7 +34,7 @@ export default {
       // stages it first).
       // Without it the app runs the host out of the checkout it was built in, as dev does. Found
       // from this file: hutch does not load the config from this directory.
-      ...(existsSync(new URL("dist/host/eta-host", import.meta.url))
+      ...(existsSync(new URL(`dist/host/${HOST}`, import.meta.url))
         ? { "dist/host": "host" }
         : {}),
     },
