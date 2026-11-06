@@ -58,12 +58,16 @@ git checkout 2d4d160d -- <path> # 取回原文件
 - eta-server：`SessionManagerOptions.mcpFor` / `AssembleOptions.mcpFor`，会话打开时取 sink，关闭时 dispose。
 - apps/eta：`src/mcp/host.ts` 的 `McpHost`，一个 host 一个 `McpManager`（文件在 `<dataDir>/mcp/`），按 agent 分 scope；来源是 `~/.eta/mcp.json` 再 `<cwd>/.mcp.json`，会话打开时读。`HostOptions.mcp: false` 关掉。测试：`apps/eta/test/mcp-realm.test.ts`（真 stdio 子进程）。
 
+#37 接回的：
+
+- OAuth：`src/mcp/credentials.ts`（凭据封存在数据库，按 server URL 的 sha256 存）、`src/mcp/service.ts` 的 `McpService`（登录/回调/登出，叠在 `McpHost` 上，`authProviderFor` 给 manager）、回调 `/mcp/oauth/callback`（`access.ts` 只对这一条 GET 免 token）。登录完成后重连等着它的 server。测试：`apps/eta/test/mcp-oauth.test.ts`（假授权服务器，login → callback → 存 token → connected → 会话 `import "mcp:remote"` 调用成功）。
+- 设置页 MCP 状态：`src/mcp/plugin.ts` 的 `mcpPlugin` 实现 `mcp` wire target（list/connect/reconnect/login/completeLogin/logout），合约 `@eta/client-contracts` 未改，前端未改。
+- 审批：删掉了 `@eta/mcp` 自己的门（`requiresApproval`、`McpHooks.approve`、`ApprovalRequest`），MCP 工具直接执行；realm `binding()` 的 authorize 不变。`mcp.json` 的 `approveTools` 照样解析不报错，但不再有任何效果。
+
 还没接回的：
 
-- OAuth：`auth: "oauth"` 的 server 只会报 needs-auth。要恢复 `src/mcp/credentials.ts`、登录回调 `/mcp/oauth/callback`（`access.ts` 免 token 路径）和 `authProviderFor`。
 - bundle 的 `mcp.json`（`bundleMcpServers`、`mcpSourcesFor`）：没有作为来源。
 - daemon / 远程会话：daemon 不建 `McpHost`，远程会话的 realm 报 not connected。
-- 设置页的 MCP 状态（`mcp` wire target、`mcpPlugin`）和 `approveTools` 的审批问题（scope 的 `approve` hook 未接，需要审批的工具会被拒绝）。
 
 ## 跟着变的测试
 

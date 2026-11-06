@@ -1,6 +1,6 @@
-import type { McpHooks, McpToolResult } from "../src/types";
+import type { ApproveTools, McpHooks, McpToolResult } from "../src/types";
 /**
- * Calls: delivery semantics, output schema validation, `_meta`, approval,
+ * Calls: delivery semantics, output schema validation, `_meta`, approveTools (now inert),
  * the veto hook, elicitation, reconnecting and cancelling.
  */
 import { readFileSync } from "node:fs";
@@ -256,105 +256,21 @@ describe("results", () => {
   });
 });
 
-describe("approval", () => {
+describe("approveTools", () => {
   const tools = [
     tool("read", { annotations: { readOnlyHint: true } }),
     tool("write", { annotations: { destructiveHint: true } }),
     tool("plain"),
-    tool("safe_write", { annotations: { destructiveHint: false } }),
   ];
 
-  it("asks for the tools approveTools names, by name or glob, and runs them when approved", async () => {
-    const asked: string[] = [];
-    const { call } = await one(
-      { tools },
-      {
-        extra: { approveTools: ["write", "pl*"] },
-        hooks: {
-          approve: async (request) => {
-            asked.push(request.name);
-            return true;
-          },
-        },
-      },
-    );
-    expect(text(await call("write"))).toBe("write ok");
-    expect(text(await call("plain"))).toBe("plain ok");
-    expect(text(await call("read"))).toBe("read ok");
-    expect(asked).toEqual(["mcp__s__write", "mcp__s__plain"]);
-  });
-
-  it("refuses when the approver says no, without starting the server", async () => {
-    const { call, h } = await one(
-      { tools },
-      {
-        extra: { approveTools: true },
-        hooks: { approve: async () => false },
-      },
-    );
-    // The tool must be known to be called: read the list first from a stopped state.
-    const result = await call("write");
-    expect(result.isError).toBe(true);
-    expect(result.details).toMatchObject({
-      error: "approval_denied",
-      delivery: "not_sent",
+  // Still read from mcp.json, but MCP no longer gates on it: every tool runs.
+  const settings: ApproveTools[] = [true, ["write", "pl*"], "destructive"];
+  for (const approveTools of settings)
+    it(`runs every tool with approveTools ${JSON.stringify(approveTools)}`, async () => {
+      const { call } = await one({ tools }, { extra: { approveTools } });
+      for (const name of ["read", "write", "plain"])
+        expect(text(await call(name))).toBe(`${name} ok`);
     });
-    expect(text(result)).toContain("declined approval");
-    // The listing started the server once; the denied call did not call the tool.
-    expect(h.starts()).toBe(1);
-  });
-
-  it("refuses a gated tool when no approver is wired", async () => {
-    const { call } = await one({ tools }, { extra: { approveTools: true } });
-    const result = await call("write");
-    expect(result.details).toMatchObject({
-      error: "approval_required",
-      delivery: "not_sent",
-    });
-  });
-
-  it('gates by annotations with "destructive": everything not marked read-only or non-destructive', async () => {
-    const asked: string[] = [];
-    const { call } = await one(
-      { tools },
-      {
-        extra: { approveTools: "destructive" },
-        hooks: {
-          approve: async (request) => {
-            asked.push(
-              `${request.tool}:${JSON.stringify(request.annotations ?? null)}`,
-            );
-            return true;
-          },
-        },
-      },
-    );
-    for (const name of ["read", "write", "plain", "safe_write"])
-      await call(name);
-    expect(asked).toEqual(['write:{"destructiveHint":true}', "plain:null"]);
-  });
-
-  it("an approval waiting keeps the server from idling out", async () => {
-    let release: (value: boolean) => void = () => undefined;
-    const waiting = new Promise<boolean>((resolve) => {
-      release = resolve;
-    });
-    const { call, scope, h } = await one(
-      { tools },
-      {
-        extra: { approveTools: ["write"] },
-        hooks: { approve: async () => await waiting },
-      },
-    );
-    await scope.connect("s");
-    const running = call("write");
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    h.advance(30 * 60_000);
-    await h.manager.sweep();
-    expect(h.manager.servers.get("a", "s")?.status).toBe("connected");
-    release(true);
-    expect(text(await running)).toBe("write ok");
-  });
 });
 
 describe("onToolCall", () => {
@@ -419,25 +335,6 @@ describe("onToolCall", () => {
       delivery: "not_sent",
     });
     expect(text(result)).toContain("rule engine down");
-  });
-
-  it("runs before approval, so a vetoed call never asks the user", async () => {
-    let asked = false;
-    const { call } = await one(
-      { tools: [tool("t")] },
-      {
-        extra: { approveTools: true },
-        hooks: {
-          onToolCall: () => ({ block: "no" }),
-          approve: async () => {
-            asked = true;
-            return true;
-          },
-        },
-      },
-    );
-    await call("t");
-    expect(asked).toBe(false);
   });
 });
 
