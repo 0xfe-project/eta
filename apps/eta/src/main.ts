@@ -1,6 +1,7 @@
 /**
  * The entry point: start the host, or register it as the user's service.
  *
+ *   eta-host --version                 the version and commit it was built from, and nothing else
  *   eta-host install-service [flags]   run with these flags at login (systemd user unit, launchd
  *                                       agent), and now; again replaces the flags and restarts
  *   eta-host uninstall-service
@@ -31,6 +32,7 @@ import { installedEnv, installService, uninstallService } from "@eta/daemon";
 import { startHost } from "./host";
 import { Tailscale } from "./machines/tailscale";
 import { COMPILED, embeddedFiles } from "./resources";
+import { VERSION_LINE } from "./version";
 
 /** The host as a user service: one per user, like the daemon. */
 const HOST_UNIT = { name: "io.eta.host", description: "eta host", args: [] };
@@ -60,9 +62,15 @@ const { values } = parseArgs({
     // web_fetch and web_search are on; the search runs on the host's own SearXNG unless given one.
     "no-web": { type: "boolean", default: false },
     "searxng-url": { type: "string" },
+    version: { type: "boolean", default: false },
   },
   strict: true,
 });
+
+if (values.version === true) {
+  console.log(VERSION_LINE);
+  process.exit(0);
+}
 
 const port = Number(values.port);
 if (!Number.isInteger(port) || port < 0 || port > 65_535) {
