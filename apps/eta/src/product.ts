@@ -575,7 +575,14 @@ export function createProduct(options: {
         }),
       }),
     },
-    { sessionTools: artifactSessionTools({ artifacts, board, limits }) },
+    {
+      sessionTools: artifactSessionTools({
+        artifacts,
+        board,
+        limits,
+        taskOfRun: (runId) => runRows.get(runId)?.taskId,
+      }),
+    },
     {
       sessionTools: pluginSessionTools({
         plugins,

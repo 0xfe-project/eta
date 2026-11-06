@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "The compaction summarizer for eta: cuts the history at a turn boundary, folds a summary through the model's own window, and digests what it cannot summarize.",
+  "license": "MIT",
   "exports": {
     ".": "./src/index.ts"
   },

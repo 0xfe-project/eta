@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "The eta daemon: sessions on another machine, reached over one outbound connection to the primary.",
+  "license": "MIT",
   "exports": {
     ".": "./src/index.ts"
   },

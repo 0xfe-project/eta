@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "JSONL session log storage for eta: fsync'd appends, atomic compactJournal, torn-tail repair.",
+  "license": "MIT",
   "exports": {
     ".": "./src/index.ts"
   },

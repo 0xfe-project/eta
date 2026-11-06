@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "The eta desktop shell: an Electrobun window that starts the host.",
+  "license": "MIT",
   "scripts": {
     "dev": "bun ../../scripts/dev.ts --desktop",
     "start": "hutch run start",

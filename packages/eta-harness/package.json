@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "The default minimal runnable set for eta: journaling, compaction, metrics, task reminders, the run pump, and the session assembler.",
+  "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
     "./testing": "./src/testing/index.ts"

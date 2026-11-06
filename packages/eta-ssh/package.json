@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Run shell scripts on another machine over SSH, and quote for it.",
+  "license": "MIT",
   "exports": {
     ".": "./src/index.ts"
   },
