@@ -97,7 +97,10 @@ export const readManifest = (seed: string): Manifest =>
 
 /** Put a seed where a host keeps its data, with the service stopped. */
 export function restoreSeed(seed: string, dataDir: string, home: string): void {
-  rmSync(dataDir, { recursive: true, force: true });
+  // `service` is not data: on Windows it is what the service runs from.
+  for (const name of readdirSync(dataDir))
+    if (name !== "service")
+      rmSync(join(dataDir, name), { recursive: true, force: true });
   cpSync(join(seed, "data"), dataDir, { recursive: true });
   chmodSync(join(dataDir, "secret.key"), 0o600);
   const db = new Database(join(dataDir, "eta.sqlite"));
