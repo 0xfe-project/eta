@@ -53,4 +53,59 @@ chmod +x eta-host-linux-x64
 
 `--version` 输出 `eta-host 0.2.0 (37d8188c1234)`，括号里是 commit。
 
-运行和装成服务都和 checkout 里构建出来的一样，见 README 的 “Running in production”。这里只负责产出文件，生产部署的方式没有变。
+运行和装成服务都和 checkout 里构建出来的一样，见 README 的 “Running in production”。
+
+## 升级
+
+已经装好的 `eta-host` 可以自己升级，不需要 checkout：
+
+```sh
+eta-host upgrade              # 最新正式版
+eta-host upgrade 0.2.0-rc.1   # 指定版本，预发布只能这样装
+eta-host upgrade --check      # 只报告有没有新版本，什么都不改
+```
+
+第一个带 `upgrade` 的版本要用 `bun run host:install` 或手动替换文件装上，更早的版本没有这条命令。
+
+下载走 GitHub API，公开仓库不需要 token；私有仓库按 `GH_TOKEN`、`GITHUB_TOKEN`、`gh` 的登录依次取 token。`ETA_RELEASES_URL` 可以换一个仓库（`https://api.github.com/repos/<owner>/<repo>`），这时不会用 `gh` 的登录。
+
+顺序是这样，前一半不影响正在运行的 host：
+
+1. 找到版本。已经是这个版本就结束。比当前版本旧的拒绝，要回退用下面的办法。
+2. 下载到可执行文件旁边的 `eta-host.next`，核对 `SHA256SUMS`。
+3. 试运行：`--version` 要和版本对上；`--migrations` 列出它带的迁移，数据库里有它不认识的迁移就拒绝（数据库比这个版本新，比如 host 是从更新的 main 构建的）。
+4. 等智能体：`task_run`、`routine_run` 和正在进行的回复（包括等用户回答的）都结束才继续，默认等 10 分钟（`--wait <分钟>`），等不到就退出，什么都没改。`--force` 不等，重启会杀掉它们。
+5. 停服务，备份数据库，替换文件（旧文件留作 `eta-host.prev`），启动。
+6. 验证：`/up` 要在 2 分钟内应答，之后 5 秒里继续应答且进程不变，新版本的迁移都在数据库里。
+
+第 6 步失败，就停服务、换回 `.prev`、恢复数据库、再启动旧版本，然后报错退出，退出码 1。新版本运行期间写入的内容会随数据库恢复丢掉。如果回退也失败，错误信息里有旧文件和备份的路径，要手动处理。
+
+第 5 步之前按 Ctrl-C 可以放弃，什么都不会留下。从第 5 步开始 `SIGINT`、`SIGTERM`、`SIGHUP` 都被忽略，中途断开终端不会把服务留在半路。
+
+重启只发生在 `io.eta.host` 正在运行、而且运行的就是这个文件时：
+
+- 服务运行的是别的文件：拒绝，要用那个文件的 `upgrade`。
+- 在服务内部运行（比如 host 下面的智能体）：拒绝，因为重启会把 `upgrade` 自己杀掉。智能体可以用 `systemd-run --user --scope <文件的完整路径> upgrade --force` 跳出去，它自己算正在运行，所以要 `--force`，重启时也会被杀掉，结果要从外面看。
+- 服务没装或者没在运行：备份数据库并替换文件，重启由你来做，不做验证和回退。
+
+服务重启后 daemon 重新连上，host 会把它们换成自己带的版本。
+
+### 备份
+
+备份在 `~/.eta/backups/upgrade-<UTC 时间>-<旧版本>.sqlite`，用 `VACUUM INTO` 写成，权限 0600，写完做一次 `quick_check`。每次备份后只留最新的 3 个，这个目录里别的文件不动。每个备份和数据库一样大。
+
+服务先停再备份，所以回退不丢数据。只备份 `eta.sqlite`，`~/.eta` 里的会话文件和配置不动。
+
+### 手动回退
+
+迁移不一定能反向执行（比如 `0042` 删了列），所以回到旧版本要同时回到旧数据库：
+
+```sh
+systemctl --user stop io.eta.host
+cd ~/.local/share/eta/host && mv eta-host.prev eta-host
+cp ~/.eta/backups/upgrade-<时间>-<旧版本>.sqlite ~/.eta/eta.sqlite
+rm -f ~/.eta/eta.sqlite-wal ~/.eta/eta.sqlite-shm
+systemctl --user start io.eta.host
+```
+
+升级之后写入的数据不在备份里，手动回退会丢掉。

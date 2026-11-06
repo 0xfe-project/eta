@@ -175,14 +175,24 @@ This builds the web, stages the compiled host the way the desktop app carries it
 CLIProxyAPI and the daemon for every platform), puts it in `~/.local/share/eta/host`, and runs
 `eta-host install-service <flags>`: a systemd user unit (`io.eta.host`) or launchd agent that starts at
 login and restarts on failure, with the PATH you installed from (so agents find git, gh, Claude Code,
-Codex). Running it again after `git pull` is the upgrade; the daemons follow on their next connect. On a
-headless Linux box, `loginctl enable-linger` keeps user services up without a login.
+Codex). Running it again after `git pull` is one way to upgrade; the daemons follow on their next connect.
+On a headless Linux box, `loginctl enable-linger` keeps user services up without a login.
 `~/.local/share/eta/host/eta-host uninstall-service` removes the service; the data stays in `~/.eta`.
 
 `--host tailscale` listens on the tailnet address only, which is what other machines join over.
 
 A tagged version is that same `eta-host` as one file on GitHub Releases, for Linux x64 so far:
-[docs/release.md](docs/release.md) says how to cut one and how to fetch it.
+[docs/release.md](docs/release.md) says how to cut one and how to fetch it. An installed file upgrades
+itself with no checkout:
+
+```sh
+~/.local/share/eta/host/eta-host upgrade            # the latest full release; --check only says
+~/.local/share/eta/host/eta-host upgrade 0.2.0-rc.1 # a pre-release has to be named
+```
+
+It checks the download, waits for working agents (`--force` does not), backs up the database to
+`~/.eta/backups`, restarts the service, and goes back on its own if the new build does not hold.
+[docs/release.md](docs/release.md) has the details.
 
 Or run the host by hand:
 

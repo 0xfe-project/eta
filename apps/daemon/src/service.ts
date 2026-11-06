@@ -30,6 +30,21 @@ const xml = (value: string): string =>
 const quote = (value: string): string =>
   `"${value.replace(/%/g, "%%").replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 
+/**
+ * The command a systemd unit file runs, undone from `quote`: what a service was installed with is
+ * in the unit and nowhere else. Undefined when the file has no `ExecStart`.
+ */
+export function serviceArgv(content: string): string[] | undefined {
+  const line = /^ExecStart=(.*)$/m.exec(content)?.[1];
+  if (line === undefined) return undefined;
+  const words = line.match(/"(?:[^"\\]|\\.)*"|\S+/g) ?? [];
+  return words.map((word) =>
+    (word.startsWith('"') ? word.slice(1, -1) : word)
+      .replace(/\\(.)/g, "$1")
+      .replace(/%%/g, "%"),
+  );
+}
+
 /** The command that runs the program: the binary and its arguments. */
 export interface ServiceCommand {
   program: string;
