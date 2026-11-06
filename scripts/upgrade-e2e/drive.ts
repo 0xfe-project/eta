@@ -290,6 +290,25 @@ async function installOver(
   );
 }
 
+/** Delete what a program ran from: Windows holds such a file for a while after it has exited. */
+async function removeHeld(path: string): Promise<void> {
+  let held: unknown;
+  const removed = await waitFor(
+    `${path} to be let go`,
+    () => {
+      try {
+        rmSync(path, { recursive: true, force: true });
+        return true;
+      } catch (error) {
+        held = error;
+        return false;
+      }
+    },
+    60,
+  );
+  if (!removed) throw held;
+}
+
 async function uninstall(): Promise<Ran | undefined> {
   if (!existsSync(EXE)) return undefined;
   return run(EXE, ["uninstall-service"]);
@@ -662,7 +681,17 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
       "uninstall-service takes an Administrator terminal",
     );
     want("it left the service alone", await serviceState(), "running");
-    rmSync(dir, { recursive: true, force: true });
+    const { out: paths } = await run("powershell.exe", [
+      "-NoProfile",
+      "-Command",
+      "Get-CimInstance Win32_Process | Select-Object -ExpandProperty ExecutablePath -ErrorAction SilentlyContinue",
+    ]);
+    want(
+      "nothing it started is still running",
+      paths.split(/\r?\n/).filter((path) => path.startsWith(dir)),
+      [],
+    );
+    await removeHeld(dir);
   },
 
   "the command upgrades the service": async () => {
@@ -1011,7 +1040,7 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     const { code, out } = await run(copy, ["upgrade", "0.9.1"], {
       env: { ETA_RELEASES_URL: RELEASES },
     });
-    rmSync(other, { recursive: true, force: true });
+    await removeHeld(other);
     want("exit", code, 1);
     has("it says so", out, "the service runs");
     want("the file is the old build", await fileVersion(), "0.9.0");
