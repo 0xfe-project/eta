@@ -52,7 +52,11 @@ export { lastSeq, listen, runAndWait } from "./run";
 export {
   installedEnv,
   installService,
+  serviceArgv,
   type ServiceCommand,
+  serviceDefinition,
   type ServiceUnit,
   uninstallService,
 } from "./service";
+export { previousPath, stagedPath, swapBack, swapIn, tryBuild } from "./swap";
+export { daemonPlatform } from "./upgrade";

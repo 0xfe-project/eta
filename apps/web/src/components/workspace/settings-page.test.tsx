@@ -148,6 +148,7 @@ describe("设置整页", () => {
         "email",
         "archived",
         "appearance",
+        "update",
       ),
     );
     // The address says which section, so a reload comes back to it.

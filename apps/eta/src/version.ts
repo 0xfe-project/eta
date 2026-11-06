@@ -8,7 +8,7 @@
 declare const ETA_HOST_VERSION: string | undefined;
 declare const ETA_HOST_COMMIT: string | undefined;
 
-const VERSION: string =
+export const VERSION: string =
   typeof ETA_HOST_VERSION === "string" ? ETA_HOST_VERSION : "dev";
 
 // A build outside a git checkout has no commit to name.

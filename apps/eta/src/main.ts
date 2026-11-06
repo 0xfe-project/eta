@@ -5,6 +5,8 @@
  *   eta-host install-service [flags]   run with these flags at login (systemd user unit, launchd
  *                                       agent), and now; again replaces the flags and restarts
  *   eta-host uninstall-service
+ *   eta-host upgrade [version]         replace this file with a release (`upgrade/command.ts`)
+ *   eta-host --help                    the usage; a flag it does not know gets it too, on stderr
  *
  *   bun apps/eta/src/main.ts [--port 8787] [--host 127.0.0.1]
  *                            [--web-dir <built web>] [--token-file <path>]
@@ -29,46 +31,47 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 import { parseArgs } from "node:util";
 import { installedEnv, installService, uninstallService } from "@eta/daemon";
+import { parseFailure, RUN_OPTIONS, USAGE } from "./cli";
+import { loadMigrations } from "./db";
 import { startHost } from "./host";
 import { Tailscale } from "./machines/tailscale";
 import { COMPILED, embeddedFiles } from "./resources";
+import { upgradeCommand } from "./upgrade/command";
+import { HOST_UNIT } from "./upgrade/service";
 import { VERSION_LINE } from "./version";
 
-/** The host as a user service: one per user, like the daemon. */
-const HOST_UNIT = { name: "io.eta.host", description: "eta host", args: [] };
-
-// `install-service` and `uninstall-service` come first; every other argument is a flag of the run.
+// A subcommand comes first; every other argument is a flag of the run.
 const [command, ...rest] = process.argv.slice(2);
+if (command === "upgrade") process.exit(await upgradeCommand(rest));
 const serviceCommand =
   command === "install-service" || command === "uninstall-service"
     ? command
     : undefined;
 const flags = serviceCommand === undefined ? process.argv.slice(2) : rest;
 
-const { values } = parseArgs({
-  args: flags,
-  options: {
-    port: { type: "string", default: "8787" },
-    host: { type: "string", default: "127.0.0.1" },
-    "web-dir": { type: "string" },
-    "token-file": { type: "string" },
-    "allow-origin": { type: "string", multiple: true },
-    "memory-url": { type: "string" },
-    "public-url": { type: "string" },
-    "no-llm": { type: "boolean", default: false },
-    // The GitHub chain is opt-in; `--no-github` overrides an environment that turns it on.
-    github: { type: "boolean", default: false },
-    "no-github": { type: "boolean", default: false },
-    // web_fetch and web_search are on; the search runs on the host's own SearXNG unless given one.
-    "no-web": { type: "boolean", default: false },
-    "searxng-url": { type: "string" },
-    version: { type: "boolean", default: false },
-  },
-  strict: true,
-});
+function parseFlags() {
+  try {
+    return parseArgs({ args: flags, options: RUN_OPTIONS, strict: true });
+  } catch (error) {
+    console.error(`eta-host: ${parseFailure(error)}\n\n${USAGE}`);
+    process.exit(2);
+  }
+}
+
+const { values } = parseFlags();
+
+if (values.help === true) {
+  console.log(USAGE);
+  process.exit(0);
+}
 
 if (values.version === true) {
   console.log(VERSION_LINE);
+  process.exit(0);
+}
+
+if (values.migrations === true) {
+  for (const { id } of loadMigrations()) console.log(id);
   process.exit(0);
 }
 

@@ -19,6 +19,7 @@ import { McpSettings } from "./mcp-settings";
 import { ProviderSettings } from "./provider-settings";
 import { SettingsNav } from "./settings-nav";
 import { settingsSections, useSettingsAttention } from "./settings-sections";
+import { UpdateSettings } from "./update-settings";
 import { useWorkspaceStore } from "./workspace-store";
 
 // Settings' body: the rail of sections beside the one being edited. The same body is a dialog
@@ -227,6 +228,8 @@ function SectionContent({
     <EmailSettings />
   ) : section === "archived" ? (
     <ArchivedGroups />
+  ) : section === "update" ? (
+    <UpdateSettings />
   ) : (
     <AppearanceSettings />
   );

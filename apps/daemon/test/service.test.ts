@@ -8,7 +8,7 @@ import {
   loadIdentity,
   saveIdentity,
 } from "../src/identity";
-import { installedEnv, serviceDefinition } from "../src/service";
+import { installedEnv, serviceArgv, serviceDefinition } from "../src/service";
 
 const command = { program: "/opt/eta daemon/eta-daemon", args: [] };
 
@@ -72,6 +72,34 @@ describe("the service definition", () => {
     expect(() => serviceDefinition(command, "win32")).toThrow(
       /no service support on win32/,
     );
+  });
+});
+
+describe("what a unit runs", () => {
+  it("reads back the command it was written with", () => {
+    const argv = [
+      "/home/a b/eta-host",
+      "--port",
+      "8790",
+      "--token-file",
+      '/x/100%/"q"\\z',
+    ];
+    const definition = serviceDefinition(
+      { program: argv[0] as string, args: argv.slice(1) },
+      "linux",
+      "/home/u",
+      { name: "io.eta.host", description: "eta host", args: [] },
+    );
+    expect(serviceArgv(definition.content)).toEqual(argv);
+  });
+
+  it("reads a line written by hand, and says when there is none", () => {
+    expect(serviceArgv("[Service]\nExecStart=/bin/x --y 1\n")).toEqual([
+      "/bin/x",
+      "--y",
+      "1",
+    ]);
+    expect(serviceArgv("[Service]\n")).toBeUndefined();
   });
 });
 

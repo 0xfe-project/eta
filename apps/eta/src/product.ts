@@ -27,6 +27,7 @@ import type { SshRunner } from "./machines/install";
 import type { MachineRecord } from "./machines/store";
 import type { Tailscale } from "./machines/tailscale";
 import type { SessionHooks } from "./session-hooks";
+import type { UpgradePluginOptions } from "./upgrade/plugin";
 import type { WebOptions } from "./web/service";
 import { homedir, hostname, platform } from "node:os";
 import { join } from "node:path";
@@ -94,6 +95,8 @@ import { sessionKeyOf, taskOfKey } from "./tasks/session-key";
 import { TaskStore } from "./tasks/store";
 import { taskSessionTools } from "./tasks/tools";
 import { workspaceChooser } from "./tasks/workspace";
+import { busyAgents } from "./upgrade/database";
+import { upgradePlugin, upgradeRoutes } from "./upgrade/plugin";
 import { usagePlugin } from "./usage/plugin";
 import { entryOf } from "./usage/recorder";
 import { UsageStore } from "./usage/store";
@@ -194,6 +197,8 @@ export function createProduct(options: {
   daemonBuilds?: DaemonBuilds | undefined;
   /** How a daemon is put on another computer; the user's `ssh` by default (a test fakes it). */
   ssh?: SshRunner | undefined;
+  /** What the update button works with, for a test; the host's own by default. */
+  upgrade?: Partial<UpgradePluginOptions> | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
   const memory =
@@ -659,7 +664,8 @@ export function createProduct(options: {
     fetch: async (request) =>
       (await hub.route(request)) ??
       (await githubCallbacks(request)) ??
-      (await artifactRoutes(request)),
+      (await artifactRoutes(request)) ??
+      upgradeRoutes(request, dataDir),
     remote: router,
     endpoints: [hub.endpoint],
     close: async () => {
@@ -828,6 +834,13 @@ export function createProduct(options: {
         ),
       );
       server.mount("usage", usagePlugin(usage, applied("usage")));
+      server.mount(
+        "upgrade",
+        upgradePlugin(
+          { dataDir, busy: () => busyAgents(dataDir), ...options.upgrade },
+          applied("upgrade"),
+        ),
+      );
       if (github !== undefined)
         server.mount("github", githubPlugin({ github }, applied("github")));
       if (memory !== undefined)

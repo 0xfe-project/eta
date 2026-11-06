@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageProvider } from "@/components/language-provider";
 import { AppProviders } from "@/components/providers";
+import { UpgradeScreen } from "@/components/upgrade-screen";
 import { WindowControls } from "@/components/window-controls";
 import { useSettingsShortcut } from "@/lib/settings-shortcut";
 
@@ -60,6 +61,8 @@ function LocalizedDocument({ children }: { children: ReactNode }) {
       <WindowControls />
       {/* The same reason for ⌘,: every route answers it, and no page can be left out of that. */}
       {children}
+      {/* Over every page: the host is going away under whatever is open. */}
+      <UpgradeScreen />
     </AppProviders>
   );
 }

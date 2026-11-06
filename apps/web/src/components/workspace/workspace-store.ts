@@ -46,7 +46,8 @@ export type SettingsSection =
   | "email"
   | "connections"
   | "archived"
-  | "appearance";
+  | "appearance"
+  | "update";
 interface SettingsState {
   open: boolean;
   section: SettingsSection;

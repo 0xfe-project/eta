@@ -19,7 +19,8 @@
   },
   "sections": {
     "approvals": "需先确认的工具",
-    "appearance": "外观"
+    "appearance": "外观",
+    "update": "更新"
   },
   "approvals": {
     "description": "列在这里的工具，每次调用前都会在待处理里问你：允许还是拒绝。对所有对话生效。",
@@ -32,5 +33,54 @@
     "needsAttention": "设置（有账号需要处理）",
     "sections": "设置分类",
     "accountsNeedAttention": "有账号需要处理"
+  },
+  "update": {
+    "version": "当前版本",
+    "latest": "最新版本",
+    "unknown": "查不到",
+    "upToDate": "已是最新",
+    "install": "更新到 {{version}}",
+    "recheck": "重新检查",
+    "checkFailed": "查不到最新版本：{{error}}",
+    "blocked": {
+      "source": "这个服务器从源码运行，更新代码就行。",
+      "noService": "服务器不是作为服务运行的，更新后没法自动重启。在服务器上运行 eta-host upgrade。",
+      "otherFile": "服务运行的是另一个文件，要用那个文件更新。"
+    },
+    "confirmTitle": "更新到 {{version}}",
+    "confirm": "服务器会重启，大约一分钟连不上。出问题会自动退回。",
+    "start": "更新",
+    "waitForAgents": "等它们结束再更新",
+    "force": "现在更新",
+    "cancel": "取消更新",
+    "phase": {
+      "starting": "准备中",
+      "downloading": "下载中",
+      "waiting": "等智能体结束",
+      "stopping": "正在停止服务",
+      "backingUp": "正在备份数据库",
+      "restarting": "正在启动新版本",
+      "verifying": "正在检查新版本",
+      "rollingBack": "新版本有问题，正在退回"
+    },
+    "waitingFor": "等待：{{list}}",
+    "lastFailed": "上次更新没有成功：{{error}}",
+    "screen": {
+      "updating": "正在更新到 {{version}}",
+      "updatingUnknown": "正在更新",
+      "offline": "服务器正在重启",
+      "slow": "比预期久，服务器可能需要手动处理。",
+      "done": "已更新到 {{version}}",
+      "reloading": "正在重新载入",
+      "rolledBack": "更新没有成功",
+      "rolledBackDetail": "已退回 {{version}}，数据也恢复了。",
+      "broken": "更新失败，服务器需要手动处理",
+      "help": "在服务器上运行 journalctl --user -u io.eta.host-upgrade 查看过程。",
+      "dismiss": "知道了"
+    },
+    "busy": "重启会中断这些工作：",
+    "busyTask": "任务 #{{number}} {{name}}",
+    "busyRoutine": "定时 {{name}}",
+    "busyReply": "{{name}} 里的回复"
   }
 }

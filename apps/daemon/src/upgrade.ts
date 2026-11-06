@@ -16,7 +16,6 @@
  */
 import type { DaemonInstall, DaemonPlatform } from "@eta/client-contracts";
 import type { Identity } from "./identity";
-import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -25,13 +24,11 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { chmod, rename, rm, writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import process from "node:process";
-import { promisify } from "node:util";
 import { DAEMON_DOWNLOAD_PATH } from "@eta/client-contracts";
-
-const run = promisify(execFile);
+import { previousPath, stagedPath, swapIn, tryBuild } from "./swap";
 
 /** The exit that asks the service manager for a restart: EX_TEMPFAIL. */
 export const RESTART_EXIT = 75;
@@ -145,25 +142,15 @@ export async function upgrade(
       reason: `the build fetched is not the one asked for (sha256 ${digest})`,
     };
 
-  // Beside the executable, so the swap is a rename on one filesystem.
-  const staged = `${execPath}.next`;
-  const previous = `${execPath}.prev`;
+  const staged = stagedPath(execPath);
   try {
     await writeFile(staged, bytes, { mode: 0o755 });
-    await chmod(staged, 0o755);
-    const { stdout } = await run(staged, ["version"], { timeout: 20_000 });
-    if (stdout.trim() !== wanted.version)
+    const says = await tryBuild(staged, ["version"]);
+    if (says !== wanted.version)
       throw new Error(
-        `the new build says it is ${stdout.trim() || "nothing"}, not ${wanted.version}`,
+        `the new build says it is ${says || "nothing"}, not ${wanted.version}`,
       );
-    await rm(previous, { force: true });
-    await rename(execPath, previous);
-    try {
-      await rename(staged, execPath);
-    } catch (error) {
-      await rename(previous, execPath);
-      throw error;
-    }
+    await swapIn(execPath);
   } catch (error) {
     await rm(staged, { force: true });
     return {
@@ -174,7 +161,7 @@ export async function upgrade(
   const marker: Marker = {
     version: wanted.version,
     from: options.version,
-    previous,
+    previous: previousPath(execPath),
     starts: 0,
   };
   await writeFile(markerPath(options.dataDir), JSON.stringify(marker), {

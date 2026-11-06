@@ -1,6 +1,7 @@
 import type { Icon } from "@phosphor-icons/react";
 import type { SettingsSection } from "./workspace-store";
 import { ArchiveIcon } from "@phosphor-icons/react/Archive";
+import { ArrowCircleUpIcon } from "@phosphor-icons/react/ArrowCircleUp";
 import { DesktopIcon } from "@phosphor-icons/react/Desktop";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/EnvelopeSimple";
 import { LinkIcon } from "@phosphor-icons/react/Link";
@@ -90,6 +91,13 @@ export const settingsSections: {
       return translate("settings:sections.appearance");
     },
     icon: PaletteIcon,
+  },
+  {
+    value: "update",
+    get label() {
+      return translate("settings:sections.update");
+    },
+    icon: ArrowCircleUpIcon,
   },
 ];
 
