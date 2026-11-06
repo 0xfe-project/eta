@@ -9,7 +9,7 @@ import { parseArgs } from "node:util";
 import { parseFailure } from "../cli";
 import { COMPILED } from "../resources";
 import { VERSION } from "../version";
-import { BACKUPS_KEPT, savedUpstream } from "./database";
+import { BACKUPS_KEPT, savedToken, savedUpstream } from "./database";
 import { Releases } from "./releases";
 import { findHostService } from "./service";
 import { readStatus, StatusWriter } from "./status";
@@ -59,13 +59,17 @@ Where a release comes from decides whose code this host runs. The first of these
 Each is owner/name, https://github.com/<owner>/<name>, a GitHub Enterprise API address such as
 https://<host>/api/v3/repos/<owner>/<name>, or the address of another server with the same API.
 
-A private repository needs a token, found again each time and never kept:
-  GitHub                GH_TOKEN, GITHUB_TOKEN, then \`gh auth token --hostname github.com\`
+A private repository needs a token. The first that is given, found again each time:
+  GitHub                GH_TOKEN, GITHUB_TOKEN, one saved under Settings, Update, then
+                        \`gh auth token --hostname github.com\`
   GitHub Enterprise     GH_ENTERPRISE_TOKEN, then the same, with --hostname <host>
   any other server      ETA_RELEASES_TOKEN, and none of the above
 
-A service may not reach the keychain gh keeps its login in: then use \`gh auth login --insecure-storage\`,
-or set GH_TOKEN in its environment.
+A saved token is the only one eta keeps. It is sealed under this host's key, and goes only to the
+host it was saved for.
+
+A service may not reach the keychain gh keeps its login in: then save a token under Settings, use
+\`gh auth login --insecure-storage\`, or set GH_TOKEN in its environment.
 `;
 
 const errorText = (error: unknown): string =>
@@ -208,7 +212,10 @@ export async function upgradeCommand(args: string[]): Promise<number> {
       flag: values.repo,
       saved: savedUpstream(dataDir),
     });
-    const releases = new Releases({ upstream: chosen.text });
+    const releases = new Releases({
+      upstream: chosen.text,
+      saved: savedToken(dataDir),
+    });
     const options = {
       wanted,
       check: values.check === true,

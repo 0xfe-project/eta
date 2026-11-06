@@ -152,21 +152,30 @@ host 下面的智能体也可以直接运行 `upgrade`。它自己算在运行�
 
 地址里不能带账号密码或查询参数：它会显示在页面上，也会写进日志。
 
-token 每次现取，不保存，不进日志、状态文件和错误信息：
+取第一个有的 token：
 
-| 上游              | 顺序                                                                                               |
-| ----------------- | -------------------------------------------------------------------------------------------------- |
-| github.com        | `GH_TOKEN`、`GITHUB_TOKEN`、`gh auth token --hostname github.com`，都没有就匿名                    |
-| GitHub Enterprise | `GH_ENTERPRISE_TOKEN`、`GH_TOKEN`、`GITHUB_TOKEN`、`gh auth token --hostname <主机>`，都没有就匿名 |
-| 其它服务器        | 只用 `ETA_RELEASES_TOKEN`                                                                          |
+| 上游              | 顺序                                                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| github.com        | `GH_TOKEN`、`GITHUB_TOKEN`、设置里保存的、`gh auth token --hostname github.com`，都没有就匿名                    |
+| GitHub Enterprise | `GH_ENTERPRISE_TOKEN`、`GH_TOKEN`、`GITHUB_TOKEN`、设置里保存的、`gh auth token --hostname <主机>`，都没有就匿名 |
+| 其它服务器        | 只用 `ETA_RELEASES_TOKEN`                                                                                        |
+
+环境变量和 `gh` 每次现取，不保存。设置里的“访问令牌”是 eta 唯一保存的 token，适合服务够不着 `gh` 登录的情况：
+
+- 它用 host 的密钥（`~/.eta/secret.key`）加密，存在数据库的 `setting` 表里。数据库备份里也是密文。
+- 保存时绑定当时上游的主机，只发给这个主机。之后把上游换到别的主机，它就不再使用，页面会说明。
+- 保存后不再显示，页面只知道它属于哪个主机。
+- 服务器环境变量里的 token 优先于它，页面会说明。上游是其它服务器时不能保存，也不显示这一行。
+
+token 不进日志、状态文件和错误信息。
 
 GitHub 的凭据不会发给其它服务器，也不会发给下载重定向到的签名地址。只有 `https` 且路径是 `/api/v3/repos/<owner>/<name>` 的地址才算 GitHub Enterprise，所以这个判断只看地址：填了一个这样的地址，`GH_TOKEN` 就会发过去。
 
 服务能走通 `gh`，前提是 `gh` 在它的 `PATH` 上（`PATH` 是 `install-service` 时的 shell 给的），而且读得到登录状态。读不到时错误信息会分开说：
 
-- 没有 `gh`：装上，或者给服务设置 `GH_TOKEN`。
-- `gh` 没有这个主机的登录：用服务的用户运行 `gh auth login`（Enterprise 加 `--hostname <主机>`）。
-- `gh` 有登录但读不到：登录存在钥匙串里，服务够不着。运行 `gh auth login --insecure-storage`，或者给服务设置 `GH_TOKEN`。
+- 没有 `gh`：装上，在设置里保存一个 token，或者给服务设置 `GH_TOKEN`。
+- `gh` 没有这个主机的登录：用服务的用户运行 `gh auth login`（Enterprise 加 `--hostname <主机>`），或者在设置里保存一个 token。
+- `gh` 有登录但读不到：登录存在钥匙串里，服务够不着。运行 `gh auth login --insecure-storage`，在设置里保存一个 token，或者给服务设置 `GH_TOKEN`。
 - 有 token 但读不到仓库：token 没有这个仓库的权限，或者仓库不存在。
 - token 被拒绝：过期或者被吊销了。
 

@@ -504,6 +504,7 @@ export const UPGRADE_ACTIONS = [
   "start",
   "cancel",
   "setUpstream",
+  "setToken",
 ] as const;
 export type UpgradeAction = (typeof UPGRADE_ACTIONS)[number];
 
@@ -572,6 +573,16 @@ export interface UpgradeUpstreamView {
   fallback: string;
 }
 
+/** Which token would read the upstream. The token itself never comes back from the host. */
+export interface UpgradeTokenView {
+  /** The GitHub host it would go to; null for a server that only takes `ETA_RELEASES_TOKEN`. */
+  host: string | null;
+  /** Where it comes from: an environment variable, `gh`, or `Settings`; null with none. */
+  from: string | null;
+  /** The host the saved token is for, which may not be this one. */
+  saved: string | null;
+}
+
 export interface UpgradeCheckView {
   /** This build. */
   version: string;
@@ -582,6 +593,7 @@ export interface UpgradeCheckView {
   /** What a restart would stop right now. */
   busy: UpgradeBusy[];
   upstream: UpgradeUpstreamView;
+  token: UpgradeTokenView;
   error: string | null;
 }
 
@@ -592,6 +604,8 @@ export interface UpgradeArgs {
   cancel: Record<string, never>;
   /** Save where releases come from; without `upstream`, go back to what the build follows. */
   setUpstream: { upstream?: string };
+  /** Save a token for the upstream's host; without `token`, forget the one saved. */
+  setToken: { token?: string };
 }
 
 export interface UpgradeResults {
@@ -599,6 +613,7 @@ export interface UpgradeResults {
   start: { id: string };
   cancel: { cancelled: boolean };
   setUpstream: UpgradeUpstreamView;
+  setToken: { saved: string | null };
 }
 
 /* ------------------------------------------------------------------ projects */

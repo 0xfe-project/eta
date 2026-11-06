@@ -196,8 +196,8 @@ process of its own does this, so it outlives the terminal and the host. Settings
 as a button.
 
 Releases come from the repository the build was released from, so a fork's builds follow the fork.
-`--repo <owner>/<name>` or Settings names another one, a private one included, with `gh`'s login or
-`GH_TOKEN`. That choice decides whose code the host runs: see [docs/release.md](docs/release.md).
+`--repo <owner>/<name>` or Settings names another one, a private one included, with `gh`'s login,
+`GH_TOKEN`, or a token saved in Settings. That choice decides whose code the host runs: see [docs/release.md](docs/release.md).
 [docs/release.md](docs/release.md) has the details.
 
 Or run the host by hand:

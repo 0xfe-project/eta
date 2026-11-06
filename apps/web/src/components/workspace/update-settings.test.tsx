@@ -20,10 +20,10 @@ afterEach(async () => {
 
 const task = { kind: "task", number: 45, name: "x" } as const;
 const text = () => document.body.textContent ?? "";
-const button = (name: string) =>
-  [...document.querySelectorAll("button")].find(
+const button = (name: string, nth = 0) =>
+  [...document.querySelectorAll("button")].filter(
     (item) => item.textContent === name,
-  );
+  )[nth];
 
 const checked: UpgradeCheckView = {
   version: "1.0.0",
@@ -37,6 +37,7 @@ const checked: UpgradeCheckView = {
     saved: null,
     fallback: "0xfe-project/eta",
   },
+  token: { host: "github.com", from: "gh", saved: null },
   error: null,
 };
 
@@ -54,16 +55,18 @@ async function open(
       throw new Error("not a repository");
     return checked.upstream;
   });
+  const setToken = rstest.fn((_args: unknown) => ({ saved: "github.com" }));
   const host = buildProductHost({}, ["upgrade"])
     .handle("upgrade.check", () => ({ ...checked, ...check }))
     .handle("upgrade.start", start)
     .handle("upgrade.cancel", cancel)
-    .handle("upgrade.setUpstream", setUpstream);
+    .handle("upgrade.setUpstream", setUpstream)
+    .handle("upgrade.setToken", setToken);
   host.install();
   host.hello();
   await mount(<UpdateSettings />);
   await flush();
-  return { start, cancel, setUpstream };
+  return { start, cancel, setUpstream, setToken };
 }
 
 const running = (
@@ -206,6 +209,64 @@ describe("Settings → 更新", () => {
     it("leaves it alone while an upgrade runs", async () => {
       await open({}, running("waiting"));
       expect(button("修改")?.disabled).toBe(true);
+    });
+  });
+
+  describe("the access token", () => {
+    const type = async (value: string) => {
+      const input = document.querySelector("input")!;
+      await act(() => {
+        Object.getOwnPropertyDescriptor(
+          HTMLInputElement.prototype,
+          "value",
+        )?.set?.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    };
+
+    it("says where it comes from, and saves one", async () => {
+      const { setToken } = await open();
+      expect(text()).toContain("gh 的登录");
+      await click(button("设置")!);
+      expect(text()).toContain("只会发给 github.com");
+      expect(document.querySelector("input")?.type).toBe("password");
+      expect(button("删除")).toBeUndefined();
+      await type("ghp_x");
+      await click(button("保存")!);
+      await flush();
+      expect(setToken).toHaveBeenCalledWith({ token: "ghp_x" });
+    });
+
+    it("starts empty and can be removed once saved", async () => {
+      const { setToken } = await open({
+        token: { host: "github.com", from: "Settings", saved: "github.com" },
+      });
+      expect(text()).toContain("在这里保存");
+      await click(button("修改", 1)!);
+      expect(document.querySelector("input")?.value).toBe("");
+      await click(button("删除")!);
+      await flush();
+      expect(setToken).toHaveBeenCalledWith({});
+    });
+
+    it("says when the environment comes first", async () => {
+      await open({
+        token: { host: "github.com", from: "GH_TOKEN", saved: "github.com" },
+      });
+      expect(text()).toContain("服务器的 GH_TOKEN");
+      expect(text()).toContain("GH_TOKEN 优先");
+    });
+
+    it("says when a saved one is for another host", async () => {
+      await open({
+        token: { host: "ghe.corp", from: "gh", saved: "github.com" },
+      });
+      expect(text()).toContain("属于 github.com");
+    });
+
+    it("has no row for a server that takes its own", async () => {
+      await open({ token: { host: null, from: null, saved: "github.com" } });
+      expect(text()).not.toContain("访问令牌");
     });
   });
 

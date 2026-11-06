@@ -8,10 +8,10 @@
 import type { UpgradeResults } from "@eta/client-contracts";
 import type { HostService } from "../src/upgrade/service";
 import { existsSync, realpathSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { savedUpstream } from "../src/upgrade/database";
+import { savedToken, savedUpstream } from "../src/upgrade/database";
 import {
   announceUpgrade,
   readStatus,
@@ -296,6 +296,7 @@ describe("the update button's target", () => {
     releases: latest("1.1.0"),
     findService: () => Promise.resolve(service()),
     busy: () => [busy],
+    findToken: () => Promise.resolve({}),
   };
 
   it("says what there is and what stands in the way", async () => {
@@ -312,7 +313,116 @@ describe("the update button's target", () => {
         saved: null,
         fallback: "0xfe-project/eta",
       },
+      token: { host: "github.com", from: null, saved: null },
       error: null,
+    });
+  });
+
+  describe("a token saved on the page", () => {
+    const { findToken: _, ...real } = options;
+    const dbText = async (dataDir: string) =>
+      await readFile(join(dataDir, "eta.sqlite"), "latin1").then(
+        async (db) =>
+          db +
+          (await readFile(join(dataDir, "eta.sqlite-wal"), "latin1").catch(
+            () => "",
+          )),
+      );
+
+    it("is sealed, tied to the upstream's host, and never comes back", async () => {
+      const dataDir = await tempDir();
+      const { socket } = await client({ dataDir, upgrade: real });
+      expect(
+        await socket.call("upgrade", "setToken", { token: " ghp_s3cret\n" }),
+      ).toEqual({ saved: "github.com" });
+
+      expect(await dbText(dataDir)).toContain("upgrade.token");
+      expect(await dbText(dataDir)).not.toContain("ghp_s3cret");
+      expect(savedToken(dataDir)).toEqual({
+        host: "github.com",
+        token: "ghp_s3cret",
+      });
+      const check = await socket.call("upgrade", "check", {});
+      expect(JSON.stringify(check)).not.toContain("ghp_s3cret");
+      expect(check).toMatchObject({
+        token: { host: "github.com", from: "Settings", saved: "github.com" },
+      });
+
+      expect(await socket.call("upgrade", "setToken", {})).toEqual({
+        saved: null,
+      });
+      expect(savedToken(dataDir)).toBeUndefined();
+    });
+
+    it("binds to GitHub Enterprise's host when that is the upstream", async () => {
+      const dataDir = await tempDir();
+      const { socket } = await client({ dataDir, upgrade: real });
+      await socket.call("upgrade", "setUpstream", {
+        upstream: "https://ghe.corp/api/v3/repos/o/r",
+      });
+      await socket.call("upgrade", "setToken", { token: "ghe_token" });
+      expect(savedToken(dataDir)?.host).toBe("ghe.corp");
+    });
+
+    it("stays behind when the upstream moves to another host", async () => {
+      const dataDir = await tempDir();
+      const { socket } = await client({ dataDir, upgrade: real });
+      await socket.call("upgrade", "setToken", { token: "ghp_s3cret" });
+      await socket.call("upgrade", "setUpstream", {
+        upstream: "https://lookalike.example/api/v3/repos/o/r",
+      });
+      expect(await socket.call("upgrade", "check", {})).toMatchObject({
+        token: {
+          host: "lookalike.example",
+          saved: "github.com",
+        },
+      });
+      await socket.call("upgrade", "setUpstream", {
+        upstream: "https://mirror.example/repos/o/r",
+      });
+      expect(await socket.call("upgrade", "check", {})).toMatchObject({
+        token: { host: null, from: null, saved: "github.com" },
+      });
+    });
+
+    it("is refused for a server that is not GitHub", async () => {
+      const dataDir = await tempDir();
+      const { socket } = await client({ dataDir, upgrade: real });
+      await socket.call("upgrade", "setUpstream", {
+        upstream: "https://mirror.example/repos/o/r",
+      });
+      await expect(
+        socket.call("upgrade", "setToken", { token: "ghp_s3cret" }),
+      ).rejects.toThrow(/ETA_RELEASES_TOKEN/);
+      expect(savedToken(dataDir)).toBeUndefined();
+    });
+
+    it.each(["has a space", "line\nbreak", "   ", "tökén"])(
+      "refuses %j without repeating it",
+      async (token) => {
+        const dataDir = await tempDir();
+        const { socket } = await client({ dataDir, upgrade: real });
+        const error = await socket
+          .call("upgrade", "setToken", { token })
+          .catch((caught: unknown) => caught as Error);
+        expect(String(error)).toContain("not a token");
+        expect(String(error)).not.toContain(token.trim() || "\0");
+        expect(savedToken(dataDir)).toBeUndefined();
+      },
+    );
+
+    it("says when the environment outranks it", async () => {
+      const dataDir = await tempDir();
+      const { socket } = await client({ dataDir, upgrade: real });
+      await socket.call("upgrade", "setToken", { token: "ghp_s3cret" });
+      process.env.GH_TOKEN = "from-env";
+      try {
+        expect(await socket.call("upgrade", "check", {})).toMatchObject({
+          token: { from: "GH_TOKEN", saved: "github.com" },
+        });
+      } finally {
+        delete process.env.GH_TOKEN;
+      }
     });
   });
 

@@ -11,6 +11,7 @@ import type {
   UpgradeBusy,
   UpgradeCheckView,
   UpgradeResults,
+  UpgradeTokenView,
   UpgradeUpstreamSource,
   UpgradeUpstreamView,
 } from "@eta/client-contracts";
@@ -19,11 +20,19 @@ import type { HostService } from "./service";
 import { realpathSync } from "node:fs";
 import process from "node:process";
 import { COMPILED } from "../resources";
+import { loadSecretKey } from "../secret";
 import { VERSION } from "../version";
 import { Args, productPlugin } from "../wire";
-import { Releases } from "./releases";
+import { Releases, releaseToken } from "./releases";
 import { findHostService } from "./service";
 import { readStatus } from "./status";
+import {
+  cleanToken,
+  openToken,
+  sealToken,
+  TOKEN_SETTING,
+  tokenHost,
+} from "./token";
 import { versionOrder } from "./upgrade";
 import {
   BUILT_UPSTREAM,
@@ -48,6 +57,7 @@ export interface UpgradePluginOptions {
   compiled?: boolean;
   execPath?: string;
   releases?: Pick<Releases, "latest">;
+  findToken?: typeof releaseToken;
   findService?: () => Promise<HostService | undefined>;
   start?: typeof startWorker;
   cancel?: typeof cancelWorker;
@@ -101,8 +111,26 @@ async function check(options: UpgradePluginOptions): Promise<UpgradeCheckView> {
     blocked: "no-service" as const,
   }));
   const { text, view: upstream } = currentUpstream(options);
+  const stored = options.settings.get(TOKEN_SETTING);
+  const token: UpgradeTokenView = {
+    host: null,
+    from: null,
+    saved: tokenHost(stored) ?? null,
+  };
   try {
-    const releases = options.releases ?? new Releases({ upstream: text });
+    const parsed = parseUpstream(text);
+    if (parsed.kind !== "other") token.host = parsed.host;
+    const found = await (options.findToken ?? releaseToken)(
+      parsed,
+      process.env,
+      stored === undefined
+        ? undefined
+        : openToken(loadSecretKey(options.dataDir), stored),
+    );
+    token.from = found.from ?? null;
+    const releases =
+      options.releases ??
+      new Releases({ upstream: text, token: () => Promise.resolve(found) });
     const latest = (await releases.latest()).version;
     const order = versionOrder(latest, version);
     return {
@@ -112,6 +140,7 @@ async function check(options: UpgradePluginOptions): Promise<UpgradeCheckView> {
       blocked,
       busy: options.busy(),
       upstream,
+      token,
       error: null,
     };
   } catch (error) {
@@ -122,6 +151,7 @@ async function check(options: UpgradePluginOptions): Promise<UpgradeCheckView> {
       blocked,
       busy: options.busy(),
       upstream,
+      token,
       error: error instanceof Error ? error.message : String(error),
     };
   }
@@ -159,6 +189,25 @@ export function upgradePlugin(
           else options.settings.set(UPSTREAM_SETTING, parseUpstream(given).api);
           const result: UpgradeResults["setUpstream"] =
             currentUpstream(options).view;
+          return { result };
+        }),
+        wire.handle("upgrade", "setToken", async (call) => {
+          const given = new Args(call).optionalString("token");
+          const { settings, dataDir } = options;
+          if (given === undefined) settings.delete(TOKEN_SETTING);
+          else {
+            const { host, kind } = parseUpstream(currentUpstream(options).text);
+            if (kind === "other")
+              throw new Error(
+                "this upstream is not GitHub: it takes ETA_RELEASES_TOKEN",
+              );
+            const token = cleanToken(given);
+            const key = loadSecretKey(dataDir);
+            settings.set(TOKEN_SETTING, sealToken(key, { host, token }));
+          }
+          const result: UpgradeResults["setToken"] = {
+            saved: tokenHost(settings.get(TOKEN_SETTING)) ?? null,
+          };
           return { result };
         }),
         wire.handle("upgrade", "cancel", async () => {

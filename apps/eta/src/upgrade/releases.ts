@@ -4,18 +4,19 @@
  *
  * The API serves a private repository and a public one the same way, so there is one path and the
  * only difference is a token: `GH_TOKEN`, `GITHUB_TOKEN` (first `GH_ENTERPRISE_TOKEN`, on GitHub
- * Enterprise), or what `gh` is logged in with on that host. Without any it asks anonymously, which
- * is all a public repository needs. Any other server is not given GitHub's credentials: it gets
- * `ETA_RELEASES_TOKEN`, and only that.
+ * Enterprise), one the user saved for that host (`token.ts`), or what `gh` is logged in with there.
+ * Without any it asks anonymously, which is all a public repository needs. Any other server is not
+ * given GitHub's credentials: it gets `ETA_RELEASES_TOKEN`, and only that.
  *
- * A token is found again for every `Releases` and kept nowhere else. It is never put in an error:
- * they end up in the status file and on the page. What they say instead is where the token came
- * from, because the user has to tell an absent token from one that cannot read the repository,
- * and from a `gh` that is logged in somewhere this process cannot reach.
+ * A token is found again for every `Releases`, and only one the user saved is kept. It is never
+ * put in an error: they end up in the status file and on the page. What they say instead is where
+ * the token came from, because the user has to tell an absent token from one that cannot read the
+ * repository, and from a `gh` that is logged in somewhere this process cannot reach.
  *
  * What is checked here is that a download is whole, against the `SHA256SUMS` of the same release.
  * That says the file is the one that was published, as far as GitHub is believed.
  */
+import type { SavedToken } from "./token";
 import type { Upstream } from "./upstream";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -24,6 +25,7 @@ import process from "node:process";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
+import { SAVED_TOKEN } from "./token";
 import { BUILT_UPSTREAM, parseUpstream } from "./upstream";
 
 const run = promisify(execFile);
@@ -58,7 +60,7 @@ type GhTrouble =
 
 export interface ReleaseToken {
   token?: string;
-  /** The name to say it by: an environment variable, or `gh`. */
+  /** The name to say it by: an environment variable, `gh`, or `SAVED_TOKEN`. */
   from?: string;
   gh?: GhTrouble;
 }
@@ -66,6 +68,8 @@ export interface ReleaseToken {
 export interface ReleasesOptions {
   /** How the repository was given (`parseUpstream`); what the build says if not. */
   upstream?: string;
+  /** What the user saved, if anything; it only counts on its own host. */
+  saved?: SavedToken | undefined;
   token?: () => Promise<ReleaseToken>;
   fetch?: typeof fetch;
 }
@@ -96,6 +100,7 @@ async function askGh(
 export async function releaseToken(
   upstream: Upstream,
   env: NodeJS.ProcessEnv = process.env,
+  saved?: SavedToken,
 ): Promise<ReleaseToken> {
   const names =
     upstream.kind === "other"
@@ -107,7 +112,10 @@ export async function releaseToken(
     const token = env[name];
     if (token) return { token, from: name };
   }
-  return upstream.kind === "other" ? {} : await askGh(upstream.host, env);
+  if (upstream.kind === "other") return {};
+  if (saved?.host === upstream.host)
+    return { token: saved.token, from: SAVED_TOKEN };
+  return await askGh(upstream.host, env);
 }
 
 /** `<sha256>  <file>` lines, as `sha256sum` writes them. */
@@ -131,7 +139,10 @@ export class Releases {
   constructor(options: ReleasesOptions = {}) {
     this.upstream = parseUpstream(options.upstream ?? BUILT_UPSTREAM);
     this.#fetch = options.fetch ?? fetch;
-    this.#token = (options.token ?? (() => releaseToken(this.upstream)))();
+    this.#token = (
+      options.token ??
+      (() => releaseToken(this.upstream, process.env, options.saved))
+    )();
   }
 
   /** The newest published release that is not a pre-release: what the API means by latest. */
@@ -260,10 +271,10 @@ export class Releases {
     const hostname = kind === "enterprise" ? ` --hostname ${host}` : "";
     const env = kind === "enterprise" ? "GH_ENTERPRISE_TOKEN" : "GH_TOKEN";
     if (gh === "missing")
-      return `gh is not on this process's PATH: install it, or set ${env}`;
+      return `gh is not on this process's PATH: install it, save a token under Settings, or set ${env}`;
     if (gh === "unreadable")
-      return `gh has a login for ${host} that this process cannot read, as happens to a service when the login is in a keychain: run \`gh auth login${hostname} --insecure-storage\`, or set ${env} in the service's environment`;
-    return `gh has no login for ${host} here: run \`gh auth login${hostname}\` as this user, or set ${env}`;
+      return `gh has a login for ${host} that this process cannot read, as happens to a service when the login is in a keychain: run \`gh auth login${hostname} --insecure-storage\`, save a token under Settings, or set ${env} in the service's environment`;
+    return `gh has no login for ${host} here: run \`gh auth login${hostname}\` as this user, save a token under Settings, or set ${env}`;
   }
 
   /** Whether the repository itself can be seen with what this has. A guess at worst: it only words an error. */

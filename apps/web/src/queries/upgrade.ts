@@ -126,6 +126,15 @@ export function useSetUpstream() {
   });
 }
 
+export function useSetToken() {
+  const client = useQueryClient();
+  return useWireMutation<UpgradeArgs["setToken"], UpgradeResults["setToken"]>(
+    "upgrade",
+    "setToken",
+    { onSuccess: () => void client.invalidateQueries({ queryKey: CHECK_KEY }) },
+  );
+}
+
 export function useCancelUpgrade() {
   const client = useQueryClient();
   return useWireMutation<UpgradeArgs["cancel"], UpgradeResults["cancel"]>(

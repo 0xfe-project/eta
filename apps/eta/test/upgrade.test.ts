@@ -8,7 +8,7 @@
 import type { ReleaseToken } from "../src/upgrade/releases";
 import type { HostService } from "../src/upgrade/service";
 import type { UpgradeOptions } from "../src/upgrade/upgrade";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
@@ -22,16 +22,24 @@ import {
   openDatabase,
 } from "../src/db";
 import { SettingStore } from "../src/inbox/setting";
+import { loadSecretKey } from "../src/secret";
 import {
   backupDatabase,
   BACKUPS_KEPT,
   busyAgents,
   busyText,
   restoreDatabase,
+  savedToken,
   savedUpstream,
 } from "../src/upgrade/database";
 import { parseSums, Releases, releaseToken } from "../src/upgrade/releases";
 import { askUp, upUrl } from "../src/upgrade/service";
+import {
+  openToken,
+  sealToken,
+  TOKEN_SETTING,
+  tokenHost,
+} from "../src/upgrade/token";
 import { upgradeHost } from "../src/upgrade/upgrade";
 import {
   BUILT_UPSTREAM,
@@ -1110,6 +1118,74 @@ describe("which token", () => {
     ).toEqual({
       token: "from-gh",
       from: "gh",
+    });
+  });
+
+  describe("one the user saved", () => {
+    const saved = { host: "github.com", token: "saved" };
+
+    it("comes after the environment and before gh", async () => {
+      const env = await gh('echo "from-gh"');
+      expect(
+        await releaseToken(github, { ...env, GH_TOKEN: "a" }, saved),
+      ).toEqual({ token: "a", from: "GH_TOKEN" });
+      expect(await releaseToken(github, env, saved)).toEqual({
+        token: "saved",
+        from: "Settings",
+      });
+    });
+
+    it("goes to its own host and nowhere else", async () => {
+      const env = await gh('echo "from-gh"');
+      expect(await releaseToken(enterprise, env, saved)).toEqual({
+        token: "from-gh",
+        from: "gh",
+      });
+      expect(await releaseToken(mirror, env, saved)).toEqual({});
+      const lookalike = parseUpstream("http://github.com/repos/o/r");
+      expect(lookalike.host).toBe("github.com");
+      expect(await releaseToken(lookalike, env, saved)).toEqual({});
+    });
+
+    it("does not open under another host's key", () => {
+      const stored = sealToken(randomBytes(32), saved);
+      expect(tokenHost(stored)).toBe("github.com");
+      expect(openToken(randomBytes(32), stored)).toBeUndefined();
+      expect(JSON.stringify(stored)).not.toContain('saved"');
+    });
+
+    it("is read back outside the host", async () => {
+      const dir = await tempDir();
+      expect(savedToken(dir)).toBeUndefined();
+      const db = openDatabase(databasePath(dir));
+      applyMigrations(db, loadMigrations());
+      expect(savedToken(dir)).toBeUndefined();
+      expect(existsSync(join(dir, "secret.key"))).toBe(false);
+      new SettingStore(db).set(
+        TOKEN_SETTING,
+        sealToken(loadSecretKey(dir), saved),
+      );
+      expect(savedToken(dir)).toEqual(saved);
+      db.close();
+    });
+
+    it("is named by where it came from when it is refused", async () => {
+      const releases = new Releases({
+        upstream: "o/r",
+        saved,
+        fetch: ((_url: string, init: RequestInit) =>
+          Promise.resolve(
+            new Response("", {
+              status: new Headers(init.headers).has("authorization")
+                ? 401
+                : 404,
+            }),
+          )) as unknown as typeof fetch,
+        token: () => releaseToken(parseUpstream("o/r"), {}, saved),
+      });
+      await expect(releases.latest()).rejects.toThrow(
+        /token from Settings was refused/,
+      );
     });
   });
 
