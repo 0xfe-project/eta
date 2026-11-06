@@ -3,7 +3,7 @@
 #
 # release.yml calls it before publishing, on Linux only and against the draft, so a tag gets its
 # answer in minutes. The other platforms cost ten and two times as much in a private repository:
-# ask for them by hand with `platforms: all`.
+# ask for them by hand, one at a time while something is wrong.
 name: Upgrade across versions
 
 on:
@@ -23,7 +23,7 @@ on:
       platforms:
         description: Where to run it
         type: choice
-        options: [linux, all]
+        options: [linux, macos, windows, all]
         default: linux
 
 permissions:
@@ -65,7 +65,12 @@ jobs:
           linux='{"os":"ubuntu-latest","platform":"linux-x64"}'
           mac='{"os":"macos-latest","platform":"darwin-arm64"}'
           windows='{"os":"windows-latest","platform":"windows-x64","exe":".exe"}'
-          matrix=$([[ $PLATFORMS == all ]] && echo "[$linux,$mac,$windows]" || echo "[$linux]")
+          case $PLATFORMS in
+            all) matrix="[$linux,$mac,$windows]" ;;
+            macos) matrix="[$mac]" ;;
+            windows) matrix="[$windows]" ;;
+            *) matrix="[$linux]" ;;
+          esac
           {
             echo "from=$from"
             echo "to=$to"

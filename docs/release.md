@@ -61,7 +61,7 @@ host 带的 CLIProxyAPI 跟构建它的机器相关，hutch 也只为所在的�
 
 ```sh
 gh workflow run upgrade-cross.yml --ref v0.2.1 -f platforms=all
-gh workflow run upgrade-cross.yml --ref main -f from=0.2.0 -f to=0.2.1 -f platforms=all
+gh workflow run upgrade-cross.yml --ref main -f from=0.2.0 -f to=0.2.1 -f platforms=windows
 ```
 
 `to` 默认是运行所在的 tag，`from` 默认是比它小的最高正式版本。
