@@ -231,6 +231,262 @@ describe("publish_artifact", () => {
   });
 });
 
+describe("publish_artifact from a task's session", () => {
+  /**
+   * Ada and Bea in a group, a site in the project, and tasks that run for real. `run` makes a task
+   * (`prepare` gets it first, while it waits in the backlog), has Ada make the calls `plan` gives
+   * for it in its session and report, and returns what each call came back with.
+   */
+  async function tasks() {
+    const plans: Record<string, Call[]> = {};
+    const seen: Record<string, string[]> = {};
+    const { models } = scriptedModels((request) => {
+      if (!request.system.includes("In this task you are")) return say("ok");
+      const who = request.agent ?? "";
+      const results = (seen[who] ??= []);
+      if (request.lastRole === "toolResult") results.push(request.last);
+      const plan = plans[who] ?? [];
+      if (results.length < plan.length) return plan[results.length]!;
+      return who === "Ada" && results.length === plan.length
+        ? call("finish_task", { summary: "Done." })
+        : say("finished");
+    });
+    const w = await world({ models });
+    const ada = await w.agent("Ada");
+    const bea = await w.agent("Bea");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id, bea.id], "ui");
+    await w.watch(group.id);
+    w.client.subscribe("artifacts");
+    await mkdir(join(project.path, "site"));
+    await writeFile(join(project.path, "site", "index.html"), "<h1>hi</h1>");
+
+    const { board } = w.host.product;
+    const by = { kind: "agent", agentId: ada.id } as const;
+    const backlog = (title: string) =>
+      board.create(
+        {
+          title,
+          description: `Do ${title}`,
+          status: "backlog",
+          conversationId: group.id,
+          workspace: "local",
+        },
+        by,
+      );
+    const idle = (taskId: string): boolean =>
+      board.detail(taskId)!.runs.length > 0 &&
+      board
+        .detail(taskId)!
+        .runs.every(
+          (run) => !["queued", "starting", "running"].includes(run.status),
+        );
+    const run = async (
+      plan: Call[] | ((task: BoardTaskDetail) => Call[]),
+      prepare?: (task: BoardTaskDetail) => void,
+    ) => {
+      const task = backlog("Report");
+      prepare?.(task);
+      plans.Ada = typeof plan === "function" ? plan(task) : plan;
+      seen.Ada = [];
+      board.update(task.id, { status: "todo" }, by);
+      await until(
+        () => idle(task.id) && board.detail(task.id)!.status === "in_review",
+      );
+      return { task, results: seen.Ada };
+    };
+    /** Bea called into a task: a session held in `task:<id>:<agent>`. */
+    const mention = async (taskId: string, plan: Call[]) => {
+      plans.Bea = plan;
+      seen.Bea = [];
+      await w.client.call("tasks", "comment", {
+        taskId,
+        body: "@Bea publish it",
+        mentions: [bea.id],
+      });
+      await until(
+        () => board.detail(taskId)!.runs.length === 2 && idle(taskId),
+      );
+      return seen.Bea;
+    };
+    const timeline = (taskId: string) =>
+      board
+        .activity(taskId)
+        .filter((entry) => entry.kind === "artifact")
+        .map((entry) => ({ agent: entry.actor.agentId, data: entry.data }));
+    return {
+      w,
+      ada,
+      bea,
+      project,
+      group,
+      board,
+      by,
+      backlog,
+      run,
+      mention,
+      timeline,
+    };
+  }
+
+  const site = publish({ path: "site", title: "Report" });
+
+  it("goes on its own task's timeline without being told, from the conversation the task is in", async () => {
+    const r = await tasks();
+    const { task, results } = await r.run([site]);
+    expect(results[0]).toContain('Published "Report" version 1');
+    await until(() => list(r.w).length === 1);
+    const artifact = list(r.w)[0]!;
+    expect(artifact).toMatchObject({
+      taskId: task.id,
+      conversationId: r.group.id,
+      publisherAgentId: r.ada.id,
+    });
+    expect(r.timeline(task.id)).toEqual([
+      {
+        agent: r.ada.id,
+        data: { artifactId: artifact.id, title: "Report", version: 1 },
+      },
+    ]);
+    expect(r.board.detail(task.id)!.artifacts).toMatchObject([
+      { artifactId: artifact.id, title: "Report", version: 1 },
+    ]);
+  });
+
+  it("is the same when it names its own task", async () => {
+    const r = await tasks();
+    const { task, results } = await r.run((made) => [
+      publish({ path: "site", title: "Report", taskId: `#${made.number}` }),
+    ]);
+    expect(results[0]).toContain('Published "Report" version 1');
+    await until(() => list(r.w).length === 1);
+    expect(list(r.w)[0]).toMatchObject({
+      taskId: task.id,
+      conversationId: r.group.id,
+    });
+    expect(r.timeline(task.id)).toHaveLength(1);
+  });
+
+  it("goes to another task when told to, still from its own task's conversation", async () => {
+    const r = await tasks();
+    const other = r.backlog("Other");
+    const { task, results } = await r.run([
+      publish({ path: "site", title: "Theirs", taskId: other.id }),
+    ]);
+    expect(results[0]).toContain('Published "Theirs" version 1');
+    await until(() => list(r.w).length === 1);
+    expect(list(r.w)[0]).toMatchObject({
+      taskId: other.id,
+      conversationId: r.group.id,
+    });
+    expect(r.timeline(other.id)).toHaveLength(1);
+    expect(r.timeline(task.id)).toEqual([]);
+  });
+
+  it("comes from where the task is now, or failing that where it came from", async () => {
+    const r = await tasks();
+    const elsewhere = await r.w.group(r.project.id, [r.ada.id], "elsewhere");
+    const moved = await r.run(
+      [publish({ path: "site", title: "Moved" })],
+      (t) => r.board.link(t.id, elsewhere.id, r.by),
+    );
+    const unlinked = await r.run(
+      [publish({ path: "site", title: "Unlinked" })],
+      (t) => r.board.link(t.id, null, r.by),
+    );
+    await until(() => list(r.w).length === 2);
+    const named = (title: string) => list(r.w).find((a) => a.title === title);
+    expect(named("Moved")).toMatchObject({
+      taskId: moved.task.id,
+      conversationId: elsewhere.id,
+    });
+    expect(named("Unlinked")).toMatchObject({
+      taskId: unlinked.task.id,
+      conversationId: r.group.id,
+    });
+  });
+
+  it("comes from no conversation when the task has none left, and still opens", async () => {
+    const r = await tasks();
+    const { task, results } = await r.run([site], () => {
+      r.w.host.db.run("DELETE FROM conversation WHERE id = ?", [r.group.id]);
+    });
+    expect(results[0]).toContain('Published "Report" version 1');
+    await until(() => list(r.w).length === 1);
+    const artifact = list(r.w)[0]!;
+    expect(artifact).toMatchObject({ taskId: task.id, conversationId: null });
+    expect(r.timeline(task.id)).toHaveLength(1);
+    expect(r.board.detail(task.id)!.artifacts).toHaveLength(1);
+    const { url } = (await r.w.client.call("artifacts", "preview", {
+      artifactId: artifact.id,
+      version: 1,
+    })) as { url: string };
+    const page = await fetch(`http://127.0.0.1:${r.w.host.port}${url}`);
+    expect(await page.text()).toContain("hi");
+  });
+
+  it("is the task's from a mentioned agent's session too, in that agent's name", async () => {
+    const r = await tasks();
+    const { task } = await r.run([]);
+    const results = await r.mention(task.id, [
+      publish({ path: "site", title: "From Bea" }),
+    ]);
+    expect(results[0]).toContain('Published "From Bea" version 1');
+    await until(() => list(r.w).length === 1);
+    expect(list(r.w)[0]).toMatchObject({
+      taskId: task.id,
+      conversationId: r.group.id,
+      publisherAgentId: r.bea.id,
+    });
+    expect(r.timeline(task.id).map((entry) => entry.agent)).toEqual([r.bea.id]);
+  });
+
+  it("finds its task through the run in a session from before the key named the task", async () => {
+    const r = await tasks();
+    const { task } = await r.run([]);
+    const tools = r.w.host.product.sessionHooks.sessionTools({
+      meta: {
+        id: "old-session",
+        createdAt: 0,
+        cwd: r.project.path,
+        agentId: r.ada.id,
+        conversationId: `task-run:${r.board.detail(task.id)!.runs[0]!.id}`,
+      },
+      session: undefined as never,
+    });
+    const tool = tools.find((t) => t.name === "publish_artifact")!;
+    await tool.execute(
+      { path: "site", title: "Old" },
+      {
+        turn: 0,
+        toolCallId: "call",
+        signal: new AbortController().signal,
+        toolContext: {},
+      },
+    );
+    await until(() => list(r.w).length === 1);
+    expect(list(r.w)[0]).toMatchObject({
+      taskId: task.id,
+      conversationId: r.group.id,
+    });
+  });
+
+  it("adds a version without taking an artifact from the task it is for", async () => {
+    const r = await tasks();
+    const first = await r.run([site]);
+    await until(() => list(r.w).length === 1);
+    const artifactId = list(r.w)[0]!.id;
+    const second = await r.run([
+      publish({ path: "site", title: "Report", artifactId }),
+    ]);
+    expect(second.results[0]).toContain('Published "Report" version 2');
+    await until(() => list(r.w)[0]!.versions.length === 2);
+    expect(list(r.w)[0]).toMatchObject({ taskId: first.task.id });
+    expect(r.timeline(first.task.id)).toHaveLength(2);
+    expect(r.timeline(second.task.id)).toEqual([]);
+  });
+});
+
 describe("the artifacts target and its pages", () => {
   async function published() {
     const r = await room();

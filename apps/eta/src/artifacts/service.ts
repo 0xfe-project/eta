@@ -46,6 +46,8 @@ export interface PublishInput {
   /** The artifact to add a version to; absent makes a new one. */
   artifactId?: string | undefined;
   taskId?: string | undefined;
+  /** The task the publishing session works on: what `taskId` falls to on an unlinked artifact. */
+  sessionTaskId?: string | undefined;
   conversationId?: string | undefined;
   /** Who publishes. Only the agent that made an artifact may add to it. */
   publisherAgentId: string;
@@ -261,8 +263,10 @@ export class ArtifactService {
           id,
           title,
           publisherAgentId: input.publisherAgentId,
-          // A version published for a task links the artifact to it; one without keeps the link.
-          taskId: input.taskId ?? existing?.taskId ?? null,
+          // A version published for a task links the artifact to it; one without keeps the link,
+          // and only with no link to keep does it go to the task of the session that published it.
+          taskId:
+            input.taskId ?? existing?.taskId ?? input.sessionTaskId ?? null,
           conversationId:
             existing?.conversationId ?? input.conversationId ?? null,
         },

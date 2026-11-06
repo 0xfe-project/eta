@@ -6,6 +6,9 @@ import type { KernelTool } from "@eta/core";
  * The directory is read from this machine's disk, relative to the session's working directory. What
  * is packed is judged by the service (`kinds/site.ts`) and stored as a new version. A version published
  * for a task goes on the task's timeline and into its cards.
+ *
+ * A task's session is held in a key, not in a conversation (`tasks/session-key.ts`), so what it
+ * publishes is for its task, and comes from the conversation the task is in, if it is in one.
  */
 import type { SessionHooks } from "../session-hooks";
 import type { TaskBoard } from "../tasks/board";
@@ -13,6 +16,7 @@ import type { SiteLimits } from "./files";
 import type { ArtifactService } from "./service";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
+import { isTaskSession, taskOfKey } from "../tasks/session-key";
 import { ArtifactError, collectSite } from "./files";
 
 /** The tool needs nothing from the run: where it reads is the session's own directory. */
@@ -42,7 +46,7 @@ const parameters = () =>
     taskId: Type.Optional(
       Type.String({
         description:
-          "The task this is for, by number (12 or #12) or id: it goes on the task's timeline and into its card",
+          "The task this is for, by number (12 or #12) or id: it goes on the task's timeline and into its card. A task's own session need not say: it defaults to that task",
       }),
     ),
   });
@@ -51,6 +55,8 @@ export function artifactSessionTools(deps: {
   artifacts: ArtifactService;
   board: TaskBoard;
   limits: SiteLimits;
+  /** The task a run is an attempt at, for a session held in a run's key. */
+  taskOfRun: (runId: string) => string | undefined;
 }): NonNullable<SessionHooks["sessionTools"]> {
   return ({ meta }) => {
     const { agentId, conversationId } = meta;
@@ -85,6 +91,9 @@ export function artifactSessionTools(deps: {
               : deps.board.find(args.taskId);
           if (args.taskId !== undefined && task === undefined)
             throw new ArtifactError(`no such task: ${args.taskId}`);
+          // Read now, not when the session opened: a task can move to another conversation.
+          const ownId = taskOfKey(conversationId, deps.taskOfRun);
+          const own = ownId === undefined ? undefined : deps.board.find(ownId);
           const files = await collectSite(
             meta.cwd,
             args.path,
@@ -97,7 +106,10 @@ export function artifactSessionTools(deps: {
             options: args.spa === true ? { fallback: "index.html" } : {},
             artifactId: args.artifactId,
             taskId: task?.id,
-            conversationId,
+            sessionTaskId: own?.id,
+            conversationId: isTaskSession(conversationId)
+              ? (own?.conversationId ?? own?.originConversationId ?? undefined)
+              : conversationId,
             publisherAgentId: agentId,
           });
           if (artifact.taskId !== null) {
