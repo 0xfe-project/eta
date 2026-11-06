@@ -41,6 +41,12 @@ jobs:
       to: ${{ steps.versions.outputs.to }}
       matrix: ${{ steps.versions.outputs.matrix }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: test/upgrade-seed
+
       - name: Work out what to upgrade between
         id: versions
         env:
@@ -58,9 +64,17 @@ jobs:
                         | sed 's/^v//'; echo "$to"; } \
                       | sort -uV | grep -Fx -B1 -- "$to" | grep -Fxv -- "$to" || true)
           fi
+          # A build older than the first seed has no data to be tested on: v0.1.0 cannot upgrade at all.
+          oldest=$(ls test/upgrade-seed | sort -V | head -1)
           if [[ -z $from ]]; then
-            echo "::notice::$to has no release before it, so there is no upgrade to test."
-            echo "No release before $to: the upgrade was not tested." >> "$GITHUB_STEP_SUMMARY"
+            why="$to has no release before it"
+          elif [[ $(printf '%s\n' "$from" "$oldest" | sort -V | head -1) != "$oldest" ]]; then
+            why="$from is older than the first seed, $oldest"
+            from=
+          fi
+          if [[ -z $from ]]; then
+            echo "::notice::$why, so there is no upgrade to test."
+            echo "$why: the upgrade was not tested." >> "$GITHUB_STEP_SUMMARY"
           fi
           linux='{"os":"ubuntu-latest","platform":"linux-x64"}'
           mac='{"os":"macos-latest","platform":"darwin-arm64"}'

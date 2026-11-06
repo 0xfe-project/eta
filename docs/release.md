@@ -21,7 +21,7 @@ git push origin v0.2.0
 1. `prepare`：从 tag 读版本，开一个草稿 Release。
 2. `check`：和构建同时跑，完整的 `bun run check`，不是 `--affected`。没通过就不会发布，草稿留着。
 3. `build`：每个平台在自己的 runner 上，干净 checkout、frozen lockfile 构建。host 单独运行一次，核对 `--version`、`/up` 和页面；桌面应用打成安装包，装上启动，看它带的 host 答应；两样都过了才上传到草稿。只有一个例外：Linux 上启动要先从 Ubuntu 的镜像装 WebKit，8 分钟装不完就跳过这次启动，运行里留一条 warning，host 的检查不受影响。
-4. `cross`：`upgrade-cross.yml` 在 Linux 上从上一个正式版本升到这个草稿，见下面的“跨版本升级测试”。第一个版本没有上一版，跳过并在运行摘要里写明。
+4. `cross`：`upgrade-cross.yml` 在 Linux 上从上一个正式版本升到这个草稿，见下面的“跨版本升级测试”。没有上一版，或者上一版比最早的种子还旧（比如不能自升级的 v0.1.0），都跳过并在运行摘要里写明。
 5. `publish`：前面都成功才会跑，从草稿算出 `SHA256SUMS`，然后发布。任何一步失败，Release 都留在草稿，用户看不到。
 
 失败了先看是不是已知的不稳定测试（`gh run rerun <id> --failed`）。一个平台失败时其它平台会跑完，`--failed` 只重跑失败的那个。草稿可以重跑，文件会被覆盖。Release 一旦发布就不再改动：重跑会报错，要换文件就打新 tag。
