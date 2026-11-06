@@ -49,8 +49,11 @@ export interface Upstream {
 }
 
 /** Text that did not parse may still hold a login or a token, and it is about to be shown. */
-const withoutSecrets = (text: string): string =>
-  text.replace(/[^/]*@/, "").replace(/[?#].*$/, "");
+function withoutSecrets(text: string): string {
+  const scheme = /^[a-z]+:\/\//i.exec(text)?.[0] ?? "";
+  const rest = text.slice(scheme.length).replace(/[?#].*$/, "");
+  return scheme + rest.replace(/^.*@/, "");
+}
 
 const notARepository = (text: string): Error =>
   new Error(

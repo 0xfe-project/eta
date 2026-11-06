@@ -986,6 +986,7 @@ describe("where releases come from", () => {
 
   it.each([
     "https://me:s3cret@ghe.corp:not-a-port/api/v3/repos/o/r",
+    "https://me:s3cret/more@ghe.corp:not-a-port/api/v3/repos/o/r",
     "https://mirror.example/repos/o/r?token=s3cret",
     "https://mirror.example/repos/o/r#s3cret",
   ])("repeats no secret of what it cannot read: %s", (text) => {
