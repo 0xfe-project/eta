@@ -100,6 +100,46 @@ export function loadMigrations(dir?: string): Migration[] {
   return migrations;
 }
 
+/**
+ * A migration's statements, each with the comments before it. `Database.exec` takes a whole text,
+ * but in Bun 1.4.3 a statement that fails while it runs is only reported if nothing follows it,
+ * not even the newline that ends a file. The rest then runs, and the migration is recorded as done
+ * with its work undone: a UNIQUE index over rows that are not, on a database with real data.
+ *
+ * A `;` in a string, a quoted name or a comment ends nothing. A trigger's body would be cut at its
+ * first `;`, which stops the migration on the spot instead of passing unnoticed.
+ */
+export function statementsOf(sql: string): string[] {
+  const statements: string[] = [];
+  let start = 0;
+  let index = 0;
+  let empty = true;
+  const skipPast = (end: string): void => {
+    const at = sql.indexOf(end, index);
+    index = at === -1 ? sql.length : at + end.length;
+  };
+  while (index < sql.length) {
+    const char = sql[index]!;
+    if (sql.startsWith("--", index)) skipPast("\n");
+    else if (sql.startsWith("/*", index)) skipPast("*/");
+    else if (char === ";") {
+      if (!empty) statements.push(sql.slice(start, index + 1));
+      index += 1;
+      start = index;
+      empty = true;
+    } else {
+      index += 1;
+      if (/\s/.test(char)) continue;
+      empty = false;
+      // A doubled quote closes the text and opens it again, which comes to the same.
+      if (char === "[") skipPast("]");
+      else if (`'"\``.includes(char)) skipPast(char);
+    }
+  }
+  if (!empty) statements.push(sql.slice(start));
+  return statements;
+}
+
 /** Apply what has not run yet. Returns the ids it applied, which is empty on a second run. */
 export function applyMigrations(
   db: Database,
@@ -119,7 +159,7 @@ export function applyMigrations(
     // second finds the first's work done.
     db.transaction(() => {
       if (isDone.get(migration.id) !== null) return;
-      db.exec(migration.sql);
+      for (const statement of statementsOf(migration.sql)) db.exec(statement);
       db.query(
         `INSERT INTO ${MIGRATION_TABLE} (id, applied_at) VALUES (?, ?)`,
       ).run(migration.id, new Date().toISOString());

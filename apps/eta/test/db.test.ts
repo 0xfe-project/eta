@@ -12,6 +12,7 @@ import {
   databasePath,
   loadMigrations,
   openDatabase,
+  statementsOf,
 } from "../src/db";
 import { embedResources } from "../src/resources";
 import { tempDir } from "./support/host";
@@ -106,6 +107,50 @@ describe("applyMigrations", () => {
     // Fixed under the same id, it applies.
     const fixed = { id: broken.id, sql: "CREATE TABLE half (id INTEGER)" };
     expect(applyMigrations(db, [first, fixed])).toEqual([fixed.id]);
+  });
+
+  it("stops at a statement that fails on the data, wherever it is in the file", async () => {
+    const dir = await tempDir();
+    const db = openDatabase(join(dir, "eta.sqlite"));
+    db.exec(
+      "CREATE TABLE twin (name TEXT); INSERT INTO twin VALUES ('a'), ('a')",
+    );
+    // As a file ends: Bun's `exec` loses this error when even a newline follows the statement.
+    const last = {
+      id: "0002-last",
+      sql: "-- Fine on an empty table.\nCREATE UNIQUE INDEX twin_name ON twin (name);\n",
+    };
+    const middle = {
+      id: "0003-middle",
+      sql: "CREATE UNIQUE INDEX twin_name ON twin (name);\nCREATE TABLE after (id INTEGER);\n",
+    };
+    for (const migration of [last, middle]) {
+      expect(() => applyMigrations(db, [migration])).toThrow("UNIQUE");
+      expect(
+        db
+          .query("SELECT id FROM eta_migrations WHERE id = ?")
+          .get(migration.id),
+      ).toBeNull();
+    }
+    expect(
+      db.query("SELECT name FROM sqlite_master WHERE name = 'after'").get(),
+    ).toBeNull();
+    db.close();
+  });
+
+  it("reads a statement's end the way SQLite does", () => {
+    expect(
+      statementsOf(`-- one; not yet
+CREATE TABLE "a;b" ([c;d] TEXT DEFAULT 'it''s; here');
+/* two; not yet */ INSERT INTO \`a;b\` VALUES ('x;y');
+-- nothing after this; at all
+`).map((statement) => statement.trim()),
+    ).toEqual([
+      `-- one; not yet\nCREATE TABLE "a;b" ([c;d] TEXT DEFAULT 'it''s; here');`,
+      "/* two; not yet */ INSERT INTO `a;b` VALUES ('x;y');",
+    ]);
+    expect(statementsOf("SELECT 1")).toEqual(["SELECT 1"]);
+    expect(statementsOf("\n-- only this\n")).toEqual([]);
   });
 
   it("keeps what earlier migrations created when a later one fails", async () => {
