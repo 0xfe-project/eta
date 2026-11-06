@@ -181,6 +181,9 @@ headless Linux box, `loginctl enable-linger` keeps user services up without a lo
 
 `--host tailscale` listens on the tailnet address only, which is what other machines join over.
 
+A tagged version is that same `eta-host` as one file on GitHub Releases, for Linux x64 so far:
+[docs/release.md](docs/release.md) says how to cut one and how to fetch it.
+
 Or run the host by hand:
 
 ```sh

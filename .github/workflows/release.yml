@@ -1,0 +1,145 @@
+# A `v*` tag becomes a GitHub Release: the host as one file for each platform, and
+# SHA256SUMS. How to cut one is in docs/release.md.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  # For a tag whose run never happened or was lost, by naming it as the ref:
+  # `gh workflow run release.yml --ref v0.2.0`.
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ github.ref_name }}
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  # All of it: --affected compares with main, and a tag on main has nothing to compare.
+  check:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      command: check
+
+  prepare:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Read the version from the tag
+        id: version
+        run: |
+          if [[ $GITHUB_REF_TYPE != tag || ! $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::A release runs on a tag like v0.2.0, not on $GITHUB_REF."
+            exit 1
+          fi
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      # The builds upload to a draft, so nobody sees a release before it is whole. A
+      # published release keeps its files: a new build means a new tag.
+      - name: Open the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          draft=$(gh release view "$TAG" --json isDraft --jq .isDraft || echo none)
+          if [[ $draft == false ]]; then
+            echo "::error::$TAG is already published."
+            exit 1
+          fi
+          if [[ $draft == none ]]; then
+            gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes \
+              --prerelease="$([[ $TAG == *-* ]] && echo true || echo false)"
+          fi
+
+  build:
+    needs: prepare
+    strategy:
+      matrix:
+        # Each platform builds on a runner of its own: the host carries the CLIProxyAPI
+        # of the machine that compiled it. macOS is not here until that has been tried.
+        include:
+          - platform: linux-x64
+            runner: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      ASSET: eta-host-${{ matrix.platform }}
+      ETA_DAEMON_VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      # Dependencies' code runs here too, in a job that can write releases.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: bun run --cwd apps/web build
+      - run: bun apps/desktop/scripts/stage-host.ts
+
+      - name: The build left the checkout as it was
+        run: |
+          changed=$(git status --porcelain)
+          if [[ -n $changed ]]; then
+            echo "::error::The checkout changed during the build:"
+            echo "$changed"
+            exit 1
+          fi
+
+      - name: Run the file on its own
+        run: |
+          expected="eta-host $ETA_DAEMON_VERSION ($(git rev-parse --short=12 HEAD))"
+          mkdir -p "$RUNNER_TEMP/try/home"
+          cp apps/desktop/dist/host/eta-host "$RUNNER_TEMP/try/$ASSET"
+          cd "$RUNNER_TEMP/try"
+
+          actual=$("./$ASSET" --version)
+          if [[ $actual != "$expected" ]]; then
+            echo "::error::--version says '$actual', not '$expected'."
+            exit 1
+          fi
+
+          HOME="$PWD/home" "./$ASSET" --port 18787 &
+          curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://127.0.0.1:18787/up
+          curl -fsS -o /dev/null http://127.0.0.1:18787/
+          kill $!
+
+      - name: Upload it to the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" "$RUNNER_TEMP/try/$ASSET" --clobber
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # From the draft, so the sums are of what people will download.
+      - name: Add SHA256SUMS
+        run: |
+          gh release download "$TAG" --pattern 'eta-host-*' --dir assets
+          cd assets
+          sha256sum eta-host-* | tee SHA256SUMS
+          gh release upload "$TAG" SHA256SUMS --clobber
+
+      - run: gh release edit "$TAG" --draft=false
