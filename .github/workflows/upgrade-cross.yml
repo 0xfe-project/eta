@@ -1,0 +1,170 @@
+# The upgrade a person will really do: the last release, installed as a service and holding the
+# seed in test/upgrade-seed, up to this one, then back from a build that does not hold.
+#
+# release.yml calls it before publishing, on Linux only and against the draft, so a tag gets its
+# answer in minutes. The other platforms cost ten and two times as much in a private repository:
+# ask for them by hand with `platforms: all`.
+name: Upgrade across versions
+
+on:
+  workflow_call:
+    inputs:
+      to:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      from:
+        description: Version to start from, like 0.2.0. Empty is the release before `to`.
+        required: false
+      to:
+        description: Version to upgrade to, like 0.2.1. Empty is the tag this runs on.
+        required: false
+      platforms:
+        description: Where to run it
+        type: choice
+        options: [linux, all]
+        default: linux
+
+permissions:
+  contents: read
+
+env:
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  versions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      from: ${{ steps.versions.outputs.from }}
+      to: ${{ steps.versions.outputs.to }}
+      matrix: ${{ steps.versions.outputs.matrix }}
+    steps:
+      - name: Work out what to upgrade between
+        id: versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FROM: ${{ inputs.from }}
+          TO: ${{ inputs.to || github.ref_name }}
+          PLATFORMS: ${{ inputs.platforms || 'linux' }}
+        run: |
+          to=${TO#v}
+          from=${FROM#v}
+          if [[ -z $from ]]; then
+            # Published and not a prerelease, the highest below this one.
+            from=$( { gh api "repos/$GH_REPO/releases" --paginate \
+                        --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' \
+                        | sed 's/^v//'; echo "$to"; } \
+                      | sort -uV | grep -Fx -B1 -- "$to" | grep -Fxv -- "$to" || true)
+          fi
+          if [[ -z $from ]]; then
+            echo "::notice::$to has no release before it, so there is no upgrade to test."
+            echo "No release before $to: the upgrade was not tested." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          linux='{"os":"ubuntu-latest","platform":"linux-x64"}'
+          mac='{"os":"macos-latest","platform":"darwin-arm64"}'
+          windows='{"os":"windows-latest","platform":"windows-x64","exe":".exe"}'
+          matrix=$([[ $PLATFORMS == all ]] && echo "[$linux,$mac,$windows]" || echo "[$linux]")
+          {
+            echo "from=$from"
+            echo "to=$to"
+            echo "matrix={\"include\":$matrix}"
+          } >> "$GITHUB_OUTPUT"
+
+  upgrade:
+    needs: versions
+    if: needs.versions.outputs.from != ''
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.versions.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    permissions:
+      # The draft of the release being cut can only be read with this.
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      BUILDS: ${{ github.workspace }}/e2e-builds
+      ASSET: eta-host-${{ matrix.platform }}${{ matrix.exe }}
+      ETA_E2E_FROM: ${{ needs.versions.outputs.from }}
+      ETA_E2E_TO: ${{ needs.versions.outputs.to }}
+    steps:
+      # The seed is read as it is in git: Windows runners would check out CRLF.
+      - run: git config --global core.autocrlf false
+
+      # Nothing to install either: the driver runs on what Bun comes with.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            package.json
+            scripts/upgrade-e2e
+            test/upgrade-seed
+            apps/eta/src/secret.ts
+            apps/eta/src/artifacts/capability.ts
+            apps/eta/test/support/client.ts
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Fetch the two builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for version in "$ETA_E2E_FROM" "$ETA_E2E_TO"; do
+            gh release download "v$version" --pattern "$ASSET" --dir "$BUILDS/$version"
+          done
+          chmod +x "$BUILDS"/*/"$ASSET"
+
+      - name: Make a build that does not hold
+        run: bun build --compile scripts/upgrade-e2e/bad-host.ts --outfile "$BUILDS/99.0.0/$ASSET"
+
+      # SHA256SUMS comes with publishing, which has not happened yet for a draft.
+      - name: Sum them
+        run: bun scripts/upgrade-e2e/sums.ts "$BUILDS" "$ASSET"
+
+      # A password this run makes up: the runner's account has none anyone knows, and a Windows
+      # service cannot log on without one.
+      - name: Give the account a password
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $password = "Eta-" + [guid]::NewGuid().ToString("N") + "-1a"
+          Write-Output "::add-mask::$password"
+          net user $env:USERNAME $password | Out-Null
+          "ETA_E2E_PASSWORD=$password" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      # The runner has a user manager only once something asks for one.
+      - name: Start the user's systemd
+        if: runner.os == 'Linux'
+        run: |
+          sudo loginctl enable-linger "$USER"
+          runtime=/run/user/$(id -u)
+          timeout 30 bash -c "until [[ -S $runtime/bus ]]; do sleep 0.2; done"
+          echo "XDG_RUNTIME_DIR=$runtime" >> "$GITHUB_ENV"
+          echo "DBUS_SESSION_BUS_ADDRESS=unix:path=$runtime/bus" >> "$GITHUB_ENV"
+
+      - name: Upgrade
+        run: bun scripts/upgrade-e2e/drive.ts "$BUILDS"
+
+      - name: What the service left
+        if: failure()
+        run: |
+          mkdir -p e2e-logs
+          cp upgrade-e2e-results.json e2e-logs/ || true
+          cp ~/.eta/upgrade-status.json e2e-logs/ || true
+          cp ~/.eta/service/*.log e2e-logs/ || true
+          cp ~/Library/Logs/eta/*.log e2e-logs/ || true
+          journalctl --user -u io.eta.host -u io.eta.host-upgrade -n 300 > e2e-logs/journal.txt || true
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: upgrade-cross-${{ matrix.platform }}
+          path: e2e-logs
+          retention-days: 14

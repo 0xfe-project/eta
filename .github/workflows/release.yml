@@ -29,12 +29,7 @@ jobs:
     with:
       command: check
 
-  # On the real service managers: a release is what people upgrade to.
-  upgrade:
-    uses: ./.github/workflows/upgrade-e2e.yml
-
   prepare:
-    needs: [check, upgrade]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -187,8 +182,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG" "$RUNNER_TEMP/try/$ASSET" "$RUNNER_TEMP/try/$DESKTOP" --clobber
 
+  # From the last release to this draft, on Linux: a release is what people upgrade to. macOS and
+  # Windows are `gh workflow run upgrade-cross.yml -f platforms=all`, by hand.
+  cross:
+    needs: [prepare, build]
+    uses: ./.github/workflows/upgrade-cross.yml
+    permissions:
+      contents: write
+    with:
+      to: ${{ needs.prepare.outputs.version }}
+
+  # `check` runs beside the builds: nothing is published until both are through, and neither has
+  # anything to wait for from the other.
   publish:
-    needs: build
+    needs: [check, cross]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

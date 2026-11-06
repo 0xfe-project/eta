@@ -547,8 +547,8 @@ describe("git and gh on a machine", () => {
     // Disconnecting leaves the machine's own logins as they were.
     await w.client.call("github", "disconnect", {});
     await until(() => !existsSync(join(dir, "token")));
+    await until(() => !existsSync(join(dir, "gh")));
     expect(w.host.product.shellEnv.GH_CONFIG_DIR).toBeUndefined();
-    expect(existsSync(join(dir, "gh"))).toBe(false);
   });
 
   it("are logged in on a daemon too, with the token relayed and no App secret kept there", async () => {

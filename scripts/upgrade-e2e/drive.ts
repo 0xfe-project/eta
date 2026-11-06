@@ -5,6 +5,11 @@
  *
  *   bun scripts/upgrade-e2e/drive.ts <builds> [scenario...]
  *
+ * With ETA_E2E_FROM and ETA_E2E_TO it runs the upgrade between two real releases instead, over the
+ * seed `chooseSeed` picks: `<builds>/<version>/` holds each, and `<builds>/99.0.0/` a build that
+ * cannot hold (`bad-host.ts`). ETA_E2E_REAL=1 takes the upgrade from the build's real upstream, with
+ * whatever token it finds, instead of `fake-releases.ts`; there is no bad build there.
+ *
  * It runs as a user with a real home and a GUI session or a service logon, and it owns `~/.eta`
  * there: not for a computer anyone uses. On Windows it needs an Administrator's terminal and
  * ETA_E2E_PASSWORD, the password of this account.
@@ -27,7 +32,14 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Database } from "bun:sqlite";
-import { connect } from "../../apps/eta/test/support/client";
+import { connect, until } from "../../apps/eta/test/support/client";
+import {
+  chooseSeed,
+  MODEL_PORT,
+  readManifest,
+  restoreSeed,
+  seedProblems,
+} from "./seed";
 
 const WINDOWS = process.platform === "win32";
 const MAC = process.platform === "darwin";
@@ -50,6 +62,10 @@ const UID = process.getuid?.() ?? 501;
 const LAUNCHD = `gui/${UID}/${SERVICE}`;
 const PLIST = join(HOME, "Library", "LaunchAgents", `${SERVICE}.plist`);
 const SHOTS = resolve("e2e-shots");
+const FROM = process.env.ETA_E2E_FROM;
+const TO = process.env.ETA_E2E_TO;
+const REAL = process.env.ETA_E2E_REAL === "1";
+const BAD = "99.0.0";
 
 let failures = 0;
 let checks = 0;
@@ -102,7 +118,9 @@ function run(
 }
 
 const eta = (args: string[], env: Record<string, string> = {}): Promise<Ran> =>
-  run(EXE, args, { env: { ETA_RELEASES_URL: RELEASES, ...env } });
+  run(EXE, args, {
+    env: { ...(REAL ? {} : { ETA_RELEASES_URL: RELEASES }), ...env },
+  });
 
 const fileVersion = async (path: string = EXE): Promise<string> =>
   (await run(path, ["--version"])).out.split(" ")[1] ?? "";
@@ -406,6 +424,136 @@ async function pressButton(force = false): Promise<void> {
 
 const pinLatest = (version: string): void =>
   writeFileSync(join(BUILDS, "latest"), version);
+
+/** A service on FROM, holding the seed. */
+async function seeded(from: string): Promise<ReturnType<typeof readManifest>> {
+  await clean();
+  const installed = await installOver(from, ["--no-llm"]);
+  if (installed.code !== 0) throw new Error(`install: ${installed.out}`);
+  if (!(await waitFor(`${from} to answer`, up, 120)))
+    throw new Error(`${from} did not come up`);
+  await stopService();
+  const seed = chooseSeed(from);
+  restoreSeed(seed, DATA, HOME);
+  await startService();
+  if (!(await waitFor(`${from} to answer on the seed`, up, 120)))
+    throw new Error(`${from} did not come up on the seed`);
+  const manifest = readManifest(seed);
+  want("the seed went in", seedProblems(manifest, DATA), []);
+  return manifest;
+}
+
+/** What each of these upgrades has to leave, with `after` the build the service ends up on. */
+async function seedHolds(
+  manifest: ReturnType<typeof readManifest>,
+  after: string,
+): Promise<void> {
+  want("the file", await fileVersion(), after);
+  want("the service runs", await serviceState(), "running");
+  want("/up", await up(), true);
+  want("the seed is all there", seedProblems(manifest, DATA), []);
+  const carried = (await run(EXE, ["--migrations"])).out.split("\n");
+  const applied = sql("SELECT id FROM eta_migrations ORDER BY id") as {
+    id: string;
+  }[];
+  want(
+    "every migration of the build is recorded",
+    carried.filter((id) => !applied.some((row) => row.id === id)),
+    [],
+  );
+  const page = await fetch(`http://127.0.0.1:${PORT}/`);
+  has("the page opens", await page.text(), "<html");
+
+  const client = await connect(`ws://127.0.0.1:${PORT}/ws`, {
+    origin: `http://127.0.0.1:${PORT}`,
+  });
+  await client.hello();
+  const { id, replied, said } = manifest.conversation;
+  const lines = async (): Promise<string[]> => {
+    const { messages } = (await client.call("conversations", "history", {
+      conversationId: id,
+    })) as { messages: { text: string }[] };
+    return messages.map(({ text }) => text);
+  };
+  const old = await lines();
+  record(
+    "the conversation opens with what was said",
+    old.some((text) => text.includes(said)),
+    old.join(" | "),
+  );
+  record("and what was answered", old.includes(replied), old.join(" | "));
+  const agent = (
+    sql("SELECT id FROM agent WHERE name = 'Ada'") as { id: string }[]
+  )[0]!.id;
+  const next = `Still there after ${after}?`;
+  await client.call("conversations", "send", {
+    conversationId: id,
+    text: `@Ada ${next}`,
+    mentions: [agent],
+  });
+  await until(
+    async () =>
+      (await lines()).some(
+        (text) => text.startsWith("Heard") && text.includes(next),
+      ),
+    30_000,
+  ).then(
+    () => record("the conversation goes on", true, ""),
+    (error: unknown) =>
+      record("the conversation goes on", false, String(error)),
+  );
+  client.close();
+}
+
+const CROSS: Record<string, () => Promise<void>> = {
+  "from a release to the next, by the command": async () => {
+    const manifest = await seeded(FROM!);
+    const before = await hostPid();
+    const { code, out } = await eta(["upgrade", TO!]);
+    console.log(out.replace(/^/gm, "    | "));
+    want("exit", code, 0);
+    record("it is a new process", (await hostPid()) !== before, "same pid");
+    want("the old build is kept", await fileVersion(`${EXE}.prev`), FROM);
+    record(
+      "a backup was taken",
+      readdirSync(join(DATA, "backups")).some((file) =>
+        file.endsWith(`-${FROM}.sqlite`),
+      ),
+      "no backup",
+    );
+    await seedHolds(manifest, TO!);
+  },
+
+  "from a release to the next, by the button": async () => {
+    const manifest = await seeded(FROM!);
+    if (!REAL) {
+      await serviceKnowsReleases();
+      pinLatest(TO!);
+    }
+    await pressButton();
+    await finished();
+    want("it ended", ended(), "done");
+    await waitFor("/up", up);
+    await seedHolds(manifest, TO!);
+  },
+
+  "a build that does not hold goes back, with the seed": async () => {
+    if (REAL) return;
+    const manifest = await seeded(FROM!);
+    const { code, out } = await eta(["upgrade", BAD]);
+    console.log(out.replace(/^/gm, "    | "));
+    want("exit", code, 1);
+    has("it says so", out, "did not hold");
+    has("and where it is", out, `back on ${FROM}`);
+    await waitFor("/up", up);
+    await seedHolds(manifest, FROM!);
+    want(
+      "no trace of its migration",
+      sql("SELECT count(*) AS n FROM eta_migrations WHERE id LIKE '9999%'"),
+      [{ n: 0 }],
+    );
+  },
+};
 
 const SCENARIOS: Record<string, () => Promise<void>> = {
   "a service installs and answers": async () => {
@@ -921,10 +1069,16 @@ const server = spawn(
   [join(import.meta.dir, "fake-releases.ts"), BUILDS, String(RELEASES_PORT)],
   { stdio: "ignore" },
 );
+const model = spawn(
+  process.execPath,
+  [join(import.meta.dir, "fake-model.ts"), String(MODEL_PORT)],
+  { stdio: "ignore" },
+);
 await sleep(1000);
 
 try {
-  for (const [name, body] of Object.entries(SCENARIOS)) {
+  const chosen = FROM !== undefined && TO !== undefined ? CROSS : SCENARIOS;
+  for (const [name, body] of Object.entries(chosen)) {
     if (ONLY.length > 0 && !ONLY.some((part) => name.includes(part))) continue;
     scenario = name;
     rmSync(join(BUILDS, "latest"), { force: true });
@@ -939,6 +1093,7 @@ try {
   }
 } finally {
   server.kill();
+  model.kill();
   rmSync(join(BUILDS, "latest"), { force: true });
 }
 

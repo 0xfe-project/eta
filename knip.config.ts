@@ -26,7 +26,7 @@ export default {
     "packages/eta-server/src/transport.ts": ["exports"],
   },
   workspaces: {
-    // Run by `upgrade-e2e.yml`, and `drive.ts` starts the server as a file.
+    // Run by the upgrade workflows, and `drive.ts` starts the servers as files.
     ".": {
       entry: ["scripts/upgrade-e2e/*.ts"],
       // Installed by that workflow for its run, to press the real button.

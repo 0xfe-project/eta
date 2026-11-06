@@ -24,6 +24,9 @@ export interface Migration {
 /** The runner's own bookkeeping; it is not part of the product's schema. */
 const MIGRATION_TABLE = "eta_migrations";
 
+const WAL_WAIT_MS = 5000;
+const WAL_RETRY_MS = 10;
+
 const MIGRATION_FILE = /^(\d{4})-[a-z0-9-]+\.sql$/;
 
 /** Where a data directory keeps its database. */
@@ -40,11 +43,24 @@ export function databasePath(dataDir: string): string {
 export function openDatabase(path: string): Database {
   mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path, { create: true, strict: true });
-  // First: moving a new database to WAL takes a lock another process may be holding.
   db.exec("PRAGMA busy_timeout = 5000");
-  db.exec("PRAGMA journal_mode = WAL");
+  moveToWal(db);
   db.exec("PRAGMA foreign_keys = ON");
   return db;
+}
+
+/** Moving a new database to WAL takes a lock SQLite does not wait for, whatever the timeout. */
+function moveToWal(db: Database): void {
+  for (const until = Date.now() + WAL_WAIT_MS; ; ) {
+    try {
+      db.exec("PRAGMA journal_mode = WAL");
+      return;
+    } catch (error) {
+      if ((error as { code?: string }).code !== "SQLITE_BUSY") throw error;
+      if (Date.now() >= until) throw error;
+      Bun.sleepSync(WAL_RETRY_MS);
+    }
+  }
 }
 
 /**

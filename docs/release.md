@@ -18,10 +18,11 @@ git push origin v0.2.0
 
 流水线的顺序：
 
-1. `check`：跑完整的 `bun run check`，不是 `--affected`。没通过就到此为止，不会留下草稿。
-2. `prepare`：从 tag 读版本，开一个草稿 Release。
+1. `prepare`：从 tag 读版本，开一个草稿 Release。
+2. `check`：和构建同时跑，完整的 `bun run check`，不是 `--affected`。没通过就不会发布，草稿留着。
 3. `build`：每个平台在自己的 runner 上，干净 checkout、frozen lockfile 构建。host 单独运行一次，核对 `--version`、`/up` 和页面；桌面应用打成安装包，装上启动，看它带的 host 答应；两样都过了才上传到草稿。只有一个例外：Linux 上启动要先从 Ubuntu 的镜像装 WebKit，8 分钟装不完就跳过这次启动，运行里留一条 warning，host 的检查不受影响。
-4. `publish`：所有平台都成功才会跑，从草稿算出 `SHA256SUMS`，然后发布。任何一个平台失败，Release 都留在草稿，用户看不到。
+4. `cross`：`upgrade-cross.yml` 在 Linux 上从上一个正式版本升到这个草稿，见下面的“跨版本升级测试”。第一个版本没有上一版，跳过并在运行摘要里写明。
+5. `publish`：前面都成功才会跑，从草稿算出 `SHA256SUMS`，然后发布。任何一步失败，Release 都留在草稿，用户看不到。
 
 失败了先看是不是已知的不稳定测试（`gh run rerun <id> --failed`）。一个平台失败时其它平台会跑完，`--failed` 只重跑失败的那个。草稿可以重跑，文件会被覆盖。Release 一旦发布就不再改动：重跑会报错，要换文件就打新 tag。
 
@@ -47,7 +48,46 @@ host 是一个不压缩的文件，页面、数据库迁移、CLIProxyAPI 和所
 
 host 带的 CLIProxyAPI 跟构建它的机器相关，hutch 也只为所在的机器打包，所以每个平台要在对应的 runner 上构建。加平台就是在 `build` 的矩阵里加一行，加之前要先验证过这个平台的编译。没有 `darwin-x64`，也没有 Windows 的 daemon（`apps/daemon/scripts/build.ts` 的平台表里没有它）。
 
-发布前还要过 `upgrade`：`upgrade-e2e.yml` 在真实的 macOS 和 Windows runner 上，用假的 Release 服务器（`scripts/upgrade-e2e/fake-releases.ts`）从旧构建升到新构建，覆盖成功、各种失败回退和卸载。改到服务或升级相关代码的 PR 也会跑。这个工作流只能证明 runner 上能测到的部分：重启后自启和真实登录用户的凭据要在真机上试。
+## 升级测试
+
+有两个工作流，都复用 `scripts/upgrade-e2e/`，都只能证明 runner 上能测到的部分：重启后自启和真实登录用户的凭据要在真机上试。
+
+- `upgrade-e2e.yml`：在真实的 macOS 和 Windows runner 上，用假的 Release 服务器（`fake-releases.ts`）在本次构建的几个变体之间升级，覆盖成功、各种失败回退和卸载，约 15 分钟。改到服务或升级相关代码的 PR 才跑，不是发布门槛。
+- `upgrade-cross.yml`：两个真实版本之间的升级。
+
+### 跨版本升级测试
+
+一个 tag 的流水线只在 Linux 上跑一次，几分钟出结果，失败就不发布。macOS 和 Windows 的 runner 在私有仓库按 10 倍和 2 倍算分钟数，所以不是每个 tag 的门槛，要用时手动跑：
+
+```sh
+gh workflow run upgrade-cross.yml --ref v0.2.1 -f platforms=all
+gh workflow run upgrade-cross.yml --ref main -f from=0.2.0 -f to=0.2.1 -f platforms=all
+```
+
+`to` 默认是运行所在的 tag，`from` 默认是比它小的最高正式版本。
+
+它下载两个版本的真实文件，把 `from` 装成服务，放入种子数据，然后：
+
+1. 用 `eta-host upgrade` 升到 `to`。
+2. 重新开始，用设置页按钮调用的同一个接口升到 `to`。
+3. 重新开始，升到一个站不住的构建（`bad-host.ts`，会毁掉数据，答应 `/up` 后退出），看 `from` 的 worker 把文件和数据库都放回去。
+
+每次之后都校验：文件版本、服务运行、`/up`、页面能打开、种子数量和内容、migration 记录、加密值能解开、会话能打开、接着发一条消息能得到回复。
+
+### 种子数据
+
+`test/upgrade-seed/<版本>/` 是那个版本的 host 真实留下的数据目录（`data/`），和之后要校验的内容（`manifest.json`）。里面全是假数据，`data/secret.key` 也只能解开这些假值。测试取不高于 `from` 的最新一份，由 `from` 自己迁移上来。
+
+schema 或存储格式变了的版本，补一份种子。在隔离环境里做，脚本会清空 `/tmp/eta-seed-home`：
+
+```sh
+gh release download v0.3.0 --repo <owner>/<name> --pattern eta-host-linux-x64
+chmod +x eta-host-linux-x64
+bun scripts/upgrade-e2e/seed.ts ./eta-host-linux-x64 0.3.0
+docker run --rm -v "$PWD:/repo:ro" zricethezav/gitleaks detect --source /repo/test/upgrade-seed --no-git
+```
+
+脚本用这个版本的二进制起一个 host，HOME 在 `/tmp/eta-seed-home`，模型是 `fake-model.ts`，然后像页面一样通过 wire 调用：建智能体、项目、对话，发消息，让模型发布两版产物、建任务并跑完，存邮箱账号、插件配置，登记机器，建例行任务，改设置。host 退出后把数据目录复制过来并生成 `manifest.json`，再校验一遍。不要手写 SQL，也不要放真实数据，主机名要是假的（`--hostname eta-seed` 的容器里生成）。
 
 ## 没有签名
 
