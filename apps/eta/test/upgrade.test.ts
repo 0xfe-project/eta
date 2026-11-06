@@ -984,6 +984,16 @@ describe("where releases come from", () => {
     expect(upstreamLabel("https://github.com/o/r")).toBe("o/r");
   });
 
+  it.each([
+    "https://me:s3cret@ghe.corp:not-a-port/api/v3/repos/o/r",
+    "https://mirror.example/repos/o/r?token=s3cret",
+    "https://mirror.example/repos/o/r#s3cret",
+  ])("repeats no secret of what it cannot read: %s", (text) => {
+    expect(() => parseUpstream(text)).toThrow(/not a repository/);
+    expect(() => parseUpstream(text)).not.toThrow(/s3cret/);
+    expect(upstreamLabel(text)).not.toContain("s3cret");
+  });
+
   it("takes the first that is given", () => {
     const env = { ETA_RELEASES_URL: "from/env" };
     const all = { flag: "from/flag", saved: "from/setting", env };

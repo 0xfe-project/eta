@@ -48,9 +48,13 @@ export interface Upstream {
   label: string;
 }
 
+/** Text that did not parse may still hold a login or a token, and it is about to be shown. */
+const withoutSecrets = (text: string): string =>
+  text.replace(/[^/]*@/, "").replace(/[?#].*$/, "");
+
 const notARepository = (text: string): Error =>
   new Error(
-    `not a repository: ${text}. Give owner/name, a github.com address, or an API address such as https://<host>/api/v3/repos/<owner>/<name>.`,
+    `not a repository: ${withoutSecrets(text)}. Give owner/name, a github.com address, or an API address such as https://<host>/api/v3/repos/<owner>/<name>.`,
   );
 
 function onGitHub(text: string, owner: string, repo: string): Upstream {
@@ -121,12 +125,12 @@ export function parseUpstream(given: string): Upstream {
   };
 }
 
-/** `parseUpstream`'s label, or the text itself for something it cannot read. */
+/** `parseUpstream`'s label, or what can be shown of something it cannot read. */
 export function upstreamLabel(text: string): string {
   try {
     return parseUpstream(text).label;
   } catch {
-    return text;
+    return withoutSecrets(text);
   }
 }
 
