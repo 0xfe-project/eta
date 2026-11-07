@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { setWire } from "@/lib/wire";
-import { agentView, productHost, projectView } from "@/test-product";
 import { BottomNav } from "./app-shell";
 import { useWorkspaceStore } from "./workspace-store";
 
@@ -62,22 +61,6 @@ const links = (container: HTMLElement) =>
 /** The plus: the one button in the bar that is not a link. */
 const plus = () => document.querySelector<HTMLElement>("nav button")!;
 
-/** The plus asks which of the two it is in a dialog, not in a menu: a thumb needs a big target. */
-const settled = () => new Promise((resolve) => setTimeout(resolve, 30));
-
-async function openPanel() {
-  await act(async () => {
-    plus().click();
-    await settled();
-  });
-}
-
-/** One of the two things one starts from the phone. */
-const item = (label: string) =>
-  [...document.querySelectorAll<HTMLElement>('[role="dialog"] button')].find(
-    (candidate) => candidate.textContent === label,
-  );
-
 afterEach(async () => {
   await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
   setWire(undefined);
@@ -102,42 +85,10 @@ describe("手机底部栏", () => {
     expect(plus().className).toContain("size-[68px]");
   });
 
-  it("offers the two things one starts from the phone", async () => {
-    productHost({
-      agents: [agentView({ id: "a1", name: "乐子人" })],
-      projects: [projectView({ id: "p1", name: "eta", path: "/work/eta" })],
-    }).install();
+  it("opens the one dialog that starts anything, with nothing to choose first", async () => {
     await render();
-    await openPanel();
-    expect(item("新建对话")).toBeDefined();
-    expect(item("新建群")).toBeDefined();
-  });
-
-  it("新建对话 opens the conversation dialog", async () => {
-    await render();
-    await openPanel();
-    await act(async () => {
-      item("新建对话")!.click();
-      // The next dialog opens a frame later: opening it in the same frame leaves the first
-      // one's overlay holding the pointer.
-      await settled();
-    });
+    await act(async () => plus().click());
     expect(useWorkspaceStore.getState().newConversation.open).toBe(true);
-  });
-
-  it("新建群 opens the group dialog", async () => {
-    const fake = productHost({
-      agents: [agentView({ id: "a1", name: "乐子人" })],
-      projects: [projectView({ id: "p1", name: "eta", path: "/work/eta" })],
-    });
-    fake.install();
-    fake.hello();
-    await render();
-    await openPanel();
-    await act(async () => {
-      item("新建群")!.click();
-      await settled();
-    });
-    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 });

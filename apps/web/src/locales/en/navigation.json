@@ -29,8 +29,6 @@
     "closeWorkspace": "Close workspace",
     "collapseWorkspace": "Collapse workspace",
     "back": "Back",
-    "new": "New",
-    "newConversation": "New chat",
-    "newGroup": "New group"
+    "new": "New"
   }
 }
