@@ -1,5 +1,61 @@
 import type { Authorizer, Effect } from "./realm";
 
+/** One configured MCP server. */
+export interface McpServerInfo {
+  name: string;
+  /** The tool count for connected/cached servers, 0 for disabled/failed. */
+  toolCount: number;
+  status:
+    | "connected"
+    | "cached"
+    | "needs-auth"
+    | "failed"
+    | "disabled"
+    | "not-connected";
+  error?: string;
+}
+
+export interface McpToolInfo {
+  name: string;
+  description: string;
+  inputSchema?: unknown;
+  outputSchema?: unknown;
+  annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean };
+}
+
+export interface McpSearchResult {
+  server: string;
+  tool: McpToolInfo;
+  score: number;
+}
+
+/**
+ * MCP servers and tools.
+ *
+ * Provided by the host when running locally; absent in remote/daemon sessions.
+ * The realm linker uses this to build `mcp:<server>` imports and `eta.mcp` exports.
+ */
+export interface McpSink {
+  /** Server status, without connecting; read from the metadata cache. */
+  servers: () => McpServerInfo[];
+  /**
+   * One server's tools for an `mcp:<server>` import: from the cache, or by
+   * connecting when nothing is known yet. Rejects for an unknown server.
+   */
+  load: (server: string) => Promise<McpToolInfo[]>;
+  /** Tool search over cached metadata, best first. Never connects. */
+  search: (query: string) => McpSearchResult[];
+  /** A server as a d.ts (`declare module "mcp:<server>"`), from cached metadata. Never connects. */
+  describe: (server: string) => string;
+  /** Calls one tool and returns its content; throws on error. */
+  callTool: (
+    server: string,
+    tool: McpToolInfo,
+    args: Record<string, unknown>,
+    context?: { signal?: AbortSignal; toolCallId?: string },
+  ) => Promise<unknown>;
+}
+
 /**
  * The seam between the runtime and whatever is hosting it.
  *
@@ -162,6 +218,8 @@ export interface Hooks {
     | (() => Record<string, PlatformCall>);
   /** `eta.state`, shared by every layer's `eta`. Absent means there is none. */
   state?: StateObject;
+  /** MCP servers and tools. Absent in remote/daemon sessions. */
+  mcp?: McpSink;
   /** A real sub-turn. Recursion, budget and cycles are the host's to enforce. */
   spawn?: (request: SpawnRequest) => Promise<SpawnResult>;
   /** Call the current agent with a new turn. Supports recursion and sees full history. */

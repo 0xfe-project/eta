@@ -106,10 +106,13 @@ export interface AssembleOptions {
    * hears about its questions. Passed straight through; the server never decides any of them.
    */
   agentPromptFor?: SessionManagerOptions["agentPromptFor"] | undefined;
+  sessionTools?: SessionManagerOptions["sessionTools"] | undefined;
+  /** MCP for a session's realm (`import "mcp:<server>"`); see `SessionManagerOptions.mcpFor`. */
+  mcpFor?: SessionManagerOptions["mcpFor"] | undefined;
   /** Skill directories a session has beyond the ones found in its directories: its plugins'. */
+
   skillDirsFor?: ((meta: SessionMeta) => readonly string[]) | undefined;
   runtimeExtrasFor?: SessionManagerOptions["runtimeExtrasFor"] | undefined;
-  sessionTools?: SessionManagerOptions["sessionTools"] | undefined;
   toolMiddleware?: SessionManagerOptions["toolMiddleware"] | undefined;
   askObserve?: SessionManagerOptions["askObserve"] | undefined;
   /** The external agent runtimes sessions may run on (`runtimes.ts`). */
@@ -467,6 +470,7 @@ export async function assembleServer(
     ...(options.runtimeExtrasFor === undefined
       ? {}
       : { runtimeExtrasFor: options.runtimeExtrasFor }),
+    ...(options.mcpFor === undefined ? {} : { mcpFor: options.mcpFor }),
     ...(options.sessionTools === undefined
       ? {}
       : { sessionTools: options.sessionTools }),

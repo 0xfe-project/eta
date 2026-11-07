@@ -6,11 +6,12 @@ import type { MemoryApi, MemorySection } from "./memory";
 import type { Linker, Realm } from "./realm";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
-
 import { dirname, isAbsolute, join, resolve } from "node:path";
+
 import * as vm from "node:vm";
 import { authorize } from "./authorize";
 import { mountNodeModules } from "./host-modules";
+import { linkMcpModule, MCP_PREFIX, mcpDiscovery } from "./mcp";
 import { createMemoryModule, MEMORY_FILE } from "./memory";
 
 /**
@@ -325,6 +326,11 @@ export function mountModules(
       return node(specifier, from) as vm.Module | undefined;
     }
 
+    // Handle mcp: specifiers (only when hooks.mcp is provided)
+    if (specifier.startsWith(MCP_PREFIX)) {
+      return await linkMcpModule(realm, hooks?.mcp, specifier);
+    }
+
     // Handle eta: specifiers (only when layers are provided)
     if ((specifier.startsWith("eta:") || specifier === "eta") && layers) {
       return loadEtaModule(specifier, from);
@@ -446,7 +452,7 @@ export function mountModules(
 
   function createEtaModule(layer: Layer, identifier: string): vm.Module {
     const registry = capabilityRegistries.get(layer)!;
-    const exports = ["default", "define", "modules"];
+    const exports = ["default", "define", "modules", "mcp"];
     if (hooks?.memory) exports.push("memory");
     if (hooks?.spawn) exports.push("spawn");
     if (hooks?.ask) exports.push("ask");
@@ -592,6 +598,9 @@ export function mountModules(
         // layer's `eta` sees the same one.
         if (hooks?.state) etaObject.state = hooks.state;
 
+        // Always there: without a sink every call says MCP is not on this machine.
+        etaObject.mcp = mcpDiscovery(realm, hooks?.mcp);
+
         // Export default as the eta object
         this.setExport("default", etaObject);
         // Also export named exports for backward compat
@@ -602,6 +611,7 @@ export function mountModules(
         if (hooks?.ask) this.setExport("ask", etaObject.ask);
         if (hooks?.platform) this.setExport("platform", etaObject.platform);
         if (hooks?.state) this.setExport("state", etaObject.state);
+        this.setExport("mcp", etaObject.mcp);
       },
       { context: realm.context, identifier },
     );

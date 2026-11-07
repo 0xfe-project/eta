@@ -9,23 +9,10 @@
  * Reconstructed from pi-mcp-adapter's `types.ts` (MIT); its four prefix modes are replaced by this
  * single qualified form.
  */
-import { createHash } from "node:crypto";
-
-/** The longest tool name providers accept. */
-const MAX_TOOL_NAME_LENGTH = 64;
 
 /** `mcp__<server>__<tool>`, as policy rules see it. Unmodified so rules match the real names. */
 export function qualifiedToolName(server: string, tool: string): string {
   return `mcp__${server}__${tool}`;
-}
-
-/** The qualified name as a provider-valid tool name: only `[A-Za-z0-9_-]`, at most 64 characters. */
-export function directToolName(server: string, tool: string): string {
-  const name = qualifiedToolName(server, tool).replace(/[^\w-]/g, "_");
-  if (name.length <= MAX_TOOL_NAME_LENGTH) return name;
-  // Cut in the middle of nothing in particular, but keep distinct names distinct.
-  const digest = createHash("sha256").update(name).digest("hex").slice(0, 8);
-  return `${name.slice(0, MAX_TOOL_NAME_LENGTH - 9)}_${digest}`;
 }
 
 /** Hyphens and underscores are the same character to a model; case is not folded. */

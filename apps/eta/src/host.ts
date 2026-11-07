@@ -14,7 +14,12 @@ import type { SiteLimits } from "./artifacts/files";
 import type { GithubTuning } from "./github/service";
 import type { LlmOptions, LlmRuntime } from "./llm/runtime";
 import type { SshRunner } from "./machines/install";
-import type { Product, RoutinesOptions, TasksOptions } from "./product";
+import type {
+  McpTuning,
+  Product,
+  RoutinesOptions,
+  TasksOptions,
+} from "./product";
 import type { UpgradePluginOptions } from "./upgrade/plugin";
 import type { WebOptions } from "./web/service";
 import { mkdirSync } from "node:fs";
@@ -67,6 +72,12 @@ export interface HostOptions {
   models?: AssembleOptions["models"];
   /** Where the agent's home is, for personas. Defaults to the real one. */
   home?: string;
+  /**
+   * MCP for the sessions this host runs (`~/.eta/mcp.json`, the project's `.mcp.json`). `false`
+   * turns it off; an object is a test's tuning (the library's fetch pointed at a fake, and its
+   * manager without timers).
+   */
+  mcp?: false | McpTuning;
   /** What a published site may hold; the defaults are for real use, a test makes them small. */
   artifactLimits?: Partial<SiteLimits> | undefined;
   /**
@@ -153,6 +164,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
   let server: AssembledServer;
   let product: Product;
   let llm: LlmRuntime | undefined;
+
   const gatewayModels = new GatewayModels();
   try {
     applyMigrations(db, loadMigrations());
@@ -195,7 +207,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
                 : buildsIn(options.daemonBuilds),
           }),
       ...(options.ssh === undefined ? {} : { ssh: options.ssh }),
-      ...(options.upgrade === undefined ? {} : { upgrade: options.upgrade }),
+      ...(options.upgrade === undefined
+        ? {}
+        : { upgrade: options.upgrade, mcp: options.mcp }),
     });
     const web = createWebRoutes(options.webDir);
     server = await assembleServer({
@@ -221,6 +235,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
       agentPromptFor: product.engine.agentPromptFor,
       skillDirsFor: product.skillDirsFor,
       runtimeExtrasFor: product.runtimeExtrasFor,
+      ...(product.mcp === undefined
+        ? {}
+        : { mcpFor: product.mcp.host.sessionMcp }),
       ...product.sessionHooks,
       generated: product.generated,
       // An agent on an external runtime has its sessions' runs taken by it (`@eta/runtime-oar`).

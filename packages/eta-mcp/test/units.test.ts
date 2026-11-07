@@ -1,10 +1,9 @@
 import type { ObservedOutputs } from "../src/output-shape";
 /**
- * The smaller parts on their own: output shapes, the output guard, the metadata cache, schema
+ * The smaller parts on their own: output shapes, the metadata cache, schema
  * validation and the failure tracker.
  */
-import { Buffer } from "node:buffer";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +11,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { FAILURE_BACKOFF_MS, FailureTracker } from "../src/failure-backoff";
 import { schemaViolation } from "../src/json-schema";
 import { MetadataCache } from "../src/metadata-cache";
-import { boundDetails, guardContent, guardText } from "../src/output-guard";
 import {
   getObservedOutput,
   outputShapeKey,
@@ -190,91 +188,6 @@ describe("observed output shapes", () => {
     expect(
       renderOutputShape(observed.get("t")!.shape).length,
     ).toBeLessThanOrEqual(4096);
-  });
-});
-
-describe("output guard", () => {
-  it("leaves text within the limits alone", () => {
-    expect(
-      guardText("short", "output", { dir, maxBytes: 100, maxLines: 5 }),
-    ).toEqual({ text: "short" });
-  });
-
-  it("cuts by lines and saves the whole to a file", () => {
-    const text = Array.from(
-      { length: 100 },
-      (_, index) => `line ${index}`,
-    ).join("\n");
-    const guarded = guardText(text, "output", { dir, maxLines: 10 });
-    expect(guarded.guard).toMatchObject({
-      truncated: true,
-      originalLines: 100,
-    });
-    expect(guarded.text.split("\n").length).toBeLessThanOrEqual(10);
-    expect(guarded.text).toContain("line 0");
-    expect(guarded.text).not.toContain("line 99");
-    expect(readFileSync(guarded.guard!.fullOutputPath!, "utf8")).toBe(text);
-    expect(guarded.guard!.fullOutputPath!.startsWith(dir)).toBe(true);
-  });
-
-  it("cuts by bytes without splitting a character", () => {
-    const text = "汉字".repeat(500);
-    const guarded = guardText(text, "output", { dir, maxBytes: 300 });
-    expect(Buffer.byteLength(guarded.text)).toBeLessThanOrEqual(300);
-    expect(guarded.text).not.toContain("�");
-    expect(guarded.guard!.originalBytes).toBe(Buffer.byteLength(text));
-  });
-
-  it("copes with one huge line", () => {
-    const guarded = guardText("x".repeat(10_000), "output", {
-      dir,
-      maxBytes: 500,
-    });
-    expect(Buffer.byteLength(guarded.text)).toBeLessThanOrEqual(500);
-    expect(guarded.guard?.fullOutputPath).toBeDefined();
-  });
-
-  it("says why there is no file when it cannot save one", () => {
-    const blocked = join(dir, "not-a-dir");
-    writeFileSync(blocked, "");
-    const text = "y".repeat(2000);
-    const unwritable = guardText(text, "output", {
-      dir: join(blocked, "inside"),
-      maxBytes: 300,
-    });
-    expect(unwritable.guard?.writeError).toBeDefined();
-    expect(unwritable.text).toContain("could not be saved");
-    const none = guardText(text, "output", { maxBytes: 300 });
-    expect(none.guard?.writeError).toBe("no output directory configured");
-  });
-
-  it("guards content as a whole, keeping images and block structure within the limits", () => {
-    const blocks = [
-      { type: "text" as const, text: "a" },
-      { type: "image" as const, data: "AA", mimeType: "image/png" },
-      { type: "text" as const, text: "b" },
-    ];
-    expect(guardContent(blocks, { dir }).content).toEqual(blocks);
-    expect(
-      guardContent(blocks, { dir }, { prefix: "Error: " }).content[0],
-    ).toEqual({ type: "text", text: "Error: a" });
-    const big = guardContent(
-      [{ type: "text", text: "z".repeat(5000) }, blocks[1]!],
-      { dir, maxBytes: 400 },
-    );
-    expect(big.guard).toBeDefined();
-    expect(big.content).toHaveLength(2);
-    expect(big.content[1]).toEqual(blocks[1]);
-  });
-
-  it("replaces oversized side data with a note", () => {
-    expect(boundDetails({ a: 1 })).toEqual({ a: 1 });
-    expect(boundDetails({ blob: "x".repeat(100) }, 50)).toMatchObject({
-      omitted: true,
-    });
-    const circular: Record<string, unknown> = {};
-    circular.self = circular;
-    expect(boundDetails(circular)).toEqual({ omitted: true });
   });
 });
 

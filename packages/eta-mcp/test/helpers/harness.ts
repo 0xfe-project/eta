@@ -46,7 +46,6 @@ export async function setup(
   const startsFile = join(dir, "starts.log");
   const manager = new McpManager({
     cacheFile: join(dir, "cache.json"),
-    outputDir: join(dir, "outputs"),
     checkIntervalMs: 0,
     now: () => clock.now,
     resolvers: false,

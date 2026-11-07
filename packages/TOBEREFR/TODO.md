@@ -14,10 +14,11 @@ git checkout 2d4d160d -- <path> # 取回原文件
 
 | 包                  | 原来做什么                                                       | 改写方向（待定）                                                      |
 | ------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `eta-mcp`           | MCP 客户端、服务器管理、OAuth、`mcp` 代理工具                    | 作为 realm 内能力（`binding()` 包一层，走 authorize），不再是静态工具 |
 | `eta-plugin-akhook` | 工具调用前后的规则（akhook.yml）、审批中间件、prompt_submit 钩子 | 审批并入 `binding()` 内的 authorize（#186、#285）；规则层看是否还需要 |
 | `eta-plugin-git`    | git 工具插件                                                     | 未定                                                                  |
 | `eta-plugin-ssh`    | SSH 执行环境插件                                                 | `ExecutionEnv` 已删除（#382），多半整包作废                           |
+
+`packages/eta-mcp` 已经移回 workspace（#33）：MCP 不再是静态工具，而是 realm 模块，见下面「MCP 已接回的部分」。代理工具、直接工具和 output guard 已删除。
 
 `packages/eta-ssh` 已经移回 workspace，只保留 transport（`LocalTransport`、SSH transport），task worktree 和远程机器仍要靠它跑 `sh`。`SshEnvironment`（`src/env.ts`）已删除。
 
@@ -44,6 +45,24 @@ git checkout 2d4d160d -- <path> # 取回原文件
 - `src/machines/service.ts`：去掉了 `mcp.credential` 这个 link handler 和 `mcpCredential` 依赖。`tool.gate` handler 保留，但 daemon 侧已经没人调用。
 - `src/machines/remote-place.ts`：远程会话 open 时不再带 `akhook` 层。
 - `package.json`：去掉了 `@eta/mcp`、`@eta/plugin-akhook` 依赖。
+
+## MCP 已接回的部分（#33）
+
+- realm：`import "mcp:<server>"` 的每个工具是一个 `binding()`（名字 `mcp.<server>.<tool>`，走 authorize、进 effect 账本）；`eta.mcp.servers/search/describe` 从元数据缓存发现。没有 sink 时一律报 `MCP not connected on this machine`。
+- harness：`OpenSessionOptions.esm.mcp`（`McpSink`）；有 server 时 esmrun 的 d.ts 和 platform prompt 才出现 MCP 段。
+- eta-server：`SessionManagerOptions.mcpFor` / `AssembleOptions.mcpFor`，会话打开时取 sink，关闭时 dispose。
+- apps/eta：`src/mcp/host.ts` 的 `McpHost`，一个 host 一个 `McpManager`（文件在 `<dataDir>/mcp/`），按 agent 分 scope；来源是 `~/.eta/mcp.json` 再 `<cwd>/.mcp.json`，会话打开时读。`HostOptions.mcp: false` 关掉。测试：`apps/eta/test/mcp-realm.test.ts`（真 stdio 子进程）。
+
+#37 接回的：
+
+- OAuth：`src/mcp/credentials.ts`（凭据封存在数据库，按 server URL 的 sha256 存）、`src/mcp/service.ts` 的 `McpService`（登录/回调/登出，叠在 `McpHost` 上，`authProviderFor` 给 manager）、回调 `/mcp/oauth/callback`（`access.ts` 只对这一条 GET 免 token）。登录完成后重连等着它的 server。测试：`apps/eta/test/mcp-oauth.test.ts`（假授权服务器，login → callback → 存 token → connected → 会话 `import "mcp:remote"` 调用成功）。
+- 设置页 MCP 状态：`src/mcp/plugin.ts` 的 `mcpPlugin` 实现 `mcp` wire target（list/connect/reconnect/login/completeLogin/logout），合约 `@eta/client-contracts` 未改，前端未改。
+- 审批：删掉了 `@eta/mcp` 自己的门（`requiresApproval`、`McpHooks.approve`、`ApprovalRequest`），MCP 工具直接执行；realm `binding()` 的 authorize 不变。`mcp.json` 的 `approveTools` 照样解析不报错，但不再有任何效果。
+
+还没接回的：
+
+- bundle 的 `mcp.json`（`bundleMcpServers`、`mcpSourcesFor`）：没有作为来源。
+- daemon / 远程会话：daemon 不建 `McpHost`，远程会话的 realm 报 not connected。
 
 ## 跟着变的测试
 
@@ -73,6 +92,6 @@ git checkout 2d4d160d -- <path> # 取回原文件
 
 ## 恢复时要回答的问题
 
-1. MCP 工具放在 realm 里（`binding()`）还是保留成静态工具？这要和工具面动态化（#279）一起定。
+1. ~~MCP 工具放在 realm 里还是保留成静态工具？~~ 已定：realm 模块（#33）。
 2. 审批：`approvals` 列表（inbox `setApprovals`）怎样接到 `binding()` 的 authorize 上？daemon 上的会话还走 `tool.gate` 吗？
 3. 远程会话的文件和 shell：`ExecutionEnv` 没了以后，daemon 上的 realm 直接用 node:fs 和 `$`，primary 侧的工具（如 `publish_artifact`）怎样读远端文件？

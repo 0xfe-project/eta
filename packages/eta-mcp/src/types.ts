@@ -155,17 +155,6 @@ export type McpDelivery =
   | "server_error"
   | "invalid_result";
 
-export interface ApprovalRequest {
-  server: string;
-  tool: string;
-  /** `mcp__<server>__<tool>`. */
-  name: string;
-  args: Record<string, unknown>;
-  annotations: ToolAnnotations | undefined;
-  toolCallId: string | undefined;
-  signal: AbortSignal | undefined;
-}
-
 export interface ToolCallInfo {
   /** `mcp__<server>__<tool>`: what policy rules (akhook) see for an MCP tool. */
   name: string;
@@ -193,10 +182,8 @@ export type ElicitationResponse =
   | { action: "decline" }
   | { action: "cancel" };
 
-/** What the caller injects. Everything is optional; without `approve` a gated tool is refused. */
+/** What the caller injects. Everything is optional. */
 export interface McpHooks {
-  /** Asked for tools that `approveTools` gates. Resolves true to run the tool. */
-  approve?: (request: ApprovalRequest) => Promise<boolean>;
   /** Asked when a server needs input mid-call. The caller maps the forms it can; return cancel otherwise. */
   elicit?: (request: ElicitationRequest) => Promise<ElicitationResponse>;
   /** Called before every call made through the library. */

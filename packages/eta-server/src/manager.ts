@@ -9,6 +9,7 @@ import type {
 import type { AnswerPayload } from "@eta/core/session";
 import type {
   AskObserver,
+  McpSink,
   MemoryExtractionOutcome,
   OpenSession,
   PlatformPromptInfo,
@@ -131,7 +132,11 @@ export interface SessionManagerOptions {
   /**
    * What a session on an external runtime is given beyond the host's tools. Such a session has no
    * `skillsFor`: the runtime finds its own skills, and what is here is what it cannot find.
+   * MCP on this machine for one session: what `import "mcp:<server>"` and `eta.mcp` reach in
+   * its realm. Read once when the session opens; `dispose` runs when it closes. Absent, or
+   * undefined for a session, means the realm says MCP is not connected here.
    */
+  mcpFor?: ((meta: SessionMeta) => SessionMcpWiring | undefined) | undefined;
   runtimeExtrasFor?:
     | ((meta: SessionMeta) => Promise<RuntimeExtras>)
     | undefined;
@@ -188,6 +193,12 @@ export interface SessionManagerOptions {
   warn?: ((message: string) => void) | undefined;
 }
 
+/** A session's MCP: the realm's sink, and what to release when the session closes. */
+export interface SessionMcpWiring {
+  sink: McpSink;
+  dispose?: (() => void) | undefined;
+}
+
 /** Where a session's memory is, and how an extraction reaches a model. */
 export interface SessionMemoryWiring {
   home?: string | undefined;
@@ -236,6 +247,8 @@ export class SessionManager {
   private readonly skillsFor: SessionManagerOptions["skillsFor"];
   private readonly runtimeExtrasFor: SessionManagerOptions["runtimeExtrasFor"];
   private readonly memoryFor: SessionManagerOptions["memoryFor"];
+  private readonly mcpFor: SessionManagerOptions["mcpFor"];
+  private readonly mcpOf = new Map<string, SessionMcpWiring>();
   private readonly agentPromptFor: SessionManagerOptions["agentPromptFor"];
   private readonly toolMiddleware: SessionManagerOptions["toolMiddleware"];
   private readonly sessionTools: SessionManagerOptions["sessionTools"];
@@ -258,6 +271,7 @@ export class SessionManager {
     this.skillsFor = options.skillsFor;
     this.runtimeExtrasFor = options.runtimeExtrasFor;
     this.memoryFor = options.memoryFor;
+    this.mcpFor = options.mcpFor;
     this.agentPromptFor = options.agentPromptFor;
     this.toolMiddleware = options.toolMiddleware;
     this.sessionTools = options.sessionTools;
@@ -460,6 +474,10 @@ export class SessionManager {
             onAnswer: (payload) => recordAnswer?.(payload),
           });
     const agentPrompt = this.agentPromptFor?.(meta);
+    // Only a session with a realm can use MCP; without one there is nothing to hand the sink to.
+    const mcp =
+      platform?.sessionDir === undefined ? undefined : this.mcpFor?.(meta);
+    if (mcp !== undefined) this.mcpOf.set(meta.id, mcp);
     const session = await openSession({
       storage: (await this.store.open(meta.id))!.storage,
       models,
@@ -474,6 +492,7 @@ export class SessionManager {
               root: platform.sessionDir,
               project: join(meta.cwd, ".eta"),
               global: join(platform.home, ".eta", "global"),
+              ...(mcp === undefined ? {} : { mcp: mcp.sink }),
             },
           }),
       ...(agentPrompt === undefined ? {} : { agentPrompt }),
@@ -658,6 +677,11 @@ export class SessionManager {
     }
     managed.session.stop();
     await managed.session.kernel.dispose();
+    const mcp = this.mcpOf.get(managed.meta.id);
+    if (mcp !== undefined) {
+      this.mcpOf.delete(managed.meta.id);
+      mcp.dispose?.();
+    }
     const runtime = this.runtimeOf.get(managed.meta.id);
     if (runtime !== undefined) {
       this.runtimeOf.delete(managed.meta.id);

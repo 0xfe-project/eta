@@ -1,3 +1,4 @@
+import type { McpServerInfo, McpSink, McpToolInfo } from "../src/realm/hooks";
 /**
  * Every snippet the realm prompt shows runs here, in a real session, one esmrun per
  * script (#434): the prompt may only promise what the realm does.
@@ -9,7 +10,11 @@ import { MemoryStorage } from "@eta/core/storage";
 import { assistantMessage, fakeModels } from "@eta/core/testing";
 import { describe, expect, it } from "vitest";
 import { openSession } from "../src/open";
-import { REALM_EXAMPLES, renderPlatformBlock } from "../src/prompts/platform";
+import {
+  MCP_EXAMPLE,
+  REALM_EXAMPLES,
+  renderPlatformBlock,
+} from "../src/prompts/platform";
 
 const call = (script: string, id: string) =>
   assistantMessage({
@@ -106,4 +111,115 @@ describe("the realm prompt", () => {
     const state = await runExample(REALM_EXAMPLES[3]!.scripts);
     expect(state[1]!.text).toContain("hello-world");
   }, 60_000);
+
+  it("the MCP example runs", async () => {
+    const fakeSink: McpSink = {
+      servers: () => [
+        {
+          name: "fs",
+          toolCount: 3,
+          status: "connected",
+        } satisfies McpServerInfo,
+      ],
+      load: async () =>
+        [
+          {
+            name: "read_file",
+            description: "Read a file",
+            inputSchema: {
+              type: "object",
+              properties: { path: { type: "string" } },
+            },
+          },
+          {
+            name: "write_file",
+            description: "Write",
+            inputSchema: {
+              type: "object",
+              properties: {
+                path: { type: "string" },
+                content: { type: "string" },
+              },
+            },
+          },
+          {
+            name: "list_directory",
+            description: "List a directory",
+            inputSchema: {
+              type: "object",
+              properties: { path: { type: "string" } },
+            },
+          },
+        ] satisfies McpToolInfo[],
+      search: (query: string) =>
+        query.toLowerCase().includes("read")
+          ? [
+              {
+                server: "fs",
+                tool: {
+                  name: "read_file",
+                  description: "Read a file",
+                  inputSchema: {
+                    type: "object",
+                    properties: { path: { type: "string" } },
+                  },
+                },
+                score: 1.0,
+              },
+            ]
+          : [],
+      describe: () =>
+        `declare module "mcp:fs" {
+  export function read_file(input: { path: string }): Promise<string>;
+  export function write_file(input: { path: string; content: string }): Promise<string>;
+  export function list_directory(input: { path: string }): Promise<string[]>;
+  const exports: { read_file: typeof read_file; write_file: typeof write_file; list_directory: typeof list_directory };
+  export default exports;
+}`,
+      callTool: async (_server, tool, args) => {
+        if (
+          tool.name === "read_file" &&
+          (args as { path: string }).path === "README.md"
+        )
+          return "# MCP test";
+        return "unknown tool";
+      },
+    };
+    const root = await mkdtemp(join(tmpdir(), "mcp-realm-"));
+    const cwd = await mkdtemp(join(tmpdir(), "mcp-cwd-"));
+    const { scripts } = MCP_EXAMPLE;
+    const turns = scripts.flatMap((script, i) => [
+      call(script, `m${i}`),
+      ...Array.from({ length: innerReplies(script) }, () => stop("inner")),
+    ]);
+    const session = await openSession({
+      storage: new MemoryStorage(),
+      models: fakeModels([...turns, stop("done")]) as never,
+      cwd,
+      esm: { root, mcp: fakeSink },
+    });
+    session.kernel.nextRun({
+      role: "user",
+      content: [{ type: "text", text: "go" }],
+      timestamp: 0,
+    });
+    await session.runner.run();
+    const results = scripts.map((_, i) => {
+      const found = session.runner
+        .getTranscript()
+        .find((m) => m.role === "toolResult" && m.toolCallId === `m${i}`) as
+        | { isError?: boolean; content: { text?: string }[] }
+        | undefined;
+      return {
+        isError: found?.isError ?? true,
+        text: found?.content.map((p) => p.text ?? "").join("") ?? "",
+      };
+    });
+    session.stop();
+    expect(results[0]!.isError).toBe(false);
+    expect(results[0]!.text).toContain("fs");
+    expect(results[0]!.text).toContain("read_file");
+    expect(results[1]!.isError).toBe(false);
+    expect(results[1]!.text).toContain("# MCP test");
+  }, 30_000);
 });

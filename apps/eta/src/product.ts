@@ -26,6 +26,7 @@ import type { DaemonBuilds } from "./machines/builds";
 import type { SshRunner } from "./machines/install";
 import type { MachineRecord } from "./machines/store";
 import type { Tailscale } from "./machines/tailscale";
+import type { McpHostOptions } from "./mcp/host";
 import type { SessionHooks } from "./session-hooks";
 import type { UpgradePluginOptions } from "./upgrade/plugin";
 import type { WebOptions } from "./web/service";
@@ -72,6 +73,8 @@ import { RemoteSessionsRouter } from "./machines/remote-sessions";
 import { serveLink } from "./machines/service";
 import { transportOn } from "./machines/shell";
 import { MachineStore } from "./machines/store";
+import { mcpPlugin } from "./mcp/plugin";
+import { McpService } from "./mcp/service";
 import { MemoryClient } from "./memory/client";
 import { memoryRunHooks, memoryTools } from "./memory/hooks";
 import { memoryPlugin } from "./memory/plugin";
@@ -139,6 +142,8 @@ export interface Product {
   readonly skillDirsFor: (meta: SessionMeta) => readonly string[];
   /** What a session on an external runtime gets from the agent's plugins. */
   readonly runtimeExtrasFor: (meta: SessionMeta) => Promise<RuntimeExtras>;
+  /** MCP on this machine (servers, credentials, sign-ins); absent when the host turned it off. */
+  readonly mcp: McpService | undefined;
   /**
    * The environment sessions' shells get beyond the process's: GitHub's login, once connected.
    * Empty when the host has no GitHub.
@@ -152,6 +157,12 @@ export interface Product {
   readonly endpoints: readonly WebSocketEndpoint[];
   /** Cut the links to other machines (the host is stopping). */
   close: () => Promise<void>;
+}
+
+/** What a test sets to run MCP against fakes; a real host leaves it alone. */
+export interface McpTuning {
+  fetch?: McpHostOptions["fetch"];
+  manager?: McpHostOptions["manager"];
 }
 
 /** The plugins are applied a moment after they are mounted; this is how long to wait for that. */
@@ -199,6 +210,11 @@ export function createProduct(options: {
   ssh?: SshRunner | undefined;
   /** What the update button works with, for a test; the host's own by default. */
   upgrade?: Partial<UpgradePluginOptions> | undefined;
+  /**
+   * MCP for this machine's sessions and the settings page. `false` turns it off; an object is a
+   * test's tuning (the library's fetch, pointed at a fake authorization server, and its manager).
+   */
+  mcp?: false | McpTuning | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
   const memory =
@@ -241,12 +257,14 @@ export function createProduct(options: {
   /** Say that product state moved, to whoever is looking at it. */
   const changed = (touched?: readonly string[] | "all"): void => {
     if (wire === undefined) return;
+    // `mcp` lists each agent's servers, so it moves with the agents.
     for (const target of [
       "agents",
       "machines",
       "projects",
       "conversations",
       "plugins",
+      "mcp",
     ])
       wire.pushNow(target);
     const ids =
@@ -377,6 +395,20 @@ export function createProduct(options: {
   const mirrors = new SessionMirrors(hub, (id) => machines.get(id)?.name);
   const secretKey = loadSecretKey(dataDir);
   const emailCredentials = new EmailCredentials(db, secretKey);
+  const mcp =
+    options.mcp === false
+      ? undefined
+      : new McpService({
+          db,
+          key: secretKey,
+          dataDir,
+          home: options.home ?? homedir(),
+          agents: () => agents.list().map(({ id, name }) => ({ id, name })),
+          publicUrl: options.publicUrl,
+          changed: () => wire?.pushNow("mcp"),
+          warn,
+          ...options.mcp,
+        });
   // The plugins agents use: what is on disk, what the user configured and what each may read.
   const plugins = new Plugins({
     db,
@@ -660,9 +692,11 @@ export function createProduct(options: {
     generated,
     skillDirsFor: (meta) => plugins.skillDirsFor(meta),
     runtimeExtrasFor: (meta) => plugins.runtimeExtrasFor(meta),
+    mcp,
     shellEnv: githubLogin?.env ?? {},
     fetch: async (request) =>
       (await hub.route(request)) ??
+      (await mcp?.route(request)) ??
       (await githubCallbacks(request)) ??
       (await artifactRoutes(request)) ??
       upgradeRoutes(request, dataDir),
@@ -676,6 +710,7 @@ export function createProduct(options: {
       plugins.close();
       await githubLogin?.stop();
       email.stop();
+      await mcp?.close();
       await web?.close();
     },
     async mount(server) {
@@ -706,6 +741,7 @@ export function createProduct(options: {
         "usage",
         "email",
         "plugins",
+        ...(mcp === undefined ? [] : ["mcp"]),
         // Not mounted, so not waited for: github would otherwise cost the startup one
         // `MOUNT_TIMEOUT_MS` and then a failure.
         ...(github === undefined ? [] : ["github"]),
@@ -846,6 +882,8 @@ export function createProduct(options: {
           applied("upgrade"),
         ),
       );
+      if (mcp !== undefined)
+        server.mount("mcp", mcpPlugin({ service: mcp }, applied("mcp")));
       if (github !== undefined)
         server.mount("github", githubPlugin({ github }, applied("github")));
       if (memory !== undefined)

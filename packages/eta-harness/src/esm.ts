@@ -33,6 +33,7 @@ import type {
   Layer,
   PlatformCall,
 } from "./realm";
+import type { McpSink } from "./realm/hooks";
 import type { StateKV } from "./state";
 import type { HarnessTool, ToolResult } from "./tools/tool";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -71,6 +72,8 @@ export interface EsmSessionOptions {
   global?: string | undefined;
   /** Where relative paths, `$` and `search` resolve. */
   cwd?: string | undefined;
+  /** MCP servers on this machine; absent in remote/daemon sessions. */
+  mcp?: McpSink | undefined;
 }
 
 export interface EsmSession {
@@ -196,7 +199,10 @@ function mirrored(kernel: Kernel) {
 }
 
 /** The realm's surface as declarations, generated from the live tool table. */
-export function platformDts(kernel: Kernel): string {
+export function platformDts(
+  kernel: Kernel,
+  mcpServers: readonly string[] = [],
+): string {
   const calls = mirrored(kernel).map((tool) => {
     const params = (tool as { parameters?: unknown }).parameters;
     const first =
@@ -220,9 +226,24 @@ export function platformDts(kernel: Kernel): string {
     "    define(name: string, fn: (...args: any[]) => unknown, meta?: { desc?: string }): string;",
     "    /** Capabilities defined in this layer. */",
     "    modules: Record<string, (...args: any[]) => any>;",
+    ...(mcpServers.length === 0
+      ? []
+      : [
+          "    /** MCP discovery from cached metadata; none of these start a server. */",
+          "    mcp: {",
+          "      servers(): { name: string; status: string; toolCount: number }[];",
+          "      search(query: string): { server: string; tool: string; summary: string }[];",
+          '      /** A server\'s tools as a d.ts: `declare module "mcp:<server>"` with input and output types. */',
+          "      describe(server: string): string;",
+          "    };",
+        ]),
     "  };",
     "  export default eta;",
     "}",
+    ...mcpServers.map(
+      (name) =>
+        `declare module ${JSON.stringify(`mcp:${name}`)} { const tools: Record<string, (input?: object) => Promise<any>>; export default tools; }`,
+    ),
     "/** ripgrep; paths relative to the session cwd. */",
     "declare function search(pattern: string, options?: { glob?: string; cwd?: string; limit?: number }): Promise<{ file: string; line: number; column?: number; text: string; match?: string }[]>;",
     "/** Lines with 1-indexed `N: ` prefixes. Defaults: start 1, limit 50. */",
@@ -272,8 +293,11 @@ const ESMRUN_DESCRIPTION = [
 ].join(" ");
 
 /** `esmrun`'s description: the fixed text plus the realm's surface, read from the live tool table. */
-export function esmrunDescription(kernel: Kernel): string {
-  return `${ESMRUN_DESCRIPTION}\n\nThe realm:\n\`\`\`ts\n${platformDts(kernel)}\n\`\`\``;
+export function esmrunDescription(
+  kernel: Kernel,
+  mcpServers: readonly string[] = [],
+): string {
+  return `${ESMRUN_DESCRIPTION}\n\nThe realm:\n\`\`\`ts\n${platformDts(kernel, mcpServers)}\n\`\`\``;
 }
 export function openEsmSession(options: EsmSessionOptions): EsmSession {
   const { kernel, models, state, root } = options;
@@ -448,6 +472,21 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
       }
   };
 
+  /** The MCP sink with the running script's signal and a per-call id, like `eta.platform`. */
+  const frameMcp = (sink: McpSink): McpSink => ({
+    servers: () => sink.servers(),
+    load: (server) => sink.load(server),
+    search: (query) => sink.search(query),
+    describe: (server) => sink.describe(server),
+    callTool: (server, tool, args) => {
+      const frame = frames.getStore();
+      return sink.callTool(server, tool, args, {
+        toolCallId: `${frame?.toolCallId ?? "esm"}.mcp.${server}.${tool.name}.${frame === undefined ? 0 : ++frame.seq}`,
+        ...(frame?.signal === undefined ? {} : { signal: frame.signal }),
+      });
+    },
+  });
+
   const agent = new Agent({
     root,
     ...(options.project === undefined ? {} : { project: options.project }),
@@ -457,6 +496,7 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
       platform,
       state: etaState,
       ask,
+      ...(options.mcp === undefined ? {} : { mcp: frameMcp(options.mcp) }),
       onConsole: (level, line) => {
         frames
           .getStore()
@@ -590,7 +630,10 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
     name: "esmrun",
     label: "esmrun",
     get description() {
-      return esmrunDescription(kernel);
+      return esmrunDescription(
+        kernel,
+        options.mcp?.servers().map((server) => server.name) ?? [],
+      );
     },
     parameters: Type.Object({
       script: Type.String({
