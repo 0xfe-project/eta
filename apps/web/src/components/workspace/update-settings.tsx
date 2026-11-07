@@ -28,7 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { host } from "@/lib/native";
+import { hasCapability, host } from "@/lib/native";
 import {
   busyLabels,
   phaseKeys,
@@ -40,6 +40,7 @@ import {
   useUpgradeWatch,
 } from "@/queries/upgrade";
 import { wireErrorMessage } from "@/queries/wire";
+import { DesktopUpdate } from "./desktop-update";
 
 // Settings → 更新: which version this host is, whether there is a newer one, and the button. The
 // work happens in a process of its own (`apps/eta/src/upgrade/worker.ts`); from the moment the
@@ -231,7 +232,32 @@ function tokenNotes(
   return { source, note };
 }
 
+/**
+ * The desktop app's own update over the host's, each under its name, when the app can update
+ * itself; the host's alone otherwise, as in a browser.
+ */
 export function UpdateSettings() {
+  const { t: translateText } = useTranslation(["settings"] as const);
+  if (!hasCapability("shell-update")) return <HostUpdate />;
+  return (
+    <div className="space-y-6">
+      <section className="space-y-2">
+        <h3 className="text-sm font-medium">
+          {translateText("desktopUpdate.heading")}
+        </h3>
+        <DesktopUpdate />
+      </section>
+      <section className="space-y-2">
+        <h3 className="text-sm font-medium">
+          {translateText("update.hostHeading")}
+        </h3>
+        <HostUpdate />
+      </section>
+    </div>
+  );
+}
+
+function HostUpdate() {
   const { t: translateText } = useTranslation(["settings", "common"] as const);
   const check = useUpgradeCheck();
   const status = useUpgradeWatch()?.status ?? null;

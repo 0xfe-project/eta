@@ -42,6 +42,9 @@ bun run --cwd apps/desktop package
 打完用 `scripts/try-app.ts` 装上启动一次。版本号来自 tag，本地打包取 `package.json` 的 `version`
 （`src/version.ts`）。没有签名，放行方式见 `docs/release.md`。
 
+应用自己的更新：构建时给 `ETA_DESKTOP_UPDATE_URL`（能匿名读的静态地址），设置 → 更新里就有“桌面端”一节，
+检查、下载、重启都由用户按（`src/bun/update.ts`）。没给就没有这一节。
+
 `electrobun dev` 的开发构建不下载，和开发时一样往上找 checkout 运行 host。
 
 数据目录是 `~/.eta`，和命令行启动的 host 共用一份。

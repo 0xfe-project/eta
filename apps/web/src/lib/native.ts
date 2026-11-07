@@ -25,7 +25,10 @@
  *   host there is no page, and the shell shows its own.
  */
 
-import type { DesktopCapability } from "@eta/client-contracts/desktop";
+import type {
+  DesktopCapability,
+  ShellUpdateView,
+} from "@eta/client-contracts/desktop";
 import { BASELINE_CAPABILITIES } from "@eta/client-contracts/desktop";
 
 /** Which of the two places this page is open in. */
@@ -199,6 +202,24 @@ export async function windowAction(action: WindowAction): Promise<void> {
  */
 export async function openConnectionPage(language: string): Promise<void> {
   await call("window-action", { action: "connection", language });
+}
+
+/**
+ * The app's own update, where it has got to; `null` without the `shell-update` capability. Nothing
+ * happens unless the page asks (`shellUpdateAction`): the app never checks or installs by itself.
+ */
+export async function shellUpdate(): Promise<ShellUpdateView | null> {
+  return await call<ShellUpdateView>("shell-update", undefined);
+}
+
+/**
+ * One step of it, as the user pressed: check, download, or apply (which quits the app, and in local
+ * mode its host, and starts the new one; the answer may never come).
+ */
+export async function shellUpdateAction(
+  action: "check" | "download" | "apply",
+): Promise<ShellUpdateView | null> {
+  return await call<ShellUpdateView>("shell-update", { action });
 }
 
 /** Links that mean "somewhere else": a new window, or another origin. Same-page links stay here. */

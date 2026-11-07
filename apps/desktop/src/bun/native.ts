@@ -21,7 +21,10 @@
  *
  * This server never opens a session, never touches the database and never starts the host.
  */
-import type { DesktopCapability } from "@eta/client-contracts/desktop";
+import type {
+  DesktopCapability,
+  ShellUpdateView,
+} from "@eta/client-contracts/desktop";
 import { Buffer } from "node:buffer";
 import { timingSafeEqual } from "node:crypto";
 import { BASELINE_CAPABILITIES } from "@eta/client-contracts/desktop";
@@ -29,9 +32,17 @@ import { BASELINE_CAPABILITIES } from "@eta/client-contracts/desktop";
 /**
  * What this bridge answers, by name, for a page to ask before it calls
  * (`@eta/client-contracts/desktop`). Only ever grows: a page from a newer host relies on a name
- * meaning what it meant.
+ * meaning what it meant. `shell-update` is there when the app was built with somewhere to update
+ * from.
  */
-export const CAPABILITIES: readonly DesktopCapability[] = BASELINE_CAPABILITIES;
+export function capabilities(updates: boolean): readonly DesktopCapability[] {
+  return updates
+    ? [...BASELINE_CAPABILITIES, "shell-update"]
+    : BASELINE_CAPABILITIES;
+}
+
+/** What the page may ask the app's own update to do; each is a press of a button. */
+const SHELL_UPDATE_ACTIONS = ["check", "download", "apply"] as const;
 
 /** What the page may ask the window to do. Kept in step with `apps/web/src/lib/native.ts`. */
 type WindowAction = "minimize" | "toggle-maximize" | "close" | "connection";
@@ -61,6 +72,13 @@ interface NativeHandlers {
     action: WindowAction;
     language: string | undefined;
   }) => void;
+  /** The app's own update (`update.ts`); absent in a build that has nowhere to update from. */
+  shellUpdate?: {
+    view: () => ShellUpdateView;
+    act: (
+      action: (typeof SHELL_UPDATE_ACTIONS)[number],
+    ) => Promise<ShellUpdateView>;
+  };
 }
 
 export interface NativeBridge {
@@ -81,6 +99,7 @@ export interface NativeBridgeOptions {
   /** What `GET /api/native/info` answers with. */
   platform: string;
   appVersion: string;
+  capabilities: readonly DesktopCapability[];
 }
 
 const JSON_HEADERS = {
@@ -175,12 +194,16 @@ export function startNativeBridge(options: NativeBridgeOptions): NativeBridge {
       const json = (body: unknown): Response =>
         Response.json(body, { headers });
       const path = new URL(request.url).pathname;
+      if (path === "/api/native/shell-update" && request.method === "GET")
+        return handlers.shellUpdate === undefined
+          ? new Response("not_found", { status: 404, headers })
+          : json(handlers.shellUpdate.view());
       if (path === "/api/native/info" && request.method === "GET")
         return json({
           isDesktop: true,
           platform: options.platform,
           appVersion: options.appVersion,
-          capabilities: CAPABILITIES,
+          capabilities: options.capabilities,
         });
       if (request.method !== "POST")
         return new Response("not_found", { status: 404, headers });
@@ -225,6 +248,19 @@ export function startNativeBridge(options: NativeBridgeOptions): NativeBridge {
             });
           handlers.contextMenu({ items });
           return new Response(null, { status: 202, headers });
+        }
+        if (path === "/api/native/shell-update") {
+          const asked = SHELL_UPDATE_ACTIONS.find(
+            (candidate) => candidate === field("action"),
+          );
+          if (handlers.shellUpdate === undefined)
+            return new Response("not_found", { status: 404, headers });
+          if (asked === undefined)
+            return new Response("native_request_invalid", {
+              status: 400,
+              headers,
+            });
+          return json(await handlers.shellUpdate.act(asked));
         }
         if (path === "/api/native/window-action") {
           if (action === undefined)

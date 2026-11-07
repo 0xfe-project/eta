@@ -97,6 +97,17 @@ token 的顺序和 host 升级一样：`GH_TOKEN`、`GITHUB_TOKEN`、`gh auth to
 
 hutch 只为所在的机器打包，所以每个平台在对应的 runner 上构建。
 
+### 桌面应用自己的更新
+
+用的是 Electrobun 自带的 Updater（`apps/desktop/src/bun/update.ts`），只在用户按按钮时做事：设置 → 更新的“桌面端”一节显示应用的版本，按“检查更新”才去问，有新版本再按“下载”，下载完按“重启并更新”。没有定时检查，启动时也不检查，更不会自己装。
+
+- **更新地址**是构建时的 `ETA_DESKTOP_UPDATE_URL`（`release-desktop.yml` 取仓库变量 `vars.ETA_DESKTOP_UPDATE_URL`），写进包里 `version.json` 的 `baseUrl`。没设就没有这一节，也不生成补丁。**正式地址还没定。**
+- 这个地址要能**匿名**读：Updater 发的是不带凭据的 GET，私有仓库的 Release 不行。要放的文件就是那次构建的 `artifacts/` 里的三样，名字不能改：`stable-<os>-<arch>-update.json`、`stable-<os>-<arch>-eta.tar.zst`，以及相对上一版的补丁 `stable-<os>-<arch>-<上一版 hash>.patch`。设了地址时 `release-desktop.yml` 把它们一起传到 Release 上，复制到那个地址即可。
+- 检查读 `update.json`，hash 和本机不同就有更新；这里再加一条：版本号要比当前新，不会“更新”到旧版本。
+- 下载先按补丁链走（构建时能从更新地址拿到上一版才会生成补丁），拿不到就下完整的 `.tar.zst`。Updater 自己核对解出来的 hash。
+- 应用更新时 Updater 退出应用，由一个辅助程序换掉整个应用目录后再启动新版。本机模式下 host 是应用的子进程，所以先停 host，再交给 Updater；没交出去（比如辅助程序起不来）就把 host 重新启动，旧版应用照常用，设置页说明原因。确认框会列出重启会中断的工作（host 的 `upgrade.check` 给的那份）。连远程 host 时只说 host 不受影响。
+- Linux 上辅助程序先复制到临时目录（`/tmp`）再运行，`/tmp` 挂成 `noexec` 的机器上会失败（`EACCES`，实测），旧版不受影响。
+
 ### 桌面应用和 host 的兼容
 
 两者各自升级：host 用设置页的按钮或 `eta-host upgrade`，桌面应用重新安装。应用不带 host，第一次用到时下载。窗口里的页面是 host 提供的，所以页面可能比应用新，也可能比它旧；连远程 host 时更是如此。约定在 `packages/client-contracts/src/desktop.ts`：
@@ -148,7 +159,7 @@ docker run --rm -v "$PWD:/repo:ro" zricethezav/gitleaks detect --source /repo/te
 
 ## 没有签名
 
-这些文件都没有签名和公证。桌面应用没有自动更新：新版本要重新下载安装。macOS 和 Windows 第一次打开时都会拦下来，放行一次之后就正常了。
+这些文件都没有签名和公证。桌面应用的更新由用户在设置里触发（见“桌面应用自己的更新”），没有配置更新地址的构建只能重新下载安装。macOS 和 Windows 第一次打开时都会拦下来，放行一次之后就正常了。
 
 macOS 上，从 DMG 把 eta 拖进“应用程序”，然后去掉下载带上的隔离标记，否则系统会说应用已损坏：
 

@@ -143,6 +143,7 @@ describe("relaying a call", () => {
   const bridge = () => {
     const started = startNativeBridge({
       appVersion: "0.1.0",
+      capabilities: [],
       origins: [],
       platform: "linux",
       handlers: {
