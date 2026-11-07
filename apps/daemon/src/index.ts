@@ -50,13 +50,20 @@ export {
 } from "./plugin-package";
 export { lastSeq, listen, runAndWait } from "./run";
 export {
+  type DetachedRunner,
   installedEnv,
-  installService,
-  serviceArgv,
-  type ServiceCommand,
-  serviceDefinition,
+  type ServiceManager,
+  type ServiceStatus,
   type ServiceUnit,
-  uninstallService,
 } from "./service";
-export { previousPath, stagedPath, swapBack, swapIn, tryBuild } from "./swap";
+export { detachedRunner, serviceManager } from "./service-manager";
+export type { WindowsOptions } from "./service-windows";
+export {
+  previousPath,
+  stagedPath,
+  swapBack,
+  swapIn,
+  sweepPrevious,
+  tryBuild,
+} from "./swap";
 export { daemonPlatform } from "./upgrade";

@@ -1,47 +1,42 @@
 /**
- * The host as the user's service, seen from the outside: `eta-host upgrade` runs in a shell, not in
- * the service, so it asks systemd what is installed and what state it is in.
+ * The host as the user's service, seen from outside it: `eta-host upgrade` runs in a shell, not in
+ * the service, so it asks the computer's service manager what is installed and what state it is
+ * in. `serviceManager` knows the kinds of manager; what is the host's here is asking `/up`.
  *
- * Only systemd: the one platform there is a release for. On any other, or with no unit installed,
- * there is no service and the upgrade only replaces the file.
+ * With no service installed the upgrade only replaces the file.
  */
-import { execFile } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import type {
+  DetachedRunner,
+  ServiceManager,
+  ServiceStatus,
+  ServiceUnit,
+  WindowsOptions,
+} from "@eta/daemon";
+import { realpathSync } from "node:fs";
 import { get } from "node:http";
-import { homedir } from "node:os";
 import process from "node:process";
-import { parseArgs, promisify } from "node:util";
-import { serviceArgv, serviceDefinition } from "@eta/daemon";
+import { parseArgs } from "node:util";
+import { detachedRunner, serviceManager } from "@eta/daemon";
 import { RUN_OPTIONS } from "../cli";
 import { Tailscale } from "../machines/tailscale";
 
-const run = promisify(execFile);
-
 /** The host as a user service: one per user, like the daemon. */
-export const HOST_UNIT = {
+export const HOST_UNIT: ServiceUnit = {
   name: "io.eta.host",
   description: "eta host",
   args: [],
 };
-const UNIT_FILE = `${HOST_UNIT.name}.service`;
 
-/** A stop can take as long as systemd gives the host before it kills it. */
-const SYSTEMCTL_TIMEOUT_MS = 120_000;
+/** What runs the upgrade, outside the service it restarts. */
+export const WORKER_NAME = "io.eta.host-upgrade";
+
 const UP_TIMEOUT_MS = 3000;
-
-interface ServiceStatus {
-  /** Started and not exited. */
-  running: boolean;
-  /** It exited on its own: waiting to be started again, or given up on. */
-  crashed: boolean;
-  /** Down for now: systemd will start it again, from whatever file is there then. */
-  restarting: boolean;
-  pid: number;
-}
 
 export interface HostService {
   /** The file the service runs. */
   readonly program: string;
+  /** What a person types to start it. */
+  readonly startCommand: string;
   status: () => Promise<ServiceStatus>;
   stop: () => Promise<void>;
   start: () => Promise<void>;
@@ -49,35 +44,25 @@ export interface HostService {
   up: () => Promise<boolean>;
 }
 
-const systemctl = async (...args: string[]): Promise<string> =>
-  (
-    await run("systemctl", ["--user", ...args], {
-      timeout: SYSTEMCTL_TIMEOUT_MS,
-    })
-  ).stdout;
+const windows: WindowsOptions = {
+  worker: { name: WORKER_NAME, description: "eta host upgrade" },
+};
 
-async function show(): Promise<Record<string, string>> {
-  const properties = [
-    "LoadState",
-    "ActiveState",
-    "SubState",
-    "MainPID",
-    "FragmentPath",
-  ];
-  const stdout = await systemctl(
-    "show",
-    UNIT_FILE,
-    ...properties.flatMap((property) => ["-p", property]),
-  );
-  return Object.fromEntries(
-    stdout
-      .split("\n")
-      .filter((line) => line.includes("="))
-      .map((line) => {
-        const at = line.indexOf("=");
-        return [line.slice(0, at), line.slice(at + 1)];
-      }),
-  );
+export const hostManager = (unit: ServiceUnit = HOST_UNIT): ServiceManager =>
+  serviceManager(unit, windows);
+
+export const hostRunner = (): DetachedRunner => detachedRunner(windows);
+
+/** Whether two paths are one file; Windows's names have no case. */
+export function sameFile(one: string, other: string): boolean {
+  try {
+    const [first, second] = [realpathSync(one), realpathSync(other)];
+    return process.platform === "win32"
+      ? first.toLowerCase() === second.toLowerCase()
+      : first === second;
+  } catch {
+    return false;
+  }
 }
 
 /** Where to ask a service with these flags: loopback, for a host that listens everywhere. */
@@ -125,50 +110,19 @@ export const askUp = (url: string): Promise<boolean> =>
 
 /** The installed service, whether it is running or not; undefined when there is none. */
 export async function findHostService(): Promise<HostService | undefined> {
-  if (process.platform !== "linux") return undefined;
-  const { path } = serviceDefinition(
-    { program: "", args: [] },
-    "linux",
-    homedir(),
-    HOST_UNIT,
-  );
-  let facts: Record<string, string>;
-  try {
-    facts = await show();
-  } catch (error) {
-    // No systemd here is no service. A unit nobody can be asked about is another matter: going on
-    // would leave a running host on the old file and say nothing.
-    if (!existsSync(path)) return undefined;
-    throw new Error(
-      `${path} is installed, but systemd does not answer: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-  if (facts.LoadState !== "loaded") return undefined;
-  const argv = serviceArgv(readFileSync(facts.FragmentPath ?? path, "utf8"));
-  const [program] = argv ?? [];
+  const manager = hostManager();
+  const argv = await manager.installed();
+  if (argv === undefined) return undefined;
+  const [program] = argv;
   if (program === undefined)
-    throw new Error(`no ExecStart in ${facts.FragmentPath ?? path}`);
-  const url = await upUrl(argv?.slice(1) ?? []);
+    throw new Error(`${manager.name} is registered with no command`);
+  const url = await upUrl(argv.slice(1));
   return {
     program,
-    status: async () => {
-      const { ActiveState, SubState, MainPID } = await show();
-      return {
-        running: ActiveState === "active" && SubState === "running",
-        crashed:
-          ActiveState === "failed" ||
-          ActiveState === "inactive" ||
-          SubState === "auto-restart",
-        restarting: ActiveState === "activating",
-        pid: Number(MainPID ?? 0),
-      };
-    },
-    stop: async () => {
-      await systemctl("stop", UNIT_FILE);
-    },
-    start: async () => {
-      await systemctl("start", UNIT_FILE);
-    },
+    startCommand: manager.startCommand,
+    status: manager.status,
+    stop: manager.stop,
+    start: manager.start,
     up: () => askUp(url),
   };
 }

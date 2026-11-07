@@ -33,12 +33,8 @@ import {
   loadIdentity,
 } from "./identity";
 import { DaemonNode } from "./node";
-import {
-  DAEMON_UNIT,
-  installedEnv,
-  installService,
-  uninstallService,
-} from "./service";
+import { DAEMON_UNIT, installedEnv } from "./service";
+import { serviceManager } from "./service-manager";
 import { RESTART_EXIT, settleUpgrade, upgrade } from "./upgrade";
 import { VERSION } from "./version";
 
@@ -205,15 +201,17 @@ switch (command) {
     await run();
     break;
   case "install-service": {
-    const definition = await installService(selfCommand(), {
+    const definition = await serviceManager({
       ...DAEMON_UNIT,
       env: installedEnv(),
-    });
+    }).install(selfCommand());
     console.log(`Installed ${definition.name} (${definition.path}).`);
     break;
   }
   case "uninstall-service": {
-    const definition = await uninstallService(selfCommand());
+    const definition = await serviceManager(DAEMON_UNIT).uninstall(
+      selfCommand(),
+    );
     console.log(`Removed ${definition.name}.`);
     break;
   }

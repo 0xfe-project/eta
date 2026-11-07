@@ -499,7 +499,13 @@ export type MachineCall = {
 
 /* ------------------------------------------------------------------ upgrade */
 
-export const UPGRADE_ACTIONS = ["check", "start", "cancel"] as const;
+export const UPGRADE_ACTIONS = [
+  "check",
+  "start",
+  "cancel",
+  "setUpstream",
+  "setToken",
+] as const;
 export type UpgradeAction = (typeof UPGRADE_ACTIONS)[number];
 
 /** Where a running upgrade is, in order. Until `stopping` the host goes on serving. */
@@ -551,7 +557,36 @@ export interface UpgradeStatusView {
 }
 
 /** Why this host cannot upgrade itself from the page. */
-export type UpgradeBlock = "source" | "no-service" | "other-file";
+export type UpgradeBlock =
+  | "source"
+  | "no-service"
+  /** The same, on Windows, where installing the service takes an Administrator. */
+  | "no-windows-service"
+  | "other-file";
+
+/** Who says where releases come from: the host's environment, the user's setting, or the build. */
+export type UpgradeUpstreamSource = "env" | "setting" | "build";
+
+/** The repository this host takes its releases from, which is whose code it would run. */
+export interface UpgradeUpstreamView {
+  /** The one in use: `owner/name`, or an address. */
+  label: string;
+  source: UpgradeUpstreamSource;
+  /** What the user saved, in use or not. */
+  saved: string | null;
+  /** What this build follows with nothing saved. */
+  fallback: string;
+}
+
+/** Which token would read the upstream. The token itself never comes back from the host. */
+export interface UpgradeTokenView {
+  /** The GitHub host it would go to; null for a server that only takes `ETA_RELEASES_TOKEN`. */
+  host: string | null;
+  /** Where it comes from: an environment variable, `gh`, or `Settings`; null with none. */
+  from: string | null;
+  /** The host the saved token is for, which may not be this one. */
+  saved: string | null;
+}
 
 export interface UpgradeCheckView {
   /** This build. */
@@ -562,6 +597,8 @@ export interface UpgradeCheckView {
   blocked: UpgradeBlock | null;
   /** What a restart would stop right now. */
   busy: UpgradeBusy[];
+  upstream: UpgradeUpstreamView;
+  token: UpgradeTokenView;
   error: string | null;
 }
 
@@ -570,12 +607,18 @@ export interface UpgradeArgs {
   /** `force` restarts over working agents instead of waiting for them. */
   start: { force?: boolean };
   cancel: Record<string, never>;
+  /** Save where releases come from; without `upstream`, go back to what the build follows. */
+  setUpstream: { upstream?: string };
+  /** Save a token for the upstream's host; without `token`, forget the one saved. */
+  setToken: { token?: string };
 }
 
 export interface UpgradeResults {
   check: UpgradeCheckView;
   start: { id: string };
   cancel: { cancelled: boolean };
+  setUpstream: UpgradeUpstreamView;
+  setToken: { saved: string | null };
 }
 
 /* ------------------------------------------------------------------ projects */

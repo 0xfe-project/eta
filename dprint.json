@@ -26,6 +26,7 @@
     "**/var",
     "AGENTS.md",
     "**/.eta",
+    "test/upgrade-seed",
     "**/test/fixtures/**/*.js",
     "**/test/**/fixtures/**/*.js"
   ],

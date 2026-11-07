@@ -26,6 +26,16 @@ export default {
     "packages/eta-server/src/transport.ts": ["exports"],
   },
   workspaces: {
+    // Run by the upgrade workflows, and `drive.ts` starts the servers as files.
+    ".": {
+      entry: ["scripts/upgrade-e2e/*.ts"],
+      // Installed by that workflow for its run, to press the real button.
+      ignoreDependencies: ["playwright-core"],
+    },
+    // `apps/eta/scripts/embed.ts` writes the import of this into a compiled host's entry.
+    "apps/daemon": {
+      entry: ["src/windows-shell.ts"],
+    },
     // The eta packages are libraries read straight from source (package.json
     // `exports` and `main` point at src/index.ts and the `testing` subpaths,
     // which knip takes as entries). What they export beyond that is the

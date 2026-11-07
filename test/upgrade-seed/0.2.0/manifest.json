@@ -1,0 +1,104 @@
+{
+  "version": "0.2.0",
+  "home": "/tmp/eta-seed-home",
+  "counts": {
+    "agent": 2,
+    "machine": 1,
+    "project": 3,
+    "conversation": 1,
+    "participant": 1,
+    "setting": 1,
+    "usage": 13,
+    "message": 9,
+    "task": 1,
+    "artifact": 1,
+    "artifact_version": 2,
+    "routine": 1,
+    "routine_brief": 1,
+    "machine_enrollment": 1,
+    "credential": 1,
+    "task_run": 1,
+    "task_activity": 7,
+    "email_account": 1,
+    "plugin_config": 1
+  },
+  "samples": {
+    "SELECT name, model FROM agent ORDER BY name": [
+      {
+        "name": "Ada",
+        "model": "fake:m1"
+      },
+      {
+        "name": "Bob",
+        "model": "fake:m1"
+      }
+    ],
+    "SELECT name FROM conversation WHERE name IS NOT NULL ORDER BY name": [
+      {
+        "name": "Seed talk"
+      }
+    ],
+    "SELECT title, status FROM task ORDER BY title": [
+      {
+        "title": "Seed task",
+        "status": "in_review"
+      }
+    ],
+    "SELECT status FROM task_run ORDER BY id": [
+      {
+        "status": "completed"
+      }
+    ],
+    "SELECT title FROM artifact ORDER BY title": [
+      {
+        "title": "Seed"
+      }
+    ],
+    "SELECT number FROM artifact_version ORDER BY number": [
+      {
+        "number": 1
+      },
+      {
+        "number": 2
+      }
+    ],
+    "SELECT name, address, smtp_host FROM email_account ORDER BY name": [
+      {
+        "name": "Seed mail",
+        "address": "seed@example.invalid",
+        "smtp_host": "smtp.example.invalid"
+      }
+    ],
+    "SELECT name FROM routine ORDER BY name": [
+      {
+        "name": "Seed routine"
+      }
+    ],
+    "SELECT name, kind FROM machine ORDER BY name": [
+      {
+        "name": "eta-seed",
+        "kind": "primary"
+      }
+    ],
+    "SELECT key FROM setting ORDER BY key": [
+      {
+        "key": "approvals"
+      }
+    ]
+  },
+  "conversation": {
+    "id": "ae32b512-f4af-4f5b-a245-62a1562c3b09",
+    "said": "Is this thing on?",
+    "replied": "Heard: [conversation: Seed talk]\nthe user says:\n@Ada Is this thing on?"
+  },
+  "sealed": [
+    {
+      "query": "SELECT value AS sealed FROM credential WHERE kind = 'password'",
+      "plain": "{\"password\":\"fake-mail-password\"}"
+    },
+    {
+      "query": "SELECT sealed FROM plugin_config WHERE plugin = 'seed-plugin'",
+      "plain": "{\"api_key\":\"sk-fakefakefake\",\"team\":\"seed team\"}"
+    }
+  ]
+}

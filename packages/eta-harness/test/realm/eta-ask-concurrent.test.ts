@@ -22,14 +22,19 @@ describe("eta.ask 并发执行", () => {
     const callLog: Array<{ seq: number; time: number; prompt: string }> = [];
     let seq = 0;
 
+    let running = 0;
+    let peak = 0;
     const hooks: Hooks = {
       ask: async (request: AskRequest): Promise<AskResult> => {
         const mySeq = seq++;
         const startTime = Date.now();
         callLog.push({ seq: mySeq, time: startTime, prompt: request.prompt });
+        running += 1;
+        peak = Math.max(peak, running);
 
         // Simulate async work (50ms)
         await new Promise((resolve) => setTimeout(resolve, 50));
+        running -= 1;
 
         return {
           text: `Answer ${mySeq}: ${request.prompt}`,
@@ -41,7 +46,6 @@ describe("eta.ask 并发执行", () => {
     };
 
     const agent = new Agent({ root, hooks });
-    const start = Date.now();
 
     const result = await agent.run(
       `import eta from "eta";
@@ -54,14 +58,9 @@ export default results;`,
       { identifier: join(root, "test.js") },
     );
 
-    const elapsed = Date.now() - start;
-
-    // All 3 should start concurrently
+    // All 3 should start concurrently: each was still running when the last began.
     expect(callLog.length).toBe(3);
-
-    // Total time should be ~50ms (concurrent), not ~150ms (serial)
-    // Allow some overhead for scheduling
-    expect(elapsed).toBeLessThan(150);
+    expect(peak).toBe(3);
 
     // Results should be in call order (A, B, C) not completion order
     const results = result.value as AskResult[];

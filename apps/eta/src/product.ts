@@ -837,7 +837,12 @@ export function createProduct(options: {
       server.mount(
         "upgrade",
         upgradePlugin(
-          { dataDir, busy: () => busyAgents(dataDir), ...options.upgrade },
+          {
+            dataDir,
+            busy: () => busyAgents(dataDir),
+            settings: new SettingStore(db),
+            ...options.upgrade,
+          },
           applied("upgrade"),
         ),
       );

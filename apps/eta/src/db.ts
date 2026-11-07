@@ -24,6 +24,9 @@ export interface Migration {
 /** The runner's own bookkeeping; it is not part of the product's schema. */
 const MIGRATION_TABLE = "eta_migrations";
 
+const WAL_WAIT_MS = 5000;
+const WAL_RETRY_MS = 10;
+
 const MIGRATION_FILE = /^(\d{4})-[a-z0-9-]+\.sql$/;
 
 /** Where a data directory keeps its database. */
@@ -40,11 +43,24 @@ export function databasePath(dataDir: string): string {
 export function openDatabase(path: string): Database {
   mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path, { create: true, strict: true });
-  // First: moving a new database to WAL takes a lock another process may be holding.
   db.exec("PRAGMA busy_timeout = 5000");
-  db.exec("PRAGMA journal_mode = WAL");
+  moveToWal(db);
   db.exec("PRAGMA foreign_keys = ON");
   return db;
+}
+
+/** Moving a new database to WAL takes a lock SQLite does not wait for, whatever the timeout. */
+function moveToWal(db: Database): void {
+  for (const until = Date.now() + WAL_WAIT_MS; ; ) {
+    try {
+      db.exec("PRAGMA journal_mode = WAL");
+      return;
+    } catch (error) {
+      if ((error as { code?: string }).code !== "SQLITE_BUSY") throw error;
+      if (Date.now() >= until) throw error;
+      Bun.sleepSync(WAL_RETRY_MS);
+    }
+  }
 }
 
 /**
@@ -84,6 +100,46 @@ export function loadMigrations(dir?: string): Migration[] {
   return migrations;
 }
 
+/**
+ * A migration's statements, each with the comments before it. `Database.exec` takes a whole text,
+ * but in Bun 1.4.3 a statement that fails while it runs is only reported if nothing follows it,
+ * not even the newline that ends a file. The rest then runs, and the migration is recorded as done
+ * with its work undone: a UNIQUE index over rows that are not, on a database with real data.
+ *
+ * A `;` in a string, a quoted name or a comment ends nothing. A trigger's body would be cut at its
+ * first `;`, which stops the migration on the spot instead of passing unnoticed.
+ */
+export function statementsOf(sql: string): string[] {
+  const statements: string[] = [];
+  let start = 0;
+  let index = 0;
+  let empty = true;
+  const skipPast = (end: string): void => {
+    const at = sql.indexOf(end, index);
+    index = at === -1 ? sql.length : at + end.length;
+  };
+  while (index < sql.length) {
+    const char = sql[index]!;
+    if (sql.startsWith("--", index)) skipPast("\n");
+    else if (sql.startsWith("/*", index)) skipPast("*/");
+    else if (char === ";") {
+      if (!empty) statements.push(sql.slice(start, index + 1));
+      index += 1;
+      start = index;
+      empty = true;
+    } else {
+      index += 1;
+      if (/\s/.test(char)) continue;
+      empty = false;
+      // A doubled quote closes the text and opens it again, which comes to the same.
+      if (char === "[") skipPast("]");
+      else if (`'"\``.includes(char)) skipPast(char);
+    }
+  }
+  if (!empty) statements.push(sql.slice(start));
+  return statements;
+}
+
 /** Apply what has not run yet. Returns the ids it applied, which is empty on a second run. */
 export function applyMigrations(
   db: Database,
@@ -103,7 +159,7 @@ export function applyMigrations(
     // second finds the first's work done.
     db.transaction(() => {
       if (isDone.get(migration.id) !== null) return;
-      db.exec(migration.sql);
+      for (const statement of statementsOf(migration.sql)) db.exec(statement);
       db.query(
         `INSERT INTO ${MIGRATION_TABLE} (id, applied_at) VALUES (?, ?)`,
       ).run(migration.id, new Date().toISOString());

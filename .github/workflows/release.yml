@@ -30,7 +30,6 @@ jobs:
       command: check
 
   prepare:
-    needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -100,6 +99,8 @@ jobs:
       ASSET: eta-host-${{ matrix.platform }}${{ matrix.exe }}
       DESKTOP: ${{ matrix.desktop }}
       ETA_DAEMON_VERSION: ${{ needs.prepare.outputs.version }}
+      # The repository a build upgrades from: this one, so a fork's builds follow the fork.
+      ETA_HOST_UPSTREAM: ${{ github.api_url }}/repos/${{ github.repository }}
     steps:
       # What is built is what is in git: Windows runners would check out CRLF.
       - run: git config --global core.autocrlf false
@@ -127,6 +128,11 @@ jobs:
           actual=$("./$ASSET" --version)
           if [[ $actual != "$expected" ]]; then
             echo "::error::--version says '$actual', not '$expected'."
+            exit 1
+          fi
+
+          if ! "./$ASSET" upgrade --help | grep "this build follows:" | grep -qF "$GH_REPO"; then
+            echo "::error::The build does not follow $GH_REPO."
             exit 1
           fi
 
@@ -176,8 +182,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG" "$RUNNER_TEMP/try/$ASSET" "$RUNNER_TEMP/try/$DESKTOP" --clobber
 
+  # From the last release to this draft, on Linux: a release is what people upgrade to. macOS and
+  # Windows are `gh workflow run upgrade-cross.yml -f platforms=all`, by hand.
+  cross:
+    needs: [prepare, build]
+    uses: ./.github/workflows/upgrade-cross.yml
+    permissions:
+      contents: write
+    with:
+      to: ${{ needs.prepare.outputs.version }}
+
+  # `check` runs beside the builds: nothing is published until both are through, and neither has
+  # anything to wait for from the other.
   publish:
-    needs: build
+    needs: [check, cross]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
