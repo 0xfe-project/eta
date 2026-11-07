@@ -4,7 +4,11 @@
  * The user decides which, on the shell's own page the first time and from Settings after that, and
  * `shell.ts` holds the rules for moving between them. In **local** mode the host (`apps/eta`) runs
  * here, the whole product in one Bun process: the page, the database and the socket live behind
- * its one port. This process finds a free port, starts that one, and points the window at it. With
+ * its one port. This process finds a free port, starts that one, and points the window at it. The
+ * host it starts is the user's copy (`~/.eta/desktop/host/`, seeded from the one the app carries,
+ * `installed.ts`), and this process is its service: the host's own upgrade stops it, replaces the
+ * file and has it started again through `service.ts`. A host already serving `~/.eta` (the command
+ * line's service) is opened instead of starting a second. With
  * no built page (`apps/web/dist`) the host serves the socket only and the window says so. In
  * **remote** mode no host runs here and the window loads the remote one's page; nothing of the two
  * modes' data is shared or moved.
@@ -42,9 +46,10 @@
  * paste anywhere in the app. The menu is installed below, all of it roles.
  */
 import type { ApplicationMenuItemConfig } from "electrobun/main";
+import type { ServiceServer } from "./service";
 import type { HostLaunch, View } from "./shell";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import process from "node:process";
@@ -56,10 +61,12 @@ import Electrobun, {
 } from "electrobun/main";
 import { readConnection, writeConnection } from "./connection";
 import { HOST_WRAPPER } from "./host";
+import { hostHome, installHost, runningHost } from "./installed";
 import { startNativeBridge } from "./native";
 import { configureWindowsWindow } from "./platform/windows";
 import { pagePreload, relayedRequest, relayToBridge } from "./preload";
-import { probeRemote, remoteHealth, watchRemote } from "./remote";
+import { probeRemote, remoteHealth, remotePage, watchRemote } from "./remote";
+import { LocalHost, startServiceServer } from "./service";
 import { createShell } from "./shell";
 import { startShellServer } from "./shell-server";
 
@@ -159,7 +166,8 @@ if (process.platform === "darwin") ApplicationMenu.setApplicationMenu(APP_MENU);
 
 /**
  * The host the app carries: the compiled host in `host/`, beside the main process's bundle. Only
- * a packaged build has one — `build.copy` never lands in the dev bundle.
+ * a packaged build has one — `build.copy` never lands in the dev bundle. It is a seed: what runs is
+ * the copy `installHost` makes of it.
  */
 function packagedHost(): string | undefined {
   const dir = join(dirname(Bun.main), "..", "host");
@@ -218,35 +226,10 @@ function bunBinary(): string {
   return existsSync(beside) ? beside : "bun";
 }
 
-/**
- * The port the host actually bound, read from a file rather than its stdout.
- *
- * The Electrobun launcher owns this process's stdout for its own protocol, so a pipe off the
- * host does not arrive as the host wrote it. The host prints one JSON summary first; a wrapper
- * keeps that line and lets the rest through.
- */
-async function boundPort(file: string, child: Bun.Subprocess): Promise<number> {
-  const deadline = Date.now() + 20_000;
-  for (;;) {
-    const text = await readFile(file, "utf8").catch(() => "");
-    if (text.includes("\n")) {
-      return (JSON.parse(text.slice(0, text.indexOf("\n"))) as { port: number })
-        .port;
-    }
-    // `await child.exited` would wait for the host to exit; only its exitCode is a question now.
-    if (child.exitCode !== null) {
-      throw new Error(
-        `the host exited with ${child.exitCode} before it was ready`,
-      );
-    }
-    if (Date.now() > deadline)
-      throw new Error("the host was not ready after 20s");
-    await Bun.sleep(100);
-  }
-}
-
 let current: BrowserWindow | undefined;
-let host: Bun.Subprocess | undefined;
+/** The host this app started, and the port its upgrade asks it through; neither for a host it found. */
+let localHost: LocalHost | undefined;
+let service: ServiceServer | undefined;
 
 const reasonOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -257,12 +240,12 @@ const devPage = ETA_DESKTOP_WEB_URL?.trim();
 const developing = devPage !== undefined && devPage !== "";
 
 /**
- * Start the host and learn the port it bound.
+ * Start the host and learn the port it bound, or find the one already running here.
  *
- * A failure here is a window's answer, not a process's exit: the two ways it goes wrong (no
- * host carried and no checkout above us, no host within twenty seconds) both come back as the reason the page is
- * missing, so the window can open and say it. Quitting on `process.exit` left the user with an
- * app that flashed and vanished.
+ * A failure here is a window's answer, not a process's exit: the ways it goes wrong (no host
+ * carried and no checkout above us, a seed that cannot be copied out, no host within twenty
+ * seconds) all come back as the reason the page is missing, so the window can open and say it.
+ * Quitting on `process.exit` left the user with an app that flashed and vanished.
  */
 async function startHost(): Promise<HostLaunch> {
   if (developing) {
@@ -279,13 +262,26 @@ async function startHost(): Promise<HostLaunch> {
     }
   }
 
-  // The app's own host, else the checkout's: `bun apps/eta/src/main.ts`, with the page when it
-  // has been built and the dev server's origin let in when it has not.
-  let command: string[];
+  // The app's host, run from the user's copy of it (`installed.ts`), else the checkout's:
+  // `bun apps/eta/src/main.ts`, with the page when it has been built and the dev server's origin
+  // let in when it has not.
+  let program: string[];
+  let flags: string[];
   let cwd: string;
   let built: boolean;
+  let file: string | undefined;
+  const home = hostHome(homedir());
   if (packaged !== undefined) {
-    command = [packaged];
+    try {
+      file = await installHost(packaged, home);
+    } catch (error) {
+      return {
+        ready: false,
+        reason: `cannot copy the host to ${home}: ${reasonOf(error)}`,
+      };
+    }
+    program = [file];
+    flags = [];
     cwd = homedir();
     built = true;
   } else {
@@ -296,45 +292,51 @@ async function startHost(): Promise<HostLaunch> {
       return { ready: false, reason: reasonOf(error) };
     }
     built = existsSync(join(root, "apps", "web", "dist", "index.html"));
-    command = [
-      bunBinary(),
-      "apps/eta/src/main.ts",
-      ...(built
-        ? ["--web-dir", "apps/web/dist"]
-        : ["--allow-origin", "http://127.0.0.1:3000"]),
-    ];
+    program = [bunBinary(), "apps/eta/src/main.ts"];
+    flags = built
+      ? ["--web-dir", "apps/web/dist"]
+      : ["--allow-origin", "http://127.0.0.1:3000"];
     cwd = root;
   }
   const path = packaged === undefined ? undefined : await loginShellPath();
+  // The host keeps its data in ~/.eta; HOME is the only way to point it elsewhere.
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...(path === undefined ? {} : { PATH: path }),
+  };
+
+  // One host to a data directory: a second would run the same agents over the same database.
+  const found = await runningHost([...program, "running"], cwd, env);
+  if (found !== undefined)
+    return { ready: true, page: remotePage(found), external: found };
 
   const runtime = join(tmpdir(), "eta-desktop");
   await mkdir(runtime, { recursive: true });
-  const summary = join(runtime, "host.json");
-  await rm(summary, { force: true });
-
   // A file import is bundled inline and build.copy never lands in the dev bundle, so the script
   // bun runs is written out from this string. It is src/bun/host.ts; keep the two the same.
   const wrapper = join(runtime, "host.ts");
   await Bun.write(wrapper, HOST_WRAPPER);
 
-  host = Bun.spawn(
-    // Port 0: the host picks a free port and says which in its summary.
-    [bunBinary(), wrapper, ...command, "--port", "0", "--github"],
-    // The host keeps its data in ~/.eta; HOME is the only way to point it elsewhere.
-    {
-      cwd,
-      env: {
-        ...process.env,
-        ...(path === undefined ? {} : { PATH: path }),
-        ETA_DESKTOP_SUMMARY: summary,
-      },
-      stdout: "inherit",
-      stderr: "inherit",
-    },
-  );
+  const hostEnv = { ...env };
+  const host = new LocalHost({
+    // The first start takes any free port and says which in its summary; the next ones take it again.
+    command: [...program, ...flags, "--github"],
+    cwd,
+    env: hostEnv,
+    wrapper,
+    bun: bunBinary(),
+    summary: join(runtime, "host.json"),
+  });
+  localHost = host;
+  // Only a compiled host replaces its own file; one from the checkout is updated with the checkout.
+  if (file !== undefined) {
+    service = startServiceServer({ host, program: file, dir: home, env });
+    Object.assign(hostEnv, service.env);
+  }
 
   try {
-    const port = await boundPort(summary, host);
+    await host.spawn();
+    const port = await host.ready();
     return {
       // The built page is served by the host itself, so the window and the socket share one
       // origin. Without a build there is only the shell's own placeholder.
@@ -350,18 +352,18 @@ async function startHost(): Promise<HostLaunch> {
   }
 }
 
-/** Stop the host and wait for it: it holds the database until it has gone. */
+/**
+ * Stop the host and wait for it: it holds the database until it has gone. An upgrade halfway
+ * through goes first: told to stop, it does if it has not touched the host yet, and otherwise
+ * finishes, since it is what starts the host again or puts the old build back.
+ */
 async function stopLocalHost(): Promise<void> {
-  const closing = host;
-  host = undefined;
-  if (closing === undefined) return;
-  closing.kill("SIGTERM");
-  const exited = closing.exited;
-  const gaveUp = new Promise((resolve) =>
-    setTimeout(resolve, 5_000, "timeout"),
-  );
-  if ((await Promise.race([exited, gaveUp])) === "timeout")
-    closing.kill("SIGKILL");
+  const [host, server] = [localHost, service];
+  localHost = undefined;
+  service = undefined;
+  await server?.finishJob();
+  await host?.stop();
+  server?.close();
 }
 
 /**

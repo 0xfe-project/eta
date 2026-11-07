@@ -7,6 +7,8 @@
  *                                       the flags and restarts
  *   eta-host uninstall-service
  *   eta-host upgrade [version]         replace this file with a release (`upgrade/command.ts`)
+ *   eta-host running                   the host already serving ~/.eta, as one line of JSON, or
+ *                                      `null` (`running.ts`): what the desktop app asks first
  *   eta-host --help                    the usage; a flag it does not know gets it too, on stderr
  *
  *   bun apps/eta/src/main.ts [--port 8787] [--host 127.0.0.1]
@@ -37,14 +39,25 @@ import { loadMigrations } from "./db";
 import { startHost } from "./host";
 import { Tailscale } from "./machines/tailscale";
 import { COMPILED, embeddedFiles } from "./resources";
+import { findRunningHost, recordRunning } from "./running";
 import { listenForStop } from "./stop";
 import { upgradeCommand } from "./upgrade/command";
+import { takeDesktopShell } from "./upgrade/desktop";
 import { HOST_UNIT, hostManager } from "./upgrade/service";
-import { VERSION_LINE } from "./version";
+import { VERSION, VERSION_LINE } from "./version";
+
+// Before anything can start a process that would inherit it.
+takeDesktopShell();
+
+const dataDir = join(homedir(), ".eta");
 
 // A subcommand comes first; every other argument is a flag of the run.
 const [command, ...rest] = process.argv.slice(2);
 if (command === "upgrade") process.exit(await upgradeCommand(rest));
+if (command === "running") {
+  console.log(JSON.stringify((await findRunningHost({ dataDir })) ?? null));
+  process.exit(0);
+}
 const serviceCommand =
   command === "install-service" || command === "uninstall-service"
     ? command
@@ -147,7 +160,7 @@ const github =
     : values.github === true || envOn(process.env.ETA_GITHUB);
 
 const host = await startHost({
-  dataDir: join(homedir(), ".eta"),
+  dataDir,
   port,
   hostname: listen,
   // The tailnet's computers can be found and added as machines, and the user's own let in.
@@ -196,12 +209,23 @@ console.log(
   }),
 );
 
+// Said where another start looks before it opens the same database (`running.ts`).
+const forget = recordRunning(dataDir, {
+  pid: process.pid,
+  hostname: host.hostname,
+  port: host.port,
+  tokenFile: host.tokenFile ?? null,
+  version: VERSION,
+});
+process.on("exit", forget);
+
 /** A signal is a shutdown, not a crash: the sessions flush, the files close. */
 let closing = false;
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
     if (closing) return;
     closing = true;
+    forget();
     void host.close().then(() => process.exit(0));
   });
 }

@@ -11,6 +11,9 @@
  * - **The local host keeps running while the connection page is open.** Going back is immediate,
  *   and nothing has changed until the user picks something that works.
  * - **The token stops here.** `describe` is all a page ever hears about the connection.
+ * - **A host already running here is opened, not joined.** `startHost` may answer with one that
+ *   serves the same data (`installed.ts`); it is watched like a remote host, and when it goes the
+ *   next try starts over, which may start the app's own.
  */
 import type { HostAddress } from "@eta/client-contracts/connect-link";
 import type { Connection } from "./connection";
@@ -28,7 +31,7 @@ export type Failure =
 
 /** What starting the local host came to. */
 export type HostLaunch =
-  | { ready: true; page: string; port?: number }
+  | { ready: true; page: string; port?: number; external?: RemoteTarget }
   | { ready: false; reason: string };
 
 export interface PageView {
@@ -36,6 +39,8 @@ export interface PageView {
   page: string;
   port?: number;
   connection: Connection;
+  /** A local host the app did not start: where it is, to watch it. */
+  external?: RemoteTarget;
 }
 
 export type View =
@@ -105,12 +110,15 @@ export function createShell(deps: ShellDependencies) {
     stopWatching();
     const { connection: at } = page;
     connection = at;
+    const watched = at.mode === "remote" ? at : page.external;
     stopWatching =
-      at.mode === "remote"
-        ? deps.watch(at, (reason) => {
+      watched === undefined
+        ? () => {}
+        : deps.watch(watched, (reason) => {
+            // Gone is gone: the next try asks again what runs here.
+            if (page === local) local = undefined;
             fail(at, { reason });
-          })
-        : () => {};
+          });
     show(page);
   }
 
@@ -124,6 +132,7 @@ export function createShell(deps: ShellDependencies) {
         page: launch.page,
         ...(launch.port === undefined ? {} : { port: launch.port }),
         connection: target,
+        ...(launch.external === undefined ? {} : { external: launch.external }),
       };
       return local;
     }

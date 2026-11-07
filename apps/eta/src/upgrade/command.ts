@@ -33,7 +33,7 @@ changes, and a release older than this build is refused.
 
 If the service (io.eta.host) runs this file, the work is handed to a process of its own,
 io.eta.host-upgrade, which the service manager runs (a systemd user unit, a launchd job, a Windows
-service), and this command only follows it: closing the terminal, or killing this command or the
+service; the desktop app is the manager of the host it runs), and this command only follows it: closing the terminal, or killing this command or the
 host, does not stop it. That process waits for working agents, stops the service,
 backs up the database, swaps the file, starts it, and checks /up and the migrations. If that fails,
 the old build and the database go back and the service is started again.

@@ -52,6 +52,7 @@ export { lastSeq, listen, runAndWait } from "./run";
 export {
   type DetachedRunner,
   installedEnv,
+  passedValues,
   type ServiceManager,
   type ServiceStatus,
   type ServiceUnit,

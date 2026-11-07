@@ -1,5 +1,5 @@
 import type { Connection } from "../src/bun/connection";
-import type { Failure, View } from "../src/bun/shell";
+import type { Failure, HostLaunch, View } from "../src/bun/shell";
 import { describe, expect, it, vi } from "vitest";
 import { createShell, describe as describeView } from "../src/bun/shell";
 
@@ -15,7 +15,7 @@ function rig(options: { saved?: Connection; failure?: Failure } = {}) {
   let saved = options.saved;
   let onLost: ((failure: "lost" | "token") => void) | undefined;
   const views: View[] = [];
-  const startHost = vi.fn(async () => {
+  const startHost = vi.fn(async (): Promise<HostLaunch> => {
     log.push("startHost");
     return { ready: true as const, page: LOCAL_PAGE, port: 4000 };
   });
@@ -265,5 +265,49 @@ describe("a local host that does not start", () => {
     });
     await shell.shell.choose(REMOTE);
     expect(shell.view()).toMatchObject({ screen: "page" });
+  });
+});
+
+describe("a host already running here", () => {
+  const FOUND = { address: "http://127.0.0.1:8790", token: "" };
+
+  it("is opened and watched like a remote one, and a try after it went asks again", async () => {
+    const { log, lose, shell, startHost, view } = rig({
+      saved: { mode: "local" },
+    });
+    startHost.mockImplementationOnce(async () => {
+      log.push("startHost");
+      return {
+        ready: true as const,
+        page: `${FOUND.address}/`,
+        external: FOUND,
+      };
+    });
+    await shell.boot();
+    expect(view()).toMatchObject({ screen: "page", external: FOUND });
+    expect(log).toContain("watch");
+
+    lose("lost");
+    expect(view()).toMatchObject({
+      screen: "failure",
+      failure: { reason: "lost" },
+    });
+    // Gone: the next try does not open the old address from memory.
+    await shell.retry();
+    expect(startHost).toHaveBeenCalledTimes(2);
+    expect(view()).toMatchObject({ screen: "page", page: LOCAL_PAGE });
+  });
+
+  it("is not stopped by going remote: it is not the app's", async () => {
+    const { log, shell, startHost } = rig({ saved: { mode: "local" } });
+    startHost.mockImplementationOnce(async () => ({
+      ready: true as const,
+      page: `${FOUND.address}/`,
+      external: FOUND,
+    }));
+    await shell.boot();
+    await shell.choose({ mode: "remote", address: REMOTE.address, token: "x" });
+    // `stopHost` is called, and stops nothing: the app holds no process for a host it found.
+    expect(log).toContain("stopHost");
   });
 });

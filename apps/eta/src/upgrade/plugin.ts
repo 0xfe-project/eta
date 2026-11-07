@@ -63,7 +63,11 @@ export interface UpgradePluginOptions {
   cancel?: typeof cancelWorker;
 }
 
-/** The desktop app's host is in the app: a service is not the way for it, on any platform. */
+/**
+ * What stands in the way when nothing runs this host. A desktop app runs its host as a service of
+ * its own (`desktop.ts`); one that does not say so is an older app, or one running a checkout, and
+ * a Windows service is not the way for it.
+ */
 const noService = (options: UpgradePluginOptions): UpgradeBlock =>
   (options.platform ?? process.platform) === "win32" &&
   process.env.ETA_DESKTOP_SUMMARY === undefined

@@ -51,4 +51,42 @@ describe("the host's wrapper", () => {
     await until(() => Bun.file(gone).exists());
     expect(await Bun.file(gone).text()).toBe("stopped");
   });
+
+  it("stops the host when the shell is gone without a word", async () => {
+    const wrapper = join(dir, "wrapper.ts");
+    const fake = join(dir, "host.ts");
+    const shell = join(dir, "shell.ts");
+    const summary = join(dir, "summary");
+    const gone = join(dir, "gone");
+    const pids = join(dir, "pids");
+    await writeFile(wrapper, HOST_WRAPPER);
+    await writeFile(
+      fake,
+      `process.on("SIGTERM", async () => {
+         await Bun.write(${JSON.stringify(gone)}, "stopped");
+         process.exit(0);
+       });
+       console.log(JSON.stringify({ port: 1 }));
+       setInterval(() => {}, 1000);`,
+    );
+    // A shell that starts the wrapper, says its pid, and is then killed outright.
+    await writeFile(
+      shell,
+      `const child = Bun.spawn(${JSON.stringify([process.execPath, wrapper, process.execPath, fake])}, {
+         env: { ...process.env, ETA_DESKTOP_SUMMARY: ${JSON.stringify(summary)} },
+         stdout: "ignore", stderr: "ignore",
+       });
+       await Bun.write(${JSON.stringify(pids)}, String(process.pid));
+       setInterval(() => {}, 1000);`,
+    );
+    const outer = Bun.spawn([process.execPath, shell], {
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    await until(() => Bun.file(summary).exists());
+    outer.kill("SIGKILL");
+    await outer.exited;
+    await until(() => Bun.file(gone).exists());
+    expect(await Bun.file(gone).text()).toBe("stopped");
+  });
 });
