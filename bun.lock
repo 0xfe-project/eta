@@ -41,10 +41,14 @@
     "apps/desktop": {
       "name": "@eta/desktop",
       "version": "0.1.0",
+      "dependencies": {
+        "@eta/client-contracts": "*",
+      },
       "devDependencies": {
         "@types/bun": "1.4.0",
         "electrobun": "2.0.4",
         "typescript": "5.9.3",
+        "vitest": "4.1.9",
       },
     },
     "apps/eta": {

@@ -4,10 +4,11 @@
  *
  *   bun apps/desktop/scripts/try-app.ts <installer>
  *
- * The app starts the host it carries, and that host names its port in `<tmp>/eta-desktop/host.json`
- * (`src/bun/index.ts`). The app has started when the host answers on that port. That proves the
- * installer, the launcher, the runtime and the host inside; it says nothing about what the window
- * shows.
+ * A first launch asks where the host should run, and nobody is at this window, so the app is told
+ * (`ETA_DESKTOP_CONNECTION`). It then starts the host it carries, and that host names its port in
+ * `<tmp>/eta-desktop/host.json` (`src/bun/index.ts`). The app has started when the host answers on
+ * that port. That proves the installer, the launcher, the runtime and the host inside; it says
+ * nothing about what the window shows.
  */
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -63,7 +64,11 @@ async function installCommand(file: string): Promise<string[]> {
 const out = Bun.file(log);
 const app = spawn(await installCommand(resolve(installer)), {
   cwd: work,
-  env: { ...process.env, ELECTROBUN_INSTALLER_UI_AUTOCLOSE: "1" },
+  env: {
+    ...process.env,
+    ELECTROBUN_INSTALLER_UI_AUTOCLOSE: "1",
+    ETA_DESKTOP_CONNECTION: "local",
+  },
   stdin: "ignore",
   stdout: out,
   stderr: out,

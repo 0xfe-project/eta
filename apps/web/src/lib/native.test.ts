@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
-import { host, markHost, openExternal, watchExternalLinks } from "./native";
+import {
+  host,
+  markHost,
+  openConnectionPage,
+  openExternal,
+  watchExternalLinks,
+} from "./native";
 
 /** A page as the shell's preload leaves it. */
 function shell(extra: Record<string, unknown> = {}) {
@@ -38,7 +44,7 @@ afterEach(() => {
 
 describe("in a browser", () => {
   it("has no host, and does not write the attribute", () => {
-    expect(host()).toMatchObject({ kind: "browser" });
+    expect(host()).toMatchObject({ kind: "browser", connection: undefined });
     expect(markHost().kind).toBe("browser");
     expect(document.documentElement.hasAttribute("data-host")).toBe(false);
   });
@@ -72,8 +78,41 @@ describe("in the shell", () => {
       appVersion: "0.1.0",
       role: "dev",
       error: undefined,
+      connection: undefined,
+      address: undefined,
     });
     expect(document.documentElement.dataset.host).toBe("desktop");
+  });
+
+  it("knows whether its host is this computer's or a remote one", () => {
+    shell({ connection: "local" });
+    expect(host()).toMatchObject({
+      connection: "local",
+      address: undefined,
+    });
+    shell({ connection: "remote", address: "https://mac.ts.net" });
+    expect(host()).toMatchObject({
+      connection: "remote",
+      address: "https://mac.ts.net",
+    });
+  });
+
+  it("does not take an older shell's silence for an answer", () => {
+    shell();
+    expect(host().connection).toBeUndefined();
+    shell({ connection: "somewhere" });
+    expect(host().connection).toBeUndefined();
+  });
+
+  it("asks the window for the connection page in the page's language", async () => {
+    shell({ connection: "remote" });
+    const fetch = serve({});
+    await openConnectionPage("en");
+    const [url, init] = fetch.mock.calls[0]!;
+    expect(url).toBe("http://127.0.0.1:5001/api/native/window-action");
+    expect(init!.body).toBe(
+      JSON.stringify({ action: "connection", language: "en" }),
+    );
   });
 
   it("gives no bridge when the shell forgot its token", async () => {

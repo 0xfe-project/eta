@@ -19,6 +19,12 @@ const child = Bun.spawn(process.argv.slice(2), {
   stderr: "inherit",
 });
 
+// The shell's signal stops this script, and the host has to hear it: left running, it would still
+// hold the database when the shell starts another one.
+for (const signal of ["SIGTERM", "SIGINT"]) {
+  process.on(signal, () => child.kill(signal));
+}
+
 const reader = child.stdout.getReader();
 const decoder = new TextDecoder();
 let buffer = "";
