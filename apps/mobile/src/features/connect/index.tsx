@@ -20,7 +20,7 @@ import { clock } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
 import { ToastHost } from "../../ui/toast";
 import { eager, useTarget } from "../../wire/target";
-import { parseConnectLink } from "./link";
+import { parseConnectLink } from "@eta/client-contracts/connect-link";
 import { form, scanHostCode } from "./scan";
 
 const SCREEN =

@@ -1,7 +1,12 @@
 # @eta/desktop
 
-eta 的桌面壳。打开应用就启动 host（`apps/eta`，一个 Bun 进程，页面、数据库和 WebSocket
-都在它的一个端口后面），窗口指向它；关掉窗口就把 host 停掉。
+eta 的桌面壳。host 跑在哪里由用户决定：首次打开时在壳自己的页面上选，之后在设置 → 连接方式里改。
+
+- **本机**：壳启动包内的 host（`apps/eta`，一个 Bun 进程，页面、数据库和 WebSocket 都在它的
+  一个端口后面），窗口指向它；退出应用就把 host 停掉。
+- **远程**：不启动本机 host，窗口直接加载远程 host 的页面。
+
+两种模式的数据互相独立，切换不迁移，本机数据一直留在 `~/.eta`。
 
 前端打过包（`apps/web/dist` 存在）时，host 用 `--web-dir` 自己托管页面，窗口打开的就是
 产品本身。没打包时 host 只提供 socket，窗口提示先构建，页面仍由 `bun run dev` 的 vite
@@ -36,3 +41,24 @@ Release 里的安装包由 CI 在各平台自己的 runner 上打（`.github/wor
 找 checkout）。
 
 数据目录是 `~/.eta`，和命令行启动的 host 共用一份。
+
+## 连接方式
+
+选择存在用户目录的 `connection.json`（0600，所在目录 0700）：Linux 是
+`~/.local/share/dev.eta.desktop/stable/`，macOS 是 `~/Library/Application Support/dev.eta.desktop/stable/`，
+Windows 是 `%LOCALAPPDATA%\dev.eta.desktop\stable\`。里面有远程 host 的 token，不进日志，也不给任何页面。
+删掉这个文件，下次打开会重新询问。
+
+远程连接用手机端同款的 `eta://connect?…` 链接（host 的设置 → 机器 → 连接手机），或手动填地址和
+token。连接前先探测：`/up` 回 `ok`，再带 token 取 `/`。每次启动都走一次 `/?token=…`，host 换成
+cookie 并重定向，所以地址栏不留 token，cookie 过期也不用重新登录。
+
+运行中壳每 5 秒看一次 `/upgrade/status`：连续 30 秒没有回应就换成壳自己的失败页，host 恢复后自动
+回去；token 失效立刻提示；这个 host 正在升级时宽限 10 分钟，让页面自己等重启。
+
+原生桥只接受窗口当前页面的 origin，能力和本机模式一样。HTTPS 页面访问不了 `http://127.0.0.1`
+（WebKit 按混合内容拦截），所以 preload 把这类请求转到 Electrobun 的原生消息通道，由壳发给同一个
+桥（`src/bun/preload.ts`）。
+
+设置里的入口只是请壳打开它自己的页面，页面本身不接触连接配置。连接到旧版本的 host 时页面里没有这个
+入口：连得上就没有地方切换，要删掉 `connection.json`。

@@ -45,6 +45,13 @@ import {
 import { MCP_CALLBACK_PATH } from "./mcp/path";
 
 const COOKIE = "eta_session";
+/**
+ * The same cookie over https, under a name of its own. A `Secure` cookie is not sent to the plain
+ * http address of the same name, and a browser lets that address neither read nor replace it, so
+ * one name would lock out a host reached both ways: the token would be accepted and the next page
+ * refused. An older host's `Secure` cookie has the plain name, which is why that still opens https.
+ */
+const SECURE_COOKIE = "__Secure-eta_session";
 /** Thirty days: a browser that was let in once should not be asked again on Monday. */
 const COOKIE_MAX_AGE = 30 * 24 * 60 * 60;
 const MIN_TOKEN_LENGTH = 16;
@@ -229,15 +236,13 @@ export function createAccess(options: AccessOptions): Access {
       if (offered !== null && url.pathname !== "/ws") {
         if (!matches(offered, gate.token)) return refuse(401, "unauthorized");
         url.searchParams.delete("token");
-        const secure = askedFor(request).origin.startsWith("https:")
-          ? "; Secure"
-          : "";
+        const secure = askedFor(request).origin.startsWith("https:");
         return new Response(null, {
           status: 303,
           headers: {
             // One leading slash: `//host` would be a redirect to another site.
             location: `/${url.pathname.replace(/^\/+/, "")}${url.search}`,
-            "set-cookie": `${COOKIE}=${gate.cookie}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${COOKIE_MAX_AGE}${secure}`,
+            "set-cookie": `${secure ? SECURE_COOKIE : COOKIE}=${gate.cookie}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${COOKIE_MAX_AGE}${secure ? "; Secure" : ""}`,
             "cache-control": "no-store",
           },
         });
@@ -249,7 +254,8 @@ export function createAccess(options: AccessOptions): Access {
       if (
         matches(bearer, gate.token) ||
         matches(request.headers.get("x-eta-token"), gate.token) ||
-        matches(cookieOf(request, COOKIE), gate.cookieDigest)
+        matches(cookieOf(request, COOKIE), gate.cookieDigest) ||
+        matches(cookieOf(request, SECURE_COOKIE), gate.cookieDigest)
       ) {
         return undefined;
       }

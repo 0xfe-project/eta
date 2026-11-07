@@ -47,6 +47,7 @@ export type SettingsSection =
   | "connections"
   | "archived"
   | "appearance"
+  | "host"
   | "update";
 interface SettingsState {
   open: boolean;

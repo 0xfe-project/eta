@@ -20,6 +20,7 @@
   "sections": {
     "approvals": "Tools that ask first",
     "appearance": "Appearance",
+    "host": "Connection",
     "update": "Update"
   },
   "approvals": {
@@ -35,6 +36,7 @@
     "accountsNeedAttention": "Accounts need attention"
   },
   "update": {
+    "remoteHost": "Connected host",
     "version": "This version",
     "latest": "Latest version",
     "upstream": "Updates from",
@@ -79,6 +81,7 @@
     },
     "confirmTitle": "Update to {{version}}",
     "confirm": "The server restarts and is unreachable for about a minute. It goes back by itself if something is wrong.",
+    "confirmRemote": "The host at {{host}} restarts and is unreachable for about a minute. Nothing on this computer changes. If something goes wrong it rolls back by itself.",
     "start": "Update",
     "waitForAgents": "Update when they finish",
     "force": "Update now",
@@ -112,5 +115,11 @@
     "busyTask": "Task #{{number}} {{name}}",
     "busyRoutine": "Routine {{name}}",
     "busyReply": "A reply in {{name}}"
+  },
+  "host": {
+    "local": "Running on this computer",
+    "remote": "Connected to {{address}}",
+    "independent": "The two keep separate data. Switching doesn't move anything. The window reopens after switching.",
+    "change": "Change"
   }
 }

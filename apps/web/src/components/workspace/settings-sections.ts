@@ -4,6 +4,7 @@ import { ArchiveIcon } from "@phosphor-icons/react/Archive";
 import { ArrowCircleUpIcon } from "@phosphor-icons/react/ArrowCircleUp";
 import { DesktopIcon } from "@phosphor-icons/react/Desktop";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/EnvelopeSimple";
+import { GlobeSimpleIcon } from "@phosphor-icons/react/GlobeSimple";
 import { LinkIcon } from "@phosphor-icons/react/Link";
 import { PaletteIcon } from "@phosphor-icons/react/Palette";
 import { PlugIcon } from "@phosphor-icons/react/Plug";
@@ -91,6 +92,13 @@ export const settingsSections: {
       return translate("settings:sections.appearance");
     },
     icon: PaletteIcon,
+  },
+  {
+    value: "host",
+    get label() {
+      return translate("settings:sections.host");
+    },
+    icon: GlobeSimpleIcon,
   },
   {
     value: "update",

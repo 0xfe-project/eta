@@ -12,8 +12,10 @@
  *
  * What the shell tells us (`__ETA_HOST__`):
  *
- * - `apiBase`, `token` — the host. There is no token when the host listens on loopback only, since
- *   a loopback host has no token gate.
+ * - `apiBase` — the host. No page gets its token: a remote host trades it for a cookie, and a
+ *   loopback host has no token gate.
+ * - `connection`, `address` — whether that host is this computer's or a remote one, and where. A
+ *   shell that cannot change it (an older one, or the dev page) says nothing.
  * - `native`, `nativeApiBase`, `nativeToken` — this window's capabilities.
  * - `platform`, `appVersion`, `role` — what the shell is and which page it meant to show.
  * - `error` — why it could not start the host. A page served by a host will not see this: with no
@@ -22,6 +24,8 @@
 
 /** Which of the two places this page is open in. */
 type HostKind = "desktop" | "browser";
+
+type HostConnection = "local" | "remote";
 
 export interface Host {
   kind: HostKind;
@@ -32,6 +36,10 @@ export interface Host {
   role: string | undefined;
   /** Why the shell has no host running, when it has none. */
   error: string | undefined;
+  /** Where the host is. Only a shell that can change it says. */
+  connection: HostConnection | undefined;
+  /** The remote host's origin. */
+  address: string | undefined;
 }
 
 interface EtaHost {
@@ -42,6 +50,8 @@ interface EtaHost {
   appVersion?: unknown;
   role?: unknown;
   error?: unknown;
+  connection?: unknown;
+  address?: unknown;
 }
 
 declare global {
@@ -52,6 +62,9 @@ declare global {
 
 const text = (value: unknown): string | undefined =>
   typeof value === "string" && value !== "" ? value : undefined;
+
+const connectionOf = (value: unknown): HostConnection | undefined =>
+  value === "local" || value === "remote" ? value : undefined;
 
 /** Where this page is running, and what the shell said about itself. */
 export function host(): Host {
@@ -66,6 +79,8 @@ export function host(): Host {
     appVersion: shell ? text(injected.appVersion) : undefined,
     role: shell ? text(injected.role) : undefined,
     error: shell ? text(injected.error) : undefined,
+    connection: shell ? connectionOf(injected.connection) : undefined,
+    address: shell ? text(injected.address) : undefined,
   };
 }
 
@@ -133,7 +148,11 @@ export async function openExternal(url: string): Promise<void> {
  * (`components/window-controls.tsx`) — and a painted button can only close a window by asking the
  * process that owns it. That one capability is `window-action` on the bridge above.
  */
-export type WindowAction = "close" | "minimize" | "toggle-maximize";
+export type WindowAction =
+  | "close"
+  | "minimize"
+  | "toggle-maximize"
+  | "connection";
 
 /**
  * Whether the three buttons are ours to draw.
@@ -155,6 +174,14 @@ export function drawsOwnWindowControls(): boolean {
  */
 export async function windowAction(action: WindowAction): Promise<void> {
   await call("window-action", { action });
+}
+
+/**
+ * Ask the shell for its connection page. The page itself is the shell's, in the language this one
+ * is in, and a remote page hears nothing more about the connection than it already has.
+ */
+export async function openConnectionPage(language: string): Promise<void> {
+  await call("window-action", { action: "connection", language });
 }
 
 /** Links that mean "somewhere else": a new window, or another origin. Same-page links stay here. */

@@ -1,5 +1,5 @@
 import { expect, open, test } from "nsh/test";
-import { parseConnectLink } from "./link";
+import { parseConnectLink } from "@eta/client-contracts/connect-link";
 
 const DEV = "../../../DevApp.tsx";
 const form = (extra: Record<string, string> = {}) =>

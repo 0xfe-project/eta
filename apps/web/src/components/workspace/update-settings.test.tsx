@@ -15,6 +15,7 @@ afterEach(async () => {
   await cleanup();
   setWire(undefined);
   globalThis.fetch = realFetch;
+  delete window.__ETA_HOST__;
   document.body.innerHTML = "";
 });
 
@@ -90,6 +91,29 @@ describe("Settings → 更新", () => {
     expect(text()).toContain("1.1.0");
     await click(button("更新到 1.1.0")!);
     expect(start).not.toHaveBeenCalled();
+    await click(button("更新")!);
+    expect(start).toHaveBeenCalledWith({ force: false });
+  });
+
+  it("says nothing about where the host is in a browser or on this computer", async () => {
+    window.__ETA_HOST__ = { native: true, connection: "local" };
+    await open();
+    expect(text()).not.toContain("连接的 host");
+    await click(button("更新到 1.1.0")!);
+    expect(text()).toContain("服务器会重启");
+  });
+
+  it("names the remote host it would update, which is not this computer", async () => {
+    window.__ETA_HOST__ = {
+      native: true,
+      connection: "remote",
+      address: "https://mac.ts.net",
+    };
+    const { start } = await open();
+    expect(text()).toContain("连接的 host");
+    expect(text()).toContain("https://mac.ts.net");
+    await click(button("更新到 1.1.0")!);
+    expect(text()).toContain("这台电脑上的东西不变");
     await click(button("更新")!);
     expect(start).toHaveBeenCalledWith({ force: false });
   });
