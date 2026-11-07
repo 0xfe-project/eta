@@ -29,8 +29,6 @@
     "closeWorkspace": "关闭工作区",
     "collapseWorkspace": "收起工作区",
     "back": "返回",
-    "new": "新建",
-    "newConversation": "新建对话",
-    "newGroup": "新建群"
+    "new": "新建"
   }
 }

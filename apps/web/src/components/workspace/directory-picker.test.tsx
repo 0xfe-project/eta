@@ -1,5 +1,4 @@
 import type { DirectoryEntry, ProjectResults } from "@eta/client-contracts";
-import type { DirectoryPickerProps } from "./directory-picker";
 import {
   afterEach,
   beforeEach,
@@ -13,19 +12,14 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { setWire } from "@/lib/wire";
 import {
   agentView,
-  conversationView,
   machineView,
   productHost,
   projectView,
 } from "@/test-product";
 import { button, cleanup, click, flush, mount } from "@/test-render";
 import { DirectoryPicker } from "./directory-picker";
-import { NewConversationDialog } from "./new-conversation-dialog";
+import { useDirectoryBrowser } from "./use-directory-browser";
 import { useWorkspaceStore } from "./workspace-store";
-
-rstest.mock("@tanstack/react-router", () => ({
-  useNavigate: () => () => {},
-}));
 
 const entry = (
   name: string,
@@ -90,20 +84,30 @@ function machineHost({
   return fake;
 }
 
-const onPick = rstest.fn();
-const onBack = rstest.fn();
+const onProject = rstest.fn();
 
-async function open(fields: Partial<DirectoryPickerProps> = {}) {
+function Picker({
+  machineId,
+  start,
+}: {
+  machineId: string | undefined;
+  start: string | undefined;
+}) {
+  const browser = useDirectoryBrowser({ machineId, path: start });
+  return <DirectoryPicker browser={browser} onProject={onProject} />;
+}
+
+async function open({
+  machineId,
+  start,
+}: {
+  machineId?: string;
+  start?: string;
+} = {}) {
   const view = await mount(
     <Dialog open>
       <DialogContent>
-        <DirectoryPicker
-          machineId="m1"
-          start={undefined}
-          onPick={onPick}
-          onBack={onBack}
-          {...fields}
-        />
+        <Picker machineId={machineId} start={start} />
       </DialogContent>
     </Dialog>,
   );
@@ -127,11 +131,10 @@ const crumb = (name: string) =>
   [...document.querySelectorAll<HTMLElement>("nav button")].find(
     (candidate) => candidate.textContent === name,
   );
-const chooser = () => button(document.body, "选择此目录")!;
 const pathBox = () =>
   document.querySelector<HTMLInputElement>('input[aria-label="目录路径"]');
 const filterBox = () =>
-  document.querySelector<HTMLInputElement>('input[aria-label="筛选"]')!;
+  document.querySelector<HTMLInputElement>('input[aria-label="搜索"]')!;
 
 async function type(input: HTMLInputElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(
@@ -160,9 +163,7 @@ beforeEach(() => {
 afterEach(async () => {
   await cleanup();
   setWire(undefined);
-  onPick.mockClear();
-  onBack.mockClear();
-  useWorkspaceStore.setState({ newConversation: { open: false } });
+  onProject.mockClear();
 });
 
 describe("走目录", () => {
@@ -178,7 +179,7 @@ describe("走目录", () => {
     expect(rows()).toEqual(["Developer", "Documents"]);
   });
 
-  it("opens where the field already points", async () => {
+  it("opens where it was sent", async () => {
     machineHost();
     await open({ start: `${HOME}/Developer` });
     expect(crumbs()).toEqual(["~", "Developer"]);
@@ -195,7 +196,6 @@ describe("走目录", () => {
     await flush();
     expect(crumbs()).toEqual(["~", "Developer", "notes"]);
     expect(document.body.textContent).toContain("这里没有子目录");
-    expect(chooser().disabled).toBe(false);
   });
 
   it("jumps back along the path", async () => {
@@ -211,15 +211,6 @@ describe("走目录", () => {
     machineHost();
     await open({ start: "/srv" });
     expect(crumbs()).toEqual(["/", "srv"]);
-  });
-
-  it("chooses where it is, not a row", async () => {
-    machineHost();
-    await open();
-    await click(row("Developer"));
-    await flush();
-    await click(chooser());
-    expect(onPick).toHaveBeenCalledWith(`${HOME}/Developer`, "m1");
   });
 
   it("filters this list only, and forgets the filter on the way in", async () => {
@@ -310,13 +301,6 @@ describe("输入路径", () => {
     expect(rows()).toEqual(["Developer", "Documents"]);
   });
 
-  it("does not choose while the box is open, because it would not be what the box says", async () => {
-    machineHost();
-    await open();
-    await openBox();
-    expect(chooser().disabled).toBe(true);
-  });
-
   it("goes back to the path on cancel, without going anywhere", async () => {
     machineHost();
     await open();
@@ -325,30 +309,19 @@ describe("输入路径", () => {
     await click(button(document.body, "取消"));
     expect(pathBox()).toBeNull();
     expect(crumbs()).toEqual(["~"]);
-    expect(onBack).not.toHaveBeenCalled();
-  });
-
-  it("takes one step back on Escape", async () => {
-    machineHost();
-    await open();
-    await press(await openBox(), "Escape");
-    expect(pathBox()).toBeNull();
-    expect(onBack).not.toHaveBeenCalled();
   });
 });
 
 describe("读不了的时候", () => {
-  it("offers the way up from a directory it may not read, and nothing to choose", async () => {
+  it("offers the way up from a directory it may not read", async () => {
     machineHost({ failing: { [`${HOME}/Developer/notes`]: "denied" } });
     await open({ start: `${HOME}/Developer/notes` });
     expect(document.querySelector('[role="alert"]')!.textContent).toContain(
       "没有权限读取这个目录",
     );
-    expect(chooser().disabled).toBe(true);
     await click(button(document.body, "回到上一级"));
     await flush();
     expect(crumbs()).toEqual(["~", "Developer"]);
-    expect(chooser().disabled).toBe(false);
   });
 
   it("says so when a directory is gone", async () => {
@@ -357,7 +330,6 @@ describe("读不了的时候", () => {
     expect(document.querySelector('[role="alert"]')!.textContent).toContain(
       "这个目录不存在",
     );
-    expect(chooser().disabled).toBe(true);
   });
 
   it("offers a retry when the machine does not answer", async () => {
@@ -367,7 +339,6 @@ describe("读不了的时候", () => {
     expect(document.querySelector('[role="alert"]')!.textContent).toContain(
       "连不上这台机器",
     );
-    expect(chooser().disabled).toBe(true);
     delete failing[HOME];
     await click(button(document.body, "重试"));
     await flush();
@@ -420,237 +391,116 @@ describe("几台机器", () => {
     await flush();
     expect(fake.calls.at(-1)!.args).toEqual({ machineId: "m2" });
     expect(crumbs()).toEqual(["~"]);
-    await click(chooser());
-    expect(onPick).toHaveBeenCalledWith(HOME, "m2");
   });
 });
 
-describe("最近用过", () => {
+describe("主目录顶上的项目", () => {
+  const eta = projectView({
+    id: "p1",
+    name: "eta",
+    path: `${HOME}/Developer/eta`,
+  });
+  const house = projectView({
+    id: "p2",
+    name: "house",
+    path: `${HOME}/work/house`,
+  });
   const remember = (paths: string[], machineId = "m1") =>
     useWorkspaceStore.setState({
       workspace: { recentDirectories: { [machineId]: paths } },
     });
 
-  it("is at the top of the home and nowhere else", async () => {
-    machineHost();
-    remember([`${HOME}/Developer/billing`, `${HOME}/old`]);
+  it("are at the top of the home and nowhere else", async () => {
+    machineHost({ projects: [eta, house] });
     await open();
-    expect(document.body.textContent).toContain("最近用过");
     expect(rows()).toEqual([
-      "billing~/Developer",
-      "old~",
+      "eta~/Developer",
+      "house~/work",
       "Developer",
       "Documents",
     ]);
-    await type(filterBox(), "dev");
-    expect(document.body.textContent).not.toContain("最近用过");
-    await type(filterBox(), "");
+    expect(document.body.textContent).toContain("主目录");
     await click(row("Developer"));
     await flush();
-    expect(document.body.textContent).not.toContain("最近用过");
+    expect(rows()).not.toContain("eta~/Developer");
+    expect(document.body.textContent).not.toContain("主目录");
   });
 
-  it("is not there for a machine with nothing to remember", async () => {
-    machineHost();
-    remember(["/srv"], "m2");
+  it("put what was used first, and the rest after in their own order", async () => {
+    const third = projectView({ id: "p3", name: "zed", path: "/srv/zed" });
+    machineHost({ projects: [eta, third, house] });
+    remember([`${HOME}/work/house`, `${HOME}/gone`]);
     await open();
-    expect(document.body.textContent).not.toContain("最近用过");
+    expect(rows().slice(0, 3)).toEqual([
+      "house~/work",
+      "eta~/Developer",
+      "zed/srv",
+    ]);
   });
 
-  it("walks into a remembered directory, and a stale one says it is gone", async () => {
-    machineHost();
-    remember([`${HOME}/Developer/billing`, `${HOME}/Developer`]);
+  it("are taken on a click, rather than walked into", async () => {
+    const fake = machineHost({ projects: [eta] });
     await open();
-    await click(row("billing"));
+    const asked = fake.calls.length;
+    await click(row("eta"));
     await flush();
-    expect(document.querySelector('[role="alert"]')!.textContent).toContain(
-      "这个目录不存在",
-    );
-    await click(button(document.body, "回到上一级"));
-    await flush();
-    expect(crumbs()).toEqual(["~", "Developer"]);
-  });
-});
-
-describe("从新对话进去再回来", () => {
-  async function startDialog(
-    options: Parameters<typeof machineHost>[0] = {},
-    projectId?: string,
-  ) {
-    const fake = machineHost({
-      projects: [projectView({ id: "p1", name: "eta", path: "/work/eta" })],
-      ...options,
-    });
-    fake.handle("projects.create", (args) => ({
-      project: projectView({
-        id: "made",
-        path: (args as { path: string }).path,
-      }),
-      existed: false,
-    }));
-    fake.handle("conversations.create", () => ({
-      conversation: conversationView({ id: "c-new" }),
-    }));
-    useWorkspaceStore.setState({ newConversation: { open: true, projectId } });
-    await mount(<NewConversationDialog />);
-    await flush();
-    return fake;
-  }
-
-  const addDirectory = async (label = "添加目录…") => {
-    await act(async () => {
-      document
-        .querySelector("#new-project")!
-        .dispatchEvent(
-          new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
-        );
-    });
-    const option = [
-      ...document.querySelectorAll<HTMLElement>('[role="option"]'),
-    ].find((candidate) => candidate.textContent === label);
-    await act(async () => option!.click());
-    await flush();
-  };
-
-  const onForm = () => document.body.textContent!.includes("乐子人");
-  const field = () => document.querySelector("#new-project")!;
-  const panel = () => document.querySelector('[data-slot="dialog-content"]')!;
-
-  it("swaps the form for the view, wider, in one dialog", async () => {
-    await startDialog();
-    expect(panel().className).toContain("sm:max-w-md");
-    await addDirectory();
-    expect(onForm()).toBe(false);
-    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
-    expect(panel().className).toContain("sm:max-w-[560px]");
-    await click(button(document.body, "取消"));
-    expect(onForm()).toBe(true);
-    expect(panel().className).toContain("sm:max-w-md");
+    expect(onProject).toHaveBeenCalledWith(eta);
+    expect(fake.calls).toHaveLength(asked);
   });
 
-  it("back and cancel return to the form as it was left", async () => {
-    await startDialog(undefined, "p1");
-    await addDirectory();
-    await click(document.querySelector('button[aria-label="返回"]'));
-    expect(onForm()).toBe(true);
-    expect(field().textContent).toContain("eta");
-    expect(document.activeElement).toBe(field());
+  it("are found by the search too", async () => {
+    machineHost({ projects: [eta, house] });
+    await open();
+    await type(filterBox(), "hou");
+    expect(rows()).toEqual(["house~/work"]);
+    await type(filterBox(), "doc");
+    expect(rows()).toEqual(["Documents"]);
+    expect(document.body.textContent).not.toContain("主目录");
   });
 
-  it("Escape in the view returns to the form, and the dialog stays open", async () => {
-    await startDialog();
-    await addDirectory();
-    await press(filterBox(), "Escape");
-    expect(onForm()).toBe(true);
-    expect(useWorkspaceStore.getState().newConversation.open).toBe(true);
-  });
-
-  it("Escape on the form still closes it", async () => {
-    await startDialog();
-    await press(document.activeElement ?? document.body, "Escape");
-    expect(useWorkspaceStore.getState().newConversation.open).toBe(false);
-  });
-
-  it("shows the chosen directory in the field, adds it, and remembers it", async () => {
-    const fake = await startDialog();
-    await addDirectory();
-    await click(row("Developer"));
-    await flush();
-    await click(chooser());
-    await flush();
-    expect(onForm()).toBe(true);
-    expect(field().textContent).toContain(`Developer${HOME}/Developer`);
-    expect(
-      useWorkspaceStore.getState().workspace.recentDirectories?.m1,
-    ).toEqual([`${HOME}/Developer`]);
-    await click(button(document.body, "开始"));
-    await flush();
-    expect(fake.calls.find((call) => call.action === "create")).toMatchObject({
-      target: "projects",
-      args: { path: `${HOME}/Developer`, machineId: "m1", stewardId: "a1" },
-    });
-  });
-
-  it("reopens where the last choice was", async () => {
-    await startDialog();
-    await addDirectory();
-    await click(row("Developer"));
-    await flush();
-    await click(chooser());
-    await flush();
-    await addDirectory();
-    expect(crumbs()).toEqual(["~", "Developer"]);
-  });
-
-  it("uses the project a chosen directory already is, without adding it", async () => {
-    const fake = await startDialog({
-      projects: [
-        projectView({ id: "p1", name: "eta", path: "/work/eta" }),
-        projectView({ id: "p2", name: "dev", path: `${HOME}/Developer` }),
-      ],
-    });
-    await addDirectory();
-    await click(row("Developer"));
-    await flush();
-    await click(chooser());
-    await flush();
-    expect(field().textContent).toContain("dev");
-    await click(button(document.body, "开始"));
-    await flush();
-    expect(
-      fake.calls.find(
-        (call) => call.target === "projects" && call.action === "create",
-      ),
-    ).toBeUndefined();
-    expect(fake.calls.at(-1)).toMatchObject({
-      target: "conversations",
-      action: "create",
-      args: { projectId: "p2" },
-    });
-  });
-
-  it("leaves a put-away project to the host, which brings it back", async () => {
-    const fake = await startDialog({
-      projects: [
-        projectView({ id: "p1", name: "eta", path: "/work/eta" }),
-        projectView({
-          id: "p2",
-          name: "dev",
-          path: `${HOME}/Developer`,
-          archived: true,
-        }),
-      ],
-    });
-    await addDirectory();
-    await click(row("Developer"));
-    await flush();
-    await click(chooser());
-    await flush();
-    await click(button(document.body, "开始"));
-    await flush();
-    expect(
-      fake.calls.find(
-        (call) => call.target === "projects" && call.action === "create",
-      ),
-    ).toMatchObject({ args: { path: `${HOME}/Developer` } });
-  });
-
-  it("opens on the machine the option named", async () => {
-    const fake = await startDialog({
+  it("leave out what is put away, an agent's own, and other machines'", async () => {
+    machineHost({
       machines: [
         primary,
         machineView({ id: "m2", name: "gpu", kind: "daemon" }),
       ],
+      projects: [
+        eta,
+        projectView({ id: "p3", name: "old", path: "/old", archived: true }),
+        projectView({
+          id: "p4",
+          name: "own",
+          path: "/own",
+          kind: "agent_home",
+        }),
+        projectView({ id: "p5", name: "far", path: "/far", machineId: "m2" }),
+      ],
     });
-    await addDirectory("在 gpu 上添加目录…");
+    await open();
+    expect(rows().slice(0, -2)).toEqual(["eta~/Developer"]);
+  });
+
+  it("change with the machine", async () => {
+    const fake = machineHost({
+      machines: [
+        primary,
+        machineView({ id: "m2", name: "gpu", kind: "daemon" }),
+      ],
+      projects: [
+        eta,
+        projectView({ id: "p5", name: "far", path: "/far", machineId: "m2" }),
+      ],
+    });
+    await open();
+    await click(
+      [
+        ...document.querySelectorAll<HTMLButtonElement>(
+          '[role="group"] button',
+        ),
+      ].find((candidate) => candidate.textContent === "gpu"),
+    );
+    await flush();
     expect(fake.calls.at(-1)!.args).toEqual({ machineId: "m2" });
-    await click(chooser());
-    await flush();
-    await click(button(document.body, "开始"));
-    await flush();
-    expect(fake.calls.find((call) => call.action === "create")).toMatchObject({
-      target: "projects",
-      args: { machineId: "m2" },
-    });
+    expect(rows()[0]).toBe("far/");
   });
 });

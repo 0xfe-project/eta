@@ -9,16 +9,10 @@ import { EnvelopeSimpleIcon } from "@phosphor-icons/react/EnvelopeSimple";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { UsersThreeIcon } from "@phosphor-icons/react/UsersThree";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+
 import {
   SidebarContent,
   SidebarFooter,
@@ -40,7 +34,6 @@ import { cn } from "@/lib/utils";
 import { useEmail, useVerifyEmailAccount } from "@/queries/email";
 import { useTasks } from "@/queries/tasks";
 import { AgentEditor } from "./agent-editor";
-import { CreateGroup } from "./groups";
 import { NewConversationDialog } from "./new-conversation-dialog";
 import { usePaneWidth } from "./pane";
 import { SettingsDialog, SettingsMenuItem } from "./settings-dialog";
@@ -513,9 +506,7 @@ function Tab({
 }
 
 /**
- * The phone's main action, in the middle cell: the two things one starts from here. The desktop
- * has a plus above each column — a conversation on the sidebar, a group on the list — and the
- * phone has one bar, so the plus asks which of the two it is rather than picking one for good.
+ * The phone's main action, in the middle cell: starting a conversation, alone or with several.
  *
  * A solid square in the theme's inverse (`bg-foreground text-background`): the theme flips those
  * two, so the axis stays an axis in both themes without a second set of colours.
@@ -523,61 +514,17 @@ function Tab({
 function NewAction() {
   const { t: translateText } = useTranslation(["navigation"] as const);
   const setNewConversation = useWorkspaceStore((s) => s.setNewConversation);
-  const [choosing, setChoosing] = useState(false);
-  const [group, setGroup] = useState(false);
-  // Two rows the size of a thumb, not a menu the size of a cursor: a pointer picks from a menu,
-  // a thumb needs a target it cannot miss. So the choice opens as a dialog, like every other
-  // question the app asks.
-  const rowClass =
-    "flex h-[52px] w-full items-center gap-2 border px-3 text-sm outline-none transition-colors hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring";
-  const pick = (next: () => void) => {
-    setChoosing(false);
-    // After this dialog is gone: opening the next one in the same frame leaves its overlay
-    // holding the pointer.
-    requestAnimationFrame(next);
-  };
   return (
-    <>
-      <button
-        type="button"
-        aria-label={translateText("actions.new")}
-        title={translateText("actions.new")}
-        aria-haspopup="dialog"
-        aria-expanded={choosing}
-        onClick={() => setChoosing(true)}
-        className="flex size-[68px] items-center justify-center bg-foreground text-background outline-none hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <PlusIcon aria-hidden="true" weight="bold" className="size-7" />
-      </button>
-      <Dialog open={choosing} onOpenChange={setChoosing}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{translateText("actions.new")}</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-2">
-            <button
-              type="button"
-              className={rowClass}
-              onClick={() => pick(() => setNewConversation({ open: true }))}
-            >
-              <ChatsCircleIcon aria-hidden="true" className="size-4" />
-              {translateText("actions.newConversation")}
-            </button>
-            <button
-              type="button"
-              className={rowClass}
-              onClick={() => pick(() => setGroup(true))}
-            >
-              <UsersThreeIcon aria-hidden="true" className="size-4" />
-              {translateText("actions.newGroup")}
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
-      {/* Mounted on open, like the conversation dialog: a form left half filled in is not what the
-          next open should show. */}
-      {group ? <CreateGroup open onOpenChange={setGroup} /> : null}
-    </>
+    <button
+      type="button"
+      aria-label={translateText("actions.new")}
+      title={translateText("actions.new")}
+      aria-haspopup="dialog"
+      onClick={() => setNewConversation({ open: true })}
+      className="flex size-[68px] items-center justify-center bg-foreground text-background outline-none hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <PlusIcon aria-hidden="true" weight="bold" className="size-7" />
+    </button>
   );
 }
 
