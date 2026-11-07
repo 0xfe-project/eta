@@ -17,6 +17,7 @@
  */
 import type { HostAddress } from "@eta/client-contracts/connect-link";
 import type { Connection } from "./connection";
+import type { DownloadFailure, DownloadProgress } from "./download";
 import type { Probe, RemoteFailure, RemoteTarget } from "./remote";
 import { parseConnectLink } from "@eta/client-contracts/connect-link";
 import { hostOrigin } from "./connection";
@@ -27,12 +28,19 @@ export type Failure =
   /** The host on screen stopped answering. */
   | { reason: "lost"; detail?: undefined }
   /** The local host did not start: `detail` says why. */
-  | { reason: "host"; detail: string };
+  | { reason: "host"; detail: string }
+  /** There is no local host, and getting one did not work. */
+  | {
+      reason: "download";
+      detail: string;
+      kind: DownloadFailure["kind"];
+      tokenless: boolean;
+    };
 
 /** What starting the local host came to. */
 export type HostLaunch =
   | { ready: true; page: string; port?: number; external?: RemoteTarget }
-  | { ready: false; reason: string };
+  | { ready: false; reason: string; download?: DownloadFailure };
 
 export interface PageView {
   screen: "page";
@@ -52,14 +60,23 @@ export type View =
       returnTo: PageView | Extract<View, { screen: "failure" }> | undefined;
       language: string | undefined;
     }
-  | { screen: "failure"; connection: Connection; failure: Failure };
+  | { screen: "failure"; connection: Connection; failure: Failure }
+  /** The local host is being downloaded; `progress` moves without the view being shown again. */
+  | {
+      screen: "download";
+      connection: Connection;
+      progress: DownloadProgress | undefined;
+    };
 
 export type Choice = { mode: "local" } | ({ mode: "remote" } & HostAddress);
 
 interface ShellDependencies {
   read: () => Promise<Connection | undefined>;
   save: (connection: Connection) => Promise<void>;
-  startHost: () => Promise<HostLaunch>;
+  /** Start the local host; `onProgress` hears a download, when there has to be one first. */
+  startHost: (
+    onProgress: (progress: DownloadProgress) => void,
+  ) => Promise<HostLaunch>;
   stopHost: () => Promise<void>;
   probe: (target: RemoteTarget) => Promise<Probe>;
   /** Start watching a remote host; the answer stops it. */
@@ -85,6 +102,7 @@ export function describe(view: View) {
             hasToken: connection.mode === "remote" && connection.token !== "",
           },
     failure: view.screen === "failure" ? view.failure : null,
+    progress: view.screen === "download" ? (view.progress ?? null) : null,
     canReturn: view.screen === "choose" && view.returnTo !== undefined,
     language: view.screen === "choose" ? view.language : undefined,
   };
@@ -101,8 +119,10 @@ export function createShell(deps: ShellDependencies) {
     deps.show(next);
   };
 
+  // What 重试 tries again: the connection that failed, even one never reached before.
   const fail = (at: Connection, failure: Failure) => {
     stopWatching();
+    connection = at;
     show({ screen: "failure", connection: at, failure });
   };
 
@@ -125,8 +145,30 @@ export function createShell(deps: ShellDependencies) {
   async function reach(target: Connection): Promise<PageView | Failure> {
     if (target.mode === "local") {
       if (local !== undefined) return local;
-      const launch = await deps.startHost();
-      if (!launch.ready) return { reason: "host", detail: launch.reason };
+      // The download has a page of its own, shown once; what it has got to is read off the view.
+      let downloading: Extract<View, { screen: "download" }> | undefined;
+      const launch = await deps.startHost((progress) => {
+        if (downloading === undefined) {
+          stopWatching();
+          downloading = { screen: "download", connection: target, progress };
+          show(downloading);
+        } else downloading.progress = progress;
+      });
+      if (!launch.ready) {
+        const failure: Failure =
+          launch.download === undefined
+            ? { reason: "host", detail: launch.reason }
+            : {
+                reason: "download",
+                detail: launch.download.detail,
+                kind: launch.download.kind,
+                tokenless: launch.download.tokenless,
+              };
+        // On a page of its own, with 重试 and the way to a remote host: the chooser has nowhere to
+        // say why this computer cannot run one, and a download's page has gone by now.
+        fail(target, failure);
+        return failure;
+      }
       local = {
         screen: "page",
         page: launch.page,
@@ -178,7 +220,8 @@ export function createShell(deps: ShellDependencies) {
       }
       connection = saved;
       const failure = await enter(saved);
-      if (failure !== undefined) fail(saved, failure);
+      if (failure !== undefined && view?.screen !== "failure")
+        fail(saved, failure);
     },
 
     current: (): View | undefined => view,
@@ -207,7 +250,13 @@ export function createShell(deps: ShellDependencies) {
 
     /** From 设置 or the failure screen. The page behind it stays as it was until a choice works. */
     openChooser(language?: string): void {
-      if (view === undefined || view.screen === "choose") return;
+      // A download runs to its end or its failure; the failure page offers the way out.
+      if (
+        view === undefined ||
+        view.screen === "choose" ||
+        view.screen === "download"
+      )
+        return;
       stopWatching();
       show({
         screen: "choose",

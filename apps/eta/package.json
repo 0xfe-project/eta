@@ -26,6 +26,7 @@
     "@eta/daemon": "*",
     "@eta/harness": "*",
     "@eta/mcp": "*",
+    "@eta/releases": "*",
     "@eta/runtime-oar": "*",
     "@eta/server": "*",
     "@eta/ssh": "*",

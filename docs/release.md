@@ -71,7 +71,22 @@ git push origin desktop-v0.2.0
 - 带 `-` 的是预发布。tag 要写成 `desktop-vX.Y.Z` 或 `desktop-vX.Y.Z-后缀`。
 - 草稿和发布都带 `--latest=false`，不占仓库的 Latest。
 
-流水线：`prepare` 开草稿；`check` 和 host 一样跑完整的 `bun run check`；`build` 每个平台构建页面和应用带的 host，打包，装上启动一次（`apps/desktop/scripts/try-app.ts`），Linux 上 8 分钟装不完 WebKit 就跳过启动并留 warning；`publish` 算 `SHA256SUMS` 后发布。没有跨版本升级测试，那是 host 的。
+流水线：`prepare` 开草稿；`check` 和 host 一样跑完整的 `bun run check`；`build` 每个平台打包，装上启动一次（`apps/desktop/scripts/try-app.ts`），Linux 上 8 分钟装不完 WebKit 就跳过启动并留 warning；`publish` 算 `SHA256SUMS` 后发布。没有跨版本升级测试，那是 host 的。
+
+安装包里没有 host。启动那一步选的是“在这台电脑上运行”，应用会从同一个仓库下载它能跑的最新 host（用工作流的 token），所以**发桌面版之前，仓库里要先有一个带 `eta-host.json` 的 host Release**，否则这一步失败。
+
+### 第一次选“在这台电脑上运行”
+
+应用在 `~/.eta/desktop/host/` 里没有 host 时才下载，选“连接到已有 host”完全不下载（`apps/desktop/src/bun/download.ts`）：
+
+1. 先看 `~/.eta/running-host.json`：已经有 host 在服务 `~/.eta`，直接打开它，不下载。没写这个文件的旧版服务这里认不出，下载完以后 `eta-host running` 会认出它，仍然不会起第二个。
+2. 从构建时写进应用的仓库（`ETA_HOST_UPSTREAM`，和 host 的一样；`ETA_RELEASES_URL` 可以覆盖）找最新的正式 host Release，读它的 `eta-host.json`，`minDesktop` 比应用新就看上一个，最多看 10 个。没有 `eta-host.json` 的旧版本不给应用用。
+3. 下载到 `~/.eta/desktop/host/eta-host.<pid>.download`（Windows 上是 `eta-host.<pid>.download.exe`：应用里的 Bun 在 Windows 上只运行 `.exe`），窗口显示壳自己的进度页；按 `SHA256SUMS` 校验，运行一次 `--version` 确认版本，才改名成 `eta-host`。任何一步失败都删掉这个文件，下次从头下载，半截文件不会被当成 host。
+4. 之后一直从这里启动，用设置页的按钮升级（见“桌面应用里的 host”）。
+
+token 的顺序和 host 升级一样：`GH_TOKEN`、`GITHUB_TOKEN`、`gh auth token --hostname github.com`（用登录 shell 的 `PATH` 找 `gh`），都没有就匿名；应用没有设置页可以保存 token。失败页按原因分开说：连不上、下载中断、校验不通过、私有仓库没有 token（说明要设置什么）、服务器拒绝、没有能用的版本、下载的文件运行不了、磁盘写不进。每一种都有“重试”和“切换连接方式”（可以改连远程 host）。
+
+下载逻辑和 host 的升级是同一份代码（`packages/releases`：`hostForDesktop`、`hostFile`、`downloadChecked`），不是复制。
 
 | 文件                           | 平台        | 是什么                           |
 | ------------------------------ | ----------- | -------------------------------- |
@@ -84,7 +99,7 @@ hutch 只为所在的机器打包，所以每个平台在对应的 runner 上构
 
 ### 桌面应用和 host 的兼容
 
-两者各自升级：host 用设置页的按钮或 `eta-host upgrade`，桌面应用重新安装。窗口里的页面是 host 提供的，所以页面可能比应用新，也可能比它旧；连远程 host 时更是如此。约定在 `packages/client-contracts/src/desktop.ts`：
+两者各自升级：host 用设置页的按钮或 `eta-host upgrade`，桌面应用重新安装。应用不带 host，第一次用到时下载。窗口里的页面是 host 提供的，所以页面可能比应用新，也可能比它旧；连远程 host 时更是如此。约定在 `packages/client-contracts/src/desktop.ts`：
 
 - **原生桥只增不改。** 应用通过 `window.__ETA_HOST__.capabilities` 列出它能做的事（`open-external`、`save-file`、`context-menu`、`window-action`、`connection`，之后只会增加）。名字一旦发布，含义和应答都不变；要改就起新名字。没有这个列表的应用是 0.1.0，按 `BASELINE_CAPABILITIES` 算。
 - **页面按能力判断，不按版本判断。** 调用前用 `hasCapability(<名字>)`（`apps/web/src/lib/native.ts`）；没有这个能力就不显示对应入口，浏览器里什么都没有。
@@ -343,7 +358,7 @@ fork 用同一份 `release.yml`，什么都不用改：工作流把 `github.repo
 
 ### 桌面应用里的 host
 
-桌面应用本机模式下自己就是 host 的服务，和 systemd、launchd、Windows 服务并列（`apps/desktop/src/bun/service.ts`，host 一侧是 `apps/eta/src/upgrade/desktop.ts`）。它不跑包里那份 host：第一次启动把包里的 `eta-host` 复制到 `~/.eta/desktop/host/eta-host`，之后一直从那里启动，包里的只是种子。应用升级不会用新种子盖掉已经在那里的 host，host 只从设置里的按钮升级，所以安装包里的文件从来不被改，签名不受影响。
+桌面应用本机模式下自己就是 host 的服务，和 systemd、launchd、Windows 服务并列（`apps/desktop/src/bun/service.ts`，host 一侧是 `apps/eta/src/upgrade/desktop.ts`）。它跑的是 `~/.eta/desktop/host/eta-host`，第一次用到时下载（见“第一次选‘在这台电脑上运行’”），之后一直从那里启动。应用升级不碰这个 host，host 只从设置里的按钮升级，所以安装包里的文件从来不被改，签名不受影响。
 
 壳在本机回环上开一个只有它和 host 知道 token 的端口，地址和 token 放进 host 的环境变量（host 一启动就从环境里拿掉，它启动的进程看不到）。点按钮后流程和服务一样：host 请壳启动 `eta-host upgrade --worker`，worker 是壳的子进程，不是 host 的，所以 host 停了它还在；它下载、校验、试跑，再请壳停 host、备份数据库、换文件、请壳在原来的端口上启动新版、看 `/up` 和迁移，不行就换回 `eta-host.prev`、恢复数据库、再启动旧版。端口不变，窗口不用换，页面自己的等待页等 host 回来再刷新。壳只替 host 运行 `<host 文件> upgrade …`，别的命令一律拒绝。
 

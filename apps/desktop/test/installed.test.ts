@@ -1,10 +1,10 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { hostHome, installHost, runningHost } from "../src/bun/installed";
+import { hostHome, recordedHost, runningHost } from "../src/bun/installed";
 
 let dir: string;
 beforeEach(async () => {
@@ -14,23 +14,50 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-describe("the host the app runs", () => {
-  it("is a copy of the seed in the user's directory, made once", async () => {
-    const seed = join(dir, "bundle", "eta-host");
-    await Bun.write(seed, "seed 1");
-    const home = hostHome(join(dir, "home"));
-    expect(home).toBe(join(dir, "home", ".eta", "desktop", "host"));
+describe("a host already serving the data directory, before there is a host file", () => {
+  it("is opened when its record names a live process that answers", async () => {
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () => new Response("ok"),
+    });
+    const data = join(dir, ".eta");
+    await Bun.write(
+      join(data, "running-host.json"),
+      JSON.stringify({
+        pid: process.pid,
+        hostname: "127.0.0.1",
+        port: server.port,
+        tokenFile: null,
+      }),
+    );
+    expect(await recordedHost(data)).toEqual({
+      address: `http://127.0.0.1:${String(server.port)}`,
+      token: "",
+    });
+    await server.stop(true);
+    expect(await recordedHost(data)).toBeUndefined();
+  });
 
-    const file = await installHost(seed, home);
-    expect(file).toBe(join(home, "eta-host"));
-    expect(await readFile(file, "utf8")).toBe("seed 1");
-    expect((await stat(file)).mode & 0o111).not.toBe(0);
+  it("is nothing without a record, or with a dead one", async () => {
+    const data = join(dir, ".eta");
+    expect(await recordedHost(data)).toBeUndefined();
+    await Bun.write(
+      join(data, "running-host.json"),
+      JSON.stringify({
+        pid: 2 ** 22 + 7,
+        hostname: "127.0.0.1",
+        port: 1,
+        tokenFile: null,
+      }),
+    );
+    expect(await recordedHost(data)).toBeUndefined();
+  });
 
-    // An upgrade replaced it; a newer seed does not put itself back over that.
-    await writeFile(file, "upgraded");
-    await Bun.write(seed, "seed 2");
-    await installHost(seed, home);
-    expect(await readFile(file, "utf8")).toBe("upgraded");
+  it("lives under the user's .eta", () => {
+    expect(hostHome(join(dir, "home"))).toBe(
+      join(dir, "home", ".eta", "desktop", "host"),
+    );
   });
 });
 

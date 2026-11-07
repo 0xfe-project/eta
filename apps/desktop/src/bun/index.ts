@@ -46,6 +46,7 @@
  * paste anywhere in the app. The menu is installed below, all of it roles.
  */
 import type { ApplicationMenuItemConfig } from "electrobun/main";
+import type { DownloadProgress } from "./download";
 import type { ServiceServer } from "./service";
 import type { HostLaunch, View } from "./shell";
 import { existsSync } from "node:fs";
@@ -56,13 +57,15 @@ import process from "node:process";
 import Electrobun, {
   ApplicationMenu,
   BrowserWindow,
+  BuildConfig,
   ContextMenu,
   Updater,
   Utils,
 } from "electrobun/main";
 import { readConnection, writeConnection } from "./connection";
+import { DownloadError, downloadHost } from "./download";
 import { HOST_WRAPPER } from "./host";
-import { hostHome, installHost, runningHost } from "./installed";
+import { hostHome, recordedHost, runningHost } from "./installed";
 import { CAPABILITIES, startNativeBridge } from "./native";
 import { configureWindowsWindow } from "./platform/windows";
 import { pagePreload, relayedRequest, relayToBridge } from "./preload";
@@ -171,17 +174,28 @@ const APP_MENU: ApplicationMenuItemConfig[] = [
 if (process.platform === "darwin") ApplicationMenu.setApplicationMenu(APP_MENU);
 
 /**
- * The host the app carries: the compiled host in `host/`, beside the main process's bundle. Only
- * a packaged build has one — `build.copy` never lands in the dev bundle. It is a seed: what runs is
- * the copy `installHost` makes of it.
+ * A packaged app (a stable or canary build) runs a compiled host it downloads (`download.ts`); a
+ * dev build runs the host out of the checkout above it.
  */
-function packagedHost(): string | undefined {
-  const dir = join(dirname(Bun.main), "..", "host");
-  const file = join(dir, `eta-host${EXE}`);
-  return existsSync(file) ? file : undefined;
-}
+const packaged = BuildConfig.getSync().isPackaged;
 
-const packaged = packagedHost();
+/**
+ * What a downloaded host says it is, run once before it becomes the host. Two minutes, as the
+ * host's upgrade gives a new build: a virus scanner reads a new 390MB file first on Windows.
+ */
+async function versionOf(file: string): Promise<string> {
+  const child = Bun.spawn([file, "--version"], {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  const timer = setTimeout(() => child.kill(), 120_000);
+  const output = await new Response(child.stdout).text();
+  clearTimeout(timer);
+  const code = await child.exited;
+  if (code !== 0) throw new Error(`it exited with ${String(code)}`);
+  return output.trim();
+}
 
 /**
  * PATH as the user's login shell has it.
@@ -253,7 +267,9 @@ const developing = devPage !== undefined && devPage !== "";
  * seconds) all come back as the reason the page is missing, so the window can open and say it.
  * Quitting on `process.exit` left the user with an app that flashed and vanished.
  */
-async function startHost(): Promise<HostLaunch> {
+async function startHost(
+  onProgress: (progress: DownloadProgress) => void,
+): Promise<HostLaunch> {
   if (developing) {
     try {
       const url = new URL(devPage);
@@ -277,14 +293,36 @@ async function startHost(): Promise<HostLaunch> {
   let built: boolean;
   let file: string | undefined;
   const home = hostHome(homedir());
-  if (packaged !== undefined) {
-    try {
-      file = await installHost(packaged, home);
-    } catch (error) {
-      return {
-        ready: false,
-        reason: `cannot copy the host to ${home}: ${reasonOf(error)}`,
-      };
+  const path = packaged ? await loginShellPath() : undefined;
+  // The host keeps its data in ~/.eta; HOME is the only way to point it elsewhere.
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...(path === undefined ? {} : { PATH: path }),
+  };
+  if (packaged) {
+    file = join(home, `eta-host${EXE}`);
+    if (!existsSync(file)) {
+      // A host already serving ~/.eta needs no download to be opened.
+      const recorded = await recordedHost(join(homedir(), ".eta"));
+      if (recorded !== undefined)
+        return { ready: true, page: remotePage(recorded), external: recorded };
+      try {
+        await downloadHost({
+          dir: home,
+          name: `eta-host${EXE}`,
+          appVersion: APP_VERSION,
+          env,
+          onProgress,
+          tryBuild: versionOf,
+        });
+      } catch (error) {
+        if (!(error instanceof DownloadError)) throw error;
+        return {
+          ready: false,
+          reason: error.failure.detail,
+          download: error.failure,
+        };
+      }
     }
     program = [file];
     flags = [];
@@ -304,13 +342,6 @@ async function startHost(): Promise<HostLaunch> {
       : ["--allow-origin", "http://127.0.0.1:3000"];
     cwd = root;
   }
-  const path = packaged === undefined ? undefined : await loginShellPath();
-  // The host keeps its data in ~/.eta; HOME is the only way to point it elsewhere.
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    ...(path === undefined ? {} : { PATH: path }),
-  };
-
   // One host to a data directory: a second would run the same agents over the same database.
   const found = await runningHost([...program, "running"], cwd, env);
   if (found !== undefined)
@@ -491,7 +522,7 @@ function preloadFor(view: View): string {
       native: true,
       nativeApiBase: bridge.apiBase,
       nativeToken: bridge.token,
-      role: packaged === undefined ? "dev" : "desktop",
+      role: packaged ? "desktop" : "dev",
       // The dev page has no connection to change, so it hears about none.
       ...(developing || connection === undefined
         ? {}

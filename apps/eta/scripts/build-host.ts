@@ -32,8 +32,8 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
+import { parseUpstream } from "@eta/releases";
 import { $ } from "bun";
-import { parseUpstream } from "../src/upgrade/upstream";
 import { writeEmbedded } from "./embed";
 import { thirdPartyNotices } from "./notices";
 

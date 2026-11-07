@@ -5,10 +5,11 @@
  *   bun apps/desktop/scripts/try-app.ts <installer>
  *
  * A first launch asks where the host should run, and nobody is at this window, so the app is told
- * (`ETA_DESKTOP_CONNECTION`). It then starts the host it carries, and that host names its port in
- * `<tmp>/eta-desktop/host.json` (`src/bun/index.ts`). The app has started when the host answers on
- * that port. That proves the installer, the launcher, the runtime and the host inside; it says
- * nothing about what the window shows.
+ * (`ETA_DESKTOP_CONNECTION`). It then downloads a host from the repository it was built for
+ * (`src/bun/download.ts`; `GH_TOKEN` reads a private one), starts it, and the host names its port
+ * in `<tmp>/eta-desktop/host.json` (`src/bun/index.ts`). The app has started when the host answers
+ * on that port. That proves the installer, the launcher, the runtime, the download and a host it
+ * can run; it says nothing about what the window shows.
  */
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,8 +17,8 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 import { $, spawn } from "bun";
 
-/** Unpacking the app on its first start is most of this. */
-const TIMEOUT_MS = 180_000;
+/** Unpacking the app on its first start, and downloading a 390MB host. */
+const TIMEOUT_MS = 300_000;
 
 const [installer] = process.argv.slice(2);
 if (installer === undefined) {

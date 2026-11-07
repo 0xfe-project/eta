@@ -1,9 +1,12 @@
 import type { ElectrobunConfig } from "electrobun";
-import { existsSync } from "node:fs";
 import process from "node:process";
+import { parseUpstream } from "@eta/releases";
 import { buildVersion } from "./src/version";
 
-const HOST = process.platform === "win32" ? "eta-host.exe" : "eta-host";
+// The repository the app downloads its host from (`src/bun/download.ts`), as the host's own build
+// names the one it upgrades from: `release-desktop.yml` names its own, so a fork's app follows the
+// fork. Read now: an app that cannot find a host would only find out on someone's computer.
+const upstream = process.env.ETA_HOST_UPSTREAM?.trim();
 
 export default {
   app: {
@@ -20,6 +23,13 @@ export default {
     mainProcess: "bun",
     bun: {
       entrypoint: "src/bun/index.ts",
+      ...(upstream
+        ? {
+            define: {
+              ETA_HOST_UPSTREAM: JSON.stringify(parseUpstream(upstream).api),
+            },
+          }
+        : {}),
     },
     views: {
       mainview: {
@@ -32,13 +42,7 @@ export default {
       // but the HWND of a running window needs its own copy, and the shell loads it out of the
       // bundle (`src/bun/platform/windows/icon.ts`) — a packaged app has no checkout to read.
       "Eta-Logo.ico": "views/mainview/Eta-Logo.ico",
-      // The host the app carries, one executable (`apps/eta/scripts/build-host.ts`; `bun run
-      // package` builds it here first).
-      // Without it the app runs the host out of the checkout it was built in, as dev does. Found
-      // from this file: hutch does not load the config from this directory.
-      ...(existsSync(new URL(`dist/host/${HOST}`, import.meta.url))
-        ? { "dist/host": "host" }
-        : {}),
+      // No host: a packaged app downloads one the first time it runs it (`src/bun/download.ts`).
     },
     mac: {
       bundleCEF: false,
