@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import {
+  hasCapability,
   host,
   markHost,
   openConnectionPage,
@@ -40,6 +41,23 @@ afterEach(() => {
   delete document.documentElement.dataset.host;
   document.body.innerHTML = "";
   globalThis.fetch = rstest.fn() as unknown as typeof globalThis.fetch;
+});
+
+describe("capabilities", () => {
+  it("are none in a browser", () => {
+    expect(hasCapability("open-external")).toBe(false);
+  });
+
+  it("are what the shell lists", () => {
+    shell({ capabilities: ["open-external"] });
+    expect(hasCapability("open-external")).toBe(true);
+    expect(hasCapability("save-file")).toBe(false);
+  });
+
+  it("are the 0.1.0 bridge's when the shell lists none", () => {
+    shell();
+    expect(hasCapability("connection")).toBe(true);
+  });
 });
 
 describe("in a browser", () => {

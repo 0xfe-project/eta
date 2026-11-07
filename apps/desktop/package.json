@@ -10,7 +10,7 @@
     "typecheck": "electrobun prepare && tsc --noEmit",
     "test": "bun --bun vitest --run",
     "//": "Not `build`: turbo would run it, and a distributable app is not part of a source build.",
-    "package": "bun run --cwd ../web build && bun scripts/stage-host.ts && hutch run build"
+    "package": "bun run --cwd ../web build && bun ../eta/scripts/build-host.ts dist/host && hutch run build"
   },
   "dependencies": {
     "@eta/client-contracts": "*"

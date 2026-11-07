@@ -58,9 +58,10 @@ jobs:
           to=${TO#v}
           from=${FROM#v}
           if [[ -z $from ]]; then
-            # Published and not a prerelease, the highest below this one.
+            # Published and not a prerelease, the highest host below this one: the desktop app's
+            # desktop-v* releases are not hosts.
             from=$( { gh api "repos/$GH_REPO/releases" --paginate \
-                        --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' \
+                        --jq '.[] | select(.draft == false and .prerelease == false and (.tag_name | test("^v[0-9]"))) | .tag_name' \
                         | sed 's/^v//'; echo "$to"; } \
                       | sort -uV | grep -Fx -B1 -- "$to" | grep -Fxv -- "$to" || true)
           fi

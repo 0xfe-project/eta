@@ -44,7 +44,7 @@ import { listenForStop } from "./stop";
 import { upgradeCommand } from "./upgrade/command";
 import { takeDesktopShell } from "./upgrade/desktop";
 import { HOST_UNIT, hostManager } from "./upgrade/service";
-import { VERSION, VERSION_LINE } from "./version";
+import { VERSION, VERSION_JSON, VERSION_LINE } from "./version";
 
 // Before anything can start a process that would inherit it.
 takeDesktopShell();
@@ -81,7 +81,7 @@ if (values.help === true) {
 }
 
 if (values.version === true) {
-  console.log(VERSION_LINE);
+  console.log(values.json === true ? VERSION_JSON : VERSION_LINE);
   process.exit(0);
 }
 

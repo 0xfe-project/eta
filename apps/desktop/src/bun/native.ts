@@ -21,8 +21,17 @@
  *
  * This server never opens a session, never touches the database and never starts the host.
  */
+import type { DesktopCapability } from "@eta/client-contracts/desktop";
 import { Buffer } from "node:buffer";
 import { timingSafeEqual } from "node:crypto";
+import { BASELINE_CAPABILITIES } from "@eta/client-contracts/desktop";
+
+/**
+ * What this bridge answers, by name, for a page to ask before it calls
+ * (`@eta/client-contracts/desktop`). Only ever grows: a page from a newer host relies on a name
+ * meaning what it meant.
+ */
+export const CAPABILITIES: readonly DesktopCapability[] = BASELINE_CAPABILITIES;
 
 /** What the page may ask the window to do. Kept in step with `apps/web/src/lib/native.ts`. */
 type WindowAction = "minimize" | "toggle-maximize" | "close" | "connection";
@@ -171,6 +180,7 @@ export function startNativeBridge(options: NativeBridgeOptions): NativeBridge {
           isDesktop: true,
           platform: options.platform,
           appVersion: options.appVersion,
+          capabilities: CAPABILITIES,
         });
       if (request.method !== "POST")
         return new Response("not_found", { status: 404, headers });

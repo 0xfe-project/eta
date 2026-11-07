@@ -32,18 +32,19 @@ bun run --cwd apps/desktop dev
 bun run --cwd apps/desktop package
 ```
 
-这条命令先构建前端，再用 `scripts/stage-host.ts` 把 host 编译成单个可执行文件 `eta-host`，
+这条命令先构建前端，再用 `apps/eta/scripts/build-host.ts` 把 host 编译成单个可执行文件 `eta-host`，
 它运行时要读的文件（migrations、页面、CLIProxyAPI、daemon）都嵌在里面，`dist/host/` 里只有
 这一个文件。最后 `hutch run build` 把它作为 `host/` 打进 app。产物在 `artifacts/`，打好的 app
 不依赖仓库，可以装到 `/Applications`。
 
-Release 里的安装包由 CI 在各平台自己的 runner 上打（`.github/workflows/release.yml`），打完用
-`scripts/try-app.ts` 装上启动一次。没有签名，放行方式见 `docs/release.md`。
+安装包单独发版：打 `desktop-v*` tag，CI 在各平台自己的 runner 上打（`.github/workflows/release-desktop.yml`），
+打完用 `scripts/try-app.ts` 装上启动一次。版本号来自 tag，本地打包取 `package.json` 的 `version`
+（`src/version.ts`）。没有签名，放行方式见 `docs/release.md`。
 
 包里的 host 只是种子：装过一次以后，换新版 app 不会覆盖 `~/.eta/desktop/host/` 里已有的 host。
 删掉那个目录，下次打开会重新从包里复制。
 
-不先 stage 直接 `hutch run build` 打出来的 app 不带 host，只能在仓库里打开（和开发时一样往上
+不先构建 host 直接 `hutch run build` 打出来的 app 不带 host，只能在仓库里打开（和开发时一样往上
 找 checkout）。
 
 数据目录是 `~/.eta`，和命令行启动的 host 共用一份。

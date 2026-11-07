@@ -18,9 +18,15 @@
  *   shell that cannot change it (an older one, or the dev page) says nothing.
  * - `native`, `nativeApiBase`, `nativeToken` — this window's capabilities.
  * - `platform`, `appVersion`, `role` — what the shell is and which page it meant to show.
+ * - `capabilities` — what the bridge answers, by name. The shell and this page are released apart
+ *   (`@eta/client-contracts/desktop`): ask `hasCapability`, never compare `appVersion`. A shell
+ *   from before the list says nothing, and has the 0.1.0 set.
  * - `error` — why it could not start the host. A page served by a host will not see this: with no
  *   host there is no page, and the shell shows its own.
  */
+
+import type { DesktopCapability } from "@eta/client-contracts/desktop";
+import { BASELINE_CAPABILITIES } from "@eta/client-contracts/desktop";
 
 /** Which of the two places this page is open in. */
 type HostKind = "desktop" | "browser";
@@ -48,6 +54,7 @@ interface EtaHost {
   nativeToken?: unknown;
   platform?: unknown;
   appVersion?: unknown;
+  capabilities?: unknown;
   role?: unknown;
   error?: unknown;
   connection?: unknown;
@@ -82,6 +89,16 @@ export function host(): Host {
     connection: shell ? connectionOf(injected.connection) : undefined,
     address: shell ? text(injected.address) : undefined,
   };
+}
+
+/** Whether the shell around this page can do `capability`. A browser can do none of it. */
+export function hasCapability(capability: DesktopCapability): boolean {
+  const injected = window.__ETA_HOST__;
+  if (injected?.native !== true) return false;
+  const listed = injected.capabilities;
+  return Array.isArray(listed)
+    ? listed.includes(capability)
+    : (BASELINE_CAPABILITIES as readonly string[]).includes(capability);
 }
 
 /**

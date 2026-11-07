@@ -32,8 +32,8 @@
  * (see `apps/web/src/lib/native.ts`). Three facts worth stating here: no page is given a host's
  * token, because a remote page gets a cookie for it from the host and a loopback host has no token
  * gate; `role` says what the shell is — `desktop` when the app carries a host (`host/`, a compiled
- * binary staged by `scripts/stage-host.ts`), `dev` when it runs one out of the checkout above it;
- * and `connection` says `local` or `remote`, with `address` for the latter.
+ * binary from `apps/eta/scripts/build-host.ts`), `dev` when it runs one out of the checkout above
+ * it; and `connection` says `local` or `remote`, with `address` for the latter.
  *
  * The window is the app's own, not a browser's: it has no system title bar, and the 40px band the
  * page draws across its top *is* the title bar — the page's band carries the drag region and, on
@@ -57,12 +57,13 @@ import Electrobun, {
   ApplicationMenu,
   BrowserWindow,
   ContextMenu,
+  Updater,
   Utils,
 } from "electrobun/main";
 import { readConnection, writeConnection } from "./connection";
 import { HOST_WRAPPER } from "./host";
 import { hostHome, installHost, runningHost } from "./installed";
-import { startNativeBridge } from "./native";
+import { CAPABILITIES, startNativeBridge } from "./native";
 import { configureWindowsWindow } from "./platform/windows";
 import { pagePreload, relayedRequest, relayToBridge } from "./preload";
 import { probeRemote, remoteHealth, remotePage, watchRemote } from "./remote";
@@ -70,8 +71,13 @@ import { LocalHost, startServiceServer } from "./service";
 import { createShell } from "./shell";
 import { startShellServer } from "./shell-server";
 
-/** Kept in step with package.json and electrobun.config.ts; the page may show it. */
-const APP_VERSION = "0.1.0";
+/**
+ * What the build put in the bundle (`src/version.ts`); the page may show it and compares it with
+ * its host's `MIN_DESKTOP`. A run without the bundle's metadata is `dev`, which compares with
+ * nothing.
+ */
+const APP_VERSION =
+  (await Updater.localInfo.version().catch(() => "")) || "dev";
 
 /** What an executable's name ends in here. */
 const EXE = process.platform === "win32" ? ".exe" : "";
@@ -481,6 +487,7 @@ function preloadFor(view: View): string {
             : `http://127.0.0.1:${String(view.port)}`,
       platform: process.platform,
       appVersion: APP_VERSION,
+      capabilities: CAPABILITIES,
       native: true,
       nativeApiBase: bridge.apiBase,
       nativeToken: bridge.token,

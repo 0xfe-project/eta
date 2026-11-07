@@ -42,14 +42,14 @@ const asset =
 const staged = process.platform === "win32" ? "eta-host.exe" : "eta-host";
 
 async function stage(version: string): Promise<void> {
-  await $`${process.execPath} ${join(root, "apps", "desktop", "scripts", "stage-host.ts")}`
+  await $`${process.execPath} ${join(root, "apps", "eta", "scripts", "build-host.ts")}`
     .cwd(root)
     .env({ ...process.env, ETA_DAEMON_VERSION: version })
     .quiet();
   const dir = join(out, version);
   mkdirSync(dir, { recursive: true });
   const file = join(dir, asset);
-  cpSync(join(root, "apps", "desktop", "dist", "host", staged), file);
+  cpSync(join(root, "apps", "eta", "out", "host", staged), file);
   const sha256 = new Bun.CryptoHasher("sha256")
     .update(readFileSync(file))
     .digest("hex");

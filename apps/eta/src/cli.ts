@@ -23,6 +23,8 @@ export const RUN_OPTIONS = {
   "no-web": { type: "boolean", default: false },
   "searxng-url": { type: "string" },
   version: { type: "boolean", default: false },
+  // With --version: the build as JSON, with the oldest desktop app its page works in.
+  json: { type: "boolean", default: false },
   // What the build carries, for the `eta-host upgrade` that is about to run it. Not in the usage.
   migrations: { type: "boolean", default: false },
   help: { type: "boolean", short: "h", default: false },
@@ -33,7 +35,7 @@ export const USAGE = `Usage:
   eta-host install-service [flags]    run it with these flags at login, and now
   eta-host uninstall-service          remove that service; the data stays
   eta-host upgrade [version]          replace this file with a release (eta-host upgrade --help)
-  eta-host --version                  print the build
+  eta-host --version [--json]         print the build
   eta-host --help                     print this
 
 Flags:

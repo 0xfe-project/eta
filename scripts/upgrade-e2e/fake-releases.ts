@@ -1,7 +1,8 @@
 /**
  * GitHub's release API over a directory of builds, as far as `eta-host upgrade` uses it:
  * `<root>/<version>/` is a release, `latest` the highest without a `-`, or what `<root>/latest`
- * says. An asset's address redirects to a signed one that refuses a credential, like GitHub's.
+ * says, and the list is all of them, newest first. An asset's address redirects to a signed one
+ * that refuses a credential, like GitHub's.
  *
  *   bun scripts/upgrade-e2e/fake-releases.ts <builds> [port]
  */
@@ -19,19 +20,21 @@ function pinned(): string | undefined {
   return existsSync(file) ? readFileSync(file, "utf8").trim() : undefined;
 }
 
+const describe = (origin: string, version: string) => ({
+  tag_name: `v${version}`,
+  draft: false,
+  prerelease: version.includes("-"),
+  assets: readdirSync(join(root, version))
+    .filter((name) => name === "SHA256SUMS" || name.startsWith("eta-host-"))
+    .map((name) => ({
+      name,
+      url: `${origin}/repos/o/r/releases/assets/${version}/${name}`,
+      browser_download_url: "unused",
+    })),
+});
+
 const release = (origin: string, version: string): Response =>
-  Response.json({
-    tag_name: `v${version}`,
-    draft: false,
-    prerelease: version.includes("-"),
-    assets: readdirSync(join(root, version))
-      .filter((name) => name === "SHA256SUMS" || name.startsWith("eta-host-"))
-      .map((name) => ({
-        name,
-        url: `${origin}/repos/o/r/releases/assets/${version}/${name}`,
-        browser_download_url: "unused",
-      })),
-  });
+  Response.json(describe(origin, version));
 
 Bun.serve({
   port,
@@ -53,6 +56,13 @@ Bun.serve({
         ? new Response("Not Found", { status: 404 })
         : release(origin, version);
     }
+    if (pathname === "/repos/o/r/releases")
+      return Response.json(
+        versions()
+          .sort(Bun.semver.order)
+          .reverse()
+          .map((version) => describe(origin, version)),
+      );
     const tag = /^\/repos\/o\/r\/releases\/tags\/v(.+)$/.exec(pathname)?.[1];
     if (tag !== undefined && existsSync(join(root, tag)))
       return release(origin, tag);
