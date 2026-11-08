@@ -1,15 +1,26 @@
 import type { DOMElement } from "ink";
+import type { Locale } from "../../../config/types";
 import type { SlashCommand } from "../../../extensions/types";
+import type { MenuEntry } from "../../../ui/components/completion-menu";
+import type { TextRange } from "../../../ui/components/typed-ranges";
 import type { PasteRange } from "../contract";
-import type { CompletionItem, CompletionSources, OpenMenu } from "./completion";
+import type {
+  CompletionItem,
+  CompletionQuery,
+  CompletionSources,
+  OpenMenu,
+} from "./completion";
 import type { KeyContext } from "./keys";
 import type { ComposerState, FoldedPaste } from "./state";
 import type { DisplayRow } from "./text-layout";
-import { Box, Text } from "ink";
+import { Box, Text, useBoxMetrics } from "ink";
 import { useEffect, useRef, useState } from "react";
 import { useConfig, useInputActive } from "../../../extensions/react";
 import { localize } from "../../../i18n/messages";
 import { useLocale, useMessages } from "../../../i18n/react";
+import { CompletionMenu } from "../../../ui/components/completion-menu";
+import { MENU_ROWS } from "../../../ui/components/menu-window";
+import { typedRanges } from "../../../ui/components/typed-ranges";
 import { truncateToWidth } from "../../../ui/text-width";
 import { inkColor } from "../../../ui/theme";
 import { completionQuery, menuOf } from "./completion";
@@ -22,6 +33,9 @@ const PROMPT = "› ";
 const CONTINUATION = "  ";
 const PROMPT_WIDTH = 2;
 const MAX_ROWS = 10;
+/** The rules above and below the input rows. */
+const RULE_ROWS = 2;
+const MIN_MENU_ROWS = 1;
 
 export interface ComposerProps {
   state: ComposerState;
@@ -81,29 +95,33 @@ function useProjectFiles(
   return files;
 }
 
-function MenuRow({
-  item,
-  highlighted,
-}: {
-  item: CompletionItem;
-  highlighted: boolean;
-}) {
-  const config = useConfig();
-  const locale = useLocale();
-  const { accent, muted, selection } = config.theme;
-  const background = highlighted ? inkColor(selection) : undefined;
-  const [name, detail] =
-    item.kind === "command"
-      ? [`/${item.command.name}`, `  ${localize(item.command.summary, locale)}`]
-      : item.kind === "file"
-        ? [`@${item.path}`, ""]
-        : [`@${item.label}`, ""];
-  return (
-    <Text wrap="truncate-end" backgroundColor={background}>
-      <Text color={inkColor(accent)}>{name}</Text>
-      <Text color={inkColor(muted)}>{detail}</Text>
-    </Text>
-  );
+/** The name a menu row shows, the part of it to draw bold, and the muted detail after it. */
+function menuRowText(
+  item: CompletionItem,
+  query: CompletionQuery,
+  locale: Locale,
+): { name: string; bold: TextRange[]; detail?: string } {
+  switch (item.kind) {
+    case "command": {
+      const name = `/${item.command.name}`;
+      return {
+        name,
+        bold: typedRanges(name, query.query),
+        detail: localize(item.command.summary, locale),
+      };
+    }
+    case "file":
+      return {
+        name: `@${item.path}`,
+        bold: typedRanges(`@${item.path}`, query.query),
+      };
+    case "member":
+    case "everyone":
+      return {
+        name: `@${item.label}`,
+        bold: typedRanges(`@${item.label}`, query.query),
+      };
+  }
 }
 
 /** One display row, the cursor cell inverse and placeholders in the accent colour. */
@@ -197,53 +215,97 @@ export function Composer(props: ComposerProps) {
       : undefined,
   );
 
+  const inputRows = (state.text === "" ? 1 : shown.length) + RULE_ROWS;
+  // On a screen too short for it all, the composer gives up menu rows only.
   return (
-    <Box flexDirection="column" flexShrink={0} width={width}>
-      {menu && <MenuList menu={menu} highlight={state.menu.highlight} />}
-      <Box ref={rowsBoxRef} flexDirection="column">
-        {state.text === "" ? (
-          <Hint text={t("hint")} columns={columns} cursor={receiving} />
-        ) : (
-          shown.map((row, i) => (
-            <Box key={`${row.start}:${row.end}`}>
-              <Text color={inkColor(config.theme.accent)}>
-                {shownTop + i === 0 ? PROMPT : CONTINUATION}
-              </Text>
-              <RowText
-                text={state.text}
-                row={row}
-                pastes={state.pastes}
-                cursor={
-                  receiving && shownTop + i === cell.row
-                    ? state.cursor
-                    : undefined
-                }
-              />
-            </Box>
-          ))
-        )}
+    <Box
+      flexDirection="column"
+      flexShrink={1}
+      minHeight={inputRows + (menu ? MIN_MENU_ROWS : 0)}
+      width={width}
+    >
+      <Box
+        flexDirection="column"
+        flexShrink={0}
+        borderStyle="single"
+        borderLeft={false}
+        borderRight={false}
+        borderColor={inkColor(config.theme.border)}
+      >
+        <Box ref={rowsBoxRef} flexDirection="column">
+          {state.text === "" ? (
+            <Hint text={t("hint")} columns={columns} cursor={receiving} />
+          ) : (
+            shown.map((row, i) => (
+              <Box key={`${row.start}:${row.end}`}>
+                <Text color={inkColor(config.theme.accent)}>
+                  {shownTop + i === 0 ? PROMPT : CONTINUATION}
+                </Text>
+                <RowText
+                  text={state.text}
+                  row={row}
+                  pastes={state.pastes}
+                  cursor={
+                    receiving && shownTop + i === cell.row
+                      ? state.cursor
+                      : undefined
+                  }
+                />
+              </Box>
+            ))
+          )}
+        </Box>
       </Box>
+      {menu && <MenuList menu={menu} highlight={state.menu.highlight} />}
     </Box>
   );
 }
 
+function menuKey(item: CompletionItem): string {
+  switch (item.kind) {
+    case "command":
+      return item.command.name;
+    case "file":
+      return `file:${item.path}`;
+    case "member":
+    case "everyone":
+      return `${item.kind}:${item.label}`;
+  }
+}
+
+/**
+ * The menu under the input: as many rows as it wants, up to `MENU_ROWS`, when the screen has them,
+ * and as many as are left when it has not, at least one.
+ */
 function MenuList({ menu, highlight }: { menu: OpenMenu; highlight: number }) {
-  const shownHighlight = Math.min(highlight, menu.items.length - 1);
+  const locale = useLocale();
+  const roomRef = useRef<DOMElement>(null);
+  const room = useBoxMetrics(roomRef);
+  const wanted = Math.min(MENU_ROWS, menu.items.length);
+  // The room asks for `wanted` rows and gives them up to a screen too short for them; the menu
+  // draws in what the room got.
+  const rows =
+    room.hasMeasured && room.height > 0
+      ? Math.min(wanted, room.height)
+      : wanted;
+  const entries: MenuEntry[] = menu.items.map((item) => ({
+    key: menuKey(item),
+    ...menuRowText(item, menu.query, locale),
+  }));
   return (
-    <Box flexDirection="column">
-      {menu.items.map((item, i) => (
-        <MenuRow
-          key={
-            item.kind === "command"
-              ? item.command.name
-              : item.kind === "file"
-                ? `file:${item.path}`
-                : `${item.kind}:${item.label}`
-          }
-          item={item}
-          highlighted={i === shownHighlight}
-        />
-      ))}
+    <Box
+      ref={roomRef}
+      height={wanted}
+      minHeight={1}
+      flexShrink={1}
+      flexDirection="column"
+      overflow="hidden"
+    >
+      <CompletionMenu
+        entries={entries}
+        selected={Math.min(highlight, menu.items.length - 1)}
+        rows={rows}
+      />
     </Box>
   );
 }

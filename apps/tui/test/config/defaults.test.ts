@@ -7,6 +7,18 @@ const bind = (key: string, alt = false, ctrl = false, shift = false) => [
 ];
 
 describe("the default config", () => {
+  it("frames agents in colours the warnings, errors and muted lines do not use, no two neighbours the same", () => {
+    const { agents } = DEFAULT_CONFIG.theme;
+    expect(agents.length).toBeGreaterThan(1);
+    for (const colour of agents) {
+      expect(colour).not.toMatch(/^(?:red|yellow|gray|grey)/);
+      expect(colour).not.toBe("default");
+    }
+    agents.forEach((colour, index) => {
+      expect(colour).not.toBe(agents[(index + 1) % agents.length]);
+    });
+  });
+
   it("binds a key to every action", () => {
     expect(Object.keys(DEFAULT_CONFIG.keybindings).sort()).toEqual(
       [...ACTION_NAMES].sort(),
@@ -28,6 +40,7 @@ describe("the default config", () => {
       "transcript.search": bind("f", false, true),
       "transcript.select": bind("v", true),
       "transcript.expandAll": bind("o", false, true),
+      "transcript.toggleTurn": bind("e", true),
       "message.newline": [
         ...bind("enter", true),
         ...bind("enter", false, false, true),
@@ -43,5 +56,10 @@ describe("the default config", () => {
   it("puts the tab bar at the bottom and previews five lines", () => {
     expect(DEFAULT_CONFIG.layout).toEqual({ tabBar: "bottom" });
     expect(DEFAULT_CONFIG.toolOutput).toEqual({ previewLines: 5 });
+  });
+
+  it("folds the steps of a reply and has the terminal report the mouse", () => {
+    expect(DEFAULT_CONFIG.transcript).toEqual({ toolCalls: "collapsed" });
+    expect(DEFAULT_CONFIG.mouse).toBe(true);
   });
 });

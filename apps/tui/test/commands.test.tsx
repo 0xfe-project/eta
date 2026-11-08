@@ -23,7 +23,7 @@ async function run(r: Awaited<ReturnType<typeof app>>, line: string) {
 
 describe("/help", () => {
   it("lists every command with its usage and summary, and closes on Esc", async () => {
-    const r = await app({ columns: 140, rows: 60 });
+    const r = await app({ columns: 140 });
     await run(r, "/help");
     const text = plain(r);
     expect(text).toContain("/config");

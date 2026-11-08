@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { TranscriptItem } from "../contract";
+import type { ToolItem } from "../contract";
 import type { ToolBlock } from "../model/run";
 import type { FilePatch, PlanItem, ToolShape } from "../model/tool-shape";
 import type { DrawContext, DrawnItem } from "./context";
@@ -30,8 +30,6 @@ import { Prefixed } from "./prefixed";
 import { countLines, imageLabel, linesLabel, terminalText } from "./text";
 import { summarizeArgs } from "./tool-summary";
 
-type ToolItem = Extract<TranscriptItem, { kind: "tool" }>;
-
 /**
  * What a program printed, not drawn yet: its lines without the blank ones at either end, and how
  * many rows each wraps to at `width` columns by its display width. Only the rows that show are
@@ -52,7 +50,6 @@ interface ToolDrawing {
   body: Lines | Printed;
   /** Drawn after the body, folded or not. */
   after: Lines;
-  source: string;
 }
 
 const PLAN_BOXES: Readonly<Record<string, string>> = {
@@ -89,9 +86,79 @@ export function drawTool(item: ToolItem, context: DrawContext): DrawnItem {
   );
   return {
     lines: concat(title, indent(concat(body, notes), MARK_WIDTH)),
-    source: drawing.source,
+    source: sourceOf(shape, item),
     foldable: bodyRows(drawing.body) > context.previewLines,
   };
+}
+
+/**
+ * The words a tool call's card is titled with after its status mark: the command, the file a
+ * patch or a write changes, the plan, or the tool's name and its main argument.
+ */
+export function toolTitle(tool: ToolBlock, t: DrawContext["t"]): string {
+  return titleOf(shapeOf(tool), tool, t);
+}
+
+function titleOf(
+  shape: ToolShape,
+  tool: ToolBlock,
+  t: DrawContext["t"],
+): string {
+  switch (shape.kind) {
+    case "command": {
+      const [firstLine = ""] = shape.command.split("\n");
+      const cut = shape.command.includes("\n") ? " …" : "";
+      return `$ ${firstLine}${cut}`;
+    }
+    case "patch":
+      return patchHeader(shape.files[0]);
+    case "write":
+      return `✎ ${shape.path} · ${linesLabel(countLines(shape.content), t)}`;
+    case "plan":
+      return t("plan");
+    case "other": {
+      const summary = summarizeArgs(tool.input);
+      return summary === "" ? tool.name : `${tool.name} ${summary}`;
+    }
+  }
+}
+
+/**
+ * What copying a tool call gives: the command and its whole output, the patch, the content
+ * written, the plan's steps, or the tool's name, its arguments and its output.
+ */
+export function toolSource(item: ToolItem): string {
+  return sourceOf(shapeOf(item.tool), item);
+}
+
+function sourceOf(shape: ToolShape, item: ToolItem): string {
+  const { tool } = item;
+  switch (shape.kind) {
+    case "command":
+      return `${shape.command}\n${commandOutput(item)}`;
+    case "patch":
+      return shape.files.map((file) => file.patch).join("\n");
+    case "write":
+      return shape.content;
+    case "plan":
+      return shape.items.map((step) => step.content).join("\n");
+    case "other":
+      return `${tool.name}\n${JSON.stringify(tool.input ?? null, null, 2)}\n${terminalText(tool.output ?? "")}`;
+  }
+}
+
+/** What a command printed: so far while it runs, all of it once it ended. */
+function commandOutput(item: ToolItem): string {
+  const { tool } = item;
+  return terminalText(
+    tool.status === "running" ? (item.progress ?? "") : (tool.output ?? ""),
+  );
+}
+
+/** `± <path> +<added> −<removed>`: the line each file of a patch is named by. */
+function patchHeader(file: FilePatch | undefined): string {
+  const { added, removed } = patchCounts(file === undefined ? [] : [file]);
+  return `± ${file?.path ?? ""} +${added} −${removed}`;
 }
 
 function statusMark(
@@ -111,57 +178,47 @@ function drawShape(
 ): ToolDrawing {
   switch (shape.kind) {
     case "command":
-      return drawCommand(shape.command, item, context, width);
+      return drawCommand(shape, item, context, width);
     case "patch":
-      return drawPatch(shape.files, item.tool, context, width);
+      return drawPatch(shape, item.tool, context, width);
     case "write":
-      return drawWrite(shape.path, shape.content, context, width);
+      return drawWrite(shape, item.tool, context, width);
     case "plan":
       return drawPlan(shape.items, context, width);
     case "other":
-      return drawOther(item.tool, context, width);
+      return drawOther(shape, item.tool, context, width);
   }
 }
 
 function drawCommand(
-  command: string,
+  shape: Extract<ToolShape, { kind: "command" }>,
   item: ToolItem,
   context: DrawContext,
   width: number,
 ): ToolDrawing {
   const { tool } = item;
-  const [firstLine = ""] = command.split("\n");
-  const cut = command.includes("\n") ? " …" : "";
   const exitCode = exitCodeOf(tool);
   const failedExit =
     typeof exitCode === "number" && exitCode !== 0 ? ` (exit ${exitCode})` : "";
-  const output = terminalText(
-    tool.status === "running" ? (item.progress ?? "") : (tool.output ?? ""),
-  );
   return {
     title: (
       <Text wrap="wrap" color={context.colors.text}>
-        {`$ ${firstLine}${cut}`}
+        {titleOf(shape, tool, context.t)}
         <Text color={context.colors.error}>{failedExit}</Text>
       </Text>
     ),
-    body: printedOutput(output, context.colors.text, width),
+    body: printedOutput(commandOutput(item), context.colors.text, width),
     after: NO_LINES,
-    source: `${command}\n${output}`,
   };
 }
 
 function drawPatch(
-  files: FilePatch[],
+  shape: Extract<ToolShape, { kind: "patch" }>,
   tool: ToolBlock,
   context: DrawContext,
   width: number,
 ): ToolDrawing {
-  const [first, ...rest] = files;
-  const header = (file: FilePatch | undefined) => {
-    const { added, removed } = patchCounts(file === undefined ? [] : [file]);
-    return `± ${file?.path ?? ""} +${added} −${removed}`;
-  };
+  const [first, ...rest] = shape.files;
   const diff = (file: FilePatch) =>
     draw(
       <DiffRenderer
@@ -177,7 +234,7 @@ function drawPatch(
     ...rest.flatMap((file) => [
       draw(
         <Text wrap="wrap" color={context.colors.text}>
-          {header(file)}
+          {patchHeader(file)}
         </Text>,
         width,
       ),
@@ -192,22 +249,21 @@ function drawPatch(
   return {
     title: (
       <Text wrap="wrap" color={context.colors.text}>
-        {header(first)}
+        {titleOf(shape, tool, context.t)}
       </Text>
     ),
     body,
     after: failure,
-    source: files.map((file) => file.patch).join("\n"),
   };
 }
 
 function drawWrite(
-  path: string,
-  content: string,
+  shape: Extract<ToolShape, { kind: "write" }>,
+  tool: ToolBlock,
   context: DrawContext,
   width: number,
 ): ToolDrawing {
-  const { t } = context;
+  const { path, content } = shape;
   const body =
     content === ""
       ? NO_LINES
@@ -225,12 +281,11 @@ function drawWrite(
   return {
     title: (
       <Text wrap="wrap" color={context.colors.text}>
-        {`✎ ${path} · ${linesLabel(countLines(content), t)}`}
+        {titleOf(shape, tool, context.t)}
       </Text>
     ),
     body,
     after: NO_LINES,
-    source: content,
   };
 }
 
@@ -255,26 +310,24 @@ function drawPlan(
     title: <Text color={context.colors.text}>{context.t("plan")}</Text>,
     body,
     after: NO_LINES,
-    source: items.map((step) => step.content).join("\n"),
   };
 }
 
 function drawOther(
+  shape: ToolShape,
   tool: ToolBlock,
   context: DrawContext,
   width: number,
 ): ToolDrawing {
-  const summary = summarizeArgs(tool.input);
   const output = terminalText(tool.output ?? "");
   return {
     title: (
       <Text wrap="wrap" color={context.colors.text}>
-        {summary === "" ? tool.name : `${tool.name} ${summary}`}
+        {titleOf(shape, tool, context.t)}
       </Text>
     ),
     body: printedOutput(output, context.colors.text, width),
     after: NO_LINES,
-    source: `${tool.name}\n${JSON.stringify(tool.input ?? null, null, 2)}\n${output}`,
   };
 }
 

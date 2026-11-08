@@ -1,10 +1,12 @@
-/** What the tab bar shows for a conversation tab: its name and its status mark. */
+/** What the tab bar shows for a conversation tab: its name, its qualifiers and its status mark. */
 import type { TabRef } from "../../config/types";
 import type { TabStatus } from "../../extensions/types";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useStore } from "zustand";
 import { useShell } from "../../extensions/react";
 import {
+  conversationQualifiers,
+  conversationStewardName,
   conversationTabStatus,
   conversationTarget,
   conversationTitle,
@@ -13,6 +15,19 @@ import {
 export function useConversationTitle(tab: TabRef): string {
   const { wire } = useShell();
   return useStore(wire.store, (state) => conversationTitle(state, tab.id));
+}
+
+/** Follows the agents list while the tab is open, so a renamed steward shows its new name. */
+export function useConversationQualifiers(tab: TabRef): readonly string[] {
+  const { wire } = useShell();
+  useEffect(() => wire.subscribe("agents"), [wire]);
+  const stewardName = useStore(wire.store, (state) =>
+    conversationStewardName(state, tab.id),
+  );
+  return useMemo(
+    () => conversationQualifiers(stewardName, tab.id),
+    [stewardName, tab.id],
+  );
 }
 
 /**

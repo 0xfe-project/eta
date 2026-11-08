@@ -29,7 +29,8 @@ export interface ShellContextSources {
 /**
  * The context object of one shell. Its fields read the current values each time, so a command
  * that keeps the context sees the settings, language and wire in effect after `/config` or a
- * reconnect. Its layers open in its own shell only.
+ * reconnect. Its layers open in its own shell only. Reading `wire` throws while there is no
+ * connection.
  */
 export function createShellContext(sources: ShellContextSources): ShellContext {
   const { controller, session } = sources;
@@ -73,5 +74,8 @@ export function createShellContext(sources: ShellContextSources): ShellContext {
     reportFailure: sources.reportFailure,
     quit: sources.quit,
   };
+  // Not enumerable: React's development build reads every enumerable property of a changed prop
+  // to log it, and the App passes the context as a prop, also as eta quits and the wire goes.
+  Object.defineProperty(ctx, "wire", { enumerable: false });
   return ctx;
 }

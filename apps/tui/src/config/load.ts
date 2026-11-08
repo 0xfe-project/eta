@@ -22,6 +22,7 @@ const DETAIL_LIMIT = 80;
 const QUIT_ACTION: ActionName = "app.quit";
 const PREVIEW_LINES_MIN = 1;
 const PREVIEW_LINES_MAX = 500;
+const AGENT_COLOURS_KEY = "agents";
 
 const BASIC_COLOURS = [
   "black",
@@ -140,6 +141,14 @@ export function parseConfig(
       case "toolOutput":
         readToolOutput(value, config, problems);
         break;
+      case "transcript":
+        readTranscript(value, config, problems);
+        break;
+      case "mouse":
+        if (typeof value !== "boolean")
+          problems.value("mouse", "wrong-type", value);
+        else config.mouse = value;
+        break;
       default:
         problems.add(name, "unknown-key");
     }
@@ -244,11 +253,26 @@ function readTheme(
   if (!isObject(value)) return problems.value("theme", "wrong-type", value);
   for (const [name, item] of Object.entries(value)) {
     const key = `theme.${name}`;
-    if (!isThemeToken(name)) problems.add(key, "unknown-key");
+    if (name === AGENT_COLOURS_KEY) readAgentColours(item, config, problems);
+    else if (!isThemeToken(name)) problems.add(key, "unknown-key");
     else if (typeof item !== "string") problems.value(key, "wrong-type", item);
     else if (!isColour(item)) problems.value(key, "invalid-value", item);
     else config.theme[name] = item;
   }
+}
+
+/** `theme.agents`: a list of at least one colour, taken whole or not at all. */
+function readAgentColours(
+  value: unknown,
+  config: TuiConfig,
+  problems: Problems,
+): void {
+  const key = `theme.${AGENT_COLOURS_KEY}`;
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string"))
+    return problems.value(key, "wrong-type", value);
+  if (value.length === 0 || !value.every(isColour))
+    return problems.value(key, "invalid-value", value);
+  config.theme.agents = [...value];
 }
 
 const isActionName = (name: string): name is ActionName =>
@@ -329,6 +353,26 @@ function readToolOutput(
     )
       problems.value(key, "invalid-value", item);
     else config.toolOutput.previewLines = item;
+  }
+}
+
+function readTranscript(
+  value: unknown,
+  config: TuiConfig,
+  problems: Problems,
+): void {
+  if (!isObject(value))
+    return problems.value("transcript", "wrong-type", value);
+  for (const [name, item] of Object.entries(value)) {
+    const key = `transcript.${name}`;
+    if (name !== "toolCalls") {
+      problems.add(key, "unknown-key");
+      continue;
+    }
+    if (typeof item !== "string") problems.value(key, "wrong-type", item);
+    else if (item !== "collapsed" && item !== "expanded")
+      problems.value(key, "invalid-value", item);
+    else config.transcript.toolCalls = item;
   }
 }
 

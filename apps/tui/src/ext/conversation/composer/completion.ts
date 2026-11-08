@@ -8,7 +8,8 @@ import type { ComposerState } from "./state";
 import { mentionLabel } from "../model/mentions";
 import { replaceRange } from "./state";
 
-export const MAX_COMPLETIONS = 8;
+/** The most entries the `@` menu lists: members, everyone and files together. */
+export const MENTION_LIMIT = 8;
 
 /** The names `model/mentions.ts` reads as everyone, by language. */
 const EVERYONE_LABELS: Record<Locale, string> = {
@@ -62,14 +63,15 @@ export function slashItems(
   query: string,
   completeCommand: CompletionSources["completeCommand"],
 ): CompletionItem[] {
-  return completeCommand(query)
-    .slice(0, MAX_COMPLETIONS)
-    .map((command) => ({ kind: "command", command }));
+  return completeCommand(query).map((command) => ({
+    kind: "command",
+    command,
+  }));
 }
 
 /**
  * Members whose label contains the query, those starting with it first; then everyone; then files
- * whose path contains it. Case does not matter. At most `MAX_COMPLETIONS` in all.
+ * whose path contains it. Case does not matter. At most `MENTION_LIMIT` in all.
  */
 export function mentionItems(
   query: string,
@@ -92,7 +94,7 @@ export function mentionItems(
   const fileItems: CompletionItem[] = (files ?? [])
     .filter(holds)
     .map((path) => ({ kind: "file", path }));
-  return [...memberItems, ...everyone, ...fileItems].slice(0, MAX_COMPLETIONS);
+  return [...memberItems, ...everyone, ...fileItems].slice(0, MENTION_LIMIT);
 }
 
 /** The menu for the state, or undefined when it is closed: nothing to complete, nothing listed, or dismissed. */

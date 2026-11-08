@@ -20,7 +20,12 @@ const author = (key: string): TranscriptItem => ({
   kind: "author",
   key,
   name: key,
+  agentId: key,
+  members: [],
 });
+
+/** Too narrow for frames, so an author is its own line. */
+const UNFRAMED = 39;
 
 function drawn(...lines: string[]): RenderedItem {
   return {
@@ -32,16 +37,27 @@ function drawn(...lines: string[]): RenderedItem {
 }
 
 describe("layoutTranscript", () => {
-  it("puts no blank line after an author", () => {
+  it("puts no blank line between an author and the items of its reply", () => {
     const layout = layoutTranscript(
-      [text("u"), author("Ada"), text("t")],
+      [text("u"), author("r1:author"), text("r1:text")],
       [drawn("u"), drawn("Ada"), drawn("t")],
+      UNFRAMED,
     );
     expect(layout.plain).toEqual(["u", "", "Ada", "t"]);
     expect(layout.owner).toEqual([0, -1, 1, 2]);
     expect(layout.starts).toEqual([0, 2, 3]);
   });
 });
+
+const NO_FRAME = {
+  name: "",
+  border: { open: "", close: "" },
+  nameStyle: { open: "", close: "" },
+};
+
+/** Every item at the transcript's width; the widths frames give are in transcript-frames.test.ts. */
+const everyAtWidth = (items: readonly TranscriptItem[], width: number) =>
+  items.map(() => width);
 
 describe("createRenderCache", () => {
   const theme = testConfig().theme;
@@ -51,11 +67,13 @@ describe("createRenderCache", () => {
     const seen: { key: string; options: RenderOptions }[] = [];
     const render: RenderItem = (item, options) => {
       seen.push({ key: item.key, options });
-      return drawn(
-        `${item.key}@${options.width}${options.expanded ? "+" : ""}`,
-      );
+      // `RenderItem` asks every author's drawing for a frame style; none of these is in a frame.
+      return {
+        ...drawn(`${item.key}@${options.width}${options.expanded ? "+" : ""}`),
+        frame: NO_FRAME,
+      };
     };
-    return { seen, cache: createRenderCache(render) };
+    return { seen, cache: createRenderCache(render, everyAtWidth) };
   }
 
   it("draws again only the item that changed object, fold, or any option", () => {

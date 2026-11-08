@@ -225,9 +225,10 @@ describe("markdown built to be slow", () => {
   }
 
   // 160 KB on one line, each drawn in about 200 ms. Work that grows with the square of the length
-  // takes seconds already at 40 KB, and ten seconds and more here. CPU time rather than the clock,
-  // so test files running alongside slow the count down little.
-  const LONG_BOUND_MS = 1000;
+  // takes seconds already at 40 KB, and 8 to 18 seconds here. CPU time rather than the clock, but
+  // the process's CPU time also counts the test files running alongside in other threads, which
+  // pushed it past one second in a full run; three seconds still catches the square.
+  const LONG_BOUND_MS = 3000;
   const long = 160_000;
   // Each with the line's last words, which a parse that gave up would not reach.
   const longCases: [string, string, string][] = [
@@ -255,7 +256,7 @@ describe("markdown built to be slow", () => {
   ];
 
   it.each(longCases)(
-    "draws 160 KB of %s within a second, to its end",
+    "draws 160 KB of %s within three seconds, to its end",
     (_name, text, end) => {
       const { drawn, ms } = timedCpu(text);
       expect(ms).toBeLessThan(LONG_BOUND_MS);

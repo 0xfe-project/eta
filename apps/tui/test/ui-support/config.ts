@@ -39,6 +39,7 @@ const TEST_KEYBINDINGS: Record<ActionName, KeyBinding[]> = {
   "transcript.search": bind("f", { ctrl: true }),
   "transcript.select": bind("v", { alt: true }),
   "transcript.expandAll": bind("o", { ctrl: true }),
+  "transcript.toggleTurn": bind("e", { alt: true }),
   "message.newline": [
     ...bind("enter", { alt: true }),
     ...bind("enter", { shift: true }),
@@ -63,10 +64,14 @@ export function testConfig(overrides: Partial<TuiConfig> = {}): TuiConfig {
       success: "green",
       border: "gray",
       selection: "blue",
+      // Colours no other token here uses, so a frame's colour is told apart from the rest.
+      agents: ["magenta", "blueBright", "greenBright"],
     },
     keybindings: TEST_KEYBINDINGS,
     layout: { tabBar: "bottom" },
     toolOutput: { previewLines: 10 },
+    transcript: { toolCalls: "collapsed" },
+    mouse: true,
     ...overrides,
   };
 }

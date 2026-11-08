@@ -264,7 +264,9 @@ describe("messages waiting their turn", () => {
     );
     expect(second).toBeGreaterThan(transcript);
     expect(third).toBe(second + 1);
-    expect(input).toBe(third + 1);
+    // The input's upper rule sits between the last held message and the input.
+    expect(lines[third + 1]).toMatch(/^─+$/);
+    expect(input).toBe(third + 2);
     expect(plain(r)).not.toContain("with more lines");
     const raw = r.lastFrame().split("\n");
     expect(raw[second]).toContain("\u001B[90m");
@@ -300,7 +302,9 @@ describe("reply status line", () => {
     );
     const input = lines.findIndex((line) => line.startsWith(COMPOSER_HINT));
     expect(status).toBeGreaterThan(-1);
-    expect(input).toBe(status + 1);
+    // The input's upper rule sits between the status line and the input.
+    expect(lines[status + 1]).toMatch(/^─+$/);
+    expect(input).toBe(status + 2);
     expect(r.lastFrame().split("\n")[status]).toContain("\u001B[90m");
   });
 
@@ -319,9 +323,10 @@ describe("reply status line", () => {
       expect(plain(r)).not.toContain("is replying");
       const lines = frameLines(r);
       const input = lines.findIndex((line) => line.startsWith(COMPOSER_HINT));
-      // The row above the input belongs to the transcript, not to an empty status line.
-      expect(input).toBeGreaterThan(0);
-      expect(lines[input - 1]).not.toBe("");
+      // The row above the input's upper rule belongs to the transcript, not to an empty status line.
+      expect(input).toBeGreaterThan(1);
+      expect(lines[input - 1]).toMatch(/^─+$/);
+      expect(lines[input - 2]).not.toBe("");
     },
   );
 

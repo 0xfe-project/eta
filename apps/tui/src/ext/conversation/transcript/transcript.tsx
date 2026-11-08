@@ -1,26 +1,37 @@
 import type { Key } from "ink";
+import type { KeyBinding } from "../../../config/types";
 import type { RenderedItem, TranscriptItem } from "../contract";
+import type { LineFrame } from "./frame-lines";
 import type { TranscriptLayout } from "./layout";
 import type { LineScroll } from "./scroll";
 import type { Match } from "./search";
 import type { Selection } from "./selection";
 import type { LinePlace, MatchPlace, SearchState, TranscriptUi } from "./ui";
 import { Box, Text, useInput } from "ink";
-import { useEffect, useMemo, useState } from "react";
-import { useAction, useInputActive, useTheme } from "../../../extensions/react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { formatKeyBinding } from "../../../config/keys";
+import {
+  LINES_PER_WHEEL_STEP,
+  useAction,
+  useConfig,
+  useInputActive,
+  useTheme,
+  useWheel,
+} from "../../../extensions/react";
 import { useMessages } from "../../../i18n/react";
 import { LineInput } from "../../../ui/components/line-input";
 import { inkColor } from "../../../ui/theme";
 import { copyToClipboard } from "./clipboard";
+import { frameEnd, frameEndCells, frameStart } from "./frame-lines";
 import { layoutTranscript } from "./layout";
 import { transcriptMessages } from "./messages";
 import {
   lineOfPlace,
   placeIn,
   placeOfLine,
-  scrollIn,
   scrollLine,
   scrollPlace,
+  scrollSettled,
 } from "./places";
 import {
   normalized,
@@ -48,6 +59,7 @@ export interface TranscriptProps {
   rendered: readonly RenderedItem[];
   /** Rows the transcript fills, the search bar and the hint rows included. */
   height: number;
+  /** Columns the transcript fills; `rendered` was drawn for this width (see `drawWidths`). */
   width: number;
   /** The view is in front; off, none of its keys work. */
   isActive: boolean;
@@ -88,6 +100,7 @@ export function Transcript(props: TranscriptProps) {
   const { items, rendered, height, ui, onUi, isActive } = props;
   const t = useMessages(transcriptMessages);
   const theme = useTheme();
+  const bottomKey = useConfig().keybindings["transcript.bottom"][0];
   const scopeActive = useInputActive();
   const [held, setHeld] = useState<HeldSelection | undefined>(undefined);
   const mode: TranscriptMode =
@@ -98,8 +111,8 @@ export function Transcript(props: TranscriptProps) {
         : "normal";
 
   const layout = useMemo(
-    () => layoutTranscript(items, rendered),
-    [items, rendered],
+    () => layoutTranscript(items, rendered, props.width),
+    [items, rendered, props.width],
   );
   // Every layout names the kept places again, so one whose item goes away stands in from where it
   // was in the last layout that had it.
@@ -108,17 +121,19 @@ export function Transcript(props: TranscriptProps) {
     setHeldLayout(layout);
     if (held !== undefined) setHeld(heldIn(layout, held));
   }
-  const { scroll: keptScroll, search: keptSearch } = ui;
-  useEffect(() => {
-    const scroll = scrollIn(layout, keptScroll);
-    const search = searchIn(layout, keptSearch);
-    if (scroll !== keptScroll || search !== keptSearch)
-      onUi({ scroll, search });
-  }, [layout, keptScroll, keptSearch, onUi]);
-
   const total = layout.lines.length;
   const chrome = mode === "normal" ? 0 : 1;
   const linesHeight = Math.max(0, height - chrome);
+
+  // A view that more rows or fewer lines bring to the last line is kept as following, as it is
+  // drawn; otherwise the next lines to come would leave it behind.
+  const { scroll: keptScroll, search: keptSearch } = ui;
+  useEffect(() => {
+    const scroll = scrollSettled(layout, keptScroll, linesHeight);
+    const search = searchIn(layout, keptSearch);
+    if (scroll !== keptScroll || search !== keptSearch)
+      onUi({ scroll, search });
+  }, [layout, keptScroll, keptSearch, linesHeight, onUi]);
 
   const scroll = scrollLine(layout, ui.scroll);
   const view = viewportOf(scroll, total, linesHeight);
@@ -185,6 +200,26 @@ export function Transcript(props: TranscriptProps) {
     () => setScroll(scrolledBy(scroll, 1, total, linesHeight)),
     { isActive: scrolling },
   );
+  // The wheel's steps from reads right after one another can come before the next render; each
+  // moves on from where the one before it left the view.
+  const wheelScrollRef = useRef(scroll);
+  wheelScrollRef.current = scroll;
+  useWheel(
+    (direction, steps) => {
+      const lines =
+        (direction === "up" ? -1 : 1) * steps * LINES_PER_WHEEL_STEP;
+      const next = scrolledBy(
+        wheelScrollRef.current,
+        lines,
+        total,
+        linesHeight,
+      );
+      wheelScrollRef.current = normalized(next, total, linesHeight);
+      if (direction === "up") scrollUp(next);
+      else setScroll(next);
+    },
+    { isActive: scrolling },
+  );
   useAction(
     "transcript.top",
     () => scrollUp(scrolledTo(0, total, linesHeight)),
@@ -196,6 +231,15 @@ export function Transcript(props: TranscriptProps) {
   useAction("transcript.expandAll", () => onUi({ expandAll: !ui.expandAll }), {
     isActive,
   });
+  useAction(
+    "transcript.toggleTurn",
+    () => {
+      const key = turnToToggle(items, layout, view.top, view.rows);
+      if (key !== undefined)
+        onUi({ expanded: toggledExpanded(ui.expanded, key) });
+    },
+    { isActive },
+  );
   useAction(
     "transcript.search",
     () => {
@@ -345,9 +389,7 @@ export function Transcript(props: TranscriptProps) {
         })}
         {view.following || view.rows === linesHeight ? null : (
           <Text color={inkColor(theme.muted)} wrap="truncate-end">
-            {view.below === 1
-              ? t("belowOne")
-              : t("below", { count: view.below })}
+            {awayHint(t, view.below, bottomKey)}
           </Text>
         )}
       </Box>
@@ -372,6 +414,20 @@ export function Transcript(props: TranscriptProps) {
   );
 }
 
+/**
+ * The last row of a view away from the bottom: the key back there, or with none the lines below
+ * (always two or more: a view one line short of the last follows again).
+ */
+function awayHint(
+  t: Texts,
+  below: number,
+  bottomKey: KeyBinding | undefined,
+): string {
+  if (bottomKey !== undefined)
+    return t("bottomKey", { key: formatKeyBinding(bottomKey) });
+  return t("below", { count: below });
+}
+
 function searchIn(
   layout: TranscriptLayout,
   search: SearchState | undefined,
@@ -382,6 +438,35 @@ function searchIn(
   return place === current.place
     ? search
     : { ...search, current: { ...current, place } };
+}
+
+/**
+ * The key of the reply's steps line the toggle key folds or unfolds: the lowest one among the
+ * `rows` lines shown from `top`; with none shown, the one whose unfolded steps own the lowest of
+ * those lines; with neither, the newest one. None without any steps line.
+ */
+function turnToToggle(
+  items: readonly TranscriptItem[],
+  layout: TranscriptLayout,
+  top: number,
+  rows: number,
+): string | undefined {
+  const stepsLines = items.filter((item) => item.kind === "steps");
+  const turnOfStep = new Map(
+    stepsLines.flatMap((line) =>
+      line.steps.map((step) => [step.key, line.key]),
+    ),
+  );
+  const shown: TranscriptItem[] = [];
+  for (let line = top + rows - 1; line >= top; line -= 1) {
+    const owner = layout.owner[line] ?? -1;
+    if (owner >= 0) shown.push(items[owner]!);
+  }
+  const shownLine = shown.find((item) => item.kind === "steps");
+  if (shownLine !== undefined) return shownLine.key;
+  const shownStep = shown.find((item) => turnOfStep.has(item.key));
+  if (shownStep !== undefined) return turnOfStep.get(shownStep.key);
+  return stepsLines.at(-1)?.key;
 }
 
 function heldIn(layout: TranscriptLayout, held: HeldSelection): HeldSelection {
@@ -444,6 +529,9 @@ function selectionKey(
   return undefined;
 }
 
+// Ink gives an empty text no row at all; a blank line still takes one.
+const blankSafe = (text: string) => (text === "" ? " " : text);
+
 function Line({
   index,
   line,
@@ -462,14 +550,11 @@ function Line({
   selectionColor: string | undefined;
 }) {
   const plain = layout.plain[index] ?? "";
-  // Ink gives an empty text no row at all; a blank line still takes one.
-  const blankSafe = (text: string) => (text === "" ? " " : text);
+  const frame = layout.frames[index];
   if (selection !== undefined) {
     if (index === selection.cursor)
       return (
-        <Text inverse wrap="truncate-end">
-          {blankSafe(plain)}
-        </Text>
+        <MarkedLine plain={plain} frame={frame} mark={{ inverse: true }} />
       );
     const anchor = selection.anchor;
     if (
@@ -478,9 +563,11 @@ function Line({
       index <= Math.max(anchor, selection.cursor)
     )
       return (
-        <Text backgroundColor={selectionColor} wrap="truncate-end">
-          {blankSafe(plain)}
-        </Text>
+        <MarkedLine
+          plain={plain}
+          frame={frame}
+          mark={{ backgroundColor: selectionColor }}
+        />
       );
   }
   const here = matches.flatMap((match, at) =>
@@ -508,7 +595,50 @@ function Line({
     from = match.end;
   }
   if (from < plain.length) parts.push(plain.slice(from));
-  return <Text wrap="truncate-end">{parts}</Text>;
+  return (
+    <Text wrap="truncate-end">
+      {frame === undefined
+        ? parts
+        : [frameStart(frame), ...parts, frameEnd(frame)]}
+    </Text>
+  );
+}
+
+/**
+ * A line whose content is marked whole (the selection's cursor or range), its frame drawn as it
+ * always is. A line without content marks one cell where content would start.
+ */
+function MarkedLine({
+  plain,
+  frame,
+  mark,
+}: {
+  plain: string;
+  frame: LineFrame | undefined;
+  mark: { inverse?: boolean; backgroundColor?: string | undefined };
+}) {
+  if (frame === undefined)
+    return (
+      <Text wrap="truncate-end" {...mark}>
+        {blankSafe(plain)}
+      </Text>
+    );
+  if (plain !== "")
+    return (
+      <Text wrap="truncate-end">
+        {frameStart(frame)}
+        <Text {...mark}>{plain}</Text>
+        {frameEnd(frame)}
+      </Text>
+    );
+  const after = frameEndCells(frame);
+  return (
+    <Text wrap="truncate-end">
+      {frameStart(frame)}
+      <Text {...mark}>{after.first}</Text>
+      {after.rest}
+    </Text>
+  );
 }
 
 function SearchBar({

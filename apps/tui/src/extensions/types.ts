@@ -65,6 +65,12 @@ export interface TabView {
   useTitle: (tab: TabRef) => string;
   /** A hook: the tab's status mark; undefined draws none. */
   useStatus?: (tab: TabRef) => TabStatus | undefined;
+  /**
+   * A hook: what tells this tab apart from another whose shown name is the same, the strongest
+   * first. The tab bar adds them after the name one at a time, only while the shown names stay
+   * alike, as `name (first · second)`; each is drawn whole. Without it the name always shows alone.
+   */
+  useQualifiers?: (tab: TabRef) => readonly string[];
 }
 
 /** A fixed entry at the right end of the tab bar, after the open tabs. */

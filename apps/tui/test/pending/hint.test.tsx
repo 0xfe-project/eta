@@ -7,11 +7,14 @@ import { testConfig } from "../ui-support/config";
 import { plain } from "../ui-support/render";
 import { screenShows, twoRooms } from "./world";
 
-/** The waiting line from its first word to its end, without the transcript's mark before it. */
+/**
+ * The waiting line from its first word to its end, without the transcript's mark before it or the
+ * right edge of the reply's frame after it (the conversations here are group ones).
+ */
 function waitingLine(r: { lastFrame: () => string }): string {
   for (const line of plain(r).split("\n")) {
     const start = line.search(/Waiting for your answer|等你回答/);
-    if (start !== -1) return line.slice(start).trim();
+    if (start !== -1) return line.slice(start).replace(/│\s*$/, "").trim();
   }
   return "";
 }

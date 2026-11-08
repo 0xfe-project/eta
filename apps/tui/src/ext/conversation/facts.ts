@@ -9,6 +9,7 @@ import type {
 import type { WireState } from "../../connection/types";
 import type { TabStatus } from "../../extensions/types";
 import type { FeedState } from "./feed/store";
+import { agentsOf } from "../../extensions/eager-lists";
 import { RUNNING_STATUSES } from "./model/timeline";
 
 /** A member as mentions and the composer's `@` menu know it. */
@@ -69,6 +70,31 @@ export function conversationTitle(state: WireState, id: string): string {
     conversationList(state).find((c) => c.id === id)?.name ??
     id.slice(0, ID_PREFIX)
   );
+}
+
+/** The start of a conversation's id that tells apart conversations of the same name. */
+const QUALIFIER_ID_PREFIX = 6;
+
+/**
+ * The name of the conversation's steward, as the agents list has it. Undefined without a steward,
+ * when the agents list does not have the steward, and while the conversation is not listed.
+ */
+export function conversationStewardName(
+  state: WireState,
+  id: string,
+): string | undefined {
+  const stewardId = conversationList(state).find((c) => c.id === id)?.stewardId;
+  if (stewardId === null || stewardId === undefined) return undefined;
+  return agentsOf(state).find((agent) => agent.id === stewardId)?.name;
+}
+
+/** What tells a conversation tab apart from another of the same name: the steward's name, then the start of the id. */
+export function conversationQualifiers(
+  stewardName: string | undefined,
+  id: string,
+): string[] {
+  const idPrefix = id.slice(0, QUALIFIER_ID_PREFIX);
+  return stewardName === undefined ? [idPrefix] : [stewardName, idPrefix];
 }
 
 const RUNNING_MEMBER: ReadonlySet<MemberView["status"]> = new Set([

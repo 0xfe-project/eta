@@ -4,6 +4,7 @@ import type { Palette } from "../../../ui/gemini/colors";
 import type { RenderOptions } from "../contract";
 import type { Lines } from "./lines";
 import type { RenderMessageKey } from "./messages";
+import { THEME_TOKENS } from "../../../config/types";
 import { translatorFor } from "../../../i18n/messages";
 import { inkColor } from "../../../ui/theme";
 import { renderMessages } from "./messages";
@@ -17,6 +18,8 @@ export interface DrawContext {
   previewLines: number;
   expanded: boolean;
   colors: Colors;
+  /** `theme.agents` as Ink colours: what a reply's frame is painted with. */
+  agentColors: readonly (string | undefined)[];
   /** The colours the components from Gemini CLI paint with. */
   palette: Palette;
   t: Translate<RenderMessageKey>;
@@ -36,6 +39,7 @@ export function contextFor(options: RenderOptions): DrawContext {
     previewLines: options.previewLines,
     expanded: options.expanded,
     colors,
+    agentColors: options.theme.agents.map(inkColor),
     palette: {
       text: colors.text,
       muted: colors.muted,
@@ -49,8 +53,7 @@ export function contextFor(options: RenderOptions): DrawContext {
 }
 
 function colorsOf(theme: Theme): Colors {
-  const entries = Object.entries(theme) as [ThemeToken, string][];
   return Object.fromEntries(
-    entries.map(([token, value]) => [token, inkColor(value)]),
+    THEME_TOKENS.map((token) => [token, inkColor(theme[token])]),
   ) as Colors;
 }

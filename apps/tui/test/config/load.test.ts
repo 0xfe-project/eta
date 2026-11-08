@@ -263,7 +263,7 @@ describe("parseConfig: theme", () => {
       selection: "blackBright",
     };
     expect(parse({ theme })).toEqual({
-      config: { ...defaults(), theme },
+      config: { ...defaults(), theme: { ...defaults().theme, ...theme } },
       problems: [],
     });
   });
@@ -308,6 +308,71 @@ describe("parseConfig: theme", () => {
       config: defaults(),
       problems: [problem("theme", "wrong-type", '["red"]')],
     });
+  });
+});
+
+describe("parseConfig: theme.agents", () => {
+  it("takes a list of colours of every kind, in its order", () => {
+    const agents = ["magenta", "#abc", "#A1B2C3", "default", "blueBright"];
+    const { config, problems } = parse({ theme: { agents } });
+    expect(problems).toEqual([]);
+    expect(config.theme).toEqual({ ...defaults().theme, agents });
+  });
+
+  it("takes a list of one", () => {
+    const { config, problems } = parse({ theme: { agents: ["green"] } });
+    expect(problems).toEqual([]);
+    expect(config.theme.agents).toEqual(["green"]);
+  });
+
+  it("keeps the other tokens and the default list when the list is wrong", () => {
+    const { config, problems } = parse({
+      theme: { accent: "magenta", agents: "green" },
+    });
+    expect(config.theme).toEqual({ ...defaults().theme, accent: "magenta" });
+    expect(problems).toEqual([
+      problem("theme.agents", "wrong-type", '"green"'),
+    ]);
+  });
+
+  it("uses the whole default list when the value is not a list of strings", () => {
+    for (const agents of [
+      "green",
+      3,
+      null,
+      { a: "green" },
+      ["green", 3],
+      ["green", null],
+    ]) {
+      const { config, problems } = parse({ theme: { agents } });
+      expect(config.theme.agents, JSON.stringify(agents)).toEqual(
+        defaults().theme.agents,
+      );
+      expect(problems).toEqual([
+        problem("theme.agents", "wrong-type", JSON.stringify(agents)),
+      ]);
+    }
+  });
+
+  it("uses the whole default list for an empty list or a list with one value that is not a colour", () => {
+    for (const agents of [[], ["green", "orange"], ["#12345"], ["Red"]]) {
+      const { config, problems } = parse({ theme: { agents } });
+      expect(config.theme.agents, JSON.stringify(agents)).toEqual(
+        defaults().theme.agents,
+      );
+      expect(problems).toEqual([
+        problem("theme.agents", "invalid-value", JSON.stringify(agents)),
+      ]);
+    }
+  });
+
+  it("does not share the list with the defaults", () => {
+    const { config } = parse({ theme: { agents: ["green"] } });
+    (config.theme.agents as string[]).push("#000001");
+    const untouched = parse({});
+    (untouched.config.theme.agents as string[]).push("#000002");
+    expect(DEFAULT_CONFIG.theme.agents).not.toContain("#000001");
+    expect(DEFAULT_CONFIG.theme.agents).not.toContain("#000002");
   });
 });
 
@@ -430,7 +495,44 @@ describe("parseConfig: layout and tool output", () => {
     });
   });
 
+  it("takes the steps of a reply collapsed or expanded", () => {
+    expect(
+      parse({ transcript: { toolCalls: "expanded" } }).config.transcript,
+    ).toEqual({ toolCalls: "expanded" });
+    expect(
+      parse({ transcript: { toolCalls: "collapsed" } }).config.transcript,
+    ).toEqual({ toolCalls: "collapsed" });
+    expect(parse({ transcript: { toolCalls: "hidden" } })).toEqual({
+      config: defaults(),
+      problems: [problem("transcript.toolCalls", "invalid-value", '"hidden"')],
+    });
+    expect(parse({ transcript: { toolCalls: false } })).toEqual({
+      config: defaults(),
+      problems: [problem("transcript.toolCalls", "wrong-type", "false")],
+    });
+  });
+
+  it("turns the mouse off with false and refuses anything not a boolean", () => {
+    expect(parse({ mouse: false }).config.mouse).toBe(false);
+    expect(parse({ mouse: true }).config.mouse).toBe(true);
+    expect(parse({ mouse: "off" })).toEqual({
+      config: defaults(),
+      problems: [problem("mouse", "wrong-type", '"off"')],
+    });
+  });
+
   it("reports sections that are not objects and keys they do not have", () => {
+    expect(parse({ transcript: "collapsed", mouse: 1 })).toEqual({
+      config: defaults(),
+      problems: [
+        problem("transcript", "wrong-type", '"collapsed"'),
+        problem("mouse", "wrong-type", "1"),
+      ],
+    });
+    expect(parse({ transcript: { tools: "collapsed" } })).toEqual({
+      config: defaults(),
+      problems: [problem("transcript.tools", "unknown-key")],
+    });
     expect(
       parse({ layout: "top", toolOutput: { previewLines: 9, wrap: true } }),
     ).toEqual({
