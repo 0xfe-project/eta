@@ -74,7 +74,7 @@ export function testFeature(): TestFeature {
       },
     ],
     pinnedTabs: [
-      { id: "pending", useLabel: () => "Pending 3", onSelect: () => {} },
+      { id: "test-pinned", useLabel: () => "Pending 3", onSelect: () => {} },
     ],
     commands: [
       cmd("open-tab", (ctx, arg) => {

@@ -45,6 +45,8 @@ export const ACTION_NAMES = [
   "message.newline",
   /** Send the message into the reply that is running, instead of queueing it after. */
   "message.steer",
+  /** In the layer that holds one waiting item: open the conversation it belongs to, in a tab. */
+  "pending.openConversation",
 ] as const;
 
 export type ActionName = (typeof ACTION_NAMES)[number];

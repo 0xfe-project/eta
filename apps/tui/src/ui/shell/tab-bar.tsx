@@ -75,12 +75,18 @@ function UnknownTabLabel({
 }
 
 function PinnedLabel({ pinned }: { pinned: PinnedTab }) {
-  return <Text>{pinned.useLabel()}</Text>;
+  const theme = useTheme();
+  const label = pinned.useLabel();
+  const attention = pinned.useAttention?.() ?? false;
+  return (
+    <Text color={attention ? inkColor(theme.warning) : undefined}>{label}</Text>
+  );
 }
 
 /**
- * One line: the open tabs numbered from 1, then the pinned entries at the right end. A line too
- * long for the terminal is cut at its right edge, never wrapped.
+ * One line: the open tabs numbered from 1, then the pinned entries at the right end. When they do
+ * not all fit, the open tabs are cut at their right edge and the pinned entries stay whole; the
+ * line never wraps.
  */
 export function TabBar({
   tabs,
@@ -92,24 +98,25 @@ export function TabBar({
   const registry = useRegistry();
   return (
     <Box height={1} overflow="hidden" flexShrink={0} width="100%">
-      {tabs.map((tab, index) => {
-        const view = registry.view(tab.kind);
-        const props = { tab, number: index + 1, active: index === activeTab };
-        return (
-          <Box
-            key={`${tab.kind}:${tab.id}`}
-            flexShrink={0}
-            marginRight={TAB_GAP}
-          >
-            {view ? (
-              <KnownTabLabel view={view} {...props} />
-            ) : (
-              <UnknownTabLabel {...props} />
-            )}
-          </Box>
-        );
-      })}
-      <Box flexGrow={1} />
+      <Box flexGrow={1} flexShrink={1} overflow="hidden">
+        {tabs.map((tab, index) => {
+          const view = registry.view(tab.kind);
+          const props = { tab, number: index + 1, active: index === activeTab };
+          return (
+            <Box
+              key={`${tab.kind}:${tab.id}`}
+              flexShrink={0}
+              marginRight={TAB_GAP}
+            >
+              {view ? (
+                <KnownTabLabel view={view} {...props} />
+              ) : (
+                <UnknownTabLabel {...props} />
+              )}
+            </Box>
+          );
+        })}
+      </Box>
       {registry.pinnedTabs.map((pinned) => (
         <Box key={pinned.id} flexShrink={0} marginLeft={TAB_GAP}>
           <PinnedLabel pinned={pinned} />

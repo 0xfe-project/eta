@@ -6,6 +6,35 @@
 
 Slash commands of the eta terminal interface. Type them in the input line of the home screen or of a conversation; names and arguments are always English.
 
+## /archive
+
+```text
+/archive [conversation]
+```
+
+Archive a conversation, the one in front unless named, and close its tab
+
+### Arguments
+
+- `conversation` (optional): Its id, its name, or enough of its name to tell it apart
+
+### Examples
+
+- `/archive`: Archive the conversation in front
+- `/archive release`: Archive the conversation whose name starts with or holds “release”
+
+## /artifacts
+
+```text
+/artifacts
+```
+
+List what the agents published, and get an address to preview it
+
+### Examples
+
+- `/artifacts`: Show the artifacts
+
 ## /config
 
 ```text
@@ -47,6 +76,40 @@ Install a resident host and move to it from the temporary host
 
 - `/install-service`: Keep agents running after eta quits
 
+## /invite
+
+```text
+/invite [agent]
+```
+
+Invite an agent into the conversation in front
+
+### Arguments
+
+- `agent` (optional): The agent's name, or enough of it to tell it apart
+
+### Examples
+
+- `/invite`: Choose whom to invite
+- `/invite cleo`: Invite Cleo
+
+## /new
+
+```text
+/new [path]
+```
+
+Start a new conversation: where, then who
+
+### Arguments
+
+- `path` (optional): The absolute path of a directory on the host's machine to start the conversation in
+
+### Examples
+
+- `/new`: Choose a project, type a path or browse to a directory
+- `/new /home/me/code/site`: Start a conversation in this absolute path on the host's machine
+
 ## /open
 
 ```text
@@ -79,6 +142,39 @@ Send a message to the conversation in front, after the reply that is running
 
 - `/queue then write the tests`: Ask for the tests once the current reply ends
 
+## /remove
+
+```text
+/remove [agent]
+```
+
+Take a member out of the conversation in front
+
+### Arguments
+
+- `agent` (optional): The agent's name, or enough of it to tell it apart
+
+### Examples
+
+- `/remove`: Choose whom to take out
+- `/remove ben`: Take Ben out
+
+## /rename
+
+```text
+/rename <name>
+```
+
+Rename the conversation in front
+
+### Arguments
+
+- `name` (required): The new name
+
+### Examples
+
+- `/rename Launch plan`: Call the conversation “Launch plan”
+
 ## /steer
 
 ```text
@@ -95,6 +191,25 @@ Send a message into the reply running in the conversation in front
 
 - `/steer use the new API instead`: Change course while the reply is still running
 
+## /steward
+
+```text
+/steward [agent]
+```
+
+Choose who takes the messages of the conversation in front that name nobody
+
+### Arguments
+
+- `agent` (optional): A member's name, “project” to follow the project's steward, or “none”
+
+### Examples
+
+- `/steward`: Choose from a list
+- `/steward ada`: Make Ada the steward
+- `/steward project`: Follow the project's steward
+- `/steward none`: Have no steward
+
 ## /stop
 
 ```text
@@ -106,3 +221,31 @@ Stop every reply running in the conversation in front
 ### Examples
 
 - `/stop`: Stop the replies
+
+## /tasks
+
+```text
+/tasks
+```
+
+List the open tasks, and handle or comment on one
+
+### Examples
+
+- `/tasks`: List the open tasks
+
+## /unarchive
+
+```text
+/unarchive <conversation>
+```
+
+Bring an archived conversation back and open it
+
+### Arguments
+
+- `conversation` (required): Its id, its name, or enough of its name to tell it apart
+
+### Examples
+
+- `/unarchive release`: Bring back the archived conversation named like “release”

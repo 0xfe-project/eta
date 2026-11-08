@@ -33,6 +33,7 @@ describe("the default config", () => {
         ...bind("enter", false, false, true),
       ],
       "message.steer": bind("tab"),
+      "pending.openConversation": bind("o", true),
     };
     for (let n = 1; n <= 9; n += 1)
       expected[`tabs.goTo${n}`] = bind(String(n), true);
