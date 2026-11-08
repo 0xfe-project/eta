@@ -30,6 +30,20 @@ const TEST_KEYBINDINGS: Record<ActionName, KeyBinding[]> = {
   "tabs.close": bind("w", { ctrl: true }),
   "reply.stop": bind("escape"),
   "app.quit": bind("c", { ctrl: true }),
+  "transcript.pageUp": bind("pageup"),
+  "transcript.pageDown": bind("pagedown"),
+  "transcript.lineUp": bind("up", { shift: true }),
+  "transcript.lineDown": bind("down", { shift: true }),
+  "transcript.top": bind("home", { ctrl: true }),
+  "transcript.bottom": bind("end", { ctrl: true }),
+  "transcript.search": bind("f", { ctrl: true }),
+  "transcript.select": bind("v", { alt: true }),
+  "transcript.expandAll": bind("o", { ctrl: true }),
+  "message.newline": [
+    ...bind("enter", { alt: true }),
+    ...bind("enter", { shift: true }),
+  ],
+  "message.steer": bind("tab"),
 };
 
 export function testConfig(overrides: Partial<TuiConfig> = {}): TuiConfig {

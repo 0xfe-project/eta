@@ -1,6 +1,9 @@
+import type { ActionName } from "../../config/types";
 import type { LayerHandle, SlashCommand } from "../../extensions/types";
 import { Box, Text, useInput } from "ink";
-import { useInputActive, useTheme } from "../../extensions/react";
+import stringWidth from "string-width";
+import { formatKeyBinding } from "../../config/keys";
+import { useConfig, useInputActive, useTheme } from "../../extensions/react";
 import { commandUsage } from "../../extensions/usage";
 import { localize } from "../../i18n/messages";
 import { useLocale, useMessages } from "../../i18n/react";
@@ -15,6 +18,56 @@ function useCloseOnEscape(handle: LayerHandle) {
       if (key.escape) handle.close();
     },
     { isActive: active },
+  );
+}
+
+type HelpKey = keyof (typeof helpMessages)["en"];
+
+/** The kinds of keys a conversation has, one line each, with the actions that make it up. */
+const CONVERSATION_KEYS: [HelpKey, ActionName[]][] = [
+  [
+    "keysScroll",
+    [
+      "transcript.pageUp",
+      "transcript.pageDown",
+      "transcript.lineUp",
+      "transcript.lineDown",
+      "transcript.top",
+      "transcript.bottom",
+    ],
+  ],
+  ["keysSearch", ["transcript.search"]],
+  ["keysSelect", ["transcript.select"]],
+  ["keysExpandAll", ["transcript.expandAll"]],
+  ["keysNewline", ["message.newline"]],
+  ["keysSteer", ["message.steer"]],
+  ["keysStop", ["reply.stop"]],
+];
+
+/** The conversation's keys as the settings bind them: each action's first key. */
+function ConversationKeys() {
+  const t = useMessages(helpMessages);
+  const theme = useTheme();
+  const { keybindings } = useConfig();
+  const rows = CONVERSATION_KEYS.map(([label, actions]) => ({
+    label: t(label),
+    keys: actions.flatMap((action) => {
+      const first = keybindings[action][0];
+      return first === undefined ? [] : [formatKeyBinding(first)];
+    }),
+  }));
+  const width = Math.max(...rows.map((row) => stringWidth(row.label)));
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      <Text bold>{t("keys")}</Text>
+      {rows.map((row) => (
+        <Text key={row.label} wrap="truncate-end">
+          {row.label + " ".repeat(width - stringWidth(row.label) + 2)}
+          <Text color={inkColor(theme.accent)}>{row.keys.join(" ")}</Text>
+        </Text>
+      ))}
+      <Text color={inkColor(theme.muted)}>{t("mouse")}</Text>
+    </Box>
   );
 }
 
@@ -40,6 +93,7 @@ export function CommandList({
           {localize(command.summary, locale)}
         </Text>
       ))}
+      <ConversationKeys />
     </LayerFrame>
   );
 }

@@ -50,6 +50,10 @@ export function createShellContext(sources: ShellContextSources): ShellContext {
     commands: sources.commands,
     openLayer: (render) => session.openLayer(sources.shell, render),
     notify: session.notify,
+    get activeTab() {
+      const { tabs, activeTab } = session.store.getState();
+      return activeTab === undefined ? undefined : tabs[activeTab];
+    },
     openTab: session.openTab,
     closeTab: session.closeTab,
     editFile: sources.editFile,

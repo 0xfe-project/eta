@@ -19,7 +19,9 @@
     "@eta/client-contracts": "*",
     "@eta/client-wire-proto": "*",
     "@inkjs/ui": "2.0.0",
+    "diff": "^9.0.0",
     "ink": "8.0.0",
+    "lowlight": "3.3.0",
     "react": "19.3.1",
     "string-width": "8.3.0",
     "zustand": "^5.0.15"
@@ -27,6 +29,7 @@
   "devDependencies": {
     "@eta/app": "*",
     "@eta/core": "*",
+    "@types/hast": "^3.0.4",
     "@types/node": "22.19.19",
     "@types/react": "^19.3.0",
     "bun-types": "1.4.2",
