@@ -160,6 +160,68 @@ export function HostMissingScreen({
   );
 }
 
+/**
+ * A host already serves this computer's `~/.eta`, so none was started: connect to that one, or
+ * go back. Connecting uses the token read from its token file; when there is none to read and the
+ * host asks for one, the user pastes it.
+ */
+export function ExistingHostScreen({
+  phase,
+  controller,
+}: {
+  phase: PhaseOf<"existing-host">;
+  controller: ConnectionController;
+}) {
+  const t = useMessages(screenMessages);
+  const [connecting, setConnecting] = useState(false);
+  const { token } = phase;
+  return (
+    <Screen>
+      <Title>{t("existingHostTitle")}</Title>
+      <Text>{phase.url}</Text>
+      <Box flexDirection="column" marginY={1}>
+        <Text>
+          {phase.wanted === "temporary"
+            ? t("existingHostNotTemporary")
+            : t("existingHostNotInstall")}
+        </Text>
+        {token.kind === "unreadable" && (
+          <Muted>
+            {t("existingHostTokenUnreadable", { file: token.file })}
+          </Muted>
+        )}
+      </Box>
+      {connecting ? (
+        <AddressForm
+          controller={controller}
+          initialUrl={phase.url}
+          initialToken={token.kind === "read" ? token.value : ""}
+          withToken={token.kind !== "none"}
+          startAt={token.kind === "unreadable" ? "token" : "address"}
+          autoSubmit={token.kind !== "unreadable"}
+          onBack={() => setConnecting(false)}
+        />
+      ) : (
+        <>
+          <ChoiceList
+            choices={[
+              { label: t("choiceConnectExisting") },
+              { label: t("choiceBack") },
+            ]}
+            onChoose={(index) => {
+              if (index === 0) setConnecting(true);
+              else void controller.dismissFailure();
+            }}
+          />
+          <Box marginTop={1}>
+            <Muted>{t("choicesHelp", { count: 2 })}</Muted>
+          </Box>
+        </>
+      )}
+    </Screen>
+  );
+}
+
 export function InstallingScreen({ phase }: { phase: PhaseOf<"installing"> }) {
   const t = useMessages(screenMessages);
   return (

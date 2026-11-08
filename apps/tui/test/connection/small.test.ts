@@ -15,6 +15,8 @@ describe("the default timing", () => {
       temporaryStopMs: 10_000,
       installRunMs: 120_000,
       installUpMs: 60_000,
+      // Shorter than the desktop app's 15 s: every start of a host waits on `eta-host running`.
+      runningMs: 10_000,
     });
     const delays = [DEFAULT_TIMING.initialRetryMs];
     while (delays.length < 8)

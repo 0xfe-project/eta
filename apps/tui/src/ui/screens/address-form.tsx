@@ -1,6 +1,6 @@
 import type { ConnectionController } from "../../connection/types";
 import { Box, Text } from "ink";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTheme } from "../../extensions/react";
 import { useMessages } from "../../i18n/react";
 import { LineInput } from "../components/line-input";
@@ -12,24 +12,29 @@ type Field = "address" | "token";
 /**
  * Asks for a host address and, when the host wants one, a token; checks them with the controller
  * and connects when the check passes. Starts with only the address unless `withToken`.
+ * `autoSubmit` checks what it was given once, as soon as it is drawn.
  */
 export function AddressForm({
   controller,
   initialUrl,
+  initialToken = "",
   withToken = false,
   startAt = "address",
+  autoSubmit = false,
   onBack,
 }: {
   controller: ConnectionController;
   initialUrl: string;
+  initialToken?: string;
   withToken?: boolean;
   startAt?: Field;
+  autoSubmit?: boolean;
   onBack?: () => void;
 }) {
   const t = useMessages(screenMessages);
   const theme = useTheme();
   const [url, setUrl] = useState(initialUrl);
-  const [token, setToken] = useState("");
+  const [token, setToken] = useState(initialToken);
   const [showToken, setShowToken] = useState(withToken);
   const [focus, setFocus] = useState<Field>(startAt);
   const [error, setError] = useState<string | undefined>();
@@ -71,6 +76,12 @@ export function AddressForm({
         setFocus("address");
     }
   };
+  const submittedRef = useRef(false);
+  useEffect(() => {
+    if (!autoSubmit || submittedRef.current) return;
+    submittedRef.current = true;
+    void submit();
+  });
   const switchField = () => {
     if (showToken) setFocus((f) => (f === "address" ? "token" : "address"));
   };

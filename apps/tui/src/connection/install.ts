@@ -1,6 +1,7 @@
 /** Installing the local host as the user's service: `eta-host install-service`, then its `/up`. */
 import type { Subprocess } from "bun";
 import type { HostProgram } from "./types";
+import { collect, sleep } from "./output";
 import { probeUp } from "./probe";
 
 /** How often the service's `/up` is asked while waiting for it. */
@@ -28,22 +29,6 @@ export interface InstallOptions {
   /** Aborting kills the command and ends the wait, as a failure of the step it was in. */
   signal?: AbortSignal;
 }
-
-async function collect(
-  stream: ReadableStream<Uint8Array>,
-  into: (text: string) => void,
-) {
-  const decoder = new TextDecoder();
-  try {
-    for await (const chunk of stream)
-      into(decoder.decode(chunk, { stream: true }));
-  } catch {
-    // The pipe of a killed command; what was read is kept.
-  }
-  into(decoder.decode());
-}
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Run `[command, ...args, "install-service"]`, then ask `<localUrl>/up` every 500 ms. Fails in

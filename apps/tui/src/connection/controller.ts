@@ -4,18 +4,21 @@
  */
 import type { UpgradeBusy, UpgradeCheckView } from "@eta/client-contracts";
 import type { ConnectionSetting, SaveProblem, TuiPaths } from "../config/types";
+import type { RunningHost } from "./running";
 import type { TemporaryHost } from "./temporary-host";
 import type {
   ConnectionController,
   ConnectionPhase,
   ConnectionState,
+  ExistingHostToken,
   HostProgram,
 } from "./types";
 import type { WireObserver } from "./wire";
 import { saveConnection } from "../config/save";
-import { normalizeAddress, wireUrl } from "./address";
+import { isLoopback, normalizeAddress, wireUrl } from "./address";
 import { installService } from "./install";
 import { checkAddress, probeToken, probeUp } from "./probe";
+import { askRunning, readTokenFile } from "./running";
 import { launchTemporaryHost } from "./temporary-host";
 import { versionWarning } from "./version-check";
 import { Wire } from "./wire";
@@ -48,6 +51,8 @@ export interface ControllerTiming {
   installRunMs: number;
   /** How long the installed service may take to answer `/up`. */
   installUpMs: number;
+  /** How long `eta-host running` may take to say which host already runs. */
+  runningMs: number;
 }
 
 export const DEFAULT_TIMING: ControllerTiming = {
@@ -59,6 +64,7 @@ export const DEFAULT_TIMING: ControllerTiming = {
   temporaryStopMs: 10_000,
   installRunMs: 120_000,
   installUpMs: 60_000,
+  runningMs: 10_000,
 };
 
 /**
@@ -80,6 +86,7 @@ const UPGRADE_CHECK = "upgrade.check";
 const DEV_VERSION = "dev";
 
 type UnreachablePhase = Extract<ConnectionPhase, { name: "unreachable" }>;
+type ExistingHostPhase = Extract<ConnectionPhase, { name: "existing-host" }>;
 
 /** The choices `dismissFailure` goes back to. */
 type FailureOrigin =
@@ -98,6 +105,12 @@ interface Session {
   lostAt: number | undefined;
   /** Runs while there is no hello: from the first attempt, and again from each drop. */
   giveUpTimer: ReturnType<typeof setTimeout> | undefined;
+  /** How many hellos it has had. */
+  hellos: number;
+  /** Set while `eta-host running` is asked for another host, after a first failure or a drop. */
+  lookingElsewhere: boolean;
+  /** While asking: when the connection, back meanwhile, was lost again. */
+  lostWhileLooking: number | undefined;
 }
 
 /** A temporary host being started: aborting kills it; `done` settles when the start does. */
@@ -117,6 +130,7 @@ class Controller {
     tokenFromEnv: false,
     versionWarning: undefined,
     saveProblem: undefined,
+    fallback: undefined,
   };
 
   private readonly listeners = new Set<() => void>();
@@ -135,6 +149,8 @@ class Controller {
   private readonly launches = new Set<Launch>();
   /** Every `install-service` still running. */
   private readonly installs = new Set<AbortController>();
+  /** Every `eta-host running` still running. */
+  private readonly asks = new Set<AbortController>();
   private origin: FailureOrigin = { kind: "first-run" };
   private started = false;
   private stopped = false;
@@ -228,7 +244,12 @@ class Controller {
 
   dismissFailure = async (): Promise<void> => {
     const { name } = this.state.phase;
-    if (name !== "install-failed" && name !== "host-missing") return;
+    if (
+      name !== "install-failed" &&
+      name !== "host-missing" &&
+      name !== "existing-host"
+    )
+      return;
     const generation = this.nextAction();
     const origin = this.origin;
     if (origin.kind === "first-run")
@@ -243,6 +264,7 @@ class Controller {
     // Stopped from the first moment: what follows only waits for processes to end.
     if (this.state.phase.name !== "stopped") this.setPhase({ name: "stopped" });
     for (const install of this.installs) install.abort();
+    for (const ask of this.asks) ask.abort();
     for (const launch of this.launches) launch.abort.abort();
     this.endSession();
     this.temporary = undefined;
@@ -253,6 +275,7 @@ class Controller {
   };
 
   killTemporaryNow = (): void => {
+    for (const ask of this.asks) ask.abort();
     for (const launch of this.launches) launch.abort.abort();
     for (const host of this.hosts) host.killNow();
   };
@@ -284,12 +307,56 @@ class Controller {
   }
 
   private async enterFirstRun(generation: number): Promise<void> {
-    const answered = await probeUp(this.localUrl, this.timing.probeTimeoutMs);
+    const program = this.deps.findHost();
+    const [answered, running] = await Promise.all([
+      probeUp(this.localUrl, this.timing.probeTimeoutMs),
+      program === undefined ? undefined : this.runningHost(program),
+    ]);
     if (!this.isCurrent(generation)) return;
     this.setPhase({
       name: "first-run",
-      suggestedUrl: answered ? this.localUrl : undefined,
+      suggestedUrl: running?.url ?? (answered ? this.localUrl : undefined),
     });
+  }
+
+  /**
+   * The host `eta-host running` names; undefined when it names none or cannot say. One of this
+   * controller's own temporary hosts, still on its way out, is not another host.
+   */
+  private async runningHost(
+    program: HostProgram,
+  ): Promise<RunningHost | undefined> {
+    const abort = new AbortController();
+    this.asks.add(abort);
+    const answer = await askRunning({
+      program,
+      env: this.deps.env,
+      timeoutMs: this.timing.runningMs,
+      signal: abort.signal,
+    });
+    this.asks.delete(abort);
+    if (answer.result !== "found") return undefined;
+    const { host } = answer;
+    for (const own of this.hosts) if (own.url === host.url) return undefined;
+    return host;
+  }
+
+  /** The `existing-host` phase for the host already running, its token read; undefined when none runs. */
+  private async existingHost(
+    program: HostProgram,
+    wanted: ExistingHostPhase["wanted"],
+  ): Promise<ExistingHostPhase | undefined> {
+    const host = await this.runningHost(program);
+    if (host === undefined) return undefined;
+    let token: ExistingHostToken = { kind: "none" };
+    if (host.tokenFile !== null) {
+      const value = await readTokenFile(host.tokenFile);
+      token =
+        value === undefined
+          ? { kind: "unreadable", file: host.tokenFile }
+          : { kind: "read", value };
+    }
+    return { name: "existing-host", url: host.url, token, wanted };
   }
 
   /** Remember the choices the user is leaving, for `dismissFailure`. */
@@ -298,6 +365,15 @@ class Controller {
     if (phase.name === "first-run") this.origin = { kind: "first-run" };
     else if (phase.name === "unreachable")
       this.origin = { kind: "unreachable", phase };
+  }
+
+  /**
+   * Show the host found running. A handover has no choices to go back to, and starting its
+   * temporary host again would only find the same host: going back leads to the first-run choices.
+   */
+  private showExisting(phase: ExistingHostPhase): void {
+    if (this.origin.kind === "handover") this.origin = { kind: "first-run" };
+    this.setPhase(phase);
   }
 
   private async moveToResident(
@@ -328,15 +404,18 @@ class Controller {
     persist: boolean,
     generation: number,
   ): Promise<void> {
+    this.rememberOrigin();
     const program = this.deps.findHost();
-    if (program === undefined) {
-      this.rememberOrigin();
+    if (program === undefined)
       return this.setPhase({ name: "host-missing", wanted: "temporary" });
-    }
     this.endSession();
     this.setPhase({ name: "starting-temporary" });
     await this.stopTemporary();
     if (!this.isCurrent(generation)) return;
+    // Asked once this controller's own temporary host is stopped, so that it is not the one named.
+    const existing = await this.existingHost(program, "temporary");
+    if (!this.isCurrent(generation)) return;
+    if (existing !== undefined) return this.showExisting(existing);
 
     const abort = new AbortController();
     const started = launchTemporaryHost({
@@ -418,6 +497,9 @@ class Controller {
       this.state.phase.step !== "running"
     )
       this.setPhase({ name: "installing", step: "running" });
+    const existing = await this.existingHost(program, "install");
+    if (!this.isCurrent(generation)) return;
+    if (existing !== undefined) return this.showExisting(existing);
     const abort = new AbortController();
     this.installs.add(abort);
     const result = await installService({
@@ -445,11 +527,15 @@ class Controller {
     await this.moveToResident(this.localUrl, undefined, generation);
   }
 
-  /** Open a wire to `url` and follow it: hello, failed attempts, drops, the grace period. */
+  /**
+   * Open a wire to `url` and follow it: hello, failed attempts, drops, the grace period. `fallback`
+   * says the connection stands in for the address in the settings.
+   */
   private connect(
     url: string,
     temporary: boolean,
     token: string | undefined,
+    fallback?: ConnectionState["fallback"],
   ): void {
     this.endSession();
     // The wire reports only after `connect` below, once the session holds it.
@@ -469,14 +555,17 @@ class Controller {
       firstAttemptAt: Date.now(),
       lostAt: undefined,
       giveUpTimer: undefined,
+      hellos: 0,
+      lookingElsewhere: false,
+      lostWhileLooking: undefined,
     };
     observer.hello = () => this.helloFrom(session);
     observer.attemptFailed = () => this.attemptFailed(session);
-    observer.dropped = () => this.lost(session, Date.now());
+    observer.dropped = () => this.lostOrElsewhere(session, Date.now());
     this.session = session;
     this.setPhase(
       { name: "connecting", url, temporary },
-      { wire: session.wire },
+      { wire: session.wire, fallback },
     );
     // A first attempt can hang without failing (a host that accepts and never answers): the
     // grace period runs from its start, not from a failure that may never come.
@@ -498,6 +587,8 @@ class Controller {
     clearTimeout(session.giveUpTimer);
     session.giveUpTimer = undefined;
     session.lostAt = undefined;
+    session.lostWhileLooking = undefined;
+    session.hellos += 1;
     this.setPhase({
       name: "connected",
       url: session.url,
@@ -511,7 +602,7 @@ class Controller {
   private attemptFailed(session: Session): void {
     if (this.session !== session) return;
     if (this.state.phase.name === "connecting")
-      this.lost(session, session.firstAttemptAt);
+      this.lostOrElsewhere(session, session.firstAttemptAt);
     void probeToken(
       session.url,
       session.token,
@@ -521,6 +612,62 @@ class Controller {
       this.endSession();
       this.setPhase({ name: "unauthorized", url: session.url });
     });
+  }
+
+  /**
+   * The first failure of a resident host on this computer, or a drop from it: before retrying, ask
+   * `eta-host running` once whether a host runs here at another address (the desktop app's on a new
+   * port, a service moved to another), and connect to that one for this run. Otherwise, or when the
+   * wire gets its hello back meanwhile, the retries go on as for any host.
+   */
+  private lostOrElsewhere(session: Session, since: number): void {
+    if (this.session !== session || session.lostAt !== undefined) return;
+    if (session.lookingElsewhere) {
+      session.lostWhileLooking ??= since;
+      return;
+    }
+    const program =
+      session.temporary || !isLoopback(session.url)
+        ? undefined
+        : this.deps.findHost();
+    if (program === undefined) return this.lost(session, since);
+    session.lookingElsewhere = true;
+    void this.connectElsewhere(session, program, since);
+  }
+
+  private async connectElsewhere(
+    session: Session,
+    program: HostProgram,
+    since: number,
+  ): Promise<void> {
+    const hellos = session.hellos;
+    const host = await this.runningHost(program);
+    const token =
+      host === undefined || host.tokenFile === null
+        ? undefined
+        : await readTokenFile(host.tokenFile);
+    session.lookingElsewhere = false;
+    if (this.session !== session || this.stopped) return;
+    if (session.hellos !== hellos) {
+      // Back while asking: the answer is about a connection that is no longer lost. If it was
+      // lost again after that, the retries for that loss start now.
+      const again = session.lostWhileLooking;
+      session.lostWhileLooking = undefined;
+      if (again !== undefined) this.lost(session, again);
+      return;
+    }
+    if (host === undefined || host.url === session.url)
+      return this.lost(session, since);
+    const setting = this.state.setting;
+    const configured = this.state.fallback?.configured ?? session.url;
+    // Named the address in the settings again: that connection is not a fallback, and takes the
+    // token the settings' connection takes.
+    if (host.url === configured) {
+      const settingToken =
+        setting === undefined ? undefined : this.tokenFor(setting);
+      return this.connect(host.url, false, settingToken);
+    }
+    this.connect(host.url, false, token, { configured, url: host.url });
   }
 
   private lost(session: Session, since: number): void {

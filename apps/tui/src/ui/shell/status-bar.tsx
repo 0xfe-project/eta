@@ -10,18 +10,21 @@ const SEPARATOR = "  ";
 
 /**
  * One line, cut at the right edge: the quit question or the latest notice, the address, the
- * temporary host warning and the version warning. The short-lived line comes first so a narrow
+ * fallback warning, the temporary host warning and the version warning. The short-lived line comes first so a narrow
  * terminal still shows it.
  */
 export function StatusBar({
   url,
   temporary,
+  fallback,
   versionWarning,
   notice,
   quitHint,
 }: {
   url: string;
   temporary: boolean;
+  /** Connected to another host than the address in the settings, which did not answer. */
+  fallback: boolean;
   versionWarning: VersionWarning | undefined;
   notice: Notice | undefined;
   quitHint: string | undefined;
@@ -50,6 +53,14 @@ export function StatusBar({
           )
         )}
         <Text color={inkColor(theme.muted)}>{t("connected", { url })}</Text>
+        {fallback && (
+          <>
+            {SEPARATOR}
+            <Text color={inkColor(theme.warning)}>
+              {t("fallbackWarning", { url })}
+            </Text>
+          </>
+        )}
         {temporary && (
           <>
             {SEPARATOR}

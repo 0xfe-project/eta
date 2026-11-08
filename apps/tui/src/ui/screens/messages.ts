@@ -38,6 +38,16 @@ export const screenMessages = defineMessages({
     hostMissingInstallPath: "Install it at {path}",
     anyKeyBack: "Press any key to go back",
 
+    existingHostTitle: "A host is already running on this computer",
+    existingHostNotTemporary:
+      "Two hosts cannot use the same ~/.eta at once, so eta did not start a temporary host.",
+    existingHostNotInstall:
+      "Two hosts cannot use the same ~/.eta at once, so eta did not install a resident host.",
+    existingHostTokenUnreadable:
+      "Its token could not be read from {file}. Paste the token if the host asks for one.",
+    choiceConnectExisting: "Connect to it",
+    choiceBack: "Back",
+
     installRunning: "Installing eta-host as a service…",
     installWaiting: "Waiting for the service to start…",
     installFailedTitle: "Could not install the service",
@@ -96,6 +106,15 @@ export const screenMessages = defineMessages({
     hostMissingPath: "把 eta-host 放进 PATH",
     hostMissingInstallPath: "装到 {path}",
     anyKeyBack: "按任意键返回",
+
+    existingHostTitle: "这台电脑上已经有一个 host 在跑",
+    existingHostNotTemporary:
+      "两个 host 不能同时用同一个 ~/.eta，所以没有再起临时 host。",
+    existingHostNotInstall:
+      "两个 host 不能同时用同一个 ~/.eta，所以没有再装常驻 host。",
+    existingHostTokenUnreadable: "读不到令牌文件 {file}。host 要令牌时请贴上。",
+    choiceConnectExisting: "连接它",
+    choiceBack: "返回",
 
     installRunning: "正在把 eta-host 装成系统服务…",
     installWaiting: "正在等服务启动…",

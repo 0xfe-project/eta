@@ -6,6 +6,8 @@ export const shellMessages = defineMessages({
     temporaryWarning:
       "Temporary host: agents stop when you quit eta. Run /install-service to install a resident host.",
     versionWarning: "Host version {host} differs from eta {tui}.",
+    fallbackWarning:
+      "The address in the settings does not answer; connected to the host running on this computer ({url}).",
     settingsNotSaved: "Could not write settings to {file}: {reason}",
     settingsNotJson: "the file is not valid JSON",
     stateNotSaved: "Could not save the open tabs to {file}: {reason}",
@@ -21,6 +23,7 @@ export const shellMessages = defineMessages({
     temporaryWarning:
       "临时 host：退出 TUI 后 agent 会停止。用 /install-service 装常驻 host",
     versionWarning: "host 版本 {host} 与 eta {tui} 不一致。",
+    fallbackWarning: "设定里的地址连不上，已连到本机正在运行的 host（{url}）。",
     settingsNotSaved: "设定没能写进 {file}：{reason}",
     settingsNotJson: "文件不是合法的 JSON",
     stateNotSaved: "打开的标签没能存进 {file}：{reason}",

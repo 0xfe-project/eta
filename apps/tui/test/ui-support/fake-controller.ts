@@ -31,6 +31,7 @@ export class FakeController implements ConnectionController {
       tokenFromEnv: false,
       versionWarning: undefined,
       saveProblem: undefined,
+      fallback: undefined,
       ...patch,
     };
   }

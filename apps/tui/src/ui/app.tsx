@@ -43,6 +43,7 @@ import { ConfigProblemsLayer } from "./config-problems";
 import { editorLaunch } from "./editor";
 import { screenMessages } from "./screens/messages";
 import {
+  ExistingHostScreen,
   FirstRunScreen,
   HostMissingScreen,
   InstallFailedScreen,
@@ -309,6 +310,8 @@ function PhaseScreen({
       return <InstallingScreen phase={phase} />;
     case "install-failed":
       return <InstallFailedScreen phase={phase} controller={controller} />;
+    case "existing-host":
+      return <ExistingHostScreen phase={phase} controller={controller} />;
     case "unauthorized":
       return <UnauthorizedScreen phase={phase} controller={controller} />;
     case "unreachable":
@@ -380,6 +383,7 @@ function AppBody({
                 session={session}
                 url={shellPhase.url}
                 temporary={shellPhase.temporary}
+                fallback={state.fallback?.url === shellPhase.url}
                 versionWarning={state.versionWarning}
                 quitHint={quitHint}
                 version={deps.tuiVersion}
