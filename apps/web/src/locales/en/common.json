@@ -180,5 +180,8 @@
     "close": "Close window",
     "minimize": "Minimize window",
     "maximize": "Maximize or restore window"
+  },
+  "desktop": {
+    "tooOld": "This host needs the eta desktop app {{min}} or later; this one is {{current}}. Some things may not work until you update the app."
   }
 }

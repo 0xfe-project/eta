@@ -1,4 +1,5 @@
 import type { NativeBridge } from "../src/bun/native";
+import { BASELINE_CAPABILITIES } from "@eta/client-contracts/desktop";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { startNativeBridge } from "../src/bun/native";
 
@@ -74,6 +75,16 @@ describe("the bridge in remote mode", () => {
   it("answers no page when the window shows none", async () => {
     start([]);
     expect((await ask(REMOTE)).status).toBe(403);
+  });
+
+  it("lists what it can do, the 0.1.0 bridge at least", async () => {
+    start([REMOTE]);
+    const info = (await (await ask(REMOTE)).json()) as {
+      capabilities: string[];
+    };
+    expect(info.capabilities).toEqual(
+      expect.arrayContaining([...BASELINE_CAPABILITIES]),
+    );
   });
 
   it("still needs the token", async () => {

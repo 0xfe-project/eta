@@ -15,6 +15,10 @@
  *
  * What is checked here is that a download is whole, against the `SHA256SUMS` of the same release.
  * That says the file is the one that was published, as far as GitHub is believed.
+ *
+ * The same repository releases the desktop app under `desktop-v*` tags (`release-desktop.yml`).
+ * Those are not hosts: a host only ever takes a `v*` tag (`isHostTag`), whatever GitHub calls the
+ * latest release.
  */
 import type { SavedToken } from "./token";
 import type { Upstream } from "./upstream";
@@ -36,6 +40,13 @@ const STALL_MS = 60_000;
 const API_TIMEOUT_MS = 30_000;
 const MAX_REDIRECTS = 5;
 const GH_TIMEOUT_MS = 5000;
+/** One page of the release list, newest first: a host release further back than this is not the latest. */
+const LIST_PAGE = 100;
+
+/** `v0.2.0` or `v0.2.0-rc.1`: what `release.yml` publishes. `desktop-v0.1.0` is the app's. */
+const HOST_TAG = /^v\d+\.\d+\.\d+(?:-[0-9a-z.-]+)?$/i;
+
+export const isHostTag = (tag: string): boolean => HOST_TAG.test(tag);
 
 export interface ReleaseAsset {
   name: string;
@@ -129,6 +140,35 @@ export function parseSums(text: string): Map<string, string> {
   return sums;
 }
 
+/** A release as the API lists it, as far as this reads it. */
+export interface ListedRelease {
+  tag_name: string;
+  draft?: boolean;
+  prerelease?: boolean;
+  assets: { name: string; url: string }[];
+}
+
+const describe = (release: ListedRelease): Release => ({
+  version: release.tag_name.replace(/^v/, ""),
+  assets: release.assets.map(({ name, url }) => ({ name, url })),
+});
+
+/** The highest published host release that is not a pre-release, among `releases`. */
+export function newestHost<T extends ListedRelease>(
+  releases: T[],
+): T | undefined {
+  return releases
+    .filter(
+      (release) =>
+        isHostTag(release.tag_name) &&
+        release.draft !== true &&
+        release.prerelease !== true &&
+        !release.tag_name.includes("-"),
+    )
+    .sort((a, b) => Bun.semver.order(a.tag_name.slice(1), b.tag_name.slice(1)))
+    .at(-1);
+}
+
 export class Releases {
   readonly upstream: Upstream;
   readonly #fetch: typeof fetch;
@@ -145,9 +185,28 @@ export class Releases {
     )();
   }
 
-  /** The newest published release that is not a pre-release: what the API means by latest. */
+  /**
+   * The newest published host release that is not a pre-release. What GitHub calls the latest
+   * release is that, unless it is the desktop app's; then it is the highest `v*` among the newest
+   * releases.
+   */
   async latest(): Promise<Release> {
-    return await this.#release("releases/latest", "the latest release");
+    const what = "the latest release";
+    const answer = await this.#getApi("releases/latest");
+    if (answer.ok) {
+      const release = (await answer.json()) as ListedRelease;
+      if (isHostTag(release.tag_name) && release.draft !== true)
+        return describe(release);
+    } else if (answer.status !== 404) throw await this.#refused(what, answer);
+    // No latest at all, or one that is not a host: either way, the list says.
+    const listed = await this.#getApi(`releases?per_page=${LIST_PAGE}`);
+    if (!listed.ok) throw await this.#refused(what, listed);
+    const newest = newestHost((await listed.json()) as ListedRelease[]);
+    if (newest === undefined)
+      throw new Error(
+        `${what}: not found: ${this.upstream.label} has no host release (a v* tag)`,
+      );
+    return describe(newest);
   }
 
   async byVersion(version: string): Promise<Release> {
@@ -202,23 +261,20 @@ export class Releases {
     }
   }
 
-  async #release(path: string, what: string): Promise<Release> {
-    const answer = await this.#get(
+  async #getApi(path: string): Promise<Response> {
+    return await this.#get(
       `${this.upstream.api}/${path}`,
       "application/vnd.github+json",
       AbortSignal.timeout(API_TIMEOUT_MS),
     );
+  }
+
+  async #release(path: string, what: string): Promise<Release> {
+    const answer = await this.#getApi(path);
     if (!answer.ok) throw await this.#refused(what, answer);
-    const release = (await answer.json()) as {
-      tag_name: string;
-      draft?: boolean;
-      assets: { name: string; url: string }[];
-    };
+    const release = (await answer.json()) as ListedRelease;
     if (release.draft === true) throw new Error(`${what} is not published`);
-    return {
-      version: release.tag_name.replace(/^v/, ""),
-      assets: release.assets.map(({ name, url }) => ({ name, url })),
-    };
+    return describe(release);
   }
 
   /**

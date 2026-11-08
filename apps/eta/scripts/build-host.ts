@@ -1,6 +1,7 @@
 /**
- * Stage the host a packaged app carries: `dist/host/`, which `electrobun.config.ts` copies into
- * the bundle as `host/`.
+ * Build the host as a release ships it: `apps/eta/out/host/`, or the directory given.
+ *
+ *   bun apps/eta/scripts/build-host.ts [out]
  *
  * One file, `eta-host` (`eta-host.exe` on Windows): the host (`apps/eta`) compiled with everything
  * it reads at run time inside it. `apps/eta/scripts/embed.ts` generates the entry that embeds them, and
@@ -32,13 +33,13 @@ import {
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { $ } from "bun";
-import { writeEmbedded } from "../../eta/scripts/embed";
-import { thirdPartyNotices } from "../../eta/scripts/notices";
-import { parseUpstream } from "../../eta/src/upgrade/upstream";
+import { parseUpstream } from "../src/upgrade/upstream";
+import { writeEmbedded } from "./embed";
+import { thirdPartyNotices } from "./notices";
 
 const root = resolve(import.meta.dir, "../../..");
 const app = join(root, "apps", "eta");
-const out = resolve(import.meta.dir, "..", "dist", "host");
+const out = resolve(process.argv[2] ?? join(app, "out", "host"));
 
 const web = join(root, "apps", "web", "dist");
 if (!existsSync(join(web, "index.html"))) {
@@ -101,4 +102,4 @@ const defines = [
 const outfile = process.platform === "win32" ? "eta-host.exe" : "eta-host";
 await $`bun build --compile --target=bun ${defines} ${externals} ${entry} --outfile ${join(out, outfile)}`;
 
-console.log(`staged the host ${version} in ${out}`);
+console.log(`built the host ${version} in ${out}`);

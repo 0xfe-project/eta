@@ -1,6 +1,13 @@
 # 发布
 
-打一个 `v*` tag，CI 就在 Linux、macOS 和 Windows 上把 `eta-host` 和桌面应用构建好，发成 GitHub Release。工作流是 `.github/workflows/release.yml`。
+host 和桌面应用分开发版，各有各的版本号：
+
+| tag          | 工作流                                  | 发什么                                       |
+| ------------ | --------------------------------------- | -------------------------------------------- |
+| `v*`         | `.github/workflows/release.yml`         | `eta-host`，Linux、macOS、Windows 各一个文件 |
+| `desktop-v*` | `.github/workflows/release-desktop.yml` | 桌面应用安装包，见下面的“桌面应用”           |
+
+GitHub 的 Latest 永远是 host 的：桌面 Release 发布时带 `--latest=false`。`eta-host upgrade` 和设置页按钮也不看 Latest 是谁，只取 `v*` tag（`apps/eta/src/upgrade/releases.ts`），所以就算桌面 Release 被手动标成了 Latest，host 取到的仍然是最新的 host。
 
 ## 打 tag
 
@@ -13,6 +20,7 @@ git push origin v0.2.0
 ```
 
 - 版本就是 tag 去掉 `v`。host 和它带的 daemon 都是这个版本，`package.json` 里的 `version` 不参与。
+- 这一节和下面几节说的都是 host。桌面应用打 `desktop-v*`，见“桌面应用”。
 - 带 `-` 的是预发布，比如 `v0.2.0-rc.1`，Release 会标成 Pre-release，不算最新版本。
 - tag 要写成 `vX.Y.Z` 或 `vX.Y.Z-后缀`，其它写法发不出去。
 
@@ -20,9 +28,11 @@ git push origin v0.2.0
 
 1. `prepare`：从 tag 读版本，开一个草稿 Release。
 2. `check`：和构建同时跑，完整的 `bun run check`，不是 `--affected`。没通过就不会发布，草稿留着。
-3. `build`：每个平台在自己的 runner 上，干净 checkout、frozen lockfile 构建。host 单独运行一次，核对 `--version`、`/up` 和页面；桌面应用打成安装包，装上启动，看它带的 host 答应；两样都过了才上传到草稿。只有一个例外：Linux 上启动要先从 Ubuntu 的镜像装 WebKit，8 分钟装不完就跳过这次启动，运行里留一条 warning，host 的检查不受影响。
+3. `build`：每个平台在自己的 runner 上，干净 checkout、frozen lockfile 构建。host 单独运行一次，核对 `--version`、`/up` 和页面，过了才上传到草稿。Linux 那一份还写出 `eta-host.json`（`eta-host --version --json`），一起上传。
 4. `cross`：`upgrade-cross.yml` 在 Linux 上从上一个正式版本升到这个草稿，见下面的“跨版本升级测试”。没有上一版，或者上一版比最早的种子还旧（比如不能自升级的 v0.1.0），都跳过并在运行摘要里写明。
 5. `publish`：前面都成功才会跑，从草稿算出 `SHA256SUMS`，然后发布。任何一步失败，Release 都留在草稿，用户看不到。
+
+不再构建桌面应用，也不装 WebKit 和 Xvfb，所以 host 发版不再被 Ubuntu 镜像拖慢。
 
 失败了先看是不是已知的不稳定测试（`gh run rerun <id> --failed`）。一个平台失败时其它平台会跑完，`--failed` 只重跑失败的那个。草稿可以重跑，文件会被覆盖。Release 一旦发布就不再改动：重跑会报错，要换文件就打新 tag。
 
@@ -34,19 +44,51 @@ gh workflow run release.yml --ref v0.2.0
 
 ## 产物
 
+`v*` 的 Release：
+
+| 文件                       | 平台        | 是什么                                                          |
+| -------------------------- | ----------- | --------------------------------------------------------------- |
+| `eta-host-linux-x64`       | Linux x64   | host                                                            |
+| `eta-host-darwin-arm64`    | macOS arm64 | host                                                            |
+| `eta-host-windows-x64.exe` | Windows x64 | host                                                            |
+| `eta-host.json`            |             | `{"version","commit","minDesktop"}`，见“桌面应用和 host 的兼容” |
+| `SHA256SUMS`               |             | 以上全部的校验和                                                |
+
+host 是一个不压缩的文件，页面、数据库迁移、CLIProxyAPI 和所有平台的 daemon 都在里面。不压缩，是因为 zstd 只能省下三分之一左右（里面的 daemon 已经压缩过），却要求下载的机器有 zstd，校验的也不再是实际运行的文件。
+
+本地构建同一个文件：`bun run --cwd apps/web build && bun apps/eta/scripts/build-host.ts`，产物在 `apps/eta/out/host/`。
+
+host 带的 CLIProxyAPI 跟构建它的机器相关，所以每个平台要在对应的 runner 上构建。加平台就是在 `build` 的矩阵里加一行，加之前要先验证过这个平台的编译。没有 `darwin-x64`，也没有 Windows 的 daemon（`apps/daemon/scripts/build.ts` 的平台表里没有它）。
+
+## 桌面应用
+
+```sh
+git tag desktop-v0.2.0 origin/main
+git push origin desktop-v0.2.0
+```
+
+- 版本是 tag 去掉 `desktop-v`，由 `ETA_DESKTOP_VERSION` 交给 `electrobun.config.ts`，写进包里的 `Resources/version.json`，应用运行时从那里读（`apps/desktop/src/version.ts`）。本地打包没有这个变量，取 `apps/desktop/package.json` 的 `version`。源码里没有别处写版本号。
+- 带 `-` 的是预发布。tag 要写成 `desktop-vX.Y.Z` 或 `desktop-vX.Y.Z-后缀`。
+- 草稿和发布都带 `--latest=false`，不占仓库的 Latest。
+
+流水线：`prepare` 开草稿；`check` 和 host 一样跑完整的 `bun run check`；`build` 每个平台构建页面和应用带的 host，打包，装上启动一次（`apps/desktop/scripts/try-app.ts`），Linux 上 8 分钟装不完 WebKit 就跳过启动并留 warning；`publish` 算 `SHA256SUMS` 后发布。没有跨版本升级测试，那是 host 的。
+
 | 文件                           | 平台        | 是什么                           |
 | ------------------------------ | ----------- | -------------------------------- |
-| `eta-host-linux-x64`           | Linux x64   | host                             |
-| `eta-host-darwin-arm64`        | macOS arm64 | host                             |
-| `eta-host-windows-x64.exe`     | Windows x64 | host                             |
 | `eta-desktop-linux-x64.tar.gz` | Linux x64   | 桌面应用，里面是 `installer`     |
 | `eta-desktop-darwin-arm64.dmg` | macOS arm64 | 桌面应用                         |
 | `eta-desktop-windows-x64.zip`  | Windows x64 | 桌面应用，里面是 `eta-Setup.exe` |
 | `SHA256SUMS`                   |             | 以上全部的校验和                 |
 
-host 是一个不压缩的文件，页面、数据库迁移、CLIProxyAPI 和所有平台的 daemon 都在里面。不压缩，是因为 zstd 只能省下三分之一左右（里面的 daemon 已经压缩过），却要求下载的机器有 zstd，校验的也不再是实际运行的文件。桌面应用里带着同一个 host。
+hutch 只为所在的机器打包，所以每个平台在对应的 runner 上构建。
 
-host 带的 CLIProxyAPI 跟构建它的机器相关，hutch 也只为所在的机器打包，所以每个平台要在对应的 runner 上构建。加平台就是在 `build` 的矩阵里加一行，加之前要先验证过这个平台的编译。没有 `darwin-x64`，也没有 Windows 的 daemon（`apps/daemon/scripts/build.ts` 的平台表里没有它）。
+### 桌面应用和 host 的兼容
+
+两者各自升级：host 用设置页的按钮或 `eta-host upgrade`，桌面应用重新安装。窗口里的页面是 host 提供的，所以页面可能比应用新，也可能比它旧；连远程 host 时更是如此。约定在 `packages/client-contracts/src/desktop.ts`：
+
+- **原生桥只增不改。** 应用通过 `window.__ETA_HOST__.capabilities` 列出它能做的事（`open-external`、`save-file`、`context-menu`、`window-action`、`connection`，之后只会增加）。名字一旦发布，含义和应答都不变；要改就起新名字。没有这个列表的应用是 0.1.0，按 `BASELINE_CAPABILITIES` 算。
+- **页面按能力判断，不按版本判断。** 调用前用 `hasCapability(<名字>)`（`apps/web/src/lib/native.ts`）；没有这个能力就不显示对应入口，浏览器里什么都没有。
+- **确实要破坏兼容时，提高 `MIN_DESKTOP`。** 页面发现应用版本低于它，就在窗口底部提示更新桌面端。`dev` 构建和说不出版本的应用不提示。这是唯一比较版本的地方，应该很少用。每个 host Release 的 `eta-host.json` 带着 `minDesktop`，应用不用下载 host 就能知道能不能跑它。
 
 ## 升级测试
 
@@ -91,7 +133,7 @@ docker run --rm -v "$PWD:/repo:ro" zricethezav/gitleaks detect --source /repo/te
 
 ## 没有签名
 
-这些文件都没有签名和公证，也没有自动更新：新版本要重新下载安装。macOS 和 Windows 第一次打开时都会拦下来，放行一次之后就正常了。
+这些文件都没有签名和公证。桌面应用没有自动更新：新版本要重新下载安装。macOS 和 Windows 第一次打开时都会拦下来，放行一次之后就正常了。
 
 macOS 上，从 DMG 把 eta 拖进“应用程序”，然后去掉下载带上的隔离标记，否则系统会说应用已损坏：
 
@@ -279,7 +321,7 @@ GitHub 的凭据不会发给其它服务器，也不会发给下载重定向到�
 fork 用同一份 `release.yml`，什么都不用改：工作流把 `github.repository` 写进二进制，所以 fork 打 tag 发出的版本默认从 fork 自己升级，用户不用配置。
 
 1. 在 fork 的 Actions 页面启用工作流。private fork 默认是关的。
-2. 打 tag 并推到 fork：
+2. 打 tag 并推到 fork（桌面应用是 `desktop-v*`，同理）：
 
    ```sh
    git tag v0.2.0

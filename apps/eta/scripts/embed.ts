@@ -1,5 +1,5 @@
 /**
- * Generate the entry a compiled host is built from: `apps/desktop/scripts/stage-host.ts` calls
+ * Generate the entry a compiled host is built from: `apps/eta/scripts/build-host.ts` calls
  * `writeEmbedded` and compiles the `main.ts` it writes.
  *
  * Two modules, in `apps/eta/out/embed` (not in git, and nothing run from source reads them):

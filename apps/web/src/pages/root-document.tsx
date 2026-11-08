@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { DesktopTooOld } from "@/components/desktop-too-old";
 import { LanguageProvider } from "@/components/language-provider";
 import { AppProviders } from "@/components/providers";
 import { UpgradeScreen } from "@/components/upgrade-screen";
@@ -61,6 +62,8 @@ function LocalizedDocument({ children }: { children: ReactNode }) {
       <WindowControls />
       {/* The same reason for ⌘,: every route answers it, and no page can be left out of that. */}
       {children}
+      {/* Under every page: this host has said the app around it is too old. */}
+      <DesktopTooOld />
       {/* Over every page: the host is going away under whatever is open. */}
       <UpgradeScreen />
     </AppProviders>

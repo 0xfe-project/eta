@@ -2,7 +2,7 @@
  * The host's own files: in the checkout, or inside the executable.
  *
  * Run from source, a file the host reads (the migrations, the mail logo) is where the checkout
- * keeps it. A `bun build --compile` host has no checkout: `apps/desktop/scripts/stage-host.ts`
+ * keeps it. A `bun build --compile` host has no checkout: `apps/eta/scripts/build-host.ts`
  * compiles it from a generated entry (`apps/eta/scripts/embed.ts`) that imports every file with
  * `{ type: "file" }` and hands the table over with `embedResources` before the host starts. A
  * name here is the file's name in that table, `migrations/0001-agents.sql`; what the bundler made
