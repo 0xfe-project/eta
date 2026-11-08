@@ -341,7 +341,7 @@ fork 用同一份 `release.yml`，什么都不用改：工作流把 `github.repo
 
 只有编译出来的 host，而且 `io.eta.host` 或桌面应用正在运行这个文件时才有按钮，三个平台都一样。从源码运行、没装服务、服务运行别的文件时只显示原因；Windows 上没装服务时还会说要用管理员终端运行 `install-service`。
 
-### 桌面应用
+### 桌面应用里的 host
 
 桌面应用本机模式下自己就是 host 的服务，和 systemd、launchd、Windows 服务并列（`apps/desktop/src/bun/service.ts`，host 一侧是 `apps/eta/src/upgrade/desktop.ts`）。它不跑包里那份 host：第一次启动把包里的 `eta-host` 复制到 `~/.eta/desktop/host/eta-host`，之后一直从那里启动，包里的只是种子。应用升级不会用新种子盖掉已经在那里的 host，host 只从设置里的按钮升级，所以安装包里的文件从来不被改，签名不受影响。
 
@@ -351,7 +351,7 @@ fork 用同一份 `release.yml`，什么都不用改：工作流把 `github.repo
 
 本机已经有 host 在用 `~/.eta`（命令行装的 `io.eta.host`，或者在终端里跑的一个）时，壳不再启动第二个，直接打开那一个，也不管它的升级，它的设置页说的是它自己的情况。判断方法是问 host 文件（`eta-host running`）：先看运行中的 host 写的 `~/.eta/running-host.json`（pid 活着、`/up` 有应答才算），再问系统的服务管理器，所以没写这个文件的旧版服务也认得出。那个 host 停了，窗口和远程模式一样 30 秒后显示失败页，重试时重新判断，可能就换成应用自己的 host。
 
-壳被强杀时 host 不会留下：壳和 host 之间的包装脚本每秒看一次壳还在不在，不在了就停掉 host。
+壳被强杀时 host 不会留下：壳和 host 之间的包装脚本每秒看一次壳还在不在，不在了就停掉 host。Windows 上更直接：Bun 启动的子进程和壳在同一个 job object 里，壳一死，包装脚本和 host 当场一起结束，来不及正常退出，`running-host.json` 会留下，下次启动按 pid 判断它已经不在。正常退出应用时，壳往 host 的 `ETA_STOP_PIPE` 写一行，host 和收到 SIGTERM 一样正常退出（Windows runner 上三轮都过，`apps/desktop/test/real-host.test.ts`）。
 
 Windows 上按钮由服务发起，host 没有管理员权限也够用：安装时已经给这个账号授了启动和停止两个服务的权限。
 
