@@ -178,7 +178,26 @@ async function tryInstall(dir: string): Promise<string> {
     if (problems.length > 0) throw new TryFailure(problems.join("\n"));
     return `try-install: the install script installed eta and eta-host for ${platform} (${version})`;
   } finally {
-    rmSync(temp, { recursive: true, force: true, maxRetries: 5 });
+    removeTemporary(temp);
+  }
+}
+
+/**
+ * Removes the temporary directory. On Windows a program that has just run, or just been written,
+ * can stay locked for a few seconds (a virus scanner reading it, say), so it is retried for a while,
+ * and a directory still there after that is only a warning: the checks above have all been made.
+ */
+function removeTemporary(temp: string): void {
+  try {
+    rmSync(temp, {
+      recursive: true,
+      force: true,
+      maxRetries: 20,
+      retryDelay: 250,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stdout.write(`::warning::could not remove ${temp}: ${message}\n`);
   }
 }
 
