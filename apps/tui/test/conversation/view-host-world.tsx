@@ -64,6 +64,15 @@ export const KEY = {
   select: "\u001Bv",
 } as const;
 
+/**
+ * The real extensions the host worlds draw the interface without. On connecting, the first-time
+ * setup opens over the screen when the host has no usable model or no agent. These hosts have no
+ * configured model, some tests start with no agent, and a world's wire says hello before the test
+ * creates its agents, so the agents list the setup reads can be empty though agents exist. The
+ * setup is tested against hosts of its own under `test/ext/`.
+ */
+export const WITHOUT_SETUP = ["setup"];
+
 export async function hostWorld(respond: Respond) {
   const { models, requests } = scriptedModels(respond);
   const host = await testHost({ overrides: { models: models as never } });
@@ -123,7 +132,12 @@ export async function hostWorld(respond: Respond) {
     )?.find((c) => c.id === conversationId);
 
   const show = async (state: TuiState, size = { columns: 80, rows: 24 }) => {
-    const r = await renderApp({ patch: { wire }, state, ...size });
+    const r = await renderApp({
+      patch: { wire },
+      state,
+      without: WITHOUT_SETUP,
+      ...size,
+    });
     cleanups.push(() => r.unmount());
     return r;
   };

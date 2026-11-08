@@ -457,4 +457,45 @@ describe("the wire's frames", () => {
       .catch((error) => error);
     expect((slow as WireError).code).toBe("timeout");
   });
+
+  it("keeps an eager target's copy at version 0 once its last user leaves, and follows again on a new subscription", () => {
+    const { wire, sockets } = scripted();
+    const socket = sockets[0]!;
+    socket.open();
+    socket.frame(HELLO);
+    expect(wire.store.getState().targets.eager?.version).toBe(0);
+    const first = wire.subscribe("eager");
+    const second = wire.subscribe("eager");
+    socket.frame({
+      type: "state",
+      target: "eager",
+      version: 3,
+      snapshot: { sections: { s: 2 }, revisions: { s: "r2" } },
+    });
+    first();
+    // Another user still reads it: the copy keeps following.
+    expect(wire.store.getState().targets.eager?.version).toBe(3);
+    second();
+    const left = wire.store.getState().targets.eager;
+    expect(left?.version).toBe(0);
+    expect(left?.sections).toEqual({ s: 2 });
+    // A frame in flight when the last user left does not move it.
+    socket.frame({
+      type: "state",
+      target: "eager",
+      version: 4,
+      snapshot: { sections: { s: 9 }, revisions: { s: "r9" } },
+    });
+    expect(wire.store.getState().targets.eager?.version).toBe(0);
+    wire.subscribe("eager");
+    socket.frame({
+      type: "state",
+      target: "eager",
+      version: 1,
+      snapshot: { sections: { s: 3 }, revisions: { s: "r3" } },
+    });
+    const again = wire.store.getState().targets.eager;
+    expect(again?.version).toBeGreaterThan(0);
+    expect(again?.sections).toEqual({ s: 3 });
+  });
 });

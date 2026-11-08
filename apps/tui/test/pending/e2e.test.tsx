@@ -19,6 +19,7 @@ import { Wire } from "../../src/connection/wire";
 import { extensions } from "../../src/extensions.gen";
 import { createRegistry } from "../../src/extensions/registry";
 import { App } from "../../src/ui/app";
+import { dataDirWith } from "../ext-support/host-data";
 import { baseUrl, childEnv, closedPort, testHost } from "../support/host";
 import { tempDir, until } from "../support/temp";
 import { loaded, testConfig } from "../ui-support/config";
@@ -39,7 +40,14 @@ it("answers a question from another conversation without leaving the one in fron
           options: [{ title: "red" }, { title: "blue" }],
         });
   });
-  const host = await testHost({ overrides: { models: models as never } });
+  // A model usable without a key, named as the scripted models name theirs: with it and the agents
+  // made below, the host is set up and the first-time setup stays closed.
+  const host = await testHost({
+    dataDir: await dataDirWith({
+      providers: [{ id: "fake", models: ["fake-model"] }],
+    }),
+    overrides: { models: models as never },
+  });
   const url = baseUrl(host);
 
   // The test's own connection: it sets the host up and reads it, apart from the interface.

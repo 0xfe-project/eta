@@ -1,0 +1,73 @@
+import { defineMessages } from "../../i18n/messages";
+
+export const githubMessages = defineMessages({
+  en: {
+    title: "GitHub",
+    notMounted:
+      "This host does not have GitHub turned on. Start it with --github or set ETA_GITHUB=1.",
+    mountError: "GitHub did not start on this host: {error}",
+    loading: "Loading…",
+    status: "Status: {state}",
+    stateNotConnected: "not connected",
+    stateNotInstalled: "not installed",
+    stateReady: "ready",
+    stateError: "error",
+    notChecked: "Not confirmed with GitHub yet. Press r to check.",
+    app: "App: {name}, owned by {owner}",
+    installedOn: "Installed on:",
+    allRepos: "{account}: all repositories",
+    someRepos: "{account}: {count} repositories",
+    user: "Authorized by: {login}",
+    noUser: "Authorized by: nobody yet",
+    error: "Error: {error}",
+    createInBrowser:
+      "Creating the App means submitting a form in a browser. Do it in the desktop app or the web page.",
+    installAt:
+      "Open this address in a browser to install the App, then press r:",
+    offerAuthorize: "Press a to authorize the App to act as you.",
+    noOAuth:
+      "Authorizing needs the App's client secret, which this host does not have. Set it up in the desktop app.",
+    errorHelp: "Press r to try again, or sort it out in the desktop app.",
+    authorizeAt:
+      "Open this address in a browser. The browser must be able to reach this host at {origin} to finish; press r when done:",
+    noOrigin:
+      "There is no connection to the host, so there is no address to come back to.",
+    footer: "r refresh · Esc close",
+    footerAuthorize: "r refresh · a authorize · Esc close",
+    footerClose: "Esc close",
+    checking: "Checking GitHub…",
+    authorizing: "Asking for an authorization address…",
+  },
+  zh: {
+    title: "GitHub",
+    notMounted: "这台 host 没开 GitHub。启动时加 --github，或设 ETA_GITHUB=1。",
+    mountError: "GitHub 在这台 host 上没能启动：{error}",
+    loading: "正在读取…",
+    status: "状态：{state}",
+    stateNotConnected: "未连接",
+    stateNotInstalled: "未安装",
+    stateReady: "就绪",
+    stateError: "出错",
+    notChecked: "还没向 GitHub 确认过。按 r 确认。",
+    app: "App：{name}，所有者 {owner}",
+    installedOn: "装在：",
+    allRepos: "{account}：全部仓库",
+    someRepos: "{account}：{count} 个仓库",
+    user: "授权的用户：{login}",
+    noUser: "授权的用户：还没有",
+    error: "错误：{error}",
+    createInBrowser: "建 App 要在浏览器里提交表单，请到桌面端或网页完成。",
+    installAt: "在浏览器里打开这个地址安装 App，装完按 r：",
+    offerAuthorize: "按 a 授权 App 以你的身份操作。",
+    noOAuth: "授权需要 App 的 client secret，这台 host 没有。请到桌面端设置。",
+    errorHelp: "按 r 重试，或到桌面端处理。",
+    authorizeAt:
+      "在浏览器里打开这个地址。浏览器要能通过 {origin} 打开这台 host 才能完成；完成后按 r：",
+    noOrigin: "没有连着 host，没有可以跳回的地址。",
+    footer: "r 刷新 · Esc 关闭",
+    footerAuthorize: "r 刷新 · a 授权 · Esc 关闭",
+    footerClose: "Esc 关闭",
+    checking: "正在向 GitHub 确认…",
+    authorizing: "正在取授权地址…",
+  },
+});

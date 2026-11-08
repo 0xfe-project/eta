@@ -76,6 +76,9 @@ export default {
         "../src/extensions.gen",
         "../../src/extensions.gen",
       ],
+      // tsconfig.json's paths load it in place of highlight.js's own
+      // declarations; no module imports it by its path.
+      ignore: ["types/highlight.js.d.ts"],
     },
     "apps/mobile": {
       // `nsh` builds it: the entries are named in its commands.
