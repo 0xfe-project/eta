@@ -8,12 +8,21 @@ import { buildVersion } from "./src/version";
 // fork. Read now: an app that cannot find a host would only find out on someone's computer.
 const upstream = process.env.ETA_HOST_UPSTREAM?.trim();
 
+// Where the app updates itself from (`src/bun/update.ts`): a static address Electrobun's Updater
+// reads `<channel>-<os>-<arch>-update.json` and the bundles from, without credentials. Not chosen
+// yet; a build without it has no update entry. Patches are made against what is already there.
+const updateUrl = process.env.ETA_DESKTOP_UPDATE_URL?.trim() ?? "";
+
 export default {
   app: {
     name: "eta",
     identifier: "dev.eta.desktop",
     // From the `desktop-v*` tag in a release, package.json otherwise (`src/version.ts`).
     version: buildVersion(),
+  },
+  release: {
+    baseUrl: updateUrl,
+    generatePatch: updateUrl !== "",
   },
   runtime: {
     // Closing the last window keeps the app (and its host) alive; Dock brings the window back.

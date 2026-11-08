@@ -66,13 +66,14 @@ import { readConnection, writeConnection } from "./connection";
 import { DownloadError, downloadHost } from "./download";
 import { HOST_WRAPPER } from "./host";
 import { hostHome, recordedHost, runningHost } from "./installed";
-import { CAPABILITIES, startNativeBridge } from "./native";
+import { capabilities, startNativeBridge } from "./native";
 import { configureWindowsWindow } from "./platform/windows";
 import { pagePreload, relayedRequest, relayToBridge } from "./preload";
 import { probeRemote, remoteHealth, remotePage, watchRemote } from "./remote";
 import { LocalHost, startServiceServer } from "./service";
 import { createShell } from "./shell";
 import { startShellServer } from "./shell-server";
+import { createShellUpdate } from "./update";
 
 /**
  * What the build put in the bundle (`src/version.ts`); the page may show it and compares it with
@@ -438,11 +439,47 @@ const originOf = (view: View): string | undefined =>
  * A page that is not served over http (the shell's placeholder for a missing build) has no origin
  * to whitelist, and the bridge then answers no page.
  */
+/**
+ * The app's own update (`update.ts`): only in a packaged build that was given somewhere to update
+ * from (`ETA_DESKTOP_UPDATE_URL` at build time), and only when the page asks.
+ */
+const updates =
+  packaged && (await Updater.localInfo.baseUrl().catch(() => "")) !== "";
+const CAPABILITIES = capabilities(updates);
+
+/** Set once the app is on its way out, by a quit or an update: the quit is let through. */
+let stopping = false;
+
+const shellUpdate = updates
+  ? createShellUpdate({
+      updater: Updater,
+      current: APP_VERSION,
+      // The local host goes before the Updater asks to quit, so the quit needs nothing more.
+      beforeApply: async () => {
+        stopping = true;
+        await stopLocalHost();
+      },
+      afterFailedApply: async () => {
+        stopping = false;
+        await shell.restartLocal();
+      },
+    })
+  : undefined;
+
 const bridge = startNativeBridge({
   appVersion: APP_VERSION,
+  capabilities: CAPABILITIES,
   origins: [],
   platform: process.platform,
   handlers: {
+    ...(shellUpdate === undefined
+      ? {}
+      : {
+          shellUpdate: {
+            view: shellUpdate.view,
+            act: async (action) => await shellUpdate[action](),
+          },
+        }),
     async saveFile({ content, filename }) {
       // Electrobun has no save panel: the honest closest thing is to ask for a directory and
       // write the file there, rather than put it somewhere the user did not point at.
@@ -668,7 +705,6 @@ Electrobun.events.on("reopen", () => {
 });
 
 /** Quitting stops everything this process started: its sessions flush, its files close. */
-let stopping = false;
 async function stopAll(): Promise<void> {
   if (stopping) return;
   stopping = true;

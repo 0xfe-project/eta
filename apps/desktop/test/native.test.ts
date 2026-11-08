@@ -19,6 +19,7 @@ const handlers = {
 const start = (origins: string[]) => {
   bridge = startNativeBridge({
     appVersion: "0.1.0",
+    capabilities: BASELINE_CAPABILITIES,
     handlers,
     origins,
     platform: "linux",
@@ -106,5 +107,42 @@ describe("the bridge in remote mode", () => {
       action: "connection",
       language: "zh",
     });
+  });
+});
+
+describe("the app's own update on the bridge", () => {
+  it("is not there in a build with nowhere to update from", async () => {
+    start([REMOTE]);
+    expect((await ask(REMOTE, "/api/native/shell-update")).status).toBe(404);
+  });
+
+  it("answers what the page presses, and nothing else", async () => {
+    const view = { state: "idle" as const, current: "0.2.0" };
+    const act = vi.fn(async () => ({
+      state: "available" as const,
+      version: "0.3.0",
+      current: "0.2.0",
+    }));
+    bridge = startNativeBridge({
+      appVersion: "0.2.0",
+      capabilities: [...BASELINE_CAPABILITIES, "shell-update"],
+      origins: [REMOTE],
+      platform: "linux",
+      handlers: { ...handlers, shellUpdate: { view: () => view, act } },
+    });
+    expect(
+      await (await ask(REMOTE, "/api/native/shell-update")).json(),
+    ).toEqual(view);
+    const checked = await ask(REMOTE, "/api/native/shell-update", {
+      method: "POST",
+      body: JSON.stringify({ action: "check" }),
+    });
+    expect(await checked.json()).toMatchObject({ state: "available" });
+    expect(act).toHaveBeenCalledWith("check");
+    const odd = await ask(REMOTE, "/api/native/shell-update", {
+      method: "POST",
+      body: JSON.stringify({ action: "rm -rf" }),
+    });
+    expect(odd.status).toBe(400);
   });
 });

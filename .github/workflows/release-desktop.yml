@@ -101,6 +101,10 @@ jobs:
       ETA_DESKTOP_VERSION: ${{ needs.prepare.outputs.version }}
       # The app downloads its host from this repository, so a fork's app follows the fork.
       ETA_HOST_UPSTREAM: ${{ github.api_url }}/repos/${{ github.repository }}
+      # Where the app updates itself from, a static address read without credentials
+      # (apps/desktop/src/bun/update.ts). Not chosen yet: unset, the app has no update entry and
+      # builds no patches. Set the repository variable to turn it on.
+      ETA_DESKTOP_UPDATE_URL: ${{ vars.ETA_DESKTOP_UPDATE_URL }}
     steps:
       # What is built is what is in git: Windows runners would check out CRLF.
       - run: git config --global core.autocrlf false
@@ -122,6 +126,12 @@ jobs:
           node_modules/.bin/electrobun build --env=stable
           mkdir -p "$RUNNER_TEMP/try"
           cp "artifacts/${{ matrix.installer }}" "$RUNNER_TEMP/try/$DESKTOP"
+          # What the update address has to serve, under the names the Updater asks for:
+          # <channel>-<os>-<arch>-update.json, the bundle, and a patch from the release before
+          # when there was one to diff against.
+          mkdir -p "$RUNNER_TEMP/update"
+          cp artifacts/stable-*-update.json artifacts/stable-*.tar.zst "$RUNNER_TEMP/update/"
+          cp artifacts/stable-*.patch "$RUNNER_TEMP/update/" 2>/dev/null || true
 
       - name: The build left the checkout as it was
         run: |
@@ -159,7 +169,12 @@ jobs:
       - name: Upload it to the draft
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" "$RUNNER_TEMP/try/$DESKTOP" --clobber
+        run: |
+          gh release upload "$TAG" "$RUNNER_TEMP/try/$DESKTOP" --clobber
+          # Only with an update address: what to copy there, kept with the release.
+          if [[ -n $ETA_DESKTOP_UPDATE_URL ]]; then
+            gh release upload "$TAG" "$RUNNER_TEMP"/update/* --clobber
+          fi
 
   publish:
     needs: [check, build]

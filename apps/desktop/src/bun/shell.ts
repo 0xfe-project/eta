@@ -243,6 +243,15 @@ export function createShell(deps: ShellDependencies) {
       return await enter({ mode: "remote", address: origin, token });
     },
 
+    /** Start the local host again, as after an update of the app that did not go ahead. */
+    async restartLocal(): Promise<void> {
+      if (connection?.mode !== "local") return;
+      local = undefined;
+      const failure = await enter(connection);
+      if (failure !== undefined && view?.screen !== "failure")
+        fail(connection, failure);
+    },
+
     /** The failure screen's 重试. */
     async retry(): Promise<Failure | undefined> {
       return connection === undefined ? undefined : await enter(connection);

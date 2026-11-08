@@ -27,8 +27,34 @@ export const BASELINE_CAPABILITIES = [
   "connection",
 ] as const;
 
-/** A capability a page may ask the app for. New ones are added here and never renamed. */
-export type DesktopCapability = (typeof BASELINE_CAPABILITIES)[number];
+/**
+ * A capability a page may ask the app for. New ones are added here and never renamed:
+ * - `shell-update`: the app updates itself, by hand (`ShellUpdateView`). Only an app built with an
+ *   update address has it.
+ */
+export type DesktopCapability =
+  | (typeof BASELINE_CAPABILITIES)[number]
+  | "shell-update";
+
+/** Where the app's own update has got to. Nothing here happens unless the user asks. */
+export type ShellUpdateState =
+  | { state: "idle" }
+  | { state: "checking" }
+  /** Asked, and there is nothing newer. */
+  | { state: "current" }
+  | { state: "available"; version: string }
+  /** `progress` is 0–100 when the server says the size. */
+  | { state: "downloading"; version: string; progress?: number }
+  /** Downloaded and checked; applying it restarts the app. */
+  | { state: "ready"; version: string }
+  | { state: "applying"; version: string }
+  | { state: "failed"; during: "check" | "download" | "apply"; error: string };
+
+/** The app's own version and update, as `GET /api/native/shell-update` answers. */
+export type ShellUpdateView = ShellUpdateState & {
+  /** This app's version. */
+  current: string;
+};
 
 const VERSION = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9a-z.-]+))?$/i;
 
