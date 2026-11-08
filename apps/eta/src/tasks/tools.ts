@@ -254,8 +254,10 @@ function conversationTools(
       assignee: Type.Optional(
         Type.String({
           description:
-            "The agent this work is for, when it is not you: an agent's id, as the user named " +
-            "it. Absent is you, the proposer, which executes it itself.",
+            "The agent this work is for, when it is not you: its name or its id. It is resolved " +
+            "to the agent's registry id when written (an id first, then a name only one agent " +
+            "has); a name nobody has, or several agents share, is refused with the agents there are. " +
+            "Absent is you, the proposer, which executes it itself.",
         }),
       ),
     }),
@@ -316,8 +318,10 @@ function conversationTools(
       assignee: Type.Optional(
         Type.String({
           description:
-            "The agent this work is for, when it is not you: an agent's id, as the user named " +
-            "it. Absent is you, the maker, which executes it itself.",
+            "The agent this work is for, when it is not you: its name or its id. It is resolved " +
+            "to the agent's registry id when written (an id first, then a name only one agent " +
+            "has); a name nobody has, or several agents share, is refused with the agents there are. " +
+            "Absent is you, the maker, which executes it itself.",
         }),
       ),
     }),

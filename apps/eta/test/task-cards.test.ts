@@ -190,6 +190,57 @@ describe("a task draft", () => {
     void project;
   });
 
+  it("stores the registry id when the draft names the assignee by name, and refuses a name nobody has", async () => {
+    // #44: a draft named its assignee `林老师`, the row kept the name, and no run could find it.
+    const { w, ada, group } = await drafted();
+    const lin = await w.agent("林老师");
+    const draft = w.host.product.board.draft({
+      conversationId: group.id,
+      agentId: ada.id,
+      draft: {
+        title: "For Lin",
+        goal: "Do it",
+        acceptance: "It is done",
+        workspace: "local",
+        assignee: "林老师",
+      },
+    });
+    expect(draft.data.assignee).toBe(lin.id);
+    const { task } = await confirm(w, group.id, draft.id);
+    expect(task.assigneeAgentId).toBe(lin.id);
+    expect(
+      w.host.db
+        .query<{ assignee_agent: string | null }, [string]>(
+          "SELECT assignee_agent FROM task WHERE id = ?",
+        )
+        .get(task.id),
+    ).toEqual({ assignee_agent: lin.id });
+
+    // A name nobody has makes no draft, and says what it was given and who there is.
+    let refused = "";
+    try {
+      w.host.product.board.draft({
+        conversationId: group.id,
+        agentId: ada.id,
+        draft: {
+          title: "For nobody",
+          goal: "Do it",
+          acceptance: "It is done",
+          workspace: "local",
+          assignee: "潘老师",
+        },
+      });
+    } catch (error) {
+      refused = (error as Error).message;
+    }
+    expect(refused).toContain('"潘老师"');
+    expect(refused).toContain(`林老师 (${lin.id})`);
+    expect(refused).toContain(`Ada (${ada.id})`);
+    expect(
+      w.rows(group.id).filter((row) => row.kind === "task_draft"),
+    ).toHaveLength(1);
+  });
+
   it("confirms once: a second confirm, edited or not, is the same task", async () => {
     const { w, group, draft } = await drafted();
     const first = await confirm(w, group.id, draft.id);
