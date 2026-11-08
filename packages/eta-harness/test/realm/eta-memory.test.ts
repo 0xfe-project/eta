@@ -95,9 +95,11 @@ describe("eta:{layer}:memory in a realm", () => {
       `import mem from "eta:project:memory";\n` +
         `await mem.add("lesson", "x");\n` +
         `const [e] = mem.list();\n` +
-        `export default [e.constructor === Object, mem.list.constructor === Function, typeof process];`,
+        `export default [e.constructor === Object, mem.list.constructor === Function];`,
     );
-    expect(result.value).toEqual([true, true, "undefined"]);
+    // `process` itself is a host object now: the passthrough layer mounts it on
+    // purpose (mountNodeGlobals), and esm-mode.test.ts pins that separately.
+    expect(result.value).toEqual([true, true]);
   });
 
   it("add is recorded on the effect ledger", async () => {
