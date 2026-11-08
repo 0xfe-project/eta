@@ -72,8 +72,7 @@ jobs:
       # The others finish, so a rerun is only of the one that failed.
       fail-fast: false
       matrix:
-        # hutch packages for the machine it is on, and the host the app carries has the
-        # CLIProxyAPI of the machine that compiled it.
+        # hutch packages for the machine it is on.
         include:
           - platform: linux-x64
             runner: ubuntu-latest
@@ -100,7 +99,7 @@ jobs:
     env:
       DESKTOP: ${{ matrix.desktop }}
       ETA_DESKTOP_VERSION: ${{ needs.prepare.outputs.version }}
-      # The host the app carries follows this repository, so a fork's app follows the fork.
+      # The app downloads its host from this repository, so a fork's app follows the fork.
       ETA_HOST_UPSTREAM: ${{ github.api_url }}/repos/${{ github.repository }}
     steps:
       # What is built is what is in git: Windows runners would check out CRLF.
@@ -116,8 +115,6 @@ jobs:
           bun-version-file: package.json
 
       - run: bun install --frozen-lockfile --ignore-scripts
-      - run: bun run --cwd apps/web build
-      - run: bun apps/eta/scripts/build-host.ts apps/desktop/dist/host
 
       - name: Package the app
         working-directory: apps/desktop
@@ -147,8 +144,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb libwebkit2gtk-4.1-0 libayatana-appindicator3-1
 
+      # Started, it downloads the newest host release it can run from this repository, so a
+      # desktop release needs a host release before it. The job's token reads a private one.
       - name: Install the app and see it start
         if: steps.screen.outcome != 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: ${{ matrix.display }} bun apps/desktop/scripts/try-app.ts "$RUNNER_TEMP/try/$DESKTOP"
 
       - name: Say the app was not started

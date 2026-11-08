@@ -7,22 +7,14 @@
  * upstream can change afterwards, and only that host is ever sent it. The page learns the host and
  * never gets the token back.
  */
+import type { SavedToken } from "@eta/releases";
 import { Buffer } from "node:buffer";
 import { seal, unseal } from "../secret";
 
 export const TOKEN_SETTING = "upgrade.token";
 
-/** How a saved token is named as a source (`ReleaseToken.from`). */
-export const SAVED_TOKEN = "Settings";
-
 /** Printable, one word: anything else would break a header, or was not a token. */
 const TOKEN = /^[\x21-\x7E]+$/;
-
-export interface SavedToken {
-  /** The host it may go to, as `gh` would call it. */
-  host: string;
-  token: string;
-}
 
 interface StoredToken {
   host: string;

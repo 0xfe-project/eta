@@ -3,7 +3,7 @@
  * `v*` ones, whatever GitHub calls the latest release.
  */
 import { afterEach, describe, expect, it } from "vitest";
-import { isHostTag, newestHost, Releases } from "../src/upgrade/releases";
+import { isHostTag, newestHost, Releases } from "../src/releases";
 
 interface Listed {
   tag_name: string;

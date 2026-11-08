@@ -5,7 +5,7 @@
  * upgrade runs before a restart. What a build does once started is the fake service's script: the
  * file it finds under the executable's name decides whether `/up` answers. The database is real.
  */
-import type { ReleaseToken } from "../src/upgrade/releases";
+import type { ReleaseToken } from "@eta/releases";
 import type { HostService } from "../src/upgrade/service";
 import type { UpgradeOptions } from "../src/upgrade/upgrade";
 import { createHash, randomBytes } from "node:crypto";
@@ -13,6 +13,16 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
 import { join } from "node:path";
+import {
+  BUILT_UPSTREAM,
+  chooseUpstream,
+  parseSums,
+  parseUpstream,
+  Releases,
+  releaseToken,
+  UPSTREAM_SETTING,
+  upstreamLabel,
+} from "@eta/releases";
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -32,7 +42,6 @@ import {
   savedToken,
   savedUpstream,
 } from "../src/upgrade/database";
-import { parseSums, Releases, releaseToken } from "../src/upgrade/releases";
 import { askUp, upUrl } from "../src/upgrade/service";
 import {
   openToken,
@@ -41,13 +50,6 @@ import {
   tokenHost,
 } from "../src/upgrade/token";
 import { upgradeHost } from "../src/upgrade/upgrade";
-import {
-  BUILT_UPSTREAM,
-  chooseUpstream,
-  parseUpstream,
-  UPSTREAM_SETTING,
-  upstreamLabel,
-} from "../src/upgrade/upstream";
 import { tempDir } from "./support/host";
 
 const PLATFORM = `eta-host-${process.platform}-${process.arch}`;

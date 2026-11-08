@@ -18,11 +18,19 @@ import type {
 import type { SettingStore } from "../inbox/setting";
 import type { HostService } from "./service";
 import process from "node:process";
+import {
+  BUILT_UPSTREAM,
+  chooseUpstream,
+  parseUpstream,
+  Releases,
+  releaseToken,
+  UPSTREAM_SETTING,
+  upstreamLabel,
+} from "@eta/releases";
 import { COMPILED } from "../resources";
 import { loadSecretKey } from "../secret";
 import { VERSION } from "../version";
 import { Args, productPlugin } from "../wire";
-import { Releases, releaseToken } from "./releases";
 import { findHostService, sameFile } from "./service";
 import { readStatus } from "./status";
 import {
@@ -33,13 +41,6 @@ import {
   tokenHost,
 } from "./token";
 import { versionOrder } from "./upgrade";
-import {
-  BUILT_UPSTREAM,
-  chooseUpstream,
-  parseUpstream,
-  UPSTREAM_SETTING,
-  upstreamLabel,
-} from "./upstream";
 import { cancelWorker, startWorker } from "./worker";
 
 const STATUS_PATH = "/upgrade/status";

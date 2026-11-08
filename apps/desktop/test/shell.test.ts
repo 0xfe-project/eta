@@ -1,4 +1,5 @@
 import type { Connection } from "../src/bun/connection";
+import type { DownloadProgress } from "../src/bun/download";
 import type { Failure, HostLaunch, View } from "../src/bun/shell";
 import { describe, expect, it, vi } from "vitest";
 import { createShell, describe as describeView } from "../src/bun/shell";
@@ -15,10 +16,14 @@ function rig(options: { saved?: Connection; failure?: Failure } = {}) {
   let saved = options.saved;
   let onLost: ((failure: "lost" | "token") => void) | undefined;
   const views: View[] = [];
-  const startHost = vi.fn(async (): Promise<HostLaunch> => {
-    log.push("startHost");
-    return { ready: true as const, page: LOCAL_PAGE, port: 4000 };
-  });
+  const startHost = vi.fn(
+    async (
+      _onProgress: (progress: DownloadProgress) => void,
+    ): Promise<HostLaunch> => {
+      log.push("startHost");
+      return { ready: true as const, page: LOCAL_PAGE, port: 4000 };
+    },
+  );
   const probe = vi.fn(async (target: { address: string }) => {
     log.push(`probe ${target.address}`);
     return options.failure === undefined
@@ -309,5 +314,77 @@ describe("a host already running here", () => {
     await shell.choose({ mode: "remote", address: REMOTE.address, token: "x" });
     // `stopHost` is called, and stops nothing: the app holds no process for a host it found.
     expect(log).toContain("stopHost");
+  });
+});
+
+describe("a host that has to be downloaded first", () => {
+  const progress = (received: number) => ({
+    version: "0.3.0",
+    received,
+    total: 100,
+  });
+
+  it("has a page of its own, shown once, that the progress moves on", async () => {
+    const { log, shell, startHost, view } = rig();
+    let seen: View | undefined;
+    startHost.mockImplementationOnce(async (onProgress) => {
+      onProgress(progress(0));
+      seen = view();
+      onProgress(progress(60));
+      expect(describeView(seen as View).progress).toEqual(progress(60));
+      return { ready: true as const, page: LOCAL_PAGE, port: 4000 };
+    });
+    await shell.boot();
+    await shell.choose({ mode: "local" });
+    expect(log.filter((line) => line === "show download")).toHaveLength(1);
+    expect(seen).toMatchObject({ screen: "download" });
+    expect(view()).toMatchObject({ screen: "page", page: LOCAL_PAGE });
+  });
+
+  it("says why it failed on a page that offers another try and the other way", async () => {
+    const { shell, startHost, view } = rig();
+    startHost.mockImplementationOnce(async (onProgress) => {
+      onProgress(progress(10));
+      return {
+        ready: false as const,
+        reason: "stopped",
+        download: { kind: "interrupted", tokenless: false, detail: "stopped" },
+      };
+    });
+    await shell.boot();
+    const failure = await shell.choose({ mode: "local" });
+    expect(failure).toMatchObject({ reason: "download", kind: "interrupted" });
+    expect(view()).toMatchObject({
+      screen: "failure",
+      failure: { reason: "download", kind: "interrupted" },
+    });
+    // The failure page's 重试 starts over.
+    await expect(shell.retry()).resolves.toBeUndefined();
+    expect(view()).toMatchObject({ screen: "page" });
+  });
+
+  it("is never started for a remote host", async () => {
+    const { shell, startHost } = rig();
+    await shell.boot();
+    await shell.choose({ mode: "remote", address: REMOTE.address, token: "t" });
+    expect(startHost).not.toHaveBeenCalled();
+  });
+});
+
+describe("a local host that cannot be had before anything downloads", () => {
+  it("is explained on the failure page, not on the chooser", async () => {
+    const { shell, startHost, view } = rig();
+    startHost.mockImplementationOnce(async () => ({
+      ready: false as const,
+      reason: "offline",
+      download: { kind: "offline", tokenless: false, detail: "no answer" },
+    }));
+    await shell.boot();
+    await shell.choose({ mode: "local" });
+    expect(view()).toMatchObject({
+      screen: "failure",
+      connection: { mode: "local" },
+      failure: { reason: "download", kind: "offline" },
+    });
   });
 });

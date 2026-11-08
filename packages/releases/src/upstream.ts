@@ -10,7 +10,6 @@
  * comes to says where a token may go (`releases.ts`). The address ends up in logs and on the page,
  * so one that carries a credential is refused here.
  */
-import type { UpgradeUpstreamSource } from "@eta/client-contracts";
 import process from "node:process";
 
 declare const ETA_HOST_UPSTREAM: string | undefined;
@@ -139,7 +138,8 @@ export function upstreamLabel(text: string): string {
 
 export interface ChosenUpstream {
   text: string;
-  source: UpgradeUpstreamSource | "flag";
+  /** `UpgradeUpstreamSource` in `@eta/client-contracts`, or the command line's. */
+  source: "env" | "setting" | "build" | "flag";
 }
 
 /** The first that is given. Nothing here reads a setting, so the service and the worker can both. */
@@ -150,8 +150,9 @@ export function chooseUpstream(given: {
 }): ChosenUpstream {
   const { flag, saved, env = process.env } = given;
   if (flag !== undefined) return { text: flag, source: "flag" };
-  if (env.ETA_RELEASES_URL)
-    return { text: env.ETA_RELEASES_URL, source: "env" };
+  // Destructured: the desktop app compiles this without index-signature dot access.
+  const { ETA_RELEASES_URL: url } = env;
+  if (url) return { text: url, source: "env" };
   if (saved !== undefined) return { text: saved, source: "setting" };
   return { text: BUILT_UPSTREAM, source: "build" };
 }

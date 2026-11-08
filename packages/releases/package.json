@@ -1,0 +1,27 @@
+{
+  "name": "@eta/releases",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Where a host comes from: a repository's releases, the token to read them, and a checked download. The host's upgrade and the desktop app's first download share it.",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "bun --bun vitest --run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint ."
+  },
+  "dependencies": {
+    "@eta/client-contracts": "*"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.19",
+    "bun-types": "1.4.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}

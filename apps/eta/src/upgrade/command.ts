@@ -5,21 +5,21 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import { parseArgs } from "node:util";
+import {
+  BUILT_UPSTREAM,
+  chooseUpstream,
+  parseUpstream,
+  Releases,
+  upstreamLabel,
+} from "@eta/releases";
 import { parseFailure } from "../cli";
 import { COMPILED } from "../resources";
 import { listenForStop } from "../stop";
 import { VERSION } from "../version";
 import { BACKUPS_KEPT, savedToken, savedUpstream } from "./database";
-import { Releases } from "./releases";
 import { findHostService, sameFile } from "./service";
 import { readStatus, StatusWriter } from "./status";
 import { isReleaseVersion, UpgradeFailure, upgradeHost } from "./upgrade";
-import {
-  BUILT_UPSTREAM,
-  chooseUpstream,
-  parseUpstream,
-  upstreamLabel,
-} from "./upstream";
 import { cancelWorker, followWorker, startWorker } from "./worker";
 
 const WAIT_MINUTES = 10;

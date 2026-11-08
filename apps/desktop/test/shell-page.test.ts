@@ -10,6 +10,15 @@ const REASONS = [
   "no-page",
   "lost",
   "host",
+  // A download's failures: every `DownloadFailure` kind, and a refusal without a token.
+  "download-offline",
+  "download-interrupted",
+  "download-checksum",
+  "download-refused",
+  "download-token",
+  "download-none",
+  "download-broken",
+  "download-disk",
 ];
 
 describe("the shell's words", () => {

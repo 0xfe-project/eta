@@ -10,7 +10,7 @@
  * its pragmas are not involved.
  */
 import type { UpgradeBusy } from "@eta/client-contracts";
-import type { SavedToken } from "./token";
+import type { SavedToken } from "@eta/releases";
 import {
   chmodSync,
   copyFileSync,
@@ -21,12 +21,12 @@ import {
   rmSync,
 } from "node:fs";
 import { join } from "node:path";
+import { UPSTREAM_SETTING } from "@eta/releases";
 import { Database } from "bun:sqlite";
 import { databasePath } from "../db";
 import { SettingStore } from "../inbox/setting";
 import { loadSecretKey } from "../secret";
 import { openToken, TOKEN_SETTING } from "./token";
-import { UPSTREAM_SETTING } from "./upstream";
 
 /** Backups kept in `<dataDir>/backups`, newest first; each is as big as the database. */
 export const BACKUPS_KEPT = 3;

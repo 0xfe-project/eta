@@ -32,20 +32,17 @@ bun run --cwd apps/desktop dev
 bun run --cwd apps/desktop package
 ```
 
-这条命令先构建前端，再用 `apps/eta/scripts/build-host.ts` 把 host 编译成单个可执行文件 `eta-host`，
-它运行时要读的文件（migrations、页面、CLIProxyAPI、daemon）都嵌在里面，`dist/host/` 里只有
-这一个文件。最后 `hutch run build` 把它作为 `host/` 打进 app。产物在 `artifacts/`，打好的 app
-不依赖仓库，可以装到 `/Applications`。
+这条命令就是 `hutch run build`，产物在 `artifacts/`。安装包里没有 host：选“在这台电脑上运行”时，
+应用从 Release 下载它能跑的最新 host 到 `~/.eta/desktop/host/`，之后从那里运行、在设置里升级
+（`src/bun/download.ts`，`docs/release.md` 的“桌面应用”）。下载的仓库在构建时由 `ETA_HOST_UPSTREAM`
+写进应用，没写就是 `0xfe-project/eta`；运行时 `ETA_RELEASES_URL` 可以换掉它。删掉那个目录，下次
+选本机会重新下载。
 
 安装包单独发版：打 `desktop-v*` tag，CI 在各平台自己的 runner 上打（`.github/workflows/release-desktop.yml`），
 打完用 `scripts/try-app.ts` 装上启动一次。版本号来自 tag，本地打包取 `package.json` 的 `version`
 （`src/version.ts`）。没有签名，放行方式见 `docs/release.md`。
 
-包里的 host 只是种子：装过一次以后，换新版 app 不会覆盖 `~/.eta/desktop/host/` 里已有的 host。
-删掉那个目录，下次打开会重新从包里复制。
-
-不先构建 host 直接 `hutch run build` 打出来的 app 不带 host，只能在仓库里打开（和开发时一样往上
-找 checkout）。
+`electrobun dev` 的开发构建不下载，和开发时一样往上找 checkout 运行 host。
 
 数据目录是 `~/.eta`，和命令行启动的 host 共用一份。
 

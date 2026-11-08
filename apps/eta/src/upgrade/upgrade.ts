@@ -21,7 +21,7 @@
  * own, outside the service (`worker.ts`); `report` is how it says where it is.
  */
 import type { UpgradeBusy, UpgradePhase } from "@eta/client-contracts";
-import type { Release, Releases } from "./releases";
+import type { Release, Releases } from "@eta/releases";
 import type { HostService } from "./service";
 import {
   closeSync,
@@ -42,6 +42,7 @@ import {
   sweepPrevious,
   tryBuild,
 } from "@eta/daemon";
+import { downloadChecked, hostFile } from "@eta/releases";
 import {
   appliedMigrations,
   backupDatabase,
@@ -49,19 +50,7 @@ import {
   busyText,
   restoreDatabase,
 } from "./database";
-import { parseSums } from "./releases";
 import { sameFile } from "./service";
-
-const SUMS_FILE = "SHA256SUMS";
-
-/** What a release calls this computer: `release.yml`'s names, not Node's. */
-const hostAsset = (
-  platform: NodeJS.Platform = process.platform,
-  arch: string = process.arch,
-): string =>
-  platform === "win32"
-    ? `eta-host-windows-${arch}.exe`
-    : `eta-host-${platform}-${arch}`;
 
 const SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
 
@@ -323,29 +312,11 @@ async function stage(
   release: Release,
 ): Promise<string[] | undefined> {
   const { execPath, log, releases, dataDir, report } = options;
-  const name = hostAsset();
-  const asset = release.assets.find((file) => file.name === name);
-  if (asset === undefined)
-    throw new Error(
-      `${release.version} has no build for this computer: ${name}`,
-    );
-  const sumsAsset = release.assets.find((file) => file.name === SUMS_FILE);
-  if (sumsAsset === undefined)
-    throw new Error(`${release.version} has no ${SUMS_FILE}`);
-
-  const sums = parseSums(await releases.text(sumsAsset));
-  const expected = sums.get(name);
-  if (expected === undefined)
-    throw new Error(`${SUMS_FILE} of ${release.version} does not name ${name}`);
-
+  const file = await hostFile(releases, release);
   const staged = stagedPath(execPath);
-  log(`Downloading ${name} ${release.version}.`);
+  log(`Downloading ${file.name} ${release.version}.`);
   report?.phase("downloading");
-  const digest = await releases.download(asset, staged);
-  if (digest !== expected)
-    throw new Error(
-      `the checksum of ${name} is ${digest}, not the ${expected} of ${SUMS_FILE}`,
-    );
+  await downloadChecked(releases, file, staged);
 
   let says: string;
   try {
