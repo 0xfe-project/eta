@@ -25,6 +25,7 @@ Main node  apps/eta                              ← the only process; SQLite + 
 | web dev server | `apps/web`    | Only needed in development (vite proxies `/ws` to host). In production, host serves the built static pages directly (included in the packaged host; `--web-dir` can specify a different directory) |
 | eta-daemon     | `apps/daemon` | Optional, one per additional machine. A single file produced by `bun build --compile`, without Web, database, product plugins, or model configuration                                              |
 | Memory sidecar | `apps/memory` | Optional. Python (mem0 + fastembed), its own PostgreSQL (pgvector). Without it, host does not mount memory and the UI hides the memory page                                                        |
+| eta (TUI)      | `apps/tui`    | Optional, the terminal interface. A single file produced by `bun build --compile`; connects to a host over `/ws`, or starts a temporary host that exits with it, see [TUI](tui.md)                 |
 
 There are no other services: no control plane, message queue, container orchestration, or primary database. The LLM gateway is not a standalone service: CLIProxyAPI is a child process started and supervised by host, and exits with host (see [LLM gateway](llm-gateway.md)). SearXNG for search is the same: when no external address is provided, it is a child process started by host on the first search and exits with host (see [Web reading and search](web.md)).
 
@@ -37,6 +38,7 @@ apps/
               memory, tasks, artifacts, routines, plugins, and web, one directory each
   daemon/     eta-daemon：setup / run / install-service
   web/        React UI, reads and writes over WebSocket
+  tui/        terminal interface (React + Ink), reads and writes over the same WebSocket, see [TUI](tui.md)
   memory/     Python sidecar
 packages/
   eta-core, eta-harness, eta-compaction, eta-execution(-node), eta-storage-jsonl   kernel and session runtime
