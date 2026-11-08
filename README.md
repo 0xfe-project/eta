@@ -115,6 +115,7 @@ apps/
   eta/       host: one Bun process — WebSocket pipe, cordis plugins, SQLite (main node)
   daemon/    eta-daemon: a slim node on another machine, dials back to the main node, runs sessions only
   web/       React UI, reads and writes over that same WebSocket
+  tui/       eta: terminal UI, a client of the host over that same WebSocket
 packages/
   eta-*        kernel, harness, server floor, SSH and git plugins of upstream eta
   client-wire-proto, client-contracts   wire frames and product target types
