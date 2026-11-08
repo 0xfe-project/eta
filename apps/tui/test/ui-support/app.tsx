@@ -39,6 +39,8 @@ export interface AppOptions {
   state?: TuiState;
   /** Added to the real extensions under `src/ext/`. */
   extensions?: Extension[];
+  /** Ids of real extensions under `src/ext/` left out. */
+  without?: string[];
   ops?: string[];
   columns?: number;
   rows?: number;
@@ -66,6 +68,12 @@ export interface RenderedApp extends Rendered {
 export async function renderApp(
   options: AppOptions = {},
 ): Promise<RenderedApp> {
+  const without = options.without ?? [];
+  const unknown = without.filter(
+    (id) => !realExtensions.some((extension) => extension.id === id),
+  );
+  if (unknown.length > 0)
+    throw new Error(`renderApp: no real extension ${unknown.join(", ")}`);
   const controller = new FakeController(
     options.phase ?? { name: "connected", url: TEST_URL, temporary: false },
     { wire: fakeWire({ ops: options.ops ?? [] }), ...options.patch },
@@ -80,7 +88,9 @@ export async function renderApp(
       deps={{
         controller,
         registry: createRegistry([
-          ...realExtensions,
+          ...realExtensions.filter(
+            (extension) => !without.includes(extension.id),
+          ),
           ...(options.extensions ?? []),
         ]),
         paths: TEST_PATHS,

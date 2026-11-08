@@ -6,6 +6,35 @@
 
 Slash commands of the eta terminal interface. Type them in the input line of the home screen or of a conversation; names and arguments are always English.
 
+## /agent
+
+```text
+/agent [agent]
+```
+
+Edit an agent's settings as YAML in your editor
+
+### Arguments
+
+- `agent` (optional): The agent's name or id; without it, a list to choose from
+
+### Examples
+
+- `/agent`: Choose an agent to edit
+- `/agent Ada`: Edit the agent named Ada
+
+## /approvals
+
+```text
+/approvals
+```
+
+List the tools that ask before they run, and add or remove one
+
+### Examples
+
+- `/approvals`: Make a tool ask for approval before every call
+
 ## /archive
 
 ```text
@@ -46,6 +75,35 @@ Open the settings file in your editor and apply it when the editor closes
 ### Examples
 
 - `/config`: Edit the settings
+
+## /edit-host-config
+
+```text
+/edit-host-config [file]
+```
+
+Edit the host's config.json or mcp.json in your editor
+
+### Arguments
+
+- `file` (optional): config.json or mcp.json; without it, a choice of the two
+
+### Examples
+
+- `/edit-host-config config.json`: Edit the host's model providers
+- `/edit-host-config mcp.json`: Edit the host's MCP servers
+
+## /github
+
+```text
+/github
+```
+
+Show where the GitHub App stands, refresh it or authorize it
+
+### Examples
+
+- `/github`: See which accounts the App is installed on
 
 ## /help
 
@@ -93,6 +151,47 @@ Invite an agent into the conversation in front
 - `/invite`: Choose whom to invite
 - `/invite cleo`: Invite Cleo
 
+## /machines
+
+```text
+/machines
+```
+
+List the machines, add one, approve or revoke one
+
+### Examples
+
+- `/machines`: Add another machine for agents to work on
+
+## /mcp
+
+```text
+/mcp
+```
+
+List the agents' MCP servers, connect one or sign in to it
+
+### Examples
+
+- `/mcp`: Sign in to a server that needs it
+
+## /model
+
+```text
+/model [agent]
+```
+
+Choose an agent's model and thinking level
+
+### Arguments
+
+- `agent` (optional): The agent's name, the start of it, or its id; asked when left out
+
+### Examples
+
+- `/model`: Pick the agent from a list
+- `/model Ada`: Set Ada's model
+
 ## /new
 
 ```text
@@ -125,6 +224,30 @@ Open a conversation in a tab
 ### Examples
 
 - `/open release`: Open the conversation whose name starts with or holds “release”
+
+## /plugins
+
+```text
+/plugins
+```
+
+List the host's plugins and turn one on or off for agents
+
+### Examples
+
+- `/plugins`: Choose which agents use a plugin
+
+## /providers
+
+```text
+/providers
+```
+
+See and connect the model gateway's subscription accounts and API keys
+
+### Examples
+
+- `/providers`: Connect a Codex, Grok or Google AI Studio account
 
 ## /queue
 
@@ -174,6 +297,18 @@ Rename the conversation in front
 ### Examples
 
 - `/rename Launch plan`: Call the conversation “Launch plan”
+
+## /setup
+
+```text
+/setup
+```
+
+Open the first-time setup: connect model accounts, then create agents
+
+### Examples
+
+- `/setup`: Pick up the setup you left
 
 ## /steer
 
