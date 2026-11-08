@@ -121,6 +121,8 @@ export interface ShellContext {
   openLayer: (render: (handle: LayerHandle) => ReactNode) => LayerHandle;
   /** A short line in the status area. */
   notify: (text: string, tone?: NoticeTone) => void;
+  /** The tab in front now; undefined while the home screen is. */
+  readonly activeTab: TabRef | undefined;
   /** Open a tab, or bring it to the front when it is open. */
   openTab: (tab: TabRef) => void;
   closeTab: (tab: TabRef) => void;

@@ -1,0 +1,51 @@
+import { defineMessages } from "../../../i18n/messages";
+
+/** The words the transcript's items are drawn with. Symbols and units are not translated. */
+export const renderMessages = defineMessages({
+  en: {
+    oneLine: "1 line",
+    lines: "{count} lines",
+    pasted: "[Pasted text +{lines}]",
+    file: "[file]",
+    image: "[image]",
+    thinking: "∴ Thinking · {lines}",
+    thinkingStreaming: "∴ Thinking…",
+    moreLine: "… 1 more line",
+    moreLines: "… {count} more lines",
+    fullOutput: "full output: {path}",
+    plan: "☰ Plan",
+    stopped: "■ Stopped",
+    failedRestart: "The host restarted before this reply was finished",
+    failedRunFailed: "The run failed",
+    failedUnavailable: "The reply could not run",
+    failedGone: "This member is no longer in the conversation",
+    failedUnknown: "The reply failed",
+    runError: "The run hit an error",
+    compaction: "≡ Context compacted · {lines}",
+    branch: "≡ Branch summary · {lines}",
+  },
+  zh: {
+    oneLine: "1 行",
+    lines: "{count} 行",
+    pasted: "[粘贴的文本 +{lines}]",
+    file: "[文件]",
+    image: "[图片]",
+    thinking: "∴ 思考 · {lines}",
+    thinkingStreaming: "∴ 思考中…",
+    moreLine: "… 还有 1 行",
+    moreLines: "… 还有 {count} 行",
+    fullOutput: "完整输出：{path}",
+    plan: "☰ 计划",
+    stopped: "■ 已停止",
+    failedRestart: "宿主重启了，这条回复没有写完",
+    failedRunFailed: "运行失败",
+    failedUnavailable: "跑不起来",
+    failedGone: "这位成员已不在对话里",
+    failedUnknown: "回复失败",
+    runError: "运行出错",
+    compaction: "≡ 上下文已压缩 · {lines}",
+    branch: "≡ 分支摘要 · {lines}",
+  },
+});
+
+export type RenderMessageKey = keyof typeof renderMessages.en;

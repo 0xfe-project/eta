@@ -103,12 +103,21 @@ function createWireStore(): StoreApi<WireState> {
   }));
 }
 
+/**
+ * Bun's WebSocket, which takes headers. Typed by hand: a dependency's types pull in the DOM
+ * library, whose WebSocket takes only protocols and would shadow Bun's in the type check.
+ */
+const BunWebSocket = WebSocket as unknown as new (
+  url: string,
+  init?: { headers: Record<string, string> },
+) => WireSocket;
+
 function bunSocket(url: string, token: string | undefined): WireSocket {
-  return (token === undefined
-    ? new WebSocket(url)
-    : new WebSocket(url, {
+  return token === undefined
+    ? new BunWebSocket(url)
+    : new BunWebSocket(url, {
         headers: { Authorization: `Bearer ${token}` },
-      })) as unknown as WireSocket;
+      });
 }
 
 /**
