@@ -21,6 +21,7 @@ import { hostHas } from "../../../extensions/host-ops";
 import { useInputActive, useShell, useTheme } from "../../../extensions/react";
 import { useMessages } from "../../../i18n/react";
 import { LayerFrame } from "../../../ui/components/layer-frame";
+import { gateAllows, useActionGate } from "../../../ui/components/layer-space";
 import { LineInput } from "../../../ui/components/line-input";
 import { useListHeight } from "../../../ui/components/row-cursor";
 import { RowList } from "../../../ui/components/row-list";
@@ -140,6 +141,7 @@ export function NewConversationLayer({
   const theme = useTheme();
   const active = useInputActive();
   const height = useListHeight(3);
+  const gate = useActionGate();
 
   useEffect(() => {
     const releases = ["projects", "machines"].map((target) =>
@@ -431,11 +433,12 @@ export function NewConversationLayer({
           setStep("where");
           setStartError(undefined);
           setWhereKey(undefined);
-        } else if (input === " " && agent !== undefined)
-          setPick(toggleMember(pick, agentIds, agent.id));
-        else if (input === "s" && agent !== undefined)
+        } else if (input === " " && agent !== undefined) {
+          if (gateAllows(gate)) setPick(toggleMember(pick, agentIds, agent.id));
+        } else if (input === "s" && agent !== undefined)
           setPick(chooseSteward(pick, agent.id));
         else if (key.return && place !== undefined) {
+          if (!gateAllows(gate)) return;
           if (pick.checked.length === 0) setStartError(t("needMember"));
           else start(place, pick);
         }
@@ -446,8 +449,9 @@ export function NewConversationLayer({
           setStartError(undefined);
           setWhereKey(undefined);
         } else handle.close();
-      } else if (key.return) onWhereEnter();
-      else if (
+      } else if (key.return) {
+        if (gateAllows(gate)) onWhereEnter();
+      } else if (
         view === "browse" &&
         (key.leftArrow || key.backspace || key.delete) &&
         listing?.parent != null
@@ -497,7 +501,7 @@ export function NewConversationLayer({
         </Text>
       ) : (
         <Box flexDirection="column">
-          <RowList rows={rows} cursor={at} height={height} />
+          <RowList rows={rows} cursor={at} height={height} gate={gate} />
         </Box>
       )}
       {step === "where" && view === "browse" && listing?.truncated === true && (

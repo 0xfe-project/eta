@@ -7,7 +7,10 @@ import { realDelay } from "./ui-support/render";
 
 function harness(options: { stopMs?: number; deadlineMs?: number } = {}) {
   const events: string[] = [];
+  // How many events had happened each time the terminal was released.
+  const released: number[] = [];
   const shutdown = createShutdown({
+    releaseTerminal: () => released.push(events.length),
     stop: async () => {
       events.push("stop:start");
       await realDelay(options.stopMs ?? 0);
@@ -22,7 +25,7 @@ function harness(options: { stopMs?: number; deadlineMs?: number } = {}) {
     exit: (code) => events.push(`exit:${code}`),
     deadlineMs: options.deadlineMs ?? 1_000,
   });
-  return { events, shutdown };
+  return { events, released, shutdown };
 }
 
 describe("quit", () => {

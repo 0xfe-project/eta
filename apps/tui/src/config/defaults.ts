@@ -37,6 +37,7 @@ const keybindings: Record<ActionName, KeyBinding[]> = {
   "transcript.search": key("f", { ctrl: true }),
   "transcript.select": key("v", { alt: true }),
   "transcript.expandAll": key("o", { ctrl: true }),
+  "transcript.toggleTurn": key("e", { alt: true }),
   // Shift+Enter only reaches a program in terminals that report it; Alt+Enter works everywhere.
   "message.newline": [
     ...key("enter", { alt: true }),
@@ -65,8 +66,14 @@ export const DEFAULT_CONFIG: TuiConfig = {
     success: "green",
     border: "gray",
     selection: "blue",
+    // No red or yellow (errors and warnings), no gray (muted lines, borders); no cyanBright or
+    // greenBright, which fade on a light background. The two shades of blue and of magenta are
+    // kept apart.
+    agents: ["cyan", "magenta", "green", "blueBright", "magentaBright", "blue"],
   },
   keybindings,
   layout: { tabBar: "bottom" },
   toolOutput: { previewLines: 5 },
+  transcript: { toolCalls: "collapsed" },
+  mouse: true,
 };

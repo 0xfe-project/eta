@@ -238,7 +238,9 @@ describe("a reply in flight", () => {
     const input = screenLines(r).findIndex((line) =>
       line.startsWith(`› ${HINT}`),
     );
-    expect(input).toBe(status + 1);
+    // The input's upper rule sits between the status line and the input.
+    expect(screenLines(r)[status + 1]).toMatch(/^─+ *$/);
+    expect(input).toBe(status + 2);
 
     await r.type("turn left");
     await r.press(KEYS.tab);
@@ -287,10 +289,11 @@ describe("a reply in flight", () => {
     await screenShows(r, (s) => s !== selecting);
     expect(stops()).toEqual([]);
 
+    // A lone / lists the commands from the first by name, /agent.
     await r.type("/");
-    await screenShows(r, "/help");
+    await screenShows(r, "/agent");
     await r.press(KEYS.escape);
-    await screenShows(r, (s) => !s.includes("/help"));
+    await screenShows(r, (s) => !s.includes("/agent"));
     expect(stops()).toEqual([]);
     expect(plain(r)).toContain("› /");
     expect(await replyStatus()).toBe("working");
@@ -340,7 +343,7 @@ describe("coming back to a tab", () => {
     await screenShows(r, "row 30");
     await r.type("half written");
     await r.press(KEY.pageUp);
-    await screenShows(r, "below");
+    await screenShows(r, "to go to the bottom");
     const before = plain(r);
     const firstLine = before.split("\n")[0];
     expect(before).not.toContain("row 30");
@@ -359,7 +362,7 @@ describe("coming back to a tab", () => {
 
     await r.press(KEYS.altLeft);
     await screenShows(r, "› half written");
-    await screenShows(r, "below");
+    await screenShows(r, "to go to the bottom");
     expect(plain(r).split("\n")[0]).toBe(firstLine);
     expect(holders(world.group.id)).toBe(2);
   }, 60_000);
@@ -385,7 +388,7 @@ describe("the read mark", () => {
     ]);
 
     await r.press(KEY.pageUp);
-    await screenShows(r, "below");
+    await screenShows(r, "to go to the bottom");
     await world.send(world.group.id, "row 31");
     await until(
       () => world.listed(world.group.id)?.lastSeq === 31,

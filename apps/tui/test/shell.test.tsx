@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderApp, TEST_URL } from "./ui-support/app";
 import { testConfig } from "./ui-support/config";
 import { flush, KEYS, plain } from "./ui-support/render";
+import { hasBackground } from "./ui-support/sgr";
 import { testFeature } from "./ui-support/test-extension";
 
 // Ink's colour library reads this once, when it loads, so it is set before any import.
@@ -115,24 +116,18 @@ describe("tab bar", () => {
     expect(bar).not.toMatch(/5:e [●!✓✗]/);
   });
 
-  it("highlights the active tab in the selection colour", async () => {
-    const { r } = await shellWith({ tabs: chats("a", "b"), activeTab: 1 });
-    const bar = lines(r.lastFrame()).at(-1) ?? "";
-    const highlighted = bar.slice(bar.indexOf(bgBlue));
-    expect(bar).toContain(bgBlue);
-    expect(highlighted.indexOf("2:b")).toBeGreaterThanOrEqual(0);
-    expect(bar.indexOf("1:a")).toBeLessThan(bar.indexOf(bgBlue));
-  });
-
-  it("uses reverse video for the active tab when selection is default", async () => {
+  it("draws no background or reverse video on the bar, whatever the selection colour", async () => {
     const config = testConfig();
-    const { r } = await shellWith(
-      { tabs: chats("a"), activeTab: 0 },
-      {
-        config: { ...config, theme: { ...config.theme, selection: "default" } },
-      },
-    );
-    expect(lines(r.lastFrame()).at(-1)).toContain(`${ESC}7m`);
+    for (const selection of ["blue", "default"]) {
+      const { r } = await shellWith(
+        { tabs: chats("a", "b"), activeTab: 0 },
+        { config: { ...config, theme: { ...config.theme, selection } } },
+      );
+      const bar = lines(r.lastFrame()).at(-1) ?? "";
+      expect(bar).toContain("1:a");
+      expect(hasBackground(bar)).toBe(false);
+      expect(bar).not.toContain(bgBlue);
+    }
   });
 
   it("names a tab of an unregistered kind by its id, in the muted colour", async () => {

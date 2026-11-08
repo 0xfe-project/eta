@@ -24,6 +24,26 @@ const CYAN = "\u001B[36m";
 const RED = "\u001B[31m";
 const YELLOW = "\u001B[33m";
 const GRAY = "\u001B[90m";
+const MAGENTA = "\u001B[35m";
+const BLUE_BRIGHT = "\u001B[94m";
+const GREEN_BRIGHT = "\u001B[92m";
+const FG_OFF = "\u001B[39m";
+const BOLD = "\u001B[1m";
+const BOLD_OFF = "\u001B[22m";
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHAR = /[\u0000-\u001F\u007F-\u009F]/;
+
+const author = (
+  name: string,
+  agentId = "a1",
+  members: string[] = [agentId],
+): TranscriptItem => ({
+  kind: "author",
+  key: "a",
+  name,
+  agentId,
+  members,
+});
 
 function options(overrides: Partial<RenderOptions> = {}): RenderOptions {
   return {
@@ -209,12 +229,75 @@ describe("user", () => {
 
 describe("author", () => {
   it("draws the name after a dot, in the accent colour, bold", () => {
-    const drawn = draw({ kind: "author", key: "a", name: "Writer" });
+    const drawn = draw(author("Writer"));
     expect(drawn.plain).toEqual(["● Writer"]);
     expect(drawn.lines[0]).toContain(CYAN);
     expect(drawn.lines[0]).toContain("\u001B[1m");
     expect(drawn.foldable).toBe(false);
     expect(drawn.source).toBe("Writer");
+  });
+
+  // The test theme's agent colours are magenta, blueBright, greenBright; "a2" hashes to the first,
+  // "a1" to the second (see transcript-frames.test.ts for the hash).
+  it("gives the frame of its reply the colour its agent id picks, and the name bold in it", () => {
+    const first = draw(author("Writer", "a2")).frame;
+    expect(first).toEqual({
+      name: "Writer",
+      border: { open: MAGENTA, close: FG_OFF },
+      nameStyle: {
+        open: expect.stringContaining(MAGENTA),
+        close: expect.stringContaining(FG_OFF),
+      },
+    });
+    expect(first?.nameStyle.open).toContain(BOLD);
+    expect(first?.nameStyle.close).toContain(BOLD_OFF);
+    expect(draw(author("Writer", "a1")).frame?.border.open).toBe(BLUE_BRIGHT);
+  });
+
+  it("gives the same agent the same colour, whatever its name", () => {
+    const one = draw(author("Writer", "a1")).frame;
+    const other = draw(author("Someone else", "a1")).frame;
+    expect(one?.border.open).toBe(BLUE_BRIGHT);
+    expect(other?.border).toEqual(one?.border);
+  });
+
+  it("takes the colours from the theme it is given, `default` leaving the frame uncoloured", () => {
+    const theme = { ...testConfig().theme, agents: ["default"] };
+    const frame = draw(author("W", "a1"), { theme }).frame;
+    expect(frame?.border).toEqual({ open: "", close: "" });
+    expect(frame?.nameStyle).toEqual({ open: BOLD, close: BOLD_OFF });
+    const yellow = draw(author("W", "a1"), {
+      theme: { ...testConfig().theme, agents: ["yellow"] },
+    }).frame;
+    expect(yellow?.border).toEqual({ open: YELLOW, close: FG_OFF });
+  });
+
+  it("moves an agent whose colour another member of the conversation took first on to the next colour", () => {
+    // "a1" and "ada" both hash to blueBright; "a1" sorts first and keeps it.
+    const members = ["ada", "a1"];
+    expect(draw(author("A", "a1", members)).frame?.border.open).toBe(
+      BLUE_BRIGHT,
+    );
+    expect(draw(author("B", "ada", members)).frame?.border.open).toBe(
+      GREEN_BRIGHT,
+    );
+    expect(draw(author("B", "ada", ["ada"])).frame?.border.open).toBe(
+      BLUE_BRIGHT,
+    );
+  });
+
+  it("names the frame in one line without control characters", () => {
+    const frame = draw(author("Wri\u0007ter\u001B[2J\nnext", "a1")).frame;
+    expect(frame?.name).not.toMatch(CONTROL_CHAR);
+    expect(frame?.name).not.toContain("\n");
+    expect(frame?.name).toContain("Wri");
+  });
+
+  it("is the only kind with a frame", () => {
+    expect(draw(user("hi")).frame).toBeUndefined();
+    expect(
+      draw({ kind: "text", key: "t", text: "x", streaming: false }).frame,
+    ).toBeUndefined();
   });
 });
 
@@ -422,14 +505,14 @@ describe("notice", () => {
 describe("colour", () => {
   it("paints with the theme it is given", () => {
     const theme = { ...testConfig().theme, accent: "magenta" };
-    const drawn = draw({ kind: "author", key: "a", name: "W" }, { theme });
+    const drawn = draw(author("W"), { theme });
     expect(drawn.lines[0]).toContain("\u001B[35m");
     expect(drawn.lines[0]).not.toContain(CYAN);
   });
 
   it("leaves a `default` colour to the terminal", () => {
     const theme = { ...testConfig().theme, accent: "default" };
-    const drawn = draw({ kind: "author", key: "a", name: "W" }, { theme });
+    const drawn = draw(author("W"), { theme });
     expect(drawn.lines[0]).not.toMatch(new RegExp(`${ESC}\\[3\\dm`));
   });
 });
@@ -482,7 +565,7 @@ describe("terminal codes in what is drawn", () => {
   });
   const items: [string, TranscriptItem][] = [
     ["user", user(evil("u"))],
-    ["author", { kind: "author", key: "a", name: evil("n") }],
+    ["author", author(evil("n"))],
     [
       "thinking",
       { kind: "thinking", key: "t", text: evil("th"), streaming: false },
@@ -539,6 +622,8 @@ describe("terminal codes in what is drawn", () => {
           CONTROL.test(line.replace(SGR_ALL, "")),
           JSON.stringify(line),
         ).toBe(false);
+      if (drawn.frame !== undefined)
+        expect(CONTROL.test(drawn.frame.name), drawn.frame.name).toBe(false);
     }
   });
 });

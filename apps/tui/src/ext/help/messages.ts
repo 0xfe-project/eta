@@ -14,10 +14,13 @@ export const helpMessages = defineMessages({
     keysSearch: "Search",
     keysSelect: "Select lines",
     keysExpandAll: "Expand all",
+    keysToggleTurn: "Unfold or fold one reply's tool calls",
     keysNewline: "New line",
     keysSteer: "Steer",
     keysStop: "Stop the reply",
-    mouse:
+    mouseOn:
+      "The wheel scrolls the conversation. To select text with the mouse, hold Shift while dragging (the terminal's own selection, in most terminals)",
+    mouseOff:
       "To select with the mouse, use your terminal's own selection (many terminals need Shift held while dragging)",
   },
   zh: {
@@ -33,9 +36,12 @@ export const helpMessages = defineMessages({
     keysSearch: "搜索",
     keysSelect: "选取",
     keysExpandAll: "全部展开",
+    keysToggleTurn: "展开或收起一轮回复的工具调用",
     keysNewline: "换行",
     keysSteer: "插话",
     keysStop: "停止回复",
-    mouse: "要用鼠标选取，直接用终端自己的选取（不少终端要按住 Shift 拖动）",
+    mouseOn:
+      "滚轮滚动对话。要用鼠标选取文字，按住 Shift 拖动（终端自己的选取，多数终端如此）",
+    mouseOff: "要用鼠标选取，直接用终端自己的选取（不少终端要按住 Shift 拖动）",
   },
 });

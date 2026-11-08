@@ -15,6 +15,7 @@ import { translatorFor } from "../../../i18n/messages";
 import { feedMessages } from "../feed/messages";
 import { pasteBlocksOf } from "./paste-blocks";
 import { logBlocks, runFromOf, savedTools } from "./run";
+import { foldSteps } from "./steps";
 import { RUNNING_STATUSES } from "./timeline";
 
 /** What the TUI holds of one member session's run in flight. */
@@ -48,6 +49,11 @@ export interface ItemsInput {
   locale: Locale;
   /** The key that opens review mode, named for the user; the waiting line ends with it when set. */
   reviewKey?: string | undefined;
+  /**
+   * Folds each reply's steps under one `steps` item, unfolded when this says so of that item's
+   * key. Without it every reply shows all of its items.
+   */
+  stepsOpen?: ((key: string) => boolean) | undefined;
 }
 
 type Texts = Translate<keyof (typeof feedMessages)["en"]>;
@@ -66,6 +72,15 @@ function agentName(
     agents.find((agent) => agent.id === agentId)?.name ??
     (agentId ?? "").slice(0, 6)
   );
+}
+
+/**
+ * The row an item comes from: every item's key is its row's id alone, or the row's id, a colon and
+ * what the item is in the row.
+ */
+export function rowOfKey(key: string): string {
+  const colon = key.indexOf(":");
+  return colon < 0 ? key : key.slice(0, colon);
 }
 
 /** The transcript, one item per thing drawn, oldest first. */
@@ -143,10 +158,21 @@ function replyItems(context: Context, row: MessageView): TranscriptItem[] {
             kind: "author",
             key: `${row.id}:author`,
             name: agentName(input.agents, row.agentId),
+            agentId: row.agentId ?? "",
+            members: input.members.map((member) => member.agentId),
           },
         ]
       : [];
-  return [...author, ...replyBody(context, row)];
+  return [...author, ...foldedBody(context, row)];
+}
+
+/** The reply's own items, its steps folded when the input asks for it. */
+function foldedBody(context: Context, row: MessageView): TranscriptItem[] {
+  const body = replyBody(context, row);
+  const { stepsOpen } = context.input;
+  if (stepsOpen === undefined) return body;
+  const key = `${row.id}:steps`;
+  return foldSteps(body, key, RUNNING_STATUSES.has(row.status), stepsOpen(key));
 }
 
 function replyBody(context: Context, row: MessageView): TranscriptItem[] {

@@ -1,4 +1,5 @@
 import type { ProcessLaunch } from "./editor";
+import type { MouseReporting } from "./mouse/reporting";
 import type { ShutdownSignal } from "./shutdown";
 import { spawn } from "node:child_process";
 import { createShutdown, watchRenderErrors } from "./shutdown";
@@ -59,22 +60,30 @@ export function runOnTerminal(launch: ProcessLaunch): TerminalProgram {
  * the quit it hands the interface and SIGINT, SIGTERM and SIGHUP quit; an uncaught exception, an
  * unhandled rejection or a component that throws crashes; the `exit` event kills the temporary
  * host as a last resort. Programs started through `runProcess` (with `startProgram`) keep SIGINT
- * for themselves while they run and are killed when eta ends.
+ * for themselves while they run and are killed when eta ends. `mouse` is off while such a program
+ * runs; every ending releases it first, before it waits for the host to stop, and the `exit`
+ * event releases it again. When a component throws, Ink leaves the screen on its own before the
+ * crash starts: releasing `mouse` before that is up to the tree `draw` renders.
  */
 export function runInterface(options: {
   process: InterfaceProcess;
   controller: { stop: () => Promise<void>; killTemporaryNow: () => void };
   /** How long a crash waits for the temporary host to stop before it kills it. */
   deadlineMs: number;
+  mouse: Pick<MouseReporting, "handOver" | "release">;
   startProgram: (launch: ProcessLaunch) => TerminalProgram;
   draw: (hooks: InterfaceHooks) => InterfaceInk;
 }): void {
-  const { process: proc, controller } = options;
-  proc.on("exit", () => controller.killTemporaryNow());
+  const { process: proc, controller, mouse } = options;
+  proc.on("exit", () => {
+    mouse.release();
+    controller.killTemporaryNow();
+  });
 
   // Set right below by `draw`; nothing ends eta before that.
   let ink: InterfaceInk | undefined;
   const shutdown = createShutdown({
+    releaseTerminal: () => mouse.release(),
     stop: () => controller.stop(),
     killNow: () => controller.killTemporaryNow(),
     unmount: () => ink?.unmount(),
@@ -86,10 +95,11 @@ export function runInterface(options: {
 
   const drawn = options.draw({
     quit: shutdown.quit,
-    runProcess: (launch) => {
-      const program = options.startProgram(launch);
-      return shutdown.runChild(program.exited, program.kill);
-    },
+    runProcess: (launch) =>
+      mouse.handOver(async () => {
+        const program = options.startProgram(launch);
+        return shutdown.runChild(program.exited, program.kill);
+      }),
   });
   ink = drawn;
 

@@ -39,16 +39,20 @@ const CONVERSATION_KEYS: [HelpKey, ActionName[]][] = [
   ["keysSearch", ["transcript.search"]],
   ["keysSelect", ["transcript.select"]],
   ["keysExpandAll", ["transcript.expandAll"]],
+  ["keysToggleTurn", ["transcript.toggleTurn"]],
   ["keysNewline", ["message.newline"]],
   ["keysSteer", ["message.steer"]],
   ["keysStop", ["reply.stop"]],
 ];
 
-/** The conversation's keys as the settings bind them: each action's first key. */
+/**
+ * The conversation's keys as the settings bind them: each action's first key. Then how the mouse
+ * works, which depends on whether the settings have the terminal report it.
+ */
 function ConversationKeys() {
   const t = useMessages(helpMessages);
   const theme = useTheme();
-  const { keybindings } = useConfig();
+  const { keybindings, mouse } = useConfig();
   const rows = CONVERSATION_KEYS.map(([label, actions]) => ({
     label: t(label),
     keys: actions.flatMap((action) => {
@@ -66,7 +70,9 @@ function ConversationKeys() {
           <Text color={inkColor(theme.accent)}>{row.keys.join(" ")}</Text>
         </Text>
       ))}
-      <Text color={inkColor(theme.muted)}>{t("mouse")}</Text>
+      <Text color={inkColor(theme.muted)}>
+        {mouse ? t("mouseOn") : t("mouseOff")}
+      </Text>
     </Box>
   );
 }

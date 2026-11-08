@@ -25,7 +25,9 @@ import {
 } from "../../extensions/react";
 import { translatorFor } from "../../i18n/messages";
 import { useMessages } from "../../i18n/react";
+import { LayerCursorBox } from "../../ui/components/layer-cursor-box";
 import { LayerFrame } from "../../ui/components/layer-frame";
+import { gateAllows, useActionGate } from "../../ui/components/layer-space";
 import { LineInput } from "../../ui/components/line-input";
 import { inkColor } from "../../ui/theme";
 import { callsFor, showItem, startCall } from "./calls";
@@ -167,6 +169,7 @@ export function ItemContent({
       ? failure.message
       : undefined;
   const [cursor, setCursor] = useState(0);
+  const gate = useActionGate();
   const [checked, setChecked] = useState<ReadonlySet<number>>(() => new Set());
   const [text, setText] = useState("");
   const finishedRef = useRef(false);
@@ -306,9 +309,15 @@ export function ItemContent({
       else if (inputKey.upArrow) setCursor((c) => Math.max(0, c - 1));
       else if (inputKey.downArrow)
         setCursor((c) => Math.min(rows.length - 1, c + 1));
-      else if (inputKey.return) act();
-      else if (inputKey.tab && !sending) onSkip?.();
-      else if (input === " " && multi && row?.kind === "option")
+      else if (inputKey.return) {
+        if (gateAllows(gate)) act();
+      } else if (inputKey.tab && !sending) onSkip?.();
+      else if (
+        input === " " &&
+        multi &&
+        row?.kind === "option" &&
+        gateAllows(gate)
+      )
         setChecked((current) => {
           const next = new Set(current);
           if (next.has(row.index)) next.delete(row.index);
@@ -344,7 +353,12 @@ export function ItemContent({
       ) : (
         <TaskBody facts={facts} mode={mode} detail={detail} />
       )}
-      <Box flexDirection="column" marginTop={1}>
+      <LayerCursorBox
+        cursor={Math.min(cursor, rows.length - 1)}
+        offset={Math.min(cursor, rows.length - 1)}
+        marginTop={1}
+        gate={gate}
+      >
         {rows.map((r, index) => {
           const here = index === Math.min(cursor, rows.length - 1);
           return (
@@ -365,7 +379,7 @@ export function ItemContent({
             </Text>
           );
         })}
-      </Box>
+      </LayerCursorBox>
       {sending && <Text color={inkColor(theme.muted)}>{t("sending")}</Text>}
       {error !== undefined && !sending && (
         <Text color={inkColor(theme.error)} wrap="truncate-end">
