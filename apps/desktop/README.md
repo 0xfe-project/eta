@@ -2,8 +2,11 @@
 
 eta 的桌面壳。host 跑在哪里由用户决定：首次打开时在壳自己的页面上选，之后在设置 → 连接方式里改。
 
-- **本机**：壳启动包内的 host（`apps/eta`，一个 Bun 进程，页面、数据库和 WebSocket 都在它的
-  一个端口后面），窗口指向它；退出应用就把 host 停掉。
+- **本机**：壳启动 host（`apps/eta`，一个 Bun 进程，页面、数据库和 WebSocket 都在它的
+  一个端口后面），窗口指向它；退出应用就把 host 停掉。跑的是用户目录里的
+  `~/.eta/desktop/host/eta-host`，第一次启动从包里复制过去，之后从设置里的按钮升级，壳是它的服务
+  （`src/bun/service.ts`）。本机已经有 host 在用 `~/.eta`（比如命令行装的服务）时，直接打开那一个，
+  不再启动第二个。细节见 `docs/release.md` 的「桌面应用」。
 - **远程**：不启动本机 host，窗口直接加载远程 host 的页面。
 
 两种模式的数据互相独立，切换不迁移，本机数据一直留在 `~/.eta`。
@@ -36,6 +39,9 @@ bun run --cwd apps/desktop package
 
 Release 里的安装包由 CI 在各平台自己的 runner 上打（`.github/workflows/release.yml`），打完用
 `scripts/try-app.ts` 装上启动一次。没有签名，放行方式见 `docs/release.md`。
+
+包里的 host 只是种子：装过一次以后，换新版 app 不会覆盖 `~/.eta/desktop/host/` 里已有的 host。
+删掉那个目录，下次打开会重新从包里复制。
 
 不先 stage 直接 `hutch run build` 打出来的 app 不带 host，只能在仓库里打开（和开发时一样往上
 找 checkout）。
