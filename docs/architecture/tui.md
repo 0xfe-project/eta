@@ -297,4 +297,4 @@ $env:NODE_ENV = 'production'; bun run --cwd apps/tui dev
 
 ## 安装与分发
 
-安装脚本同时装 `eta` 与 `eta-host`，这一节随发布流程补全。
+`eta` 跟 host 用同一个 `v*` tag 发版，Linux x64、macOS arm64、Windows x64 各一个文件，版本号与同一个 tag 的 host 相同。`scripts/install/install.sh` 与 `install.ps1` 把 `eta` 和 `eta-host` 一起装进 `~/.eta/bin/`，这正是 `eta` 找 host 的位置之一，装完就能直接用。发布流程、安装脚本的参数与行为见[发布](../release.md)。

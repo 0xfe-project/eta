@@ -36,4 +36,4 @@ pre-commit:
     - name: verify
       env:
         TURBO_SCM_BASE: HEAD
-      run: bunx turbo run build typecheck lint lint:repo test knip --affected --output-logs=errors-only
+      run: bunx turbo run build typecheck lint lint:repo test test:install typecheck:install knip --affected --output-logs=errors-only

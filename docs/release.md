@@ -2,12 +2,14 @@
 
 host 和桌面应用分开发版，各有各的版本号：
 
-| tag          | 工作流                                  | 发什么                                       |
-| ------------ | --------------------------------------- | -------------------------------------------- |
-| `v*`         | `.github/workflows/release.yml`         | `eta-host`，Linux、macOS、Windows 各一个文件 |
-| `desktop-v*` | `.github/workflows/release-desktop.yml` | 桌面应用安装包，见下面的“桌面应用”           |
+| tag          | 工作流                                  | 发什么                                                        |
+| ------------ | --------------------------------------- | ------------------------------------------------------------- |
+| `v*`         | `.github/workflows/release.yml`         | `eta-host` 和终端界面 `eta`，Linux、macOS、Windows 各一个文件 |
+| `desktop-v*` | `.github/workflows/release-desktop.yml` | 桌面应用安装包，见下面的“桌面应用”                            |
 
-GitHub 的 Latest 永远是 host 的：桌面 Release 发布时带 `--latest=false`。`eta-host upgrade` 和设置页按钮也不看 Latest 是谁，只取 `v*` tag（`apps/eta/src/upgrade/releases.ts`），所以就算桌面 Release 被手动标成了 Latest，host 取到的仍然是最新的 host。
+终端界面跟 host 一起发：它只通过 host 的 `/ws` 读写，连上时比对的也是 host 的版本，同一个 tag 发出的两个文件版本号相同。
+
+GitHub 的 Latest 永远是 host 的：桌面 Release 发布时带 `--latest=false`。就算桌面 Release 被手动标成了 Latest，取到的仍然是 host（`packages/releases/src/releases.ts`）：`eta-host upgrade`、设置页按钮和安装脚本用 Latest，但只认 `v*` tag，Latest 不是 host 的、或者没有 Latest 时，从最近 100 个 Release 里取版本最高的正式 host Release；桌面应用的首次下载不看 Latest，直接从这个列表里挑。
 
 ## 打 tag
 
@@ -28,7 +30,7 @@ git push origin v0.2.0
 
 1. `prepare`：从 tag 读版本，开一个草稿 Release。
 2. `check`：和构建同时跑，完整的 `bun run check`，不是 `--affected`。没通过就不会发布，草稿留着。
-3. `build`：每个平台在自己的 runner 上，干净 checkout、frozen lockfile 构建。host 单独运行一次，核对 `--version`、`/up` 和页面，过了才上传到草稿。Linux 那一份还写出 `eta-host.json`（`eta-host --version --json`），一起上传。
+3. `build`：每个平台在自己的 runner 上，干净 checkout、frozen lockfile 构建。host 单独运行一次，核对 `--version`、`/up` 和页面。Linux 那一份还写出 `eta-host.json`（`eta-host --version --json`）。终端界面由 `bun run --cwd apps/tui build:binaries` 构建，一次编出三个平台，每个 runner 只上传自己的那个；核对 `eta --version` 是 `eta <版本>`，再用安装脚本把它和 host 装进一个临时 HOME，核对装上的文件与构建出来的逐字节相同（`scripts/install/try-install.ts`）。都过了才上传到草稿。
 4. `cross`：`upgrade-cross.yml` 在 Linux 上从上一个正式版本升到这个草稿，见下面的“跨版本升级测试”。没有上一版，或者上一版比最早的种子还旧（比如不能自升级的 v0.1.0），都跳过并在运行摘要里写明。
 5. `publish`：前面都成功才会跑，从草稿算出 `SHA256SUMS`，然后发布。任何一步失败，Release 都留在草稿，用户看不到。
 
@@ -51,6 +53,9 @@ gh workflow run release.yml --ref v0.2.0
 | `eta-host-linux-x64`       | Linux x64   | host                                                            |
 | `eta-host-darwin-arm64`    | macOS arm64 | host                                                            |
 | `eta-host-windows-x64.exe` | Windows x64 | host                                                            |
+| `eta-linux-x64`            | Linux x64   | 终端界面                                                        |
+| `eta-darwin-arm64`         | macOS arm64 | 终端界面                                                        |
+| `eta-windows-x64.exe`      | Windows x64 | 终端界面                                                        |
 | `eta-host.json`            |             | `{"version","commit","minDesktop"}`，见“桌面应用和 host 的兼容” |
 | `SHA256SUMS`               |             | 以上全部的校验和                                                |
 
@@ -59,6 +64,8 @@ host 是一个不压缩的文件，页面、数据库迁移、CLIProxyAPI 和所
 本地构建同一个文件：`bun run --cwd apps/web build && bun apps/eta/scripts/build-host.ts`，产物在 `apps/eta/out/host/`。
 
 host 带的 CLIProxyAPI 跟构建它的机器相关，所以每个平台要在对应的 runner 上构建。加平台就是在 `build` 的矩阵里加一行，加之前要先验证过这个平台的编译。没有 `darwin-x64`，也没有 Windows 的 daemon（`apps/daemon/scripts/build.ts` 的平台表里没有它）。
+
+终端界面也是一个不压缩的文件，`bun build --compile` 编出来，版本取构建时的 `ETA_TUI_VERSION`，没有就取 `ETA_DAEMON_VERSION`（`release.yml` 从 tag 设好），都没有是 `dev`。它不带 host：它在环境变量 `ETA_HOST_BIN`、`PATH`、`~/.eta/bin/eta-host` 里找 host，找不到只说怎么装，不替用户下载。把两个一起装上的是安装脚本，见下面的“安装脚本”。每个 runner 都编出三个平台的终端界面，只上传自己平台的那个，这样上传的文件在它的平台上被安装脚本装过一次。
 
 ## 桌面应用
 
@@ -167,9 +174,79 @@ macOS 上，从 DMG 把 eta 拖进“应用程序”，然后去掉下载带上�
 xattr -dr com.apple.quarantine /Applications/eta.app
 ```
 
-下载的 host 同样处理：`xattr -d com.apple.quarantine eta-host-darwin-arm64`。
+用浏览器下载的 host 和终端界面同样处理：`xattr -d com.apple.quarantine eta-host-darwin-arm64 eta-darwin-arm64`。安装脚本用 `curl` 下载，不带这个标记。
 
 Windows 上，解压 zip，运行 `eta-Setup.exe`。SmartScreen 提示“Windows 已保护你的电脑”时，点“更多信息”，再点“仍要运行”。
+
+## 安装脚本
+
+`scripts/install/install.sh`（Linux、macOS）和 `scripts/install/install.ps1`（Windows）从一个 host Release（`v*` tag）下载终端界面和 host，核对 `SHA256SUMS`，装进 `~/.eta/bin/`（Windows 是 `%USERPROFILE%\.eta\bin\`）。终端界面找 host 时会找这个位置，所以装完就能直接用。
+
+仓库是 private，脚本本身也要用有权限的账号取。`gh` 已登录时：
+
+```sh
+gh api repos/0xfe-project/eta/contents/scripts/install/install.sh -H 'Accept: application/vnd.github.raw' | sh
+```
+
+```powershell
+& ([scriptblock]::Create((gh api repos/0xfe-project/eta/contents/scripts/install/install.ps1 -H "Accept: application/vnd.github.raw" | Out-String)))
+```
+
+PowerShell 这样调用不受执行策略限制。从 checkout 运行时是 `sh scripts/install/install.sh` 和 `powershell -ExecutionPolicy Bypass -File scripts\install\install.ps1`。给 `sh` 传参数要写成 `| sh -s -- --version 0.3.0`；PowerShell 的参数写在最后一个括号后面，比如 `... | Out-String))) -AddToPath`。
+
+| sh                 | PowerShell        | 作用                                                                  |
+| ------------------ | ----------------- | --------------------------------------------------------------------- |
+| `--version <版本>` | `-Version <版本>` | 装这个版本，预发布只能这样装。不给就是最新的 host Release，取法见下文 |
+| `--repo <仓库>`    | `-Repo <仓库>`    | 从别的仓库装，写法见下文                                              |
+| `--from <目录>`    | `-From <目录>`    | 从本地目录装，目录里要有两个文件和 `SHA256SUMS`，不访问网络           |
+| `--force`          | `-Force`          | 已有的 host 版本不同时也替换，见下文                                  |
+| `--add-to-path`    | `-AddToPath`      | 把安装目录加进 `PATH`                                                 |
+
+只有 Linux x64、macOS arm64 和 Windows x64 有构建，别的平台脚本会直接报错。
+
+不给版本时，选法和 host 的 `Releases.latest()` 相同：GitHub 的 Latest 是 `v*` tag 就用它；Latest 是桌面应用的 Release，或者仓库没有 Latest，就从最近 100 个 Release 里取版本最高的正式 host Release（`v*` tag、不是草稿、不是预发布、tag 里没有 `-`），三段版本号按数字比较。一个都没有时报错退出，提示用 `--version` 指定。
+
+仓库按顺序取第一个有的：`--repo`、环境变量 `ETA_RELEASES_URL`、`0xfe-project/eta`。`owner/name`、`https://github.com/owner/name`、`https://api.github.com/repos/owner/name` 是 github.com 上的仓库；其它 `http(s)` 地址当作答 GitHub 同样 API 的服务器，地址本身就是 API 根，GitHub Enterprise 也按这一种处理。地址里不能带账号密码或查询参数。
+
+github.com 上的仓库按顺序用 `GH_TOKEN`、`GITHUB_TOKEN`、`gh auth token` 的令牌，都没有就匿名；其它服务器只用 `ETA_RELEASES_TOKEN`，GitHub 的令牌不会发给它。令牌去掉首尾空白后必须是不含空格的可打印 ASCII，否则脚本报错退出。令牌只随发往 API 那个源（协议、主机、端口都相同）的请求发出，重定向之后的请求一律不带，`sh` 版也不把令牌放进命令行参数，并且不读 `~/.curlrc`。
+
+两个文件都下载并核对完，还要把新的 host 运行一次 `--version`，都通过了才动 `~/.eta/bin` 里的文件，这之前失败，已有的文件都不动。
+
+- 终端界面总是替换成这一版。
+- host 不存在时装上，`--version` 相同时不动。
+- 已经装着另一个版本的 host 时，默认不替换，只提示用 `eta-host upgrade` 升级：它会备份数据库、重启服务，新版本站不住时自动回退，直接换文件做不到这些。确实要换文件就加 `--force`，正在运行的 host 要重启后才用上新文件。
+
+`eta-host upgrade` 只换 host，不换终端界面。host 升级之后，终端界面连上时会提示两边版本不同；再运行一次安装脚本，版本给成 host 的版本或者不给，终端界面就换成同一版，host 已是这一版所以不动。
+
+脚本只管 `~/.eta/bin` 里的两个文件。桌面应用的 host 是另一个文件 `~/.eta/desktop/host/eta-host`（Windows 是 `eta-host.exe`），由应用第一次用到时下载、从设置页升级（见“桌面应用里的 host”），脚本不读也不改它；`bun run host:install` 装的 `~/.local/share/eta/host/eta-host` 也一样。这几个 host 文件用的是同一个数据目录 `~/.eta`。桌面应用启动 host 之前会问 `eta-host running`，已经有 host 在服务 `~/.eta` 就直接打开那一个。
+
+装上了，标准输出是这样（Windows 上是 `eta.exe`、`eta-host.exe`）：
+
+```text
+Installed into /home/me/.eta/bin:
+  /home/me/.eta/bin/eta
+  /home/me/.eta/bin/eta-host (eta-host 0.3.0 (37d8188c1234))
+```
+
+host 已是这一版时，最后一行是 `/home/me/.eta/bin/eta-host is already eta-host 0.3.0 (37d8188c1234), and was left as it is`。用了 `--force` 时是 `... (eta-host 0.3.0 (...)), replacing eta-host 0.2.0 (...)`，再跟一行 `An eta-host that is running goes on with the old file until it restarts.`
+
+另一个版本的 host 没被替换时，退出码仍是 0，标准输出的最后一行是 `/home/me/.eta/bin/eta-host was left as it is (eta-host 0.2.0 (...))`，标准错误多三行：
+
+```text
+eta install: /home/me/.eta/bin/eta-host was left as it is: it is eta-host 0.2.0 (...), and this release has eta-host 0.3.0 (...).
+eta install: To upgrade it, run `eta-host upgrade`: it backs up the database, restarts the service, and rolls back if anything fails.
+eta install: To replace the file instead, run the installer again with --force.
+```
+
+旧文件运行不了时，括号里写的是 `an eta-host that does not run (<它的输出>)`，同样算另一个版本。
+
+失败时退出码是 1，参数写错是 2，错误写在标准错误，每行以 `eta install: ` 开头。PowerShell 以上面的脚本块方式运行时，失败不会关掉终端，退出码留在 `$LASTEXITCODE`。
+
+已知限制：Windows PowerShell 5.1 的 `Invoke-WebRequest` 在下载停住、收不到数据时不响应 Ctrl+C。这时关掉窗口，或者改用 PowerShell 7（`pwsh`）运行。
+
+Linux 和 macOS 上用 `mv` 替换，正在运行的进程继续用旧文件。Windows 上运行中的 exe 不能覆盖，脚本先把旧文件改名成 `<文件名>.old`，再放新文件；新文件放不进去时把旧文件改回原名。`.old` 删得掉就当场删，删不掉（还在运行）就留到下次运行时清理。
+
+安装目录不在 `PATH` 上时，脚本打印要加的那一行和该加到哪个文件，不自己改。加 `--add-to-path` 表示同意由它来加：Linux、macOS 上按 `$SHELL` 追加到 `~/.zshrc`、`~/.bashrc`（macOS 上是 `~/.bash_profile`）、fish 的 `~/.config/fish/conf.d/eta.fish` 或 `~/.profile`，已有就不重复；Windows 上改用户的 Path 环境变量，原有的 `%VAR%` 保持不展开。新开的终端才会生效；PowerShell 以脚本块方式运行时，当前会话也会加上。
 
 ## 下载和运行
 

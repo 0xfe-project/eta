@@ -7,6 +7,8 @@
       "devDependencies": {
         "@antfu/eslint-config": "^9.5.1",
         "@eslint-react/eslint-plugin": "^5.28.8",
+        "@types/node": "22.19.19",
+        "bun-types": "1.4.2",
         "dprint": "^0.60.1",
         "eslint": "^10.14.0",
         "eslint-plugin-react-refresh": "^0.5.7",

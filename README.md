@@ -161,9 +161,33 @@ bun run check     # everything CI runs
 In the web UI, add a model service under Settings → Model services first (an API key, or a device-code
 link for a Codex or Grok subscription, or a Google AI Studio key), then create agents and conversations.
 
-`bun run check` is `dprint check`, `bun run lint:repo` (root eslint) and
-`turbo run build typecheck lint test knip`. `bun run format` formats with dprint. CI and the pre-commit
+`bun run check` is `dprint check`, `bun run lint:repo` (root eslint), `bun run test:install` and
+`bun run typecheck:install` (the install scripts) and `turbo run build typecheck lint test knip`. `bun run format` formats with dprint. CI and the pre-commit
 hook run the same set, through turbo's remote cache.
+
+### Install from a release
+
+A host release (a `v*` tag; the desktop app has `desktop-v*` releases of its own) carries the
+terminal app `eta` next to the host, at the same version. The install script fetches both
+for this computer, checks them against the release's `SHA256SUMS`, and puts them in `~/.eta/bin`
+(`%USERPROFILE%\.eta\bin` on Windows), which is where `eta` looks for `eta-host`. The repository is
+private, so fetch the script with a logged-in `gh`:
+
+```sh
+gh api repos/0xfe-project/eta/contents/scripts/install/install.sh -H 'Accept: application/vnd.github.raw' | sh
+```
+
+```powershell
+& ([scriptblock]::Create((gh api repos/0xfe-project/eta/contents/scripts/install/install.ps1 -H "Accept: application/vnd.github.raw" | Out-String)))
+```
+
+It installs the latest host release, picked the way `eta-host upgrade` picks it (`--version` names
+another), for Linux x64, macOS arm64 and Windows x64. It tells you how to put `~/.eta/bin` on your PATH, or does it with `--add-to-path`
+(`-AddToPath`). An `eta-host` of another version already there is left alone: upgrade it with
+`eta-host upgrade`, which backs up the database and restarts the service, or replace the file with
+`--force`. `eta-host upgrade` replaces the host only; run the script again to bring `eta` to the same
+version. The desktop app's own host, `~/.eta/desktop/host/eta-host`, is the app's to download and
+upgrade, and the script leaves it alone. [docs/release.md](docs/release.md) has every option.
 
 ### Running in production
 
@@ -189,7 +213,7 @@ Windows without storing it. [docs/release.md](docs/release.md) has the details.
 `--host tailscale` listens on the tailnet address only, which is what other machines join over.
 
 A tagged version is that same `eta-host` as one file on GitHub Releases, for Linux x64, macOS arm64 and
-Windows x64:
+Windows x64 (the install script above fetches it with the terminal app):
 [docs/release.md](docs/release.md) says how to cut one and how to fetch it. An installed file upgrades
 itself with no checkout:
 

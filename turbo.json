@@ -39,8 +39,33 @@
     "//#lint:repo": {
       "inputs": [
         "*.{js,mjs,ts,json,jsonc}",
-        "deploy/**/*.{js,mjs,ts,json,jsonc}"
+        "deploy/**/*.{js,mjs,ts,json,jsonc}",
+        "scripts/**/*.{js,mjs,ts,json,jsonc}"
       ],
+      "outputs": []
+    },
+    // The install scripts (POSIX sh and PowerShell), run by their tests against a fake
+    // release server. Which of the tests run depends on the machine (PowerShell only on
+    // Windows, dash and mawk on Linux), so the platform is part of the hash: the variables
+    // install.ps1 tells Windows by, and the platform and architecture that
+    // `//#test:install:platform` writes just before.
+    "//#test:install:platform": {
+      "cache": false
+    },
+    "//#test:install": {
+      "dependsOn": ["//#test:install:platform"],
+      "inputs": [
+        "scripts/install/**",
+        {
+          "mode": "jit",
+          "globs": ["node_modules/.cache/eta-install-platform.json"]
+        }
+      ],
+      "env": ["OS", "PROCESSOR_ARCHITECTURE", "PROCESSOR_ARCHITEW6432"],
+      "outputs": []
+    },
+    "//#typecheck:install": {
+      "inputs": ["scripts/install/**/*.{ts,json}"],
       "outputs": []
     },
     // Knip checks the TypeScript/JavaScript workspaces and root configs.

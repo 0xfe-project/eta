@@ -1,6 +1,7 @@
-# A `v*` tag becomes a GitHub Release of the host: for each platform the host as one file, with
-# eta-host.json and SHA256SUMS. The desktop app is released apart, from `desktop-v*` tags
-# (release-desktop.yml). How to cut either is in docs/release.md.
+# A `v*` tag becomes a GitHub Release of the host: for each platform the host and the terminal app
+# (`eta`, which talks to that host) as one file each, with eta-host.json and SHA256SUMS. The desktop
+# app is released apart, from `desktop-v*` tags (release-desktop.yml). How to cut either is in
+# docs/release.md.
 name: Release
 
 on:
@@ -90,6 +91,7 @@ jobs:
     env:
       HOST: eta-host${{ matrix.exe }}
       ASSET: eta-host-${{ matrix.platform }}${{ matrix.exe }}
+      TUI: eta-${{ matrix.platform }}${{ matrix.exe }}
       ETA_DAEMON_VERSION: ${{ needs.prepare.outputs.version }}
       # The repository a build upgrades from: this one, so a fork's builds follow the fork.
       ETA_HOST_UPSTREAM: ${{ github.api_url }}/repos/${{ github.repository }}
@@ -109,6 +111,9 @@ jobs:
       - run: bun install --frozen-lockfile --ignore-scripts
       - run: bun run --cwd apps/web build
       - run: bun apps/eta/scripts/build-host.ts
+      # The terminal app for every platform (the script has no way to build one); this runner
+      # uploads its own.
+      - run: bun run --cwd apps/tui build:binaries
 
       - name: Run the file on its own
         run: |
@@ -148,6 +153,23 @@ jobs:
           fi
           cat eta-host.json
 
+      # The terminal app carries the host's version (`ETA_DAEMON_VERSION`), then the way a user
+      # gets the two: the install script, here from the files just built instead of a release.
+      - name: Install the terminal app and the host
+        run: |
+          mkdir -p "$RUNNER_TEMP/install"
+          cp "apps/tui/out/$TUI" "$RUNNER_TEMP/try/$TUI"
+
+          expected="eta $ETA_DAEMON_VERSION"
+          actual=$(cd "$RUNNER_TEMP/try" && "./$TUI" --version)
+          if [[ $actual != "$expected" ]]; then
+            echo "::error::$TUI --version says '$actual', not '$expected'."
+            exit 1
+          fi
+
+          cp "$RUNNER_TEMP/try/$TUI" "$RUNNER_TEMP/try/$ASSET" "$RUNNER_TEMP/install/"
+          bun scripts/install/try-install.ts "$RUNNER_TEMP/install"
+
       - name: The build left the checkout as it was
         run: |
           changed=$(git status --porcelain)
@@ -162,7 +184,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd "$RUNNER_TEMP/try"
-          files=("$ASSET")
+          files=("$ASSET" "$TUI")
           if [[ -f eta-host.json ]]; then files+=(eta-host.json); fi
           gh release upload "$TAG" "${files[@]}" --clobber
 
@@ -187,12 +209,13 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      # From the draft, so the sums are of what people will download.
+      # From the draft, so the sums are of what people will download: every `eta-*`, the host's,
+      # eta-host.json and the terminal app's.
       - name: Add SHA256SUMS
         run: |
-          gh release download "$TAG" --pattern 'eta-host*' --dir assets
+          gh release download "$TAG" --pattern 'eta-*' --dir assets
           cd assets
-          sha256sum eta-host* | tee SHA256SUMS
+          sha256sum eta-* | tee SHA256SUMS
           gh release upload "$TAG" SHA256SUMS --clobber
 
       - run: gh release edit "$TAG" --draft=false

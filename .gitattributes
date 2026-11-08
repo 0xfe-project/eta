@@ -1,0 +1,2 @@
+# Run by sh as they are, on Windows checkouts too.
+*.sh text eol=lf

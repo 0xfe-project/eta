@@ -26,9 +26,15 @@ export default {
     "packages/eta-server/src/transport.ts": ["exports"],
   },
   workspaces: {
-    // Run by the upgrade workflows, and `drive.ts` starts the servers as files.
+    // Run by the upgrade workflows, and `drive.ts` starts the servers as files. release.yml runs
+    // `try-install.ts`; `bun test scripts/install` runs the tests beside it, which compile the
+    // fake host program by path.
     ".": {
-      entry: ["scripts/upgrade-e2e/*.ts"],
+      entry: [
+        "scripts/upgrade-e2e/*.ts",
+        "scripts/install/*.ts",
+        "scripts/install/testing/fake-host-program.ts",
+      ],
       // Installed by that workflow for its run, to press the real button.
       ignoreDependencies: ["playwright-core"],
     },
