@@ -39,6 +39,7 @@ const FAST: ControllerTiming = {
   temporaryStopMs: 10_000,
   installRunMs: 30_000,
   installUpMs: 3_000,
+  runningMs: 10_000,
 };
 
 type Controller = ConnectionController & { killTemporaryNow: () => void };
@@ -105,6 +106,8 @@ function alive(pid: number): boolean {
 /**
  * `eta-host` as a script, for the paths the real one cannot take here.
  *
+ * As `running` it says that no host runs.
+ *
  * As `install-service` it writes its pid to `FAKE_INSTALL_PID_FILE` if given, sleeps
  * `FAKE_INSTALL_SLEEP_MS`, and exits with `FAKE_EXIT` after printing `FAKE_OUT`; with
  * `FAKE_REFUSE_IF_ALIVE` it exits 3 instead while the process in `FAKE_PID_FILE` still runs.
@@ -120,6 +123,10 @@ function dualProgram(): Promise<HostProgram> {
 const env = process.env;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+if (process.argv.includes("running")) {
+  console.log("null");
+  process.exit(0);
+}
 if (process.argv.includes("install-service")) {
   if (env.FAKE_INSTALL_PID_FILE) await Bun.write(env.FAKE_INSTALL_PID_FILE, String(process.pid));
   if (env.FAKE_REFUSE_IF_ALIVE) {

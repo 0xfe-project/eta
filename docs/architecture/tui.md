@@ -1,6 +1,6 @@
 # TUI
 
-`apps/tui` 是 eta 的终端界面，命令名 `eta`。它是一个独立程序，和网页一样只经 host 的一条 WebSocket（`/ws`，见[线协议](wire-protocol.md)）读写，不碰 `~/.eta`。界面用 React 19 加 Ink 8 画在终端的备用屏幕上（和 vim、htop 一样占满窗口，退出后恢复原来的终端内容）。
+`apps/tui` 是 eta 的终端界面，命令名 `eta`。它是一个独立程序，和网页一样只经 host 的一条 WebSocket（`/ws`，见[线协议](wire-protocol.md)）读写，不碰 `~/.eta`；唯一的例外是读 `eta-host running` 指明的令牌文件（见〈选哪个 host〉）。界面用 React 19 加 Ink 8 画在终端的备用屏幕上（和 vim、htop 一样占满窗口，退出后恢复原来的终端内容）。
 
 准则：不照搬桌面端。一次只展示一件事，别的按需调出、用完收起；桌面端负责齐全。
 
@@ -26,11 +26,21 @@ apps/tui/
 
 设定里有 `connection` 就照它连，不再问。没有时首次启动给三个选项，选定后写进设定：
 
-1. **连接常驻 host**：输入地址。启动时先探本机 `http://127.0.0.1:8787/up`，通了就预填这个地址。地址要令牌时（`GET /ws` 回 401）再让用户贴令牌。
+1. **连接常驻 host**：输入地址。启动时预填一个地址：找得到 `eta-host` 时先问 `eta-host running`，它指出了正在跑的 host 就预填那个地址；没指出、问不出结果或找不到 `eta-host` 时，探本机 `http://127.0.0.1:8787/up`，通了就预填这个地址。两件事同时做。地址要令牌时（`GET /ws` 回 401）再让用户贴令牌。
 2. **临时 host**：在本机起 `eta-host`，和 TUI 同生共死，照桌面端的本机模式。
 3. **装常驻 host**：跑 `eta-host install-service`，等本机 `/up` 通了再连。
 
 `eta-host` 依次在这些地方找：环境变量 `ETA_HOST_BIN`、`PATH`、`~/.eta/bin/eta-host`（Windows 为 `%USERPROFILE%\.eta\bin\eta-host.exe`）。`ETA_HOST_BIN` 设了就只认它，指向的文件不存在也不往下找。都找不到时告诉用户怎么装，不替用户下载。
+
+两个 host 不能同时用同一个 `~/.eta`，而桌面端的 host 在 `~/.eta/desktop/host/` 下用空闲端口跑，探 8787 找不到它。所以每次要在本机起 host 之前（首次启动选临时 host 或装常驻 host、设定为临时 host 的启动、断线菜单里的「改用临时 host」、`/install-service` 移交时装服务和装不上后重起临时 host），TUI 先跑 `eta-host running`（`apps/eta/src/running.ts`），和桌面端一样。它读 `~/.eta/running-host.json`（进程要活着、`/up` 要回应），再查本机的系统服务，打印一行 JSON：`{ address, tokenFile, from }` 或 `null`。TUI 取输出的最后一个非空行，不看 `from`：现行的 `eta-host` 每次启动都写这份记录，系统服务启动的也写，所以 `from` 分不出桌面端的 host 与系统服务。
+
+- 指出了一个 host：不起新的，画面说「这台电脑上已经有一个 host 在跑」并给出地址，选项是「连接它」与「返回」。`tokenFile` 有值时 TUI 读出令牌，「连接它」直接带着令牌检查并连接；读不到就预填地址，让用户贴令牌。连接时和「连接常驻 host」一样把地址（和令牌）存进设定。桌面端的 host 用空闲端口，下次启动端口变了，由〈断线与连不上〉里的回查接上。「返回」回到引出这一步的选项：首次启动的三个选项或断线菜单；设定为临时 host 的启动和 `/install-service` 移交没有可回的选项，回首次启动的三个选项，不再重起临时 host。
+- `null`：照原流程起 host。
+- 跑不起来、非零退出、10 秒内没有回答（到期硬杀）、输出不是这种 JSON：当作问不出结果，照原流程起 host。
+
+`running` 是 `eta-host` 2026-11-08（#491）加的子命令。更早的版本把 `running` 当成运行参数，严格模式的参数解析（`parseArgs` 的 `strict: true`，不收位置参数）拒绝它，以非零退出、不起 host，所以 TUI 不先查 `eta-host --version`。
+
+TUI 名下正在停止的临时 host（被新动作取代、还没退出）若被 `running` 指出，TUI 认得它的地址，不当成别的 host。
 
 ### 临时 host
 
@@ -38,7 +48,7 @@ apps/tui/
 
 停止时让 host 走自己的收尾：POSIX 上发 SIGTERM；Windows 没有 SIGTERM，TUI 启动子进程时设 `ETA_STOP_PIPE` 为一个命名管道，停止时往管道写一行（`apps/eta/src/stop.ts`）。10 秒内没退就硬杀。TUI 正常退出、收到 SIGINT、SIGTERM、SIGHUP、崩溃（未捕获的异常、未处理的 rejection、组件渲染时抛错）时都先停临时 host（有期限，到期硬杀）、离开备用屏幕，再退出；正在启动、正在停止、被新动作取代的临时 host 也算在内。进程 `exit` 事件里还有一道同步硬杀兜底。临时 host 不在 eta 的进程组（POSIX 上以新会话启动）或控制台（Windows 上有自己隐藏的控制台）里，终端的 Ctrl+C 和关终端的 SIGHUP 到不了它，它只经 eta 的停止路径停下；所以把终端交给编辑器期间，Ctrl+C 交给编辑器处理，eta 和临时 host 都不受影响。eta 退出或崩溃时，正占着终端的编辑器等子程序会被结束。代价是 eta 被硬杀（SIGKILL、任务管理器结束、Windows 关窗后 eta 没在约 5 秒内停完）时临时 host 会留下来。
 
-用临时 host 时状态区常驻一行黄字，提示 `/install-service`。这条命令把临时 host 移交给常驻服务：先用 `upgrade.check` 的 `busy` 列出会被中断的回复、任务、定时任务并要求确认，再停临时 host、跑 `install-service`、等 `/up`、重连，并把设定改成连接常驻 host。装不上时报出 `install-service` 的输出与退路（自己在另一个终端或 tmux 里跑 `eta-host`，再选连接常驻 host），用户看过后重新起临时 host，免得停在没有 host 的状态。
+用临时 host 时状态区常驻一行黄字，提示 `/install-service`。这条命令把临时 host 移交给常驻服务：先用 `upgrade.check` 的 `busy` 列出会被中断的回复、任务、定时任务并要求确认，再停临时 host、跑 `eta-host running`（见〈选哪个 host〉，这时问的是停掉自己的临时 host 之后还有没有别的 host）、跑 `install-service`、等 `/up`、重连，并把设定改成连接常驻 host。装不上时报出 `install-service` 的输出与退路（自己在另一个终端或 tmux 里跑 `eta-host`，再选连接常驻 host），用户看过后重新起临时 host（起之前同样先问 `eta-host running`），免得停在没有 host 的状态。
 
 ### 令牌
 
@@ -48,6 +58,7 @@ apps/tui/
 
 连接层照 `apps/web/src/lib/wire.ts` 改写：hello 之后才算连上；断线后对仍在用的 target 重新订阅，等回复的调用一律失败、不重放。
 
+- 连的是本机的常驻 host（地址是 `localhost`、`127.x.x.x` 或 `[::1]`，不是临时 host）时，第一次尝试失败或断线后，进遮罩之前先跑一次 `eta-host running`（期限与坏输出的处理同〈选哪个 host〉）。它指出了一个**不同地址**的 host，就直接连那个：这一次不改写设定，`tokenFile` 有值就读出令牌来用（同样不写设定，读不到就不带令牌，host 要令牌时走下面的令牌无效流程），状态区一行黄字「设定里的地址连不上，已连到本机正在运行的 host（地址）」。没指出、指出的是同一个地址、问不出结果、找不到 `eta-host`，或者问的期间原地址又连上了，就照下一条重连。这样桌面端换了端口、服务改了端口，TUI 都能自己接上。
 - 连不上或断线：整屏遮罩「Reconnecting」，自动重连，间隔从 0.5 秒起翻倍、封顶 5 秒。
 - 15 秒仍连不上（从第一次尝试或断线时起算，尝试挂住没有回应也算）：停止重试，给三个选项：改用临时 host（只这一次，不写设定）、更改地址、退出。
 - 每次尝试失败后探一次 `GET /ws`，回 401 就判令牌无效，停止重试，进「更改地址」表单。

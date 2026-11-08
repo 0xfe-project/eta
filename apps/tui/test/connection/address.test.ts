@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { normalizeAddress, wireUrl } from "../../src/connection/address";
+import {
+  isLoopback,
+  normalizeAddress,
+  wireUrl,
+} from "../../src/connection/address";
 
 describe("normalizeAddress", () => {
   it("keeps an http or https base as it is", () => {
@@ -57,5 +61,30 @@ describe("wireUrl", () => {
   it("is the base with a ws scheme and /ws", () => {
     expect(wireUrl("http://127.0.0.1:8787")).toBe("ws://127.0.0.1:8787/ws");
     expect(wireUrl("https://eta.example.com")).toBe("wss://eta.example.com/ws");
+  });
+});
+
+describe("isLoopback", () => {
+  it("is true for localhost, 127.x.x.x and [::1]", () => {
+    for (const base of [
+      "http://127.0.0.1:8787",
+      "http://127.1.2.3:1",
+      "http://localhost:8787",
+      "http://LOCALHOST:8787",
+      "https://[::1]:443",
+    ])
+      expect(isLoopback(base), base).toBe(true);
+  });
+
+  it("is false for any other host, and for what is not an address", () => {
+    for (const base of [
+      "http://10.0.0.5:8787",
+      "http://0.0.0.0:8787",
+      "http://127.0.0.1.example.com:8787",
+      "http://localhost.example.com",
+      "http://[::2]:1",
+      "not an address",
+    ])
+      expect(isLoopback(base), base).toBe(false);
   });
 });

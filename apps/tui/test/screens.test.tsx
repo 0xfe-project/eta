@@ -1,4 +1,5 @@
 /** One screen per connection phase: what each says and what each key does. */
+import type { ConnectionPhase } from "../src/connection/types";
 import { afterEach, describe, expect, it } from "vitest";
 import { renderApp, TEST_URL } from "./ui-support/app";
 import { testConfig } from "./ui-support/config";
@@ -247,6 +248,133 @@ describe("host-missing", () => {
     const r = await app({ phase: { name: "host-missing", wanted: "install" } });
     await r.press("x");
     expect(r.controller.calls).toEqual(["dismissFailure"]);
+  });
+});
+
+describe("existing-host", () => {
+  const url = "http://127.0.0.1:54321";
+  const existing = (
+    patch: Partial<Extract<ConnectionPhase, { name: "existing-host" }>> = {},
+  ): ConnectionPhase => ({
+    name: "existing-host",
+    url,
+    token: { kind: "none" },
+    wanted: "temporary",
+    ...patch,
+  });
+
+  it("says a host already runs here, where, and that no temporary host was started", async () => {
+    const r = await app({ phase: existing() });
+    const text = plain(r);
+    expect(text).toContain("A host is already running on this computer");
+    expect(text).toContain(url);
+    expect(text).toContain("so eta did not start a temporary host");
+    expect(text).toContain("1");
+    expect(text).toContain("Connect to it");
+    expect(text).toContain("Back");
+    expect(text).not.toContain("Its token could not be read");
+  });
+
+  it("says no resident host was installed", async () => {
+    const r = await app({ phase: existing({ wanted: "install" }) });
+    expect(plain(r)).toContain("so eta did not install a resident host");
+  });
+
+  it("says in Chinese what it found, and which token file it could not read", async () => {
+    const r = await app({
+      phase: existing({
+        token: { kind: "unreadable", file: "/home/me/.eta/access-token" },
+      }),
+      config: zh,
+    });
+    const text = plain(r);
+    expect(text).toContain("这台电脑上已经有一个 host 在跑");
+    expect(text).toContain("所以没有再起临时 host");
+    expect(text).toContain("读不到令牌文件 /home/me/.eta/access-token");
+    expect(text).toContain("连接它");
+    expect(text).toContain("返回");
+    const install = await app({
+      phase: existing({ wanted: "install" }),
+      config: zh,
+    });
+    expect(plain(install)).toContain("所以没有再装常驻 host");
+  });
+
+  it("1 connects at once with the token read from its file, and saves it as the connection", async () => {
+    const r = await app({
+      phase: existing({ token: { kind: "read", value: "tok-from-file" } }),
+    });
+    await r.press("1");
+    await flush();
+    expect(r.controller.calls).toEqual([
+      `checkAddress ${url} tok-from-file`,
+      `connectResident ${url} tok-from-file`,
+    ]);
+    expect(plain(r)).not.toContain("tok-from-file");
+  });
+
+  it("1 connects at once with no token when it names no token file", async () => {
+    const r = await app({ phase: existing() });
+    await r.press("1");
+    await flush();
+    expect(r.controller.calls).toEqual([
+      `checkAddress ${url}`,
+      `connectResident ${url}`,
+    ]);
+  });
+
+  it("1 asks for the token, with the address filled in, when its token file could not be read", async () => {
+    const r = await app({
+      phase: existing({
+        token: { kind: "unreadable", file: "/x/access-token" },
+      }),
+    });
+    await r.press("1");
+    await flush();
+    expect(r.controller.calls).toEqual([]);
+    expect(plain(r)).toContain("Token");
+    expect(plain(r)).toContain(url);
+    await r.type("pasted");
+    await r.press(KEYS.enter);
+    await flush();
+    expect(r.controller.calls).toEqual([
+      `checkAddress ${url} pasted`,
+      `connectResident ${url} pasted`,
+    ]);
+  });
+
+  it("asks for the token when the token read from the file is rejected", async () => {
+    const r = await app({
+      phase: existing({ token: { kind: "read", value: "stale" } }),
+    });
+    r.controller.checkAddressResult = (_url, token) =>
+      token === "fresh" ? { result: "ok", url } : { result: "bad-token", url };
+    await r.press("1");
+    await flush();
+    expect(plain(r)).toContain("The host rejected this token.");
+    expect(r.controller.calls).toEqual([`checkAddress ${url} stale`]);
+    for (let i = 0; i < "stale".length; i += 1) await r.press(KEYS.backspace);
+    await r.type("fresh");
+    await r.press(KEYS.enter);
+    await flush();
+    expect(r.controller.calls.at(-1)).toBe(`connectResident ${url} fresh`);
+  });
+
+  it("2 goes back", async () => {
+    const r = await app({ phase: existing() });
+    await r.press("2");
+    expect(r.controller.calls).toEqual(["dismissFailure"]);
+  });
+
+  it("goes back to the two choices on Esc in the form", async () => {
+    const r = await app({
+      phase: existing({ token: { kind: "unreadable", file: "/x" } }),
+    });
+    await r.press("1");
+    await r.press(KEYS.escape);
+    expect(plain(r)).toContain("Connect to it");
+    expect(plain(r)).not.toContain("Token");
+    expect(r.controller.calls).toEqual([]);
   });
 });
 

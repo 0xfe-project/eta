@@ -151,6 +151,7 @@ export function Shell({
   session,
   url,
   temporary,
+  fallback = false,
   versionWarning,
   quitHint,
   version,
@@ -158,6 +159,8 @@ export function Shell({
   session: Session;
   url: string;
   temporary: boolean;
+  /** See `StatusBar`. */
+  fallback?: boolean;
   versionWarning: VersionWarning | undefined;
   quitHint: string | undefined;
   version: string;
@@ -180,6 +183,7 @@ export function Shell({
       <StatusBar
         url={url}
         temporary={temporary}
+        fallback={fallback}
         versionWarning={versionWarning}
         notice={notice}
         quitHint={quitHint}

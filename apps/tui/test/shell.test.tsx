@@ -406,6 +406,37 @@ describe("status area", () => {
     );
   });
 
+  it("warns in yellow, in either language, when connected to another host than the settings name", async () => {
+    const fallback = { configured: "http://127.0.0.1:8787", url: TEST_URL };
+    const r = await app({ patch: { fallback }, columns: 220 });
+    const text =
+      "The address in the settings does not answer; connected to the host running on this computer";
+    expect(plain(r)).toContain(`${text} (${TEST_URL}).`);
+    const frame = r.lastFrame();
+    const styleStart = frame.lastIndexOf(ESC, frame.indexOf(text));
+    expect(frame.slice(styleStart, styleStart + fg.yellow.length)).toBe(
+      fg.yellow,
+    );
+    const zhApp = await app({
+      patch: { fallback },
+      config: testConfig({ locale: "zh" }),
+      columns: 220,
+    });
+    expect(plain(zhApp)).toContain(
+      `设定里的地址连不上，已连到本机正在运行的 host（${TEST_URL}）。`,
+    );
+  });
+
+  it("says nothing of a fallback that is not the host in use", async () => {
+    const r = await app({
+      patch: {
+        fallback: { configured: TEST_URL, url: "http://127.0.0.1:1" },
+      },
+      columns: 220,
+    });
+    expect(plain(r)).not.toContain("does not answer");
+  });
+
   it("warns in yellow when the host's version differs, naming both", async () => {
     const r = await app({
       patch: { versionWarning: { host: "1.2.0", tui: "1.3.0" } },

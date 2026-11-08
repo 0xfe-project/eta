@@ -71,10 +71,23 @@ export type UnreachableReason =
 /** Where the controller is. The interface draws one screen per phase. */
 export type ConnectionPhase =
   | { name: "idle" }
-  /** No connection in the settings: the three choices. `suggestedUrl` is a local host that answered `/up`. */
+  /**
+   * No connection in the settings: the three choices. `suggestedUrl` is the host `eta-host running`
+   * names, else a host that answered `/up` at the local address.
+   */
   | { name: "first-run"; suggestedUrl: string | undefined }
   /** `eta-host` was needed and is nowhere: how to install it. */
   | { name: "host-missing"; wanted: "temporary" | "install" }
+  /**
+   * The user asked for a host on this computer (`wanted`), and `eta-host running` named one that
+   * already serves its `~/.eta`: none is started over it, and the user may connect to that one.
+   */
+  | {
+      name: "existing-host";
+      url: string;
+      token: ExistingHostToken;
+      wanted: "temporary" | "install";
+    }
   | { name: "starting-temporary" }
   | { name: "installing"; step: "running" | "waiting-up" }
   /** `install-service` failed or the service never answered; `output` is what it printed. */
@@ -99,6 +112,14 @@ export type ConnectionPhase =
     }
   | { name: "stopped" };
 
+/** The token of a host `eta-host running` named. */
+export type ExistingHostToken =
+  /** It names no token file. */
+  | { kind: "none" }
+  | { kind: "read"; value: string }
+  /** It names a token file that could not be read, or that holds nothing. */
+  | { kind: "unreadable"; file: string };
+
 /** The host's build differs from this TUI's. */
 export interface VersionWarning {
   host: string;
@@ -116,6 +137,11 @@ export interface ConnectionState {
   versionWarning: VersionWarning | undefined;
   /** The last choice could not be saved to the settings file. */
   saveProblem: SaveProblem | undefined;
+  /**
+   * The resident address in the settings (`configured`) did not answer, and the connection is to
+   * the host `eta-host running` named (`url`) instead, for this run; the settings are unchanged.
+   */
+  fallback: { configured: string; url: string } | undefined;
 }
 
 /** How to run `eta-host`: the program, and the arguments that come before the host's own. */
@@ -157,8 +183,10 @@ export interface ConnectionController {
   /** Stop the temporary host, install the service, wait for it, reconnect, save. */
   handover: () => Promise<void>;
   /**
-   * Leave `install-failed` or `host-missing`: back to the choices that led there (the first-run
-   * choices, the unreachable choices, or the temporary host a handover stopped, started again).
+   * Leave `install-failed`, `host-missing` or `existing-host`: back to the choices that led there
+   * (the first-run choices, the unreachable choices, or the temporary host a handover stopped,
+   * started again). From `existing-host` with no choices behind it (a temporary host from the
+   * settings, a handover), back to the first-run choices.
    */
   dismissFailure: () => Promise<void>;
   /** Close the wire and stop the temporary host, waiting for it to end. */

@@ -38,6 +38,21 @@ export function normalizeAddress(text: string): string | undefined {
   return `${url.protocol}//${url.host}`;
 }
 
+/** Whether an HTTP base names this computer: `localhost`, `127.x.x.x` or `[::1]`. */
+export function isLoopback(base: string): boolean {
+  let hostname: string;
+  try {
+    hostname = new URL(base).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return (
+    hostname === "localhost" ||
+    hostname === "[::1]" ||
+    /^127(?:\.\d{1,3}){3}$/.test(hostname)
+  );
+}
+
 /** The host's socket for an HTTP base: `ws(s)://host[:port]/ws`. */
 export function wireUrl(base: string): string {
   return `${base.replace(/^http/, "ws")}/ws`;
