@@ -46,6 +46,8 @@ export interface ItemsInput {
   /** By session id. */
   sessions: ReadonlyMap<string, SessionLive>;
   locale: Locale;
+  /** The key that opens review mode, named for the user; the waiting line ends with it when set. */
+  reviewKey?: string | undefined;
 }
 
 type Texts = Translate<keyof (typeof feedMessages)["en"]>;
@@ -164,9 +166,14 @@ function replyBody(context: Context, row: MessageView): TranscriptItem[] {
       ]
     );
   const question = session?.question;
+  const reviewKey = context.input.reviewKey;
+  const hint =
+    reviewKey === undefined ? "" : t("reviewHint", { key: reviewKey });
   const waiting = notice(
     `${row.id}:waiting`,
-    question === undefined ? t("waitingBare") : t("waiting", { question }),
+    question === undefined
+      ? t("waitingBare", { hint })
+      : t("waiting", { question, hint }),
     "warning",
   );
   return [...(live ?? []), waiting];

@@ -101,8 +101,15 @@ export function feedFor(wire: WireClient, conversationId: string): Feed {
   return feed;
 }
 
-/** The transcript of a feed's state, in the reader's language. */
-export function feedItems(state: FeedState, locale: Locale): TranscriptItem[] {
+/**
+ * The transcript of a feed's state, in the reader's language. `reviewKey`, the review key named
+ * for the user, ends the line that says a member waits on the user.
+ */
+export function feedItems(
+  state: Pick<FeedState, "rows" | "members" | "agents" | "info" | "sessions">,
+  locale: Locale,
+  reviewKey?: string,
+): TranscriptItem[] {
   return transcriptItems({
     rows: state.rows,
     members: state.members,
@@ -110,6 +117,7 @@ export function feedItems(state: FeedState, locale: Locale): TranscriptItem[] {
     kind: state.info?.kind,
     sessions: state.sessions,
     locale,
+    reviewKey,
   });
 }
 

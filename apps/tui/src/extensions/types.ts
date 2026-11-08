@@ -72,6 +72,8 @@ export interface PinnedTab {
   id: string;
   /** A hook: the entry's text. */
   useLabel: () => string;
+  /** A hook: true draws the entry in the warning colour, for something that waits on the user. */
+  useAttention?: () => boolean;
   onSelect: (ctx: ShellContext) => void;
 }
 
@@ -123,6 +125,8 @@ export interface ShellContext {
   notify: (text: string, tone?: NoticeTone) => void;
   /** The tab in front now; undefined while the home screen is. */
   readonly activeTab: TabRef | undefined;
+  /** The open tabs as they are now, in tab bar order: the tab numbered N is at index N - 1. */
+  readonly tabs: readonly TabRef[];
   /** Open a tab, or bring it to the front when it is open. */
   openTab: (tab: TabRef) => void;
   closeTab: (tab: TabRef) => void;

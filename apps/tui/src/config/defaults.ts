@@ -43,6 +43,7 @@ const keybindings: Record<ActionName, KeyBinding[]> = {
     ...key("enter", { shift: true }),
   ],
   "message.steer": key("tab"),
+  "pending.openConversation": key("o", { alt: true }),
 };
 
 /**
