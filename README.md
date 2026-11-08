@@ -135,6 +135,7 @@ Architecture notes:
 - [Web](docs/architecture/web.md): `web_fetch` and `web_search`, in the host process; SSRF guard, paging, the SearXNG it runs
 - [Tasks](docs/architecture/tasks.md): an agent proposes, the user confirms, the same agent executes in a fresh session
 - [Tasks, artifacts and routines](docs/architecture/tasks-artifacts-routines.md)
+- [TUI](docs/architecture/tui.md): the terminal interface `eta`, its connection, settings files and how to add a command or a screen; [commands](docs/tui/commands.md)
 
 UI conventions live in [DESIGN.md](DESIGN.md) and [apps/web/AGENTS.md](apps/web/AGENTS.md).
 
