@@ -52,6 +52,7 @@ export const PROVIDER_ACTIONS = [
   "setNetwork",
   "reload",
   "refresh",
+  "discover",
   "codexLogin",
   "codexAnswer",
   "codexStatus",
@@ -174,6 +175,15 @@ export interface ProviderArgs {
   setNetwork: { revision: string } & import("./types").NetworkConfig;
   reload: Record<string, never>;
   refresh: { id: string };
+  /** Preview unsaved connection values; never writes configuration. */
+  discover: {
+    id?: string;
+    revision?: string;
+    kind: import("./types").ProviderKind;
+    baseUrl: string;
+    apiKey?: string | null;
+    headers?: import("./types").ProviderHeaders | null;
+  };
   codexLogin: { method?: "browser" | "device_code" };
   codexAnswer: { id: string; promptId: string; value: string };
   codexStatus: { id: string };

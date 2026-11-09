@@ -19,7 +19,7 @@ import type { ProviderHeaders } from "@eta/client-contracts";
 import type { ProviderReference } from "./catalog";
 import type { EtaModelConfig } from "./config-types";
 import { providerDefinitionForKind, resolveConfiguredModels } from "./catalog";
-import { sanitizeProviderHeaders } from "./config-types";
+import { applyProviderHeaders } from "./config-types";
 
 /** What a discovery call needs: where to ask, how to authenticate, and who to tell. */
 export interface DiscoveryOptions {
@@ -35,6 +35,8 @@ export interface DiscoveryResult {
   models: EtaModelConfig[];
   /** Why nothing came back, when nothing did. */
   error?: string;
+  failure?: "unsupported" | "network" | "http" | "response";
+  status?: number;
 }
 
 /** Whether this provider's models come from its own endpoint. */
@@ -68,7 +70,11 @@ export async function discoverModels(
     definition === undefined ||
     definition.discovery.adapter !== "openai-models"
   ) {
-    return { models: [], error: "this provider does not publish a model list" };
+    return {
+      models: [],
+      error: "this provider does not publish a model list",
+      failure: "unsupported",
+    };
   }
   const send = options.fetch ?? fetch;
   const url = `${options.reference.baseUrl.replace(/\/+$/, "")}/models`;
@@ -77,43 +83,45 @@ export async function discoverModels(
   // exactly as it reaches a generation request.
   if (options.apiKey !== undefined && options.apiKey.length > 0)
     headers.Authorization = `Bearer ${options.apiKey}`;
-  for (const [name, value] of Object.entries(
-    sanitizeProviderHeaders(options.headers) ?? {},
-  )) {
-    if (value === null) {
-      for (const existing of Object.keys(headers)) {
-        if (existing.toLowerCase() === name.toLowerCase())
-          delete headers[existing];
-      }
-      continue;
-    }
-    headers[name] = value;
-  }
 
   let response: Response;
   try {
     response = await send(url, {
       method: "GET",
-      headers,
+      headers: applyProviderHeaders(headers, options.headers),
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     });
   } catch (error) {
     return {
       models: [],
       error: error instanceof Error ? error.message : String(error),
+      failure: "network",
     };
   }
   if (!response.ok)
-    return { models: [], error: `the model list came back ${response.status}` };
+    return {
+      models: [],
+      error: `the model list came back ${response.status}`,
+      failure: "http",
+      status: response.status,
+    };
   let body: unknown;
   try {
     body = await response.json();
   } catch {
-    return { models: [], error: "the model list was not JSON" };
+    return {
+      models: [],
+      error: "the model list was not JSON",
+      failure: "response",
+    };
   }
   const entries = (body as { data?: unknown })?.data;
   if (!Array.isArray(entries))
-    return { models: [], error: "the model list had no data array" };
+    return {
+      models: [],
+      error: "the model list had no data array",
+      failure: "response",
+    };
 
   const requiresWindow = discoveryRequiresContextWindow(options.reference);
   const discovered: EtaModelConfig[] = [];

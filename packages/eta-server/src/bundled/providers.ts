@@ -190,6 +190,73 @@ export function providersPlugin(options: ProvidersPluginOptions) {
               },
             };
           }),
+          wire.handle("providers", "discover", async (call) => {
+            const args = (call.args ?? {}) as Partial<ProviderArgs["discover"]>;
+            // Never echo URLs, keys, headers or upstream error bodies.
+            let url: URL;
+            try {
+              url = new URL(args.baseUrl?.trim() ?? "");
+            } catch {
+              throw new Error("discovery_invalid_connection");
+            }
+            if (
+              !["http:", "https:"].includes(url.protocol) ||
+              url.username ||
+              url.password ||
+              url.search ||
+              url.hash
+            )
+              throw new Error("discovery_invalid_connection");
+            const baseUrl = url.href.replace(/\/+$/, "");
+            if (
+              typeof args.kind !== "string" ||
+              (args.apiKey !== undefined &&
+                args.apiKey !== null &&
+                typeof args.apiKey !== "string")
+            )
+              throw new Error("discovery_invalid_connection");
+            const { config, revision } = await options.store.read();
+            const existing =
+              args.id === undefined
+                ? undefined
+                : config.providers?.find((entry) => entry.id === args.id);
+            if (
+              args.id !== undefined &&
+              (existing === undefined || args.revision !== revision)
+            )
+              throw new Error("config_changed");
+            const signal = AbortSignal.timeout(45_000);
+            const apiKey =
+              args.apiKey === null
+                ? undefined
+                : (args.apiKey?.trim() ?? existing?.apiKey);
+            const discovered = await discoverModels({
+              reference: { kind: args.kind, baseUrl },
+              apiKey,
+              headers: args.headers ?? undefined,
+              signal,
+              ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+            });
+            if (signal.aborted) throw new Error("discovery_timeout");
+            if (discovered.failure === "network") {
+              // Only the network error may contain request values. Keep the diagnostic, redact credentials.
+              let message = discovered.error!;
+              for (const value of [
+                apiKey,
+                ...Object.values(args.headers ?? {}),
+              ]) {
+                if (value) message = message.replaceAll(value, "[redacted]");
+              }
+              throw new Error(`discovery_network: ${message}`);
+            }
+            if (discovered.failure !== undefined)
+              throw new Error(
+                discovered.failure === "http"
+                  ? `discovery_http_${discovered.status}`
+                  : `discovery_${discovered.failure}`,
+              );
+            return { result: { models: discovered.models } };
+          }),
           wire.handle("providers", "refresh", async (call) => {
             const { id } = (call.args ?? {}) as Partial<
               ProviderArgs["refresh"]

@@ -81,5 +81,23 @@
     "removeModel": "Remove model {{name}}",
     "noModels": "No models yet.",
     "headersHint": "A header with no name is not written to config.json."
+  },
+  "discovery": {
+    "fetch": "Get model list",
+    "loading": "Getting model list…",
+    "hint": "Uses the current URL, key and headers. Selection is a preview until you save. Existing models are never overwritten; missing models can be added manually.",
+    "search": "Search models",
+    "results": "Available models",
+    "inForm": "Already in form",
+    "empty": "No usable models returned. Retry or add a model manually.",
+    "noMatches": "No matching models. You can add one manually.",
+    "stale": "Connection settings changed. Get the model list again. Previous preview selections were cleared; existing and manually added models are kept.",
+    "invalidConnection": "Use an HTTP(S) base URL without credentials or query parameters.",
+    "unsupported": "This provider type does not publish a model list. Use existing models or configure a custom provider manually.",
+    "network": "Cannot reach the model endpoint: {{reason}}. Check the URL, network, key and headers, then retry.",
+    "response": "The model endpoint returned an invalid format: expected JSON with a data array. Check the URL and retry.",
+    "timeout": "Getting the model list timed out. Check the network and retry.",
+    "http": "The model endpoint returned HTTP {{status}}. Check the URL, key, headers and access permissions, then retry.",
+    "configChanged": "Configuration changed elsewhere. Go back and reopen this form before fetching again."
   }
 }

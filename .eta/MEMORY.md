@@ -42,6 +42,8 @@
 
 ## preference
 
+- [task-1-code-style] 代码遵循最小实现，避免过度防御、吞错和无依据兜底；错误沿现有链路抛出并保留诊断信息，必要安全边界除外。先看相邻及同类实现，沿用其命名、函数组织、状态管理、错误处理和测试风格，不另起无必要的新模式。
+
 - [1] Use Chinese for Eta project interactions.
 - [2] For Eta changes, ensure pre-commit/repo checks pass before pushing.
 - [19] For Eta task/draft_task features, user considers human-reviewed draft_task sufficient and prefers minimal UI/lineage changes (attach cards to originating turn, collapse/expand) over redesigning subagent/background concurrency.

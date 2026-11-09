@@ -1,5 +1,6 @@
 import type {
   AgentView,
+  EtaModelConfig,
   LlmModel,
   ProviderArgs,
   ProviderInput,
@@ -347,6 +348,42 @@ export function useRefreshProvider() {
     ProviderArgs["refresh"],
     { revision: string; models: number }
   >(TARGET, "refresh", { timeoutMs: 60_000 });
+}
+
+/** Preview only: unlike refresh, this must not write configuration or expose raw failures. */
+export function discoverProviderModels(input: ProviderArgs["discover"]) {
+  return getWire().call<{ models: EtaModelConfig[] }>(
+    TARGET,
+    "discover",
+    input,
+    { timeoutMs: 60_000 },
+  );
+}
+
+export function discoveryErrorMessage(error: unknown): string {
+  if (error instanceof WireError) {
+    if (error.code === "timeout" || error.code === "disconnected")
+      return wireErrorMessage(error);
+    if (error.message === "config_changed")
+      return translate("providers:discovery.configChanged");
+    const http = /^discovery_http_(\d{3})$/.exec(error.message);
+    if (http) return translate("providers:discovery.http", { status: http[1] });
+    if (error.message.startsWith("discovery_network: "))
+      return translate("providers:discovery.network", {
+        reason: error.message.slice("discovery_network: ".length),
+      });
+    const codes = {
+      discovery_invalid_connection: "invalidConnection",
+      discovery_unsupported: "unsupported",
+      discovery_response: "response",
+      discovery_timeout: "timeout",
+    } as const;
+    if (Object.hasOwn(codes, error.message))
+      return translate(
+        `providers:discovery.${codes[error.message as keyof typeof codes]}`,
+      );
+  }
+  return wireErrorMessage(error);
 }
 
 // ---------------------------------------------------------------------- Codex sign-in

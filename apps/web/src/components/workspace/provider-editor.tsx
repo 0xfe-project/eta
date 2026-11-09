@@ -21,7 +21,7 @@ import type {
  * told to look again before saving once more.
  */
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
@@ -41,6 +41,8 @@ import { listSeparator } from "@/lib/i18n";
 import { THINKING_LEVELS } from "@/lib/thinking";
 import {
   currentRevision,
+  discoverProviderModels,
+  discoveryErrorMessage,
   isConfigChanged,
   providerErrorMessage,
   providerLabel,
@@ -336,6 +338,14 @@ function fingerprint(form: {
   ]);
 }
 
+interface ModelPreview {
+  connection: string;
+  status: "loading" | "ready" | "failed" | "stale";
+  models: EtaModelConfig[];
+  selected: ModelRow[];
+  error?: string;
+}
+
 export function ProviderEditor({
   provider,
   onClose,
@@ -363,6 +373,7 @@ export function ProviderEditor({
     (provider?.models ?? []).map(rowOf),
   );
   const [saved, setSaved] = useState(false);
+  const [savedId, setSavedId] = useState(provider?.id);
   const [changedElsewhere, setChangedElsewhere] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   // The config this form was read from: what a save has to be made against.
@@ -392,10 +403,108 @@ export function ProviderEditor({
     key,
     clearKey,
   });
-  const dirty = current !== baseline;
+  const [preview, setPreview] = useState<ModelPreview>();
+  const [search, setSearch] = useState("");
+  const requestRef = useRef(0);
+  const pendingRef = useRef(false);
+  const connection = JSON.stringify([
+    kind,
+    baseUrl,
+    key,
+    clearKey,
+    headers,
+    revision,
+    savedId,
+  ]);
+  useEffect(() => {
+    // A connection change invalidates even an in-flight request (including change then undo).
+    requestRef.current += 1;
+    pendingRef.current = false;
+    setPreview((previous) =>
+      previous === undefined
+        ? undefined
+        : {
+            connection,
+            status: "stale",
+            models: [],
+            selected: [],
+          },
+    );
+    return () => {
+      requestRef.current += 1;
+    };
+  }, [connection]);
+  const fresh =
+    preview?.connection === connection && preview.status === "ready";
+  const selected =
+    preview?.connection === connection && preview.status !== "stale"
+      ? preview.selected.filter(
+          (row) => !models.some((existing) => existing.id.trim() === row.id),
+        )
+      : [];
+  const allModels = [...models, ...selected];
+  const dirty = current !== baseline || selected.length > 0;
+  const fetching =
+    preview?.connection === connection && preview.status === "loading";
+  const matchingModels = fresh
+    ? preview.models.filter((model) =>
+        `${model.id} ${model.name ?? ""}`
+          .toLowerCase()
+          .includes(search.toLowerCase()),
+      )
+    : [];
+  const fetchModels = async () => {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
+    const attempt = ++requestRef.current;
+    setPreview({ connection, status: "loading", models: [], selected });
+    setSearch("");
+    const input = inputOf({
+      id: provider?.id ?? "",
+      name,
+      kind,
+      baseUrl,
+      key,
+      clearKey,
+      headers,
+      models: [],
+    });
+    try {
+      const result = await discoverProviderModels({
+        kind,
+        baseUrl: input.baseUrl,
+        ...(savedId === undefined
+          ? {}
+          : { id: savedId, ...(revision === undefined ? {} : { revision }) }),
+        ...(input.apiKey === undefined ? {} : { apiKey: input.apiKey }),
+        ...(input.headers === undefined ? {} : { headers: input.headers }),
+      });
+      if (attempt !== requestRef.current) return;
+      setPreview((current) => ({
+        connection,
+        status: "ready",
+        models: [
+          ...new Map(result.models.map((model) => [model.id, model])).values(),
+        ],
+        selected: current?.selected ?? [],
+      }));
+    } catch (error) {
+      if (attempt !== requestRef.current) return;
+      const message = discoveryErrorMessage(error);
+      setPreview((current) => ({
+        connection,
+        status: "failed",
+        models: [],
+        selected: current?.selected ?? [],
+        error: message,
+      }));
+    } finally {
+      if (attempt === requestRef.current) pendingRef.current = false;
+    }
+  };
 
   const id =
-    provider?.id ??
+    savedId ??
     uniqueId(
       name,
       (config?.providers ?? []).map((existing) => existing.id),
@@ -413,12 +522,15 @@ export function ProviderEditor({
           key,
           clearKey,
           headers,
-          models,
+          models: allModels,
         }),
         ...(revision === undefined ? {} : { revision }),
       },
       {
         onSuccess: (result) => {
+          setSavedId(id);
+          setModels(allModels);
+          setPreview(undefined);
           setSaved(true);
           setChangedElsewhere(false);
           setKey("");
@@ -432,7 +544,7 @@ export function ProviderEditor({
               headers: Object.fromEntries(
                 headers.map((row) => [row.name, row.value]),
               ),
-              models,
+              models: allModels,
               key: "",
               clearKey: false,
             }),
@@ -450,12 +562,17 @@ export function ProviderEditor({
       },
     );
 
+  const close = () => {
+    requestRef.current += 1;
+    pendingRef.current = false;
+    onClose();
+  };
   const back = () => {
     if (dirty) {
       setDiscarding(true);
       return;
     }
-    onClose();
+    close();
   };
 
   const providerName = provider ? providerLabel(provider) : "";
@@ -468,10 +585,40 @@ export function ProviderEditor({
         )
     : [];
 
-  const patchModel = (index: number, patch: Partial<ModelRow>) =>
-    setModels((current) =>
-      current.map((row, at) => (at === index ? { ...row, ...patch } : row)),
-    );
+  const patchModel = (index: number, patch: Partial<ModelRow>) => {
+    if (index < models.length) {
+      setModels((current) =>
+        current.map((row, at) => (at === index ? { ...row, ...patch } : row)),
+      );
+    } else {
+      const target = selected[index - models.length];
+      setPreview((current) =>
+        current === undefined
+          ? current
+          : {
+              ...current,
+              selected: current.selected.map((row) =>
+                row === target ? { ...row, ...patch } : row,
+              ),
+            },
+      );
+    }
+  };
+  const removeModel = (index: number) => {
+    if (index < models.length)
+      setModels((current) => current.filter((_, at) => at !== index));
+    else {
+      const target = selected[index - models.length];
+      setPreview((current) =>
+        current === undefined
+          ? current
+          : {
+              ...current,
+              selected: current.selected.filter((row) => row !== target),
+            },
+      );
+    }
+  };
 
   return (
     <div>
@@ -487,7 +634,7 @@ export function ProviderEditor({
         </h2>
         <p>{translateText("editor.description")}</p>
       </div>
-      <fieldset className="min-w-0">
+      <fieldset className="min-w-0" disabled={save.isPending}>
         <div className="settings-field">
           <Label htmlFor="provider-name">{translateText("editor.name")}</Label>
           <Input
@@ -615,10 +762,107 @@ export function ProviderEditor({
         <div className="settings-section-label">
           {translateText("editor.models")}
         </div>
-        {models.length === 0 ? (
+        <div className="grid gap-2 mb-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="justify-self-start"
+            disabled={fetching || baseUrl.trim().length === 0 || save.isPending}
+            onClick={() => void fetchModels()}
+          >
+            {fetching
+              ? translateText("discovery.loading")
+              : translateText("discovery.fetch")}
+          </Button>
+          <p className="settings-hint">{translateText("discovery.hint")}</p>
+          {preview !== undefined &&
+          !fresh &&
+          !fetching &&
+          preview.status !== "failed" ? (
+            <p role="status" className="settings-hint">
+              {translateText("discovery.stale")}
+            </p>
+          ) : null}
+          {fetching ? (
+            <p role="status" className="settings-hint">
+              {translateText("discovery.loading")}
+            </p>
+          ) : null}
+          {preview?.connection === connection && preview.status === "failed" ? (
+            <p role="alert" className="settings-hint">
+              {preview.error}
+            </p>
+          ) : null}
+          {fresh ? (
+            <>
+              <Input
+                aria-label={translateText("discovery.search")}
+                placeholder={translateText("discovery.search")}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+              <div
+                className="max-h-60 overflow-y-auto grid gap-1"
+                aria-label={translateText("discovery.results")}
+              >
+                {matchingModels.map((model) => {
+                  const existing = models.some(
+                    (row) => row.id.trim() === model.id,
+                  );
+                  return (
+                    <label key={model.id} className="settings-check break-all">
+                      <input
+                        type="checkbox"
+                        checked={
+                          existing ||
+                          selected.some((row) => row.id === model.id)
+                        }
+                        disabled={existing}
+                        onChange={(event) => {
+                          const checked = event.target.checked;
+                          setPreview((current) =>
+                            current === undefined
+                              ? current
+                              : {
+                                  ...current,
+                                  selected: checked
+                                    ? [...current.selected, rowOf(model)]
+                                    : current.selected.filter(
+                                        (row) => row.id !== model.id,
+                                      ),
+                                },
+                          );
+                        }}
+                      />
+                      <span>
+                        {model.name ?? model.id}
+                        {model.name && model.name !== model.id
+                          ? ` · ${model.id}`
+                          : ""}
+                        {existing
+                          ? ` · ${translateText("discovery.inForm")}`
+                          : ""}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              {preview.models.length === 0 ? (
+                <p role="status" className="settings-hint">
+                  {translateText("discovery.empty")}
+                </p>
+              ) : matchingModels.length === 0 ? (
+                <p role="status" className="settings-hint">
+                  {translateText("discovery.noMatches")}
+                </p>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+        {allModels.length === 0 ? (
           <p className="settings-hint">{translateText("editor.noModels")}</p>
         ) : null}
-        {models.map((row, at) => (
+        {allModels.map((row, at) => (
           <ModelCard
             // Rows have no identity of their own until they have an id; the position is what the
             // person is looking at, and editing a field must not remount the card under the hand.
@@ -627,9 +871,7 @@ export function ProviderEditor({
             row={row}
             custom={custom}
             onUpdate={(patch) => patchModel(at, patch)}
-            onRemove={() =>
-              setModels((current) => current.filter((_, index) => index !== at))
-            }
+            onRemove={() => removeModel(at)}
           />
         ))}
         {custom ? (
@@ -683,7 +925,7 @@ export function ProviderEditor({
               size="xs"
               onClick={() => {
                 setDiscarding(false);
-                onClose();
+                close();
               }}
             >
               {translateText("editor.discard")}

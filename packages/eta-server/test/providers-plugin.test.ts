@@ -8,11 +8,11 @@
 
 import type { ProvidersView } from "@eta/client-contracts";
 import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context } from "cordis";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PROVIDER_ACTIONS, providersPlugin } from "../src/bundled/providers";
 import { ProviderConfigStore, revisionOf } from "../src/providers/store";
 import { WireService } from "../src/wire-service";
@@ -20,6 +20,7 @@ import { WireService } from "../src/wire-service";
 const roots: string[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0))
     await rm(root, { recursive: true, force: true });
 });
@@ -36,7 +37,7 @@ interface Harness {
 }
 
 async function harness(
-  options: { watchIntervalMs?: number } = {},
+  options: { watchIntervalMs?: number; fetch?: typeof fetch } = {},
 ): Promise<Harness> {
   const root = await mkdtemp(join(tmpdir(), "eta-providers-plugin-"));
   roots.push(root);
@@ -56,7 +57,10 @@ async function harness(
     store,
     async load() {
       const fiber = ctx.plugin(
-        providersPlugin({ store }) as never,
+        providersPlugin({
+          store,
+          ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+        }) as never,
         undefined as never,
       );
       await fiber;
@@ -472,5 +476,250 @@ describe("the codex login, over the wire", () => {
         } as never,
       ),
     ).rejects.toThrow(/browser or device_code/);
+  });
+});
+
+describe("unsaved model discovery", () => {
+  it("uses draft connection values without requiring an id or models, writing a file, pushing state or rebuilding runtime", async () => {
+    let requested: { url: string; headers: Headers } | undefined;
+    const send = (async (
+      url: Parameters<typeof fetch>[0],
+      init?: RequestInit,
+    ) => {
+      requested = { url: String(url), headers: new Headers(init?.headers) };
+      return Response.json({
+        data: [{ id: "new-model", context_window: 12000 }],
+      });
+    }) as unknown as typeof fetch;
+    const h = await harness({ fetch: send });
+    await h.load();
+    await until(() => h.config() !== undefined);
+    const before = h.config();
+    h.frames.length = 0;
+    const result = await callResult(h, "discover", {
+      kind: "openai-compatible",
+      baseUrl: "https://draft.test/v1/",
+      apiKey: "draft-secret",
+      headers: { "User-Agent": "eta-draft", "X-Custom": "custom-secret" },
+    });
+    expect(result).toEqual({
+      ok: true,
+      result: { models: [{ id: "new-model", contextWindow: 12000 }] },
+    });
+    expect(requested?.url).toBe("https://draft.test/v1/models");
+    expect(requested?.headers.get("Authorization")).toBe("Bearer draft-secret");
+    expect(requested?.headers.get("User-Agent")).toBe("eta-draft");
+    expect(requested?.headers.get("X-Custom")).toBe("custom-secret");
+    expect(h.config()).toEqual(before);
+    expect(h.frames).toEqual([]);
+    await expect(readFile(h.store.path, "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await h.unload();
+  });
+
+  it("editing reuses the saved key only when omitted; replacement and clear are write-free, and stale revisions are refused", async () => {
+    const keys: (string | null)[] = [];
+    const h = await harness({
+      fetch: (async (_url: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        keys.push(new Headers(init?.headers).get("Authorization"));
+        return Response.json({ data: [{ id: "new-model" }] });
+      }) as unknown as typeof fetch,
+    });
+    await h.load();
+    await until(() => h.config() !== undefined);
+    await callResult(h, "save", {
+      revision: h.config()?.revision,
+      provider: {
+        ...provider("existing"),
+        apiKey: "saved-secret",
+        models: [
+          {
+            id: "old",
+            name: "custom",
+            defaultThinking: "high",
+            overrides: { contextWindow: 32000 },
+          },
+        ],
+      },
+    });
+    const before = await readFile(h.store.path, "utf8");
+    const args = {
+      id: "existing",
+      revision: h.config()?.revision,
+      kind: "openai-compatible",
+      baseUrl: "https://changed.test/v1",
+      headers: {},
+    };
+    expect((await callResult(h, "discover", args)).ok).toBe(true);
+    expect(
+      (await callResult(h, "discover", { ...args, apiKey: "replacement" })).ok,
+    ).toBe(true);
+    expect(
+      (await callResult(h, "discover", { ...args, apiKey: null })).ok,
+    ).toBe(true);
+    expect(keys).toEqual(["Bearer saved-secret", "Bearer replacement", null]);
+    expect(await readFile(h.store.path, "utf8")).toBe(before);
+    const stale = await callResult(h, "discover", {
+      ...args,
+      revision: "old-revision",
+    });
+    expect(stale).toEqual({ ok: false, error: "config_changed" });
+    expect(keys).toHaveLength(3);
+    await h.unload();
+  });
+
+  it.each([
+    ["not a URL", "openai-compatible", "discovery_invalid_connection"],
+    [
+      "https://user:secret@draft.test/v1",
+      "openai-compatible",
+      "discovery_invalid_connection",
+    ],
+    [
+      "https://draft.test/v1?key=secret",
+      "openai-compatible",
+      "discovery_invalid_connection",
+    ],
+    ["file:///tmp/models", "openai-compatible", "discovery_invalid_connection"],
+    ["https://draft.test/v1", "openai-codex", "discovery_unsupported"],
+  ])(
+    "refuses unsafe/unsupported connection %s (%s) without echoing it",
+    async (baseUrl, kind, error) => {
+      let calls = 0;
+      const h = await harness({
+        fetch: (async () => {
+          calls++;
+          return Response.json({ data: [] });
+        }) as unknown as typeof fetch,
+      });
+      await h.load();
+      expect(await callResult(h, "discover", { baseUrl, kind })).toEqual({
+        ok: false,
+        error,
+      });
+      expect(calls).toBe(0);
+      await h.unload();
+    },
+  );
+
+  it.each([
+    [
+      () => new Response("secret upstream body", { status: 401 }),
+      "discovery_http_401",
+    ],
+    [() => new Response("secret invalid JSON"), "discovery_response"],
+    [() => Response.json({ models: [] }), "discovery_response"],
+    [
+      () => {
+        throw new Error("Bearer secret https://private.test/");
+      },
+      "discovery_network: Bearer [redacted] https://private.test/",
+    ],
+  ])(
+    "reports a safe error without leaking upstream content",
+    async (response, error) => {
+      const h = await harness({
+        fetch: (async () => response()) as unknown as typeof fetch,
+      });
+      await h.load();
+      expect(
+        await callResult(h, "discover", {
+          kind: "openai-compatible",
+          baseUrl: "https://draft.test/v1",
+          apiKey: "secret",
+        }),
+      ).toEqual({ ok: false, error });
+      await h.unload();
+    },
+  );
+
+  it("returns a genuinely empty list as a successful preview", async () => {
+    const h = await harness({
+      fetch: (async () =>
+        Response.json({ data: [] })) as unknown as typeof fetch,
+    });
+    await h.load();
+    expect(
+      await callResult(h, "discover", {
+        kind: "openai-compatible",
+        baseUrl: "https://draft.test/v1",
+      }),
+    ).toEqual({ ok: true, result: { models: [] } });
+    await h.unload();
+  });
+});
+
+describe("discovery connection safety", () => {
+  it("honors case-insensitive authorization overrides/removal like generation", async () => {
+    const auth: (string | null)[] = [];
+    const h = await harness({
+      fetch: (async (_url: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        auth.push(new Headers(init?.headers).get("Authorization"));
+        return Response.json({ data: [] });
+      }) as unknown as typeof fetch,
+    });
+    await h.load();
+    for (const authorization of ["Custom replacement", null])
+      await callResult(h, "discover", {
+        kind: "openai-compatible",
+        baseUrl: "https://draft.test/v1",
+        apiKey: "original",
+        headers: { authorization },
+      });
+    expect(auth).toEqual(["Custom replacement", null]);
+    await h.unload();
+  });
+  it("bounds upstream requests and safely reports an aborted deadline", async () => {
+    const timeout = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockReturnValue(AbortSignal.abort());
+    const h = await harness({
+      fetch: (async (_url: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        expect(init?.signal?.aborted).toBe(true);
+        throw new Error("secret timeout detail");
+      }) as unknown as typeof fetch,
+    });
+    await h.load();
+    expect(
+      await callResult(h, "discover", {
+        kind: "openai-compatible",
+        baseUrl: "https://draft.test/v1",
+      }),
+    ).toEqual({ ok: false, error: "discovery_timeout" });
+    expect(timeout).toHaveBeenCalledWith(45_000);
+    await h.unload();
+  });
+});
+
+describe("discovery diagnostics", () => {
+  it("keeps a useful network diagnostic while redacting the saved key and draft header values", async () => {
+    const h = await harness({
+      fetch: (async () => {
+        throw new Error(
+          "ECONNREFUSED draft.test:443 Bearer saved-secret X-Token: header-secret",
+        );
+      }) as unknown as typeof fetch,
+    });
+    await h.load();
+    await until(() => h.config() !== undefined);
+    await callResult(h, "save", {
+      revision: h.config()?.revision,
+      provider: { ...provider("existing"), apiKey: "saved-secret" },
+    });
+    expect(
+      await callResult(h, "discover", {
+        id: "existing",
+        revision: h.config()?.revision,
+        kind: "openai-compatible",
+        baseUrl: "https://draft.test/v1",
+        headers: { "X-Token": "header-secret" },
+      }),
+    ).toEqual({
+      ok: false,
+      error:
+        "discovery_network: ECONNREFUSED draft.test:443 Bearer [redacted] X-Token: [redacted]",
+    });
+    await h.unload();
   });
 });
