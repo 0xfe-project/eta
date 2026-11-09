@@ -9,7 +9,6 @@ import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Loading } from "@/components/states";
 import {
@@ -19,15 +18,19 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Input } from "@/components/ui/input";
+import { useTranslation } from "react-i18next";
 import {
   SidebarGroup,
   SidebarMenu,
+  SidebarMenuButton,
   SidebarMenuItem,
-    SidebarMenuButton,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { agentName, useAgentList } from "@/queries/agents";
+import { useTasks } from "@/queries/tasks";
+import { useArtifacts } from "@/queries/artifacts";
+import { useCaptain } from "@/queries/captain";
 import { useConversationActions } from "@/queries/conversations";
 import { useModels } from "@/queries/providers";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
@@ -35,7 +38,6 @@ import { agentStatusLabels, memberStatusLabel } from "./agent-status";
 import { useOpenAgent } from "./use-agents";
 import { useChatList } from "./use-chat-list";
 import { useOpenGroup } from "./use-groups";
-import { useCaptain, useCaptainActions } from "@/queries/captain";
 import { useWorkspaceStore } from "./workspace-store";
 
 /** "3m" / "5h" / "1d": the age of a conversation, at a glance. */
@@ -62,39 +64,64 @@ function humanizeAge(at: number): string {
 
 /** Captain conversation, if mounted. Opened via the left navigation. */
 function CaptainSection() {
+  const { t: translateText } = useTranslation(["navigation", "tasks", "artifacts"] as const);
   const captain = useCaptain();
   const open = useOpenGroup();
+  const { tasks: board } = useTasks();
+  const { artifacts } = useArtifacts();
+
   if (captain.identity === null) return null;
   const conversationId = captain.identity.conversationId;
   if (conversationId === null || conversationId === undefined) return null;
+
+  const captainTasks = board.filter(
+    (task) => task.conversationId === conversationId && task.status !== "done" && task.status !== "cancelled"
+  );
+  const captainArtifacts = artifacts.filter((art) => art.conversationId === conversationId);
+
   return (
-    <SidebarGroup aria-labelledby="sidebar-captain" className="shrink-0 border-b px-0 pb-0">
+    <SidebarGroup
+      aria-labelledby="sidebar-captain"
+      className="shrink-0 border-b px-0 pb-0"
+    >
       <div className="flex items-center border-b pb-1 pl-4 pr-3">
         <span
           id="sidebar-captain"
           className="font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase [&:lang(zh)]:tracking-normal flex-1"
         >
-          Captain
+          {translateText("navigation:sections.captain")}
         </span>
       </div>
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            asChild
-            isActive={false}
-            tooltip={captain.identity.name}
-            className="relative overflow-visible text-sm"
-          >
-            <button
-              type="button"
-              onClick={() => open(conversationId)}
-              className="w-full text-left"
-            >
-              <span>{captain.identity.name}</span>
-            </button>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
+      <button
+        type="button"
+        onClick={() => open(conversationId)}
+        className="w-full cursor-pointer border-b px-4 py-3 text-left hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <AgentAvatar
+              agent={{ id: captain.identity.agentId }}
+              animate
+              className="size-12"
+            />
+            <span className="text-sm font-medium">{captain.identity.name}</span>
+          </div>
+          {(captainTasks.length > 0 || captainArtifacts.length > 0) && (
+            <div className="flex gap-2 text-xs text-muted-foreground">
+              {captainTasks.length > 0 && (
+                <span>
+                  {captainTasks.length} {translateText("navigation:sections.tasks")}
+                </span>
+              )}
+              {captainArtifacts.length > 0 && (
+                <span>
+                  {captainArtifacts.length} {translateText("navigation:sections.artifacts")}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </button>
     </SidebarGroup>
   );
 }
@@ -120,7 +147,7 @@ export function ConversationList() {
     <>
       <CaptainSection />
       <SidebarGroup
-      aria-labelledby="sidebar-groups"
+        aria-labelledby="sidebar-groups"
         className="min-h-0 flex-1 overflow-y-auto px-0 pb-0"
       >
         <div

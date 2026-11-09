@@ -39,7 +39,6 @@ import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useEmail, useVerifyEmailAccount } from "@/queries/email";
 import { useTasks } from "@/queries/tasks";
-import { useTarget } from "@/queries/wire";
 import { AgentEditor } from "./agent-editor";
 import { CreateGroup } from "./groups";
 import { NewConversationDialog } from "./new-conversation-dialog";
@@ -442,7 +441,7 @@ export function BottomNav() {
           <div
             className={cn(
               "grid h-full grid-rows-1",
-ROUTINES_VISIBLE
+              ROUTINES_VISIBLE
                 ? "grid-cols-[1fr_1fr_1fr_68px_1fr_1fr]"
                 : "grid-cols-[1fr_1fr_1fr_68px_1fr]",
             )}
