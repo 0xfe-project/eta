@@ -399,7 +399,7 @@ describe("a task run", () => {
     expect(runsOf(r.w, task.id)[0]!.workspace).toBe(where);
     // The branch is the project's, the worktree is outside its directory, and both stay.
     expect(git(dir, "branch", "--list", "eta/task-1")).toContain("eta/task-1");
-    expect(git(dir, "worktree", "list").replaceAll("/", "\\")).toContain(where);
+    expect(git(dir, "worktree", "list")).toContain(where);
     expect(git(dir, "status", "--porcelain")).toBe("");
     expect(existsSync(where)).toBe(true);
     expect(git(where, "rev-parse", "--abbrev-ref", "HEAD")).toBe("eta/task-1");

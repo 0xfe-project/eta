@@ -115,6 +115,8 @@ describe("the migration that turns stored assignee names into ids", () => {
       db,
       all.filter((m) => m.id < normalize.id),
     );
+    // system_role column is added in 0046-captain, but we're testing 0045 so add it here
+    db.exec("ALTER TABLE agent ADD COLUMN system_role TEXT");
     const agents = new AgentStore(db);
     return { db, agents };
   }
