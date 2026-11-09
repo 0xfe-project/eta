@@ -981,15 +981,6 @@ export function createProduct(options: {
               );
               return runtimes;
             },
-            removed: (agentId) =>
-              void options
-                .gateway?.()
-                ?.revoke(agentId)
-                .catch((error) =>
-                  warn(
-                    `[eta] llm: could not end the keys of ${agentId}: ${String(error)}`,
-                  ),
-                ),
             capturePrompt: (input) => {
               captainStore.appendPromptVersion({
                 subjectId: input.agentId,

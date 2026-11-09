@@ -12,7 +12,7 @@
  * what the sessions run (git, gh, Claude Code, Codex, tailscale) lives on the user's.
  */
 import { homedir } from "node:os";
-import { delimiter, dirname, posix } from "node:path";
+import { delimiter, join, posix } from "node:path";
 import process from "node:process";
 
 export interface ServiceDefinition {

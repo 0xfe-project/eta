@@ -66,7 +66,6 @@ export function captainSessionTools(
               status: deps.timeline.agentStatuses().get(agent.id) ?? "idle",
               machineId: agent.machineId,
               systemRole: agent.systemRole,
-              bundles: agent.bundles,
               updatedAt: agent.updatedAt,
             })),
           ),
