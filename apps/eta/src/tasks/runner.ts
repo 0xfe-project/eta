@@ -63,6 +63,25 @@ import { workable } from "./board";
 import { mentionKey, sessionKeyOf, taskKey } from "./session-key";
 import { prepareWorktree } from "./workspace";
 
+/**
+ * What a run says when the agent that is to execute the task is not in the registry. It names the
+ * role the missing id holds and the id itself: the executor is the assignee, and the maker only
+ * when nobody else was assigned, so a missing assignee must not read as a missing maker.
+ */
+function executorGoneText(task: {
+  assigneeAgentId: string | null;
+  createdBy: { agentId: string | null };
+}): string {
+  const assignee = task.assigneeAgentId;
+  const maker = task.createdBy.agentId;
+  if (assignee !== null && assignee !== maker)
+    return `the agent assigned to execute this task (${assignee}) is not registered (this is the assignee, not the agent that made the task)`;
+  return `the agent that made this task and was to execute it (${maker ?? assignee}) is not registered`;
+}
+
+const capitalized = (text: string): string =>
+  text.charAt(0).toUpperCase() + text.slice(1);
+
 /** What a run says when the process died under it. */
 const RUN_RESTART_TEXT = "The server restarted before this run finished.";
 
@@ -566,13 +585,15 @@ export class TaskRunner implements TaskRuns {
     const agentId = options.agentId ?? null;
     if (agentId !== null) {
       if (agents.get(agentId) === undefined)
-        throw new Error("the agent mentioned on this task is gone");
+        throw new Error(
+          `the agent mentioned on this task (${agentId}) is not registered`,
+        );
     } else {
       const executor = this.#executorOf(task);
       if (task.createdBy.kind !== "agent" || executor === null)
         throw new Error("this task has no executor: only an agent's task runs");
       if (agents.get(executor) === undefined)
-        throw new Error("the agent that made this task is gone");
+        throw new Error(executorGoneText(task));
     }
     const project =
       task.projectId === null ? undefined : projects.get(task.projectId);
@@ -733,8 +754,8 @@ export class TaskRunner implements TaskRuns {
         ended: {
           status: "failed",
           error: mentioned
-            ? "The agent mentioned on this task is gone."
-            : "The agent that was to execute this task is gone.",
+            ? `The agent mentioned on this task (${agentId}) is not registered.`
+            : `${capitalized(executorGoneText(task))}.`,
         },
       };
     const project =

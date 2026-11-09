@@ -461,9 +461,11 @@ export function createProduct(options: {
       tasks: taskRows,
       timeline,
       conversations,
+      agents,
       artifactsOf,
     }),
     conversations,
+    agents,
     artifactsOf,
     changed,
   });

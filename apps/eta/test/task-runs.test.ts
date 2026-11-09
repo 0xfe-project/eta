@@ -19,6 +19,7 @@ import { readdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { DaemonLink, DaemonNode } from "@eta/daemon";
 import { describe, expect, it } from "vitest";
+import { loadMigrations, statementsOf } from "../src/db";
 import { connect, until } from "./support/client";
 import { machineView } from "./support/daemon";
 import { tempDir, testHost } from "./support/host";
@@ -271,6 +272,78 @@ describe("a task run", () => {
       agentId: r.ada.id,
     });
     expect(taskOf(r.w, task.id).assigneeAgentId).toBe(bola.id);
+  });
+
+  it("resolves an assignee named by name to its id, and refuses one nobody is", async () => {
+    const r = await room(finishes());
+    const bola = await r.w.agent("Bola");
+    const task = make(r, "For Bola by name", "local", { assignee: "Bola" });
+    expect(task.assigneeAgentId).toBe(bola.id);
+    await until(() => reviewed(r.w, task.id));
+    expect(() =>
+      make(r, "For nobody", "local", { assignee: "Nobody" }),
+    ).toThrow(/no agent is "Nobody".*Ada \(.*Bola \(/);
+    expect(r.w.host.product.board.list().map((t) => t.title)).not.toContain(
+      "For nobody",
+    );
+  });
+
+  it("runs a task whose stored assignee was a name once the migration has made it an id", async () => {
+    const r = await room(finishes());
+    const bola = await r.w.agent("Bola");
+    const task = make(r, "For Bola", "local", { assignee: bola.id });
+    await until(() => reviewed(r.w, task.id));
+    // A row written before names were resolved: the queue cannot find `Bola` by id.
+    r.w.host.db
+      .query("UPDATE task SET assignee_agent = 'Bola' WHERE id = ?")
+      .run(task.id);
+    await expect(
+      r.w.client.call("tasks", "rerun", { taskId: task.id }),
+    ).rejects.toThrow(/assigned to execute this task \(Bola\)/);
+    const migration = loadMigrations().find(
+      (m) => m.id === "0045-normalize-assignee-names",
+    )!;
+    for (const statement of statementsOf(migration.sql))
+      r.w.host.db.exec(statement);
+    expect(taskOf(r.w, task.id).assigneeAgentId).toBe(bola.id);
+    await r.w.client.call("tasks", "rerun", { taskId: task.id });
+    await until(
+      () => runStatuses(r.w, task.id).join() === "completed,completed",
+    );
+  });
+
+  it("says the assignee is missing, not the maker, when the assignee is not registered", async () => {
+    const r = await room(finishes());
+    const bola = await r.w.agent("Bola");
+    const task = make(r, "For Bola", "local", { assignee: bola.id });
+    await until(() => reviewed(r.w, task.id));
+    r.w.host.db.query("DELETE FROM agent WHERE id = ?").run(bola.id);
+    let said = "";
+    try {
+      await r.w.client.call("tasks", "rerun", { taskId: task.id });
+    } catch (error) {
+      said = (error as Error).message;
+    }
+    expect(said).toContain(`assigned to execute this task (${bola.id})`);
+    expect(said).toContain("not the agent that made the task");
+    expect(said).not.toContain("the agent that made this task is gone");
+  });
+
+  it("says the maker is missing when the maker executes and is not registered", async () => {
+    const r = await room(finishes());
+    const task = make(r, "Ada's own", "local");
+    await until(() => reviewed(r.w, task.id));
+    const adaId = r.ada.id;
+    r.w.host.db.query("DELETE FROM agent WHERE id = ?").run(adaId);
+    let said = "";
+    try {
+      await r.w.client.call("tasks", "rerun", { taskId: task.id });
+    } catch (error) {
+      said = (error as Error).message;
+    }
+    expect(said).toContain(
+      `the agent that made this task and was to execute it (${adaId}) is not registered`,
+    );
   });
 
   it("is only ever made by an agent: the user has no way to create a task", async () => {
