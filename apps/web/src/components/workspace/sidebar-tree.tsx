@@ -9,6 +9,7 @@ import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Loading } from "@/components/states";
 import {
@@ -18,21 +19,19 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Input } from "@/components/ui/input";
-import { useTranslation } from "react-i18next";
 import {
   SidebarGroup,
   SidebarMenu,
-  SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { agentName, useAgentList } from "@/queries/agents";
-import { useTasks } from "@/queries/tasks";
 import { useArtifacts } from "@/queries/artifacts";
 import { useCaptain } from "@/queries/captain";
 import { useConversationActions } from "@/queries/conversations";
 import { useModels } from "@/queries/providers";
+import { useTasks } from "@/queries/tasks";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels, memberStatusLabel } from "./agent-status";
 import { useOpenAgent } from "./use-agents";
