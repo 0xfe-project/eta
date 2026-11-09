@@ -23,6 +23,7 @@ import {
   SidebarGroup,
   SidebarMenu,
   SidebarMenuItem,
+    SidebarMenuButton,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,7 @@ import { agentStatusLabels, memberStatusLabel } from "./agent-status";
 import { useOpenAgent } from "./use-agents";
 import { useChatList } from "./use-chat-list";
 import { useOpenGroup } from "./use-groups";
+import { useCaptain, useCaptainActions } from "@/queries/captain";
 import { useWorkspaceStore } from "./workspace-store";
 
 /** "3m" / "5h" / "1d": the age of a conversation, at a glance. */
@@ -57,6 +59,46 @@ function humanizeAge(at: number): string {
  * line under the groups: it is the other half of the sidebar, not the tail of the list. Borders do
  * the work of separating them — BR1 does not mind a line.
  */
+
+/** Captain conversation, if mounted. Opened via the left navigation. */
+function CaptainSection() {
+  const captain = useCaptain();
+  const open = useOpenGroup();
+  if (captain.identity === null) return null;
+  const conversationId = captain.identity.conversationId;
+  if (conversationId === null || conversationId === undefined) return null;
+  return (
+    <SidebarGroup aria-labelledby="sidebar-captain" className="shrink-0 border-b px-0 pb-0">
+      <div className="flex items-center border-b pb-1 pl-4 pr-3">
+        <span
+          id="sidebar-captain"
+          className="font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase [&:lang(zh)]:tracking-normal flex-1"
+        >
+          Captain
+        </span>
+      </div>
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            asChild
+            isActive={false}
+            tooltip={captain.identity.name}
+            className="relative overflow-visible text-sm"
+          >
+            <button
+              type="button"
+              onClick={() => open(conversationId)}
+              className="w-full text-left"
+            >
+              <span>{captain.identity.name}</span>
+            </button>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </SidebarGroup>
+  );
+}
+
 export function ConversationList() {
   const { t: translateText } = useTranslation(["chat"] as const);
   const { directories, directs, current, loaded } = useChatList();
@@ -76,8 +118,9 @@ export function ConversationList() {
 
   return (
     <>
+      <CaptainSection />
       <SidebarGroup
-        aria-labelledby="sidebar-groups"
+      aria-labelledby="sidebar-groups"
         className="min-h-0 flex-1 overflow-y-auto px-0 pb-0"
       >
         <div
