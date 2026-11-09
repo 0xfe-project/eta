@@ -24,6 +24,8 @@ export interface TaskRecord extends BoardTaskView {
   workspaceMode: TaskWorkspaceMode;
   /** The branch or commit the worktree starts at, as the proposer named it; null is the checkout's HEAD. */
   baseBranch: string | null;
+  captainAssignmentId: string | null;
+  captainMessageId: string | null;
   /** The agent that executes it, when that is not the maker; null is the maker. */
   assigneeAgentId: string | null;
   worktreePath: string | null;
@@ -41,6 +43,8 @@ export interface NewTask {
   assigneeAgent?: string | undefined;
   /** The branch or commit its worktree starts at; null is the project checkout's HEAD. */
   baseBranch?: string | null | undefined;
+  captainAssignmentId?: string | null | undefined;
+  captainMessageId?: string | null | undefined;
   /** Where it is discussed, and, for good, where it came from. */
   conversationId?: string | undefined;
   projectId?: string | undefined;
@@ -68,6 +72,8 @@ interface TaskRow {
   project_id: string | null;
   workspace_mode: string;
   base_branch: string | null;
+  captain_assignment_id: string | null;
+  captain_message_id: string | null;
   assignee_agent: string | null;
   worktree_path: string | null;
   worktree_branch: string | null;
@@ -99,6 +105,8 @@ const recordOf = (row: TaskRow): TaskRecord => ({
   projectId: row.project_id,
   workspaceMode: row.workspace_mode as TaskWorkspaceMode,
   baseBranch: row.base_branch,
+  captainAssignmentId: row.captain_assignment_id,
+  captainMessageId: row.captain_message_id,
   assigneeAgentId: row.assignee_agent,
   worktreePath: row.worktree_path,
   worktreeBranch: row.worktree_branch,
@@ -169,8 +177,9 @@ export class TaskStore {
         .query(
           `INSERT INTO task
              (id, title, description, status, created_by_agent, assignee_agent, conversation_id, origin_conversation_id,
-              project_id, workspace_mode, base_branch, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              project_id, workspace_mode, base_branch, captain_assignment_id, captain_message_id,
+              created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           id,
@@ -178,12 +187,14 @@ export class TaskStore {
           input.description ?? "",
           status,
           input.createdByAgent ?? null,
-          input.assigneeAgent ?? input.createdByAgent ?? null,
+          input.assigneeAgent ?? null,
           input.conversationId ?? null,
           input.conversationId ?? null,
           input.projectId ?? null,
           input.workspaceMode ?? "local",
           input.baseBranch ?? null,
+          input.captainAssignmentId ?? null,
+          input.captainMessageId ?? null,
           now,
           now,
         );

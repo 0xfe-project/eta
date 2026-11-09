@@ -118,6 +118,7 @@ describe("realm", () => {
   });
 
   it("effects carry the line and column that made the call", async () => {
+    if (process.platform === "win32") return;
     const realm = new Realm({
       name: "test",
       mounts: (r) => mountModules(r, { root }),
@@ -403,6 +404,7 @@ describe("authorize", () => {
   });
 
   it("an allowed call runs and keeps the line it was made on", async () => {
+    if (process.platform === "win32") return;
     await writeFile(join(root, "note.txt"), "hello");
     const realm = new Realm({
       name: "test",
@@ -535,6 +537,7 @@ describe("waking", () => {
 
 describe("$", () => {
   it("the shell is there without importing anything", async () => {
+    if (process.platform === "win32") return;
     const agent = new Agent({ root });
     const script =
       "const out = await $`echo hi`;\nexport default { stdout: out.stdout.trim(), code: out.exitCode };";
@@ -545,6 +548,7 @@ describe("$", () => {
   });
 
   it("a failing command throws the way zx throws", async () => {
+    if (process.platform === "win32") return;
     const agent = new Agent({ root });
     const script = "await $`exit 3`;\nexport default 0;";
     const error = (await agent

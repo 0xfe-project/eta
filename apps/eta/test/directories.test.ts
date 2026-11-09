@@ -140,12 +140,15 @@ describe("projects.directories", () => {
     expect(entries.some((entry) => entry.hidden)).toBe(false);
   });
 
-  it("calls a name that holds a newline one directory", async () => {
-    const dir = await tempDir("eta-dirs-");
-    await mkdir(join(dir, "two\nlines"));
-    const w = await world();
-    expect(names((await listed(w, dir)).entries)).toEqual(["two\nlines"]);
-  });
+  it.skipIf(process.platform === "win32")(
+    "calls a name that holds a newline one directory",
+    async () => {
+      const dir = await tempDir("eta-dirs-");
+      await mkdir(join(dir, "two\nlines"));
+      const w = await world();
+      expect(names((await listed(w, dir)).entries)).toEqual(["two\nlines"]);
+    },
+  );
 
   it("is an empty list for an empty directory, not a failure", async () => {
     const w = await world();
@@ -166,18 +169,21 @@ describe("projects.directories", () => {
     expect((failure as Error).message).not.toContain(dir);
   });
 
-  it.skipIf(root)("calls a directory it may not read denied", async () => {
-    const dir = await tempDir("eta-dirs-");
-    await mkdir(join(dir, "closed/inside"), { recursive: true });
-    await mkdir(join(dir, "unlistable"));
-    await lock(join(dir, "closed"), 0o000);
-    await lock(join(dir, "unlistable"), 0o311);
-    const w = await world();
-    expect(await problem(w, join(dir, "closed"))).toBe("denied");
-    // What is behind it may be there or not: only that it cannot be looked at is known.
-    expect(await problem(w, join(dir, "closed/inside"))).toBe("denied");
-    expect(await problem(w, join(dir, "unlistable"))).toBe("denied");
-  });
+  it.skipIf(root || process.platform === "win32")(
+    "calls a directory it may not read denied",
+    async () => {
+      const dir = await tempDir("eta-dirs-");
+      await mkdir(join(dir, "closed/inside"), { recursive: true });
+      await mkdir(join(dir, "unlistable"));
+      await lock(join(dir, "closed"), 0o000);
+      await lock(join(dir, "unlistable"), 0o311);
+      const w = await world();
+      expect(await problem(w, join(dir, "closed"))).toBe("denied");
+      // What is behind it may be there or not: only that it cannot be looked at is known.
+      expect(await problem(w, join(dir, "closed/inside"))).toBe("denied");
+      expect(await problem(w, join(dir, "unlistable"))).toBe("denied");
+    },
+  );
 
   it("refuses a machine that does not exist", async () => {
     const w = await world();

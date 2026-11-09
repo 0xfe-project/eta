@@ -421,40 +421,43 @@ describe("installing over SSH", () => {
     return ssh;
   }
 
-  it("sends the build for the computer's platform, registers it and installs the service, step by step", async () => {
-    const seen = {
-      scripts: [] as string[],
-      passwords: [] as (string | undefined)[],
-    } as {
-      scripts: string[];
-      sent?: string;
-      passwords: (string | undefined)[];
-    };
-    const w = await world({
-      daemonBuilds: await builds(),
-      ssh: await laptop(seen),
-    });
-    w.client.subscribe("machines");
-    const { installId } = (await w.client.call("machines", "install", {
-      host: "me@laptop",
-      url: `http://127.0.0.1:${w.host.port}`,
-    })) as MachineResults["install"];
-    await until(() => installOf(w, installId)?.step === "done", 10_000);
-    const done = installOf(w, installId)!;
-    expect(done).toMatchObject({ host: "me@laptop", error: null });
-    expect(machineView(w.client, done.machineId!)).toMatchObject({
-      name: "laptop",
-      status: "pending",
-    });
-    expect(seen.sent).toBe(BUILD);
-    expect(
-      seen.scripts.some((script) => script.includes("install-service")),
-    ).toBe(true);
-    // No password was given: ssh is asked for none.
-    expect(seen.passwords.every((password) => password === undefined)).toBe(
-      true,
-    );
-  });
+  it.skipIf(process.platform === "win32")(
+    "sends the build for the computer's platform, registers it and installs the service, step by step",
+    async () => {
+      const seen = {
+        scripts: [] as string[],
+        passwords: [] as (string | undefined)[],
+      } as {
+        scripts: string[];
+        sent?: string;
+        passwords: (string | undefined)[];
+      };
+      const w = await world({
+        daemonBuilds: await builds(),
+        ssh: await laptop(seen),
+      });
+      w.client.subscribe("machines");
+      const { installId } = (await w.client.call("machines", "install", {
+        host: "me@laptop",
+        url: `http://127.0.0.1:${w.host.port}`,
+      })) as MachineResults["install"];
+      await until(() => installOf(w, installId)?.step === "done", 10_000);
+      const done = installOf(w, installId)!;
+      expect(done).toMatchObject({ host: "me@laptop", error: null });
+      expect(machineView(w.client, done.machineId!)).toMatchObject({
+        name: "laptop",
+        status: "pending",
+      });
+      expect(seen.sent).toBe(BUILD);
+      expect(
+        seen.scripts.some((script) => script.includes("install-service")),
+      ).toBe(true);
+      // No password was given: ssh is asked for none.
+      expect(seen.passwords.every((password) => password === undefined)).toBe(
+        true,
+      );
+    },
+  );
 
   it("logs in with a password given for the install, and never lets it out", async () => {
     const seen = {

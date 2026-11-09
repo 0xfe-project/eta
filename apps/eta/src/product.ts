@@ -36,6 +36,7 @@ import { GitHubKeeper } from "@eta/daemon";
 import { peerAddressOf, redactionMiddleware } from "@eta/server";
 import { agentsPlugin } from "./agents/plugin";
 import { AgentStore } from "./agents/store";
+import { approvalMiddleware } from "./approval-middleware";
 import { loadKey } from "./artifacts/capability";
 import { DEFAULT_LIMITS } from "./artifacts/files";
 import { KINDS } from "./artifacts/kinds";
@@ -44,6 +45,14 @@ import { createArtifactRoutes } from "./artifacts/routes";
 import { ArtifactService } from "./artifacts/service";
 import { ArtifactStore } from "./artifacts/store";
 import { artifactSessionTools } from "./artifacts/tools";
+import { CaptainAudit } from "./captain/audit";
+import { CaptainMemory } from "./captain/memory";
+import { captainPlugin } from "./captain/plugin";
+import { redactToolResult } from "./captain/redact";
+import { CaptainService } from "./captain/service";
+import { CaptainStore } from "./captain/store";
+import { CaptainSupervisor } from "./captain/supervisor";
+import { captainSessionTools } from "./captain/tools";
 import { AttachmentStore } from "./conversations/attachments";
 import { combineRunHooks, Engine, RESTART_TEXT } from "./conversations/engine";
 import { conversationsPlugin } from "./conversations/plugin";
@@ -94,7 +103,7 @@ import { TaskCards } from "./tasks/cards";
 import { tasksPlugin } from "./tasks/plugin";
 import { TaskRunner } from "./tasks/runner";
 import { TaskRunStore } from "./tasks/runs";
-import { sessionKeyOf, taskOfKey } from "./tasks/session-key";
+import { isTaskSession, sessionKeyOf, taskOfKey } from "./tasks/session-key";
 import { TaskStore } from "./tasks/store";
 import { taskSessionTools } from "./tasks/tools";
 import { workspaceChooser } from "./tasks/workspace";
@@ -130,10 +139,17 @@ export interface Product {
   readonly board: TaskBoard;
   /** The links to other machines. */
   readonly hub: MachineHub;
+  /** El Capitan's product service and its supervisor. */
+  readonly captain: CaptainService;
+  readonly captainSupervisor: CaptainSupervisor;
   /** The routines' clock; `tick()` makes it look. */
   readonly scheduler: Scheduler;
   /** Every feature's per-session hooks, combined into the one set the session manager takes. */
   readonly sessionHooks: Required<SessionHooks>;
+  /** Whether long-term/project memory is enabled for a session. */
+  readonly memoryEnabledFor: (meta: SessionMeta) => boolean;
+  /** The versioned base system prompt Captain can manage. */
+  readonly baseSystemPromptFor: () => string;
   /** Count a model request that ended; the server tells it for every session it holds. */
   readonly generated: (meta: SessionMeta, message: AssistantMessage) => void;
   /** Mount the plugins on an assembled server; resolves when every one of them is in place. */
@@ -180,6 +196,8 @@ export function createProduct(options: {
   home?: string | undefined;
   routines?: RoutinesOptions;
   tasks?: TasksOptions;
+  /** Whether this product starts Captain; tests that are not about Captain leave it off. */
+  captain?: boolean | undefined;
   /** Overrides of what a published site may hold. */
   artifactLimits?: Partial<SiteLimits> | undefined;
   /** The address the user's browser reaches the host at, for MCP sign-in callbacks. */
@@ -217,6 +235,7 @@ export function createProduct(options: {
   mcp?: false | McpTuning | undefined;
 }): Product {
   const { db, dataDir, warn } = options;
+  const captainOn = options.captain !== false;
   const memory =
     options.memoryUrl === undefined || options.memoryUrl === ""
       ? undefined
@@ -254,8 +273,11 @@ export function createProduct(options: {
   const usage = new UsageStore(db);
   usage.prune();
 
+  let captainChangeObserver: (() => void) | undefined;
+
   /** Say that product state moved, to whoever is looking at it. */
   const changed = (touched?: readonly string[] | "all"): void => {
+    captainChangeObserver?.();
     if (wire === undefined) return;
     // `mcp` lists each agent's servers, so it moves with the agents.
     for (const target of [
@@ -267,6 +289,9 @@ export function createProduct(options: {
       "mcp",
     ])
       wire.pushNow(target);
+    // Captain's identity, pauses, operations, settings and assignment summaries are product
+    // state too. A mutation from the sidebar must not wait for the next board event to redraw.
+    wire.pushNow("captain");
     const ids =
       touched === "all"
         ? conversations.list().map((c) => c.id)
@@ -335,6 +360,7 @@ export function createProduct(options: {
   let running: AssembledServer | undefined;
   const later: {
     taskRunner?: TaskRunner;
+    captainSupervisor?: CaptainSupervisor;
     hooks?: Required<SessionHooks>;
     inbox?: Inbox;
     githubCredentials?: () => Promise<GitHubCredentials | null>;
@@ -425,6 +451,7 @@ export function createProduct(options: {
   });
   const router = new RemoteSessionsRouter({
     conversations,
+    runs: runRows,
     machines,
     hub,
     models: () => running?.models,
@@ -473,8 +500,21 @@ export function createProduct(options: {
     interactions,
     settings: new SettingStore(db),
     timeline,
-    changed: () => wire?.pushNow("inbox"),
+    changed: () => {
+      wire?.pushNow("inbox");
+      captainChangeObserver?.();
+    },
     warn,
+  });
+  const captainStore = new CaptainStore(db);
+  const captainAudit = new CaptainAudit(dataDir);
+  const captainMemory = new CaptainMemory({
+    db,
+    dataDir,
+    agents,
+    projects,
+    conversations,
+    client: memory,
   });
   // The GitHub App agents act as, and git and gh on this machine logged in as it (the daemons'
   // machines ask over their links; see `machines/service.ts`). None of it is there when the host
@@ -534,8 +574,37 @@ export function createProduct(options: {
     warn,
     { publicUrl: options.publicUrl },
   );
+  const memoryPausedForSessionKey = (key: string | undefined): boolean => {
+    if (key === undefined) return false;
+    if (isTaskSession(key)) {
+      const taskId = taskOfKey(key, (runId) => runRows.get(runId)?.taskId);
+      if (taskId === undefined) return false;
+      if (captainStore.isMemoryPaused("task", taskId)) return true;
+      const origin = taskRows.get(taskId)?.originConversationId;
+      return (
+        origin !== null &&
+        origin !== undefined &&
+        captainStore.isMemoryPaused("conversation", origin)
+      );
+    }
+    return captainStore.isMemoryPaused("conversation", key);
+  };
   const runHooks = combineRunHooks(
-    memory === undefined ? [] : [memoryRunHooks(memory)],
+    memory === undefined
+      ? []
+      : [
+          memoryRunHooks(memory, (run) => {
+            const taskRun = runRows.get(run.replyId);
+            if (taskRun !== undefined) {
+              if (captainStore.isMemoryPaused("task", taskRun.taskId))
+                return false;
+            }
+            return !captainStore.isMemoryPaused(
+              "conversation",
+              run.conversationId,
+            );
+          }),
+        ],
   );
   const engine = new Engine({
     db,
@@ -552,6 +621,10 @@ export function createProduct(options: {
     remote: remotePlace,
     pluginStamp: (agent) => plugins.stampOf(agent.id),
     pluginsRead: () => plugins.registry.refresh(),
+    sessionStamp: (conversationId) =>
+      `${memoryPausedForSessionKey(conversationId) ? ":memory-paused" : ""}:base:${
+        captainStore.latestPrompt("global", "base")?.version ?? 0
+      }`,
     runHooks,
   });
   // The executors of tasks: a fresh session of the agent that made a task for each run, on the
@@ -574,6 +647,51 @@ export function createProduct(options: {
     warn,
   });
   later.taskRunner = taskRunner;
+  const captain = new CaptainService({
+    dataDir,
+    store: captainStore,
+    audit: captainAudit,
+    agents,
+    machines,
+    projects,
+    conversations,
+    timeline,
+    attachments,
+    inbox,
+    memory: captainMemory,
+    engine,
+    created,
+    board,
+    tasks: taskRows,
+    runs: runRows,
+    runner: taskRunner,
+    changed,
+    warn,
+  });
+  inbox.onOpened((interaction) => captain.inboxOpened(interaction));
+  inbox.onSettled((interaction, sourceInteractionId) =>
+    captain.inboxSettled(interaction, sourceInteractionId),
+  );
+  const captainSupervisor = new CaptainSupervisor({
+    store: captainStore,
+    audit: captainAudit,
+    captain,
+    board,
+    runs: runRows,
+    machines,
+    runner: taskRunner,
+    inbox,
+    timer: options.routines?.timer ?? true,
+    warn,
+    changed: () => wire?.pushNow("captain"),
+  });
+  later.captainSupervisor = captainSupervisor;
+  captainChangeObserver = () => captainSupervisor.requestTick();
+  board.onChange(() => {
+    captain.refreshAssignments();
+    captainSupervisor.requestTick();
+    wire?.pushNow("captain");
+  });
   // Nothing is running yet, so the runs the last process left going cannot be.
   taskRunner.recover();
 
@@ -593,9 +711,62 @@ export function createProduct(options: {
   const githubCallbacks =
     github === undefined ? noRoutes : githubRoutes(github, warn);
 
+  const answerCaptainInbox: Parameters<
+    typeof captainSessionTools
+  >[0]["answerInbox"] = async (interactionId, response) =>
+    await inbox.answerWith(
+      interactionId,
+      response,
+      async (sessionId, questionId, value) => {
+        const machine = router.machineOf(sessionId);
+        if (machine !== undefined) {
+          const result = (await router.forward("answer", {
+            session: sessionId,
+            questionId,
+            response: value,
+          })) as { answered?: unknown } | undefined;
+          return result?.answered === true;
+        }
+        const managed = await running?.sessions.session(sessionId);
+        return managed?.session.ask?.answer(questionId, value) === true;
+      },
+    );
+
   // Each feature that adds tools, tool middleware or a question observer to sessions is one entry
   // here; the order is the order its tools and middleware are installed in.
   const productHooks: SessionHooks[] = [
+    { toolMiddleware: approvalMiddleware(inbox) },
+    {
+      toolMiddleware: ({ meta }) =>
+        captain.identity()?.agentId === meta.agentId
+          ? [
+              {
+                name: "captain-redaction",
+                after(_name, _args, result) {
+                  return redactToolResult(result);
+                },
+              },
+            ]
+          : [],
+    },
+    {
+      sessionTools: captainSessionTools({
+        service: captain,
+        agents,
+        projects,
+        conversations,
+        timeline,
+        board,
+        tasks: taskRows,
+        inbox,
+        attachments,
+        memory: captainMemory,
+        server: () => running,
+        router,
+        answerInbox: answerCaptainInbox,
+        dataDir,
+      }),
+    },
     {
       sessionTools: engine.sessionTools,
       askObserve: engine.askObserve,
@@ -612,6 +783,12 @@ export function createProduct(options: {
           machines,
           transport,
         }),
+        captain: {
+          isCaptain: (agentId) => captain.identity()?.agentId === agentId,
+          assignmentFor: (conversationId, agentId) =>
+            captain.assignmentForAgent(conversationId, agentId),
+          taskCreated: (input) => captain.taskCreated(input),
+        },
       }),
     },
     {
@@ -669,13 +846,22 @@ export function createProduct(options: {
     {
       askObserve: (meta: SessionMeta) => inbox.askObserve(originOf(meta)),
     },
-    { sessionTools: emailSessionTools(email) },
+    {
+      sessionTools: (input) =>
+        captain.identity()?.agentId === input.meta.agentId
+          ? []
+          : emailSessionTools(email)(input),
+    },
     ...(memory === undefined
       ? []
       : [
           {
             sessionTools: (input: Parameters<typeof memoryTools>[1]) =>
-              memoryTools(memory, { ...input, meta: originOf(input.meta) }),
+              memoryTools(
+                memory,
+                { ...input, meta: originOf(input.meta) },
+                () => captain.memoryEnabled(input.meta),
+              ),
           },
         ]),
     ...(web === undefined ? [] : [{ sessionTools: webSessionTools(web) }]),
@@ -689,8 +875,12 @@ export function createProduct(options: {
     engine,
     board,
     hub,
+    captain,
+    captainSupervisor,
     scheduler,
     sessionHooks,
+    memoryEnabledFor: (meta) => captain.memoryEnabled(meta),
+    baseSystemPromptFor: () => captain.basePrompt(),
     generated,
     skillDirsFor: (meta) => plugins.skillDirsFor(meta),
     runtimeExtrasFor: (meta) => plugins.runtimeExtrasFor(meta),
@@ -706,6 +896,7 @@ export function createProduct(options: {
     endpoints: [hub.endpoint],
     close: async () => {
       // The runs stop first: they work through the links and the session host.
+      captainSupervisor.stop();
       await taskRunner.detach();
       hub.close();
       mirrors.detach();
@@ -718,6 +909,7 @@ export function createProduct(options: {
     async mount(server) {
       running = server;
       wire = server.wire;
+      if (captainOn) await captain.ensure();
       // Sessions on other machines show on this wire like any other; the ones that already
       // exist are known from the participants that hold them.
       mirrors.attach(server.wire, () =>
@@ -736,6 +928,7 @@ export function createProduct(options: {
         "machines",
         "projects",
         "conversations",
+        ...(captainOn ? ["captain"] : []),
         "routines",
         "tasks",
         "artifacts",
@@ -788,6 +981,23 @@ export function createProduct(options: {
               );
               return runtimes;
             },
+            removed: (agentId) =>
+              void options
+                .gateway?.()
+                ?.revoke(agentId)
+                .catch((error) =>
+                  warn(
+                    `[eta] llm: could not end the keys of ${agentId}: ${String(error)}`,
+                  ),
+                ),
+            capturePrompt: (input) => {
+              captainStore.appendPromptVersion({
+                subjectId: input.agentId,
+                kind: input.kind,
+                content: input.content,
+                actorAgentId: input.actorAgentId,
+              });
+            },
           },
           applied("agents"),
         ),
@@ -834,6 +1044,11 @@ export function createProduct(options: {
           applied("conversations"),
         ),
       );
+      if (captainOn)
+        server.mount(
+          "captain",
+          captainPlugin({ service: captain, changed }, applied("captain")),
+        );
       server.mount(
         "routines",
         routinesPlugin(
@@ -856,7 +1071,18 @@ export function createProduct(options: {
         "artifacts",
         artifactsPlugin({ artifacts, board }, applied("artifacts")),
       );
-      server.mount("inbox", inboxPlugin({ inbox }, applied("inbox")));
+      server.mount(
+        "inbox",
+        inboxPlugin(
+          {
+            inbox,
+            visible: (interaction) =>
+              interaction.status !== "pending" ||
+              captain.assignmentForInbox(interaction) === undefined,
+          },
+          applied("inbox"),
+        ),
+      );
       server.mount(
         "email",
         emailPlugin(
@@ -912,6 +1138,7 @@ export function createProduct(options: {
       }
       // Everything the runs need is in place: the queue is looked at now.
       if (options.tasks?.runs !== false) taskRunner.attach();
+      if (captainOn) captainSupervisor.start();
       githubLogin?.start();
       // Where the App is installed, once, so the first look at the settings is not a guess.
       if (github !== undefined && github.app() !== null)

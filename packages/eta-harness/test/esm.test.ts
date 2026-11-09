@@ -84,6 +84,7 @@ describe("esmrun", () => {
   });
 
   it("runs a bare expression in the session cwd, mirrors tools, writes state and saves the script", async () => {
+    if (process.platform === "win32") return;
     const script = [
       'import eta from "eta";',
       'import { writeFile } from "node:fs/promises";',

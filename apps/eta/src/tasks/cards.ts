@@ -51,6 +51,8 @@ export interface DraftInput {
    * executes it itself, as it always was.
    */
   assignee?: string | undefined;
+  captainAssignmentId?: string | undefined;
+  captainMessageId?: string | undefined;
 }
 
 /** What the user may have changed on the way to the board. */
@@ -136,6 +138,12 @@ export class TaskCards {
       workspace: input.draft.workspace,
       ...(input.draft.base === undefined ? {} : { base: input.draft.base }),
       ...(assignee === undefined ? {} : { assignee }),
+      ...(input.draft.captainAssignmentId === undefined
+        ? {}
+        : { captainAssignmentId: input.draft.captainAssignmentId }),
+      ...(input.draft.captainMessageId === undefined
+        ? {}
+        : { captainMessageId: input.draft.captainMessageId }),
       ...(turn === undefined ? {} : { turnMessageId: turn.id }),
     };
     return timeline.append({
@@ -187,6 +195,8 @@ export class TaskCards {
         // The agent that proposed it executes it, unless the draft says it is for someone else.
         createdByAgent: row.agentId ?? undefined,
         assigneeAgent: assignee,
+        captainAssignmentId: draft.captainAssignmentId,
+        captainMessageId: draft.captainMessageId,
         baseBranch: draft.base || undefined,
         projectId: this.#deps.conversations.get(input.conversationId)
           ?.projectId,

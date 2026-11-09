@@ -11,6 +11,10 @@ import { Args, productPlugin, publish } from "../wire";
 
 export interface InboxPluginDeps {
   inbox: Inbox;
+  /** The questions the user-facing Inbox may act on directly. */
+  visible?:
+    | ((interaction: ReturnType<Inbox["list"]>[number]) => boolean)
+    | undefined;
 }
 
 /** The longest answer taken: a person's words, not a file. */
@@ -80,7 +84,10 @@ export function inboxPlugin(deps: InboxPluginDeps, applied: () => void) {
           wire,
           "inbox",
           {
-            list: () => inbox.list(),
+            list: () =>
+              inbox
+                .list()
+                .filter((interaction) => deps.visible?.(interaction) ?? true),
             approvals: () => ({ tools: inbox.approvals() }),
           },
           { eager: true },

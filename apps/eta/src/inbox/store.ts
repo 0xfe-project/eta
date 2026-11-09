@@ -27,6 +27,7 @@ interface Row {
   multi: number;
   status: string;
   answer: string | null;
+  relay_of: string | null;
   revision: number;
   created_at: number;
   updated_at: number;
@@ -186,6 +187,38 @@ export class InteractionStore {
     const row = this.#db
       .query<Row, [string]>("SELECT * FROM interaction WHERE id = ?")
       .get(id);
+    return row === null ? undefined : viewOf(row);
+  }
+
+  setRelayOf(
+    id: string,
+    sourceInteractionId: string,
+  ): InteractionView | undefined {
+    this.#db
+      .query(
+        "UPDATE interaction SET relay_of = ? WHERE id = ? AND relay_of IS NULL",
+      )
+      .run(sourceInteractionId, id);
+    return this.get(id);
+  }
+
+  relayOf(id: string): string | null {
+    return (
+      this.#db
+        .query<{ relay_of: string | null }, [string]>(
+          "SELECT relay_of FROM interaction WHERE id = ?",
+        )
+        .get(id)?.relay_of ?? null
+    );
+  }
+
+  relayQuestionOf(sourceInteractionId: string): InteractionView | undefined {
+    const row = this.#db
+      .query<Row, [string]>(
+        `SELECT * FROM interaction WHERE relay_of = ?
+          ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+      )
+      .get(sourceInteractionId);
     return row === null ? undefined : viewOf(row);
   }
 

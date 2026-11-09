@@ -22,9 +22,18 @@ export interface MemoryView {
   source: MemorySource | null;
   /** The conversation it was remembered in, when it was. */
   conversationId: string | null;
+  /** Set when Captain soft-deleted the memory. */
+  deletedAt: number | null;
+  /** Who deleted it, when recorded. */
+  deletedBy: string | null;
 }
 
-export const MEMORY_ACTIONS = ["list", "remember", "forget"] as const;
+export const MEMORY_ACTIONS = [
+  "list",
+  "remember",
+  "forget",
+  "restore",
+] as const;
 export type MemoryAction = (typeof MEMORY_ACTIONS)[number];
 
 export interface MemoryArgs {
@@ -34,15 +43,18 @@ export interface MemoryArgs {
     query?: string;
     source?: MemorySource;
     conversationId?: string;
+    includeDeleted?: boolean;
   };
   /** The user adds one by hand. */
   remember: { agentId: string; text: string };
   forget: { agentId: string; id: string };
+  restore: { agentId: string; id: string };
 }
 export interface MemoryResults {
   list: { memories: MemoryView[] };
   remember: { memory: MemoryView };
   forget: { id: string };
+  restore: { id: string };
 }
 export type MemoryCall = {
   [A in MemoryAction]: Omit<CallFrame, "target" | "action" | "args"> & {

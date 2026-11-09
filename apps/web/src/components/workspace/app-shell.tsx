@@ -5,6 +5,7 @@ import type { PaneWidth } from "./pane";
 import { ArrowsClockwiseIcon } from "@phosphor-icons/react/ArrowsClockwise";
 import { ChatsCircleIcon } from "@phosphor-icons/react/ChatsCircle";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
+import { CrownSimpleIcon } from "@phosphor-icons/react/CrownSimple";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/EnvelopeSimple";
 import { GearSixIcon } from "@phosphor-icons/react/GearSix";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
@@ -39,7 +40,9 @@ import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useEmail, useVerifyEmailAccount } from "@/queries/email";
 import { useTasks } from "@/queries/tasks";
+import { useTarget } from "@/queries/wire";
 import { AgentEditor } from "./agent-editor";
+import { CaptainDrawer, CaptainMenuItem } from "./captain-drawer";
 import { CreateGroup } from "./groups";
 import { NewConversationDialog } from "./new-conversation-dialog";
 import { usePaneWidth } from "./pane";
@@ -154,6 +157,7 @@ export function Sidebar({
   const { t: translateText } = useTranslation(["navigation", "email"] as const);
   const { state, isMobile, toggleSidebar } = useSidebar();
   const badges = useBadges();
+  const captainMounted = useTarget("captain") !== undefined;
   const mailbox = useMailboxRow();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   // The rail: the width 4rem of icons, and the same tree in it. Not the agent shelf's fold — that
@@ -335,6 +339,11 @@ export function Sidebar({
                 </SidebarMenuItem>
               );
             })}
+            {captainMounted ? (
+              <SidebarMenuItem>
+                <CaptainMenuItem rail={rail} />
+              </SidebarMenuItem>
+            ) : null}
           </SidebarMenu>
         </SidebarGroup>
         <ConversationList />
@@ -424,62 +433,82 @@ export function SidebarShell({ children }: { children: ReactNode }) {
 export function BottomNav() {
   const { t: translateText } = useTranslation(["navigation"] as const);
   const badges = useBadges();
+  const captainMounted = useTarget("captain") !== undefined;
+  const [captainOpen, setCaptainOpen] = useState(false);
+  const captainLabel = translateText("sections.captain");
   return (
-    <nav
-      aria-label={translateText("accessibility.sections")}
-      // A board, not an edge. The bar is a bordered plate inset from the screen on every side, and
-      // what is left under it is the safe area's floor — empty, and outside the plate rather than
-      // padding inside it, so a change of inset moves the floor and not the bar.
-      className="shrink-0 px-[8px] pb-[var(--bottom-inset)] md:hidden"
-    >
-      {/* Destinations of one width, the plus in a cell of its own: the solid square is the axis
+    <>
+      <nav
+        aria-label={translateText("accessibility.sections")}
+        // A board, not an edge. The bar is a bordered plate inset from the screen on every side, and
+        // what is left under it is the safe area's floor — empty, and outside the plate rather than
+        // padding inside it, so a change of inset moves the floor and not the bar.
+        className="shrink-0 px-[8px] pb-[var(--bottom-inset)] md:hidden"
+      >
+        {/* Destinations of one width, the plus in a cell of its own: the solid square is the axis
           the tabs are read against, and it breaks the plate's edge above and below, which is what
           makes it a bigger thing than the tabs beside it rather than one of them. 定时 keeps a
           cell only where the feature is on; with three destinations the four cells are equal. */}
-      <div className="relative h-[52px] border bg-background">
-        <div
-          className={cn(
-            "grid h-full grid-rows-1",
-            ROUTINES_VISIBLE
-              ? "grid-cols-[1fr_1fr_1fr_68px_1fr_1fr]"
-              : "grid-cols-[1fr_1fr_1fr_68px_1fr]",
-          )}
-        >
-          <Tab
-            to="/"
-            label={translateText("sections.chat")}
-            icon={ChatsCircleIcon}
-          />
-          <Tab
-            to="/tasks"
-            label={translateText("sections.tasks")}
-            icon={ListChecksIcon}
-            badge={badges["/tasks"]}
-          />
-          <Tab
-            to="/email"
-            label={translateText("sections.email")}
-            icon={EnvelopeSimpleIcon}
-            badge={badges["/email"]}
-          />
-          <div className="flex items-center justify-center">
-            <NewAction />
-          </div>
-          {ROUTINES_VISIBLE ? (
+        <div className="relative h-[52px] border bg-background">
+          <div
+            className={cn(
+              "grid h-full grid-rows-1",
+              ROUTINES_VISIBLE
+                ? captainMounted
+                  ? "grid-cols-[1fr_1fr_1fr_1fr_68px_1fr_1fr]"
+                  : "grid-cols-[1fr_1fr_1fr_68px_1fr_1fr]"
+                : captainMounted
+                  ? "grid-cols-[1fr_1fr_1fr_1fr_68px_1fr]"
+                  : "grid-cols-[1fr_1fr_1fr_68px_1fr]",
+            )}
+          >
             <Tab
-              to="/routines"
-              label={translateText("sections.routines")}
-              icon={ClockIcon}
+              to="/"
+              label={translateText("sections.chat")}
+              icon={ChatsCircleIcon}
             />
-          ) : null}
-          <Tab
-            to="/settings"
-            label={translateText("sections.settings")}
-            icon={GearSixIcon}
-          />
+            <Tab
+              to="/tasks"
+              label={translateText("sections.tasks")}
+              icon={ListChecksIcon}
+              badge={badges["/tasks"]}
+            />
+            <Tab
+              to="/email"
+              label={translateText("sections.email")}
+              icon={EnvelopeSimpleIcon}
+              badge={badges["/email"]}
+            />
+            {captainMounted ? (
+              <button
+                type="button"
+                className="flex min-w-0 flex-col items-center justify-center gap-1 text-xs text-muted-foreground"
+                onClick={() => setCaptainOpen(true)}
+              >
+                <CrownSimpleIcon className="size-5" aria-hidden="true" />
+                <span className="max-w-full truncate px-1">{captainLabel}</span>
+              </button>
+            ) : null}
+            <div className="flex items-center justify-center">
+              <NewAction />
+            </div>
+            {ROUTINES_VISIBLE ? (
+              <Tab
+                to="/routines"
+                label={translateText("sections.routines")}
+                icon={ClockIcon}
+              />
+            ) : null}
+            <Tab
+              to="/settings"
+              label={translateText("sections.settings")}
+              icon={GearSixIcon}
+            />
+          </div>
         </div>
-      </div>
-    </nav>
+      </nav>
+      <CaptainDrawer open={captainOpen} onOpenChange={setCaptainOpen} />
+    </>
   );
 }
 

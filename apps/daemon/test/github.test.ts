@@ -54,8 +54,10 @@ describe("the GitHub login on a machine", () => {
       "[user]\n\tname = eta[bot]\n\temail = 1+eta[bot]@users.noreply.github.com\n",
     );
     // Private: the token is a secret.
-    expect((await stat(join(dir, "token"))).mode & 0o777).toBe(0o600);
-    expect((await stat(join(dir, "gh"))).mode & 0o777).toBe(0o700);
+    if (process.platform !== "win32") {
+      expect((await stat(join(dir, "token"))).mode & 0o777).toBe(0o600);
+      expect((await stat(join(dir, "gh"))).mode & 0o777).toBe(0o700);
+    }
     expect(k.env.GH_CONFIG_DIR).toBe(join(dir, "gh"));
     expect(k.env.GIT_CONFIG_COUNT).toBe("3");
     expect(k.env.GIT_CONFIG_KEY_0).toBe("credential.https://github.com.helper");

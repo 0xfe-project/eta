@@ -1,0 +1,46 @@
+{
+  "title": "El Capitan",
+  "description": "Coordinate agents, review assignments, approvals, and operational alerts.",
+  "tabs": {
+    "chat": "Chat",
+    "operations": "Operations · {{count}}"
+  },
+  "notInitialized": "El Capitan has not been initialized yet.",
+  "initialize": "Initialize Captain",
+  "empty": "Talk to Captain to coordinate agents and operations.",
+  "placeholder": "Ask Captain or give an operational instruction…",
+  "send": "Send",
+  "model": {
+    "label": "Captain model",
+    "help": "Choose the model used for Captain's own answers.",
+    "save": "Save model",
+    "saved": "Captain model saved."
+  },
+  "memoryPause": {
+    "label": "Long-term memory",
+    "paused": "Paused",
+    "pause": "Pause long-term memory for this conversation",
+    "resume": "Resume long-term memory for this conversation"
+  },
+  "message": {
+    "captain": "Captain",
+    "agent": "Agent",
+    "user": "You",
+    "assignment": "Assignment instruction · round {{round}}"
+  },
+  "operations": {
+    "pending": "Pending approvals",
+    "none": "Nothing is waiting for approval.",
+    "approve": "Approve",
+    "reject": "Reject"
+  },
+  "notifications": {
+    "title": "Operational alerts",
+    "none": "No alerts.",
+    "markRead": "Mark read"
+  },
+  "assignments": {
+    "title": "Recent assignments",
+    "none": "No assignments yet."
+  }
+}

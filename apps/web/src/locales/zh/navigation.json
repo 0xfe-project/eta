@@ -1,6 +1,7 @@
 {
   "sections": {
     "chat": "对话",
+    "captain": "Captain",
     "pending": "待处理",
     "tasks": "任务",
     "email": "邮箱",

@@ -24,6 +24,8 @@ export interface AgentRecord {
    * machine the project is on. Null follows the project.
    */
   machineId: string | null;
+  /** The one system role an agent can carry. Ordinary agents have none. */
+  systemRole: "captain" | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -36,6 +38,7 @@ export interface AgentInput {
   model?: string | null | undefined;
   thinkingLevel?: ThinkingLevel | null | undefined;
   machineId?: string | null | undefined;
+  systemRole?: "captain" | null | undefined;
 }
 
 interface Row {
@@ -47,6 +50,7 @@ interface Row {
   model: string | null;
   thinking_level: string | null;
   machine_id: string | null;
+  system_role: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -60,6 +64,7 @@ const recordOf = (row: Row): AgentRecord => ({
   model: row.model,
   thinkingLevel: row.thinking_level as ThinkingLevel | null,
   machineId: row.machine_id,
+  systemRole: row.system_role as "captain" | null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -94,8 +99,8 @@ export class AgentStore {
     const now = Date.now();
     this.#db
       .query(
-        `INSERT INTO agent (id, name, instructions, persona, runtime, model, thinking_level, machine_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO agent (id, name, instructions, persona, runtime, model, thinking_level, machine_id, system_role, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -106,6 +111,7 @@ export class AgentStore {
         input.model ?? null,
         input.thinkingLevel ?? null,
         input.machineId ?? null,
+        input.systemRole ?? null,
         now,
         now,
       );
@@ -118,7 +124,7 @@ export class AgentStore {
     if (current === undefined) return undefined;
     this.#db
       .query(
-        `UPDATE agent SET name = ?, instructions = ?, persona = ?, runtime = ?, model = ?, thinking_level = ?, machine_id = ?, updated_at = ?
+        `UPDATE agent SET name = ?, instructions = ?, persona = ?, runtime = ?, model = ?, thinking_level = ?, machine_id = ?, system_role = ?, updated_at = ?
           WHERE id = ?`,
       )
       .run(
@@ -131,6 +137,7 @@ export class AgentStore {
           ? current.thinkingLevel
           : patch.thinkingLevel,
         patch.machineId === undefined ? current.machineId : patch.machineId,
+        patch.systemRole === undefined ? current.systemRole : patch.systemRole,
         Date.now(),
         id,
       );

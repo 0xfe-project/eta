@@ -41,7 +41,10 @@ export function databasePath(dataDir: string): string {
  * than failing outright.
  */
 export function openDatabase(path: string): Database {
-  mkdirSync(dirname(path), { recursive: true });
+  // `:memory:` is a connection, not a file. `dirname(":memory:")` is "." on
+  // Windows, and asking mkdir to create "." fails with EEXIST instead of
+  // opening the in-memory database tests use.
+  if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path, { create: true, strict: true });
   db.exec("PRAGMA busy_timeout = 5000");
   moveToWal(db);

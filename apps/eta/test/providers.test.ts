@@ -81,7 +81,8 @@ describe("model providers", () => {
     expect(JSON.parse(await readFile(path, "utf8")).providers[0].apiKey).toBe(
       SECRET,
     );
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32")
+      expect((await stat(path)).mode & 0o777).toBe(0o600);
     client.close();
   });
 

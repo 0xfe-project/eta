@@ -100,23 +100,40 @@ class Mem0Provider:
             for item in result["results"]
         ]
 
-    def search(self, agent_id, query, limit, *, source=None, group_id=None):
+    def search(
+        self,
+        agent_id,
+        query,
+        limit,
+        *,
+        source=None,
+        group_id=None,
+        include_deleted=False,
+    ):
         filters = {"user_id": agent_id}
         if source is not None:
             filters["source"] = source
         if group_id is not None:
             filters["source_group_id"] = group_id
         result = self.memory.search(query, top_k=limit, filters=filters)
-        return [_memory(item) for item in result["results"]]
+        return [
+            memory
+            for memory in (_memory(item) for item in result["results"])
+            if include_deleted or memory.deleted_at is None
+        ][:limit]
 
-    def list(self, agent_id, *, source=None, group_id=None):
+    def list(self, agent_id, *, source=None, group_id=None, include_deleted=False):
         filters = {"user_id": agent_id}
         if source is not None:
             filters["source"] = source
         if group_id is not None:
             filters["source_group_id"] = group_id
         result = self.memory.get_all(filters=filters, top_k=LIST_LIMIT)
-        return [_memory(item) for item in result["results"]]
+        return [
+            memory
+            for memory in (_memory(item) for item in result["results"])
+            if include_deleted or memory.deleted_at is None
+        ]
 
     def delete(self, agent_id, memory_id):
         # mem0 deletes by id alone; the memory must be this agent's.
@@ -130,13 +147,39 @@ class Mem0Provider:
         self.memory.delete(memory_id)
         return True
 
+    def soft_delete(self, agent_id, memory_id, deleted_by):
+        found = self.memory.get(memory_id)
+        if not found or found.get("user_id") != agent_id:
+            return False
+        self.memory.update(
+            memory_id,
+            metadata={
+                "deleted_at": datetime.now(UTC).isoformat(),
+                "deleted_by": deleted_by,
+            },
+        )
+        return True
+
+    def restore(self, agent_id, memory_id):
+        found = self.memory.get(memory_id)
+        if not found or found.get("user_id") != agent_id:
+            return False
+        self.memory.update(
+            memory_id,
+            metadata={"deleted_at": None, "deleted_by": None},
+        )
+        return True
+
 
 def _memory(item: dict) -> Memory:
+    metadata = item.get("metadata") or {}
     return Memory(
         item["id"],
         item["memory"],
         item.get("score"),
         item.get("created_at"),
-        (item.get("metadata") or {}).get("source"),
-        (item.get("metadata") or {}).get("source_group_id"),
+        metadata.get("source"),
+        metadata.get("source_group_id"),
+        metadata.get("deleted_at"),
+        metadata.get("deleted_by"),
     )

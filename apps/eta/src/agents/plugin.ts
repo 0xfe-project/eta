@@ -31,6 +31,7 @@ import { AGENT_RUNTIMES } from "@eta/client-contracts";
 import { THINKING_LEVELS } from "@eta/core";
 import { summaryOf } from "../conversations/views";
 import { Args, productPlugin, publish } from "../wire";
+import { checkModel } from "./model";
 import { agentHome } from "./store";
 
 export interface AgentsDeps {
@@ -51,6 +52,15 @@ export interface AgentsDeps {
   /** The external runtimes of a daemon machine, asked over its link (which has to be up). */
   machineRuntimes?:
     | ((machineId: string, fresh: boolean) => Promise<AgentRuntimeInfo[]>)
+    | undefined;
+  /** Append prompt history for user edits as well as Captain edits. */
+  capturePrompt?:
+    | ((input: {
+        agentId: string;
+        kind: "instructions" | "persona";
+        content: string;
+        actorAgentId: string | null;
+      }) => void)
     | undefined;
 }
 
@@ -76,6 +86,7 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
       machineId: agent.machineId,
       plugins: plugins.rows.enabled(agent.id),
       skippedPlugins: plugins.skipped(agent.id),
+      systemRole: agent.systemRole,
       home,
       homeProjectId: project?.id ?? "",
       status: statuses.get(agent.id) ?? "idle",
@@ -165,6 +176,19 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             await rm(home, { recursive: true, force: true });
             throw error;
           }
+          const made = existing(id);
+          deps.capturePrompt?.({
+            agentId: id,
+            kind: "instructions",
+            content: made.instructions,
+            actorAgentId: null,
+          });
+          deps.capturePrompt?.({
+            agentId: id,
+            kind: "persona",
+            content: made.persona,
+            actorAgentId: null,
+          });
           deps.changed();
           return { result: { agent: viewOf(existing(id)) } };
         }),
@@ -173,6 +197,10 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
           const args = new Args(call);
           const id = args.string("agentId");
           const before = existing(id);
+          if (before.systemRole === "captain")
+            throw new Error(
+              "the Captain is managed through the captain target",
+            );
           const fields = fieldsOf(call, false);
           const moved =
             fields.runtime !== undefined && fields.runtime !== before.runtime;
@@ -187,6 +215,20 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
           const agent = agents.update(id, fields)!;
           if (fields.plugins !== undefined)
             plugins.rows.setEnabled(id, fields.plugins);
+          if (agent.instructions !== before.instructions)
+            deps.capturePrompt?.({
+              agentId: id,
+              kind: "instructions",
+              content: agent.instructions,
+              actorAgentId: null,
+            });
+          if (agent.persona !== before.persona)
+            deps.capturePrompt?.({
+              agentId: id,
+              kind: "persona",
+              content: agent.persona,
+              actorAgentId: null,
+            });
           if (agent.name !== before.name) renameHome(agent);
           // The model and thinking level belong to a session once it exists; an edit of the agent
           // is the one thing that overrides what the user chose there. An agent that moved to
@@ -208,6 +250,10 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
         wire.handle("agents", "delete", (call) => {
           const id = new Args(call).string("agentId");
           const agent = existing(id);
+          if (agent.systemRole === "captain")
+            throw new Error(
+              "the Captain cannot be deleted as an ordinary agent",
+            );
           // Running replies first: they would otherwise outlive the agent that is writing them.
           deps.engine.stopAgent(id);
           const primary = machines.primary();
@@ -332,8 +378,6 @@ function fieldsOf(
   if (name !== undefined && name.trim() === "")
     throw new Error("an agent needs a name");
   const model = args.nullableString("model");
-  if (typeof model === "string" && !model.includes(":"))
-    throw new Error("model must be provider:modelId");
   const level = args.nullableString("thinkingLevel");
   if (typeof level === "string" && !THINKING_LEVELS.includes(level as never))
     throw new Error(`unknown thinking level: ${level}`);
@@ -354,15 +398,4 @@ function fieldsOf(
       : { machineId: machineId === "" ? null : machineId }),
     ...(plugins === undefined ? {} : { plugins: plugins as string[] }),
   };
-}
-
-/**
- * An external runtime's model is one of its own: `runtime:modelId`. An eta model on such an agent
- * (or the other way round) is a model nobody would run.
- */
-function checkModel(runtime: AgentRuntime, model: string | null): void {
-  if (model === null) return;
-  const provider = model.slice(0, model.indexOf(":"));
-  if (runtime !== "eta" && provider !== runtime)
-    throw new Error(`a ${runtime} agent runs ${runtime}:<model>, not ${model}`);
 }

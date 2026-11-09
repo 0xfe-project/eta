@@ -22,6 +22,7 @@ import {
 import { agentName, useAgentList } from "@/queries/agents";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
+import { MemoryPauseToggle } from "./memory-pause-toggle";
 import { ProjectChip } from "./project-chip";
 import { StewardChip } from "./steward-chip";
 import { useAgents, useOpenAgent } from "./use-agents";
@@ -190,6 +191,13 @@ export function ChatHeader({
           restate the project the sidebar already has open. Groups show where they work. */}
       {group?.kind === "direct" ? null : <ProjectChip project={project} />}
       <StewardChip info={info} project={project} />
+      {group === undefined ? null : (
+        <MemoryPauseToggle
+          scopeType="conversation"
+          scopeId={group.id}
+          compact
+        />
+      )}
       <span className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         {members.map((member) => (
           <button

@@ -96,6 +96,10 @@ export interface SessionManagerOptions {
   modelsFor: (meta: SessionMeta) => KernelModels | Promise<KernelModels>;
   /** The summarizer a session compacts with; without one, a session runs unbound. */
   compaction?: CompactionSummarizer | undefined;
+  /** The base system prompt for local sessions. Absent uses the harness default. */
+  baseSystemPromptFor?:
+    | (() => string | undefined | Promise<string | undefined>)
+    | undefined;
   /** What a new session's metadata starts as, beyond the id and the time. */
   defaults?:
     | Partial<Pick<SessionMeta, "persona" | "model" | "title">>
@@ -144,6 +148,8 @@ export interface SessionManagerOptions {
   memoryFor?:
     | ((meta: SessionMeta) => SessionMemoryWiring | undefined)
     | undefined;
+  /** Whether a session may read, recall or write project and long-term memory. */
+  memoryEnabledFor?: ((meta: SessionMeta) => boolean) | undefined;
   /**
    * Who the agent in a session is: its name, its place, its standing instructions. The harness's
    * base prompt is left alone; this lands in the platform section, after the persona and skills,
@@ -240,6 +246,7 @@ export class SessionManager {
   private readonly store: SessionStore;
   private readonly modelsFor: SessionManagerOptions["modelsFor"];
   private readonly compaction: CompactionSummarizer | undefined;
+  private readonly baseSystemPromptFor: SessionManagerOptions["baseSystemPromptFor"];
   private readonly defaults: SessionManagerOptions["defaults"];
   private readonly settings: (() => Promise<Settings>) | undefined;
   private readonly platformFor: SessionManagerOptions["platformFor"];
@@ -249,6 +256,7 @@ export class SessionManager {
   private readonly memoryFor: SessionManagerOptions["memoryFor"];
   private readonly mcpFor: SessionManagerOptions["mcpFor"];
   private readonly mcpOf = new Map<string, SessionMcpWiring>();
+  private readonly memoryEnabledFor: SessionManagerOptions["memoryEnabledFor"];
   private readonly agentPromptFor: SessionManagerOptions["agentPromptFor"];
   private readonly toolMiddleware: SessionManagerOptions["toolMiddleware"];
   private readonly sessionTools: SessionManagerOptions["sessionTools"];
@@ -264,6 +272,7 @@ export class SessionManager {
     this.store = options.store;
     this.modelsFor = options.modelsFor;
     this.compaction = options.compaction;
+    this.baseSystemPromptFor = options.baseSystemPromptFor;
     this.defaults = options.defaults;
     this.settings = options.settings;
     this.platformFor = options.platformFor;
@@ -272,6 +281,7 @@ export class SessionManager {
     this.runtimeExtrasFor = options.runtimeExtrasFor;
     this.memoryFor = options.memoryFor;
     this.mcpFor = options.mcpFor;
+    this.memoryEnabledFor = options.memoryEnabledFor;
     this.agentPromptFor = options.agentPromptFor;
     this.toolMiddleware = options.toolMiddleware;
     this.sessionTools = options.sessionTools;
@@ -443,7 +453,8 @@ export class SessionManager {
       return await this.openRuntimeSession(meta, meta.runtime);
     const models = await this.modelsFor(meta);
     const platform = this.platformFor?.(meta);
-    const wiring = this.memoryFor?.(meta);
+    const memoryEnabled = this.memoryEnabledFor?.(meta) ?? true;
+    const wiring = memoryEnabled ? this.memoryFor?.(meta) : undefined;
     const skills = await this.skillsFor?.(meta);
     const memory: SessionMemoryOptions | undefined =
       wiring === undefined
@@ -478,6 +489,7 @@ export class SessionManager {
     const mcp =
       platform?.sessionDir === undefined ? undefined : this.mcpFor?.(meta);
     if (mcp !== undefined) this.mcpOf.set(meta.id, mcp);
+    const baseSystemPrompt = await this.baseSystemPromptFor?.();
     const session = await openSession({
       storage: (await this.store.open(meta.id))!.storage,
       models,
@@ -496,6 +508,7 @@ export class SessionManager {
             },
           }),
       ...(agentPrompt === undefined ? {} : { agentPrompt }),
+      ...(baseSystemPrompt === undefined ? {} : { baseSystemPrompt }),
       // The app's own facts: the words are the harness's, the paths are this app's.
       ...(platform === undefined ? {} : { platform }),
       ...(skills === undefined || skills.length === 0

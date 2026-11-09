@@ -70,9 +70,10 @@ import {
   useTasks,
   useUpdateTask,
 } from "@/queries/tasks";
-import { wireErrorMessage } from "@/queries/wire";
+import { useTarget, wireErrorMessage } from "@/queries/wire";
 import { AgentAvatar } from "./agent-identity";
 import { ArtifactButton } from "./artifact-dialog";
+import { MemoryPauseToggle } from "./memory-pause-toggle";
 import { when } from "./routine-format";
 import { Select, SelectOption } from "./select-field";
 import { useTaskDraft } from "./task-draft";
@@ -600,10 +601,26 @@ export function TaskProperties({
             ) : null}
           </dd>
           <RunRow task={task} />
+          <TaskMemoryPause taskId={task.id} />
         </>
       ) : null}
       {children}
     </dl>
+  );
+}
+
+/** Captain's per-task memory switch, beside the task's other durable properties. */
+function TaskMemoryPause({ taskId }: { taskId: string }) {
+  const mounted = useTarget("captain") !== undefined;
+  const { t } = useTranslation("captain");
+  if (!mounted) return null;
+  return (
+    <>
+      <dt className={propertyLabel}>{t("memoryPause.label")}</dt>
+      <dd className="min-w-0 py-1.5 leading-5">
+        <MemoryPauseToggle scopeType="task" scopeId={taskId} />
+      </dd>
+    </>
   );
 }
 

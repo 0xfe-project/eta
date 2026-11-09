@@ -11,7 +11,12 @@
  * session is quiet, a steer and a stop are ordinary `sessions.*` calls on the daemon's pipe, and a
  * link that dies under any of them fails them as an unknown outcome. Nothing is replayed.
  */
-import type { PromptImage, RunOutcome, ToolSpec } from "@eta/client-contracts";
+import type {
+  DaemonRunEvent,
+  PromptImage,
+  RunOutcome,
+  ToolSpec,
+} from "@eta/client-contracts";
 import type { KernelModels, KernelTool } from "@eta/core";
 import type { Settings } from "@eta/server";
 import type {
@@ -54,6 +59,9 @@ class RemoteHandle implements SessionHandle {
   readonly id: string;
   readonly #link: MachineLink;
   readonly #warn: (message: string) => void;
+  readonly #activityListeners = new Set<
+    (kind: DaemonRunEvent["kind"]) => void
+  >();
   #running = false;
 
   constructor(id: string, link: MachineLink, warn: (message: string) => void) {
@@ -89,6 +97,26 @@ class RemoteHandle implements SessionHandle {
     images?: PromptImage[],
   ): Promise<RunOutcome> {
     this.#running = true;
+    const onEvent =
+      this.#activityListeners.size === 0
+        ? undefined
+        : (raw: unknown): void => {
+            const kind = (raw as Partial<DaemonRunEvent> | null)?.kind;
+            if (
+              kind !== "tool-start" &&
+              kind !== "tool-update" &&
+              kind !== "tool-end" &&
+              kind !== "message"
+            )
+              return;
+            for (const listener of [...this.#activityListeners]) {
+              try {
+                listener(kind);
+              } catch {
+                // Liveness observation must never fail the run.
+              }
+            }
+          };
     try {
       return await this.#link.daemon(
         "run",
@@ -96,8 +124,12 @@ class RemoteHandle implements SessionHandle {
           session: this.id,
           text: prompt,
           ...(images === undefined || images.length === 0 ? {} : { images }),
+          ...(onEvent === undefined ? {} : { activity: true }),
         },
-        { timeoutMs: LINK_LIMITS.runTimeoutMs },
+        {
+          timeoutMs: LINK_LIMITS.runTimeoutMs,
+          ...(onEvent === undefined ? {} : { onEvent }),
+        },
       );
     } finally {
       this.#running = false;
@@ -110,6 +142,11 @@ class RemoteHandle implements SessionHandle {
       .catch((error: unknown) =>
         this.#warn(`[eta] could not stop ${this.id}: ${String(error)}`),
       );
+  }
+
+  onActivity(listener: (kind: DaemonRunEvent["kind"]) => void): () => void {
+    this.#activityListeners.add(listener);
+    return () => void this.#activityListeners.delete(listener);
   }
 }
 
