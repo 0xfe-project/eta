@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { setWire } from "@/lib/wire";
 import { providersHost } from "@/test-wire";
 import { ProviderEditor } from "./provider-editor";
@@ -247,6 +248,106 @@ function deferred<T>() {
   });
   return { promise, resolve, reject };
 }
+
+describe("弹窗内的 provider 类型选择", () => {
+  it.each([
+    { editing: false, input: "mouse" },
+    { editing: true, input: "mouse" },
+    { editing: false, input: "keyboard" },
+    { editing: true, input: "keyboard" },
+  ])(
+    "editing=$editing input=$input：展开、切换并保存，不覆盖已有模型",
+    async ({ editing, input }) => {
+      const fake = host().handle("providers.discover", () => ({
+        models: [{ id: "preview-model" }],
+      }));
+      await render(
+        <Dialog open>
+          <DialogContent aria-describedby={undefined}>
+            <DialogTitle>模型服务</DialogTitle>
+            <ProviderEditor
+              provider={editing ? provider : undefined}
+              onClose={() => {}}
+            />
+          </DialogContent>
+        </Dialog>,
+      );
+      if (!editing) {
+        await fill("#provider-name", "New");
+        await fill("#provider-base", "https://new.test/v1");
+      }
+      await fetchList();
+      await act(async () => choice("preview-model")!.click());
+      const trigger =
+        document.querySelector<HTMLButtonElement>("#provider-kind")!;
+      expect(trigger.disabled).toBe(false);
+      expect(trigger.textContent).toBe("openai-compatible");
+      // This exercises React/Radix event wiring, not layout or browser hit testing.
+      // Those are checked separately with real Chrome and WebKit input.
+      await act(async () => {
+        if (input === "mouse") {
+          trigger.dispatchEvent(
+            new PointerEvent("pointerdown", {
+              bubbles: true,
+              button: 0,
+              pointerType: "mouse",
+              ctrlKey: false,
+            }),
+          );
+        } else {
+          trigger.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+          );
+        }
+      });
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
+      const options = [
+        ...document.querySelectorAll<HTMLElement>('[role="option"]'),
+      ];
+      expect(options).toHaveLength(7);
+      const next = options.find(
+        (option) => option.textContent === "openai-responses",
+      )!;
+      await act(async () => {
+        if (input === "mouse") {
+          next.dispatchEvent(
+            new PointerEvent("pointerdown", {
+              bubbles: true,
+              pointerType: "mouse",
+              button: 0,
+            }),
+          );
+          next.dispatchEvent(
+            new PointerEvent("pointerup", {
+              bubbles: true,
+              pointerType: "mouse",
+              button: 0,
+            }),
+          );
+        } else {
+          next.focus();
+          next.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+          );
+        }
+      });
+      expect(trigger.getAttribute("aria-expanded")).toBe("false");
+      expect(trigger.textContent).toBe("openai-responses");
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+      expect(document.body.textContent).toContain("请重新获取模型列表");
+      expect(choice("preview-model")).toBeUndefined();
+      expect(saves(fake)).toHaveLength(0);
+      await save();
+      expect(saves(fake)[0]?.args).toMatchObject({
+        revision: "r1",
+        provider: {
+          kind: "openai-responses",
+          models: editing ? provider.models : [],
+        },
+      });
+    },
+  );
+});
 
 describe("表单内模型预览", () => {
   it("空白添加：使用未保存的连接值，无占位模型即可获取、搜索、勾选、手加并保存", async () => {
