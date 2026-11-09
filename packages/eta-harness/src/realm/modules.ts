@@ -15,6 +15,81 @@ import { linkMcpModule, MCP_PREFIX, mcpDiscovery } from "./mcp";
 import { createMemoryModule, MEMORY_FILE } from "./memory";
 
 /**
+ * Node's built-in module names. A fixed list rather than `module.isBuiltin`,
+ * which under Bun also says yes to `ws`, `undici` and `bun`: on Node
+ * those are npm packages, and a realm should resolve the same either way.
+ *
+ * A name here is a built-in with or without the `node:` prefix, and it never
+ * reaches the package resolver, so a same-named npm package (`fs@1.0.0`)
+ * cannot stand in for it. Whether a built-in is mounted is
+ * {@link mountNodeModules}'s call; one that is not fails as "not mounted".
+ */
+const NODE_BUILTINS = new Set([
+  "assert",
+  "assert/strict",
+  "async_hooks",
+  "buffer",
+  "child_process",
+  "cluster",
+  "console",
+  "constants",
+  "crypto",
+  "dgram",
+  "diagnostics_channel",
+  "dns",
+  "dns/promises",
+  "domain",
+  "events",
+  "fs",
+  "fs/promises",
+  "http",
+  "http2",
+  "https",
+  "inspector",
+  "inspector/promises",
+  "module",
+  "net",
+  "os",
+  "path",
+  "path/posix",
+  "path/win32",
+  "perf_hooks",
+  "process",
+  "punycode",
+  "querystring",
+  "readline",
+  "readline/promises",
+  "repl",
+  "stream",
+  "stream/consumers",
+  "stream/promises",
+  "stream/web",
+  "string_decoder",
+  "sys",
+  "timers",
+  "timers/promises",
+  "tls",
+  "trace_events",
+  "tty",
+  "url",
+  "util",
+  "util/types",
+  "v8",
+  "vm",
+  "wasi",
+  "worker_threads",
+  "zlib",
+]);
+
+/** `fs` and `node:fs` both answer `node:fs`; a name that is not a built-in answers undefined. */
+function builtinSpecifier(specifier: string): string | undefined {
+  const name = specifier.startsWith("node:")
+    ? specifier.slice("node:".length)
+    : specifier;
+  return NODE_BUILTINS.has(name) ? `node:${name}` : undefined;
+}
+
+/**
  * Manages concurrent eta.ask calls with a maximum concurrency limit.
  * Queues requests beyond the limit and processes them in FIFO order.
  * Flattens results in call order (not completion order).
@@ -322,8 +397,10 @@ export function mountModules(
     specifier: string,
     from: string,
   ): Promise<vm.Module | undefined> {
-    if (specifier.startsWith("node:")) {
-      return node(specifier, from) as vm.Module | undefined;
+    // Built-ins first, prefixed or bare, the way Node resolves them.
+    const builtin = builtinSpecifier(specifier);
+    if (builtin !== undefined) {
+      return node(builtin, from) as vm.Module | undefined;
     }
 
     // Handle mcp: specifiers (only when hooks.mcp is provided)

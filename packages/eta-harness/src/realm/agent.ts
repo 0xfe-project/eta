@@ -5,7 +5,7 @@ import type { CtxView, Hooks } from "./hooks";
 import type { Evaluation } from "./realm";
 import { defaultApprovalStorePath, FileApprovalStore } from "./authorize";
 import { mountFileOps } from "./file-ops";
-import { mountGlobals, mountShell } from "./host-modules";
+import { mountGlobals, mountNodeGlobals, mountShell } from "./host-modules";
 import { EnvLayers } from "./layers";
 import { mountModules } from "./modules";
 import { Realm } from "./realm";
@@ -179,6 +179,7 @@ export class Agent {
       authorize: hooks.authorize,
     });
     mountGlobals(realm);
+    mountNodeGlobals(realm);
     mountShell(realm, this.#cwd);
     mountFileOps(realm, this.#cwd);
     mountNonEtaHooks(realm, hooks);
