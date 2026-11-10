@@ -44,6 +44,7 @@ import {
   currentRevision,
   discoverProviderModels,
   discoveryErrorMessage,
+  fetchModelMetadata,
   isConfigChanged,
   providerErrorMessage,
   providerLabel,
@@ -51,6 +52,7 @@ import {
   useProviders,
   useSaveProvider,
 } from "@/queries/providers";
+import { wireErrorMessage } from "@/queries/wire";
 import { Select, SelectOption } from "./select-field";
 import { useAgents } from "./use-agents";
 
@@ -74,6 +76,7 @@ interface ModelRow {
   reasoning: boolean;
   defaultThinking: EtaModelConfig["defaultThinking"];
   source?: EtaModelConfig;
+  edited?: (keyof ModelCapabilities)[];
 }
 
 function rowOf(model: EtaModelConfig): ModelRow {
@@ -108,7 +111,10 @@ function modelOf(row: ModelRow): EtaModelConfig | undefined {
     contextWindow !== was?.contextWindow
   )
     changes.contextWindow = contextWindow;
-  if (row.vision !== (was?.input?.includes("image") ?? false))
+  if (
+    row.vision !== (was?.input?.includes("image") ?? false) ||
+    (row.edited?.includes("input") && was?.input === undefined)
+  )
     changes.input = row.vision ? ["text", "image"] : ["text"];
   const overrides = { ...was?.overrides, ...changes };
   const base: EtaModelConfig = { ...(was ?? { id }) };
@@ -329,6 +335,8 @@ function fingerprint(form: {
       row.contextWindow,
       row.vision,
       row.defaultThinking ?? "",
+      row.source,
+      row.edited,
     ]),
   ]);
 }
@@ -440,6 +448,90 @@ export function ProviderEditor({
         )
       : [];
   const allModels = [...models, ...selected];
+  const [metadata, setMetadata] = useState<{
+    status: "loading" | "ready" | "failed";
+    form: string;
+    count?: number;
+    error?: string;
+  }>();
+  const metadataRequestRef = useRef(0);
+  const metadataPendingRef = useRef(false);
+  const metadataForm = JSON.stringify([connection, allModels]);
+  useEffect(() => {
+    metadataRequestRef.current += 1;
+    metadataPendingRef.current = false;
+    return () => {
+      metadataRequestRef.current += 1;
+    };
+  }, [metadataForm]);
+  const supplementMetadata = async () => {
+    if (metadataPendingRef.current) return;
+    metadataPendingRef.current = true;
+    const attempt = ++metadataRequestRef.current;
+    setMetadata({ status: "loading", form: metadataForm });
+    try {
+      const result = await fetchModelMetadata({
+        kind,
+        baseUrl,
+        modelIds: allModels.map((row) => row.id.trim()).filter(Boolean),
+      });
+      if (attempt !== metadataRequestRef.current) return;
+      const supplement = (row: ModelRow): ModelRow => {
+        const known = result.models.find((model) => model.id === row.id.trim());
+        if (!known) return row;
+        const source = { ...row.source, id: row.id.trim() };
+        const updated = { ...row, source };
+        if (
+          !row.edited?.includes("name") &&
+          !row.name &&
+          source.name === undefined &&
+          known.name !== undefined
+        )
+          updated.name = source.name = known.name;
+        if (
+          !row.edited?.includes("contextWindow") &&
+          !row.contextWindow &&
+          source.contextWindow === undefined &&
+          known.contextWindow !== undefined
+        )
+          updated.contextWindow = String(
+            (source.contextWindow = known.contextWindow),
+          );
+        if (
+          !row.edited?.includes("input") &&
+          source.input === undefined &&
+          known.input !== undefined
+        ) {
+          source.input = known.input;
+          updated.vision = known.input.includes("image");
+        }
+        return updated;
+      };
+      setModels((rows) => rows.map(supplement));
+      setPreview((current) =>
+        current === undefined
+          ? current
+          : { ...current, selected: current.selected.map(supplement) },
+      );
+      setMetadata({
+        status: "ready",
+        form: JSON.stringify([connection, allModels.map(supplement)]),
+        count: result.models.length,
+      });
+    } catch (error) {
+      if (attempt === metadataRequestRef.current)
+        setMetadata({
+          status: "failed",
+          form: metadataForm,
+          error: wireErrorMessage(error),
+        });
+    } finally {
+      if (attempt === metadataRequestRef.current)
+        metadataPendingRef.current = false;
+    }
+  };
+  const currentMetadata =
+    metadata?.form === metadataForm ? metadata : undefined;
   const dirty = current !== baseline || selected.length > 0;
   const fetching =
     preview?.connection === connection && preview.status === "loading";
@@ -508,7 +600,10 @@ export function ProviderEditor({
     );
   const custom = isCustomKind(kind);
   const save = useSaveProvider();
-  const submit = () =>
+  const submit = () => {
+    metadataRequestRef.current += 1;
+    metadataPendingRef.current = false;
+    setMetadata(undefined);
     save.mutate(
       {
         provider: inputOf({
@@ -558,8 +653,10 @@ export function ProviderEditor({
         },
       },
     );
+  };
 
   const close = () => {
+    metadataRequestRef.current += 1;
     requestRef.current += 1;
     pendingRef.current = false;
     onClose();
@@ -583,6 +680,12 @@ export function ProviderEditor({
     : [];
 
   const patchModel = (index: number, patch: Partial<ModelRow>) => {
+    const row = allModels[index]!;
+    const edited = new Set(row.edited);
+    if (patch.name !== undefined) edited.add("name");
+    if (patch.contextWindow !== undefined) edited.add("contextWindow");
+    if (patch.vision !== undefined) edited.add("input");
+    patch = { ...patch, edited: [...edited] };
     if (index < models.length) {
       setModels((current) =>
         current.map((row, at) => (at === index ? { ...row, ...patch } : row)),
@@ -875,6 +978,41 @@ export function ProviderEditor({
                 </p>
               ) : null}
             </>
+          ) : null}
+        </div>
+        <div className="grid gap-2 mb-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="justify-self-start"
+            disabled={
+              currentMetadata?.status === "loading" ||
+              allModels.length === 0 ||
+              !baseUrl.trim()
+            }
+            onClick={() => void supplementMetadata()}
+          >
+            {translateText(
+              currentMetadata?.status === "loading"
+                ? "metadata.loading"
+                : "metadata.fetch",
+            )}
+          </Button>
+          <p className="settings-hint">{translateText("metadata.hint")}</p>
+          {currentMetadata?.status === "failed" ? (
+            <p role="alert" className="settings-hint">
+              {translateText("metadata.failed", {
+                reason: currentMetadata.error,
+              })}
+            </p>
+          ) : null}
+          {currentMetadata?.status === "ready" ? (
+            <p role="status" className="settings-hint">
+              {translateText(
+                currentMetadata.count ? "metadata.ready" : "metadata.empty",
+                { count: currentMetadata.count },
+              )}
+            </p>
           ) : null}
         </div>
         {allModels.length === 0 ? (

@@ -21,6 +21,7 @@ import type { ProviderConfigStore } from "../providers/store";
 import type { WireService } from "../wire-service";
 import { Service } from "cordis";
 import { discoverModels } from "../providers/discovery";
+import { publicModelMetadata } from "../providers/metadata";
 
 export { PROVIDER_ACTIONS } from "@eta/client-contracts";
 
@@ -168,6 +169,12 @@ export function providersPlugin(options: ProvidersPluginOptions) {
               },
             };
           }),
+          wire.handle("providers", "metadata", async (call) => ({
+            result: await publicModelMetadata(
+              call.args as ProviderArgs["metadata"],
+              options.fetch,
+            ),
+          })),
           wire.handle("providers", "discover", async (call) => {
             const args = (call.args ?? {}) as Partial<ProviderArgs["discover"]>;
             // Never echo URLs, keys, headers or upstream error bodies.

@@ -659,3 +659,73 @@ describe("discovery diagnostics", () => {
     await h.unload();
   });
 });
+
+describe("public metadata preview", () => {
+  it("does not read/send stored secrets, publish state or write config on success/failure; only save persists", async () => {
+    const send = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        openai: {
+          id: "openai",
+          models: {
+            exact: {
+              id: "exact",
+              name: "Public Exact",
+              limit: { context: 32000 },
+            },
+          },
+        },
+      }),
+    );
+    const h = await harness({ fetch: send });
+    await h.load();
+    await until(() => h.config() !== undefined);
+    await callResult(h, "save", {
+      revision: h.config()?.revision,
+      provider: {
+        ...provider("official"),
+        baseUrl: "https://api.openai.com/v1",
+        apiKey: "saved-secret",
+        headers: { Authorization: "custom-secret" },
+        models: [{ id: "exact" }],
+      },
+    });
+    const before = await readFile(h.store.path, "utf8");
+    const view = h.config();
+    h.frames.length = 0;
+    const args = {
+      kind: "openai-compatible",
+      baseUrl: "https://api.openai.com/v1",
+      modelIds: ["exact"],
+    };
+    const result = await callResult(h, "metadata", args);
+    expect(result).toEqual({
+      ok: true,
+      result: {
+        models: [{ id: "exact", name: "Public Exact", contextWindow: 32000 }],
+      },
+    });
+    expect(send.mock.calls[0]?.[1]?.headers).toEqual({
+      Accept: "application/json",
+    });
+    expect(h.config()).toEqual(view);
+    expect(h.frames).toEqual([]);
+    expect(await readFile(h.store.path, "utf8")).toBe(before);
+    send.mockRejectedValueOnce(new Error("public network offline"));
+    expect(await callResult(h, "metadata", args)).toEqual({
+      ok: false,
+      error: "public network offline",
+    });
+    expect(await readFile(h.store.path, "utf8")).toBe(before);
+    await callResult(h, "save", {
+      revision: view?.revision,
+      provider: {
+        ...provider("official"),
+        models: (result.result as { models: unknown[] }).models,
+      },
+    });
+    expect(
+      JSON.parse(await readFile(h.store.path, "utf8")).providers[0].models,
+    ).toEqual((result.result as { models: unknown[] }).models);
+    await h.unload();
+  });
+});

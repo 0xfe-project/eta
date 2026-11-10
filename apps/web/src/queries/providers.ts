@@ -356,6 +356,16 @@ export function discoverProviderModels(input: ProviderArgs["discover"]) {
   );
 }
 
+/** Public request deliberately carries no key, headers or subscription credentials. */
+export function fetchModelMetadata(input: ProviderArgs["metadata"]) {
+  return getWire().call<{ models: EtaModelConfig[] }>(
+    TARGET,
+    "metadata",
+    input,
+    { timeoutMs: 60_000 },
+  );
+}
+
 export function discoveryErrorMessage(error: unknown): string {
   if (error instanceof WireError) {
     if (error.code === "timeout" || error.code === "disconnected")

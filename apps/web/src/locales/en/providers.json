@@ -92,5 +92,13 @@
     "timeout": "Getting the model list timed out. Check the network and retry.",
     "http": "The model endpoint returned HTTP {{status}}. Check the URL, key, headers and access permissions, then retry.",
     "configChanged": "Configuration changed elsewhere. Go back and reopen this form before fetching again."
+  },
+  "metadata": {
+    "fetch": "Supplement public model metadata",
+    "loading": "Fetching public model metadata…",
+    "hint": "Fill missing metadata for exact official model matches in this form from models.dev; not an account model list. Manual values take priority. Save to apply.",
+    "failed": "Public model metadata failed: {{reason}}. You can still add or save models manually.",
+    "ready": "Matched public metadata for {{count}} models. Existing values are unchanged; save to apply.",
+    "empty": "No reliable public metadata match. Models are unchanged and can still be edited manually."
   }
 }

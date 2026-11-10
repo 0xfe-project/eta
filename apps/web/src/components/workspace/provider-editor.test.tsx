@@ -825,3 +825,255 @@ describe("具名服务商预置", () => {
     });
   });
 });
+
+const metadataModels = [
+  {
+    id: "m1",
+    name: "Public One",
+    contextWindow: 100000,
+    input: ["text", "image"],
+  },
+];
+const publicProvider: ProviderSummary = {
+  ...provider,
+  baseUrl: "https://api.openai.com/v1",
+  models: [{ id: "m1" }],
+};
+async function supplement() {
+  await act(async () => button("补充公共模型资料").click());
+}
+const savedModels = (fake: FakeHost, index = 0) =>
+  (saves(fake)[index]!.args as { provider: { models: unknown[] } }).provider
+    .models;
+
+describe("公共模型资料预览", () => {
+  it("只发精确 ID/连接信息，补空缺；保存前不写配置，未知模型保留", async () => {
+    const fake = host().handle("providers.metadata", () => ({
+      models: metadataModels,
+    }));
+    await render(
+      <ProviderEditor
+        provider={{
+          ...publicProvider,
+          models: [{ id: "m1" }, { id: "unknown" }],
+        }}
+        onClose={() => {}}
+      />,
+    );
+    await fill("#provider-key", "private-key");
+    await supplement();
+    expect(fake.calls.find((call) => call.action === "metadata")?.args).toEqual(
+      {
+        kind: "openai-compatible",
+        baseUrl: publicProvider.baseUrl,
+        modelIds: ["m1", "unknown"],
+      },
+    );
+    expect(saves(fake)).toEqual([]);
+    expect(document.body.textContent).toContain("已匹配 1 个模型");
+    expect(document.body.textContent).toContain("还没保存");
+    expect(
+      document.querySelector<HTMLInputElement>("#model-window-0")?.value,
+    ).toBe("100000");
+    await save();
+    expect(savedModels(fake)).toEqual([...metadataModels, { id: "unknown" }]);
+  });
+  it("已有保存配置及 overrides 不被公共资料覆盖", async () => {
+    const fake = host().handle("providers.metadata", () => ({
+      models: metadataModels,
+    }));
+    await render(<ProviderEditor provider={provider} onClose={() => {}} />);
+    await supplement();
+    await save();
+    expect(savedModels(fake)).toEqual(provider.models);
+  });
+  it("手动修改包括取消视觉、清空字段优先，不把默认 false 当成已填写", async () => {
+    const fake = host().handle("providers.metadata", () => ({
+      models: metadataModels,
+    }));
+    await render(
+      <ProviderEditor provider={publicProvider} onClose={() => {}} />,
+    );
+    await fill("#model-name-0", "Manual");
+    await fill("#model-name-0", "");
+    await fill("#model-window-0", "7777");
+    const vision = document.querySelector<HTMLInputElement>(
+      ".settings-model input[type=checkbox]",
+    )!;
+    await act(async () => vision.click());
+    await act(async () => vision.click());
+    await supplement();
+    expect(
+      document.querySelector<HTMLInputElement>("#model-name-0")?.value,
+    ).toBe("");
+    expect(vision.checked).toBe(false);
+    await save();
+    expect(savedModels(fake)).toEqual([
+      { id: "m1", overrides: { contextWindow: 7777, input: ["text"] } },
+    ]);
+  });
+  it("补全后仍可手动修正，保存修正值", async () => {
+    const fake = host().handle("providers.metadata", () => ({
+      models: metadataModels,
+    }));
+    await render(
+      <ProviderEditor provider={publicProvider} onClose={() => {}} />,
+    );
+    await supplement();
+    await fill("#model-name-0", "Mine");
+    await fill("#model-window-0", "32000");
+    await save();
+    expect(savedModels(fake)).toEqual([
+      {
+        ...metadataModels[0],
+        overrides: { name: "Mine", contextWindow: 32000 },
+      },
+    ]);
+  });
+  it("目录失败明确报错但不破坏发现列表、已选模型和手动添加/保存", async () => {
+    const fake = host()
+      .handle("providers.discover", () => ({ models: [{ id: "new" }] }))
+      .handle("providers.metadata", () => {
+        throw new Error("Public model metadata HTTP 503");
+      });
+    await render(
+      <ProviderEditor provider={publicProvider} onClose={() => {}} />,
+    );
+    await fetchList();
+    await act(async () => choice("new")!.click());
+    await supplement();
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+      "公共模型资料获取失败",
+    );
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+      "503",
+    );
+    expect(choice("new")?.checked).toBe(true);
+    await act(async () => button("＋ 加一个模型").click());
+    await fill("#model-id-1", "manual");
+    await save();
+    expect(savedModels(fake)).toEqual([
+      { id: "m1" },
+      { id: "manual" },
+      { id: "new" },
+    ]);
+  });
+  it("无匹配与请求失败区分；取消补全不落配置", async () => {
+    const fake = host().handle("providers.metadata", () => ({ models: [] }));
+    const closed = rstest.fn();
+    await render(<ProviderEditor provider={publicProvider} onClose={closed} />);
+    await supplement();
+    expect(document.body.textContent).toContain("公共目录无可靠匹配");
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    fake.handle("providers.metadata", () => ({ models: metadataModels }));
+    await supplement();
+    await act(async () => button("返回").click());
+    await act(async () => button("放弃改动").click());
+    expect(closed).toHaveBeenCalledOnce();
+    expect(saves(fake)).toEqual([]);
+  });
+  it.each(["connection", "model", "name", "vision", "undo", "save", "close"])(
+    "资料请求中 %s 改变后，旧请求不能污染表单",
+    async (change) => {
+      const pending = deferred<{ models: typeof metadataModels }>();
+      const fake = host().handle("providers.metadata", () => pending.promise);
+      await render(
+        <ProviderEditor provider={publicProvider} onClose={() => {}} />,
+      );
+      await supplement();
+      if (change === "connection" || change === "undo")
+        await fill("#provider-base", "https://other.test/v1");
+      if (change === "undo")
+        await fill("#provider-base", publicProvider.baseUrl);
+      if (change === "model") await fill("#model-id-0", "different");
+      if (change === "name") await fill("#model-name-0", "Manual");
+      if (change === "vision")
+        await act(async () =>
+          document
+            .querySelector<HTMLInputElement>(
+              ".settings-model input[type=checkbox]",
+            )!
+            .click(),
+        );
+      if (change === "save") await save();
+      if (change === "close") await act(async () => button("返回").click());
+      await act(async () => pending.resolve({ models: metadataModels }));
+      expect(
+        document.querySelector<HTMLInputElement>("#model-window-0")?.value,
+      ).toBe("");
+      expect(document.body.textContent).not.toContain("Public One");
+      expect(saves(fake).length).toBe(change === "save" ? 1 : 0);
+    },
+  );
+  it("只为已选账号模型补资料，不自动导入目录其它模型", async () => {
+    const fake = host()
+      .handle("providers.discover", () => ({
+        models: [{ id: "m1" }, { id: "m2" }],
+      }))
+      .handle("providers.metadata", () => ({ models: metadataModels }));
+    await render(
+      <ProviderEditor
+        provider={{ ...publicProvider, models: [] }}
+        onClose={() => {}}
+      />,
+    );
+    await fetchList();
+    await act(async () => choice("m1")!.click());
+    await supplement();
+    expect(choice("m2")?.checked).toBe(false);
+    await save();
+    expect(savedModels(fake)).toEqual(metadataModels);
+  });
+});
+
+describe("公共资料请求隔离回归", () => {
+  it("旧请求失败不遮盖新结果，同一请求防重复提交", async () => {
+    const first = deferred<{ models: typeof metadataModels }>();
+    const fake = host().handle("providers.metadata", () => first.promise);
+    await render(
+      <ProviderEditor provider={publicProvider} onClose={() => {}} />,
+    );
+    await act(async () => {
+      button("补充公共模型资料").click();
+      button("补充公共模型资料").click();
+    });
+    expect(
+      fake.calls.filter((call) => call.action === "metadata"),
+    ).toHaveLength(1);
+    expect(button("正在获取公共模型资料…").disabled).toBe(true);
+    await fill("#provider-key", "changed");
+    fake.handle("providers.metadata", () => ({ models: metadataModels }));
+    await supplement();
+    await act(async () => first.reject(new Error("old failure")));
+    expect(document.body.textContent).not.toContain("old failure");
+    expect(document.body.textContent).toContain("已匹配 1 个模型");
+    expect(
+      document.querySelector<HTMLInputElement>("#model-window-0")?.value,
+    ).toBe("100000");
+  });
+  it("保存的手动 overrides 保持原样", async () => {
+    const saved = {
+      id: "m1",
+      name: "Mine",
+      contextWindow: 32000,
+      input: ["text"] as ("text" | "image")[],
+      overrides: {
+        name: "Mine",
+        contextWindow: 32000,
+        input: ["text"] as ("text" | "image")[],
+      },
+    };
+    const fake = host().handle("providers.metadata", () => ({
+      models: metadataModels,
+    }));
+    await render(
+      <ProviderEditor
+        provider={{ ...publicProvider, models: [saved] }}
+        onClose={() => {}}
+      />,
+    );
+    await supplement();
+    await save();
+    expect(savedModels(fake)).toEqual([saved]);
+  });
+});

@@ -53,6 +53,7 @@ export const PROVIDER_ACTIONS = [
   "reload",
   "refresh",
   "discover",
+  "metadata",
 ] as const;
 
 export interface CreateSessionInput {
@@ -171,6 +172,12 @@ export interface ProviderArgs {
   setNetwork: { revision: string } & import("./types").NetworkConfig;
   reload: Record<string, never>;
   refresh: { id: string };
+  /** Public metadata for explicit IDs, never an account model list. */
+  metadata: {
+    kind: import("./types").ProviderKind;
+    baseUrl: string;
+    modelIds: string[];
+  };
   /** Preview unsaved connection values; never writes configuration. */
   discover: {
     id?: string;
