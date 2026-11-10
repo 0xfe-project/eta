@@ -21,7 +21,6 @@ import {
 import { cleanup, click, flush, mount } from "@/test-render";
 import { ChatHeader, MobileChatHeader } from "./agent-bar";
 
-const opened: string[] = [];
 const direct = (id: string, agent: string, name: string) =>
   conversationView({
     id,
@@ -39,19 +38,14 @@ const groups: ConversationSummary[] = [
     participants: [memberView("a1"), memberView("a2")],
   }),
 ];
-rstest.mock("./use-groups", () => ({
-  useGroups: () => ({ groups }),
-  useOpenGroup: () => (id: string) => opened.push(id),
-}));
 const openAgentCalls: string[] = [];
 const roster = rstest.hoisted(() => [
   { id: "a1", name: "小明", status: "idle" },
   { id: "a2", name: "一个名字非常非常非常长的智能体助手", status: "working" },
 ]);
 rstest.mock("./use-agents", () => ({
-  // The header's avatars open an agent's own conversation; the switch menu reuses the router.
+  // The header's avatars open an agent's own conversation.
   useOpenAgent: () => (id: string) => openAgentCalls.push(id),
-  useAgents: () => ({ agents: roster, openEditor: () => {} }),
 }));
 
 let host: ReturnType<typeof productHost>;
@@ -74,21 +68,11 @@ beforeEach(() => {
   host.handle("projects.setSteward", () => ({}));
 });
 
-async function openMenu(container: HTMLElement) {
-  const trigger = container.querySelector("button")!;
-  await act(async () => {
-    trigger.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-    );
-  });
-  return trigger;
-}
 const items = () => [
   ...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'),
 ];
 
 afterEach(async () => {
-  opened.length = 0;
   openAgentCalls.length = 0;
   await cleanup();
   setWire(undefined);
@@ -113,7 +97,7 @@ describe("手机上的 header", () => {
   });
 });
 
-describe("header 里的名称切换", () => {
+describe("桌面 header", () => {
   it("keeps the name, the project, the steward and the members in one row", async () => {
     const project = projectView({
       id: "p1",
@@ -125,7 +109,6 @@ describe("header 里的名称切换", () => {
         group={groups[2]}
         info={conversationSections(groups[2]!).info}
         project={project}
-        onInfo={() => {}}
       />,
     );
     await flush();
@@ -140,8 +123,8 @@ describe("header 里的名称切换", () => {
     expect(
       container.querySelector('[aria-label="主理人：小明"]'),
     ).not.toBeNull();
-    // No info or settings buttons of its own: both are reached elsewhere (the switcher's menu,
-    // the app's own settings), and a pair of icons after the names read as controls for the group.
+    // No info or settings buttons of its own: both are reached elsewhere (the panel, the app's
+    // own settings), and a pair of icons after the names read as controls for the group.
     const controls = [...container.querySelectorAll("header button")];
     expect(
       controls.some((button) => button.getAttribute("title") === "设置"),
@@ -176,7 +159,6 @@ describe("header 里的名称切换", () => {
         group={groups[2]}
         info={conversationSections(groups[2]!).info}
         project={project}
-        onInfo={() => {}}
       />,
     );
     await flush();
@@ -186,37 +168,14 @@ describe("header 里的名称切换", () => {
     ).not.toBeNull();
   });
 
-  it("lists the agents, marks the current one and opens the other's direct chat", async () => {
-    const { container } = await mount(
-      <ChatHeader group={groups[0]} onInfo={() => {}} />,
-    );
+  it("shows the name as text, with no menu behind it", async () => {
+    const { container } = await mount(<ChatHeader group={groups[2]} />);
     await flush();
-    const trigger = await openMenu(container);
-    expect(trigger.getAttribute("aria-label")).toBe(
-      "正在与 小明 私聊（空闲），切换智能体",
-    );
-    const [first, second] = items();
-    expect(first.textContent).toContain("小明");
-    expect(first.querySelector('[aria-label="当前"]')).not.toBeNull();
-    expect(second.querySelector('[aria-label="当前"]')).toBeNull();
-    await click(second);
-    expect(opened).toEqual(["d2"]);
-  });
-
-  it("shows the group as current and only navigates from it", async () => {
-    const { container } = await mount(
-      <ChatHeader group={groups[2]} onInfo={() => {}} />,
-    );
-    await flush();
-    await openMenu(container);
-    const [current, ...rest] = items();
-    expect(current.textContent).toContain("群 · 发布讨论");
-    expect(current.querySelector('[aria-label="当前"]')).not.toBeNull();
-    expect(rest.some((i) => i.querySelector('[aria-label="当前"]'))).toBe(
-      false,
-    );
-    await click(rest[0]);
-    expect(opened).toEqual(["d1"]);
+    const name = container.querySelector("h1")!;
+    expect(name.textContent).toBe("发布讨论");
+    expect(name.querySelector("button")).toBeNull();
+    // Before its facts arrive there is no steward chip either, so nothing in the header opens a menu.
+    expect(container.querySelector('[aria-haspopup="menu"]')).toBeNull();
   });
 });
 
@@ -230,12 +189,7 @@ describe("主理人芯片", () => {
     };
     const project = projectView({ id: "p1", name: "eta", stewardId: "a1" });
     const { container } = await mount(
-      <ChatHeader
-        group={groups[2]}
-        info={info}
-        project={project}
-        onInfo={() => {}}
-      />,
+      <ChatHeader group={groups[2]} info={info} project={project} />,
     );
     await flush();
     const chip = container.querySelector<HTMLElement>(
@@ -271,7 +225,6 @@ describe("主理人芯片", () => {
       <ChatHeader
         group={groups[0]}
         info={conversationSections(groups[0]!).info}
-        onInfo={() => {}}
       />,
     );
     await flush();
