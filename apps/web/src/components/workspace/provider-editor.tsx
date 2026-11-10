@@ -20,6 +20,7 @@ import type {
  * (another tab, an editor on the file), the host refuses, the page re-reads it, and the person is
  * told to look again before saving once more.
  */
+import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -53,15 +54,9 @@ import {
 import { Select, SelectOption } from "./select-field";
 import { useAgents } from "./use-agents";
 
-const KINDS: ProviderKind[] = [
-  "openai-compatible",
-  "openai-responses",
-  "openai-codex",
-  "kimi-coding",
-  "deepseek",
-  "zai-coding-cn",
-  "zai",
-];
+const PRESETS = Object.entries(BUILTIN_PROVIDER_PRESETS).filter(
+  ([kind]) => kind !== "openai-codex",
+);
 
 /** Kinds you point at an endpoint of your own: their models are yours to spell out. */
 const CUSTOM_KINDS: readonly ProviderKind[] = [
@@ -359,7 +354,9 @@ export function ProviderEditor({
   const remove = useDeleteProvider();
   const [removing, setRemoving] = useState(false);
   const [name, setName] = useState(provider?.name ?? "");
-  const [kind, setKind] = useState<ProviderKind>(provider?.kind ?? KINDS[0]!);
+  const [kind, setKind] = useState<ProviderKind>(
+    provider?.kind ?? "openai-compatible",
+  );
   const [baseUrl, setBaseUrl] = useState(provider?.baseUrl ?? "");
   const [key, setKey] = useState("");
   const [clearKey, setClearKey] = useState(false);
@@ -386,7 +383,7 @@ export function ProviderEditor({
   const [baseline, setBaseline] = useState(() =>
     fingerprint({
       name: provider?.name ?? "",
-      kind: provider?.kind ?? KINDS[0]!,
+      kind: provider?.kind ?? "openai-compatible",
       baseUrl: provider?.baseUrl ?? "",
       headers: provider?.headers ?? {},
       models: (provider?.models ?? []).map(rowOf),
@@ -648,14 +645,34 @@ export function ProviderEditor({
           <Select
             id="provider-kind"
             value={kind}
-            onValueChange={(next) => setKind(next as ProviderKind)}
+            onValueChange={(next) => {
+              setKind(next as ProviderKind);
+              const preset = PRESETS.find(([kind]) => kind === next)?.[1];
+              if (preset) setBaseUrl(preset.baseUrl);
+            }}
           >
-            {KINDS.map((choice) => (
+            {PRESETS.map(([choice, preset]) => (
               <SelectOption key={choice} value={choice}>
-                <span className="font-mono">{choice}</span>
+                {preset.name}
               </SelectOption>
             ))}
+            <SelectOption value="openai-compatible">
+              {translateText("editor.chatCompletions")}
+            </SelectOption>
+            <SelectOption value="openai-responses">
+              {translateText("editor.responses")}
+            </SelectOption>
           </Select>
+          {custom ? (
+            <p className="settings-hint">
+              {translateText(
+                kind === "openai-responses"
+                  ? "editor.responsesHint"
+                  : "editor.chatCompletionsHint",
+              )}
+            </p>
+          ) : null}
+          <p className="settings-hint">{translateText("editor.nativeCodex")}</p>
         </div>
         <div className="settings-field">
           <Label htmlFor="provider-base">
@@ -668,6 +685,7 @@ export function ProviderEditor({
             className="font-mono"
             onChange={(event) => setBaseUrl(event.target.value)}
           />
+          <p className="settings-hint">{translateText("editor.baseUrlHint")}</p>
         </div>
         <div className="settings-field">
           <Label htmlFor="provider-key">{translateText("editor.key")}</Label>

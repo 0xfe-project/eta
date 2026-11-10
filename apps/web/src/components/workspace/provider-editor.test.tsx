@@ -249,7 +249,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-describe("弹窗内的 provider 类型选择", () => {
+describe("弹窗内的服务商选择", () => {
   it.each([
     { editing: false, input: "mouse" },
     { editing: true, input: "mouse" },
@@ -281,7 +281,7 @@ describe("弹窗内的 provider 类型选择", () => {
       const trigger =
         document.querySelector<HTMLButtonElement>("#provider-kind")!;
       expect(trigger.disabled).toBe(false);
-      expect(trigger.textContent).toBe("openai-compatible");
+      expect(trigger.textContent).toBe("OpenAI / 自定义 · Chat Completions");
       // This exercises React/Radix event wiring, not layout or browser hit testing.
       // Those are checked separately with real Chrome and WebKit input.
       await act(async () => {
@@ -304,9 +304,9 @@ describe("弹窗内的 provider 类型选择", () => {
       const options = [
         ...document.querySelectorAll<HTMLElement>('[role="option"]'),
       ];
-      expect(options).toHaveLength(7);
+      expect(options).toHaveLength(6);
       const next = options.find(
-        (option) => option.textContent === "openai-responses",
+        (option) => option.textContent === "OpenAI / 自定义 · Responses",
       )!;
       await act(async () => {
         if (input === "mouse") {
@@ -332,7 +332,7 @@ describe("弹窗内的 provider 类型选择", () => {
         }
       });
       expect(trigger.getAttribute("aria-expanded")).toBe("false");
-      expect(trigger.textContent).toBe("openai-responses");
+      expect(trigger.textContent).toBe("OpenAI / 自定义 · Responses");
       expect(document.querySelector('[role="dialog"]')).not.toBeNull();
       expect(document.body.textContent).toContain("请重新获取模型列表");
       expect(choice("preview-model")).toBeUndefined();
@@ -603,7 +603,7 @@ describe("预览连接边界", () => {
         );
         const option = [
           ...document.querySelectorAll<HTMLElement>('[role="option"]'),
-        ].find((item) => item.textContent === "openai-responses")!;
+        ].find((item) => item.textContent === "OpenAI / 自定义 · Responses")!;
         await act(async () => {
           option.focus();
           option.dispatchEvent(
@@ -666,5 +666,162 @@ describe("重新获取中的表单改动", () => {
       ...provider.models,
       { id: "preview-model", overrides: { name: "Edited while loading" } },
     ]);
+  });
+});
+
+async function selectProvider(label: string) {
+  await act(async () =>
+    document
+      .querySelector<HTMLButtonElement>("#provider-kind")!
+      .dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+      ),
+  );
+  const option = [
+    ...document.querySelectorAll<HTMLElement>('[role="option"]'),
+  ].find((item) => item.textContent === label)!;
+  expect(option).toBeDefined();
+  await act(async () => {
+    option.focus();
+    option.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+  });
+}
+
+describe("具名服务商预置", () => {
+  it.each([
+    { label: "DeepSeek", kind: "deepseek", url: "https://api.deepseek.com" },
+    {
+      label: "Kimi for Coding",
+      kind: "kimi-coding",
+      url: "https://api.kimi.com/coding/v1",
+    },
+    {
+      label: "GLM Coding Plan (CN)",
+      kind: "zai-coding-cn",
+      url: "https://open.bigmodel.cn/api/coding/paas/v4",
+    },
+    {
+      label: "GLM Coding Plan (Global)",
+      kind: "zai",
+      url: "https://api.z.ai/api/coding/paas/v4",
+    },
+  ])(
+    "$label：选服务商、填 Key、获取、勾选、保存",
+    async ({ label, kind, url }) => {
+      const fake = host().handle("providers.discover", () => ({
+        models: [{ id: "remote-model" }],
+      }));
+      await render(<ProviderEditor provider={undefined} onClose={() => {}} />);
+      await fill("#provider-name", label);
+      await selectProvider(label);
+      expect(
+        document.querySelector<HTMLInputElement>("#provider-base")?.value,
+      ).toBe(url);
+      await fill("#provider-key", "test-key");
+      await fetchList();
+      expect(discoveries(fake)[0]?.args).toMatchObject({
+        kind,
+        baseUrl: url,
+        apiKey: "test-key",
+      });
+      expect(saves(fake)).toHaveLength(0);
+      await act(async () => choice("remote-model")!.click());
+      await save();
+      expect(saves(fake)[0]?.args).toMatchObject({
+        provider: {
+          kind,
+          baseUrl: url,
+          apiKey: "test-key",
+          models: [{ id: "remote-model" }],
+        },
+      });
+    },
+  );
+
+  it("编辑具名服务商不覆盖中转地址，手改地址后获取和保存均沿用", async () => {
+    const fake = host().handle("providers.discover", () => ({ models: [] }));
+    await render(
+      <ProviderEditor
+        provider={{
+          ...provider,
+          kind: "deepseek",
+          baseUrl: "https://proxy.test/v1",
+        }}
+        onClose={() => {}}
+      />,
+    );
+    expect(
+      document.querySelector<HTMLButtonElement>("#provider-kind")?.textContent,
+    ).toBe("DeepSeek");
+    expect(
+      document.querySelector<HTMLInputElement>("#provider-base")?.value,
+    ).toBe("https://proxy.test/v1");
+    await fill("#provider-base", "https://other.test/v1");
+    await fetchList();
+    await save();
+    expect(discoveries(fake)[0]?.args).toMatchObject({
+      kind: "deepseek",
+      baseUrl: "https://other.test/v1",
+    });
+    expect(saves(fake)[0]?.args).toMatchObject({
+      provider: {
+        kind: "deepseek",
+        baseUrl: "https://other.test/v1",
+        models: provider.models,
+      },
+    });
+  });
+
+  it("只列出现有具名服务商与两种自定义协议，不再提供 Codex 订阅", async () => {
+    host();
+    await render(<ProviderEditor provider={undefined} onClose={() => {}} />);
+    await act(async () =>
+      document
+        .querySelector<HTMLButtonElement>("#provider-kind")!
+        .dispatchEvent(
+          new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+        ),
+    );
+    expect(
+      [...document.querySelectorAll('[role="option"]')].map(
+        (o) => o.textContent,
+      ),
+    ).toEqual([
+      "Kimi for Coding",
+      "DeepSeek",
+      "GLM Coding Plan (CN)",
+      "GLM Coding Plan (Global)",
+      "OpenAI / 自定义 · Chat Completions",
+      "OpenAI / 自定义 · Responses",
+    ]);
+  });
+
+  it("自定义 Responses 保留 OpenAI API Key、地址与发现/保存链路", async () => {
+    const fake = host().handle("providers.discover", () => ({
+      models: [{ id: "gpt-test" }],
+    }));
+    await render(<ProviderEditor provider={undefined} onClose={() => {}} />);
+    await selectProvider("OpenAI / 自定义 · Responses");
+    expect(document.body.textContent).toContain("/responses");
+    await fill("#provider-name", "OpenAI");
+    await fill("#provider-base", "https://api.openai.com/v1");
+    await fill("#provider-key", "test-api-key");
+    await fetchList();
+    await act(async () => choice("gpt-test")!.click());
+    await save();
+    expect(discoveries(fake)[0]?.args).toMatchObject({
+      kind: "openai-responses",
+      apiKey: "test-api-key",
+    });
+    expect(saves(fake)[0]?.args).toMatchObject({
+      provider: {
+        kind: "openai-responses",
+        baseUrl: "https://api.openai.com/v1",
+        apiKey: "test-api-key",
+        models: [{ id: "gpt-test" }],
+      },
+    });
   });
 });

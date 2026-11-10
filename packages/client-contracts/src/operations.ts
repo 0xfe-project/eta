@@ -53,10 +53,6 @@ export const PROVIDER_ACTIONS = [
   "reload",
   "refresh",
   "discover",
-  "codexLogin",
-  "codexAnswer",
-  "codexStatus",
-  "codexCancel",
 ] as const;
 
 export interface CreateSessionInput {
@@ -184,10 +180,6 @@ export interface ProviderArgs {
     apiKey?: string | null;
     headers?: import("./types").ProviderHeaders | null;
   };
-  codexLogin: { method?: "browser" | "device_code" };
-  codexAnswer: { id: string; promptId: string; value: string };
-  codexStatus: { id: string };
-  codexCancel: { id?: string };
 }
 export type ProviderCall = {
   [A in ProviderAction]: Omit<CallFrame, "target" | "action" | "args"> & {

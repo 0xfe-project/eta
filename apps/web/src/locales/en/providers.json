@@ -1,23 +1,9 @@
 {
   "actions": {
     "openSettings": "Go to model services",
-    "linkAccount": "Link account",
     "refreshModels": "Refresh models"
   },
   "title": "Model services",
-  "login": {
-    "linked": "Linked {{providerName}} account",
-    "failed": "Sign-in failed. Try again.",
-    "title": "Link {{providerName}} account",
-    "instructions": "Open the authorization page, sign in and enter the code below.",
-    "codeLabel": "Verification code {{code}}",
-    "copyCode": "Copy verification code",
-    "waiting": "Awaiting authorization…",
-    "loadingCode": "Getting verification code…",
-    "openAuthorization": "Open authorization page",
-    "manualLabel": "Code or address from the authorization page",
-    "continue": "Continue"
-  },
   "remove": {
     "confirmTitle": "Remove {{providerName}}?",
     "affectedAgents": "{{providerName}} models used by {{agents}} will be unavailable until it is added again.",
@@ -48,7 +34,7 @@
     "newTitle": "New provider",
     "description": "Saved to config.json; the next request uses it.",
     "name": "Name",
-    "kind": "Kind",
+    "kind": "Provider",
     "baseUrl": "Base URL",
     "key": "API key",
     "keyConfigured": "Configured — type to replace",
@@ -80,7 +66,14 @@
     "reasoning": "Reasoning",
     "removeModel": "Remove model {{name}}",
     "noModels": "No models yet.",
-    "headersHint": "A header with no name is not written to config.json."
+    "headersHint": "A header with no name is not written to config.json.",
+    "chatCompletions": "OpenAI / Custom · Chat Completions",
+    "responses": "OpenAI / Custom · Responses",
+    "chatCompletionsHint": "Uses /chat/completions; supports OpenAI API keys and compatible services.",
+    "responsesHint": "Uses /responses; supports OpenAI API keys and compatible services.",
+    "baseUrlHint": "Editable for proxies or gateways. The OpenAI API URL is https://api.openai.com/v1.",
+    "nativeCodex": "Sign in to and manage Codex subscriptions in the Accounts section of Model providers; no provider entry is needed.",
+    "legacyCodex": "Legacy Codex config (not migrated). Use Accounts for subscriptions; config and model references are unchanged."
   },
   "discovery": {
     "fetch": "Get model list",

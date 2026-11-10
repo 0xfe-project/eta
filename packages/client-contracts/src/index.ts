@@ -24,6 +24,7 @@ export * from "./operations";
 export type * from "./plugin-fields";
 export * from "./plugins";
 export * from "./product";
+export * from "./providers";
 export * from "./routines";
 export * from "./tasks";
 export type * from "./types";

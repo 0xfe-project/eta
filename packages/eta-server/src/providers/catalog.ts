@@ -27,12 +27,9 @@ import { kimiCodingProvider } from "@earendil-works/pi-ai/providers/kimi-coding"
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import { zaiProvider } from "@earendil-works/pi-ai/providers/zai";
 import { zaiCodingCnProvider } from "@earendil-works/pi-ai/providers/zai-coding-cn";
+import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
 import rawCatalog from "./catalog.json";
-import {
-  BUILTIN_PROVIDER_PRESETS,
-  isCustomKind,
-  MODEL_THINKING_LEVELS,
-} from "./config-types";
+import { isCustomKind, MODEL_THINKING_LEVELS } from "./config-types";
 
 export interface ProviderRuntimeDefinition {
   adapter: "openai-chat" | "openai-responses" | "codex";

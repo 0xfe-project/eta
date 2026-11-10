@@ -4,12 +4,14 @@ import type {
   LlmModel,
   ProviderArgs,
   ProviderInput,
-  ProviderKind,
   ProviderSummary,
   ProvidersView,
 } from "@eta/client-contracts";
-import { LLM_PROVIDER_ID } from "@eta/client-contracts";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  BUILTIN_PROVIDER_PRESETS,
+  LLM_PROVIDER_ID,
+} from "@eta/client-contracts";
+import { useMutation } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { translate } from "@/lib/i18n";
 import { llmProblemText } from "@/lib/llm-problem";
@@ -29,20 +31,14 @@ import {
 
 const TARGET = "providers";
 
-/** Names of the kinds that come with an endpoint of their own. */
-const PRESET_NAMES: Partial<Record<ProviderKind, string>> = {
-  "openai-codex": "Codex",
-  "kimi-coding": "Kimi for Coding",
-  deepseek: "DeepSeek",
-  "zai-coding-cn": "GLM Coding Plan (CN)",
-  zai: "GLM Coding Plan (Global)",
-};
-
 /** What a provider is called: its own name, else its kind's, else its id. */
 export function providerLabel(
   provider: Pick<ProviderSummary, "id" | "kind" | "name">,
 ): string {
-  return provider.name ?? PRESET_NAMES[provider.kind] ?? provider.id;
+  const preset = Object.entries(BUILTIN_PROVIDER_PRESETS).find(
+    ([kind]) => kind === provider.kind,
+  )?.[1];
+  return provider.name ?? preset?.name ?? provider.id;
 }
 
 /** Codex signs in through ChatGPT instead of holding a key. */
@@ -384,56 +380,4 @@ export function discoveryErrorMessage(error: unknown): string {
       );
   }
   return wireErrorMessage(error);
-}
-
-// ---------------------------------------------------------------------- Codex sign-in
-
-/** One sign-in attempt, as the host reports it. No token is ever in it. */
-export interface CodexLogin {
-  id: string;
-  status: "pending" | "complete" | "failed" | "cancelled";
-  method?: "browser" | "device_code";
-  /** Set while the flow waits for a code typed back. */
-  manualPromptId?: string;
-  /** The code to type at the authorization page. */
-  userCode?: string;
-  url?: string;
-}
-
-export function useStartLogin() {
-  return useWireMutation<ProviderArgs["codexLogin"], { login: CodexLogin }>(
-    TARGET,
-    "codexLogin",
-  );
-}
-
-export function useCancelLogin() {
-  return useWireMutation<ProviderArgs["codexCancel"]>(TARGET, "codexCancel");
-}
-
-export function useAnswerLogin() {
-  return useWireMutation<ProviderArgs["codexAnswer"], { accepted: boolean }>(
-    TARGET,
-    "codexAnswer",
-  );
-}
-
-/**
- * Follows a sign-in until it finishes. A sign-in is not part of any target's state, so this one
- * asks, every second and a half, and stops when the attempt is no longer pending.
- */
-export function useLoginStatus(id: string | undefined) {
-  return useQuery({
-    queryKey: ["wire", TARGET, "codexStatus", id],
-    enabled: id !== undefined,
-    queryFn: async () =>
-      (
-        await getWire().call<{ login: CodexLogin }>(TARGET, "codexStatus", {
-          id,
-        })
-      ).login,
-    refetchInterval: (query) =>
-      query.state.data && query.state.data.status !== "pending" ? false : 1500,
-    refetchIntervalInBackground: true,
-  });
 }

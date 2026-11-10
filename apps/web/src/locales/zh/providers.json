@@ -1,23 +1,9 @@
 {
   "actions": {
     "openSettings": "前往模型服务",
-    "linkAccount": "绑定账号",
     "refreshModels": "刷新模型"
   },
   "title": "模型服务",
-  "login": {
-    "linked": "已绑定 {{providerName}} 账号",
-    "failed": "登录失败，请重试。",
-    "title": "绑定 {{providerName}} 账号",
-    "instructions": "打开授权页面，登录后输入下面的验证码。",
-    "codeLabel": "验证码 {{code}}",
-    "copyCode": "复制验证码",
-    "waiting": "等待授权…",
-    "loadingCode": "正在获取验证码…",
-    "openAuthorization": "打开授权页面",
-    "manualLabel": "授权页给出的代码或地址",
-    "continue": "继续"
-  },
   "remove": {
     "confirmTitle": "移除 {{providerName}}？",
     "affectedAgents": "{{agents}} 使用的 {{providerName}} 模型将不可用，直到重新添加。",
@@ -48,7 +34,7 @@
     "newTitle": "新建 provider",
     "description": "保存写进 config.json，下一次请求就生效。",
     "name": "名字",
-    "kind": "类型",
+    "kind": "服务商",
     "baseUrl": "接口地址",
     "key": "API key",
     "keyConfigured": "已配置——输入即替换",
@@ -80,7 +66,14 @@
     "reasoning": "推理",
     "removeModel": "移除模型 {{name}}",
     "noModels": "还没有模型。",
-    "headersHint": "空的请求头不会写进 config.json。"
+    "headersHint": "空的请求头不会写进 config.json。",
+    "chatCompletions": "OpenAI / 自定义 · Chat Completions",
+    "responses": "OpenAI / 自定义 · Responses",
+    "chatCompletionsHint": "使用 /chat/completions 接口；支持 OpenAI API Key 及兼容服务。",
+    "responsesHint": "使用 /responses 接口；支持 OpenAI API Key 及兼容服务。",
+    "baseUrlHint": "可修改为代理或中转地址。OpenAI API 地址为 https://api.openai.com/v1。",
+    "nativeCodex": "Codex 订阅统一在模型服务的「账号」区登录和管理，不需要新增 provider。",
+    "legacyCodex": "旧 Codex 配置（未迁移）。订阅请使用「账号」入口；配置和模型引用未改动。"
   },
   "discovery": {
     "fetch": "获取模型列表",

@@ -389,94 +389,30 @@ describe("refreshing a provider's model list", () => {
   });
 });
 
-describe("the codex login, over the wire", () => {
-  it("starts a login, reports the prompt it is waiting on, and answers it", async () => {
-    const root = await mkdtemp(join(tmpdir(), "eta-codex-wire-"));
-    roots.push(root);
-    const ctx = new Context();
-    const wire = new WireService(ctx);
-    const store = new ProviderConfigStore({ path: join(root, "config.json") });
-    const plugin = providersPlugin({ store, loginTimeoutMs: 60_000 });
-    // The flow itself is pi-ai's and needs a network; what this test drives is the state machine
-    // a client talks to. Starting a login does not block on the flow, so nothing here waits for
-    // one — the attempt is cancelled before it can do anything.
-    ctx.plugin(plugin as never, undefined as never);
-    await until(() => wire.descriptors().length > 0);
-
-    const started = (await wire.dispatch(
-      { op: "call", target: "providers", action: "codexLogin", args: {} },
-      {
-        reply: () => undefined,
-      } as never,
-    )) as { result: { login: { id: string; status: string; method: string } } };
-    expect(started.result.login.status).toBe("pending");
-    expect(started.result.login.method).toBe("browser");
-    // The public state carries no token — it is rendered in a UI and sent over the wire.
-    expect(JSON.stringify(started.result.login)).not.toContain("token");
-
-    // A status for an id nobody knows is `failed`, not a lie about pending.
-    const unknown = (await wire.dispatch(
-      {
-        op: "call",
-        target: "providers",
-        action: "codexStatus",
-        args: { id: "ghost" },
-      },
-      {
-        reply: () => undefined,
-      } as never,
-    )) as { result: { login: { status: string } } };
-    expect(unknown.result.login.status).toBe("failed");
-
-    // Cancelling settles it as cancelled, and the status says so afterwards.
-    await wire.dispatch(
-      {
-        op: "call",
-        target: "providers",
-        action: "codexCancel",
-        args: { id: started.result.login.id },
-      },
-      {
-        reply: () => undefined,
-      } as never,
-    );
-    const after = (await wire.dispatch(
-      {
-        op: "call",
-        target: "providers",
-        action: "codexStatus",
-        args: { id: started.result.login.id },
-      },
-      { reply: () => undefined } as never,
-    )) as { result: { login: { status: string } } };
-    expect(after.result.login.status).toBe("cancelled");
-
-    // An answer for a prompt nobody is waiting on is refused by name, not silently accepted.
-    await expect(
-      wire.dispatch(
-        {
-          op: "call",
-          target: "providers",
-          action: "codexAnswer",
-          args: { id: started.result.login.id, promptId: "x", value: "1" },
-        },
-        { reply: () => undefined } as never,
-      ),
-    ).rejects.toThrow(/not waiting/);
-    await expect(
-      wire.dispatch(
-        {
-          op: "call",
-          target: "providers",
-          action: "codexLogin",
-          args: { method: "carrier-pigeon" },
-        },
-        {
+describe("subscription login belongs to the native llm plugin", () => {
+  it.each(["codexLogin", "codexAnswer", "codexStatus", "codexCancel"])(
+    "does not register providers.%s",
+    async (action) => {
+      const root = await mkdtemp(join(tmpdir(), "eta-provider-no-login-"));
+      roots.push(root);
+      const ctx = new Context();
+      const wire = new WireService(ctx);
+      const store = new ProviderConfigStore({
+        path: join(root, "config.json"),
+      });
+      const fiber = ctx.plugin(
+        providersPlugin({ store }) as never,
+        undefined as never,
+      );
+      await until(() => wire.descriptors().length > 0);
+      await expect(
+        wire.dispatch({ op: "call", target: "providers", action, args: {} }, {
           reply: () => undefined,
-        } as never,
-      ),
-    ).rejects.toThrow(/browser or device_code/);
-  });
+        } as never),
+      ).rejects.toThrow(`unknown op: providers.${action}`);
+      await (fiber as unknown as { dispose: () => Promise<void> }).dispose();
+    },
+  );
 });
 
 describe("unsaved model discovery", () => {
