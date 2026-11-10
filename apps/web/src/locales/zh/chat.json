@@ -68,12 +68,7 @@
     "truncated": "输出太长，只保留了一部分",
     "truncatedAt": "输出太长，只保留了一部分；完整输出在 {{path}}"
   },
-  "agentSwitcher": {
-    "currentDirectChat": "正在与 {{agentName}} 私聊（{{status}}），切换智能体",
-    "currentGroup": "正在群「{{groupName}}」中，切换到智能体私聊"
-  },
   "groups": {
-    "nameLabel": "群 · {{name}}",
     "directChat": "私聊",
     "info": "群信息",
     "unreadCount": "{{count}} 条未读",

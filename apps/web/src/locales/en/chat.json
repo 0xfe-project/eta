@@ -68,12 +68,7 @@
     "truncated": "Output was too long; only part of it was kept",
     "truncatedAt": "Output was too long; only part of it was kept. Full output: {{path}}"
   },
-  "agentSwitcher": {
-    "currentDirectChat": "Chatting with {{agentName}} ({{status}}); switch agent",
-    "currentGroup": "In group “{{groupName}}”; switch to a direct chat"
-  },
   "groups": {
-    "nameLabel": "Group · {{name}}",
     "directChat": "Direct chat",
     "info": "Group info",
     "unreadCount": "{{count}} unread",
