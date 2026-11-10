@@ -34,6 +34,45 @@ function localProvider(
 }
 
 describe("building the model layer", () => {
+  it("sends a manually configured unknown ID and reports the upstream rejection", async () => {
+    const requests: unknown[] = [];
+    const endpoint = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(request) {
+        requests.push(await request.json());
+        return Response.json(
+          {
+            error: {
+              message: "unknown model from test endpoint",
+              type: "invalid_request_error",
+              code: "model_not_found",
+            },
+          },
+          { status: 404 },
+        );
+      },
+    });
+    try {
+      const { models } = await buildModels([
+        localProvider({
+          kind: "deepseek",
+          baseUrl: `http://127.0.0.1:${endpoint.port}/v1`,
+          models: [{ id: "manual-unknown" }],
+        }),
+      ]);
+      const model = models!.getModel("local", "manual-unknown")!;
+      const result = await models!.completeSimple(model, {
+        messages: [{ role: "user", content: "hello", timestamp: 0 }],
+      });
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatchObject({ model: "manual-unknown" });
+      expect(result.stopReason).toBe("error");
+      expect(result.errorMessage).toContain("unknown model from test endpoint");
+    } finally {
+      await endpoint.stop(true);
+    }
+  });
   it("builds a provider whose models are the configured ones", async () => {
     const { models, failed } = await buildModels([localProvider()]);
     expect(failed).toEqual([]);
@@ -128,15 +167,27 @@ describe("what the catalog says about a provider", () => {
     expect(resolved[0]?.contextWindow).toBeGreaterThan(0);
   });
 
-  it("drops a model a restricted provider does not serve", () => {
-    // A provider whose catalog lists its models serves only those: an id the user typed has to
-    // be rejected here, or it becomes an alias for something the endpoint will refuse.
-    const resolved = resolveConfiguredModels(
-      { kind: "deepseek", baseUrl: "https://api.deepseek.com" },
-      [{ id: "made-up-model" }],
-    );
-    expect(resolved).toEqual([]);
-  });
+  it.each([
+    "deepseek",
+    "kimi-coding",
+    "zai",
+    "zai-coding-cn",
+    "openai-compatible",
+    "openai-responses",
+  ] as const)(
+    "%s keeps unknown IDs and manual capabilities without guessing metadata",
+    (kind) => {
+      const configured = [
+        { id: "made-up-model", overrides: { contextWindow: 32000 } },
+      ];
+      expect(
+        resolveConfiguredModels(
+          { kind, baseUrl: "https://local.test/v1" },
+          configured,
+        ),
+      ).toEqual(configured);
+    },
+  );
 
   it("refuses a catalog that does not describe itself honestly", () => {
     expect(() =>

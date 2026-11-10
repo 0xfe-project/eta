@@ -298,6 +298,48 @@ describe("the config over the wire", () => {
 });
 
 describe("refreshing a provider's model list", () => {
+  it("a named provider keeps manual IDs and overrides through discover, save, refresh and reload", async () => {
+    const h = await harness({
+      fetch: (async () =>
+        Response.json({
+          data: [{ id: "remote-unknown" }],
+        })) as unknown as typeof fetch,
+    });
+    await h.load();
+    await until(() => h.config() !== undefined);
+    const models = [
+      { id: "manual-unknown", overrides: { contextWindow: 64000 } },
+      { id: "remote-unknown", overrides: { name: "Mine" } },
+    ];
+    const discovered = await h.call("discover", {
+      kind: "deepseek",
+      baseUrl: "https://api.deepseek.com",
+      apiKey: "test",
+    });
+    expect(discovered).toMatchObject({
+      result: { models: [{ id: "remote-unknown" }] },
+    });
+    await h.call("save", {
+      revision: h.config()!.revision,
+      provider: {
+        id: "named",
+        kind: "deepseek",
+        baseUrl: "https://api.deepseek.com",
+        models,
+      },
+    });
+    await h.call("refresh", { id: "named" });
+    await h.call("reload");
+    expect(
+      (await new ProviderConfigStore({ path: h.store.path }).read()).config
+        .providers?.[0]?.models,
+    ).toEqual(models);
+    expect(h.config()?.providers[0]?.models).toEqual([
+      { ...models[0], contextWindow: 64000 },
+      { ...models[1], name: "Mine" },
+    ]);
+    await h.unload();
+  });
   it("asks the endpoint and writes down what it found", async () => {
     const calls: string[] = [];
     const send = (async (url: string) => {

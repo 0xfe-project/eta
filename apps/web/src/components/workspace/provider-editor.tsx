@@ -179,13 +179,11 @@ function inputOf(form: {
 function ModelCard({
   row,
   index,
-  custom,
   onUpdate,
   onRemove,
 }: {
   row: ModelRow;
   index: number;
-  custom: boolean;
   onUpdate: (patch: Partial<ModelRow>) => void;
   onRemove: () => void;
 }) {
@@ -256,58 +254,56 @@ function ModelCard({
           </Select>
         </div>
       </div>
-      {custom ? (
-        <details>
-          <summary>{translateText("editor.modelSettings")}</summary>
-          <div className="settings-model-fields">
-            <div className="settings-field">
-              <Label htmlFor={`model-id-${index}`}>
-                {translateText("editor.modelId")}
-              </Label>
-              <Input
-                id={`model-id-${index}`}
-                className="font-mono"
-                value={row.id}
-                placeholder="model-id"
-                onChange={(event) => onUpdate({ id: event.target.value })}
-              />
-            </div>
-            <div className="settings-field">
-              <Label htmlFor={`model-name-${index}`}>
-                {translateText("editor.modelName")}
-              </Label>
-              <Input
-                id={`model-name-${index}`}
-                value={row.name}
-                onChange={(event) => onUpdate({ name: event.target.value })}
-              />
-            </div>
-            <div className="settings-field">
-              <Label htmlFor={`model-window-${index}`}>
-                {translateText("editor.contextWindow")}
-              </Label>
-              <Input
-                id={`model-window-${index}`}
-                aria-label={translateText("editor.contextWindow")}
-                className="font-mono"
-                inputMode="numeric"
-                value={row.contextWindow}
-                onChange={(event) =>
-                  onUpdate({ contextWindow: event.target.value })
-                }
-              />
-            </div>
-            <label className="settings-check">
-              <input
-                type="checkbox"
-                checked={row.vision}
-                onChange={(event) => onUpdate({ vision: event.target.checked })}
-              />
-              {translateText("editor.vision")}
-            </label>
+      <details>
+        <summary>{translateText("editor.modelSettings")}</summary>
+        <div className="settings-model-fields">
+          <div className="settings-field">
+            <Label htmlFor={`model-id-${index}`}>
+              {translateText("editor.modelId")}
+            </Label>
+            <Input
+              id={`model-id-${index}`}
+              className="font-mono"
+              value={row.id}
+              placeholder="model-id"
+              onChange={(event) => onUpdate({ id: event.target.value })}
+            />
           </div>
-        </details>
-      ) : null}
+          <div className="settings-field">
+            <Label htmlFor={`model-name-${index}`}>
+              {translateText("editor.modelName")}
+            </Label>
+            <Input
+              id={`model-name-${index}`}
+              value={row.name}
+              onChange={(event) => onUpdate({ name: event.target.value })}
+            />
+          </div>
+          <div className="settings-field">
+            <Label htmlFor={`model-window-${index}`}>
+              {translateText("editor.contextWindow")}
+            </Label>
+            <Input
+              id={`model-window-${index}`}
+              aria-label={translateText("editor.contextWindow")}
+              className="font-mono"
+              inputMode="numeric"
+              value={row.contextWindow}
+              onChange={(event) =>
+                onUpdate({ contextWindow: event.target.value })
+              }
+            />
+          </div>
+          <label className="settings-check">
+            <input
+              type="checkbox"
+              checked={row.vision}
+              onChange={(event) => onUpdate({ vision: event.target.checked })}
+            />
+            {translateText("editor.vision")}
+          </label>
+        </div>
+      </details>
     </div>
   );
 }
@@ -1025,32 +1021,29 @@ export function ProviderEditor({
             key={at}
             index={at}
             row={row}
-            custom={custom}
             onUpdate={(patch) => patchModel(at, patch)}
             onRemove={() => removeModel(at)}
           />
         ))}
-        {custom ? (
-          <button
-            type="button"
-            className="settings-add-model"
-            onClick={() =>
-              setModels((current) => [
-                ...current,
-                {
-                  id: "",
-                  name: "",
-                  contextWindow: "",
-                  vision: false,
-                  reasoning: false,
-                  defaultThinking: undefined,
-                },
-              ])
-            }
-          >
-            ＋ {translateText("editor.addModel")}
-          </button>
-        ) : null}
+        <button
+          type="button"
+          className="settings-add-model"
+          onClick={() =>
+            setModels((current) => [
+              ...current,
+              {
+                id: "",
+                name: "",
+                contextWindow: "",
+                vision: false,
+                reasoning: false,
+                defaultThinking: undefined,
+              },
+            ])
+          }
+        >
+          ＋ {translateText("editor.addModel")}
+        </button>
       </fieldset>
       <div className="settings-provider-actions">
         {changedElsewhere ? (

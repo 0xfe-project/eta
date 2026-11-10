@@ -1,4 +1,8 @@
-import type { ProviderSummary, ProvidersView } from "@eta/client-contracts";
+import type {
+  ProviderInput,
+  ProviderSummary,
+  ProvidersView,
+} from "@eta/client-contracts";
 import type { FakeHost } from "@/test-wire";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -689,6 +693,108 @@ async function selectProvider(label: string) {
   });
 }
 
+describe("手动模型不受服务商目录限制", () => {
+  it.each([
+    "deepseek",
+    "kimi-coding",
+    "zai",
+    "zai-coding-cn",
+    "openai-compatible",
+    "openai-responses",
+  ] as const)(
+    "%s：搜索无匹配、手加、编辑、重取、改连接、保存并重开",
+    async (kind) => {
+      const existing = { ...provider, kind };
+      let persisted: ProviderSummary = existing;
+      const fake = providersHost({ ...config, providers: [existing] })
+        .handle("providers.discover", () => ({
+          models: [{ id: "remote-model" }],
+        }))
+        .handle("providers.save", (args) => {
+          const input = (args as { provider: ProviderInput }).provider;
+          persisted = {
+            ...existing,
+            ...input,
+            hasApiKey: true,
+            models: input.models.map((model) => ({
+              ...model,
+              ...model.overrides,
+            })),
+            headers: existing.headers,
+          };
+          fake.set("providers", {
+            config: { revision: "r2", providers: [persisted] },
+          });
+          return { revision: "r2" };
+        });
+      await render(<ProviderEditor provider={existing} onClose={() => {}} />);
+      await fetchList();
+      await act(async () => choice("remote-model")!.click());
+      await fill('input[aria-label="搜索模型"]', "unknown-id");
+      expect(document.body.textContent).toContain("没有匹配的模型，可手动添加");
+      await act(async () => button("＋ 加一个模型").click());
+      await fill("#model-id-1", "unknown-id");
+      await fill("#model-id-1", "unknown-id-edited");
+      await fill("#model-name-1", "My model");
+      await fill("#model-window-1", "64000");
+      await fetchList();
+      expect(
+        document.querySelector<HTMLInputElement>("#model-id-1")?.value,
+      ).toBe("unknown-id-edited");
+      await fill("#provider-key", "replacement");
+      expect(choice("remote-model")).toBeUndefined();
+      expect(document.body.textContent).toContain("请重新获取模型列表");
+      expect(saves(fake)).toHaveLength(0);
+      await save();
+      expect(saves(fake)[0]?.args).toMatchObject({
+        provider: {
+          kind,
+          models: [
+            ...provider.models,
+            {
+              id: "unknown-id-edited",
+              overrides: { name: "My model", contextWindow: 64000 },
+            },
+          ],
+        },
+      });
+      await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
+      await render(<ProviderEditor provider={persisted} onClose={() => {}} />);
+      expect(
+        document.querySelector<HTMLInputElement>("#model-id-1")?.value,
+      ).toBe("unknown-id-edited");
+      expect(
+        document.querySelector<HTMLInputElement>("#model-name-1")?.value,
+      ).toBe("My model");
+      expect(
+        document.querySelector<HTMLInputElement>("#model-window-1")?.value,
+      ).toBe("64000");
+      await save();
+      expect(saves(fake)[1]?.args).toMatchObject({
+        provider: { models: persisted.models },
+      });
+    },
+  );
+
+  it("具名服务商手加后放弃不保存，重开没有未保存模型", async () => {
+    const existing = { ...provider, kind: "deepseek" as const };
+    const fake = host().handle("providers.discover", () => ({ models: [] }));
+    const close = rstest.fn();
+    await render(<ProviderEditor provider={existing} onClose={close} />);
+    await fetchList();
+    expect(document.body.textContent).toContain("没有可用模型");
+    await act(async () => button("＋ 加一个模型").click());
+    await fill("#model-id-1", "unsaved-model");
+    await act(async () => button("返回").click());
+    await act(async () => button("放弃改动").click());
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(saves(fake)).toHaveLength(0);
+    await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
+    await render(<ProviderEditor provider={existing} onClose={() => {}} />);
+    expect(document.querySelector("#model-id-1")).toBeNull();
+  });
+});
+
 describe("具名服务商预置", () => {
   it.each([
     { label: "DeepSeek", kind: "deepseek", url: "https://api.deepseek.com" },
@@ -887,31 +993,37 @@ describe("公共模型资料预览", () => {
     await save();
     expect(savedModels(fake)).toEqual(provider.models);
   });
-  it("手动修改包括取消视觉、清空字段优先，不把默认 false 当成已填写", async () => {
-    const fake = host().handle("providers.metadata", () => ({
-      models: metadataModels,
-    }));
-    await render(
-      <ProviderEditor provider={publicProvider} onClose={() => {}} />,
-    );
-    await fill("#model-name-0", "Manual");
-    await fill("#model-name-0", "");
-    await fill("#model-window-0", "7777");
-    const vision = document.querySelector<HTMLInputElement>(
-      ".settings-model input[type=checkbox]",
-    )!;
-    await act(async () => vision.click());
-    await act(async () => vision.click());
-    await supplement();
-    expect(
-      document.querySelector<HTMLInputElement>("#model-name-0")?.value,
-    ).toBe("");
-    expect(vision.checked).toBe(false);
-    await save();
-    expect(savedModels(fake)).toEqual([
-      { id: "m1", overrides: { contextWindow: 7777, input: ["text"] } },
-    ]);
-  });
+  it.each(["deepseek", "kimi-coding", "openai-compatible"] as const)(
+    "%s 手动修改优先，不把默认 false 当成已填写",
+    async (kind) => {
+      const fake = host().handle("providers.metadata", () => ({
+        models: metadataModels,
+      }));
+      await render(
+        <ProviderEditor
+          provider={{ ...publicProvider, kind }}
+          onClose={() => {}}
+        />,
+      );
+      await fill("#model-name-0", "Manual");
+      await fill("#model-name-0", "");
+      await fill("#model-window-0", "7777");
+      const vision = document.querySelector<HTMLInputElement>(
+        ".settings-model input[type=checkbox]",
+      )!;
+      await act(async () => vision.click());
+      await act(async () => vision.click());
+      await supplement();
+      expect(
+        document.querySelector<HTMLInputElement>("#model-name-0")?.value,
+      ).toBe("");
+      expect(vision.checked).toBe(false);
+      await save();
+      expect(savedModels(fake)).toEqual([
+        { id: "m1", overrides: { contextWindow: 7777, input: ["text"] } },
+      ]);
+    },
+  );
   it("补全后仍可手动修正，保存修正值", async () => {
     const fake = host().handle("providers.metadata", () => ({
       models: metadataModels,

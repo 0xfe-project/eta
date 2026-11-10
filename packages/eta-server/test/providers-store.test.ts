@@ -46,6 +46,53 @@ describe("a config that is not there", () => {
 });
 
 describe("writes", () => {
+  it.each([
+    "deepseek",
+    "kimi-coding",
+    "zai",
+    "zai-coding-cn",
+    "openai-compatible",
+    "openai-responses",
+  ] as const)(
+    "%s saves unknown IDs, reopens them and preserves custom settings on refresh",
+    async (kind) => {
+      const root = await scratch();
+      const path = join(root, "config.json");
+      const store = new ProviderConfigStore({ path });
+      const models = [
+        {
+          id: "manual-unknown",
+          overrides: { name: "Mine", contextWindow: 64000 },
+          defaultThinking: "high" as const,
+        },
+        {
+          id: "existing",
+          name: "My existing model",
+          overrides: { maxTokens: 777 },
+        },
+      ];
+      await store.save({
+        revision: revisionOf(""),
+        provider: { ...provider("named"), kind, models },
+      });
+      expect(
+        (await new ProviderConfigStore({ path }).read()).config.providers?.[0]
+          ?.models,
+      ).toEqual(models);
+      await store.markRefreshed(
+        "named",
+        [{ id: "existing", name: "Remote" }, { id: "discovered" }],
+        "now",
+      );
+      await store.markRefreshed("named", [], "later");
+      const reopened = await new ProviderConfigStore({ path }).read();
+      expect(reopened.config.providers?.[0]?.models).toEqual([
+        ...models,
+        { id: "discovered" },
+      ]);
+      expect(reopened.config.providers?.[0]?.lastRefreshedAt).toBe("later");
+    },
+  );
   it("adds a provider, and the file it leaves behind is the config", async () => {
     const root = await scratch();
     const path = join(root, "config.json");

@@ -54,7 +54,7 @@ export interface ProviderCatalogEntry {
     requireContextWindow: boolean;
   };
   runtime: ProviderRuntimeDefinition;
-  /** Whether this provider only serves the models the catalog lists. */
+  /** Limit catalog suggestions to checked-in entries, not manually configured IDs. */
   restrictToListedModels: boolean;
   models: Map<string, ModelCapabilities>;
 }
@@ -475,9 +475,8 @@ function fromPiModel(model: Model<Api>): EtaModelConfig {
  * The models a provider serves: pi-ai's list, corrected by the checked-in metadata.
  *
  * The catalog wins where it speaks (its context windows and thinking levels are the ones the
- * server has tested), and pi-ai fills in what it knows. A restricted provider serves only what
- * the catalog lists — that is what stops a manually injected model id from becoming an alias for
- * something the provider will reject at request time.
+ * server has tested), and pi-ai fills in what it knows. Restricted suggestions use only the
+ * checked-in list; this is metadata, not an allowlist for configured or discovered IDs.
  */
 export function providerModelCatalog(
   provider: ProviderReference,
@@ -509,25 +508,14 @@ export function providerModelDefinition(
   return providerModelCatalog(provider).find((model) => model.id === modelId);
 }
 
-export function providerCatalogRestrictsModels(
-  provider: ProviderReference,
-): boolean {
-  if (isCustomKind(provider.kind)) return false;
-  return (
-    providerDefinitionForKind(provider.kind)?.restrictToListedModels === true
-  );
-}
-
-/** Fill in saved entries from the catalog, and keep a restricted provider from exposing aliases. */
+/** Fill exact catalog matches without treating the catalog as an allowlist. */
 export function resolveConfiguredModels(
   provider: ProviderReference,
   models: EtaModelConfig[],
 ): EtaModelConfig[] {
-  const restricted = providerCatalogRestrictsModels(provider);
   const resolved: EtaModelConfig[] = [];
   for (const model of models) {
     const known = providerModelDefinition(provider, model.id);
-    if (restricted && known === undefined) continue;
     resolved.push({ ...(known ?? {}), ...model, id: model.id });
   }
   return resolved;
