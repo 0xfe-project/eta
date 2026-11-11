@@ -68,15 +68,24 @@ for entry in * .[!.]* ..?*; do
 done`;
 }
 
+/**
+ * The machine's own kind of path. Its home says which: a Windows machine's is a drive path
+ * (`C:\Users\…`), anyone else's is POSIX. How the host reaches it does not: a daemon's link is
+ * not over SSH whatever the machine runs, and win32 paths on Linux or macOS turn `/home/a`
+ * into `\home\a`, which no shell there can `cd` into.
+ */
+function pathsOf(home: string): typeof posix {
+  return /^[a-z]:[\\/]/i.test(home) ? win32 : posix;
+}
+
 /** `~` is the machine's home; anything else that is not absolute names no directory. */
 function absolutePath(
   raw: string,
   home: string,
-  local: boolean,
+  path: typeof posix,
 ): string | undefined {
   const expanded =
     raw === "~" || raw.startsWith("~/") ? `${home}${raw.slice(1)}` : raw;
-  const path = local ? win32 : posix;
   // `/` is the machine's root on POSIX and the Git Bash root on Windows. Keep it textual so the
   // chooser's cross-machine result shape does not turn the root into the current drive.
   if (expanded === "/") return "/";
@@ -98,8 +107,8 @@ export async function listDirectories(
   projectAt: ReadonlyMap<string, string>,
 ): Promise<ProjectResults["directories"]> {
   const home = transport.home;
-  const local = transport.overSsh === false;
-  const path = absolutePath(raw ?? home, home, local);
+  const pathModule = pathsOf(home);
+  const path = absolutePath(raw ?? home, home, pathModule);
   if (path === undefined) throw new DirectoryError("not_found");
   const result = await transport.run(script(path), { timeoutMs: TIMEOUT_MS });
   if (result.code === EXIT_MISSING) throw new DirectoryError("not_found");
@@ -107,7 +116,6 @@ export async function listDirectories(
   // A cut link, a deadline, a machine that would not run it: nobody answered the question.
   if (result.code !== 0) throw new DirectoryError("offline");
   const names = result.stdout.split("\0").filter((line) => line.length > 1);
-  const pathModule = local ? win32 : posix;
   const entries = names.slice(0, MAX_ENTRIES).map((line) => {
     const name = line.slice(1);
     return {
