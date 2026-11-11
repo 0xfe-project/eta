@@ -59,10 +59,10 @@ A subscription's quota windows (Codex's 5-hour and weekly, Grok's periodic quota
 - **daemon unchanged**: when a daemon needs to generate it still hands the request to the main node, whose model layer (including `llm`) resolves it and calls the gateway; **subscription credentials live only on the main node**, see [Machines and daemons](machines.md).
 - **`llm` target**（`apps/eta/src/llm`，eager）：
 
-| section    | Content                                                              |
-| ---------- | -------------------------------------------------------------------- |
-| `accounts` | `ready`, connection methods (`connectors`), accounts (`connections`) and their status |
-| `models`   | the catalog and each model's current availability and reason          |
+| section    | Content                                                                                  |
+| ---------- | ---------------------------------------------------------------------------------------- |
+| `accounts` | `ready`, connection methods (`connectors`), accounts (`connections`) and their status    |
+| `models`   | the catalog and each model's current availability and reason                             |
 | `quota`    | each account's subscription windows (`kind`: `5h`/`weekly`/`monthly`, `used` percentage) |
 
 action: `refresh` (check all accounts and read quota), `loginStart`, `loginPoll`, `loginSubmit` (API key), `loginCancel`, `setEnabled`, `remove`. Accounts and models are read every 5 seconds (a few loopback management requests) and pushed only when something changes; quota is read at startup, after a successful login, on `refresh`, and every 10 minutes. Reasons for failures and unavailability are always **a code plus params**, not sentences: `LLM_CODES` (`packages/client-contracts/src/llm.ts`) is a closed code table, and each code's meaning and params are written in `apps/eta/src/llm/problems.ts`. The gateway returns `{code, message, params}`, where `message` is an English diagnostic only for logs and `params` are `provider` (display name) and `status` (HTTP status). The `llm` plugin passes them through as-is (a failed reply frame carries `problem: {code, params}`; a failure the gateway doesn't explain reports `gateway_unavailable`), untranslated; the web UI translates each code into Chinese and English in `llm:problems.*`, and for an unknown code shows the code and diagnostic. A connection method's login instructions (formerly `hint`) are no longer given by the gateway either; the web UI looks up the copy by connection method id.

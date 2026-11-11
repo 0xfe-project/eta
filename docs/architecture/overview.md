@@ -19,12 +19,12 @@ Main node  apps/eta                              ← the only process; SQLite + 
 
 ## Processes
 
-| Processes      | Location      | Purpose                                                                                                                          |
-| -------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| host           | `apps/eta`    | The only required process. `bun apps/eta/src/main.ts`; for development, `bun run dev`                                                                 |
+| Processes      | Location      | Purpose                                                                                                                                                                                            |
+| -------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| host           | `apps/eta`    | The only required process. `bun apps/eta/src/main.ts`; for development, `bun run dev`                                                                                                              |
 | web dev server | `apps/web`    | Only needed in development (vite proxies `/ws` to host). In production, host serves the built static pages directly (included in the packaged host; `--web-dir` can specify a different directory) |
-| eta-daemon     | `apps/daemon` | Optional, one per additional machine. A single file produced by `bun build --compile`, without Web, database, product plugins, or model configuration                                 |
-| Memory sidecar | `apps/memory` | Optional. Python (mem0 + fastembed), its own PostgreSQL (pgvector). Without it, host does not mount memory and the UI hides the memory page                         |
+| eta-daemon     | `apps/daemon` | Optional, one per additional machine. A single file produced by `bun build --compile`, without Web, database, product plugins, or model configuration                                              |
+| Memory sidecar | `apps/memory` | Optional. Python (mem0 + fastembed), its own PostgreSQL (pgvector). Without it, host does not mount memory and the UI hides the memory page                                                        |
 
 There are no other services: no control plane, message queue, container orchestration, or primary database. The LLM gateway is not a standalone service: CLIProxyAPI is a child process started and supervised by host, and exits with host (see [LLM gateway](llm-gateway.md)). SearXNG for search is the same: when no external address is provided, it is a child process started by host on the first search and exits with host (see [Web reading and search](web.md)).
 

@@ -77,7 +77,7 @@ function Appearance() {
         </Text>
         <View class="flex-row gap-2">
           <Option
-            title="Simplified Chinese"
+            title="简体中文"
             on={language() === "zh"}
             onPress={() => setLanguage("zh")}
           />

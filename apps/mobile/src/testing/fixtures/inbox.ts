@@ -45,7 +45,13 @@ const ask = (
 
 /** Newest first, as the host lists them. */
 const QUESTIONS: InteractionView[] = [
-  ask("q-weekly", "agent-xiaoman", "dm-xiaoman", today(9, 40), "Who gets the weekly report?"),
+  ask(
+    "q-weekly",
+    "agent-xiaoman",
+    "dm-xiaoman",
+    today(9, 40),
+    "Who gets the weekly report?",
+  ),
   ask(
     "q-push",
     "agent-mori",
@@ -77,12 +83,14 @@ const MULTI: InteractionView[] = [
 ];
 
 const MANY: InteractionView[] = [
-  ask("q-window", "agent-ache", "wire", today(9, 29), "When should the migration run?", [
-    "Now",
-    "Tonight",
-    "This weekend",
-    "Next week",
-  ]),
+  ask(
+    "q-window",
+    "agent-ache",
+    "wire",
+    today(9, 29),
+    "When should the migration run?",
+    ["Now", "Tonight", "This weekend", "Next week"],
+  ),
 ];
 
 const task = (
@@ -106,8 +114,20 @@ const task = (
 });
 
 const ATTENTION: BoardTaskView[] = [
-  task(128, "Resend lost frames after reconnect", "in_review", "agent-ache", "completed"),
-  task(41, "Swap homepage first screen to new copy", "in_review", "agent-mori", "completed"),
+  task(
+    128,
+    "Resend lost frames after reconnect",
+    "in_review",
+    "agent-ache",
+    "completed",
+  ),
+  task(
+    41,
+    "Swap homepage first screen to new copy",
+    "in_review",
+    "agent-mori",
+    "completed",
+  ),
   task(129, "Archive backup to nas", "blocked", "agent-ache", "completed"),
 ];
 
@@ -261,7 +281,13 @@ function installLoad(host: FakeHost): void {
     setRun(host, row, "running", machineId);
     return row;
   });
-  const waiting = task(206, "Archive backup to nas", "todo", "agent-ache", "queued");
+  const waiting = task(
+    206,
+    "Archive backup to nas",
+    "todo",
+    "agent-ache",
+    "queued",
+  );
   setRun(host, waiting, "queued", "nas", { queueReason: "machine_offline" });
   host.patch("tasks", "list", [...rows, waiting]);
 }

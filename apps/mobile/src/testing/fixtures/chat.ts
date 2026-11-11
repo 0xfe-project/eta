@@ -274,7 +274,10 @@ function wireRun(from: number): ViewMessageRow[] {
     ]),
     ...calls(steps),
     assistant([
-      { type: "text", text: "The migration will lock the message table for about 40 seconds; you'll need to decide." },
+      {
+        type: "text",
+        text: "The migration will lock the message table for about 40 seconds; you'll need to decide.",
+      },
     ]),
   ]);
 }
@@ -282,7 +285,11 @@ function wireRun(from: number): ViewMessageRow[] {
 function boardRun(from: number): ViewMessageRow[] {
   return transcript(from, [
     assistant([
-      { type: "thinking", thinking: "Board column widths should remember the last drag; check storage first." },
+      {
+        type: "thinking",
+        thinking:
+          "Board column widths should remember the last drag; check storage first.",
+      },
     ]),
     ...calls([
       {
@@ -311,9 +318,10 @@ function dmRun(from: number): ViewMessageRow[] {
     assistant([
       {
         type: "thinking",
-        thinking: "This week's tasks should be grouped by status, with blocked ones in a separate column.",
-          .repeat(17)
-          .slice(0, 320),
+        thinking:
+          "This week's tasks should be grouped by status, with blocked ones in a separate column. "
+            .repeat(17)
+            .slice(0, 320),
       },
     ]),
     ...calls([
@@ -333,7 +341,8 @@ function dmRun(from: number): ViewMessageRow[] {
   ]);
 }
 
-const REPORT = "The weekly report is ready: 12 tasks completed this week, 2 blocked. Now putting together next week's plan,";
+const REPORT =
+  "The weekly report is ready: 12 tasks completed this week, 2 blocked. Now putting together next week's plan,";
 
 const session = (
   id: string,
@@ -367,7 +376,13 @@ const LONG_REPLY = [
 function older(id: string): MessageView[] {
   const rows: MessageView[] = [];
   for (let seq = 1; seq <= 8; seq += 2) {
-    rows.push(user(id, seq, `Message ${seq}: first walk through the current reconnect logic`));
+    rows.push(
+      user(
+        id,
+        seq,
+        `Message ${seq}: first walk through the current reconnect logic`,
+      ),
+    );
     rows.push(
       reply(id, seq + 1, "agent-ache", {
         text: `Item ${seq + 1}: if it drops now, re-pull everything.`,
@@ -402,7 +417,11 @@ function wireRows(): MessageView[] {
       thinking: "Read wire.ts first.",
       data: { activity: savedActivity },
     }),
-    user("wire", 10, "After reconnecting, backfill first, then resume live frames. Bring the migration along too."),
+    user(
+      "wire",
+      10,
+      "After reconnecting, backfill first, then resume live frames. Bring the migration along too.",
+    ),
     reply("wire", 11, "agent-ache", {
       status: "waiting_for_input",
       text: "The migration will lock the message table for about 40 seconds — that's your call.",
@@ -484,8 +503,14 @@ function cardRows(): MessageView[] {
 function errorRows(): MessageView[] {
   const id = "wire";
   return [
-    user(id, 1, "What does everyone think of this plan?", { woke: [], joined: [] }),
-    user(id, 2, "Don't touch the migration, look at the logs first.", { woke: [], joined: ["agent-ache"] }),
+    user(id, 1, "What does everyone think of this plan?", {
+      woke: [],
+      joined: [],
+    }),
+    user(id, 2, "Don't touch the migration, look at the logs first.", {
+      woke: [],
+      joined: ["agent-ache"],
+    }),
     reply(id, 3, "agent-ache", {
       text: "There are two duplicate frames in the log, both after the reconnect",
       status: "stopped",
@@ -503,7 +528,11 @@ function errorRows(): MessageView[] {
 function queueRows(): MessageView[] {
   const id = "wire";
   return [
-    user(id, 1, "@everyone Don't merge this version yet, wait for the migration conclusion."),
+    user(
+      id,
+      1,
+      "@everyone Don't merge this version yet, wait for the migration conclusion.",
+    ),
     reply(id, 2, "agent-ache", { status: "working", data: { runFrom: 0 } }),
     reply(id, 3, "agent-mori", { status: "queued" }),
     reply(id, 4, "agent-mori", { status: "queued" }),
@@ -521,7 +550,12 @@ function queueRun(): ViewMessageRow[] {
   return transcript(0, [
     assistant([{ type: "thinking", thinking: "Write the rollback first." }]),
     ...calls(list),
-    assistant([{ type: "text", text: "OK, I'll write the migration rollback first, and wait until you've reviewed it before" }]),
+    assistant([
+      {
+        type: "text",
+        text: "OK, I'll write the migration rollback first, and wait until you've reviewed it before",
+      },
+    ]),
   ]);
 }
 
@@ -660,7 +694,11 @@ export function installChat(host: FakeHost): void {
     else if (summary.id === "artifacts") add("artifacts", cardRows());
     else if (summary.id === "dm-xiaoman")
       add("dm-xiaoman", [
-        user("dm-xiaoman", 1, "Summarize this week's tasks into a weekly report."),
+        user(
+          "dm-xiaoman",
+          1,
+          "Summarize this week's tasks into a weekly report.",
+        ),
         reply("dm-xiaoman", 2, "agent-xiaoman", {
           status: "working",
           data: { runFrom: 0 },
@@ -740,7 +778,10 @@ export function installChat(host: FakeHost): void {
     const wire = conversations.get("wire");
     if (wire !== undefined)
       wire.held = [
-        row("wire", 6, { text: "The rollback needs tests too", data: { held: true } }),
+        row("wire", 6, {
+          text: "The rollback needs tests too",
+          data: { held: true },
+        }),
       ];
   }
 
@@ -792,8 +833,13 @@ export function installChat(host: FakeHost): void {
           agentId: "agent-ache",
           conversationId: "wire",
           replyId: "wire-11",
-          prompt: "Should the migration script run directly on the production database?",
-          options: ["Back up first, then run", "Run it directly", "Don't run it yet"],
+          prompt:
+            "Should the migration script run directly on the production database?",
+          options: [
+            "Back up first, then run",
+            "Run it directly",
+            "Don't run it yet",
+          ],
           multi: false,
           status: "pending",
           answer: null,
@@ -861,9 +907,15 @@ export function installChat(host: FakeHost): void {
       clientId?: string;
       attachments?: string[];
     }): SendResult | Promise<SendResult> => {
-      if (scenario === "chat-errors" && args.text.includes("Back up first, then run"))
+      if (
+        scenario === "chat-errors" &&
+        args.text.includes("Back up first, then run")
+      )
         throw new Error("Network connection failed, message not delivered.");
-      if (scenario === "chat-errors" && args.text.includes("Send me a copy of the log"))
+      if (
+        scenario === "chat-errors" &&
+        args.text.includes("Send me a copy of the log")
+      )
         return new Promise<SendResult>(() => undefined);
       const conversation = conversationOf(args.conversationId);
       const known = conversation.rows.find((item) => item.id === args.clientId);

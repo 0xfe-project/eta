@@ -4,17 +4,17 @@ There is only one WebSocket (`/ws`) between the browser and the host, speaking t
 
 ## Frames
 
-| Direction | Frame                                             | Meaning                                                                                               |
-| ---- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| In   | `call { target, action, args?, requestId? }`   | Call `target.action`; a reply is sent only if `requestId` is present, otherwise no reply (cheap fire-and-forget)                |
-| In   | `subscribe { target, filter? }`                | Subscribe to a target's state and events; `filter` only filters event names (substring); state is always the full snapshot                          |
-| In   | `unsubscribe { target }`                       | Unsubscribe                                                                                           |
-| In   | `native`                                       | Desktop shell loopback; not used by eta                                                                           |
-| Out   | `hello { ops, mounted, state }`                | First frame after connecting (sent again after reconnect): all callable ops and their contracts, mounted plugins, and the state of all eager targets |
-| Out   | `reply { requestId, ok, result \| error }`     | Settles a call                                                                                       |
-| Out   | `state { target, version, snapshot \| patch }` | A target's state: full, or only the sections whose revision changed                                             |
-| Out   | `event { target, name, data, at? }`            | Something happened (transient, not state); `at` is the occurrence time, strictly increasing within the same target, used to identify replays                |
-| Out   | `error { message }`                            | A frame that is completely unreadable                                                                                     |
+| Direction | Frame                                          | Meaning                                                                                                                                              |
+| --------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| In        | `call { target, action, args?, requestId? }`   | Call `target.action`; a reply is sent only if `requestId` is present, otherwise no reply (cheap fire-and-forget)                                     |
+| In        | `subscribe { target, filter? }`                | Subscribe to a target's state and events; `filter` only filters event names (substring); state is always the full snapshot                           |
+| In        | `unsubscribe { target }`                       | Unsubscribe                                                                                                                                          |
+| In        | `native`                                       | Desktop shell loopback; not used by eta                                                                                                              |
+| Out       | `hello { ops, mounted, state }`                | First frame after connecting (sent again after reconnect): all callable ops and their contracts, mounted plugins, and the state of all eager targets |
+| Out       | `reply { requestId, ok, result \| error }`     | Settles a call                                                                                                                                       |
+| Out       | `state { target, version, snapshot \| patch }` | A target's state: full, or only the sections whose revision changed                                                                                  |
+| Out       | `event { target, name, data, at? }`            | Something happened (transient, not state); `at` is the occurrence time, strictly increasing within the same target, used to identify replays         |
+| Out       | `error { message }`                            | A frame that is completely unreadable                                                                                                                |
 
 Rules:
 
@@ -32,31 +32,31 @@ Names are flat `target.action`. `hello.ops` gives the schema and description of 
 
 Upstream provides (bundled plugins):
 
-| target                      | Content                                                                                                                          |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| target                      | Content                                                                                                                                                           |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `sessions`, `sessions.<id>` | Session list; view of a session (prompt segments, tools, usage, goal, model and thinking profile, pending questions) and actions like `prompt`, `abort`, `answer` |
-| `providers`                 | Model services and credentials, including Codex device code login and model discovery                                        |
-| `settings`, `personas`      | Global settings; persona cards                                                                                               |
+| `providers`                 | Model services and credentials, including Codex device code login and model discovery                                                                             |
+| `settings`, `personas`      | Global settings; persona cards                                                                                                                                    |
 
 Product plugins (`apps/eta`, all are cordis plugins, injecting `wire` and `sessions`):
 
-| Plugin        | target                                | action                                                                                                               |
-| ------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| agents        | `agents`（eager）                     | `create` `update` `delete` `direct`                                                                                  |
-| machines      | `machines`（eager）                   | `enroll` `approve` `revoke` `rename` `setMaxActiveRuns`                                                              |
-| projects      | `projects` (eager)                    | `create` `update` `setSteward` `files` (archive via `update`)                                                        |
-| conversations | `conversations`、`conversations.<id>` | `create` `update` `invite` `remove` `setSteward` `send` `stop` `read` `history` `attach` `unattach`                  |
-| inbox         | `inbox`                               | `answer` `setApprovals`                                                                                              |
-| email         | `email`、`email.<thread-id>`          | `saveAccount` `removeAccount` `verifyAccount` `refresh` `markRead` `assign` `confirmProposal` `discardProposal`      |
-| usage         | `usage`                               | Read-only                                                                                                            |
-| tasks         | `tasks`, `tasks.<id>`                 | `update` `comment` `delete` `link` `confirmDraft` `interrupt` `rerun` (no `create`, see [Tasks](tasks.md))           |
-| artifacts     | `artifacts`                           | `share` `unshare` `delete` `preview`                                                                                 |
-| routines      | `routines`、`routines.<id>`           | `create` `update` `delete` `run` `seen` `feedback` `restoreBrief`                                                    |
-| mcp           | `mcp`                                 | `connect` `reconnect` `login` `completeLogin` `logout`, see [MCP](mcp.md)                                            |
-| plugins       | `list` `audit`                        | `configure` `setLevel` `add` `update` `remove` `recheck`, see [Plugins](plugins.md)                                  |
-| github        | `github` (mounted only on load, not loaded by default)  | `refresh` `createApp` `setOAuthClient` `authorize` `unauthorize` `disconnect` `pull` `merge`, see [GitHub](github.md) |
-| memory        | `memory` (mounted only when sidecar is present)            | `list` `remember` `forget`                                                                                           |
-| llm           | `llm` (eager; mounted only when gateway library is present)      | `refresh` `loginStart` `loginPoll` `loginSubmit` `loginCancel` `setEnabled` `remove`                                 |
+| Plugin        | target                                                      | action                                                                                                                |
+| ------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| agents        | `agents`（eager）                                           | `create` `update` `delete` `direct`                                                                                   |
+| machines      | `machines`（eager）                                         | `enroll` `approve` `revoke` `rename` `setMaxActiveRuns`                                                               |
+| projects      | `projects` (eager)                                          | `create` `update` `setSteward` `files` (archive via `update`)                                                         |
+| conversations | `conversations`、`conversations.<id>`                       | `create` `update` `invite` `remove` `setSteward` `send` `stop` `read` `history` `attach` `unattach`                   |
+| inbox         | `inbox`                                                     | `answer` `setApprovals`                                                                                               |
+| email         | `email`、`email.<thread-id>`                                | `saveAccount` `removeAccount` `verifyAccount` `refresh` `markRead` `assign` `confirmProposal` `discardProposal`       |
+| usage         | `usage`                                                     | Read-only                                                                                                             |
+| tasks         | `tasks`, `tasks.<id>`                                       | `update` `comment` `delete` `link` `confirmDraft` `interrupt` `rerun` (no `create`, see [Tasks](tasks.md))            |
+| artifacts     | `artifacts`                                                 | `share` `unshare` `delete` `preview`                                                                                  |
+| routines      | `routines`、`routines.<id>`                                 | `create` `update` `delete` `run` `seen` `feedback` `restoreBrief`                                                     |
+| mcp           | `mcp`                                                       | `connect` `reconnect` `login` `completeLogin` `logout`, see [MCP](mcp.md)                                             |
+| plugins       | `list` `audit`                                              | `configure` `setLevel` `add` `update` `remove` `recheck`, see [Plugins](plugins.md)                                   |
+| github        | `github` (mounted only on load, not loaded by default)      | `refresh` `createApp` `setOAuthClient` `authorize` `unauthorize` `disconnect` `pull` `merge`, see [GitHub](github.md) |
+| memory        | `memory` (mounted only when sidecar is present)             | `list` `remember` `forget`                                                                                            |
+| llm           | `llm` (eager; mounted only when gateway library is present) | `refresh` `loginStart` `loginPoll` `loginSubmit` `loginCancel` `setEnabled` `remove`                                  |
 
 Eager targets arrive with `hello`, so the page can render without subscribing first.
 

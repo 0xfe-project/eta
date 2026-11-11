@@ -1,10 +1,12 @@
-import type { ConversationResults,
+import type {
+  ConversationResults,
   MemberView,
   MessageView,
   StoredTask,
   TaskStatus,
   TimelineSection,
-  TranscriptSection } from "@eta/client-contracts";
+  TranscriptSection,
+} from "@eta/client-contracts";
 // 03k Member details: one member's numbers and what can be done about it, and Only, its side of the group.
 
 import { computed, signal, Text, View } from "nsh";

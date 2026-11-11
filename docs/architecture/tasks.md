@@ -28,10 +28,10 @@ Collapsing uses the repository's existing syntax (native `<details>` + `.thinkin
 
 Chosen by the agent when creating a task (`workspace`):
 
-| Mode       | Meaning                                                                                               |
-| ---------- | ----------------------------------------------------------------------------------------------------- |
+| Mode       | Meaning                                                                                                                                                                      |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `worktree` | Default for git projects. Creates a git worktree for the task on the machine where the project lives, branch `eta/task-<number>`, starting from the project's current commit |
-| `local`    | Work directly in the project directory. Projects that are not git repositories can only use this          |
+| `local`    | Work directly in the project directory. Projects that are not git repositories can only use this                                                                             |
 
 Checked at proposal time: requesting `worktree` for a project that is not a repository is rejected by the tool, so the agent hears about it on the spot rather than waiting for a run to fail.
 
@@ -69,12 +69,12 @@ When the project is on another machine, the run's session lives on that machine:
 
 ## Actions on the wire
 
-| action                | Meaning                               |
-| --------------------- | ------------------------------------- |
-| `confirmDraft`        | Confirm draft, create task and enqueue |
-| `update`              | Change title, description, status (drag between columns too) |
-| `comment`             | Comment; deliver into the running run, or wake a continuation run |
-| `interrupt` / `rerun` | Stop a run / start a new run          |
+| action                | Meaning                                                                  |
+| --------------------- | ------------------------------------------------------------------------ |
+| `confirmDraft`        | Confirm draft, create task and enqueue                                   |
+| `update`              | Change title, description, status (drag between columns too)             |
+| `comment`             | Comment; deliver into the running run, or wake a continuation run        |
+| `interrupt` / `rerun` | Stop a run / start a new run                                             |
 | `link` / `delete`     | Link a conversation / delete a task (can't delete while a run is active) |
 
 `tasks` is one eager list (each row carries `runStatus`); each task is `tasks.<id>`: `task` (details, including the workspace and `runs`) and `activity` (the timeline, containing `run_queued/started/completed/failed/interrupted/nudged`).

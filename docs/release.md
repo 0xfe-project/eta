@@ -2,10 +2,10 @@
 
 The host and the desktop app are released separately, each with its own version number:
 
-| tag          | Workflow                                | What ships                                   |
-| ------------ | --------------------------------------- | -------------------------------------------- |
+| tag          | Workflow                                | What ships                                          |
+| ------------ | --------------------------------------- | --------------------------------------------------- |
 | `v*`         | `.github/workflows/release.yml`         | `eta-host`, one file each for Linux, macOS, Windows |
-| `desktop-v*` | `.github/workflows/release-desktop.yml` | Desktop app installers, see "Desktop app" below |
+| `desktop-v*` | `.github/workflows/release-desktop.yml` | Desktop app installers, see "Desktop app" below     |
 
 GitHub's Latest is always the host: desktop releases are published with `--latest=false`. `eta-host upgrade` and the settings page button also don't look at who Latest is, they only take `v*` tags (`apps/eta/src/upgrade/releases.ts`), so even if a desktop Release is manually marked Latest, the host still picks up the newest host.
 
@@ -46,13 +46,13 @@ gh workflow run release.yml --ref v0.2.0
 
 Releases for `v*`:
 
-| File                       | Platform    | What it is                                                      |
-| -------------------------- | ----------- | --------------------------------------------------------------- |
-| `eta-host-linux-x64`       | Linux x64   | host                                                            |
-| `eta-host-darwin-arm64`    | macOS arm64 | host                                                            |
-| `eta-host-windows-x64.exe` | Windows x64 | host                                                            |
+| File                       | Platform    | What it is                                                                    |
+| -------------------------- | ----------- | ----------------------------------------------------------------------------- |
+| `eta-host-linux-x64`       | Linux x64   | host                                                                          |
+| `eta-host-darwin-arm64`    | macOS arm64 | host                                                                          |
+| `eta-host-windows-x64.exe` | Windows x64 | host                                                                          |
 | `eta-host.json`            |             | `{"version","commit","minDesktop"}`, see "Desktop app and host compatibility" |
-| `SHA256SUMS`               |             | Checksums of everything above                                   |
+| `SHA256SUMS`               |             | Checksums of everything above                                                 |
 
 The host is a single uncompressed file containing the pages, database migrations, CLIProxyAPI and the daemons for every platform. It is uncompressed because zstd would save only about a third (the daemons inside are already compressed) while requiring the downloading machine to have zstd, and the checksum would no longer cover the file that actually runs.
 
@@ -88,12 +88,12 @@ The token order is the same as for host upgrades: `GH_TOKEN`, `GITHUB_TOKEN`, `g
 
 The download logic is the same code as host upgrades (`packages/releases`: `hostForDesktop`, `hostFile`, `downloadChecked`), not a copy.
 
-| File                           | Platform    | What it is                       |
-| ------------------------------ | ----------- | -------------------------------- |
-| `eta-desktop-linux-x64.tar.gz` | Linux x64   | Desktop app, contains `installer` |
-| `eta-desktop-darwin-arm64.dmg` | macOS arm64 | Desktop application                |
+| File                           | Platform    | What it is                                    |
+| ------------------------------ | ----------- | --------------------------------------------- |
+| `eta-desktop-linux-x64.tar.gz` | Linux x64   | Desktop app, contains `installer`             |
+| `eta-desktop-darwin-arm64.dmg` | macOS arm64 | Desktop application                           |
 | `eta-desktop-windows-x64.zip`  | Windows x64 | Desktop application, contains `eta-Setup.exe` |
-| `SHA256SUMS`                   |             | Checksums for all of the above       |
+| `SHA256SUMS`                   |             | Checksums for all of the above                |
 
 hutch only packages for the host machine it runs on, so each platform is built on its corresponding runner.
 
@@ -197,11 +197,11 @@ Running it and installing it as a service work the same as a build from a checko
 
 `eta-host install-service <args>` registers this file as a service, starting at boot or login, and restarting on crash. Running it again changes the args and restarts. `eta-host uninstall-service` removes the service; data stays in `~/.eta`.
 
-| Platform | What it is                     | When it starts          | Permissions needed |
-| ------- | ------------------------------- | --------------------- | -------------- |
-| Linux   | systemd user unit `io.eta.host` | at login, at boot with linger | none      |
-| macOS   | LaunchAgent `io.eta.host`       | at login                | none           |
-| Windows | Windows service `io.eta.host`   | at boot                 | admin to install |
+| Platform | What it is                      | When it starts                | Permissions needed |
+| -------- | ------------------------------- | ----------------------------- | ------------------ |
+| Linux    | systemd user unit `io.eta.host` | at login, at boot with linger | none               |
+| macOS    | LaunchAgent `io.eta.host`       | at login                      | none               |
+| Windows  | Windows service `io.eta.host`   | at boot                       | admin to install   |
 
 ### Windows service
 
@@ -230,13 +230,13 @@ Windows has no SIGTERM. Each time the shell starts, it generates a named pipe na
 
 When something goes wrong, check these:
 
-| What to check       | Where                                                                  |
-| ------------ | --------------------------------------------------------------------- |
-| host output  | `~/.eta/service/io.eta.host.log`                                      |
-| Upgrade output   | `~/.eta/service/io.eta.host-upgrade.log`                              |
-| Service config     | `~/.eta/service/io.eta.host.json`: command to run, environment variables, stop wait time |
-| Run status     | `~/.eta/service/io.eta.host.state.json`, `sc query io.eta.host`       |
-| Windows logs | Event Viewer: Windows Logs → System, Source Service Control Manager         |
+| What to check  | Where                                                                                    |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| host output    | `~/.eta/service/io.eta.host.log`                                                         |
+| Upgrade output | `~/.eta/service/io.eta.host-upgrade.log`                                                 |
+| Service config | `~/.eta/service/io.eta.host.json`: command to run, environment variables, stop wait time |
+| Run status     | `~/.eta/service/io.eta.host.state.json`, `sc query io.eta.host`                          |
+| Windows logs   | Event Viewer: Windows Logs → System, Source Service Control Manager                      |
 
 ## Upgrade
 
@@ -258,11 +258,11 @@ On Windows, run it under the account that installed the service; administrator p
 
 While the service is running, the upgrade is handled by a separate worker, `io.eta.host-upgrade`. It is started by the service manager and is not a child process of the host, so stopping the service does not kill it. `eta-host upgrade` merely prints progress: closing the terminal, killing this command, or stopping the host does not affect it. Progress is written to `~/.eta/upgrade-status.json`. This file is not kept in the database because the database is replaced during a rollback.
 
-| Platform    | What the worker is                                   | Logs                                         |
-| ------- | ----------------------------------------------- | -------------------------------------------- |
-| Linux   | Temporary user unit, not in the host's cgroup           | `journalctl --user -u io.eta.host-upgrade`   |
-| macOS   | Temporary launchd job with its own process group               | `~/Library/Logs/eta/io.eta.host-upgrade.log` |
-| Windows | One-shot service registered during installation, not in the host's job | `~/.eta/service/io.eta.host-upgrade.log`     |
+| Platform | What the worker is                                                     | Logs                                         |
+| -------- | ---------------------------------------------------------------------- | -------------------------------------------- |
+| Linux    | Temporary user unit, not in the host's cgroup                          | `journalctl --user -u io.eta.host-upgrade`   |
+| macOS    | Temporary launchd job with its own process group                       | `~/Library/Logs/eta/io.eta.host-upgrade.log` |
+| Windows  | One-shot service registered during installation, not in the host's job | `~/.eta/service/io.eta.host-upgrade.log`     |
 
 On Windows, a running exe cannot be overwritten or deleted, but it can be renamed, so there are two differences: the worker runs from a temporary copy in `~/.eta/service`, which is deleted afterward; when swapping files, always rename the old file to `.prev` first. If the previous `.prev` is still in use by a process (such as an `eta-host upgrade` that has not exited yet), it is first renamed to `.prev.<pid>.old`. On rollback, likewise first rename the failed version to `.prev.<pid>.failed.old`, then swap back the old version: a file that has just run may remain locked for a while, during which it can be renamed but not overwritten. These `.old` files are cleaned up on the next upgrade; each is about 390 MB. Downloaded new files must be scanned by antivirus, so the test run timeout is 2 minutes, versus 20 seconds on other platforms.
 
@@ -305,23 +305,23 @@ Only users can change settings; agent tools cannot reach them. When `ETA_RELEASE
 
 All four sources use the same syntax:
 
-| Syntax                                    | What it is                           |
-| ----------------------------------------- | ------------------------------------ |
-| `owner/name`                              | A repository on github.com           |
-| `https://github.com/owner/name`           | Same as above                        |
-| `https://api.github.com/repos/owner/name` | Same as above                        |
-| `https://<host>/api/v3/repos/owner/name`  | GitHub Enterprise                    |
+| Syntax                                    | What it is                                        |
+| ----------------------------------------- | ------------------------------------------------- |
+| `owner/name`                              | A repository on github.com                        |
+| `https://github.com/owner/name`           | Same as above                                     |
+| `https://api.github.com/repos/owner/name` | Same as above                                     |
+| `https://<host>/api/v3/repos/owner/name`  | GitHub Enterprise                                 |
 | Any other `http(s)` URL                   | Another server; must serve the same API as GitHub |
 
 The URL must not contain credentials or query parameters: it will be shown on the page and written to logs.
 
 Take the first available token:
 
-| Upstream          | Order                                                                                                            |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------- |
-| github.com        | `GH_TOKEN`, `GITHUB_TOKEN`, the one saved in settings, `gh auth token --hostname github.com`; anonymous if none are present |
+| Upstream          | Order                                                                                                                                              |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| github.com        | `GH_TOKEN`, `GITHUB_TOKEN`, the one saved in settings, `gh auth token --hostname github.com`; anonymous if none are present                        |
 | GitHub Enterprise | `GH_ENTERPRISE_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`, the one saved in settings, `gh auth token --hostname <host machine>`; anonymous if none of them |
-| Other servers     | Only `ETA_RELEASES_TOKEN`                                                                                        |
+| Other servers     | Only `ETA_RELEASES_TOKEN`                                                                                                                          |
 
 Environment variables and `gh` are read fresh each time, never stored. The “access token” in settings is the only token eta stores, and is meant for when the service cannot reach the `gh` login:
 

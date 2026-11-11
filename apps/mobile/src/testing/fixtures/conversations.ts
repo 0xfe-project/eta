@@ -65,10 +65,17 @@ const EXTRA: ConversationSummary[] = [
       lastMessageAt: minutesAgo(1500),
     },
   ),
-  row("release", "Release process", "eta", "group", [member("agent-ache", "idle")], {
-    archived: true,
-    updatedAt: new Date(new Date().getFullYear(), 9, 2).getTime(),
-  }),
+  row(
+    "release",
+    "Release process",
+    "eta",
+    "group",
+    [member("agent-ache", "idle")],
+    {
+      archived: true,
+      updatedAt: new Date(new Date().getFullYear(), 9, 2).getTime(),
+    },
+  ),
   row(
     "landing",
     "Landing page copy",

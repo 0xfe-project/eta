@@ -26,7 +26,7 @@ export function LanguageSettings() {
       }}
     >
       <SelectOption value="system">{t("appearance.system")}</SelectOption>
-      <SelectOption value="zh">Chinese</SelectOption>
+      <SelectOption value="zh">中文</SelectOption>
       <SelectOption value="en">English</SelectOption>
     </Select>
   );

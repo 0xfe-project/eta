@@ -70,11 +70,15 @@ describe("a task draft", () => {
     // guessing at the order, and that row is the one Ada was writing when she drafted.
     expect(draft.data.turnMessageId).toBe(reply.id);
     const { description } = draft.data as { description: string };
-    expect(description).toContain("## 目标\n\nUsers can sign in again");
-    expect(description).toContain("## 已决定\n\nKeep the existing form");
-    expect(description).toContain("## 验收标准\n\nThe sign-in test passes");
+    expect(description).toContain("## Goal\n\nUsers can sign in again");
+    expect(description).toContain("## Decided\n\nKeep the existing form");
+    expect(description).toContain(
+      "## Acceptance criteria\n\nThe sign-in test passes",
+    );
     // Where it came from: the conversation, and the rows from the message that woke Ada on.
-    expect(description).toContain("来源：对话《login》第 1–2 条。");
+    expect(description).toContain(
+      "Source: conversation “login”, messages 1–2.",
+    );
     expect(w.host.db.query("SELECT COUNT(*) AS n FROM task").get()).toEqual({
       n: 0,
     });

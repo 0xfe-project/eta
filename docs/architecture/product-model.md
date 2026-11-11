@@ -1,12 +1,12 @@
 # Product model
 
-| Concept        | Meaning                                                                                          | Table                                    | target                                |
-| -------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------- | ------------------------------------- |
-| Agent (persona) | Global config: name, instructions, persona card, model and thinking level. **Not a container**, it owns no sessions or conversations | `agent`                                  | `agents`                              |
-| machine        | Which computer the session runs on: the primary where host lives, plus the other machines running daemons | `machine`                                | `machines`                            |
-| project        | A directory on one machine, with a steward                                                       | `project`                                | `projects`                            |
-| Conversation   | A timeline belonging to one project, whose members are several agents                            | `conversation`, `participant`, `message` | `conversations`, `conversations.<id>` |
-| session        | A session of the upstream harness, one per (agent × conversation), with cwd set to the project's directory and running on the machine the project lives on | Upstream files (see [data](data.md))     | `sessions.<id>`                       |
+| Concept         | Meaning                                                                                                                                                    | Table                                    | target                                |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------- |
+| Agent (persona) | Global config: name, instructions, persona card, model and thinking level. **Not a container**, it owns no sessions or conversations                       | `agent`                                  | `agents`                              |
+| machine         | Which computer the session runs on: the primary where host lives, plus the other machines running daemons                                                  | `machine`                                | `machines`                            |
+| project         | A directory on one machine, with a steward                                                                                                                 | `project`                                | `projects`                            |
+| Conversation    | A timeline belonging to one project, whose members are several agents                                                                                      | `conversation`, `participant`, `message` | `conversations`, `conversations.<id>` |
+| session         | A session of the upstream harness, one per (agent × conversation), with cwd set to the project's directory and running on the machine the project lives on | Upstream files (see [data](data.md))     | `sessions.<id>`                       |
 
 ## Agents
 

@@ -13,16 +13,16 @@ A plugin's identity is the manifest's `name`. Plugins rejected by the spec are a
 
 ## Spec failure boundaries
 
-| Case | Result |
-| --------------------------------------------------------------------------------------------- | ------------------------------------- |
-| `plugin.json` is missing, not valid JSON, has an unrecognized `$schema`, wrong field type, invalid name, or resolves outside the plugin root | Reject the entire plugin |
-| Unknown top-level fields, `extensions` is not an object | Report and ignore; continue loading |
-| Unimplemented namespace | Not read |
+| Case                                                                                                                                           | Result                                                    |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `plugin.json` is missing, not valid JSON, has an unrecognized `$schema`, wrong field type, invalid name, or resolves outside the plugin root   | Reject the entire plugin                                  |
+| Unknown top-level fields, `extensions` is not an object                                                                                        | Report and ignore; continue loading                       |
+| Unimplemented namespace                                                                                                                        | Not read                                                  |
 | `mcp.json` is not valid JSON, has an unrecognized `$schema` or version mismatch, has extra fields, resolves outside the root, or is not a file | MCP for this plugin is disabled; skills continue as usual |
-| A single server is invalid (fields, reserved names in `command`, `cwd`, `url`, header, `env`) | Skip this server |
-| `sse` transport | Skip and report: oar's `McpServer` does not support it |
-| `skills` is not a directory | Skill is invalid; MCP continues as usual |
-| A single skill does not conform to the Agent Skills spec or resolves outside the root | Skip this skill |
+| A single server is invalid (fields, reserved names in `command`, `cwd`, `url`, header, `env`)                                                  | Skip this server                                          |
+| `sse` transport                                                                                                                                | Skip and report: oar's `McpServer` does not support it    |
+| `skills` is not a directory                                                                                                                    | Skill is invalid; MCP continues as usual                  |
+| A single skill does not conform to the Agent Skills spec or resolves outside the root                                                          | Skip this skill                                           |
 
 Reports are shown under the plugin entry on the settings page. Only direct subdirectories of `skills/` are inspected; there is no deeper search.
 
@@ -68,11 +68,11 @@ When config is no longer valid after an upgrade, fall back to pending configurat
 
 ## What a session gets
 
-| Runtime            | Skill                                                | MCP                                  |
-| ------------------- | ---------------------------------------------------- | ------------------------------------ |
-| Built-in kernel            | Directory wired into `skillDirsFor`, included in the skills block of the system prompt      | Not started in this version; marked in the UI; picked up by the next task |
-| Claude Code         | `--plugin-dir` natively loads a generated directory containing only valid skills | oar's `mcpServers`                  |
-| Codex, OpenCode, Pi | Name, description, and path written into the system prompt; the agent reads the files itself       | oar's `mcpServers`                  |
+| Runtime             | Skill                                                                                        | MCP                                                                       |
+| ------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Built-in kernel     | Directory wired into `skillDirsFor`, included in the skills block of the system prompt       | Not started in this version; marked in the UI; picked up by the next task |
+| Claude Code         | `--plugin-dir` natively loads a generated directory containing only valid skills             | oar's `mcpServers`                                                        |
+| Codex, OpenCode, Pi | Name, description, and path written into the system prompt; the agent reads the files itself | oar's `mcpServers`                                                        |
 
 Claude Code cannot use the plugin directory directly: `--plugin-dir` treats it as a Claude plugin, runs its `hooks/`, and loads its `commands/`, which eta does not support. The generated directory is at `<dataDir>/plugin-runtime/claude/<content hash>/<plugin name>/skills/`, containing symlinks to valid skills.
 
@@ -92,12 +92,12 @@ When a session is opened on a daemon, `RemotePlace` first uses `machine.pluginHa
 
 `get_plugin_config({ plugin, fields? })` is a host tool that enters the realm with the tool table (`eta.platform.get_plugin_config`). It can only read plugins that this agent has enabled and that are in an enabled state.
 
-| Level    | Used for      | Returns                                 |
-| ------- | --------- | ------------------------------------ |
-| `read`  | Non-secret | Value                                   |
-| `file`  | secret    | Path to a 0600 temporary file; the value is not included in the result      |
-| `value` | secret    | Plaintext; goes into the journal and into tool records in replies  |
-| `none`  | Both      | "Not readable", with a note that the plugin process has already received it |
+| Level   | Used for   | Returns                                                                     |
+| ------- | ---------- | --------------------------------------------------------------------------- |
+| `read`  | Non-secret | Value                                                                       |
+| `file`  | secret     | Path to a 0600 temporary file; the value is not included in the result      |
+| `value` | secret     | Plaintext; goes into the journal and into tool records in replies           |
+| `none`  | Both       | "Not readable", with a note that the plugin process has already received it |
 
 Non-secrets default to `read`, and secrets default to `none`. The manifest declares the upper bound; users can lower it but cannot raise it.
 

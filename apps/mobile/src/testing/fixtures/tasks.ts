@@ -169,7 +169,8 @@ const FEATURED: Fixture[] = [
     conversationId: "board",
     updatedAt: minutesAgo(0),
     createdAt: at(0, 9, 20),
-    description: "Column widths are written to localStorage and restored after refresh.",
+    description:
+      "Column widths are written to localStorage and restored after refresh.",
     runs: [
       run("run-131", "running", {
         machineId: "gpu-box",
@@ -195,7 +196,8 @@ const FEATURED: Fixture[] = [
     by: agent("xiaoman"),
     conversationId: "board",
     updatedAt: minutesAgo(2),
-    description: "The view only carries the latest 200 entries; scrolling up uses sessions.history to fetch older ones.",
+    description:
+      "The view only carries the latest 200 entries; scrolling up uses sessions.history to fetch older ones.",
     runs: [run("run-133", "queued", { queueReason: "machine_full" })],
     activity: [entry("created", agent("xiaoman"), minutesAgo(2))],
   },
@@ -223,7 +225,10 @@ const FEATURED: Fixture[] = [
       }),
       entry("run_started", SYSTEM, at(1, 18, 22), { runId: "run-128" }),
       entry("title", agent("ache"), at(1, 18, 30), {
-        data: { from: "Resend lost frames", to: "Resend lost frames after reconnect" },
+        data: {
+          from: "Resend lost frames",
+          to: "Resend lost frames after reconnect",
+        },
       }),
       entry("description", agent("ache"), at(1, 18, 31)),
       entry("conversation", USER, at(1, 19, 0), {
@@ -247,9 +252,13 @@ const FEATURED: Fixture[] = [
     conversationId: "wire",
     updatedAt: minutesAgo(20),
     createdAt: at(1, 22, 4),
-    description: "Every week, pack ~/.eta and archive it to nas, keeping the latest four copies.",
+    description:
+      "Every week, pack ~/.eta and archive it to nas, keeping the latest four copies.",
     runs: [
-      run("run-129", "failed", { machineId: "nas", error: "nas connection timed out" }),
+      run("run-129", "failed", {
+        machineId: "nas",
+        error: "nas connection timed out",
+      }),
       run("run-129b", "queued", {
         machineId: "nas",
         queueReason: "machine_offline",
@@ -278,7 +287,8 @@ const FEATURED: Fixture[] = [
     by: agent("mori"),
     conversationId: "redesign",
     updatedAt: minutesAgo(60),
-    description: "Use the copy finalized last week, within two lines on mobile.",
+    description:
+      "Use the copy finalized last week, within two lines on mobile.",
     projectId: "site",
     runs: [run("run-41", "completed", { machineId: "mb-air" })],
     activity: [entry("created", agent("mori"), minutesAgo(600))],
@@ -313,7 +323,7 @@ const FEATURED: Fixture[] = [
   {
     id: "task-124",
     number: 124,
-    title: "Skeleton screen no longer flickers"
+    title: "Skeleton screen no longer flickers",
     status: "done",
     by: agent("mori"),
     conversationId: "board",
@@ -401,7 +411,9 @@ function replayLog(): unknown[] {
     }),
   ];
   return [
-    text("Check the current reconnect path first, then decide where to resume replay."),
+    text(
+      "Check the current reconnect path first, then decide where to resume replay.",
+    ),
     ...["wire.ts", "reconnect.ts", "replay.ts", "hello.ts"].flatMap(
       (file, index) =>
         tool(`read-${index}`, "read", { file_path: `src/${file}` }, "…"),
@@ -419,7 +431,9 @@ function replayLog(): unknown[] {
       "index missing",
       true,
     ),
-    text("Build indexes on the test database before migration, then rerun after changes."),
+    text(
+      "Build indexes on the test database before migration, then rerun after changes.",
+    ),
     ...["0042_seq.sql", "replay.ts"].flatMap((file, index) =>
       tool(`edit-${index}`, "edit", { file_path: `src/${file}` }, "ok"),
     ),
@@ -455,7 +469,8 @@ function pull(
   };
 }
 
-const REPLAY = () => pull(472, "Replay Missing Frames", "open", 182, 40, "ready");
+const REPLAY = () =>
+  pull(472, "Replay Missing Frames", "open", 182, 40, "ready");
 const NOT_READY = () =>
   pull(
     470,

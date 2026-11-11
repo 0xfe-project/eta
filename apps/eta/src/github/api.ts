@@ -42,7 +42,9 @@ export const statusOf = (error: unknown): number =>
 /** GitHub's message and the messages of its `errors`, joined. */
 export function reasons(error: unknown): string {
   if (!(error instanceof ApiError)) return String(error);
-  return [error.message, ...error.reasons].join("；").replace(/^；+|；+$/g, "");
+  return [error.message, ...error.reasons]
+    .join("; ")
+    .replace(/^(?:; )+|(?:; )+$/g, "");
 }
 
 /**
@@ -52,7 +54,11 @@ export function reasons(error: unknown): string {
  */
 export function fromGitHub(error: unknown): GithubError {
   if (!(error instanceof ApiError) || error.status === 0)
-    return new GithubError("GITHUB_UNREACHABLE", 424, "Can't reach GitHub right now.");
+    return new GithubError(
+      "GITHUB_UNREACHABLE",
+      424,
+      "Can't reach GitHub right now.",
+    );
   return new GithubError(
     "GITHUB_ERROR",
     424,

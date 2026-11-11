@@ -6,10 +6,10 @@ The main node hosts the Web, product data, model credentials, and the memory sid
 
 `kind` in the `machine` table:
 
-| kind      | Meaning                                                                                                       |
-| --------- | ---------------------------------------------------------------------------------------------------------- |
-| `primary` | The computer hosting the deployment, created automatically at startup (a unique index guarantees only one). Sessions run in-process |
-| `daemon`  | A machine running `eta-daemon`. Status `pending` (registered, awaiting user approval), `online`, `offline`, `revoked` |
+| kind      | Meaning                                                                                                                                                                         |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `primary` | The computer hosting the deployment, created automatically at startup (a unique index guarantees only one). Sessions run in-process                                             |
+| `daemon`  | A machine running `eta-daemon`. Status `pending` (registered, awaiting user approval), `online`, `offline`, `revoked`                                                           |
 | `ssh`     | The schema retains this value; SSH-based execution environments are in `packages/eta-ssh`, `eta-plugin-ssh`; currently there is no corresponding add entry point in the product |
 
 A project points to a machine (`project.machine_id`); the session in the conversation runs on the machine where the project is located, with the project's directory as cwd.
@@ -57,11 +57,11 @@ When the main node is on the tailnet (`main.ts` reads the `tailscale` command by
 
 The daemon is **outbound-only**: it dials back to `GET /machines/connect` (WebSocket), with credentials in the handshake's `Authorization` header, never in the address. One connection carries three channels (`packages/client-contracts/src/link.ts`):
 
-| Channel | Direction        | Content                                                                                                                                                                                     |
-| ------ | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pipe` | main node → daemon | The ordinary eta pipe protocol. The daemon is an eta server without its own socket, and the main node is its client: `sessions.*` means the same here as elsewhere                                                                  |
-| `svc`  | daemon → main node | The few things the daemon lacks: generation (`model.stream`), product tools (`tool.call`), approval list (`tool.gate`), MCP credentials (`mcp.credential`), GitHub token (`github.credentials`), question notifications (`ask.observe`) |
-| `ctl`  | Both directions  | `welcome` (which machine, which connection number, whether approved), `approved`, heartbeat                                                                                                 |
+| Channel | Direction          | Content                                                                                                                                                                                                                                 |
+| ------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pipe`  | main node → daemon | The ordinary eta pipe protocol. The daemon is an eta server without its own socket, and the main node is its client: `sessions.*` means the same here as elsewhere                                                                      |
+| `svc`   | daemon → main node | The few things the daemon lacks: generation (`model.stream`), product tools (`tool.call`), approval list (`tool.gate`), MCP credentials (`mcp.credential`), GitHub token (`github.credentials`), question notifications (`ask.observe`) |
+| `ctl`   | Both directions    | `welcome` (which machine, which connection number, whether approved), `approved`, heartbeat                                                                                                                                             |
 
 Therefore **model credentials, OAuth tokens (including subscription accounts in the LLM gateway), and usage live only on the main node**: when the daemon needs to generate, it hands the request to the main node; the main node resolves the model, adds credentials, streams back from the provider, and sends it back event by event while counting usage. Product tools (tasks, artifacts, memory, `mention`, `web_fetch` / `web_search`, etc.) run on the main node for the corresponding session. Their execution environment is the SSH environment over the link, so reading a file reads the file on that machine; reading a web page is done by the main node itself. Every call carries a session id, and **only the main node's own row is trusted**: the machine the link belongs to must be the machine of that session's project.
 

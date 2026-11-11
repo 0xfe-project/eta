@@ -203,7 +203,7 @@ export class Github {
       throw new GithubError(
         "INVALID_ORIGIN",
         400,
-        "Cannot determine eta's access URL。Start the host with --public-url。",
+        "Cannot determine eta's access URL. Start the host with --public-url.",
       );
     return origin;
   }
@@ -232,7 +232,7 @@ export class Github {
       return new GithubError(
         "GITHUB_APP_GONE",
         424,
-        "GitHub no longer recognizes this App（it may have been deleted on GitHub）。Disconnect and reconnect。",
+        "GitHub no longer recognizes this App (it may have been deleted on GitHub). Disconnect and reconnect.",
       );
     return fromGitHub(error);
   }
@@ -251,16 +251,20 @@ export class Github {
       throw new GithubError(
         "INVALID_NAME",
         400,
-        "The App name must be 1 to 34 characters，and may use letters、numbers、spaces、dots、underscores、and hyphens。",
+        "The App name must be 1 to 34 characters, and may use letters, numbers, spaces, dots, underscores, and hyphens.",
       );
     const organization = organizationInput?.trim() ?? "";
     if (organization !== "" && !ACCOUNT.test(organization))
-      throw new GithubError("INVALID_ORGANIZATION", 400, "Invalid organization name。");
+      throw new GithubError(
+        "INVALID_ORGANIZATION",
+        400,
+        "Invalid organization name.",
+      );
     if (this.app() !== null)
       throw new GithubError(
         "GITHUB_ALREADY_CONNECTED",
         409,
-        "A GitHub App is already connected。",
+        "A GitHub App is already connected.",
       );
     const origin = this.origin(reportedOrigin);
     const state = random(24);
@@ -273,7 +277,7 @@ export class Github {
     const manifest = JSON.stringify({
       name,
       url: origin,
-      description: "eta's agents use GitHub under this App's identity。",
+      description: "eta's agents use GitHub under this App's identity.",
       // Nothing listens for webhooks; GitHub still wants a URL.
       hook_attributes: { url: origin + GITHUB_WEBHOOK_PATH, active: false },
       redirect_url: origin + GITHUB_MANIFEST_CALLBACK_PATH,
@@ -302,7 +306,7 @@ export class Github {
       throw new GithubError(
         "MANIFEST_EXPIRED",
         400,
-        "This creation has expired，please return to eta and start again。",
+        "This creation has expired, please return to eta and start again.",
       );
     let created: {
       id: number;
@@ -324,7 +328,7 @@ export class Github {
       throw new GithubError(
         "MANIFEST_FAILED",
         424,
-        `GitHub did not return the App credentials（${statusOf(error)}），please recreate it。`,
+        `GitHub did not return the App credentials (${statusOf(error)}), please recreate it.`,
       );
     }
     const secret = created.client_secret ?? "";
@@ -381,7 +385,7 @@ export class Github {
       throw new GithubError(
         "GITHUB_UNAVAILABLE",
         424,
-        "Cannot read the App's identity from GitHub right now。",
+        "Cannot read the App's identity from GitHub right now.",
       );
     const bot = `${app.slug}[bot]`;
     return {
@@ -426,7 +430,7 @@ export class Github {
     throw new GithubError(
       "GITHUB_NOT_INSTALLED",
       409,
-      `eta's GitHub App is not installed on ${owner}。Ask the user to install the App on this account or organization in eta's “Settings → Connections”，and authorize the required repositories。`,
+      `eta's GitHub App is not installed on ${owner}. Ask the user to install the App on this account or organization in eta's “Settings → Connections”, and authorize the required repositories.`,
     );
   }
 
@@ -793,18 +797,22 @@ export class Github {
       });
     } catch (error) {
       if (statusOf(error) === 0)
-        throw new GithubError("GITHUB_UNREACHABLE", 424, "Cannot reach GitHub right now。");
+        throw new GithubError(
+          "GITHUB_UNREACHABLE",
+          424,
+          "Cannot reach GitHub right now.",
+        );
       throw new GithubError(
         "GITHUB_ERROR",
         424,
-        `GitHub returned ${statusOf(error)}。`,
+        `GitHub returned ${statusOf(error)}.`,
       );
     }
     if ((out.error ?? "") !== "" || (out.access_token ?? "") === "")
       throw new GithubError(
         "AUTHORIZATION_FAILED",
         424,
-        `GitHub did not grant authorization（${out.error ?? ""}）：${out.error_description ?? ""}`,
+        `GitHub did not grant authorization (${out.error ?? ""}): ${out.error_description ?? ""}`,
       );
     const now = Math.floor(this.now() / 1000);
     return {
@@ -829,7 +837,7 @@ export class Github {
       throw new GithubError(
         "INVALID_CLIENT",
         400,
-        "Enter the Client ID and the newly generated client secret from the App settings page。",
+        "Enter the Client ID and the newly generated client secret from the App settings page.",
       );
     this.store.setClient(clientId, secret);
     this.#options.changed();
@@ -842,7 +850,7 @@ export class Github {
       throw new GithubError(
         "OAUTH_NOT_CONFIGURED",
         409,
-        "eta does not have this App's client secret yet。First add a Callback URL on the App settings page、generate a client secret、and enter it in eta。",
+        "eta does not have this App's client secret yet. First add a Callback URL on the App settings page, generate a client secret, and enter it in eta.",
       );
     const origin = this.origin(reportedOrigin);
     const state = random();
@@ -888,7 +896,7 @@ export class Github {
       new GithubError(
         "AUTHORIZATION_EXPIRED",
         400,
-        "This authorization has expired，please return to eta to authorize again。",
+        "This authorization has expired, please return to eta to authorize again.",
       );
     if (state !== "") {
       const pending = this.store.takePending(
@@ -986,10 +994,18 @@ export function parseRepository(value: string): [string, string] {
     try {
       url = new URL(text);
     } catch {
-      throw new GithubError("NOT_GITHUB", 400, `${value} is not a GitHub repository.`);
+      throw new GithubError(
+        "NOT_GITHUB",
+        400,
+        `${value} is not a GitHub repository.`,
+      );
     }
     if (url.hostname !== "github.com")
-      throw new GithubError("NOT_GITHUB", 400, `${value} is not a GitHub repository.`);
+      throw new GithubError(
+        "NOT_GITHUB",
+        400,
+        `${value} is not a GitHub repository.`,
+      );
     text = url.pathname;
   }
   const trimmed = text.replace(/^\/+|\/+$/g, "").replace(/\.git$/, "");

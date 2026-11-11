@@ -12,11 +12,11 @@ Like `open_pull_request`, these are tools that `sessionTools` hands to each sess
 
 ## Switches and configuration
 
-| Main node parameter          | Meaning                                                                   |
-| --------------------- | ---------------------------------------------------------------------- |
-| (Default)              | Both tools are present; `web_search` uses the main node-hosted SearXNG                    |
+| Main node parameter   | Meaning                                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| (Default)             | Both tools are present; `web_search` uses the main node-hosted SearXNG                                                  |
 | `--searxng-url <url>` | Use an external SearXNG (the `json` format must be enabled). `ETA_SEARXNG_URL` is synonymous; the flag takes precedence |
-| `--no-web`            | Neither tool is loaded                                                       |
+| `--no-web`            | Neither tool is loaded                                                                                                  |
 
 `startHost` does not load them by default (the host started by tests does not have these two tools); `main.ts` enables them, the same way as the LLM gateway.
 

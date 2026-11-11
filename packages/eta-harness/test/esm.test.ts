@@ -194,7 +194,9 @@ describe("esmrunandkeep", () => {
       .filter((m) => m.role === "user")
       .map((m) => JSON.stringify(m.content));
     expect(
-      users.some((u) => u.includes("能力 delta") && u.includes("self:double")),
+      users.some(
+        (u) => u.includes("Capability delta") && u.includes("self:double"),
+      ),
     ).toBe(true);
     session.stop();
   });

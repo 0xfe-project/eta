@@ -55,7 +55,8 @@ export function newIssueDraft(input: {
     );
   const title = input.title.trim();
   const body = input.body ?? "";
-  if (title === "") throw new GithubError("INVALID_ISSUE", 400, "Missing title.");
+  if (title === "")
+    throw new GithubError("INVALID_ISSUE", 400, "Missing title.");
   if (characters(title) > MAX_ISSUE_TITLE)
     throw new GithubError(
       "INVALID_ISSUE",

@@ -144,7 +144,11 @@ const APP_MENU: ApplicationMenuItemConfig[] = [
         accelerator: "CommandOrControl+Backspace",
       },
       { type: "divider" },
-      { role: "selectAll", label: "Select All", accelerator: "CommandOrControl+A" },
+      {
+        role: "selectAll",
+        label: "Select All",
+        accelerator: "CommandOrControl+A",
+      },
     ],
   },
   {
@@ -161,7 +165,11 @@ const APP_MENU: ApplicationMenuItemConfig[] = [
   {
     label: "Window",
     submenu: [
-      { role: "minimize", label: "Minimize", accelerator: "CommandOrControl+M" },
+      {
+        role: "minimize",
+        label: "Minimize",
+        accelerator: "CommandOrControl+M",
+      },
       { role: "zoom", label: "Zoom", accelerator: "" },
       { type: "divider" },
       { role: "close", label: "Close", accelerator: "CommandOrControl+W" },

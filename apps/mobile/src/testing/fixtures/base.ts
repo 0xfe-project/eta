@@ -139,7 +139,8 @@ export const CONVERSATIONS: ConversationSummary[] = [
       unread: 2,
       lastSeq: 12,
       lastMessageAt: minutesAgo(0),
-      preview: "The migration will lock the message table for about 40 seconds; you'll need to decide.",
+      preview:
+        "The migration will lock the message table for about 40 seconds; you'll need to decide.",
     },
   ),
   conversation("board", "Task board redesign", "eta", "group", [

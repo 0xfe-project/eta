@@ -166,7 +166,8 @@ function view(read: Read, pull: RawPull): GitHubPull {
   if (pull.draft === true) {
     p.state = "draft";
     p.merge = "blocked";
-    p.reason = "Draft PRs cannot be merged, mark it as ready for review on GitHub first.";
+    p.reason =
+      "Draft PRs cannot be merged, mark it as ready for review on GitHub first.";
     return p;
   }
   const [merge, reason] = mergeability(pull, read.repo, read.reader.asUser);
@@ -195,7 +196,10 @@ function mergeability(
     !perms.maintain &&
     !perms.admin
   )
-    return ["blocked", "Your GitHub account does not have write permission for this repository, so it cannot be merged."];
+    return [
+      "blocked",
+      "Your GitHub account does not have write permission for this repository, so it cannot be merged.",
+    ];
   if (mergeMethod(repo) === "" && repo.allow_merge_commit !== undefined)
     return ["blocked", "The repository does not allow any merge method."];
   const state = pull.mergeable_state ?? "";
@@ -205,13 +209,22 @@ function mergeability(
     state === "unknown" ||
     state === ""
   )
-    return ["pending", "GitHub is still computing mergeability, refresh later."];
+    return [
+      "pending",
+      "GitHub is still computing mergeability, refresh later.",
+    ];
   if (!pull.mergeable || state === "dirty")
     return ["blocked", "There are conflicts that need to be resolved first."];
   if (state === "blocked")
-    return ["blocked", "Branch protection requirements are not met yet（approval or required checks）。"];
+    return [
+      "blocked",
+      "Branch protection requirements are not met yet (approval or required checks).",
+    ];
   if (state === "behind")
-    return ["blocked", "The branch is behind the target branch and needs to be updated first。"];
+    return [
+      "blocked",
+      "The branch is behind the target branch and needs to be updated first.",
+    ];
   // clean, unstable (checks that are not required failed), has_hooks.
   return ["ready", ""];
 }
@@ -242,7 +255,7 @@ const staleHead = () =>
   new GithubError(
     "STALE_HEAD",
     409,
-    "The PR has new commits after you viewed it，so it was not merged。Please refresh and confirm again。",
+    "The PR has new commits after you viewed it, so it was not merged. Please refresh and confirm again.",
   );
 
 /**
@@ -258,16 +271,24 @@ export async function mergePull(
 ): Promise<GitHubPull> {
   const [owner, name, number] = parsePullUrl(pullUrl);
   if (headSha.trim() === "")
-    throw new GithubError("INVALID_REQUEST", 400, "Missing commits to merge。");
+    throw new GithubError("INVALID_REQUEST", 400, "Missing commits to merge.");
   const read = await readAs(github, owner, name, number);
   const now = view(read, read.pull);
   if (now.state === "merged")
-    throw new GithubError("ALREADY_MERGED", 409, "This PR has already been merged。");
+    throw new GithubError(
+      "ALREADY_MERGED",
+      409,
+      "This PR has already been merged.",
+    );
   if (now.headSha !== headSha) throw staleHead();
   if (now.merge === "blocked")
     throw new GithubError("NOT_MERGEABLE", 409, now.reason ?? "");
   if (now.state === "closed")
-    throw new GithubError("NOT_MERGEABLE", 409, "The PR is closed，so it cannot be merged。");
+    throw new GithubError(
+      "NOT_MERGEABLE",
+      409,
+      "The PR is closed, so it cannot be merged.",
+    );
   // pending: GitHub decides.
   const path = `/repos/${segment(owner)}/${segment(name)}/pulls/${number}`;
   const method = mergeMethod(read.repo);
@@ -292,19 +313,19 @@ export async function mergePull(
       throw new GithubError(
         "MERGE_FORBIDDEN",
         403,
-        `GitHub rejected the merge：no permission（${reasons(error)}）。`,
+        `GitHub rejected the merge: no permission (${reasons(error)}).`,
       );
     if (status === 405 || status === 422)
       throw new GithubError(
         "NOT_MERGEABLE",
         409,
-        `GitHub rejected the merge：${reasons(error)}`,
+        `GitHub rejected the merge: ${reasons(error)}`,
       );
     if (status === 401)
       throw new GithubError(
         "MERGE_FORBIDDEN",
         403,
-        "GitHub does not recognize this authorization，so it was not merged。",
+        "GitHub does not recognize this authorization, so it was not merged.",
       );
     // No answer, or GitHub failed: it may have merged all the same.
     try {
@@ -320,7 +341,7 @@ export async function mergePull(
     throw new GithubError(
       "MERGE_UNKNOWN",
       424,
-      "No merge result was received from GitHub，and GitHub does not yet show it as merged。Refresh to confirm before deciding whether to retry。",
+      "No merge result was received from GitHub, and GitHub does not yet show it as merged. Refresh to confirm before deciding whether to retry.",
     );
   }
   // Merged: read it again; failing to is no reason to report the merge as failed.

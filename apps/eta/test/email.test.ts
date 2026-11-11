@@ -104,8 +104,8 @@ describe("email payload", () => {
   it("renders the agent side as text with its provenance", () => {
     const rendered = renderAgentPayload(envelope().payload, "header");
     expect(rendered).toContain("carrier=header");
-    expect(rendered).toContain("未签名");
-    expect(rendered).toContain("需要你做: 看一眼 schema");
+    expect(rendered).toContain("unsigned");
+    expect(rendered).toContain("What you need to do: 看一眼 schema");
     expect(rendered).toContain("payload 是正文的超集");
     expect(rendered).toContain("task: t1");
   });

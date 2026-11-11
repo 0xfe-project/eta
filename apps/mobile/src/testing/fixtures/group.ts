@@ -48,7 +48,8 @@ const SHARE_TOKEN = "7f3a91c2";
 const GOALS: Record<string, { goal: string; decided: string }> = {
   wire: {
     goal: "No dropped or duplicated frames after reconnect, and the migration can roll back.",
-    decided: "The client carries last_seq; the host replays from that line forward.",
+    decided:
+      "The client carries last_seq; the host replays from that line forward.",
   },
 };
 
@@ -433,8 +434,16 @@ function installSessions(host: FakeHost): void {
     metrics: { tokensPerSec: 0 },
     tools: tools(18),
     tasks: [
-      { id: "step-1", content: "Measure the current column widths", status: "completed" },
-      { id: "step-2", content: "Write column widths into settings", status: "in_progress" },
+      {
+        id: "step-1",
+        content: "Measure the current column widths",
+        status: "completed",
+      },
+      {
+        id: "step-2",
+        content: "Write column widths into settings",
+        status: "in_progress",
+      },
     ],
   });
   host.set("sessions.session-agent-xiaoman", {

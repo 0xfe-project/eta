@@ -444,7 +444,7 @@ export function Composer(props: {
         : {
             everyone: {
               label: everyoneLabel(),
-              aliases: ["all", "everyone"],
+              aliases: ["所有人", "everyone"],
             },
           }),
     }),

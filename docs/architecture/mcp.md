@@ -12,10 +12,10 @@ Agents use external tools via MCP. The library lives in `packages/eta-mcp` (`@et
 
 Later sources override earlier ones for servers with the same name:
 
-| Source          | Location           | Description                                  |
-| ----------------- | ------------------ | -------------------------------------------- |
-| `~/.eta/mcp.json` | This machine's user directory | For all agents on this machine                     |
-| `.mcp.json`       | Session working directory | Loaded directly, no approval needed (it is in the user's own project) |
+| Source            | Location                      | Description                                                           |
+| ----------------- | ----------------------------- | --------------------------------------------------------------------- |
+| `~/.eta/mcp.json` | This machine's user directory | For all agents on this machine                                        |
+| `.mcp.json`       | Session working directory     | Loaded directly, no approval needed (it is in the user's own project) |
 
 The format is the usual `{ "mcpServers": { ... } }`, with additional fields such as `lifecycle` (`lazy` / `keep-alive` / `lazy-keep-alive`), `directTools`, `approveTools`, `auth` (`oauth` / `bearer`), and `includeTools` / `excludeTools`; see the library's `McpServerEntry`. These files are read once when a session opens; changes take effect for newly opened sessions.
 
@@ -46,13 +46,13 @@ Remote HTTP servers set `"auth": "oauth"`.
 
 `list` returns a section; each item (`McpServerView`): `agentId`, `agentName`, `server`, `source`, `transport` (`stdio` | `http` | `sse`), `lifecycle`, `state` (`connected` | `cached` | `not-connected` | `failed` | `needs-auth` | `disabled`), `toolCount`, `error`, `auth` (`none` | `signed_in` | `needs_login`). The content is the servers each agent gets from the user files, plus those read from the project `.mcp.json` by running sessions. Currently only configuration on the main node is listed; servers unique to a project on a daemon are not in the list.
 
-| Action          | Description                                                                     |
-| --------------- | ------------------------------------------------------------------------------- |
-| `connect`       | `{ agentId, server }`: connects now, returns `{ ok, message }`                           |
-| `reconnect`     | Same as above; disconnects first and clears failed memory                                                      |
-| `login`         | `{ agentId, server, redirectOrigin? }` → `{ pendingId, authorizationUrl }`      |
+| Action          | Description                                                                                                |
+| --------------- | ---------------------------------------------------------------------------------------------------------- |
+| `connect`       | `{ agentId, server }`: connects now, returns `{ ok, message }`                                             |
+| `reconnect`     | Same as above; disconnects first and clears failed memory                                                  |
+| `login`         | `{ agentId, server, redirectOrigin? }` → `{ pendingId, authorizationUrl }`                                 |
 | `completeLogin` | `{ pendingId, callbackUrl }`: completes login using the redirect URL; if `state` is wrong, nothing changes |
-| `logout`        | `{ agentId, server }`: forgets all credentials for this URL (all agents lose their login)        |
+| `logout`        | `{ agentId, server }`: forgets all credentials for this URL (all agents lose their login)                  |
 
 ## UI
 

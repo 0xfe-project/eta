@@ -51,9 +51,14 @@ export function renderAgentPayload(
     );
   }
   if (human.note !== null) {
-    rows.push("human.note (full text of the body edited by the other side's people before pressing send):", human.note);
+    rows.push(
+      "human.note (full text of the body edited by the other side's people before pressing send):",
+      human.note,
+    );
   } else if (human.edited) {
-    rows.push("human.note: the other side's people edited the body but left no content.");
+    rows.push(
+      "human.note: the other side's people edited the body but left no content.",
+    );
   }
   return rows.join("\n");
 }

@@ -28,7 +28,7 @@ const written = (text: string, label: string) =>
   ).exec(text);
 // Both aliases remain valid in saved drafts after switching language.
 const everyoneMention = (text: string) =>
-  [written(text, "everyone"), written(text, "everyone")]
+  [written(text, "所有人"), written(text, "everyone")]
     .filter((result) => result !== null)
     .sort((a, b) => a.index - b.index)[0];
 

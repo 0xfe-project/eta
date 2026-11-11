@@ -14,10 +14,10 @@ Sessions on remote machines (daemon) read the user-level file and the project's 
 
 ## How rules are executed
 
-| `on`                                     | Where it executes                                           |
-| ---------------------------------------- | ---------------------------------------------------------- |
-| `file_change`, `shell_exec`, `tool_call` | The session's `ToolMiddleware` (`before`)                   |
-| `prompt_submit`, `stop`                  | The engine's `beforeRun` / `afterRun`; errors never block the agent |
+| `on`                                     | Where it executes                                                                           |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `file_change`, `shell_exec`, `tool_call` | The session's `ToolMiddleware` (`before`)                                                   |
+| `prompt_submit`, `stop`                  | The engine's `beforeRun` / `afterRun`; errors never block the agent                         |
 | `stream`                                 | The runner's generation guard (see below); soft reminders go through `ToolMiddleware.after` |
 
 - **Tool calls**: `deny` blocks directly; the model sees the rule ID and `message`. `ask` goes through the session's ask channel, so it appears as a card in the pending page — no one-time authorization file from akhook for Codex is needed, so `ask_instruction` has no place to act (the field is still parsed but has no effect). `decide` runs an external command to decide. If the same call has `deny`, it's rejected; otherwise if it has `ask`, it asks. If the configuration can't be read, the checker errors, or `ast` can't infer the language, the call is rejected — never allowed through.

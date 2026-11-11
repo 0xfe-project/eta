@@ -260,11 +260,11 @@ describe("what is said before GitHub is connected", () => {
   it("points the user at settings", async () => {
     const credentials = await failure(github.credentials());
     expect(credentials.code).toBe("GITHUB_NOT_CONNECTED");
-    expect(credentials.message).toContain("设置 → 连接");
+    expect(credentials.message).toContain("Settings → Connections");
     const opened = await failure(
       github.openPullRequest({ repository: "a/b", head: "x", title: "t" }),
     );
-    expect(opened.message).toContain("设置 → 连接");
+    expect(opened.message).toContain("Settings → Connections");
   });
 
   it("needs the App installed for credentials", async () => {
@@ -346,7 +346,7 @@ describe("opening pull requests", () => {
       }),
     );
     expect(same.code).toBe("PULL_REQUEST_FAILED");
-    expect(same.message).toContain("GitHub 拒绝创建 PR");
+    expect(same.message).toContain("GitHub refused to create the PR");
   });
 
   it("needs the App installed on the repository's owner", async () => {
@@ -368,7 +368,7 @@ describe("opening pull requests", () => {
     expect(parseRepository("https://github.com/a/b.git")).toEqual(["a", "b"]);
     expect(parseRepository(" https://github.com/a/b/ ")).toEqual(["a", "b"]);
     expect(() => parseRepository("https://gitlab.com/a/b")).toThrow(
-      /不是 GitHub 仓库/,
+      /is not a GitHub repository/,
     );
     expect(() => parseRepository("a")).toThrow(/owner\/name/);
     expect(() => parseRepository("a/b/c")).toThrow(/owner\/name/);
@@ -717,7 +717,7 @@ describe("a pull request's state and merge", () => {
     const { url, number } = await openPull("read-only-user");
     const pull = await pullOf(url);
     expect(pull.merge).toBe("blocked");
-    expect(pull.reason).toContain("写权限");
+    expect(pull.reason).toContain("write permission");
     const error = await failure(mergePull(github, url, pull.headSha));
     expect(error.code).toBe("NOT_MERGEABLE");
     expect(fake.mergersOf("akarachen/notes", number)).toEqual([]);

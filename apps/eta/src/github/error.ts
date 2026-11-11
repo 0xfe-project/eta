@@ -16,7 +16,7 @@ export class GithubError extends Error {
 }
 
 const NOT_CONNECTED_MESSAGE =
-  "GitHub is not connected yet. Ask the user to connect GitHub via the wizard in eta's "Settings → Connections".";
+  "GitHub is not connected yet. Ask the user to connect GitHub via the wizard in eta's “Settings → Connections”.";
 
 export const notConnected = (): GithubError =>
   new GithubError("GITHUB_NOT_CONNECTED", 409, NOT_CONNECTED_MESSAGE);

@@ -16,12 +16,12 @@ This is **hiding, not deleting**: the tables, rows, migrations, copy, and code a
 
 ## Who acts as whom
 
-| Scenario                        | Identity                                                                                              |
-| --------------------------- | ------------------------------------------------------------------------------------------------- |
-| `git`, `gh` (the session's shell) | The user has authorized the App: the user's user-to-server token (`gh auth status` is the user); otherwise the App's installation token (bot) |
-| commit author               | Always the App's bot (`<slug>[bot]`, email `<bot id>+<slug>[bot]@users.noreply.github.com`)          |
-| `open_pull_request`         | Try the user's token first; if GitHub rejects it (401 also forgets the authorization; 403 and 404 mean the user lacks permission), silently open it as the App instead       |
-| Read PR, merge PR (task page)  | The user's token; if there is no authorization or it is rejected (401), the App. If GitHub rejects the merge, that is the answer; it will not switch to the App and merge again            |
+| Scenario                          | Identity                                                                                                                                                                        |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `git`, `gh` (the session's shell) | The user has authorized the App: the user's user-to-server token (`gh auth status` is the user); otherwise the App's installation token (bot)                                   |
+| commit author                     | Always the App's bot (`<slug>[bot]`, email `<bot id>+<slug>[bot]@users.noreply.github.com`)                                                                                     |
+| `open_pull_request`               | Try the user's token first; if GitHub rejects it (401 also forgets the authorization; 403 and 404 mean the user lacks permission), silently open it as the App instead          |
+| Read PR, merge PR (task page)     | The user's token; if there is no authorization or it is rejected (401), the App. If GitHub rejects the merge, that is the answer; it will not switch to the App and merge again |
 
 The App is public (users can install it on their other accounts and organizations), `request_oauth_on_install`: during installation GitHub also asks the user to authorize, so most users are already “acting as the user” once installation finishes. The token's permissions are exactly what the user granted at install time; when creating the App, the manifest requests the highest level available for repositories and organizations from GitHub.
 
@@ -55,12 +55,12 @@ The token the host gives the machine lasts **at most one hour** (`credentials()`
 
 Migration 0035:
 
-| Table            | Content                                                                                                       |
-| ---------------- | ------------------------------------------------------------------------------------------------------------- |
-| `github_app`     | Single row. App public info in plaintext; **private key, client secret sealed** (`apps/eta/src/secret.ts`, AES-256-GCM, `secret.key`) |
-| `github_user`    | Single row. Login name, id in plaintext; **access token and refresh token sealed**                                                  |
-| `github_pending` | In-progress creation (manifest) and authorization: one-time `state`, PKCE verifier, redirect address. Deleted once used, cleared on expiry                 |
-| `task_pull`      | PRs delivered by a task: `task_id` (foreign key, cascades when the task is deleted), `url`, `title`, `number`, `opened_at`                       |
+| Table            | Content                                                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `github_app`     | Single row. App public info in plaintext; **private key, client secret sealed** (`apps/eta/src/secret.ts`, AES-256-GCM, `secret.key`)      |
+| `github_user`    | Single row. Login name, id in plaintext; **access token and refresh token sealed**                                                         |
+| `github_pending` | In-progress creation (manifest) and authorization: one-time `state`, PKCE verifier, redirect address. Deleted once used, cleared on expiry |
+| `task_pull`      | PRs delivered by a task: `task_id` (foreign key, cascades when the task is deleted), `url`, `title`, `number`, `opened_at`                 |
 
 A sealed row that cannot be read (key changed or tampered with) counts as absent: the App reads as not connected, the user reads as not authorized. Keys, secrets, and tokens never go on the wire: the wizard gets the address to open and the manifest to POST.
 
@@ -110,16 +110,16 @@ The host layer `eta:github` (`github/akhook.ts`) carries the `gh-pr-create` rule
 
 Two sections: `state` (`GitHubStatus`: `state`, `app`, `installations`, `error`, `user`, `oauth`, `checked`) and `pulls` (`TaskPullView[]`). `checked` false means the host has not asked GitHub yet since starting, and the page shows loading.
 
-| Action             | Description                                                       |
-| ---------------- | ---------------------------------------------------------- |
-| `refresh`        | `{ fresh? }`: asks which accounts GitHub is installed on, returns the new `state`       |
-| `createApp`      | `{ name, organization?, origin }` → `{ action, manifest }` |
-| `setOAuthClient` | `{ clientId, clientSecret }`                               |
-| `authorize`      | `{ origin }` → `{ url }`                                   |
-| `unauthorize`    | Revoke the user's authorization                                             |
-| `disconnect`     | Forget the App and authorization                                            |
-| `pull`           | `{ url }` → `GitHubPull`                                   |
-| `merge`          | `{ url, headSha }` → `GitHubPull`                          |
+| Action           | Description                                                                       |
+| ---------------- | --------------------------------------------------------------------------------- |
+| `refresh`        | `{ fresh? }`: asks which accounts GitHub is installed on, returns the new `state` |
+| `createApp`      | `{ name, organization?, origin }` → `{ action, manifest }`                        |
+| `setOAuthClient` | `{ clientId, clientSecret }`                                                      |
+| `authorize`      | `{ origin }` → `{ url }`                                                          |
+| `unauthorize`    | Revoke the user's authorization                                                   |
+| `disconnect`     | Forget the App and authorization                                                  |
+| `pull`           | `{ url }` → `GitHubPull`                                                          |
+| `merge`          | `{ url, headSha }` → `GitHubPull`                                                 |
 
 ## Access control
 

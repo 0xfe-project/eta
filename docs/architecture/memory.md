@@ -33,14 +33,14 @@ mem0 v2 only appends, never rewrites: a new phrasing of the same fact becomes a 
 
 Environment variables:
 
-| Variable              | Meaning                                                                             |
-| --------------------- | ----------------------------------------------------------------------------------- |
-| `DATABASE_URL`        | Its own PostgreSQL (requires the pgvector extension)                                           |
+| Variable              | Meaning                                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`        | Its own PostgreSQL (requires the pgvector extension)                                                          |
 | `MEMORY_LLM_BASE_URL` | OpenAI-compatible API base (e.g. `https://api.openai.com/v1`), used to extract facts from a conversation turn |
-| `MEMORY_LLM_API_KEY`  | The key for the API above                                                                 |
-| `MEMORY_LLM_MODEL`    | Model used for extraction                                                                        |
-| `MEMORY_HOST`         | Network interface to listen on, default `127.0.0.1`                                                        |
-| `MEMORY_PORT`         | Port, default `8320`                                                                   |
+| `MEMORY_LLM_API_KEY`  | The key for the API above                                                                                     |
+| `MEMORY_LLM_MODEL`    | Model used for extraction                                                                                     |
+| `MEMORY_HOST`         | Network interface to listen on, default `127.0.0.1`                                                           |
+| `MEMORY_PORT`         | Port, default `8320`                                                                                          |
 
 The extraction model is configured by the sidecar itself and is unrelated to the host's providers. The embedding model is `jinaai/jina-embeddings-v2-base-zh` (768 dimensions, mixed Chinese and English); changing the model means re-embedding all memories.
 

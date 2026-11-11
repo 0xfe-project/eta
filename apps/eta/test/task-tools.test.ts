@@ -184,7 +184,7 @@ describe("the task tools", () => {
     await w.settled(group.id, first.replies[0]!.id);
     const draft = w.rows(group.id).find((row) => row.kind === "task_draft")!;
     // What the agent said about where it came from is kept.
-    expect(String(draft.data.description)).toContain("第 1 条。");
+    expect(String(draft.data.description)).toContain("第 1 条.");
     await w.client.call("tasks", "confirmDraft", {
       conversationId: group.id,
       messageId: draft.id,

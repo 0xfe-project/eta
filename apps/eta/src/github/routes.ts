@@ -58,7 +58,7 @@ export function githubRoutes(
           throw new GithubError(
             "AUTHORIZATION_DECLINED",
             400,
-            `Authorization was not completed：${query.get("error_description") ?? ""}`,
+            `Authorization was not completed: ${query.get("error_description") ?? ""}`,
           );
         }
         if (code !== "") {
@@ -74,7 +74,7 @@ export function githubRoutes(
         throw new GithubError(
           "AUTHORIZATION_EXPIRED",
           400,
-          "This authorization has expired，please return to eta to authorize again。",
+          "This authorization has expired, please return to eta to authorize again.",
         );
       } catch (error) {
         warn(`[eta] authorizing the GitHub App failed: ${String(error)}`);

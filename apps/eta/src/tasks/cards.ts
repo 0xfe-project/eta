@@ -133,7 +133,7 @@ export class TaskCards {
         `## Goal\n\n${input.draft.goal.trim()}`,
         `## Decided\n\n${(input.draft.decided ?? "").trim()}`,
         `## Acceptance criteria\n\n${input.draft.acceptance.trim()}`,
-        `Source: conversation 《${conversation.name}》${source}.`,
+        `Source: conversation “${conversation.name}”, ${source}.`,
       ].join("\n\n"),
       workspace: input.draft.workspace,
       ...(input.draft.base === undefined ? {} : { base: input.draft.base }),

@@ -241,7 +241,7 @@ describe("the github target", () => {
     await createApp(client, base, "new-app");
     await expect(
       client.call("github", "createApp", { name: "again", origin: ORIGIN }),
-    ).rejects.toThrow("已经连接了一个 GitHub App");
+    ).rejects.toThrow("A GitHub App is already connected");
   });
 
   it("is not there without a way to say where the browser is", async () => {
@@ -432,7 +432,7 @@ describe("the tools", () => {
     await w.watch(group.id);
     const sent = await w.send(group.id, "go");
     await w.settled(group.id, sent.replies[0]!.id);
-    expect(results[0]).toContain("设置 → 连接");
+    expect(results[0]).toContain("Settings → Connections");
     expect(results[1]).toContain("https://github.com/a/b/issues/new?title=Bug");
   });
 });

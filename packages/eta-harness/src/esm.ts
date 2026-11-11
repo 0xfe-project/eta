@@ -618,8 +618,12 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
     return [
       "## Capability delta",
       ...(added.length === 0 ? [] : ["", "Added capabilities:", ...added]),
-      ...(changed.length === 0 ? [] : ["", "Changed capabilities:", ...changed]),
-      ...(removed.length === 0 ? [] : ["", "Removed capabilities:", ...removed]),
+      ...(changed.length === 0
+        ? []
+        : ["", "Changed capabilities:", ...changed]),
+      ...(removed.length === 0
+        ? []
+        : ["", "Removed capabilities:", ...removed]),
     ].join("\n");
   };
 

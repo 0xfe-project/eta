@@ -1,5 +1,5 @@
 import type { ProvidersView } from "@eta/client-contracts";
-import type { InputRef, JSX  } from "nsh";
+import type { InputRef, JSX } from "nsh";
 import type { TextKey } from "../../i18n";
 import { parseConnectLink } from "@eta/client-contracts/connect-link";
 import { Keyboard, keyboardFrame, safeArea, Text, View } from "nsh";

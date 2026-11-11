@@ -4,18 +4,18 @@ Vite + React + React Compiler. The UI reads and writes only through one host Web
 
 ## Configured libraries
 
-| Purpose        | Library                                           | Configuration entry                                                                               |
-| -------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Icons          | `@phosphor-icons/react`                           | `src/components/providers.tsx`, default 20px / regular                                             |
-| Agent avatar   | `blobatar` + `@blobatar/react`                    | `AgentAvatar` (`agent-identity.tsx`), generated from id; animation requires importing `blobatar/motion.css` in `styles.css` |
-| Routing        | `@tanstack/react-router`                          | `src/router.tsx` + `src/routes/`                                                                  |
-| Server state   | `@tanstack/react-query` + own wire store          | `src/lib/query-client.ts`, `src/lib/wire.ts`, `src/queries/`                                      |
-| URL state      | `nuqs`                                            | Root component adapter                                                                            |
-| Forms and validation | `react-hook-form` + `@hookform/resolvers` + `zod` | `src/components/workspace/agent-editor.tsx`                                                       |
-| Notifications  | `sonner`                                          | Mount `Toaster` in the root component; call `toast.success()` in business code                     |
-| Markdown       | `streamdown` + `@streamdown/cjk`                  | `src/components/markdown.tsx`                                                                     |
-| Styles         | Tailwind CSS v4                                   | `vite.config.ts` + `src/styles.css`                                                               |
-| React Compiler | `babel-plugin-react-compiler`                     | `reactCompilerPreset` in `vite.config.ts`                                                         |
+| Purpose              | Library                                           | Configuration entry                                                                                                         |
+| -------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Icons                | `@phosphor-icons/react`                           | `src/components/providers.tsx`, default 20px / regular                                                                      |
+| Agent avatar         | `blobatar` + `@blobatar/react`                    | `AgentAvatar` (`agent-identity.tsx`), generated from id; animation requires importing `blobatar/motion.css` in `styles.css` |
+| Routing              | `@tanstack/react-router`                          | `src/router.tsx` + `src/routes/`                                                                                            |
+| Server state         | `@tanstack/react-query` + own wire store          | `src/lib/query-client.ts`, `src/lib/wire.ts`, `src/queries/`                                                                |
+| URL state            | `nuqs`                                            | Root component adapter                                                                                                      |
+| Forms and validation | `react-hook-form` + `@hookform/resolvers` + `zod` | `src/components/workspace/agent-editor.tsx`                                                                                 |
+| Notifications        | `sonner`                                          | Mount `Toaster` in the root component; call `toast.success()` in business code                                              |
+| Markdown             | `streamdown` + `@streamdown/cjk`                  | `src/components/markdown.tsx`                                                                                               |
+| Styles               | Tailwind CSS v4                                   | `vite.config.ts` + `src/styles.css`                                                                                         |
+| React Compiler       | `babel-plugin-react-compiler`                     | `reactCompilerPreset` in `vite.config.ts`                                                                                   |
 
 `@/` points to `src/` in both TypeScript and Vite.
 

@@ -184,7 +184,7 @@ function jsonBody(text: string): ErrorBody | undefined {
 const PATTERNS: readonly (readonly [FailureCode, RegExp])[] = [
   [
     "quota",
-    /insufficient_quota|insufficient balance|insufficient funds|out of budget|quota exceeded|exceeded your current quota|billing|free-?tier|payment required|balance|overdue/i,
+    /insufficient_quota|insufficient balance|insufficient funds|out of budget|quota exceeded|exceeded your current quota|billing|free-?tier|payment required|余额|欠费/i,
   ],
   [
     "context_overflow",
@@ -254,7 +254,7 @@ function codeOf(text: string, httpStatus: number | undefined): FailureCode {
   // Money first, whatever the status says: a 400 carrying "Insufficient
   // Balance" is still a wallet problem, and retrying it burns time.
   if (
-    /insufficient_quota|insufficient balance|out of budget|quota exceeded|balance|overdue/i.test(
+    /insufficient_quota|insufficient balance|out of budget|quota exceeded|余额|欠费/i.test(
       text,
     )
   )

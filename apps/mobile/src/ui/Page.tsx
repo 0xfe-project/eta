@@ -1,4 +1,4 @@
-import type { JSX, ScrollRef  } from "nsh";
+import type { JSX, ScrollRef } from "nsh";
 import { keyboardFrame, safeArea, Scroll, Text, View } from "nsh";
 import { NavPage } from "nsh/base";
 import { t } from "../i18n";
