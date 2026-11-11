@@ -80,44 +80,44 @@ export function GroupPanel({
   const listed = [...tasks].sort((a, b) => b.updatedAt - a.updatedAt);
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="divide-y divide-border pb-2">
-        {isCaptain ? (
-          <CaptainOperations />
-        ) : (
-          <Section
-            title={translateText("navigation:sections.tasks")}
-            count={tasks.length}
-          >
-            {tasks.length === 0 ? (
-              // "No tasks yet" would be wrong once some have been closed here.
-              <p className="text-xs text-muted-foreground">
-                {translateText(
-                  groupTasks.length === 0
-                    ? "tasks:empty.title"
-                    : "tasks:empty.noOpen",
-                )}
-              </p>
-            ) : (
-              // Rows, edge to edge: the rule between two runs into the panel's own edges.
-              <ul className="-mx-3 divide-y divide-border">
-                {listed.slice(0, 5).map((task) => (
-                  <li key={task.id}>
-                    <ActivityRefCard
-                      value={{
-                        kind: "task",
-                        id: task.id,
-                        number: task.number,
-                        title: task.title,
-                        status: task.status,
-                      }}
-                    />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
-        )}
+    // `WorkspacePanel` scrolls this. No scroll container of its own: one with nothing to scroll,
+    // under `overscroll-behavior: none`, stops every wheel and touch that starts inside it.
+    <div className="divide-y divide-border pb-2">
+      {isCaptain ? (
+        <CaptainOperations />
+      ) : (
+        <Section
+          title={translateText("navigation:sections.tasks")}
+          count={tasks.length}
+        >
+          {tasks.length === 0 ? (
+            // "No tasks yet" would be wrong once some have been closed here.
+            <p className="text-xs text-muted-foreground">
+              {translateText(
+                groupTasks.length === 0
+                  ? "tasks:empty.title"
+                  : "tasks:empty.noOpen",
+              )}
+            </p>
+          ) : (
+            <ul className={listClass}>
+              {listed.map((task) => (
+                <li key={task.id}>
+                  <ActivityRefCard
+                    value={{
+                      kind: "task",
+                      id: task.id,
+                      number: task.number,
+                      title: task.title,
+                      status: task.status,
+                    }}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      )}
 
       <Section
         title={translateText("navigation:sections.artifacts")}
