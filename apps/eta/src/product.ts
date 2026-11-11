@@ -47,6 +47,7 @@ import { ArtifactStore } from "./artifacts/store";
 import { artifactSessionTools } from "./artifacts/tools";
 import { CaptainAudit } from "./captain/audit";
 import { CaptainMemory } from "./captain/memory";
+import { repairCaptainToolPin } from "./captain/pin";
 import { captainPlugin } from "./captain/plugin";
 import { redactToolResult } from "./captain/redact";
 import { CaptainService } from "./captain/service";
@@ -766,6 +767,20 @@ export function createProduct(options: {
         answerInbox: answerCaptainInbox,
         dataDir,
       }),
+      /**
+       * Captain may not have the task and email tools (see `captain/pin.ts`), and a session's pin
+       * outlives the build that wrote it: another build on this data directory installs them and
+       * widens the pin, and the next Captain-aware open would then fail every run with
+       * `configured_tools_unavailable`. Narrowing the pin here is what keeps Captain runnable.
+       */
+      sessionAttach: async ({ meta, session }) => {
+        if (captain.identity()?.agentId !== meta.agentId) return;
+        const dropped = repairCaptainToolPin(session);
+        if (dropped.length > 0)
+          warn(
+            `[eta] session ${meta.id}: took tools Captain may not have off its pin: ${dropped.join(", ")}`,
+          );
+      },
     },
     {
       sessionTools: engine.sessionTools,
