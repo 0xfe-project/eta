@@ -44,7 +44,7 @@ import { CreateGroup } from "./groups";
 import { NewConversationDialog } from "./new-conversation-dialog";
 import { usePaneWidth } from "./pane";
 import { SettingsDialog, SettingsMenuItem } from "./settings-dialog";
-import { ConversationList } from "./sidebar-tree";
+import { CaptainSection, ConversationList } from "./sidebar-tree";
 import { useWorkspaceStore } from "./workspace-store";
 
 // Shared navigation: the full-window sidebar on wide screens and the destinations plus the main
@@ -212,6 +212,9 @@ export function Sidebar({
         )}
       </SidebarHeader>
       <SidebarContent className="gap-0 overflow-hidden">
+        {/* Captain first, above the destinations and above the list: the whole sidebar is what it
+            watches over, so it is the one thing here that does not move. */}
+        <CaptainSection rail={rail} />
         <SidebarGroup className="shrink-0 border-b pb-1">
           <SidebarMenu aria-label={translateText("accessibility.sections")}>
             {/* The fold, in the rail, at the head of the list it folds away with: the band above
