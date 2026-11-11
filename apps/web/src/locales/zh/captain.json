@@ -1,10 +1,6 @@
 {
   "title": "El Capitan",
   "description": "统筹智能体、派工、审批和运营告警。",
-  "tabs": {
-    "chat": "对话",
-    "operations": "运营 · {{count}}"
-  },
   "notInitialized": "Captain 尚未初始化。",
   "initialize": "初始化 Captain",
   "empty": "与 Captain 对话，统筹智能体和运营事项。",
@@ -41,6 +37,8 @@
   },
   "assignments": {
     "title": "最近派工",
-    "none": "还没有派工。"
-  }
+    "none": "还没有派工。",
+    "round": "第 {{round}} 轮"
+  },
+  "operationsBadge": "运营 · {{count}}"
 }

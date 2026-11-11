@@ -79,8 +79,14 @@ export function CaptainSection({ rail }: { rail: boolean }) {
     "navigation",
     "tasks",
     "artifacts",
+    "captain",
   ] as const);
   const captain = useCaptain();
+  // What Captain is holding for a person: an approval not yet decided, an alert not yet read.
+  // The same count the 运营 blocks in its context panel open with.
+  const waiting =
+    captain.operations.filter((item) => item.status === "pending").length +
+    captain.notifications.filter((item) => item.readAt === null).length;
   const { groups } = useGroups();
   const open = useOpenGroup();
   const { tasks: board } = useTasks();
@@ -133,9 +139,13 @@ export function CaptainSection({ rail }: { rail: boolean }) {
         <button
           type="button"
           onClick={() => open(conversationId)}
-          aria-label={name}
+          aria-label={
+            waiting === 0
+              ? name
+              : `${name} · ${translateText("captain:operationsBadge", { count: waiting })}`
+          }
           title={name}
-          className="mx-auto flex cursor-pointer items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="relative mx-auto flex cursor-pointer items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {sessionId === undefined ? (
             face("size-10")
@@ -143,6 +153,16 @@ export function CaptainSection({ rail }: { rail: boolean }) {
             <MemberRing sessionId={sessionId} size={48}>
               {face("size-10")}
             </MemberRing>
+          )}
+          {/* Folded to a rail there is no room for two words, so the badge becomes its number. */}
+          {waiting === 0 ? null : (
+            <span
+              data-captain-waiting={waiting}
+              aria-hidden="true"
+              className="absolute top-0 right-0 rounded-full bg-muted px-1 font-mono text-[10px] tabular-nums text-muted-foreground"
+            >
+              {waiting}
+            </span>
           )}
         </button>
       </SidebarGroup>
@@ -180,6 +200,18 @@ export function CaptainSection({ rail }: { rail: boolean }) {
           {member === undefined ? null : (
             <span className="shrink-0 text-xs text-muted-foreground">
               {memberStatusLabel(member.status)}
+            </span>
+          )}
+          {/* What Captain is holding for a person — an approval, an unread alert — as one chip.
+              It is the same count the 运营 blocks in its context panel open with, computed on the
+              client from data the panel already reads: a card says whether to look, the panel
+              says at what. Nothing here asks the host for anything. */}
+          {waiting === 0 ? null : (
+            <span
+              data-captain-waiting={waiting}
+              className="shrink-0 rounded-sm bg-muted px-1 font-mono text-[10px] tabular-nums text-muted-foreground"
+            >
+              {translateText("captain:operationsBadge", { count: waiting })}
             </span>
           )}
           {/* The numbers end the same line rather than starting a new block: what is left of the

@@ -207,6 +207,47 @@ describe("Captain 在左栏顶上", () => {
     expect(button?.textContent).toBe("");
   });
 
+  it("卡片带「运营 · N」：N 是要人处理的审批加未读告警", async () => {
+    host.target("captain", {
+      identity: captain,
+      operations: [
+        { id: "o1", kind: "task.create", status: "pending" },
+        { id: "o2", kind: "task.close", status: "approved" },
+      ],
+      notifications: [
+        { id: "n1", kind: "stuck", body: "卡住了", readAt: null },
+        { id: "n2", kind: "stuck", body: "老的", readAt: 5 },
+      ],
+      assignments: [],
+      memoryPauses: [],
+      settings: {},
+    });
+    const container = await section();
+    await flush();
+    const badge = container.querySelector("[data-captain-waiting]");
+    expect(badge?.textContent).toBe("运营 · 2");
+    // Nothing waiting, nothing said: the card does not carry a 0.
+    expect(container.textContent).not.toContain("运营 · 0");
+  });
+
+  it("折成图标栏时把同一个数留在环的角上，名字留给读屏", async () => {
+    host.target("captain", {
+      identity: captain,
+      operations: [{ id: "o1", kind: "task.create", status: "pending" }],
+      notifications: [],
+      assignments: [],
+      memoryPauses: [],
+      settings: {},
+    });
+    const container = await section(true);
+    await flush();
+    const button = container.querySelector('[data-section="captain"] button');
+    expect(button?.getAttribute("aria-label")).toBe("Captain · 运营 · 1");
+    expect(button?.querySelector("[data-captain-waiting]")?.textContent).toBe(
+      "1",
+    );
+  });
+
   it("没有 Captain 时整块不出现", async () => {
     host.target("captain", { identity: null });
     const container = await section();

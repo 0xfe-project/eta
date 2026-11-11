@@ -20,6 +20,7 @@ import {
   routineSections,
   taskDetail,
 } from "@/test-product";
+import { flush } from "@/test-render";
 import { GroupPanel } from "./group-panel";
 import { useAttention } from "./use-attention";
 
@@ -61,6 +62,9 @@ function Panel() {
   );
 }
 
+/** Every tree this file mounted, so one test's panel cannot answer another test's wire. */
+const roots: { unmount: () => void }[] = [];
+
 async function mount(path = "/?group=g1") {
   const router = createRouter({
     routeTree: createRootRoute({
@@ -74,8 +78,10 @@ async function mount(path = "/?group=g1") {
   });
   const container = document.createElement("div");
   document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
   await act(async () => {
-    createRoot(container).render(
+    root.render(
       <QueryClientProvider client={new QueryClient()}>
         <RouterProvider router={router} />
       </QueryClientProvider>,
@@ -98,7 +104,8 @@ const rowsOf = (container: HTMLElement, section: string) =>
 const countOf = (container: HTMLElement, section: string) =>
   container.querySelector(`section[aria-label="${section}"] h3`)!.textContent;
 
-afterEach(() => {
+afterEach(async () => {
+  await act(async () => roots.splice(0).forEach((root) => root.unmount()));
   document.body.innerHTML = "";
   setWire(undefined);
 });
@@ -222,4 +229,104 @@ it("does not say 还没有任务 when every task here is closed", async () => {
   const section = container.querySelector('section[aria-label="任务"]')!;
   expect(section.textContent).toContain(translate("tasks:empty.noOpen"));
   expect(section.textContent).not.toContain(translate("tasks:empty.title"));
+});
+
+it("Captain 的会话里第一块是运营，不是任务", async () => {
+  // Captain's conversation is a conversation, so this is its panel — but "which tasks is Captain
+  // working on" is a question about the agents it assigns them to. What it holds for a person
+  // instead is 运营: an approval it cannot give itself, an alert, what it handed out.
+  const host = surfaceHost({
+    conversations: [group, other],
+    tasks: [task(1)],
+  });
+  host.target("captain", {
+    identity: {
+      agentId: "cap",
+      name: "Captain",
+      home: "/agents/cap",
+      model: null,
+      conversationId: "g1",
+      createdAt: 1,
+    },
+    operations: [
+      {
+        id: "o1",
+        kind: "task.create",
+        actorAgentId: "cap",
+        requiresApproval: true,
+        status: "pending",
+        payload: {},
+        result: null,
+        error: null,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      {
+        id: "o2",
+        kind: "task.close",
+        actorAgentId: "cap",
+        requiresApproval: true,
+        status: "approved",
+        payload: {},
+        result: {},
+        error: null,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ],
+    notifications: [
+      {
+        id: "n1",
+        kind: "stuck",
+        body: "任务 9 卡住了",
+        data: {},
+        readAt: null,
+        createdAt: 1,
+      },
+    ],
+    assignments: [
+      {
+        id: "a1",
+        conversationId: "g1",
+        messageId: "m1",
+        rootMessageId: null,
+        captainAgentId: "cap",
+        round: 2,
+        status: "running",
+        targets: [
+          {
+            id: "at1",
+            agentId: "agenttwo",
+            replyId: null,
+            status: "running",
+            taskCount: 3,
+          },
+        ],
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    ],
+    memoryPauses: [],
+    settings: {},
+  });
+  const container = await mount();
+  await flush();
+  expect(sections(container)).toEqual([
+    "待审批操作",
+    "运营告警",
+    "最近派工",
+    "产物",
+    "成员",
+  ]);
+  // Only the undecided one is listed, and it can be decided here — this is the only place in the
+  // window that can: the drawer that used to hold it is gone.
+  expect(rowsOf(container, "待审批操作")).toHaveLength(1);
+  expect(container.textContent).toContain("task.create");
+  expect(container.textContent).toContain("批准");
+  expect(container.textContent).toContain("拒绝");
+  expect(container.textContent).toContain("任务 9 卡住了");
+  expect(container.textContent).toContain("标为已读");
+  expect(container.textContent).toContain("第 2 轮");
+  // The tasks of that conversation are elsewhere (the 任务 page), not lost here by accident.
+  expect(container.textContent).not.toContain("任务1");
 });

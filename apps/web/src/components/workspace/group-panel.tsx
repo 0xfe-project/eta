@@ -1,13 +1,15 @@
 import type { ConversationSummary } from "@eta/client-contracts";
-import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ROUTINES_VISIBLE } from "@/lib/features";
 import { useArtifacts } from "@/queries/artifacts";
+import { useCaptain } from "@/queries/captain";
 import { useConversation } from "@/queries/conversations";
 import { useRoutines } from "@/queries/routines";
 import { useTasks } from "@/queries/tasks";
 import { ActivityRefCard } from "./activity-ref";
+import { CaptainOperations } from "./captain-operations";
 import { GroupMembers } from "./groups";
+import { Section } from "./panel-section";
 import { when } from "./routine-format";
 
 /**
@@ -17,6 +19,11 @@ import { when } from "./routine-format";
  *
  * So: what the group made and what it is on track to make first (任务, 产物,
  * 定时), then the background that is only news when it changes (成员, 目标).
+ *
+ * Captain's own conversation is the one exception: its first block is 运营 rather than 任务 —
+ * the approvals, alerts and assignments it holds for everyone else — because "which tasks is
+ * Captain working on" is not a question about Captain, it is a question about the agents it is
+ * assigning them to. See captain-operations.tsx.
  * What waits for the user is the 待处理 tab's, with its badge; it is not listed
  * again here.
  *
@@ -45,7 +52,12 @@ export function GroupPanel({
   const { routines } = useRoutines();
   const { artifacts } = useArtifacts();
   const { info } = useConversation(group?.id);
+  const captain = useCaptain();
   if (group === undefined) return null;
+  // Captain's conversation is a conversation, so this panel is its panel too — but what it is
+  // working on is not a list of tasks of its own: it is the operations it is running for everyone
+  // else. 任务 gives way to 运营 here, and nowhere else.
+  const isCaptain = captain.identity?.conversationId === group.id;
   const groupTasks = board.filter((task) => task.conversationId === group.id);
   const tasks = groupTasks.filter((task) => !closed.has(task.status));
   const groupRoutines = routines.filter(
@@ -60,38 +72,42 @@ export function GroupPanel({
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="divide-y divide-border pb-2">
-        <Section
-          title={translateText("navigation:sections.tasks")}
-          count={tasks.length}
-        >
-          {tasks.length === 0 ? (
-            // "No tasks yet" would be wrong once some have been closed here.
-            <p className="text-xs text-muted-foreground">
-              {translateText(
-                groupTasks.length === 0
-                  ? "tasks:empty.title"
-                  : "tasks:empty.noOpen",
-              )}
-            </p>
-          ) : (
-            // Rows, edge to edge: the rule between two runs into the panel's own edges.
-            <ul className="-mx-3 divide-y divide-border">
-              {listed.slice(0, 5).map((task) => (
-                <li key={task.id}>
-                  <ActivityRefCard
-                    value={{
-                      kind: "task",
-                      id: task.id,
-                      number: task.number,
-                      title: task.title,
-                      status: task.status,
-                    }}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+        {isCaptain ? (
+          <CaptainOperations />
+        ) : (
+          <Section
+            title={translateText("navigation:sections.tasks")}
+            count={tasks.length}
+          >
+            {tasks.length === 0 ? (
+              // "No tasks yet" would be wrong once some have been closed here.
+              <p className="text-xs text-muted-foreground">
+                {translateText(
+                  groupTasks.length === 0
+                    ? "tasks:empty.title"
+                    : "tasks:empty.noOpen",
+                )}
+              </p>
+            ) : (
+              // Rows, edge to edge: the rule between two runs into the panel's own edges.
+              <ul className="-mx-3 divide-y divide-border">
+                {listed.slice(0, 5).map((task) => (
+                  <li key={task.id}>
+                    <ActivityRefCard
+                      value={{
+                        kind: "task",
+                        id: task.id,
+                        number: task.number,
+                        title: task.title,
+                        status: task.status,
+                      }}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
+        )}
 
         <Section
           title={translateText("navigation:sections.artifacts")}
@@ -165,28 +181,5 @@ export function GroupPanel({
         )}
       </div>
     </div>
-  );
-}
-
-/** A section's heading carries its name and how many, as every block here does. */
-function Section({
-  title,
-  count,
-  children,
-}: {
-  title: string;
-  count?: number;
-  children: ReactNode;
-}) {
-  return (
-    <section aria-label={title} className="px-3 py-2">
-      <h3 className="mb-1 font-mono text-[10px] tracking-[0.12em] text-faint uppercase">
-        {title}
-        {count === undefined ? null : (
-          <span className="ml-1 tabular-nums">{count}</span>
-        )}
-      </h3>
-      {children}
-    </section>
   );
 }
