@@ -155,7 +155,14 @@ describe("the private chat", () => {
       "conversations",
       "list",
     )!;
-    expect(listed.filter((entry) => entry.kind === "direct")).toHaveLength(1);
+    // Ada's, once. (Captain's private chat is in the list too: the host makes it when it starts.)
+    expect(
+      listed.filter(
+        (entry) =>
+          entry.kind === "direct" &&
+          entry.participants.some((member) => member.agentId === agent.id),
+      ),
+    ).toHaveLength(1);
     // And it is a target of its own, from the moment it exists.
     await w.watch(first.conversation.id);
     expect(

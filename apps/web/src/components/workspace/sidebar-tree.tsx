@@ -92,6 +92,8 @@ export function CaptainSection({ rail }: { rail: boolean }) {
   const { tasks: board } = useTasks();
   const { artifacts } = useArtifacts();
 
+  // The host makes Captain whole when it starts, conversation included (`CaptainService.ensure`),
+  // so a Captain without one is only the moment before the first state arrives.
   const conversationId = captain.identity?.conversationId ?? null;
   if (captain.identity === null || conversationId === null) return null;
   // The conversation's own member row: its session is what the ring and the numbers read from.

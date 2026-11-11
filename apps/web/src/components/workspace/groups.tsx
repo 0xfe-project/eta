@@ -41,6 +41,7 @@ import { translate } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { agentName } from "@/queries/agents";
 import { useArtifacts } from "@/queries/artifacts";
+import { useCaptain } from "@/queries/captain";
 import {
   useConversation,
   useConversationActions,
@@ -337,8 +338,12 @@ export function GroupMembers() {
   const [removing, setRemoving] = useState<string>();
   /** Whose tasks are open under its card: one at a time, and the same press closes it. */
   const [tasksFor, setTasksFor] = useState<string | null>(null);
+  const captain = useCaptain();
   if (!group) return null;
   const members = group.participants;
+  // Captain's conversation is the way to Captain, so the host refuses to archive it.
+  const archivable =
+    group.archived || captain.identity?.conversationId !== group.id;
   const linked = board.filter((t) => t.conversationId === group.id);
   return (
     <section aria-label={translateText("groups.members.title")}>
@@ -382,18 +387,20 @@ export function GroupMembers() {
                 </span>
               ) : null}
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() =>
-                update.mutate(
-                  { conversationId: group.id, archived: !group.archived },
-                  { onError },
-                )
-              }
-            >
-              {group.archived
-                ? translateText("groups.actions.unarchive")
-                : translateText("groups.actions.archive")}
-            </DropdownMenuItem>
+            {archivable ? (
+              <DropdownMenuItem
+                onSelect={() =>
+                  update.mutate(
+                    { conversationId: group.id, archived: !group.archived },
+                    { onError },
+                  )
+                }
+              >
+                {group.archived
+                  ? translateText("groups.actions.unarchive")
+                  : translateText("groups.actions.archive")}
+              </DropdownMenuItem>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

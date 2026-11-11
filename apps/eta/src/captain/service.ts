@@ -116,10 +116,26 @@ export class CaptainService {
     return this.#viewOf(agent);
   }
 
-  /** Create the single Captain agent and its ordinary agent workspace, if absent. */
+  /**
+   * Captain as one whole, made complete if any of it is missing: the single Captain agent, its
+   * ordinary agent workspace, and its conversation. The host does this when it starts, so Captain
+   * is on the sidebar from the first page load. The conversation is how anyone reaches Captain;
+   * leaving it to whoever opens Captain first (the drawer used to) left a new host with a Captain
+   * nobody could open.
+   */
   async ensure(): Promise<{ identity: CaptainIdentityView; created: boolean }> {
-    const existing = this.identity();
-    if (existing !== undefined) return { identity: existing, created: false };
+    const existing = this.#deps.store.captainAgent();
+    const created = existing === undefined ? await this.#create() : undefined;
+    const agent = existing ?? created!.agent;
+    this.#conversation(agent);
+    return {
+      identity: this.#viewOf(agent),
+      created: created?.first ?? false,
+    };
+  }
+
+  /** The Captain agent, its workspace project and its first prompt versions. */
+  async #create(): Promise<{ agent: AgentRecord; first: boolean }> {
     const primary = this.#deps.machines.primary();
     if (primary === undefined)
       throw new Error("this host has no primary machine");
@@ -167,39 +183,52 @@ export class CaptainService {
       data: { agentId: id, createdAt: created.createdAt },
     });
     this.#deps.changed();
-    return {
-      identity: this.#viewOf(created),
-      created: instructions.version === 1,
-    };
+    return { agent: created, first: instructions.version === 1 };
+  }
+
+  /**
+   * Captain's conversation, made if it is missing and brought back if it was archived before
+   * archiving it was refused (`conversations.update` refuses it now). A host whose Captain was
+   * made by an older build without one gets it here, the next time it starts.
+   */
+  #conversation(agent: AgentRecord): string {
+    const primary = this.#deps.machines.primary();
+    if (primary === undefined)
+      throw new Error("this host has no primary machine");
+    const path = agentHome(this.#deps.dataDir, agent.id);
+    const home =
+      this.#deps.projects.byPath(primary.id, path) ??
+      this.#deps.projects.create({
+        machineId: primary.id,
+        path,
+        name: agent.name,
+        kind: "agent_home",
+        stewardId: agent.id,
+      });
+    const found = this.#deps.conversations.directOf(home.id, agent.id);
+    if (found === undefined) {
+      const made = this.#deps.conversations.create({
+        projectId: home.id,
+        kind: "direct",
+        name: agent.name,
+        agentIds: [agent.id],
+      });
+      this.#deps.created?.(made.id);
+      this.#deps.changed([made.id]);
+      return made.id;
+    }
+    if (found.archived) {
+      this.#deps.conversations.update(found.id, { archived: false });
+      this.#deps.changed([found.id]);
+    }
+    return found.id;
   }
 
   async direct(): Promise<CaptainIdentityView & { conversationId: string }> {
     const { identity } = await this.ensure();
-    const primary = this.#deps.machines.primary();
-    if (primary === undefined)
-      throw new Error("this host has no primary machine");
-    const home = this.#deps.projects.byPath(primary.id, identity.home);
-    if (home === undefined) throw new Error("Captain has no workspace project");
-    let conversation = this.#deps.conversations.directOf(
-      home.id,
-      identity.agentId,
-    );
-    if (conversation === undefined) {
-      conversation = this.#deps.conversations.create({
-        projectId: home.id,
-        kind: "direct",
-        name: identity.name,
-        agentIds: [identity.agentId],
-      });
-      this.#deps.created?.(conversation.id);
-      this.#deps.changed([conversation.id]);
-    } else if (conversation.archived) {
-      conversation = this.#deps.conversations.update(conversation.id, {
-        archived: false,
-      })!;
-      this.#deps.changed([conversation.id]);
-    }
-    return { ...identity, conversationId: conversation.id };
+    const conversationId = identity.conversationId;
+    if (conversationId === null) throw new Error("Captain has no conversation");
+    return { ...identity, conversationId };
   }
 
   /**

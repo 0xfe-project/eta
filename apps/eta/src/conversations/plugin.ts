@@ -48,6 +48,13 @@ export function conversationsPlugin(
     return conversation;
   };
 
+  /** The private chat with the Captain agent. */
+  const isCaptains = (conversation: ConversationRecord): boolean =>
+    conversation.kind === "direct" &&
+    conversations
+      .participants(conversation.id)
+      .some((p) => agents.get(p.agentId)?.systemRole === "captain");
+
   const summary = (conversation: ConversationRecord): ConversationSummary =>
     summaryOf(views, conversation);
 
@@ -115,14 +122,19 @@ export function conversationsPlugin(
         wire.handle("conversations", "update", (call) => {
           const args = new Args(call);
           const id = args.string("conversationId");
-          existing(id);
+          const current = existing(id);
           const name = args.optionalString("name")?.trim();
           if (name === "") throw new Error("a conversation needs a name");
+          const archived = args.optionalBoolean("archived");
+          // Captain's conversation is the way to Captain: archived, Captain would leave the sidebar
+          // with nothing that brings it back.
+          if (archived === true && isCaptains(current))
+            throw new Error("Captain's conversation cannot be archived");
           const conversation = conversations.update(id, {
             name,
             goal: args.optionalString("goal"),
             decided: args.optionalString("decided"),
-            archived: args.optionalBoolean("archived"),
+            archived,
           })!;
           deps.changed([id]);
           return { result: { conversation: summary(conversation) } };

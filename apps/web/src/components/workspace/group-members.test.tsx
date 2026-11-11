@@ -93,7 +93,40 @@ const menu = async (trigger: Element | null | undefined) =>
     );
   });
 
+/** The group's actions menu, opened: what it offers. */
+const menuItems = async (container: HTMLElement) => {
+  await menu(container.querySelector('button[aria-label="群操作"]'));
+  return [...document.querySelectorAll('[role="menuitem"]')].map(
+    (item) => item.textContent ?? "",
+  );
+};
+
 describe("成员和群的管理", () => {
+  it("offers to archive the group", async () => {
+    const { container } = await mount(<GroupMembers />);
+    await flush();
+    expect(await menuItems(container)).toContain("归档");
+  });
+
+  it("does not offer to archive Captain's conversation, which the host refuses", async () => {
+    // It is how anyone reaches Captain: archived, Captain would leave the sidebar for good.
+    host.target("captain", {
+      identity: {
+        agentId: "a1",
+        name: "Captain",
+        home: "/agents/a1",
+        model: null,
+        conversationId: "members-1",
+        createdAt: 1,
+      },
+    });
+    const { container } = await mount(<GroupMembers />);
+    await flush();
+    const items = await menuItems(container);
+    expect(items).toContain("编辑群信息");
+    expect(items).not.toContain("归档");
+  });
+
   it("shows each member with the numbers of its own session", async () => {
     const { container } = await mount(<GroupMembers />);
     await flush();

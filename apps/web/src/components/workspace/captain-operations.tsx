@@ -1,8 +1,64 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useCaptain, useCaptainActions } from "@/queries/captain";
+import { useModels } from "@/queries/providers";
+import { ModelSelect } from "./agent-fields";
 import { Section } from "./panel-section";
+
+/**
+ * What answers for Captain. Captain is not edited the way the other agents are (its changes go
+ * through the captain target), so this is the one place to choose its model; it was in the drawer,
+ * and went with it. With none chosen, Captain uses the providers' default model.
+ *
+ * The parent keys it by the saved model, so a save from elsewhere starts it over from that.
+ */
+export function CaptainModel() {
+  const { t: translateText } = useTranslation("captain");
+  const captain = useCaptain();
+  const actions = useCaptainActions();
+  const { data: models } = useModels();
+  const saved = captain.identity?.model ?? "";
+  const [model, setModel] = useState(saved);
+  if (captain.identity === null) return null;
+  const save = () => {
+    void actions.setModel
+      .mutateAsync({ model })
+      .then(() => toast.success(translateText("model.saved")))
+      .catch((error: Error) => toast.error(error.message));
+  };
+  return (
+    <Section title={translateText("model.label")}>
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <ModelSelect
+            id="captain-model"
+            value={model}
+            models={models}
+            aria-label={translateText("model.label")}
+            aria-describedby="captain-model-help"
+            onValueChange={setModel}
+          />
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          disabled={
+            model === "" || model === saved || actions.setModel.isPending
+          }
+          onClick={save}
+        >
+          {translateText("model.save")}
+        </Button>
+      </div>
+      <p id="captain-model-help" className="mt-1 text-xs text-muted-foreground">
+        {translateText("model.help")}
+      </p>
+    </Section>
+  );
+}
 
 /**
  * Operations: the three things about Captain's work that a chat cannot carry — an approval it cannot give

@@ -73,6 +73,114 @@ describe("captain identity", () => {
       w.client.section(`conversations.${direct.conversationId}`, "info"),
     ).toMatchObject({ id: direct.conversationId, kind: "direct" });
   });
+
+  it("has its conversation as soon as the host starts, before anyone opens it", async () => {
+    const { w } = await captainWorld();
+    // Nothing on this side asks for Captain: the page shows what the host started with.
+    w.client.subscribe("captain");
+    await until(
+      () =>
+        w.client.section<CaptainIdentityView | null>("captain", "identity")
+          ?.conversationId != null,
+    );
+    const identity = w.client.section<CaptainIdentityView>(
+      "captain",
+      "identity",
+    )!;
+    expect(
+      w.host.db
+        .query<{ kind: string; archived: number; agent_id: string }, [string]>(
+          `SELECT c.kind, c.archived, p.agent_id FROM conversation c
+             JOIN participant p ON p.conversation_id = c.id WHERE c.id = ?`,
+        )
+        .all(identity.conversationId!),
+    ).toEqual([{ kind: "direct", archived: 0, agent_id: identity.agentId }]);
+    const direct = (await w.client.call("captain", "direct", {})) as {
+      conversationId: string;
+    };
+    expect(direct.conversationId).toBe(identity.conversationId);
+  });
+
+  it("refuses to archive its conversation, and nobody else's", async () => {
+    const { w } = await captainWorld();
+    const { conversationId } = (await w.client.call(
+      "captain",
+      "direct",
+      {},
+    )) as {
+      conversationId: string;
+    };
+    await expect(
+      w.client.call("conversations", "update", {
+        conversationId,
+        archived: true,
+      }),
+    ).rejects.toThrow(/Captain's conversation cannot be archived/);
+    expect(
+      w.host.db
+        .query<{ archived: number }, [string]>(
+          "SELECT archived FROM conversation WHERE id = ?",
+        )
+        .get(conversationId)!.archived,
+    ).toBe(0);
+    // Renaming it is still the user's.
+    await w.client.call("conversations", "update", {
+      conversationId,
+      name: "Bridge",
+    });
+
+    const ada = await w.agent("Ada");
+    const project = await w.project();
+    const group = await w.group(project.id, [ada.id]);
+    await w.client.call("conversations", "update", {
+      conversationId: group.id,
+      archived: true,
+    });
+    expect(
+      w.host.db
+        .query<{ archived: number }, [string]>(
+          "SELECT archived FROM conversation WHERE id = ?",
+        )
+        .get(group.id)!.archived,
+    ).toBe(1);
+  });
+
+  it("gives back a conversation an older build left missing or archived", async () => {
+    const { w } = await captainWorld();
+    const first = (await w.client.call("captain", "direct", {})) as {
+      conversationId: string;
+    };
+    // An older build archived it, before archiving it was refused.
+    w.host.db
+      .query("UPDATE conversation SET archived = 1 WHERE id = ?")
+      .run(first.conversationId);
+    const unarchived = (await w.client.call("captain", "ensure", {})) as {
+      identity: CaptainIdentityView;
+    };
+    expect(unarchived.identity.conversationId).toBe(first.conversationId);
+    expect(
+      w.host.db
+        .query<{ archived: number }, [string]>(
+          "SELECT archived FROM conversation WHERE id = ?",
+        )
+        .get(first.conversationId)!.archived,
+    ).toBe(0);
+
+    // An older build made Captain with no conversation at all; the drawer used to make it.
+    w.host.db
+      .query("DELETE FROM participant WHERE conversation_id = ?")
+      .run(first.conversationId);
+    w.host.db
+      .query("DELETE FROM conversation WHERE id = ?")
+      .run(first.conversationId);
+    const remade = (await w.client.call("captain", "ensure", {})) as {
+      identity: CaptainIdentityView;
+      created: boolean;
+    };
+    expect(remade.created).toBe(false);
+    expect(remade.identity.conversationId).not.toBeNull();
+    expect(remade.identity.conversationId).not.toBe(first.conversationId);
+  });
 });
 
 describe("captain assignment", () => {

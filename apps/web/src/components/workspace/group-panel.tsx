@@ -7,7 +7,7 @@ import { useConversation } from "@/queries/conversations";
 import { useRoutines } from "@/queries/routines";
 import { useTasks } from "@/queries/tasks";
 import { ActivityRefCard } from "./activity-ref";
-import { CaptainOperations } from "./captain-operations";
+import { CaptainModel, CaptainOperations } from "./captain-operations";
 import { GroupMembers } from "./groups";
 import { Section } from "./panel-section";
 import { when } from "./routine-format";
@@ -84,7 +84,10 @@ export function GroupPanel({
     // under `overscroll-behavior: none`, stops every wheel and touch that starts inside it.
     <div className="divide-y divide-border pb-2">
       {isCaptain ? (
-        <CaptainOperations />
+        <>
+          <CaptainModel key={captain.identity?.model ?? ""} />
+          <CaptainOperations />
+        </>
       ) : (
         <Section
           title={translateText("navigation:sections.tasks")}
