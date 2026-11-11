@@ -76,7 +76,11 @@ describe("creating an agent", () => {
     await expect(
       w.agent("Ada", { thinkingLevel: "loud" as never }),
     ).rejects.toThrow(/thinking level/);
-    expect(w.client.section<AgentView[]>("agents", "list")).toEqual([]);
+    expect(
+      w.client
+        .section<AgentView[]>("agents", "list")
+        ?.filter((entry) => entry.systemRole === null),
+    ).toEqual([]);
   });
 
   it("edits an agent in place, and the workspace's names follow a rename", async () => {

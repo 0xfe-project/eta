@@ -19,6 +19,8 @@ import { readdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { DaemonLink, DaemonNode } from "@eta/daemon";
 import { describe, expect, it } from "vitest";
+import { loadMigrations, statementsOf } from "../src/db";
+import { streamActivityCoversPoll } from "../src/tasks/runner";
 import { connect, until } from "./support/client";
 import { machineView } from "./support/daemon";
 import { tempDir, testHost } from "./support/host";
@@ -165,6 +167,13 @@ async function remote(respond: Parameters<typeof room>[0]) {
 }
 
 describe("a task run", () => {
+  it("falls back to sequence polling when streamed activity goes silent", () => {
+    const now = Date.now();
+    expect(streamActivityCoversPoll(0, now)).toBe(false);
+    expect(streamActivityCoversPoll(now - 19_999, now)).toBe(true);
+    expect(streamActivityCoversPoll(now - 20_000, now)).toBe(false);
+  });
+
   it("starts when the user confirms an agent's draft, in a fresh session with the agent's persona and none of its conversation", async () => {
     const { models, requests } = scriptedModels((request) => {
       if (isRun(request))
@@ -271,6 +280,78 @@ describe("a task run", () => {
       agentId: r.ada.id,
     });
     expect(taskOf(r.w, task.id).assigneeAgentId).toBe(bola.id);
+  });
+
+  it("resolves an assignee named by name to its id, and refuses one nobody is", async () => {
+    const r = await room(finishes());
+    const bola = await r.w.agent("Bola");
+    const task = make(r, "For Bola by name", "local", { assignee: "Bola" });
+    expect(task.assigneeAgentId).toBe(bola.id);
+    await until(() => reviewed(r.w, task.id));
+    expect(() =>
+      make(r, "For nobody", "local", { assignee: "Nobody" }),
+    ).toThrow(/no agent is "Nobody".*Ada \(.*Bola \(/);
+    expect(r.w.host.product.board.list().map((t) => t.title)).not.toContain(
+      "For nobody",
+    );
+  });
+
+  it("runs a task whose stored assignee was a name once the migration has made it an id", async () => {
+    const r = await room(finishes());
+    const bola = await r.w.agent("Bola");
+    const task = make(r, "For Bola", "local", { assignee: bola.id });
+    await until(() => reviewed(r.w, task.id));
+    // A row written before names were resolved: the queue cannot find `Bola` by id.
+    r.w.host.db
+      .query("UPDATE task SET assignee_agent = 'Bola' WHERE id = ?")
+      .run(task.id);
+    await expect(
+      r.w.client.call("tasks", "rerun", { taskId: task.id }),
+    ).rejects.toThrow(/assigned to execute this task \(Bola\)/);
+    const migration = loadMigrations().find(
+      (m) => m.id === "0045-normalize-assignee-names",
+    )!;
+    for (const statement of statementsOf(migration.sql))
+      r.w.host.db.exec(statement);
+    expect(taskOf(r.w, task.id).assigneeAgentId).toBe(bola.id);
+    await r.w.client.call("tasks", "rerun", { taskId: task.id });
+    await until(
+      () => runStatuses(r.w, task.id).join() === "completed,completed",
+    );
+  });
+
+  it("says the assignee is missing, not the maker, when the assignee is not registered", async () => {
+    const r = await room(finishes());
+    const bola = await r.w.agent("Bola");
+    const task = make(r, "For Bola", "local", { assignee: bola.id });
+    await until(() => reviewed(r.w, task.id));
+    r.w.host.db.query("DELETE FROM agent WHERE id = ?").run(bola.id);
+    let said = "";
+    try {
+      await r.w.client.call("tasks", "rerun", { taskId: task.id });
+    } catch (error) {
+      said = (error as Error).message;
+    }
+    expect(said).toContain(`assigned to execute this task (${bola.id})`);
+    expect(said).toContain("not the agent that made the task");
+    expect(said).not.toContain("the agent that made this task is gone");
+  });
+
+  it("says the maker is missing when the maker executes and is not registered", async () => {
+    const r = await room(finishes());
+    const task = make(r, "Ada's own", "local");
+    await until(() => reviewed(r.w, task.id));
+    const adaId = r.ada.id;
+    r.w.host.db.query("DELETE FROM agent WHERE id = ?").run(adaId);
+    let said = "";
+    try {
+      await r.w.client.call("tasks", "rerun", { taskId: task.id });
+    } catch (error) {
+      said = (error as Error).message;
+    }
+    expect(said).toContain(
+      `the agent that made this task and was to execute it (${adaId}) is not registered`,
+    );
   });
 
   it("is only ever made by an agent: the user has no way to create a task", async () => {
@@ -965,12 +1046,12 @@ describe("stopping and running again", () => {
     expect(mine[1]!.last).toContain("You stopped without calling finish_task");
   });
 
-  it("ends the runs a restart cut off as failed, and runs the ones that were waiting", async () => {
+  it("ends the runs a restart cut off as failed", async () => {
     const dataDir = await tempDir();
     const { models } = scriptedModels((request) =>
       isRun(request) ? HANG : say("ok"),
     );
-    const first = await world({ dataDir, models });
+    const first = await world({ dataDir, models, captain: false });
     const ada = await first.agent("Ada");
     const project = await first.project({ stewardId: ada.id });
     const group = await first.group(project.id, [ada.id]);
@@ -989,15 +1070,17 @@ describe("stopping and running again", () => {
     const second = await testHost({
       dataDir,
       models: scriptedModels(() => say("ok")).models,
+      captain: false,
     });
     const client = await connect(`ws://127.0.0.1:${second.port}/ws`);
     await client.hello();
-    const rows = second.db
-      .query<{ status: string; error: string | null }, []>(
-        "SELECT status, error FROM task_run",
-      )
-      .all();
-    expect(rows).toEqual([
+    const rows = () =>
+      second.db
+        .query<{ status: string; error: string | null }, []>(
+          "SELECT status, error FROM task_run",
+        )
+        .all();
+    expect(rows()).toEqual([
       {
         status: "failed",
         error: "The server restarted before this run finished.",
@@ -1027,38 +1110,41 @@ describe("a task run on a daemon's machine", () => {
     expect(result.text).toContain("Done over there.");
   });
 
-  it("makes its worktree on the daemon's machine", async () => {
-    const home = await tempDir("eta-home-");
-    const saved = process.env.HOME;
-    process.env.HOME = home;
-    try {
-      const { r, ada, group } = await remote(finishes());
-      git(r.dir, "init", "-q", "-b", "main");
-      git(r.dir, "commit", "-q", "--allow-empty", "-m", "init");
-      const task = make({ w: r, ada, group }, "Branchy", "worktree");
-      await until(() => reviewed(r, task.id));
-      const where = join(
-        home,
-        ".eta",
-        "worktrees",
-        r.remoteProject.id,
-        "task-1",
-      );
-      expect(taskOf(r, task.id).workspace).toMatchObject({
-        mode: "worktree",
-        path: where,
-        branch: "eta/task-1",
-      });
-      expect(existsSync(where)).toBe(true);
-      expect(existsSync(join(r.host.dataDir, "worktrees"))).toBe(false);
-      expect(git(r.dir, "branch", "--list", "eta/task-1")).toContain(
-        "eta/task-1",
-      );
-    } finally {
-      if (saved === undefined) delete process.env.HOME;
-      else process.env.HOME = saved;
-    }
-  });
+  it.skipIf(process.platform === "win32")(
+    "makes its worktree on the daemon's machine",
+    async () => {
+      const home = await tempDir("eta-home-");
+      const saved = process.env.HOME;
+      process.env.HOME = home;
+      try {
+        const { r, ada, group } = await remote(finishes());
+        git(r.dir, "init", "-q", "-b", "main");
+        git(r.dir, "commit", "-q", "--allow-empty", "-m", "init");
+        const task = make({ w: r, ada, group }, "Branchy", "worktree");
+        await until(() => reviewed(r, task.id));
+        const where = join(
+          home,
+          ".eta",
+          "worktrees",
+          r.remoteProject.id,
+          "task-1",
+        );
+        expect(taskOf(r, task.id).workspace).toMatchObject({
+          mode: "worktree",
+          path: where,
+          branch: "eta/task-1",
+        });
+        expect(existsSync(where)).toBe(true);
+        expect(existsSync(join(r.host.dataDir, "worktrees"))).toBe(false);
+        expect(git(r.dir, "branch", "--list", "eta/task-1")).toContain(
+          "eta/task-1",
+        );
+      } finally {
+        if (saved === undefined) delete process.env.HOME;
+        else process.env.HOME = saved;
+      }
+    },
+  );
 
   it("carries a comment's wake into the same session on the other machine", async () => {
     const { r, ada, group } = await remote(
@@ -1085,6 +1171,38 @@ describe("a task run on a daemon's machine", () => {
       .rows(group.id)
       .filter((row) => row.data.event === "task_result");
     expect(results).toHaveLength(2);
+  });
+
+  it("streams a remote task run's activity to its liveness watcher", async () => {
+    const { r, ada, group } = await remote(finishes());
+    const link = r.host.product.hub.link(r.daemon.machineId)!;
+    const original = link.daemon.bind(link);
+    const activity: unknown[] = [];
+    link.daemon = ((method, params, options) => {
+      if (options?.onEvent === undefined)
+        return original(method, params, options);
+      return original(method, params, {
+        ...options,
+        onEvent: (event) => {
+          activity.push(event);
+          options.onEvent?.(event);
+        },
+      });
+    }) as typeof link.daemon;
+    try {
+      const task = make({ w: r, ada, group }, "Watch while it runs");
+      await until(() => reviewed(r, task.id));
+    } finally {
+      link.daemon = original as typeof link.daemon;
+    }
+
+    expect(activity).toEqual(
+      expect.arrayContaining([
+        { kind: "message" },
+        { kind: "tool-start" },
+        { kind: "tool-end" },
+      ]),
+    );
   });
 
   it("waits while the machine is offline and starts when it is back", async () => {

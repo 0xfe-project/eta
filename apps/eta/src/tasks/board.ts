@@ -19,11 +19,13 @@ import type {
  * That is all this class is; the rows are `store.ts` and the cards `cards.ts`.
  */
 import type { Database } from "bun:sqlite";
+import type { AgentStore } from "../agents/store";
 import type { ConversationStore } from "../conversations/store";
 import type { DraftInput, TaskCards } from "./cards";
 import type { TaskRunStore } from "./runs";
 import type { TaskRecord, TaskStore } from "./store";
 import { TASK_STATUSES } from "@eta/client-contracts";
+import { resolveAssignee } from "./assignee";
 
 /** Something a viewer of the board may want to read again. */
 export interface BoardChange {
@@ -82,6 +84,8 @@ export interface TaskBoardDeps {
   runs: TaskRunStore;
   cards: TaskCards;
   conversations: ConversationStore;
+  /** Who an assignee is: the caller names it, the task keeps the registry's id. */
+  agents: Pick<AgentStore, "get" | "list">;
   /** The newest version of each artifact published for a task. */
   artifactsOf: (taskId: string) => TaskArtifactRef[];
   /** These conversations' timelines moved. */
@@ -97,6 +101,8 @@ const viewOf = (task: TaskRecord): BoardTaskView => ({
   createdBy: task.createdBy,
   assigneeAgentId: task.assigneeAgentId,
   conversationId: task.conversationId,
+  captainAssignmentId: task.captainAssignmentId,
+  captainMessageId: task.captainMessageId,
   runStatus: task.runStatus,
   comments: task.comments,
   createdAt: task.createdAt,
@@ -157,8 +163,10 @@ export class TaskBoard {
       workspace: TaskWorkspaceMode;
       /** The branch (or `#number` of another task) the worktree starts at. */
       base?: string | undefined;
-      /** The agent the work is for, when that is not the maker. */
+      /** The agent the work is for, when that is not the maker: its name or id. */
       assignee?: string | undefined;
+      captainAssignmentId?: string | null | undefined;
+      captainMessageId?: string | null | undefined;
     },
     actor: TaskActor,
   ): BoardTaskDetail {
@@ -167,13 +175,16 @@ export class TaskBoard {
     const { title, ...fields } = this.#fieldsOf(input);
     const { base, assignee } = input;
     if (title === undefined) throw new Error("a task needs a title");
+    const assigneeAgent = resolveAssignee(assignee, this.#deps.agents);
     const conversationId = this.#conversation(input.conversationId)!;
     const task = this.#deps.tasks.create({
       ...fields,
       title,
       conversationId,
       createdByAgent: actor.agentId,
-      assigneeAgent: assignee || undefined,
+      assigneeAgent,
+      captainAssignmentId: input.captainAssignmentId,
+      captainMessageId: input.captainMessageId,
       baseBranch: base === undefined ? undefined : this.#baseOf(base),
       projectId: this.#deps.conversations.get(conversationId)?.projectId,
       workspaceMode: input.workspace,

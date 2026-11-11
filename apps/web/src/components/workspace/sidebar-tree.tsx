@@ -27,13 +27,18 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { agentName, useAgentList } from "@/queries/agents";
+import { useArtifacts } from "@/queries/artifacts";
+import { useCaptain } from "@/queries/captain";
 import { useConversationActions } from "@/queries/conversations";
 import { useModels } from "@/queries/providers";
+import { useTasks } from "@/queries/tasks";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels, memberStatusLabel } from "./agent-status";
+import { MemberRing } from "./member-ring";
+import { MemberStats } from "./member-stats";
 import { useOpenAgent } from "./use-agents";
 import { useChatList } from "./use-chat-list";
-import { useOpenGroup } from "./use-groups";
+import { useGroups, useOpenGroup } from "./use-groups";
 import { useWorkspaceStore } from "./workspace-store";
 
 /** "3m" / "5h" / "1d": the age of a conversation, at a glance. */
@@ -57,6 +62,172 @@ function humanizeAge(at: number): string {
  * line under the groups: it is the other half of the sidebar, not the tail of the list. Borders do
  * the work of separating them — BR1 does not mind a line.
  */
+
+/**
+ * Captain, at the head of the sidebar and outside the list that scrolls.
+ *
+ * It is one agent in one conversation, so what is worth showing is what that conversation is made
+ * of — and that is exactly what 成员 draws: the ring around the avatar (`MemberRing`) and the
+ * session's own numbers under it (`MemberStats`). Both are the group panel's components, reused
+ * rather than re-read: a second way of counting a session's spend is a second thing to keep true.
+ *
+ * The avatar is this section's size, not a row's. It is the one thing in the sidebar that is a
+ * thing rather than an entry, and it should hold the eye before the list does.
+ */
+export function CaptainSection({ rail }: { rail: boolean }) {
+  const { t: translateText } = useTranslation([
+    "navigation",
+    "tasks",
+    "artifacts",
+    "captain",
+  ] as const);
+  const captain = useCaptain();
+  // What Captain is holding for a person: an approval not yet decided, an alert not yet read.
+  // The same count the 运营 blocks in its context panel open with.
+  const waiting =
+    captain.operations.filter((item) => item.status === "pending").length +
+    captain.notifications.filter((item) => item.readAt === null).length;
+  const { groups } = useGroups();
+  const open = useOpenGroup();
+  const { tasks: board } = useTasks();
+  const { artifacts } = useArtifacts();
+
+  const conversationId = captain.identity?.conversationId ?? null;
+  if (captain.identity === null || conversationId === null) return null;
+  // The conversation's own member row: its session is what the ring and the numbers read from.
+  const member = groups.find((each) => each.id === conversationId)
+    ?.participants[0];
+  const sessionId = member?.sessionId ?? undefined;
+  const captainTasks = board.filter(
+    (task) =>
+      task.conversationId === conversationId &&
+      task.status !== "done" &&
+      task.status !== "cancelled",
+  );
+  const captainArtifacts = artifacts.filter(
+    (art) => art.conversationId === conversationId,
+  );
+  const name = captain.identity.name;
+  // What the card no longer draws, since it is one row: the counts live in the tooltip. Still the
+  // same numbers, still off the same query — just not a third and fourth line.
+  const counts = [
+    captainTasks.length === 0
+      ? null
+      : `${captainTasks.length} ${translateText("navigation:sections.tasks")}`,
+    captainArtifacts.length === 0
+      ? null
+      : `${captainArtifacts.length} ${translateText("navigation:sections.artifacts")}`,
+  ]
+    .filter((each) => each !== null)
+    .join(" · ");
+  const face = (size: string) => (
+    <AgentAvatar
+      agent={{ id: captain.identity === null ? "" : captain.identity.agentId }}
+      animate
+      className={size}
+    />
+  );
+
+  // The rail is 4rem: the glyph and the name under it, as every other card there.
+  if (rail) {
+    return (
+      <SidebarGroup
+        data-section="captain"
+        aria-label={name}
+        className="shrink-0 border-b px-0 pt-2 pb-2"
+      >
+        <button
+          type="button"
+          onClick={() => open(conversationId)}
+          aria-label={
+            waiting === 0
+              ? name
+              : `${name} · ${translateText("captain:operationsBadge", { count: waiting })}`
+          }
+          title={name}
+          className="relative mx-auto flex cursor-pointer items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {sessionId === undefined ? (
+            face("size-10")
+          ) : (
+            <MemberRing sessionId={sessionId} size={48}>
+              {face("size-10")}
+            </MemberRing>
+          )}
+          {/* Folded to a rail there is no room for two words, so the badge becomes its number. */}
+          {waiting === 0 ? null : (
+            <span
+              data-captain-waiting={waiting}
+              aria-hidden="true"
+              className="absolute top-0 right-0 rounded-full bg-muted px-1 font-mono text-[10px] tabular-nums text-muted-foreground"
+            >
+              {waiting}
+            </span>
+          )}
+        </button>
+      </SidebarGroup>
+    );
+  }
+
+  return (
+    <SidebarGroup
+      data-section="captain"
+      aria-label={name}
+      className="shrink-0 px-0 pb-2"
+    >
+      {/* No label above the card: the card says what it is. A heading that repeats the name the
+          card already shows is one more line between the window's top edge and the list.
+          The card is one row, top to bottom: face, name, state, and the session's numbers all on
+          the same baseline. A block of stats under the name made this the tallest thing in the
+          sidebar, which is the one thing a section head must not be. */}
+      <div className="mx-2 mt-2 border">
+        <button
+          type="button"
+          onClick={() => open(conversationId)}
+          title={counts === "" ? undefined : counts}
+          className="flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {sessionId === undefined ? (
+            face("size-10")
+          ) : (
+            // 48px ring around a 40px face. Half the size it first shipped at: big enough that the
+            // gauge reads as a gauge, small enough that it stays a section head and not a poster.
+            <MemberRing sessionId={sessionId} size={48}>
+              {face("size-10")}
+            </MemberRing>
+          )}
+          <span className="shrink-0 truncate text-sm font-medium">{name}</span>
+          {member === undefined ? null : (
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {memberStatusLabel(member.status)}
+            </span>
+          )}
+          {/* What Captain is holding for a person — an approval, an unread alert — as one chip.
+              It is the same count the 运营 blocks in its context panel open with, computed on the
+              client from data the panel already reads: a card says whether to look, the panel
+              says at what. Nothing here asks the host for anything. */}
+          {waiting === 0 ? null : (
+            <span
+              data-captain-waiting={waiting}
+              className="shrink-0 rounded-sm bg-muted px-1 font-mono text-[10px] tabular-nums text-muted-foreground"
+            >
+              {translateText("captain:operationsBadge", { count: waiting })}
+            </span>
+          )}
+          {/* The numbers end the same line rather than starting a new block: what is left of the
+              row is theirs, and it truncates from the tail, so a narrow sidebar costs a few digits
+              and never the name of the agent the card is about. */}
+          <MemberStats
+            sessionId={sessionId}
+            inline
+            className="ml-auto min-w-0 justify-end"
+          />
+        </button>
+      </div>
+    </SidebarGroup>
+  );
+}
+
 export function ConversationList() {
   const { t: translateText } = useTranslation(["chat"] as const);
   const { directories, directs, current, loaded } = useChatList();

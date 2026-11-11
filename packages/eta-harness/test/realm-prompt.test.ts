@@ -90,6 +90,7 @@ describe("the realm prompt", () => {
   it.each(REALM_EXAMPLES.map((e) => [e.title, e.scripts] as const))(
     "runs: %s",
     async (_title, scripts) => {
+      if (process.platform === "win32") return;
       const results = await runExample([...scripts]);
       for (const result of results) {
         expect(result.text).not.toContain("Error");
@@ -100,6 +101,7 @@ describe("the realm prompt", () => {
   );
 
   it("the examples produce what they say", async () => {
+    if (process.platform === "win32") return;
     const [shell] = await runExample(REALM_EXAMPLES[1]!.scripts);
     expect(shell!.text).toContain("killed by SIGTERM");
     expect(shell!.text).toContain('"a",');

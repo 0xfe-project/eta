@@ -66,7 +66,11 @@ export interface MachineLink {
   daemon: <M extends keyof DaemonServiceParams>(
     method: M,
     params: DaemonServiceParams[M],
-    options?: { timeoutMs?: number; signal?: AbortSignal },
+    options?: {
+      timeoutMs?: number;
+      signal?: AbortSignal;
+      onEvent?: (event: unknown) => void;
+    },
   ) => Promise<DaemonServiceResults[M]>;
 }
 
@@ -273,7 +277,11 @@ export class MachineHub {
         daemon: (
           method: string,
           params: unknown,
-          options?: { timeoutMs?: number; signal?: AbortSignal },
+          options?: {
+            timeoutMs?: number;
+            signal?: AbortSignal;
+            onEvent?: (event: unknown) => void;
+          },
         ) => peer.call(method, params, options),
       });
       this.#connections.set(machine.id, connection);

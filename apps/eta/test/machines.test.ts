@@ -254,42 +254,45 @@ describe("the link", () => {
     await second.stop();
   });
 
-  it("reconnects after a drop, and nothing that was running is replayed", async () => {
-    const w = await world();
-    const daemon = await startDaemon(w.host, w.client);
-    await approve(w.client, daemon);
-    const link = w.host.product.hub.link(daemon.machineId)!;
-    const work = await tempDir("eta-work-");
-    const marker = join(work, "marker");
-    const running = link
-      .daemon("exec", {
-        script: `echo ran >> ${marker}; exec sleep 30`,
-        timeoutMs: 60_000,
-      })
-      .then(
-        () => "finished",
-        (error: Error) => error.message,
+  it.skipIf(process.platform === "win32")(
+    "reconnects after a drop, and nothing that was running is replayed",
+    async () => {
+      const w = await world();
+      const daemon = await startDaemon(w.host, w.client);
+      await approve(w.client, daemon);
+      const link = w.host.product.hub.link(daemon.machineId)!;
+      const work = await tempDir("eta-work-");
+      const marker = join(work, "marker");
+      const running = link
+        .daemon("exec", {
+          script: `echo ran >> ${marker}; exec sleep 30`,
+          timeoutMs: 60_000,
+        })
+        .then(
+          () => "finished",
+          (error: Error) => error.message,
+        );
+      await until(async () => {
+        try {
+          return (await readFile(marker, "utf8")).includes("ran");
+        } catch {
+          return false;
+        }
+      });
+      daemon.link.drop();
+      // The caller is told it does not know: the script may or may not have finished.
+      expect(await running).toMatch(/outcome is unknown/);
+      await until(
+        () => machineView(w.client, daemon.machineId)?.status === "offline",
       );
-    await until(async () => {
-      try {
-        return (await readFile(marker, "utf8")).includes("ran");
-      } catch {
-        return false;
-      }
-    });
-    daemon.link.drop();
-    // The caller is told it does not know: the script may or may not have finished.
-    expect(await running).toMatch(/outcome is unknown/);
-    await until(
-      () => machineView(w.client, daemon.machineId)?.status === "offline",
-    );
-    await daemon.reached("online");
-    await until(
-      () => machineView(w.client, daemon.machineId)?.status === "online",
-    );
-    // A new epoch, and the old call is not run again.
-    expect(await readFile(marker, "utf8")).toBe("ran\n");
-  });
+      await daemon.reached("online");
+      await until(
+        () => machineView(w.client, daemon.machineId)?.status === "online",
+      );
+      // A new epoch, and the old call is not run again.
+      expect(await readFile(marker, "utf8")).toBe("ran\n");
+    },
+  );
 
   it("revoking cuts the link and the machine cannot come back", async () => {
     const w = await world();

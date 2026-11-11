@@ -23,9 +23,11 @@ import type {
  * cards behind, marked, because what a reader still has is the card.
  */
 import type { Database } from "bun:sqlite";
+import type { AgentStore } from "../agents/store";
 import type { ConversationStore } from "../conversations/store";
 import type { Timeline } from "../conversations/timeline";
 import type { TaskRecord, TaskStore } from "./store";
+import { resolveAssignee } from "./assignee";
 
 /** What the agent says about the work it proposes. */
 export interface DraftInput {
@@ -44,10 +46,13 @@ export interface DraftInput {
    */
   base?: string | undefined;
   /**
-   * The agent the work is for, when it is not the one proposing: an agent id. Absent is the
-   * proposing agent, which executes it itself, as it always was.
+   * The agent the work is for, when it is not the one proposing: its name or id, which the draft
+   * resolves to the registry's id (see `assignee.ts`). Absent is the proposing agent, which
+   * executes it itself, as it always was.
    */
   assignee?: string | undefined;
+  captainAssignmentId?: string | undefined;
+  captainMessageId?: string | undefined;
 }
 
 /** What the user may have changed on the way to the board. */
@@ -62,6 +67,8 @@ export interface TaskCardsDeps {
   tasks: TaskStore;
   timeline: Timeline;
   conversations: ConversationStore;
+  /** Who an assignee is: a draft names it as the user did, the task keeps the registry's id. */
+  agents: Pick<AgentStore, "get" | "list">;
   /** The newest version of each artifact published for a task, for the card to list. */
   artifactsOf: (taskId: string) => TaskArtifactRef[];
 }
@@ -112,6 +119,9 @@ export class TaskCards {
       throw new Error(`no such conversation: ${input.conversationId}`);
     const title = input.draft.title.trim();
     if (title === "") throw new Error("a task needs a title");
+    // An assignee nobody is, or more than one agent is, is refused now, while the proposer can
+    // still name it again; the draft keeps the id, so the card and the task agree.
+    const assignee = resolveAssignee(input.draft.assignee, this.#deps.agents);
     // The draft belongs to the turn that is writing it: that row says both where the draft came
     // from (the range of messages below) and where the page should draw it.
     const turn = this.#turnOf(input.conversationId, input.agentId);
@@ -127,9 +137,13 @@ export class TaskCards {
       ].join("\n\n"),
       workspace: input.draft.workspace,
       ...(input.draft.base === undefined ? {} : { base: input.draft.base }),
-      ...(input.draft.assignee === undefined || input.draft.assignee === ""
+      ...(assignee === undefined ? {} : { assignee }),
+      ...(input.draft.captainAssignmentId === undefined
         ? {}
-        : { assignee: input.draft.assignee }),
+        : { captainAssignmentId: input.draft.captainAssignmentId }),
+      ...(input.draft.captainMessageId === undefined
+        ? {}
+        : { captainMessageId: input.draft.captainMessageId }),
       ...(turn === undefined ? {} : { turnMessageId: turn.id }),
     };
     return timeline.append({
@@ -170,6 +184,9 @@ export class TaskCards {
     const draft = row.data as unknown as TaskDraftData;
     const title = (input.fields.title ?? draft.title).trim();
     if (title === "") throw new Error("a task needs a title");
+    // Resolved again: a draft written before assignees were resolved may hold a name, and the
+    // agent it named may have been renamed or removed since.
+    const assignee = resolveAssignee(draft.assignee, this.#deps.agents);
     return db.transaction(() => {
       const task = tasks.create({
         title,
@@ -177,7 +194,9 @@ export class TaskCards {
         status: input.fields.status,
         // The agent that proposed it executes it, unless the draft says it is for someone else.
         createdByAgent: row.agentId ?? undefined,
-        assigneeAgent: draft.assignee || undefined,
+        assigneeAgent: assignee,
+        captainAssignmentId: draft.captainAssignmentId,
+        captainMessageId: draft.captainMessageId,
         baseBranch: draft.base || undefined,
         projectId: this.#deps.conversations.get(input.conversationId)
           ?.projectId,

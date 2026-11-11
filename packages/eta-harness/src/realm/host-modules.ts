@@ -1,30 +1,87 @@
+import type * as vm from "node:vm";
 import type { Linker, Realm } from "./realm";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
+import { createRequire } from "node:module";
 import * as path from "node:path";
-import process from "node:process";
 
+import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { $ } from "zx";
 
 /**
- * The `node:*` half of a realm's surface.
+ * The `node:*` half of a realm's surface, in two layers with different rules.
  *
- * Two rules hold for everything here, and both are about the seam rather than
- * about safety:
+ * **Curated layer**: `node:fs`, `node:fs/promises`, `node:path`, `node:url`,
+ * and `randomUUID` in `node:crypto`. Two rules hold here, and both are about
+ * the seam rather than about safety:
  *
  * - Every function goes through {@link Realm.binding}, so a call is recorded
- *   with the line that made it. Nothing reaches the host any other way.
+ *   with the line that made it.
  * - Everything that comes back is a plain value. A host `Buffer` would carry
  *   the host's prototype into the realm, where `instanceof Uint8Array` would
  *   then answer wrongly.
  *
- * Whether a call is allowed is not decided here. Each binding asks the
+ * Whether a curated call is allowed is not decided here. Each binding asks the
  * authorizer the host installed at {@link RealmOptions.authorize}; this file
  * only makes sure there is no way around the question.
+ *
+ * **Passthrough layer**: the modules in {@link PASSTHROUGH}. These are the
+ * host's own module objects, mounted as they are, and neither rule applies:
+ *
+ * - Calls are not bindings. A socket opened with `node:net`, a hash taken with
+ *   `node:crypto`, a request made with `node:https` leave no row in the effect
+ *   ledger and are never put to the authorizer. This widens the gap ESMMODE §1
+ *   already names for `$` (see {@link mountShell}): a script that can run `$`
+ *   could already open any connection, so this is no new reach, only less
+ *   visibility. No second ledger is kept for it.
+ * - Values keep the host's prototypes. The same object reference is mounted,
+ *   so the `Buffer` global from {@link mountNodeGlobals} is `node:buffer`'s
+ *   `Buffer`, the `EventEmitter` a socket extends is `node:events`'s, and
+ *   `instanceof` between them answers right. What does not hold is identity
+ *   with the realm's own intrinsics: a host `Buffer` is not `instanceof` the
+ *   realm's `Uint8Array`.
+ *
+ * `node:child_process` is left out on purpose: `$` is the realm's way to run a
+ * process, and a second one would only be a second hole. A built-in in neither
+ * layer fails as "not mounted"; it is never installed from npm.
  */
+/**
+ * Built-ins mounted as the host's own module objects; see {@link mountNodeModules}
+ * for what that gives up. `node:diagnostics_channel` is here because postgres
+ * imports it; the subpaths are parts of modules already on the list.
+ */
+export const PASSTHROUGH: readonly string[] = [
+  "node:assert",
+  "node:assert/strict",
+  "node:async_hooks",
+  "node:buffer",
+  "node:crypto",
+  "node:diagnostics_channel",
+  "node:dns",
+  "node:dns/promises",
+  "node:events",
+  "node:http",
+  "node:https",
+  "node:net",
+  "node:os",
+  "node:querystring",
+  "node:stream",
+  "node:stream/promises",
+  "node:stream/web",
+  "node:string_decoder",
+  "node:timers",
+  "node:timers/promises",
+  "node:tls",
+  "node:util",
+  "node:util/types",
+  "node:zlib",
+];
+
+const hostRequire = createRequire(import.meta.url);
+
 export function mountNodeModules(realm: Realm, cwd?: string): Linker {
   const cache = new Map<string, unknown>();
 
@@ -37,12 +94,26 @@ export function mountNodeModules(realm: Realm, cwd?: string): Linker {
   };
 }
 
+/**
+ * A curated module answers `import fs from "node:fs"` the way Node's CJS
+ * interop does: the whole namespace, as the default. A package written as
+ * ESM-with-default-imports (postgres does `import fs from 'fs'`) links
+ * against the curated layer only if the default is there.
+ */
+function syntheticWithDefault(
+  realm: Realm,
+  specifier: string,
+  exports: Record<string, unknown>,
+): vm.Module {
+  return realm.synthetic(specifier, { ...exports, default: exports });
+}
+
 function nodeModule(realm: Realm, specifier: string, cwd?: string) {
   // A relative path means the session's working directory, not the host process's.
   const at = (p: string): string => path.resolve(cwd ?? process.cwd(), p);
   switch (specifier) {
     case "node:fs/promises":
-      return realm.synthetic(specifier, {
+      return syntheticWithDefault(realm, specifier, {
         readFile: realm.binding(
           "fs.readFile",
           async (path: string, encoding = "utf8") =>
@@ -90,7 +161,7 @@ function nodeModule(realm: Realm, specifier: string, cwd?: string) {
         ),
       });
     case "node:fs":
-      return realm.synthetic(specifier, {
+      return syntheticWithDefault(realm, specifier, {
         readFileSync: realm.binding(
           "fs.readFileSync",
           (path: string, encoding = "utf8") =>
@@ -134,7 +205,7 @@ function nodeModule(realm: Realm, specifier: string, cwd?: string) {
         ),
       });
     case "node:path":
-      return realm.synthetic(specifier, {
+      return syntheticWithDefault(realm, specifier, {
         join: realm.binding("path.join", (...parts: string[]) =>
           path.join(...parts),
         ),
@@ -159,7 +230,7 @@ function nodeModule(realm: Realm, specifier: string, cwd?: string) {
         sep: path.sep,
       });
     case "node:url":
-      return realm.synthetic(specifier, {
+      return syntheticWithDefault(realm, specifier, {
         fileURLToPath: realm.binding("url.fileURLToPath", (value: string) =>
           fileURLToPath(value),
         ),
@@ -169,11 +240,62 @@ function nodeModule(realm: Realm, specifier: string, cwd?: string) {
         ),
       });
     case "node:crypto":
-      return realm.synthetic(specifier, {
+      // Passthrough, with randomUUID kept the binding it was.
+      return passthrough(realm, specifier, {
         randomUUID: realm.binding("crypto.randomUUID", () => randomUUID()),
       });
     default:
-      return undefined;
+      return PASSTHROUGH.includes(specifier)
+        ? passthrough(realm, specifier)
+        : undefined;
+  }
+}
+
+/**
+ * The host module as it is: the same object a host `import` gets, as the
+ * default export and spread into named exports. `overrides` replaces names in
+ * both, without touching the host module.
+ */
+function passthrough(
+  realm: Realm,
+  specifier: string,
+  overrides: Record<string, unknown> = {},
+): vm.Module {
+  const host = hostRequire(specifier) as Record<string, unknown>;
+  const value =
+    Object.keys(overrides).length === 0
+      ? host
+      : Object.assign(Object.create(host) as object, overrides);
+  return realm.synthetic(specifier, { ...host, ...overrides, default: value });
+}
+
+/**
+ * The Node globals a package expects without importing anything. They belong
+ * to the passthrough layer and share its terms: host objects, no ledger row, no
+ * authorizer. `Buffer` is `node:buffer`'s `Buffer`, so a package's
+ * `Buffer.isBuffer` and the buffers `node:net` hands it agree. `process`
+ * includes `process.env`, which `$` already reaches.
+ *
+ * `setTimeout` and `clearTimeout` are not here: {@link mountGlobals} keeps them
+ * as bindings, as before.
+ */
+export function mountNodeGlobals(realm: Realm): void {
+  const host = globalThis as unknown as Record<string, unknown>;
+  for (const name of [
+    "Buffer",
+    "process",
+    "performance",
+    "queueMicrotask",
+    "setImmediate",
+    "clearImmediate",
+    "setInterval",
+    "clearInterval",
+    "URL",
+    "URLSearchParams",
+    "TextEncoder",
+    "TextDecoder",
+  ]) {
+    if (name in host) realm.global(name, host[name]);
   }
 }
 

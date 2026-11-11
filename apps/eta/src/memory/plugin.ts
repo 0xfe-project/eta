@@ -29,10 +29,12 @@ export function memoryPlugin(deps: MemoryPluginDeps, applied: () => void) {
             );
           const query = args.optionalString("query")?.trim();
           const conversationId = args.optionalString("conversationId");
+          const includeDeleted = args.optionalBoolean("includeDeleted");
           const memories = await client.list(args.string("agentId"), {
             ...(query ? { query } : {}),
             ...(source === undefined ? {} : { source: source as MemorySource }),
             ...(conversationId ? { conversationId } : {}),
+            ...(includeDeleted === undefined ? {} : { includeDeleted }),
           });
           return { result: { memories } };
         }),
@@ -50,6 +52,13 @@ export function memoryPlugin(deps: MemoryPluginDeps, applied: () => void) {
           const args = new Args(call);
           const id = args.string("id");
           await client.forget(args.string("agentId"), id);
+          return { result: { id } };
+        }),
+
+        wire.handle("memory", "restore", async (call) => {
+          const args = new Args(call);
+          const id = args.string("id");
+          await client.restore(args.string("agentId"), id);
           return { result: { id } };
         }),
       ];

@@ -28,15 +28,22 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 
 /** Every `.agents/skills` candidate for a cwd, deduped, closest first. */
 export function discoverSkillDirs(cwd: string, home: string): string[] {
   const dirs = new Set<string>();
+  const realHome = resolve(homedir());
+  const configuredHome = resolve(home);
   let dir = resolve(cwd);
   const fsRoot = parse(dir).root;
   for (;;) {
-    dirs.add(join(dir, ".agents", "skills"));
+    // A test or embedding may deliberately use a different home. Do not let a temporary cwd
+    // under the real user's home walk back into that user's global skills; the configured home
+    // is the one the caller asked this session to use.
+    if (dir !== realHome || configuredHome === realHome)
+      dirs.add(join(dir, ".agents", "skills"));
     if (dir === fsRoot) break;
     const up = dirname(dir);
     if (up === dir) break;

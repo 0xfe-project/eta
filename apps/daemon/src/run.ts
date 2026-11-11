@@ -19,11 +19,17 @@ import { ActivityRecorder } from "./activity";
 
 /** What a session says during a run; `stop` lets go of the listener. */
 export function listen(managed: ManagedSession): {
-  said: () => { text: string; thinking: string; activity: ToolActivity[] };
+  said: () => {
+    text: string;
+    thinking: string;
+    activity: ToolActivity[];
+    failure: RunOutcome["failure"];
+  };
   stop: () => void;
 } {
   let text = "";
   let thinking = "";
+  let failure: RunOutcome["failure"];
   const activity = new ActivityRecorder();
   const off = kernelOn(managed.session.kernel.ctx)(
     "message:end",
@@ -44,9 +50,18 @@ export function listen(managed: ManagedSession): {
       if (spoken.trim() !== "") text = spoken;
     },
   );
+  const offFailure = kernelOn(managed.session.kernel.ctx)(
+    "turn:run-failed",
+    ({ failure: classified }: { failure?: RunOutcome["failure"] }) => {
+      if (classified !== undefined) failure = classified;
+    },
+  );
   return {
-    said: () => ({ text, thinking, activity: activity.list() }),
-    stop: () => void off(),
+    said: () => ({ text, thinking, activity: activity.list(), failure }),
+    stop: () => {
+      off();
+      offFailure();
+    },
   };
 }
 
@@ -96,7 +111,10 @@ export async function runAndWait(
     return {
       status: result.status,
       ...(result.status === "failed"
-        ? { error: result.error ?? "The run failed." }
+        ? {
+            error: result.error ?? "The run failed.",
+            ...(said.failure === undefined ? {} : { failure: said.failure }),
+          }
         : {}),
       text: said.text,
       thinking: said.thinking,

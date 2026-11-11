@@ -75,9 +75,12 @@ function shareOf(
 export function MemberRing({
   sessionId,
   children,
+  size = 48,
 }: {
   sessionId: string;
   children: ReactNode;
+  /** The ring's box in px. The viewBox stays 48, so the geometry below scales with it. */
+  size?: number;
 }) {
   const { t: translateText } = useTranslation(["chat"] as const);
   const view = useSession(sessionId);
@@ -164,7 +167,8 @@ export function MemberRing({
   });
   return (
     <span
-      className="relative inline-flex size-12 shrink-0 items-center justify-center"
+      className="relative inline-flex shrink-0 items-center justify-center"
+      style={{ width: size, height: size }}
       title={translateText("chat:usage.ring", {
         percent,
         used: used.toLocaleString(),
@@ -174,7 +178,8 @@ export function MemberRing({
       <svg
         viewBox="0 0 48 48"
         aria-hidden="true"
-        className="absolute inset-0 size-12 -rotate-90"
+        className="absolute inset-0 -rotate-90"
+        style={{ width: size, height: size }}
       >
         <circle
           cx="24"

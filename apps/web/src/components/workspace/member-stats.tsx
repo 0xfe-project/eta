@@ -19,13 +19,22 @@ const tokens = (count: number | undefined) =>
  * which is why it lives beside the member rather than in a group-level block: a group of three has
  * three of these, and each is about what that agent is doing here.
  */
-export function MemberStats({ sessionId }: { sessionId: string | undefined }) {
+export function MemberStats({
+  sessionId,
+  inline = false,
+  className,
+}: {
+  sessionId: string | undefined;
+  /** One line instead of a block: for a header that has a single row to give. */
+  inline?: boolean;
+  className?: string;
+}) {
   const { t: translateText } = useTranslation(["chat", "common"] as const);
   const session = useSession(sessionId);
   const { goal: setGoal } = useSessionActions();
   if (sessionId === undefined)
     return (
-      <p className="font-mono text-[10px] text-faint">
+      <p className={`font-mono text-[10px] text-faint ${className ?? ""}`}>
         {translateText("chat:groups.members.noSession")}
       </p>
     );
@@ -35,6 +44,36 @@ export function MemberStats({ sessionId }: { sessionId: string | undefined }) {
     setGoal.mutate(
       { session: sessionId, action },
       { onError: (error) => toast.error(error.message) },
+    );
+  if (inline)
+    return (
+      // The same numbers on one line, and the model not among them: a model id is a name, not a
+      // count, and it is the one field here that can run longer than the whole row. It keeps its
+      // place in the title. What is left — the spend, the tool count, the rate — truncates as one
+      // run of text, so a narrow sidebar loses the tail of the numbers rather than the name of the
+      // agent this card is about.
+      <span
+        title={model?.id}
+        className={`flex min-w-0 items-baseline gap-2 font-mono text-[10px] text-muted-foreground tabular-nums ${" "}${className ?? ""}`}
+      >
+        <span className="min-w-0 truncate">
+          in <span className="text-foreground">{tokens(usage?.input)}</span> ·
+          out <span className="text-foreground">{tokens(usage?.output)}</span> ·
+          cache{" "}
+          <span className="text-foreground">
+            {tokens(
+              usage === undefined
+                ? undefined
+                : usage.cacheRead + usage.cacheWrite,
+            )}
+          </span>
+          {" · "}
+          {tools === undefined ? "tools —" : `tools ${tools.length}`}
+        </span>
+        {rate === 0 ? null : (
+          <span className="shrink-0 text-state-success">{rate} tok/s</span>
+        )}
+      </span>
     );
   return (
     <div className="space-y-0.5 font-mono text-[10px] text-muted-foreground tabular-nums">

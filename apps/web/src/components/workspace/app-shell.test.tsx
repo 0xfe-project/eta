@@ -1,5 +1,6 @@
 import type {
   BoardTaskDetail,
+  CaptainIdentityView,
   ConversationSummary,
   EmailAccountView,
 } from "@eta/client-contracts";
@@ -39,6 +40,8 @@ let emailAccounts: EmailAccountView[] = [];
 const verified: string[] = [];
 /** Unread mail, for the corner the row has to leave for it. */
 let emailUnread = 0;
+/** Captain, when a test is about where its block sits; mounted only then. */
+let captainIdentity: CaptainIdentityView | null = null;
 rstest.mock("./use-agents", () => ({
   useAgents: () => ({
     agents: state.agents,
@@ -141,6 +144,7 @@ async function render(
       return { account: emailAccounts.find((a) => a.id === accountId)! };
     });
   }
+  host.target("captain", { identity: captainIdentity });
   host.install();
   host.hello();
   const container = document.createElement("div");
@@ -217,6 +221,7 @@ afterEach(async () => {
   state.openAgent.mockClear();
   state.pathname = "/";
   tasks = [];
+  captainIdentity = null;
   emailAccounts = [];
   emailUnread = 0;
   verified.length = 0;
@@ -229,6 +234,48 @@ const agent = (id: string, name: string, status = "idle") => ({
   id,
   name,
   status,
+});
+
+describe("Captain 的位置", () => {
+  it("在最顶上：导航行和对话列表都在它下面", async () => {
+    captainIdentity = {
+      agentId: "cap",
+      name: "Captain",
+      home: "/data/agents/cap",
+      model: null,
+      conversationId: "g-cap",
+      createdAt: 1,
+    };
+    state.groups = [
+      conversationView({
+        id: "g-cap",
+        name: "Captain",
+        projectId: "p",
+        participants: [memberView("cap")],
+      }),
+      conversationView({
+        id: "g1",
+        name: "装配",
+        projectId: "p",
+        participants: [memberView("a1")],
+      }),
+    ];
+    const container = await render(<Sidebar />);
+    const content = container.querySelector('[data-sidebar="content"]')!;
+    // The head of the column, above the destinations and above the list that scrolls: Captain is
+    // the one block in the sidebar that does not move.
+    expect(content.firstElementChild?.getAttribute("data-section")).toBe(
+      "captain",
+    );
+    const captain = container.querySelector('[data-section="captain"]')!;
+    const groups = container.querySelector(
+      '[aria-labelledby="sidebar-groups"]',
+    )!;
+    expect(
+      captain.compareDocumentPosition(groups) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 });
 
 describe("左栏的两块", () => {

@@ -290,7 +290,8 @@ describe("the token file", () => {
     const path = join(dir, "state", "token");
     const first = await testHost({ tokenFile: path });
     expect(first.tokenFile).toBe(path);
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32")
+      expect((await stat(path)).mode & 0o777).toBe(0o600);
     const token = (await readFile(path, "utf8")).trim();
     expect(token.length).toBeGreaterThanOrEqual(16);
     await first.close();
@@ -307,7 +308,8 @@ describe("the token file", () => {
     const path = await tokenFile();
     await chmod(path, 0o644);
     await testHost({ tokenFile: path });
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32")
+      expect((await stat(path)).mode & 0o777).toBe(0o600);
   });
 
   it("refuses a token too short to be a secret, and stops the host from starting", async () => {

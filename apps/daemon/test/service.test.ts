@@ -163,10 +163,12 @@ describe("the identity", () => {
         machineId: "m",
         secret: "s",
       });
-      expect((await stat(join(dataDir, "identity.json"))).mode & 0o777).toBe(
-        0o600,
-      );
-      expect((await stat(dataDir)).mode & 0o777).toBe(0o700);
+      if (process.platform !== "win32")
+        expect((await stat(join(dataDir, "identity.json"))).mode & 0o777).toBe(
+          0o600,
+        );
+      if (process.platform !== "win32")
+        expect((await stat(dataDir)).mode & 0o777).toBe(0o700);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -298,45 +298,49 @@ describe("images", () => {
 });
 
 describe("on a remote machine", () => {
-  it("is written on the daemon's machine through the link, whole and once", async () => {
-    // The daemon runs in this process, so "its home" is whatever HOME says now.
-    const home = await tempDir("eta-daemon-home-");
-    await mkdir(home, { recursive: true });
-    process.env.HOME = home;
-    const { models, requests } = scriptedModels(() => say("seen"));
-    const r = await remoteWorld({ models });
-    const { group } = await r.agents("Ada");
-    // Bigger than one piece over the link, with content that would show a gap or a repeat.
-    const bytes = Buffer.alloc(7 * 1024 * 1024 + 123);
-    for (let i = 0; i < bytes.length; i += 1)
-      bytes[i] = (i * 31 + (i >> 8)) & 255;
-    const file = await upload(
-      r,
-      group.id,
-      bytes,
-      "big.bin",
-      "application/octet-stream",
-      {
-        piece: 384 * 1024,
-      },
-    );
-    const sent = await r.send(group.id, "look", { attachments: [file.id] });
-    await r.settled(group.id, sent.replies[0]!.id);
+  it.skipIf(process.platform === "win32")(
+    "is written on the daemon's machine through the link, whole and once",
+    async () => {
+      // The daemon runs in this process, so "its home" is whatever HOME says now.
+      const home = await tempDir("eta-daemon-home-");
+      await mkdir(home, { recursive: true });
+      process.env.HOME = home;
+      const { models, requests } = scriptedModels(() => say("seen"));
+      const r = await remoteWorld({ models });
+      const { group } = await r.agents("Ada");
+      // Bigger than one piece over the link, with content that would show a gap or a repeat.
+      const bytes = Buffer.alloc(7 * 1024 * 1024 + 123);
+      for (let i = 0; i < bytes.length; i += 1)
+        bytes[i] = (i * 31 + (i >> 8)) & 255;
+      const file = await upload(
+        r,
+        group.id,
+        bytes,
+        "big.bin",
+        "application/octet-stream",
+        {
+          piece: 384 * 1024,
+        },
+      );
+      const sent = await r.send(group.id, "look", { attachments: [file.id] });
+      await r.settled(group.id, sent.replies[0]!.id);
 
-    const path = /\[attachment: (.+?) \(application\/octet-stream/.exec(
-      requests[0]!.transcript.join("\n"),
-    )?.[1];
-    expect(path).toBe(
-      join(home, ".eta", "uploads", group.id, `${file.id}-big.bin`),
-    );
-    expect((await readFile(path!)).equals(bytes)).toBe(true);
-    // The primary keeps its own copy; the agent was pointed at the daemon's.
-    expect(
-      existsSync(
-        join(r.host.dataDir, "attachments", group.id, `${file.id}-big.bin`),
-      ),
-    ).toBe(true);
-  }, 60_000);
+      const path = /\[attachment: (.+?) \(application\/octet-stream/.exec(
+        requests[0]!.transcript.join("\n"),
+      )?.[1];
+      expect(path).toBe(
+        join(home, ".eta", "uploads", group.id, `${file.id}-big.bin`),
+      );
+      expect((await readFile(path!)).equals(bytes)).toBe(true);
+      // The primary keeps its own copy; the agent was pointed at the daemon's.
+      expect(
+        existsSync(
+          join(r.host.dataDir, "attachments", group.id, `${file.id}-big.bin`),
+        ),
+      ).toBe(true);
+    },
+    60_000,
+  );
 
   it("sends an image to the remote model as an image, over the link", async () => {
     const home = await tempDir("eta-daemon-home-");

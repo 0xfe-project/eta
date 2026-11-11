@@ -57,6 +57,21 @@ export interface TaskToolDeps {
   agents: AgentStore;
   runner: TaskRunner;
   workspaceFor: WorkspaceChoice;
+  captain?: {
+    assignmentFor: (
+      conversationId: string,
+      agentId: string,
+    ) =>
+      | { assignmentId: string; messageId: string; targetId: string }
+      | undefined;
+    isCaptain: (agentId: string) => boolean;
+    taskCreated: (input: {
+      taskId: string;
+      assignmentId: string;
+      messageId: string;
+      agentId: string;
+    }) => void;
+  };
 }
 
 /** The task tools of every session that is an agent in a conversation, or the executor of a task. */
@@ -66,6 +81,7 @@ export function taskSessionTools(
   return ({ meta }) => {
     if (meta.agentId === undefined || meta.conversationId === undefined)
       return [];
+    if (deps.captain?.isCaptain(meta.agentId)) return [];
     const taskId = taskOfKey(
       meta.conversationId,
       (runId) => deps.runner.runOf(runId)?.taskId,
@@ -202,6 +218,8 @@ function conversationTools(
 ): KernelTool[] {
   const { board, workspaceFor } = deps;
   const actor: TaskActor = { kind: "agent", agentId: who.agentId };
+  const assignment = () =>
+    deps.captain?.assignmentFor(who.conversationId, who.agentId);
   const { taskOf, list, get } = reading(deps);
 
   // The debt this comment used to record is paid on the prompt side. The session's own list is
@@ -254,8 +272,10 @@ function conversationTools(
       assignee: Type.Optional(
         Type.String({
           description:
-            "The agent this work is for, when it is not you: an agent's id, as the user named " +
-            "it. Absent is you, the proposer, which executes it itself.",
+            "The agent this work is for, when it is not you: its name or its id. It is resolved " +
+            "to the agent's registry id when written (an id first, then a name only one agent " +
+            "has); a name nobody has, or several agents share, is refused with the agents there are. " +
+            "Absent is you, the proposer, which executes it itself.",
         }),
       ),
     }),
@@ -266,10 +286,26 @@ function conversationTools(
           args.workspace,
         );
         const { base, assignee, ...rest } = args;
+        const captain = assignment();
+        if (captain !== undefined && assignee !== undefined)
+          throw new Error(
+            "Captain assignments do not use task.assignee; create the task yourself",
+          );
         const row = board.draft({
           conversationId: who.conversationId,
           agentId: who.agentId,
-          draft: { ...rest, workspace, base, assignee },
+          draft: {
+            ...rest,
+            workspace,
+            base,
+            assignee,
+            ...(captain === undefined
+              ? {}
+              : {
+                  captainAssignmentId: captain.assignmentId,
+                  captainMessageId: captain.messageId,
+                }),
+          },
         });
         return text(
           `Drafted "${args.title}" for the user to confirm; it will run in ${workspace === "worktree" ? "a git worktree" : "the project directory"}${base === undefined ? "" : ` based on ${base}`}${assignee === undefined ? "" : `, executed by ${assignee}`}.`,
@@ -316,8 +352,10 @@ function conversationTools(
       assignee: Type.Optional(
         Type.String({
           description:
-            "The agent this work is for, when it is not you: an agent's id, as the user named " +
-            "it. Absent is you, the maker, which executes it itself.",
+            "The agent this work is for, when it is not you: its name or its id. It is resolved " +
+            "to the agent's registry id when written (an id first, then a name only one agent " +
+            "has); a name nobody has, or several agents share, is refused with the agents there are. " +
+            "Absent is you, the maker, which executes it itself.",
         }),
       ),
     }),
@@ -328,6 +366,11 @@ function conversationTools(
           args.workspace,
         );
         const { base, assignee, ...rest } = args;
+        const captain = assignment();
+        if (captain !== undefined && assignee !== undefined)
+          throw new Error(
+            "Captain assignments do not use task.assignee; create the task yourself",
+          );
         const task = board.create(
           {
             ...rest,
@@ -335,9 +378,22 @@ function conversationTools(
             base,
             assignee,
             conversationId: who.conversationId,
+            ...(captain === undefined
+              ? {}
+              : {
+                  captainAssignmentId: captain.assignmentId,
+                  captainMessageId: captain.messageId,
+                }),
           },
           actor,
         );
+        if (captain !== undefined)
+          deps.captain?.taskCreated({
+            taskId: task.id,
+            assignmentId: captain.assignmentId,
+            messageId: captain.messageId,
+            agentId: who.agentId,
+          });
         return text(`Created task #${task.number} "${task.title}".`, {
           id: task.id,
           number: task.number,

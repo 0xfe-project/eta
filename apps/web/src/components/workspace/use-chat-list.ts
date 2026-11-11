@@ -87,6 +87,7 @@ export function useChatList() {
       if (agentId !== undefined) chats.set(agentId, conversation);
     }
     return agents
+      .filter((a) => a.systemRole !== "captain")
       .flatMap((agent): AgentEntry[] => {
         const conversation = chats.get(agent.id);
         // A chat that is put away takes the agent with it: the archived list is the only place it

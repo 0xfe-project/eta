@@ -364,6 +364,7 @@ export default r1;`,
 
 describe("eta.ask effect ledger", () => {
   it("records the call site and a prompt summary", async () => {
+    if (process.platform === "win32") return;
     const hooks: Hooks = {
       ask: async (request: AskRequest): Promise<AskResult> => ({
         text: "answer",

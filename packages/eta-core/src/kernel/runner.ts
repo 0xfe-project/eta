@@ -27,6 +27,7 @@ import type { CompactionDriver } from "./compaction";
 import type { ConfigService } from "./config";
 import type { RunDelegate } from "./delegate";
 import type { Gate, GateControl } from "./effect-gate";
+import type { RunFailure } from "./failure";
 import type { GenerationInterrupt } from "./generation";
 import type { GoalService } from "./goal";
 import type { QueuedItem } from "./inbox";
@@ -178,6 +179,8 @@ export interface RunResult {
   status: "completed" | "failed" | "aborted";
   /** Set when the run ended on a provider error rather than a clean stop. */
   error?: string;
+  /** The classified failure behind `error`, when the provider produced one. */
+  failure?: RunFailure | undefined;
 }
 
 const charsToTokens = (text: string): number => Math.ceil(text.length / 4);
@@ -198,6 +201,7 @@ export class Runner {
   private emptyStops = 0;
   private currentRunId: string | undefined;
   private currentTurnId: string | undefined;
+  private currentFailure: RunFailure | undefined;
   private turnToolResults: AgentMessage[] = [];
   private inFlight: Promise<RunResult> | undefined;
   private gate: { gate: Gate; control: GateControl } | undefined;
@@ -473,6 +477,7 @@ export class Runner {
     const runId = crypto.randomUUID();
     const { gate, control } = createGate();
     this.gate = { gate, control };
+    this.currentFailure = undefined;
     this.emit("turn:run-start", { runId, startedAt: Date.now() });
     // What a run takes when it starts: next-run items always, steering and
     // follow-ups per their modes. They become the run's opening transcript.
@@ -686,7 +691,14 @@ export class Runner {
       status = "failed";
       // The failure is announced before the flush, so the journal's record of it
       // rides in the same durability wait as the rest of the run.
-      this.emit("turn:run-failed", { runId, error, failedAt: Date.now() });
+      this.emit("turn:run-failed", {
+        runId,
+        error,
+        failedAt: Date.now(),
+        ...(this.currentFailure === undefined
+          ? {}
+          : { failure: this.currentFailure }),
+      });
     }
     // The one place the loop waits for the disk: a finished run is a durable
     // run. Commits were started as messages landed and are not awaited — the
@@ -697,6 +709,9 @@ export class Runner {
       turns: this.kernel.turns,
       status,
       ...(error === undefined ? {} : { error }),
+      ...(this.currentFailure === undefined
+        ? {}
+        : { failure: this.currentFailure }),
     };
     this.emit("turn:run-end", {
       runId,
@@ -816,6 +831,9 @@ export class Runner {
       contextFor: () =>
         this.assembleContext(toolContext, systemPrompt, transient),
       emit: this.emit,
+      onFailure: (failure) => {
+        this.currentFailure = failure;
+      },
       ...(this.options.maxInterrupts === undefined
         ? {}
         : { maxInterrupts: this.options.maxInterrupts }),

@@ -28,6 +28,8 @@ interface WireMemory {
   source?: string;
   source_group_id?: string;
   group_context?: string;
+  deleted_at?: string;
+  deleted_by?: string;
 }
 
 const viewOf = (memory: WireMemory): MemoryView => {
@@ -40,6 +42,12 @@ const viewOf = (memory: WireMemory): MemoryView => {
     createdAt: Number.isNaN(created) ? null : created,
     source: (memory.source as MemorySource | undefined) ?? null,
     conversationId: memory.source_group_id ?? null,
+    deletedAt:
+      memory.deleted_at === undefined ||
+      Number.isNaN(Date.parse(memory.deleted_at))
+        ? null
+        : Date.parse(memory.deleted_at),
+    deletedBy: memory.deleted_by ?? null,
   };
 };
 
@@ -166,12 +174,18 @@ export class MemoryClient {
   /** The agent's memories, newest first, or the ones matching `query` best first. */
   async list(
     agentId: string,
-    filters: { query?: string; source?: string; conversationId?: string } = {},
+    filters: {
+      query?: string;
+      source?: string;
+      conversationId?: string;
+      includeDeleted?: boolean;
+    } = {},
   ): Promise<MemoryView[]> {
     const params = new URLSearchParams();
     if (filters.query) params.set("q", filters.query);
     if (filters.source) params.set("source", filters.source);
     if (filters.conversationId) params.set("group_id", filters.conversationId);
+    if (filters.includeDeleted === true) params.set("include_deleted", "1");
     const search = params.size === 0 ? "" : `?${params}`;
     const response = await this.#send(
       "GET",
@@ -196,6 +210,26 @@ export class MemoryClient {
     await this.#send(
       "DELETE",
       `/api/memory/v1/agents/${encodeURIComponent(agentId)}/memories/${encodeURIComponent(id)}`,
+      { timeoutMs: 15_000 },
+    );
+  }
+
+  async softDelete(
+    agentId: string,
+    id: string,
+    deletedBy: string,
+  ): Promise<void> {
+    await this.#send(
+      "DELETE",
+      `/api/memory/v1/agents/${encodeURIComponent(agentId)}/memories/${encodeURIComponent(id)}/soft`,
+      { body: { deleted_by: deletedBy }, timeoutMs: 15_000 },
+    );
+  }
+
+  async restore(agentId: string, id: string): Promise<void> {
+    await this.#send(
+      "POST",
+      `/api/memory/v1/agents/${encodeURIComponent(agentId)}/memories/${encodeURIComponent(id)}/restore`,
       { timeoutMs: 15_000 },
     );
   }

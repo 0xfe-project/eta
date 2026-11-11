@@ -34,7 +34,7 @@ import type {
 import type { Context } from "cordis";
 import { existsSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 /** What a plugin's `package.json` says about itself. */
@@ -365,7 +365,7 @@ export class PluginManager {
     directory: string,
     source: "bundled" | "user",
   ): Promise<LoadedPlugin> {
-    const fallbackName = directory.split("/").pop() ?? directory;
+    const fallbackName = basename(directory);
     // The fingerprint is taken first, and even a plugin that fails to load records it: a
     // broken plugin that gets fixed is a *change*, and a failure path that recorded nothing
     // would make the fix look like the state it was already in.

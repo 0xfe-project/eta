@@ -2,6 +2,7 @@ import type {
   BoardTaskDetail,
   BoardTaskStatus,
   MessageView,
+  RunFailureView,
   TaskActivityView,
   TaskActor,
   TaskQueueReason,
@@ -62,6 +63,25 @@ import { shellQuote } from "@eta/ssh";
 import { workable } from "./board";
 import { mentionKey, sessionKeyOf, taskKey } from "./session-key";
 import { prepareWorktree } from "./workspace";
+
+/**
+ * What a run says when the agent that is to execute the task is not in the registry. It names the
+ * role the missing id holds and the id itself: the executor is the assignee, and the maker only
+ * when nobody else was assigned, so a missing assignee must not read as a missing maker.
+ */
+function executorGoneText(task: {
+  assigneeAgentId: string | null;
+  createdBy: { agentId: string | null };
+}): string {
+  const assignee = task.assigneeAgentId;
+  const maker = task.createdBy.agentId;
+  if (assignee !== null && assignee !== maker)
+    return `the agent assigned to execute this task (${assignee}) is not registered (this is the assignee, not the agent that made the task)`;
+  return `the agent that made this task and was to execute it (${maker ?? assignee}) is not registered`;
+}
+
+const capitalized = (text: string): string =>
+  text.charAt(0).toUpperCase() + text.slice(1);
 
 /** What a run says when the process died under it. */
 const RUN_RESTART_TEXT = "The server restarted before this run finished.";
@@ -133,6 +153,19 @@ interface Live {
 interface Ended {
   status: "completed" | "failed" | "interrupted";
   error?: string | undefined;
+  failure?: RunFailureView | undefined;
+}
+
+const ACTIVITY_POLL_MS = 10_000;
+const ACTIVITY_STREAM_STALE_MS = ACTIVITY_POLL_MS * 2;
+
+export function streamActivityCoversPoll(
+  lastStreamedAt: number,
+  now: number,
+): boolean {
+  return (
+    lastStreamedAt !== 0 && now - lastStreamedAt < ACTIVITY_STREAM_STALE_MS
+  );
 }
 
 const NUDGE =
@@ -171,6 +204,28 @@ const mentionsOf = (activity: TaskActivityView): string[] => {
 
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+export function failureFromThrown(error: unknown): RunFailureView | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error))
+    return undefined;
+  const code = error.code;
+  if (typeof code !== "string") return undefined;
+  if (code === "ENOENT")
+    return {
+      code: "configuration_missing",
+      attempt: 1,
+      retryable: false,
+      providerMessage: messageOf(error),
+    };
+  if (code === "EACCES" || code === "EPERM")
+    return {
+      code: "permission",
+      attempt: 1,
+      retryable: false,
+      providerMessage: messageOf(error),
+    };
+  return undefined;
+}
 
 /**
  * Where a run works, in the words it is told. A run on another machine than the project's has no
@@ -566,13 +621,15 @@ export class TaskRunner implements TaskRuns {
     const agentId = options.agentId ?? null;
     if (agentId !== null) {
       if (agents.get(agentId) === undefined)
-        throw new Error("the agent mentioned on this task is gone");
+        throw new Error(
+          `the agent mentioned on this task (${agentId}) is not registered`,
+        );
     } else {
       const executor = this.#executorOf(task);
       if (task.createdBy.kind !== "agent" || executor === null)
         throw new Error("this task has no executor: only an agent's task runs");
       if (agents.get(executor) === undefined)
-        throw new Error("the agent that made this task is gone");
+        throw new Error(executorGoneText(task));
     }
     const project =
       task.projectId === null ? undefined : projects.get(task.projectId);
@@ -680,6 +737,15 @@ export class TaskRunner implements TaskRuns {
         error: lost
           ? `The link to ${machine.name} failed while this run was working, so what it did there is unknown. Nothing was run again. (${error.message})`
           : messageOf(error),
+        ...(lost
+          ? {
+              failure: {
+                code: "unknown_outcome",
+                attempt: 1,
+                retryable: false,
+              },
+            }
+          : failureFromThrown(error)),
       };
     }
     if (live.stopped === "closing")
@@ -691,6 +757,7 @@ export class TaskRunner implements TaskRuns {
       run.id,
       ended.status,
       ended.error ?? null,
+      ended.failure,
     );
     if (done !== undefined) {
       this.#deps.board.runEvent(run.taskId, {
@@ -733,8 +800,8 @@ export class TaskRunner implements TaskRuns {
         ended: {
           status: "failed",
           error: mentioned
-            ? "The agent mentioned on this task is gone."
-            : "The agent that was to execute this task is gone.",
+            ? `The agent mentioned on this task (${agentId}) is not registered.`
+            : `${capitalized(executorGoneText(task))}.`,
         },
       };
     const project =
@@ -872,10 +939,12 @@ export class TaskRunner implements TaskRuns {
       if (live.stopped !== undefined)
         return { ended: { status: "interrupted" }, info };
       live.inFlight = true;
+      const stopActivity = this.#watchActivity(run.id, handle);
       let result;
       try {
         result = await handle.run(prompt, () => !this.#closing);
       } finally {
+        stopActivity();
         live.inFlight = false;
       }
       if (result.text.trim() !== "") live.said = result.text;
@@ -883,7 +952,11 @@ export class TaskRunner implements TaskRuns {
         return { ended: { status: "interrupted" }, info };
       if (result.status === "failed")
         return {
-          ended: { status: "failed", error: result.error ?? "The run failed." },
+          ended: {
+            status: "failed",
+            error: result.error ?? "The run failed.",
+            failure: result.failure,
+          },
           info,
         };
       // Comments that came while the turn was ending go in with the next.
@@ -1018,6 +1091,69 @@ export class TaskRunner implements TaskRuns {
       this.#deps.warn(`[eta] beforeRun failed: ${messageOf(error)}`);
       return undefined;
     }
+  }
+
+  #watchActivity(runId: string, handle: SessionHandle): () => void {
+    let stopped = false;
+    let seen = -1;
+    let lastStreamedAt = 0;
+    let failures = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const touch = (): void => {
+      if (!stopped) this.#deps.runs.touch(runId);
+    };
+    const off = handle.onActivity?.(() => {
+      // Only a new event is progress. An in-flight tool that never updates is exactly the silent
+      // hang the Supervisor needs to catch, so the start event must not keep renewing the run.
+      lastStreamedAt = Date.now();
+      touch();
+    });
+    // Starting the run is itself progress. Until an activity stream proves it is available, the
+    // sequence poll below remains the fallback for daemons and session hosts that cannot stream.
+    touch();
+    let look: () => Promise<void>;
+    const schedule = (delay: number): void => {
+      if (stopped) return;
+      timer = setTimeout(() => void look(), delay);
+      timer.unref?.();
+    };
+    look = async (): Promise<void> => {
+      if (stopped) return;
+      let delay = ACTIVITY_POLL_MS;
+      try {
+        if (streamActivityCoversPoll(lastStreamedAt, Date.now())) {
+          // The session's event stream is live: polling another machine's journal would only add
+          // an RPC every ten seconds while the stream already carries the liveness evidence.
+        } else {
+          // A dead event stream must not disable the fallback permanently.
+          lastStreamedAt = 0;
+          const seq = await handle.lastSeq();
+          if (stopped) return;
+          if (seq > seen) {
+            seen = seq;
+            touch();
+          }
+        }
+        failures = 0;
+      } catch (error) {
+        failures += 1;
+        delay = Math.min(
+          5 * 60_000,
+          ACTIVITY_POLL_MS * 2 ** Math.min(failures - 1, 6),
+        );
+        if (failures === 1 || (failures & (failures - 1)) === 0)
+          this.#deps.warn(
+            `[eta] could not read run activity (failure ${failures}): ${messageOf(error)}`,
+          );
+      }
+      schedule(delay);
+    };
+    schedule(ACTIVITY_POLL_MS);
+    return () => {
+      stopped = true;
+      if (timer !== undefined) clearTimeout(timer);
+      off?.();
+    };
   }
 
   /** Tell the features how the run ended, without waiting for them or letting them fail it. */

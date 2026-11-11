@@ -12,7 +12,7 @@
  * what the sessions run (git, gh, Claude Code, Codex, tailscale) lives on the user's.
  */
 import { homedir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, join, posix } from "node:path";
 import process from "node:process";
 
 export interface ServiceDefinition {
@@ -184,7 +184,7 @@ export function serviceDefinition(
     const log = launchdLog(home, name);
     return {
       name,
-      path: join(home, "Library", "LaunchAgents", `${name}.plist`),
+      path: posix.join(home, "Library", "LaunchAgents", `${name}.plist`),
       content: `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -207,7 +207,7 @@ export function serviceDefinition(
   if (platform === "linux") {
     return {
       name,
-      path: join(home, ".config", "systemd", "user", `${name}.service`),
+      path: posix.join(home, ".config", "systemd", "user", `${name}.service`),
       content: `[Unit]
 Description=${unit.description}
 After=network-online.target

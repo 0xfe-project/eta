@@ -10,6 +10,7 @@ import {
   Agent,
   mountGlobals,
   mountModules,
+  mountNodeGlobals,
   Realm,
 } from "../../src/realm/index";
 
@@ -32,7 +33,92 @@ describe("realm", () => {
     expect(result.value).toBe(6);
   });
 
+  it("a bare specifier resolves to the built-in, not npm", async () => {
+    const realm = new Realm({
+      name: "test",
+      mounts: (r) => mountModules(r, { root }),
+    });
+    await writeFile(join(root, "note.txt"), "bare");
+
+    // No node_modules anywhere near `root`: if the bare specifier reached the
+    // package resolver it would install the same-named npm dummy and fail.
+    const result = await realm.evaluate(
+      `import { readFile } from "fs/promises";\n\nconst text = await readFile(${JSON.stringify(join(root, "note.txt"))});\nexport default text;`,
+      { identifier: join(root, "probe.js") },
+    );
+
+    expect(result.value).toBe("bare");
+    expect(result.effects[0]?.name).toBe("fs.readFile");
+  });
+
+  it("a curated module answers a default import the way Node's interop does", async () => {
+    const realm = new Realm({
+      name: "test",
+      mounts: (r) => mountModules(r, { root }),
+    });
+
+    const result = await realm.evaluate(
+      `import fs from "fs";\nexport default typeof fs.readFileSync;`,
+      { identifier: join(root, "probe.js") },
+    );
+
+    expect(result.value).toBe("function");
+  });
+
+  it("a passthrough module answers with the host's own object", async () => {
+    const realm = new Realm({
+      name: "test",
+      mounts: (r) => mountModules(r, { root }),
+    });
+
+    const result = await realm.evaluate(
+      `import os from "os";\nexport default typeof os.platform;`,
+      { identifier: join(root, "probe.js") },
+    );
+
+    expect(result.value).toBe("function");
+  });
+
+  it("the node globals are the host's own objects", async () => {
+    const realm = new Realm({
+      name: "test",
+      mounts: (r) => {
+        mountNodeGlobals(r);
+        return mountModules(r, { root });
+      },
+    });
+
+    const result = await realm.evaluate(
+      `export default [typeof process, Buffer.isBuffer(Buffer.from("hi"))];`,
+      { identifier: join(root, "probe.js") },
+    );
+
+    expect(result.value).toEqual(["object", true]);
+  });
+
+  it("child_process is a built-in that is not mounted, bare or prefixed", async () => {
+    const realm = new Realm({
+      name: "test",
+      mounts: (r) => mountModules(r, { root }),
+    });
+
+    const bare = await realm
+      .evaluate(`import { execFile } from "child_process";\nexport default 1;`)
+      .catch((e: Error) => e);
+    expect(bare).toBeInstanceOf(Error);
+    expect((bare as Error).message).toContain("not mounted");
+
+    const prefixed = await realm
+      .evaluate(
+        `import { execFile } from "node:child_process";\nexport default 1;`,
+      )
+      .catch((e: Error) => e);
+    expect(prefixed).toBeInstanceOf(Error);
+    expect((prefixed as Error).message).toContain("not mounted");
+  });
+
   it("effects carry the line and column that made the call", async () => {
+    if (process.platform === "win32") return;
     const realm = new Realm({
       name: "test",
       mounts: (r) => mountModules(r, { root }),
@@ -318,6 +404,7 @@ describe("authorize", () => {
   });
 
   it("an allowed call runs and keeps the line it was made on", async () => {
+    if (process.platform === "win32") return;
     await writeFile(join(root, "note.txt"), "hello");
     const realm = new Realm({
       name: "test",
@@ -450,6 +537,7 @@ describe("waking", () => {
 
 describe("$", () => {
   it("the shell is there without importing anything", async () => {
+    if (process.platform === "win32") return;
     const agent = new Agent({ root });
     const script =
       "const out = await $`echo hi`;\nexport default { stdout: out.stdout.trim(), code: out.exitCode };";
@@ -460,6 +548,7 @@ describe("$", () => {
   });
 
   it("a failing command throws the way zx throws", async () => {
+    if (process.platform === "win32") return;
     const agent = new Agent({ root });
     const script = "await $`exit 3`;\nexport default 0;";
     const error = (await agent

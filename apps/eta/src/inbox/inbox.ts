@@ -36,6 +36,10 @@ export class Inbox {
   readonly #timeline: Timeline;
   readonly #changed: () => void;
   readonly #warn: (message: string) => void;
+  readonly #opened = new Set<(interaction: InteractionView) => void>();
+  readonly #settled = new Set<
+    (interaction: InteractionView, sourceInteractionId: string) => void
+  >();
   /**
    * The answers on their way to a session. The ask channel tells its observer that a question was
    * answered but not with what, so the answer waits here for the moment the observer hears it.
@@ -56,6 +60,42 @@ export class Inbox {
       ...this.#interactions.pending(),
       ...this.#interactions.settled(HISTORY_LIMIT),
     ];
+  }
+
+  get(id: string): InteractionView | undefined {
+    return this.#interactions.get(id);
+  }
+
+  /** Hear a question as it becomes pending. A listener cannot fail the asking run. */
+  onOpened(listener: (interaction: InteractionView) => void): () => void {
+    this.#opened.add(listener);
+    return () => this.#opened.delete(listener);
+  }
+
+  /** Hear a Captai relay question settle, with the source question it was relayed from. */
+  onSettled(
+    listener: (
+      interaction: InteractionView,
+      sourceInteractionId: string,
+    ) => void,
+  ): () => void {
+    this.#settled.add(listener);
+    return () => this.#settled.delete(listener);
+  }
+
+  setRelayOf(
+    interactionId: string,
+    sourceInteractionId: string,
+  ): InteractionView | undefined {
+    return this.#interactions.setRelayOf(interactionId, sourceInteractionId);
+  }
+
+  relayOf(interactionId: string): string | null {
+    return this.#interactions.relayOf(interactionId);
+  }
+
+  relayQuestionOf(sourceInteractionId: string): InteractionView | undefined {
+    return this.#interactions.relayQuestionOf(sourceInteractionId);
   }
 
   /** The tool names that ask the user before they run, sorted. */
@@ -104,9 +144,39 @@ export class Inbox {
             response ?? null,
           );
         } else {
-          row = this.#interactions.settle(id, action);
+          row = this.#interactions.settle(
+            id,
+            action,
+            this.#answering.get(id) ?? null,
+          );
         }
-        if (row !== undefined) this.#changed();
+        if (row !== undefined) {
+          this.#changed();
+          if (action === "asked" && row.status === "pending") {
+            for (const listener of [...this.#opened]) {
+              try {
+                listener(row);
+              } catch (error) {
+                this.#warn(
+                  `[eta] could not relay a question: ${String(error)}`,
+                );
+              }
+            }
+          } else if (action !== "asked") {
+            const sourceInteractionId = this.#interactions.relayOf(row.id);
+            if (sourceInteractionId !== null) {
+              for (const listener of [...this.#settled]) {
+                try {
+                  listener(row, sourceInteractionId);
+                } catch (error) {
+                  this.#warn(
+                    `[eta] could not record a relayed answer: ${String(error)}`,
+                  );
+                }
+              }
+            }
+          }
+        }
       } catch (error) {
         this.#warn(`[eta] could not record a question: ${String(error)}`);
       }
@@ -123,6 +193,24 @@ export class Inbox {
     id: string,
     response: InboxResponse,
   ): Promise<{ interaction: InteractionView; answered: boolean }> {
+    return await this.answerWith(id, response, (sessionId, questionId, value) =>
+      sessions.answer(sessionId, questionId, value),
+    );
+  }
+
+  /**
+   * The same answer path for a Captain, whose session may be local or on a daemon and whose
+   * delivery is therefore supplied by the caller.
+   */
+  async answerWith(
+    id: string,
+    response: InboxResponse,
+    deliver: (
+      sessionId: string,
+      questionId: string,
+      response: InboxResponse,
+    ) => Promise<boolean>,
+  ): Promise<{ interaction: InteractionView; answered: boolean }> {
     const row = this.#interactions.get(id);
     if (row === undefined) throw new Error(`no such question: ${id}`);
     if (row.status !== "pending") return { interaction: row, answered: false };
@@ -130,11 +218,7 @@ export class Inbox {
     this.#answering.set(id, response);
     let delivered: boolean;
     try {
-      delivered = await sessions.answer(
-        row.sessionId,
-        row.questionId,
-        response,
-      );
+      delivered = await deliver(row.sessionId, row.questionId, response);
     } finally {
       this.#answering.delete(id);
     }

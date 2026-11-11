@@ -19,6 +19,11 @@ import type { Database } from "bun:sqlite";
 
 export interface RunRecord extends TaskRunView {
   taskId: string;
+  /** The structured classification of a failed run, when one exists. */
+  errorCode: string | null;
+  retryable: boolean | null;
+  /** The last time this run's journal moved. */
+  lastEventAt: number | null;
   /** What the session is held in (`session-key.ts`); null until the run has a session. */
   sessionKey: string | null;
 }
@@ -36,6 +41,9 @@ interface Row {
   workspace: string | null;
   nudged: number;
   error: string | null;
+  error_code: string | null;
+  retryable: number | null;
+  last_event_at: number | null;
   created_at: number;
   started_at: number | null;
   finished_at: number | null;
@@ -54,6 +62,9 @@ const recordOf = (row: Row): RunRecord => ({
   workspace: row.workspace,
   nudged: row.nudged === 1,
   error: row.error,
+  errorCode: row.error_code,
+  retryable: row.retryable === null ? null : row.retryable === 1,
+  lastEventAt: row.last_event_at,
   createdAt: row.created_at,
   startedAt: row.started_at,
   finishedAt: row.finished_at,
@@ -84,10 +95,19 @@ export class TaskRunStore {
     const id = crypto.randomUUID();
     this.#db
       .query(
-        `INSERT INTO task_run (id, task_id, machine_id, continues_run_id, agent_id, created_at)
-          VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO task_run
+           (id, task_id, machine_id, continues_run_id, agent_id, created_at, last_event_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(id, taskId, machineId, continuesRunId, agentId, Date.now());
+      .run(
+        id,
+        taskId,
+        machineId,
+        continuesRunId,
+        agentId,
+        Date.now(),
+        Date.now(),
+      );
     return this.get(id)!;
   }
 
@@ -209,10 +229,10 @@ export class TaskRunStore {
     return (
       this.#db
         .query(
-          `UPDATE task_run SET status = 'starting', queue_reason = NULL, started_at = ?
+          `UPDATE task_run SET status = 'starting', queue_reason = NULL, started_at = ?, last_event_at = ?
             WHERE id = ? AND status = 'queued'`,
         )
-        .run(Date.now(), id).changes > 0
+        .run(Date.now(), Date.now(), id).changes > 0
     );
   }
 
@@ -238,9 +258,9 @@ export class TaskRunStore {
     return (
       this.#db
         .query(
-          "UPDATE task_run SET status = 'running' WHERE id = ? AND status = 'starting'",
+          "UPDATE task_run SET status = 'running', last_event_at = ? WHERE id = ? AND status = 'starting'",
         )
-        .run(id).changes > 0
+        .run(Date.now(), id).changes > 0
     );
   }
 
@@ -248,18 +268,38 @@ export class TaskRunStore {
     this.#db.query("UPDATE task_run SET nudged = 1 WHERE id = ?").run(id);
   }
 
+  /** The run's journal moved: it has more to work with than when it started. */
+  touch(id: string, at: number = Date.now()): void {
+    this.#db
+      .query(
+        `UPDATE task_run SET last_event_at = ?
+          WHERE id = ? AND status IN ('queued', 'starting', 'running')`,
+      )
+      .run(at, id);
+  }
+
   /** The run ends. Only a run that has not ended can: the second write of a race is dropped. */
   finish(
     id: string,
     status: "completed" | "failed" | "interrupted",
     error: string | null = null,
+    failure?: { code: string; retryable: boolean } | undefined,
   ): RunRecord | undefined {
     const changed = this.#db
       .query(
-        `UPDATE task_run SET status = ?, error = ?, queue_reason = NULL, finished_at = ?
+        `UPDATE task_run SET status = ?, error = ?, error_code = ?, retryable = ?,
+            queue_reason = NULL, last_event_at = ?, finished_at = ?
           WHERE id = ? AND status IN ('queued', 'starting', 'running')`,
       )
-      .run(status, error, Date.now(), id).changes;
+      .run(
+        status,
+        error,
+        failure?.code ?? null,
+        failure === undefined ? null : failure.retryable ? 1 : 0,
+        Date.now(),
+        Date.now(),
+        id,
+      ).changes;
     return changed === 0 ? undefined : this.get(id);
   }
 

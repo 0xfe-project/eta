@@ -15,6 +15,7 @@ import type { TaskStatus } from "@/queries/tasks";
 import { MAX_ATTACHMENTS } from "@eta/client-contracts";
 import { ArrowDownIcon } from "@phosphor-icons/react/ArrowDown";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
+import { CrownSimpleIcon } from "@phosphor-icons/react/CrownSimple";
 import { PaperclipIcon } from "@phosphor-icons/react/Paperclip";
 import {
   memo,
@@ -871,6 +872,7 @@ const Turn = memo(
       "chat",
       "agents",
       "common",
+      "captain",
       "navigation",
       "tasks",
     ] as const);
@@ -934,15 +936,24 @@ const Turn = memo(
           <Markdown>{message.text}</Markdown>
         </div>
       );
+    const captain = message.author === "captain";
     return (
-      <div className="message assistant">
+      <div className={cn("message assistant", captain && "message-captain")}>
         {author === undefined ? null : (
           <div className="message-author">
-            <AgentAvatar
-              agent={{ id: message.agentId ?? "" }}
-              className="size-[18px]"
-            />
-            <span>{author}</span>
+            {captain ? (
+              <CrownSimpleIcon className="size-[18px]" aria-hidden="true" />
+            ) : (
+              <AgentAvatar
+                agent={{ id: message.agentId ?? "" }}
+                className="size-[18px]"
+              />
+            )}
+            <span>
+              {captain
+                ? translateText("captain:message.captain", { name: author })
+                : author}
+            </span>
           </div>
         )}
         {running && sessionId !== undefined ? (
@@ -994,6 +1005,13 @@ const Turn = memo(
           <time dateTime={new Date(message.createdAt).toISOString()}>
             {when(message.createdAt)}
           </time>
+          {typeof message.data.captainAssignmentId === "string" ? (
+            <span data-captain-assignment={message.data.captainAssignmentId}>
+              {translateText("captain:message.assignment", {
+                round: String(message.data.captainRound ?? 1),
+              })}
+            </span>
+          ) : null}
           <CopyMessage text={message.text} />
         </div>
         <ReplyOutcome
@@ -1650,12 +1668,14 @@ export function ChatPanel({
                         message={message}
                         taskRowsOf={under.get(message.id)}
                         author={
-                          message.author === "agent" &&
-                          (group?.kind === "group" ||
-                            (group?.participants.length ?? 0) > 1 ||
-                            message.kind === "mention")
+                          message.author === "captain"
                             ? agentName(agents, message.agentId)
-                            : undefined
+                            : message.author === "agent" &&
+                                (group?.kind === "group" ||
+                                  (group?.participants.length ?? 0) > 1 ||
+                                  message.kind === "mention")
+                              ? agentName(agents, message.agentId)
+                              : undefined
                         }
                         sessionId={
                           message.agentId === null

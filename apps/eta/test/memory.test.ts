@@ -400,6 +400,8 @@ describe("the memory target", () => {
         createdAt: Date.parse("2026-10-08T00:00:01+00:00"),
         source: "agent",
         conversationId: "c1",
+        deletedAt: null,
+        deletedBy: null,
       },
       {
         id: "m2",
@@ -408,6 +410,8 @@ describe("the memory target", () => {
         createdAt: null,
         source: null,
         conversationId: null,
+        deletedAt: null,
+        deletedBy: null,
       },
     ]);
     await w.client.call("memory", "list", { agentId: "a1" });

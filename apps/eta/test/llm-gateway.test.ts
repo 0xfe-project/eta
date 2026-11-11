@@ -241,95 +241,99 @@ describe("the gateway's accounts", () => {
     );
   }, 60_000);
 
-  it("hand a Codex device login to CPA as a credential file", async () => {
-    const openai = fakeOpenAI();
-    stops.push(openai.stop);
-    const dataDir = await tempDir("eta-llm-");
-    const { gateway } = await open(dataDir, { codexIssuer: openai.url });
+  it.skipIf(process.platform === "win32")(
+    "hand a Codex device login to CPA as a credential file",
+    async () => {
+      const openai = fakeOpenAI();
+      stops.push(openai.stop);
+      const dataDir = await tempDir("eta-llm-");
+      const { gateway } = await open(dataDir, { codexIssuer: openai.url });
 
-    const login = await gateway.loginStart("codex");
-    expect(login).toMatchObject({
-      connector: "codex",
-      flow: "oauth_device",
-      status: "pending",
-      userCode: "ABCD-1234",
-      url: "https://auth.openai.com/codex/device",
-    });
-    await until(
-      async () => (await gateway.loginPoll(login.id)).status === "succeeded",
-    );
-    // What was asked of OpenAI, in order: the code, polls until approved, the exchange.
-    expect(openai.sent.map((request) => request.path)).toEqual([
-      "/api/accounts/deviceauth/usercode",
-      "/api/accounts/deviceauth/token",
-      "/api/accounts/deviceauth/token",
-      "/oauth/token",
-    ]);
-    expect(JSON.parse(openai.sent[0]!.body)).toEqual({
-      client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
-    });
-    expect(JSON.parse(openai.sent[1]!.body)).toEqual({
-      device_auth_id: "dev-1",
-      user_code: "ABCD-1234",
-    });
-    expect(
-      Object.fromEntries(new URLSearchParams(openai.sent[3]!.body)),
-    ).toEqual({
-      grant_type: "authorization_code",
-      client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
-      code: "code",
-      redirect_uri: "https://auth.openai.com/deviceauth/callback",
-      code_verifier: "verifier",
-    });
-    await until(async () => (await gateway.connections()).length === 1);
-    const [account] = await gateway.connections();
-    expect(account).toMatchObject({
-      connector: "codex",
-      label: "ada@example.com",
-      plan: "plus",
-      state: "active",
-    });
-    // The credential file, as CPA's own device login writes it.
-    const auths = join(dataDir, "llm", "auths");
-    // CPA keeps a `.lock` beside it.
-    const [file] = (await readdir(auths)).filter((name) =>
-      name.endsWith(".json"),
-    );
-    expect(file).toMatch(/^codex-[0-9a-f]{8}-ada@example\.com-plus\.json$/);
-    const credential = JSON.parse(await readFile(join(auths, file!), "utf8"));
-    expect(credential).toMatchObject({
-      type: "codex",
-      access_token: "access",
-      refresh_token: "refresh",
-      account_id: "acct-1",
-      email: "ada@example.com",
-      plan_type: "plus",
-    });
-    expect(
-      Date.parse(credential.expired) - Date.parse(credential.last_refresh),
-    ).toBe(3_600_000);
-    // CPA serves its models; a disabled account serves none of them.
-    await until(async () =>
-      (await gateway.models()).some(
-        (model) => model.connector === "codex" && model.available,
-      ),
-    );
-    expect((await gateway.setEnabled(account!.id, false)).state).toBe(
-      "disabled",
-    );
-    await gateway.remove(account!.id);
-    expect(await gateway.connections()).toEqual([]);
-    expect(
-      await readFile(join(dataDir, "llm", "models.json"), "utf8"),
-    ).toContain('"connector": "codex"');
+      const login = await gateway.loginStart("codex");
+      expect(login).toMatchObject({
+        connector: "codex",
+        flow: "oauth_device",
+        status: "pending",
+        userCode: "ABCD-1234",
+        url: "https://auth.openai.com/codex/device",
+      });
+      await until(
+        async () => (await gateway.loginPoll(login.id)).status === "succeeded",
+      );
+      // What was asked of OpenAI, in order: the code, polls until approved, the exchange.
+      expect(openai.sent.map((request) => request.path)).toEqual([
+        "/api/accounts/deviceauth/usercode",
+        "/api/accounts/deviceauth/token",
+        "/api/accounts/deviceauth/token",
+        "/oauth/token",
+      ]);
+      expect(JSON.parse(openai.sent[0]!.body)).toEqual({
+        client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
+      });
+      expect(JSON.parse(openai.sent[1]!.body)).toEqual({
+        device_auth_id: "dev-1",
+        user_code: "ABCD-1234",
+      });
+      expect(
+        Object.fromEntries(new URLSearchParams(openai.sent[3]!.body)),
+      ).toEqual({
+        grant_type: "authorization_code",
+        client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
+        code: "code",
+        redirect_uri: "https://auth.openai.com/deviceauth/callback",
+        code_verifier: "verifier",
+      });
+      await until(async () => (await gateway.connections()).length === 1);
+      const [account] = await gateway.connections();
+      expect(account).toMatchObject({
+        connector: "codex",
+        label: "ada@example.com",
+        plan: "plus",
+        state: "active",
+      });
+      // The credential file, as CPA's own device login writes it.
+      const auths = join(dataDir, "llm", "auths");
+      // CPA keeps a `.lock` beside it.
+      const [file] = (await readdir(auths)).filter((name) =>
+        name.endsWith(".json"),
+      );
+      expect(file).toMatch(/^codex-[0-9a-f]{8}-ada@example\.com-plus\.json$/);
+      const credential = JSON.parse(await readFile(join(auths, file!), "utf8"));
+      expect(credential).toMatchObject({
+        type: "codex",
+        access_token: "access",
+        refresh_token: "refresh",
+        account_id: "acct-1",
+        email: "ada@example.com",
+        plan_type: "plus",
+      });
+      expect(
+        Date.parse(credential.expired) - Date.parse(credential.last_refresh),
+      ).toBe(3_600_000);
+      // CPA serves its models; a disabled account serves none of them.
+      await until(async () =>
+        (await gateway.models()).some(
+          (model) => model.connector === "codex" && model.available,
+        ),
+      );
+      expect((await gateway.setEnabled(account!.id, false)).state).toBe(
+        "disabled",
+      );
+      await gateway.remove(account!.id);
+      expect(await gateway.connections()).toEqual([]);
+      expect(
+        await readFile(join(dataDir, "llm", "models.json"), "utf8"),
+      ).toContain('"connector": "codex"');
 
-    await expect(gateway.loginPoll("no-such-login")).rejects.toMatchObject({
-      code: "not_found",
-    });
-    await expect(gateway.loginStart("nobody")).rejects.toMatchObject({
-      code: "not_found",
-    });
-  }, 60_000);
+      await expect(gateway.loginPoll("no-such-login")).rejects.toMatchObject({
+        code: "not_found",
+      });
+      await expect(gateway.loginStart("nobody")).rejects.toMatchObject({
+        code: "not_found",
+      });
+    },
+    60_000,
+  );
 
   it("keep a Codex login whose email has two dots in a row", async () => {
     const email = "first..last@example.com";

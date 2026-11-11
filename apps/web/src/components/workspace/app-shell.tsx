@@ -37,7 +37,7 @@ import { AgentEditor } from "./agent-editor";
 import { NewConversationDialog } from "./new-conversation-dialog";
 import { usePaneWidth } from "./pane";
 import { SettingsDialog, SettingsMenuItem } from "./settings-dialog";
-import { ConversationList } from "./sidebar-tree";
+import { CaptainSection, ConversationList } from "./sidebar-tree";
 import { useWorkspaceStore } from "./workspace-store";
 
 // Shared navigation: the full-window sidebar on wide screens and the destinations plus the main
@@ -205,6 +205,9 @@ export function Sidebar({
         )}
       </SidebarHeader>
       <SidebarContent className="gap-0 overflow-hidden">
+        {/* Captain first, above the destinations and above the list: the whole sidebar is what it
+            watches over, so it is the one thing here that does not move. */}
+        <CaptainSection rail={rail} />
         <SidebarGroup className="shrink-0 border-b pb-1">
           <SidebarMenu aria-label={translateText("accessibility.sections")}>
             {/* The fold, in the rail, at the head of the list it folds away with: the band above
@@ -418,61 +421,64 @@ export function BottomNav() {
   const { t: translateText } = useTranslation(["navigation"] as const);
   const badges = useBadges();
   return (
-    <nav
-      aria-label={translateText("accessibility.sections")}
-      // A board, not an edge. The bar is a bordered plate inset from the screen on every side, and
-      // what is left under it is the safe area's floor — empty, and outside the plate rather than
-      // padding inside it, so a change of inset moves the floor and not the bar.
-      className="shrink-0 px-[8px] pb-[var(--bottom-inset)] md:hidden"
-    >
-      {/* Destinations of one width, the plus in a cell of its own: the solid square is the axis
+    <>
+      <nav
+        aria-label={translateText("accessibility.sections")}
+        // A board, not an edge. The bar is a bordered plate inset from the screen on every side, and
+        // what is left under it is the safe area's floor — empty, and outside the plate rather than
+        // padding inside it, so a change of inset moves the floor and not the bar.
+        className="shrink-0 px-[8px] pb-[var(--bottom-inset)] md:hidden"
+      >
+        {/* Destinations of one width, the plus in a cell of its own: the solid square is the axis
           the tabs are read against, and it breaks the plate's edge above and below, which is what
           makes it a bigger thing than the tabs beside it rather than one of them. 定时 keeps a
           cell only where the feature is on; with three destinations the four cells are equal. */}
-      <div className="relative h-[52px] border bg-background">
-        <div
-          className={cn(
-            "grid h-full grid-rows-1",
-            ROUTINES_VISIBLE
-              ? "grid-cols-[1fr_1fr_1fr_68px_1fr_1fr]"
-              : "grid-cols-[1fr_1fr_1fr_68px_1fr]",
-          )}
-        >
-          <Tab
-            to="/"
-            label={translateText("sections.chat")}
-            icon={ChatsCircleIcon}
-          />
-          <Tab
-            to="/tasks"
-            label={translateText("sections.tasks")}
-            icon={ListChecksIcon}
-            badge={badges["/tasks"]}
-          />
-          <Tab
-            to="/email"
-            label={translateText("sections.email")}
-            icon={EnvelopeSimpleIcon}
-            badge={badges["/email"]}
-          />
-          <div className="flex items-center justify-center">
-            <NewAction />
-          </div>
-          {ROUTINES_VISIBLE ? (
+        <div className="relative h-[52px] border bg-background">
+          <div
+            className={cn(
+              "grid h-full grid-rows-1",
+              ROUTINES_VISIBLE
+                ? "grid-cols-[1fr_1fr_1fr_68px_1fr_1fr]"
+                : "grid-cols-[1fr_1fr_1fr_68px_1fr]",
+            )}
+          >
             <Tab
-              to="/routines"
-              label={translateText("sections.routines")}
-              icon={ClockIcon}
+              to="/"
+              label={translateText("sections.chat")}
+              icon={ChatsCircleIcon}
             />
-          ) : null}
-          <Tab
-            to="/settings"
-            label={translateText("sections.settings")}
-            icon={GearSixIcon}
-          />
+            <Tab
+              to="/tasks"
+              label={translateText("sections.tasks")}
+              icon={ListChecksIcon}
+              badge={badges["/tasks"]}
+            />
+            <Tab
+              to="/email"
+              label={translateText("sections.email")}
+              icon={EnvelopeSimpleIcon}
+              badge={badges["/email"]}
+            />
+
+            <div className="flex items-center justify-center">
+              <NewAction />
+            </div>
+            {ROUTINES_VISIBLE ? (
+              <Tab
+                to="/routines"
+                label={translateText("sections.routines")}
+                icon={ClockIcon}
+              />
+            ) : null}
+            <Tab
+              to="/settings"
+              label={translateText("sections.settings")}
+              icon={GearSixIcon}
+            />
+          </div>
         </div>
-      </div>
-    </nav>
+      </nav>
+    </>
   );
 }
 

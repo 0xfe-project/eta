@@ -116,6 +116,17 @@ export class Timeline {
     return row === null ? undefined : viewOf(row);
   }
 
+  /** The newest row, including a held message or an unfinished reply. */
+  latest(conversationId: string): MessageView | undefined {
+    const row = this.#db
+      .query<Row, [string]>(
+        `SELECT * FROM message WHERE conversation_id = ?
+          ORDER BY seq DESC LIMIT 1`,
+      )
+      .get(conversationId);
+    return row === null ? undefined : viewOf(row);
+  }
+
   /** Write a row at the end of the timeline. The seq is taken in the same statement that bumps the count. */
   append(input: NewRow): MessageView {
     const id = input.id ?? crypto.randomUUID();

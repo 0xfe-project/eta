@@ -62,7 +62,7 @@ mkdirSync(dist, { recursive: true });
 const builds: Record<string, { file: string; sha256: string; size: number }> =
   {};
 for (const platform of targets) {
-  const file = `eta-daemon-${platform}`;
+  const file = `eta-daemon-${platform}${platform.startsWith("win32") ? ".exe" : ""}`;
   const target = `bun-${platform}`;
   // This bun, by path: the same one running the script.
   await $`${process.execPath} build --compile --target=${target} --define ETA_DAEMON_VERSION=${JSON.stringify(version)} src/main.ts --outfile ${join(dist, file)}`.cwd(
