@@ -1,14 +1,12 @@
-import type { TranscriptSection } from "@eta/client-contracts";
-// 03k Member details: one member's numbers and what can be done about it, and Only, its side of the group.
-
-import type {
-  ConversationResults,
+import type { ConversationResults,
   MemberView,
   MessageView,
   StoredTask,
   TaskStatus,
   TimelineSection,
-} from "@eta/client-contracts";
+  TranscriptSection } from "@eta/client-contracts";
+// 03k Member details: one member's numbers and what can be done about it, and Only, its side of the group.
+
 import { computed, signal, Text, View } from "nsh";
 import { agentById } from "../../app/lists";
 import { t } from "../../i18n";
@@ -16,11 +14,11 @@ import { go } from "../../nav/links";
 import { nav, open } from "../../nav/stack";
 import { AgentAvatar } from "../../ui/AgentAvatar";
 import { Button } from "../../ui/Button";
+import { moment } from "../../ui/format";
 import { Markdown } from "../../ui/Markdown";
 import { Body, Header, Page } from "../../ui/Page";
 import { Sheet } from "../../ui/Sheet";
 import { Empty, Loading } from "../../ui/States";
-import { moment } from "../../ui/format";
 import { call, useTarget } from "../../wire/target";
 import {
   act,

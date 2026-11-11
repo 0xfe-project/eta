@@ -1,11 +1,10 @@
-import type { JSX } from "nsh";
-import type { ScrollRef } from "nsh";
+import type { JSX, ScrollRef  } from "nsh";
 import { keyboardFrame, safeArea, Scroll, Text, View } from "nsh";
 import { NavPage } from "nsh/base";
 import { t } from "../i18n";
+import { nav } from "../nav/stack";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { Icon } from "./Icon";
-import { nav } from "../nav/stack";
 
 const INSET_TOP = "pt-[env(safe-area-inset-top)]";
 const INSET_BOTTOM = "pb-[env(safe-area-inset-bottom)]";

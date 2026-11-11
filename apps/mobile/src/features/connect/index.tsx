@@ -1,8 +1,8 @@
-import type { JSX } from "nsh";
 import type { ProvidersView } from "@eta/client-contracts";
+import type { InputRef, JSX  } from "nsh";
 import type { TextKey } from "../../i18n";
+import { parseConnectLink } from "@eta/client-contracts/connect-link";
 import { Keyboard, keyboardFrame, safeArea, Text, View } from "nsh";
-import type { InputRef } from "nsh";
 import { Input } from "nsh/base";
 import { agents, machines } from "../../app/lists";
 import {
@@ -20,7 +20,6 @@ import { clock } from "../../ui/format";
 import { Icon } from "../../ui/Icon";
 import { ToastHost } from "../../ui/toast";
 import { eager, useTarget } from "../../wire/target";
-import { parseConnectLink } from "@eta/client-contracts/connect-link";
 import { form, scanHostCode } from "./scan";
 
 const SCREEN =

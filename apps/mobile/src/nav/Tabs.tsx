@@ -1,6 +1,6 @@
 import type { JSX } from "nsh";
-import type { IconName } from "../ui/icons";
 import type { TextKey } from "../i18n";
+import type { IconName } from "../ui/icons";
 import { signal, Text, View } from "nsh";
 import { NavPage } from "nsh/base";
 import { pendingInteractions } from "../app/lists";

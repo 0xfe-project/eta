@@ -4,8 +4,8 @@ import { cleanup, effect, Text, View } from "nsh";
 import { agentById } from "../../app/lists";
 import { wire } from "../../app/session";
 import { t } from "../../i18n";
-import { Icon } from "../../ui/Icon";
 import { reason } from "../../ui/format";
+import { Icon } from "../../ui/Icon";
 import { toast } from "../../ui/toast";
 
 /** A call a press made: on success what comes next, on failure the host's own words. */

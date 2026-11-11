@@ -1,10 +1,10 @@
 import type { HostAddress } from "../../app/session";
+import { parseConnectLink } from "@eta/client-contracts/connect-link";
 import { Scanner } from "eta/native";
 import { signal } from "nsh";
 import { connectTo } from "../../app/session";
 import { t } from "../../i18n";
 import { toast } from "../../ui/toast";
-import { parseConnectLink } from "@eta/client-contracts/connect-link";
 
 /** What the connect form holds. A pasted or scanned link fills it. */
 export const form = signal<HostAddress>({ address: "", token: "" });

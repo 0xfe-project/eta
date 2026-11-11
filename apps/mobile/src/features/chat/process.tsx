@@ -19,8 +19,8 @@ import { agentName, replyBlocks } from "./conversation";
 import { Counts } from "./ProcessBox";
 import { useSessions } from "./session";
 import { stepOf } from "./steps";
-import { ToolScreen } from "./ToolScreen";
 import { shapeOf, withoutAnsi } from "./tool-shape";
+import { ToolScreen } from "./ToolScreen";
 
 /** How many of the last steps 04 shows before 「Earlier N steps」. */
 const LAST_STEPS = 10;

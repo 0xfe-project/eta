@@ -1,8 +1,8 @@
 import type { JSX } from "nsh";
 import { keyboardFrame, safeArea, Text, View } from "nsh";
 import { Dialog } from "nsh/base";
-import { Button } from "./Button";
 import { t } from "../i18n";
+import { Button } from "./Button";
 
 /**
  * A sheet from the bottom over the scrim, as 03p, 05c, 06c–06g. It sits on the keyboard: the host's
