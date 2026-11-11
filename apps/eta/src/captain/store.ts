@@ -297,7 +297,9 @@ export class CaptainStore {
           updated_at: number;
         },
         []
-      >("SELECT id, name, instructions, persona, runtime, model, thinking_level, machine_id, system_role, created_at, updated_at FROM agent WHERE system_role = 'captain'")
+      >(
+        "SELECT id, name, instructions, persona, runtime, model, thinking_level, machine_id, system_role, created_at, updated_at FROM agent WHERE system_role = 'captain'",
+      )
       .get();
     if (row === null) return undefined;
     return {

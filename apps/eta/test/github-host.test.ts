@@ -546,12 +546,13 @@ describe("git and gh on a machine", () => {
       );
       expect(await shell("printenv GIT_CONFIG_COUNT")).toBe("3\n");
 
-    // Disconnecting leaves the machine's own logins as they were.
-    await w.client.call("github", "disconnect", {});
-    await until(() => !existsSync(join(dir, "token")));
-    expect(w.host.product.shellEnv.GH_CONFIG_DIR).toBeUndefined();
-    expect(existsSync(join(dir, "gh"))).toBe(false);
-  });
+      // Disconnecting leaves the machine's own logins as they were.
+      await w.client.call("github", "disconnect", {});
+      await until(() => !existsSync(join(dir, "token")));
+      expect(w.host.product.shellEnv.GH_CONFIG_DIR).toBeUndefined();
+      expect(existsSync(join(dir, "gh"))).toBe(false);
+    },
+  );
 
   it("are logged in on a daemon too, with the token relayed and no App secret kept there", async () => {
     const fake = fakeGitHub();
