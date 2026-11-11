@@ -28,7 +28,7 @@ import { wireErrorMessage } from "@/queries/wire";
 import { when } from "./routine-format";
 import { Select, SelectOption } from "./select-field";
 
-// Settings → 机器 → 添加机器: the machines panel turned into the way in, not a dialog over it.
+// Settings → Machines → Add machine: the machines panel turned into the way in, not a dialog over it.
 // Running a command on the new machine is the way that always works; installing over SSH is the
 // shortcut, with or without a password. No name is asked for up front: the host names a machine
 // after its hostname (or the SSH host), and its card can rename it.

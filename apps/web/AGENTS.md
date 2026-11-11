@@ -1,37 +1,37 @@
-# Web 界面开发约定
+# Web UI Development Conventions
 
-## 1. 消融式设计
+## 1. Ablative Design
 
-遵循奥卡姆剃刀，逐个检查界面元素并尝试移除。删掉后不影响理解和操作，就不保留。新增元素也要有明确用途。
+Follow Occam's Razor: inspect each UI element and try removing it. If removal doesn't affect understanding or operation, don't keep it. New elements must also have a clear purpose.
 
-## 2. 文案最简化
+## 2. Minimal Copy
 
-能自解释的控件不加说明。删除重复标题、状态提示和多余标签；保留理解当前状态、完成操作和处理错误所必需的信息。删除可见文案时，仍需保留必要的无障碍名称和语义。
+Don't add explanations to self-explanatory controls. Remove duplicate titles, status prompts, and redundant labels; keep only information necessary for understanding current state, completing operations, and handling errors. When removing visible copy, still preserve necessary accessibility names and semantics.
 
-## 3. 布局紧凑
+## 3. Compact Layout
 
-像汽车仪表盘一样利用空间。避免多层 padding、margin 叠加；通过对齐、分组和少量留白建立层次，少用分割线。紧凑布局仍应保留清晰的操作空间和可读性。
+Use space like a car dashboard. Avoid stacking multiple layers of padding and margin; establish hierarchy through alignment, grouping, and minimal whitespace, using few dividers. Compact layout should still preserve clear operation space and readability.
 
-## 4. 组件优先
+## 4. Components first
 
-优先使用 shadcn 原有组件，不自行重造外观，不无故修改组件结构和间距。
+Prefer existing shadcn components; do not reinvent their appearance or change component structure and spacing without reason.
 
-## 5. 动画直接、快速
+## 5. Direct, fast animation
 
-交互过渡默认使用 60ms linear，不拖尾、不弹跳。所有 default variant 的 Tabs 自带滑动选中底块，通过通用组件实现，不在每个页面重复定制。尊重 prefers-reduced-motion 设置。
+Interaction transitions use 60ms linear by default, with no trailing or bouncing. All Tabs with the default variant have a built-in sliding selected indicator, implemented via a shared component and not customized repeatedly on every page. Respect the prefers-reduced-motion setting.
 
-## 6. 中英文 UI
+## 6. Chinese and English UI
 
-所有产品 UI 通过 react-i18next 维护简体中文与英文，包括按钮、导航、设置、提示、错误和无障碍标签。按功能维护 `src/locales/zh/<namespace>.json` 与 `en/<namespace>.json`，共用文案放在 common。必须使用英文语义 key 和嵌套路径，禁止中文 key、整句文案 key 和把动态文本当 key；插值参数按含义命名。组件显式声明 namespace，如 `useTranslation(["tasks", "common"] as const)`；组件外使用带 namespace 的 `translate("tasks:status.todo")`。新增文案同时更新中英文资源，遵守 i18next 类型约束和资源覆盖检查。默认跟随用户系统语言，不支持的语言回退英文；设置 → 外观可以切换。Claude、Codex、Grok 等产品名、代码及命令保留原文；路由路径、内部标识和用户内容不必翻译。
+All product UI is maintained in Simplified Chinese and English via react-i18next, including buttons, navigation, settings, hints, errors, and accessibility labels. Maintain `src/locales/zh/<namespace>.json` and `en/<namespace>.json` by feature, with shared copy in common. Use English semantic keys and nested paths; Chinese keys, full-sentence copy keys, and dynamic text as keys are forbidden; name interpolation parameters by meaning. Components explicitly declare their namespace, e.g. `useTranslation(["tasks", "common"] as const)`; outside components, use namespaced `translate("tasks:status.todo")`. When adding copy, update both Chinese and English resources and comply with i18next type constraints and resource coverage checks. Follow the user's system language by default; fall back to English for unsupported languages. Can be switched in Settings → Appearance. Product names such as Claude, Codex, and Grok, code, and commands stay as-is; route paths, internal identifiers, and user content do not need translation.
 
-## 7. 视觉约束
+## 7. Visual constraints
 
-全局使用直角。支持浅色和深色（设置中可选跟随系统），颜色一律走颜色变量；不要在组件中散落仅适用于单一主题的硬编码颜色。
+Use square corners globally. Support light and dark themes (with follow system selectable in settings); all colors go through color variables; do not scatter hardcoded colors in components that apply to only one theme.
 
-## 8. 代码结构
+## 8. Code structure
 
-页面、组件和共享状态分离。全窗口等独立页面使用真实路由，支持直接访问、刷新和浏览器历史导航；共享界面复用组件。
+Separate pages, components, and shared state. Full-window and other standalone pages use real routes, supporting direct access, refresh, and browser history navigation; shared UI reuses components.
 
-## 9. 数据只走 wire
+## 9. Data goes only through wire
 
-界面读写 host 只通过 `src/lib/wire.ts` 的那一条 WebSocket：状态来自 `hello` 与 `state` 帧，操作是 `target.action` 调用。不要为一个功能另开 `fetch` 或轮询；host 没挂载的插件（`hello.mounted`），对应入口隐藏。
+The UI reads and writes to the host only through the single WebSocket in `src/lib/wire.ts`: state comes from `hello` and `state` frames, and actions are `target.action` calls. Do not open a separate `fetch` or polling for a feature; for plugins not mounted by the host (`hello.mounted`), hide the corresponding entry point.

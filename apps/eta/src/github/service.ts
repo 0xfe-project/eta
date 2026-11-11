@@ -203,7 +203,7 @@ export class Github {
       throw new GithubError(
         "INVALID_ORIGIN",
         400,
-        "无法确定 eta 的访问地址。请用 --public-url 启动 host。",
+        "Cannot determine eta's access URL。Start the host with --public-url。",
       );
     return origin;
   }
@@ -232,7 +232,7 @@ export class Github {
       return new GithubError(
         "GITHUB_APP_GONE",
         424,
-        "GitHub 不认这个 App 了（可能已在 GitHub 上删除）。请断开后重新连接。",
+        "GitHub no longer recognizes this App（it may have been deleted on GitHub）。Disconnect and reconnect。",
       );
     return fromGitHub(error);
   }
@@ -251,16 +251,16 @@ export class Github {
       throw new GithubError(
         "INVALID_NAME",
         400,
-        "App 名称为 1 到 34 个字符，可用字母、数字、空格、点、下划线和连字符。",
+        "The App name must be 1 to 34 characters，and may use letters、numbers、spaces、dots、underscores、and hyphens。",
       );
     const organization = organizationInput?.trim() ?? "";
     if (organization !== "" && !ACCOUNT.test(organization))
-      throw new GithubError("INVALID_ORGANIZATION", 400, "组织名称无效。");
+      throw new GithubError("INVALID_ORGANIZATION", 400, "Invalid organization name。");
     if (this.app() !== null)
       throw new GithubError(
         "GITHUB_ALREADY_CONNECTED",
         409,
-        "已经连接了一个 GitHub App。",
+        "A GitHub App is already connected。",
       );
     const origin = this.origin(reportedOrigin);
     const state = random(24);
@@ -273,7 +273,7 @@ export class Github {
     const manifest = JSON.stringify({
       name,
       url: origin,
-      description: "eta 的智能体以这个 App 的身份使用 GitHub。",
+      description: "eta's agents use GitHub under this App's identity。",
       // Nothing listens for webhooks; GitHub still wants a URL.
       hook_attributes: { url: origin + GITHUB_WEBHOOK_PATH, active: false },
       redirect_url: origin + GITHUB_MANIFEST_CALLBACK_PATH,
@@ -302,7 +302,7 @@ export class Github {
       throw new GithubError(
         "MANIFEST_EXPIRED",
         400,
-        "这次创建已失效，请回到 eta 重新开始。",
+        "This creation has expired，please return to eta and start again。",
       );
     let created: {
       id: number;
@@ -324,7 +324,7 @@ export class Github {
       throw new GithubError(
         "MANIFEST_FAILED",
         424,
-        `GitHub 没有返回 App 的凭据（${statusOf(error)}），请重新创建。`,
+        `GitHub did not return the App credentials（${statusOf(error)}），please recreate it。`,
       );
     }
     const secret = created.client_secret ?? "";
@@ -381,7 +381,7 @@ export class Github {
       throw new GithubError(
         "GITHUB_UNAVAILABLE",
         424,
-        "暂时无法从 GitHub 读取 App 的身份。",
+        "Cannot read the App's identity from GitHub right now。",
       );
     const bot = `${app.slug}[bot]`;
     return {
@@ -426,7 +426,7 @@ export class Github {
     throw new GithubError(
       "GITHUB_NOT_INSTALLED",
       409,
-      `eta 的 GitHub App 没有安装到 ${owner}。请让用户在 eta 的“设置 → 连接”里把 App 安装到这个账号或组织，并授权需要的仓库。`,
+      `eta's GitHub App is not installed on ${owner}。Ask the user to install the App on this account or organization in eta's “Settings → Connections”，and authorize the required repositories。`,
     );
   }
 
@@ -793,18 +793,18 @@ export class Github {
       });
     } catch (error) {
       if (statusOf(error) === 0)
-        throw new GithubError("GITHUB_UNREACHABLE", 424, "暂时连不上 GitHub。");
+        throw new GithubError("GITHUB_UNREACHABLE", 424, "Cannot reach GitHub right now。");
       throw new GithubError(
         "GITHUB_ERROR",
         424,
-        `GitHub 返回 ${statusOf(error)}。`,
+        `GitHub returned ${statusOf(error)}。`,
       );
     }
     if ((out.error ?? "") !== "" || (out.access_token ?? "") === "")
       throw new GithubError(
         "AUTHORIZATION_FAILED",
         424,
-        `GitHub 没有给出授权（${out.error ?? ""}）：${out.error_description ?? ""}`,
+        `GitHub did not grant authorization（${out.error ?? ""}）：${out.error_description ?? ""}`,
       );
     const now = Math.floor(this.now() / 1000);
     return {
@@ -829,7 +829,7 @@ export class Github {
       throw new GithubError(
         "INVALID_CLIENT",
         400,
-        "请填写 App 设置页里的 Client ID 和新生成的 client secret。",
+        "Enter the Client ID and the newly generated client secret from the App settings page。",
       );
     this.store.setClient(clientId, secret);
     this.#options.changed();
@@ -842,7 +842,7 @@ export class Github {
       throw new GithubError(
         "OAUTH_NOT_CONFIGURED",
         409,
-        "eta 还没有这个 App 的 client secret。请先在 App 设置页添加 Callback URL、生成 client secret 并填入 eta。",
+        "eta does not have this App's client secret yet。First add a Callback URL on the App settings page、generate a client secret、and enter it in eta。",
       );
     const origin = this.origin(reportedOrigin);
     const state = random();
@@ -888,7 +888,7 @@ export class Github {
       new GithubError(
         "AUTHORIZATION_EXPIRED",
         400,
-        "这次授权已失效，请回到 eta 重新授权。",
+        "This authorization has expired，please return to eta to authorize again。",
       );
     if (state !== "") {
       const pending = this.store.takePending(
@@ -907,7 +907,7 @@ export class Github {
       throw new GithubError(
         "OAUTH_NOT_CONFIGURED",
         409,
-        "eta 还没有这个 App 的 client secret，无法完成授权。",
+        "eta doesn't have this App's client secret yet, so it can't complete authorization.",
       );
     const user = await this.#exchange(form);
     let me: { login: string; id: number };
@@ -931,7 +931,7 @@ export class Github {
       throw new GithubError(
         "AUTHORIZATION_UNRELATED",
         403,
-        `授权的 GitHub 账号 ${user.login} 访问不到这个 App 的任何安装，eta 没有保存它。`,
+        `The authorized GitHub account ${user.login} can't reach any installation of this App, so eta didn't save it.`,
       );
     if (
       state === "" &&
@@ -941,7 +941,7 @@ export class Github {
       throw new GithubError(
         "AUTHORIZATION_UNRELATED",
         403,
-        `这次授权来自 ${user.login}，不是这个 App 的所有者 ${app.owner}，eta 没有保存它。请回到 eta 的“设置 → 连接”里授权。`,
+        `This authorization came from ${user.login}, not the owner of this App ${app.owner}, so eta didn't save it. Go back to eta's “Settings → Connections” to authorize.`,
       );
     await this.#locked(async () => {
       this.store.saveUser(user, this.now());
@@ -986,10 +986,10 @@ export function parseRepository(value: string): [string, string] {
     try {
       url = new URL(text);
     } catch {
-      throw new GithubError("NOT_GITHUB", 400, `${value} 不是 GitHub 仓库。`);
+      throw new GithubError("NOT_GITHUB", 400, `${value} is not a GitHub repository.`);
     }
     if (url.hostname !== "github.com")
-      throw new GithubError("NOT_GITHUB", 400, `${value} 不是 GitHub 仓库。`);
+      throw new GithubError("NOT_GITHUB", 400, `${value} is not a GitHub repository.`);
     text = url.pathname;
   }
   const trimmed = text.replace(/^\/+|\/+$/g, "").replace(/\.git$/, "");
@@ -1000,7 +1000,7 @@ export function parseRepository(value: string): [string, string] {
     throw new GithubError(
       "INVALID_REPOSITORY",
       400,
-      `无法识别仓库 ${value}，请写成 owner/name。`,
+      `Can't recognize repository ${value}, write it as owner/name.`,
     );
   return [owner, name];
 }
@@ -1010,7 +1010,7 @@ function pullError(error: unknown): GithubError {
   return new GithubError(
     "PULL_REQUEST_FAILED",
     statusOf(error) >= 500 ? 424 : 400,
-    `GitHub 拒绝创建 PR（${statusOf(error)}）：${reasons(error)}`,
+    `GitHub refused to create the PR (${statusOf(error)}): ${reasons(error)}`,
   );
 }
 

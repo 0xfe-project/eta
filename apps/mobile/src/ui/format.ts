@@ -11,7 +11,7 @@ export function clock(at: number): string {
 const startOfDay = (at: number) => new Date(at).setHours(0, 0, 0, 0);
 const DAY = 24 * 60 * 60 * 1000;
 
-/** 今天 `9:12`, `昨天 18:20`, `10/28 18:20`. */
+/** Today `9:12`, `Yesterday 18:20`, `10/28 18:20`. */
 export function moment(at: number, now = Date.now()): string {
   const days = Math.round((startOfDay(now) - startOfDay(at)) / DAY);
   if (days === 0) return clock(at);
@@ -20,7 +20,7 @@ export function moment(at: number, now = Date.now()): string {
   return `${date.getMonth() + 1}/${date.getDate()} ${clock(at)}`;
 }
 
-/** The list's right column: 刚刚, 3 分钟, 2 小时, 昨天, 10/28. */
+/** The list's right column: Just now, 3 min, 2 hr, Yesterday, 10/28. */
 export function ago(at: number, now = Date.now()): string {
   const minutes = Math.floor((now - at) / 60_000);
   if (minutes < 1) return t("common.justNow");

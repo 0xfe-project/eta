@@ -74,7 +74,7 @@ const sections = [
   },
 ] as const;
 
-/** The sections this build offers: 定时 keeps its entry only where the feature is on. */
+/** The sections this build offers: Routine keeps its entry only where the feature is on. */
 const shownSections = sections.filter(
   (section) => ROUTINES_VISIBLE || section.to !== "/routines",
 );
@@ -96,10 +96,10 @@ const MAILBOX_STATUS = {
 } as const;
 
 /**
- * What the 邮箱 row has to say about the accounts behind it, and the way to try again.
+ * What the Mailbox row has to say about the accounts behind it, and the way to try again.
  *
- * The row is one destination, so the accounts are one state: every one of them ready is 连接正常,
- * anything else is not. 连接异常 wins over 待检查 — a failure is the one a person has to act on,
+ * The row is one destination, so the accounts are one state: if every one is ready, it is Connected,
+ * anything else is not. Connection error wins over Pending check — a failure is the one a person has to act on,
  * while an account nobody has checked yet is only a question. The button checks every account that
  * is not ready, in turn: a failed check comes back as the account's own state, so there is nothing
  * here to catch but the wire itself.
@@ -228,7 +228,7 @@ export function Sidebar({
             ) : null}
             {shownSections.map(({ to, label, icon: Icon }) => {
               const count = badges[to];
-              // 邮箱 is the one destination whose page can be right there and useless, because the
+              // Mailbox is the one destination whose page can be right there and useless, because the
               // account behind it is not reachable — so it is the one row that says how it is.
               const mail = to === "/email" ? mailbox : undefined;
               const health =
@@ -236,7 +236,7 @@ export function Sidebar({
                   ? undefined
                   : translateText(MAILBOX_STATUS[mail.status]);
               const name = count ? `${label} · ${count}` : label;
-              // 对话 is the home row: `startsWith("/")` is true from every section, so it is lit by
+              // Conversation is the home row: `startsWith("/")` is true from every section, so it is lit by
               // the home path alone. The other rows keep the prefix match.
               const active =
                 to === "/" ? pathname === "/" : pathname.startsWith(to);
@@ -314,7 +314,7 @@ export function Sidebar({
                     <SidebarMenuAction
                       aria-label={translateText("email:reconnect")}
                       title={translateText("email:reconnect")}
-                      // Nothing to reconnect is not a failure: the row says 连接正常 and this is the
+                      // Nothing to reconnect is not a failure: the row says Connected and this is the
                       // door that stays shut until something is actually wrong.
                       disabled={mail.checking || mail.status === "ready"}
                       onClick={() => void mail.reconnect()}
@@ -431,7 +431,7 @@ export function BottomNav() {
       >
         {/* Destinations of one width, the plus in a cell of its own: the solid square is the axis
           the tabs are read against, and it breaks the plate's edge above and below, which is what
-          makes it a bigger thing than the tabs beside it rather than one of them. 定时 keeps a
+          makes it a bigger thing than the tabs beside it rather than one of them. Routine keeps a
           cell only where the feature is on; with three destinations the four cells are equal. */}
         <div className="relative h-[52px] border bg-background">
           <div

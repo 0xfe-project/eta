@@ -1,47 +1,47 @@
-# 记忆
+# Memory
 
-智能体跨对话的长期记忆。它是一个**可选的边车**：`apps/memory`，Python（mem0 作为库 + fastembed 的 CPU 向量），自己的 PostgreSQL（pgvector，表 `memories`）。host 通过 HTTP 调用它；host 不在进程内做任何记忆。
+Long-term memory for agents across conversations. It is an **optional sidecar**: `apps/memory`, Python (mem0 as a library + fastembed CPU vectors), its own PostgreSQL (pgvector, table `memories`). The host calls it over HTTP; the host does no memory work in-process.
 
 ```
-host ──HTTP──▶ 记忆边车 (:8320)
-  memory 插件        POST /memory/recall   run 之前：与要告诉智能体的内容相关的记忆
-  engine 的 run 钩子  POST /memory/capture  run 之后：一轮完成的对话，后台抽取
-  会话工具           /memory/mcp           remember / recall / forget（MCP，streamable HTTP）
-  memory target      /api/memory/v1/agents/{agent}/memories   用户看、搜、加、删
+host ──HTTP──▶ memory sidecar (:8320)
+  memory plugin        POST /memory/recall   before run: memories relevant to what will be told to the agent
+  engine's run hook  POST /memory/capture  after run: a completed conversation turn, extracted in the background
+  session tools           /memory/mcp           remember / recall / forget (MCP, streamable HTTP)
+  memory target      /api/memory/v1/agents/{agent}/memories   users view, search, add, delete
                                           │
-                                          ▼  抽取：MEMORY_LLM_*（OpenAI 兼容）；向量：fastembed；存储：PostgreSQL + pgvector
+                                          ▼  extraction: MEMORY_LLM_* (OpenAI-compatible); vectors: fastembed; storage: PostgreSQL + pgvector
 ```
 
-## 身份
+## Identity
 
-边车只认请求头：`X-AXP-Agent-Id`（智能体）与 `X-AXP-Group-Id`（对话 id）。agent 侧的路由里这个头是唯一的身份，所以智能体只能碰到自己的记忆。用户侧的路由把智能体写在路径里（用户能看见并编辑所有智能体的记忆）。**边车没有鉴权，网络就是信任边界**：只让 host 到得了它（loopback，或 compose 里不发布端口的内部网络）。
+The sidecar only looks at request headers: `X-AXP-Agent-Id` (agent) and `X-AXP-Group-Id` (conversation id). On agent-side routes, this header is the only identity, so an agent can only touch its own memories. User-side routes put the agent in the path (users can see and edit memories of all agents). **The sidecar has no authentication; the network is the trust boundary**: only let the host reach it (loopback, or an internal network in compose with no published ports).
 
-## host 一侧
+## host side
 
-只有给了边车地址才有记忆：`--memory-url <url>`，或环境变量 `ETA_MEMORY_URL`（flag 优先，空值表示没有）。没有地址时：不挂载 `memory` 插件，没有 `memory` target，没有记忆工具，也不会向任何地方发请求；`hello.mounted` 里没有它，界面隐藏记忆页。
+Memory is only available when a sidecar address is provided: `--memory-url <url>`, or the environment variable `ETA_MEMORY_URL` (flag takes precedence; an empty value means none). Without an address: the `memory` plugin is not mounted, there is no `memory` target, no memory tools, and no requests are sent anywhere; it is absent from `hello.mounted`, and the UI hides the memory page.
 
-- **run 之前**（`beforeRun`）：把要告诉智能体的 briefing 的末尾 2000 字作为查询去 `recall`，最多 5 条、相关度不低于 0.2 的记忆放在 briefing 之前，每条标注是"本对话"还是"另一个对话"。
-- **run 之后**（`afterRun`）：只有回复以 `done` 结束才保存——触发消息和智能体的回答作为一轮交给 `capture`，边车立即回 202，在后台用抽取模型逐条抽取事实再写入。失败或被停止的回复不值得记。
-- **工具**：每个会话装 `remember`（原样记一条）、`recall`（检索）、`forget`（按 id 删）。
-- **用户侧**：`memory.list`（可按来源 `conversation` / `agent` / `user` 筛，可搜索）、`memory.remember`（手动添加，原样记下，不经抽取）、`memory.forget`。
+- **before run** (`beforeRun`): uses the last 2000 characters of the briefing to be told to the agent as the query for `recall`; up to 5 memories with relevance no lower than 0.2 are placed before the briefing, each labeled "this conversation" or "another conversation".
+- **after run** (`afterRun`): only saves if the reply ends with `done`—the triggering message and the agent's answer are passed as one turn to `capture`; the sidecar immediately returns 202 and, in the background, extracts facts one by one with the extraction model before writing them. Failed or stopped replies are not worth remembering.
+- **Tools**: each session installs `remember` (records an entry as-is), `recall` (retrieves), `forget` (deletes by id).
+- **User side**: `memory.list` (filterable by source `conversation` / `agent` / `user`, searchable), `memory.remember` (add manually, recorded as-is, without extraction), `memory.forget`.
 
-记忆是锦上添花：每次调用都有时限（recall 3 秒），边车慢或不在时这一轮照常进行；钩子抛错只被报告，不会让回复失败。边车停止时队列里还没保存的会丢失。
+Memory is a nice-to-have: every call has a timeout (recall 3 seconds); if the sidecar is slow or absent, the run proceeds as usual; hook errors are only reported and do not fail the reply. When the sidecar stops, anything still queued and unsaved is lost.
 
-mem0 v2 只追加不改写：同一事实的新说法会成为新记忆，过时的由模型发现后 `forget`。抽取要求用用户的语言写事实，否则中文提问很难检索到英文事实。
+mem0 v2 only appends, never rewrites: a new phrasing of the same fact becomes a new memory; outdated ones are found by the model and removed with `forget`. Extraction requires facts to be written in the user's language; otherwise Chinese questions will have trouble retrieving English facts.
 
-## 运行边车
+## Running the sidecar
 
-环境变量：
+Environment variables:
 
-| 变量                  | 含义                                                                                |
+| Variable              | Meaning                                                                             |
 | --------------------- | ----------------------------------------------------------------------------------- |
-| `DATABASE_URL`        | 它自己的 PostgreSQL（需要 pgvector 扩展）                                           |
-| `MEMORY_LLM_BASE_URL` | OpenAI 兼容 API 的 base（如 `https://api.openai.com/v1`），用来从一轮对话里抽取事实 |
-| `MEMORY_LLM_API_KEY`  | 上面那个 API 的 key                                                                 |
-| `MEMORY_LLM_MODEL`    | 抽取用的模型                                                                        |
-| `MEMORY_HOST`         | 监听的网卡，默认 `127.0.0.1`                                                        |
-| `MEMORY_PORT`         | 端口，默认 `8320`                                                                   |
+| `DATABASE_URL`        | Its own PostgreSQL (requires the pgvector extension)                                           |
+| `MEMORY_LLM_BASE_URL` | OpenAI-compatible API base (e.g. `https://api.openai.com/v1`), used to extract facts from a conversation turn |
+| `MEMORY_LLM_API_KEY`  | The key for the API above                                                                 |
+| `MEMORY_LLM_MODEL`    | Model used for extraction                                                                        |
+| `MEMORY_HOST`         | Network interface to listen on, default `127.0.0.1`                                                        |
+| `MEMORY_PORT`         | Port, default `8320`                                                                   |
 
-抽取模型由边车自己配置，与 host 的 providers 无关。向量模型是 `jinaai/jina-embeddings-v2-base-zh`（768 维，中英混合），换模型意味着重新嵌入全部记忆。
+The extraction model is configured by the sidecar itself and is unrelated to the host's providers. The embedding model is `jinaai/jina-embeddings-v2-base-zh` (768 dimensions, mixed Chinese and English); changing the model means re-embedding all memories.
 
-本地开发：`bun run setup` 装好 Python 依赖后，先 `bun run --cwd apps/memory build` 把向量模型下载到 `apps/memory/out/models`，再在 `apps/memory` 目录里 `FASTEMBED_CACHE_PATH=out/models uv run python -m axp_memory`（带上面的环境变量），host 以 `--memory-url http://127.0.0.1:8320` 启动。容器化见 `deploy/memory.Dockerfile` 与 `deploy/compose.yaml` 的 `memory` profile（带一个 `pgvector/pgvector` 数据库）。
+Local development: after `bun run setup` installs the Python dependencies, first run `bun run --cwd apps/memory build` to download the embedding model to `apps/memory/out/models`, then in the `apps/memory` directory run `FASTEMBED_CACHE_PATH=out/models uv run python -m axp_memory` (with the environment variables above), and start the host with `--memory-url http://127.0.0.1:8320`. For containerization, see `deploy/memory.Dockerfile` and the `memory` profile in `deploy/compose.yaml` (with a `pgvector/pgvector` database).

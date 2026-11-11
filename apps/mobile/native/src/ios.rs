@@ -114,7 +114,7 @@ impl Reader {
 
         let close = UIButton::buttonWithType(UIButtonType::System, mtm);
         close.setTitle_forState(
-            Some(&NSString::from_str("关闭 / Close")),
+            Some(&NSString::from_str("Close")),
             UIControlState::Normal,
         );
         unsafe { close.setTintColor(Some(&UIColor::whiteColor())) };

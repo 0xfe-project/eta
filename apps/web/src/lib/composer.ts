@@ -17,7 +17,7 @@ export const LONG_PASTE = { chars: 1000, lines: 3 };
 /**
  * How long a message's own words have to be before they are folded to a dozen lines. Higher on
  * purpose than a paste: the answer beside it is written to be read in place, and a row of four
- * lines with an “展开” under it is a row that apologises for nothing. One threshold for both is
+ * lines with an “expand” under it is a row that apologises for nothing. One threshold for both is
  * how every short reply starts wearing a control.
  */
 export const LONG_MESSAGE = { chars: 1000, lines: 12 };

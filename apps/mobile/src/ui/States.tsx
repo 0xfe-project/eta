@@ -2,7 +2,7 @@ import { Text, View } from "nsh";
 import { t } from "../i18n";
 import { Button } from "./Button";
 
-/** 这个任务已不存在 and its kin: says what happened and stops. */
+/** This task no longer exists and its kin: says what happened and stops. */
 export function Empty(props: { title: string; body?: string }) {
   return (
     <View class="gap-1 px-4 py-[24px]">
@@ -30,7 +30,7 @@ export function Loading() {
   );
 }
 
-/** 无法加载任务: what failed, and the one thing to do about it. */
+/** Unable to load task: what failed, and the one thing to do about it. */
 export function Failed(props: {
   title: string;
   body?: string;

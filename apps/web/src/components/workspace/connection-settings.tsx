@@ -9,7 +9,7 @@ import { translate } from "@/lib/i18n";
 import { useGitHubStatus, useKeepGitHubFresh } from "@/queries/github";
 import { GitHubWizard } from "./github-wizard";
 
-// Settings → 连接: the accounts the user connects eta to. Today that is GitHub: the App agents act
+// Settings → Connections: the accounts the user connects eta to. Today that is GitHub: the App agents act
 // as, which the wizard creates, installs and (when the user authorizes it) lets them act through.
 // GitHub sends the browser back here after creating or authorizing the App, with what happened in
 // the address; the page reopens the wizard where it now stands.
@@ -150,7 +150,7 @@ function GitHubConnection() {
   );
 }
 
-/** Settings → 连接. */
+/** Settings → Connections. */
 export function ConnectionSettings() {
   const { t: translateText } = useTranslation([
     "connections",

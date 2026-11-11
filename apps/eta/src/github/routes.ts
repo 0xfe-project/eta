@@ -6,7 +6,7 @@
  * made, which the service checks first and spends. Anything else (no state, an unknown or used
  * one) changes nothing and ends on the settings page with the reason.
  *
- * Each ends in a redirect to Settings → 连接, told what happened; the page reopens the wizard.
+ * Each ends in a redirect to Settings → Connections, told what happened; the page reopens the wizard.
  */
 import type { Github } from "./service";
 import { GithubError, messageOf } from "./error";
@@ -15,7 +15,7 @@ import {
   GITHUB_MANIFEST_CALLBACK_PATH,
 } from "./path";
 
-/** Settings → 连接 on the home page, told what happened. */
+/** Settings → Connections on the home page, told what happened. */
 const back = (key: string, value: string): string =>
   `/?${new URLSearchParams({ settings: "connections", [key]: value }).toString()}`;
 
@@ -58,7 +58,7 @@ export function githubRoutes(
           throw new GithubError(
             "AUTHORIZATION_DECLINED",
             400,
-            `没有完成授权：${query.get("error_description") ?? ""}`,
+            `Authorization was not completed：${query.get("error_description") ?? ""}`,
           );
         }
         if (code !== "") {
@@ -74,7 +74,7 @@ export function githubRoutes(
         throw new GithubError(
           "AUTHORIZATION_EXPIRED",
           400,
-          "这次授权已失效，请回到 eta 重新授权。",
+          "This authorization has expired，please return to eta to authorize again。",
         );
       } catch (error) {
         warn(`[eta] authorizing the GitHub App failed: ${String(error)}`);

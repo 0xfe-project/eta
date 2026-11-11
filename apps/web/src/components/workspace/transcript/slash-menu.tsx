@@ -12,7 +12,7 @@ export interface SlashRow {
   status?: string;
   /**
    * What a screen reader reads for the row. The visible text is split into columns, so a task
-   * row says it out in one sentence instead: `#10 整理发布说明 · 待验收`.
+   * row says it out in one sentence instead: `#10 Tidy up the release notes · Pending acceptance`.
    */
   ariaLabel?: string;
 }

@@ -47,8 +47,8 @@ const SHARE_TOKEN = "7f3a91c2";
 
 const GOALS: Record<string, { goal: string; decided: string }> = {
   wire: {
-    goal: "断线重连后不丢帧、不重复，迁移能回滚。",
-    decided: "客户端带 last_seq，host 从那一行往后重放。",
+    goal: "No dropped or duplicated frames after reconnect, and the migration can roll back.",
+    decided: "The client carries last_seq; the host replays from that line forward.",
   },
 };
 
@@ -72,7 +72,7 @@ const version = (
 const ARTIFACTS: ArtifactView[] = [
   {
     id: "reconnect",
-    title: "重连方案",
+    title: "Reconnect plan",
     publisherAgentId: "agent-ache",
     taskId: "task-128",
     conversationId: "wire",
@@ -82,7 +82,7 @@ const ARTIFACTS: ArtifactView[] = [
   },
   {
     id: "scripts",
-    title: "迁移脚本",
+    title: "Migration script",
     publisherAgentId: "agent-mori",
     taskId: null,
     conversationId: "board",
@@ -101,7 +101,7 @@ const ARTIFACTS: ArtifactView[] = [
 const ROUTINES = [
   {
     id: "weekly",
-    name: "每周汇总",
+    name: "Weekly summary",
     conversationId: "artifacts",
     nextRunAt: minutesAgo(-2000),
     runs: [],
@@ -126,10 +126,10 @@ const tools = (count: number) =>
 /** The page 03n draws. The real host answers `/preview/<capability>/…`; here nothing could serve it. */
 const PAGE = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <body style="margin:0;padding:24px 20px;font:14px/22px system-ui;color:#737373;background:#fafafa">
-<h1 style="margin:0 0 12px;font:400 24px/24px system-ui;color:#0a0a0a">重连补帧方案</h1>
-<p style="margin:0 0 12px">客户端保存最后收到的 seq，重连时带给 host。host 从下一行开始重放，再切回实时帧。</p>
+<h1 style="margin:0 0 12px;font:400 24px/24px system-ui;color:#0a0a0a">Reconnect frame catch-up plan</h1>
+<p style="margin:0 0 12px">The client saves the last seq it received and hands it to the host on reconnect. The host replays from the next line, then switches back to live frames.</p>
 <div style="height:180px;background:#f5f5f5;margin:0 0 12px"></div>
-<p style="margin:0">200 次强杀重连，没有丢帧，也没有重复帧。</p>`;
+<p style="margin:0">200 force-kill reconnects, with no dropped and no duplicated frames.</p>`;
 
 const reply = (
   id: string,
@@ -163,7 +163,7 @@ const replies: Record<string, MessageView[]> = {
       "wire",
       "agent-ache",
       "waiting_for_input",
-      "迁移会锁 message 表大约 40 秒，得你定。",
+      "The migration locks the message table for about 40 seconds, so it's your call.",
     ),
   ],
   board: [
@@ -172,7 +172,7 @@ const replies: Record<string, MessageView[]> = {
       "board",
       "agent-mori",
       "working",
-      "列宽放进 localStorage，换设备不跟着走。",
+      "Column widths go in localStorage, so they don't follow you across devices.",
     ),
   ],
 };
@@ -433,8 +433,8 @@ function installSessions(host: FakeHost): void {
     metrics: { tokensPerSec: 0 },
     tools: tools(18),
     tasks: [
-      { id: "step-1", content: "量一下现在的列宽", status: "completed" },
-      { id: "step-2", content: "把列宽写进设置", status: "in_progress" },
+      { id: "step-1", content: "Measure the current column widths", status: "completed" },
+      { id: "step-2", content: "Write column widths into settings", status: "in_progress" },
     ],
   });
   host.set("sessions.session-agent-xiaoman", {
@@ -458,7 +458,7 @@ function installSessions(host: FakeHost): void {
 }
 
 export function installGroup(host: FakeHost): void {
-  // 03j draws Mori before its first wake, and 03h2 draws 小满 as the design has it.
+  // 03j draws Mori before its first wake, and 03h2 draws Xiaoman as the design has it.
   host.patch(
     "conversations",
     "list",
@@ -489,7 +489,7 @@ export function installGroup(host: FakeHost): void {
             thinkingLevel: null,
             persona: "",
             instructions:
-              "你负责每周把任务汇总成周报，只写做完的和受阻的，下周计划单列一节。",
+              "Each week you compile the tasks into a weekly report: only what's done and what's blocked, with next week's plan in its own section.",
           },
     ),
   );

@@ -52,11 +52,11 @@ export function reasons(error: unknown): string {
  */
 export function fromGitHub(error: unknown): GithubError {
   if (!(error instanceof ApiError) || error.status === 0)
-    return new GithubError("GITHUB_UNREACHABLE", 424, "暂时连不上 GitHub。");
+    return new GithubError("GITHUB_UNREACHABLE", 424, "Can't reach GitHub right now.");
   return new GithubError(
     "GITHUB_ERROR",
     424,
-    `GitHub 返回 ${error.status}：${reasons(error)}`,
+    `GitHub returned ${error.status}: ${reasons(error)}`,
   );
 }
 

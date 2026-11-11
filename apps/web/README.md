@@ -1,88 +1,88 @@
 # Web
 
-Vite + React + React Compiler。界面只通过 host 的一条 WebSocket（`/ws`）读写，没有 REST、没有生成的 API 客户端。开发命令在仓库根目录执行 `bun run dev`（host 与 vite 一起起）；生产由 host 用 `--web-dir` 直接提供构建结果（`bun run --cwd apps/web build` → `dist/`，其中的 `BUILD` 文件是 `/version` 的内容）。
+Vite + React + React Compiler. The UI reads and writes only through one host WebSocket (`/ws`); there is no REST and no generated API client. Run the development command from the repository root with `bun run dev` (host and vite start together); in production, the host directly serves the build output with `--web-dir` (`bun run --cwd apps/web build` → `dist/`, whose `BUILD` file is the content of `/version`).
 
-## 已配置的库
+## Configured libraries
 
-| 用途           | 库                                                | 配置入口                                                                                          |
+| Purpose        | Library                                           | Configuration entry                                                                               |
 | -------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| 图标           | `@phosphor-icons/react`                           | `src/components/providers.tsx`，默认 20px / regular                                               |
-| 智能体头像     | `blobatar` + `@blobatar/react`                    | `AgentAvatar`（`agent-identity.tsx`），按 id 生成；动画需 `styles.css` 引入 `blobatar/motion.css` |
-| 路由           | `@tanstack/react-router`                          | `src/router.tsx` + `src/routes/`                                                                  |
-| 服务端状态     | `@tanstack/react-query` + 自己的 wire store       | `src/lib/query-client.ts`、`src/lib/wire.ts`、`src/queries/`                                      |
-| URL 状态       | `nuqs`                                            | 根组件 adapter                                                                                    |
-| 表单与校验     | `react-hook-form` + `@hookform/resolvers` + `zod` | `src/components/workspace/agent-editor.tsx`                                                       |
-| 通知           | `sonner`                                          | 根组件挂载 `Toaster`，业务中调用 `toast.success()`                                                |
+| Icons          | `@phosphor-icons/react`                           | `src/components/providers.tsx`, default 20px / regular                                             |
+| Agent avatar   | `blobatar` + `@blobatar/react`                    | `AgentAvatar` (`agent-identity.tsx`), generated from id; animation requires importing `blobatar/motion.css` in `styles.css` |
+| Routing        | `@tanstack/react-router`                          | `src/router.tsx` + `src/routes/`                                                                  |
+| Server state   | `@tanstack/react-query` + own wire store          | `src/lib/query-client.ts`, `src/lib/wire.ts`, `src/queries/`                                      |
+| URL state      | `nuqs`                                            | Root component adapter                                                                            |
+| Forms and validation | `react-hook-form` + `@hookform/resolvers` + `zod` | `src/components/workspace/agent-editor.tsx`                                                       |
+| Notifications  | `sonner`                                          | Mount `Toaster` in the root component; call `toast.success()` in business code                     |
 | Markdown       | `streamdown` + `@streamdown/cjk`                  | `src/components/markdown.tsx`                                                                     |
-| 样式           | Tailwind CSS v4                                   | `vite.config.ts` + `src/styles.css`                                                               |
-| React Compiler | `babel-plugin-react-compiler`                     | `vite.config.ts` 的 `reactCompilerPreset`                                                         |
+| Styles         | Tailwind CSS v4                                   | `vite.config.ts` + `src/styles.css`                                                               |
+| React Compiler | `babel-plugin-react-compiler`                     | `reactCompilerPreset` in `vite.config.ts`                                                         |
 
-`@/` 同时在 TypeScript 和 Vite 中指向 `src/`。
+`@/` points to `src/` in both TypeScript and Vite.
 
-## 数据层
+## Data layer
 
-`src/lib/wire.ts` 是页面唯一的连接：说 `@eta/client-wire-proto` 的管道协议，处理 `hello`、`reply`、`state`、`event`，断线后以递增的间隔重连，重连时重新订阅仍有人使用的 target，等不到回复的调用以错误结束。连接状态和各 target 的 section / revision 放在一个 zustand store 里。类型来自 `@eta/client-contracts`。协议见 [线协议与 target](../../docs/architecture/wire-protocol.md)。
+`src/lib/wire.ts` is the page's only connection: it speaks the wire protocol from `@eta/client-wire-proto`, handles `hello`, `reply`, `state`, and `event`, reconnects with increasing intervals after disconnection, resubscribes to targets still in use on reconnect, and calls that get no reply end with an error. Connection state and each target's section / revision live in a zustand store. Types come from `@eta/client-contracts`. See [Wire protocol and target](../../docs/architecture/wire-protocol.md) for the protocol.
 
-`src/queries/wire.ts` 把它接成 hooks（`useTarget`、`useConnectionLost` 和调用用的 mutation）；每个 target 一个 `src/queries/<target>.ts`（agents、machines、projects、conversations、sessions、providers、inbox、tasks、artifacts、routines、memory、usage、personas），签名贴近 react-query 的习惯。读到的是 host 推来的状态，不轮询。
+`src/queries/wire.ts` wires it into hooks (`useTarget`, `useConnectionLost`, and a mutation for calls); one `src/queries/<target>.ts` per target (agents, machines, projects, conversations, sessions, providers, inbox, tasks, artifacts, routines, memory, usage, personas), with signatures close to react-query conventions. Reads are host-pushed state; no polling.
 
-`hello.mounted` 里没有的插件，对应入口隐藏而不是报错（例如没有记忆边车时的记忆页，见 `queries/memory.ts`）。
+For plugins not present in `hello.mounted`, hide the corresponding entry point instead of erroring (e.g. the memory page when there is no memory sidecar; see `queries/memory.ts`).
 
-开发时 vite 只代理 `/ws`（目标 `ETA_HOST_ORIGIN`，默认 `http://127.0.0.1:8787`），浏览器带的是 vite 的 origin，所以 host 以 `--allow-origin` 放行它（根目录的 `dev` 脚本已经做了）。`/up` 与 `/version` 由提供页面的服务器回答：开发时是 vite，生产时是 host，页面据此（`src/lib/update.ts`）提示"有新版本"。
+During development, vite only proxies `/ws` (target `ETA_HOST_ORIGIN`, default `http://127.0.0.1:8787`); the browser sends vite's origin, so the host allows it with `--allow-origin` (the root `dev` script already does this). `/up` and `/version` are answered by the server serving the page: vite in development and the host in production; based on this, the page (`src/lib/update.ts`) indicates "a new version is available".
 
-## 国际化
+## Internationalization
 
-使用 `react-i18next`，简体中文与英文资源按功能放在 `src/locales/zh/<namespace>.json` 和 `en/<namespace>.json`，由 `resources.ts` 注册，共 14 个 namespace（common、agents、artifacts、chat、machines、connections、memory、navigation、overview、providers、routines、settings、tasks、validation）。共用按钮、时间和通用标签放在 common，各功能维护自己的资源。
+Uses `react-i18next`; Simplified Chinese and English resources are organized by feature under `src/locales/zh/<namespace>.json` and `en/<namespace>.json`, registered by `resources.ts`, with 14 namespaces in total (common, agents, artifacts, chat, machines, connections, memory, navigation, overview, providers, routines, settings, tasks, validation). Shared buttons, time, and common labels go in common; each feature maintains its own resources.
 
-所有界面文字、无障碍标签、通知和校验提示都从资源读取；用户内容、产品名、代码和命令保留原文。key 使用稳定的英文语义路径，如 `tasks:status.todo`，禁止中文 key 或整句文案 key。插值参数按含义命名；英文数量文案维护 `_one` / `_other`。
+All UI text, accessibility labels, notifications, and validation messages are read from resources; user content, product names, code, and commands remain as-is. Keys use stable English semantic paths, such as `tasks:status.todo`; Chinese keys or whole-sentence copy keys are forbidden. Interpolation parameters are named by meaning; English quantity copy maintains `_one` / `_other`.
 
-默认按 `navigator.languages` 选择中英文，中文地区变体统一使用简体中文，其他语言回退英文。设置 → 外观 → 语言可选择跟随系统、中文或 English，保存在 `eta.language.v1`，即时切换并跨标签页同步。React 组件显式声明 namespace，如 `useTranslation(["tasks", "common"] as const)`；组件外通过 `src/lib/i18n.ts` 的 `translate("tasks:status.todo")` 在调用时读取语言。`src/@types/i18next.d.ts` 从英文资源推导 key 类型，拼错 key 或 namespace 在类型检查中失败。`i18n.test.ts` 检查 namespace/key 一致性、英文语义 key、插值变量和源码调用覆盖。
+By default, Chinese or English is selected based on `navigator.languages`; Chinese locale variants all use Simplified Chinese, and other languages fall back to English. Settings → Appearance → Language can be set to Follow system, Chinese, or English, and is saved in `eta.language.v1`, switching instantly and syncing across tabs. React components explicitly declare namespaces, such as `useTranslation(["tasks", "common"] as const)`; outside components, `translate("tasks:status.todo")` from `src/lib/i18n.ts` reads the language at call time. `src/@types/i18next.d.ts` derives key types from the English resources, so misspelled keys or namespaces fail type checking. `i18n.test.ts` checks namespace/key consistency, English semantic keys, interpolation variables, and source call coverage.
 
 ## Query
 
-`getRouter()` 为每个路由实例创建独立 QueryClient（测试与应用不共用缓存），默认保鲜 30 秒、失败重试一次、mutation 不重试。
+`getRouter()` creates an independent QueryClient for each router instance (tests and the app do not share the cache), with a default stale time of 30 seconds, one retry on failure, and no retry for mutations.
 
-## 加载、空与出错
+## Loading, Empty, and Error States
 
-`src/components/states.tsx` 是各处共用的三种状态，不要再手写「正在加载…」或单独一行的空提示：
+`src/components/states.tsx` provides the three states shared across the app; do not hand-write 「Loading…」 or a single-line empty prompt again:
 
-- `Loading`：灰色骨架，形状接近将要出现的内容（`list`、`detail`、`lines`）；延迟 300ms 淡入，快的请求不会闪一下。
-- `Empty`：居中的图标 + 一句「还没有…」+ 这里会放什么 + 开始的按钮。筛选或搜索后为空也用它，按钮换成清除筛选。
-- `LoadError`：同样的排版，「无法加载…」+ 错误信息 + 重试。
+- `Loading`: gray skeleton, shaped like the content about to appear (`list`, `detail`, `lines`); fades in after a 300ms delay, so fast requests do not flash.
+- `Empty`: centered icon + a line saying 「Nothing yet…」 + what will go here + a start button. Also use it when filtering or searching yields no results, swapping the button for clear filters.
+- `LoadError`: same layout, 「Unable to load…」 + error message + retry.
 
-## 表单、通知与 Markdown
+## Forms, Notifications, and Markdown
 
-智能体编辑器用 `useForm` + `zodResolver` 校验字段，错误显示在字段下方，结果用 toast 提示。`Markdown` 支持 GFM 表格、列表与代码块，不渲染原始 HTML，过滤不安全 URL，链接在新标签页打开；聊天中正在输出的文本用 `streaming` 模式，其余用静态模式。
+The agent editor uses `useForm` + `zodResolver` to validate fields, shows errors below the fields, and reports results with a toast. `Markdown` supports GFM tables, lists, and code blocks, does not render raw HTML, filters unsafe URLs, and opens links in new tabs; text being streamed in chat uses `streaming` mode, and everything else uses static mode.
 
-## shadcn 与设计规范
+## shadcn and Design Conventions
 
-`components.json` 使用 `radix-lyra`、neutral 配色和 Phosphor 图标，组件源码在 `src/components/ui/`。后续添加组件在 `apps/web` 执行 `bunx shadcn@latest add <component>`；再次应用 preset 可能覆盖 `src/styles.css`，需要保留以下项目规则：
+`components.json` uses `radix-lyra`, the neutral color scheme, and Phosphor icons; component source is in `src/components/ui/`. To add components later, run `bunx shadcn@latest add <component>` in `apps/web`; reapplying the preset may overwrite `src/styles.css`, so the following project rules must be preserved:
 
-- 字体是本地打包的 Geist Variable / Geist Mono Variable。
-- `--radius` 与所有 Tailwind radius token 均为 `0px`；全局样式把元素和伪元素的 `border-radius` 强制设为 0。
-- 组件用 `bg-background`、`text-foreground` 等语义 token，不写死单一主题的颜色。
-- `ThemeProvider` 默认跟随系统，设置 → 外观可切换。
+- Fonts are locally bundled Geist Variable / Geist Mono Variable.
+- `--radius` and all Tailwind radius tokens are `0px`; global styles force `border-radius` to 0 for elements and pseudo-elements.
+- Components use semantic tokens such as `bg-background` and `text-foreground`, not hard-coded colors for a single theme.
+- `ThemeProvider` follows the system by default; it can be switched in Settings → Appearance.
 
-界面约定见 [AGENTS.md](AGENTS.md) 与根目录的 [DESIGN.md](../../DESIGN.md)。所有单选入口统一用 `select-field.tsx` 组合官方 Select（不用原生 select）。
+See [AGENTS.md](AGENTS.md) and the root [DESIGN.md](../../DESIGN.md) for UI conventions. All single-select controls use `select-field.tsx` to compose the official Select (do not use native select).
 
-## 页面与路由
+## Pages and Routing
 
-文件路由在 `src/routes/`。
+File routes live in `src/routes/`.
 
-- `/`：工作台。侧栏 project → 对话 → 成员（机器多于一台时先按机器分一层），底部是智能体库；主区是对话，header 有主理人芯片。
-- `/new`：新建对话，选 project 与智能体；`?project=<id>` 预选 project。
-- `/workspace`：全窗口应用外壳（`app-shell.tsx`），下面是 `/workspace/tasks`、`/workspace/routines`、`/workspace/inbox`、`/workspace/memory`（仅有记忆边车时）、`/workspace/more`（手机上的入口页）。
-- 设置是首页和 `/workspace` 共用的弹层，分区：智能体、模型服务、审批、机器、已归档、外观。`?settings=<分区>` 在任意页面打开对应分区一次，随后从地址里去掉。
-- 任务页：列表（按状态分组）或看板，`?task=<id>` 打开、`?task=new` 新建；定时任务页参数是 `routine`、`run`、`edit`；待处理页按天分组，`?filter=pending` 只看待处理。分区和侧栏共用同一套 URL 参数（`task-nav.ts`、`routine-nav.ts`、`workspace-search.ts`），都支持直接访问、刷新和浏览器历史。
+- `/`: workbench. Sidebar project → conversation → members (if there is more than one machine, group by machine first), with the agent library at the bottom; the main area is the conversation, and the header has a lead chip.
+- `/new`: new conversation, selecting project and agent; `?project=<id>` preselects the project.
+- `/workspace`: full-window app shell (`app-shell.tsx`), below which are `/workspace/tasks`, `/workspace/routines`, `/workspace/inbox`, `/workspace/memory` (only when there is a memory sidecar), and `/workspace/more` (the entry page on phones).
+- Settings is a modal shared by the home page and `/workspace`, with sections: agents, model providers, approvals, machines, archived, appearance. `?settings=<section>` opens the corresponding section once on any page, then removes it from the URL.
+- Tasks page: list (grouped by status) or board, `?task=<id>` opens and `?task=new` creates; routine page parameters are `routine`, `run`, and `edit`; the pending page is grouped by day, and `?filter=pending` shows only pending items. Sections and the sidebar share the same URL parameters (`task-nav.ts`, `routine-nav.ts`, `workspace-search.ts`), all supporting direct access, refresh, and browser history.
 
-整个应用只有一个键盘快捷键：⌘,（Windows / Linux 为 Ctrl+,）打开设置，由根组件挂的一条 `window` 监听实现（`src/lib/settings-shortcut.ts`），所以在任何页面、任何焦点下都算——焦点在输入框里也开（带 ⌘ 的逗号不是可打印字符），输入法组合期间则让位。宽窗口开的是设置弹层，手机上没有弹窗语义，去 `/settings` 那一页并把盖着的层关掉。再加第二个快捷键时才需要注册表，现在只有一个。
+The entire app has only one keyboard shortcut: ⌘, (Ctrl+, on Windows / Linux) opens Settings, implemented by a single `window` listener mounted by the root component (`src/lib/settings-shortcut.ts`), so it works on any page and regardless of focus—it also opens when focus is in an input (⌘ plus comma is not a printable character), but yields during IME composition. On wide windows it opens the Settings modal; on phones there is no modal semantics, so go to the `/settings` page and close the covering layer. A registry is only needed when adding a second shortcut; there is only one now.
 
-`localStorage` 只放这个浏览器自己的东西，都用 Zod 校验：`eta.workspace.v1` 是界面状态（布局、字体、上次用的模型、任务页过滤等），`eta.groups.v1` 是草稿和还没送达的消息，`eta.language.v1` 是语言。
+`localStorage` only stores things belonging to this browser, all validated with Zod: `eta.workspace.v1` is UI state (layout, font, last-used model, task page filters, etc.), `eta.groups.v1` is drafts and undelivered messages, and `eta.language.v1` is the language.
 
-## React Grab（圈选元素）
+## React Grab (Element Picker)
 
-`react-grab` 由 `src/lib/element-picker.ts` 动态加载：默认只在开发构建开启，工作区状态里的 `reactGrab` 可以覆盖。把鼠标移到页面元素上按 ⌘C（Windows/Linux 为 Ctrl+C），即可复制元素、组件和源码位置信息。生产构建带 source map，使圈选在生产包上也能映射回源码。
+`react-grab` is dynamically loaded by `src/lib/element-picker.ts`: enabled only in development builds by default, and `reactGrab` in workspace state can override that. Hover over a page element and press ⌘C (Ctrl+C on Windows/Linux) to copy the element, component, and source location information. Production builds include source maps, so element picking in production bundles can also map back to source.
 
-## 验证
+## Verification
 
 ```sh
 bun run --cwd apps/web build
@@ -90,4 +90,4 @@ bun run --cwd apps/web typecheck
 bun run --cwd apps/web test
 ```
 
-`typecheck` 依赖 `build` 先生成 `src/routeTree.gen.ts`（不入库）；根目录的 `bun run check` 经 turbo 按这个顺序执行。
+`typecheck` depends on `build` first generating `src/routeTree.gen.ts`（not committed）; `bun run check` at the repo root runs them in this order via turbo.

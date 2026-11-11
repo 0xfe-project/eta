@@ -14,7 +14,7 @@ import { usePhoneLink } from "@/queries/machines";
 import { wireErrorMessage } from "@/queries/wire";
 import { isLoopback } from "./phone-address";
 
-// Settings → 机器 → 连接手机: the code the phone app scans once. The address is what this page was
+// Settings → Host machine → Connect phone: the code the phone app scans once. The address is what this page was
 // opened at; the token comes from the host, to a client it already let in.
 
 export function PhoneLinkButton() {

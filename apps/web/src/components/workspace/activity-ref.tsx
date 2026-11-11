@@ -108,7 +108,7 @@ export function ActivityRefCard({
     "connections",
   ] as const);
   const sectionLink = useSectionLink();
-  // A routine's card is the way to its page; with 定时 off there is no page to open, so the
+  // A routine's card is the way to its page; with routines off there is no page to open, so the
   // result of a call that touched one draws nothing rather than a dead link.
   if (!ROUTINES_VISIBLE && value.kind === "routine") return null;
   const { icon: Icon, open } = kinds[value.kind];

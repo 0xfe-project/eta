@@ -56,7 +56,7 @@ export type View =
   | {
       screen: "choose";
       connection: Connection | undefined;
-      /** What 返回 goes back to; a first launch has nothing to go back to. */
+      /** Where Back returns to; a first launch has nothing to go back to. */
       returnTo: PageView | Extract<View, { screen: "failure" }> | undefined;
       language: string | undefined;
     }
@@ -119,7 +119,7 @@ export function createShell(deps: ShellDependencies) {
     deps.show(next);
   };
 
-  // What 重试 tries again: the connection that failed, even one never reached before.
+  // What Retry tries again: the connection that failed, even one never reached before.
   const fail = (at: Connection, failure: Failure) => {
     stopWatching();
     connection = at;
@@ -164,7 +164,7 @@ export function createShell(deps: ShellDependencies) {
                 kind: launch.download.kind,
                 tokenless: launch.download.tokenless,
               };
-        // On a page of its own, with 重试 and the way to a remote host: the chooser has nowhere to
+        // On a page of its own, with Retry and the way to a remote host: the chooser has nowhere to
         // say why this computer cannot run one, and a download's page has gone by now.
         fail(target, failure);
         return failure;
@@ -252,12 +252,12 @@ export function createShell(deps: ShellDependencies) {
         fail(connection, failure);
     },
 
-    /** The failure screen's 重试. */
+    /** The failure screen's Retry. */
     async retry(): Promise<Failure | undefined> {
       return connection === undefined ? undefined : await enter(connection);
     },
 
-    /** From 设置 or the failure screen. The page behind it stays as it was until a choice works. */
+    /** From Settings or the failure screen. The page behind it stays as it was until a choice works. */
     openChooser(language?: string): void {
       // A download runs to its end or its failure; the failure page offers the way out.
       if (
@@ -275,7 +275,7 @@ export function createShell(deps: ShellDependencies) {
       });
     },
 
-    /** 返回: the page or the failure the chooser was opened from. */
+    /** Back: the page or the failure the chooser was opened from. */
     back(): void {
       if (view?.screen !== "choose" || view.returnTo === undefined) return;
       if (view.returnTo.screen === "page") showPage(view.returnTo);

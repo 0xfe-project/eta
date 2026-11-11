@@ -48,7 +48,7 @@ export function Page(props: {
 export function Header(props: {
   title?: string;
   subtitle?: string;
-  /** A muted crumb beside the back arrow, as 06's `#128` and 06i's 任务. */
+  /** A muted crumb beside the back arrow, as 06's `#128` and 06i's task. */
   crumb?: string;
   right?: JSX.Element;
   onBack?: () => void;
@@ -89,7 +89,7 @@ export function Header(props: {
   );
 }
 
-/** The 34-high caption over a list: 确认请求 3, 任务 3. */
+/** The 34-high caption over a list: Confirm Requests 3, Tasks 3. */
 export function SectionLabel(props: { title: string; border?: boolean }) {
   return (
     <View

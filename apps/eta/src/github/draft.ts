@@ -51,22 +51,22 @@ export function newIssueDraft(input: {
     throw new GithubError(
       "INVALID_REPOSITORY",
       400,
-      `无法识别仓库 ${input.repository}，请写成 owner/name。`,
+      `Unrecognized repository ${input.repository}, please write it as owner/name.`,
     );
   const title = input.title.trim();
   const body = input.body ?? "";
-  if (title === "") throw new GithubError("INVALID_ISSUE", 400, "缺少标题。");
+  if (title === "") throw new GithubError("INVALID_ISSUE", 400, "Missing title.");
   if (characters(title) > MAX_ISSUE_TITLE)
     throw new GithubError(
       "INVALID_ISSUE",
       400,
-      "标题太长：GitHub issue 标题最多 256 个字符。",
+      "Title too long: GitHub issue titles are at most 256 characters.",
     );
   if (characters(body) > MAX_ISSUE_BODY)
     throw new GithubError(
       "INVALID_ISSUE",
       400,
-      "正文太长：GitHub issue 正文最多 65536 个字符。",
+      "Body too long: GitHub issue bodies are at most 65536 characters.",
     );
   // The fields in key order, as a query string is written.
   const link = (fields: [string, string][]): string =>

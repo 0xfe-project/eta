@@ -9,7 +9,7 @@ interface Member {
 export type StickyTarget = "everyone" | string[];
 /** Who the next message reaches, one answer for the composer and everything that sends. */
 export interface ComposerTarget {
-  /** What the composer says: nobody yet, the steward, 所有人, or the members in `ids`. */
+  /** What the composer says: nobody yet, the steward, everyone, or the members in `ids`. */
   kind: "none" | "steward" | "everyone" | "members";
   /** Everyone it reaches, the steward included when the host is the one to pick them. */
   ids: string[];
@@ -26,7 +26,7 @@ const written = (text: string, label: string) =>
   ).exec(text);
 // Both aliases remain valid in saved drafts after switching language.
 const everyoneMention = (text: string) =>
-  [written(text, "所有人"), written(text, "everyone")]
+  [written(text, "everyone"), written(text, "everyone")]
     .filter((result) => result !== null)
     .sort((a, b) => a.index - b.index)[0];
 

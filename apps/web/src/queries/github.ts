@@ -21,7 +21,7 @@ export const authorizationCallbackPath = "/github/authorization/callback";
 
 /**
  * Whether the host has the plugin. GitHub is one chain and the page learns of it from this one
- * fact: with no `github` in `hello.mounted` there is no settings → 连接, no pull-request section
+ * fact: with no `github` in `hello.mounted` there is no settings → Connect, no pull-request section
  * on a task, no card under a pull request or an issue an agent once opened, and no subscription or
  * call aimed at the target. The host was started without it (`--github`, `ETA_GITHUB`).
  */

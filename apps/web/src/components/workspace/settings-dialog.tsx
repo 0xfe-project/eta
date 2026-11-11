@@ -18,8 +18,8 @@ import { useWorkspaceStore } from "./workspace-store";
 /**
  * The sidebar's settings row: the same gear, in the same row every section wears.
  *
- * It used to be a `size="icon"` button with a label pushed into it, which is how 设置 ended up at a
- * different type size from 任务 right beside it: an icon button's square is not a menu row's height,
+ * It used to be a `size="icon"` button with a label pushed into it, which is how Settings ended up at a
+ * different type size from Tasks right beside it: an icon button's square is not a menu row's height,
  * inset or type. This is the menu row itself, so the two read as two of one thing and only their
  * order — the sections, then the door out of them — says which is which.
  */

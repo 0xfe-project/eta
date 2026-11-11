@@ -36,7 +36,7 @@ import {
 } from "@/queries/mcp";
 import { wireErrorMessage } from "@/queries/wire";
 
-// Settings → MCP 服务器: every agent's servers by where they are declared, how each stands, and
+// Settings → MCP servers: every agent's servers by where they are declared, how each stands, and
 // the sign-in of the ones that use OAuth. The page never holds a credential: signing in opens the
 // provider's address in a new tab, and a host the browser cannot be sent back to is finished by
 // pasting the address the provider ended on.
@@ -322,7 +322,7 @@ function AgentServers({
   );
 }
 
-/** Settings → MCP 服务器. */
+/** Settings → MCP servers. */
 export function McpSettings() {
   const { t: translateText } = useTranslation(["mcp", "common"] as const);
   const { servers, loaded, error } = useMcpServers();

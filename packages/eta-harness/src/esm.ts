@@ -616,10 +616,10 @@ export function openEsmSession(options: EsmSessionOptions): EsmSession {
       .map((k) => `- ${k}`);
     if (added.length + changed.length + removed.length === 0) return undefined;
     return [
-      "## 能力 delta",
-      ...(added.length === 0 ? [] : ["", "新增的能力：", ...added]),
-      ...(changed.length === 0 ? [] : ["", "修改的能力：", ...changed]),
-      ...(removed.length === 0 ? [] : ["", "删除的能力：", ...removed]),
+      "## Capability delta",
+      ...(added.length === 0 ? [] : ["", "Added capabilities:", ...added]),
+      ...(changed.length === 0 ? [] : ["", "Changed capabilities:", ...changed]),
+      ...(removed.length === 0 ? [] : ["", "Removed capabilities:", ...removed]),
     ].join("\n");
   };
 

@@ -63,7 +63,7 @@ function stateLabel(state: GitHubPull["state"]): string {
   return t(`tasks.pr.${state}`);
 }
 
-/** 打开 +182 −40, or what stands in for it. */
+/** Open +182 −40, or what stands in for it. */
 function Facts(props: { pull: GitHubPull | undefined; unavailable: boolean }) {
   return (
     <If
@@ -340,7 +340,7 @@ function DeliveryRow(props: { task: () => TaskDetail }) {
   );
 }
 
-/** 06c's 交付: the row, its label with it, goes when the host has no GitHub or the task no PR. */
+/** 06c's delivery: the row, its label with it, goes when the host has no GitHub or the task no PR. */
 export function TaskDelivery(props: { task: () => TaskDetail }) {
   return (
     <If when={wire().isMounted("github")}>

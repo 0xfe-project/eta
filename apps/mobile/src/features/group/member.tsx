@@ -1,5 +1,5 @@
 import type { TranscriptSection } from "@eta/client-contracts";
-// 03k 成员详情: one member's numbers and what can be done about it, and 只看, its side of the group.
+// 03k Member details: one member's numbers and what can be done about it, and Only, its side of the group.
 
 import type {
   ConversationResults,
@@ -240,7 +240,7 @@ function MemberBody(props: {
 }
 
 /**
- * 回合 and 被拦, counted from the transcript the view holds. Older rows may lie outside its window;
+ * Turns and blocked, counted from the transcript the view holds. Older rows may lie outside its window;
  * then the count is a floor, and says so with a `+`.
  */
 function activity(transcript: TranscriptSection | undefined): string[] {
@@ -340,7 +340,7 @@ export function MemberSheet(props: {
   );
 }
 
-/** 只看: one member's rows of the conversation, newest first. The web has no such view; it reads the same timeline. */
+/** Only: one member's rows of the conversation, newest first. The web has no such view; it reads the same timeline. */
 function MemberOnlyScreen(props: { conversationId: string; agentId: string }) {
   const target = useTarget(`conversations.${props.conversationId}`);
   const timeline = () => target.section<TimelineSection>("timeline");

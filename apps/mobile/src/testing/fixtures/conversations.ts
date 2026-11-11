@@ -1,4 +1,4 @@
-// 02, 02a, 03p, 03p2: the rows the design draws, and what a long press and 取消归档 call.
+// 02, 02a, 03p, 03p2: the rows the design draws, and what a long press and Unarchive call.
 
 import type {
   ConversationArgs,
@@ -46,7 +46,7 @@ const row = (
 const EXTRA: ConversationSummary[] = [
   row(
     "dm-ache",
-    "阿澈",
+    "Ache",
     "home-agent-ache",
     "direct",
     [member("agent-ache", "working")],
@@ -61,17 +61,17 @@ const EXTRA: ConversationSummary[] = [
     "direct",
     [member("agent-mori", "idle")],
     {
-      preview: "列宽的方案写好了，你看下。",
+      preview: "The column-width plan is ready, take a look.",
       lastMessageAt: minutesAgo(1500),
     },
   ),
-  row("release", "发布流程", "eta", "group", [member("agent-ache", "idle")], {
+  row("release", "Release process", "eta", "group", [member("agent-ache", "idle")], {
     archived: true,
     updatedAt: new Date(new Date().getFullYear(), 9, 2).getTime(),
   }),
   row(
     "landing",
-    "落地页文案",
+    "Landing page copy",
     "site",
     "group",
     [member("agent-mori", "idle")],

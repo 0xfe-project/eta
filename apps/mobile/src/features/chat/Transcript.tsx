@@ -124,7 +124,7 @@ function SmallButton(props: {
   );
 }
 
-/** A message on its way (03f): 发送中…, or why it did not arrive and what to do about it. */
+/** A message on its way (03f): Sending…, or why it did not arrive and what to do about it. */
 function OutgoingRow(props: { item: Outgoing }) {
   return (
     <View class="gap-[6px]">

@@ -15,7 +15,7 @@ export function AttentionDot({ className }: { className?: string }) {
  * Settings' section list: a column beside the content, a scrolling row
  * above it on phones. A section with `attention` shows a dot, `hint` names
  * it to screen readers. The open section scrolls into view, for sections
- * opened from elsewhere (the phone's 更多 page).
+ * opened from elsewhere (the phone's More page).
  */
 export function SettingsNav<T extends string>({
   label,

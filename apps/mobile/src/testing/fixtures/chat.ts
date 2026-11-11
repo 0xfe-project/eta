@@ -169,7 +169,7 @@ const replayPatch = () =>
   ].join("\n");
 
 const THINKING =
-  "先看 hello 帧现在怎么带状态，再看 host 那头有没有按 seq 取行的查询。".repeat(
+  "Start by looking at how the hello frame carries state now, then check whether the host side has a query that fetches rows by seq.".repeat(
     38,
   );
 
@@ -242,7 +242,7 @@ function wireRun(from: number): ViewMessageRow[] {
       id: "t11",
       name: "bash",
       input: { command: "rm -rf ~/.eta/cache" },
-      output: "blocked by approvals: 用户拒绝了这次调用",
+      output: "blocked by approvals: user rejected this call",
       error: true,
     },
     {
@@ -268,13 +268,13 @@ function wireRun(from: number): ViewMessageRow[] {
     assistant([
       {
         type: "text",
-        text: "补发已经写好：客户端带上最后收到的 seq，host 从那一行往后重放。测试全过。",
+        text: "The backfill is ready: the client includes the last received seq, and the host replays from that row onward. All tests pass.",
       },
       { type: "thinking", thinking: THINKING.slice(0, 1240) },
     ]),
     ...calls(steps),
     assistant([
-      { type: "text", text: "迁移会锁 message 表大约 40 秒，得你定。" },
+      { type: "text", text: "The migration will lock the message table for about 40 seconds; you'll need to decide." },
     ]),
   ]);
 }
@@ -282,7 +282,7 @@ function wireRun(from: number): ViewMessageRow[] {
 function boardRun(from: number): ViewMessageRow[] {
   return transcript(from, [
     assistant([
-      { type: "thinking", thinking: "看板列宽要记住上次拖动，先看存储。" },
+      { type: "thinking", thinking: "Board column widths should remember the last drag; check storage first." },
     ]),
     ...calls([
       {
@@ -311,7 +311,7 @@ function dmRun(from: number): ViewMessageRow[] {
     assistant([
       {
         type: "thinking",
-        thinking: "这周的任务要按状态分组，受阻的单独列。"
+        thinking: "This week's tasks should be grouped by status, with blocked ones in a separate column.",
           .repeat(17)
           .slice(0, 320),
       },
@@ -320,7 +320,7 @@ function dmRun(from: number): ViewMessageRow[] {
       {
         id: "d1",
         name: "read_tasks",
-        input: { query: "tasks · 18 条" },
+        input: { query: "tasks · 18 items" },
         output: "…",
       },
       {
@@ -333,7 +333,7 @@ function dmRun(from: number): ViewMessageRow[] {
   ]);
 }
 
-const REPORT = "周报写好了：本周完成 12 个任务，2 个受阻。正在整理下周的计划，";
+const REPORT = "The weekly report is ready: 12 tasks completed this week, 2 blocked. Now putting together next week's plan,";
 
 const session = (
   id: string,
@@ -351,11 +351,11 @@ const session = (
 // ---------------------------------------------------------------- timelines
 
 const LONG_REPLY = [
-  "帧格式我看过了，三处要改：",
+  "I've looked at the frame format; three things need changing:",
   "",
   ...Array.from(
     { length: 14 },
-    (_, index) => `${index + 1}. 第 ${index + 1} 处要带上 seq`,
+    (_, index) => `${index + 1}. Point ${index + 1} needs to include seq`,
   ),
   "",
   "```diff",
@@ -367,10 +367,10 @@ const LONG_REPLY = [
 function older(id: string): MessageView[] {
   const rows: MessageView[] = [];
   for (let seq = 1; seq <= 8; seq += 2) {
-    rows.push(user(id, seq, `第 ${seq} 条：先把现在的重连逻辑讲一遍`));
+    rows.push(user(id, seq, `Message ${seq}: first walk through the current reconnect logic`));
     rows.push(
       reply(id, seq + 1, "agent-ache", {
-        text: `第 ${seq + 1} 条：现在断了就全量重拉。`,
+        text: `Item ${seq + 1}: if it drops now, re-pull everything.`,
       }),
     );
   }
@@ -399,13 +399,13 @@ function wireRows(): MessageView[] {
     ...older("wire"),
     reply("wire", 9, "agent-ache", {
       text: LONG_REPLY,
-      thinking: "先读 wire.ts。",
+      thinking: "Read wire.ts first.",
       data: { activity: savedActivity },
     }),
-    user("wire", 10, "重连后先补发，再恢复实时帧。迁移也一起带上。"),
+    user("wire", 10, "After reconnecting, backfill first, then resume live frames. Bring the migration along too."),
     reply("wire", 11, "agent-ache", {
       status: "waiting_for_input",
-      text: "迁移会锁 message 表大约 40 秒，得你定。",
+      text: "The migration will lock the message table for about 40 seconds — that's your call.",
       data: { runFrom: 40 },
       createdAt: minutesAgo(6),
     }),
@@ -419,7 +419,7 @@ function cardRows(): MessageView[] {
   const card: TaskCardData = {
     taskId: "task-128",
     number: 128,
-    title: "重连后补发丢失的帧",
+    title: "Backfill lost frames after reconnect",
     status: "in_review",
     runStatus: "completed",
     conversationId: id,
@@ -435,9 +435,9 @@ function cardRows(): MessageView[] {
       text: "agent-mori is steward now",
       data: { event: "steward", from: "agent-ache", to: "agent-mori" },
     }),
-    user(id, 2, "回滚也提一个任务。"),
+    user(id, 2, "File a task for the rollback too."),
     reply(id, 3, "agent-ache", {
-      text: "迁移的回滚我提成了一个任务，确认后我开始。上一版说明也发布了。",
+      text: "I filed the migration rollback as a task; I'll start once you confirm. The previous write-up is published too.",
       data: {
         activity: [
           {
@@ -447,7 +447,7 @@ function cardRows(): MessageView[] {
             input: {},
             details: {
               artifactId: "artifact-plan",
-              title: "重连方案",
+              title: "Reconnect plan",
               version: 2,
             },
           },
@@ -459,9 +459,9 @@ function cardRows(): MessageView[] {
       author: "agent",
       agentId: "agent-ache",
       data: {
-        title: "写迁移回滚脚本",
+        title: "Write the migration rollback script",
         description:
-          "给 0042_seq 写对应的回滚，并在测试库上跑一遍。完成的标准：回滚后 message 表结构和迁移前一致。",
+          "Write the matching rollback for 0042_seq and run it once on the test database. Done means: after the rollback the message table schema matches the pre-migration one.",
         workspace: "worktree",
         turnMessageId: turn,
       },
@@ -484,13 +484,13 @@ function cardRows(): MessageView[] {
 function errorRows(): MessageView[] {
   const id = "wire";
   return [
-    user(id, 1, "这个方案大家怎么看？", { woke: [], joined: [] }),
-    user(id, 2, "别动迁移，先看日志。", { woke: [], joined: ["agent-ache"] }),
+    user(id, 1, "What does everyone think of this plan?", { woke: [], joined: [] }),
+    user(id, 2, "Don't touch the migration, look at the logs first.", { woke: [], joined: ["agent-ache"] }),
     reply(id, 3, "agent-ache", {
-      text: "日志里有两处重复帧，都在重连之后的",
+      text: "There are two duplicate frames in the log, both after the reconnect",
       status: "stopped",
     }),
-    user(id, 4, "再跑一遍。", {}),
+    user(id, 4, "Run it again.", {}),
     reply(id, 5, "agent-mori", {
       status: "failed",
       replyToId: "wire-4",
@@ -503,7 +503,7 @@ function errorRows(): MessageView[] {
 function queueRows(): MessageView[] {
   const id = "wire";
   return [
-    user(id, 1, "@所有人 这版先别合，等迁移的结论。"),
+    user(id, 1, "@everyone Don't merge this version yet, wait for the migration conclusion."),
     reply(id, 2, "agent-ache", { status: "working", data: { runFrom: 0 } }),
     reply(id, 3, "agent-mori", { status: "queued" }),
     reply(id, 4, "agent-mori", { status: "queued" }),
@@ -519,9 +519,9 @@ function queueRun(): ViewMessageRow[] {
     output: "…",
   }));
   return transcript(0, [
-    assistant([{ type: "thinking", thinking: "先写回滚。" }]),
+    assistant([{ type: "thinking", thinking: "Write the rollback first." }]),
     ...calls(list),
-    assistant([{ type: "text", text: "好，我先把迁移的回滚写上，等你看完再" }]),
+    assistant([{ type: "text", text: "OK, I'll write the migration rollback first, and wait until you've reviewed it before" }]),
   ]);
 }
 
@@ -660,7 +660,7 @@ export function installChat(host: FakeHost): void {
     else if (summary.id === "artifacts") add("artifacts", cardRows());
     else if (summary.id === "dm-xiaoman")
       add("dm-xiaoman", [
-        user("dm-xiaoman", 1, "把这周的任务汇总成周报。"),
+        user("dm-xiaoman", 1, "Summarize this week's tasks into a weekly report."),
         reply("dm-xiaoman", 2, "agent-xiaoman", {
           status: "working",
           data: { runFrom: 0 },
@@ -668,7 +668,7 @@ export function installChat(host: FakeHost): void {
       ]);
     else if (summary.id === "board")
       add("board", [
-        user("board", 1, "看板列宽记住上次拖动。"),
+        user("board", 1, "Remember the last column-width drag on the board."),
         reply("board", 2, "agent-mori", {
           status: "working",
           data: { runFrom: 0 },
@@ -740,7 +740,7 @@ export function installChat(host: FakeHost): void {
     const wire = conversations.get("wire");
     if (wire !== undefined)
       wire.held = [
-        row("wire", 6, { text: "回滚也要有测试", data: { held: true } }),
+        row("wire", 6, { text: "The rollback needs tests too", data: { held: true } }),
       ];
   }
 
@@ -792,8 +792,8 @@ export function installChat(host: FakeHost): void {
           agentId: "agent-ache",
           conversationId: "wire",
           replyId: "wire-11",
-          prompt: "迁移脚本要直接在生产库上跑吗？",
-          options: ["先备份再跑", "直接跑", "先不跑"],
+          prompt: "Should the migration script run directly on the production database?",
+          options: ["Back up first, then run", "Run it directly", "Don't run it yet"],
           multi: false,
           status: "pending",
           answer: null,
@@ -861,9 +861,9 @@ export function installChat(host: FakeHost): void {
       clientId?: string;
       attachments?: string[];
     }): SendResult | Promise<SendResult> => {
-      if (scenario === "chat-errors" && args.text.includes("先备份再跑"))
-        throw new Error("网络连接失败，消息未送达。");
-      if (scenario === "chat-errors" && args.text.includes("日志发我一份"))
+      if (scenario === "chat-errors" && args.text.includes("Back up first, then run"))
+        throw new Error("Network connection failed, message not delivered.");
+      if (scenario === "chat-errors" && args.text.includes("Send me a copy of the log"))
         return new Promise<SendResult>(() => undefined);
       const conversation = conversationOf(args.conversationId);
       const known = conversation.rows.find((item) => item.id === args.clientId);
@@ -931,7 +931,7 @@ export function installChat(host: FakeHost): void {
               data: { runFrom: 10_000 },
             });
             conversation.publish();
-            const words = "收到。";
+            const words = "Got it.";
             stream(`sessions.${sessionId}`, words, () => {
               conversation.replace(answer.id, { status: "done", text: words });
               conversation.publish();

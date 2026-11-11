@@ -9,7 +9,7 @@ import { parseConnectLink } from "@eta/client-contracts/connect-link";
 /** What the connect form holds. A pasted or scanned link fills it. */
 export const form = signal<HostAddress>({ address: "", token: "" });
 
-/** The 扫电脑上的二维码 button: the code is the link 设置 → 机器 → 连接手机 shows on the desktop. */
+/** The Scan the QR code on your computer button: the code is the link Settings → Machine → Connect phone shows on the desktop. */
 export async function scanHostCode(): Promise<void> {
   if (!Scanner.available()) {
     toast(t("connect.scanUnavailable"));

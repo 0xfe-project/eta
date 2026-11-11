@@ -163,13 +163,13 @@ const FEATURED: Fixture[] = [
   {
     id: "task-131",
     number: 131,
-    title: "看板列宽记住上次拖动",
+    title: "Board column width remembers last drag",
     status: "in_progress",
     by: agent("mori"),
     conversationId: "board",
     updatedAt: minutesAgo(0),
     createdAt: at(0, 9, 20),
-    description: "列宽写进 localStorage，刷新后恢复。",
+    description: "Column widths are written to localStorage and restored after refresh.",
     runs: [
       run("run-131", "running", {
         machineId: "gpu-box",
@@ -190,26 +190,26 @@ const FEATURED: Fixture[] = [
   {
     id: "task-133",
     number: 133,
-    title: "运行记录支持分页",
+    title: "Run history supports pagination",
     status: "in_progress",
     by: agent("xiaoman"),
     conversationId: "board",
     updatedAt: minutesAgo(2),
-    description: "视图只带最近 200 条，往上翻时用 sessions.history 取更早的。",
+    description: "The view only carries the latest 200 entries; scrolling up uses sessions.history to fetch older ones.",
     runs: [run("run-133", "queued", { queueReason: "machine_full" })],
     activity: [entry("created", agent("xiaoman"), minutesAgo(2))],
   },
   {
     id: "task-128",
     number: 128,
-    title: "重连后补发丢失的帧",
+    title: "Backfill lost frames after reconnect",
     status: "in_review",
     by: agent("ache"),
     conversationId: "wire",
     updatedAt: minutesAgo(8),
     createdAt: at(1, 18, 20),
     description:
-      "断线后客户端带上最后收到的 seq，host 从那一行往后重放，再接回实时帧。\n\n## 完成的标准\n- 杀进程重连 200 次不丢帧\n- 补发期间不打乱顺序",
+      "After a disconnect, the client sends the last seq it received, and the host replays from that row forward, then reattaches to live frames.\n\n## Definition of done\n- No frame loss across 200 kill-and-reconnect cycles\n- Order stays intact during backfill",
     branch: "task/128-replay",
     path: WORKTREE_128,
     runs: [replay],
@@ -223,7 +223,7 @@ const FEATURED: Fixture[] = [
       }),
       entry("run_started", SYSTEM, at(1, 18, 22), { runId: "run-128" }),
       entry("title", agent("ache"), at(1, 18, 30), {
-        data: { from: "补发丢失的帧", to: "重连后补发丢失的帧" },
+        data: { from: "Resend lost frames", to: "Resend lost frames after reconnect" },
       }),
       entry("description", agent("ache"), at(1, 18, 31)),
       entry("conversation", USER, at(1, 19, 0), {
@@ -231,7 +231,7 @@ const FEATURED: Fixture[] = [
       }),
       entry("run_nudged", SYSTEM, at(0, 8, 58), { runId: "run-128" }),
       entry("comment", agent("ache"), at(0, 9, 12), {
-        body: "杀进程重连 200 次，没有丢帧。测试全过，等你验收。",
+        body: "Killed the process and reconnected 200 times, no frames lost. All tests pass, ready for your acceptance.",
       }),
       entry("status", agent("ache"), at(0, 9, 12), {
         data: { from: "in_progress", to: "in_review" },
@@ -241,15 +241,15 @@ const FEATURED: Fixture[] = [
   {
     id: "task-129",
     number: 129,
-    title: "备份归档到 nas",
+    title: "Archive backup to nas",
     status: "blocked",
     by: agent("ache"),
     conversationId: "wire",
     updatedAt: minutesAgo(20),
     createdAt: at(1, 22, 4),
-    description: "每周把 ~/.eta 打包归档到 nas，保留最近四份。",
+    description: "Every week, pack ~/.eta and archive it to nas, keeping the latest four copies.",
     runs: [
-      run("run-129", "failed", { machineId: "nas", error: "nas 连接超时" }),
+      run("run-129", "failed", { machineId: "nas", error: "nas connection timed out" }),
       run("run-129b", "queued", {
         machineId: "nas",
         queueReason: "machine_offline",
@@ -260,25 +260,25 @@ const FEATURED: Fixture[] = [
       entry("created", agent("ache"), at(1, 22, 4)),
       entry("run_failed", SYSTEM, minutesAgo(30), {
         runId: "run-129",
-        body: "nas 连接超时",
+        body: "nas connection timed out",
       }),
       entry("status", agent("ache"), minutesAgo(29), {
         data: { from: "in_progress", to: "blocked" },
       }),
       entry("comment", agent("ache"), minutesAgo(20), {
-        body: "nas 从昨晚起连不上。要等它回来，还是先把归档存到 gpu-box？",
+        body: "nas has been unreachable since last night. Wait for it to come back, or store the archive on gpu-box for now?",
       }),
     ],
   },
   {
     id: "task-41",
     number: 41,
-    title: "首页首屏换成新文案",
+    title: "Swap homepage first screen to new copy",
     status: "in_review",
     by: agent("mori"),
     conversationId: "redesign",
     updatedAt: minutesAgo(60),
-    description: "用上周定下的文案，手机上两行以内。",
+    description: "Use the copy finalized last week, within two lines on mobile.",
     projectId: "site",
     runs: [run("run-41", "completed", { machineId: "mb-air" })],
     activity: [entry("created", agent("mori"), minutesAgo(600))],
@@ -286,7 +286,7 @@ const FEATURED: Fixture[] = [
   {
     id: "task-135",
     number: 135,
-    title: "设置页的快捷键列表",
+    title: "Shortcut list on settings page",
     status: "todo",
     by: agent("ache"),
     updatedAt: minutesAgo(1500),
@@ -295,7 +295,7 @@ const FEATURED: Fixture[] = [
   {
     id: "task-118",
     number: 118,
-    title: "产物支持 PDF 预览",
+    title: "Artifacts support PDF preview",
     status: "backlog",
     by: agent("mori"),
     conversationId: "redesign",
@@ -304,7 +304,7 @@ const FEATURED: Fixture[] = [
   {
     id: "task-126",
     number: 126,
-    title: "site 支持 SPA 回退",
+    title: "site supports SPA fallback",
     status: "done",
     by: agent("ache"),
     conversationId: "wire",
@@ -313,7 +313,7 @@ const FEATURED: Fixture[] = [
   {
     id: "task-124",
     number: 124,
-    title: "骨架屏不再闪",
+    title: "Skeleton screen no longer flickers"
     status: "done",
     by: agent("mori"),
     conversationId: "board",
@@ -322,7 +322,7 @@ const FEATURED: Fixture[] = [
   {
     id: "task-97",
     number: 97,
-    title: "旧版设置页迁移",
+    title: "Legacy Settings Page Migration",
     status: "cancelled",
     by: agent("xiaoman"),
     updatedAt: minutesAgo(9 * 1440),
@@ -350,11 +350,11 @@ function filler(): Fixture[] {
     updatedAt: minutesAgo(number * 700),
   });
   return [
-    row(20, "backlog", "桌面端托盘菜单"),
-    row(21, "backlog", "导出整段对话"),
-    row(22, "cancelled", "旧版通知中心"),
+    row(20, "backlog", "Desktop Tray Menu"),
+    row(21, "backlog", "Export Full Conversation"),
+    row(22, "cancelled", "Legacy Notification Center"),
     ...Array.from({ length: 25 }, (_, index) =>
-      row(30 + index, "done", `已归档的第 ${index + 1} 件事`),
+      row(30 + index, "done", `Archived Item ${index + 1}`),
     ),
   ];
 }
@@ -401,7 +401,7 @@ function replayLog(): unknown[] {
     }),
   ];
   return [
-    text("先看现在的重连路径，再决定补发从哪里接。"),
+    text("Check the current reconnect path first, then decide where to resume replay."),
     ...["wire.ts", "reconnect.ts", "replay.ts", "hello.ts"].flatMap(
       (file, index) =>
         tool(`read-${index}`, "read", { file_path: `src/${file}` }, "…"),
@@ -419,7 +419,7 @@ function replayLog(): unknown[] {
       "index missing",
       true,
     ),
-    text("迁移在测试库上要先建索引，改完重跑。"),
+    text("Build indexes on the test database before migration, then rerun after changes."),
     ...["0042_seq.sql", "replay.ts"].flatMap((file, index) =>
       tool(`edit-${index}`, "edit", { file_path: `src/${file}` }, "ok"),
     ),
@@ -455,16 +455,16 @@ function pull(
   };
 }
 
-const REPLAY = () => pull(472, "重放缺失的帧", "open", 182, 40, "ready");
+const REPLAY = () => pull(472, "Replay Missing Frames", "open", 182, 40, "ready");
 const NOT_READY = () =>
   pull(
     470,
-    "迁移脚本",
+    "Migration Script",
     "open",
     20,
     0,
     "blocked",
-    "检查还没过，GitHub 现在不让合并。",
+    "Checks haven't passed yet, GitHub won't allow merging now.",
   );
 
 function pulls(scenario: string): Record<string, PullFixture[]> {
@@ -473,9 +473,9 @@ function pulls(scenario: string): Record<string, PullFixture[]> {
       "task-128": [
         REPLAY(),
         NOT_READY(),
-        pull(466, "日志降噪", "merged", 12, 30),
-        pull(465, "面板宽度", "merged", 8, 2),
-        pull(460, "看板拖动", "open", 1, 1),
+        pull(466, "Log Noise Reduction", "merged", 12, 30),
+        pull(465, "Panel Width", "merged", 8, 2),
+        pull(460, "Board Drag", "open", 1, 1),
       ],
     };
   return { "task-128": [REPLAY()], "task-41": [NOT_READY()] };
@@ -624,7 +624,7 @@ function installBoard(host: FakeHost): void {
       !completionFailed
     ) {
       completionFailed = true;
-      throw new Error("宿主没有及时回应。");
+      throw new Error("Host did not respond in time.");
     }
     const before = read(args.taskId);
     let task = before;
@@ -673,7 +673,7 @@ function installBoard(host: FakeHost): void {
       await new Promise((done) => setTimeout(done, 150));
       if (failures.comment) {
         failures.comment = false;
-        throw new Error("网络连接失败。");
+        throw new Error("Network connection failed.");
       }
       let task = read(args.taskId);
       const body = args.body;

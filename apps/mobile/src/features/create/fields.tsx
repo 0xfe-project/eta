@@ -1,4 +1,4 @@
-// The parts every 新建 page is made of.
+// The parts every New page is made of.
 
 import type { JSX } from "nsh";
 import { Keyboard, Text, View } from "nsh";

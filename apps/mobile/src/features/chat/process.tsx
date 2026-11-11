@@ -22,7 +22,7 @@ import { stepOf } from "./steps";
 import { ToolScreen } from "./ToolScreen";
 import { shapeOf, withoutAnsi } from "./tool-shape";
 
-/** How many of the last steps 04 shows before 「前面 N 步」. */
+/** How many of the last steps 04 shows before 「Earlier N steps」. */
 const LAST_STEPS = 10;
 /** How many older messages one page back asks for: the size of the view's own window. */
 const HISTORY_PAGE = 200;

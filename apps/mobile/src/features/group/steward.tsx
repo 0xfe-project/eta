@@ -1,4 +1,4 @@
-// 03l 选主理人. The effective steward is the conversation's own pick, else its project's, so there are
+// 03l Choose steward. The effective steward is the conversation's own pick, else its project's, so there are
 // two levels, as on the web: this conversation (an agent, follow the project, or none at all) and
 // the project.
 

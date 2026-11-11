@@ -54,7 +54,7 @@ export function GroupNotice({ message }: { message: MessageView }) {
           title={title}
         />
       );
-    // 定时 is off in this build: the report is still news, so its line stays, in the reader's
+    // Routine is off in this build: the report is still news, so its line stays, in the reader's
     // language; the way to the page it belongs to does not.
     text = title
       ? translateText("chat:system.routineReport", {

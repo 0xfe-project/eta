@@ -104,7 +104,7 @@ export const runActor = (task: BoardTaskView, run: TaskRunView): TaskActor =>
     ? executor(task)
     : { kind: "agent", agentId: run.agentId };
 
-/** The list's second line in a fold: 昨天, 3 天, 上周, 10/28. */
+/** The list's second line in a fold: Yesterday, 3 days, Last week, 10/28. */
 export function past(at: number, now = Date.now()): string {
   const days = Math.floor((now - at) / (24 * 60 * 60_000));
   if (days < 2) return ago(at, now);
@@ -113,7 +113,7 @@ export function past(at: number, now = Date.now()): string {
   return ago(at, now);
 }
 
-/** 06c's 更新于: 刚刚, 今天 9:12, 昨天 18:20. */
+/** 06c's Updated at: Just now, Today 9:12, Yesterday 18:20. */
 export function updated(at: number, now = Date.now()): string {
   if (now - at < 60_000) return t("common.justNow");
   return new Date(at).toDateString() === new Date(now).toDateString()

@@ -1,43 +1,43 @@
-# 访问控制
+# Access control
 
-WebSocket 管道会在这台电脑上以运行 host 的用户身份执行命令、读写文件，所以它是**绝不能被偶然碰到**的东西。访问控制在 `apps/eta/src/access.ts`，作为传输层的 `authorize` 在任何路由和 WebSocket 升级**之前**运行。两道相互独立的检查。
+The WebSocket channel executes commands and reads and writes files on this machine as the user running the host, so it is **something that must never be stumbled upon by accident**. Access control lives in `apps/eta/src/access.ts`, running as the transport layer's `authorize` **before** any routing and WebSocket upgrade. Two independent checks.
 
-## Origin 检查
+## Origin check
 
-只作用于 `/ws`。浏览器在 WebSocket 握手时附上页面的 origin，页面无法伪造，所以来自别的页面的握手就是某个随机网站想借用户的浏览器操作 host，一律 403。
+Applies only to `/ws`. The browser attaches the page's origin during the WebSocket handshake, and a page cannot forge it, so a handshake from another page means some random website is trying to use the user's browser to operate the host — always 403.
 
-- **没有 `Origin`** 的握手不是浏览器（脚本、daemon），通过这一道。
-- 页面的 origin 等于它所请求的 origin（`Host` 头，加上反向代理给出的 `X-Forwarded-Proto`），或在 `--allow-origin` 里（可重复）。开发时页面由 vite 在另一个端口提供，所以 `bun run dev` 会把 vite 的地址传给 host。
-- "它请求的 origin"只在不会被 DNS 重绑定欺骗时才被信任：攻击者的域名解析到 127.0.0.1，会把攻击者的页面变成"自己的 origin"。所以在**回环地址且没有令牌门**时，被请求的主机名也必须是回环地址。
+- A handshake **without an `Origin`** is not a browser (scripts, daemons), and passes this check.
+- The page's origin equals the origin it requested (`Host` header, plus `X-Forwarded-Proto` from a reverse proxy), or is in `--allow-origin` (repeatable). During development the page is served by vite on another port, so `bun run dev` passes vite's address to the host.
+- "The origin it requested" is only trusted when it cannot be spoofed by DNS rebinding: an attacker's domain resolving to 127.0.0.1 would turn the attacker's page into "its own origin". So when **on a loopback address and without a token gate**, the requested hostname must also be a loopback address.
 
-## 令牌门
+## Token gate
 
-当给了 `--token-file`，**或** host 监听在回环以外的网卡（`--host 0.0.0.0` 等）时开启——因为此时任何能路由到这个端口的人都能用它。令牌文件不存在就在首次启动时创建（随机 24 字节，base64url；文件 0600，目录 0700），没给 `--token-file` 时默认是 `<数据目录>/access-token`。令牌不得短于 16 字符。
+Enabled when `--token-file` is given, **or** the host listens on an interface other than loopback (`--host 0.0.0.0` etc.) — because then anyone who can route to this port can use it. If the token file does not exist, it is created on first start (random 24 bytes, base64url; file 0600, directory 0700); when `--token-file` is not given, it defaults to `<data directory>/access-token`. Tokens must be at least 16 characters.
 
-开启后，**除 `/up` 外**所有请求都需要令牌，两种方式：
+Once enabled, **all requests except `/up`** require a token, in one of two ways:
 
-- 脚本：`Authorization: Bearer <令牌>`。
-- 手机 app：`X-Eta-Token: <令牌>`。它的运行时不让 WebSocket 握手带凭据类的头，所以用这个自定义头；比较方式与 bearer 相同。
-- 浏览器：打开一次 `/?token=<令牌>`，host 回一个 303 重定向到去掉令牌的地址，并种下 cookie（`HttpOnly`、`SameSite=Strict`，https 下加 `Secure`，30 天）。cookie 里是令牌派生的哈希，不是令牌本身，泄漏 cookie 不等于泄漏令牌。令牌比较都是比较哈希，耗时不透露令牌的内容。`/ws` 不接受 `?token=`（socket 不能跟随重定向），它带 cookie、bearer 或 `X-Eta-Token`。
+- Scripts: `Authorization: Bearer <token>`.
+- Mobile app: `X-Eta-Token: <token>`. Its runtime does not let the WebSocket handshake carry credential headers, so this custom header is used; it is compared the same way as bearer.
+- Browser: open `/?token=<token>` once; the host responds with a 303 redirect to the address without the token and sets a cookie (`HttpOnly`, `SameSite=Strict`, plus `Secure` under https, 30 days). The cookie holds a hash derived from the token, not the token itself, so leaking the cookie is not the same as leaking the token. Token comparisons always compare hashes, and timing does not reveal the token's contents. `/ws` does not accept `?token=` (a socket cannot follow redirects); it carries the cookie, bearer, or `X-Eta-Token`.
 
-这是上游开发网关（`scripts/dev/gateway.ts`）的令牌门搬进了 host。
+This is the token gate from the upstream development gateway (`scripts/dev/gateway.ts`) moved into the host.
 
-## 能力路由
+## Capability routing
 
-有些页面自带凭据，不能靠 cookie：
+Some pages carry their own credentials and cannot rely on cookies:
 
-- `/preview/<capability>/…`：artifact 在沙箱 iframe 里预览，沙箱 iframe 是不透明 origin，不发 cookie，所以**地址本身就是凭据**：`<版本>.<过期>.<签名>`，用只在 host 上的密钥（`artifacts/.preview-key`）签名，只能打开一个版本，一小时后失效。
-- `/share/<token>/…`：公开分享，给不是用户的人，路径里是一个秘密令牌；取消分享后永久失效，再分享会生成新令牌。
+- `/preview/<capability>/…`: artifacts are previewed in a sandboxed iframe; a sandboxed iframe is an opaque origin and sends no cookies, so **the address itself is the credential**: `<version>.<expiry>.<signature>`, signed with a key that exists only on the host (`artifacts/.preview-key`), can open only one version, and expires after an hour.
+- `/share/<token>/…`: public sharing for people who are not users; the path contains a secret token. Revoking the share invalidates it permanently; sharing again generates a new token.
 
-- `/mcp/oauth/callback`：MCP 服务器 OAuth 登录结束后，浏览器从授权方跳回来，不带我们的 cookie。凭据是 URL 里的 `state`：只有宿主自己发起、还在等待的登录才认，其余（没有 `state`、`state` 不对、已用过）只回一页提示，什么都不改变；它只放行这一个路径的 GET，见 [MCP](mcp.md)。
-- `/github/manifest/callback`、`/github/authorization/callback`：GitHub App 创建完成、用户授权完成后，浏览器从 github.com 跳回来，同样不带 cookie。凭据是宿主发出的一次性 `state`（创建一小时、授权 15 分钟有效，用一次就作废）：没有、不对、已用过或过期的，什么都不改变，只重定向回“设置 → 连接”并带上原因。装完 App 时 GitHub 带着 `code` 和 `setup_action` 回来、不带 `state`，这一种还要求授权的账号能访问这个 App 的某个安装，且个人 App 只认所有者本人。只放行这两个精确路径的 GET，见 [GitHub](github.md)。host 没加载 GitHub（默认，见下）时这两条路径依旧免令牌，只是没人应答，归页面。
+- `/mcp/oauth/callback`: after an MCP server OAuth login completes, the browser jumps back from the authorization provider without our cookie. The credential is the `state` in the URL: only logins initiated by the host itself that are still waiting are accepted; everything else (no `state`, wrong `state`, already used) just returns an informational page and changes nothing. It only allows GET on this one path, see [MCP](mcp.md).
+- `/github/manifest/callback`, `/github/authorization/callback`: after a GitHub App is created or a user finishes authorization, the browser jumps back from github.com, likewise without a cookie. The credential is a one-time `state` issued by the host (valid for one hour for creation and 15 minutes for authorization, invalidated after one use): if it is missing, wrong, already used, or expired, nothing changes; the browser is only redirected back to “settings → Connections” with a reason. When an App has just been installed, GitHub comes back with `code` and `setup_action` and without `state`; this case additionally requires that the authorizing account can access some installation of this App, and a personal App only accepts its owner. It only allows GET on these two exact paths, see [GitHub](github.md). When the host has not loaded GitHub (the default, see below), these two paths are still exempt from the token gate; nothing answers them and they fall through to the page.
 
-这几类**只读**（GET/HEAD）免令牌门，不为别的原因。其余一切，包括应用自己的 `/artifacts/<id>/<版本>/archive.zip` 下载，仍在令牌门后。预览与分享的每个文件都带 `Content-Security-Policy: sandbox`（不含 `allow-same-origin`），所以别人的 HTML 在不透明 origin 里运行，读不到 cookie 与存储，也不能以用户身份调用 host；另有 `Referrer-Policy: no-referrer`。对无效的能力或令牌，不说明为什么无效。
+These categories are **read-only** (GET/HEAD) and exempt from the token gate for no other reason. Everything else, including the app's own `/artifacts/<id>/<version>/archive.zip` downloads, remains behind the token gate. Every preview and share file carries `Content-Security-Policy: sandbox` (without `allow-same-origin`), so someone else's HTML runs in an opaque origin, cannot read cookies or storage, and cannot call the host as the user; there is also `Referrer-Policy: no-referrer`. For an invalid capability or token, it does not say why it is invalid.
 
-## daemon 的入口
+## daemon entry points
 
-`/machines/enroll` 与 `/machines/connect` 同样不经这两道检查：daemon 没有 cookie，也不发 origin。它们各自校验自己携带的东西（安装码、设备凭据），见[机器与 daemon](machines.md)。
+`/machines/enroll` and `/machines/connect` likewise bypass these two checks: the daemon has no cookie and sends no origin. They each verify what they carry (enrollment code, device credential), see [Machines and daemons](machines.md).
 
-## 放在反向代理后面
+## Running behind a reverse proxy
 
-代理需要：升级 WebSocket（`/ws`、`/machines/connect`）、传 `Host` 与 `X-Forwarded-Proto`。如果代理改写了 `Host`，把页面的外部地址加进 `--allow-origin`（如 `--allow-origin https://eta.example.com`）。令牌门由 host 自己管，代理处不必重复，但终止 TLS 后别让 host 直接暴露在公网。
+The proxy needs to: upgrade WebSocket (`/ws`, `/machines/connect`), forward `Host` and `X-Forwarded-Proto`. If the proxy rewrites `Host`, add the page's external URL to `--allow-origin` (e.g. `--allow-origin https://eta.example.com`). The token gate is managed by the host itself, so the proxy doesn't need to duplicate it, but after terminating TLS don't expose the host directly to the public internet.

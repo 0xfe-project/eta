@@ -216,7 +216,7 @@ export const routineSections = (
   rest: Partial<Omit<RoutineSections, "info">> = {},
 ): RoutineSections => ({
   info,
-  briefs: [{ version: 1, text: "说点什么", createdAt: 1000, feedback: null }],
+  briefs: [{ version: 1, text: "Say something", createdAt: 1000, feedback: null }],
   runs: [],
   handoff: null,
   ...rest,

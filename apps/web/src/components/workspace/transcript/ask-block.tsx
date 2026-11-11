@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
  *
  * Same grammar as the composer's toolbar — a mono label, the question, its options as bordered
  * controls — because it is the same kind of thing: something you press to keep the work going.
- * A question with options is answered by pressing one (several, then 发送, when more than one may
+ * A question with options is answered by pressing one (several, then Send, when more than one may
  * be chosen); one without is answered in words. Giving up ends the run that is waiting.
  */
 export function AskBlock({

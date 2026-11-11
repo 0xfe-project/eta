@@ -32,7 +32,7 @@ const FAILURES = {
 } as const;
 
 /**
- * Forget the host, from 设置 or 08b′. The form goes up first: `disconnect` takes the wire away, and
+ * Forget the host, from Settings or 08b′. The form goes up first: `disconnect` takes the wire away, and
  * every screen behind `ready` reads it. Pushed pages stay out of the next connection.
  */
 export function leaveHost(): void {
@@ -125,7 +125,7 @@ function Field(props: {
 
 /** 08 and 08a: one form, whether this is the first try or the last one failed. */
 export function ConnectScreen() {
-  // Back from 设置: the address may help, the token stays with the host that was left.
+  // Back from Settings: the address may help, the token stays with the host that was left.
   if (phase() === "form")
     form.set({ address: host()?.address ?? "", token: "" });
 

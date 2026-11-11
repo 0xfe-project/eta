@@ -267,7 +267,7 @@ interface RawMessage {
   }[];
 }
 
-/** `30 秒`, `8 分钟`, `2 小时`. */
+/** `30 seconds`, `8 minutes`, `2 hours`. */
 function elapsed(since: number): string {
   const seconds = Math.max(0, Math.floor((Date.now() - since) / 1000));
   if (seconds < 60) return t("inbox.run.seconds", { count: seconds });

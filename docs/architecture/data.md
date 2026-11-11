@@ -1,75 +1,75 @@
-# 数据
+# Data
 
-产品数据在 SQLite（`bun:sqlite`），会话照上游存成文件。所有东西在**一个数据目录**里：`$HOME/.eta`，不是开关。想要别的位置就换 `HOME`；Docker 镜像里 `HOME=/data`，卷挂在 `/data`，所以内容在 `/data/.eta/`，由非 root 用户 `bun`（uid 1000）拥有，host 与会话的 bash 都以它运行。
+Product data lives in SQLite (`bun:sqlite`); sessions are stored as files, as upstream does. Everything lives in **one data directory**: `$HOME/.eta`, not a switch. For a different location, change `HOME`; in the Docker image `HOME=/data` and the volume is mounted at `/data`, so contents live in `/data/.eta/`, owned by the non-root user `bun` (uid 1000), which is what the host and session bash run as.
 
-这里不许再有第二个根。曾经有过一个 `--data-dir`：它只挪走配置、数据库和会话，persona 卡片仍然从真实的 `~/.eta/persona` 读，于是换一个目录启动的进程看起来像「模型配置丢了」。persona、MCP 配置这些用户级的东西也跟着 `$HOME` 走之后，一个根就够了。
+No second root is allowed here. There used to be a `--data-dir`: it only moved config, database, and sessions, while persona cards were still read from the real `~/.eta/persona`, so a process started with a different directory looked like "the model config is gone". Once user-level things like persona and MCP config also follow `$HOME`, one root is enough.
 
-## 目录布局
+## Directory layout
 
 ```text
-<数据目录>/
-  eta.sqlite(-wal, -shm)    产品数据库
-  config.json               上游设置（模型、provider 等；providers 插件维护）
-  llm/                      LLM 网关的状态：auths/ 凭据、models.json、config.yaml（CPA 的配置，含 Gemini key）
-  unpacked/<名字>-<内容哈希>/   打包的 host 用到时才解压的文件：cpa-…/（CLIProxyAPI 和 cpa-launcher）、daemon-…/（给机器的构建）。删掉会再解压，旧版本的目录自动清掉
-  sessions/<会话 id>/       上游会话：meta.json + journal.jsonl（本机会话）
-  attachments/<对话 id>/    用户附在消息上的文件：<附件 id>-<文件名>（上传中是 .up-<id>，重启时清理）
-  agents/<智能体 id>/       智能体的工作区（它同时是一个 project）
-  routines/<定时任务 id>/   定时任务每次运行的工作目录
-  worktrees/<项目 id>/task-<编号>/   任务在 primary 上的 git worktree（运行后保留；daemon 机器上在 ~/.eta/worktrees/）
-  artifacts/<产物 id>/<版本>/   archive.zip 与解压后的 files/；artifacts/.preview-key 是预览地址的签名密钥
-  plugins/<目录>/           Agent Plugins（有 plugin.json，见[插件](plugins.md)）和 eta-server 的用户插件（package.json 里有 eta-plugin），两种各认各的
-  plugins/data/<插件名>/    插件的 PLUGIN_DATA，更新时保留
-  plugin-sources/           从 git 取回的插件，固定在一个 commit
-  plugin-runtime/           给 Claude Code 的生成目录，只有合法的 skill（符号链接）
-  modules/                  官方插件
-  access-token              令牌门的令牌（开启时；0600）
-  secret.key                邮箱、MCP 与 GitHub 的密封密钥（0600，第一次用时生成）
-  github/                   这台机器上 git 与 gh 的 GitHub 登录（令牌最多一小时，见 [GitHub](github.md)）：gh/hosts.yml、token、login、git/github.inc
+<data directory>/
+  eta.sqlite(-wal, -shm)    product database
+  config.json               upstream settings (models, providers, etc.; maintained by the providers plugin)
+  llm/                      state of the LLM gateway: auths/ credentials, models.json, config.yaml (CPA's config, including the Gemini key)
+  unpacked/<name>-<content hash>/   files for the packaged host, unpacked on first use: cpa-…/ (CLIProxyAPI and cpa-launcher), daemon-…/ (the build for machines). Delete them and they are unpacked again; directories from old versions are cleaned up automatically
+  sessions/<session id>/       upstream sessions: meta.json + journal.jsonl (sessions on this host machine)
+  attachments/<conversation id>/    files users attach to messages: <attachment id>-<file name> (in-progress uploads are .up-<id>, cleaned up on restart)
+  agents/<agent id>/       the agent's workspace (it is also a project)
+  routines/<routine id>/   the working directory for each routine run
+  worktrees/<project id>/task-<number>/   the task's git worktree on primary (kept after the run; on daemon machines it is in ~/.eta/worktrees/)
+  artifacts/<artifact id>/<version>/   archive.zip and the unpacked files/; artifacts/.preview-key is the signing key for preview URLs
+  plugins/<directory>/      Agent Plugins (with plugin.json, see [plugins](plugins.md)) and eta-server user plugins (package.json contains eta-plugin); the two are recognized separately
+  plugins/data/<plugin name>/    the plugin's PLUGIN_DATA, preserved across updates
+  plugin-sources/           plugins fetched from git, pinned to a commit
+  plugin-runtime/           generated directory for Claude Code, containing only valid skills (symlinks)
+  modules/                  official plugins
+  access-token              the token for the token gate (when enabled; 0600)
+  secret.key                sealing key for email, MCP, and GitHub (0600, generated on first use)
+  github/                   GitHub login for git and gh on this host machine (tokens last at most an hour, see [GitHub](github.md)): gh/hosts.yml, token, login, git/github.inc
 ```
 
-daemon 的数据在同一个根里：`~/.eta/daemon/`（见[机器与 daemon](machines.md)），GitHub 登录在 `daemon/github/`，会话在 `daemon/sessions/`。和宿主共用 `$HOME`，各自占一个子目录。记忆边车的数据在它自己的 PostgreSQL，不在这里。
+daemon data lives in the same root: `~/.eta/daemon/` (see [machines and daemon](machines.md)), GitHub login in `daemon/github/`, sessions in `daemon/sessions/`. It shares `$HOME` with the host, each occupying its own subdirectory. The memory sidecar's data lives in its own PostgreSQL, not here.
 
 ## SQLite
 
-`src/db.ts`：WAL、外键、`busy_timeout`。时间一律是 epoch 毫秒。
+`src/db.ts`: WAL, foreign keys, `busy_timeout`. All times are epoch milliseconds.
 
-**迁移**是一条扁平的编号序列 `apps/eta/src/migrations/NNNN-<name>.sql`，按号码顺序执行，已执行的记在 `eta_migrations`。不合规范的文件名或重复的号码直接报错，不会被静默跳过。新功能要表就加下一个号码；两个分支抢同一个号会在合并时冲突，而不是在某人的数据上出错。数据库不是契约，线协议才是，所以 schema 可以改，只要有迁移。
+**Migrations** are a flat numbered sequence `apps/eta/src/migrations/NNNN-<name>.sql`, run in numeric order, with applied ones recorded in `eta_migrations`. Malformed filenames or duplicate numbers error out rather than being silently skipped. A new feature that needs a table takes the next number; two branches claiming the same number conflict at merge time instead of corrupting someone's data. The database is not the contract — the wire protocol is — so the schema can change as long as there is a migration.
 
 | 0001 agents | `agent` |
-| 0002 machines | `machine`（`primary`、`daemon`、`ssh`；状态 online/offline/pending/revoked） |
-| 0003 projects | `project`（machine + path 唯一） |
+| 0002 machines | `machine` (`primary`, `daemon`, `ssh`; status online/offline/pending/revoked) |
+| 0003 projects | `project` (unique on machine + path) |
 | 0004 conversations | `conversation`、`participant`、`message` |
-| 0005 interactions | `interaction`（会话里的提问及结果） |
-| 0006 settings | `setting`（键 + JSON，如审批名单） |
+| 0005 interactions | `interaction` (questions asked in a session and their results) |
+| 0006 settings | `setting` (key + JSON, e.g. the approval list) |
 | 0007 usage | `usage` |
-| 0008 | `message` 增加 `task_draft`、`task_card` 两种行 |
-| 0009 tasks | `task`（编号用 AUTOINCREMENT，永不复用）、`task_activity` |
+| 0008 | `message` gains two row kinds, `task_draft` and `task_card` |
+| 0009 tasks | `task` (number via AUTOINCREMENT, never reused), `task_activity` |
 | 0010 artifacts | `artifact`、`artifact_version`、`artifact_share` |
-| 0011–0013 | `routine`、`routine_run`（同一定时任务同一时刻最多一次运行，由唯一索引保证）、`routine_feedback`、`routine_brief`（简报的版本） |
-| 0014 | `machine_enrollment`（一次性安装码，只存摘要） |
-| 0028 | `attachment`（附件：属于哪个对话、名字、类型、大小、被哪条消息认领；未发送的 24 小时后清理） |
-| 0033 | `credential`（外部集成的凭据：`integration`、`key`、`kind`、`value` 加密；目前是 MCP 服务器的 OAuth 状态，见 [MCP](mcp.md)） |
-| 0034 | `task_run`（任务的运行，同时是队列）；`task` 增加项目、工作区（模式、worktree 路径与分支）、来源对话，去掉 `assignee`；`machine.max_active_runs`（默认 2）；`task_activity` 增加运行类的条目，见[任务](tasks.md) |
-| 0035 | `github_app`、`github_user`（私钥、client secret、用户令牌密封）、`github_pending`（进行中的 manifest 与授权）、`task_pull`（任务交付的 PR），见 [GitHub](github.md) |
+| 0011–0013 | `routine`, `routine_run` (at most one run per routine at a time, guaranteed by a unique index), `routine_feedback`, `routine_brief` (brief versions) |
+| 0014 | `machine_enrollment` (one-time enrollment codes, digest only) |
+| 0028 | `attachment` (attachments: which conversation they belong to, name, type, size, which message claimed them; unsent ones are cleaned up after 24 hours) |
+| 0033 | `credential` (credentials for external integrations: `integration`, `key`, `kind`, encrypted `value`; currently the OAuth state of MCP servers, see [MCP](mcp.md)) |
+| 0034 | `task_run` (a task's run, which is also the queue); `task` gains project, workspace (mode, worktree path and branch), and source conversation, and drops `assignee`; `machine.max_active_runs` (default 2); `task_activity` gains run-type entries, see [Tasks](tasks.md) |
+| 0035 | `github_app`, `github_user` (private key, client secret, and user tokens sealed), `github_pending` (in-flight manifests and authorizations), `task_pull` (PRs delivered by tasks), see [GitHub](github.md) |
 | 0046 captain | Captain：`agent.system_role`、`message.author = 'captain'`、assignment/target、task provenance |
-| 0047 captain-reviews | Captain review 队列：失败、卡住、Inbox 与 assignment 的待复核事件，记录去重键、checkpoint、投递消息与 Captain reply |
-| 0048 run-activity | run 的 `last_event_at/error_code/retryable`；Captain review 的 `attempts/next_attempt_at` 退避字段 |
+| 0047 captain-reviews | Captain review queue: failed, stuck, Inbox, and assignment events awaiting review, recording the dedupe key, checkpoint, delivered message, and Captain reply |
+| 0048 run-activity | run's `last_event_at/error_code/retryable`; Captain review's `attempts/next_attempt_at` backoff fields |
 | 0049 captain-inbox | Captain inbox relay |
-| 0043 | `plugin_source`（git 来源）、`plugin_config`（配置，密封）、`plugin_agent_level`（用户调低的级别）、`agent_plugin`（智能体启用哪些，随智能体删除）、`plugin_audit`（agent 读 secret 的记录，不含值），见[插件](plugins.md) |
-| 0032 | `bundle_config`（环境包的配置，加密）、`bundle_source`（来自 git 的包：仓库、rev、路径、解析出的提交）、`agent.bundles`（智能体载入的包，JSON 名单） |
-| 0039 | `task.assignee_agent`（可选的执行 Agent；null 回退到创建者）、`task.base_branch`，见[任务](tasks.md) |
-| 0041 | Captain：`agent.system_role`、`message.author = 'captain'`、assignment/target、task provenance、prompt/settings 版本、memory pause、operations/notifications/retry，见[Captain](captain.md) |
-| 0042 | Captain review 队列：失败、卡住、Inbox 与 assignment 的待复核事件，记录去重键、checkpoint、投递消息与 Captain reply，见[Captain](captain.md) |
+| 0043 | `plugin_source` (git source), `plugin_config` (config, sealed), `plugin_agent_level` (levels the user lowered), `agent_plugin` (which plugins an agent has enabled, deleted with the agent), `plugin_audit` (records of agents reading secrets, without values), see [Plugins](plugins.md) |
+| 0032 | `bundle_config` (environment bundle config, encrypted), `bundle_source` (bundles from git: repository, rev, path, resolved commit), `agent.bundles` (bundles an agent loads, as a JSON list) |
+| 0039 | `task.assignee_agent` (optional executing agent; null falls back to the creator), `task.base_branch`, see [Tasks](tasks.md) |
+| 0041 | Captain: `agent.system_role`, `message.author = 'captain'`, assignment/target, task provenance, prompt/settings versions, memory pause, operations/notifications/retry, see [Captain](captain.md) |
+| 0042 | Captain review queue: failed, stuck, Inbox, and assignment events awaiting review, recording the dedupe key, checkpoint, delivered message, and Captain reply, see [Captain](captain.md) |
 
-外键的取舍：`message.agent_id`、`interaction`、`usage` 里指向智能体和对话的列**没有**外键，因为这些行是历史，比智能体活得久。
+Foreign key trade-off: the columns pointing at agents and conversations in `message.agent_id`, `interaction`, and `usage` have **no** foreign keys, because those rows are history and outlive the agent.
 
-## 会话文件
+## Session files
 
-会话（上游 `FileSessionStore`）每个一个目录：`meta.json`（cwd、模型等）与 `journal.jsonl`（追加写的日志，加载时可压缩）。会话的内容不复制进 SQLite；SQLite 里只有 `participant.session_id` 这条指针。重启后 host 按 `participant` 找回会话，新进程读同样的文件。
+Each session (the upstream `FileSessionStore`) gets its own directory: `meta.json` (cwd, model, etc.) and `journal.jsonl` (an append-only log, compacted on load). Session contents are not copied into SQLite; SQLite holds only the `participant.session_id` pointer. After a restart the host finds sessions again via `participant`, and the new process reads the same files.
 
-远端机器上的会话，文件在**那台机器**的 daemon 数据目录里；primary 只存指针（会话属于哪个 machine 由对话所在 project 的 machine 决定）。
+For sessions on a remote machine, the files live in the daemon data directory on **that machine**; the primary stores only a pointer (which machine a session belongs to is decided by the machine of the project its conversation is in).
 
-## 启动时的收尾
+## Startup cleanup
 
-重启的进程认为"上一个进程在途的一切都已经不在了"：`failInterrupted` 把遗留的 queued/working 回复标为失败，`expirePending` 让未回答的提问过期，定时任务里还在 `running` 的运行标为失败，任务里还在 `starting/running` 的运行标为失败，上次在线的 daemon 先标为 offline，等它们重新连上。
+A restarted process assumes "everything the previous process had in flight is gone": `failInterrupted` marks leftover queued/working replies as failed, `expirePending` expires unanswered questions, routine runs still `running` are marked failed, task runs still `starting/running` are marked failed, and daemons that were online are first marked offline until they reconnect.

@@ -13,7 +13,7 @@ import { useGroups } from "./use-groups";
 import { usePanelViews } from "./workspace-search";
 
 /**
- * The home page's side panel. A group chat's holds the group (成员 and
+ * The home page's side panel. A group chat's holds the group (members and
  * Artifacts); a direct chat's the workspace. A view the panel has no tab for,
  * such as an old link's, opens its first tab.
  */

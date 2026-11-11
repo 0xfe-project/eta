@@ -1,67 +1,67 @@
-# 产品模型
+# Product model
 
-| 概念           | 含义                                                                                             | 表                                       | target                                |
+| Concept        | Meaning                                                                                          | Table                                    | target                                |
 | -------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------- | ------------------------------------- |
-| 智能体（人格） | 全局的配置：名字、指令、persona 卡、模型与思考档。**不是容器**，不拥有会话和对话                 | `agent`                                  | `agents`                              |
-| machine        | 会话跑在哪台电脑上：host 所在的 primary，以及跑 daemon 的其他机器                                | `machine`                                | `machines`                            |
-| project        | 一台 machine 上的一个目录，带一个主理人（steward）                                               | `project`                                | `projects`                            |
-| 对话           | 一条时间线，属于一个 project，成员是若干智能体                                                   | `conversation`、`participant`、`message` | `conversations`、`conversations.<id>` |
-| session        | 上游 harness 的会话，每个（智能体 × 对话）一个，cwd 是 project 的目录，跑在 project 所在的机器上 | 上游文件（见[数据](data.md)）            | `sessions.<id>`                       |
+| Agent (persona) | Global config: name, instructions, persona card, model and thinking level. **Not a container**, it owns no sessions or conversations | `agent`                                  | `agents`                              |
+| machine        | Which computer the session runs on: the primary where host lives, plus the other machines running daemons | `machine`                                | `machines`                            |
+| project        | A directory on one machine, with a steward                                                       | `project`                                | `projects`                            |
+| Conversation   | A timeline belonging to one project, whose members are several agents                            | `conversation`, `participant`, `message` | `conversations`, `conversations.<id>` |
+| session        | A session of the upstream harness, one per (agent × conversation), with cwd set to the project's directory and running on the machine the project lives on | Upstream files (see [data](data.md))     | `sessions.<id>`                       |
 
-## 智能体
+## Agents
 
-- 字段：`name`、`instructions`（追加到该智能体每个会话系统提示的基底之后）、`persona`（persona 卡的名字；空串是 project 的默认卡，和"没有 persona"不同）、`model`（`provider:modelId`，空表示跟随设置）、`thinking_level`。
-- 创建时在主 node 上得到自己的工作区 `<数据目录>/agents/<id>/`，它同时是一个 `agent_home` 类型的 project，主理人是它自己，并在一个事务里一起出现。改名会移动目录。
-- **私聊**就是它工作区里只有它一个成员的 `direct` 对话（`agents.direct` 取得或恢复）。
-- 删除智能体先停掉它正在写的回复；时间线上它写过的行保留。
+- Fields: `name`, `instructions` (appended after the base of every session's system prompt for this agent), `persona` (the name of a persona card; an empty string is the project's default card, which differs from "no persona"), `model` (`provider:modelId`, empty means follow settings), `thinking_level`.
+- On creation it gets its own workspace on the primary node, `<data directory>/agents/<id>/`, which is also a project of kind `agent_home` whose steward is itself, and both appear together in one transaction. Renaming moves the directory.
+- A **DM** is the `direct` conversation in its workspace whose only member is itself (`agents.direct` gets or restores it).
+- Deleting an agent first stops the reply it is writing; the lines it wrote on the timeline are kept.
 
-## project 与主理人
+## Projects and stewards
 
-project = machine + 目录（同一台机器上同一路径唯一）。`steward_id` 是主理人：没有 @ 任何人的消息交给它。对话可以有自己的主理人（`conversation.steward_id`），为空则沿用 project 的。有效主理人 = 对话的 ?? project 的（`effectiveSteward`）。
+project = machine + directory (unique per path on the same machine). `steward_id` is the steward: messages that don't @ anyone go to it. A conversation can have its own steward (`conversation.steward_id`); when empty, the project's is used. Effective steward = the conversation's ?? the project's (`effectiveSteward`).
 
-**文件列表**（`projects.files`，输入框的 `@` 菜单用）：在 project 所在的机器上用一段 shell 脚本列出（本机经进程自己的 shell，daemon 经链路的 `exec`，所以只有一套实现）：git 检出里取 git 认识的文件（已跟踪、未被忽略），否则是深度 ≤ 8 的 `find`；再滤掉 `node_modules`、`.git`、`.eta`、`dist`、`build` 等目录，按浅层优先排序，默认 2000、最多 5000 条，超出时 `truncated`。路径相对 project 目录，也就是智能体的工作目录。菜单里成员在前、文件在后。
+**File list** (`projects.files`, used by the composer's `@` menu): listed by a shell script on the machine the project lives on (the local machine via the process's own shell, a daemon via the link's `exec`, so there is only one implementation): in a git checkout it takes the files git knows about (tracked, not ignored), otherwise a `find` with depth ≤ 8; then filters out `node_modules`, `.git`, `.eta`, `dist`, `build` and similar directories, sorts shallow-first, defaults to 2000 and at most 5000 entries, with `truncated` when it overflows. Paths are relative to the project directory, i.e. the agent's working directory. In the menu, members come first and files after.
 
-**列目录**（`projects.directories`，选目录的视图用）：同样是在目标机器上跑一段 shell 脚本，只列目录（含指向目录的符号链接），带 `hidden`、`git` 和已有的 `projectId`，不碰文件名。没有用 `ExecutionEnv.listDir`：它逐项取文件信息，远端读不了的目录会被当成空目录。路径按文本规范化，不解析符号链接，和 `projects.create` 存的 key 一致。上限 1000 项，超出时 `truncated`，可见目录优先。失败时 `problem.code` 是 `not_found`、`denied` 或 `offline`，不带系统细节。
+**List directories** (`projects.directories`, used by the directory picker): likewise a shell script on the target machine, listing only directories (including symlinks to directories), with `hidden`, `git` and the existing `projectId`, without touching file names. It does not use `ExecutionEnv.listDir`: that stats each entry one by one, and directories unreadable from the remote side end up as empty. Paths are normalized as text, without resolving symlinks, matching the key stored by `projects.create`. At most 1000 entries, with `truncated` when it overflows and visible directories first. On failure `problem.code` is `not_found`, `denied` or `offline`, with no system details.
 
-**切换主理人**：旧智能体的会话保留，仍然可以被 @；新智能体的会话在第一次被唤醒时才创建，只被告知它没看过的部分（`participant.last_seq` 之后的行）；时间线上落一条 `system` 行（"X 现在是主理人，接替 Y"）。
+**Switching stewards**: the old agent's session is kept and it can still be @-mentioned; the new agent's session is created only on its first wake-up, and it is told only the parts it hasn't seen (the lines after `participant.last_seq`); a `system` line lands on the timeline ("X is now the steward, taking over from Y").
 
-## 对话与成员
+## Conversations and members
 
-- 对话 `kind` 是 `group` 或 `direct`。有 `goal`、`decided` 两段文字（讨论的目标与已定的结论）、`read_seq`（用户读到哪）、`archived`。
-- `participant`：谁参加。`session_id` 是该智能体在这个对话里的会话（首次唤醒时创建，之后一直复用，重启后同样按这行找回），`last_seq` 是它被告知到哪一行。
-- `message`（时间线）：`seq` 在对话内递增，是阅读顺序。`kind` 有 `message`、`mention`、`system`、`task_draft`、`task_card`；`status` 有 `queued`、`working`、`waiting_for_input`、`done`、`failed`、`stopping`、`stopped`。**回复行占着它的位置**：入队时就有 `seq`，文字陆续到达时 `revision` 增长而 `seq` 不变。
-- 回复结束时，这次运行的工具活动存进行的 `data.activity`（`ToolActivity[]`：名称、裁短的输入、输出开头最多 2000 字符、状态，以及工具留给页面的 `details`，如 `publish_artifact` 的产物引用；`details` 超过 4000 字节丢弃，最多 200 条）。回复进行中页面从会话的 transcript 画工具卡，结束后从这里画同样的卡片和产物卡。远端会话由 daemon 的 `run` 随 `RunOutcome.activity` 带回，不需要迁移。
+- A conversation's `kind` is `group` or `direct`. It has two text blocks, `goal` and `decided` (the discussion's goal and the conclusions reached), plus `read_seq` (how far the user has read) and `archived`.
+- `participant`: who takes part. `session_id` is that agent's session in this conversation (created on first wake-up, reused ever after, and found again from this row after a restart); `last_seq` is the line it has been told up to.
+- `message` (the timeline): `seq` increases within a conversation and is the reading order. `kind` is one of `message`, `mention`, `system`, `task_draft`, `task_card`; `status` is one of `queued`, `working`, `waiting_for_input`, `done`, `failed`, `stopping`, `stopped`. **A reply row holds its place**: it has a `seq` as soon as it is queued, and as text arrives `revision` grows while `seq` stays the same.
+- When a reply finishes, the run's tool activity is stored in the row's `data.activity` (`ToolActivity[]`: name, truncated input, at most the first 2000 characters of output, status, and the `details` the tool left for the page, such as the artifact reference from `publish_artifact`; `details` over 4000 bytes are dropped, at most 200 entries). While a reply is in progress the page draws tool cards from the session's transcript; afterwards it draws the same cards and artifact cards from here. For remote sessions the daemon's `run` brings them back in `RunOutcome.activity`, so no migration is needed.
 
-## 附件
+## Attachments
 
-用户行的 `data.attachments`（`AttachmentView[]`：id、名字、类型、大小）列出它带来的文件，文件本身在主 node 的数据目录里（见[数据](data.md)），上传方式见[线协议](wire-protocol.md)。智能体被唤醒（或被插话加入）时，简报里每条消息下面列出它的文件：**本机会话**得到数据目录里文件的绝对路径；**daemon 上的会话**得到写在 daemon 机器上的副本 `~/.eta/uploads/<对话 id>/<附件 id>-<名字>`（经链路的 `exec` 分块写入，已有同样大小的文件就跳过）。某个文件写不过去时，简报里写明原因，回复照常运行。png/jpeg/gif/webp 图片（最多 4 张、合计 3 MB 内）在会话的模型声明支持图像输入时，还随这条消息作为图像送给模型；模型不支持时只有路径，智能体可以用工具读。
+A user row's `data.attachments` (`AttachmentView[]`: id, name, type, size) lists the files it brings; the files themselves live in the primary node's data directory (see [data](data.md)), and how they are uploaded is in [wire protocol](wire-protocol.md). When an agent is woken (or joined by an interjection), the briefing lists each message's files underneath it: a **local session** gets absolute paths to the files in the data directory; a **session on a daemon** gets copies written on the daemon machine at `~/.eta/uploads/<conversation id>/<attachment id>-<name>` (written in chunks via the link's `exec`, skipping files that already exist at the same size). If a file can't be written, the briefing says why and the reply runs as usual. png/jpeg/gif/webp images (at most 4, 3 MB total) are also sent to the model as images with this message when the session's model declares image input support; when it doesn't, only the paths are given and the agent can read them with tools.
 
-## 唤醒规则
+## Wake-up rules
 
-**一次唤醒就是一条回复行。** 没有单独的唤醒表或队列：`queued` 的回复行是等着会话的唤醒，`working` 是正在跑的，进程重启时把遗留的在途行统一标为失败（"服务重启，这条回复没有完成"）。
+**One wake-up is one reply row.** There is no separate wake-up table or queue: a `queued` reply row is a wake-up waiting for its session, `working` is one in flight, and on process restart any leftover in-flight rows are all marked failed ("the service restarted and this reply did not finish").
 
-谁被唤醒（`conversations/routing.ts`，纯规则）：
+Who gets woken (`conversations/routing.ts`, pure rules):
 
-1. 用户消息里 @ 了的成员（只认成员）。
-2. 没有 @ 且是私聊：唯一的那个智能体。
-3. 没有 @ 且有有效主理人：主理人（还不是成员则先加入）。
-4. 没有主理人且只有一个成员：这个成员。
-5. 其他情况：没人被唤醒，并告知发送者，不猜。
+1. Members @-mentioned in the user message (only members count).
+2. No @ and it's a DM: the one and only agent.
+3. No @ and there is an effective steward: the steward (joined first if not yet a member).
+4. No steward and only one member: that member.
+5. Everything else: nobody is woken, and the sender is told — no guessing.
 
-智能体之间用 `mention` 工具互相交接工作（按名字或 id，找不到的名字会告诉智能体）：被点名者被唤醒，发起者不等待。**五次唤醒预算**：一条用户消息引发的 agent-to-agent mention 跨所有分支合计最多 5 次（`WAKE_BUDGET`），第 5 次仍唤醒并附提醒，之后只是上下文，直到用户再次发言重新计数。
+Agents hand work to each other with the `mention` tool (by name or id; an unknown name is reported back to the agent): the named agent is woken, the initiator does not wait. **Five-wake budget**: agent-to-agent mentions triggered by one user message total at most 5 across all branches (`WAKE_BUDGET`); the 5th still wakes and carries a reminder, after that it is only context, until the user speaks again and the count resets.
 
-**会话内串行，会话间并行**：一个会话一次只答一件事；一个智能体在三个对话里就有三个会话，三个成员的对话可以同时跑三个。队列的键是 participant（会话创建之前就存在）。发送有两种模式：`queue`（排队）与 `steer`（并入正在回答的那一轮）；带 `clientId` 重试是同一条消息。
+**Serial within a session, parallel across sessions**: a session answers one thing at a time; an agent in three conversations has three sessions, and three members' conversations can run three at once. The queue key is the participant (it exists before the session is created). Sending has two modes: `queue` and `steer` (merge into the round currently answering); a retry with the same `clientId` is the same message.
 
-**被唤醒的智能体看到什么**（`briefing.ts`）：自己的会话只听过对它说的话，所以每次唤醒带上 `last_seq` 之后的所有行（谁说的 + 内容，最多 100 条，每条截 2000 字），再加触发它的那条。还没写完的行不算看过，水位不会越过它。
+**What a woken agent sees** (`briefing.ts`): its own session has only ever heard what was said to it, so each wake carries every line after `last_seq` (who said it + content, at most 100 lines, each truncated to 2000 characters), plus the line that triggered it. Lines not yet finished don't count as seen, and the watermark won't pass them.
 
-对话里的工具（注册在每个（智能体 × 对话）会话上）：`mention`，以及`conversation_info`（看当前对话的目标与成员）；其他功能各自再加（任务、产物、记忆、定时任务）。
+Tools in a conversation (registered on each (agent × conversation) session): `mention`, plus `conversation_info` (to see the current conversation's goal and members); other features add their own (tasks, artifacts, memory, routines).
 
-## 待处理与审批
+## Inbox and approvals
 
-会话里的提问（ask）被 `inbox` 聚合成 `interaction` 行：提出、回答、取消、过期各有状态。回答经 `inbox.answer` 交回给提问的会话，等待它的那一轮继续；引擎同时听到同样的事件，把回复在 `working` 与 `waiting_for_input` 之间切换。进程重启时未回答的提问一律过期。
+Questions (ask) in a session are aggregated by `inbox` into `interaction` rows: posed, answered, cancelled, and expired each have a state. An answer goes back to the asking session via `inbox.answer`, and the round waiting on it continues; the engine hears the same events and switches the reply between `working` and `waiting_for_input`. On process restart, unanswered questions all expire.
 
-**审批名单**（`inbox.setApprovals`，存在 `setting` 表）：名单里的工具在运行前先问用户，实现为工具中间件，本机会话与 daemon 上的会话一致。
+**Approval list** (`inbox.setApprovals`, stored in the `setting` table): tools on the list ask the user before running, implemented as tool middleware, the same for local sessions and sessions on the daemon.
 
-## 用量
+## Usage
 
-每次向模型发出的请求写一行 `usage`（智能体、对话、状态 ok/error/aborted）：回合、回合每一次重试（失败的那次和后面成功的那次是两行）、压缩的摘要请求、旁路提问、记忆提取，以及子代理的回合（记在派出它的智能体和对话名下）。记账点是模型层（`assembleServer` 的 `generated`），不是会话的回合事件；远端会话的请求在主 node 的 `model.stream` 里记，保留 30 天，启动时和之后每天清理一次；界面看到的所有合计都是对这张表的读取，没有计数器。
+Every request sent to the model writes one `usage` row (agent, conversation, status ok/error/aborted): turns, each turn retry (the failed one and the later successful one are two rows), compaction summary requests, side questions, memory extraction, and subagent turns (recorded under the agent and conversation that dispatched them). The accounting point is the model layer (`generated` in `assembleServer`), not the session's turn events; remote session requests are recorded in `model.stream` on the main node, kept for 30 days, pruned at startup and once a day after that; every total the UI shows is a read of this table, there are no counters.

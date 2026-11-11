@@ -20,7 +20,7 @@ add_keys() {
   /usr/libexec/PlistBuddy \
     -c "Delete :NSAppTransportSecurity" "$plist" 2>/dev/null || true
   /usr/libexec/PlistBuddy \
-    -c "Add :NSCameraUsageDescription string 扫描电脑上的二维码来连接主机。" \
+    -c "Add :NSCameraUsageDescription string Scan the QR code on the computer to connect to the host machine." \
     -c "Add :NSAppTransportSecurity dict" \
     -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" \
     "$plist"

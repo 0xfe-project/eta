@@ -30,7 +30,7 @@ function Entry(props: {
   );
 }
 
-/** 04: what the + on 对话 opens. */
+/** 04: what the + on Conversations opens. */
 export function CreateSheet(props: { open: boolean; onClose: () => void }) {
   const choose = (to: () => void) => {
     props.onClose();

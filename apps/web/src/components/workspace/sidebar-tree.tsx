@@ -67,7 +67,7 @@ function humanizeAge(at: number): string {
  * Captain, at the head of the sidebar and outside the list that scrolls.
  *
  * It is one agent in one conversation, so what is worth showing is what that conversation is made
- * of — and that is exactly what 成员 draws: the ring around the avatar (`MemberRing`) and the
+ * of — and that is exactly what Member draws: the ring around the avatar (`MemberRing`) and the
  * session's own numbers under it (`MemberStats`). Both are the group panel's components, reused
  * rather than re-read: a second way of counting a session's spend is a second thing to keep true.
  *
@@ -83,7 +83,7 @@ export function CaptainSection({ rail }: { rail: boolean }) {
   ] as const);
   const captain = useCaptain();
   // What Captain is holding for a person: an approval not yet decided, an alert not yet read.
-  // The same count the 运营 blocks in its context panel open with.
+  // The same count the Operations blocks in its context panel open with.
   const waiting =
     captain.operations.filter((item) => item.status === "pending").length +
     captain.notifications.filter((item) => item.readAt === null).length;
@@ -203,7 +203,7 @@ export function CaptainSection({ rail }: { rail: boolean }) {
             </span>
           )}
           {/* What Captain is holding for a person — an approval, an unread alert — as one chip.
-              It is the same count the 运营 blocks in its context panel open with, computed on the
+              It is the same count the Operations blocks in its context panel open with, computed on the
               client from data the panel already reads: a card says whether to look, the panel
               says at what. Nothing here asks the host for anything. */}
           {waiting === 0 ? null : (

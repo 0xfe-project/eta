@@ -52,7 +52,7 @@ import { changes, draftOf, formState } from "./plugin-form";
 import { PluginServers } from "./plugin-servers";
 import { Select, SelectOption } from "./select-field";
 
-// Settings → 插件: what plugins there are and where each came from, whether it can be enabled, what
+// Settings → Plugins: what plugins there are and where each came from, whether it can be enabled, what
 // it needs from each machine, and a form generated from what it declares. A secret is typed here
 // once and is never shown again.
 
@@ -588,7 +588,7 @@ function PluginAudit() {
   );
 }
 
-/** Settings → 插件. */
+/** Settings → Plugins. */
 export function PluginSettings() {
   const { t: translateText } = useTranslation(["plugins", "common"] as const);
   const { plugins, loaded, error } = usePlugins();

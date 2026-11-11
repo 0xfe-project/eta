@@ -30,7 +30,7 @@ import { useSectionLink } from "./workspace-search";
 // Everything waiting for the user, the same in the side panel and on the
 // full-window page: confirmations to answer in place, then tasks and routines to
 // open where that section lives — `useSectionLink` picks the panel's tab beside
-// the chat when the section has one, and the page when it does not (定时 has no
+// the chat when the section has one, and the page when it does not (routine has no
 // tab). Each row says what it is, why it waits and what to do.
 
 function clock(epoch: number) {
@@ -70,7 +70,7 @@ function Confirmation({ interaction }: { interaction: InteractionView }) {
   const [text, setText] = useState("");
   const pending = interaction.status === "pending";
   const mine = answer.isPending && answer.variables?.id === interaction.id;
-  // The first line says what is asked ("tasks 请求确认"), the rest the details.
+  // The first line says what is asked ("tasks asks for confirmation"), the rest the details.
   const [headline, ...rest] = interaction.prompt.split("\n");
   const details = rest.join("\n").trim();
   const onError = (error: Error) => toast.error(error.message);

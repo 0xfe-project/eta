@@ -1,84 +1,84 @@
-# 任务
+# Tasks
 
-任务是看板上的一件事，也是**一次可以执行的工作**：默认由提出它的智能体执行；若草稿指定了 `assignee_agent`，则由该 Agent 执行。执行者在自己的一个会话里去做，做完交回待验收。任务上后来的评论会把它再叫醒一次，**在同一个会话里继续**（见[运行](#运行)）。代码在 `apps/eta/src/tasks`，契约在 `packages/client-contracts/src/tasks.ts`。
+A task is an item on the board and also **a piece of work that can be executed**: by default it is executed by the agent that proposed it; if the draft specifies `assignee_agent`, that Agent executes it. The executor works in one of its own sessions and hands it back for acceptance when done. Later comments on the task wake it up again, **continuing in the same session** (see [Run](#run)). The code is in `apps/eta/src/tasks`, and the contract is in `packages/client-contracts/src/tasks.ts`.
 
-## 谁建任务，谁执行
+## Who creates a task and who executes it
 
-- **用户不能新建任务。** 线上没有 `tasks.create`，界面没有"新建"。任务只来自智能体的工具：`draft_task`（提议，由用户确认）和 `create_task`（用户明确要求时直接建）。
-- **任务是智能体创建的，执行者由 `assignee_agent` 决定；没有 `assignee_agent` 时回退到创建者**（`assignee_agent ?? created_by_agent`）。普通任务可以由创建者写给另一个 Agent 执行；早先用户建的任务没有执行者，是看板上不能运行的笔记。
-- **Captain 的“指派”不属于上面的 task assignee**：Captain 只在群聊里发一条可见的工作授权，目标 Agent 自己调用 `create_task`，因此该 Agent 同时是创建者和执行者，不需要也不能用 `assignee_agent` 把任务转给别人。
-- 任务有编号（`#12`，`AUTOINCREMENT`，删掉最新的也不复用）、标题、描述、状态 `backlog | todo | in_progress | in_review | done | blocked | cancelled`、所属项目、工作区、来源对话（`origin_conversation_id`，永远是提出它的那个，执行结果发回那里；`conversation_id` 是现在关联的对话，可以改）。
-- **一个入口**：线上 action 与智能体工具是同一组操作（`TaskBoard`）。校验、变更与它留下的活动记录是一次写入，任务的所有卡片在同一次写入里刷新，然后才通知看着的人。
+- **Users cannot create tasks.** There is no `tasks.create` online, and the UI has no "New". Tasks only come from agent tools: `draft_task` (proposal, confirmed by the user) and `create_task` (created directly when the user explicitly asks).
+- **Tasks are created by agents, and the executor is determined by `assignee_agent`; without `assignee_agent`, it falls back to the creator** (`assignee_agent ?? created_by_agent`). A normal task can be handed off by its creator to another Agent for execution; earlier user-created tasks have no executor and are notes on the board that cannot run.
+- **Captain's "assignment" is not the task assignee above**: Captain only posts a visible work authorization in the group chat, and the target Agent calls `create_task` itself; therefore that Agent is both creator and executor, and does not need to—and cannot—use `assignee_agent` to hand the task to someone else.
+- A task has a number (`#12`, `AUTOINCREMENT`; deleting the latest does not reuse it), title, description, status `backlog | todo | in_progress | in_review | done | blocked | cancelled`, project, workspace, and origin conversation (`origin_conversation_id`, always the one that proposed it; execution results are sent back there; `conversation_id` is the currently associated conversation and can be changed).
+- **One entry point**: online actions and agent tools are the same set of operations (`TaskBoard`). Validation, changes, and the activity record they leave are a single write; all of the task's cards refresh in that same write, and only then is the viewer notified.
 
-## 草稿、确认与卡片
+## Drafts, confirmation, and cards
 
-智能体在对话里 `draft_task`：标题、目标、已决定、验收标准、来源，加上**工作区**的选择。这是对话时间线上的一行（`task_draft`），看板上还没有任何东西。用户可以改标题、描述、起始状态后确认（`tasks.confirmDraft`），同一行变成该任务的卡片（`task_card`），任务入队（起始状态是 `backlog` 则只建不跑）。草稿的描述要写给"什么都不知道的读者"：执行者看不到这段对话。
+The agent calls `draft_task` in a conversation: title, goal, decisions made, acceptance criteria, origin, plus the choice of **workspace**. This is a row in the conversation timeline (`task_draft`); there is nothing on the board yet. The user can change the title, description, and initial status and then confirm (`tasks.confirmDraft`); the same row becomes the task's card (`task_card`), and the task is enqueued (if the initial status is `backlog`, it is only created and not run). The draft's description must be written for "a reader who knows nothing": the executor cannot see this conversation.
 
-### 草稿属于写出它的那一轮
+### A draft belongs to the turn that wrote it
 
-`task_draft` 的 `data` 带 `turnMessageId`：写出它的那条回复行的 id。host 本来就要找这一行（算来源的「第 N–M 条」），顺手记下它的 id——**归属靠数据，不靠猜序**，一轮里两张草稿、或者两轮交错都不会错位。确认时同一行变成 `task_card`，这个字段跟着搬过去，卡片因此留在提出它的那一轮里随任务刷新。`MessageView.data` 是 JSON，没有迁移；缺这个字段的旧行按时间线原样独立绘制。
+`task_draft`'s `data` carries `turnMessageId`: the id of the reply row that wrote it. The host already has to find this row (to compute the origin's "items N–M"), so it records its id along the way—**attribution relies on data, not on guessing order**; two drafts in one turn, or two turns interleaved, will not be misaligned. On confirmation the same row becomes `task_card`, and this field is carried over; the card therefore stays in the turn that proposed it and refreshes with the task. `MessageView.data` is JSON, with no migration; old rows missing this field are rendered independently as-is on the timeline.
 
-页面把带这个字段的行画进那条回复的框内（`chat-panel.tsx` 的 `Turn` → `.turn-tasks`）：同一个作者、同一个页脚时间，缩进与一条发丝线说明它来自哪一轮。它**不进**折叠起来的执行过程（`ProcessBox`）：草稿是向用户要一个决定，不是智能体干过的一步；该轮落定后它与答案同级。
+The page draws rows with this field inside that reply's frame (`Turn` → `.turn-tasks` in `chat-panel.tsx`): same author, same footer time, with indentation and a hairline indicating which turn it comes from. It does **not** go into the collapsed execution process (`ProcessBox`): a draft asks the user for a decision, not a step the agent took; once the turn settles, it is at the same level as the answer.
 
-折叠用仓库现成的语法（原生 `<details>` + `.thinking-block-header` + chevron），默认与 `ProcessBox` 一致：该轮在途展开，落定后折成一行。读者自己开合的选择按 message id 记在 localStorage（`lib/fold.ts`），不被默认值覆盖，也不受刷新影响。折叠态的标题行带「待确认」与确认入口：折起来看不见的是它的正文，不是它的问题。
+Collapsing uses the repository's existing syntax (native `<details>` + `.thinking-block-header` + chevron), and defaults match `ProcessBox`: expanded while the turn is in flight, collapsed to one line once settled. The reader's own open/closed choice is recorded per message id in localStorage (`lib/fold.ts`), is not overridden by the default, and is unaffected by refresh. The collapsed title row carries "Pending confirmation" and the confirmation entry point: what is hidden when collapsed is its body, not its question.
 
-**草稿不计入待办（attention），这一条本次明确不改。** 待办数的是在别处等着你的事——提问、看板上 blocked / in_review 的任务、没看过的例行任务报告——它们都藏在一个「你不在那儿看就不知道」的地方，所以要单独列一行。草稿已经有两处出口：它就是这条对话时间线上的一条智能体行，对话列表的未读数为它 +1（`timeline.ts` 的 `digest`），而卡片自己带着标记和确认入口，折着也带。它没有「看过」或「搁下」这个状态——不确认它就一直在，计入待办等于一枚只能靠确认或删行来摘的角标。确认后它是看板上的任务，那时按任务自己的状态（blocked / in_review）进入待办。
+**Drafts do not count toward attention; this is explicitly unchanged this time.** Attention counts the things waiting for you elsewhere—questions, blocked / in_review tasks on the board, unseen routine reports—they all hide somewhere "you won't know unless you look there", so they get their own row. Drafts already have two outlets: a draft is an agent row on this conversation's timeline, and the conversation list's unread count increments by one for it (`digest` in `timeline.ts`); and the card itself carries a marker and confirmation entry point, even when collapsed. It has no "seen" or "dismissed" state—until confirmed it stays there, and counting it toward attention would be a badge that can only be removed by confirming or deleting the row. After confirmation it is a task on the board, and then it enters attention according to the task's own status (blocked / in_review).
 
-## 工作区
+## Workspace
 
-建任务时由智能体选（`workspace`）：
+Chosen by the agent when creating a task (`workspace`):
 
-| 模式       | 含义                                                                                                  |
+| Mode       | Meaning                                                                                               |
 | ---------- | ----------------------------------------------------------------------------------------------------- |
-| `worktree` | git 项目的默认值。在项目所在机器上为任务建一个 git worktree，分支 `eta/task-<编号>`，从项目当前提交开 |
-| `local`    | 在项目目录里直接干。不是 git 仓库的项目只能用它                                                       |
+| `worktree` | Default for git projects. Creates a git worktree for the task on the machine where the project lives, branch `eta/task-<number>`, starting from the project's current commit |
+| `local`    | Work directly in the project directory. Projects that are not git repositories can only use this          |
 
-提议时就检查：对不是仓库的项目要 `worktree` 会被工具拒绝，让智能体当场听到，而不是等运行失败。
+Checked at proposal time: requesting `worktree` for a project that is not a repository is rejected by the tool, so the agent hears about it on the spot rather than waiting for a run to fail.
 
-**worktree 的位置**是它所在机器自己的 eta 数据目录下的稳定路径，不在项目目录里：
+**The worktree location** is a stable path under that machine's own eta data directory, not inside the project directory:
 
-- primary：`<数据目录>/worktrees/<项目 id>/task-<编号>`
-- daemon 所在机器：`~/.eta/worktrees/<项目 id>/task-<编号>`（daemon 以会话读写文件的同一个用户运行）
+- primary: `<data directory>/worktrees/<project id>/task-<number>`
+- daemon machine: `~/.eta/worktrees/<project id>/task-<number>` (the daemon runs as the same user that reads and writes files for sessions)
 
-选在项目目录之外，是为了让项目的 `git status` 保持干净；路径只由任务决定，所以重跑会回到同一份文件；没有任何东西会删它，因为它装着正在被验收的工作。分支已存在时（上一次运行建的）直接复用。建 worktree 是一段 shell，经机器的 transport 执行：primary 在自己的 shell 里，daemon 经链路，文本相同（`workspace.ts`）。worktree 的路径与分支在第一次运行建好后写回任务，任务页显示。
+It is placed outside the project directory to keep the project's `git status` clean; the path is determined only by the task, so a rerun returns to the same files; nothing deletes it, because it holds work that is being accepted. If the branch already exists (created by a previous run), it is reused directly. Creating a worktree is a shell snippet executed through the machine's transport: primary in its own shell, daemon over the link, with identical text (`workspace.ts`). The worktree path and branch are written back to the task after the first run creates them, and are shown on the task page.
 
-## 运行
+## Run
 
-一次运行是执行者对任务的一次尝试（`task_run`，状态 `queued | starting | running | completed | failed | interrupted`），**表本身就是队列**（`runner.ts`）。
+A run is one attempt by the executor at a task (`task_run`, status `queued | starting | running | completed | failed | interrupted`); **the table itself is the queue** (`runner.ts`).
 
-- **会话是任务的。** `openRunSession` 按 `existing` 决定是复用任务已有的会话还是新开一个：任务的第一次运行（和 `tasks.rerun`）开新的，被评论叫醒的运行接着任务的会话往下。会话里是这个智能体的模型、persona、指令、技能、MCP 服务器和记忆钩子，跟它在对话里的会话一模一样（走同一个 `place.ensure`），但没有对话的历史、没有参与者行。会话存在项目所在的机器上，cwd 是工作区。**它不出现在侧栏**（侧栏是对话），只在任务页：状态加执行记录。
-- **会话的键。** 对话里的会话用对话 id 作 `SessionMeta.conversationId`；任务的会话用 `task:<任务 id>`（`session-key.ts`）。会话活得比一次运行久，键要说得上是「谁的」，任务才是那个单位。会话沿用它被建立时那把键（建它的运行把键记在 `task_run.session_key`，后面的运行沿用），所以键还叫 `task-run:<运行 id>` 的老会话也认得、也能重开。工具、daemon 的归属校验、用量、提问、记忆都认这把键：用量与提问归到来源对话，记忆钩子按来源对话取。工具想知道「现在是哪次运行在读写我」是当场问的（`runner.workingRunOf`），不是开会话那一刻定死的。会话里没有对话工具（`mention` 等），有 `list_tasks`、`get_task`、`update_task`、`comment_task` 和 `finish_task`。
-- **第一条提示**是任务本身：标题、描述（目标、已决定、验收标准）、来源对话的名字与 id，工作在哪、怎么汇报，别在任务没说时合并进主分支。被评论叫醒的运行不再听一遍简报：它上面已有自己做过的事，只告诉它任务现在到哪一步、要说的话在下面。
-- **队列。** 运行按 `created_at` 排队。启动需要两个条件：这个任务上一次运行已结束，机器有空位。否则标出原因：`task_busy`、`machine_full`、`machine_offline`。`pump()` 在一切可能改变答案的时刻调用（排了新的、有运行结束、机器上线、上限被改）。
-- **每台机器的并发上限**是机器的设置（`machine.max_active_runs`，默认 **2**，1–20，设置 → 机器里改，`machines.setMaxActiveRuns`）。
-- **运行日志就是会话的 transcript。** 任务页订阅 `sessions.<会话 id>`，用聊天里同一套块（思考、文字、工具卡）实时画出来；没有第二份记录。第一条用户消息（简报）不显示。工具卡按调用的输入形状画（`apps/web/src/lib/tool-shape.ts`）：编辑是 diff，命令是终端加退出码，待办是清单，结果里的图片是缩略图、点开铺满窗口（图片本身按需经 `sessions.image` 取）；外部运行时的退出码、子代理步骤和运行时任务在 `toolResult.details` 里（`eta-runtime-oar` 的 translator 写入）；外部运行时经 MCP 调用 eta 自己的工具时，transcript 里是工具本来的名字和它自己留下的 `details`（`host-calls.ts`），和自带内核一样。出错的回合和上下文压缩也各占一行。视图只带最近 200 条，滚到顶部用 `sessions.history` 往前翻。弹窗宽高固定（`min(960px, 100vw − 4rem)` × `min(800px, 100dvh − 4rem)`，窄屏全屏），和群聊过程盒的「查看全部」是同一个 `TranscriptDialog`。
-- **结束靠 `finish_task`。** 执行者调用它：总结变成任务上的一条评论，任务进入 `in_review`（或 `blocked`：需要用户），并且**以智能体的身份**把"#编号 标题 + 总结"发到来源对话。worktree 保留，合并/开 PR 或丢弃由验收后决定，不是自动的。没调用就安静下来的运行被提醒一次，再不报就失败。
-- **评论总要被读到。** 任务上有运行在跑时，用户（或别的智能体）的评论作为用户消息送进它的会话：轮次进行中就 steer，否则等下一轮。没有运行在跑时，评论就是一个 prompt：它排一次**续跑**（`task_run.continues_run_id` 指向它续的那次运行，任务页的执行记录也说得出这一点），排在任务的会话里继续 —— 执行者上面已有自己做过的事，不必把项目再读一遍。排队的规矩与首次运行一致（`machine_offline`/`machine_full`/`task_busy`），评论跟着一起等。不询问用户、不弹窗。
-  - `blocked`：执行者用 `finish_task(blocked)` 说了「需要你」，用户的评论就是答复 —— 这是这条规则最主要的用处。
-  - `in_review`：评论即「验收没通过 / 再改一点」，续跑。
-  - `done`、`cancelled`：那是一句终结的话（移到这两个状态本来就会停运行），不唤醒；评论仍记在时间线上。
-  - `backlog`：任务还没被认领，评论只记录。
-  - 执行者自己的评论不回灌给它，也不叫醒它。带同一 `clientId` 的重试仍是同一条评论，只投递一次、只叫醒一次。
-  - 代价：同一个会话越写越长，靠 `packages/eta-compaction` 收敛 —— 这是「它记得」的代价，不是缺陷。被打断当作一次完整的停：不再欠一次续跑，话仍在任务的时间线上。宿主重启会丢掉正在内存里等的那几句话（排好的续跑本身在表里），那种运行被被告知自己去读时间线。
-- **打断与重跑。** `tasks.interrupt` 停一次运行（排队的永不开始，在跑的结束为 `interrupted`，任务状态不动）；任务被移到 `done`/`cancelled` 也会停它的运行。`tasks.rerun` 开一次新运行，**丢弃记忆、从零开始**：一个新会话，不记得上一次做过什么。想带着记忆继续，写评论。同一时刻一个任务只能有一次没结束的运行。
-- **重启。** 重启时遗留的 `starting/running` 运行全部标为失败（"服务器重启了"），排队中的继续等。链路在运行中断掉，运行以"结果未知"失败，不重放。
+- **The session belongs to the task.** `openRunSession` uses `existing` to decide whether to reuse the task's existing session or open a new one: the task's first run (and `tasks.rerun`) opens a new one, while a run woken by a comment continues in the task's session. The session has this agent's model, persona, instructions, skills, MCP servers, and memory hooks, exactly like its session in a conversation (going through the same `place.ensure`), but no conversation history and no participant rows. The session lives on the machine where the project is, with cwd set to the workspace. **It does not appear in the sidebar** (the sidebar is conversations); it appears only on the task page: status plus execution record.
+- **The session key.** A conversation session uses the conversation id as `SessionMeta.conversationId`; a task session uses `task:<task id>` (`session-key.ts`). Sessions outlive a run, so the key must identify whose it is; the task is that unit. A session keeps the key it was created with (the run that created it records the key in `task_run.session_key`, and later runs reuse it), so old sessions whose key is still `task-run:<run id>` are also recognized and can be reopened. Tools, the daemon's ownership checks, usage, questions, and memory all recognize this key: usage and questions are attributed to the origin conversation, and memory hooks are fetched by origin conversation. When a tool wants to know "which run is reading/writing me now", it asks on the spot (`runner.workingRunOf`), not fixed at session creation time. Sessions have no conversation tools (`mention`, etc.), but have `list_tasks`, `get_task`, `update_task`, `comment_task`, and `finish_task`.
+- **The first prompt** is the task itself: title, description (goal, decisions made, acceptance criteria), the name and id of the source conversation, where the work is, how to report, and not to merge into the main branch when the task doesn't say so. A run woken by a comment doesn't hear the briefing again: it already has what it did above it, so just tell it where the task stands now and that what it needs to say is below.
+- **Queue.** Runs are queued by `created_at`. Starting needs two conditions: this task's previous run has finished, and the machine has a free slot. Otherwise mark the reason: `task_busy`, `machine_full`, `machine_offline`. `pump()` is called at every moment that could change the answer (something new queued, a run finished, a machine came online, a limit was changed).
+- **The per-machine concurrency limit** is a machine setting (`machine.max_active_runs`, default **2**, 1–20, changed in Settings → Machines, `machines.setMaxActiveRuns`).
+- **The run log is the session's transcript.** The task page subscribes to `sessions.<session id>` and renders it live with the same blocks used in chat (thinking, text, tool cards); there is no second record. The first user message (the briefing) is not shown. Tool cards are drawn by the input shape of the call (`apps/web/src/lib/tool-shape.ts`): edits are diffs, commands are a terminal plus exit code, todos are a list, images in results are thumbnails that open full-window when clicked (the image itself is fetched on demand via `sessions.image`); external runtime exit codes, sub-agent steps and runtime tasks live in `toolResult.details` (written by `eta-runtime-oar`'s translator); when an external runtime calls eta's own tools over MCP, the transcript shows the tool's own name and the `details` it left (`host-calls.ts`), same as the built-in kernel. Errored turns and context compaction each get their own line. The view carries only the most recent 200 entries; scroll to the top and page back with `sessions.history`. The dialog has fixed dimensions (`min(960px, 100vw − 4rem)` × `min(800px, 100dvh − 4rem)`, fullscreen on narrow screens), and it is the same `TranscriptDialog` as "View all" in the group chat process box.
+- **It ends via `finish_task`.** The executor calls it: the summary becomes a comment on the task, the task moves to `in_review` (or `blocked`: needs the user), and **as the agent** it posts "#number title + summary" to the source conversation. The worktree is kept; merging / opening a PR or discarding is decided after acceptance, not automatically. A run that goes quiet without calling it is reminded once, and fails if it still doesn't report.
+- **Comments always get read.** While a run is active on the task, a user's (or another agent's) comment is delivered into its session as a user message: steered mid-turn if a turn is in progress, otherwise it waits for the next turn. When no run is active, a comment is a prompt: it queues a **continuation run** (`task_run.continues_run_id` points at the run it continues, and the task page's execution record says so too), queued into the task's session to carry on — the executor already has what it did above it, so it needn't read the project again. Queueing follows the same rules as the first run (`machine_offline`/`machine_full`/`task_busy`), and the comment waits along with it. No asking the user, no dialogs.
+  - `blocked`: the executor said "I need you" via `finish_task(blocked)`, so the user's comment is the answer — this is the rule's main use.
+  - `in_review`: a comment means "acceptance failed / change it a bit more", so it continues.
+  - `done`, `cancelled`: that is a closing remark (moving to these states stops the run anyway), so nothing is woken; the comment is still recorded on the timeline.
+  - `backlog`: the task hasn't been claimed yet, so the comment is only recorded.
+  - The executor's own comments are not fed back to it and don't wake it. A retry with the same `clientId` is still the same comment: delivered once, woken once.
+  - The cost: the same session keeps growing and is reined in by `packages/eta-compaction` — that's the price of "it remembers", not a defect. An interrupt counts as a full stop: no continuation run is owed, and the words stay on the task's timeline. A host restart drops the few lines waiting in memory (the queued continuation run itself is in the table); such a run is told to go read the timeline itself.
+- **Interrupt and rerun.** `tasks.interrupt` stops a run (a queued one never starts, a running one ends as `interrupted`, the task status is untouched); moving a task to `done`/`cancelled` also stops its run. `tasks.rerun` starts a new run, **discarding memory and beginning from scratch**: a new session that doesn't remember what the last one did. To continue with memory, write a comment. A task can only have one unfinished run at a time.
+- **Restart.** On restart, leftover `starting/running` runs are all marked failed ("the server restarted"), and queued ones keep waiting. If the link drops mid-run, the run fails as "result unknown" and is not replayed.
 
-## daemon 上的运行
+## Runs on a daemon
 
-项目在别的机器上时，运行的会话在那台机器上：journal、kernel 与工具都在 daemon，模型调用和产品工具（任务、产物、记忆）经链路回到 primary（见[机器与 daemon](machines.md)）。primary 凭自己的 `task_run` 行相信一个会话属于哪次运行（一个会话被多次运行共用时，在跑的那次算），并要求链路所属的机器就是运行记录的机器。机器离线时运行排队（`machine_offline`），连上后开始。
+When the project is on another machine, the run's session lives on that machine: journal, kernel and tools are all in the daemon, while model calls and product tools (tasks, artifacts, memory) come back to the primary over the link (see [Machines and daemons](machines.md)). The primary trusts its own `task_run` row for which run a session belongs to (when a session is shared by several runs, the running one counts), and requires that the machine owning the link is the machine recorded for the run. While a machine is offline, runs queue (`machine_offline`) and start once it connects.
 
-## 线上的动作
+## Actions on the wire
 
-| action                | 含义                                  |
+| action                | Meaning                               |
 | --------------------- | ------------------------------------- |
-| `confirmDraft`        | 确认草稿，建任务并入队                |
-| `update`              | 改标题、描述、状态（拖列也是它）      |
-| `comment`             | 评论；送进在跑的运行，或叫醒一次续跑  |
-| `interrupt` / `rerun` | 停一次运行 / 新开一次运行             |
-| `link` / `delete`     | 关联对话 / 删任务（有运行在跑不能删） |
+| `confirmDraft`        | Confirm draft, create task and enqueue |
+| `update`              | Change title, description, status (drag between columns too) |
+| `comment`             | Comment; deliver into the running run, or wake a continuation run |
+| `interrupt` / `rerun` | Stop a run / start a new run          |
+| `link` / `delete`     | Link a conversation / delete a task (can't delete while a run is active) |
 
-`tasks` 是 eager 的一份列表（每行带 `runStatus`）；每个任务是 `tasks.<id>`：`task`（详情，含工作区与 `runs`）和 `activity`（时间线，包含 `run_queued/started/completed/failed/interrupted/nudged`）。
+`tasks` is one eager list (each row carries `runStatus`); each task is `tasks.<id>`: `task` (details, including the workspace and `runs`) and `activity` (the timeline, containing `run_queued/started/completed/failed/interrupted/nudged`).
 
-## 智能体的工具
+## Agent tools
 
-对话里的智能体：`draft_task`、`list_tasks`、`get_task`、`create_task`、`update_task`、`comment_task`。运行里的执行者：`list_tasks`、`get_task`、`update_task`（不能直接移到 `done`/`cancelled`/`in_review`）、`comment_task`（作用在自己的任务上）、`finish_task`。工具描述承载纪律：`draft_task` 的描述开头是可自检的触发条件（改仓库里的文件、跑构建或测试、结果要人验收、你知道会转好几轮工具），命中任一条就别在聊天里做；留在聊天区的是读、查、解释、问答、表态和一两条命令的验证。`mention` 是把话交给人，`draft_task` 是让工作离开这一轮：它是看板的提案，由用户确认后成为任务，由 `assignee_agent`（没有指定时是提出它的智能体）在一个看不见这段对话的新会话里执行。
+The agent in a conversation: `draft_task`, `list_tasks`, `get_task`, `create_task`, `update_task`, `comment_task`. The executor in a run: `list_tasks`, `get_task`, `update_task` (can't move directly to `done`/`cancelled`/`in_review`), `comment_task` (acts on its own task), `finish_task`. The tool descriptions carry the discipline: `draft_task`'s description opens with self-checkable triggers (editing files in the repo, running a build or tests, results that need human acceptance, anything you know will take several rounds of tools) — hit any one and don't do it in chat; what stays in chat is reading, looking things up, explaining, Q&A, taking a position, and verifying with one or two commands. `mention` hands the words to a human; `draft_task` takes the work out of this turn: it is a proposal on the board that becomes a task once the user confirms it, executed by `assignee_agent` (the agent that proposed it when none is specified) in a new session that cannot see this conversation.

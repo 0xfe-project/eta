@@ -59,7 +59,7 @@ const RUNTIME_NAMES: Record<Exclude<AgentRuntime, "eta">, string> = {
  * sidebar and the panel away, which left a mostly empty screen behind a form that fits in a corner
  * of it. The window keeps its size across the steps, so nothing moves under the pointer.
  *
- * Nothing is written until 开始: a directory becomes a project then, with the steward on it, so a
+ * Nothing is written until Start: a directory becomes a project then, with the steward on it, so a
  * dialog closed halfway leaves nothing behind. Opened from a project the first step is already
  * answered, and is still one step back.
  */

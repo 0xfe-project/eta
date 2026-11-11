@@ -1,4 +1,4 @@
-// 03h2 智能体信息: read-only. Editing an agent stays on the desktop.
+// 03h2 Agent info: read-only. Editing an agent stays on the desktop.
 
 import type { AgentView } from "@eta/client-contracts";
 import { Text, View } from "nsh";

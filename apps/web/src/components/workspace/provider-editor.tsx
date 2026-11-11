@@ -6,7 +6,7 @@ import type {
   ProviderSummary,
 } from "@eta/client-contracts";
 /**
- * Editing one provider, in place: the settings column turns into this form and 返回 brings the list
+ * Editing one provider, in place: the settings column turns into this form and Back brings the list
  * back. It is not a dialog — a form one level deep inside another one asks the person to keep track
  * of two ways out, and the thing being edited is one row of the list behind it.
  *
@@ -368,7 +368,7 @@ export function ProviderEditor({
   // The config this form was read from: what a save has to be made against.
   const [revision, setRevision] = useState(config?.revision);
 
-  // A dirty form is one the person would lose by leaving it, so 返回 asks first — the rule the whole
+  // A dirty form is one the person would lose by leaving it, so Back asks first — the rule the whole
   // settings dialog follows, applied to the one form here that can hold an unsubmitted key. The
   // form is compared against what was last read or written, not against the row behind it: after a
   // save the row follows, and a form that flickered back to "unsaved" while it did would be wrong.

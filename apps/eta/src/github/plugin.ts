@@ -80,7 +80,7 @@ export function githubPlugin(deps: GithubPluginDeps, applied: () => void) {
             throw new GithubError(
               "MERGE_IN_PROGRESS",
               409,
-              "这个 PR 正在合并。",
+              "This PR is being merged.",
             );
           merging.add(url);
           try {

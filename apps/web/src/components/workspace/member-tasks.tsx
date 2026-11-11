@@ -22,7 +22,7 @@ import { useWireMutation } from "@/queries/wire";
  *
  * These are the session's own — the list the agent keeps for itself while it works, not the board's
  * cards: a board task is a work item with a number, an assignee and a run; this is what the agent
- * decided to do first. Two different things, and the panel says 步骤 for this one so that 任务 keeps
+ * decided to do first. Two different things, and the panel says Steps for this one so that Task keeps
  * meaning the board.
  *
  * Nothing is copied: `taskUpdate` writes one row and the session's own view follows.

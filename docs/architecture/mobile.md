@@ -1,33 +1,33 @@
-# 手机端
+# Mobile
 
-`apps/mobile` 是 Native Shell（nsh）写的原生客户端：TSX 跑在 QuickJS 上，界面是 UIKit 和 Android 的原生视图。设计稿在 Paper 文件「Eta mobile」，产品判断写在总览页：电脑上干活，手机上拍板。
+`apps/mobile` is a native client written with Native Shell (nsh): TSX runs on QuickJS, and the UI uses native UIKit and Android views. The design file is the Paper file 「Eta mobile」, and the product judgment is written on the overview page: do the work on the computer, make the decisions on the phone.
 
-## 连接
+## Connection
 
-手机只是一块屏：连一次主机，就能用它后面的所有机器。它和 Web 一样只走 `/ws` 一条线，帧、订阅和重连的规则见[线协议](wire-protocol.md)，`src/wire/wire.ts` 是 Web 同名文件换成 signal 的版本。
+The phone is just a screen: connect once to a host machine, and you can use all the machines behind it. Like the Web, it uses only a single `/ws` connection; for the rules on frames, subscriptions, and reconnection, see [wire protocol](wire-protocol.md). `src/wire/wire.ts` is the version of the Web file with the same name switched to signals.
 
-- 令牌走 `X-Eta-Token` 握手头（[访问控制](access.md)）：nsh 的 WebSocket 不让握手带 `Authorization`。`--host` 不是回环时令牌门自动打开。
-- 扫码：Web 的 设置 → 机器 → 连接手机 用 `machines.phoneLink` 生成 `eta://connect?address=…&token=…`，手机扫到后直接连。粘贴这个链接到地址栏同样可以。
-- `hello` 只带一次 eager target 的快照，手机建好连接就订阅它们，否则之后的推送收不到。
+- The token goes in the `X-Eta-Token` handshake header ([access control](access.md)): nsh's WebSocket does not allow the handshake to carry `Authorization`. When `--host` is not loopback, the token gate opens automatically.
+- Scan code: in Web, Settings → Machines → Connect phone uses `machines.phoneLink` to generate `eta://connect?address=…&token=…`; the phone connects directly after scanning it. Pasting this link into the address bar also works.
+- `hello` carries a snapshot of eager targets only once; the phone subscribes to them as soon as the connection is established, otherwise it will not receive later pushes.
 
-## 原生模块
+## Native modules
 
-`apps/mobile/native` 是一个 Rust crate（`eta/native`），放 TSX 碰不到的东西：相机扫码（`Scanner`）和系统分享面板（`Sharing`，私有产物下载用，iOS 上文件也只有 Rust 能写）。
+`apps/mobile/native` is a Rust crate (`eta/native`) for things TSX cannot touch: camera scanning (`Scanner`) and the system share sheet (`Sharing`, used for downloading private artifacts; on iOS, only Rust can write files).
 
-它依赖 GitHub 上 `longbridge/nsh` 的 `v0.4.0`，不是 crates.io：crates.io 上的 `nsh-platform-ios 0.4.0` 用 `#[path]` 引用了包外的文件，编不过。
+It depends on `longbridge/nsh` `v0.4.0` on GitHub, not crates.io: `nsh-platform-ios 0.4.0` on crates.io references files outside the package with `#[path]`, so it does not compile.
 
-## 打包
+## Packaging
 
-`nsh.json` 没有写 Info.plist 的键，而手机端需要两项：相机用途说明，以及用明文 http 连 tailnet 或局域网上的主机。`apps/mobile/scripts/package-ios.sh` 打完包后写入它们再重新签名，模拟器和真机都走它。
+`nsh.json` does not write the Info.plist keys, but the mobile app needs two: the camera usage description, and permission to use plaintext http to connect to hosts on the tailnet or LAN. `apps/mobile/scripts/package-ios.sh` writes them after packaging and then re-signs; both the simulator and real devices go through it.
 
-## 测试
+## Testing
 
-`src/testing/fake-host.ts` 是跑在 app 自己 VM 里的假 host，帧和真的一样，`DevApp.tsx` 用它在模拟器和 `nsh test` 里运行。
+`src/testing/fake-host.ts` is a fake host running in the app's own VM, with frames identical to the real ones; `DevApp.tsx` uses it to run in the simulator and under `nsh test`.
 
 ```sh
-nsh check                            # 类型检查（含 Rust crate）
-nsh test                             # 无头测试
-nsh test <file> --target ios         # 在模拟器里驱动真实界面，app.screenshot 能截图
+nsh check                            # Type check (including Rust crate)
+nsh test                             # Headless tests
+nsh test <file> --target ios         # Drive the real UI in the simulator; app.screenshot can take screenshots
 ```
 
-iOS 目标要先设 `BINDGEN_EXTRA_CLANG_ARGS="-isysroot $(xcrun --sdk iphonesimulator --show-sdk-path)"`。这几个命令不在 `bun run check` 里：CI 没有 nsh。
+The iOS target requires setting `BINDGEN_EXTRA_CLANG_ARGS="-isysroot $(xcrun --sdk iphonesimulator --show-sdk-path)"` first. These commands are not part of `bun run check`: CI does not have nsh.

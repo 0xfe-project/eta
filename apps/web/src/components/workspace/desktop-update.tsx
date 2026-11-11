@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { host, shellUpdate, shellUpdateAction } from "@/lib/native";
 import { busyLabels, useUpgradeCheck } from "@/queries/upgrade";
 
-// Settings → 更新, the desktop app's own part: its version and its update, apart from the host's.
+// Settings → Update, the desktop app's own part: its version and its update, apart from the host's.
 // Every step is a press here; the app neither checks nor installs by itself
 // (`apps/desktop/src/bun/update.ts`). Applying quits the app and starts the new one, and in local
 // mode the host goes with it, so the dialog says what a restart would stop.

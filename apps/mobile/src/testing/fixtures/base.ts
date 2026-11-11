@@ -11,7 +11,7 @@ import type { FakeHost } from "../fake-host";
 
 const now = Date.now();
 export const minutesAgo = (minutes: number) => now - minutes * 60_000;
-/** Reads as 昨天 whatever time it is now. */
+/** Reads as yesterday whatever time it is now. */
 const yesterdayNoon = new Date(now).setHours(12, 0, 0, 0) - 24 * 60 * 60 * 1000;
 
 const agent = (
@@ -38,9 +38,9 @@ const agent = (
 });
 
 export const AGENTS: AgentView[] = [
-  agent("agent-ache", "阿澈", "waiting_for_input", "engineer"),
+  agent("agent-ache", "Ache", "waiting_for_input", "engineer"),
   agent("agent-mori", "Mori", "working", "designer"),
-  agent("agent-xiaoman", "小满", "idle", "assistant"),
+  agent("agent-xiaoman", "Xiaoman", "idle", "assistant"),
 ];
 
 const machine = (
@@ -93,7 +93,7 @@ const project = (
 
 export const PROJECTS: ProjectView[] = [
   project("eta", "eta", "mac-studio", "agent-ache"),
-  project("site", "官网", "mb-air", "agent-mori"),
+  project("site", "Website", "mb-air", "agent-mori"),
 ];
 
 const member = (agentId: string, status: MemberView["status"]): MemberView => ({
@@ -131,7 +131,7 @@ const conversation = (
 export const CONVERSATIONS: ConversationSummary[] = [
   conversation(
     "wire",
-    "wire 重连",
+    "wire reconnect",
     "eta",
     "group",
     [member("agent-ache", "waiting_for_input"), member("agent-mori", "queued")],
@@ -139,35 +139,35 @@ export const CONVERSATIONS: ConversationSummary[] = [
       unread: 2,
       lastSeq: 12,
       lastMessageAt: minutesAgo(0),
-      preview: "迁移会锁 message 表大约 40 秒，得你定。",
+      preview: "The migration will lock the message table for about 40 seconds; you'll need to decide.",
     },
   ),
-  conversation("board", "任务看板改版", "eta", "group", [
+  conversation("board", "Task board redesign", "eta", "group", [
     member("agent-mori", "working"),
   ]),
   conversation(
     "artifacts",
-    "产物版本",
+    "Artifact version",
     "eta",
     "group",
     [member("agent-ache", "idle"), member("agent-xiaoman", "idle")],
     {
-      preview: "site 走 SPA 回退，版本里带上 manifest。",
+      preview: "site uses SPA fallback; include the manifest in the version.",
       lastMessageAt: yesterdayNoon,
     },
   ),
-  conversation("redesign", "官网改版", "site", "group", [
+  conversation("redesign", "Website redesign", "site", "group", [
     member("agent-mori", "waiting_for_input"),
     member("agent-xiaoman", "idle"),
   ]),
   conversation(
     "dm-xiaoman",
-    "小满",
+    "Xiaoman",
     "home-agent-xiaoman",
     "direct",
     [member("agent-xiaoman", "waiting_for_input")],
     {
-      preview: "周报发给谁？",
+      preview: "Who should the weekly report go to?",
       lastMessageAt: minutesAgo(1),
     },
   ),

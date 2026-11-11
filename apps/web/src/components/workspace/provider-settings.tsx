@@ -306,7 +306,7 @@ function ProviderRow({
 }
 
 /**
- * Settings → 模型服务: the providers in the config file, as rows you can edit.
+ * Settings → Model service: the providers in the config file, as rows you can edit.
  *
  * One row, one editor: a provider is one object in the file and the form is that object. What a
  * row says about a provider is what the config says (its kind, endpoint, models, whether a key is

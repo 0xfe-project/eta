@@ -16,7 +16,7 @@
 #
 # GitHub is optional too, and off by default: with it the host loads the App, the `github` target, the
 # agents' pull-request and issue tools, the callbacks and the git/gh login, and the page shows
-# settings → 连接. `ETA_GITHUB=1` (or a `--github` in `command:` below) turns it on.
+# settings → Connections. `ETA_GITHUB=1` (or a `--github` in `command:` below) turns it on.
 services:
   eta:
     build:

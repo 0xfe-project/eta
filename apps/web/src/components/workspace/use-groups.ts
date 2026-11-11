@@ -34,7 +34,7 @@ export function useOpenGroup() {
   const navigate = useNavigate();
   // Opening a conversation is not asking for a tab. It used to carry `view: "context"` — the
   // panel's first tab — and on a phone that was read as "the URL wants this tab", which opened the
-  // panel over the chat you had just asked for: 点一行会话，先看到右侧边栏。
+  // panel over the chat you had just asked for: click a session row and you see the right sidebar first.
   //
   // Nothing is lost by dropping it: `view` falls back to `context` on its own, so the panel still
   // shows the same tab wherever it is drawn, a stale `view=tasks` from the last place still clears,

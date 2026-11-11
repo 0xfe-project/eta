@@ -135,7 +135,7 @@ export function QuestionCard(props: {
   const approval = () => isApproval(props.interaction);
   const options = () => props.interaction.options;
   const freeform = () => options().length === 0;
-  /** Three answers fill a row, so 放弃 takes a line of its own. */
+  /** Three answers fill a row, so Give up takes a line of its own. */
   const giveUpBelow = () => !props.interaction.multi && options().length >= 3;
   /** More than a row can hold: one under the other. */
   const stacked = () => options().length > 3;

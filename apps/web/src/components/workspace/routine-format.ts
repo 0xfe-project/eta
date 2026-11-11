@@ -41,7 +41,7 @@ function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-/** "今天 08:02", "明天 08:00", "10-11 08:03". */
+/** "Today 08:02", "Tomorrow 08:00", "10-11 08:03". */
 export function when(at: string | number) {
   const date = new Date(at);
   const time = date.toLocaleTimeString(formatLocale(), {

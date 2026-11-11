@@ -130,10 +130,10 @@ export class TaskCards {
     const data: TaskDraftData = {
       title,
       description: [
-        `## 目标\n\n${input.draft.goal.trim()}`,
-        `## 已决定\n\n${(input.draft.decided ?? "").trim()}`,
-        `## 验收标准\n\n${input.draft.acceptance.trim()}`,
-        `来源：对话《${conversation.name}》${source}。`,
+        `## Goal\n\n${input.draft.goal.trim()}`,
+        `## Decided\n\n${(input.draft.decided ?? "").trim()}`,
+        `## Acceptance criteria\n\n${input.draft.acceptance.trim()}`,
+        `Source: conversation 《${conversation.name}》${source}.`,
       ].join("\n\n"),
       workspace: input.draft.workspace,
       ...(input.draft.base === undefined ? {} : { base: input.draft.base }),
@@ -266,6 +266,6 @@ export class TaskCards {
     const trigger =
       turn?.replyToId == null ? undefined : timeline.get(turn.replyToId);
     const first = trigger?.seq ?? last;
-    return first >= last ? `第 ${last} 条` : `第 ${first}–${last} 条`;
+    return first >= last ? `message ${last}` : `messages ${first}–${last}`;
   }
 }

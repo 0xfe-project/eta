@@ -670,7 +670,7 @@
    * The fold line is `.thinking-block-header` with two additions: the title in the reader's type
    * rather than in the mono label's (an uppercase-cased sentence is a different sentence), and the
    * mark of what the row is still waiting for, which stays on the line when everything else on it is
-   * folded away. `目标` / `已决定` are labels rather than headings, as everywhere else here.
+   * folded away. `Goals` / `Decided` are labels rather than headings, as everywhere else here.
    */
   .turn-tasks {
     display: flex;
@@ -1636,7 +1636,7 @@
     gap: 6px;
   }
 
-  /* One provider, edited in place: the content column turns into its form and 返回 brings the
+  /* One provider, edited in place: the content column turns into its form and Back brings the
      list back. Ported from eta-old's settings.css, numbers included. */
   .settings-back {
     margin-bottom: 10px;

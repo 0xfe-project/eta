@@ -1,31 +1,31 @@
-# 任务、产物与定时任务
+# Tasks, artifacts, and routines
 
-三个产品插件，都建在对话和会话之上：任务是看板，产物是智能体发布的静态页，定时任务是按时间跑的短会话。
+Three product plugins, all built on conversations and sessions: tasks are a board, artifacts are static pages published by agents, and routines are short sessions that run on a schedule.
 
-## 任务
+## Tasks
 
-看板（`tasks` / `tasks.<id>`，`apps/eta/src/tasks`）：智能体提出任务，用户确认，提出它的智能体在它自己的会话里去执行，做完交回待验收；任务上的评论会把它在同一会话里再叫醒一次。完整的说明（草稿与卡片、工作区、运行队列、`finish_task`、daemon 上的运行）在[任务](tasks.md)。
+Board (`tasks` / `tasks.<id>`, `apps/eta/src/tasks`): an agent proposes a task, the user confirms it, the proposing agent executes it in its own session and hands it back for acceptance when done; a comment on the task wakes it once more in the same session. The full description (drafts and cards, workspace, run queue, `finish_task`, runs on the daemon) is in [Tasks](tasks.md).
 
-- **交付的 PR**：任务板不认识 GitHub；智能体 `open_pull_request` 后，GitHub 插件把 PR 记在自己的 `task_pull` 表，任务页的“交付”一行读它，显示 PR 现在的状态并可以合并。PR 属于哪个任务：任务的会话（会话键 `task:<任务 id>`）属于这个任务；对话里的会话属于这个对话里最近动过、还没结束的任务（`todo`、`in_progress`、`in_review`、`blocked`）。见 [GitHub](github.md)。
+- **Delivered PRs**: the task board doesn't know GitHub; after an agent runs `open_pull_request`, the GitHub plugin records the PR in its own `task_pull` table, and the “Delivered” line on the task page reads it, shows the PR's current status, and can merge it. Which task a PR belongs to: the task's session (session key `task:<task id>`) belongs to that task; a conversation's session belongs to the most recently touched, unfinished task in that conversation (`todo`, `in_progress`, `in_review`, `blocked`). See [GitHub](github.md).
 
-## 产物
+## Artifacts
 
-智能体用 `publish_artifact` 发布一个静态站点（根目录有 `index.html` 的目录，可含 CSS、脚本、图片），用户可以预览、分享、下载。带 `spa: true` 时它是单页应用：导航到没有文件的路径时返回 `index.html`，缺失的 `.js`、`.css`、图片仍是 404。
+An agent publishes a static site with `publish_artifact` (a directory with an `index.html` at its root, may contain CSS, scripts, images); users can preview, share, and download it. With `spa: true` it is a single-page app: navigating to a path with no file returns `index.html`, while missing `.js`, `.css`, and images are still 404.
 
-- **站点要先被判定再存**（`files.ts`、`kinds/site.ts`）：根里要有 `index.html`，路径必须是干净的相对路径，不允许符号链接（`.git` 与 `node_modules` 被略过），文件数与总字节有上限（默认 5000 个、100 MiB）。不合格就整个拒绝并说明哪里要改，半个站点看起来能用，比没有更糟。
-- 文件通过**会话自己的执行环境**读取，所以在另一台机器上的会话发布的是那台机器上的目录。
-- **版本**：带 `artifactId` 再发布就是同一产物的新版本，不会新建一个。每个版本是一个 ZIP 加解压后的站点，在 `<数据目录>/artifacts/<产物>/<版本>/`；先写文件、再写行，所以有行就一定有文件，有目录没行是崩溃留下的残渣，下次发布同号时被替换。可以关联到一个任务（卡片上列出）。
-- **预览**用带一小时有效期的签名地址；**分享**是绑定某一版本的公开令牌，一个版本同一时刻至多一份分享，取消后永久失效。详见[访问控制](access.md)。
-- **类型**：每个版本有 `kind` 和 `manifest`（JSON），发布后不再改变。`apps/eta/src/artifacts/kinds/` 里的类型决定怎么校验（`prepare`）、从哪打开（`entry`）、一次请求怎么回应（`respond`）、前端怎么打开（`viewer`）；现在只有 `site`。鉴权、路径和大小限制以及沙盒响应头都在核心，类型和 manifest 不能放宽。主机不认识的类型只提供 ZIP。
-- target：`artifacts`（列表），action `share`、`unshare`、`delete`、`preview`。
+- **A site is validated before it is stored** (`files.ts`, `kinds/site.ts`): there must be an `index.html` at the root, paths must be clean relative paths, symlinks are not allowed (`.git` and `node_modules` are skipped), and file count and total bytes have limits (default 5000 files, 100 MiB). If it fails, the whole thing is rejected with a note on what to fix — half a site that looks like it works is worse than none.
+- Files are read through **the session's own execution environment**, so a session on another machine publishes the directory on that machine.
+- **Versions**: publishing again with an `artifactId` makes a new version of the same artifact, not a new artifact. Each version is a ZIP plus the unpacked site, under `<data directory>/artifacts/<artifact>/<version>/`; files are written first and the row second, so a row always means the files exist, and a directory with no row is debris left by a crash, replaced the next time the same number is published. A version can be linked to a task (listed on the card).
+- **Preview** uses a signed URL valid for one hour; **share** is a public token bound to a specific version, at most one share per version at a time, and revoking it invalidates it permanently. See [Access control](access.md).
+- **Kinds**: each version has a `kind` and a `manifest` (JSON), fixed after publishing. The kinds in `apps/eta/src/artifacts/kinds/` decide how to validate (`prepare`), where to open (`entry`), how to answer a request (`respond`), and how the frontend opens it (`viewer`); currently only `site`. Authorization, path and size limits, and sandbox response headers live in the core, and kinds and manifests cannot loosen them. A kind the host machine doesn't recognize is offered only as a ZIP.
+- target: `artifacts` (list), actions `share`, `unshare`, `delete`, `preview`.
 
-## 定时任务
+## Routines
 
-一个智能体样的东西按时间运行并留下报告，但**它背后没有智能体**，只有模型、简报（brief）和时钟。target `routines` / `routines.<id>`。
+An agent-like thing runs on a schedule and leaves a report, but **there is no agent behind it** — only a model, a brief, and a clock. target `routines` / `routines.<id>`.
 
-- **时钟**（`scheduler.ts`）：进程内的定时器，没有消息代理。计划存的是形状：`daily`、`weekly`、`hourly`（每 1/2/3/4/6/8/12 小时）、`cron`（五段），时区单独存；下一次运行从计划和时区算出，**不落库**（`croner` 做运算）。一条被创建、暂停、恢复或改计划的任务会被自动按"现在"重新排上，没有人需要通知时钟发生了变化。**错过的时间不补**：进程停着时到点的，重启后从"现在"起算，不会一口气补跑三次；刚好睡着、醒来很快的，按一次运行；已经在运行的任务这次跳过。
-- **运行**（`runner.ts`）：一次运行就是一个短命的上游会话，工作目录是 `<数据目录>/routines/<id>/`。规则：运行要么**汇报要么什么也不说**（`finish` 决定；没调用 `finish` 就把最后一条消息当报告；什么都没说就是失败）；最多 15 分钟，超时算失败；**同一任务同一时刻最多一次运行**，由表的唯一索引保证；重启时遗留的 `running` 全部标为失败。运行结束是 `sent`（有汇报）、`no_news`（看过了没新东西）或 `failed`。
-- 运行里的工具：`list_runs`、`get_run`、`search_runs`（只能看自己这个任务的历史）和 `finish`。每次的第一条消息把它不可能自己查到的都带上：自己是谁、现在几点、做什么、上次留下什么交接、怎么结束。
-- **简报有版本**：每次修改都是新版本，不是编辑，因为旧版本是更早的运行所遵循的；"为什么它这么做"由引入那一行的版本回答，恢复旧文本是把它写成最新版本（`restoreBrief`）。
-- **反馈修订简报**：用户对一份报告的反馈（`routines.feedback`）在后台修订简报，每个任务同一时间一轮；修订读它将要替换的简报，如果这期间简报被改了，就基于新文本重来。一条反馈至多产生一个简报版本（唯一索引）。进程重启后未完成的修订在 runner 挂载时继续。
-- 汇报可以作为 `system` 行发到一个对话里（`routine.conversation_id`，为空就不发）。
+- **Clock** (`scheduler.ts`): an in-process timer, no message broker. A schedule stores a shape: `daily`, `weekly`, `hourly` (every 1/2/3/4/6/8/12 hours), `cron` (five fields), with the time zone stored separately; the next run is computed from the schedule and time zone and **not persisted** (`croner` does the math). A routine that is created, paused, resumed, or rescheduled is automatically rescheduled from "now", with no one needing to notify the clock that something changed. **Missed times are not made up**: a time that passed while the process was down counts from "now" after restart, it won't backfill three runs at once; a brief sleep and quick wake counts as one run; a routine already running is skipped this time.
+- **Runs** (`runner.ts`): a run is a short-lived upstream session whose working directory is `<data directory>/routines/<id>/`. The rules: a run either **reports or says nothing** (decided by `finish`; without a `finish` call the last message becomes the report; saying nothing is a failure); at most 15 minutes, timing out counts as a failure; **at most one run per task at a time**, guaranteed by a unique index on the table; leftover `running` rows are all marked failed on restart. A run ends as `sent` (has a report), `no_news` (looked, nothing new), or `failed`.
+- Tools inside a run: `list_runs`, `get_run`, `search_runs` (only the history of its own routine), and `finish`. The first message of each run carries everything it could not look up itself: who it is, what time it is, what to do, what handoff the previous run left, and how to end.
+- **Briefs are versioned**: every change is a new version, not an edit, because old versions are what earlier runs followed; "why did it do that" is answered by the version that introduced the line, and restoring old text writes it as the newest version (`restoreBrief`).
+- **Feedback revises the brief**: user feedback on a report (`routines.feedback`) revises the brief in the background, one round per routine at a time; the revision reads the brief it is about to replace, and if the brief changed in the meantime it starts over from the new text. One piece of feedback produces at most one brief version (unique index). Revisions left unfinished by a process restart continue when the runner mounts.
+- A report can be sent as a `system` line into a conversation (`routine.conversation_id`; skip if empty).

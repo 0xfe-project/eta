@@ -40,7 +40,7 @@ function Action(props: { title: string; onPress: () => void }) {
   );
 }
 
-/** 03p: what a long press on a row offers. A private chat bears its agent's name: no 改名. */
+/** 03p: what a long press on a row offers. A private chat bears its agent's name: no Rename. */
 export function ConversationSheet(props: {
   open: boolean;
   conversation: ConversationSummary | undefined;

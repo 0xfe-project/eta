@@ -13,18 +13,18 @@ import { Section } from "./panel-section";
 import { when } from "./routine-format";
 
 /**
- * 上下文: what this conversation is made of, for the panel beside it, ordered by
+ * Context: what this conversation is made of, for the panel beside it, ordered by
  * whether it is worth a look *now* — reading it top down should cost one glance,
  * not a scroll to find out whether anything needs the user.
  *
- * So: what the group made and what it is on track to make first (任务, 产物,
- * 定时), then the background that is only news when it changes (成员, 目标).
+ * So: what the group made and what it is on track to make first (tasks, artifacts,
+ * routines), then the background that is only news when it changes (members, goals).
  *
- * Captain's own conversation is the one exception: its first block is 运营 rather than 任务 —
+ * Captain's own conversation is the one exception: its first block is Operations rather than tasks —
  * the approvals, alerts and assignments it holds for everyone else — because "which tasks is
  * Captain working on" is not a question about Captain, it is a question about the agents it is
  * assigning them to. See captain-operations.tsx.
- * What waits for the user is the 待处理 tab's, with its badge; it is not listed
+ * What waits for the user belongs to the Pending tab, with its badge; it is not listed
  * again here.
  *
  * The members are the group's own component, the one the group manager uses,
@@ -33,12 +33,12 @@ import { when } from "./routine-format";
  * second thing to keep in sync. What this file adds is only what surrounds that.
  */
 
-/** What 任务 leaves out: a closed task needs nothing more, and the 任务 tab still holds it. */
+/** What tasks leave out: a closed task needs nothing more, and the task tab still holds it. */
 const closed = new Set<string>(["done", "cancelled"]);
 
 /**
- * 任务 and 产物 as rows, edge to edge: the rule between two runs into the panel's own edges. One
- * height for both, a few rows on a normal window and less on a short one, so that 成员 under them
+ * Tasks and artifacts as rows, edge to edge: the rule between two runs into the panel's own edges. One
+ * height for both, a few rows on a normal window and less on a short one, so that members under them
  * stays in reach; a short list just ends. `overscroll-y-auto` undoes the panes' global
  * `overscroll-behavior: none`, or a list at its end, or with nothing to scroll, would keep the
  * wheel and the finger from the panel around it.
@@ -66,7 +66,7 @@ export function GroupPanel({
   if (group === undefined) return null;
   // Captain's conversation is a conversation, so this panel is its panel too — but what it is
   // working on is not a list of tasks of its own: it is the operations it is running for everyone
-  // else. 任务 gives way to 运营 here, and nowhere else.
+  // else. Tasks give way to Operations here, and nowhere else.
   const isCaptain = captain.identity?.conversationId === group.id;
   const groupTasks = board.filter((task) => task.conversationId === group.id);
   const tasks = groupTasks.filter((task) => !closed.has(task.status));

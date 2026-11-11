@@ -5,12 +5,12 @@ import { useCaptain, useCaptainActions } from "@/queries/captain";
 import { Section } from "./panel-section";
 
 /**
- * 运营: the three things about Captain's work that a chat cannot carry — an approval it cannot give
+ * Operations: the three things about Captain's work that a chat cannot carry — an approval it cannot give
  * itself, an alert it raised, and what it handed out recently.
  *
  * They used to be the second tab of a drawer that held the whole of Captain. The drawer is gone
  * (the conversation is the chat, the head of the sidebar is its card), and this is the half of it
- * that had nowhere to land: 待审批操作 is something a person has to do, and it cannot live in a
+ * that had nowhere to land: a pending approval is something a person has to do, and it cannot live in a
  * tab nobody drew. It goes in the context panel of Captain's own conversation — the one column in
  * the window that is *about* a conversation rather than in it.
  */
@@ -34,7 +34,7 @@ export function CaptainOperations() {
             {translateText("operations.none")}
           </p>
         ) : (
-          // Rows, edge to edge, as 任务 and 产物 draw theirs: the rule between two runs into the
+          // Rows, edge to edge, as tasks and artifacts draw theirs: the rule between two runs into the
           // panel's own edges, so the block reads as part of the column and not as cards on it.
           <ul className="-mx-3 divide-y divide-border">
             {pending.map((operation) => (

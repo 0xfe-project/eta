@@ -16,7 +16,7 @@ export class GithubError extends Error {
 }
 
 const NOT_CONNECTED_MESSAGE =
-  "GitHub 还没有连接。请让用户在 eta 的“设置 → 连接”里按向导连接 GitHub。";
+  "GitHub is not connected yet. Ask the user to connect GitHub via the wizard in eta's "Settings → Connections".";
 
 export const notConnected = (): GithubError =>
   new GithubError("GITHUB_NOT_CONNECTED", 409, NOT_CONNECTED_MESSAGE);
@@ -25,4 +25,4 @@ export const notConnected = (): GithubError =>
 export const messageOf = (error: unknown): string =>
   error instanceof GithubError
     ? error.message
-    : "代码托管服务出错，请稍后再试。";
+    : "The code hosting service errored, please try again later.";

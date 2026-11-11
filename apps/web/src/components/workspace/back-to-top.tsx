@@ -14,7 +14,7 @@ function scroller(el: HTMLElement | null) {
 }
 
 /**
- * 回到顶部, once what scrolls around it has left the top. Put it after the
+ * Back to top, once what scrolls around it has left the top. Put it after the
  * content, in the same box: it floats at the bottom right of what scrolls and,
  * scrolled to the end, takes its own row below the content instead of covering it.
  */

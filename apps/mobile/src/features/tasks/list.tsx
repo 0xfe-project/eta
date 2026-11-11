@@ -21,7 +21,7 @@ import {
   statusLabel,
 } from "./format";
 
-/** How many rows a fold shows before 还有 N 条. */
+/** How many rows a fold shows before N more items. */
 const FOLD_ROWS = 2;
 
 /** The stacked strip under the title: how the open work divides. */

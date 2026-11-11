@@ -43,7 +43,7 @@ export type Phase =
 export const phase = signal<Phase>("boot");
 export const failure = signal<RefusedBy | undefined>(undefined);
 export const host = signal<HostAddress | undefined>(undefined);
-/** When the host last answered, for 「上次在线」. */
+/** When the host last answered, for “last online”. */
 export const lastOnlineAt = signal<number | undefined>(undefined);
 
 const currentWire = signal<Wire | undefined>(undefined);
@@ -158,7 +158,7 @@ export function retry(): void {
   if (untracked(() => current.status()) !== "open") startGiveUp();
 }
 
-/** Forget the host and go back to the form (设置 → 连接 → 断开连接, 换一台主机). */
+/** Forget the host and go back to the form (Settings → Connection → Disconnect, switch to another host machine). */
 export function disconnect(): void {
   stopGiveUp();
   failure.set(undefined);

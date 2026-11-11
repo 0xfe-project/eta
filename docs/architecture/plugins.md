@@ -1,32 +1,32 @@
-# 插件
+# Plugins
 
-插件给智能体带来 skill 和 MCP 服务器，格式是 [Agent Plugins 1.0.0](https://agent-plugins.org)：根目录一个 `plugin.json`，`skills/<name>/SKILL.md` 和 `mcp.json` 在固定位置。eta 的私有数据放在 `extensions["tech.0xfe.eta"]` 里，不认识这个扩展的客户端把它当普通插件加载。
+Plugins give agents skills and MCP servers, in the format [Agent Plugins 1.0.0](https://agent-plugins.org): a `plugin.json` at the root, with `skills/<name>/SKILL.md` and `mcp.json` in fixed locations. eta's private data lives in `extensions["tech.0xfe.eta"]`; clients that do not recognize this extension load it as an ordinary plugin.
 
-代码在 `apps/daemon/src/plugin-*.ts`（主 node 和 daemon 共用的读取、启动、文件同步）和 `apps/eta/src/plugins/`（来源、配置、工具、wire）。字段校验是纯函数，在 `packages/client-contracts/src/plugin-fields.ts`，host 和前端共用，host 的结果是权威。
+The code is in `apps/daemon/src/plugin-*.ts` (reading, startup, and file sync shared by the main node and the daemon) and `apps/eta/src/plugins/` (sources, configuration, tools, wire). Field validation is a pure function in `packages/client-contracts/src/plugin-fields.ts`, shared by the host and the frontend; the host's result is authoritative.
 
-## 从哪里来
+## Where they come from
 
-- **本地**：`~/.eta/plugins/<目录>/`，改了就重读。主 node 每 2 秒比一次文件签名（路径、大小、修改时间），开会话前再比一次。`data` 这个目录名被 `PLUGIN_DATA` 占用，不算插件。这个目录也是 eta-server 用户插件的位置：有 `plugin.json` 的归这里，`package.json` 带 `eta-plugin` 的归它，互不打扰。
-- **git**：`{ repo, rev, path }`。`rev` 解析成 commit 后固定下来，要用户手动「更新」才移动。文件在 `<dataDir>/plugin-sources/`。
+- **Local**: `~/.eta/plugins/<directory>/`; re-read on change. The main node compares file signatures (path, size, modification time) every 2 seconds, and again before opening a session. The directory name `data` is reserved by `PLUGIN_DATA` and is not treated as a plugin. This directory is also where eta-server user plugins live: those with `plugin.json` belong here, those whose `package.json` includes `eta-plugin` belong there; they do not interfere with each other.
+- **git**: `{ repo, rev, path }`. Once `rev` resolves to a commit it is pinned and only moves when the user manually selects "Update". Files are in `<dataDir>/plugin-sources/`.
 
-插件的身份是 manifest 的 `name`。被规范拒绝的插件也会列出来，用目录名显示，并说明原因。
+A plugin's identity is the manifest's `name`. Plugins rejected by the spec are also listed, displayed by directory name, with the reason.
 
-## 规范的失败边界
+## Spec failure boundaries
 
-| 情况                                                                                          | 结果                                  |
+| Case | Result |
 | --------------------------------------------------------------------------------------------- | ------------------------------------- |
-| `plugin.json` 缺失、不是合法 JSON、`$schema` 不识别、字段类型错、名字不合规、解析到插件根之外 | 拒绝整个插件                          |
-| 未知顶层字段、`extensions` 不是对象                                                           | 报告并忽略，继续加载                  |
-| 未实现的命名空间                                                                              | 不读                                  |
-| `mcp.json` 不是合法 JSON、`$schema` 不识别或版本不一致、多余字段、解析到根之外、不是文件      | 这个插件的 MCP 关闭，skill 照常       |
-| 单个 server 无效（字段、`command`、`cwd`、`url`、header、`env` 里有保留名）                   | 跳过这个 server                       |
-| `sse` 传输                                                                                    | 跳过并报告：oar 的 `McpServer` 不支持 |
-| `skills` 不是目录                                                                             | skill 无效，MCP 照常                  |
-| 单个 skill 不合 Agent Skills 规范或解析到根之外                                               | 跳过这个 skill                        |
+| `plugin.json` is missing, not valid JSON, has an unrecognized `$schema`, wrong field type, invalid name, or resolves outside the plugin root | Reject the entire plugin |
+| Unknown top-level fields, `extensions` is not an object | Report and ignore; continue loading |
+| Unimplemented namespace | Not read |
+| `mcp.json` is not valid JSON, has an unrecognized `$schema` or version mismatch, has extra fields, resolves outside the root, or is not a file | MCP for this plugin is disabled; skills continue as usual |
+| A single server is invalid (fields, reserved names in `command`, `cwd`, `url`, header, `env`) | Skip this server |
+| `sse` transport | Skip and report: oar's `McpServer` does not support it |
+| `skills` is not a directory | Skill is invalid; MCP continues as usual |
+| A single skill does not conform to the Agent Skills spec or resolves outside the root | Skip this skill |
 
-报告显示在设置页的插件条目下。只看 `skills/` 的直接子目录，不往深处找。
+Reports are shown under the plugin entry on the settings page. Only direct subdirectories of `skills/` are inspected; there is no deeper search.
 
-## 配置
+## Configuration
 
 `extensions["tech.0xfe.eta"]`：
 
@@ -52,69 +52,69 @@
 }
 ```
 
-- `config` 是封闭 schema，不是 JSON Schema。共用键 `type`、`title`、`description`、`required`、`default`、`secret`、`agent`；`string` 有 `pattern`、`minLength`、`maxLength`，`number` 有 `int`、`min`、`max`，`select` 有 `options`、`multiple`、`minItems`、`maxItems`。任何未知键让 `config` 整体无效：插件留在待配置，并报告原因。
-- `secret: true` 只能用于 `string`，不能有 `default`。
-- `pattern` 用 RE2（`re2js`）执行，匹配时间和输入长度成线性，所以作者写的正则不会拖住 host。环视和反向引用不是 RE2，算 `config` 无效。模式最长 512 字符，字符串值最长 64 KiB。
-- `mcp.<server>.env` 和 `headers` 把字段送到 server，不写进 `mcp.json`。`mcp.json` 保持规范要求的样子：`${PLUGIN_ROOT}`、`${PLUGIN_DATA}` 单次展开，别的都不展开。多选字段用逗号连接。没有值的字段不设这个变量，也不加这个 header。
-- `requires` 只用于提示：每台机器逐个检查，缺了显示在设置页。
+- `config` is a closed schema, not JSON Schema. Shared keys are `type`, `title`, `description`, `required`, `default`, `secret`, `agent`; `string` has `pattern`, `minLength`, `maxLength`; `number` has `int`, `min`, `max`; `select` has `options`, `multiple`, `minItems`, `maxItems`. Any unknown key invalidates `config` as a whole: the plugin remains pending configuration, and the reason is reported.
+- `secret: true` can only be used on `string`, and cannot have a `default`.
+- `pattern` is executed with RE2 (`re2js`); matching time is linear in input length, so regexes written by authors cannot stall the host. Lookarounds and backreferences are not RE2 and make `config` invalid. Patterns are at most 512 characters, and string values at most 64 KiB.
+- `mcp.<server>.env` and `headers` pass fields to the server; they are not written into `mcp.json`. `mcp.json` stays as the spec requires: `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` are expanded once, and nothing else is expanded. Multi-select fields are joined with commas. Fields without a value do not set this variable or add this header.
+- `requires` is informational only: checked per machine, and anything missing is shown on the settings page.
 
-配置全局一份，`seal` 成一个 JSON 存进 `plugin_config`。secret 不经 wire 返回，留空表示不改，`null` 表示清除。host 拒绝保存不合字段的值；缺必填项可以保存，状态留在待配置。
+There is one global configuration; it is `seal`ed into one JSON object and stored in `plugin_config`. Secrets are not returned over the wire; leaving blank means unchanged, and `null` means clear. The host refuses to save values that do not match the fields; missing required items can still be saved, with the state remaining pending configuration.
 
-## 状态
+## Status
 
-`待配置`（`needs_config`）/ `可启用`（`ready`）。必填项没填、保存的值不合当前字段，或者 `config` 无效，都是待配置。只有可启用的插件能被勾选。
+`Needs configuration` (`needs_config`) / `Ready` (`ready`). Missing required fields, saved values that do not match the current fields, or an invalid `config` all mean the plugin needs configuration. Only ready plugins can be selected.
 
-升级后配置不再合法时退回待配置：已启用的智能体保留勾选，会话跳过它，设置页和智能体编辑器都有提示。改好后自动恢复。
+When config is no longer valid after an upgrade, fall back to pending configuration: enabled agents remain checked, sessions skip it, and both the settings page and agent editor show a notice. It recovers automatically once fixed.
 
-## 会话拿到什么
+## What a session gets
 
-| 运行方式            | Skill                                                | MCP                                  |
+| Runtime            | Skill                                                | MCP                                  |
 | ------------------- | ---------------------------------------------------- | ------------------------------------ |
-| 自带内核            | 目录接到 `skillDirsFor`，进系统提示的 skills 块      | 这一版不启动，界面标明，下一个任务接 |
-| Claude Code         | `--plugin-dir` 原生加载一个只含合法 skill 的生成目录 | oar 的 `mcpServers`                  |
-| Codex、OpenCode、Pi | 名字、描述和路径写进系统提示，agent 自己读文件       | oar 的 `mcpServers`                  |
+| Built-in kernel            | Directory wired into `skillDirsFor`, included in the skills block of the system prompt      | Not started in this version; marked in the UI; picked up by the next task |
+| Claude Code         | `--plugin-dir` natively loads a generated directory containing only valid skills | oar's `mcpServers`                  |
+| Codex, OpenCode, Pi | Name, description, and path written into the system prompt; the agent reads the files itself       | oar's `mcpServers`                  |
 
-Claude Code 不能直接拿插件目录：`--plugin-dir` 会把它当 Claude 插件，运行里面的 `hooks/`、加载 `commands/`，而 eta 不支持这些。生成目录在 `<dataDir>/plugin-runtime/claude/<内容哈希>/<插件名>/skills/`，里面是指向合法 skill 的符号链接。
+Claude Code cannot use the plugin directory directly: `--plugin-dir` treats it as a Claude plugin, runs its `hooks/`, and loads its `commands/`, which eta does not support. The generated directory is at `<dataDir>/plugin-runtime/claude/<content hash>/<plugin name>/skills/`, containing symlinks to valid skills.
 
-运行时不接受工作目录，所以 stdio server 经 `/bin/sh -c 'cd "$0" && exec "$@"'` 启动，cwd 默认是插件根。server 名是 `<插件>-<server>`，非法字符换成 `_`。
+The runtime does not accept a working directory, so the stdio server is started via `/bin/sh -c 'cd "$0" && exec "$@"'`, with cwd defaulting to the plugin root. The server name is `<plugin>-<server>`; invalid characters are replaced with `_`.
 
-`PLUGIN_ROOT` 和 `PLUGIN_DATA` 由 eta 设置，覆盖同名环境变量。`PLUGIN_DATA` 在 `<dataDir>/plugins/data/<name>`，插件更新时保留，主 node 和 daemon 各有各的。
+`PLUGIN_ROOT` and `PLUGIN_DATA` are set by eta and override environment variables with the same names. `PLUGIN_DATA` is at `<dataDir>/plugins/data/<name>`, retained across plugin updates, with separate copies for the main node and the daemon.
 
-配置或文件变化时，session 的 stamp 跟着变（`<名字>@<内容哈希>:<配置保存时间>`），相关会话下次打开时重开。
+When config or files change, the session's stamp changes with it (`<name>@<content hash>:<config save time>`), and affected sessions reopen on next open.
 
-## 其他机器
+## Other machines
 
-会话开在 daemon 上时，`RemotePlace` 先用 `machine.pluginHave` 问它缺哪些内容哈希，再用 `machine.pluginPut` 分块发文件（每批不超过一帧，符号链接跟随，离开插件根的跳过），daemon 校验哈希后才放进 `<dataDir>/plugins/store/<hash>/`。
+When a session is opened on a daemon, `RemotePlace` first uses `machine.pluginHave` to ask which content hashes it lacks, then sends files in chunks with `machine.pluginPut` (each batch no larger than one frame, symlinks followed, anything outside the plugin root skipped); the daemon places them in `<dataDir>/plugins/store/<hash>/` only after verifying the hashes.
 
-`machine.open` 带上 `plugins`（哈希和给每个 server 的值）和 `redactions`。这些只在 daemon 内存里，启动 server 时注入，不落盘。自带内核的会话不起 MCP，所以不发 server 的值，但 `redactions` 仍含 secret。
+`machine.open` includes `plugins` (hashes and the values for each server) and `redactions`. These live only in daemon memory, are injected when the server starts, and are never written to disk. Sessions with the built-in kernel do not start MCP, so no server values are sent, but `redactions` still contains secrets.
 
-## agent 读取配置
+## Agent reads config
 
-`get_plugin_config({ plugin, fields? })` 是宿主工具，随工具表进入 realm（`eta.platform.get_plugin_config`）。只能读这个智能体启用的、可启用状态的插件。
+`get_plugin_config({ plugin, fields? })` is a host tool that enters the realm with the tool table (`eta.platform.get_plugin_config`). It can only read plugins that this agent has enabled and that are in an enabled state.
 
-| 级别    | 用于      | 返回                                 |
+| Level    | Used for      | Returns                                 |
 | ------- | --------- | ------------------------------------ |
-| `read`  | 非 secret | 值                                   |
-| `file`  | secret    | 0600 临时文件的路径，值不进结果      |
-| `value` | secret    | 明文，会进 journal 和回复的工具记录  |
-| `none`  | 两者      | 「不可读」，并说明插件进程已经拿到了 |
+| `read`  | Non-secret | Value                                   |
+| `file`  | secret    | Path to a 0600 temporary file; the value is not included in the result      |
+| `value` | secret    | Plaintext; goes into the journal and into tool records in replies  |
+| `none`  | Both      | "Not readable", with a note that the plugin process has already received it |
 
-非 secret 默认 `read`，secret 默认 `none`。manifest 声明的是上限，用户可以调低，不能调高。
+Non-secrets default to `read`, and secrets default to `none`. The manifest declares the upper bound; users can lower it but cannot raise it.
 
-`file` 写在会话所在的机器上（经 `SshTransport`，远端走 link），每次读取一个新的 0700 目录，值走 stdin，不进任何进程的参数。文件一小时后删除，这台机器的下一次读取也会清理过期的。
+`file` is written on the machine where the session runs (via `SshTransport`; remote goes over link), with a new 0700 directory for each read. The value goes through stdin and never enters any process's arguments. The file is deleted after one hour, and the next read on that machine also cleans up expired ones.
 
-`file`、`value` 每次读取都写审计（`plugin_audit`：会话、智能体、插件、字段、时间，不记值），设置页能看到。
+Every read of `file` or `value` writes an audit entry (`plugin_audit`: session, agent, plugin, field, time; the value is not recorded), visible on the settings page.
 
-**不要打印 secret。** `value` 的结果会进模型上下文和 journal，这是用户选这个级别时接受的；需要用值的脚本应该读 `file` 的路径。
+**Do not print secrets.** The result of `value` goes into the model context and journal, which the user accepts when choosing this level; scripts that need the value should read the path from `file`.
 
-## 脱敏
+## Redaction
 
-自带内核在工具结果和进度更新进入模型和 journal 之前，把已知 secret 替换成 `[secret <插件>.<字段>]`（`redactionMiddleware`，主 node 和 daemon 都装）。范围是所有插件保存的 secret，除了这个智能体能以 `value` 读的那些。
+Before tool results and progress updates enter the model and journal, the built-in kernel replaces known secrets with `[secret <plugin>.<field>]` (`redactionMiddleware`, installed on both the main node and the daemon). The scope is all secrets saved by all plugins, except those this agent can read with `value`.
 
-这只是防意外：匹配完全相同的文本，脚本编码过的值拦不住，短于 4 个字符的不处理。外部运行时内部的工具输出 eta 看不到，也管不到。
+This is only a safeguard against accidents: it matches exact text, cannot catch values encoded by scripts, and ignores values shorter than 4 characters. eta cannot see or control tool output inside external runtimes.
 
-## 安全边界
+## Security boundary
 
-stdio server 就是在机器上运行作者的代码，不是沙盒，所以启用前会显示它运行的命令或连接地址。`npx` 这类 server 运行时自己装包，不经过我们的检查。
+A stdio server runs the author's code on the machine and is not a sandbox, so before enabling it, the command it runs or the address it connects to is shown. Servers like `npx` install packages themselves at runtime, bypassing our checks.
 
-secret 只交给 server 的环境，但和 agent 同一个用户运行，agent 有 shell 时可以从 `/proc/<pid>/environ` 读到。`none` 的意思是「不进上下文，也没有提供读取的途径」，不是操作系统级隔离。
+Secrets are only passed to the server's environment, but it runs as the same user as the agent; if the agent has a shell, it can read them from `/proc/<pid>/environ`. `none` means "does not enter the context, and no way to read it is provided", not OS-level isolation.

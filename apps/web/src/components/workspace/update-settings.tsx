@@ -42,7 +42,7 @@ import {
 import { wireErrorMessage } from "@/queries/wire";
 import { DesktopUpdate } from "./desktop-update";
 
-// Settings → 更新: which version this host is, whether there is a newer one, and the button. The
+// Settings → Update: which version this host is, whether there is a newer one, and the button. The
 // work happens in a process of its own (`apps/eta/src/upgrade/worker.ts`); from the moment the
 // service stops this page is under `UpgradeScreen`. In a window connected to a remote host all of
 // this is that host's, so it says which one: the button does not touch the computer it is on.

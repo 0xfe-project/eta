@@ -36,7 +36,7 @@ export function Sheet(props: {
   );
 }
 
-/** A question with two answers: 06g 删除确认 and its kin. */
+/** A question with two answers: 06g Delete Confirmation and its kin. */
 export function ConfirmSheet(props: {
   open: boolean;
   title: string;

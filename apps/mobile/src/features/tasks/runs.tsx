@@ -155,7 +155,7 @@ function RunsScreen(props: { id: string }) {
   );
 }
 
-/** 执行记录 from a task: straight to the log when there is only one to read. */
+/** Run log from a task: straight to the log when there is only one to read. */
 export function openRuns(task: TaskDetail): void {
   const readable = task.runs.filter((run) => run.sessionId !== null);
   const only = readable[0];

@@ -44,7 +44,7 @@ import { AddMachine, Approval } from "./add-machine";
 import { PhoneLinkButton } from "./phone-link";
 import { when } from "./routine-format";
 
-// Settings → 机器: the primary and the machines that run the daemon. Adding one turns this panel
+// Settings → Machines: the primary and the machines that run the daemon. Adding one turns this panel
 // into the way in (`add-machine.tsx`): a command to run on it, or an install over SSH. A machine
 // shows up here pending until its fingerprint is approved; the user's own tailnet nodes are let in
 // without one.
@@ -357,7 +357,7 @@ function MachineCard({ machine }: { machine: MachineView }) {
   );
 }
 
-/** Settings → 机器. */
+/** Settings → Machines. */
 export function MachineSettings() {
   const { t: translateText } = useTranslation(["machines", "common"] as const);
   const { machines, loaded, error } = useMachines();

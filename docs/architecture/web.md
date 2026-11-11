@@ -1,71 +1,71 @@
-# 读网页与搜索
+# Reading web pages and searching
 
-两个产品工具：`web_fetch` 读一个网页，返回 Markdown；`web_search` 搜索网页，返回排好序的结果。两者都在主 node 的进程里直接调用库（`@searxng-js/sex-scrape`、`sex-search`、`sex-searxng`、`sex-page`，0.1.1），不另起服务。代码在 `apps/eta/src/web/`。
+Two product tools: `web_fetch` reads a web page and returns Markdown; `web_search` searches the web and returns ranked results. Both call libraries directly in the main node's process (`@searxng-js/sex-scrape`, `sex-search`, `sex-searxng`, `sex-page`, 0.1.1), without starting a separate service. The code is in `apps/eta/src/web/`.
 
-## 为什么是会话工具
+## Why session tools
 
-和 `open_pull_request` 一样，它们是 `sessionTools` 交给每个会话的工具，而不是 MCP 服务器：
+Like `open_pull_request`, these are tools that `sessionTools` hands to each session, not MCP servers:
 
-- 要调用的是同一个进程里的库，不需要 MCP 客户端、端口或子进程来连。
-- daemon 上的会话经 `tool.call` 拿到它们（产品工具的代理，见[机器与 daemon](machines.md)），抓取和搜索都在主 node 上发生；daemon 不需要装这些库，`bun build --compile` 出的单文件也不变。
-- 读网页是每个智能体都该有的基本能力，所以默认就在，和任务、产物的工具一样。
+- The libraries called are in the same process; no MCP client, port, or subprocess is needed to connect.
+- Sessions on the daemon get them via `tool.call` (proxies for product tools, see [Machines and daemon](machines.md)); both scraping and search happen on the main node; the daemon does not need these libraries installed, and the single file produced by `bun build --compile` is unchanged.
+- Reading web pages is a basic capability every agent should have, so it is available by default, just like the task and artifact tools.
 
-## 开关和配置
+## Switches and configuration
 
-| 主 node 参数          | 含义                                                                   |
+| Main node parameter          | Meaning                                                                   |
 | --------------------- | ---------------------------------------------------------------------- |
-| （默认）              | 两个工具都在；`web_search` 用主 node 托管的 SearXNG                    |
-| `--searxng-url <url>` | 用外部的 SearXNG（要开 `json` 格式）。`ETA_SEARXNG_URL` 同义，参数优先 |
-| `--no-web`            | 两个工具都不加载                                                       |
+| (Default)              | Both tools are present; `web_search` uses the main node-hosted SearXNG                    |
+| `--searxng-url <url>` | Use an external SearXNG (the `json` format must be enabled). `ETA_SEARXNG_URL` is synonymous; the flag takes precedence |
+| `--no-web`            | Neither tool is loaded                                                       |
 
-`startHost` 默认不加载（测试起的 host 没有这两个工具），`main.ts` 把它打开，和 LLM 网关的做法一样。
+`startHost` does not load them by default (the host started by tests does not have these two tools); `main.ts` enables them, the same way as the LLM gateway.
 
-## 参数为什么是 eta 自己写的
+## Why eta defines the parameters itself
 
-sex-scrape / sex-search 0.1.1 的 zod schema 描述已经是中性的说法，但工具的参数仍然用 eta 自己的 TypeBox 定义（描述借鉴 sex-lite 的 MCP 工具）：
+The zod schema descriptions in sex-scrape / sex-search 0.1.1 are already neutrally worded, but the tools' parameters are still defined with eta's own TypeBox (descriptions borrow from sex-lite's MCP tools):
 
-- harness 用 TypeBox 校验参数（`defineTool`），sex 的是 zod，要转一道。
-- sex 的 `ScrapeRequest` / `SearchRequest` 是 Firecrawl 的整套选项：`formats`、`actions`、`waitFor`、`headers`、`maxAge`、`parsers`、`proxy`、`scrapeOptions`……大半要浏览器、LLM 或缓存，在 eta 里只会得到 501；`headers`、`timeout` 这类也不该交给模型。给模型看的越少，它越少犯错，提示词也越短。
-- eta 要的东西 sex 的 schema 里没有：`web_fetch` 的 `offset`（分段读），`web_search` 用 `timeRange` 枚举代替 Firecrawl 的 `tbs` 字符串，`limit` 和 `includeDomains` 的上限更小。
+- The harness validates parameters with TypeBox (`defineTool`); sex's are zod, so a conversion is needed.
+- sex's `ScrapeRequest` / `SearchRequest` are Firecrawl's full set of options: `formats`, `actions`, `waitFor`, `headers`, `maxAge`, `parsers`, `proxy`, `scrapeOptions`… most require a browser, LLM, or cache and would only return 501 in eta; things like `headers` and `timeout` should not be exposed to the model either. The less the model is shown, the fewer mistakes it makes, and the shorter the prompt.
+- Things eta needs are absent from sex's schema: `web_fetch`'s `offset` (chunked reading), `web_search` uses the `timeRange` enum instead of Firecrawl's `tbs` string, and the upper limits for `limit` and `includeDomains` are smaller.
 
 ## web_fetch
 
-- 参数：`url`；`onlyMainContent`（默认 true，Defuddle 提取正文；false 是整页）；`offset`（从 Markdown 的第几个字符开始，默认 0）。
-- 结果：`Title:`、`URL:`（重定向之后的地址）、库给的 `Warning:`，然后是 Markdown。
-- **长度**：一次最多 50KB（UTF-8 字节，和 `read` 工具一样），尽量在换行处断开，不拆代理对。没读完时末尾写明 `[Showing characters A-B of N. Call web_fetch with the same url and offset=B for the next part.]`，最后一段写 `This is the end of the page.`。
-- **续读不重抓**：抓到的页面在内存里留 10 分钟（最多 16 页）。`offset > 0` 先用这份，保证各段来自同一份内容；`offset` 为 0 总是重新抓。
-- **SSRF**：sex-egress 的防护保持开启：回环、私网、链路本地（含 `169.254.169.254`）、ULA 一律拒绝（`PRIVATE_NETWORK_BLOCKED`），DNS 校验后把连接固定到校验过的地址，每一跳重定向都再查一次。没有任何配置项能关掉它；要读本机或内网，智能体用 bash。
-- 单页最大 10 MiB，默认 30 秒；PDF 也会转成 Markdown（unpdf）。不支持浏览器渲染和 LLM 格式。
+- Parameters: `url`; `onlyMainContent` (default true, Defuddle extracts the main content; false is the full page); `offset` (the character in the Markdown to start from, default 0).
+- Result: `Title:`, `URL:` (the address after redirects), the library-provided `Warning:`, then the Markdown.
+- **Length**: at most 50KB per call (UTF-8 bytes, same as the `read` tool), breaking at newlines where possible and never splitting surrogate pairs. When not finished, the end states `[Showing characters A-B of N. Call web_fetch with the same url and offset=B for the next part.]`; the last part says `This is the end of the page.`
+- **Continuation does not refetch**: fetched pages are kept in memory for 10 minutes (at most 16 pages). For `offset > 0`, this copy is used first to ensure all parts come from the same content; `offset` 0 always refetches.
+- **SSRF**: sex-egress protections remain enabled: loopback, private networks, link-local (including `169.254.169.254`), and ULA are always rejected (`PRIVATE_NETWORK_BLOCKED`); after DNS validation the connection is pinned to the validated address, and every redirect hop is checked again. No configuration option can disable it; to read the local machine or an intranet, the agent uses bash.
+- Maximum 10 MiB per page, 30 seconds by default; PDFs are also converted to Markdown (unpdf). Browser rendering and LLM formats are not supported.
 
 ## web_search
 
-- 参数：`query`；`limit`（每个来源的条数，1–20，默认 5）；`sources`（`web`、`news`）；`includeDomains`（至多 10 个，每个是一次单独的查询）或 `excludeDomains`；`timeRange`（`day`、`week`、`month`、`year`）；`lang`。
-- 结果：编号列表，每条是标题、URL、摘要；新闻另起一段，带日期；SearXNG 做不到的参数在 `Warning:` 里写明。
-- 不顺带抓取结果页面：描述里让模型对需要的几个 URL 用 `web_fetch`，上下文只花在真要读的页面上。
+- Parameters: `query`; `limit` (number of results per source, 1–20, default 5); `sources` (`web`, `news`); `includeDomains` (at most 10, each one a separate query) or `excludeDomains`; `timeRange` (`day`, `week`, `month`, `year`); `lang`.
+- Result: a numbered list, each entry with title, URL, and snippet; news is a separate section with dates; parameters SearXNG cannot handle are noted in `Warning:`.
+- Do not fetch result pages along the way: the description tells the model to use `web_fetch` for the few URLs it needs, so context is spent only on pages it actually reads.
 
 ## SearXNG
 
-- **外部**：`--searxng-url`。主 node 只是去问它，不管它的配置。
-- **托管**：没给地址时，`sex-searxng` 把 `@searxng-js/searxng` 的预编译 SearXNG 作为主 node 的子进程运行：第一次搜索时才启动（第一次要多等几秒），只监听回环，连续启动失败会冷却 30 秒；它盯着自己的 stdin 管道，主 node 退出（哪怕被 SIGKILL）它也跟着退出，主 node 正常关闭时 `close()` 停掉它。
-- **平台**：预编译二进制只有 linux-x64（glibc ≥ 2.35）、darwin-arm64、win32-x64，随 `bun install` 作为可选依赖装上。其他平台（linux-arm64、musl、Intel Mac）不提供 `web_search`，启动时警告一次，提示用 `--searxng-url`；`web_fetch` 照常。`deploy/Dockerfile` 的 `oven/bun` 镜像是 Debian（glibc 2.36），x64 上可以托管；arm64 镜像要给外部地址。
+- **External**: `--searxng-url`. The main node only queries it and does not manage its configuration.
+- **Managed**: when no address is given, `sex-searxng` runs the prebuilt SearXNG from `@searxng-js/searxng` as a child process of the main node: it starts only on the first search (the first one takes a few extra seconds), listens only on loopback, and consecutive startup failures trigger a 30-second cooldown; it watches its own stdin pipe, so it exits when the main node exits (even if SIGKILLed), and `close()` stops it when the main node shuts down normally.
+- **Platforms**: the prebuilt binaries are only linux-x64 (glibc ≥ 2.35), darwin-arm64, and win32-x64, installed as optional dependencies with `bun install`. Other platforms (linux-arm64, musl, Intel Mac) do not provide `web_search`; a warning is shown once at startup suggesting `--searxng-url`; `web_fetch` works as usual. The `oven/bun` image in `deploy/Dockerfile` is Debian (glibc 2.36), so managed mode works on x64; the arm64 image needs an external address.
 
-## 代理
+## Proxy
 
-eta 的网络设置（`@eta/server` 的 `initializeNetwork`）把代理写进环境变量。抓取每次调用时读 `HTTPS_PROXY` / `HTTP_PROXY`，作为库的 `proxyUrl`；托管的 SearXNG 在第一次搜索时创建，拿到同一个代理（写进它的临时 settings.yml，文件 0600，起来后即删）。走代理时请求不能再固定到校验过的地址，主机名仍然先解析、校验一遍，防重绑定交给代理。
+eta's network setup (`initializeNetwork` in `@eta/server`) writes the proxy into environment variables. Scraping reads `HTTPS_PROXY` / `HTTP_PROXY` on each call and passes it to the library as `proxyUrl`; the managed SearXNG is created on the first search and receives the same proxy (written to its temporary settings.yml, mode 0600, deleted once it starts). When going through a proxy, requests can no longer be pinned to the validated address; the hostname is still resolved and validated first, and rebinding protection is left to the proxy.
 
-## 运行时
+## Runtime
 
-这些包的 `engines` 写的是 `node >= 24`，而仓库根的 `engines` 是 `node >= 22.12`。实际上它们只在主 node 里运行，主 node 永远是 Bun（`bun apps/eta/src/main.ts`，Docker 和桌面壳也一样），测试是 `bun --bun vitest`；daemon 不加载它们。所以：
+These packages declare `node >= 24` in `engines`, while the repository root's `engines` is `node >= 22.12`. In practice they only run in the main node, which is always Bun (`bun apps/eta/src/main.ts`, the same for Docker and the desktop shell), and tests use `bun --bun vitest`; the daemon does not load them. So:
 
-- 不需要 Node 24，也不改根的 `engines`（那是给 Node 跑的工具链的，比如 eslint、knip）。
-- 在 Bun 上，库的可选 peer 依赖都不用：请求用 Bun 的 `fetch`（不要 `undici`），Markdown 转 HTML 用 `Bun.markdown`（不要 `marked`），SearXNG 的代理配置用 `Bun.YAML`（不要 `yaml`）。所以 `apps/eta` 不声明它们。以后要在 Node 上跑主 node，得先补上这三个。
+- No Node 24 required, and the root `engines` is not changed (that's for the toolchain running on Node, e.g. eslint, knip).
+- On Bun, none of the library's optional peer dependencies are used: requests use Bun's `fetch` (not `undici`), Markdown to HTML uses `Bun.markdown` (not `marked`), and SearXNG's proxy config uses `Bun.YAML` (not `yaml`). So `apps/eta` does not declare them. To run the main node on Node in the future, these three must be added first.
 
-## 错误和日志
+## Errors and logging
 
-- 库的错误是 `AppError`（从 `@searxng-js/sex-scrape` 导入），主 node 自己的拒绝（offset 越界、没有 SearXNG）也用它，工具只有一种失败要描述。判断用 `AppError.isInstance(e)`，不用 `instanceof`：每个发布包里各打包了一份这个类。模型看到的是 `CODE: message`（例如 `PRIVATE_NETWORK_BLOCKED: ...`、`SEARCH_BACKEND_UNAVAILABLE: ...`），作为工具错误。
-- 取消和超时：工具把会话的 `AbortSignal` 传给库。`search()` 等托管 SearXNG 启动时也看这个 signal 和请求的 `timeout`（sex-search 0.1.1 起），取消或超时立刻是 `TIMEOUT`（“... while waiting for SearXNG to start”），SearXNG 在后台接着启动，下一次搜索直接用。
-- 日志：库自己不写 stdout/stderr，而是发到 `node:diagnostics_channel` 的 `searxng-js:sex:{scrape,search,searxng,page}`。主 node 订阅这几个频道，`warn` 和 `error` 进主 node 的 `warn`（`[eta] web: <包>: <消息> k=v`），`debug`、`info`（每次抓取、SearXNG 自己的输出）不记。
+- Library errors are `AppError` (imported from `@searxng-js/sex-scrape`); the main node's own rejections (offset out of bounds, no SearXNG) use it too, so tools have only one kind of failure to describe. Check with `AppError.isInstance(e)`, not `instanceof`: each published package bundles its own copy of this class. The model sees `CODE: message` (e.g. `PRIVATE_NETWORK_BLOCKED: ...`, `SEARCH_BACKEND_UNAVAILABLE: ...`) as a tool error.
+- Cancellation and timeouts: tools pass the session's `AbortSignal` to the library. While `search()` waits for the managed SearXNG to start, it also watches this signal and the request's `timeout` (since sex-search 0.1.1); cancellation or timeout immediately yields `TIMEOUT` ("... while waiting for SearXNG to start"), SearXNG continues starting in the background, and the next search uses it directly.
+- Logging: the library does not write to stdout/stderr itself; it publishes to `searxng-js:sex:{scrape,search,searxng,page}` on `node:diagnostics_channel`. The main node subscribes to these channels; `warn` and `error` go to the main node's `warn` (`[eta] web: <package>: <message> k=v`), while `debug` and `info` (every scrape, SearXNG's own output) are not logged.
 
-## 测试
+## Testing
 
-`apps/eta/test/web.test.ts`：抓取用测试自己起的回环 fixture 站点（测试里才打开 `allowPrivateNetwork`，并验证默认会拒绝它），搜索用假的 SearXNG，外加一次经脚本模型在真会话上调用两个工具。访问外网和托管 SearXNG 的两个测试默认跳过，`ETA_WEB_LIVE=1` 才跑。
+`apps/eta/test/web.test.ts`: scraping uses a loopback fixture site started by the test itself (`allowPrivateNetwork` is enabled only in tests, and verifies that it is rejected by default), search uses a fake SearXNG, plus one call through the scripted model to both tools in a real session. The two tests that access the external network and managed SearXNG are skipped by default and only run with `ETA_WEB_LIVE=1`.

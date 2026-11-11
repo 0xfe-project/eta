@@ -96,14 +96,14 @@ function markdownHtml(source: string): string {
 function contextBlock(payload: EtaMailEnvelope["payload"]): string {
   const rows: [string, string][] = [];
   const needed = payload.ask.needed ?? payload.ask.question;
-  if (needed !== null) rows.push(["需要你", needed]);
-  if (payload.ask.by !== null) rows.push(["期限", payload.ask.by]);
-  if (payload.work.doing !== null) rows.push(["在做", payload.work.doing]);
+  if (needed !== null) rows.push(["Needs you", needed]);
+  if (payload.ask.by !== null) rows.push(["Due", payload.ask.by]);
+  if (payload.work.doing !== null) rows.push(["Doing", payload.work.doing]);
   const where = [payload.work.repo, payload.work.branch]
     .filter((part): part is string => part !== null)
     .join(" @ ");
   const place = where !== "" ? where : payload.from.cwd;
-  if (place !== null) rows.push(["位置", place]);
+  if (place !== null) rows.push(["Location", place]);
   if (rows.length === 0) return "";
   return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:6px 0 22px;border-top:1px solid #eceef0;">${rows
     .map(
@@ -141,7 +141,7 @@ export function renderMail(input: MailTemplateInput): string {
 <tr><td style="padding:20px 34px;border-bottom:1px solid #eceef0;"><table role="presentation" width="100%"><tr><td style="font:700 12px Arial,sans-serif;letter-spacing:.12em;color:#17191b;">ETA / MAIL</td><td align="right"><span style="padding:6px 10px;background:#f1f3f4;color:#5f6469;font:700 10px Arial,sans-serif;letter-spacing:.08em;">${escape(input.status)}</span></td></tr></table></td></tr>
 <tr><td align="center" style="padding:36px 28px 24px;"><img src="cid:eta-logo@eta" width="104" height="104" alt="${escape(encodeLogoAlt(input.envelope))}" style="display:block;border:0;margin:0 auto;"><table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:15px auto 0;"><tr><td style="height:20px;line-height:20px;white-space:nowrap;">${points}</td></tr></table></td></tr>
 <tr><td style="padding:0 40px 34px;"><p style="margin:0 0 7px;color:#8a8f94;font:700 10px Arial,sans-serif;letter-spacing:.11em;text-transform:uppercase;">ETA TASK UPDATE</p><h1 style="margin:0 0 20px;color:#17191b;font:700 30px/1.22 Arial,sans-serif;letter-spacing:-.03em;">${escape(input.title)}</h1>${markdownHtml(input.markdown)}${contextBlock(input.envelope.payload)}</td></tr>
-${input.ctaUrl ? `<tr><td align="center" style="padding:0 34px 30px;"><a href="${escape(input.ctaUrl)}" style="display:inline-block;min-width:180px;padding:16px 28px;background:#17191b;color:#fff;text-decoration:none;font:600 15px Arial,sans-serif;text-align:center;">打开会话</a></td></tr>` : ""}
-<tr><td style="padding:24px 40px 34px;border-top:1px solid #eceef0;"><p style="margin:0;color:#8a8f94;font:11px/1.5 ui-monospace,Menlo,monospace;overflow-wrap:anywhere;">${escape(input.messageId)}</p><p style="margin:10px 0 0;color:#9a9fa4;font:10px/1.5 Arial,sans-serif;">此邮件由 ETA 发送。agent 侧的完整上下文位于 X-ETA-Payload-* 邮件头、logo alt 与数据点 alt 中。</p></td></tr>
+${input.ctaUrl ? `<tr><td align="center" style="padding:0 34px 30px;"><a href="${escape(input.ctaUrl)}" style="display:inline-block;min-width:180px;padding:16px 28px;background:#17191b;color:#fff;text-decoration:none;font:600 15px Arial,sans-serif;text-align:center;">Open session</a></td></tr>` : ""}
+<tr><td style="padding:24px 40px 34px;border-top:1px solid #eceef0;"><p style="margin:0;color:#8a8f94;font:11px/1.5 ui-monospace,Menlo,monospace;overflow-wrap:anywhere;">${escape(input.messageId)}</p><p style="margin:10px 0 0;color:#9a9fa4;font:10px/1.5 Arial,sans-serif;">This email was sent by ETA. The full agent-side context is in the X-ETA-Payload-* headers, the logo alt, and the data point alt.</p></td></tr>
 </table><p style="margin:16px 0 0;color:#9ba0a5;font:10px Arial,sans-serif;letter-spacing:.08em;">ETA MULTI-AGENT COMMUNICATION</p></td></tr></table></body></html>`;
 }

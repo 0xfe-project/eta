@@ -35,7 +35,7 @@ async function start() {
     void navigator.serviceWorker.register("/sw.js");
   }
 
-  // 圈选元素, installed before the first React commit when turned on.
+  // element selection, installed before the first React commit when turned on.
   if (savedElementPicker()) await setElementPicker(true);
 
   await Promise.all([

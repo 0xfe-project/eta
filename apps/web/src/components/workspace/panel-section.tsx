@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
  * One block of the context panel: a name, how many, and whatever it holds.
  *
  * It is its own module because the panel is no longer one file's business: Captain's conversation
- * draws its own blocks (运营) in the same column as 任务/产物/成员/目标, and one 10-line heading is
+ * draws its own blocks (Operations) in the same column as Tasks/Artifacts/Members/Goals, and one 10-line heading is
  * not worth a circular import between the two.
  */
 export function Section({

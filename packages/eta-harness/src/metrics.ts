@@ -1,6 +1,6 @@
 /**
  * MetricsService — the observable numbers, computed from the bus (REFACTOR.md
- * §2.4, and the answer to "可观测性看板" in the original brief).
+ * §2.4, and the answer to "observability board" in the original brief).
  *
  * The runner emits what happens — frames while a message streams, the settled
  * message when it lands, a run start — and this service turns that into the

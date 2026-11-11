@@ -1,4 +1,4 @@
-// 03n 产物查看 and 03o 产物分享. The site runs in a web view from a preview address the host hands out
+// 03n Artifact view and 03o Artifact share. The site runs in a web view from a preview address the host hands out
 // for the version. That address carries an hour's capability, so it is asked for each time a version
 // is shown and kept nowhere else. Every page under it is served in a sandbox by the host.
 

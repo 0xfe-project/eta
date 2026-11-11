@@ -30,7 +30,7 @@ function Pane(props: { name: TabName; children: JSX.Element }) {
   );
 }
 
-/** 待处理 6 on the other tabs; on its own tab the count is the page's headline. */
+/** Pending 6 on the other tabs; on its own tab the count is the page's headline. */
 function label(name: TabName, text: string): string {
   if (name !== "inbox" || tab() === "inbox") return text;
   const waiting = pendingInteractions().length;

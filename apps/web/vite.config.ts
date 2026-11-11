@@ -64,7 +64,7 @@ export default defineConfig(({ mode }) => {
       },
     ],
     build: {
-      // Public, so React Grab (圈选元素, lib/element-picker.ts) can map the
+      // Public, so React Grab (element picking, lib/element-picker.ts) can map the
       // production bundle back to source files and component names.
       sourcemap: true,
       rolldownOptions: {

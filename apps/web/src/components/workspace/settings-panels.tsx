@@ -34,7 +34,7 @@ const PluginSettings = lazy(async () => ({
 }));
 
 /**
- * The sections the rail does not offer, by choice: 连接 is off in this build, and 审批 is the
+ * The sections the rail does not offer, by choice: Connections is off in this build, and Approvals is the
  * editor's only. The settings stay in force — `?settings=connections` still opens one — because
  * hiding the door is not the same as turning the feature off.
  */

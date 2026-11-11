@@ -170,7 +170,7 @@ function Folded(props: {
 
 /** A description opens on its first paragraph. */
 function descriptionPreview(text: string): string | undefined {
-  // Past the headings a draft's description is built from (`## 目标`): they say nothing yet.
+  // Past the headings a draft's description is built from (`## Goal`): they say nothing yet.
   const body = text
     .trim()
     .replace(/^#{1,6}\s.*$/gm, "")

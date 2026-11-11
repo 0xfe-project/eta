@@ -5,19 +5,19 @@ import { EnvFile } from "./env-file";
 export type Layer = "self" | "project" | "global";
 
 export interface LayerRoots {
-  /** 个人层，~/.eta/sessions/{id}/ */
+  /** Personal layer, ~/.eta/sessions/{id}/ */
   self: string;
-  /** 项目层，{project}/.eta/ （可选）*/
+  /** Project layer, {project}/.eta/ (optional) */
   project?: string;
-  /** 全局层，~/.eta/global/ （可选）*/
+  /** Global layer, ~/.eta/global/ (optional) */
   global?: string;
 }
 
 /**
- * 三层 env.js 的管理：self（个人）> project（项目）> global（全局）。
+ * Managing the three env.js layers: self (personal) > project > global.
  *
- * 解析只往外走，不往里走：项目层看不见个人包，个人层能用项目包。
- * 同名能力按优先级覆盖：self > project > global。
+ * Resolution only goes outward, never inward: the project layer can't see personal packages, the personal layer can use project packages.
+ * Same-name capabilities override by priority: self > project > global.
  */
 export class EnvLayers {
   readonly #layers: Map<Layer, EnvFile>;
@@ -34,8 +34,8 @@ export class EnvLayers {
   }
 
   /**
-   * 按优先级（self → project → global）查找能力。
-   * 返回第一个找到的层和能力源码。
+   * Look up a capability by priority (self → project → global).
+   * Return the first layer found and the capability source.
    */
   find(
     name: string,
@@ -52,15 +52,15 @@ export class EnvLayers {
   }
 
   /**
-   * 获取某一层的 EnvFile（可能不存在）。
+   * Get a layer's EnvFile (may not exist).
    */
   get(layer: Layer): EnvFile | undefined {
     return this.#layers.get(layer);
   }
 
   /**
-   * 判断某个文件路径属于哪一层的 env.js。
-   * 用于执行解析方向检查：项目层不得 import 个人层。
+   * Determine which layer's env.js a file path belongs to.
+   * Used for import-direction checks: the project layer must not import the personal layer.
    */
   layerOf(path: string): Layer | undefined {
     for (const [layer, file] of this.#layers) {
@@ -70,8 +70,8 @@ export class EnvLayers {
   }
 
   /**
-   * 判断某个能力属于哪一层。
-   * 用于 authorize：项目层和全局层的能力需要审批，个人层不需要。
+   * Determine which layer a capability belongs to.
+   * Used by authorize: project and global layer capabilities require approval, personal layer does not.
    */
   layerOfCapability(name: string): Layer | undefined {
     const found = this.find(name);
@@ -79,7 +79,7 @@ export class EnvLayers {
   }
 
   /**
-   * 重新加载所有层的文件（捕获外部修改）。
+   * Reload files from all layers (capture external modifications).
    */
   reload(): void {
     for (const file of this.#layers.values()) {
@@ -88,7 +88,7 @@ export class EnvLayers {
   }
 
   /**
-   * 计算所有层的联合 hash（用于判断是否需要重新唤醒 realm）。
+   * Compute the combined hash of all layers (used to decide whether to re-wake the realm).
    */
   get hash(): string {
     const hashes: string[] = [];

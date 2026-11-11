@@ -1,17 +1,17 @@
-# 发布
+# Release
 
-host 和桌面应用分开发版，各有各的版本号：
+The host and the desktop app are released separately, each with its own version number:
 
-| tag          | 工作流                                  | 发什么                                       |
+| tag          | Workflow                                | What ships                                   |
 | ------------ | --------------------------------------- | -------------------------------------------- |
-| `v*`         | `.github/workflows/release.yml`         | `eta-host`，Linux、macOS、Windows 各一个文件 |
-| `desktop-v*` | `.github/workflows/release-desktop.yml` | 桌面应用安装包，见下面的“桌面应用”           |
+| `v*`         | `.github/workflows/release.yml`         | `eta-host`, one file each for Linux, macOS, Windows |
+| `desktop-v*` | `.github/workflows/release-desktop.yml` | Desktop app installers, see "Desktop app" below |
 
-GitHub 的 Latest 永远是 host 的：桌面 Release 发布时带 `--latest=false`。`eta-host upgrade` 和设置页按钮也不看 Latest 是谁，只取 `v*` tag（`apps/eta/src/upgrade/releases.ts`），所以就算桌面 Release 被手动标成了 Latest，host 取到的仍然是最新的 host。
+GitHub's Latest is always the host: desktop releases are published with `--latest=false`. `eta-host upgrade` and the settings page button also don't look at who Latest is, they only take `v*` tags (`apps/eta/src/upgrade/releases.ts`), so even if a desktop Release is manually marked Latest, the host still picks up the newest host.
 
-## 打 tag
+## Tagging
 
-在要发布的 commit 上打 tag，通常是 `main` 的最新一次：
+Tag the commit you want to release, usually the latest one on `main`:
 
 ```sh
 git fetch origin
@@ -19,134 +19,134 @@ git tag v0.2.0 origin/main
 git push origin v0.2.0
 ```
 
-- 版本就是 tag 去掉 `v`。host 和它带的 daemon 都是这个版本，`package.json` 里的 `version` 不参与。
-- 这一节和下面几节说的都是 host。桌面应用打 `desktop-v*`，见“桌面应用”。
-- 带 `-` 的是预发布，比如 `v0.2.0-rc.1`，Release 会标成 Pre-release，不算最新版本。
-- tag 要写成 `vX.Y.Z` 或 `vX.Y.Z-后缀`，其它写法发不出去。
+- The version is the tag minus the `v`. Both the host and the daemon it ships are this version; `version` in `package.json` plays no part.
+- This section and the ones below are all about the host. For the desktop app, tag `desktop-v*`; see "Desktop app".
+- A `-` makes it a prerelease, e.g. `v0.2.0-rc.1`; the Release is marked Pre-release and doesn't count as the latest version.
+- The tag must be `vX.Y.Z` or `vX.Y.Z-suffix`; any other form won't publish.
 
-流水线的顺序：
+Pipeline order:
 
-1. `prepare`：从 tag 读版本，开一个草稿 Release。
-2. `check`：和构建同时跑，完整的 `bun run check`，不是 `--affected`。没通过就不会发布，草稿留着。
-3. `build`：每个平台在自己的 runner 上，干净 checkout、frozen lockfile 构建。host 单独运行一次，核对 `--version`、`/up` 和页面，过了才上传到草稿。Linux 那一份还写出 `eta-host.json`（`eta-host --version --json`），一起上传。
-4. `cross`：`upgrade-cross.yml` 在 Linux 上从上一个正式版本升到这个草稿，见下面的“跨版本升级测试”。没有上一版，或者上一版比最早的种子还旧（比如不能自升级的 v0.1.0），都跳过并在运行摘要里写明。
-5. `publish`：前面都成功才会跑，从草稿算出 `SHA256SUMS`，然后发布。任何一步失败，Release 都留在草稿，用户看不到。
+1. `prepare`: read the version from the tag, open a draft Release.
+2. `check`: runs alongside the build, the full `bun run check`, not `--affected`. If it fails nothing is published and the draft stays.
+3. `build`: each platform on its own runner, clean checkout, frozen lockfile build. The host is run separately once to check `--version`, `/up` and the page, and only then uploaded to the draft. The Linux one also writes `eta-host.json` (`eta-host --version --json`) and uploads it too.
+4. `cross`: `upgrade-cross.yml` upgrades from the previous stable release to this draft on Linux, see "Cross-version upgrade test" below. With no previous release, or if the previous one is older than the earliest seed (e.g. v0.1.0, which cannot self-upgrade), it is skipped and noted in the run summary.
+5. `publish`: only runs if everything before it succeeded, computes `SHA256SUMS` from the draft, then publishes. If any step fails the Release stays a draft and users cannot see it.
 
-不再构建桌面应用，也不装 WebKit 和 Xvfb，所以 host 发版不再被 Ubuntu 镜像拖慢。
+The desktop app is no longer built and WebKit and Xvfb are no longer installed, so host releases are no longer slowed down by the Ubuntu image.
 
-失败了先看是不是已知的不稳定测试（`gh run rerun <id> --failed`）。一个平台失败时其它平台会跑完，`--failed` 只重跑失败的那个。草稿可以重跑，文件会被覆盖。Release 一旦发布就不再改动：重跑会报错，要换文件就打新 tag。
+On failure, first check whether it is a known flaky test (`gh run rerun <id> --failed`). When one platform fails the others run to completion, and `--failed` reruns only the failed one. A draft can be rerun and its files are overwritten. Once a Release is published it never changes again: rerunning errors out, and to replace files you push a new tag.
 
-tag 的那次运行没有发生或者丢了，可以手动跑，`--ref` 必须是 tag：
+If the run for the tag never happened or was lost, you can run it manually; `--ref` must be the tag:
 
 ```sh
 gh workflow run release.yml --ref v0.2.0
 ```
 
-## 产物
+## Artifacts
 
-`v*` 的 Release：
+Releases for `v*`:
 
-| 文件                       | 平台        | 是什么                                                          |
+| File                       | Platform    | What it is                                                      |
 | -------------------------- | ----------- | --------------------------------------------------------------- |
 | `eta-host-linux-x64`       | Linux x64   | host                                                            |
 | `eta-host-darwin-arm64`    | macOS arm64 | host                                                            |
 | `eta-host-windows-x64.exe` | Windows x64 | host                                                            |
-| `eta-host.json`            |             | `{"version","commit","minDesktop"}`，见“桌面应用和 host 的兼容” |
-| `SHA256SUMS`               |             | 以上全部的校验和                                                |
+| `eta-host.json`            |             | `{"version","commit","minDesktop"}`, see "Desktop app and host compatibility" |
+| `SHA256SUMS`               |             | Checksums of everything above                                   |
 
-host 是一个不压缩的文件，页面、数据库迁移、CLIProxyAPI 和所有平台的 daemon 都在里面。不压缩，是因为 zstd 只能省下三分之一左右（里面的 daemon 已经压缩过），却要求下载的机器有 zstd，校验的也不再是实际运行的文件。
+The host is a single uncompressed file containing the pages, database migrations, CLIProxyAPI and the daemons for every platform. It is uncompressed because zstd would save only about a third (the daemons inside are already compressed) while requiring the downloading machine to have zstd, and the checksum would no longer cover the file that actually runs.
 
-本地构建同一个文件：`bun run --cwd apps/web build && bun apps/eta/scripts/build-host.ts`，产物在 `apps/eta/out/host/`。
+Build the same file locally with `bun run --cwd apps/web build && bun apps/eta/scripts/build-host.ts`; the artifact is in `apps/eta/out/host/`.
 
-host 带的 CLIProxyAPI 跟构建它的机器相关，所以每个平台要在对应的 runner 上构建。加平台就是在 `build` 的矩阵里加一行，加之前要先验证过这个平台的编译。没有 `darwin-x64`，也没有 Windows 的 daemon（`apps/daemon/scripts/build.ts` 的平台表里没有它）。
+The CLIProxyAPI bundled in the host depends on the machine that builds it, so each platform must be built on its own runner. Adding a platform means adding a row to the `build` matrix; verify that the platform compiles first. There is no `darwin-x64` and no Windows daemon (it is not in the platform table in `apps/daemon/scripts/build.ts`).
 
-## 桌面应用
+## Desktop app
 
 ```sh
 git tag desktop-v0.2.0 origin/main
 git push origin desktop-v0.2.0
 ```
 
-- 版本是 tag 去掉 `desktop-v`，由 `ETA_DESKTOP_VERSION` 交给 `electrobun.config.ts`，写进包里的 `Resources/version.json`，应用运行时从那里读（`apps/desktop/src/version.ts`）。本地打包没有这个变量，取 `apps/desktop/package.json` 的 `version`。源码里没有别处写版本号。
-- 带 `-` 的是预发布。tag 要写成 `desktop-vX.Y.Z` 或 `desktop-vX.Y.Z-后缀`。
-- 草稿和发布都带 `--latest=false`，不占仓库的 Latest。
+- The version is the tag with `desktop-v` stripped, passed via `ETA_DESKTOP_VERSION` to `electrobun.config.ts`, written into `Resources/version.json` in the bundle, and read by the app at runtime (`apps/desktop/src/version.ts`). Local packaging has no such variable, so it takes `version` from `apps/desktop/package.json`. Nowhere else in the source hardcodes the version.
+- A `-` makes it a prerelease. Tags must be `desktop-vX.Y.Z` or `desktop-vX.Y.Z-suffix`.
+- Both drafts and releases pass `--latest=false` and do not take the repository's Latest.
 
-流水线：`prepare` 开草稿；`check` 和 host 一样跑完整的 `bun run check`；`build` 每个平台打包，装上启动一次（`apps/desktop/scripts/try-app.ts`），Linux 上 8 分钟装不完 WebKit 就跳过启动并留 warning；`publish` 算 `SHA256SUMS` 后发布。没有跨版本升级测试，那是 host 的。
+Pipeline: `prepare` opens the draft; `check` runs the full `bun run check` like the host; `build` packages each platform, installs it and launches it once (`apps/desktop/scripts/try-app.ts`); on Linux, if WebKit is not installed within 8 minutes the launch is skipped and a warning is left; `publish` computes `SHA256SUMS` and publishes. There is no cross-version upgrade test, that belongs to the host.
 
-安装包里没有 host。启动那一步选的是“在这台电脑上运行”，应用会从同一个仓库下载它能跑的最新 host（用工作流的 token），所以**发桌面版之前，仓库里要先有一个带 `eta-host.json` 的 host Release**，否则这一步失败。
+The installer does not contain the host. The launch step picks "Run on this computer", and the app downloads the newest host it can run from the same repository (using the workflow token), so **before publishing a desktop release, the repository must already have a host Release with `eta-host.json`**, otherwise this step fails.
 
-### 第一次选“在这台电脑上运行”
+### The first time "Run on this computer" is picked
 
-应用在 `~/.eta/desktop/host/` 里没有 host 时才下载，选“连接到已有 host”完全不下载（`apps/desktop/src/bun/download.ts`）：
+The app downloads only when there is no host in `~/.eta/desktop/host/`; picking "Connect to an existing host" downloads nothing at all (`apps/desktop/src/bun/download.ts`):
 
-1. 先看 `~/.eta/running-host.json`：已经有 host 在服务 `~/.eta`，直接打开它，不下载。没写这个文件的旧版服务这里认不出，下载完以后 `eta-host running` 会认出它，仍然不会起第二个。
-2. 从构建时写进应用的仓库（`ETA_HOST_UPSTREAM`，和 host 的一样；`ETA_RELEASES_URL` 可以覆盖）找最新的正式 host Release，读它的 `eta-host.json`，`minDesktop` 比应用新就看上一个，最多看 10 个。没有 `eta-host.json` 的旧版本不给应用用。
-3. 下载到 `~/.eta/desktop/host/eta-host.<pid>.download`（Windows 上是 `eta-host.<pid>.download.exe`：应用里的 Bun 在 Windows 上只运行 `.exe`），窗口显示壳自己的进度页；按 `SHA256SUMS` 校验，运行一次 `--version` 确认版本，才改名成 `eta-host`。任何一步失败都删掉这个文件，下次从头下载，半截文件不会被当成 host。
-4. 之后一直从这里启动，用设置页的按钮升级（见“桌面应用里的 host”）。
+1. First check `~/.eta/running-host.json`: if a host is already serving `~/.eta`, open it directly with no download. Older versions that do not write this file are not recognized here; after downloading, `eta-host running` will recognize it and still will not start a second one.
+2. Find the newest stable host Release in the repository baked into the app at build time (`ETA_HOST_UPSTREAM`, the same as the host's; `ETA_RELEASES_URL` can override it), read its `eta-host.json`, and if `minDesktop` is newer than the app look at the previous one, up to 10. Older versions without `eta-host.json` are not given to the app.
+3. Download to `~/.eta/desktop/host/eta-host.<pid>.download` (on Windows `eta-host.<pid>.download.exe`: Bun inside the app only runs `.exe` on Windows), and the window shows the shell's own progress page; verify against `SHA256SUMS`, run `--version` once to confirm the version, and only then rename it to `eta-host`. If any step fails the file is deleted and the next attempt downloads from scratch; a partial file is never treated as the host.
+4. From then on it always starts from there, and upgrades with the button on the settings page (see "The host in the desktop app").
 
-token 的顺序和 host 升级一样：`GH_TOKEN`、`GITHUB_TOKEN`、`gh auth token --hostname github.com`（用登录 shell 的 `PATH` 找 `gh`），都没有就匿名；应用没有设置页可以保存 token。失败页按原因分开说：连不上、下载中断、校验不通过、私有仓库没有 token（说明要设置什么）、服务器拒绝、没有能用的版本、下载的文件运行不了、磁盘写不进。每一种都有“重试”和“切换连接方式”（可以改连远程 host）。
+The token order is the same as for host upgrades: `GH_TOKEN`, `GITHUB_TOKEN`, `gh auth token --hostname github.com` (`gh` located using the login shell's `PATH`), and anonymous if none is available; the app has no settings page for saving a token. The failure page distinguishes causes: cannot connect, download interrupted, checksum mismatch, private repository without a token (and what to set), server refused, no usable version, the downloaded file will not run, the disk cannot be written. Each has "Retry" and "Switch connection method" (you can change to connect to a remote host).
 
-下载逻辑和 host 的升级是同一份代码（`packages/releases`：`hostForDesktop`、`hostFile`、`downloadChecked`），不是复制。
+The download logic is the same code as host upgrades (`packages/releases`: `hostForDesktop`, `hostFile`, `downloadChecked`), not a copy.
 
-| 文件                           | 平台        | 是什么                           |
+| File                           | Platform    | What it is                       |
 | ------------------------------ | ----------- | -------------------------------- |
-| `eta-desktop-linux-x64.tar.gz` | Linux x64   | 桌面应用，里面是 `installer`     |
-| `eta-desktop-darwin-arm64.dmg` | macOS arm64 | 桌面应用                         |
-| `eta-desktop-windows-x64.zip`  | Windows x64 | 桌面应用，里面是 `eta-Setup.exe` |
-| `SHA256SUMS`                   |             | 以上全部的校验和                 |
+| `eta-desktop-linux-x64.tar.gz` | Linux x64   | Desktop app, contains `installer` |
+| `eta-desktop-darwin-arm64.dmg` | macOS arm64 | Desktop application                |
+| `eta-desktop-windows-x64.zip`  | Windows x64 | Desktop application, contains `eta-Setup.exe` |
+| `SHA256SUMS`                   |             | Checksums for all of the above       |
 
-hutch 只为所在的机器打包，所以每个平台在对应的 runner 上构建。
+hutch only packages for the host machine it runs on, so each platform is built on its corresponding runner.
 
-### 桌面应用自己的更新
+### Desktop application's own updates
 
-用的是 Electrobun 自带的 Updater（`apps/desktop/src/bun/update.ts`），只在用户按按钮时做事：设置 → 更新的“桌面端”一节显示应用的版本，按“检查更新”才去问，有新版本再按“下载”，下载完按“重启并更新”。没有定时检查，启动时也不检查，更不会自己装。
+Uses Electrobun's built-in Updater (`apps/desktop/src/bun/update.ts`), only acts when the user clicks a button: Settings → Update's "Desktop" section shows the app version, click "Check for updates" to check, click "Download" if there's a new version, then click "Restart and update" after download. No scheduled checks, doesn't check on startup, and won't install itself.
 
-- **更新地址**是构建时的 `ETA_DESKTOP_UPDATE_URL`（`release-desktop.yml` 取仓库变量 `vars.ETA_DESKTOP_UPDATE_URL`），写进包里 `version.json` 的 `baseUrl`。没设就没有这一节，也不生成补丁。**正式地址还没定。**
-- 这个地址要能**匿名**读：Updater 发的是不带凭据的 GET，私有仓库的 Release 不行。要放的文件就是那次构建的 `artifacts/` 里的三样，名字不能改：`stable-<os>-<arch>-update.json`、`stable-<os>-<arch>-eta.tar.zst`，以及相对上一版的补丁 `stable-<os>-<arch>-<上一版 hash>.patch`。设了地址时 `release-desktop.yml` 把它们一起传到 Release 上，复制到那个地址即可。
-- 检查读 `update.json`，hash 和本机不同就有更新；这里再加一条：版本号要比当前新，不会“更新”到旧版本。
-- 下载先按补丁链走（构建时能从更新地址拿到上一版才会生成补丁），拿不到就下完整的 `.tar.zst`。Updater 自己核对解出来的 hash。
-- 应用更新时 Updater 退出应用，由一个辅助程序换掉整个应用目录后再启动新版。本机模式下 host 是应用的子进程，所以先停 host，再交给 Updater；没交出去（比如辅助程序起不来）就把 host 重新启动，旧版应用照常用，设置页说明原因。确认框会列出重启会中断的工作（host 的 `upgrade.check` 给的那份）。连远程 host 时只说 host 不受影响。
-- Linux 上辅助程序先复制到临时目录（`/tmp`）再运行，`/tmp` 挂成 `noexec` 的机器上会失败（`EACCES`，实测），旧版不受影响。
+- **Update URL** is the build-time `ETA_DESKTOP_UPDATE_URL` (`release-desktop.yml` reads the repository variable `vars.ETA_DESKTOP_UPDATE_URL`), written into the package's `version.json` as `baseUrl`. If not set, this section doesn't exist and no patches are generated. **The official URL hasn't been finalized yet.**
+- This URL must be **anonymously** readable: Updater sends GETs without credentials, so private repository Releases won't work. The files to place are the three from that build's `artifacts/`, names cannot be changed: `stable-<os>-<arch>-update.json`, `stable-<os>-<arch>-eta.tar.zst`, and the patch relative to the previous version `stable-<os>-<arch>-<previous hash>.patch`. When the URL is set, `release-desktop.yml` uploads them all to the Release, just copy them to that URL.
+- Check reads `update.json`, if the hash differs from the local one there's an update; add one more rule here: the version number must be newer than the current one, won't "update" to an older version.
+- Download first follows the patch chain (patches are only generated if the previous version can be fetched from the update URL at build time), if unavailable downloads the full `.tar.zst`. Updater verifies the extracted hash itself.
+- When updating the app, Updater exits the app, a helper program replaces the entire app directory then launches the new version. In local mode, host is a child process of the app, so stop host first, then hand over to Updater; if handover fails (e.g., helper program fails to start), restart host, old version continues to work, settings page explains the reason. Confirmation dialog lists work that will be interrupted by restart (the list from host's `upgrade.check`). When connected to remote host, only says host is not affected.
+- On Linux, helper program first copies to temp directory (`/tmp`) then runs, will fail on machines where `/tmp` is mounted as `noexec` (`EACCES`, tested), old version not affected.
 
-### 桌面应用和 host 的兼容
+### Desktop application and host compatibility
 
-两者各自升级：host 用设置页的按钮或 `eta-host upgrade`，桌面应用重新安装。应用不带 host，第一次用到时下载。窗口里的页面是 host 提供的，所以页面可能比应用新，也可能比它旧；连远程 host 时更是如此。约定在 `packages/client-contracts/src/desktop.ts`：
+Both upgrade independently: host uses settings page button or `eta-host upgrade`, desktop app reinstall. App doesn't include host, downloads when first used. Pages in the window are provided by host, so pages may be newer or older than the app; even more so when connected to remote host. Conventions in `packages/client-contracts/src/desktop.ts`:
 
-- **原生桥只增不改。** 应用通过 `window.__ETA_HOST__.capabilities` 列出它能做的事（`open-external`、`save-file`、`context-menu`、`window-action`、`connection`，之后只会增加）。名字一旦发布，含义和应答都不变；要改就起新名字。没有这个列表的应用是 0.1.0，按 `BASELINE_CAPABILITIES` 算。
-- **页面按能力判断，不按版本判断。** 调用前用 `hasCapability(<名字>)`（`apps/web/src/lib/native.ts`）；没有这个能力就不显示对应入口，浏览器里什么都没有。
-- **确实要破坏兼容时，提高 `MIN_DESKTOP`。** 页面发现应用版本低于它，就在窗口底部提示更新桌面端。`dev` 构建和说不出版本的应用不提示。这是唯一比较版本的地方，应该很少用。每个 host Release 的 `eta-host.json` 带着 `minDesktop`，应用不用下载 host 就能知道能不能跑它。
+- **Native bridge only adds, never changes.** App lists what it can do via `window.__ETA_HOST__.capabilities` (`open-external`, `save-file`, `context-menu`, `window-action`, `connection`, will only add more). Once a name is released, meaning and response don't change; to change, use a new name. Apps without this list are 0.1.0, calculated by `BASELINE_CAPABILITIES`.
+- **Pages judge by capability, not by version.** Before calling use `hasCapability(<name>)` (`apps/web/src/lib/native.ts`); if no such capability, don't show corresponding entry, nothing in browser.
+- **When really need to break compatibility, raise `MIN_DESKTOP`.** When page finds app version is lower than it, prompts to update desktop at bottom of window. `dev` builds and apps that can't tell version don't prompt. This is the only place that compares versions, should rarely be used. Each host Release's `eta-host.json` carries `minDesktop`, app can know if it can run it without downloading host.
 
-## 升级测试
+## Upgrade testing
 
-有两个工作流，都复用 `scripts/upgrade-e2e/`，都只能证明 runner 上能测到的部分：重启后自启和真实登录用户的凭据要在真机上试。
+There are two workflows, both reuse `scripts/upgrade-e2e/`, both can only prove what can be tested on runner: auto-start after restart and real logged-in user credentials must be tested on real machine.
 
-- `upgrade-e2e.yml`：在真实的 macOS 和 Windows runner 上，用假的 Release 服务器（`fake-releases.ts`）在本次构建的几个变体之间升级，覆盖成功、各种失败回退和卸载，约 15 分钟。改到服务或升级相关代码的 PR 才跑，不是发布门槛。
-- `upgrade-cross.yml`：两个真实版本之间的升级。
+- `upgrade-e2e.yml`: on real macOS and Windows runners, using fake Release server (`fake-releases.ts`) upgrade between several variants of this build, covers success, various failure fallbacks and uninstall, about 15 minutes. Only runs on PRs that change service or upgrade-related code, not a release gate.
+- `upgrade-cross.yml`: upgrade between two real versions.
 
-### 跨版本升级测试
+### Cross-version upgrade testing
 
-一个 tag 的流水线只在 Linux 上跑一次，几分钟出结果，失败就不发布。macOS 和 Windows 的 runner 在私有仓库按 10 倍和 2 倍算分钟数，所以不是每个 tag 的门槛，要用时手动跑：
+A tag's pipeline only runs once on Linux, results in a few minutes, doesn't release if fails. macOS and Windows runners in private repository count minutes at 10x and 2x, so not a gate for every tag, run manually when needed:
 
 ```sh
 gh workflow run upgrade-cross.yml --ref v0.2.1 -f platforms=all
 gh workflow run upgrade-cross.yml --ref main -f from=0.2.0 -f to=0.2.1 -f platforms=windows
 ```
 
-`to` 默认是运行所在的 tag，`from` 默认是比它小的最高正式版本。
+`to` defaults to the tag being run, `from` defaults to the highest release version smaller than it.
 
-它下载两个版本的真实文件，把 `from` 装成服务，放入种子数据，然后：
+It downloads real files for both versions, installs `from` as a service, puts in seed data, then:
 
-1. 用 `eta-host upgrade` 升到 `to`。
-2. 重新开始，用设置页按钮调用的同一个接口升到 `to`。
-3. 重新开始，升到一个站不住的构建（`bad-host.ts`，会毁掉数据，答应 `/up` 后退出），看 `from` 的 worker 把文件和数据库都放回去。
+1. Use `eta-host upgrade` to upgrade to `to`.
+2. Start over, upgrade to `to` using the same interface called by the settings page button.
+3. Start over, upgrade to a broken build (`bad-host.ts`, will destroy data, exits after responding to `/up`), see `from`'s worker put files and database back.
 
-每次之后都校验：文件版本、服务运行、`/up`、页面能打开、种子数量和内容、migration 记录、加密值能解开、会话能打开、接着发一条消息能得到回复。
+After each time verify: file version, service running, `/up`, page can open, seed count and content, migration records, encrypted values can be decrypted, session can open, then send a message and get a reply.
 
-### 种子数据
+### Seed data
 
-`test/upgrade-seed/<版本>/` 是那个版本的 host 真实留下的数据目录（`data/`），和之后要校验的内容（`manifest.json`）。里面全是假数据，`data/secret.key` 也只能解开这些假值。测试取不高于 `from` 的最新一份，由 `from` 自己迁移上来。
+`test/upgrade-seed/<version>/` is a data directory (`data/`) actually left behind by a host of that version, plus the content to verify against later (`manifest.json`). Everything in it is fake data, and `data/secret.key` can only decrypt those fake values. The test picks the newest one no higher than `from`, and `from` migrates it up itself.
 
-schema 或存储格式变了的版本，补一份种子。在隔离环境里做，脚本会清空 `/tmp/eta-seed-home`：
+For versions where the schema or storage format changed, add a seed. Do it in an isolated environment; the script wipes `/tmp/eta-seed-home`:
 
 ```sh
 gh release download v0.3.0 --repo <owner>/<name> --pattern eta-host-linux-x64
@@ -155,258 +155,258 @@ bun scripts/upgrade-e2e/seed.ts ./eta-host-linux-x64 0.3.0
 docker run --rm -v "$PWD:/repo:ro" zricethezav/gitleaks detect --source /repo/test/upgrade-seed --no-git
 ```
 
-脚本用这个版本的二进制起一个 host，HOME 在 `/tmp/eta-seed-home`，模型是 `fake-model.ts`，然后像页面一样通过 wire 调用：建智能体、项目、对话，发消息，让模型发布两版产物、建任务并跑完，存邮箱账号、插件配置，登记机器，建例行任务，改设置。host 退出后把数据目录复制过来并生成 `manifest.json`，再校验一遍。不要手写 SQL，也不要放真实数据，主机名要是假的（`--hostname eta-seed` 的容器里生成）。
+The script starts a host with this version's binary, HOME at `/tmp/eta-seed-home`, model `fake-model.ts`, then calls over the wire like the pages do: create agents, projects, conversations, send messages, have the model publish two versions of an artifact, create tasks and run them to completion, store email accounts and plugin config, register host machines, create routine tasks, change settings. After the host exits, copy the data directory over and generate `manifest.json`, then verify once more. Don't hand-write SQL, don't put in real data, and the hostname must be fake (generated in a container with `--hostname eta-seed`).
 
-## 没有签名
+## No signatures
 
-这些文件都没有签名和公证。桌面应用的更新由用户在设置里触发（见“桌面应用自己的更新”），没有配置更新地址的构建只能重新下载安装。macOS 和 Windows 第一次打开时都会拦下来，放行一次之后就正常了。
+None of these files are signed or notarized. Desktop app updates are triggered by the user in settings (see "The desktop app's own updates"), and builds without a configured update URL can only be re-downloaded and reinstalled. macOS and Windows both block them on first open; once allowed, they work normally.
 
-macOS 上，从 DMG 把 eta 拖进“应用程序”，然后去掉下载带上的隔离标记，否则系统会说应用已损坏：
+On macOS, drag eta from the DMG into Applications, then remove the quarantine flag from the download, otherwise the system will say the app is damaged:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/eta.app
 ```
 
-下载的 host 同样处理：`xattr -d com.apple.quarantine eta-host-darwin-arm64`。
+Do the same for the downloaded host: `xattr -d com.apple.quarantine eta-host-darwin-arm64`.
 
-Windows 上，解压 zip，运行 `eta-Setup.exe`。SmartScreen 提示“Windows 已保护你的电脑”时，点“更多信息”，再点“仍要运行”。
+On Windows, unzip and run `eta-Setup.exe`. When SmartScreen says "Windows protected your PC", click "More info", then "Run anyway".
 
-## 下载和运行
+## Download and run
 
-仓库是 private，下载要有权限的 token，`gh` 已登录即可：
+The repo is private, so downloading needs a token with permission; a logged-in `gh` is enough:
 
 ```sh
 gh release download v0.2.0 --repo 0xfe-project/eta --pattern 'eta-*' --pattern SHA256SUMS
 sha256sum -c SHA256SUMS
 ```
 
-只下一个平台时，用 `--pattern` 写具体文件名，校验时加 `--ignore-missing`。macOS 没有 `sha256sum`，用 `shasum -a 256 -c SHA256SUMS --ignore-missing`；Windows 上用 PowerShell 的 `Get-FileHash <文件>`，和 `SHA256SUMS` 里那一行对比。
+To download only one platform, put the exact filename in `--pattern` and add `--ignore-missing` when verifying. macOS has no `sha256sum`; use `shasum -a 256 -c SHA256SUMS --ignore-missing`. On Windows use PowerShell's `Get-FileHash <file>` and compare against that line in `SHA256SUMS`.
 
-然后：
+Then:
 
 ```sh
 chmod +x eta-host-linux-x64
 ./eta-host-linux-x64 --version
 ```
 
-`--version` 输出 `eta-host 0.2.0 (37d8188c1234)`，括号里是 commit。
+`--version` outputs `eta-host 0.2.0 (37d8188c1234)`; the parentheses hold the commit.
 
-运行和装成服务都和 checkout 里构建出来的一样，见 README 的 “Running in production”。
+Running it and installing it as a service work the same as a build from a checkout; see "Running in production" in the README.
 
-## 装成服务
+## Install as a service
 
-`eta-host install-service <参数>` 把这个文件注册成服务，开机或登录时启动，崩溃了会重启。再运行一次就是换参数并重启。`eta-host uninstall-service` 去掉服务，数据留在 `~/.eta`。
+`eta-host install-service <args>` registers this file as a service, starting at boot or login, and restarting on crash. Running it again changes the args and restarts. `eta-host uninstall-service` removes the service; data stays in `~/.eta`.
 
-| 平台    | 是什么                          | 什么时候启动          | 要什么权限     |
+| Platform | What it is                     | When it starts          | Permissions needed |
 | ------- | ------------------------------- | --------------------- | -------------- |
-| Linux   | systemd 用户 unit `io.eta.host` | 登录时，linger 后开机 | 不用           |
-| macOS   | LaunchAgent `io.eta.host`       | 登录时                | 不用           |
-| Windows | Windows 服务 `io.eta.host`      | 开机                  | 安装时要管理员 |
+| Linux   | systemd user unit `io.eta.host` | at login, at boot with linger | none      |
+| macOS   | LaunchAgent `io.eta.host`       | at login                | none           |
+| Windows | Windows service `io.eta.host`   | at boot                 | admin to install |
 
-### Windows 服务
+### Windows service
 
-在**管理员终端**里运行（开始菜单搜 Terminal，右键“以管理员身份运行”）：
+Run in an **administrator terminal** (search Terminal in the Start menu, right-click "Run as administrator"):
 
 ```powershell
 .\eta-host.exe install-service --port 8787
 ```
 
-文件放在自己能写的目录里，比如 `%LOCALAPPDATA%\eta`，不要放 `Program Files`：host 升级时要替换它旁边的文件，host 本身没有管理员权限。
+Put the file in a directory you can write to, e.g. `%LOCALAPPDATA%\eta`, not `Program Files`: upgrades replace the files next to it, and the host itself has no admin privileges.
 
-服务以**运行这条命令的账号**运行。host 下面的智能体要读这个用户的 Claude、Codex 和 `gh` 登录状态和 `~/.eta`，换成 LocalSystem 既读不到，智能体以 SYSTEM 运行也太危险。所以安装时要输入一次 Windows 密码：
+The service runs as **the account that ran this command**. Agents under the host need to read this user's Claude, Codex and `gh` login state and `~/.eta`; LocalSystem can't read them, and running agents as SYSTEM is too dangerous. So installation asks for the Windows password once:
 
-- 密码从控制台读取，不回显，通过 `CreateServiceW` 交给 Windows 保存，不进命令行、日志和磁盘文件。脚本里可以从标准输入传一行。
-- 这个账号会得到“作为服务登录”权限。卸载时收回，账号原来就有的不动。
-- 这个账号可以不用管理员启动和停止这两个服务，所以 `eta-host upgrade` 和设置里的按钮都不需要管理员。
-- **账号是管理员时，host 和智能体都带完整的管理员权限**，没有 UAC 提示：UAC 只拆分交互登录，服务拿到的是完整令牌。这比 Linux、macOS 的用户服务权限大。不能用受限令牌解决：在 session 0 里，受限令牌启动不了控制台程序（`0xC0000142`），而 host 要启动 git、gh 和智能体。介意的话，用一个普通账号（不在 Administrators 组）装服务。
-- 改了 Windows 密码之后服务登录不上。运行 `uninstall-service` 再 `install-service`。
-- 用微软账号登录的电脑，输入的是微软账号的密码，不是 PIN。
+- The password is read from the console without echo and handed to Windows via `CreateServiceW` to store; it never reaches the command line, logs, or files on disk. From a script, pass one line on stdin.
+- This account gets the "Log on as a service" right. It's revoked on uninstall; rights the account already had are left alone.
+- This account can start and stop these two services without admin, so `eta-host upgrade` and the button in settings need no admin rights.
+- **If the account is an administrator, the host and agents carry full admin rights**, with no UAC prompt: UAC only splits interactive logon, and a service gets the full token. That's more privilege than user services get on Linux and macOS. A restricted token doesn't solve it: in session 0 a restricted token can't start console programs (`0xC0000142`), and the host needs to start git, gh and agents. If that bothers you, install the service under a regular account (not in the Administrators group).
+- After changing your Windows password the service can't log in. Run `uninstall-service` then `install-service`.
+- On machines signed in with a Microsoft account, enter the Microsoft account password, not the PIN.
 
-Windows 服务要响应系统的服务控制，这部分用 `bun:ffi` 直接调 `advapi32.dll`（`apps/daemon/src/windows-api.ts`），没有别的二进制，还是一个文件。Windows 运行的是 `eta-host.exe service-run`（`windows-shell.ts`），它只做三件事：启动 `eta-host.exe <参数>`；把“停止”转成 host 的优雅停止，90 秒没结束才强杀；host 崩溃时 10 秒后重启。host 和它启动的所有进程都在一个 job object 里，所以 CLIProxyAPI 这些子进程不会残留。
+The Windows service must respond to the system's service control. This part calls `advapi32.dll` directly via `bun:ffi` (`apps/daemon/src/windows-api.ts`); there is no other binary, still just one file. Windows runs `eta-host.exe service-run` (`windows-shell.ts`), which does only three things: start `eta-host.exe <arguments>`; translate “stop” into the host's graceful stop, force-killing only if it has not finished after 90 seconds; restart 10 seconds after the host crashes. The host and all processes it starts are in one job object, so subprocesses such as CLIProxyAPI are not left behind.
 
-host 是子进程而不在服务进程里，是因为 Windows 自己的崩溃重启取消不掉，可能正好落在回退恢复数据库的时候；服务没有 stdout，崩溃输出会丢；host 卡死时，它自己的计时器也不会走。
+The host is a child process rather than being inside the service process because Windows' own crash restart cannot be canceled and might land exactly while a rollback is restoring the database; the service has no stdout, so crash output would be lost; and when the host hangs, its own timer will not run either.
 
-Windows 没有 SIGTERM。壳每次启动时生成一个命名管道的名字，通过 `ETA_STOP_PIPE` 告诉 host（host 读完就从环境里删掉，不传给智能体），host 收到一行就走和 SIGTERM 一样的退出流程。
+Windows has no SIGTERM. Each time the shell starts, it generates a named pipe name and tells the host via `ETA_STOP_PIPE` (the host removes it from the environment after reading it and does not pass it to the agent); when the host receives one line, it follows the same exit path as SIGTERM.
 
-出问题时看这些：
+When something goes wrong, check these:
 
-| 看什么       | 在哪                                                                  |
+| What to check       | Where                                                                  |
 | ------------ | --------------------------------------------------------------------- |
-| host 的输出  | `~/.eta/service/io.eta.host.log`                                      |
-| 升级的输出   | `~/.eta/service/io.eta.host-upgrade.log`                              |
-| 服务配置     | `~/.eta/service/io.eta.host.json`：运行的命令、环境变量、停止等待时间 |
-| 运行状态     | `~/.eta/service/io.eta.host.state.json`，`sc query io.eta.host`       |
-| Windows 记录 | 事件查看器：Windows 日志 → 系统，来源 Service Control Manager         |
+| host output  | `~/.eta/service/io.eta.host.log`                                      |
+| Upgrade output   | `~/.eta/service/io.eta.host-upgrade.log`                              |
+| Service config     | `~/.eta/service/io.eta.host.json`: command to run, environment variables, stop wait time |
+| Run status     | `~/.eta/service/io.eta.host.state.json`, `sc query io.eta.host`       |
+| Windows logs | Event Viewer: Windows Logs → System, Source Service Control Manager         |
 
-## 升级
+## Upgrade
 
-已经装好的 `eta-host` 可以自己升级，不需要 checkout：
+An installed `eta-host` can upgrade itself; no checkout required:
 
 ```sh
-eta-host upgrade              # 最新正式版
-eta-host upgrade 0.2.0-rc.1   # 指定版本，预发布只能这样装
-eta-host upgrade --check      # 只报告有没有新版本，什么都不改
-eta-host upgrade --status     # 上一次升级的结果，或者正在进行的阶段
-eta-host upgrade --cancel     # 取消正在进行的升级，服务已经停了就取消不了
+eta-host upgrade              # latest stable release
+eta-host upgrade 0.2.0-rc.1   # specific version; prereleases can only be installed this way
+eta-host upgrade --check      # only report whether a new version is available; change nothing
+eta-host upgrade --status     # result of the last upgrade, or the stage currently in progress
+eta-host upgrade --cancel     # cancel the in-progress upgrade; cannot cancel if the service has already stopped
 ```
 
-设置里的“更新”一节做的是同一件事，只升到最新正式版。
+The “Updates” section in settings does the same thing, but only upgrades to the latest stable release.
 
-第一个带 `upgrade` 的版本要用 `bun run host:install` 或手动替换文件装上，更早的版本没有这条命令。
+The first version with `upgrade` must be installed with `bun run host:install` or by manually replacing files; earlier versions do not have this command.
 
-Windows 上要在装服务的那个账号下运行，不需要管理员。别的账号运行会被拒绝，提示是谁装的。
+On Windows, run it under the account that installed the service; administrator privileges are not required. Running under another account is rejected, and reports who installed it.
 
-服务在运行时，升级交给一个单独的 worker `io.eta.host-upgrade` 来做。它由服务管理器启动，不是 host 的子进程，所以停服务不会杀掉它。`eta-host upgrade` 只是跟着打印进度：关掉终端、杀掉这条命令、host 停掉，都不影响它。进度写在 `~/.eta/upgrade-status.json`。这个文件不放数据库，因为回退时数据库会被换掉。
+While the service is running, the upgrade is handled by a separate worker, `io.eta.host-upgrade`. It is started by the service manager and is not a child process of the host, so stopping the service does not kill it. `eta-host upgrade` merely prints progress: closing the terminal, killing this command, or stopping the host does not affect it. Progress is written to `~/.eta/upgrade-status.json`. This file is not kept in the database because the database is replaced during a rollback.
 
-| 平台    | worker 是什么                                   | 日志                                         |
+| Platform    | What the worker is                                   | Logs                                         |
 | ------- | ----------------------------------------------- | -------------------------------------------- |
-| Linux   | 临时用户 unit，不在 host 的 cgroup 里           | `journalctl --user -u io.eta.host-upgrade`   |
-| macOS   | 临时 launchd 任务，有自己的进程组               | `~/Library/Logs/eta/io.eta.host-upgrade.log` |
-| Windows | 安装时一起注册的一次性服务，不在 host 的 job 里 | `~/.eta/service/io.eta.host-upgrade.log`     |
+| Linux   | Temporary user unit, not in the host's cgroup           | `journalctl --user -u io.eta.host-upgrade`   |
+| macOS   | Temporary launchd job with its own process group               | `~/Library/Logs/eta/io.eta.host-upgrade.log` |
+| Windows | One-shot service registered during installation, not in the host's job | `~/.eta/service/io.eta.host-upgrade.log`     |
 
-Windows 上运行中的 exe 不能覆盖或删除，但能改名，所以有两点不同：worker 从 `~/.eta/service` 里的临时副本运行，结束后删除；换文件总是先把旧文件改名成 `.prev`。上一次的 `.prev` 如果还有进程在用（比如还没退出的 `eta-host upgrade`），会先改名成 `.prev.<pid>.old`。回退时同样先把失败的版本改名成 `.prev.<pid>.failed.old`，再换回旧版本：刚运行过的文件可能被占用一阵子，这时能改名，但不能被覆盖。这些 `.old` 文件下次升级时清理，每个约 390 MB。下载的新文件要经过杀毒软件扫描，所以试运行的超时是 2 分钟，其它平台是 20 秒。
+On Windows, a running exe cannot be overwritten or deleted, but it can be renamed, so there are two differences: the worker runs from a temporary copy in `~/.eta/service`, which is deleted afterward; when swapping files, always rename the old file to `.prev` first. If the previous `.prev` is still in use by a process (such as an `eta-host upgrade` that has not exited yet), it is first renamed to `.prev.<pid>.old`. On rollback, likewise first rename the failed version to `.prev.<pid>.failed.old`, then swap back the old version: a file that has just run may remain locked for a while, during which it can be renamed but not overwritten. These `.old` files are cleaned up on the next upgrade; each is about 390 MB. Downloaded new files must be scanned by antivirus, so the test run timeout is 2 minutes, versus 20 seconds on other platforms.
 
-顺序是这样，前一半不影响正在运行的 host：
+The order is as follows; the first half does not affect the running host:
 
-1. 找到版本。已经是这个版本就结束。比当前版本旧的拒绝，要回退用下面的办法。
-2. 下载到可执行文件旁边的 `eta-host.next`，核对 `SHA256SUMS`。
-3. 试运行：`--version` 要和版本对上；`--migrations` 列出它带的迁移，数据库里有它不认识的迁移就拒绝（数据库比这个版本新，比如 host 是从更新的 main 构建的）。`v0.1.0` 列不出迁移：从 checkout 构建的 host 不能升到它，因为无法判断数据库是否更新。
-4. 等智能体：`task_run`、`routine_run` 和进行中的回复（包括刚排队和等用户回答的）都结束才继续，默认等 10 分钟（`--wait <分钟>`），等不到就退出，什么都没改。`--force` 不等，重启会杀掉它们。
-5. 停服务，备份数据库，替换文件（旧文件留作 `eta-host.prev`），启动。
-6. 验证：`/up` 要在 2 分钟内应答，之后 5 秒里继续应答且进程不变，新版本的迁移都在数据库里。
+1. Find the version. If it is already this version, stop. Versions older than the current one are rejected; to roll back, use the method below.
+2. Download to `eta-host.next` next to the executable and verify `SHA256SUMS`.
+3. Test run: `--version` must match the version; `--migrations` lists the migrations it includes, and it is rejected if the database has a migration it does not recognize (the database is newer than this version, for example the host was built from a newer main). `v0.1.0` cannot list migrations: a host built from a checkout cannot upgrade to it, because there is no way to tell whether the database is newer.
+4. Wait for agents: continue only after `task_run`, `routine_run`, and in-progress replies (including those just queued and those waiting for a user answer) have all finished. By default it waits 10 minutes (`--wait <minutes>`); if the wait times out, it exits without changing anything. `--force` does not wait; a restart will kill them.
+5. Stop the service, back up the database, replace the files (the old files are kept as `eta-host.prev`), and start it.
+6. Verify: `/up` must respond within 2 minutes, then keep responding for the next 5 seconds with the process unchanged, and the new version's migrations are all in the database.
 
-第 6 步失败，就停服务、换回 `.prev`、恢复数据库、再启动旧版本，然后报错退出，退出码 1。新版本运行期间写入的内容会随数据库恢复丢掉。如果回退也失败，错误信息里有旧文件和备份的路径，要手动处理。
+If step 6 fails, stop the service, switch back to `.prev`, restore the database, start the old version again, then report the error and exit with exit code 1. Content written while the new version was running will be lost when the database is restored. If rollback also fails, the error message contains the paths to the old files and the backup; handle it manually.
 
-第 5 步之前可以用 `--cancel` 放弃，什么都不会留下。从第 5 步开始 worker 忽略 `SIGINT`、`SIGTERM`、`SIGHUP`，不会把服务留在半路。
+Before step 5 you can abort with `--cancel`; nothing will be left behind. Starting at step 5, the worker ignores `SIGINT`, `SIGTERM`, and `SIGHUP`, so it will not leave the service halfway through.
 
-按 Ctrl-C 只是不再跟着看，升级继续。
+Pressing Ctrl-C only stops following the output; the upgrade continues.
 
-重启只发生在 `io.eta.host` 正在运行（或崩溃后等服务管理器重新启动）、而且运行的就是这个文件时：
+A restart only happens when `io.eta.host` is running (or has crashed and is waiting for the service manager to restart it), and the file running is this one:
 
-- 服务运行的是别的文件：拒绝，要用那个文件的 `upgrade`。
-- 服务没装或者没在运行：备份数据库并替换文件，重启由你来做，不做验证和回退。
+- The service is running a different file: refuse; use that file's `upgrade`.
+- The service is not installed or not running: back up the database and replace the files; you handle the restart; no verification or rollback.
 
-host 下面的智能体也可以直接运行 `upgrade`。它自己算在运行的智能体里，所以要加 `--force`，重启时它会被杀掉，升级继续。
+Agents under host can also run `upgrade` directly. It counts itself among the running agents, so add `--force`; it will be killed during the restart and the upgrade continues.
 
-服务重启后 daemon 重新连上，host 会把它们换成自己带的版本。
+After the service restarts, the daemon reconnects, and the host replaces them with the version it ships.
 
-## 升级的来源
+## Upgrade source
 
-上游决定这台 host 运行谁的代码。`SHA256SUMS` 和文件来自同一个地方，只能说明文件完整，防不了上游本身有问题。
+The upstream determines whose code this host runs. `SHA256SUMS` and the files come from the same place; this only proves the files are intact and cannot guard against a problem in the upstream itself.
 
-按顺序取第一个有的：
+Take the first one that exists, in order:
 
-1. 命令行 `--repo`，只管这一次。
-2. 环境变量 `ETA_RELEASES_URL`。
-3. 设置里“更新”一节保存的值，存在 host 的数据库里，服务和后台 worker 都读得到。
-4. 编译时写进二进制的默认值：CI 构建的是它自己所在的仓库，本地构建是 `0xfe-project/eta`。`eta-host upgrade --help` 会显示这个值。
+1. Command-line `--repo`; applies only to this run.
+2. The `ETA_RELEASES_URL` environment variable.
+3. The value saved in the "Updates" section of settings, stored in the host's database and readable by both the service and background workers.
+4. The default compiled into the binary: CI builds use the repository they are built in; local builds use `0xfe-project/eta`. `eta-host upgrade --help` displays this value.
 
-设置里只有用户能改，智能体的工具碰不到。服务的环境里有 `ETA_RELEASES_URL` 时它优先，设置页会说明，不提供修改。
+Only users can change settings; agent tools cannot reach them. When `ETA_RELEASES_URL` is present in the service's environment, it takes precedence; the settings page explains this and does not offer editing.
 
-四种来源的写法相同：
+All four sources use the same syntax:
 
-| 写法                                      | 是什么                               |
+| Syntax                                    | What it is                           |
 | ----------------------------------------- | ------------------------------------ |
-| `owner/name`                              | github.com 上的仓库                  |
-| `https://github.com/owner/name`           | 同上                                 |
-| `https://api.github.com/repos/owner/name` | 同上                                 |
-| `https://<主机>/api/v3/repos/owner/name`  | GitHub Enterprise                    |
-| 其它 `http(s)` 地址                       | 其它服务器，要答和 GitHub 一样的 API |
+| `owner/name`                              | A repository on github.com           |
+| `https://github.com/owner/name`           | Same as above                        |
+| `https://api.github.com/repos/owner/name` | Same as above                        |
+| `https://<host>/api/v3/repos/owner/name`  | GitHub Enterprise                    |
+| Any other `http(s)` URL                   | Another server; must serve the same API as GitHub |
 
-地址里不能带账号密码或查询参数：它会显示在页面上，也会写进日志。
+The URL must not contain credentials or query parameters: it will be shown on the page and written to logs.
 
-取第一个有的 token：
+Take the first available token:
 
-| 上游              | 顺序                                                                                                             |
+| Upstream          | Order                                                                                                            |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------- |
-| github.com        | `GH_TOKEN`、`GITHUB_TOKEN`、设置里保存的、`gh auth token --hostname github.com`，都没有就匿名                    |
-| GitHub Enterprise | `GH_ENTERPRISE_TOKEN`、`GH_TOKEN`、`GITHUB_TOKEN`、设置里保存的、`gh auth token --hostname <主机>`，都没有就匿名 |
-| 其它服务器        | 只用 `ETA_RELEASES_TOKEN`                                                                                        |
+| github.com        | `GH_TOKEN`, `GITHUB_TOKEN`, the one saved in settings, `gh auth token --hostname github.com`; anonymous if none are present |
+| GitHub Enterprise | `GH_ENTERPRISE_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`, the one saved in settings, `gh auth token --hostname <host machine>`; anonymous if none of them |
+| Other servers     | Only `ETA_RELEASES_TOKEN`                                                                                        |
 
-环境变量和 `gh` 每次现取，不保存。设置里的“访问令牌”是 eta 唯一保存的 token，适合服务够不着 `gh` 登录的情况：
+Environment variables and `gh` are read fresh each time, never stored. The “access token” in settings is the only token eta stores, and is meant for when the service cannot reach the `gh` login:
 
-- 它用 host 的密钥（`~/.eta/secret.key`）加密，存在数据库的 `setting` 表里。数据库备份里也是密文。
-- 保存时绑定当时上游的主机，只发给这个主机。之后把上游换到别的主机，它就不再使用，页面会说明。
-- 保存后不再显示，页面只知道它属于哪个主机。
-- 服务器环境变量里的 token 优先于它，页面会说明。上游是其它服务器时不能保存，也不显示这一行。
+- It is encrypted with the host machine's key (`~/.eta/secret.key`) and stored in the database's `setting` table. It is ciphertext in database backups too.
+- When saved, it is bound to the upstream host machine at that time and only sent to that host machine. If the upstream is later switched to another host machine, it is no longer used, and the page says so.
+- It is never shown again after saving; the page only knows which host machine it belongs to.
+- A token in the server's environment variables takes precedence over it, and the page says so. It cannot be saved when the upstream is another server, and that row is not shown then either.
 
-token 不进日志、状态文件和错误信息。
+The token never appears in logs, state files, or error messages.
 
-GitHub 的凭据不会发给其它服务器，也不会发给下载重定向到的签名地址。只有 `https` 且路径是 `/api/v3/repos/<owner>/<name>` 的地址才算 GitHub Enterprise，所以这个判断只看地址：填了一个这样的地址，`GH_TOKEN` 就会发过去。
+GitHub credentials are never sent to other servers, nor to the signed addresses that downloads redirect to. Only `https` addresses whose path is `/api/v3/repos/<owner>/<name>` count as GitHub Enterprise, so this check looks only at the address: fill in one of those and `GH_TOKEN` will be sent to it.
 
-服务能走通 `gh`，前提是 `gh` 在它的 `PATH` 上（`PATH` 是 `install-service` 时的 shell 给的），而且读得到登录状态。读不到时错误信息会分开说：
+The service can use `gh` only if `gh` is on its `PATH` (`PATH` comes from the shell at `install-service` time) and it can read the login state. When it cannot, the error messages say which case it is:
 
-- 没有 `gh`：装上，在设置里保存一个 token，或者给服务设置 `GH_TOKEN`。
-- `gh` 没有这个主机的登录：用服务的用户运行 `gh auth login`（Enterprise 加 `--hostname <主机>`），或者在设置里保存一个 token。
-- `gh` 有登录但读不到：登录存在钥匙串里，服务够不着。运行 `gh auth login --insecure-storage`，在设置里保存一个 token，或者给服务设置 `GH_TOKEN`。
-- 有 token 但读不到仓库：token 没有这个仓库的权限，或者仓库不存在。
-- token 被拒绝：过期或者被吊销了。
+- No `gh`: install it, save a token in settings, or set `GH_TOKEN` for the service.
+- `gh` has no login for this host machine: run `gh auth login` as the service's user (add `--hostname <host machine>` for Enterprise), or save a token in settings.
+- `gh` has a login but it cannot be read: the login is in the keychain and the service cannot reach it. Run `gh auth login --insecure-storage`, save a token in settings, or set `GH_TOKEN` for the service.
+- There is a token but the repository cannot be read: the token lacks permission for this repository, or the repository does not exist.
+- The token was rejected: it expired or was revoked.
 
-## Fork 怎么发版
+## How a fork releases
 
-fork 用同一份 `release.yml`，什么都不用改：工作流把 `github.repository` 写进二进制，所以 fork 打 tag 发出的版本默认从 fork 自己升级，用户不用配置。
+A fork uses the same `release.yml` with nothing to change: the workflow writes `github.repository` into the binary, so a release tagged from a fork upgrades from the fork itself by default, with no configuration needed from users.
 
-1. 在 fork 的 Actions 页面启用工作流。private fork 默认是关的。
-2. 打 tag 并推到 fork（桌面应用是 `desktop-v*`，同理）：
+1. Enable the workflow on the fork's Actions page. It is off by default for private forks.
+2. Tag and push to the fork (the desktop app uses `desktop-v*`, same idea):
 
    ```sh
    git tag v0.2.0
-   git push <fork 的 remote> v0.2.0
+   git push <the fork's remote> v0.2.0
    ```
 
-3. 等 Release 发布。`check` 里 Turborepo Remote Cache 只属于上游，那一步在 fork 上失败不影响结果，只是第一次跑得久一些。macOS 和 Windows runner 在 private 仓库按倍数计算 Actions 分钟数。
-4. 下载 fork 的 `eta-host` 安装，或者已经在跑上游版本的 host 用 `eta-host upgrade --repo <owner>/<name>` 升上来。之后这台 host 默认跟着 fork。
+3. Wait for the Release to publish. The Turborepo Remote Cache step in `check` belongs to the upstream only; failing there on a fork does not affect the result, it just makes the first run take longer. macOS and Windows runners count Actions minutes at a multiplier on private repositories.
+4. Download and install the fork's `eta-host`, or, if the host machine already runs an upstream version, upgrade with `eta-host upgrade --repo <owner>/<name>`. After that this host machine follows the fork by default.
 
-版本要比正在运行的新：比当前版本旧的 release 会被拒绝。fork 是 private 时，host 上要有读得到它的 token，见上一节。
+The version must be newer than the running one: releases older than the current version are rejected. When the fork is private, the host machine needs a token that can read it, see the previous section.
 
-### 设置里的更新按钮
+### The update button in settings
 
-`upgrade` 这个 wire target 提供 `check`、`start`、`cancel`，页面用它们启动 worker。进度走普通 HTTP：页面轮询 `/upgrade/status`，这个地址和页面一样要 token。socket 在重启时最先断、最后恢复，轮询这个地址只需要有没有应答，所以能分清“host 在重启”和“升级结束了”。
+The `upgrade` wire target provides `check`, `start`, and `cancel`, which the page uses to start the worker. Progress goes over plain HTTP: the page polls `/upgrade/status`, which requires a token just like the page does. The socket drops first and recovers last during a restart, while polling this address only needs an answer or not, so it can tell “the host machine is restarting” apart from “the upgrade is finished”.
 
-下载和等智能体的时候页面照常可用，这时候可能还需要回答智能体。服务一停就显示全屏的等待页，host 回来后读结果：成功就重新载入页面，回退了就说明原因。别的标签页如果在 host 停掉之前没读到进度，看到的是平常的断线提示，host 回来后会提示刷新。
+The page stays usable while downloading and waiting for the agent, and you may still need to answer the agent meanwhile. Once the service stops, a full-screen waiting page appears; when the host machine comes back it reads the result: on success it reloads the page, on rollback it explains why. Other tabs that did not read progress before the host machine stopped see the usual disconnected notice, and are prompted to refresh once it returns.
 
-只有编译出来的 host，而且 `io.eta.host` 或桌面应用正在运行这个文件时才有按钮，三个平台都一样。从源码运行、没装服务、服务运行别的文件时只显示原因；Windows 上没装服务时还会说要用管理员终端运行 `install-service`。
+The button only appears for a compiled host, and only when `io.eta.host` or the desktop app is running that file, on all three platforms. When running from source, when no service is installed, or when the service runs a different file, only the reason is shown; on Windows without an installed service it also says to run `install-service` in an administrator terminal.
 
-### 桌面应用里的 host
+### The host machine in the desktop app
 
-桌面应用本机模式下自己就是 host 的服务，和 systemd、launchd、Windows 服务并列（`apps/desktop/src/bun/service.ts`，host 一侧是 `apps/eta/src/upgrade/desktop.ts`）。它跑的是 `~/.eta/desktop/host/eta-host`，第一次用到时下载（见“第一次选‘在这台电脑上运行’”），之后一直从那里启动。应用升级不碰这个 host，host 只从设置里的按钮升级，所以安装包里的文件从来不被改，签名不受影响。
+In local mode the desktop app is itself the host machine's service, alongside systemd, launchd, and the Windows service (`apps/desktop/src/bun/service.ts`; on the host machine side it is `apps/eta/src/upgrade/desktop.ts`). It runs `~/.eta/desktop/host/eta-host`, downloaded the first time it is needed (see “the first time you pick ‘run on this computer’”), and started from there ever after. App upgrades never touch this host machine; the host machine is upgraded only from the button in settings, so files in the installer are never modified and the signature is unaffected.
 
-壳在本机回环上开一个只有它和 host 知道 token 的端口，地址和 token 放进 host 的环境变量（host 一启动就从环境里拿掉，它启动的进程看不到）。点按钮后流程和服务一样：host 请壳启动 `eta-host upgrade --worker`，worker 是壳的子进程，不是 host 的，所以 host 停了它还在；它下载、校验、试跑，再请壳停 host、备份数据库、换文件、请壳在原来的端口上启动新版、看 `/up` 和迁移，不行就换回 `eta-host.prev`、恢复数据库、再启动旧版。端口不变，窗口不用换，页面自己的等待页等 host 回来再刷新。壳只替 host 运行 `<host 文件> upgrade …`，别的命令一律拒绝。
+The shell opens a port on the local loopback whose token only it and the host machine know, and puts the address and token into the host machine's environment variables (the host machine removes them from the environment as soon as it starts, so processes it spawns never see them). After the button is clicked the flow is the same as with the service: the host machine asks the shell to start `eta-host upgrade --worker`; the worker is the shell's child process, not the host machine's, so it survives the host machine stopping. It downloads, verifies, and test-runs, then asks the shell to stop the host machine, backs up the database, swaps the files, asks the shell to start the new version on the original port, and checks `/up` and the migrations; on failure it swaps back to `eta-host.prev`, restores the database, and starts the old version again. The port stays the same, the window does not need to change, and the page's own waiting page refreshes once the host machine returns. The shell only runs `<host file> upgrade …` on behalf of the host machine and rejects every other command.
 
-升级中途退出应用：还没停 host 的升级会被取消；已经停了 host 的，应用等它做完（成功或者回退）再退出。
+Quitting the app mid-upgrade: an upgrade that hasn't stopped the host yet is canceled; if the host has already been stopped, the app waits for it to finish (success or rollback) before exiting.
 
-本机已经有 host 在用 `~/.eta`（命令行装的 `io.eta.host`，或者在终端里跑的一个）时，壳不再启动第二个，直接打开那一个，也不管它的升级，它的设置页说的是它自己的情况。判断方法是问 host 文件（`eta-host running`）：先看运行中的 host 写的 `~/.eta/running-host.json`（pid 活着、`/up` 有应答才算），再问系统的服务管理器，所以没写这个文件的旧版服务也认得出。那个 host 停了，窗口和远程模式一样 30 秒后显示失败页，重试时重新判断，可能就换成应用自己的 host。
+If a host on this machine is already using `~/.eta` (the command-line-installed `io.eta.host`, or one running in a terminal), the shell no longer starts a second one; it opens that one directly and leaves its upgrade alone—its settings page reports its own status. The way to determine this is to ask the host binary (`eta-host running`): first check `~/.eta/running-host.json`, written by the running host (it only counts if the pid is alive and `/up` responds), then ask the system service manager, so older services that don't write this file are also recognized. If that host stops, the window shows a failure page after 30 seconds, just like remote mode; on retry it re-evaluates and may switch to the app's own host.
 
-壳被强杀时 host 不会留下：壳和 host 之间的包装脚本每秒看一次壳还在不在，不在了就停掉 host。Windows 上更直接：Bun 启动的子进程和壳在同一个 job object 里，壳一死，包装脚本和 host 当场一起结束，来不及正常退出，`running-host.json` 会留下，下次启动按 pid 判断它已经不在。正常退出应用时，壳往 host 的 `ETA_STOP_PIPE` 写一行，host 和收到 SIGTERM 一样正常退出（Windows runner 上三轮都过，`apps/desktop/test/real-host.test.ts`）。
+When the shell is force-killed, the host is not left behind: the wrapper script between the shell and the host checks once a second whether the shell is still there, and stops the host if it isn't. On Windows it's more direct: child processes started by Bun share the same job object as the shell; as soon as the shell dies, the wrapper script and host end together on the spot, too quickly for a clean exit, so `running-host.json` is left behind, and on next startup the pid is used to determine that it is no longer alive. On normal app exit, the shell writes a line to the host's `ETA_STOP_PIPE`, and the host exits cleanly as if it had received SIGTERM (all three rounds pass on the Windows runner, `apps/desktop/test/real-host.test.ts`).
 
-Windows 上按钮由服务发起，host 没有管理员权限也够用：安装时已经给这个账号授了启动和停止两个服务的权限。
+On Windows the buttons are initiated by the service, so the host works without administrator privileges: installation has already granted this account permission to start and stop both services.
 
-### 备份
+### Backup
 
-备份在 `~/.eta/backups/upgrade-<UTC 时间>-<旧版本>.sqlite`，用 `VACUUM INTO` 写成，权限 0600，写完做一次 `quick_check`。每次备份后只留最新的 3 个，这个目录里别的文件不动。每个备份和数据库一样大。
+Backups are written to `~/.eta/backups/upgrade-<UTC time>-<old version>.sqlite` using `VACUUM INTO`, with permissions 0600, and a `quick_check` is run after writing. After each backup, only the latest 3 are kept; other files in this directory are left untouched. Each backup is the same size as the database.
 
-服务先停再备份，所以回退不丢数据。只备份 `eta.sqlite`，`~/.eta` 里的会话文件和配置不动。
+The service is stopped before backup, so rollback does not lose data. Only `eta.sqlite` is backed up; session files and configuration in `~/.eta` are left untouched.
 
-### 手动回退
+### Manual rollback
 
-迁移不一定能反向执行（比如 `0042` 删了列），所以回到旧版本要同时回到旧数据库。桌面应用的 host 在 `~/.eta/desktop/host/`，先退出应用，换完文件和数据库再打开，不用下面的服务命令：
+Migrations cannot necessarily be reversed (for example, `0042` dropped a column), so going back to an old version requires going back to the old database as well. The desktop app's host is in `~/.eta/desktop/host/`; quit the app first, swap the files and database, then open it again—no need for the service commands below:
 
 ```sh
 systemctl --user stop io.eta.host
 cd ~/.local/share/eta/host && mv eta-host.prev eta-host
-cp ~/.eta/backups/upgrade-<时间>-<旧版本>.sqlite ~/.eta/eta.sqlite
+cp ~/.eta/backups/upgrade-<time>-<old version>.sqlite ~/.eta/eta.sqlite
 rm -f ~/.eta/eta.sqlite-wal ~/.eta/eta.sqlite-shm
 systemctl --user start io.eta.host
 ```
 
-macOS 上第一行和最后一行换成 `launchctl bootout gui/$(id -u)/io.eta.host` 和 `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.eta.host.plist`。Windows 上是 `sc stop io.eta.host` 和 `sc start io.eta.host`，中间换文件：
+On macOS, replace the first and last lines with `launchctl bootout gui/$(id -u)/io.eta.host` and `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.eta.host.plist`. On Windows, use `sc stop io.eta.host` and `sc start io.eta.host`, swapping the files in between:
 
 ```powershell
 sc stop io.eta.host
 Move-Item -Force eta-host.exe.prev eta-host.exe
-Copy-Item -Force "$HOME\.eta\backups\upgrade-<时间>-<旧版本>.sqlite" "$HOME\.eta\eta.sqlite"
+Copy-Item -Force "$HOME\.eta\backups\upgrade-<time>-<old version>.sqlite" "$HOME\.eta\eta.sqlite"
 Remove-Item -Force "$HOME\.eta\eta.sqlite-wal", "$HOME\.eta\eta.sqlite-shm" -ErrorAction SilentlyContinue
 sc start io.eta.host
 ```
 
-升级之后写入的数据不在备份里，手动回退会丢掉。
+Data written after the upgrade is not in the backup and will be lost on manual rollback.

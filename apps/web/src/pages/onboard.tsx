@@ -15,7 +15,7 @@ import { useModels } from "@/queries/providers";
 
 /**
  * Setting up a fresh install in three steps: bind a model provider, create one
- * agent per persona card, then optionally connect an IMAP mailbox. Nothing is created until 安装;
+ * agent per persona card, then optionally connect an IMAP mailbox. Nothing is created until Install;
  * a
  * persona whose agent already exists is marked and skipped, so re-running the
  * wizard only fills the gaps.

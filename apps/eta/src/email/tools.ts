@@ -165,8 +165,8 @@ export function emailSessionTools(
             // carry is a human rewriting it just before send, so only that is repeated here.
             const human =
               payload.human.note === null
-                ? "\n\n（人看的正文从略：内容都在上面的载荷里。）"
-                : `\n\n人看的正文（发送前由对方的人改过）:\n${message.text.slice(0, 20_000)}`;
+                ? "\n\n(human-readable body omitted: the content is all in the payload above.)"
+                : `\n\nhuman-readable body (edited by the other side's people before sending):\n${message.text.slice(0, 20_000)}`;
             return `${head}\n\n${agent}${human}`;
           })
           .join("\n\n---\n\n");

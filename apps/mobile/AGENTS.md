@@ -1,77 +1,77 @@
-# 手机端（apps/mobile）
+# Mobile (apps/mobile)
 
-Native Shell（nsh，TSX on QuickJS）写的 iOS/Android 客户端。设计稿在 Paper 文件「Eta mobile」
-（`01M6NVTTY29AE2FET8P4VRX3ZK`），总览页写了产品判断：**首屏是「等你」**、**就地答完**、**过程是证据**、
-**手机只是一块屏**、**黑白，红绿只留给 diff 和错误**。不做：锁屏推送、提问过期提示、语音转写、邮箱。
-留在电脑：模型、MCP、审批、GitHub、编辑智能体、管理机器。
+Native Shell (nsh, TSX on QuickJS) client for iOS/Android. The design draft is in the Paper file "Eta mobile"
+(`01M6NVTTY29AE2FET8P4VRX3ZK`), the overview page records the product judgements: **the first screen is "waiting for you"**, **answer in place**, **the process is evidence**,
+**the phone is just a screen**, **black and white; red and green reserved for diff and errors**. Not doing: lock-screen push, question-expiry hints, voice transcription, email.
+Stays on the computer: models, MCP, approval, GitHub, editing agents, managing machines.
 
-## 还原设计稿
+## Reproducing the design
 
-- 用 `get_jsx`（`includeNodeIds:false`，`format:"tailwind"`）取精确值，截图只用来对照结果。
-- Paper 的导出类名和本工程不完全相同，按下表翻译：
+- Use `get_jsx` (`includeNodeIds:false`, `format:"tailwind"`) for exact values; screenshots are only for comparing the result.
+- Paper's exported class names aren't exactly the same as this project's; translate per the table below:
 
-| Paper                                        | 这里                                                 |
+| Paper                                        | Here                                                 |
 | -------------------------------------------- | ---------------------------------------------------- |
 | `text-md/tight`                              | `text-md leading-[18px]`（`/tight` = 18px）           |
 | `text-base/body`                             | `text-base leading-[23px]`（`/body` = 23px）          |
 | `h-band`                                     | `h-11`（44）                                          |
-| `px-5` `gap-5` 等 `-5`                       | `-[24px]`（Paper 的 5 = 24，不是 20）                 |
-| `-6`                                         | `-[32px]`（Paper 的 6 = 32）                          |
-| `leading-5` `leading-6` `w-6`                | 同上：Paper 的间距令牌（24、32、32）                  |
+| `px-5` `gap-5` and other `-5`                | `-[24px]` (Paper's 5 = 24, not 20)                   |
+| `-6`                                         | `-[32px]` (Paper's 6 = 32)                           |
+| `leading-5` `leading-6` `w-6`                | Same as above: Paper's spacing tokens (24, 32, 32)   |
 | `bg-foreground/scrim`                        | `bg-scrim`                                            |
 | `[color:var(--color-primary-foreground)]`    | `text-primary-foreground`                             |
 | `border-t border-t-solid border-t-border`    | `border-t border-border`                              |
-| `flex`（横向）                               | `flex-row`（nsh 默认纵向）                            |
-| `flex flex-col`                              | 不写（默认）                                          |
+| `flex` (horizontal)                          | `flex-row` (nsh defaults to vertical)                |
+| `flex flex-col`                              | Omit (default)                                       |
 | `grow basis-[0%]`                            | `grow basis-0`                                        |
-| `font-sans` `antialiased` `inline-block`     | 不写                                                  |
-| 状态栏帧、Home indicator 帧                  | 不画：`Page` 已留安全区                               |
-| `<svg>` Phosphor 图标                        | `<Icon name=…>`，缺的把 path 加进 `src/ui/icons.ts`   |
-| 头像 `<svg viewBox="0 0 100 100">`           | `<AgentAvatar id={agent.id} size={20} />`             |
+| `font-sans` `antialiased` `inline-block`     | Omit                                                 |
+| Status bar frame, Home indicator frame       | Don't draw: `Page` already leaves the safe area      |
+| `<svg>` Phosphor icons                       | `<Icon name=…>`, add missing paths to `src/ui/icons.ts` |
+| Avatar `<svg viewBox="0 0 100 100">`         | `<AgentAvatar id={agent.id} size={20} />`            |
 
-## 约定
+## Conventions
 
-- 数据只走 wire，和 Web 一样：`src/wire/target.ts` 的 `useTarget`（订阅）、`eager`（`hello` 带的）、
-  `call`（`target.action`）。列表在 `src/app/lists.ts`。类型来自 `@eta/client-contracts`，
-  **动手前读 `docs/architecture/` 和 `apps/web/src` 里同一功能的实现**，语义和 Web 保持一致，不要发明 op。
-- 所有文案走 `t("feature.key")`，中英成对写在 `src/features/<feature>/i18n.ts`。
-- 只用主题颜色（`theme.json`）：`text-foreground`、`text-muted-foreground`、`text-faint`、`bg-muted`、
-  `bg-surface`、`border-border`、`border-border-strong`、`bg-primary`、`text-state-error`…，深色自动切换。
-- 直角。动效直接、不拖尾。列表行要有按压反馈（`active:bg-muted` 或 `active:opacity-60`）。
-- 组件在 `src/ui/`：`Page` `Header` `SectionLabel` `Body` `Button` `Segmented` `Sheet` `ConfirmSheet`
-  `Empty` `Loading` `Failed` `Icon` `AgentAvatar` `toast`，时间格式在 `ui/format.ts`。优先复用，能共用的放进 `src/ui/`。
-- 页面之间跳转用 `src/nav/links.tsx` 的 `go.*`；feature 内部的页面用 `nav/stack.ts` 的 `open(key, page)`。
-- 操作失败用 `toast(t("common.failed", { message: reason(error) }))`；host 没挂载的插件，入口隐藏（`wire().isMounted`）。
-- nsh 的反应式：组件函数只跑一次；用 `signal`/`computed`，JSX 里读 `x()`；列表用 `<Each of=…>{(item) => …item()…}</Each>`
-  或 `<List>`，条件用 `<If when=… else=…>`。解构 props 会丢响应，别解构。
-- 文档：`https://nsh.dev/docs/<page>.md`，类型声明在 `.nsh/types/nsh/`。文本截断用 class `truncate` / `line-clamp-2`。
-  `nsh.json` 里没有的 Tailwind 字号不要写；类名检查的 warning 也要处理干净。
+- Data only flows through the wire, same as Web: `useTarget` (subscribe) in `src/wire/target.ts`, `eager` (carried by `hello`),
+  `call` (`target.action`). The list is in `src/app/lists.ts`. Types come from `@eta/client-contracts`,
+  **Before starting, read `docs/architecture/` and the implementation of the same feature in `apps/web/src`**: keep semantics identical to Web, don't invent ops.
+- All copy goes through `t("feature.key")`, with Chinese and English written as a pair in `src/features/<feature>/i18n.ts`.
+- Use only theme colors (`theme.json`): `text-foreground`, `text-muted-foreground`, `text-faint`, `bg-muted`,
+  `bg-surface`, `border-border`, `border-border-strong`, `bg-primary`, `text-state-error`…, dark mode switches automatically.
+- Square corners. Motion is direct, no trailing. List rows need press feedback (`active:bg-muted` or `active:opacity-60`).
+- Components live in `src/ui/`: `Page` `Header` `SectionLabel` `Body` `Button` `Segmented` `Sheet` `ConfirmSheet`
+  `Empty` `Loading` `Failed` `Icon` `AgentAvatar` `toast`; time formatting is in `ui/format.ts`. Reuse first; anything shareable goes in `src/ui/`.
+- Navigate between pages with `go.*` from `src/nav/links.tsx`; pages inside a feature use `open(key, page)` from `nav/stack.ts`.
+- On failure use `toast(t("common.failed", { message: reason(error) }))`; hide the entry for plugins the host hasn't mounted (`wire().isMounted`).
+- nsh reactivity: component functions run only once; use `signal`/`computed`, read `x()` in JSX; for lists use `<Each of=…>{(item) => …item()…}</Each>`
+  or `<List>`, conditionals with `<If when=… else=…>`. Destructuring props loses reactivity, so don't destructure.
+- Docs: `https://nsh.dev/docs/<page>.md`; type declarations are in `.nsh/types/nsh/`. Truncate text with class `truncate` / `line-clamp-2`.
+  Don't use Tailwind font sizes that aren't in `nsh.json`; also clear the class-name check warnings.
 
-## 假 host
+## Fake host
 
-`src/testing/fake-host.ts` 在 app 自己的 VM 里说同样的帧：`DevApp.tsx` 用它在模拟器和 `nsh test` 里跑，不需要网络。
-数据和 op 写在 `src/testing/fixtures/<feature>.ts`，数据用设计稿里的（阿澈、Mori、小满、#128…）。
-类型由 contracts 约束，op 的回答方式要和 `apps/eta` 一致。`host.scenario`（storage 的 `eta.fake.scenario`）切变体，
-`eta.fake.route`（如 `group:wire`、`artifact:reconnect`）让 DevApp 直接开到某一页。入口文件要放在 app 根目录，否则主题加载不到。
+`src/testing/fake-host.ts` speaks the same frames in the app's own VM: `DevApp.tsx` uses it to run in the simulator and under `nsh test`, no network needed.
+Data and ops live in `src/testing/fixtures/<feature>.ts`; use the data from the design (Ache, Mori, Xiaoman, #128…).
+Types are constrained by contracts; ops must answer the same way as `apps/eta`. `host.scenario` (storage's `eta.fake.scenario`) switches variants,
+`eta.fake.route` (e.g. `group:wire`, `artifact:reconnect`) opens DevApp straight onto a page. The entry file must be in the app root, otherwise the theme won't load.
 
-测试写在 `src/features/<feature>/*.test.tsx`：
+Tests go in `src/features/<feature>/*.test.tsx`:
 
 ```tsx
 import { expect, open, test } from "nsh/test";
 
-test("答完一个问题", async () => {
+test("answering a question", async () => {
   const app = await open("../../../DevApp.tsx");
-  await app.press("先备份再跑");
-  expect(app.texts()).not.toContain("迁移脚本要直接在生产库上跑吗？");
+  await app.press("back up first, then run");
+  expect(app.texts()).not.toContain("Should the migration script run directly on the production database?");
 });
 ```
 
-## 命令
+## Commands
 
 ```sh
-nsh check                 # 类型检查
-nsh test                  # 无头测试
-nsh test <file> --target ios   # 在模拟器里驱动界面，app.screenshot 截图；先设 BINDGEN_EXTRA_CLANG_ARGS，见 docs/architecture/mobile.md
-scripts/package-ios.sh simulator   # 正式包（真 host），含相机和 http 例外
-xcrun simctl io booted screenshot /tmp/x.png   # 含键盘的整屏截图；app.screenshot 拍不到键盘
+nsh check                 # type check
+nsh test                  # headless tests
+nsh test <file> --target ios   # drive the UI in the simulator, screenshot with app.screenshot; set BINDGEN_EXTRA_CLANG_ARGS first, see docs/architecture/mobile.md
+scripts/package-ios.sh simulator   # release build (real host), with camera and http exceptions
+xcrun simctl io booted screenshot /tmp/x.png   # full-screen screenshot including the keyboard; app.screenshot can't capture the keyboard
 ```

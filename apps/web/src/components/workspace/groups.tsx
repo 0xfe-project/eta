@@ -93,14 +93,14 @@ function GroupAvatars({
 }
 
 /**
- * The 新建群 dialog, opened by its own trigger (children, or a plus), or
+ * The New group dialog, opened by its own trigger (children, or a plus), or
  * by its owner through open and onOpenChange.
  */
 /**
  * The line under a name.
  *
  * It is the row's content slot, not its type slot. A direct chat and a group are already told
- * apart by their avatars — one face, or a stack — so 「私聊」 and 「无消息」 were words that carried
+ * apart by their avatars — one face, or a stack — so 「Direct message」 and 「No messages」 were words that carried
  * nothing: the first restated the row's shape, the second restated its emptiness. What is left to
  * say is what actually differs between two rows at a glance: whether that agent is busy, what was
  * last said, and — for a group that has said nothing yet — how many are in it.
@@ -243,7 +243,7 @@ export function GroupList() {
   );
 }
 
-/** Settings' 已归档: archived conversations, to open or bring back. */
+/** Settings' Archived: archived conversations, to open or bring back. */
 export function ArchivedGroups() {
   const { t: translateText } = useTranslation([
     "chat",
@@ -312,7 +312,7 @@ export function ArchivedGroups() {
   );
 }
 
-/** A group chat's 成员 tab: who is in it, and the group's own actions. */
+/** A group chat's Members tab: who is in it, and the group's own actions. */
 export function GroupMembers() {
   const { t: translateText } = useTranslation([
     "chat",

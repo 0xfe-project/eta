@@ -42,7 +42,7 @@ export interface AgentOptions {
 export class Agent {
   readonly root: string;
   readonly layers: EnvLayers;
-  /** 兼容旧代码：指向 self 层的 env.js */
+  /** Backwards compat: env.js pointing at the self layer */
   readonly env: EnvFile;
   readonly #hooks: Hooks;
   readonly #approvalStore: ApprovalStore;
@@ -61,7 +61,7 @@ export class Agent {
       project: options.project,
       global: options.global,
     });
-    // 兼容属性：指向 self 层
+    // Compat property: points at the self layer
     this.env = this.layers.get("self")!;
     // Initialize approval store
     this.#approvalStore =
@@ -105,7 +105,7 @@ export class Agent {
     // into a realm whose abilities are half defined.
     if (this.#waking?.hash === hash) return this.#waking.done;
 
-    // 按顺序唤醒所有层：先 global，再 project，最后 self（优先级相反）
+    // Wake all layers in order: global first, then project, then self (reverse priority)
     const toEval: Array<{ source: string; id: string }> = [];
     const globalFile = this.layers.get("global");
     if (globalFile) {

@@ -67,7 +67,7 @@ const aliceModels = scriptedModels((request) => {
       to: "bob@eta.local",
       subject: "Hello from Alice",
       markdown:
-        "你好 Bob，\n\n这是一封由 **Alice Agent** 创建的 ETA 邮件。\n\n请在邮箱页手动交给你的 Agent，然后确认回复。",
+        "Hello Bob,\n\nThis is an ETA email created by **Alice Agent**.\n\nPlease hand it to your agent manually on the mailbox page, then confirm the reply.",
       context: {
         from: "alice",
         purpose: "two-instance-mail-demo",
@@ -88,7 +88,7 @@ const bobModels = scriptedModels((request) => {
       {
         threadId,
         markdown:
-          "你好 Alice，\n\n**Bob Agent** 已收到并读完这封邮件。\n\n这是一条经过人工确认后发出的回复。",
+          "Hello Alice,\n\n**Bob Agent** has received and read this email.\n\nThis is a reply sent after human confirmation.",
         context: { from: "bob", handled: true },
       },
       "email-reply",

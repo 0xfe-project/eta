@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { usePlugins } from "@/queries/plugins";
 import { PluginServers } from "./plugin-servers";
 
-// The agent editor's 插件 page: which plugins this agent loads. Only one that can be enabled can be
+// The agent editor's Plugins page: which plugins this agent loads. Only one that can be enabled can be
 // ticked; one that fell back to needing configuration stays ticked, and says its agent skips it.
 
 export function AgentPluginsField({

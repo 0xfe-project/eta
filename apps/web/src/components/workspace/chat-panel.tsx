@@ -182,7 +182,7 @@ const FAILURE_CODES = {
   unavailable: "unavailable",
   gone: "gone",
 } as const;
-// 设置 → 外观's 聊天内容宽度, as the section's `--chat-width`: the transcript, the strip over the
+// Settings → Appearance's chat content width, as the section's `--chat-width`: the transcript, the strip over the
 // composer and `.input-outer` all read that, so they cannot come apart.
 const chatWidths: Record<NonNullable<WorkspaceState["chatWidth"]>, string> = {
   "extra-narrow": "600px",
@@ -241,7 +241,7 @@ function UserText({
  * Who a message is for, as a composer control: the button says who the next message reaches, and
  * picking replaces that for this group until it is changed. Groups only: a direct conversation
  * wakes its one member without an @, so there is no second person to pick. The steward comes first
- * as the state you return to, then 所有人, which is a real choice, not a convenience.
+ * as the state you return to, then Everyone, which is a real choice, not a convenience.
  */
 function MemberPicker({
   members,
@@ -1245,7 +1245,7 @@ export function ChatPanel({
     onLoadOlder,
   });
 
-  // The rail is off until 设置 → 外观 turns it on; off, nothing below is worked out for it.
+  // The rail is off until Settings → Appearance turns it on; off, nothing below is worked out for it.
   const showRail = useWorkspaceStore(
     (state) => state.workspace.transcriptRail ?? false,
   );

@@ -98,14 +98,14 @@ const RUNTIMES: AgentRuntimeInfo[] = [
 const PERSONAS = [
   {
     id: "engineer",
-    name: "工程师",
-    description: "写代码、改代码",
+    name: "Engineer",
+    description: "Write and modify code",
     custom: false,
   },
   {
     id: "designer",
-    name: "设计师",
-    description: "做界面和交互",
+    name: "Designer",
+    description: "Build UI and interactions",
     custom: false,
   },
 ];
@@ -118,7 +118,7 @@ export function installCreate(host: FakeHost): void {
   let made = 0;
   const id = (kind: string) => `${kind}-${++made}`;
 
-  // The design's 官网 lives at ~/site. `hutch` was added and put away: 07a's 已添加.
+  // The design's website lives at ~/site. `hutch` was added and put away: 07a's already added.
   const site = PROJECTS.find((project) => project.id === "site");
   host.patch("projects", "list", [
     ...projects().map((project) =>
@@ -241,7 +241,7 @@ export function installCreate(host: FakeHost): void {
   host.on("agents.create", (fields: AgentFields) => {
     if (!refused) {
       refused = true;
-      throw new Error("模型不可用");
+      throw new Error("model unavailable");
     }
     const name = fields.name.trim();
     if (name === "") throw new Error("an agent needs a name");

@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { host, openConnectionPage } from "@/lib/native";
 
-// Settings → 连接方式, in the desktop shell only: where this window's host is. Changing it is the
+// Settings → Connection method, in the desktop shell only: where this window's host is. Changing it is the
 // shell's business, on the shell's own page, because the choice has to work when this page's host
 // is the one that is gone. This page only asks for it.
 

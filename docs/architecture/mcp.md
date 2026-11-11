@@ -1,63 +1,63 @@
 # MCP
 
-智能体经 MCP 使用外部工具。库在 `packages/eta-mcp`（`@eta/mcp`，架构取自 pi-mcp-adapter，不依赖任何 harness）；`apps/daemon/src/mcp-host.ts` 的 `McpHost` 把它接到会话上，主 node 和每个 daemon 各用一个，所以 MCP 进程总起在会话所在的那台机器上。
+Agents use external tools via MCP. The library lives in `packages/eta-mcp` (`@eta/mcp`; its architecture comes from pi-mcp-adapter and it does not depend on any harness); the `McpHost` in `apps/daemon/src/mcp-host.ts` connects it to sessions. The main node and each daemon each use one, so MCP processes always start on the machine where the session is located.
 
-## 会话拿到什么
+## What a session gets
 
-- **一个 `mcp` 代理工具**（约 200 token）：状态、列出某服务器的工具、搜索、描述、`instructions`、调用、连接。没有任何配置的服务器时，会话一个 MCP 工具都不带。
-- **直接工具**：配置里写 `directTools`（`true` 或工具名列表）的服务器，其工具以 `mcp__<server>__<tool>` 直接出现在工具列表里。定义取自元数据缓存，不连服务器；还没缓存的服务器在会话打开后台预热一次（同一智能体的预热一个接一个），读完把直接工具补进正在运行的会话。
-- 服务器**懒连接**（第一次调用才连，空闲 10 分钟断开），打开会话从不等它们。
+- **One `mcp` proxy tool** (~200 tokens): status, list a server's tools, search, describe, `instructions`, call, connect. When no servers are configured, the session carries no MCP tools at all.
+- **Direct tools**: for servers whose config sets `directTools` (`true` or a list of tool names), their tools appear directly in the tool list as `mcp__<server>__<tool>`. Definitions are taken from the metadata cache without connecting to the server; servers not yet cached are warmed up once in the background when a session opens (warmups for the same agent run one after another), and after the read completes, the direct tools are added to the running session.
+- Servers are **lazily connected** (connect only on first call, disconnect after 10 minutes idle), and opening a session never waits for them.
 
-## 配置来源
+## Configuration sources
 
-后面的盖住前面的同名服务器：
+Later sources override earlier ones for servers with the same name:
 
-| 来源              | 位置               | 说明                                         |
+| Source          | Location           | Description                                  |
 | ----------------- | ------------------ | -------------------------------------------- |
-| `~/.eta/mcp.json` | 这台机器的用户目录 | 对这台机器上的所有智能体                     |
-| `.mcp.json`       | 会话工作目录       | 直接加载，不需要批准（它在用户自己的项目里） |
+| `~/.eta/mcp.json` | This machine's user directory | For all agents on this machine                     |
+| `.mcp.json`       | Session working directory | Loaded directly, no approval needed (it is in the user's own project) |
 
-格式是常见的 `{ "mcpServers": { ... } }`，另有 `lifecycle`（`lazy` / `keep-alive` / `lazy-keep-alive`）、`directTools`、`approveTools`、`auth`（`oauth` / `bearer`）、`includeTools` / `excludeTools` 等，见库的 `McpServerEntry`。会话打开时读一次这些文件；改了之后新开的会话生效。
+The format is the usual `{ "mcpServers": { ... } }`, with additional fields such as `lifecycle` (`lazy` / `keep-alive` / `lazy-keep-alive`), `directTools`, `approveTools`, `auth` (`oauth` / `bearer`), and `includeTools` / `excludeTools`; see the library's `McpServerEntry`. These files are read once when a session opens; changes take effect for newly opened sessions.
 
-元数据缓存、`npx`/`bunx`/`uvx` 的解析结果和超长输出的落盘目录在各机器自己的状态目录的 `mcp/` 下（主 node 是数据目录，daemon 是它自己的）。
+The metadata cache, resolved results for `npx`/`bunx`/`uvx`, and the on-disk directory for oversized output live under `mcp/` in each machine's own state directory (for the main node, the data directory; for a daemon, its own).
 
-## 隔离与共享
+## Isolation and sharing
 
-连接按（智能体，服务器名）划分：同一智能体在这台机器上的所有会话共享连接，两个智能体永远不共享。一个智能体在这台机器上的最后一个会话关掉后，它的连接再留一分钟才关，宿主关闭时全部关掉。
+Connections are keyed by (agent, server name): all sessions of the same agent on this machine share a connection, and two agents never share one. After the last session of an agent on this machine closes, its connection is kept for another minute before closing; when the host shuts down, all are closed.
 
-## 接进会话的钩子
+## Hooks wired into sessions
 
-- **审批**：`approveTools`（`true`、工具名或通配、`"destructive"`）命中时，在会话的 ask 通道里问（选项 `allow` / `deny`），也就是收件箱里的一张卡片，不管会话在哪台机器上。
-- **表单（elicitation）**：服务器中途要输入时，扁平表单按字段逐个提问：枚举是选项，布尔是 yes/no，文本和数字是自由输入（可选字段回答 `-` 跳过）。用户拒绝是 `decline`；嵌套、多选、URL 模式的表单取消，并在这次调用的结果里追加一句原因，让模型知道。
-- **akhook**：经代理或直接工具发起的每次调用，都以 `mcp__<server>__<tool>` 和工具参数交给 akhook 的工具调用中间件，所以 `on: tool_call` 的规则（`tools: ["mcp__github__*"]`）、`ask` 规则和审批名单都能命中底层的 MCP 工具；被拦下的调用把规则的话返回给模型，服务器不会收到请求。
+- **Approval**: when `approveTools` (`true`, a tool name or wildcard, `"destructive"`) matches, it asks in the session's ask channel (options `allow` / `deny`), i.e. a card in the inbox, regardless of which machine the session is on.
+- **Forms (elicitation)**: when a server asks for input mid-call, flat forms ask field by field: enums are options, booleans are yes/no, and text and numbers are free input (answer `-` to skip optional fields). A user refusal is `decline`; nested, multi-select, and URL-mode forms are cancelled, and a reason sentence is appended to the result of this call so the model knows.
+- **akhook**: every call made via the proxy or a direct tool is passed to akhook's tool-call middleware as `mcp__<server>__<tool>` plus the tool arguments, so `on: tool_call` rules (`tools: ["mcp__github__*"]`), `ask` rules, and approval lists can all match the underlying MCP tools; a blocked call returns the rule's message to the model, and the server never receives the request.
 
 ## OAuth
 
-远端 HTTP 服务器写 `"auth": "oauth"`。
+Remote HTTP servers set `"auth": "oauth"`.
 
-- **凭据**在主 node 的 `credential` 表（迁移 0033，`integration = 'mcp'`），每个值是 JSON，用数据目录里的 `secret.key` 做 AES-256-GCM 加密，随机 12 字节 IV，存 `iv | tag | 密文`；篡改或换了密钥读不出来，按没登录处理。存的是 `tokens`、`clientInformation`、`discoveryState` 和登录进行中的 `codeVerifier`。
-- **服务器键**是服务器 URL（去掉 fragment）的 SHA-256：与智能体和配置来源无关，所以一次登录对所有智能体、所有机器都有效。
-- 连接时用 connect 模式的 provider（从不自己注册客户端或跳转，缺登录就报“需要登录”），并发刷新同一个 refresh token 合并成一次请求。
-- **登录**：`mcp.login` 返回 `{ pendingId, authorizationUrl }`，浏览器去授权；授权方把浏览器送回 `GET /mcp/oauth/callback?code&state`（免令牌门，见[访问控制](access.md)），宿主按 `state` 找到自己在等的登录并完成，回一页“可以关闭这个标签页”。宿主不在浏览器能回到的地址上（无头、远程）时，用户把授权方最后停在的地址粘贴进 `mcp.completeLogin`。登录完成后，等着这次登录的服务器立刻重连。
-- **重定向地址**是 `<origin>/mcp/oauth/callback`。origin 取启动参数 `--public-url`（或环境变量 `ETA_PUBLIC_URL`），没有就用 web 客户端在 `login` 里报来的 `location.origin`：那一定是用户的浏览器打得开的地址，也是页面本来就信任的地址；两者都没有，登录报错并提示设置 `--public-url`。授权方注册的客户端记着重定向地址，换了地址下次登录会重新注册。
-- **daemon 不存凭据。** 它的 provider 的存取经 `svc` 的 `mcp.credential` 问主 node：`get` / `set` / `delete`，只放行 `tokens`、`clientInformation`、`discoveryState`（不含登录的 `codeVerifier`），键必须是 64 位十六进制（URL 的哈希，所以 daemon 只能碰它知道 URL 的服务器）。daemon 刷新令牌后新的令牌就存在主 node，下一个会话（在哪台机器上）都读得到。登录只发生在主 node：daemon 上需要登录的服务器报“需要登录”，在设置里登录后重连。
+- **Credentials** live in the main node's `credential` table (migration 0033, `integration = 'mcp'`). Each value is JSON, encrypted with AES-256-GCM using `secret.key` in the data directory, with a random 12-byte IV, stored as `iv | tag | ciphertext`; if tampered with or the key is changed, it cannot be read and is treated as not signed in. It stores `tokens`, `clientInformation`, `discoveryState`, and the `codeVerifier` for an in-progress login.
+- **Server key** is the SHA-256 of the server URL (with the fragment removed): independent of agent and configuration source, so one login is valid for all agents and all machines.
+- On connect, it uses the provider in connect mode (it never registers a client or redirects on its own; if login is missing, it reports “needs login”), and concurrent refreshes of the same refresh token are merged into a single request.
+- **Login**: `mcp.login` returns `{ pendingId, authorizationUrl }`; the browser goes to authorize. The authorization server sends the browser back to `GET /mcp/oauth/callback?code&state` (exempt from the token gate; see [access control](access.md)); the host finds the login it is waiting for by `state` and completes it, returning a page saying “You can close this tab”. When the host is not at an address the browser can return to (headless, remote), the user pastes the address where the authorization server finally landed into `mcp.completeLogin`. After login completes, servers waiting on that login reconnect immediately.
+- **Redirect URL** is `<origin>/mcp/oauth/callback`. The origin comes from the startup argument `--public-url` (or the environment variable `ETA_PUBLIC_URL`); if neither is set, it uses the `location.origin` reported by the web client in `login`: that is always an address the user's browser can open, and an address the page already trusts. If neither is available, login errors and prompts to set `--public-url`. The client registered with the authorization server remembers the redirect URL; if the address changes, it re-registers on the next login.
+- **The daemon does not store credentials.** Its provider reads and writes via `svc`'s `mcp.credential` by asking the main node: `get` / `set` / `delete`, allowing only `tokens`, `clientInformation`, and `discoveryState` (excluding the login `codeVerifier`); keys must be 64-digit hexadecimal (the URL hash, so the daemon can only touch servers whose URL it knows). After the daemon refreshes a token, the new token is stored on the main node, and the next session (on any machine) can read it. Login happens only on the main node: a server on a daemon that needs login reports “needs login”; after logging in from settings, it reconnects.
 
 ## wire：`mcp` target
 
-`list` 一个 section，每项（`McpServerView`）：`agentId`、`agentName`、`server`、`source`、`transport`（`stdio` | `http` | `sse`）、`lifecycle`、`state`（`connected` | `cached` | `not-connected` | `failed` | `needs-auth` | `disabled`）、`toolCount`、`error`、`auth`（`none` | `signed_in` | `needs_login`）。内容是每个智能体从用户文件得到的服务器，加上正在运行的会话从项目 `.mcp.json` 读到的。目前只列主 node 上的配置；daemon 上项目独有的服务器不在列表里。
+`list` returns a section; each item (`McpServerView`): `agentId`, `agentName`, `server`, `source`, `transport` (`stdio` | `http` | `sse`), `lifecycle`, `state` (`connected` | `cached` | `not-connected` | `failed` | `needs-auth` | `disabled`), `toolCount`, `error`, `auth` (`none` | `signed_in` | `needs_login`). The content is the servers each agent gets from the user files, plus those read from the project `.mcp.json` by running sessions. Currently only configuration on the main node is listed; servers unique to a project on a daemon are not in the list.
 
-| 动作            | 说明                                                                            |
+| Action          | Description                                                                     |
 | --------------- | ------------------------------------------------------------------------------- |
-| `connect`       | `{ agentId, server }`：现在连接，回 `{ ok, message }`                           |
-| `reconnect`     | 同上，先断开并清掉失败记忆                                                      |
+| `connect`       | `{ agentId, server }`: connects now, returns `{ ok, message }`                           |
+| `reconnect`     | Same as above; disconnects first and clears failed memory                                                      |
 | `login`         | `{ agentId, server, redirectOrigin? }` → `{ pendingId, authorizationUrl }`      |
-| `completeLogin` | `{ pendingId, callbackUrl }`：用重定向 URL 完成登录，`state` 不对时什么都不改变 |
-| `logout`        | `{ agentId, server }`：忘掉这个 URL 的全部凭据（所有智能体都会失去登录）        |
+| `completeLogin` | `{ pendingId, callbackUrl }`: completes login using the redirect URL; if `state` is wrong, nothing changes |
+| `logout`        | `{ agentId, server }`: forgets all credentials for this URL (all agents lose their login)        |
 
-## 界面
+## UI
 
-设置 → MCP 服务器：按智能体、再按来源分组，每个服务器一行：名字、传输和生命周期、状态、工具数、最近一次错误；OAuth 服务器有登录 / 退出登录。登录在新标签页打开授权方，同时弹出一个可以粘贴重定向 URL 的对话框；回调把服务器登录好后对话框自己关闭。
+Settings → MCP servers: grouped by agent, then by source; one row per server: name, transport and lifecycle, status, tool count, most recent error; OAuth servers have log in / log out. Logging in opens the authorization provider in a new tab and shows a dialog where you can paste the redirect URL; once the callback logs the server in, the dialog closes automatically.
 
-## 旧实现
+## Old implementation
 
-`apps/daemon/src/mcp.ts`（每个会话各连各的、一次性读工具列表、表单一律取消、工具名 `server__tool`、引擎要等 `settled`）已删除。工具名变成了代理工具的 `tool` 参数或 `mcp__<server>__<tool>` 的直接工具；会话打开不再等服务器；连接在同一智能体的会话间共享，会话关掉不再杀进程。
+`apps/daemon/src/mcp.ts` (each session connected separately, tool list read once, forms always canceled, tool name `server__tool`, engine had to wait for `settled`) has been deleted. Tool names are now the proxy tool's `tool` parameter or direct tools `mcp__<server>__<tool>`; opening a session no longer waits for the server; connections are shared between sessions of the same agent, and closing a session no longer kills the process.

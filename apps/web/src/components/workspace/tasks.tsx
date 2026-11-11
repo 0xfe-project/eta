@@ -1138,7 +1138,7 @@ function RunRow({ task }: { task: TaskDetail }) {
 /**
  * The task's history as a thread: comments as messages, a sender's run of them under one face, what
  * was delivered and what failed on lines of their own, and the rest between them folded into one
- * line ("N 条动态"). What is going now is not here but under it (`LiveRuns`).
+ * line ("N updates"). What is going now is not here but under it (`LiveRuns`).
  */
 export function Timeline({ task }: { task: TaskDetail }) {
   const { t: translateText } = useTranslation(["common"] as const);

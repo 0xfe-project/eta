@@ -43,7 +43,7 @@ function parsePullUrl(value: string): [string, string, number] {
     new GithubError(
       "INVALID_PULL_REQUEST",
       400,
-      `${value} 不是 GitHub 的 PR 链接。`,
+      `${value} is not a GitHub PR link.`,
     );
   let url: URL;
   try {
@@ -112,7 +112,7 @@ const readError = (error: unknown): GithubError => {
     return new GithubError(
       "PULL_REQUEST_UNREACHABLE",
       424,
-      "GitHub 上看不到这个 PR：App 或你的账号没有这个仓库的权限，或 PR 已不存在。",
+      "This PR is not visible on GitHub: the App or your account lacks permission for this repository, or the PR no longer exists.",
     );
   return fromGitHub(error);
 };
@@ -166,7 +166,7 @@ function view(read: Read, pull: RawPull): GitHubPull {
   if (pull.draft === true) {
     p.state = "draft";
     p.merge = "blocked";
-    p.reason = "草稿 PR 不能合并，请先在 GitHub 上标为可审阅。";
+    p.reason = "Draft PRs cannot be merged, mark it as ready for review on GitHub first.";
     return p;
   }
   const [merge, reason] = mergeability(pull, read.repo, read.reader.asUser);
@@ -195,9 +195,9 @@ function mergeability(
     !perms.maintain &&
     !perms.admin
   )
-    return ["blocked", "你的 GitHub 账号没有这个仓库的写权限，不能合并。"];
+    return ["blocked", "Your GitHub account does not have write permission for this repository, so it cannot be merged."];
   if (mergeMethod(repo) === "" && repo.allow_merge_commit !== undefined)
-    return ["blocked", "仓库没有允许任何合并方式。"];
+    return ["blocked", "The repository does not allow any merge method."];
   const state = pull.mergeable_state ?? "";
   if (
     pull.mergeable === undefined ||
@@ -205,13 +205,13 @@ function mergeability(
     state === "unknown" ||
     state === ""
   )
-    return ["pending", "GitHub 还在计算能否合并，稍后刷新。"];
+    return ["pending", "GitHub is still computing mergeability, refresh later."];
   if (!pull.mergeable || state === "dirty")
-    return ["blocked", "有冲突，需要先解决。"];
+    return ["blocked", "There are conflicts that need to be resolved first."];
   if (state === "blocked")
-    return ["blocked", "分支保护的要求还没满足（审批或必需的检查）。"];
+    return ["blocked", "Branch protection requirements are not met yet（approval or required checks）。"];
   if (state === "behind")
-    return ["blocked", "分支落后于目标分支，需要先更新。"];
+    return ["blocked", "The branch is behind the target branch and needs to be updated first。"];
   // clean, unstable (checks that are not required failed), has_hooks.
   return ["ready", ""];
 }
@@ -242,7 +242,7 @@ const staleHead = () =>
   new GithubError(
     "STALE_HEAD",
     409,
-    "PR 在你查看之后又有了新提交，没有合并。请刷新后再确认。",
+    "The PR has new commits after you viewed it，so it was not merged。Please refresh and confirm again。",
   );
 
 /**
@@ -258,16 +258,16 @@ export async function mergePull(
 ): Promise<GitHubPull> {
   const [owner, name, number] = parsePullUrl(pullUrl);
   if (headSha.trim() === "")
-    throw new GithubError("INVALID_REQUEST", 400, "缺少要合并的提交。");
+    throw new GithubError("INVALID_REQUEST", 400, "Missing commits to merge。");
   const read = await readAs(github, owner, name, number);
   const now = view(read, read.pull);
   if (now.state === "merged")
-    throw new GithubError("ALREADY_MERGED", 409, "这个 PR 已经合并了。");
+    throw new GithubError("ALREADY_MERGED", 409, "This PR has already been merged。");
   if (now.headSha !== headSha) throw staleHead();
   if (now.merge === "blocked")
     throw new GithubError("NOT_MERGEABLE", 409, now.reason ?? "");
   if (now.state === "closed")
-    throw new GithubError("NOT_MERGEABLE", 409, "PR 已关闭，不能合并。");
+    throw new GithubError("NOT_MERGEABLE", 409, "The PR is closed，so it cannot be merged。");
   // pending: GitHub decides.
   const path = `/repos/${segment(owner)}/${segment(name)}/pulls/${number}`;
   const method = mergeMethod(read.repo);
@@ -292,19 +292,19 @@ export async function mergePull(
       throw new GithubError(
         "MERGE_FORBIDDEN",
         403,
-        `GitHub 拒绝合并：没有权限（${reasons(error)}）。`,
+        `GitHub rejected the merge：no permission（${reasons(error)}）。`,
       );
     if (status === 405 || status === 422)
       throw new GithubError(
         "NOT_MERGEABLE",
         409,
-        `GitHub 拒绝合并：${reasons(error)}`,
+        `GitHub rejected the merge：${reasons(error)}`,
       );
     if (status === 401)
       throw new GithubError(
         "MERGE_FORBIDDEN",
         403,
-        "GitHub 不认这次的授权，没有合并。",
+        "GitHub does not recognize this authorization，so it was not merged。",
       );
     // No answer, or GitHub failed: it may have merged all the same.
     try {
@@ -320,7 +320,7 @@ export async function mergePull(
     throw new GithubError(
       "MERGE_UNKNOWN",
       424,
-      "没有得到 GitHub 的合并结果，GitHub 上暂时也没显示已合并。请刷新确认后再决定是否重试。",
+      "No merge result was received from GitHub，and GitHub does not yet show it as merged。Refresh to confirm before deciding whether to retry。",
     );
   }
   // Merged: read it again; failing to is no reason to report the merge as failed.

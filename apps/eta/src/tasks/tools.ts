@@ -255,7 +255,7 @@ function conversationTools(
       source: Type.Optional(
         Type.String({
           description:
-            "The messages it came from, as plain text, e.g. 第 12–18 条. Defaults to the message " +
+            "The messages it came from, as plain text, e.g. messages 12–18. Defaults to the message " +
             "that woke you through the present.",
         }),
       ),

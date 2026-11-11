@@ -759,7 +759,7 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
       page.screenshot({ path: join(SHOTS, `${process.platform}-${file}.png`) });
     const settings = async (): Promise<void> => {
       await page.goto(`http://127.0.0.1:${PORT}/?settings=update`);
-      await page.getByText("当前版本").waitFor({ timeout: 30_000 });
+      await page.getByText("Current version").waitFor({ timeout: 30_000 });
       await sleep(800);
     };
     const shown = (): Promise<string | null> =>
@@ -768,10 +768,10 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
     await settings();
     want("the page says the old build", await shown(), "0.9.0");
     await shot("1-update-available");
-    await page.getByRole("button", { name: /^更新到 / }).click();
+    await page.getByRole("button", { name: /^Update to / }).click();
     await page.getByRole("alertdialog").waitFor();
     await shot("2-confirm");
-    await page.getByRole("button", { name: "更新", exact: true }).click();
+    await page.getByRole("button", { name: "Update", exact: true }).click();
     const screen = page.locator(".fixed.inset-0[role=status]");
     await screen.waitFor({ timeout: 60_000 });
     await shot("3-restarting");
@@ -788,11 +788,11 @@ const SCENARIOS: Record<string, () => Promise<void>> = {
 
     pinLatest("0.9.3");
     await settings();
-    await page.getByRole("button", { name: /^更新到 / }).click();
+    await page.getByRole("button", { name: /^Update to / }).click();
     await page.getByRole("alertdialog").waitFor();
-    await page.getByRole("button", { name: "更新", exact: true }).click();
+    await page.getByRole("button", { name: "Update", exact: true }).click();
     try {
-      await page.getByText("没有成功").first().waitFor({ timeout: 180_000 });
+      await page.getByText("was not successful").first().waitFor({ timeout: 180_000 });
       await shot("5-rolled-back");
       want("it went back", await fileVersion(), "0.9.1");
     } catch (error) {

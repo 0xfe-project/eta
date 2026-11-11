@@ -45,13 +45,13 @@ const ask = (
 
 /** Newest first, as the host lists them. */
 const QUESTIONS: InteractionView[] = [
-  ask("q-weekly", "agent-xiaoman", "dm-xiaoman", today(9, 40), "周报发给谁？"),
+  ask("q-weekly", "agent-xiaoman", "dm-xiaoman", today(9, 40), "Who gets the weekly report?"),
   ask(
     "q-push",
     "agent-mori",
     "redesign",
     today(9, 38),
-    "想把分支推到远端\ngit push origin redesign --force-with-lease",
+    "Want to push the branch to the remote\ngit push origin redesign --force-with-lease",
     ["allow", "deny"],
   ),
   ask(
@@ -59,8 +59,8 @@ const QUESTIONS: InteractionView[] = [
     "agent-ache",
     "wire",
     today(9, 29),
-    "迁移脚本要直接在生产库上跑吗？",
-    ["先备份再跑", "直接跑", "先不跑"],
+    "Should the migration script run directly on the production database?",
+    ["Back up first, then run", "Run it directly", "Don't run it yet"],
   ),
 ];
 
@@ -70,18 +70,18 @@ const MULTI: InteractionView[] = [
     "agent-ache",
     "wire",
     today(9, 29),
-    "这次发布要包含哪些改动？可以多选。",
-    ["重连补帧", "迁移脚本", "日志降噪"],
+    "Which changes should this release include? Multiple choice.",
+    ["Reconnect frame catch-up", "Migration script", "Log noise reduction"],
     true,
   ),
 ];
 
 const MANY: InteractionView[] = [
-  ask("q-window", "agent-ache", "wire", today(9, 29), "什么时候跑迁移？", [
-    "现在",
-    "今晚",
-    "周末",
-    "下周",
+  ask("q-window", "agent-ache", "wire", today(9, 29), "When should the migration run?", [
+    "Now",
+    "Tonight",
+    "This weekend",
+    "Next week",
   ]),
 ];
 
@@ -106,9 +106,9 @@ const task = (
 });
 
 const ATTENTION: BoardTaskView[] = [
-  task(128, "重连后补发丢失的帧", "in_review", "agent-ache", "completed"),
-  task(41, "首页首屏换成新文案", "in_review", "agent-mori", "completed"),
-  task(129, "备份归档到 nas", "blocked", "agent-ache", "completed"),
+  task(128, "Resend lost frames after reconnect", "in_review", "agent-ache", "completed"),
+  task(41, "Swap homepage first screen to new copy", "in_review", "agent-mori", "completed"),
+  task(129, "Archive backup to nas", "blocked", "agent-ache", "completed"),
 ];
 
 function setRun(
@@ -174,7 +174,7 @@ function setSession(
     core: { session: id, running: true },
     transcript: {
       messages: [
-        row("e1", 1, at, { role: "user", content: "继续", timestamp: at }),
+        row("e1", 1, at, { role: "user", content: "Continue", timestamp: at }),
         ...(call === undefined
           ? []
           : [
@@ -234,7 +234,7 @@ function installAnswered(host: FakeHost): void {
   });
   const row = task(
     133,
-    "运行记录支持分页",
+    "Run history supports pagination",
     "in_progress",
     "agent-xiaoman",
     "running",
@@ -250,18 +250,18 @@ function installAnswered(host: FakeHost): void {
 /** 10b's load: 3/4, 1/2, 1/4, and a task waiting for nas to come back. */
 function installLoad(host: FakeHost): void {
   const runs: [number, string, string][] = [
-    [201, "运行记录支持分页", "mac-studio"],
-    [202, "wire 补帧测试", "mac-studio"],
-    [203, "看板排序", "mac-studio"],
-    [204, "官网改版", "mb-air"],
-    [205, "批量转码", "gpu-box"],
+    [201, "Run history supports pagination", "mac-studio"],
+    [202, "wire frame backfill test", "mac-studio"],
+    [203, "Board sorting", "mac-studio"],
+    [204, "Website redesign", "mb-air"],
+    [205, "Batch transcoding", "gpu-box"],
   ];
   const rows = runs.map(([number, title, machineId]) => {
     const row = task(number, title, "in_progress", "agent-mori", "running");
     setRun(host, row, "running", machineId);
     return row;
   });
-  const waiting = task(206, "备份归档到 nas", "todo", "agent-ache", "queued");
+  const waiting = task(206, "Archive backup to nas", "todo", "agent-ache", "queued");
   setRun(host, waiting, "queued", "nas", { queueReason: "machine_offline" });
   host.patch("tasks", "list", [...rows, waiting]);
 }

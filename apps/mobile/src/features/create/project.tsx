@@ -95,7 +95,7 @@ export function useProjectChoice() {
       />
     ));
   };
-  /** Nothing to start in yet: 添加目录 has not been through. */
+  /** Nothing to start in yet: Add directory has not been through. */
   const missing = () => adding() && choice().path.trim() === "";
   /** The project the choice stands for, adding the path first when that is what it is. */
   const resolve = async (stewardId: string | null): Promise<ProjectView> => {

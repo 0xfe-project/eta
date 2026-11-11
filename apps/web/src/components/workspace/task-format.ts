@@ -104,7 +104,7 @@ export function workspaceLabel(workspace: TaskDetail["workspace"]) {
     : translate("tasks:workspace.local");
 }
 
-/** "刚刚", "5 分钟前", "3 小时前", "10-11". */
+/** "just now", "5 minutes ago", "3 hours ago", "10-11". */
 export function ago(at: string | number) {
   const date = new Date(at);
   const seconds = (Date.now() - date.getTime()) / 1000;
@@ -130,7 +130,7 @@ export function actorName(
   return "eta";
 }
 
-/** "由 Josh 创建 · 今天 08:58". */
+/** "Created by Josh · today 08:58". */
 export function createdBy(
   task: TaskDetail,
   agents: readonly Pick<AgentView, "id" | "name">[],

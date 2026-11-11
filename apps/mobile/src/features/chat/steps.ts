@@ -11,9 +11,9 @@ export interface Step {
   text: string;
   added?: number;
   removed?: number;
-  /** A short outcome after the text: `51 pass`, `退出 1`. */
+  /** A short outcome after the text: `51 pass`, `exit 1`. */
   note?: string;
-  /** `全过`, said where 04 has room for a word instead of the numbers. */
+  /** `all pass`, said where 04 has room for a word instead of the numbers. */
   verdict?: string;
   /** A tool the host stopped, or a command that failed. */
   failed: boolean;

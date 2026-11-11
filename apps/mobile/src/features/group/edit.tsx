@@ -1,4 +1,4 @@
-// 03m 编辑群信息: name, goal and what has been decided. The form starts from the first `info` the
+// 03m Edit group info: name, goal and what has been decided. The form starts from the first `info` the
 // conversation's target gives, and later pushes do not overwrite what is being typed.
 
 import type { ConversationInfo } from "@eta/client-contracts";

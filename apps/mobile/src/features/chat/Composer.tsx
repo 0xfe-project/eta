@@ -444,7 +444,7 @@ export function Composer(props: {
         : {
             everyone: {
               label: everyoneLabel(),
-              aliases: ["所有人", "everyone"],
+              aliases: ["all", "everyone"],
             },
           }),
     }),
@@ -581,7 +581,7 @@ export function Composer(props: {
   const send = (mode: SendMode) => {
     props.modes.set(false);
     if (blocked() || hold() !== undefined) return;
-    // The button says 停止 while a reply runs and the box is empty, and that promise is kept.
+    // The button says Stop while a reply runs and the box is empty, and that promise is kept.
     if (blank()) {
       stopActive();
       return;

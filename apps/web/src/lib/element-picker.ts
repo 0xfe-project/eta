@@ -1,7 +1,7 @@
 import type { Plugin } from "react-grab";
 import { storageKey } from "@/components/workspace/workspace-store";
 
-// 圈选元素: React Grab, to pick an element and copy its components and source
+// Select element: React Grab, to pick an element and copy its components and source
 // locations. Production builds stay React's production build; locations come
 // from the client's public source maps (vite.config.ts) and the DevTools hook
 // installed at startup (react-devtools-hook.ts).

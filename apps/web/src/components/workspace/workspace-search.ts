@@ -52,7 +52,7 @@ export function useSectionLink() {
  * The workspace's pages used to be four destinations in the sidebar, each of which then asked
  * "but which group?" — the question the conversation you are in has already answered. So they
  * moved here: tasks and what is waiting belong to *this* group, and the panel beside it says so.
- * 定时 went the other way: a clock is not a fact about the conversation you happen to be reading,
+ * Routine went the other way: a clock is not a fact about the conversation you happen to be reading,
  * so it keeps its page and its sidebar entry and has no tab here. A link that wants it gets the
  * page — `useSectionLink` sends a section this panel has no tab for there.
  */

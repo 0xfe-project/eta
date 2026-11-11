@@ -85,7 +85,7 @@ export const RowCaret = () => (
   <Icon name="caretRight" size={14} color="faint" />
 );
 
-/** A 36-high caption over a group of rows: 任务 2, 2 位成员 and 邀请 beside it. */
+/** A 36-high caption over a group of rows: Task 2, 2 members and Invite beside it. */
 export function Caption(props: { title: string; right?: JSX.Element }) {
   return (
     <View class="h-9 shrink-0 flex-row items-end justify-between px-4 pb-[6px]">
@@ -134,7 +134,7 @@ export function SheetRow(props: {
   );
 }
 
-/** A sheet's title: 本对话的主理人, 公开链接. */
+/** A sheet's title: This conversation's steward, Public link. */
 export function SheetTitle(props: { title: string; body?: string }) {
   return (
     <View class="gap-[2px] px-4 pt-4 pb-3">

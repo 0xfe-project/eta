@@ -1,6 +1,6 @@
 import { Text, View } from "nsh";
 
-/** 群聊 / 私聊, 外观 / 机器 / 连接: 36 high on a muted strip, the chosen one lifted to the page. */
+/** Group / Private, Appearance / Machine / Connection: 36 high on a muted strip, the chosen one lifted to the page. */
 export function Segmented<T extends string>(props: {
   options: { value: T; label: string; count?: number | undefined }[];
   value: T;

@@ -143,7 +143,7 @@ def create_app(provider: MemoryProvider):
             body = await request.json()
             text = str(body.get("text") or "").strip()[:MAX_TEXT]
             if not text:
-                return _error(400, "INVALID_TEXT", "记忆内容不能为空。")
+                return _error(400, "INVALID_TEXT", "Memory content must not be empty.")
             message = {"role": "user", "content": text}
             added = await anyio.to_thread.run_sync(
                 lambda: provider.add(agent, [message], source="user", infer=False)
@@ -151,7 +151,7 @@ def create_app(provider: MemoryProvider):
             return JSONResponse(_view(added[0]), status_code=201)
         source = request.query_params.get("source") or None
         if source is not None and source not in {"conversation", "agent", "user"}:
-            return _error(400, "INVALID_SOURCE", "无效的记忆种类。")
+            return _error(400, "INVALID_SOURCE", "Invalid memory kind.")
         group_id = request.query_params.get("group_id") or None
         include_deleted = request.query_params.get("include_deleted") == "1"
         query = request.query_params.get("q", "").strip()[:MAX_TEXT]
@@ -196,7 +196,7 @@ def create_app(provider: MemoryProvider):
             request.path_params["memory_id"],
         )
         if not await anyio.to_thread.run_sync(provider.delete, agent, memory_id):
-            return _error(404, "NOT_FOUND", "这条记忆不存在。")
+            return _error(404, "NOT_FOUND", "This memory does not exist.")
         return Response(status_code=204)
 
     @mcp.custom_route(
@@ -216,7 +216,7 @@ def create_app(provider: MemoryProvider):
         if not await anyio.to_thread.run_sync(
             provider.soft_delete, agent, memory_id, deleted_by
         ):
-            return _error(404, "NOT_FOUND", "这条记忆不存在。")
+            return _error(404, "NOT_FOUND", "This memory does not exist.")
         return Response(status_code=204)
 
     @mcp.custom_route(
@@ -229,7 +229,7 @@ def create_app(provider: MemoryProvider):
             request.path_params["memory_id"],
         )
         if not await anyio.to_thread.run_sync(provider.restore, agent, memory_id):
-            return _error(404, "NOT_FOUND", "这条记忆不存在。")
+            return _error(404, "NOT_FOUND", "This memory does not exist.")
         return Response(status_code=204)
 
     @mcp.custom_route("/up", methods=["GET"])

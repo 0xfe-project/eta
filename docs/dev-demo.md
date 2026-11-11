@@ -1,16 +1,16 @@
-# 开一个 dev 实例给别人看
+# Spin up a dev instance for others to see
 
-在本机起一个 host，再用 Cloudflare 的临时隧道给它一个公网地址。不需要域名，也不需要 Cloudflare 账号。
+Start a host on the local machine, then use a Cloudflare temporary tunnel to give it a public address. No domain or Cloudflare account is needed.
 
-## 1. 构建
+## 1. Build
 
 ```sh
 bun install
-bun run setup                 # 编译 LLM 网关（需要 Go）
-bun run --cwd apps/web build  # 网页，产物在 apps/web/dist
+bun run setup                 # Compile LLM gateway (requires Go)
+bun run --cwd apps/web build  # Web page, artifacts in apps/web/dist
 ```
 
-## 2. 起 host
+## 2. Start host
 
 ```sh
 bun apps/eta/src/main.ts \
@@ -20,39 +20,39 @@ bun apps/eta/src/main.ts \
   --token-file ~/eta-demo/access-token
 ```
 
-- 只监听 127.0.0.1，外面的流量只能经隧道进来。
-- 给了 `--token-file` 就会开令牌门禁：令牌在第一次启动时写进这个文件，`cat ~/eta-demo/access-token` 可以看到。
-- 数据都在 `--data-dir` 里，删掉这个目录就清空了。
+- Listens on 127.0.0.1 only; outside traffic can come in only through the tunnel.
+- Passing `--token-file` turns on the token gate: the token is written into this file on first start, and `cat ~/eta-demo/access-token` shows it.
+- All data lives in `--data-dir`; delete this directory and it's wiped.
 
-## 3. 开隧道
+## 3. Open a tunnel
 
 ```sh
 cloudflared tunnel --no-autoupdate --url http://127.0.0.1:18800
 ```
 
-输出里会打印一个 `https://<随机词>.trycloudflare.com` 地址。隧道进程不退出，地址就一直有效；重启隧道会换一个新地址。
+The output prints a `https://<random-words>.trycloudflare.com` address. As long as the tunnel process keeps running, the address stays valid; restarting the tunnel gives you a new address.
 
-## 4. 打开
+## 4. Open it
 
 ```
-https://<随机词>.trycloudflare.com/?token=<access-token 的内容>
+https://<random-words>.trycloudflare.com/?token=<contents of access-token>
 ```
 
-只需要带一次令牌：host 会把它换成 cookie，之后访问根地址即可。
+You only need to pass the token once: the host exchanges it for a cookie, after which you can just visit the root address.
 
-## 可选：GitHub 与 OAuth 回调
+## Optional: GitHub and OAuth callbacks
 
-GitHub 那条链默认不加载（见 [GitHub](docs/architecture/github.md)）。要在这台 host 上试连接向导、`open_pull_request`、任务页的 PR，启动时加 `--github`（或 `ETA_GITHUB=1`）。两个开发脚本（根目录的 `dev` 与 `apps/eta` 的 `dev`）都带着 `--github`；要看默认（没 GitHub）的样子，就自己起一个不加它的 host：`bun apps/eta/src/main.ts --allow-origin http://127.0.0.1:3000`（或给它 `--no-github`）。
+The GitHub chain is not loaded by default (see [GitHub](docs/architecture/github.md)). To try the connection wizard, `open_pull_request`, and the PR on the task page on this host, add `--github` (or `ETA_GITHUB=1`) at startup. Both dev scripts (the `dev` in the repo root and the one in `apps/eta`) include `--github`; to see the default (no GitHub) behavior, start a host yourself without it: `bun apps/eta/src/main.ts --allow-origin http://127.0.0.1:3000` (or pass it `--no-github`).
 
-要在这个实例上登录 MCP 的 OAuth 或者连接 GitHub App，启动 host 时还要加上公网地址，让回调落回隧道：
+To sign in to MCP's OAuth or connect a GitHub App on this instance, also pass the public URL when starting the host so callbacks land back on the tunnel:
 
 ```sh
-ETA_PUBLIC_URL=https://<随机词>.trycloudflare.com bun apps/eta/src/main.ts --github ...
+ETA_PUBLIC_URL=https://<random-words>.trycloudflare.com bun apps/eta/src/main.ts --github ...
 ```
 
-## 更新和停止
+## Updating and stopping
 
-- 更新：拉代码，重新做第 1 步，然后只重启 host（第 2 步）。隧道不用动，地址也不变。
-- 停止：按 PID 结束 host 和 `cloudflared` 两个进程，不要用 `pkill -f`。不再需要的话，删掉 `--data-dir` 目录。
+- Update: pull the code, redo step 1, then restart only the host (step 2). The tunnel doesn't need touching, and the address stays the same.
+- Stop: kill the host and `cloudflared` processes by PID, not with `pkill -f`. If you no longer need it, delete the `--data-dir` directory.
 
-令牌等于这个实例的访问权限，只发给要看的人。
+The token is access to this instance — only give it to people who need to look.

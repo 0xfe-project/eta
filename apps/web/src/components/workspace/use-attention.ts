@@ -56,7 +56,7 @@ export function useAttention() {
     const alert = task.status === "blocked";
     return reason ? [{ task, reason, alert }] : [];
   });
-  // 定时 is not offered in this build: a report the reader cannot open is not something waiting
+  // routine is not offered in this build: a report the reader cannot open is not something waiting
   // for them, and counting it would leave a badge no page can clear.
   const waiting = ROUTINES_VISIBLE
     ? routines.flatMap((routine) => {

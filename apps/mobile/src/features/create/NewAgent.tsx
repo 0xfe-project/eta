@@ -45,7 +45,7 @@ const INSTRUCTIONS_MAX = 10_000;
 /** A machine's external runtimes: undefined while it is asked, null when it could not be. */
 type Answer = AgentRuntimeInfo[] | null | undefined;
 
-/** The form, kept above its two pages. Nothing goes out until 创建. */
+/** The form, kept above its two pages. Nothing goes out until Create. */
 function useDraft() {
   const name = signal("");
   const machineId = signal("");

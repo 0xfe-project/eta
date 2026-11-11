@@ -1,5 +1,5 @@
 // Ported from apps/web/src/lib/composer-menu.ts: keep the two in step. One addition: `@` also offers
-// 所有人 in a group (03b), which the web has on its member picker instead.
+// Everyone in a group (03b), which the web has on its member picker instead.
 
 /**
  * What the composer's one menu offers, and why.
@@ -152,7 +152,7 @@ export function buildMenu(input: {
   members: readonly MenuMember[];
   files: readonly string[];
   commands: readonly { name: string; description: string }[];
-  /** A group's `@所有人` row, after the members: its name, and the words it answers to. */
+  /** A group's `@everyone` row, after the members: its name, and the words it answers to. */
   everyone?: { label: string; aliases: readonly string[] };
   /** The board, for `#`. */
   tasks: readonly MenuTask[];

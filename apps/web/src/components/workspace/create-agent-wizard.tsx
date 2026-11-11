@@ -36,7 +36,7 @@ const last = steps.length - 1;
 
 /**
  * Creating an agent one step at a time, as in connecting GitHub. Nothing
- * is sent until 创建 on the last step; a failure stays there with every
+ * is sent until Create on the last step; a failure stays there with every
  * field kept, to retry. Mounted per open, so a cancelled draft is gone.
  */
 export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
@@ -93,7 +93,7 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
   const clearRuntimeNote = () => setRuntimeNote(undefined);
   // Unlike the editor, nothing here has been saved on a runtime yet, so a machine without it moves
   // the draft to eta's own loop, which every machine has. It is checked as the answer comes in, and
-  // 下一步 waits for that. A machine that cannot be asked can't vouch for the runtime either.
+  // Next waits for that. A machine that cannot be asked can't vouch for the runtime either.
   const info = runtimes?.find((item) => item.id === runtime);
   const runtimeGone =
     external && runtimes !== undefined && info?.status !== "available";
@@ -278,7 +278,7 @@ export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
               key="create"
               type="submit"
               disabled={create.isPending}
-              // A double click on 下一步 lands its second click here.
+              // A double click on Next lands its second click here.
               onClick={(event) => event.detail > 1 && event.preventDefault()}
             >
               {create.isPending

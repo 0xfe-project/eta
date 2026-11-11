@@ -1,4 +1,4 @@
-// 03j 群信息: what the group is working on, who is in it, and the group's own actions. The order is
+// 03j Group info: what the group is working on, who is in it, and the group's own actions. The order is
 // the web's context panel: what the group made first, the background after.
 
 import type {
@@ -164,7 +164,7 @@ function MemberRow(props: {
   );
 }
 
-/** 邀请: every agent not in the group yet. */
+/** Invite: every agent not in the group yet. */
 function InviteSheet(props: {
   open: boolean;
   id: string;
@@ -206,7 +206,7 @@ function InviteSheet(props: {
   );
 }
 
-/** 相关任务: link a board task to this group, or take one off it. */
+/** Related tasks: link a board task to this group, or take one off it. */
 function RelatedSheet(props: {
   open: boolean;
   id: string;
