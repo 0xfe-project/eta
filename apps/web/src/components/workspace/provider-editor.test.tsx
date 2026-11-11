@@ -1,9 +1,14 @@
-import type { ProviderSummary, ProvidersView } from "@eta/client-contracts";
+import type {
+  ProviderInput,
+  ProviderSummary,
+  ProvidersView,
+} from "@eta/client-contracts";
 import type { FakeHost } from "@/test-wire";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { setWire } from "@/lib/wire";
 import { providersHost } from "@/test-wire";
 import { ProviderEditor } from "./provider-editor";
@@ -215,5 +220,972 @@ describe("改了一半就走", () => {
     )!;
     await act(async () => discard.click());
     expect(closed).toEqual([false]);
+  });
+});
+
+function button(text: string) {
+  return [...document.querySelectorAll("button")].find(
+    (item) => item.textContent === text,
+  )!;
+}
+async function fill(selector: string, value: string) {
+  await act(async () =>
+    type(document.querySelector<HTMLInputElement>(selector)!, value),
+  );
+}
+async function fetchList() {
+  await act(async () => button("获取模型列表").click());
+}
+const discoveries = (fake: FakeHost) =>
+  fake.calls.filter((call) => call.action === "discover");
+function choice(id: string) {
+  return [...document.querySelectorAll("label")]
+    .find((label) => label.textContent?.includes(id))
+    ?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+}
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+
+describe("弹窗内的服务商选择", () => {
+  it.each([
+    { editing: false, input: "mouse" },
+    { editing: true, input: "mouse" },
+    { editing: false, input: "keyboard" },
+    { editing: true, input: "keyboard" },
+  ])(
+    "editing=$editing input=$input：展开、切换并保存，不覆盖已有模型",
+    async ({ editing, input }) => {
+      const fake = host().handle("providers.discover", () => ({
+        models: [{ id: "preview-model" }],
+      }));
+      await render(
+        <Dialog open>
+          <DialogContent aria-describedby={undefined}>
+            <DialogTitle>模型服务</DialogTitle>
+            <ProviderEditor
+              provider={editing ? provider : undefined}
+              onClose={() => {}}
+            />
+          </DialogContent>
+        </Dialog>,
+      );
+      if (!editing) {
+        await fill("#provider-name", "New");
+        await fill("#provider-base", "https://new.test/v1");
+      }
+      await fetchList();
+      await act(async () => choice("preview-model")!.click());
+      const trigger =
+        document.querySelector<HTMLButtonElement>("#provider-kind")!;
+      expect(trigger.disabled).toBe(false);
+      expect(trigger.textContent).toBe("OpenAI / 自定义 · Chat Completions");
+      // This exercises React/Radix event wiring, not layout or browser hit testing.
+      // Those are checked separately with real Chrome and WebKit input.
+      await act(async () => {
+        if (input === "mouse") {
+          trigger.dispatchEvent(
+            new PointerEvent("pointerdown", {
+              bubbles: true,
+              button: 0,
+              pointerType: "mouse",
+              ctrlKey: false,
+            }),
+          );
+        } else {
+          trigger.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+          );
+        }
+      });
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
+      const options = [
+        ...document.querySelectorAll<HTMLElement>('[role="option"]'),
+      ];
+      expect(options).toHaveLength(6);
+      const next = options.find(
+        (option) => option.textContent === "OpenAI / 自定义 · Responses",
+      )!;
+      await act(async () => {
+        if (input === "mouse") {
+          next.dispatchEvent(
+            new PointerEvent("pointerdown", {
+              bubbles: true,
+              pointerType: "mouse",
+              button: 0,
+            }),
+          );
+          next.dispatchEvent(
+            new PointerEvent("pointerup", {
+              bubbles: true,
+              pointerType: "mouse",
+              button: 0,
+            }),
+          );
+        } else {
+          next.focus();
+          next.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+          );
+        }
+      });
+      expect(trigger.getAttribute("aria-expanded")).toBe("false");
+      expect(trigger.textContent).toBe("OpenAI / 自定义 · Responses");
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+      expect(document.body.textContent).toContain("请重新获取模型列表");
+      expect(choice("preview-model")).toBeUndefined();
+      expect(saves(fake)).toHaveLength(0);
+      await save();
+      expect(saves(fake)[0]?.args).toMatchObject({
+        revision: "r1",
+        provider: {
+          kind: "openai-responses",
+          models: editing ? provider.models : [],
+        },
+      });
+    },
+  );
+});
+
+describe("表单内模型预览", () => {
+  it("空白添加：使用未保存的连接值，无占位模型即可获取、搜索、勾选、手加并保存", async () => {
+    const fake = host().handle("providers.discover", () => ({
+      models: [
+        { id: "alpha", contextWindow: 12000 },
+        { id: "beta" },
+        { id: "alpha" },
+      ],
+    }));
+    await render(<ProviderEditor provider={undefined} onClose={() => {}} />);
+    expect(button("获取模型列表").disabled).toBe(true);
+    await fill("#provider-name", "New");
+    await fill("#provider-base", "https://new.test/v1");
+    await fill("#provider-key", "new-secret");
+    await act(async () =>
+      [...document.querySelectorAll("button")]
+        .find((item) => item.textContent?.includes("加一行"))!
+        .click(),
+    );
+    await fill('input[aria-label="名字"]', "User-Agent");
+    await fill('input[aria-label="值"]', "eta-test");
+    await fetchList();
+    expect(discoveries(fake)[0]?.args).toEqual({
+      kind: "openai-compatible",
+      baseUrl: "https://new.test/v1",
+      apiKey: "new-secret",
+      headers: { "User-Agent": "eta-test" },
+    });
+    expect(saves(fake)).toHaveLength(0);
+    expect(document.querySelectorAll('input[type="checkbox"]')).toHaveLength(2);
+    await fill('input[aria-label="搜索模型"]', "alpha");
+    expect(choice("beta")).toBeUndefined();
+    await act(async () => choice("alpha")!.click());
+    await fill('input[aria-label="搜索模型"]', "missing");
+    expect(document.body.textContent).toContain("没有匹配");
+    await act(async () =>
+      [...document.querySelectorAll("button")]
+        .find((item) => item.textContent?.includes("加一个模型"))!
+        .click(),
+    );
+    await fill("#model-id-0", "manual");
+    expect(saves(fake)).toHaveLength(0);
+    await save();
+    expect(
+      (saves(fake)[0]?.args as { provider: { models: unknown[] } }).provider
+        .models,
+    ).toEqual([{ id: "manual" }, { id: "alpha" }]);
+    expect(document.body.textContent).toContain("已保存");
+    // Saving a new provider must not create a second provider on the next save/fetch.
+    await fetchList();
+    expect(discoveries(fake)[1]?.args).toMatchObject({
+      id: "new",
+      revision: "r2",
+    });
+  });
+
+  it("获取/勾选后放弃：不保存也不刷新实际配置，返回后未完成请求不可写回", async () => {
+    const waiting = deferred<{ models: { id: string }[] }>();
+    const fake = host().handle("providers.discover", () => ({
+      models: [{ id: "new-model" }],
+    }));
+    const close = rstest.fn();
+    await render(<ProviderEditor provider={undefined} onClose={close} />);
+    await fill("#provider-base", "https://new.test/v1");
+    await fetchList();
+    await act(async () => choice("new-model")!.click());
+    fake.handle("providers.discover", () => waiting.promise);
+    await fetchList();
+    await act(async () =>
+      [...document.querySelectorAll("button")]
+        .find((item) => item.textContent?.includes("返回"))!
+        .click(),
+    );
+    await act(async () => button("放弃改动").click());
+    expect(close).toHaveBeenCalledTimes(1);
+    await act(async () => waiting.resolve({ models: [{ id: "late" }] }));
+    expect(
+      fake.calls.filter((call) =>
+        ["save", "refresh", "delete"].includes(call.action),
+      ),
+    ).toEqual([]);
+  });
+
+  it("编辑：保留已修改名称、窗口、思考配置及未被发现的模型；只补选新模型", async () => {
+    const existing = {
+      ...provider,
+      models: [
+        ...provider.models,
+        { id: "not-discovered", overrides: { maxTokens: 50 } },
+      ],
+    };
+    const fake = host().handle("providers.discover", () => ({
+      models: [
+        { id: "m1", name: "remote", contextWindow: 1 },
+        { id: "new-model", contextWindow: 16000 },
+      ],
+    }));
+    await render(<ProviderEditor provider={existing} onClose={() => {}} />);
+    await fill("#model-name-0", "My name");
+    await fill("#model-window-0", "32000");
+    await act(async () =>
+      document
+        .querySelector<HTMLButtonElement>("#model-thinking-0")!
+        .dispatchEvent(
+          new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+        ),
+    );
+    const high = [
+      ...document.querySelectorAll<HTMLElement>('[role="option"]'),
+    ].find((option) => option.textContent === "high")!;
+    await act(async () => {
+      high.focus();
+      high.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+    });
+    await fetchList();
+    expect(discoveries(fake)[0]?.args).toMatchObject({
+      id: "local",
+      revision: "r1",
+    });
+    expect(discoveries(fake)[0]?.args as object).not.toHaveProperty("apiKey");
+    expect(choice("m1")?.disabled).toBe(true);
+    await act(async () => choice("new-model")!.click());
+    await save();
+    expect(
+      (saves(fake)[0]?.args as { provider: { models: unknown[] } }).provider
+        .models,
+    ).toEqual([
+      {
+        ...provider.models[0],
+        overrides: { name: "My name", contextWindow: 32000 },
+        defaultThinking: "high",
+      },
+      existing.models[1],
+      { id: "new-model", contextWindow: 16000 },
+    ]);
+  });
+
+  it("加载防重入、失败保留输入可重试、空结果，以及错误不回显敏感内容", async () => {
+    const waiting = deferred<{ models: { id: string }[] }>();
+    const fake = host().handle("providers.discover", () => waiting.promise);
+    await render(<ProviderEditor provider={provider} onClose={() => {}} />);
+    await fill("#provider-key", "secret-value");
+    await act(async () => {
+      button("获取模型列表").click();
+      button("获取模型列表").click();
+    });
+    expect(discoveries(fake)).toHaveLength(1);
+    expect(button("正在获取模型列表…").disabled).toBe(true);
+    await act(async () =>
+      waiting.reject(new Error("discovery_network: ECONNREFUSED [redacted]")),
+    );
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+      "ECONNREFUSED",
+    );
+    expect(document.body.textContent).not.toContain("secret-value");
+    expect(
+      document.querySelector<HTMLInputElement>("#provider-key")?.value,
+    ).toBe("secret-value");
+    fake.handle("providers.discover", () => {
+      throw new Error("discovery_http_401");
+    });
+    await fetchList();
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+      "HTTP 401",
+    );
+    fake.handle("providers.discover", () => ({ models: [] }));
+    await fetchList();
+    expect(document.body.textContent).toContain("没有可用模型");
+    expect(saves(fake)).toHaveLength(0);
+  });
+
+  it.each(["#provider-base", "#provider-key", 'input[aria-label="值"]'])(
+    "修改连接字段 %s 后清除预览勾选，保留手动/已有模型且不使用旧列表",
+    async (selector) => {
+      const fake = host().handle("providers.discover", () => ({
+        models: [{ id: "new-model" }],
+      }));
+      await render(<ProviderEditor provider={provider} onClose={() => {}} />);
+      await fetchList();
+      await act(async () => choice("new-model")!.click());
+      await fill(
+        selector,
+        selector === "#provider-base" ? "https://other.test/v1" : "changed",
+      );
+      expect(document.body.textContent).toContain("请重新获取模型列表");
+      expect(choice("new-model")).toBeUndefined();
+      await save();
+      expect(
+        (saves(fake)[0]?.args as { provider: { models: unknown[] } }).provider
+          .models,
+      ).toEqual(provider.models);
+    },
+  );
+
+  it("旧请求的成功/失败不可覆盖新请求，改后再改回也必须重取", async () => {
+    const first = deferred<{ models: { id: string }[] }>();
+    const second = deferred<{ models: { id: string }[] }>();
+    const fake = host().handle("providers.discover", () => first.promise);
+    await render(<ProviderEditor provider={provider} onClose={() => {}} />);
+    await fetchList();
+    await fill("#provider-base", "https://other.test/v1");
+    fake.handle("providers.discover", () => second.promise);
+    await fetchList();
+    await act(async () => second.resolve({ models: [{ id: "fresh-model" }] }));
+    await act(async () => first.resolve({ models: [{ id: "stale-model" }] }));
+    expect(choice("fresh-model")).toBeDefined();
+    expect(choice("stale-model")).toBeUndefined();
+    await fill("#provider-base", provider.baseUrl);
+    await fill("#provider-base", "https://other.test/v1");
+    expect(choice("fresh-model")).toBeUndefined();
+    const oldFailure = deferred<{ models: { id: string }[] }>();
+    fake.handle("providers.discover", () => oldFailure.promise);
+    await fetchList();
+    await fill("#provider-key", "replacement");
+    fake.handle("providers.discover", () => ({
+      models: [{ id: "latest-model" }],
+    }));
+    await fetchList();
+    await act(async () => oldFailure.reject(new Error("discovery_http_500")));
+    expect(choice("latest-model")).toBeDefined();
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+  });
+});
+
+describe("预览连接边界", () => {
+  it.each(["清除 key", "delete-header", "rename-header", "change-kind"])(
+    "%s 后旧预览不可继续选择",
+    async (action) => {
+      host().handle("providers.discover", () => ({
+        models: [{ id: "preview-model" }],
+      }));
+      await render(<ProviderEditor provider={provider} onClose={() => {}} />);
+      await fetchList();
+      if (action === "清除 key") await act(async () => button(action).click());
+      if (action === "delete-header")
+        await act(async () =>
+          document
+            .querySelector<HTMLButtonElement>(".settings-header-row button")!
+            .click(),
+        );
+      if (action === "rename-header")
+        await fill('input[aria-label="名字"]', "X-New");
+      if (action === "change-kind") {
+        await act(async () =>
+          document
+            .querySelector<HTMLButtonElement>("#provider-kind")!
+            .dispatchEvent(
+              new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+            ),
+        );
+        const option = [
+          ...document.querySelectorAll<HTMLElement>('[role="option"]'),
+        ].find((item) => item.textContent === "OpenAI / 自定义 · Responses")!;
+        await act(async () => {
+          option.focus();
+          option.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+          );
+        });
+      }
+      expect(document.body.textContent).toContain("请重新获取模型列表");
+      expect(choice("preview-model")).toBeUndefined();
+    },
+  );
+
+  it("同一连接重复获取或失败不覆盖已经勾选并编辑的模型", async () => {
+    const fake = host().handle("providers.discover", () => ({
+      models: [{ id: "preview-model", name: "Remote" }],
+    }));
+    await render(<ProviderEditor provider={provider} onClose={() => {}} />);
+    await fetchList();
+    await act(async () => choice("preview-model")!.click());
+    await fill("#model-name-1", "Mine");
+    await fetchList();
+    expect(
+      document.querySelector<HTMLInputElement>("#model-name-1")?.value,
+    ).toBe("Mine");
+    fake.handle("providers.discover", () => {
+      throw new Error("discovery_http_500");
+    });
+    await fetchList();
+    await save();
+    expect(
+      (saves(fake)[0]?.args as { provider: { models: unknown[] } }).provider
+        .models,
+    ).toEqual([
+      ...provider.models,
+      { id: "preview-model", name: "Remote", overrides: { name: "Mine" } },
+    ]);
+  });
+});
+
+describe("重新获取中的表单改动", () => {
+  it("请求未完成时继续编辑已选模型，返回结果不能覆盖编辑", async () => {
+    const fake = host().handle("providers.discover", () => ({
+      models: [{ id: "preview-model" }],
+    }));
+    await render(<ProviderEditor provider={provider} onClose={() => {}} />);
+    await fetchList();
+    await act(async () => choice("preview-model")!.click());
+    const waiting = deferred<{ models: { id: string }[] }>();
+    fake.handle("providers.discover", () => waiting.promise);
+    await fetchList();
+    await fill("#model-name-1", "Edited while loading");
+    await act(async () =>
+      waiting.resolve({ models: [{ id: "preview-model" }] }),
+    );
+    await save();
+    expect(
+      (saves(fake)[0]?.args as { provider: { models: unknown[] } }).provider
+        .models,
+    ).toEqual([
+      ...provider.models,
+      { id: "preview-model", overrides: { name: "Edited while loading" } },
+    ]);
+  });
+});
+
+async function selectProvider(label: string) {
+  await act(async () =>
+    document
+      .querySelector<HTMLButtonElement>("#provider-kind")!
+      .dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+      ),
+  );
+  const option = [
+    ...document.querySelectorAll<HTMLElement>('[role="option"]'),
+  ].find((item) => item.textContent === label)!;
+  expect(option).toBeDefined();
+  await act(async () => {
+    option.focus();
+    option.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+  });
+}
+
+describe("手动模型不受服务商目录限制", () => {
+  it.each([
+    "deepseek",
+    "kimi-coding",
+    "zai",
+    "zai-coding-cn",
+    "openai-compatible",
+    "openai-responses",
+  ] as const)(
+    "%s：搜索无匹配、手加、编辑、重取、改连接、保存并重开",
+    async (kind) => {
+      const existing = { ...provider, kind };
+      let persisted: ProviderSummary = existing;
+      const fake = providersHost({ ...config, providers: [existing] })
+        .handle("providers.discover", () => ({
+          models: [{ id: "remote-model" }],
+        }))
+        .handle("providers.save", (args) => {
+          const input = (args as { provider: ProviderInput }).provider;
+          persisted = {
+            ...existing,
+            ...input,
+            hasApiKey: true,
+            models: input.models.map((model) => ({
+              ...model,
+              ...model.overrides,
+            })),
+            headers: existing.headers,
+          };
+          fake.set("providers", {
+            config: { revision: "r2", providers: [persisted] },
+          });
+          return { revision: "r2" };
+        });
+      await render(<ProviderEditor provider={existing} onClose={() => {}} />);
+      await fetchList();
+      await act(async () => choice("remote-model")!.click());
+      await fill('input[aria-label="搜索模型"]', "unknown-id");
+      expect(document.body.textContent).toContain("没有匹配的模型，可手动添加");
+      await act(async () => button("＋ 加一个模型").click());
+      await fill("#model-id-1", "unknown-id");
+      await fill("#model-id-1", "unknown-id-edited");
+      await fill("#model-name-1", "My model");
+      await fill("#model-window-1", "64000");
+      await fetchList();
+      expect(
+        document.querySelector<HTMLInputElement>("#model-id-1")?.value,
+      ).toBe("unknown-id-edited");
+      await fill("#provider-key", "replacement");
+      expect(choice("remote-model")).toBeUndefined();
+      expect(document.body.textContent).toContain("请重新获取模型列表");
+      expect(saves(fake)).toHaveLength(0);
+      await save();
+      expect(saves(fake)[0]?.args).toMatchObject({
+        provider: {
+          kind,
+          models: [
+            ...provider.models,
+            {
+              id: "unknown-id-edited",
+              overrides: { name: "My model", contextWindow: 64000 },
+            },
+          ],
+        },
+      });
+      await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
+      await render(<ProviderEditor provider={persisted} onClose={() => {}} />);
+      expect(
+        document.querySelector<HTMLInputElement>("#model-id-1")?.value,
+      ).toBe("unknown-id-edited");
+      expect(
+        document.querySelector<HTMLInputElement>("#model-name-1")?.value,
+      ).toBe("My model");
+      expect(
+        document.querySelector<HTMLInputElement>("#model-window-1")?.value,
+      ).toBe("64000");
+      await save();
+      expect(saves(fake)[1]?.args).toMatchObject({
+        provider: { models: persisted.models },
+      });
+    },
+  );
+
+  it("具名服务商手加后放弃不保存，重开没有未保存模型", async () => {
+    const existing = { ...provider, kind: "deepseek" as const };
+    const fake = host().handle("providers.discover", () => ({ models: [] }));
+    const close = rstest.fn();
+    await render(<ProviderEditor provider={existing} onClose={close} />);
+    await fetchList();
+    expect(document.body.textContent).toContain("没有可用模型");
+    await act(async () => button("＋ 加一个模型").click());
+    await fill("#model-id-1", "unsaved-model");
+    await act(async () => button("返回").click());
+    await act(async () => button("放弃改动").click());
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(saves(fake)).toHaveLength(0);
+    await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
+    await render(<ProviderEditor provider={existing} onClose={() => {}} />);
+    expect(document.querySelector("#model-id-1")).toBeNull();
+  });
+});
+
+describe("具名服务商预置", () => {
+  it.each([
+    { label: "DeepSeek", kind: "deepseek", url: "https://api.deepseek.com" },
+    {
+      label: "Kimi for Coding",
+      kind: "kimi-coding",
+      url: "https://api.kimi.com/coding/v1",
+    },
+    {
+      label: "GLM Coding Plan (CN)",
+      kind: "zai-coding-cn",
+      url: "https://open.bigmodel.cn/api/coding/paas/v4",
+    },
+    {
+      label: "GLM Coding Plan (Global)",
+      kind: "zai",
+      url: "https://api.z.ai/api/coding/paas/v4",
+    },
+  ])(
+    "$label：选服务商、填 Key、获取、勾选、保存",
+    async ({ label, kind, url }) => {
+      const fake = host().handle("providers.discover", () => ({
+        models: [{ id: "remote-model" }],
+      }));
+      await render(<ProviderEditor provider={undefined} onClose={() => {}} />);
+      await fill("#provider-name", label);
+      await selectProvider(label);
+      expect(
+        document.querySelector<HTMLInputElement>("#provider-base")?.value,
+      ).toBe(url);
+      await fill("#provider-key", "test-key");
+      await fetchList();
+      expect(discoveries(fake)[0]?.args).toMatchObject({
+        kind,
+        baseUrl: url,
+        apiKey: "test-key",
+      });
+      expect(saves(fake)).toHaveLength(0);
+      await act(async () => choice("remote-model")!.click());
+      await save();
+      expect(saves(fake)[0]?.args).toMatchObject({
+        provider: {
+          kind,
+          baseUrl: url,
+          apiKey: "test-key",
+          models: [{ id: "remote-model" }],
+        },
+      });
+    },
+  );
+
+  it("编辑具名服务商不覆盖中转地址，手改地址后获取和保存均沿用", async () => {
+    const fake = host().handle("providers.discover", () => ({ models: [] }));
+    await render(
+      <ProviderEditor
+        provider={{
+          ...provider,
+          kind: "deepseek",
+          baseUrl: "https://proxy.test/v1",
+        }}
+        onClose={() => {}}
+      />,
+    );
+    expect(
+      document.querySelector<HTMLButtonElement>("#provider-kind")?.textContent,
+    ).toBe("DeepSeek");
+    expect(
+      document.querySelector<HTMLInputElement>("#provider-base")?.value,
+    ).toBe("https://proxy.test/v1");
+    await fill("#provider-base", "https://other.test/v1");
+    await fetchList();
+    await save();
+    expect(discoveries(fake)[0]?.args).toMatchObject({
+      kind: "deepseek",
+      baseUrl: "https://other.test/v1",
+    });
+    expect(saves(fake)[0]?.args).toMatchObject({
+      provider: {
+        kind: "deepseek",
+        baseUrl: "https://other.test/v1",
+        models: provider.models,
+      },
+    });
+  });
+
+  it("只列出现有具名服务商与两种自定义协议，不再提供 Codex 订阅", async () => {
+    host();
+    await render(<ProviderEditor provider={undefined} onClose={() => {}} />);
+    await act(async () =>
+      document
+        .querySelector<HTMLButtonElement>("#provider-kind")!
+        .dispatchEvent(
+          new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+        ),
+    );
+    expect(
+      [...document.querySelectorAll('[role="option"]')].map(
+        (o) => o.textContent,
+      ),
+    ).toEqual([
+      "Kimi for Coding",
+      "DeepSeek",
+      "GLM Coding Plan (CN)",
+      "GLM Coding Plan (Global)",
+      "OpenAI / 自定义 · Chat Completions",
+      "OpenAI / 自定义 · Responses",
+    ]);
+  });
+
+  it("自定义 Responses 保留 OpenAI API Key、地址与发现/保存链路", async () => {
+    const fake = host().handle("providers.discover", () => ({
+      models: [{ id: "gpt-test" }],
+    }));
+    await render(<ProviderEditor provider={undefined} onClose={() => {}} />);
+    await selectProvider("OpenAI / 自定义 · Responses");
+    expect(document.body.textContent).toContain("/responses");
+    await fill("#provider-name", "OpenAI");
+    await fill("#provider-base", "https://api.openai.com/v1");
+    await fill("#provider-key", "test-api-key");
+    await fetchList();
+    await act(async () => choice("gpt-test")!.click());
+    await save();
+    expect(discoveries(fake)[0]?.args).toMatchObject({
+      kind: "openai-responses",
+      apiKey: "test-api-key",
+    });
+    expect(saves(fake)[0]?.args).toMatchObject({
+      provider: {
+        kind: "openai-responses",
+        baseUrl: "https://api.openai.com/v1",
+        apiKey: "test-api-key",
+        models: [{ id: "gpt-test" }],
+      },
+    });
+  });
+});
+
+const metadataModels = [
+  {
+    id: "m1",
+    name: "Public One",
+    contextWindow: 100000,
+    input: ["text", "image"],
+  },
+];
+const publicProvider: ProviderSummary = {
+  ...provider,
+  baseUrl: "https://api.openai.com/v1",
+  models: [{ id: "m1" }],
+};
+async function supplement() {
+  await act(async () => button("补充公共模型资料").click());
+}
+const savedModels = (fake: FakeHost, index = 0) =>
+  (saves(fake)[index]!.args as { provider: { models: unknown[] } }).provider
+    .models;
+
+describe("公共模型资料预览", () => {
+  it("只发精确 ID/连接信息，补空缺；保存前不写配置，未知模型保留", async () => {
+    const fake = host().handle("providers.metadata", () => ({
+      models: metadataModels,
+    }));
+    await render(
+      <ProviderEditor
+        provider={{
+          ...publicProvider,
+          models: [{ id: "m1" }, { id: "unknown" }],
+        }}
+        onClose={() => {}}
+      />,
+    );
+    await fill("#provider-key", "private-key");
+    await supplement();
+    expect(fake.calls.find((call) => call.action === "metadata")?.args).toEqual(
+      {
+        kind: "openai-compatible",
+        baseUrl: publicProvider.baseUrl,
+        modelIds: ["m1", "unknown"],
+      },
+    );
+    expect(saves(fake)).toEqual([]);
+    expect(document.body.textContent).toContain("已匹配 1 个模型");
+    expect(document.body.textContent).toContain("还没保存");
+    expect(
+      document.querySelector<HTMLInputElement>("#model-window-0")?.value,
+    ).toBe("100000");
+    await save();
+    expect(savedModels(fake)).toEqual([...metadataModels, { id: "unknown" }]);
+  });
+  it("已有保存配置及 overrides 不被公共资料覆盖", async () => {
+    const fake = host().handle("providers.metadata", () => ({
+      models: metadataModels,
+    }));
+    await render(<ProviderEditor provider={provider} onClose={() => {}} />);
+    await supplement();
+    await save();
+    expect(savedModels(fake)).toEqual(provider.models);
+  });
+  it.each(["deepseek", "kimi-coding", "openai-compatible"] as const)(
+    "%s 手动修改优先，不把默认 false 当成已填写",
+    async (kind) => {
+      const fake = host().handle("providers.metadata", () => ({
+        models: metadataModels,
+      }));
+      await render(
+        <ProviderEditor
+          provider={{ ...publicProvider, kind }}
+          onClose={() => {}}
+        />,
+      );
+      await fill("#model-name-0", "Manual");
+      await fill("#model-name-0", "");
+      await fill("#model-window-0", "7777");
+      const vision = document.querySelector<HTMLInputElement>(
+        ".settings-model input[type=checkbox]",
+      )!;
+      await act(async () => vision.click());
+      await act(async () => vision.click());
+      await supplement();
+      expect(
+        document.querySelector<HTMLInputElement>("#model-name-0")?.value,
+      ).toBe("");
+      expect(vision.checked).toBe(false);
+      await save();
+      expect(savedModels(fake)).toEqual([
+        { id: "m1", overrides: { contextWindow: 7777, input: ["text"] } },
+      ]);
+    },
+  );
+  it("补全后仍可手动修正，保存修正值", async () => {
+    const fake = host().handle("providers.metadata", () => ({
+      models: metadataModels,
+    }));
+    await render(
+      <ProviderEditor provider={publicProvider} onClose={() => {}} />,
+    );
+    await supplement();
+    await fill("#model-name-0", "Mine");
+    await fill("#model-window-0", "32000");
+    await save();
+    expect(savedModels(fake)).toEqual([
+      {
+        ...metadataModels[0],
+        overrides: { name: "Mine", contextWindow: 32000 },
+      },
+    ]);
+  });
+  it("目录失败明确报错但不破坏发现列表、已选模型和手动添加/保存", async () => {
+    const fake = host()
+      .handle("providers.discover", () => ({ models: [{ id: "new" }] }))
+      .handle("providers.metadata", () => {
+        throw new Error("Public model metadata HTTP 503");
+      });
+    await render(
+      <ProviderEditor provider={publicProvider} onClose={() => {}} />,
+    );
+    await fetchList();
+    await act(async () => choice("new")!.click());
+    await supplement();
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+      "公共模型资料获取失败",
+    );
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+      "503",
+    );
+    expect(choice("new")?.checked).toBe(true);
+    await act(async () => button("＋ 加一个模型").click());
+    await fill("#model-id-1", "manual");
+    await save();
+    expect(savedModels(fake)).toEqual([
+      { id: "m1" },
+      { id: "manual" },
+      { id: "new" },
+    ]);
+  });
+  it("无匹配与请求失败区分；取消补全不落配置", async () => {
+    const fake = host().handle("providers.metadata", () => ({ models: [] }));
+    const closed = rstest.fn();
+    await render(<ProviderEditor provider={publicProvider} onClose={closed} />);
+    await supplement();
+    expect(document.body.textContent).toContain("公共目录无可靠匹配");
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    fake.handle("providers.metadata", () => ({ models: metadataModels }));
+    await supplement();
+    await act(async () => button("返回").click());
+    await act(async () => button("放弃改动").click());
+    expect(closed).toHaveBeenCalledOnce();
+    expect(saves(fake)).toEqual([]);
+  });
+  it.each(["connection", "model", "name", "vision", "undo", "save", "close"])(
+    "资料请求中 %s 改变后，旧请求不能污染表单",
+    async (change) => {
+      const pending = deferred<{ models: typeof metadataModels }>();
+      const fake = host().handle("providers.metadata", () => pending.promise);
+      await render(
+        <ProviderEditor provider={publicProvider} onClose={() => {}} />,
+      );
+      await supplement();
+      if (change === "connection" || change === "undo")
+        await fill("#provider-base", "https://other.test/v1");
+      if (change === "undo")
+        await fill("#provider-base", publicProvider.baseUrl);
+      if (change === "model") await fill("#model-id-0", "different");
+      if (change === "name") await fill("#model-name-0", "Manual");
+      if (change === "vision")
+        await act(async () =>
+          document
+            .querySelector<HTMLInputElement>(
+              ".settings-model input[type=checkbox]",
+            )!
+            .click(),
+        );
+      if (change === "save") await save();
+      if (change === "close") await act(async () => button("返回").click());
+      await act(async () => pending.resolve({ models: metadataModels }));
+      expect(
+        document.querySelector<HTMLInputElement>("#model-window-0")?.value,
+      ).toBe("");
+      expect(document.body.textContent).not.toContain("Public One");
+      expect(saves(fake).length).toBe(change === "save" ? 1 : 0);
+    },
+  );
+  it("只为已选账号模型补资料，不自动导入目录其它模型", async () => {
+    const fake = host()
+      .handle("providers.discover", () => ({
+        models: [{ id: "m1" }, { id: "m2" }],
+      }))
+      .handle("providers.metadata", () => ({ models: metadataModels }));
+    await render(
+      <ProviderEditor
+        provider={{ ...publicProvider, models: [] }}
+        onClose={() => {}}
+      />,
+    );
+    await fetchList();
+    await act(async () => choice("m1")!.click());
+    await supplement();
+    expect(choice("m2")?.checked).toBe(false);
+    await save();
+    expect(savedModels(fake)).toEqual(metadataModels);
+  });
+});
+
+describe("公共资料请求隔离回归", () => {
+  it("旧请求失败不遮盖新结果，同一请求防重复提交", async () => {
+    const first = deferred<{ models: typeof metadataModels }>();
+    const fake = host().handle("providers.metadata", () => first.promise);
+    await render(
+      <ProviderEditor provider={publicProvider} onClose={() => {}} />,
+    );
+    await act(async () => {
+      button("补充公共模型资料").click();
+      button("补充公共模型资料").click();
+    });
+    expect(
+      fake.calls.filter((call) => call.action === "metadata"),
+    ).toHaveLength(1);
+    expect(button("正在获取公共模型资料…").disabled).toBe(true);
+    await fill("#provider-key", "changed");
+    fake.handle("providers.metadata", () => ({ models: metadataModels }));
+    await supplement();
+    await act(async () => first.reject(new Error("old failure")));
+    expect(document.body.textContent).not.toContain("old failure");
+    expect(document.body.textContent).toContain("已匹配 1 个模型");
+    expect(
+      document.querySelector<HTMLInputElement>("#model-window-0")?.value,
+    ).toBe("100000");
+  });
+  it("保存的手动 overrides 保持原样", async () => {
+    const saved = {
+      id: "m1",
+      name: "Mine",
+      contextWindow: 32000,
+      input: ["text"] as ("text" | "image")[],
+      overrides: {
+        name: "Mine",
+        contextWindow: 32000,
+        input: ["text"] as ("text" | "image")[],
+      },
+    };
+    const fake = host().handle("providers.metadata", () => ({
+      models: metadataModels,
+    }));
+    await render(
+      <ProviderEditor
+        provider={{ ...publicProvider, models: [saved] }}
+        onClose={() => {}}
+      />,
+    );
+    await supplement();
+    await save();
+    expect(savedModels(fake)).toEqual([saved]);
   });
 });

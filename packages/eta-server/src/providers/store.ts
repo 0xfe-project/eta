@@ -229,7 +229,11 @@ export class ProviderConfigStore {
         (entry) => entry.id === id,
       );
       if (provider === undefined) return;
-      provider.models = models;
+      const existing = new Set(provider.models.map((model) => model.id));
+      provider.models = [
+        ...provider.models,
+        ...models.filter((model) => !existing.has(model.id)),
+      ];
       provider.lastRefreshedAt = at;
     });
   }

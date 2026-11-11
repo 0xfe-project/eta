@@ -125,7 +125,6 @@ export {
   catalogModelsFor,
   parseProviderModelCatalog,
   type ProviderCatalogEntry,
-  providerCatalogRestrictsModels,
   providerDefinitionForKind,
   providerModelCatalog,
   providerModelDefinition,

@@ -52,10 +52,8 @@ export const PROVIDER_ACTIONS = [
   "setNetwork",
   "reload",
   "refresh",
-  "codexLogin",
-  "codexAnswer",
-  "codexStatus",
-  "codexCancel",
+  "discover",
+  "metadata",
 ] as const;
 
 export interface CreateSessionInput {
@@ -174,10 +172,21 @@ export interface ProviderArgs {
   setNetwork: { revision: string } & import("./types").NetworkConfig;
   reload: Record<string, never>;
   refresh: { id: string };
-  codexLogin: { method?: "browser" | "device_code" };
-  codexAnswer: { id: string; promptId: string; value: string };
-  codexStatus: { id: string };
-  codexCancel: { id?: string };
+  /** Public metadata for explicit IDs, never an account model list. */
+  metadata: {
+    kind: import("./types").ProviderKind;
+    baseUrl: string;
+    modelIds: string[];
+  };
+  /** Preview unsaved connection values; never writes configuration. */
+  discover: {
+    id?: string;
+    revision?: string;
+    kind: import("./types").ProviderKind;
+    baseUrl: string;
+    apiKey?: string | null;
+    headers?: import("./types").ProviderHeaders | null;
+  };
 }
 export type ProviderCall = {
   [A in ProviderAction]: Omit<CallFrame, "target" | "action" | "args"> & {

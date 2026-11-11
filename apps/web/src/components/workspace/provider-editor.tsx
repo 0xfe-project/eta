@@ -20,8 +20,9 @@ import type {
  * (another tab, an editor on the file), the host refuses, the page re-reads it, and the person is
  * told to look again before saving once more.
  */
+import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
@@ -41,6 +42,9 @@ import { listSeparator } from "@/lib/i18n";
 import { THINKING_LEVELS } from "@/lib/thinking";
 import {
   currentRevision,
+  discoverProviderModels,
+  discoveryErrorMessage,
+  fetchModelMetadata,
   isConfigChanged,
   providerErrorMessage,
   providerLabel,
@@ -48,18 +52,13 @@ import {
   useProviders,
   useSaveProvider,
 } from "@/queries/providers";
+import { wireErrorMessage } from "@/queries/wire";
 import { Select, SelectOption } from "./select-field";
 import { useAgents } from "./use-agents";
 
-const KINDS: ProviderKind[] = [
-  "openai-compatible",
-  "openai-responses",
-  "openai-codex",
-  "kimi-coding",
-  "deepseek",
-  "zai-coding-cn",
-  "zai",
-];
+const PRESETS = Object.entries(BUILTIN_PROVIDER_PRESETS).filter(
+  ([kind]) => kind !== "openai-codex",
+);
 
 /** Kinds you point at an endpoint of your own: their models are yours to spell out. */
 const CUSTOM_KINDS: readonly ProviderKind[] = [
@@ -77,6 +76,7 @@ interface ModelRow {
   reasoning: boolean;
   defaultThinking: EtaModelConfig["defaultThinking"];
   source?: EtaModelConfig;
+  edited?: (keyof ModelCapabilities)[];
 }
 
 function rowOf(model: EtaModelConfig): ModelRow {
@@ -111,7 +111,10 @@ function modelOf(row: ModelRow): EtaModelConfig | undefined {
     contextWindow !== was?.contextWindow
   )
     changes.contextWindow = contextWindow;
-  if (row.vision !== (was?.input?.includes("image") ?? false))
+  if (
+    row.vision !== (was?.input?.includes("image") ?? false) ||
+    (row.edited?.includes("input") && was?.input === undefined)
+  )
     changes.input = row.vision ? ["text", "image"] : ["text"];
   const overrides = { ...was?.overrides, ...changes };
   const base: EtaModelConfig = { ...(was ?? { id }) };
@@ -176,13 +179,11 @@ function inputOf(form: {
 function ModelCard({
   row,
   index,
-  custom,
   onUpdate,
   onRemove,
 }: {
   row: ModelRow;
   index: number;
-  custom: boolean;
   onUpdate: (patch: Partial<ModelRow>) => void;
   onRemove: () => void;
 }) {
@@ -253,58 +254,56 @@ function ModelCard({
           </Select>
         </div>
       </div>
-      {custom ? (
-        <details>
-          <summary>{translateText("editor.modelSettings")}</summary>
-          <div className="settings-model-fields">
-            <div className="settings-field">
-              <Label htmlFor={`model-id-${index}`}>
-                {translateText("editor.modelId")}
-              </Label>
-              <Input
-                id={`model-id-${index}`}
-                className="font-mono"
-                value={row.id}
-                placeholder="model-id"
-                onChange={(event) => onUpdate({ id: event.target.value })}
-              />
-            </div>
-            <div className="settings-field">
-              <Label htmlFor={`model-name-${index}`}>
-                {translateText("editor.modelName")}
-              </Label>
-              <Input
-                id={`model-name-${index}`}
-                value={row.name}
-                onChange={(event) => onUpdate({ name: event.target.value })}
-              />
-            </div>
-            <div className="settings-field">
-              <Label htmlFor={`model-window-${index}`}>
-                {translateText("editor.contextWindow")}
-              </Label>
-              <Input
-                id={`model-window-${index}`}
-                aria-label={translateText("editor.contextWindow")}
-                className="font-mono"
-                inputMode="numeric"
-                value={row.contextWindow}
-                onChange={(event) =>
-                  onUpdate({ contextWindow: event.target.value })
-                }
-              />
-            </div>
-            <label className="settings-check">
-              <input
-                type="checkbox"
-                checked={row.vision}
-                onChange={(event) => onUpdate({ vision: event.target.checked })}
-              />
-              {translateText("editor.vision")}
-            </label>
+      <details>
+        <summary>{translateText("editor.modelSettings")}</summary>
+        <div className="settings-model-fields">
+          <div className="settings-field">
+            <Label htmlFor={`model-id-${index}`}>
+              {translateText("editor.modelId")}
+            </Label>
+            <Input
+              id={`model-id-${index}`}
+              className="font-mono"
+              value={row.id}
+              placeholder="model-id"
+              onChange={(event) => onUpdate({ id: event.target.value })}
+            />
           </div>
-        </details>
-      ) : null}
+          <div className="settings-field">
+            <Label htmlFor={`model-name-${index}`}>
+              {translateText("editor.modelName")}
+            </Label>
+            <Input
+              id={`model-name-${index}`}
+              value={row.name}
+              onChange={(event) => onUpdate({ name: event.target.value })}
+            />
+          </div>
+          <div className="settings-field">
+            <Label htmlFor={`model-window-${index}`}>
+              {translateText("editor.contextWindow")}
+            </Label>
+            <Input
+              id={`model-window-${index}`}
+              aria-label={translateText("editor.contextWindow")}
+              className="font-mono"
+              inputMode="numeric"
+              value={row.contextWindow}
+              onChange={(event) =>
+                onUpdate({ contextWindow: event.target.value })
+              }
+            />
+          </div>
+          <label className="settings-check">
+            <input
+              type="checkbox"
+              checked={row.vision}
+              onChange={(event) => onUpdate({ vision: event.target.checked })}
+            />
+            {translateText("editor.vision")}
+          </label>
+        </div>
+      </details>
     </div>
   );
 }
@@ -332,8 +331,18 @@ function fingerprint(form: {
       row.contextWindow,
       row.vision,
       row.defaultThinking ?? "",
+      row.source,
+      row.edited,
     ]),
   ]);
+}
+
+interface ModelPreview {
+  connection: string;
+  status: "loading" | "ready" | "failed" | "stale";
+  models: EtaModelConfig[];
+  selected: ModelRow[];
+  error?: string;
 }
 
 export function ProviderEditor({
@@ -349,7 +358,9 @@ export function ProviderEditor({
   const remove = useDeleteProvider();
   const [removing, setRemoving] = useState(false);
   const [name, setName] = useState(provider?.name ?? "");
-  const [kind, setKind] = useState<ProviderKind>(provider?.kind ?? KINDS[0]!);
+  const [kind, setKind] = useState<ProviderKind>(
+    provider?.kind ?? "openai-compatible",
+  );
   const [baseUrl, setBaseUrl] = useState(provider?.baseUrl ?? "");
   const [key, setKey] = useState("");
   const [clearKey, setClearKey] = useState(false);
@@ -363,6 +374,7 @@ export function ProviderEditor({
     (provider?.models ?? []).map(rowOf),
   );
   const [saved, setSaved] = useState(false);
+  const [savedId, setSavedId] = useState(provider?.id);
   const [changedElsewhere, setChangedElsewhere] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   // The config this form was read from: what a save has to be made against.
@@ -375,7 +387,7 @@ export function ProviderEditor({
   const [baseline, setBaseline] = useState(() =>
     fingerprint({
       name: provider?.name ?? "",
-      kind: provider?.kind ?? KINDS[0]!,
+      kind: provider?.kind ?? "openai-compatible",
       baseUrl: provider?.baseUrl ?? "",
       headers: provider?.headers ?? {},
       models: (provider?.models ?? []).map(rowOf),
@@ -392,17 +404,202 @@ export function ProviderEditor({
     key,
     clearKey,
   });
-  const dirty = current !== baseline;
+  const [preview, setPreview] = useState<ModelPreview>();
+  const [search, setSearch] = useState("");
+  const requestRef = useRef(0);
+  const pendingRef = useRef(false);
+  const connection = JSON.stringify([
+    kind,
+    baseUrl,
+    key,
+    clearKey,
+    headers,
+    revision,
+    savedId,
+  ]);
+  useEffect(() => {
+    // A connection change invalidates even an in-flight request (including change then undo).
+    requestRef.current += 1;
+    pendingRef.current = false;
+    setPreview((previous) =>
+      previous === undefined
+        ? undefined
+        : {
+            connection,
+            status: "stale",
+            models: [],
+            selected: [],
+          },
+    );
+    return () => {
+      requestRef.current += 1;
+    };
+  }, [connection]);
+  const fresh =
+    preview?.connection === connection && preview.status === "ready";
+  const selected =
+    preview?.connection === connection && preview.status !== "stale"
+      ? preview.selected.filter(
+          (row) => !models.some((existing) => existing.id.trim() === row.id),
+        )
+      : [];
+  const allModels = [...models, ...selected];
+  const [metadata, setMetadata] = useState<{
+    status: "loading" | "ready" | "failed";
+    form: string;
+    count?: number;
+    error?: string;
+  }>();
+  const metadataRequestRef = useRef(0);
+  const metadataPendingRef = useRef(false);
+  const metadataForm = JSON.stringify([connection, allModels]);
+  useEffect(() => {
+    metadataRequestRef.current += 1;
+    metadataPendingRef.current = false;
+    return () => {
+      metadataRequestRef.current += 1;
+    };
+  }, [metadataForm]);
+  const supplementMetadata = async () => {
+    if (metadataPendingRef.current) return;
+    metadataPendingRef.current = true;
+    const attempt = ++metadataRequestRef.current;
+    setMetadata({ status: "loading", form: metadataForm });
+    try {
+      const result = await fetchModelMetadata({
+        kind,
+        baseUrl,
+        modelIds: allModels.map((row) => row.id.trim()).filter(Boolean),
+      });
+      if (attempt !== metadataRequestRef.current) return;
+      const supplement = (row: ModelRow): ModelRow => {
+        const known = result.models.find((model) => model.id === row.id.trim());
+        if (!known) return row;
+        const source = { ...row.source, id: row.id.trim() };
+        const updated = { ...row, source };
+        if (
+          !row.edited?.includes("name") &&
+          !row.name &&
+          source.name === undefined &&
+          known.name !== undefined
+        )
+          updated.name = source.name = known.name;
+        if (
+          !row.edited?.includes("contextWindow") &&
+          !row.contextWindow &&
+          source.contextWindow === undefined &&
+          known.contextWindow !== undefined
+        )
+          updated.contextWindow = String(
+            (source.contextWindow = known.contextWindow),
+          );
+        if (
+          !row.edited?.includes("input") &&
+          source.input === undefined &&
+          known.input !== undefined
+        ) {
+          source.input = known.input;
+          updated.vision = known.input.includes("image");
+        }
+        return updated;
+      };
+      setModels((rows) => rows.map(supplement));
+      setPreview((current) =>
+        current === undefined
+          ? current
+          : { ...current, selected: current.selected.map(supplement) },
+      );
+      setMetadata({
+        status: "ready",
+        form: JSON.stringify([connection, allModels.map(supplement)]),
+        count: result.models.length,
+      });
+    } catch (error) {
+      if (attempt === metadataRequestRef.current)
+        setMetadata({
+          status: "failed",
+          form: metadataForm,
+          error: wireErrorMessage(error),
+        });
+    } finally {
+      if (attempt === metadataRequestRef.current)
+        metadataPendingRef.current = false;
+    }
+  };
+  const currentMetadata =
+    metadata?.form === metadataForm ? metadata : undefined;
+  const dirty = current !== baseline || selected.length > 0;
+  const fetching =
+    preview?.connection === connection && preview.status === "loading";
+  const matchingModels = fresh
+    ? preview.models.filter((model) =>
+        `${model.id} ${model.name ?? ""}`
+          .toLowerCase()
+          .includes(search.toLowerCase()),
+      )
+    : [];
+  const fetchModels = async () => {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
+    const attempt = ++requestRef.current;
+    setPreview({ connection, status: "loading", models: [], selected });
+    setSearch("");
+    const input = inputOf({
+      id: provider?.id ?? "",
+      name,
+      kind,
+      baseUrl,
+      key,
+      clearKey,
+      headers,
+      models: [],
+    });
+    try {
+      const result = await discoverProviderModels({
+        kind,
+        baseUrl: input.baseUrl,
+        ...(savedId === undefined
+          ? {}
+          : { id: savedId, ...(revision === undefined ? {} : { revision }) }),
+        ...(input.apiKey === undefined ? {} : { apiKey: input.apiKey }),
+        ...(input.headers === undefined ? {} : { headers: input.headers }),
+      });
+      if (attempt !== requestRef.current) return;
+      setPreview((current) => ({
+        connection,
+        status: "ready",
+        models: [
+          ...new Map(result.models.map((model) => [model.id, model])).values(),
+        ],
+        selected: current?.selected ?? [],
+      }));
+    } catch (error) {
+      if (attempt !== requestRef.current) return;
+      const message = discoveryErrorMessage(error);
+      setPreview((current) => ({
+        connection,
+        status: "failed",
+        models: [],
+        selected: current?.selected ?? [],
+        error: message,
+      }));
+    } finally {
+      if (attempt === requestRef.current) pendingRef.current = false;
+    }
+  };
 
   const id =
-    provider?.id ??
+    savedId ??
     uniqueId(
       name,
       (config?.providers ?? []).map((existing) => existing.id),
     );
   const custom = isCustomKind(kind);
   const save = useSaveProvider();
-  const submit = () =>
+  const submit = () => {
+    metadataRequestRef.current += 1;
+    metadataPendingRef.current = false;
+    setMetadata(undefined);
     save.mutate(
       {
         provider: inputOf({
@@ -413,12 +610,15 @@ export function ProviderEditor({
           key,
           clearKey,
           headers,
-          models,
+          models: allModels,
         }),
         ...(revision === undefined ? {} : { revision }),
       },
       {
         onSuccess: (result) => {
+          setSavedId(id);
+          setModels(allModels);
+          setPreview(undefined);
           setSaved(true);
           setChangedElsewhere(false);
           setKey("");
@@ -432,7 +632,7 @@ export function ProviderEditor({
               headers: Object.fromEntries(
                 headers.map((row) => [row.name, row.value]),
               ),
-              models,
+              models: allModels,
               key: "",
               clearKey: false,
             }),
@@ -449,13 +649,20 @@ export function ProviderEditor({
         },
       },
     );
+  };
 
+  const close = () => {
+    metadataRequestRef.current += 1;
+    requestRef.current += 1;
+    pendingRef.current = false;
+    onClose();
+  };
   const back = () => {
     if (dirty) {
       setDiscarding(true);
       return;
     }
-    onClose();
+    close();
   };
 
   const providerName = provider ? providerLabel(provider) : "";
@@ -468,10 +675,46 @@ export function ProviderEditor({
         )
     : [];
 
-  const patchModel = (index: number, patch: Partial<ModelRow>) =>
-    setModels((current) =>
-      current.map((row, at) => (at === index ? { ...row, ...patch } : row)),
-    );
+  const patchModel = (index: number, patch: Partial<ModelRow>) => {
+    const row = allModels[index]!;
+    const edited = new Set(row.edited);
+    if (patch.name !== undefined) edited.add("name");
+    if (patch.contextWindow !== undefined) edited.add("contextWindow");
+    if (patch.vision !== undefined) edited.add("input");
+    patch = { ...patch, edited: [...edited] };
+    if (index < models.length) {
+      setModels((current) =>
+        current.map((row, at) => (at === index ? { ...row, ...patch } : row)),
+      );
+    } else {
+      const target = selected[index - models.length];
+      setPreview((current) =>
+        current === undefined
+          ? current
+          : {
+              ...current,
+              selected: current.selected.map((row) =>
+                row === target ? { ...row, ...patch } : row,
+              ),
+            },
+      );
+    }
+  };
+  const removeModel = (index: number) => {
+    if (index < models.length)
+      setModels((current) => current.filter((_, at) => at !== index));
+    else {
+      const target = selected[index - models.length];
+      setPreview((current) =>
+        current === undefined
+          ? current
+          : {
+              ...current,
+              selected: current.selected.filter((row) => row !== target),
+            },
+      );
+    }
+  };
 
   return (
     <div>
@@ -487,7 +730,7 @@ export function ProviderEditor({
         </h2>
         <p>{translateText("editor.description")}</p>
       </div>
-      <fieldset className="min-w-0">
+      <fieldset className="min-w-0" disabled={save.isPending}>
         <div className="settings-field">
           <Label htmlFor="provider-name">{translateText("editor.name")}</Label>
           <Input
@@ -501,14 +744,34 @@ export function ProviderEditor({
           <Select
             id="provider-kind"
             value={kind}
-            onValueChange={(next) => setKind(next as ProviderKind)}
+            onValueChange={(next) => {
+              setKind(next as ProviderKind);
+              const preset = PRESETS.find(([kind]) => kind === next)?.[1];
+              if (preset) setBaseUrl(preset.baseUrl);
+            }}
           >
-            {KINDS.map((choice) => (
+            {PRESETS.map(([choice, preset]) => (
               <SelectOption key={choice} value={choice}>
-                <span className="font-mono">{choice}</span>
+                {preset.name}
               </SelectOption>
             ))}
+            <SelectOption value="openai-compatible">
+              {translateText("editor.chatCompletions")}
+            </SelectOption>
+            <SelectOption value="openai-responses">
+              {translateText("editor.responses")}
+            </SelectOption>
           </Select>
+          {custom ? (
+            <p className="settings-hint">
+              {translateText(
+                kind === "openai-responses"
+                  ? "editor.responsesHint"
+                  : "editor.chatCompletionsHint",
+              )}
+            </p>
+          ) : null}
+          <p className="settings-hint">{translateText("editor.nativeCodex")}</p>
         </div>
         <div className="settings-field">
           <Label htmlFor="provider-base">
@@ -521,6 +784,7 @@ export function ProviderEditor({
             className="font-mono"
             onChange={(event) => setBaseUrl(event.target.value)}
           />
+          <p className="settings-hint">{translateText("editor.baseUrlHint")}</p>
         </div>
         <div className="settings-field">
           <Label htmlFor="provider-key">{translateText("editor.key")}</Label>
@@ -615,44 +879,171 @@ export function ProviderEditor({
         <div className="settings-section-label">
           {translateText("editor.models")}
         </div>
-        {models.length === 0 ? (
+        <div className="grid gap-2 mb-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="justify-self-start"
+            disabled={fetching || baseUrl.trim().length === 0 || save.isPending}
+            onClick={() => void fetchModels()}
+          >
+            {fetching
+              ? translateText("discovery.loading")
+              : translateText("discovery.fetch")}
+          </Button>
+          <p className="settings-hint">{translateText("discovery.hint")}</p>
+          {preview !== undefined &&
+          !fresh &&
+          !fetching &&
+          preview.status !== "failed" ? (
+            <p role="status" className="settings-hint">
+              {translateText("discovery.stale")}
+            </p>
+          ) : null}
+          {fetching ? (
+            <p role="status" className="settings-hint">
+              {translateText("discovery.loading")}
+            </p>
+          ) : null}
+          {preview?.connection === connection && preview.status === "failed" ? (
+            <p role="alert" className="settings-hint">
+              {preview.error}
+            </p>
+          ) : null}
+          {fresh ? (
+            <>
+              <Input
+                aria-label={translateText("discovery.search")}
+                placeholder={translateText("discovery.search")}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+              <div
+                className="max-h-60 overflow-y-auto grid gap-1"
+                aria-label={translateText("discovery.results")}
+              >
+                {matchingModels.map((model) => {
+                  const existing = models.some(
+                    (row) => row.id.trim() === model.id,
+                  );
+                  return (
+                    <label key={model.id} className="settings-check break-all">
+                      <input
+                        type="checkbox"
+                        checked={
+                          existing ||
+                          selected.some((row) => row.id === model.id)
+                        }
+                        disabled={existing}
+                        onChange={(event) => {
+                          const checked = event.target.checked;
+                          setPreview((current) =>
+                            current === undefined
+                              ? current
+                              : {
+                                  ...current,
+                                  selected: checked
+                                    ? [...current.selected, rowOf(model)]
+                                    : current.selected.filter(
+                                        (row) => row.id !== model.id,
+                                      ),
+                                },
+                          );
+                        }}
+                      />
+                      <span>
+                        {model.name ?? model.id}
+                        {model.name && model.name !== model.id
+                          ? ` · ${model.id}`
+                          : ""}
+                        {existing
+                          ? ` · ${translateText("discovery.inForm")}`
+                          : ""}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              {preview.models.length === 0 ? (
+                <p role="status" className="settings-hint">
+                  {translateText("discovery.empty")}
+                </p>
+              ) : matchingModels.length === 0 ? (
+                <p role="status" className="settings-hint">
+                  {translateText("discovery.noMatches")}
+                </p>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+        <div className="grid gap-2 mb-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="justify-self-start"
+            disabled={
+              currentMetadata?.status === "loading" ||
+              allModels.length === 0 ||
+              !baseUrl.trim()
+            }
+            onClick={() => void supplementMetadata()}
+          >
+            {translateText(
+              currentMetadata?.status === "loading"
+                ? "metadata.loading"
+                : "metadata.fetch",
+            )}
+          </Button>
+          <p className="settings-hint">{translateText("metadata.hint")}</p>
+          {currentMetadata?.status === "failed" ? (
+            <p role="alert" className="settings-hint">
+              {translateText("metadata.failed", {
+                reason: currentMetadata.error,
+              })}
+            </p>
+          ) : null}
+          {currentMetadata?.status === "ready" ? (
+            <p role="status" className="settings-hint">
+              {translateText(
+                currentMetadata.count ? "metadata.ready" : "metadata.empty",
+                { count: currentMetadata.count },
+              )}
+            </p>
+          ) : null}
+        </div>
+        {allModels.length === 0 ? (
           <p className="settings-hint">{translateText("editor.noModels")}</p>
         ) : null}
-        {models.map((row, at) => (
+        {allModels.map((row, at) => (
           <ModelCard
             // Rows have no identity of their own until they have an id; the position is what the
             // person is looking at, and editing a field must not remount the card under the hand.
             key={at}
             index={at}
             row={row}
-            custom={custom}
             onUpdate={(patch) => patchModel(at, patch)}
-            onRemove={() =>
-              setModels((current) => current.filter((_, index) => index !== at))
-            }
+            onRemove={() => removeModel(at)}
           />
         ))}
-        {custom ? (
-          <button
-            type="button"
-            className="settings-add-model"
-            onClick={() =>
-              setModels((current) => [
-                ...current,
-                {
-                  id: "",
-                  name: "",
-                  contextWindow: "",
-                  vision: false,
-                  reasoning: false,
-                  defaultThinking: undefined,
-                },
-              ])
-            }
-          >
-            ＋ {translateText("editor.addModel")}
-          </button>
-        ) : null}
+        <button
+          type="button"
+          className="settings-add-model"
+          onClick={() =>
+            setModels((current) => [
+              ...current,
+              {
+                id: "",
+                name: "",
+                contextWindow: "",
+                vision: false,
+                reasoning: false,
+                defaultThinking: undefined,
+              },
+            ])
+          }
+        >
+          ＋ {translateText("editor.addModel")}
+        </button>
       </fieldset>
       <div className="settings-provider-actions">
         {changedElsewhere ? (
@@ -683,7 +1074,7 @@ export function ProviderEditor({
               size="xs"
               onClick={() => {
                 setDiscarding(false);
-                onClose();
+                close();
               }}
             >
               {translateText("editor.discard")}

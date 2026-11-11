@@ -2,6 +2,7 @@ import type { ProviderSummary, ProvidersView } from "@eta/client-contracts";
 import { describe, expect, it } from "@rstest/core";
 import { WireError } from "@/lib/wire";
 import {
+  discoveryErrorMessage,
   keyMissing,
   modelAvailability,
   modelGroups,
@@ -166,5 +167,28 @@ describe("what a failed write says", () => {
     expect(providerErrorMessage(new WireError("timeout", "x"))).toBe(
       "宿主没有及时回应。",
     );
+  });
+});
+
+describe("safe discovery failures", () => {
+  it.each([
+    ["discovery_invalid_connection", "接口地址不对"],
+    ["discovery_unsupported", "不提供模型发现"],
+    ["discovery_network: ECONNREFUSED", "ECONNREFUSED"],
+    ["discovery_response", "格式不正确"],
+    ["discovery_timeout", "超时"],
+    ["config_changed", "重新打开表单"],
+    ["discovery_http_403", "HTTP 403"],
+  ])("localizes %s without showing connection data", (code, text) => {
+    expect(discoveryErrorMessage(new WireError("server", code))).toContain(
+      text,
+    );
+  });
+  it("passes unexpected errors through the existing error chain instead of hiding them", () => {
+    const message = "unknown op: providers.discover";
+    expect(discoveryErrorMessage(new WireError("server", message))).toBe(
+      message,
+    );
+    expect(discoveryErrorMessage(new Error(message))).toBe(message);
   });
 });

@@ -20,20 +20,13 @@ import type { ProviderArgs, ProvidersView } from "@eta/client-contracts";
 import type { ProviderConfigStore } from "../providers/store";
 import type { WireService } from "../wire-service";
 import { Service } from "cordis";
-import {
-  codexAuthPath,
-  CodexCredentialStore,
-  CodexLogin,
-  piCodexLogin,
-} from "../codex-auth";
 import { discoverModels } from "../providers/discovery";
+import { publicModelMetadata } from "../providers/metadata";
 
 export { PROVIDER_ACTIONS } from "@eta/client-contracts";
 
 export interface ProvidersPluginOptions {
   store: ProviderConfigStore;
-  /** How long a codex login may stay pending. Zero-ish values are for tests. */
-  loginTimeoutMs?: number | undefined;
   /**
    * The HTTP client discovery uses. A test supplies one; production uses `fetch`, which is what
    * makes the refresh path the same client the requests go through.
@@ -81,20 +74,6 @@ export function providersPlugin(options: ProvidersPluginOptions) {
         effect: (execute: () => () => unknown) => unknown;
       };
       const wire = context.wire;
-      // The codex login: a second target's worth of state, kept on this one because it is
-      // about the same subject (which providers exist and whether they are usable). The
-      // credentials live beside the config file, and the flow is pi-ai's.
-      const credentials = new CodexCredentialStore(
-        codexAuthPath(options.store.path),
-      );
-      const codex = new CodexLogin({
-        credentials,
-        login: piCodexLogin(credentials),
-        ...(options.loginTimeoutMs === undefined
-          ? {}
-          : { timeoutMs: options.loginTimeoutMs }),
-      });
-
       return context.effect(() => {
         // What the section shows: the last read, plus the revision a write must carry.
         // Kept as a box because the state projector must be synchronous while reading the
@@ -190,6 +169,79 @@ export function providersPlugin(options: ProvidersPluginOptions) {
               },
             };
           }),
+          wire.handle("providers", "metadata", async (call) => ({
+            result: await publicModelMetadata(
+              call.args as ProviderArgs["metadata"],
+              options.fetch,
+            ),
+          })),
+          wire.handle("providers", "discover", async (call) => {
+            const args = (call.args ?? {}) as Partial<ProviderArgs["discover"]>;
+            // Never echo URLs, keys, headers or upstream error bodies.
+            let url: URL;
+            try {
+              url = new URL(args.baseUrl?.trim() ?? "");
+            } catch {
+              throw new Error("discovery_invalid_connection");
+            }
+            if (
+              !["http:", "https:"].includes(url.protocol) ||
+              url.username ||
+              url.password ||
+              url.search ||
+              url.hash
+            )
+              throw new Error("discovery_invalid_connection");
+            const baseUrl = url.href.replace(/\/+$/, "");
+            if (
+              typeof args.kind !== "string" ||
+              (args.apiKey !== undefined &&
+                args.apiKey !== null &&
+                typeof args.apiKey !== "string")
+            )
+              throw new Error("discovery_invalid_connection");
+            const { config, revision } = await options.store.read();
+            const existing =
+              args.id === undefined
+                ? undefined
+                : config.providers?.find((entry) => entry.id === args.id);
+            if (
+              args.id !== undefined &&
+              (existing === undefined || args.revision !== revision)
+            )
+              throw new Error("config_changed");
+            const signal = AbortSignal.timeout(45_000);
+            const apiKey =
+              args.apiKey === null
+                ? undefined
+                : (args.apiKey?.trim() ?? existing?.apiKey);
+            const discovered = await discoverModels({
+              reference: { kind: args.kind, baseUrl },
+              apiKey,
+              headers: args.headers ?? undefined,
+              signal,
+              ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+            });
+            if (signal.aborted) throw new Error("discovery_timeout");
+            if (discovered.failure === "network") {
+              // Only the network error may contain request values. Keep the diagnostic, redact credentials.
+              let message = discovered.error!;
+              for (const value of [
+                apiKey,
+                ...Object.values(args.headers ?? {}),
+              ]) {
+                if (value) message = message.replaceAll(value, "[redacted]");
+              }
+              throw new Error(`discovery_network: ${message}`);
+            }
+            if (discovered.failure !== undefined)
+              throw new Error(
+                discovered.failure === "http"
+                  ? `discovery_http_${discovered.status}`
+                  : `discovery_${discovered.failure}`,
+              );
+            return { result: { models: discovered.models } };
+          }),
           wire.handle("providers", "refresh", async (call) => {
             const { id } = (call.args ?? {}) as Partial<
               ProviderArgs["refresh"]
@@ -223,60 +275,6 @@ export function providersPlugin(options: ProvidersPluginOptions) {
               result: {
                 revision: latest.revision,
                 models: discovered.models.length,
-              },
-            };
-          }),
-          wire.handle("providers", "codexLogin", (call) => {
-            const { method } = (call.args ?? {}) as Partial<
-              ProviderArgs["codexLogin"]
-            >;
-            if (
-              method !== undefined &&
-              method !== "browser" &&
-              method !== "device_code"
-            ) {
-              throw new Error(
-                "providers.codexLogin needs method: browser or device_code",
-              );
-            }
-            // The view carries no token: it is what a UI renders and what the wire carries.
-            return { result: { login: codex.start(method ?? "browser") } };
-          }),
-          wire.handle("providers", "codexAnswer", (call) => {
-            const { id, promptId, value } = (call.args ?? {}) as Partial<
-              ProviderArgs["codexAnswer"]
-            >;
-            if (
-              id === undefined ||
-              promptId === undefined ||
-              value === undefined
-            ) {
-              throw new Error(
-                "providers.codexAnswer needs an id, a promptId and a value",
-              );
-            }
-            const accepted = codex.answer(id, promptId, value);
-            if (!accepted)
-              throw new Error("codex_login_failed: that prompt is not waiting");
-            return { result: { accepted } };
-          }),
-          wire.handle("providers", "codexStatus", (call) => {
-            const { id } = (call.args ?? {}) as Partial<
-              ProviderArgs["codexStatus"]
-            >;
-            if (id === undefined)
-              throw new Error("providers.codexStatus needs an id");
-            return { result: { login: codex.status(id) } };
-          }),
-          wire.handle("providers", "codexCancel", (call) => {
-            const { id } = (call.args ?? {}) as Partial<
-              ProviderArgs["codexCancel"]
-            >;
-            codex.cancel(id);
-            return {
-              result: {
-                cancelled: true,
-                ...(id === undefined ? {} : { login: codex.status(id) }),
               },
             };
           }),

@@ -59,15 +59,6 @@ async function render(fake: FakeHost) {
 
 const settle = () => act(() => new Promise((r) => setTimeout(r, 0)));
 const text = () => document.body.textContent ?? "";
-const button = (label: RegExp) =>
-  [...document.querySelectorAll("button")].find((b) =>
-    label.test(`${b.textContent ?? ""}${b.getAttribute("aria-label") ?? ""}`),
-  );
-const press = async (label: RegExp) => {
-  const target = button(label);
-  expect(target, String(label)).toBeDefined();
-  await act(async () => target!.click());
-};
 /** Radix opens a menu on pointer down. */
 const openMenu = async (row = 0) => {
   const item = document.querySelectorAll("li")[row]!;
@@ -125,7 +116,11 @@ describe("the providers page", () => {
     ).toBeNull();
     // Codex holds no key; the page does not claim anything about its sign-in.
     expect(rows[3]).not.toContain("还没配");
-    expect(rows[3]).toContain("绑定账号");
+    expect(rows[3]).toContain("旧 Codex 配置（未迁移）");
+    expect(
+      document.querySelectorAll("li")[3]?.querySelector("button"),
+    ).toBeNull();
+    expect(text()).not.toContain("绑定账号");
   });
 
   it("waits for the config, and says so when the host has no providers plugin", async () => {
@@ -223,159 +218,5 @@ describe("refreshing a provider's models", () => {
     await choose(/刷新模型/);
     await settle();
     expect(toast.error).toHaveBeenCalledWith("the model list came back 401");
-  });
-});
-
-describe("linking a Codex account", () => {
-  it("shows the code, follows the sign-in, and says when it is done", async () => {
-    rstest.useFakeTimers();
-    const { toast } = await import("sonner");
-    let status = "pending";
-    const fake = await render(
-      providersHost(
-        config([
-          provider({ id: "codex", kind: "openai-codex", hasApiKey: false }),
-        ]),
-      )
-        .handle("providers.codexLogin", () => ({
-          login: {
-            id: "l1",
-            status: "pending",
-            method: "device_code",
-            userCode: "ABCD-1234",
-            url: "https://auth.example.com/device",
-          },
-        }))
-        .handle("providers.codexStatus", () => ({
-          login: {
-            id: "l1",
-            status,
-            userCode: "ABCD-1234",
-            url: "https://auth.example.com/device",
-          },
-        })),
-    );
-    await press(/绑定账号/);
-    await act(async () => {
-      await rstest.advanceTimersByTimeAsync(0);
-    });
-    expect(
-      fake.calls.find((call) => call.action === "codexLogin")?.args,
-    ).toEqual({ method: "device_code" });
-    expect(text()).toContain("ABCD-1234");
-    expect(
-      document.querySelector<HTMLAnchorElement>('a[href^="https://auth"]'),
-    ).not.toBeNull();
-
-    // Still pending after a poll; then it completes.
-    await act(async () => {
-      await rstest.advanceTimersByTimeAsync(1500);
-    });
-    status = "complete";
-    await act(async () => {
-      await rstest.advanceTimersByTimeAsync(1500);
-    });
-    // The reply to that poll is still on its way through the microtasks.
-    await act(async () => {
-      await rstest.advanceTimersByTimeAsync(10);
-    });
-    expect(toast.success).toHaveBeenCalledWith("已绑定 Codex 账号");
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
-    // No longer pending, so it stops asking.
-    const polls = () =>
-      fake.calls.filter((call) => call.action === "codexStatus").length;
-    const seen = polls();
-    await act(async () => {
-      await rstest.advanceTimersByTimeAsync(10_000);
-    });
-    expect(polls()).toBe(seen);
-  });
-
-  it("cancels a sign-in that is closed while it waits", async () => {
-    const fake = await render(
-      providersHost(
-        config([
-          provider({ id: "codex", kind: "openai-codex", hasApiKey: false }),
-        ]),
-      )
-        .handle("providers.codexLogin", () => ({
-          login: {
-            id: "l1",
-            status: "pending",
-            userCode: "X",
-            url: "https://a",
-          },
-        }))
-        .handle("providers.codexStatus", () => ({
-          login: {
-            id: "l1",
-            status: "pending",
-            userCode: "X",
-            url: "https://a",
-          },
-        }))
-        .handle("providers.codexCancel", () => ({ cancelled: true })),
-    );
-    await press(/绑定账号/);
-    await settle();
-    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    await act(async () => {
-      dialog.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
-      );
-    });
-    await settle();
-    expect(
-      fake.calls.find((call) => call.action === "codexCancel")?.args,
-    ).toEqual({
-      id: "l1",
-    });
-  });
-
-  it("passes on the code the authorization page asked to have typed back", async () => {
-    const fake = await render(
-      providersHost(
-        config([
-          provider({ id: "codex", kind: "openai-codex", hasApiKey: false }),
-        ]),
-      )
-        .handle("providers.codexLogin", () => ({
-          login: {
-            id: "l1",
-            status: "pending",
-            manualPromptId: "p1",
-            url: "https://a",
-          },
-        }))
-        .handle("providers.codexStatus", () => ({
-          login: {
-            id: "l1",
-            status: "pending",
-            manualPromptId: "p1",
-            url: "https://a",
-          },
-        }))
-        .handle("providers.codexAnswer", () => ({ accepted: true })),
-    );
-    await press(/绑定账号/);
-    await settle();
-    const input = document.querySelector<HTMLInputElement>(
-      'input[aria-label="授权页给出的代码或地址"]',
-    )!;
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(
-        HTMLInputElement.prototype,
-        "value",
-      )!.set!.call(input, " http://localhost:1455/cb?code=1 ");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    await press(/^继续$/);
-    expect(
-      fake.calls.find((call) => call.action === "codexAnswer")?.args,
-    ).toEqual({
-      id: "l1",
-      promptId: "p1",
-      value: "http://localhost:1455/cb?code=1",
-    });
   });
 });
