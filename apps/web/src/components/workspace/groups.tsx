@@ -3,11 +3,10 @@ import type {
   ConversationSummary,
   MemberStatus,
 } from "@eta/client-contracts";
-import type { ProjectChoice } from "./use-project-choice";
 import { AppWindowIcon } from "@phosphor-icons/react/AppWindow";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Empty, Loading } from "@/components/states";
@@ -22,7 +21,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -30,7 +28,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -53,22 +50,14 @@ import { wireErrorMessage } from "@/queries/wire";
 import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar, AgentStatus, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels, memberStatusLabel } from "./agent-status";
-import { DirectoryPicker } from "./directory-picker";
 import { InspectButton } from "./inspect-button";
 import { MemberRing } from "./member-ring";
 import { MemberStats } from "./member-stats";
 import { MemberTasksButton, MemberTasksPanel } from "./member-tasks";
-import { ProjectField } from "./project-field";
-import { useReturnFocus } from "./return-focus";
 import { when } from "./routine-format";
 import { useAgents, useOpenAgent } from "./use-agents";
 import { useChatList } from "./use-chat-list";
 import { useGroups, useOpenGroup } from "./use-groups";
-import {
-  useChosenProject,
-  useDirectoryBrowsing,
-  useResolveProject,
-} from "./use-project-choice";
 import { useWorkspaceStore } from "./workspace-store";
 
 const onError = (error: Error) => toast.error(wireErrorMessage(error));
@@ -107,186 +96,6 @@ function GroupAvatars({
  * The 新建群 dialog, opened by its own trigger (children, or a plus), or
  * by its owner through open and onOpenChange.
  */
-export function CreateGroup({
-  members = [],
-  children,
-  open: controlled,
-  onOpenChange,
-}: {
-  members?: string[];
-  children?: React.ReactNode;
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-}) {
-  const { t: translateText } = useTranslation([
-    "chat",
-    "agents",
-    "artifacts",
-    "common",
-    "settings",
-  ] as const);
-  const [uncontrolled, setUncontrolled] = useState(false);
-  const open = controlled ?? uncontrolled;
-  const setOpen = onOpenChange ?? setUncontrolled;
-  const [name, setName] = useState("");
-  const [goal, setGoal] = useState("");
-  // Where the group works: a project, or a directory to add as one.
-  const [choice, setChoice] = useState<ProjectChoice>({
-    projectId: undefined,
-    path: "",
-  });
-  const { project, adding } = useChosenProject(choice);
-  const { browsing, picker, dialog, browse } = useDirectoryBrowsing(
-    choice,
-    setChoice,
-  );
-  const resolver = useResolveProject();
-  const [chosen, setChosen] = useState<string[]>(members);
-  const { agents } = useAgents();
-  const { create, update } = useConversationActions();
-  const openGroup = useOpenGroup();
-  const returnFocus = useReturnFocus(open);
-  // isPending only updates on the next render; a double click on 创建群
-  // must not create the group twice.
-  const sendingRef = useRef(false);
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(value) => {
-        setOpen(value);
-        if (value) setChosen(members);
-        else picker.onBack();
-      }}
-    >
-      {controlled === undefined && (
-        <DialogTrigger asChild>
-          {children ?? (
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label={translateText("groups.actions.create")}
-            >
-              <PlusIcon />
-            </Button>
-          )}
-        </DialogTrigger>
-      )}
-      <DialogContent {...dialog} onCloseAutoFocus={returnFocus}>
-        {browsing ? (
-          <DirectoryPicker {...picker} />
-        ) : (
-          <>
-            <DialogHeader>
-              <DialogTitle>
-                {translateText("groups.actions.create")}
-              </DialogTitle>
-              <DialogDescription>
-                {translateText("groups.createDescription")}
-              </DialogDescription>
-            </DialogHeader>
-            <form
-              className="grid gap-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (sendingRef.current) return;
-                sendingRef.current = true;
-                void (async () => {
-                  try {
-                    const target = await resolver.resolve(
-                      choice,
-                      project,
-                      chosen[0] ?? null,
-                    );
-                    const { conversation } = await create.mutateAsync({
-                      projectId: target.id,
-                      name: name.trim(),
-                      agentIds: chosen,
-                    });
-                    if (goal.trim())
-                      await update.mutateAsync({
-                        conversationId: conversation.id,
-                        goal,
-                      });
-                    setOpen(false);
-                    setName("");
-                    setGoal("");
-                    setChoice({ projectId: undefined, path: "" });
-                    openGroup(conversation.id);
-                  } catch (error) {
-                    onError(error as Error);
-                  } finally {
-                    sendingRef.current = false;
-                  }
-                })();
-              }}
-            >
-              <label className="grid gap-2 text-sm">
-                {translateText("groups.fields.name")}
-                <Input
-                  autoFocus
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder={translateText("groups.fields.namePlaceholder")}
-                  maxLength={100}
-                />
-              </label>
-              <ProjectField
-                choice={choice}
-                onChange={setChoice}
-                onBrowse={browse}
-              />
-              <label className="grid gap-2 text-sm">
-                {translateText("groups.fields.optionalGoal")}
-                <Textarea
-                  value={goal}
-                  onChange={(e) => setGoal(e.target.value)}
-                  maxLength={10000}
-                />
-              </label>
-              <fieldset className="grid max-h-64 gap-1 overflow-y-auto">
-                <legend className="mb-2 text-sm">
-                  {translateText("groups.members.title")}
-                </legend>
-                {agents.map((a) => (
-                  <label
-                    key={a.id}
-                    className="flex min-h-10 items-center gap-2 text-sm"
-                  >
-                    <Checkbox
-                      checked={chosen.includes(a.id)}
-                      onCheckedChange={(v) =>
-                        setChosen(
-                          v
-                            ? [...chosen, a.id]
-                            : chosen.filter((id) => id !== a.id),
-                        )
-                      }
-                    />
-                    <AgentAvatar agent={a} className="size-6" />
-                    {a.name}
-                  </label>
-                ))}
-              </fieldset>
-              <DialogFooter>
-                <Button
-                  type="submit"
-                  disabled={
-                    !chosen.length ||
-                    create.isPending ||
-                    (adding && choice.path.trim().length === 0)
-                  }
-                >
-                  {translateText("groups.actions.createGroup")}
-                </Button>
-              </DialogFooter>
-            </form>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 /**
  * The line under a name.
  *

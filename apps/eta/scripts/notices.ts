@@ -1,6 +1,6 @@
 /**
  * The notices a compiled host carries: `THIRD_PARTY_NOTICES.md` from the root of the repository, then
- * every npm package the build can reach with its license texts. `apps/desktop/scripts/stage-host.ts`
+ * every npm package the build can reach with its license texts. `apps/eta/scripts/build-host.ts`
  * writes the result next to the page, so the one file brings them along and a running host serves
  * them at `/THIRD_PARTY_NOTICES.md`.
  *

@@ -56,7 +56,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: e2e-builds
-          key: upgrade-e2e-${{ matrix.platform }}-${{ hashFiles('bun.lock', 'apps/daemon/src/**', 'apps/desktop/scripts/stage-host.ts', 'apps/eta/scripts/**', 'apps/eta/src/**', 'apps/web/src/**', 'scripts/upgrade-e2e/build.ts') }}
+          key: upgrade-e2e-${{ matrix.platform }}-${{ hashFiles('bun.lock', 'apps/daemon/src/**', 'apps/eta/scripts/**', 'apps/eta/src/**', 'apps/web/src/**', 'scripts/upgrade-e2e/build.ts') }}
 
       - name: Build the hosts
         if: steps.builds.outputs.cache-hit != 'true'

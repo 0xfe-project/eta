@@ -69,7 +69,7 @@ export default {
     },
     "apps/desktop": {
       // Electrobun reads the configs by path and bundles both processes from
-      // their entrypoints; nothing imports them. release.yml runs try-app.
+      // their entrypoints; nothing imports them. release-desktop.yml runs try-app.
       entry: [
         "electrobun.config.ts",
         "hutch.config.ts",
@@ -77,6 +77,9 @@ export default {
         "src/bun/index.ts",
         "src/mainview/index.ts",
       ],
+      // Loading vitest.config.mts reads tsconfig.json, which extends what `electrobun prepare`
+      // makes, and a clean checkout has not run that: name the tests instead.
+      vitest: { config: [], entry: ["vitest.config.mts", "test/**/*.test.ts"] },
     },
   },
 } satisfies KnipConfig;

@@ -4,7 +4,8 @@
  *
  * The API serves a private repository and a public one the same way, so there is one path and the
  * only difference is a token: `GH_TOKEN`, `GITHUB_TOKEN` (first `GH_ENTERPRISE_TOKEN`, on GitHub
- * Enterprise), one the user saved for that host (`token.ts`), or what `gh` is logged in with there.
+ * Enterprise), one the user saved for that host (the host's `upgrade/token.ts`), or what `gh` is
+ * logged in with there. The desktop app, which has no settings of its own, has all but the saved one.
  * Without any it asks anonymously, which is all a public repository needs. Any other server is not
  * given GitHub's credentials: it gets `ETA_RELEASES_TOKEN`, and only that.
  *
@@ -15,8 +16,11 @@
  *
  * What is checked here is that a download is whole, against the `SHA256SUMS` of the same release.
  * That says the file is the one that was published, as far as GitHub is believed.
+ *
+ * The same repository releases the desktop app under `desktop-v*` tags (`release-desktop.yml`).
+ * Those are not hosts: a host only ever takes a `v*` tag (`isHostTag`), whatever GitHub calls the
+ * latest release.
  */
-import type { SavedToken } from "./token";
 import type { Upstream } from "./upstream";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -25,10 +29,18 @@ import process from "node:process";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
-import { SAVED_TOKEN } from "./token";
 import { BUILT_UPSTREAM, parseUpstream } from "./upstream";
 
 const run = promisify(execFile);
+
+/** How a token the user saved in the host's settings is named as a source (`ReleaseToken.from`). */
+export const SAVED_TOKEN = "Settings";
+
+/** A token the user saved, and the host it may go to, as `gh` would call it. */
+export interface SavedToken {
+  host: string;
+  token: string;
+}
 
 const USER_AGENT = "eta-host";
 /** How long a request may go without a byte, on a file too big for a limit on the whole. */
@@ -36,6 +48,40 @@ const STALL_MS = 60_000;
 const API_TIMEOUT_MS = 30_000;
 const MAX_REDIRECTS = 5;
 const GH_TIMEOUT_MS = 5000;
+/** One page of the release list, newest first: a host release further back than this is not the latest. */
+const LIST_PAGE = 100;
+
+/** `v0.2.0` or `v0.2.0-rc.1`: what `release.yml` publishes. `desktop-v0.1.0` is the app's. */
+const HOST_TAG = /^v\d+\.\d+\.\d+(?:-[0-9a-z.-]+)?$/i;
+
+export const isHostTag = (tag: string): boolean => HOST_TAG.test(tag);
+
+/**
+ * Why a release or its file could not be had, for the one who has to do something about it:
+ * - `offline`: nothing answered.
+ * - `interrupted`: a download stopped partway.
+ * - `checksum`: what arrived is not what was published.
+ * - `refused`: the server said no; `tokenless` when there was no token to ask with.
+ * - `none`: there is no such release or file.
+ */
+export type ReleaseFailure =
+  | "offline"
+  | "interrupted"
+  | "checksum"
+  | "refused"
+  | "none";
+
+export class ReleaseError extends Error {
+  readonly kind: ReleaseFailure;
+  readonly tokenless: boolean;
+
+  constructor(kind: ReleaseFailure, message: string, tokenless = false) {
+    super(message);
+    this.name = "ReleaseError";
+    this.kind = kind;
+    this.tokenless = tokenless;
+  }
+}
 
 export interface ReleaseAsset {
   name: string;
@@ -72,6 +118,8 @@ export interface ReleasesOptions {
   saved?: SavedToken | undefined;
   token?: () => Promise<ReleaseToken>;
   fetch?: typeof fetch;
+  /** Whether there is a Settings page to save a token in: the host's, not the desktop app's. */
+  settings?: boolean;
 }
 
 /** `gh`'s token for `host`, or why it has none. Its own words are not passed on. */
@@ -129,9 +177,43 @@ export function parseSums(text: string): Map<string, string> {
   return sums;
 }
 
+/** A release as the API lists it, as far as this reads it. */
+export interface ListedRelease {
+  tag_name: string;
+  draft?: boolean;
+  prerelease?: boolean;
+  assets: { name: string; url: string }[];
+}
+
+const reason = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+/** Published, a host's tag, and not a pre-release. */
+const isHostRelease = (release: ListedRelease): boolean =>
+  isHostTag(release.tag_name) &&
+  release.draft !== true &&
+  release.prerelease !== true &&
+  !release.tag_name.includes("-");
+
+const describe = (release: ListedRelease): Release => ({
+  version: release.tag_name.replace(/^v/, ""),
+  assets: release.assets.map(({ name, url }) => ({ name, url })),
+});
+
+/** The highest published host release that is not a pre-release, among `releases`. */
+export function newestHost<T extends ListedRelease>(
+  releases: T[],
+): T | undefined {
+  return releases
+    .filter(isHostRelease)
+    .sort((a, b) => Bun.semver.order(a.tag_name.slice(1), b.tag_name.slice(1)))
+    .at(-1);
+}
+
 export class Releases {
   readonly upstream: Upstream;
   readonly #fetch: typeof fetch;
+  readonly #settings: boolean;
   #token: Promise<ReleaseToken>;
   /** The token the server refused, kept to say so and to keep it out of what it answers. */
   #refusedToken: ReleaseToken | undefined;
@@ -139,15 +221,48 @@ export class Releases {
   constructor(options: ReleasesOptions = {}) {
     this.upstream = parseUpstream(options.upstream ?? BUILT_UPSTREAM);
     this.#fetch = options.fetch ?? fetch;
+    this.#settings = options.settings ?? true;
     this.#token = (
       options.token ??
       (() => releaseToken(this.upstream, process.env, options.saved))
     )();
   }
 
-  /** The newest published release that is not a pre-release: what the API means by latest. */
+  /**
+   * The newest published host release that is not a pre-release. What GitHub calls the latest
+   * release is that, unless it is the desktop app's; then it is the highest `v*` among the newest
+   * releases.
+   */
   async latest(): Promise<Release> {
-    return await this.#release("releases/latest", "the latest release");
+    const what = "the latest release";
+    const answer = await this.#getApi("releases/latest");
+    if (answer.ok) {
+      const release = (await answer.json()) as ListedRelease;
+      if (isHostTag(release.tag_name) && release.draft !== true)
+        return describe(release);
+    } else if (answer.status !== 404) throw await this.#refused(what, answer);
+    // No latest at all, or one that is not a host: either way, the list says.
+    const listed = await this.#getApi(`releases?per_page=${LIST_PAGE}`);
+    if (!listed.ok) throw await this.#refused(what, listed);
+    const newest = newestHost((await listed.json()) as ListedRelease[]);
+    if (newest === undefined)
+      throw new ReleaseError(
+        "none",
+        `${what}: not found: ${this.upstream.label} has no host release (a v* tag)`,
+      );
+    return describe(newest);
+  }
+
+  /** The published host releases that are not pre-releases among the newest, highest first. */
+  async hosts(): Promise<Release[]> {
+    const listed = await this.#getApi(`releases?per_page=${LIST_PAGE}`);
+    if (!listed.ok) throw await this.#refused("the releases", listed);
+    return ((await listed.json()) as ListedRelease[])
+      .filter(isHostRelease)
+      .sort((a, b) =>
+        Bun.semver.order(b.tag_name.slice(1), a.tag_name.slice(1)),
+      )
+      .map(describe);
   }
 
   async byVersion(version: string): Promise<Release> {
@@ -164,8 +279,15 @@ export class Releases {
     return await answer.text();
   }
 
-  /** The asset into `path`, as it arrives; its SHA-256. */
-  async download(asset: ReleaseAsset, path: string): Promise<string> {
+  /**
+   * The asset into `path`, as it arrives; its SHA-256. `onProgress` hears the bytes so far, and the
+   * size when the server says it. Whatever stops it partway is `interrupted`.
+   */
+  async download(
+    asset: ReleaseAsset,
+    path: string,
+    onProgress?: (received: number, total: number | undefined) => void,
+  ): Promise<string> {
     const stalled = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const alive = (): void => {
@@ -184,41 +306,57 @@ export class Releases {
       );
       if (!answer.ok || answer.body === null)
         throw await this.#refused(asset.name, answer);
+      const length = Number(answer.headers.get("content-length"));
+      const total = Number.isFinite(length) && length > 0 ? length : undefined;
       const hash = createHash("sha256");
-      await pipeline([
-        Readable.fromWeb(answer.body as never),
-        new Transform({
-          transform: (chunk: Uint8Array, _encoding, done) => {
-            alive();
-            hash.update(chunk);
-            done(null, chunk);
-          },
-        }),
-        createWriteStream(path, { mode: 0o600 }),
-      ]);
+      let received = 0;
+      try {
+        await pipeline([
+          Readable.fromWeb(answer.body as never),
+          new Transform({
+            transform: (chunk: Uint8Array, _encoding, done) => {
+              alive();
+              hash.update(chunk);
+              received += chunk.length;
+              onProgress?.(received, total);
+              done(null, chunk);
+            },
+          }),
+          createWriteStream(path, { mode: 0o600 }),
+        ]);
+      } catch (error) {
+        throw new ReleaseError(
+          "interrupted",
+          `${asset.name}: the download stopped after ${String(received)} bytes: ${reason(error)}`,
+        );
+      }
+      // A connection that closes early can end the body without an error.
+      if (total !== undefined && received !== total)
+        throw new ReleaseError(
+          "interrupted",
+          `${asset.name}: the download stopped after ${String(received)} of ${String(total)} bytes`,
+        );
       return hash.digest("hex");
     } finally {
       clearTimeout(timer);
     }
   }
 
-  async #release(path: string, what: string): Promise<Release> {
-    const answer = await this.#get(
+  async #getApi(path: string): Promise<Response> {
+    return await this.#get(
       `${this.upstream.api}/${path}`,
       "application/vnd.github+json",
       AbortSignal.timeout(API_TIMEOUT_MS),
     );
+  }
+
+  async #release(path: string, what: string): Promise<Release> {
+    const answer = await this.#getApi(path);
     if (!answer.ok) throw await this.#refused(what, answer);
-    const release = (await answer.json()) as {
-      tag_name: string;
-      draft?: boolean;
-      assets: { name: string; url: string }[];
-    };
-    if (release.draft === true) throw new Error(`${what} is not published`);
-    return {
-      version: release.tag_name.replace(/^v/, ""),
-      assets: release.assets.map(({ name, url }) => ({ name, url })),
-    };
+    const release = (await answer.json()) as ListedRelease;
+    if (release.draft === true)
+      throw new ReleaseError("none", `${what} is not published`);
+    return describe(release);
   }
 
   /**
@@ -234,15 +372,23 @@ export class Releases {
   ): Promise<Response> {
     const onApi = new URL(url).href.startsWith(`${this.upstream.root}/`);
     const { token } = onApi ? await this.#token : ({} as ReleaseToken);
-    const answer = await this.#fetch(url, {
-      headers: {
-        accept,
-        "user-agent": USER_AGENT,
-        ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
-      },
-      redirect: "manual",
-      signal,
-    });
+    let answer: Response;
+    try {
+      answer = await this.#fetch(url, {
+        headers: {
+          accept,
+          "user-agent": USER_AGENT,
+          ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+        },
+        redirect: "manual",
+        signal,
+      });
+    } catch (error) {
+      throw new ReleaseError(
+        "offline",
+        `${new URL(url).host} did not answer: ${reason(error)}`,
+      );
+    }
     // A token gone stale is no reason to fail on a repository anyone may read.
     if (answer.status === 401 && token !== undefined) {
       this.#refusedToken = await this.#token;
@@ -263,6 +409,7 @@ export class Releases {
 
   /** What would give this host a token, or the fact that the one it had was refused. */
   #noToken(gh: GhTrouble | undefined): string {
+    const save = this.#settings ? " save a token under Settings," : "";
     const { host, kind } = this.upstream;
     const refused = this.#refusedToken?.from;
     if (refused !== undefined)
@@ -271,10 +418,10 @@ export class Releases {
     const hostname = kind === "enterprise" ? ` --hostname ${host}` : "";
     const env = kind === "enterprise" ? "GH_ENTERPRISE_TOKEN" : "GH_TOKEN";
     if (gh === "missing")
-      return `gh is not on this process's PATH: install it, save a token under Settings, or set ${env}`;
+      return `gh is not on this process's PATH: install it,${save} or set ${env}`;
     if (gh === "unreadable")
-      return `gh has a login for ${host} that this process cannot read, as happens to a service when the login is in a keychain: run \`gh auth login${hostname} --insecure-storage\`, save a token under Settings, or set ${env} in the service's environment`;
-    return `gh has no login for ${host} here: run \`gh auth login${hostname}\` as this user, save a token under Settings, or set ${env}`;
+      return `gh has a login for ${host} that this process cannot read, as happens to a service when the login is in a keychain: run \`gh auth login${hostname} --insecure-storage\`, ${save.trim() === "" ? "" : `${save.trim()} `}or set ${env} in the service's environment`;
+    return `gh has no login for ${host} here: run \`gh auth login${hostname}\` as this user,${save} or set ${env}`;
   }
 
   /** Whether the repository itself can be seen with what this has. A guess at worst: it only words an error. */
@@ -290,23 +437,29 @@ export class Releases {
     );
   }
 
-  async #refused(what: string, answer: Response): Promise<Error> {
+  async #refused(what: string, answer: Response): Promise<ReleaseError> {
+    const { token } = await this.#token;
+    const message = await this.#refusal(what, answer);
+    return new ReleaseError(
+      "refused",
+      message,
+      token === undefined && this.upstream.kind !== "other",
+    );
+  }
+
+  async #refusal(what: string, answer: Response): Promise<string> {
     const { from, gh, token } = await this.#token;
     const { kind, label } = this.upstream;
     if (answer.status === 404) {
       if (await this.#seesRepository())
-        return new Error(`${what}: not found: ${label} has no such release`);
+        return `${what}: not found: ${label} has no such release`;
       if (token === undefined)
-        return new Error(
-          kind === "other" && this.#refusedToken === undefined
-            ? `${what}: not found (if this server wants a token: set ETA_RELEASES_TOKEN)`
-            : `${what}: not found: ${label} does not exist or is private, and there is no token to read it with: ${this.#noToken(gh)}`,
-        );
-      return new Error(
-        kind === "other"
-          ? `${what}: not found`
-          : `${what}: not found: ${label} does not exist, or the token from ${from} cannot read it`,
-      );
+        return kind === "other" && this.#refusedToken === undefined
+          ? `${what}: not found (if this server wants a token: set ETA_RELEASES_TOKEN)`
+          : `${what}: not found: ${label} does not exist or is private, and there is no token to read it with: ${this.#noToken(gh)}`;
+      return kind === "other"
+        ? `${what}: not found`
+        : `${what}: not found: ${label} does not exist, or the token from ${from} cannot read it`;
     }
     let detail = await answer.text().catch(() => "");
     for (const spent of [token, this.#refusedToken?.token])
@@ -321,10 +474,8 @@ export class Releases {
       else if (kind !== "other")
         why = ` (the token from ${from} is not allowed to read this, or has hit a limit)`;
     }
-    return new Error(
-      `${what}: the server answered ${answer.status}${why}${
-        detail === "" ? "" : `: ${detail.slice(0, 200)}`
-      }`,
-    );
+    return `${what}: the server answered ${answer.status}${why}${
+      detail === "" ? "" : `: ${detail.slice(0, 200)}`
+    }`;
   }
 }

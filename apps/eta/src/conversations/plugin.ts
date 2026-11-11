@@ -78,6 +78,9 @@ export function conversationsPlugin(
           // A conversation nobody is in would be an empty room: the project's steward is there.
           if (members.length === 0 && project.stewardId !== null)
             members = [project.stewardId];
+          const stewardId = args.optionalString("stewardId");
+          if (stewardId !== undefined && !members.includes(agent(stewardId)))
+            throw new Error("the steward has to be a member");
           const given = args.optionalString("name")?.trim();
           // A group nobody named takes the project's name, not the names of who is in it.
           const name =
@@ -92,6 +95,8 @@ export function conversationsPlugin(
             kind: "group",
             name,
             agentIds: members,
+            // The project's own is followed rather than copied, so changing it later still counts.
+            stewardId: stewardId === project.stewardId ? undefined : stewardId,
           });
           deps.created(conversation.id);
           deps.changed([conversation.id]);

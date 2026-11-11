@@ -234,6 +234,38 @@ describe("the token gate", () => {
     expect(response.headers.get("set-cookie")).toMatch(/; Secure/);
   });
 
+  it("gives https a cookie of its own, so http on the same name still works", async () => {
+    const host = await testHost({ tokenFile: await tokenFile() });
+    const base = `http://127.0.0.1:${host.port}`;
+    const exchange = (headers: Record<string, string>) =>
+      fetch(`${base}/?token=${TOKEN}`, { redirect: "manual", headers }).then(
+        (response) => response.headers.get("set-cookie") ?? "",
+      );
+    const secure = await exchange({ "x-forwarded-proto": "https" });
+    const plain = await exchange({});
+    expect(secure).toMatch(/^__Secure-eta_session=/);
+    expect(plain).toMatch(/^eta_session=/);
+    for (const cookie of [secure, plain]) {
+      const response = await fetch(`${base}/up-to-date`, {
+        headers: { cookie: cookie.split(";")[0] ?? "" },
+      });
+      expect(response.status).not.toBe(401);
+    }
+  });
+
+  it("still takes the plain name over https, from before it had its own", async () => {
+    const host = await testHost({ tokenFile: await tokenFile() });
+    const base = `http://127.0.0.1:${host.port}`;
+    const plain = await fetch(`${base}/?token=${TOKEN}`, {
+      redirect: "manual",
+    });
+    const cookie = (plain.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+    const response = await fetch(`${base}/up-to-date`, {
+      headers: { cookie, "x-forwarded-proto": "https" },
+    });
+    expect(response.status).not.toBe(401);
+  });
+
   it("does not take the token from the socket's URL", async () => {
     const host = await testHost({ tokenFile: await tokenFile() });
     expect(

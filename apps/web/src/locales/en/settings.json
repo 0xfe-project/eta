@@ -20,6 +20,7 @@
   "sections": {
     "approvals": "Tools that ask first",
     "appearance": "Appearance",
+    "host": "Connection",
     "update": "Update"
   },
   "approvals": {
@@ -35,6 +36,7 @@
     "accountsNeedAttention": "Accounts need attention"
   },
   "update": {
+    "remoteHost": "Connected host",
     "version": "This version",
     "latest": "Latest version",
     "upstream": "Updates from",
@@ -79,6 +81,7 @@
     },
     "confirmTitle": "Update to {{version}}",
     "confirm": "The server restarts and is unreachable for about a minute. It goes back by itself if something is wrong.",
+    "confirmRemote": "The host at {{host}} restarts and is unreachable for about a minute. Nothing on this computer changes. If something goes wrong it rolls back by itself.",
     "start": "Update",
     "waitForAgents": "Update when they finish",
     "force": "Update now",
@@ -111,6 +114,34 @@
     "busy": "The restart would stop:",
     "busyTask": "Task #{{number}} {{name}}",
     "busyRoutine": "Routine {{name}}",
-    "busyReply": "A reply in {{name}}"
+    "busyReply": "A reply in {{name}}",
+    "hostHeading": "Host"
+  },
+  "host": {
+    "local": "Running on this computer",
+    "remote": "Connected to {{address}}",
+    "independent": "The two keep separate data. Switching doesn't move anything. The window reopens after switching.",
+    "change": "Change"
+  },
+  "desktopUpdate": {
+    "heading": "Desktop app",
+    "version": "This version",
+    "check": "Check for updates",
+    "checking": "Checking",
+    "upToDate": "Up to date",
+    "download": "Download {{version}}",
+    "downloading": "Downloading {{version}}",
+    "downloadingPercent": "Downloading {{version}} ({{percent}}%)",
+    "restart": "Restart to update to {{version}}",
+    "applying": "Restarting into {{version}}",
+    "confirmTitle": "Update the desktop app to {{version}}",
+    "confirm": "eta quits, swaps in the new version and opens again. The host on this computer restarts with it and is unreachable for some seconds. If it doesn't work, the old version opens as before.",
+    "confirmRemote": "eta quits, swaps in the new version and opens again. The connected host isn't touched. If it doesn't work, the old version opens as before.",
+    "restartNow": "Restart now",
+    "failed": {
+      "check": "The check didn't work: {{error}}",
+      "download": "The download didn't work: {{error}}",
+      "apply": "The update didn't start; this is still the current version: {{error}}"
+    }
   }
 }

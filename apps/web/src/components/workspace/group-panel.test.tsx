@@ -157,7 +157,7 @@ it("leaves what waits to the 待处理 tab, even when something does", async () 
   expect(container.textContent).toContain("本周上线");
 });
 
-it("orders 任务 by the last move made, and shows five", async () => {
+it("orders 任务 by the last move made, and leaves none out", async () => {
   // A task waiting for the user does not jump the queue: that is the 待处理
   // tab's job.
   surfaceHost({
@@ -175,7 +175,41 @@ it("orders 任务 by the last move made, and shows five", async () => {
   const listed = rowsOf(container, "任务").map(
     (row) => row.match(/任务\d/)?.[0],
   );
-  expect(listed).toEqual(["任务1", "任务3", "任务4", "任务5", "任务6"]);
+  expect(listed).toEqual([
+    "任务1",
+    "任务3",
+    "任务4",
+    "任务5",
+    "任务6",
+    "任务2",
+  ]);
+  expect(countOf(container, "任务")).toBe("任务6");
+});
+
+it("scrolls 任务 and 产物 in lists of one height, and hands the rest on to the panel", async () => {
+  // Layout itself is measured in a real browser; what happy-dom can hold in place is the shape that
+  // broke the panel. The pane rule `[class*="overflow-y-auto"]` sets `overscroll-behavior: none`,
+  // and any element under it that keeps it stops the wheel and the finger right there, even with
+  // nothing to scroll: so a list opts out, and `WorkspacePanel` is the only other scroller.
+  surfaceHost({
+    conversations: [group],
+    tasks: [task(1), task(2)],
+    artifacts: [
+      artifactView({ id: "v1", title: "看板", conversationId: "g1" }),
+    ],
+  });
+  const container = await mount();
+  const lists = ["任务", "产物"].map(
+    (section) =>
+      container.querySelector(`section[aria-label="${section}"] ul`)!,
+  );
+  const scrollers = [
+    ...container.querySelectorAll('[class*="overflow-y-auto"]'),
+  ];
+  expect(scrollers).toEqual(lists);
+  expect(lists[0].className).toBe(lists[1].className);
+  expect(lists[0].className).toContain("max-h-");
+  expect(lists[0].classList.contains("overscroll-y-auto")).toBe(true);
 });
 
 it("draws its cards as flat rows: the list rules them, not a frame each", async () => {
@@ -213,8 +247,15 @@ it("leaves closed tasks out of 任务, and out of its count", async () => {
   const listed = rowsOf(container, "任务").map(
     (row) => row.match(/任务\d/)?.[0],
   );
-  // Six still open: the count says six, the list shows the first five.
-  expect(listed).toEqual(["任务2", "任务4", "任务5", "任务6", "任务7"]);
+  // Six still open: the count says six, and the list holds all six.
+  expect(listed).toEqual([
+    "任务2",
+    "任务4",
+    "任务5",
+    "任务6",
+    "任务7",
+    "任务8",
+  ]);
   expect(countOf(container, "任务")).toBe("任务6");
 });
 

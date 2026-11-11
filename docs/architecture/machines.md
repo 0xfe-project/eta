@@ -67,7 +67,7 @@ daemon **只出站**：它反向拨号 `GET /machines/connect`（WebSocket），
 
 ## 版本：daemon 跟着主 node
 
-daemon 是主 node 的一部分。构建脚本（`apps/daemon/scripts/build.ts`，`build:all` 是四个平台）把版本用 `--define` 写进二进制（`ETA_DAEMON_VERSION`，发布时由 tag 决定，默认是 commit，工作区有改动时加时间戳），并写 `out/dist/manifest.json`。主 node 带着这些构建：源码运行读 checkout 的 `apps/daemon/out/dist`；打包的 host 把四个平台的构建用 zstd 压缩后嵌在可执行文件里（`stage-host.ts`），`manifest.json` 原样带着，其中的 `sha256`、`size` 指解压后的文件。需要给出某个构建时才解压到 `~/.eta/unpacked/daemon-<hash>/`，核对 sha256 后使用；只问版本不解压。
+daemon 是主 node 的一部分。构建脚本（`apps/daemon/scripts/build.ts`，`build:all` 是四个平台）把版本用 `--define` 写进二进制（`ETA_DAEMON_VERSION`，发布时由 tag 决定，默认是 commit，工作区有改动时加时间戳），并写 `out/dist/manifest.json`。主 node 带着这些构建：源码运行读 checkout 的 `apps/daemon/out/dist`；打包的 host 把四个平台的构建用 zstd 压缩后嵌在可执行文件里（`apps/eta/scripts/build-host.ts`），`manifest.json` 原样带着，其中的 `sha256`、`size` 指解压后的文件。需要给出某个构建时才解压到 `~/.eta/unpacked/daemon-<hash>/`，核对 sha256 后使用；只问版本不解压。
 
 - daemon 在 `machine.info` 里报 `version`、`platform`（`linux-x64`）、`install`（`service` / `binary` / `source`，看 systemd 的 `INVOCATION_ID`、launchd 的 `XPC_SERVICE_NAME`）和链路协议 `protocol`（`LINK_PROTOCOL`，没报的老 daemon 算 1）。主 node 存进 `machine` 行。
 - **连上时版本和带着的不一致**，在让它做任何事之前先让它换（`svc` 的 `upgrade`）：daemon 带自己的凭据 `GET /machines/daemon/<platform>` 取构建，核对 sha256，写到可执行文件旁边，先跑一次 `version` 看能启动、版本对；然后旧文件改名为 `.prev`、新文件就位、在数据目录留一个标记，以 75 退出。systemd 的 `Restart=on-failure`、launchd 的 `KeepAlive.SuccessfulExit=false` 都会在非零退出时重启它。签名没有必要：链路是认证过的，主 node 本来就能在 daemon 上 `exec`。

@@ -3,8 +3,8 @@
  *
  *   bun run host:install -- [host flags]     e.g. -- --host tailscale --port 8790
  *
- * 1. builds the page (`apps/web`) and stages the host the way the desktop app carries it
- *    (`apps/desktop/scripts/stage-host.ts`: one executable with its migrations, page,
+ * 1. builds the page (`apps/web`) and builds the host the way a release ships it
+ *    (`apps/eta/scripts/build-host.ts`: one executable with its migrations, page,
  *    CLIProxyAPI, and the daemon for every platform inside);
  * 2. puts it in `~/.local/share/eta/host` (the old directory is swapped out whole, so nothing an
  *    older install laid out there stays behind, and a running host keeps the file it started
@@ -28,10 +28,10 @@ const home = join(
   "eta",
 );
 const target = join(home, "host");
-const staged = join(root, "apps", "desktop", "dist", "host");
+const staged = join(root, "apps", "eta", "out", "host");
 
 await $`${process.execPath} run --cwd ${join(root, "apps", "web")} build`;
-await $`${process.execPath} ${join(root, "apps", "desktop", "scripts", "stage-host.ts")}`;
+await $`${process.execPath} ${join(root, "apps", "eta", "scripts", "build-host.ts")}`;
 
 const next = `${target}.next`;
 const previous = `${target}.previous`;

@@ -20,6 +20,7 @@
   "sections": {
     "approvals": "需先确认的工具",
     "appearance": "外观",
+    "host": "连接方式",
     "update": "更新"
   },
   "approvals": {
@@ -35,6 +36,7 @@
     "accountsNeedAttention": "有账号需要处理"
   },
   "update": {
+    "remoteHost": "连接的 host",
     "version": "当前版本",
     "latest": "最新版本",
     "upstream": "更新来源",
@@ -79,6 +81,7 @@
     },
     "confirmTitle": "更新到 {{version}}",
     "confirm": "服务器会重启，大约一分钟连不上。出问题会自动退回。",
+    "confirmRemote": "{{host}} 上的 host 会重启，大约一分钟连不上。这台电脑上的东西不变。出问题会自动退回。",
     "start": "更新",
     "waitForAgents": "等它们结束再更新",
     "force": "现在更新",
@@ -111,6 +114,34 @@
     "busy": "重启会中断这些工作：",
     "busyTask": "任务 #{{number}} {{name}}",
     "busyRoutine": "定时 {{name}}",
-    "busyReply": "{{name}} 里的回复"
+    "busyReply": "{{name}} 里的回复",
+    "hostHeading": "host"
+  },
+  "host": {
+    "local": "在这台电脑上运行",
+    "remote": "连接到 {{address}}",
+    "independent": "两种方式的数据互相独立，切换不会迁移。切换后窗口会重开。",
+    "change": "更改"
+  },
+  "desktopUpdate": {
+    "heading": "桌面端",
+    "version": "当前版本",
+    "check": "检查更新",
+    "checking": "正在检查",
+    "upToDate": "已是最新",
+    "download": "下载 {{version}}",
+    "downloading": "正在下载 {{version}}",
+    "downloadingPercent": "正在下载 {{version}}（{{percent}}%）",
+    "restart": "重启并更新到 {{version}}",
+    "applying": "正在重启到 {{version}}",
+    "confirmTitle": "更新桌面端到 {{version}}",
+    "confirm": "eta 会退出，换成新版本后重新打开。这台电脑上的 host 也会跟着重启，大约几十秒连不上。没成功的话旧版本照常打开。",
+    "confirmRemote": "eta 会退出，换成新版本后重新打开。连接的 host 不受影响。没成功的话旧版本照常打开。",
+    "restartNow": "现在重启",
+    "failed": {
+      "check": "检查没有成功：{{error}}",
+      "download": "下载没有成功：{{error}}",
+      "apply": "没能开始更新，还是当前版本：{{error}}"
+    }
   }
 }

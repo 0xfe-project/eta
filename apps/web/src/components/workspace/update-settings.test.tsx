@@ -15,6 +15,7 @@ afterEach(async () => {
   await cleanup();
   setWire(undefined);
   globalThis.fetch = realFetch;
+  delete window.__ETA_HOST__;
   document.body.innerHTML = "";
 });
 
@@ -90,6 +91,29 @@ describe("Settings → 更新", () => {
     expect(text()).toContain("1.1.0");
     await click(button("更新到 1.1.0")!);
     expect(start).not.toHaveBeenCalled();
+    await click(button("更新")!);
+    expect(start).toHaveBeenCalledWith({ force: false });
+  });
+
+  it("says nothing about where the host is in a browser or on this computer", async () => {
+    window.__ETA_HOST__ = { native: true, connection: "local" };
+    await open();
+    expect(text()).not.toContain("连接的 host");
+    await click(button("更新到 1.1.0")!);
+    expect(text()).toContain("服务器会重启");
+  });
+
+  it("names the remote host it would update, which is not this computer", async () => {
+    window.__ETA_HOST__ = {
+      native: true,
+      connection: "remote",
+      address: "https://mac.ts.net",
+    };
+    const { start } = await open();
+    expect(text()).toContain("连接的 host");
+    expect(text()).toContain("https://mac.ts.net");
+    await click(button("更新到 1.1.0")!);
+    expect(text()).toContain("这台电脑上的东西不变");
     await click(button("更新")!);
     expect(start).toHaveBeenCalledWith({ force: false });
   });
@@ -283,5 +307,86 @@ describe("Settings → 更新", () => {
     );
     expect(text()).toContain("checksum");
     expect(button("更新到 1.1.0")).toBeDefined();
+  });
+});
+
+describe("in a desktop app that updates itself", () => {
+  /** The app's bridge, answering its update as a sequence of presses moves it on. */
+  async function openDesktop(connection: "local" | "remote", busy = [task]) {
+    let state: Record<string, unknown> = { state: "idle", current: "0.2.0" };
+    const asked: string[] = [];
+    window.__ETA_HOST__ = {
+      native: true,
+      nativeApiBase: "http://127.0.0.1:5001",
+      nativeToken: "t",
+      connection,
+      capabilities: [
+        "open-external",
+        "save-file",
+        "context-menu",
+        "window-action",
+        "connection",
+        "shell-update",
+      ],
+    };
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      if (!String(url).endsWith("/api/native/shell-update"))
+        return Response.json(null);
+      if (init?.method === "POST") {
+        const { action } = JSON.parse(String(init.body)) as { action: string };
+        asked.push(action);
+        state =
+          action === "check"
+            ? { state: "available", version: "0.3.0", current: "0.2.0" }
+            : action === "download"
+              ? { state: "ready", version: "0.3.0", current: "0.2.0" }
+              : { state: "applying", version: "0.3.0", current: "0.2.0" };
+      }
+      return Response.json(state);
+    }) as unknown as typeof globalThis.fetch;
+    const product = buildProductHost({}, ["upgrade"]).handle(
+      "upgrade.check",
+      () => ({ ...checked, busy }),
+    );
+    product.install();
+    product.hello();
+    await mount(<UpdateSettings />);
+    await flush();
+    return { asked };
+  }
+
+  it("keeps its own version apart from the host's, and does nothing unasked", async () => {
+    const { asked } = await openDesktop("local");
+    expect(text()).toContain("桌面端");
+    expect(text()).toContain("0.2.0");
+    expect(text()).toContain("1.0.0");
+    expect(asked).toEqual([]);
+  });
+
+  it("checks, downloads and restarts as the user presses, saying what the host's restart stops", async () => {
+    const { asked } = await openDesktop("local");
+    await click(button("检查更新")!);
+    await flush();
+    await click(button("下载 0.3.0")!);
+    await flush();
+    await click(button("重启并更新到 0.3.0")!);
+    await flush();
+    expect(text()).toContain("这台电脑上的 host 也会跟着重启");
+    expect(text()).toContain("任务 #45 x");
+    await act(async () => button("现在重启")!.click());
+    await flush();
+    expect(asked).toEqual(["check", "download", "apply"]);
+  });
+
+  it("says the remote host is not touched", async () => {
+    await openDesktop("remote");
+    await click(button("检查更新")!);
+    await flush();
+    await click(button("下载 0.3.0")!);
+    await flush();
+    await click(button("重启并更新到 0.3.0")!);
+    await flush();
+    expect(text()).toContain("连接的 host 不受影响");
+    expect(text()).not.toContain("任务 #45 x");
   });
 });

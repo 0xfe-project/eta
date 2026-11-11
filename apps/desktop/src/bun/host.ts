@@ -6,6 +6,11 @@
  * stdout, so the shell cannot read the host's summary off a pipe; this script keeps the host's
  * first stdout line — its JSON summary (`apps/eta/src/main.ts`) — in the file named by
  * `ETA_DESKTOP_SUMMARY` and forwards the rest.
+ *
+ * It also keeps the host from outliving the shell. A shell that is killed outright sends nothing,
+ * and a host left behind holds the database and the port the next launch wants, so this looks for
+ * the shell every second and stops the host once it has gone. Stopping is a signal, or on Windows,
+ * which has none, a line on the pipe the host listens to (`ETA_STOP_PIPE`, `apps/eta/src/stop.ts`).
  */
 export const HOST_WRAPPER = String.raw`const summary = process.env.ETA_DESKTOP_SUMMARY;
 if (summary === undefined) {
@@ -18,6 +23,34 @@ const child = Bun.spawn(process.argv.slice(2), {
   stdout: "pipe",
   stderr: "inherit",
 });
+
+const stopPipe = process.env.ETA_STOP_PIPE;
+const stopHost = (signal = "SIGTERM") => {
+  if (stopPipe === undefined || stopPipe === "") {
+    child.kill(signal);
+    return;
+  }
+  const net = require("node:net");
+  const socket = net.connect(stopPipe, () => socket.end("stop\n"));
+  socket.on("error", () => child.kill(signal));
+};
+
+// The shell's signal stops this script, and the host has to hear it: left running, it would still
+// hold the database when the shell starts another one.
+for (const signal of ["SIGTERM", "SIGINT"]) {
+  process.on(signal, () => stopHost(signal));
+}
+
+const shell = process.ppid;
+const watching = setInterval(() => {
+  try {
+    process.kill(shell, 0);
+  } catch {
+    clearInterval(watching);
+    stopHost();
+  }
+}, 1000);
+watching.unref();
 
 const reader = child.stdout.getReader();
 const decoder = new TextDecoder();

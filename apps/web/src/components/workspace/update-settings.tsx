@@ -28,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { hasCapability, host } from "@/lib/native";
 import {
   busyLabels,
   phaseKeys,
@@ -39,10 +40,12 @@ import {
   useUpgradeWatch,
 } from "@/queries/upgrade";
 import { wireErrorMessage } from "@/queries/wire";
+import { DesktopUpdate } from "./desktop-update";
 
 // Settings → 更新: which version this host is, whether there is a newer one, and the button. The
 // work happens in a process of its own (`apps/eta/src/upgrade/worker.ts`); from the moment the
-// service stops this page is under `UpgradeScreen`.
+// service stops this page is under `UpgradeScreen`. In a window connected to a remote host all of
+// this is that host's, so it says which one: the button does not touch the computer it is on.
 
 const blockKeys = {
   source: "source",
@@ -229,7 +232,32 @@ function tokenNotes(
   return { source, note };
 }
 
+/**
+ * The desktop app's own update over the host's, each under its name, when the app can update
+ * itself; the host's alone otherwise, as in a browser.
+ */
 export function UpdateSettings() {
+  const { t: translateText } = useTranslation(["settings"] as const);
+  if (!hasCapability("shell-update")) return <HostUpdate />;
+  return (
+    <div className="space-y-6">
+      <section className="space-y-2">
+        <h3 className="text-sm font-medium">
+          {translateText("desktopUpdate.heading")}
+        </h3>
+        <DesktopUpdate />
+      </section>
+      <section className="space-y-2">
+        <h3 className="text-sm font-medium">
+          {translateText("update.hostHeading")}
+        </h3>
+        <HostUpdate />
+      </section>
+    </div>
+  );
+}
+
+function HostUpdate() {
   const { t: translateText } = useTranslation(["settings", "common"] as const);
   const check = useUpgradeCheck();
   const status = useUpgradeWatch()?.status ?? null;
@@ -251,6 +279,8 @@ export function UpdateSettings() {
   const { available, blocked, busy, error, latest, token, upstream, version } =
     check.data;
   const notes = tokenNotes(token, translateText);
+  const { address, connection } = host();
+  const remote = connection === "remote" ? address : undefined;
   const running = status?.state === "running";
   const failed =
     status?.state === "failed" ||
@@ -265,6 +295,14 @@ export function UpdateSettings() {
   return (
     <div className="space-y-3">
       <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
+        {remote !== undefined && (
+          <>
+            <dt className="text-muted-foreground">
+              {translateText("update.remoteHost")}
+            </dt>
+            <dd className="break-all">{remote}</dd>
+          </>
+        )}
         <dt className="text-muted-foreground">
           {translateText("update.version")}
         </dt>
@@ -406,7 +444,9 @@ export function UpdateSettings() {
               {translateText("update.confirmTitle", { version: latest })}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {translateText("update.confirm")}
+              {remote === undefined
+                ? translateText("update.confirm")
+                : translateText("update.confirmRemote", { host: remote })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {busy.length > 0 && (

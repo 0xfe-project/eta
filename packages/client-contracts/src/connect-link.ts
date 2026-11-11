@@ -1,4 +1,8 @@
-import type { HostAddress } from "../../app/session";
+/** A host and the token that lets a client in: empty on a host without the token gate. */
+export interface HostAddress {
+  address: string;
+  token: string;
+}
 
 /**
  * The host and token in the link `machines.phoneLink` makes: `eta://connect?address=…&token=…`.

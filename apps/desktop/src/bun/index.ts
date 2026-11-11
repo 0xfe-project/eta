@@ -1,27 +1,39 @@
 /**
- * The desktop shell. Opening the app starts the host and shows its page.
+ * The desktop shell. Opening the app shows a host's page: its own, or one the user connected to.
  *
- * The host (`apps/eta`) is the whole product in one Bun process: the page, the database and the
- * socket live behind its one port. This process finds a free port, starts that one, and points
- * the window at it. With no built page (`apps/web/dist`) the host serves the socket only and the
- * window says so.
+ * The user decides which, on the shell's own page the first time and from Settings after that, and
+ * `shell.ts` holds the rules for moving between them. In **local** mode the host (`apps/eta`) runs
+ * here, the whole product in one Bun process: the page, the database and the socket live behind
+ * its one port. This process finds a free port, starts that one, and points the window at it. The
+ * host it starts is the user's copy (`~/.eta/desktop/host/`, seeded from the one the app carries,
+ * `installed.ts`), and this process is its service: the host's own upgrade stops it, replaces the
+ * file and has it started again through `service.ts`. A host already serving `~/.eta` (the command
+ * line's service) is opened instead of starting a second. With
+ * no built page (`apps/web/dist`) the host serves the socket only and the window says so. In
+ * **remote** mode no host runs here and the window loads the remote one's page; nothing of the two
+ * modes' data is shared or moved.
  *
  * The host lives as long as the app, not as long as a window: closing the window is closing a
- * window (Dock click brings it back), and quitting the app is what stops the host.
+ * window (Dock click brings it back), and quitting the app or switching to remote is what stops
+ * the host.
  *
- * Two things sit beside the host in this process, and both are the window's, not the product's:
+ * Three things sit beside the host in this process, and all are the window's, not the product's:
  *
  * - the **capability bridge** (`native.ts`): a loopback port that answers save dialogs, the
- *   system browser, window buttons. It exists so the page can do what a page cannot.
+ *   system browser, window buttons. It exists so the page can do what a page cannot, and it answers
+ *   whichever page the window shows, a remote one included.
+ * - the **shell's page** (`shell-server.ts`, `shell-page.ts`): where the host is chosen and where
+ *   a host that cannot be shown is explained. It is the only page that can touch the connection.
  * - the **preload**: the one script that runs in the page before any of its own code. `preload` is
  *   script *source*, not a path, which is the only reason the bridge's port — which does not exist
  *   until this process has started — can be in the page before its first line runs.
  *
  * What the page learns about itself arrives that way, as `window.__ETA_HOST__`
- * (see `apps/web/src/lib/native.ts`). Two facts worth stating here: there is no `token` when the
- * host listens on loopback only, because a loopback host has no token gate; and `role` says where
- * the host came from — `desktop` when the app carries it (`host/`, a compiled binary staged by
- * `scripts/stage-host.ts`), `dev` when the shell runs it out of the checkout above it.
+ * (see `apps/web/src/lib/native.ts`). Three facts worth stating here: no page is given a host's
+ * token, because a remote page gets a cookie for it from the host and a loopback host has no token
+ * gate; `role` says what the shell is — `desktop` when the app carries a host (`host/`, a compiled
+ * binary from `apps/eta/scripts/build-host.ts`), `dev` when it runs one out of the checkout above
+ * it; and `connection` says `local` or `remote`, with `address` for the latter.
  *
  * The window is the app's own, not a browser's: it has no system title bar, and the 40px band the
  * page draws across its top *is* the title bar — the page's band carries the drag region and, on
@@ -34,24 +46,42 @@
  * paste anywhere in the app. The menu is installed below, all of it roles.
  */
 import type { ApplicationMenuItemConfig } from "electrobun/main";
+import type { DownloadProgress } from "./download";
+import type { ServiceServer } from "./service";
+import type { HostLaunch, View } from "./shell";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import process from "node:process";
 import Electrobun, {
   ApplicationMenu,
   BrowserWindow,
+  BuildConfig,
   ContextMenu,
+  Updater,
   Utils,
 } from "electrobun/main";
-import { failurePage } from "./failure";
+import { readConnection, writeConnection } from "./connection";
+import { DownloadError, downloadHost } from "./download";
 import { HOST_WRAPPER } from "./host";
-import { startNativeBridge } from "./native";
+import { hostHome, recordedHost, runningHost } from "./installed";
+import { capabilities, startNativeBridge } from "./native";
 import { configureWindowsWindow } from "./platform/windows";
+import { pagePreload, relayedRequest, relayToBridge } from "./preload";
+import { probeRemote, remoteHealth, remotePage, watchRemote } from "./remote";
+import { LocalHost, startServiceServer } from "./service";
+import { createShell } from "./shell";
+import { startShellServer } from "./shell-server";
+import { createShellUpdate } from "./update";
 
-/** Kept in step with package.json and electrobun.config.ts; the page may show it. */
-const APP_VERSION = "0.1.0";
+/**
+ * What the build put in the bundle (`src/version.ts`); the page may show it and compares it with
+ * its host's `MIN_DESKTOP`. A run without the bundle's metadata is `dev`, which compares with
+ * nothing.
+ */
+const APP_VERSION =
+  (await Updater.localInfo.version().catch(() => "")) || "dev";
 
 /** What an executable's name ends in here. */
 const EXE = process.platform === "win32" ? ".exe" : "";
@@ -145,16 +175,28 @@ const APP_MENU: ApplicationMenuItemConfig[] = [
 if (process.platform === "darwin") ApplicationMenu.setApplicationMenu(APP_MENU);
 
 /**
- * The host the app carries: the compiled host in `host/`, beside the main process's bundle. Only
- * a packaged build has one — `build.copy` never lands in the dev bundle.
+ * A packaged app (a stable or canary build) runs a compiled host it downloads (`download.ts`); a
+ * dev build runs the host out of the checkout above it.
  */
-function packagedHost(): string | undefined {
-  const dir = join(dirname(Bun.main), "..", "host");
-  const file = join(dir, `eta-host${EXE}`);
-  return existsSync(file) ? file : undefined;
-}
+const packaged = BuildConfig.getSync().isPackaged;
 
-const packaged = packagedHost();
+/**
+ * What a downloaded host says it is, run once before it becomes the host. Two minutes, as the
+ * host's upgrade gives a new build: a virus scanner reads a new 390MB file first on Windows.
+ */
+async function versionOf(file: string): Promise<string> {
+  const child = Bun.spawn([file, "--version"], {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  const timer = setTimeout(() => child.kill(), 120_000);
+  const output = await new Response(child.stdout).text();
+  clearTimeout(timer);
+  const code = await child.exited;
+  if (code !== 0) throw new Error(`it exited with ${String(code)}`);
+  return output.trim();
+}
 
 /**
  * PATH as the user's login shell has it.
@@ -205,56 +247,31 @@ function bunBinary(): string {
   return existsSync(beside) ? beside : "bun";
 }
 
-/**
- * The port the host actually bound, read from a file rather than its stdout.
- *
- * The Electrobun launcher owns this process's stdout for its own protocol, so a pipe off the
- * host does not arrive as the host wrote it. The host prints one JSON summary first; a wrapper
- * keeps that line and lets the rest through.
- */
-async function boundPort(file: string, child: Bun.Subprocess): Promise<number> {
-  const deadline = Date.now() + 20_000;
-  for (;;) {
-    const text = await readFile(file, "utf8").catch(() => "");
-    if (text.includes("\n")) {
-      return (JSON.parse(text.slice(0, text.indexOf("\n"))) as { port: number })
-        .port;
-    }
-    // `await child.exited` would wait for the host to exit; only its exitCode is a question now.
-    if (child.exitCode !== null) {
-      throw new Error(
-        `the host exited with ${child.exitCode} before it was ready`,
-      );
-    }
-    if (Date.now() > deadline)
-      throw new Error("the host was not ready after 20s");
-    await Bun.sleep(100);
-  }
-}
-
-/** What the window has to show, or why it has nothing to show. */
-type Launch =
-  | { ready: true; page: string; port?: number }
-  | { ready: false; reason: string };
-
 let current: BrowserWindow | undefined;
-let host: Bun.Subprocess | undefined;
+/** The host this app started, and the port its upgrade asks it through; neither for a host it found. */
+let localHost: LocalHost | undefined;
+let service: ServiceServer | undefined;
 
 const reasonOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+/** The dev page, which comes with a host of its own: `bun run dev --desktop` starts both. */
+const { ETA_DESKTOP_WEB_URL } = process.env;
+const devPage = ETA_DESKTOP_WEB_URL?.trim();
+const developing = devPage !== undefined && devPage !== "";
+
 /**
- * Start the host and learn the port it bound.
+ * Start the host and learn the port it bound, or find the one already running here.
  *
- * A failure here is a window's answer, not a process's exit: the two ways it goes wrong (no
- * host carried and no checkout above us, no host within twenty seconds) both come back as the reason the page is
- * missing, so the window can open and say it. Quitting on `process.exit` left the user with an
- * app that flashed and vanished.
+ * A failure here is a window's answer, not a process's exit: the ways it goes wrong (no host
+ * carried and no checkout above us, a seed that cannot be copied out, no host within twenty
+ * seconds) all come back as the reason the page is missing, so the window can open and say it.
+ * Quitting on `process.exit` left the user with an app that flashed and vanished.
  */
-async function startHost(): Promise<Launch> {
-  const { ETA_DESKTOP_WEB_URL } = process.env;
-  const devPage = ETA_DESKTOP_WEB_URL?.trim();
-  if (devPage !== undefined && devPage !== "") {
+async function startHost(
+  onProgress: (progress: DownloadProgress) => void,
+): Promise<HostLaunch> {
+  if (developing) {
     try {
       const url = new URL(devPage);
       if (url.protocol !== "http:" && url.protocol !== "https:")
@@ -268,13 +285,48 @@ async function startHost(): Promise<Launch> {
     }
   }
 
-  // The app's own host, else the checkout's: `bun apps/eta/src/main.ts`, with the page when it
-  // has been built and the dev server's origin let in when it has not.
-  let command: string[];
+  // The app's host, run from the user's copy of it (`installed.ts`), else the checkout's:
+  // `bun apps/eta/src/main.ts`, with the page when it has been built and the dev server's origin
+  // let in when it has not.
+  let program: string[];
+  let flags: string[];
   let cwd: string;
   let built: boolean;
-  if (packaged !== undefined) {
-    command = [packaged];
+  let file: string | undefined;
+  const home = hostHome(homedir());
+  const path = packaged ? await loginShellPath() : undefined;
+  // The host keeps its data in ~/.eta; HOME is the only way to point it elsewhere.
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...(path === undefined ? {} : { PATH: path }),
+  };
+  if (packaged) {
+    file = join(home, `eta-host${EXE}`);
+    if (!existsSync(file)) {
+      // A host already serving ~/.eta needs no download to be opened.
+      const recorded = await recordedHost(join(homedir(), ".eta"));
+      if (recorded !== undefined)
+        return { ready: true, page: remotePage(recorded), external: recorded };
+      try {
+        await downloadHost({
+          dir: home,
+          name: `eta-host${EXE}`,
+          appVersion: APP_VERSION,
+          env,
+          onProgress,
+          tryBuild: versionOf,
+        });
+      } catch (error) {
+        if (!(error instanceof DownloadError)) throw error;
+        return {
+          ready: false,
+          reason: error.failure.detail,
+          download: error.failure,
+        };
+      }
+    }
+    program = [file];
+    flags = [];
     cwd = homedir();
     built = true;
   } else {
@@ -285,45 +337,44 @@ async function startHost(): Promise<Launch> {
       return { ready: false, reason: reasonOf(error) };
     }
     built = existsSync(join(root, "apps", "web", "dist", "index.html"));
-    command = [
-      bunBinary(),
-      "apps/eta/src/main.ts",
-      ...(built
-        ? ["--web-dir", "apps/web/dist"]
-        : ["--allow-origin", "http://127.0.0.1:3000"]),
-    ];
+    program = [bunBinary(), "apps/eta/src/main.ts"];
+    flags = built
+      ? ["--web-dir", "apps/web/dist"]
+      : ["--allow-origin", "http://127.0.0.1:3000"];
     cwd = root;
   }
-  const path = packaged === undefined ? undefined : await loginShellPath();
+  // One host to a data directory: a second would run the same agents over the same database.
+  const found = await runningHost([...program, "running"], cwd, env);
+  if (found !== undefined)
+    return { ready: true, page: remotePage(found), external: found };
 
   const runtime = join(tmpdir(), "eta-desktop");
   await mkdir(runtime, { recursive: true });
-  const summary = join(runtime, "host.json");
-  await rm(summary, { force: true });
-
   // A file import is bundled inline and build.copy never lands in the dev bundle, so the script
   // bun runs is written out from this string. It is src/bun/host.ts; keep the two the same.
   const wrapper = join(runtime, "host.ts");
   await Bun.write(wrapper, HOST_WRAPPER);
 
-  host = Bun.spawn(
-    // Port 0: the host picks a free port and says which in its summary.
-    [bunBinary(), wrapper, ...command, "--port", "0", "--github"],
-    // The host keeps its data in ~/.eta; HOME is the only way to point it elsewhere.
-    {
-      cwd,
-      env: {
-        ...process.env,
-        ...(path === undefined ? {} : { PATH: path }),
-        ETA_DESKTOP_SUMMARY: summary,
-      },
-      stdout: "inherit",
-      stderr: "inherit",
-    },
-  );
+  const hostEnv = { ...env };
+  const host = new LocalHost({
+    // The first start takes any free port and says which in its summary; the next ones take it again.
+    command: [...program, ...flags, "--github"],
+    cwd,
+    env: hostEnv,
+    wrapper,
+    bun: bunBinary(),
+    summary: join(runtime, "host.json"),
+  });
+  localHost = host;
+  // Only a compiled host replaces its own file; one from the checkout is updated with the checkout.
+  if (file !== undefined) {
+    service = startServiceServer({ host, program: file, dir: home, env });
+    Object.assign(hostEnv, service.env);
+  }
 
   try {
-    const port = await boundPort(summary, host);
+    await host.spawn();
+    const port = await host.ready();
     return {
       // The built page is served by the host itself, so the window and the socket share one
       // origin. Without a build there is only the shell's own placeholder.
@@ -334,9 +385,23 @@ async function startHost(): Promise<Launch> {
       ready: true,
     };
   } catch (error) {
-    host.kill();
+    await stopLocalHost();
     return { ready: false, reason: reasonOf(error) };
   }
+}
+
+/**
+ * Stop the host and wait for it: it holds the database until it has gone. An upgrade halfway
+ * through goes first: told to stop, it does if it has not touched the host yet, and otherwise
+ * finishes, since it is what starts the host again or puts the old build back.
+ */
+async function stopLocalHost(): Promise<void> {
+  const [host, server] = [localHost, service];
+  localHost = undefined;
+  service = undefined;
+  await server?.finishJob();
+  await host?.stop();
+  server?.close();
 }
 
 /**
@@ -364,18 +429,57 @@ function httpOrigin(url: string): string | undefined {
     : undefined;
 }
 
-const launch = await startHost();
+/** The origin a view's page will have. */
+const originOf = (view: View): string | undefined =>
+  view.screen === "page" ? httpOrigin(view.page) : pages.origin;
 
-// The page's own origin is the only origin the capability bridge answers, and it is not knowable
-// before the host has bound its port — hence the bridge starts here, not at the top. A page that
-// is not served over http (the shell's own placeholder, or nothing at all when the host failed)
-// has no origin to whitelist: the bridge then answers no page.
-const pageOrigin = launch.ready ? httpOrigin(launch.page) : undefined;
+/**
+ * The capability bridge starts before there is a page, so it starts answering nothing: `show`
+ * tells it the origin of each page the window is given, and no origin before or after that one.
+ * A page that is not served over http (the shell's placeholder for a missing build) has no origin
+ * to whitelist, and the bridge then answers no page.
+ */
+/**
+ * The app's own update (`update.ts`): only in a packaged build that was given somewhere to update
+ * from (`ETA_DESKTOP_UPDATE_URL` at build time), and only when the page asks.
+ */
+const updates =
+  packaged && (await Updater.localInfo.baseUrl().catch(() => "")) !== "";
+const CAPABILITIES = capabilities(updates);
+
+/** Set once the app is on its way out, by a quit or an update: the quit is let through. */
+let stopping = false;
+
+const shellUpdate = updates
+  ? createShellUpdate({
+      updater: Updater,
+      current: APP_VERSION,
+      // The local host goes before the Updater asks to quit, so the quit needs nothing more.
+      beforeApply: async () => {
+        stopping = true;
+        await stopLocalHost();
+      },
+      afterFailedApply: async () => {
+        stopping = false;
+        await shell.restartLocal();
+      },
+    })
+  : undefined;
+
 const bridge = startNativeBridge({
   appVersion: APP_VERSION,
-  origins: pageOrigin === undefined ? [] : [pageOrigin],
+  capabilities: CAPABILITIES,
+  origins: [],
   platform: process.platform,
   handlers: {
+    ...(shellUpdate === undefined
+      ? {}
+      : {
+          shellUpdate: {
+            view: shellUpdate.view,
+            act: async (action) => await shellUpdate[action](),
+          },
+        }),
     async saveFile({ content, filename }) {
       // Electrobun has no save panel: the honest closest thing is to ask for a directory and
       // write the file there, rather than put it somewhere the user did not point at.
@@ -403,38 +507,78 @@ const bridge = startNativeBridge({
         ),
       );
     },
-    windowAction({ action }) {
-      const shell = current;
-      if (shell === undefined) return;
-      if (action === "minimize") shell.minimize();
+    windowAction({ action, language }) {
+      if (action === "connection") {
+        shell.openChooser(language);
+        return;
+      }
+      const window = current;
+      if (window === undefined) return;
+      if (action === "minimize") window.minimize();
       else if (action === "toggle-maximize")
-        shell.isMaximized() ? shell.unmaximize() : shell.maximize();
-      else shell.close();
+        window.isMaximized() ? window.unmaximize() : window.maximize();
+      else window.close();
     },
   },
+});
+
+// An `https` page's bridge calls, which reach this process as messages (see `preload.ts`).
+Electrobun.events.on("host-message", (event) => {
+  const { detail } = (event as { data: { detail: unknown } }).data;
+  const request = relayedRequest(detail);
+  if (request === undefined) return;
+  void relayToBridge(bridge.apiBase, request).then(
+    (answer) => {
+      current?.webview.executeJavascript(answer);
+    },
+    () => {},
+  );
 });
 
 /**
  * The page's first fact about itself. `preload` is source, so the bridge's port — which only
  * exists now — is already on `window` before the page's first line runs. The bridge token is in
  * there too; it is a secret of this launch and belongs in the page and nowhere else: never log it,
- * never put it in a message.
+ * never put it in a message. The shell's page also gets the token of the connection calls, which
+ * is why a window's preload is written for the view it shows.
  */
-const preload = `window.__ETA_HOST__=${JSON.stringify({
-  apiBase:
-    launch.ready && launch.port !== undefined
-      ? `http://127.0.0.1:${String(launch.port)}`
-      : undefined,
-  platform: process.platform,
-  appVersion: APP_VERSION,
-  native: true,
-  nativeApiBase: bridge.apiBase,
-  nativeToken: bridge.token,
-  role: packaged === undefined ? "dev" : "desktop",
-  ...(launch.ready ? {} : { error: launch.reason }),
-})};`;
+function preloadFor(view: View): string {
+  const { connection } = view;
+  return pagePreload({
+    origin: originOf(view),
+    facts: {
+      apiBase:
+        view.screen !== "page"
+          ? undefined
+          : view.port === undefined
+            ? httpOrigin(view.page)
+            : `http://127.0.0.1:${String(view.port)}`,
+      platform: process.platform,
+      appVersion: APP_VERSION,
+      capabilities: CAPABILITIES,
+      native: true,
+      nativeApiBase: bridge.apiBase,
+      nativeToken: bridge.token,
+      role: packaged ? "desktop" : "dev",
+      // The dev page has no connection to change, so it hears about none.
+      ...(developing || connection === undefined
+        ? {}
+        : {
+            connection: connection.mode,
+            ...(connection.mode === "remote"
+              ? { address: connection.address }
+              : {}),
+          }),
+      ...(view.screen === "failure" && view.failure.reason === "host"
+        ? { error: view.failure.detail }
+        : {}),
+    },
+    ...(view.screen === "page" ? {} : { shellToken: pages.token }),
+  });
+}
 
 const isMac = process.platform === "darwin";
+const DEFAULT_FRAME = { width: 1280, height: 800 };
 
 /**
  * What the window is called.
@@ -472,15 +616,12 @@ const lightInsetY = (): number => {
  * ours. Everywhere else the bar is hidden outright (`hidden`) — Windows has no inset controls to
  * keep, so the page draws all three buttons itself.
  */
-function open(): BrowserWindow {
+function open(view: View, frame = DEFAULT_FRAME): BrowserWindow {
   const created = new BrowserWindow({
     title: WINDOW_TITLE,
-    // No host, no page: the shell's own page carries the reason instead of the app vanishing.
-    ...(launch.ready
-      ? { url: launch.page }
-      : { html: failurePage(launch.reason) }),
-    frame: { width: 1280, height: 800 },
-    preload,
+    url: view.screen === "page" ? view.page : pages.origin,
+    frame,
+    preload: preloadFor(view),
     // A window opened by the app is the app's window: bring it forward, do not open it behind.
     activate: true,
     titleBarStyle: isMac ? "hiddenInset" : "hidden",
@@ -488,12 +629,71 @@ function open(): BrowserWindow {
       ? { trafficLightOffset: { x: LIGHT_INSET_X, y: lightInsetY() } }
       : {}),
   });
+  created.on("close", () => {
+    if (current === created) current = undefined;
+  });
   // Windows pays for the missing title bar in three places; none of them are Electrobun's.
   if (process.platform === "win32") void configureWindowsWindow(created);
   return created;
 }
 
-current = open();
+/**
+ * Put a view in the window. A preload cannot be changed once a webview has it, and what it says
+ * differs from view to view, so a new view is a new window, in the place of the old one. Closed
+ * first: the Windows patches find a window by its title, and there must be only one.
+ *
+ * With the window closed there is nothing to replace, and asking for it back opens this view. A
+ * host that goes away behind a closed window does not get to open one.
+ */
+let shown: View | undefined;
+function show(view: View): void {
+  const origin = originOf(view);
+  bridge.setOrigins(origin === undefined ? [] : [origin]);
+  const first = shown === undefined;
+  shown = view;
+  const replaced = current;
+  if (replaced === undefined && !first) return;
+  const frame = replaced?.getFrame();
+  current = undefined;
+  replaced?.close();
+  current = open(view, frame);
+}
+
+/**
+ * The app answers the first launch's question itself in two cases: the dev page brings its own
+ * host, and the release's smoke test (`scripts/try-app.ts`) has nobody at the window. Neither
+ * touches what a user chose.
+ */
+const { ETA_DESKTOP_CONNECTION } = process.env;
+const decided = developing || ETA_DESKTOP_CONNECTION === "local";
+const connectionFile = join(Utils.paths.userData, "connection.json");
+const shell = createShell({
+  read: async () =>
+    decided ? { mode: "local" } : await readConnection(connectionFile),
+  save: async (connection) => {
+    if (!decided) await writeConnection(connectionFile, connection);
+  },
+  startHost,
+  stopHost: stopLocalHost,
+  probe: probeRemote,
+  watch: (target, onLost) =>
+    watchRemote({ health: () => remoteHealth(target), onLost }),
+  show,
+});
+
+const pages = startShellServer({
+  view: () => shell.current(),
+  choose: (choice) => shell.choose(choice),
+  retry: () => shell.retry(),
+  openChooser: () => {
+    shell.openChooser();
+  },
+  back: () => {
+    shell.back();
+  },
+});
+
+await shell.boot();
 
 // A Dock click on a windowless app asks for its window back.
 Electrobun.events.on("reopen", () => {
@@ -501,32 +701,25 @@ Electrobun.events.on("reopen", () => {
     current.activate();
     return;
   }
-  current = open();
+  if (shown !== undefined) current = open(shown);
 });
 
-/** Quitting is the one thing that stops the host: its sessions flush, its files close. */
-let stopping = false;
-async function stopHost(): Promise<void> {
+/** Quitting stops everything this process started: its sessions flush, its files close. */
+async function stopAll(): Promise<void> {
   if (stopping) return;
   stopping = true;
+  shell.close();
+  pages.close();
   bridge.close();
-  const closing = host;
-  if (closing === undefined) return;
-  closing.kill("SIGTERM");
-  const exited = closing.exited;
-  const gaveUp = new Promise((resolve) =>
-    setTimeout(resolve, 5_000, "timeout"),
-  );
-  if ((await Promise.race([exited, gaveUp])) === "timeout")
-    closing.kill("SIGKILL");
+  await stopLocalHost();
 }
 
 Electrobun.events.on("before-quit", (event) => {
   if (stopping) return;
   // The emitter does not await; refuse this quit, stop the host, then ask again.
   (event as { response?: { allow: boolean } }).response = { allow: false };
-  void stopHost().then(() => Electrobun.Utils.quit());
+  void stopAll().then(() => Electrobun.Utils.quit());
 });
 
-process.on("SIGINT", () => void stopHost().then(() => process.exit(0)));
-process.on("SIGTERM", () => void stopHost().then(() => process.exit(0)));
+process.on("SIGINT", () => void stopAll().then(() => process.exit(0)));
+process.on("SIGTERM", () => void stopAll().then(() => process.exit(0)));

@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { useTheme } from "@/components/use-theme";
 import { elementPickerDefault, setElementPicker } from "@/lib/element-picker";
 import { translate } from "@/lib/i18n";
+import { host } from "@/lib/native";
 import { cn } from "@/lib/utils";
 import { useGitHubMounted } from "@/queries/github";
 import { AgentSettings } from "./agent-settings";
@@ -14,6 +15,7 @@ import { ApprovalSettings } from "./approval-settings";
 import { ConnectionSettings } from "./connection-settings";
 import { EmailSettings } from "./email-settings";
 import { ArchivedGroups } from "./groups";
+import { HostSettings } from "./host-settings";
 import { MachineSettings } from "./machine-settings";
 import { McpSettings } from "./mcp-settings";
 import { ProviderSettings } from "./provider-settings";
@@ -228,6 +230,8 @@ function SectionContent({
     <EmailSettings />
   ) : section === "archived" ? (
     <ArchivedGroups />
+  ) : section === "host" ? (
+    <HostSettings />
   ) : section === "update" ? (
     <UpdateSettings />
   ) : (
@@ -253,6 +257,11 @@ export function SettingsPanels({
         label={translateText("accessibility.sections")}
         sections={settingsSections
           .filter((section) => !hiddenSettings.has(section.value))
+          // Only the shell can change where its host is.
+          .filter(
+            (section) =>
+              section.value !== "host" || host().connection !== undefined,
+          )
           .map((section) => ({
             ...section,
             attention: attention[section.value],

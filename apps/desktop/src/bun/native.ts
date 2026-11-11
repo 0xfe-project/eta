@@ -21,11 +21,31 @@
  *
  * This server never opens a session, never touches the database and never starts the host.
  */
+import type {
+  DesktopCapability,
+  ShellUpdateView,
+} from "@eta/client-contracts/desktop";
 import { Buffer } from "node:buffer";
 import { timingSafeEqual } from "node:crypto";
+import { BASELINE_CAPABILITIES } from "@eta/client-contracts/desktop";
+
+/**
+ * What this bridge answers, by name, for a page to ask before it calls
+ * (`@eta/client-contracts/desktop`). Only ever grows: a page from a newer host relies on a name
+ * meaning what it meant. `shell-update` is there when the app was built with somewhere to update
+ * from.
+ */
+export function capabilities(updates: boolean): readonly DesktopCapability[] {
+  return updates
+    ? [...BASELINE_CAPABILITIES, "shell-update"]
+    : BASELINE_CAPABILITIES;
+}
+
+/** What the page may ask the app's own update to do; each is a press of a button. */
+const SHELL_UPDATE_ACTIONS = ["check", "download", "apply"] as const;
 
 /** What the page may ask the window to do. Kept in step with `apps/web/src/lib/native.ts`. */
-type WindowAction = "minimize" | "toggle-maximize" | "close";
+type WindowAction = "minimize" | "toggle-maximize" | "close" | "connection";
 
 /** One native context-menu row: `action` comes back to the page when the row is chosen. */
 interface NativeMenuItem {
@@ -44,7 +64,21 @@ interface NativeHandlers {
   /** Hand a URL to the system browser; the window itself never navigates away. */
   openExternal: (input: { url: string }) => void;
   contextMenu: (input: { items: readonly NativeMenuItem[] }) => void;
-  windowAction: (input: { action: WindowAction }) => void;
+  /**
+   * `connection` is the page asking the shell to show its own connection page. It carries nothing
+   * and changes nothing: the choice, and the token, stay on a page that is the shell's.
+   */
+  windowAction: (input: {
+    action: WindowAction;
+    language: string | undefined;
+  }) => void;
+  /** The app's own update (`update.ts`); absent in a build that has nowhere to update from. */
+  shellUpdate?: {
+    view: () => ShellUpdateView;
+    act: (
+      action: (typeof SHELL_UPDATE_ACTIONS)[number],
+    ) => Promise<ShellUpdateView>;
+  };
 }
 
 export interface NativeBridge {
@@ -52,17 +86,20 @@ export interface NativeBridge {
   apiBase: string;
   /** This launch's bearer token, for the preload. Never log it, never put it in a message. */
   token: string;
+  /** The window changed page: from now on only this origin's requests are answered. */
+  setOrigins: (origins: readonly string[]) => void;
   close: () => void;
 }
 
 /** Only a page we loaded may talk to this port; the list is that page's own origin. */
 export interface NativeBridgeOptions {
   handlers: NativeHandlers;
-  /** The origin of the page the window shows. Empty when the window shows a shell-owned page. */
+  /** The origin of the page the window shows. Empty when it has none, as `views://` has not. */
   origins: readonly string[];
   /** What `GET /api/native/info` answers with. */
   platform: string;
   appVersion: string;
+  capabilities: readonly DesktopCapability[];
 }
 
 const JSON_HEADERS = {
@@ -102,6 +139,7 @@ const WINDOW_ACTIONS: readonly WindowAction[] = [
   "minimize",
   "toggle-maximize",
   "close",
+  "connection",
 ];
 
 function menuItems(value: unknown): NativeMenuItem[] | undefined {
@@ -128,7 +166,8 @@ function menuItems(value: unknown): NativeMenuItem[] | undefined {
 export function startNativeBridge(options: NativeBridgeOptions): NativeBridge {
   const token = crypto.randomUUID();
   const expected = Buffer.from(token);
-  const { handlers, origins } = options;
+  const { handlers } = options;
+  let { origins } = options;
   const server = Bun.serve({
     hostname: "127.0.0.1",
     // Zero: the port is this launch's business, and only the preload ever learns it.
@@ -155,11 +194,16 @@ export function startNativeBridge(options: NativeBridgeOptions): NativeBridge {
       const json = (body: unknown): Response =>
         Response.json(body, { headers });
       const path = new URL(request.url).pathname;
+      if (path === "/api/native/shell-update" && request.method === "GET")
+        return handlers.shellUpdate === undefined
+          ? new Response("not_found", { status: 404, headers })
+          : json(handlers.shellUpdate.view());
       if (path === "/api/native/info" && request.method === "GET")
         return json({
           isDesktop: true,
           platform: options.platform,
           appVersion: options.appVersion,
+          capabilities: options.capabilities,
         });
       if (request.method !== "POST")
         return new Response("not_found", { status: 404, headers });
@@ -205,13 +249,26 @@ export function startNativeBridge(options: NativeBridgeOptions): NativeBridge {
           handlers.contextMenu({ items });
           return new Response(null, { status: 202, headers });
         }
+        if (path === "/api/native/shell-update") {
+          const asked = SHELL_UPDATE_ACTIONS.find(
+            (candidate) => candidate === field("action"),
+          );
+          if (handlers.shellUpdate === undefined)
+            return new Response("not_found", { status: 404, headers });
+          if (asked === undefined)
+            return new Response("native_request_invalid", {
+              status: 400,
+              headers,
+            });
+          return json(await handlers.shellUpdate.act(asked));
+        }
         if (path === "/api/native/window-action") {
           if (action === undefined)
             return new Response("native_request_invalid", {
               status: 400,
               headers,
             });
-          handlers.windowAction({ action });
+          handlers.windowAction({ action, language: text(field("language")) });
           return new Response(null, { status: 202, headers });
         }
       } catch {
@@ -224,6 +281,9 @@ export function startNativeBridge(options: NativeBridgeOptions): NativeBridge {
   return {
     apiBase: `http://127.0.0.1:${String(server.port)}`,
     token,
+    setOrigins: (next) => {
+      origins = next;
+    },
     close: () => {
       server.stop(true);
     },

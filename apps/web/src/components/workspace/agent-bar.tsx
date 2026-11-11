@@ -4,126 +4,17 @@ import type {
   ProjectView,
 } from "@eta/client-contracts";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
-import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
-import { CheckIcon } from "@phosphor-icons/react/Check";
 import { InfoIcon } from "@phosphor-icons/react/Info";
-import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { SidebarIcon } from "@phosphor-icons/react/Sidebar";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { agentName, useAgentList } from "@/queries/agents";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels } from "./agent-status";
 import { MemoryPauseToggle } from "./memory-pause-toggle";
 import { ProjectChip } from "./project-chip";
 import { StewardChip } from "./steward-chip";
-import { useAgents, useOpenAgent } from "./use-agents";
-import { useGroups, useOpenGroup } from "./use-groups";
-import { useHoverMenu } from "./use-hover-menu";
-
-/**
- * Switches the chat to an agent's direct chat, or keeps the group open. Only
- * navigates: the group's members, the agents' models and every chat's draft
- * and running replies stay as they are.
- */
-function AgentSwitch({
-  group,
-  onInfo,
-  children,
-}: {
-  group: ConversationSummary;
-  onInfo: () => void;
-  children: (open: string) => React.ReactNode;
-}) {
-  const { t: translateText } = useTranslation([
-    "agents",
-    "chat",
-    "common",
-  ] as const);
-  const { agents, openEditor } = useAgents();
-  const { groups } = useGroups();
-  const openGroup = useOpenGroup();
-  const menu = useHoverMenu();
-  const direct =
-    group.kind === "direct" ? group.participants[0]?.agentId : undefined;
-  const agent = agents.find((a) => a.id === direct);
-  const directs = new Map(
-    groups
-      .filter((g) => g.kind === "direct")
-      .map((g) => [g.participants[0]?.agentId, g.id]),
-  );
-  const open = agent
-    ? translateText("chat:agentSwitcher.currentDirectChat", {
-        agentName: agent.name,
-        status: agentStatusLabels[agent.status],
-      })
-    : translateText("chat:agentSwitcher.currentGroup", {
-        groupName: group.name,
-      });
-  return (
-    <DropdownMenu {...menu.root}>
-      <DropdownMenuTrigger asChild {...menu.trigger}>
-        {children(open)}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="center" className="w-56" {...menu.content}>
-        {direct ? null : (
-          <>
-            <DropdownMenuItem>
-              <span className="min-w-0 flex-1 truncate">
-                {translateText("chat:groups.nameLabel", { name: group.name })}
-              </span>
-              <CheckIcon aria-label={translateText("common:labels.current")} />
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-          </>
-        )}
-        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-          {translateText("chat:groups.directChat")}
-        </DropdownMenuLabel>
-        {agents.map((a) => {
-          const target = directs.get(a.id);
-          return (
-            <DropdownMenuItem
-              key={a.id}
-              disabled={!target}
-              onSelect={() => {
-                if (target && target !== group.id) openGroup(target);
-              }}
-            >
-              <AgentAvatar agent={a} className="size-5" />
-              <span className="min-w-0 flex-1 truncate">{a.name}</span>
-              <AgentStatusDot status={a.status} />
-              {a.id === direct ? (
-                <CheckIcon
-                  aria-label={translateText("common:labels.current")}
-                />
-              ) : null}
-            </DropdownMenuItem>
-          );
-        })}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onInfo}>
-          <InfoIcon aria-hidden="true" />
-          {direct
-            ? translateText("settings.title")
-            : translateText("chat:groups.info")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => openEditor()}>
-          <PlusIcon aria-hidden="true" />
-          {translateText("actions.create")}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
+import { useOpenAgent } from "./use-agents";
 
 /**
  * The chat's header: what this conversation is, where it works, and who is in it.
@@ -133,14 +24,14 @@ function AgentSwitch({
  * every conversation on decoration, and read as content rather than as navigation. A header that
  * scrolls away is not a header.
  *
- * The avatar row is navigation: pressing one opens that agent's own conversation. The name opens
- * the switcher (other groups, the agent's editor). The folder chip says where the work happens.
+ * The avatar row is navigation: pressing one opens that agent's own conversation. The name is
+ * only the name: it used to open a menu that switched to an agent's direct chat, which the sidebar
+ * and the avatar row already do. The folder chip says where the work happens.
  */
 export function ChatHeader({
   group,
   info,
   project,
-  onInfo,
   onOpenWorkspace,
   workspaceOpen,
   workspaceButtonRef,
@@ -149,7 +40,6 @@ export function ChatHeader({
   /** The conversation's own facts (its steward override); not there until its target arrives. */
   info?: ConversationInfo | undefined;
   project?: ProjectView | undefined;
-  onInfo: () => void;
   /**
    * Where the panel comes from, on the screens where it can be away: between md and lg it is a
    * drawer over the chat, and this is the only thing in the header that brings it back.
@@ -168,24 +58,8 @@ export function ChatHeader({
     // The band clears the window's lights: a folded rail is narrower than they are, so in that
     // state their corridor continues into this column and the group's name starts past them.
     <header className="band gap-2 px-2" data-lights-shift>
-      <h1 className="flex min-w-0 items-center text-sm font-medium">
-        {group ? (
-          <AgentSwitch group={group} onInfo={onInfo}>
-            {(openLabel) => (
-              <button
-                type="button"
-                aria-label={openLabel}
-                className="flex h-9 min-w-0 items-center gap-1 px-1 outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
-                <span className="max-w-56 truncate">{group.name}</span>
-                <CaretDownIcon
-                  aria-hidden="true"
-                  className="size-3 shrink-0 text-muted-foreground"
-                />
-              </button>
-            )}
-          </AgentSwitch>
-        ) : null}
+      <h1 className="flex h-9 min-w-0 items-center px-1 text-sm font-medium">
+        {group ? <span className="max-w-56 truncate">{group.name}</span> : null}
       </h1>
       {/* A direct conversation has one agent and one fixed folder: the chip would only
           restate the project the sidebar already has open. Groups show where they work. */}

@@ -3,7 +3,8 @@
  * the service, so it asks the computer's service manager what is installed and what state it is
  * in. `serviceManager` knows the kinds of manager; what is the host's here is asking `/up`.
  *
- * With no service installed the upgrade only replaces the file.
+ * With no service installed the upgrade only replaces the file. A host the desktop app runs has
+ * the app for its service (`desktop.ts`), whatever else is installed.
  */
 import type {
   DetachedRunner,
@@ -19,6 +20,7 @@ import { parseArgs } from "node:util";
 import { detachedRunner, serviceManager } from "@eta/daemon";
 import { RUN_OPTIONS } from "../cli";
 import { Tailscale } from "../machines/tailscale";
+import { desktopRunner, desktopService } from "./desktop";
 
 /** The host as a user service: one per user, like the daemon. */
 export const HOST_UNIT: ServiceUnit = {
@@ -51,7 +53,8 @@ const windows: WindowsOptions = {
 export const hostManager = (unit: ServiceUnit = HOST_UNIT): ServiceManager =>
   serviceManager(unit, windows);
 
-export const hostRunner = (): DetachedRunner => detachedRunner(windows);
+export const hostRunner = (): DetachedRunner =>
+  desktopRunner() ?? detachedRunner(windows);
 
 /** Whether two paths are one file; Windows's names have no case. */
 export function sameFile(one: string, other: string): boolean {
@@ -110,6 +113,11 @@ export const askUp = (url: string): Promise<boolean> =>
 
 /** The installed service, whether it is running or not; undefined when there is none. */
 export async function findHostService(): Promise<HostService | undefined> {
+  return (await desktopService()) ?? (await installedService());
+}
+
+/** The service the computer's own manager runs, leaving the desktop app out. */
+async function installedService(): Promise<HostService | undefined> {
   const manager = hostManager();
   const argv = await manager.installed();
   if (argv === undefined) return undefined;

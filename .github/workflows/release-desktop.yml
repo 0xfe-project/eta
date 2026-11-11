@@ -1,0 +1,197 @@
+# A `desktop-v*` tag becomes a GitHub Release of the desktop app: an installer for each platform,
+# and SHA256SUMS. The host is released apart, from `v*` tags (release.yml). How to cut either is
+# in docs/release.md.
+name: Release desktop
+
+on:
+  push:
+    tags: ["desktop-v*"]
+  # For a tag whose run never happened or was lost, by naming it as the ref:
+  # `gh workflow run release-desktop.yml --ref desktop-v0.2.0`.
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ github.ref_name }}
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  # All of it: --affected compares with main, and a tag on main has nothing to compare.
+  check:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      command: check
+
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Read the version from the tag
+        id: version
+        run: |
+          if [[ $GITHUB_REF_TYPE != tag || ! $TAG =~ ^desktop-v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::A desktop release runs on a tag like desktop-v0.2.0, not on $GITHUB_REF."
+            exit 1
+          fi
+          echo "version=${TAG#desktop-v}" >> "$GITHUB_OUTPUT"
+
+      # Never the repository's Latest: that is the host's, and what `eta-host upgrade` and the
+      # install instructions mean by the latest release (apps/eta/src/upgrade/releases.ts only
+      # takes v* tags in any case).
+      - name: Open the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          draft=$(gh release view "$TAG" --json isDraft --jq .isDraft || echo none)
+          if [[ $draft == false ]]; then
+            echo "::error::$TAG is already published."
+            exit 1
+          fi
+          # A pre-release by its version: the tag itself always has a `-` in it.
+          if [[ $draft == none ]]; then
+            gh release create "$TAG" --draft --verify-tag --title "eta desktop ${TAG#desktop-v}" \
+              --generate-notes --latest=false \
+              --prerelease="$([[ ${TAG#desktop-v} == *-* ]] && echo true || echo false)"
+          fi
+
+  build:
+    needs: prepare
+    strategy:
+      # The others finish, so a rerun is only of the one that failed.
+      fail-fast: false
+      matrix:
+        # hutch packages for the machine it is on.
+        include:
+          - platform: linux-x64
+            runner: ubuntu-latest
+            installer: linux-x64-eta-Setup.tar.gz
+            desktop: eta-desktop-linux-x64.tar.gz
+            # The runner has no screen, and the app wants one to start.
+            display: xvfb-run -a
+          - platform: darwin-arm64
+            runner: macos-latest
+            installer: macos-arm64-eta.dmg
+            desktop: eta-desktop-darwin-arm64.dmg
+          - platform: windows-x64
+            runner: windows-latest
+            installer: win-x64-eta-Setup.zip
+            desktop: eta-desktop-windows-x64.zip
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    defaults:
+      run:
+        # Git's bash on Windows, so every platform runs the same steps.
+        shell: bash
+    env:
+      DESKTOP: ${{ matrix.desktop }}
+      ETA_DESKTOP_VERSION: ${{ needs.prepare.outputs.version }}
+      # The app downloads its host from this repository, so a fork's app follows the fork.
+      ETA_HOST_UPSTREAM: ${{ github.api_url }}/repos/${{ github.repository }}
+      # Where the app updates itself from, a static address read without credentials
+      # (apps/desktop/src/bun/update.ts). Not chosen yet: unset, the app has no update entry and
+      # builds no patches. Set the repository variable to turn it on.
+      ETA_DESKTOP_UPDATE_URL: ${{ vars.ETA_DESKTOP_UPDATE_URL }}
+    steps:
+      # What is built is what is in git: Windows runners would check out CRLF.
+      - run: git config --global core.autocrlf false
+
+      # Dependencies' code runs here too, in a job that can write releases.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Package the app
+        working-directory: apps/desktop
+        run: |
+          node_modules/.bin/electrobun build --env=stable
+          mkdir -p "$RUNNER_TEMP/try"
+          cp "artifacts/${{ matrix.installer }}" "$RUNNER_TEMP/try/$DESKTOP"
+          # What the update address has to serve, under the names the Updater asks for:
+          # <channel>-<os>-<arch>-update.json, the bundle, and a patch from the release before
+          # when there was one to diff against.
+          mkdir -p "$RUNNER_TEMP/update"
+          cp artifacts/stable-*-update.json artifacts/stable-*.tar.zst "$RUNNER_TEMP/update/"
+          cp artifacts/stable-*.patch "$RUNNER_TEMP/update/" 2>/dev/null || true
+
+      - name: The build left the checkout as it was
+        run: |
+          changed=$(git status --porcelain)
+          if [[ -n $changed ]]; then
+            echo "::error::The checkout changed during the build:"
+            echo "$changed"
+            exit 1
+          fi
+
+      # A screen and WebKit, which the runner has neither of. Ubuntu's mirror has taken
+      # twenty minutes over these, and does not get to hold up a release: the Linux app
+      # then goes out without having been started here, and the run says so.
+      - name: What the app needs to open on Linux
+        id: screen
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        timeout-minutes: 8
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libwebkit2gtk-4.1-0 libayatana-appindicator3-1
+
+      # Started, it downloads the newest host release it can run from this repository, so a
+      # desktop release needs a host release before it. The job's token reads a private one.
+      - name: Install the app and see it start
+        if: steps.screen.outcome != 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ${{ matrix.display }} bun apps/desktop/scripts/try-app.ts "$RUNNER_TEMP/try/$DESKTOP"
+
+      - name: Say the app was not started
+        if: steps.screen.outcome == 'failure'
+        run: echo "::warning::$DESKTOP was packaged but not started on the runner."
+
+      - name: Upload it to the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$TAG" "$RUNNER_TEMP/try/$DESKTOP" --clobber
+          # Only with an update address: what to copy there, kept with the release.
+          if [[ -n $ETA_DESKTOP_UPDATE_URL ]]; then
+            gh release upload "$TAG" "$RUNNER_TEMP"/update/* --clobber
+          fi
+
+  publish:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # From the draft, so the sums are of what people will download.
+      - name: Add SHA256SUMS
+        run: |
+          gh release download "$TAG" --pattern 'eta-desktop-*' --dir assets
+          cd assets
+          sha256sum eta-desktop-* | tee SHA256SUMS
+          gh release upload "$TAG" SHA256SUMS --clobber
+
+      # Publishing makes a release the Latest unless told otherwise.
+      - run: gh release edit "$TAG" --draft=false --latest=false

@@ -711,7 +711,16 @@ export const CONVERSATION_ACTIONS = [
 export type ConversationAction = (typeof CONVERSATION_ACTIONS)[number];
 
 export interface ConversationArgs {
-  create: { projectId: string; name?: string; agentIds?: string[] };
+  /**
+   * `stewardId` has to be one of the members. The project's own steward writes nothing, so the
+   * conversation goes on following the project; anyone else is the conversation's own.
+   */
+  create: {
+    projectId: string;
+    name?: string;
+    agentIds?: string[];
+    stewardId?: string;
+  };
   /**
    * Take back a message that is still waiting for a lane. False when it is no longer held: a lane
    * picked it up, and the words are in the conversation now.

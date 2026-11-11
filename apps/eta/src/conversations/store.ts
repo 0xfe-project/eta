@@ -139,16 +139,26 @@ export class ConversationStore {
     kind: ConversationKind;
     name: string;
     agentIds: readonly string[];
+    /** Its own steward; left out, it follows the project. */
+    stewardId?: string | undefined;
   }): ConversationRecord {
     const id = crypto.randomUUID();
     const now = Date.now();
     this.#db.transaction(() => {
       this.#db
         .query(
-          `INSERT INTO conversation (id, project_id, kind, name, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO conversation (id, project_id, kind, name, steward_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
         )
-        .run(id, input.projectId, input.kind, input.name, now, now);
+        .run(
+          id,
+          input.projectId,
+          input.kind,
+          input.name,
+          input.stewardId ?? null,
+          now,
+          now,
+        );
       for (const agentId of input.agentIds) this.addParticipant(id, agentId);
     })();
     return this.get(id)!;

@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { MIN_DESKTOP } from "@eta/client-contracts/desktop";
 import { describe, expect, it } from "vitest";
 import { tempDir } from "./support/host";
 
@@ -26,6 +27,19 @@ describe("eta-host --version", () => {
     expect(run.stdout.trim()).toBe("eta-host dev");
     expect(run.status).toBe(0);
     expect(existsSync(join(home, ".eta"))).toBe(false);
+  });
+});
+
+describe("eta-host --version --json", () => {
+  it("says which desktop app its page needs", async () => {
+    const home = await tempDir("eta-version-");
+    const run = host(["--version", "--json"], home);
+    expect(run.status).toBe(0);
+    expect(JSON.parse(run.stdout)).toEqual({
+      version: "dev",
+      commit: "",
+      minDesktop: MIN_DESKTOP,
+    });
   });
 });
 
