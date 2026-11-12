@@ -40,5 +40,25 @@
     "none": "No assignments yet.",
     "round": "Round {{round}}"
   },
-  "operationsBadge": "Operations · {{count}}"
+  "operationsBadge": "Operations · {{count}}",
+  "proposal": {
+    "label": "Proposed group {{name}}",
+    "title": "New group",
+    "directory": "Directory",
+    "newProject": "New project",
+    "members": "Members",
+    "steward": "Steward",
+    "goal": "Goal",
+    "create": "Create",
+    "reject": "Reject",
+    "open": "Open {{name}}",
+    "status": {
+      "pending": "Awaiting confirmation",
+      "approved": "Creating…",
+      "applied": "Created",
+      "rejected": "Rejected",
+      "failed": "Failed",
+      "expired": "Expired"
+    }
+  }
 }

@@ -2,6 +2,9 @@ import type {
   BoardTaskDetail,
   BoardTaskView,
   CaptainAssignmentView,
+  CaptainGroupProposal,
+  CaptainGroupProposalRowData,
+  CaptainGroupResult,
   CaptainIdentityView,
   CaptainMemoryPauseView,
   CaptainNotificationView,
@@ -19,8 +22,8 @@ import type { Engine } from "../conversations/engine";
 import type { ConversationStore } from "../conversations/store";
 import type { Timeline } from "../conversations/timeline";
 import type { Inbox } from "../inbox/inbox";
-import type { MachineStore } from "../machines/store";
-import type { ProjectStore } from "../projects/store";
+import type { MachineRecord, MachineStore } from "../machines/store";
+import type { ProjectRecord, ProjectStore } from "../projects/store";
 import type { TaskBoard } from "../tasks/board";
 import type { TaskRunner } from "../tasks/runner";
 import type { TaskRunStore } from "../tasks/runs";
@@ -29,9 +32,11 @@ import type { CaptainAudit } from "./audit";
 import type { CaptainMemory } from "./memory";
 import type { CaptainReviewRecord, CaptainStore } from "./store";
 import { mkdir } from "node:fs/promises";
+import { basename, isAbsolute, resolve } from "node:path";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/harness";
 import { checkModel } from "../agents/model";
 import { agentHome } from "../agents/store";
+import { createGroup, groupNamed } from "../conversations/groups";
 import { effectiveSteward } from "../conversations/views";
 import { isTaskSession, taskOfKey } from "../tasks/session-key";
 import { redactJson, redactText } from "./redact";
@@ -75,6 +80,43 @@ export interface CaptainServiceDeps {
   runner: TaskRunner;
   changed: (conversationIds?: readonly string[]) => void;
   warn: (message: string) => void;
+  /** Whether a path is a directory on the machine; throws saying why not (`projects/check.ts`). */
+  checkDirectory: (machine: MachineRecord, path: string) => Promise<void>;
+}
+
+/** What Captain asks for when it proposes a group (`propose_group`). */
+export interface GroupProposalInput {
+  name: string;
+  projectId?: string | undefined;
+  path?: string | undefined;
+  machineId?: string | undefined;
+  memberIds: readonly string[];
+  stewardId: string;
+  goal?: string | undefined;
+}
+
+/** A group of that name is already in the project: the proposal would make a second one. */
+export class GroupConflictError extends Error {
+  readonly conversationId: string;
+
+  constructor(name: string, conversationId: string) {
+    super(
+      `a group named "${name}" already exists in this project (conversationId ${conversationId})`,
+    );
+    this.conversationId = conversationId;
+  }
+}
+
+/** A proposal checked against what exists now: where it goes, and who is in it. */
+interface ResolvedGroup {
+  /** Undefined: the directory is not a project yet, and confirming adds it. */
+  project: ProjectRecord | undefined;
+  machine: MachineRecord;
+  path: string;
+  name: string;
+  memberIds: string[];
+  stewardId: string;
+  goal: string | null;
 }
 
 export interface CaptainOperationRequest {
@@ -634,8 +676,13 @@ export class CaptainService {
         data: { operationId },
       });
       this.#deps.changed();
+      await this.#settled(rejected);
       return rejected;
     }
+    // Taken before anything is awaited: a second click while this one is applying finds it no longer
+    // pending, instead of applying it twice (a group made twice, say).
+    this.#deps.store.setOperation(operationId, "approved");
+    this.#deps.changed();
     try {
       const result = await this.#applyOperation(operation);
       const applied = this.#deps.store.setOperation(
@@ -650,6 +697,7 @@ export class CaptainService {
         data: { operationId, kind: operation.kind, result },
       });
       this.#deps.changed();
+      await this.#settled(applied);
       return applied;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -665,6 +713,7 @@ export class CaptainService {
         data: { operationId, kind: operation.kind, error: message },
       });
       this.#deps.changed();
+      await this.#settled(failed);
       return failed;
     }
   }
@@ -731,8 +780,236 @@ export class CaptainService {
         );
         return { agentId, memoryId, deleted: true };
       }
+      case "create_group":
+        return { ...(await this.#createProposedGroup(operation)) };
       default:
         throw new Error(`unsupported Captain operation: ${operation.kind}`);
+    }
+  }
+
+  /**
+   * Propose a group. Nothing is made: the proposal is a pending `create_group` operation, drawn as a
+   * card in the conversation Captain proposed it from, and the user's confirmation is what makes the
+   * group (`decideOperation`). Everything that would make it fail is checked now, and again then.
+   */
+  async proposeGroup(
+    input: GroupProposalInput & {
+      originConversationId: string;
+      captainAgentId: string;
+    },
+  ): Promise<{ operation: CaptainOperationView; messageId: string }> {
+    const origin = this.#deps.conversations.get(input.originConversationId);
+    if (origin === undefined) throw new Error("no such conversation");
+    const resolved = await this.#resolveGroup(input);
+    const messageId = crypto.randomUUID();
+    const proposal: CaptainGroupProposal = {
+      originConversationId: origin.id,
+      messageId,
+      name: resolved.name,
+      goal: resolved.goal,
+      memberIds: resolved.memberIds,
+      stewardId: resolved.stewardId,
+      projectId: resolved.project?.id ?? null,
+      machineId: resolved.machine.id,
+      path: resolved.path,
+      projectName: resolved.project?.name ?? projectNameOf(resolved.path),
+    };
+    const operation = this.createOperation({
+      kind: "create_group",
+      requiresApproval: true,
+      actorAgentId: input.captainAgentId,
+      payload: { ...proposal },
+    });
+    const data: CaptainGroupProposalRowData = {
+      event: "captain_group_proposal",
+      operationId: operation.id,
+      proposal,
+      status: operation.status,
+      result: null,
+      error: null,
+    };
+    this.#deps.timeline.append({
+      id: messageId,
+      conversationId: origin.id,
+      kind: "system",
+      author: "system",
+      text: `Captain proposed the group "${resolved.name}". It is made when the user confirms it.`,
+      data: { ...data },
+    });
+    this.#deps.changed([origin.id]);
+    return { operation, messageId };
+  }
+
+  /**
+   * Where a proposed group goes and who is in it, as things are now. Throws, saying why, for what
+   * the user could not confirm: a directory that is missing, a file, an agent's own workspace or an
+   * archived project; a member that is gone or is Captain; a steward who is not a member; a group of
+   * the same name in the same project.
+   */
+  async #resolveGroup(input: GroupProposalInput): Promise<ResolvedGroup> {
+    const captainId = this.identity()?.agentId;
+    const name = input.name.trim();
+    if (name === "") throw new Error("a group needs a name");
+    const memberIds = [...new Set(input.memberIds)];
+    if (memberIds.length === 0)
+      throw new Error("a group needs at least one member");
+    for (const agentId of memberIds) {
+      if (agentId === captainId)
+        throw new Error("Captain cannot be a member of a group it proposes");
+      if (this.#deps.agents.get(agentId) === undefined)
+        throw new Error(`member ${agentId} does not exist`);
+    }
+    if (!memberIds.includes(input.stewardId))
+      throw new Error("the steward has to be a member");
+    const goal = input.goal?.trim() || null;
+
+    const byId = input.projectId !== undefined && input.projectId !== "";
+    const byPath = input.path !== undefined && input.path !== "";
+    if (byId === byPath)
+      throw new Error("give either projectId or path, not both or neither");
+    let project: ProjectRecord | undefined;
+    let machine: MachineRecord | undefined;
+    let path: string;
+    if (byId) {
+      project = this.#deps.projects.get(input.projectId!);
+      if (project === undefined)
+        throw new Error(`no such project: ${input.projectId}`);
+      machine = this.#deps.machines.get(project.machineId);
+      if (machine === undefined) throw new Error("no such machine");
+      path = project.path;
+    } else {
+      const machineId = input.machineId || this.#deps.machines.primary()?.id;
+      machine =
+        machineId === undefined
+          ? undefined
+          : this.#deps.machines.get(machineId);
+      if (machine === undefined) throw new Error("no such machine");
+      if (!isAbsolute(input.path!))
+        throw new Error(`the path must be absolute: ${input.path}`);
+      path = resolve(input.path!);
+      // A directory that is a project already is that project, the way adding it again is.
+      project = this.#deps.projects.byPath(machine.id, path);
+      if (project === undefined) {
+        if (
+          machine.kind === "primary" &&
+          this.#deps.agents
+            .list()
+            .some((agent) => agentHome(this.#deps.dataDir, agent.id) === path)
+        )
+          throw new Error(`${path} is an agent's own workspace`);
+        await this.#deps.checkDirectory(machine, path);
+      }
+    }
+    if (project !== undefined) {
+      if (project.kind === "agent_home")
+        throw new Error(`${project.path} is an agent's own workspace`);
+      if (project.archived)
+        throw new Error(`the project ${project.name} is archived`);
+      const clash = groupNamed(this.#deps.conversations, project.id, name);
+      if (clash !== undefined) throw new GroupConflictError(name, clash.id);
+    }
+    return {
+      project,
+      machine,
+      path,
+      name,
+      memberIds,
+      stewardId: input.stewardId,
+      goal,
+    };
+  }
+
+  /**
+   * The confirmed proposal, made: everything checked again (a group of that name may have appeared,
+   * a member may be gone), the directory added as a project if it is not one, stewarded by the
+   * group's steward as the dialog does it, then the group, its goal and the line that says who made it.
+   */
+  async #createProposedGroup(
+    operation: CaptainOperationView,
+  ): Promise<CaptainGroupResult> {
+    const proposal = operation.payload as unknown as CaptainGroupProposal;
+    const resolved = await this.#resolveGroup({
+      name: proposal.name,
+      ...(proposal.projectId === null
+        ? { path: proposal.path, machineId: proposal.machineId }
+        : { projectId: proposal.projectId }),
+      memberIds: proposal.memberIds,
+      stewardId: proposal.stewardId,
+      goal: proposal.goal ?? undefined,
+    });
+    const project =
+      resolved.project ??
+      this.#deps.projects.create({
+        machineId: resolved.machine.id,
+        path: resolved.path,
+        name: projectNameOf(resolved.path),
+        stewardId: resolved.stewardId,
+      });
+    const group = createGroup(this.#deps, {
+      projectId: project.id,
+      agentIds: resolved.memberIds,
+      stewardId: resolved.stewardId,
+      name: resolved.name,
+      goal: resolved.goal ?? undefined,
+    });
+    this.#deps.timeline.system(group.id, "Created by Captain.", {
+      event: "captain_created",
+      operationId: operation.id,
+      agentId: operation.actorAgentId,
+    });
+    this.#deps.created?.(group.id);
+    this.#deps.changed([group.id]);
+    return {
+      conversationId: group.id,
+      projectId: project.id,
+      projectCreated: resolved.project === undefined,
+    };
+  }
+
+  /**
+   * A decided operation that Captain is waiting on. A group proposal's card shows the outcome, and
+   * Captain hears it in the conversation it proposed from, as a message that starts its next turn.
+   */
+  async #settled(operation: CaptainOperationView): Promise<void> {
+    if (operation.kind !== "create_group") return;
+    const proposal = operation.payload as unknown as CaptainGroupProposal;
+    const card = this.#deps.timeline.get(proposal.messageId);
+    if (card !== undefined) {
+      this.#deps.timeline.setData(card.id, {
+        ...card.data,
+        status: operation.status,
+        result: operation.result,
+        error: operation.error,
+      });
+      this.#deps.changed([card.conversationId]);
+    }
+    const captain = this.identity();
+    if (captain === undefined) return;
+    try {
+      const origin = this.#deps.conversations.get(
+        proposal.originConversationId,
+      );
+      const reachable =
+        origin !== undefined &&
+        !origin.archived &&
+        this.#deps.conversations
+          .participants(origin.id)
+          .some((member) => member.agentId === captain.agentId);
+      const conversationId = reachable
+        ? origin.id
+        : (await this.direct()).conversationId;
+      await this.#deps.engine.send({
+        conversationId,
+        text: groupOutcome(operation, proposal),
+        author: "system",
+        mentions: [captain.agentId],
+        mode: "queue",
+      });
+      this.#deps.changed([conversationId]);
+    } catch (error) {
+      this.#deps.warn(
+        `[eta] Captain was not told how its group proposal ended: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -1199,6 +1476,31 @@ export class CaptainService {
       createdAt: agent.createdAt,
     };
   }
+}
+
+/** A new project's name: its directory's, as adding a directory names it. */
+function projectNameOf(path: string): string {
+  return basename(path) || path;
+}
+
+/** What Captain is told when the user decided on a group it proposed. */
+function groupOutcome(
+  operation: CaptainOperationView,
+  proposal: CaptainGroupProposal,
+): string {
+  const head = `Your proposed group "${proposal.name}" (operation ${operation.id})`;
+  if (operation.status === "applied") {
+    const result = operation.result as unknown as CaptainGroupResult;
+    return [
+      `${head} was confirmed by the user and created.`,
+      `conversationId: ${result.conversationId}`,
+      `projectId: ${result.projectId}${result.projectCreated ? ` (${proposal.path} was added as a new project)` : ""}`,
+      "Assign work there with assign_in_group.",
+    ].join("\n");
+  }
+  if (operation.status === "rejected")
+    return `${head} was rejected by the user. Nothing was created. If a group is still needed, ask what to change before proposing again.`;
+  return `${head} was confirmed by the user, but creating it failed: ${operation.error ?? "unknown error"}. Nothing was created.`;
 }
 
 function reviewPrompt(reviews: readonly CaptainReviewRecord[]): string {

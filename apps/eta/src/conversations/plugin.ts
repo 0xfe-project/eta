@@ -15,8 +15,9 @@ import type { ConversationRecord, ConversationStore } from "./store";
 import type { ConversationTargets } from "./targets";
 import type { Timeline } from "./timeline";
 import { Args, productPlugin, publish } from "../wire";
+import { createGroup } from "./groups";
 import { announceSteward } from "./steward";
-import { defaultGroupName, effectiveSteward, summaryOf } from "./views";
+import { effectiveSteward, summaryOf } from "./views";
 
 export interface ConversationsDeps {
   agents: AgentStore;
@@ -79,31 +80,11 @@ export function conversationsPlugin(
 
         wire.handle("conversations", "create", (call) => {
           const args = new Args(call);
-          const project = projects.get(args.string("projectId"));
-          if (project === undefined) throw new Error("no such project");
-          let members = [...new Set(args.strings("agentIds").map(agent))];
-          // A conversation nobody is in would be an empty room: the project's steward is there.
-          if (members.length === 0 && project.stewardId !== null)
-            members = [project.stewardId];
-          const stewardId = args.optionalString("stewardId");
-          if (stewardId !== undefined && !members.includes(agent(stewardId)))
-            throw new Error("the steward has to be a member");
-          const given = args.optionalString("name")?.trim();
-          // A group nobody named takes the project's name, not the names of who is in it.
-          const name =
-            given === undefined || given === ""
-              ? defaultGroupName(
-                  project.name,
-                  members.map((id) => agents.get(id)?.name),
-                )
-              : given;
-          const conversation = conversations.create({
-            projectId: project.id,
-            kind: "group",
-            name,
-            agentIds: members,
-            // The project's own is followed rather than copied, so changing it later still counts.
-            stewardId: stewardId === project.stewardId ? undefined : stewardId,
+          const conversation = createGroup(deps, {
+            projectId: args.string("projectId"),
+            agentIds: args.strings("agentIds"),
+            stewardId: args.optionalString("stewardId"),
+            name: args.optionalString("name"),
           });
           deps.created(conversation.id);
           deps.changed([conversation.id]);

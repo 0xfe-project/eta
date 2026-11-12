@@ -91,6 +91,46 @@ export interface CaptainOperationView {
   updatedAt: number;
 }
 
+/**
+ * A group Captain proposed: the payload of a `create_group` operation. Nothing exists until the user
+ * confirms it; then the directory is added as a project if it is not one yet, and the group is made.
+ */
+export interface CaptainGroupProposal {
+  /** Where Captain proposed it: the card is there, and so is the message that tells Captain. */
+  originConversationId: string;
+  /** The card's row in that conversation. */
+  messageId: string;
+  name: string;
+  goal: string | null;
+  memberIds: string[];
+  stewardId: string;
+  /** The project it goes in; null when the directory is not a project yet. */
+  projectId: string | null;
+  machineId: string;
+  path: string;
+  /** What the directory is called on the card: the project's name, or the new one's. */
+  projectName: string;
+}
+
+/** What a confirmed `create_group` made. */
+export interface CaptainGroupResult {
+  conversationId: string;
+  projectId: string;
+  /** The directory became a project when the group was made. */
+  projectCreated: boolean;
+}
+
+/** The data of the system row that draws a proposal as a card (`event: "captain_group_proposal"`). */
+export interface CaptainGroupProposalRowData {
+  event: "captain_group_proposal";
+  operationId: string;
+  proposal: CaptainGroupProposal;
+  /** Mirrors the operation, for a card whose operation is no longer in the published list. */
+  status: CaptainOperationStatus;
+  result: CaptainGroupResult | null;
+  error: string | null;
+}
+
 export interface CaptainNotificationView {
   id: string;
   kind: string;
