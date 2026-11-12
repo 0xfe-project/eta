@@ -104,15 +104,23 @@ host 的版本号只在 `upgrade.check` 的回复里（`version`）。TUI 进程
 
 键位写成 `ctrl+alt+shift+键`，键是一个字符或 `left`、`right`、`up`、`down`、`escape`、`enter`、`tab`、`backspace`、`delete`、`pageup`、`pagedown`、`home`、`end`、`space`。动作与默认键位：
 
-| 动作                         | 默认                           |
-| ---------------------------- | ------------------------------ |
-| `tabs.previous`、`tabs.next` | `alt+left`、`alt+right`        |
-| `tabs.goTo1` … `tabs.goTo9`  | `alt+1` … `alt+9`              |
-| `panel.open`                 | `left`（只在输入框为空时有效） |
-| `review.open`                | `alt+r`                        |
-| `tabs.close`                 | `alt+w`（关标签，不影响对话）  |
-| `reply.stop`                 | `escape`（有回复在跑时）       |
-| `app.quit`                   | `ctrl+c`，2 秒内连按两次才退出 |
+| 动作                                       | 默认                                       |
+| ------------------------------------------ | ------------------------------------------ |
+| `tabs.previous`、`tabs.next`               | `alt+left`、`alt+right`                    |
+| `tabs.goTo1` … `tabs.goTo9`                | `alt+1` … `alt+9`                          |
+| `panel.open`                               | `left`（只在输入框为空时有效）             |
+| `review.open`                              | `alt+r`                                    |
+| `tabs.close`                               | `alt+w`（关标签，不影响对话）              |
+| `reply.stop`                               | `escape`（有回复在跑时）                   |
+| `app.quit`                                 | `ctrl+c`，2 秒内连按两次才退出             |
+| `transcript.pageUp`、`transcript.pageDown` | `pageup`、`pagedown`（对话滚一页）         |
+| `transcript.lineUp`、`transcript.lineDown` | `shift+up`、`shift+down`（滚一行）         |
+| `transcript.top`、`transcript.bottom`      | `ctrl+home`、`ctrl+end`                    |
+| `transcript.search`                        | `ctrl+f`（在对话里找字）                   |
+| `transcript.select`                        | `alt+v`（选取模式）                        |
+| `transcript.expandAll`                     | `ctrl+o`（展开或收起全部思考与工具输出）   |
+| `message.newline`                          | `alt+enter`、`shift+enter`（输入框里换行） |
+| `message.steer`                            | `tab`（有回复在跑时把消息插进这次回复）    |
 
 ## 画面
 
@@ -120,6 +128,36 @@ host 的版本号只在 `upgrade.check` 的回复里（`version`）。TUI 进程
 - **状态区**：一行。最新的通知、连接地址、临时 host 黄字、版本提示；放不下就截断。
 - **标签栏**：一行，默认在最底下。每个打开的标签显示编号、名字与状态标记；扩展注册的固定标签靠右。打开的标签记在 `tui-state.json`，下次启动还在。
 - **层**：命令开的小窗盖在主区域上，可以叠，最上面那层收按键，用完关掉。
+
+## 对话
+
+对话是 `src/ext/conversation/` 这个扩展画的一种标签页（`kind` 为 `conversation`，`id` 为对话 id）。打开一个对话就是 `ctx.openTab({ kind: "conversation", id })`，`/open <名字或 id>` 是给用户的入口。画面从上到下是转录区、等待空闲成员的消息、回复状态行（有回复在跑时才有）、输入框。
+
+### 数据
+
+- 订阅 `conversations.<id>`（`info`、`members`、`timeline`）与 eager target `agents`。行按 `revision` 合并，翻旧页用 `conversations.history`。
+- 回复在跑时，它的文字与工具调用在成员的会话里：对正在跑的成员先调一次 `sessions.resync`（每个连接每个会话一次），再订阅 `sessions.<sessionId>`，流式正文来自 `message:update`，工具的实时输出来自 `tool:update`、`tool:end`。成员停下后退掉它的会话订阅，回复改从时间线的行上取（`thinking`、`text`、`data.activity`）。
+- 每个（连接，对话）一份 store（`feed/store.ts`），放行、成员、会话的实时内容和画面状态（滚动位置、展开的条目、搜索、输入框草稿与历史）。标签切走时画面卸载、订阅退掉，store 留着；对话照常在 host 上跑，切回来接着画。换 host 就是新的 store。
+- 画面在前面且滚到底时，用 `conversations.read` 把已读标到最新的行。
+
+`model/` 下的 `run.ts`、`tool-shape.ts`、`mentions.ts`、`timeline.ts` 复制自网页的同名文件，两边要一起改，等它们挪进共享包。
+
+### 转录区
+
+数据层把行与会话的实时内容整理成一列条目（`contract.ts` 的 `TranscriptItem`：用户消息、作者、思考、正文、工具调用、结局、摘要、提示）。每个条目单独画成若干行（`render/`：Ink 组件经 `renderToString` 按宽度画成字符串再切行），画面在这些行上滚动、搜索、选取，所以一个条目的行只取决于它自己、宽度和是否展开，没变就不重画。
+
+- 正文按 markdown 画；思考与摘要默认收起成一行；工具调用按参数的形状分 command、patch、write、plan、other 画标题，输出默认只显示 `toolOutput.previewLines` 行（在跑的命令显示最后几行）。`transcript.expandAll` 展开全部，选取模式里空格展开一条。
+- markdown、代码高亮、表格、diff 的组件改编自 Gemini CLI（`src/ui/gemini/`，Apache-2.0，见仓库根的 `THIRD_PARTY_NOTICES.md`）：去掉了它的设置与主题，表格改用 `string-width` 量宽，长内容的折叠在行一级做。
+- 搜索在已载入的行里找子串（不分大小写），Enter 与 ↑ 找更早的，↓ 找更新的，Esc 关掉、滚动位置不动。
+- 选取模式只用键盘：光标按行走，`v` 定区间起点，`y` 或 Enter 复制这些行，`c` 复制光标所在条目的原文（markdown、命令与完整输出、patch），经 OSC 52 写进终端的剪贴板（在 tmux 里包一层透传）。TUI 不开终端的鼠标上报，所以要用鼠标选就直接用终端自己的选取（不少终端要按住 Shift 拖动）。
+- 不在底部时，最后一行提示下面还有几行。已经在顶上还往上滚时翻一页更早的行（`conversations.history`，50 行），这一页画进来之前不再请求；host 说没有更早的、翻页失败或拿到空页时停下，失败报到状态区，下次再往上滚时再试。滚动位置、选取光标、搜索的当前匹配都按「条目加条目内的第几行」记，所以旧页插到前面、展开收起之后仍指同一处内容，改窗口宽度后仍在同一个条目里；条目不见了（流式的块落地时换了条目）就落到同一行回复的条目，再不行落到它最后所在的位置。
+
+### 输入框
+
+多行；宽字符按两列算，终端的真光标跟着输入位置走（输入法的候选窗靠它定位）。超过 5 行或 800 个字符的粘贴折叠成 `[Pasted text #N +L lines]`，发送时展开，折叠的范围随 `conversations.send` 的 `blocks` 发出，用户消息在转录区里照样画成折叠的。上下键在第一行与最后一行时翻这个对话的历史。`/` 开头补全命令，`@` 补全成员、所有人与项目里的文件（`projects.files`）。
+
+- Enter 发送，消息排在正在跑的回复之后（`queue`）；有回复在跑时 `message.steer`（Tab）把消息插进这次回复（`steer`）。补全菜单开着时 Tab 归补全。`/queue`、`/steer`、`/stop` 是同样的事的命令形式。
+- Esc 的先后：层开着先关层；搜索或选取模式里先退出模式；补全菜单开着先关菜单；都没有且有回复在跑时停止这个对话的全部回复（`conversations.stop`）；否则什么都不做，不清草稿。
 
 ## 扩展：加命令、加画面
 
@@ -150,7 +188,7 @@ host 的版本号只在 `upgrade.check` 的回复里（`version`）。TUI 进程
 
 ## 命令
 
-命令文档由注册表生成：[英文](../tui/commands.md)、[中文](../tui/commands.zh.md)。地基自带 `/help`、`/config`、`/install-service`。
+命令文档由注册表生成：[英文](../tui/commands.md)、[中文](../tui/commands.zh.md)。地基自带 `/help`、`/config`、`/install-service`；对话扩展带 `/open`、`/queue`、`/steer`、`/stop`。
 
 ## 构建
 

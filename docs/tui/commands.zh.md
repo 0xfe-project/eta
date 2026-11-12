@@ -4,7 +4,7 @@
 
 [English](commands.md)
 
-eta 终端界面的斜杠命令，在首页输入。命令名和参数名一律是英文。
+eta 终端界面的斜杠命令，在首页或对话的输入框里输入。命令名和参数名一律是英文。
 
 ## /config
 
@@ -46,3 +46,63 @@ eta 终端界面的斜杠命令，在首页输入。命令名和参数名一律�
 ### 例子
 
 - `/install-service`: 退出 eta 后 agent 继续运行
+
+## /open
+
+```text
+/open <conversation>
+```
+
+在标签页里打开一个对话
+
+### 参数
+
+- `conversation` (必填): 对话的 id、名字，或足以区分它的一段名字
+
+### 例子
+
+- `/open release`: 打开名字以“release”开头或包含它的对话
+
+## /queue
+
+```text
+/queue <message>
+```
+
+给最前面的对话发消息，排在正在跑的回复之后
+
+### 参数
+
+- `message` (必填): 要说的话
+
+### 例子
+
+- `/queue then write the tests`: 等当前回复结束后再要测试
+
+## /steer
+
+```text
+/steer <message>
+```
+
+把消息插进最前面对话正在跑的回复
+
+### 参数
+
+- `message` (必填): 要说的话
+
+### 例子
+
+- `/steer use the new API instead`: 回复还在跑的时候改方向
+
+## /stop
+
+```text
+/stop
+```
+
+停止最前面对话里所有在跑的回复
+
+### 例子
+
+- `/stop`: 停止回复

@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_CONFIG } from "../../src/config/defaults";
 import { ACTION_NAMES } from "../../src/config/types";
 
-const bind = (key: string, alt = false, ctrl = false) => [
-  { key, ctrl, alt, shift: false },
+const bind = (key: string, alt = false, ctrl = false, shift = false) => [
+  { key, ctrl, alt, shift },
 ];
 
 describe("the default config", () => {
-  it("binds one key to every action", () => {
+  it("binds a key to every action", () => {
     expect(Object.keys(DEFAULT_CONFIG.keybindings).sort()).toEqual(
       [...ACTION_NAMES].sort(),
     );
@@ -19,6 +19,20 @@ describe("the default config", () => {
       "tabs.close": bind("w", true),
       "reply.stop": bind("escape"),
       "app.quit": bind("c", false, true),
+      "transcript.pageUp": bind("pageup"),
+      "transcript.pageDown": bind("pagedown"),
+      "transcript.lineUp": bind("up", false, false, true),
+      "transcript.lineDown": bind("down", false, false, true),
+      "transcript.top": bind("home", false, true),
+      "transcript.bottom": bind("end", false, true),
+      "transcript.search": bind("f", false, true),
+      "transcript.select": bind("v", true),
+      "transcript.expandAll": bind("o", false, true),
+      "message.newline": [
+        ...bind("enter", true),
+        ...bind("enter", false, false, true),
+      ],
+      "message.steer": bind("tab"),
     };
     for (let n = 1; n <= 9; n += 1)
       expected[`tabs.goTo${n}`] = bind(String(n), true);

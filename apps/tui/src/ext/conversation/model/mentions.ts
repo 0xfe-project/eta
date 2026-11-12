@@ -1,0 +1,39 @@
+// Copied from apps/web/src/lib/mentions.ts. The web and the TUI read the host's rows the same way;
+// keep the two in step until the logic moves to a shared package. Only the parts the TUI uses
+// are here.
+interface Member {
+  id: string;
+  name: string;
+}
+const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const written = (text: string, label: string) =>
+  new RegExp(
+    `(?:^|[\\s，。！？、,:;!?])@${escaped(label)}(?=\\s|[，。！？、,:;!?]|$)`,
+    "u",
+  ).exec(text);
+// Both aliases remain valid in saved drafts after switching language.
+const everyoneMention = (text: string) =>
+  [written(text, "所有人"), written(text, "everyone")]
+    .filter((result) => result !== null)
+    .sort((a, b) => a.index - b.index)[0];
+
+/** Disambiguate equal display names without exposing an id for every member. */
+export function mentionLabel(member: Member, members: readonly Member[]) {
+  return members.filter((p) => p.name === member.name).length > 1
+    ? `${member.name}·${member.id.slice(0, 6)}`
+    : member.name;
+}
+
+/** Resolve explicit mentions in their written order; a bare message has no targets. */
+export function mentionedMembers(text: string, members: readonly Member[]) {
+  const everyone = everyoneMention(text);
+  const ordered = members.flatMap((p) => {
+    const named = written(text, mentionLabel(p, members));
+    const index = Math.min(
+      named?.index ?? Infinity,
+      everyone?.index ?? Infinity,
+    );
+    return Number.isFinite(index) ? [{ id: p.id, index }] : [];
+  });
+  return ordered.sort((a, b) => a.index - b.index).map((p) => p.id);
+}

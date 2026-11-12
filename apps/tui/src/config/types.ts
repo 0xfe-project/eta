@@ -28,6 +28,23 @@ export const ACTION_NAMES = [
   "reply.stop",
   /** Quits on the second press in a row. */
   "app.quit",
+  /** Scroll the conversation on screen by a page, a line, or to either end. */
+  "transcript.pageUp",
+  "transcript.pageDown",
+  "transcript.lineUp",
+  "transcript.lineDown",
+  "transcript.top",
+  "transcript.bottom",
+  /** Find text in the conversation on screen. */
+  "transcript.search",
+  /** Move a cursor over the conversation's lines to select, copy and fold them. */
+  "transcript.select",
+  /** Unfold, or fold again, every thinking block and long tool output of the conversation. */
+  "transcript.expandAll",
+  /** A new line in the message being written, instead of sending it. */
+  "message.newline",
+  /** Send the message into the reply that is running, instead of queueing it after. */
+  "message.steer",
 ] as const;
 
 export type ActionName = (typeof ACTION_NAMES)[number];

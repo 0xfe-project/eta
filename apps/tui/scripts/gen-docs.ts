@@ -17,7 +17,7 @@ const HEADINGS = {
     title: "eta commands",
     other: "[中文](commands.zh.md)",
     intro:
-      "Slash commands of the eta terminal interface. Type them on the home screen; names and arguments are always English.",
+      "Slash commands of the eta terminal interface. Type them in the input line of the home screen or of a conversation; names and arguments are always English.",
     generated:
       "This file is generated from the command registry. Do not edit it: run `bun run --cwd apps/tui docs` to regenerate it.",
     arguments: "Arguments",
@@ -28,7 +28,8 @@ const HEADINGS = {
   zh: {
     title: "eta 命令",
     other: "[English](commands.md)",
-    intro: "eta 终端界面的斜杠命令，在首页输入。命令名和参数名一律是英文。",
+    intro:
+      "eta 终端界面的斜杠命令，在首页或对话的输入框里输入。命令名和参数名一律是英文。",
     generated:
       "本文件由命令注册表生成，不要手改：运行 `bun run --cwd apps/tui docs` 重新生成。",
     arguments: "参数",
