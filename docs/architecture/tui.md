@@ -1,288 +1,288 @@
 # TUI
 
-`apps/tui` 是 eta 的终端界面，命令名 `eta`。它是一个独立程序，和网页一样只经 host 的一条 WebSocket（`/ws`，见[线协议](wire-protocol.md)）读写，不碰 `~/.eta`；唯一的例外是读 `eta-host running` 指明的令牌文件（见〈选哪个 host〉）。界面用 React 19 加 Ink 8 画在终端的备用屏幕上（和 vim、htop 一样占满窗口，退出后恢复原来的终端内容）。
+`apps/tui` is eta's terminal interface; the command is `eta`. It is a separate program that, like the web UI, reads and writes only through one WebSocket to the host (`/ws`, see [Wire protocol](wire-protocol.md)) and does not touch `~/.eta`. The one exception is reading the token file named by `eta-host running` (see "Which host"). The interface is drawn with React 19 and Ink 8 on the terminal's alternate screen (filling the window like vim or htop, and restoring the earlier terminal content on exit).
 
-准则：不照搬桌面端。一次只展示一件事，别的按需调出、用完收起；桌面端负责齐全。
+Guideline: do not copy the desktop app. Show one thing at a time; bring up anything else on demand and put it away when done. Completeness is the desktop app's job.
 
-## 组成
+## Parts
 
 ```text
 apps/tui/
-  src/main.tsx          入口：参数、读设定、建控制器、render、退出与崩溃处理
-  src/config/           设定文件与状态文件：路径、默认值、逐键校验、写入
-  src/connection/       连接层：wire、找 eta-host、临时 host、装服务、探测、控制器
-  src/extensions/       扩展的类型、注册表、斜杠命令的解析与执行、给扩展用的 React 接口
-  src/ext/              功能模块，一个文件（或目录）一个功能；/help、/config、/install-service 在这里
-  src/i18n/             语言选择与消息目录
-  src/ui/               各阶段画面、外壳（主区域、状态区、标签栏）、首页与开场图案、编辑器；`run-interface.ts` 把界面接到进程上（信号、异常、`exit` 兜底、交给终端的子程序）
-  scripts/              gen-extensions、gen-docs、build-binaries
+  src/main.tsx          entry: arguments, reading settings, creating the controller, render, exit and crash handling
+  src/config/           settings and state files: paths, defaults, per-key validation, writing
+  src/connection/       connection layer: wire, finding eta-host, temporary host, service install, probing, controller
+  src/extensions/       extension types, registry, parsing and running slash commands, React interface for extensions
+  src/ext/              feature modules, one file (or directory) per feature; /help, /config, /install-service live here
+  src/i18n/             locale selection and message catalogs
+  src/ui/               the screens of each phase, the shell (main area, status area, tab bar), home screen and splash art, editor; `run-interface.ts` wires the interface to the process (signals, exceptions, the `exit` fallback, child programs handed the terminal)
+  scripts/              gen-extensions, gen-docs, build-binaries
 ```
 
-界面只读控制器的状态、调控制器的动作；找 host、起停进程、写设定都在 `src/connection/` 里，界面不直接碰。`src/connection/` 不产出给人看的文字，只交结构化的结果，文字全在界面这边翻译。
+The interface only reads the controller's state and calls the controller's actions; finding a host, starting and stopping processes and writing settings all live in `src/connection/`, which the interface does not touch directly. `src/connection/` produces no text for people, only structured results; all text is translated on the interface side.
 
-## 连接
+## Connection
 
-### 选哪个 host
+### Which host
 
-设定里有 `connection` 就照它连，不再问。没有时首次启动给三个选项，选定后写进设定：
+When the settings have `connection`, the TUI connects as it says and does not ask. Otherwise the first run offers three options, and the choice is written to the settings:
 
-1. **连接常驻 host**：输入地址。启动时预填一个地址：找得到 `eta-host` 时先问 `eta-host running`，它指出了正在跑的 host 就预填那个地址；没指出、问不出结果或找不到 `eta-host` 时，探本机 `http://127.0.0.1:8787/up`，通了就预填这个地址。两件事同时做。地址要令牌时（`GET /ws` 回 401）再让用户贴令牌。
-2. **临时 host**：在本机起 `eta-host`，和 TUI 同生共死，照桌面端的本机模式。
-3. **装常驻 host**：跑 `eta-host install-service`，等本机 `/up` 通了再连。
+1. **Connect to a resident host**: type an address. An address is prefilled at startup: when `eta-host` can be found, the TUI first asks `eta-host running`, and if it names a running host, prefills that address; if it names none, gives no result, or `eta-host` cannot be found, the TUI probes the local `http://127.0.0.1:8787/up` and prefills that address when it answers. The two run at the same time. When the address needs a token (`GET /ws` answers 401), the user is then asked to paste one.
+2. **Temporary host**: start `eta-host` locally, living and dying with the TUI, like the desktop app's local mode.
+3. **Install a resident host**: run `eta-host install-service`, wait until the local `/up` answers, then connect.
 
-`eta-host` 依次在这些地方找：环境变量 `ETA_HOST_BIN`、`PATH`、`~/.eta/bin/eta-host`（Windows 为 `%USERPROFILE%\.eta\bin\eta-host.exe`）。`ETA_HOST_BIN` 设了就只认它，指向的文件不存在也不往下找。都找不到时告诉用户怎么装，不替用户下载。
+`eta-host` is looked for in this order: the `ETA_HOST_BIN` environment variable, `PATH`, `~/.eta/bin/eta-host` (`%USERPROFILE%\.eta\bin\eta-host.exe` on Windows). When `ETA_HOST_BIN` is set, only it counts, and the search does not go on even if the file it points to does not exist. When none is found, the TUI tells the user how to install it and does not download it for them.
 
-两个 host 不能同时用同一个 `~/.eta`，而桌面端的 host 在 `~/.eta/desktop/host/` 下用空闲端口跑，探 8787 找不到它。所以每次要在本机起 host 之前（首次启动选临时 host 或装常驻 host、设定为临时 host 的启动、断线菜单里的「改用临时 host」、`/install-service` 移交时装服务和装不上后重起临时 host），TUI 先跑 `eta-host running`（`apps/eta/src/running.ts`），和桌面端一样。它读 `~/.eta/running-host.json`（进程要活着、`/up` 要回应），再查本机的系统服务，打印一行 JSON：`{ address, tokenFile, from }` 或 `null`。TUI 取输出的最后一个非空行，不看 `from`：现行的 `eta-host` 每次启动都写这份记录，系统服务启动的也写，所以 `from` 分不出桌面端的 host 与系统服务。
+Two hosts cannot use the same `~/.eta` at the same time, and the desktop app's host runs under `~/.eta/desktop/host/` on a free port, where probing 8787 cannot find it. So every time before starting a host locally (choosing a temporary host or installing a resident host on first run, a start with the temporary host set in the settings, "Use a temporary host" in the disconnect menu, and installing the service during the `/install-service` handover plus restarting the temporary host when that install fails), the TUI first runs `eta-host running` (`apps/eta/src/running.ts`), as the desktop app does. It reads `~/.eta/running-host.json` (the process must be alive and `/up` must answer), then checks the local system service, and prints one line of JSON: `{ address, tokenFile, from }` or `null`. The TUI takes the last non-empty line of the output and ignores `from`: the current `eta-host` writes this record every time it starts, including when started by the system service, so `from` cannot tell the desktop app's host apart from the system service.
 
-- 指出了一个 host：不起新的，画面说「这台电脑上已经有一个 host 在跑」并给出地址，选项是「连接它」与「返回」。`tokenFile` 有值时 TUI 读出令牌，「连接它」直接带着令牌检查并连接；读不到就预填地址，让用户贴令牌。连接时和「连接常驻 host」一样把地址（和令牌）存进设定。桌面端的 host 用空闲端口，下次启动端口变了，由〈断线与连不上〉里的回查接上。「返回」回到引出这一步的选项：首次启动的三个选项或断线菜单；设定为临时 host 的启动和 `/install-service` 移交没有可回的选项，回首次启动的三个选项，不再重起临时 host。
-- `null`：照原流程起 host。
-- 跑不起来、非零退出、10 秒内没有回答（到期硬杀）、输出不是这种 JSON：当作问不出结果，照原流程起 host。
+- It names a host: do not start a new one. The screen says "A host is already running on this computer" and shows the address, with the options "Connect to it" and "Back". When `tokenFile` has a value, the TUI reads the token from it, and "Connect to it" checks and connects with that token directly; if it cannot be read, the address is prefilled and the user pastes the token. Connecting saves the address (and token) to the settings, just like "Connect to a resident host". The desktop app's host uses a free port, so when the port has changed by the next start, the lookup in "Disconnects and failed connections" picks it up. "Back" returns to the options that led here: the three first-run options or the disconnect menu; a start with the temporary host set in the settings and the `/install-service` handover have no options to return to, so they return to the three first-run options without restarting the temporary host.
+- `null`: start a host as in the original flow.
+- Fails to run, exits non-zero, gives no answer within 10 seconds (hard-killed at the deadline), or prints something other than this JSON: treated as giving no result, and a host is started as in the original flow.
 
-`running` 是 `eta-host` 2026-11-08（#491）加的子命令。更早的版本把 `running` 当成运行参数，严格模式的参数解析（`parseArgs` 的 `strict: true`，不收位置参数）拒绝它，以非零退出、不起 host，所以 TUI 不先查 `eta-host --version`。
+`running` is a subcommand `eta-host` gained on 2026-11-08 (#491). Earlier versions take `running` as a run argument, which their strict argument parsing (`parseArgs` with `strict: true`, no positional arguments) rejects, exiting non-zero without starting a host, so the TUI does not check `eta-host --version` first.
 
-TUI 名下正在停止的临时 host（被新动作取代、还没退出）若被 `running` 指出，TUI 认得它的地址，不当成别的 host。
+If `running` names a temporary host of the TUI's own that is being stopped (replaced by a newer action and not yet exited), the TUI recognises its address and does not treat it as another host.
 
-### 临时 host
+### Temporary host
 
-子进程跑 `eta-host --port 0`，端口从 host 启动时打印的一行 JSON 摘要里取（`apps/eta/src/main.ts`）。stdout 与 stderr 一直读到进程结束，留最近 200 行，起不来或半路退出时显示给用户。
+A child process runs `eta-host --port 0`, and the port is taken from the one-line JSON summary the host prints at startup (`apps/eta/src/main.ts`). stdout and stderr are read until the process ends, keeping the last 200 lines, which are shown to the user if the host fails to start or exits midway.
 
-停止时让 host 走自己的收尾：POSIX 上发 SIGTERM；Windows 没有 SIGTERM，TUI 启动子进程时设 `ETA_STOP_PIPE` 为一个命名管道，停止时往管道写一行（`apps/eta/src/stop.ts`）。10 秒内没退就硬杀。TUI 正常退出、收到 SIGINT、SIGTERM、SIGHUP、崩溃（未捕获的异常、未处理的 rejection、组件渲染时抛错）时都先停临时 host（有期限，到期硬杀）、离开备用屏幕，再退出；正在启动、正在停止、被新动作取代的临时 host 也算在内。进程 `exit` 事件里还有一道同步硬杀兜底。临时 host 不在 eta 的进程组（POSIX 上以新会话启动）或控制台（Windows 上有自己隐藏的控制台）里，终端的 Ctrl+C 和关终端的 SIGHUP 到不了它，它只经 eta 的停止路径停下；所以把终端交给编辑器期间，Ctrl+C 交给编辑器处理，eta 和临时 host 都不受影响。eta 退出或崩溃时，正占着终端的编辑器等子程序会被结束。代价是 eta 被硬杀（SIGKILL、任务管理器结束、Windows 关窗后 eta 没在约 5 秒内停完）时临时 host 会留下来。
+Stopping lets the host run its own shutdown: SIGTERM on POSIX; Windows has no SIGTERM, so when starting the child the TUI sets `ETA_STOP_PIPE` to a named pipe and writes one line to it to stop (`apps/eta/src/stop.ts`). If it has not exited within 10 seconds, it is hard-killed. On a normal exit, on SIGINT, SIGTERM or SIGHUP, and on a crash (an uncaught exception, an unhandled rejection, a component throwing while rendering), the TUI first stops the temporary host (with a deadline, hard-killing when it passes), leaves the alternate screen, and then exits; temporary hosts that are starting, stopping or replaced by a newer action count too. The process's `exit` event adds a synchronous hard-kill fallback. The temporary host is outside eta's process group (started in a new session on POSIX) and console (it has its own hidden console on Windows), so the terminal's Ctrl+C and the SIGHUP from closing the terminal do not reach it, and it only stops through eta's stop path; so while the terminal is handed to an editor, Ctrl+C goes to the editor, and neither eta nor the temporary host is affected. When eta exits or crashes, a child program holding the terminal, such as an editor, is ended. The cost is that the temporary host is left behind when eta is hard-killed (SIGKILL, ended from the Task Manager, or on Windows not finished within about 5 seconds after the window is closed).
 
-用临时 host 时状态区常驻一行黄字，提示 `/install-service`。这条命令把临时 host 移交给常驻服务：先用 `upgrade.check` 的 `busy` 列出会被中断的回复、任务、定时任务并要求确认，再停临时 host、跑 `eta-host running`（见〈选哪个 host〉，这时问的是停掉自己的临时 host 之后还有没有别的 host）、跑 `install-service`、等 `/up`、重连，并把设定改成连接常驻 host。装不上时报出 `install-service` 的输出与退路（自己在另一个终端或 tmux 里跑 `eta-host`，再选连接常驻 host），用户看过后重新起临时 host（起之前同样先问 `eta-host running`），免得停在没有 host 的状态。
+While a temporary host is in use, the status area keeps one yellow line pointing to `/install-service`. That command hands the temporary host over to a resident service: it first lists the replies, tasks and routines that would be interrupted, from `upgrade.check`'s `busy`, and asks for confirmation, then stops the temporary host, runs `eta-host running` (see "Which host"; this time it asks whether any other host is left once its own temporary host is stopped), runs `install-service`, waits for `/up`, reconnects, and changes the settings to connect to the resident host. When the install fails, it reports the output of `install-service` and a way out (run `eta-host` yourself in another terminal or in tmux, then choose to connect to a resident host); after the user has read it, the temporary host is started again (again asking `eta-host running` first), so the TUI is not left without a host.
 
-### 令牌
+### Token
 
-依次取：用户这一次在界面里输入的令牌、环境变量 `ETA_TOKEN`、设定里的 `connection.token`。以 `Authorization: Bearer <令牌>` 带在 WebSocket 握手上（`apps/eta/src/access.ts`）。用户输入的排最前，是因为 `ETA_TOKEN` 错了时，用户在「更改地址」里贴的新令牌要能生效。
+Taken in this order: the token the user typed in the interface this time, the `ETA_TOKEN` environment variable, `connection.token` in the settings. It is sent on the WebSocket handshake as `Authorization: Bearer <token>` (`apps/eta/src/access.ts`). What the user typed comes first so that, when `ETA_TOKEN` is wrong, a new token pasted in "Change the address" takes effect.
 
-### 断线与连不上
+### Disconnects and failed connections
 
-连接层照 `apps/web/src/lib/wire.ts` 改写：hello 之后才算连上；断线后对仍在用的 target 重新订阅，等回复的调用一律失败、不重放。
+The connection layer is adapted from `apps/web/src/lib/wire.ts`: it counts as connected only after hello; after a disconnect it resubscribes to the targets still in use, and calls awaiting a reply all fail and are not replayed.
 
-- 连的是本机的常驻 host（地址是 `localhost`、`127.x.x.x` 或 `[::1]`，不是临时 host）时，第一次尝试失败或断线后，进遮罩之前先跑一次 `eta-host running`（期限与坏输出的处理同〈选哪个 host〉）。它指出了一个**不同地址**的 host，就直接连那个：这一次不改写设定，`tokenFile` 有值就读出令牌来用（同样不写设定，读不到就不带令牌，host 要令牌时走下面的令牌无效流程），状态区一行黄字「设定里的地址连不上，已连到本机正在运行的 host（地址）」。没指出、指出的是同一个地址、问不出结果、找不到 `eta-host`，或者问的期间原地址又连上了，就照下一条重连。这样桌面端换了端口、服务改了端口，TUI 都能自己接上。
-- 连不上或断线：整屏遮罩「Reconnecting」，自动重连，间隔从 0.5 秒起翻倍、封顶 5 秒。
-- 15 秒仍连不上（从第一次尝试或断线时起算，尝试挂住没有回应也算）：停止重试，给三个选项：改用临时 host（只这一次，不写设定）、更改地址、退出。
-- 每次尝试失败后探一次 `GET /ws`，回 401 就判令牌无效，停止重试，进「更改地址」表单。
+- When connected to a local resident host (the address is `localhost`, `127.x.x.x` or `[::1]`, and it is not a temporary host), after the first attempt fails or the connection drops, and before showing the overlay, the TUI runs `eta-host running` once (with the deadline and bad-output handling of "Which host"). If it names a host at a **different address**, the TUI connects straight to it: without rewriting the settings this time, reading the token from `tokenFile` when it has a value (again not written to the settings; when it cannot be read, no token is sent, and if the host needs one, the invalid-token flow below applies), with one yellow line in the status area, "The address in the settings does not answer; connected to the host running on this computer (address)." If it names none, names the same address, gives no result, `eta-host` cannot be found, or the original address connects again while asking, the TUI reconnects as in the next item. This way the TUI follows the desktop app or the service onto a new port by itself.
+- Cannot connect, or disconnected: a full-screen "Reconnecting" overlay with automatic reconnection, the interval starting at 0.5 seconds and doubling up to 5 seconds.
+- Still not connected after 15 seconds (counted from the first attempt or the disconnect, including an attempt that hangs without answering): stop retrying and offer three options: use a temporary host (this time only, not written to the settings), change the address, quit.
+- After every failed attempt, probe `GET /ws` once; a 401 means the token is invalid, so retrying stops and the "Change the address" form opens.
 
-### 版本检查
+### Version check
 
-host 的版本号只在 `upgrade.check` 的回复里（`version`）。TUI 进程启动后第一次连上时调一次，和自己构建时记下的版本比，不一致就在状态区黄字提示，不拒绝。任一方是 `dev`（源码运行）就不比，TUI 是 `dev` 时干脆不调。重连、换 host 都不再调：`upgrade.check` 每次都会去问 GitHub Releases，未登录一小时只有 60 次额度。
+The host's version number is only in the reply to `upgrade.check` (`version`). The TUI calls it once on the first connection after the process starts and compares it with the version recorded at its own build; when they differ, it shows a yellow hint in the status area without refusing. When either side is `dev` (run from source) there is no comparison, and when the TUI is `dev` it does not call at all. Reconnecting or switching hosts does not call it again: `upgrade.check` asks GitHub Releases every time, and unauthenticated requests are limited to 60 an hour.
 
-不用 `/version`：它回的是网页包的构建 id（`apps/web` 构建时的时间戳），不是 host 的版本号。
+`/version` is not used: it returns the web bundle's build id (a timestamp from building `apps/web`), not the host's version number.
 
-功能用到的 op 不在 `hello.ops` 里时，那个功能报「host 版本太旧」，其余照常。斜杠命令在 `requiredOps` 里声明，执行前检查。
+When an op a feature needs is not in `hello.ops`, that feature reports "host too old" and the rest works as usual. Slash commands declare their ops in `requiredOps`, which is checked before running.
 
-## 设定文件
+## Settings files
 
-| 文件             | 位置                                                                                                                    | 谁写                     |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| `tui.json`       | `$XDG_CONFIG_HOME/eta/`，没有时 `~/.config/eta/`；Windows 为 `%APPDATA%\eta\`；环境变量 `ETA_TUI_CONFIG` 可改成任意路径 | 用户；首次启动写入连接   |
-| `tui-state.json` | 和 `tui.json` 同一目录                                                                                                  | TUI 自己（打开的标签等） |
+| File             | Location                                                                                                                                         | Written by                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| `tui.json`       | `$XDG_CONFIG_HOME/eta/`, or `~/.config/eta/` without it; `%APPDATA%\eta\` on Windows; the `ETA_TUI_CONFIG` environment variable can set any path | The user; the connection is written on first run |
+| `tui-state.json` | The same directory as `tui.json`                                                                                                                 | The TUI itself (open tabs and so on)             |
 
-两个文件分开，TUI 记状态时就不会改写用户手写的设定。写入都是先写临时文件再改名；POSIX 上文件是 0600、新建的目录是 0700，因为 `tui.json` 里可能有令牌。
+The two files are separate so that recording state never rewrites settings the user wrote by hand. Every write goes to a temporary file first and is then renamed; on POSIX the files are 0600 and new directories 0700, because `tui.json` may hold a token.
 
-`tui.json` 是声明式覆盖：写了的键盖掉默认值，没写的用默认值。坏掉的键（类型不对、值不合法、不认识的键）启动时列出文件、键与原因，那个键用默认值，其余照常；JSON 本身坏了就全部用默认值。`/config` 用编辑器打开这个文件，保存后重新载入并立即生效，`connection` 的改动下次启动生效。
+`tui.json` is a declarative override: keys that are set replace the defaults, and keys that are not set use the defaults. Bad keys (wrong type, invalid value, unknown key) are listed at startup with the file, the key and the reason, and that key uses its default while the rest works as usual; if the JSON itself is broken, everything uses the defaults. `/config` opens this file in the editor and reloads it after saving, taking effect immediately; changes to `connection` take effect at the next start.
 
-下面的例子用注释说明每个键；真正的 `tui.json` 是普通 JSON，不能写注释。
+The example below explains each key in comments; a real `tui.json` is plain JSON and cannot contain comments.
 
 ```jsonc
 {
-  "locale": "zh", // "zh" 或 "en"；不写时按 LC_ALL、LC_MESSAGES、LANG 选，认不出用英文
+  "locale": "zh", // "zh" or "en"; when unset, chosen by LC_ALL, LC_MESSAGES, LANG, falling back to English
   "connection": {
     "mode": "resident",
     "url": "http://127.0.0.1:8787",
     "token": "…"
-  }, // 或 { "mode": "temporary" }
-  "ssh": { "target": "me@server" }, // 远程时经 ssh -t 打开 host 机器上的文件
+  }, // or { "mode": "temporary" }
+  "ssh": { "target": "me@server" }, // for a remote host, open files on the host machine through ssh -t
   "theme": {
     "accent": "cyan",
     "brand": "#e6e6e6",
     "agents": ["cyan", "#d78700"]
-  }, // 颜色令牌；agents 是群聊回复框的颜色
-  "keybindings": { "tabs.next": ["alt+right", "ctrl+n"] }, // 动作名到键位，空数组表示不绑
-  "layout": { "tabBar": "bottom" }, // 或 "top"
-  "toolOutput": { "previewLines": 5 }, // 长工具输出默认显示几行
-  "transcript": { "toolCalls": "collapsed" }, // 一轮回复的工具调用与中间过程收成一行；"expanded" 全部展开
-  "mouse": true // 终端上报鼠标：滚轮滚内容，用终端自己的选取要按住 Shift；false 时鼠标归终端
+  }, // colour tokens; agents are the colours of reply frames in group conversations
+  "keybindings": { "tabs.next": ["alt+right", "ctrl+n"] }, // action name to keys; an empty array means unbound
+  "layout": { "tabBar": "bottom" }, // or "top"
+  "toolOutput": { "previewLines": 5 }, // how many lines of long tool output show by default
+  "transcript": { "toolCalls": "collapsed" }, // collapse a reply's tool calls and the steps between into one line; "expanded" expands everything
+  "mouse": true // terminal mouse reporting: the wheel scrolls content, and the terminal's own selection needs Shift held; false leaves the mouse to the terminal
 }
 ```
 
-颜色令牌：`brand`、`brandDim`（开场图案渐变的两端）、`text`、`muted`、`accent`、`warning`、`error`、`success`、`border`、`selection`。值可以是 `default`（终端前景色）、16 色名（含 `Bright` 后缀与 `gray`）、`#rgb`、`#rrggbb`。默认只用 16 色和 `default`，跟着用户的终端主题走。
+Colour tokens: `brand`, `brandDim` (the two ends of the splash art's gradient), `text`, `muted`, `accent`, `warning`, `error`, `success`, `border`, `selection`. A value can be `default` (the terminal's foreground colour), a 16-colour name (including the `Bright` suffix and `gray`), `#rgb` or `#rrggbb`. The defaults use only the 16 colours and `default`, following the user's terminal theme.
 
-`theme.agents` 不是单个颜色，是一组颜色，写法同上，至少一个；群聊里每个智能体的回复框从中取一种（见「转录区」）。默认是 `cyan`、`magenta`、`green`、`blueBright`、`magentaBright`、`blue`。不是数组、是空数组、或其中有一个值不合法时，启动时列出原因，整组用默认值。
+`theme.agents` is not a single colour but a list of colours, written the same way, at least one; each agent's reply frame in a group conversation takes one of them (see "Transcript"). The default is `cyan`, `magenta`, `green`, `blueBright`, `magentaBright`, `blue`. When it is not an array, is an empty array, or contains an invalid value, the reason is listed at startup and the whole list uses the default.
 
-键位写成 `ctrl+alt+shift+键`，键是一个字符或 `left`、`right`、`up`、`down`、`escape`、`enter`、`tab`、`backspace`、`delete`、`pageup`、`pagedown`、`home`、`end`、`space`。动作与默认键位：
+Keys are written as `ctrl+alt+shift+key`, where the key is one character or `left`, `right`, `up`, `down`, `escape`, `enter`, `tab`, `backspace`, `delete`, `pageup`, `pagedown`, `home`, `end`, `space`. Actions and default keys:
 
-| 动作                                       | 默认                                       |
-| ------------------------------------------ | ------------------------------------------ |
-| `tabs.previous`、`tabs.next`               | `alt+left`、`alt+right`                    |
-| `tabs.goTo1` … `tabs.goTo9`                | `alt+1` … `alt+9`                          |
-| `panel.open`                               | `left`（只在输入框为空时有效）             |
-| `review.open`                              | `alt+r`                                    |
-| `tabs.close`                               | `alt+w`（关标签，不影响对话）              |
-| `reply.stop`                               | `escape`（有回复在跑时）                   |
-| `app.quit`                                 | `ctrl+c`，2 秒内连按两次才退出             |
-| `transcript.pageUp`、`transcript.pageDown` | `pageup`、`pagedown`（对话滚一页）         |
-| `transcript.lineUp`、`transcript.lineDown` | `shift+up`、`shift+down`（滚一行）         |
-| `transcript.top`、`transcript.bottom`      | `ctrl+home`、`ctrl+end`                    |
-| `transcript.search`                        | `ctrl+f`（在对话里找字）                   |
-| `transcript.select`                        | `alt+v`（选取模式）                        |
-| `transcript.expandAll`                     | `ctrl+o`（展开或收起全部思考与工具输出）   |
-| `transcript.toggleTurn`                    | `alt+e`（展开或收起一轮回复的工具调用）    |
-| `message.newline`                          | `alt+enter`、`shift+enter`（输入框里换行） |
-| `message.steer`                            | `tab`（有回复在跑时把消息插进这次回复）    |
-| `pending.openConversation`                 | `alt+o`（在待处理的单项层里进入那个对话）  |
+| Action                                     | Default                                                     |
+| ------------------------------------------ | ----------------------------------------------------------- |
+| `tabs.previous`, `tabs.next`               | `alt+left`, `alt+right`                                     |
+| `tabs.goTo1` … `tabs.goTo9`                | `alt+1` … `alt+9`                                           |
+| `panel.open`                               | `left` (only with an empty input box)                       |
+| `review.open`                              | `alt+r`                                                     |
+| `tabs.close`                               | `alt+w` (closes the tab, not the conversation)              |
+| `reply.stop`                               | `escape` (while a reply is running)                         |
+| `app.quit`                                 | `ctrl+c`, pressed twice within 2 seconds to quit            |
+| `transcript.pageUp`, `transcript.pageDown` | `pageup`, `pagedown` (scroll the conversation by a page)    |
+| `transcript.lineUp`, `transcript.lineDown` | `shift+up`, `shift+down` (scroll by a line)                 |
+| `transcript.top`, `transcript.bottom`      | `ctrl+home`, `ctrl+end`                                     |
+| `transcript.search`                        | `ctrl+f` (find text in the conversation)                    |
+| `transcript.select`                        | `alt+v` (selection mode)                                    |
+| `transcript.expandAll`                     | `ctrl+o` (expand or collapse all thinking and tool output)  |
+| `transcript.toggleTurn`                    | `alt+e` (expand or collapse one reply's tool calls)         |
+| `message.newline`                          | `alt+enter`, `shift+enter` (new line in the input box)      |
+| `message.steer`                            | `tab` (put the message into the running reply)              |
+| `pending.openConversation`                 | `alt+o` (enter the conversation from a single pending item) |
 
-## 画面
+## Screens
 
-- **主区域**：活跃标签对应的画面；没有打开的标签时是首页。首页从最上面一行起依次是：开场图案（旁边是名字、版本、连的 host）、一个空行、命令输入、三条上手提示（`/new`、`/help`、打开待处理的键），剩下的空间留在提示下面。命令没注册时不显示那条提示；没有绑定 `panel.open` 的键或没有固定标签时不显示第三条。
-  - 终端太窄放不下图案时，图案退成一行 `eta <版本> · <host>`，下面紧接输入框。终端太矮时先省掉提示，再把图案退成一行；连这一行也放不下就只留输入框。
-  - 打 `/` 时补全菜单出现在输入框下面，占掉提示的位置，列出全部按英文前缀匹配的命令。菜单要的行放不下时，先省掉图案或那一行，再按剩下的行缩小菜单，至少留一行。
-- **输入框**：首页的命令输入和对话的输入框都夹在上下两条整宽的 `─` 横线之间（颜色是主题的 `border`），左右不画竖线；多行输入时两条线夹住全部输入行。补全菜单画在下横线下面。
-- **补全菜单**：首页的命令输入和对话的输入框共用一种菜单。每项恰好一行：左列是名字，右列是说明（命令的 `summary`，跟界面语言）；说明列对齐在全部匹配项里最长的名字之后，所以窗口滚动时它不动；一行放不下就在行尾截断，加 `…`。菜单最多 8 行，屏幕矮时缩到放得下的行数，至少 1 行。匹配项比行数多时只显示一个窗口：上面藏着项就在第一行写「↑ 还有 N 项」，下面藏着项就在最后一行写「↓ 还有 N 项」（`muted`，各占一行，措辞和层里的列表一致），少于 3 行时不写这两行。窗口一开始在最上面；选中项往下走过窗口的中线后窗口开始滚动，选中项保持在中间，直到窗口到了末尾一页就停住。↑↓ 移动选中，到最后一项再按 ↓ 回到第一项，在第一项按 ↑ 到最后一项。Tab 补全选中的那条；改动输入后选中回到第一项，窗口回到最上面。
-- **补全菜单与列表的选中样式**：选中项前面是 `› `，未选中项前面两个空格；选中项用 `accent` 色，补全菜单里已输入的部分加粗，说明文字用 `muted`。所有列表与选择器都不用背景色、不用反色；用反色的只有输入框的光标格和转录区选取模式的选中行。
-- **状态区**：一行。最新的通知、连接地址、临时 host 黄字、版本提示；放不下就截断。
-- **标签栏**：一行，默认在最底下。每个打开的标签显示编号、名字与状态标记；当前标签的编号与名字用 `accent` 色加粗，其他标签用 `muted`，状态标记保持各自的颜色，不用背景色。扩展注册的固定标签靠右：没有要用户处理的事时用 `muted`，有时用 `warning` 色文字。名字截到 20 列。截断后显示出来相同的两个以上标签，在名字后面加上区分它们的补充说明，写成 `名字 (说明1)`：加了第一项仍相同的再加第二项，写成 `名字 (说明1 · 说明2)`，依此类推，说明用完仍相同就照样显示；没有重名的标签不加。括号部分完整显示、和名字同色，状态标记在括号之后。对话的说明依次是主理人的名字和对话 id 的前 6 个字符，没有主理人或查不到名字时只有 id 前缀。只改标签栏的显示，不改对话的名字。标签放不下时截掉的是标签那一段，固定标签总是完整显示。打开的标签记在 `tui-state.json`，下次启动还在。
-- **鼠标**：设定 `mouse` 为 `true`（默认）时，画面画出来后打开终端的鼠标上报（基本上报加 SGR 坐标，`ESC[?1000h ESC[?1006h`）。stdin 先经过 `src/ui/mouse/input.ts` 再交给 Ink：鼠标序列（SGR 与旧式 X10）在这里滤掉，括号粘贴里的内容原样放行；滚轮的上下两个方向交给 `useWheel`（`src/extensions/react.ts`），点击、拖动、横向滚动丢掉。序列被拆在两次读入里时，可能是序列开头的那一截最多等 20 ms，等不到就原样交给 Ink，所以单独按 Esc 最多晚 20 ms。括号粘贴里被拆开的结束标记不按 20 ms 放出，一直等到下文。
-  - 上报在每条离开界面的路上都关掉（`ESC[?1006l ESC[?1000l`）：正常退出、两次 Ctrl+C、SIGINT/SIGTERM/SIGHUP、崩溃（未捕获的异常、未处理的 rejection、组件抛错），都在离开备用屏幕之前关。退出和崩溃一开始就关，不等临时 host 停下；组件抛错时 Ink 自己先拆掉界面再离开备用屏幕，拆界面时就关。进程的 `exit` 事件再关一次。把终端交给编辑器或别的程序前关掉，程序结束后按当时的设定再开；交出终端那一刻还没交给 Ink 的按键（包括正在等下文的半截序列）丢掉。`/config` 改了 `mouse` 后立即生效。为 `false` 时一个字节也不写。
-  - 过滤一直装着，`mouse` 为 `false` 时也在，因为设定在运行中还能被 `/config` 打开。所以为 `false` 时单独按 Esc 同样最多晚 20 ms。
-  - 滚轮在对话里滚转录区（见「转录区」）；在层里，框接管按键的那种层（内容放不下、框里没有光标，例如 `/help`）每格滚 3 行，经过 `layer-frame.tsx` 里同一个 `scrollBy`；有光标的层里滚轮不做事。
-- **层**：命令开的小窗盖在主区域上，可以叠，最上面那层收按键，用完关掉。
-  - 层的框（`LayerFrame`）画在主区域的最上面，高度是内容的行数加上框自己的行，最高和主区域一样高，所以整个画面不超过终端的行数；框下面剩下的行留空。内容变了、终端改了尺寸，框高都按新的内容和主区域重算。框里的内容不跟着框的高度压缩，每一行要么完整画出，要么不画。内容比框里放得下的高时在框里滚动：PageUp/PageDown 翻一页，↑↓ 滚一行，到顶、到底就停；上面还有内容时标题下面那一行写「↑ 还有 N 行」，下面还有时底部提示上面那一行写「↓ 还有 N 行」，没有时这两行留空。滚动都经过 `layer-frame.tsx` 里的 `scrollBy`。
-  - 有光标的层：自己处理 ↑↓ 的部分（`PickList`、`CheckList`、`RowList`、`ChoiceList`，以及用 `LayerCursorBox` 画自己光标行的待处理单项层）通过 `useLayerCursor` 向框登记。这样的层里 ↑↓ 只归光标，滚轮不做事；内容放不下时 PageUp/PageDown 由框用来滚整层，列表不再用它们翻页。光标每移动一次（包括周围的行变了），框就滚到让光标那一行露出来；PageUp/PageDown 可以把光标滚出视野，之后再按 ↑、↓ 或 Enter 就滚回去；光标不在视野里时按的那一下 Enter 只滚回光标，不选择，光标在视野里时 Enter 照常选择。
-  - 列表在框里按剩下的行数开窗（`useListFit`），和层里别的行加起来能放下时整层不用滚动。剩下的行数按主区域放得下的最高的框来算，不按跟着内容缩小的框来算。层要自己算列表高度时用 `useListHeight(其他行数)`，行数来自外壳实际给层的高度。框只在外壳的层区域里限高；在别处（例如测试里单独渲染）它和内容一样高。
+- **Main area**: the screen of the active tab; the home screen when no tab is open. From the top line, the home screen shows: the splash art (with the name, version and connected host beside it), an empty line, the command input, three getting started hints (`/new`, `/help`, the key that opens pending items), and the remaining space below the hints. A hint is left out when its command is not registered; the third is left out when no key is bound to `panel.open` or there is no pinned tab.
+  - When the terminal is too narrow for the art, the art falls back to one line, `eta <version> · <host>`, directly above the input box. When the terminal is too short, the hints go first, then the art falls back to one line; when even that line does not fit, only the input box remains.
+  - Typing `/` shows the completion menu below the input box, in place of the hints, listing every command that matches by English prefix. When the rows the menu needs do not fit, the art or its one line goes first, then the menu shrinks to the rows left, keeping at least one.
+- **Input box**: both the home screen's command input and the conversation's input box sit between two full-width `─` rules above and below (in the theme's `border` colour), with no vertical lines at the sides; with multi-line input, the two rules enclose all input lines. The completion menu is drawn below the lower rule.
+- **Completion menu**: the home screen's command input and the conversation's input box share one kind of menu. Each item is exactly one line: the name on the left and the description on the right (the command's `summary`, in the interface language); the description column is aligned after the longest name among all matches, so it does not move when the window scrolls; a line that does not fit is cut at the end with `…`. The menu has at most 8 rows and shrinks to what fits on a short screen, at least 1. When there are more matches than rows, only a window is shown: with items hidden above, the first row says "↑ N more", and with items hidden below, the last row says "↓ N more" (`muted`, one row each, worded like the lists in layers); with fewer than 3 rows, these two rows are left out. The window starts at the top; once the selection moves past the window's middle, the window starts scrolling with the selection held in the middle, until the window reaches the last page and stops. ↑↓ move the selection; ↓ on the last item goes back to the first, and ↑ on the first goes to the last. Tab completes the selected one; changing the input returns the selection to the first item and the window to the top.
+- **Selection style of the completion menu and lists**: the selected item is prefixed with `› ` and unselected items with two spaces; the selected item is in the `accent` colour, the typed part in the completion menu is bold, and descriptions are `muted`. No list or picker uses a background colour or reverse video; reverse video is used only for the input box's cursor cell and the selected lines of the transcript's selection mode.
+- **Status area**: one line. The latest notice, the connection address, the yellow temporary-host line, the version hint; cut when it does not fit.
+- **Tab bar**: one line, at the very bottom by default. Each open tab shows its number, name and status mark; the current tab's number and name are bold in the `accent` colour, other tabs are `muted`, and status marks keep their own colours, with no background colours. Pinned tabs registered by extensions sit on the right: `muted` when there is nothing for the user to handle, and `warning`-coloured text when there is. Names are cut to 20 columns. When two or more tabs look the same after cutting, their names get qualifiers that tell them apart, written `name (qualifier1)`: if they are still the same after the first, the second is added, `name (qualifier1 · qualifier2)`, and so on; if they are still the same once the qualifiers run out, they are shown as they are; tabs without a duplicate name get none. The parenthesised part is shown in full in the same colour as the name, with the status mark after it. A conversation's qualifiers are, in order, the steward's name and the first 6 characters of the conversation id; with no steward, or when the name cannot be found, only the id prefix. This only changes the tab bar's display, not the conversation's name. When the tabs do not fit, it is the tabs section that gets cut; pinned tabs are always shown in full. Open tabs are recorded in `tui-state.json` and are still there on the next start.
+- **Mouse**: when the `mouse` setting is `true` (the default), terminal mouse reporting is turned on once the screen is drawn (basic reporting plus SGR coordinates, `ESC[?1000h ESC[?1006h`). stdin goes through `src/ui/mouse/input.ts` before reaching Ink: mouse sequences (SGR and the old X10 form) are filtered out there, while the content of a bracketed paste passes through unchanged; the up and down wheel directions go to `useWheel` (`src/extensions/react.ts`), and clicks, drags and horizontal scrolling are dropped. When a sequence is split across two reads, a piece that may be the start of a sequence waits at most 20 ms and is passed to Ink unchanged if nothing follows, so a lone Esc can be up to 20 ms late. A split end marker inside a bracketed paste is not released after 20 ms; it waits for what follows.
+  - Reporting is turned off (`ESC[?1006l ESC[?1000l`) on every way out of the interface: a normal exit, Ctrl+C twice, SIGINT/SIGTERM/SIGHUP, a crash (an uncaught exception, an unhandled rejection, a component throwing), always before leaving the alternate screen. Exits and crashes turn it off at the very start, without waiting for the temporary host to stop; when a component throws, Ink tears down the interface itself before leaving the alternate screen, and reporting is turned off during that teardown. The process's `exit` event turns it off once more. It is turned off before handing the terminal to an editor or another program, and turned on again after that program ends, according to the settings at that time; keys not yet passed to Ink at the moment the terminal is handed over (including a half sequence waiting for what follows) are dropped. Changing `mouse` through `/config` takes effect immediately. When it is `false`, not a single byte is written.
+  - The filter is always installed, even when `mouse` is `false`, because the setting can be turned on through `/config` while running. So with `false`, a lone Esc can also be up to 20 ms late.
+  - In a conversation the wheel scrolls the transcript (see "Transcript"); in a layer whose frame takes over the keys (the content does not fit and the frame has no cursor, such as `/help`), each notch scrolls 3 lines, through the same `scrollBy` in `layer-frame.tsx`; in a layer with a cursor, the wheel does nothing.
+- **Layers**: small windows opened by commands over the main area; they can stack, the topmost one receives the keys, and they are closed when done.
+  - A layer's frame (`LayerFrame`) is drawn at the top of the main area. Its height is the content's line count plus the frame's own lines, at most as tall as the main area, so the whole screen never exceeds the terminal's rows; the rows below the frame stay empty. When the content changes or the terminal is resized, the frame height is recomputed from the new content and main area. The content inside the frame is not squeezed to the frame's height: each line is either drawn whole or not at all. When the content is taller than what fits in the frame, it scrolls inside the frame: PageUp/PageDown move a page, ↑↓ a line, stopping at the top and bottom; with content above, the line under the title says "↑ N more", and with content below, the line above the bottom hint says "↓ N more"; otherwise these two lines stay empty. All scrolling goes through `scrollBy` in `layer-frame.tsx`.
+  - Layers with a cursor: the parts that handle ↑↓ themselves (`PickList`, `CheckList`, `RowList`, `ChoiceList`, and the single pending item layer that draws its own cursor line with `LayerCursorBox`) register with the frame through `useLayerCursor`. In such a layer ↑↓ belong only to the cursor and the wheel does nothing; when the content does not fit, the frame uses PageUp/PageDown to scroll the whole layer, and lists no longer page with them. Every time the cursor moves (including when the lines around it change), the frame scrolls to bring the cursor's line into view; PageUp/PageDown can scroll the cursor out of view, and the next ↑, ↓ or Enter scrolls it back; while the cursor is out of view, that Enter only scrolls back to the cursor without selecting, and with the cursor in view, Enter selects as usual.
+  - Lists open a window over the rows left in the frame (`useListFit`), so that when they fit together with the layer's other lines, the whole layer does not need to scroll. The rows left are counted from the tallest frame the main area can hold, not from a frame shrunk to its content. A layer that computes its list height itself uses `useListHeight(otherLineCount)`, with the line counts coming from the height the shell actually gives the layer. The frame is height-limited only in the shell's layer area; elsewhere (for example rendered alone in a test) it is as tall as its content.
 
-## 对话
+## Conversations
 
-对话是 `src/ext/conversation/` 这个扩展画的一种标签页（`kind` 为 `conversation`，`id` 为对话 id）。打开一个对话就是 `ctx.openTab({ kind: "conversation", id })`，`/open <名字或 id>` 是给用户的入口。画面从上到下是转录区、等待空闲成员的消息、回复状态行（有回复在跑时才有）、输入框。
+A conversation is a kind of tab drawn by the extension `src/ext/conversation/` (`kind` is `conversation`, `id` is the conversation id). Opening a conversation is `ctx.openTab({ kind: "conversation", id })`, and `/open <name or id>` is the entry point for the user. From top to bottom the screen shows the transcript, the messages waiting for an idle member, the reply status line (only while a reply is running), and the input box.
 
-### 数据
+### Data
 
-- 订阅 `conversations.<id>`（`info`、`members`、`timeline`）与 eager target `agents`。行按 `revision` 合并，翻旧页用 `conversations.history`。
-- 回复在跑时，它的文字与工具调用在成员的会话里：对正在跑的成员先调一次 `sessions.resync`（每个连接每个会话一次），再订阅 `sessions.<sessionId>`，流式正文来自 `message:update`，工具的实时输出来自 `tool:update`、`tool:end`。成员停下后退掉它的会话订阅，回复改从时间线的行上取（`thinking`、`text`、`data.activity`）。
-- 每个（连接，对话）一份 store（`feed/store.ts`），放行、成员、会话的实时内容和画面状态（滚动位置、展开的条目、搜索、输入框草稿与历史）。标签切走时画面卸载、订阅退掉，store 留着；对话照常在 host 上跑，切回来接着画。换 host 就是新的 store。
-- 画面在前面且滚到底时，用 `conversations.read` 把已读标到最新的行。
+- Subscribe to `conversations.<id>` (`info`, `members`, `timeline`) and the eager target `agents`. Rows are merged by `revision`, and older pages come from `conversations.history`.
+- While a reply is running, its text and tool calls are in the member's session: for a running member, first call `sessions.resync` once (once per session per connection), then subscribe to `sessions.<sessionId>`; streaming text comes from `message:update`, and tools' live output from `tool:update` and `tool:end`. Once the member stops, its session subscription is dropped and the reply is read from the timeline rows instead (`thinking`, `text`, `data.activity`).
+- Each (connection, conversation) has one store (`feed/store.ts`) holding the rows, members, the sessions' live content and the screen state (scroll position, expanded items, search, input box draft and history). When the tab is switched away, the screen unmounts and the subscriptions are dropped, but the store stays; the conversation keeps running on the host, and drawing resumes when the user switches back. A different host means a new store.
+- When the screen is in front and scrolled to the bottom, `conversations.read` marks everything up to the latest row as read.
 
-`model/` 下的 `run.ts`、`tool-shape.ts`、`mentions.ts`、`timeline.ts` 复制自网页的同名文件，两边要一起改，等它们挪进共享包。
+`run.ts`, `tool-shape.ts`, `mentions.ts` and `timeline.ts` under `model/` are copied from the web UI's files of the same names; change both sides together until they move into a shared package.
 
-### 转录区
+### Transcript
 
-数据层把行与会话的实时内容整理成一列条目（`contract.ts` 的 `TranscriptItem`：用户消息、作者、思考、正文、工具调用、一轮回复的过程段、结局、摘要、提示）。每个条目单独画成若干行（`render/`：Ink 组件经 `renderToString` 按宽度画成字符串再切行），画面在这些行上滚动、搜索、选取，所以一个条目的行只取决于它自己、宽度和是否展开，没变就不重画。
+The data layer arranges the rows and the sessions' live content into a list of items (`TranscriptItem` in `contract.ts`: user message, author, thinking, text, tool call, a reply's steps section, outcome, summary, notice). Each item is drawn separately into a number of lines (`render/`: Ink components drawn into a string at the given width with `renderToString`, then split into lines), and the screen scrolls, searches and selects over these lines, so an item's lines depend only on the item itself, the width and whether it is expanded, and an unchanged item is not redrawn.
 
-- 正文按 markdown 画；思考与摘要默认收起成一行；工具调用按参数的形状分 command、patch、write、plan、other 画标题，输出默认只显示 `toolOutput.previewLines` 行（在跑的命令显示最后几行）。`transcript.expandAll` 展开全部，选取模式里空格展开一条。
-- 一轮回复是一行回复（时间线上的一个 agent 行）产出的全部条目。它从第一个条目到最后一个工具调用为止的思考、正文、工具调用叫过程段，默认收成一行摘要，放在过程段第一个条目的位置（`model/steps.ts`）；作者、结局、提示不进过程段，照常显示，最后一个工具调用之后的条目也照常显示。没有工具调用的回复没有摘要行。
-  - 摘要行用 `muted`：回复结束后是 `▸ Used N tools`（有失败的再接 `, M failed`，这一段用 `error` 色）；回复在跑且最后一个工具调用也在跑时是 `▸ Running: <工具卡的标题> (N so far)`，标题截到一行放得下；最后一个工具调用已结束时是 `▸ Working (N tools so far)`。回复在跑时，最后一个工具调用之后正在写的正文先照常显示，等它后面又开始新的工具调用，就收进摘要。
-  - 展开时摘要行的 `▸` 换成 `▾`，下面照常画过程段的每个条目，各自的折叠不变。展开记在 store 的展开条目里（按摘要行的 key），切走标签再回来还在。`transcript.expandAll` 连摘要一起展开或收起；`transcript.toggleTurn` 展开或收起一轮：屏幕上能看到的摘要行里最下面的那个；一个摘要行都看不到、但看得到某一轮展开着的过程段条目时，是屏幕上最下面那个这类条目所属的那一轮；都没有时是最新的那一轮。选取模式里光标在摘要行上，空格展开或收起那一轮，`c` 复制过程段每个条目的原文（条目之间空一行）。
-  - 设定 `transcript.toolCalls` 为 `"expanded"` 时不分组，每个条目照常各自画；`/config` 重新载入后立即生效。收起的过程段不画出来，所以搜索找不到里面的字。
-- 群聊里每一轮回复画在一个圆角框里（`transcript/frames.ts`、`frame-lines.ts`）。框从作者条目开始，到同一行回复的最后一个条目为止，展开的过程段也在同一个框里；用户消息不加框。私聊没有作者条目，不加框。
-  - 上边框是 `╭─ 名字 ─…─╮`，取代 `● 名字` 那一行；名字放不下时截短。中间每行是 `│ ` 加内容、补空格再加 ` │`，框里条目之间的空行也画两边的竖线；下边框是 `╰─…─╯`。框和转录区一样宽，框里的条目按转录区宽度减 4 列画；某一行仍比框里宽时截短，末尾是 `…`，这一行不带颜色。还没有任何条目的回复（刚开始跑）只画上下边框，让人看到谁在回复；相邻两个框之间、框和下一条用户消息之间都空一行。
-  - 只有框线和名字带颜色，名字加粗，内容的颜色不变。颜色从 `theme.agents` 里取（`render/agent-colour.ts`）。智能体 id 的 32 位 FNV-1a 散列对颜色数取模，得到它的首选色。同一个对话的成员按 id 排序依次取色：首选色已被前面的成员占了，就从首选色往后（到表尾绕回表头）找第一个没被占的颜色。成员数超过颜色数时，颜色都占满之后再从头一轮，这时才有人同色。作者不在成员里（例如已被移除）时用首选色。代价是同一个智能体在不同对话里可能不同色，邀请或移除成员也可能让某人换色。
-  - 转录区不到 40 列时不画框，作者照旧画成 `● 名字`（名字长时折成多行），条目按整宽画；宽度跨过 40 列时随之切换，滚动位置照样按条目记。
-  - 上边框这一行属于作者条目，下边框这一行属于框里最后一个条目，框里的空行和条目之间的空行一样，算作下面那个条目之前的空行。滚动、翻页、「在下面」的行数都把上下边框算进去；跟随到底时屏幕最后一行是最新那一轮的下边框。
-  - 复制与搜索不带框线：每行的无色文本只有内容，上边框是名字，下边框是空行。复制行、复制条目、搜索匹配都按内容算；搜索高亮与选取模式的光标、区间只标在内容上，框线照常画、保持颜色。没有内容的行（框里的空行、下边框）被光标停住时，标的是内容起始处的一格。
-- markdown、代码高亮、表格、diff 的组件改编自 Gemini CLI（`src/ui/gemini/`，Apache-2.0，见仓库根的 `THIRD_PARTY_NOTICES.md`）：去掉了它的设置与主题，表格改用 `string-width` 量宽，长内容的折叠在行一级做。
-- 搜索在已载入的行里找子串（不分大小写），Enter 与 ↑ 找更早的，↓ 找更新的，Esc 关掉、滚动位置不动。
-- 选取模式只用键盘：光标按行走，`v` 定区间起点，`y` 或 Enter 复制这些行，`c` 复制光标所在条目的原文（markdown、命令与完整输出、patch），经 OSC 52 写进终端的剪贴板（在 tmux 里包一层透传）。设定 `mouse` 开着时滚轮滚对话：每一格 3 行，上滚往旧的方向、下滚往新的方向，效果与 `transcript.lineUp`、`transcript.lineDown` 相同，有层盖着时不滚；这时要用鼠标选字，按住 Shift 用终端自己的选取。`mouse` 为 `false` 时鼠标归终端，直接用终端的选取。
-- 不在底部时，最后一行提示回到最下面的键：`↓ ctrl+end 回到最下面`（英文 `↓ ctrl+end to go to the bottom`），键取 `transcript.bottom` 的第一个绑定，`/config` 改了立即生效；这个动作没绑键时改为提示下面还有几行。
-- 跟随最新一行时，展开、收起（`transcript.expandAll`、`transcript.toggleTurn`）和新来的输出都不会让它离开，回复在跑和已结束都一样。滚上去之后，屏幕最上面一行回到跟随时的那一行或更靠下，就恢复跟随（提示行不再盖住最后一行），之后来的行照常跟随：滚轮、翻页、`transcript.lineDown`、搜索与选取光标把屏幕带到那里时如此，输入框变矮、搜索栏或选取提示行关掉、条目收起这类变化让屏幕到那里时也如此。所以离开底部时下面至少还有两行。还没到那里时，位置照下面的规则保持不动。滚上去时发出的消息不会把屏幕带回底部。
-- 已经在顶上还往上滚时翻一页更早的行（`conversations.history`，50 行），这一页画进来之前不再请求；host 说没有更早的、翻页失败或拿到空页时停下，失败报到状态区，下次再往上滚时再试。滚动位置、选取光标、搜索的当前匹配都按「条目加条目内的第几行」记，所以旧页插到前面、展开收起之后仍指同一处内容，改窗口宽度后仍在同一个条目里；条目被收进摘要就落到摘要行上；条目不见了（流式的块落地时换了条目）就落到同一行回复的条目，再不行落到它最后所在的位置。
+- Text is drawn as markdown; thinking and summaries are collapsed into one line by default; a tool call's title is drawn as command, patch, write, plan or other by the shape of its arguments, and its output shows only `toolOutput.previewLines` lines by default (a running command shows its last few lines). `transcript.expandAll` expands everything, and Space in selection mode expands one item.
+- A turn is all the items produced by one reply row (one agent row on the timeline). Its thinking, text and tool calls from the first item up to the last tool call are called the steps section, collapsed by default into one summary line placed where the section's first item would be (`model/steps.ts`); the author, outcome and notices are not part of the steps section and show as usual, as do items after the last tool call. A reply without tool calls has no summary line.
+  - The summary line is `muted`: after the reply ends, `▸ Used N tools` (followed by `, M failed` when some failed, in the `error` colour); while the reply is running and its last tool call is too, `▸ Running: <tool card title> (N so far)`, with the title cut to fit on one line; once the last tool call has ended, `▸ Working (N tools so far)`. While a reply is running, text being written after the last tool call shows as usual at first, and is folded into the summary once another tool call starts after it.
+  - When expanded, the summary line's `▸` becomes `▾`, and each item of the steps section is drawn below as usual, each keeping its own folding. Expansion is recorded in the store's expanded items (keyed by the summary line's key), so it is still there after switching tabs and back. `transcript.expandAll` expands or collapses summaries as well; `transcript.toggleTurn` expands or collapses one turn: the lowest summary line visible on screen; when no summary line is visible but items of an expanded steps section are, the turn of the lowest such item on screen; otherwise the latest turn. In selection mode, with the cursor on a summary line, Space expands or collapses that turn, and `c` copies the source of every item in the steps section (with an empty line between items).
+  - When `transcript.toolCalls` is set to `"expanded"`, nothing is grouped and every item is drawn on its own as usual; it takes effect immediately after `/config` reloads. A collapsed steps section is not drawn, so search cannot find text inside it.
+- In a group conversation each turn is drawn in a rounded frame (`transcript/frames.ts`, `frame-lines.ts`). The frame starts at the author item and ends at the last item of the same reply row, and an expanded steps section is inside the same frame; user messages are not framed. A private conversation has no author items and no frames.
+  - The top border is `╭─ name ─…─╮`, replacing the `● name` line; a name that does not fit is shortened. Each line in between is `│ ` plus the content, padded with spaces, plus ` │`, and the empty lines between items inside the frame also get the vertical lines on both sides; the bottom border is `╰─…─╯`. The frame is as wide as the transcript, and the items inside it are drawn at the transcript width minus 4 columns; a line still wider than the inside is cut, ending in `…`, and that line has no colour. A reply with no items yet (just started) draws only the top and bottom borders, so people can see who is replying; there is one empty line between two adjacent frames and between a frame and the next user message.
+  - Only the border and the name are coloured, the name bold, and the content keeps its colour. The colour comes from `theme.agents` (`render/agent-colour.ts`). The 32-bit FNV-1a hash of the agent id, modulo the number of colours, gives its preferred colour. The members of one conversation take colours in order of id: when the preferred colour is already taken by an earlier member, the member looks forward from its preferred colour (wrapping from the end of the list to the start) for the first colour not taken. When there are more members than colours, a new round starts once all colours are taken, and only then do two members share a colour. An author who is not a member (for example removed) uses the preferred colour. The cost is that the same agent may have different colours in different conversations, and inviting or removing a member may change someone's colour.
+  - When the transcript is under 40 columns, no frames are drawn; the author is drawn as `● name` as before (a long name wraps onto several lines), and items are drawn at full width; crossing 40 columns switches between the two, and the scroll position is still kept by item.
+  - The top border line belongs to the author item, the bottom border line to the last item in the frame, and the empty lines inside the frame count, like the empty lines between items, as the empty line before the item below. Scrolling, paging and the "below" line count all include the top and bottom borders; when following the bottom, the screen's last line is the bottom border of the latest turn.
+  - Copy and search leave out the frame: each line's plain text holds only the content, the top border is the name, and the bottom border is an empty line. Copied lines, copied items and search matches are all computed on the content; search highlights and selection mode's cursor and range mark only the content, while the frame is drawn as usual and keeps its colour. When the cursor stops on a line without content (an empty line in the frame, the bottom border), it marks one cell at the start of the content.
+- The markdown, code highlighting, table and diff components are adapted from Gemini CLI (`src/ui/gemini/`, Apache-2.0, see `THIRD_PARTY_NOTICES.md` at the repository root): its settings and themes are removed, tables measure width with `string-width`, and folding of long content is done at the line level.
+- Search finds substrings in the loaded rows (case-insensitive); Enter and ↑ find earlier matches, ↓ newer ones, and Esc closes the search without moving the scroll position.
+- Selection mode is keyboard only: the cursor moves by line, `v` sets the start of a range, `y` or Enter copies those lines, and `c` copies the source of the item under the cursor (markdown, the command and its full output, the patch), written to the terminal's clipboard through OSC 52 (wrapped in a passthrough inside tmux). With the `mouse` setting on, the wheel scrolls the conversation: 3 lines per notch, up towards older and down towards newer, the same as `transcript.lineUp` and `transcript.lineDown`, and not while a layer covers it; selecting text with the mouse then means holding Shift to use the terminal's own selection. When `mouse` is `false`, the mouse belongs to the terminal, and its selection works directly.
+- When not at the bottom, the last line hints at the key that goes back to the bottom: `↓ ctrl+end to go to the bottom` (Chinese `↓ ctrl+end 回到最下面`), using the first binding of `transcript.bottom`, and a change through `/config` takes effect immediately; when that action has no key, the hint shows how many lines are below instead.
+- While following the latest line, expanding and collapsing (`transcript.expandAll`, `transcript.toggleTurn`) and new output never make it leave, whether the reply is running or has ended. After scrolling up, following resumes once the screen's top line is back at the line it had while following, or lower (the hint line then no longer covers the last line), and later lines are followed as usual: this holds when the wheel, paging, `transcript.lineDown`, or the search and selection cursors bring the screen there, and also when a shorter input box, closing the search bar or the selection hint line, or collapsing items brings it there. So when leaving the bottom there are at least two lines below. Until it gets there, the position stays put by the rules below. Sending a message while scrolled up does not bring the screen back to the bottom.
+- Scrolling up when already at the top loads a page of older rows (`conversations.history`, 50 rows), with no new request until that page is drawn in; it stops when the host says there is nothing older, the request fails, or an empty page comes back; a failure is reported in the status area and retried at the next scroll up. The scroll position, the selection cursor and the current search match are all kept as "item plus line within the item", so they still point at the same content after an older page is inserted before them or after expanding and collapsing, and stay within the same item after the window width changes; an item folded into a summary lands on the summary line; an item that disappears (a streaming block replaced by another item when it lands) lands on an item of the same reply row, and failing that, on where it last was.
 
-### 输入框
+### Input box
 
-多行；宽字符按两列算，终端的真光标跟着输入位置走（输入法的候选窗靠它定位）。超过 5 行或 800 个字符的粘贴折叠成 `[Pasted text #N +L lines]`，发送时展开，折叠的范围随 `conversations.send` 的 `blocks` 发出，用户消息在转录区里照样画成折叠的。输入框为空时，上键翻出这个对话最近发过的一条；输入框里是翻出来、没改过的那条时，上下键继续翻，下键翻过最新一条回到空；输入框里有自己打的字时，上下键只移动光标。`/` 开头补全命令，`@` 补全成员、所有人与项目里的文件（`projects.files`），菜单见〈画面〉的「补全菜单」。`@` 菜单最多列 8 项。转录区让出全部行之后屏幕仍不够高时，菜单跟着缩小，输入框和菜单的第一行总留着。
+Multi-line; wide characters count as two columns, and the terminal's real cursor follows the input position (the input method's candidate window is placed by it). A paste of more than 5 lines or 800 characters folds into `[Pasted text #N +L lines]`, expanded on sending; the folded ranges are sent with the `blocks` of `conversations.send`, and the user message is drawn folded in the transcript too. With an empty input box, ↑ recalls the latest message sent in this conversation; while the input box holds a recalled, unchanged message, ↑↓ keep going through the history, and ↓ past the newest returns to empty; with text the user typed, ↑↓ only move the cursor. `/` at the start completes commands, `@` completes members, everyone and files in the project (`projects.files`); for the menu, see "Completion menu" in "Screens". The `@` menu lists at most 8 items. When the screen is still not tall enough after the transcript has given up all its lines, the menu shrinks, and the input box and the menu's first row always stay.
 
-- Enter 发送，消息排在正在跑的回复之后（`queue`）；有回复在跑时 `message.steer`（Tab）把消息插进这次回复（`steer`）。补全菜单开着时 Tab 归补全。`/queue`、`/steer`、`/stop` 是同样的事的命令形式。
-- Esc 的先后：层开着先关层；搜索或选取模式里先退出模式；补全菜单开着先关菜单；都没有且有回复在跑时停止这个对话的全部回复（`conversations.stop`）；否则什么都不做，不清草稿。
+- Enter sends, and the message is queued after the running reply (`queue`); while a reply is running, `message.steer` (Tab) puts the message into that reply (`steer`). While the completion menu is open, Tab belongs to completion. `/queue`, `/steer` and `/stop` are the command forms of the same things.
+- The order of Esc: with a layer open, close the layer first; in search or selection mode, leave the mode first; with the completion menu open, close the menu first; otherwise, while a reply is running, stop all replies in this conversation (`conversations.stop`); otherwise do nothing, and never clear the draft.
 
-## 多对话与待处理
+## Multiple conversations and pending items
 
-标签栏只放用户自己打开的对话。别的对话和等用户处理的事都从最右边的固定标签「待处理 N」进去，这个数字就是「别处有卡住的」提示，不另占一行。
+The tab bar holds only the conversations the user opened. Other conversations and everything waiting for the user are reached through the pinned tab on the far right, "Pending N"; that number is the "something is stuck elsewhere" hint and takes no line of its own.
 
-### 标签的状态标记
+### Tab status marks
 
-● 在跑、! 等你，来自 `conversations` 列表里成员的状态。✓ 完成、✗ 失败：这个对话最新一条智能体回复是 `done` 或 `failed`，而且在已读位置之后；读过（画面在前面且滚到底时 `conversations.read`）就消失。为了在标签切走时也知道，每个开着的标签在挂载期间订阅自己的 `conversations.<id>`（`src/ext/conversation/tab-label.ts`）。
+● running and ! waiting for you come from the members' status in the `conversations` list. ✓ done and ✗ failed: the latest agent reply in this conversation is `done` or `failed` and comes after the read position; it disappears once read (`conversations.read` when the screen is in front and scrolled to the bottom). To know this even when the tab is switched away, every open tab subscribes to its own `conversations.<id>` while mounted (`src/ext/conversation/tab-label.ts`).
 
-### 待处理（`src/ext/pending/`）
+### Pending (`src/ext/pending/`)
 
-- 范围和网页的「待处理」一致：`inbox` 里 `pending` 的提问（工具审批也是提问，选项一般是 allow 和 deny），加上 `tasks` 里 `blocked` 与 `in_review` 的任务；定时任务不算。全部从 wire 的 store 现算，别处答掉或任务换了状态，数字跟着变。外壳显示期间订阅 `inbox`、`tasks`、`agents`（eager target 只随 hello 来一次，之后要订阅才推送）。
-- 固定标签：`待处理 N`，N > 0 时用 warning 色。选中它，或在空输入框里按 `panel.open`（←），打开列表面板。
-- 列表面板（层）：先是待处理项，按时间从旧到新（提问按提出时间，任务按最后改动）；再是没归档的对话，按最近活动，带状态、未读数和标签编号。Enter 在对话上打开它的标签；Enter 在待处理项上，在面板上面再开一个只装这一项的层。
-- 单项层：提问按选项单选、多选或自由文字回答，最后一行是放弃（`inbox.answer` 的 `none`）；等验收的任务可以验收（`tasks.update` 改成 `done`）或留言；卡住的任务可以回复（`tasks.comment`）。答完收起回到面板，人不离开当前标签。`pending.openConversation`（Alt+O）进入这一项所在的对话并关掉这些层。同一项只有一个调用在途；这一项在别处被处理掉时层自己收起。
-- 批阅模式：`review.open`（Alt+R）在外壳的任何标签与首页上都能用（有层开着时不响应），按时间从旧到新一项一项呈现，Tab 跳过，处理完或 Esc 退出；没有待处理时不开层。
-- 不打扰：不自动开层，不响铃，不发终端通知；新来的待处理只改固定标签的数字和颜色。对话里有成员在等用户时，「等你回答」那一行末尾提示批阅模式的键。
+- The scope matches the web UI's "Pending": `pending` questions in `inbox` (tool approvals are questions too, usually with the options allow and deny), plus `blocked` and `in_review` tasks in `tasks`; routines do not count. Everything is computed on the fly from the wire's store, so when something is answered elsewhere or a task changes status, the number follows. While the shell is shown it subscribes to `inbox`, `tasks` and `agents` (an eager target comes only once with hello and is pushed afterwards only to subscribers).
+- Pinned tab: `Pending N`, in the warning colour when N > 0. Selecting it, or pressing `panel.open` (←) in an empty input box, opens the list panel.
+- List panel (a layer): pending items first, oldest to newest (questions by when they were asked, tasks by their last change); then unarchived conversations, by most recent activity, with status, unread count and tab number. Enter on a conversation opens its tab; Enter on a pending item opens another layer over the panel holding just that item.
+- Single item layer: a question is answered by single choice, multiple choice or free text over its options, and the last line is to dismiss it (`none` in `inbox.answer`); a task waiting for review can be approved (`tasks.update` to `done`) or commented on; a blocked task can be replied to (`tasks.comment`). Once answered, the layer closes back to the panel and the user never leaves the current tab. `pending.openConversation` (Alt+O) enters the conversation the item belongs to and closes these layers. Only one call per item is in flight; when the item is handled elsewhere, the layer closes itself.
+- Review mode: `review.open` (Alt+R) works on any tab of the shell and on the home screen (not while a layer is open). It presents pending items one at a time, oldest to newest; Tab skips, and it exits when they are done or on Esc; with nothing pending, no layer opens.
+- No interruptions: no automatic layers, no bell, no terminal notifications; a new pending item only changes the pinned tab's number and colour. When a member of the conversation is waiting for the user, the end of the "Waiting for your answer" line hints at the review mode key.
 
-### 命令
+### Commands
 
-- `/new`：两步。第一步选在哪里：已有项目、输入一个路径，或在主机器上浏览目录（`projects.directories`）。host 的目录浏览是 POSIX shell 脚本，Windows 上的 host 浏览不了，这时用输入路径。第二步勾选成员、指定主理人。开始时才建项目（`projects.create`）再建对话（`conversations.create`），然后打开它的标签；开始之前关掉不在 host 上留下任何东西（项目建好、对话没建成时项目会留下）。
-- `/rename`、`/archive`、`/unarchive`、`/invite`、`/remove`、`/steward`：作用在最前面的对话（`/archive`、`/unarchive` 也可以指名）。成员与主理人不带参数时开选择层。私聊不能加人或移除成员。
-- `/tasks`：没关的任务，等验收与卡住的排前面，Enter 开和待处理同样的单项层。
-- `/artifacts`：产物列表。Enter 取一个一小时有效的预览地址（`artifacts.preview`）显示出来，`y` 经 OSC 52 复制；不替用户开浏览器，因为 host 在远程时浏览器会开在错的机器上。
+- `/new`: two steps. The first picks where: an existing project, a typed path, or browsing directories on the host machine (`projects.directories`). The host's directory browsing is a POSIX shell script, so a host on Windows cannot browse; use a typed path there. The second checks the members and names the steward. Only on start is the project created (`projects.create`) and then the conversation (`conversations.create`), and then its tab opens; closing before the start leaves nothing on the host (if the project was created but the conversation was not, the project stays).
+- `/rename`, `/archive`, `/unarchive`, `/invite`, `/remove`, `/steward`: act on the conversation in front (`/archive` and `/unarchive` can also name one). Without arguments, members and the steward are picked in a layer. A private conversation cannot add or remove members.
+- `/tasks`: open tasks, with those waiting for review and blocked first; Enter opens the same single item layer as for pending items.
+- `/artifacts`: the artifact list. Enter gets a preview address valid for one hour (`artifacts.preview`) and shows it, and `y` copies it through OSC 52; the TUI does not open a browser for the user, because with a remote host the browser would open on the wrong machine.
 
-层里的键（↑↓、PageUp/PageDown、Enter、Space、Tab、Esc）是固定的，不进设定；能改的是上面键位表里的动作。
+The keys inside layers (↑↓, PageUp/PageDown, Enter, Space, Tab, Esc) are fixed and not in the settings; what can be changed are the actions in the keybinding table above.
 
-## 扩展：加命令、加画面
+## Extensions: adding commands and screens
 
-一个功能是 `src/ext/` 下的一个模块（`<名字>.ts(x)` 或 `<名字>/index.ts(x)`），默认导出一个 `Extension`（`src/extensions/types.ts`）。`scripts/gen-extensions.ts` 扫描这个目录，写出被 git 忽略的 `src/extensions.gen.ts`；`build`、`dev`、`test`、`typecheck`、`build:binaries` 都先跑它，`bun run --cwd apps/tui gen` 单独跑。所以加功能只加文件，不改已有文件。注册表在启动时检查扩展 id、命令名、标签页 kind、固定标签 id 不重复，重复就启动失败。
+A feature is a module under `src/ext/` (`<name>.ts(x)` or `<name>/index.ts(x)`) that default-exports an `Extension` (`src/extensions/types.ts`). `scripts/gen-extensions.ts` scans this directory and writes the git-ignored `src/extensions.gen.ts`; `build`, `dev`, `test`, `typecheck` and `build:binaries` all run it first, and `bun run --cwd apps/tui gen` runs it alone. So a feature is added by adding files only, without changing existing files. At startup the registry checks that extension ids, command names, tab kinds and pinned tab ids are unique, and fails to start on a duplicate.
 
-`Extension` 可以带：
+An `Extension` can have:
 
-- `commands`：斜杠命令（`SlashCommand`）。名字和参数名只用英文，没有别名，补全按英文前缀；`summary`、参数说明、例子说明中英各一。`requiredOps` 列出它调的 op。`run(ctx, argText)` 里的 `ctx` 是 `ShellContext`：开层、在状态区提示、读打开的标签（`tabs`、`activeTab`）、开关标签、用编辑器打开文件、把终端交给交互程序（`ssh -t`）、重新载入设定、退出。
-- `views`：一种标签页（`TabView`）。`kind` 是它画的东西的种类（例如对话），`Component` 画主区域，`useTitle`、`useStatus` 是给标签栏用的 hook。可选的 `useQualifiers` 也是 hook，按区分力从强到弱返回区分同名标签的补充说明，标签栏只在显示出来的名字相同时才逐项加上；不给就永远只显示名字。用 `ctx.openTab({ kind, id })` 打开。
-- `pinnedTabs`：标签栏右端的固定标签。选中它（`ctx.selectPinnedTab(id?)`，不给 id 时是最右边那个）时调它的 `onSelect(ctx)`。`useAttention` 返回 true 时用 warning 色画。
-- `Background`：外壳显示期间常驻挂载、不占画面的组件，用来放在外壳任何画面上都有效的键（`useAction`），例如批阅模式。被层盖住、在重连遮罩后面时它的键不触发；外壳收起时卸载。
-- `messages`：这个功能的消息目录。
-- `onConnected(ctx, first)`：每次连上（hello）后调用，`first` 表示本进程第一次。
+- `commands`: slash commands (`SlashCommand`). Names and argument names are English only, with no aliases, and completion is by English prefix; the `summary`, argument descriptions and example descriptions come in English and Chinese. `requiredOps` lists the ops it calls. The `ctx` in `run(ctx, argText)` is a `ShellContext`: open layers, show notices in the status area, read the open tabs (`tabs`, `activeTab`), open and close tabs, open a file in the editor, hand the terminal to an interactive program (`ssh -t`), reload the settings, quit.
+- `views`: a kind of tab (`TabView`). `kind` is the kind of thing it draws (for example a conversation), `Component` draws the main area, and `useTitle` and `useStatus` are hooks for the tab bar. The optional `useQualifiers` is also a hook, returning qualifiers that tell same-named tabs apart, from strongest to weakest; the tab bar adds them one by one only when the displayed names are the same; without it, only the name is ever shown. Opened with `ctx.openTab({ kind, id })`.
+- `pinnedTabs`: pinned tabs at the right end of the tab bar. Selecting one (`ctx.selectPinnedTab(id?)`, the rightmost without an id) calls its `onSelect(ctx)`. When `useAttention` returns true, it is drawn in the warning colour.
+- `Background`: a component that stays mounted while the shell is shown and takes no screen space, for keys that work on any screen of the shell (`useAction`), such as review mode. Its keys do not fire while covered by a layer or behind the reconnect overlay; it unmounts when the shell is put away.
+- `messages`: the feature's message catalog.
+- `onConnected(ctx, first)`: called after every connection (hello); `first` means the first time in this process.
 
-画面里用的 React 接口：`useShell()`、`useConfig()`、`useTheme()`（颜色交给 Ink 前过一次 `inkColor`）、`useRegistry()`（`src/extensions/react.ts`）；`useMessages(catalog)`、`useLocale()`（`src/i18n/react.ts`）；按动作名绑键用 `useAction(action, handler, { isActive })`，自己用 Ink 的 `useInput` 时把 `useInputActive()` 放进 `isActive`，这样被层或重连遮罩盖住时不会收到按键；层的外观用 `LayerFrame`。层属于外壳：一次外壳从一个连接的第一次尝试起，到这个连接被放弃、令牌被拒、临时 host 退出或换 host 为止；外壳收起时所有层一起关掉。`ShellContext` 也按外壳分开，外壳收起之后再经同一个上下文开层什么都不会开，不会盖到下一次外壳上；`onConnected` 里在外壳画出来之前开的层，外壳出现时显示。层回调、按键处理、画面里发起的异步动作用 `ctx.reportFailure(promise)` 包起来，失败时报到状态区，而不是变成未处理的 rejection 让程序崩溃。
+React interfaces for screens: `useShell()`, `useConfig()`, `useTheme()` (pass colours through `inkColor` before handing them to Ink), `useRegistry()` (`src/extensions/react.ts`); `useMessages(catalog)`, `useLocale()` (`src/i18n/react.ts`); bind keys by action name with `useAction(action, handler, { isActive })`, and when using Ink's `useInput` directly put `useInputActive()` into `isActive`, so no keys arrive while covered by a layer or the reconnect overlay; layers look the way `LayerFrame` draws them. Layers belong to the shell: one shell lasts from a connection's first attempt until that connection is given up, its token is rejected, the temporary host exits, or the host changes; when the shell is put away, all layers close together. `ShellContext` is also per shell: once the shell is put away, opening a layer through the same context opens nothing, so it never lands on the next shell; layers opened in `onConnected` before the shell is drawn show when the shell appears. Wrap async actions started from layer callbacks, key handlers and screens in `ctx.reportFailure(promise)`, so a failure is reported in the status area instead of becoming an unhandled rejection that crashes the program.
 
-输入框为空时按 `left` 打开最右边的固定标签（`panel.open`）由输入框自己绑：`useAction("panel.open", () => ctx.selectPinnedTab(), { isActive: 值为空且这个画面在前面 })`。首页的命令输入就是这样做的，对话画面的输入框照做。切走的标签会被卸载，滚动位置这类要保留的状态放进功能自己的 store。
+Opening the rightmost pinned tab with `left` in an empty input box (`panel.open`) is bound by the input box itself: `useAction("panel.open", () => ctx.selectPinnedTab(), { isActive: value is empty and this screen is in front })`. The home screen's command input does this, and the conversation screen's input box does the same. A tab switched away is unmounted, so state that must be kept, such as the scroll position, goes into the feature's own store.
 
-加了或改了命令后跑 `bun run --cwd apps/tui docs`，重新生成命令文档；不跑的话测试会红。
+After adding or changing a command, run `bun run --cwd apps/tui docs` to regenerate the command docs; without it the tests fail.
 
-### 界面文字
+### UI text
 
-界面文字中英两套都要完整。每个功能的文字放在自己的消息目录里，用 `defineMessages({ en: {...}, zh: {...} })` 声明并导出；两种语言的键必须完全相同，少一个键类型检查就失败。占位写 `{name}`，两种语言用同样的占位。测试 `catalog-parity` 遍历所有导出的目录、每个扩展的 `messages` 和每条命令的说明，检查键一一对应、占位相同、没有空串，所以**加文字时中英两边都要加**。产品名、命令名、代码保留原文。React 之外（命令的 `run` 里）用 `translatorFor(catalog, ctx.locale)` 与 `localize(text, ctx.locale)`。
+UI text must be complete in both English and Chinese. Each feature keeps its text in its own message catalog, declared and exported with `defineMessages({ en: {...}, zh: {...} })`; the keys of the two languages must be exactly the same, and type checking fails when one is missing. Placeholders are written `{name}`, the same in both languages. The `catalog-parity` test walks every exported catalog, every extension's `messages` and every command's descriptions, checking that keys correspond one to one, placeholders match, and no string is empty, so **when adding text, add it on both the English and Chinese sides**. Product names, command names and code stay as they are. Outside React (in a command's `run`), use `translatorFor(catalog, ctx.locale)` and `localize(text, ctx.locale)`.
 
-## 编辑器
+## Editor
 
-`ctx.editFile(path)` 用 Ink 的 `suspendTerminal` 挂起界面、交还终端，子进程用继承的 stdio 跑，退出后恢复并重画。编辑器取 `$VISUAL`，其次 `$EDITOR`，都没设时 Windows 用 `notepad`、其他用 `vi`；值可以带参数（`code --wait`）。Windows 上 `.cmd`、`.bat` 经 `cmd.exe` 启动。`ctx.runInteractive(command, args)` 走同一条路。
+`ctx.editFile(path)` suspends the interface with Ink's `suspendTerminal` and hands back the terminal; the child process runs with inherited stdio, and the interface is restored and redrawn after it exits. The editor is `$VISUAL`, then `$EDITOR`; with neither set, `notepad` on Windows and `vi` elsewhere; the value may carry arguments (`code --wait`). On Windows, `.cmd` and `.bat` are started through `cmd.exe`. `ctx.runInteractive(command, args)` takes the same path.
 
-## 命令
+## Commands
 
-命令文档由注册表生成：[英文](../tui/commands.md)、[中文](../tui/commands.zh.md)。地基自带 `/help`、`/config`、`/install-service`；对话扩展带 `/open`、`/queue`、`/steer`、`/stop`；`/new` 与对话管理命令在 `src/ext/manage/`，`/tasks` 在 `src/ext/pending/`，`/artifacts` 在 `src/ext/artifacts/`。
+The command docs are generated from the registry: [English](../tui/commands.md), [Chinese](../tui/commands.zh.md). The foundation brings `/help`, `/config` and `/install-service`; the conversation extension brings `/open`, `/queue`, `/steer` and `/stop`; `/new` and the conversation management commands are in `src/ext/manage/`, `/tasks` in `src/ext/pending/`, and `/artifacts` in `src/ext/artifacts/`.
 
-### 首次设置
+### First-run setup
 
-`src/ext/setup/` 的 `onConnected` 在同一个进程里对每个 host 地址只查一次：等 `providers` 的 `config`、`llm` 的 `accounts.ready`（`llm` 没挂就不等）、`personas` 的 `cards` 到齐（最多 10 秒，到期不查、不打扰），没有可用模型或者没有智能体时，开首次设置的层。不写盘，所以故意不建智能体的 host 每次启动都会进来一次；层的第一行写明按 Esc 离开、之后用 `/setup` 回来。
+`onConnected` in `src/ext/setup/` checks each host address only once per process: it waits for `providers`' `config`, `llm`'s `accounts.ready` (not waited for when `llm` is not loaded) and `personas`' `cards` to arrive (at most 10 seconds; past that it does not check and does not interrupt), and when there is no usable model or no agent, opens the first-run setup layer. Nothing is written to disk, so a host deliberately left without agents gets it once on every start; the layer's first line says Esc leaves it and `/setup` brings it back later.
 
-1. 绑模型账号：就是 `/providers` 的画面，有可用模型才能进下一步。一开始就有可用模型时直接从第二步开始。
-2. 建智能体：照网页的 `onboard.tsx`，每张 persona 卡一个，默认全选，已有同 `persona` 智能体的卡不能勾、不重建；按卡的顺序逐个 `agents.create`，模型用默认可用模型。某个失败就停下，显示原因，重试时跳过已建的。
-3. 邮箱不做。完成后在状态区引导 `/new`。
+1. Link a model account: this is the `/providers` screen, and the next step needs a usable model. When a usable model exists from the start, setup begins at the second step.
+2. Create agents: like the web UI's `onboard.tsx`, one per persona card, all selected by default; a card whose `persona` already has an agent cannot be checked and is not recreated. Cards are created one by one in card order with `agents.create`, using the default usable model. If one fails, it stops and shows why, and a retry skips those already created.
+3. Email is not covered. When done, the status area points to `/new`.
 
-### 设置命令
+### Setup commands
 
-每条命令是 `src/ext/` 下的一个目录，开一个层：列表加对选中项的几个动作，Esc 一步步退回、在列表上关层。画面跟着 host 推来的状态变，不在本地改一份。调用失败一律显示 host 的原话（LLM 网关的错误代码照网页翻译），不吞掉。
+Each command is a directory under `src/ext/` and opens one layer: a list plus a few actions on the selected item, Esc stepping back one level at a time and closing the layer from the list. The screen follows the state the host pushes and keeps no local copy to edit. A failed call always shows the host's own words (LLM gateway error codes translated as in the web UI), never swallowed.
 
-| 命令                       | 调的接口                                                                            | 要点                                                                                                                                                                                                                                                                                                                                                                                                |
-| -------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/providers`               | `llm.loginStart`、`loginPoll`、`loginSubmit`、`loginCancel`、`setEnabled`、`remove` | 只管 LLM 网关的账号：Codex、Grok 走设备码（显示网址与用户码，每 1.5 秒查一次），Google AI Studio 填 key。`config.json` 里的 provider 只计入可用模型，改它用 `/edit-host-config config.json`。host 用了 `--no-llm` 时如实说明                                                                                                                                                                        |
-| `/model [agent]`           | `agents.update`、`agents.runtimes`                                                  | 先选模型，再选思考档，选完才写一次。外部运行时的智能体列那个运行时自己的模型                                                                                                                                                                                                                                                                                                                        |
-| `/agent [agent]`           | `agents.update`                                                                     | 导出成 YAML 临时文件，用编辑器打开，读回后校验；YAML 坏了指出行列，字段无效逐条指出键名，host 拒绝时显示原话，都可以按 Enter 重新编辑同一个文件。只发变了的键（`runtime` 变了时连同 `model` 一起发）。host 不按版本拒绝旧写入，所以发之前再读一次，`updatedAt` 变了就报冲突、让用户重新编辑，用户写的那份另存。编辑期间外壳结束或换了 host 时不发，用户写的内容留在文件里，下一个外壳出现时列出路径 |
-| `/approvals`               | `inbox.setApprovals`                                                                | 每次改动发完整名单                                                                                                                                                                                                                                                                                                                                                                                  |
-| `/plugins`                 | `agents.update`（`plugins`）                                                        | host 没有全局开关，启用是按智能体的；需要先配置的插件不能新启用                                                                                                                                                                                                                                                                                                                                     |
-| `/mcp`                     | `mcp.connect`、`reconnect`、`login`、`completeLogin`                                | 登录的 `redirectOrigin` 是连接地址的 origin；浏览器回不到 host 时，把跳转后的地址贴回来                                                                                                                                                                                                                                                                                                             |
-| `/machines`                | `machines.enroll`、`addresses`、`approve`、`revoke`                                 | 新机器连的地址：有 tailnet 地址用它；否则连接地址不是 loopback 时用它；否则交给 host 定。用安装码加进来的机器要贴指纹批准                                                                                                                                                                                                                                                                           |
-| `/edit-host-config [file]` | `providers.reload`                                                                  | `config.json` 或 `mcp.json`。临时 host 或 loopback 地址算本机，直接用编辑器打开 `~/.eta/<文件>`（host 的数据目录固定在这里）；远程且设定有 `ssh.target` 时跑 `ssh -t <target> -- ${EDITOR:-vi} ~/.eta/<文件>`，参数数组直接交给 spawn，变量与 `~` 由远端 shell 展开；否则只说明路径                                                                                                                 |
-| `/setup`                   |                                                                                     | 手动打开首次设置                                                                                                                                                                                                                                                                                                                                                                                    |
+| Command                    | Interfaces called                                                                   | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| -------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/providers`               | `llm.loginStart`, `loginPoll`, `loginSubmit`, `loginCancel`, `setEnabled`, `remove` | Only the LLM gateway's accounts: Codex and Grok use a device code (showing the URL and user code, polling every 1.5 seconds), Google AI Studio takes a key. Providers in `config.json` only count towards the usable models; change them with `/edit-host-config config.json`. When the host runs with `--no-llm`, it says so                                                                                                                                                                                                                                                                                                                                                                                               |
+| `/model [agent]`           | `agents.update`, `agents.runtimes`                                                  | Pick the model first, then the thinking level, and write once only after both are picked. An agent on an external runtime lists that runtime's own models                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `/agent [agent]`           | `agents.update`                                                                     | Exported to a temporary YAML file, opened in the editor, and validated after reading it back; broken YAML points to the line and column, invalid fields name each key, and a host rejection shows the host's words; in each case Enter edits the same file again. Only changed keys are sent (with `model` alongside when `runtime` changed). The host does not reject old writes by version, so the agent is read once more before sending, and a changed `updatedAt` reports a conflict and asks the user to edit again, saving what the user wrote separately. If the shell ends or the host changes during editing, nothing is sent; what the user wrote stays in the file, and the next shell to appear lists its path |
+| `/approvals`               | `inbox.setApprovals`                                                                | Every change sends the full list                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `/plugins`                 | `agents.update` (`plugins`)                                                         | The host has no global switch; plugins are enabled per agent. A plugin that needs configuring first cannot be newly enabled                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `/mcp`                     | `mcp.connect`, `reconnect`, `login`, `completeLogin`                                | The sign-in's `redirectOrigin` is the connection address's origin; when the browser cannot get back to the host, paste the address it was redirected to                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `/machines`                | `machines.enroll`, `addresses`, `approve`, `revoke`                                 | The address a new machine connects to: the tailnet address when there is one; otherwise the connection address when it is not loopback; otherwise left to the host. A machine added with an install code is approved by pasting its fingerprint                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `/edit-host-config [file]` | `providers.reload`                                                                  | `config.json` or `mcp.json`. A temporary host or a loopback address counts as local, and `~/.eta/<file>` opens directly in the editor (the host's data directory is fixed there); for a remote host with `ssh.target` in the settings, it runs `ssh -t <target> -- ${EDITOR:-vi} ~/.eta/<file>`, passing the argument array straight to spawn so the remote shell expands the variable and `~`; otherwise it only explains the path                                                                                                                                                                                                                                                                                         |
+| `/setup`                   |                                                                                     | Open first-run setup by hand                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
-可选插件（`llm`）的 op 不放进 `requiredOps`，没挂时说「这台 host 没开 X」，而不是「host 版本太旧」。
+Ops of the optional plugin (`llm`) are not put in `requiredOps`; when it is not loaded, the TUI says "this host has no X plugin" rather than "host too old".
 
-命令共用的零件在 `src/ext/kit/`（没有 `index`，所以不算功能）：读 target 的 `useTarget`（读内容一律经它订阅：急切 target 只在 hello 里送一次，之后只推给订阅者）、可滚动的选择列表与勾选列表（一次读入的多个键逐个处理）、文本输入、一次只跑一个的 host 调用（`useHostCall`）、调用失败的文字、模型清单（照网页 `queries/providers.ts`）、找智能体、连接地址。测试用 `test/ext-support/` 的 `renderWithHost`：进程内的真 host、真连接控制器、真 `App`。
+Parts shared by the commands are in `src/ext/kit/` (it has no `index`, so it is not a feature): `useTarget` for reading a target (all reads subscribe through it: an eager target is sent only once in hello and afterwards pushed only to subscribers), scrollable pick lists and check lists (several keys read at once are handled one by one), text input, host calls that run one at a time (`useHostCall`), the text for failed calls, the model list (following the web UI's `queries/providers.ts`), finding agents, and the connection address. Tests use `renderWithHost` from `test/ext-support/`: a real in-process host, a real connection controller, a real `App`.
 
-## 构建
+## Build
 
-`bun run --cwd apps/tui build:binaries` 交叉编译出 `apps/tui/out/eta-linux-x64`、`eta-darwin-arm64`、`eta-windows-x64.exe`。版本号写进程序（`eta --version` 打印 `eta <版本>`），依次取环境变量 `ETA_TUI_VERSION`、`ETA_DAEMON_VERSION`，都没有时是 `dev`。脚本用 `Bun.build` 的 compile，并把 Ink 的可选依赖 `react-devtools-core` 换成空模块：直接 `bun build --compile --external` 编出的程序一启动就因为找不到它而退出。
+`bun run --cwd apps/tui build:binaries` cross-compiles `apps/tui/out/eta-linux-x64`, `eta-darwin-arm64` and `eta-windows-x64.exe`. The version number is written into the program (`eta --version` prints `eta <version>`), taken from the `ETA_TUI_VERSION` environment variable, then `ETA_DAEMON_VERSION`, and `dev` when neither is set. The script uses `Bun.build`'s compile and replaces Ink's optional dependency `react-devtools-core` with an empty module: a program built directly with `bun build --compile --external` exits as soon as it starts because it cannot find it.
 
-开发时 `bun run --cwd apps/tui dev` 从源码运行。从源码跑默认用 React 的开发版；要用生产版，启动前设 `NODE_ENV=production`：
+During development, `bun run --cwd apps/tui dev` runs from source. Running from source uses React's development build by default; for the production build, set `NODE_ENV=production` before starting:
 
 ```bash
 NODE_ENV=production bun run --cwd apps/tui dev
@@ -292,8 +292,8 @@ NODE_ENV=production bun run --cwd apps/tui dev
 $env:NODE_ENV = 'production'; bun run --cwd apps/tui dev
 ```
 
-编译出的程序已是生产版：`build:binaries` 在编译时把 `process.env.NODE_ENV` 定为 `production`。
+The compiled program is already the production build: `build:binaries` sets `process.env.NODE_ENV` to `production` at compile time.
 
-## 安装与分发
+## Installation and distribution
 
-安装脚本同时装 `eta` 与 `eta-host`，这一节随发布流程补全。
+The install script installs both `eta` and `eta-host`; this section will be completed along with the release process.

@@ -1,32 +1,32 @@
-# 终端界面（apps/tui）
+# Terminal interface (apps/tui)
 
-`eta` 命令：React 19 加 Ink 8 画在终端备用屏幕上的 host 客户端。组成、连接、设定文件、画面与扩展接口见 [`docs/architecture/tui.md`](../../docs/architecture/tui.md)，命令见 [`docs/tui/commands.md`](../../docs/tui/commands.md)。
+The `eta` command: a host client drawn with React 19 and Ink 8 on the terminal's alternate screen. Its parts, connection, settings files, screens and extension interface are in [`docs/architecture/tui.md`](../../docs/architecture/tui.md); the commands are in [`docs/tui/commands.md`](../../docs/tui/commands.md).
 
-准则：**不照搬桌面端**。一次只展示一件事，别的按需调出、用完收起；齐全是桌面端的事。打扰不超过桌面端：不自动弹层、不响铃、不发终端通知。
+Guideline: **do not copy the desktop app**. Show one thing at a time; bring up anything else on demand and put it away when done. Completeness is the desktop app's job. Be no more intrusive than the desktop app: no automatic layers, no bell, no terminal notifications.
 
-## 约定
+## Conventions
 
-- 数据只走 wire，和 Web 一样：`src/connection/wire.ts` 的那一条 WebSocket，订阅 target、调 `target.action`。类型来自 `@eta/client-contracts`，**动手前读 `docs/architecture/` 和 `apps/web/src` 里同一功能的实现**，语义保持一致，不要发明 op。host 缺接口时去改 host，不在 TUI 里绕。
-- 不碰 `~/.eta`。找 host、起停进程、写设定都在 `src/connection/`，它只交结构化结果，不产出给人看的文字；界面只读控制器的状态、调它的动作。
-- 加功能只加文件：`src/ext/` 下一个模块默认导出一个 `Extension`，`scripts/gen-extensions.ts` 生成注册表，不改已有文件。
-- 命令名和参数名只用英文，没有别名。加了或改了命令跑 `bun run --cwd apps/tui docs` 重新生成命令文档，否则测试会红。
-- 界面文字用 `defineMessages({ en, zh })`，中英两套键一一对应、占位相同；`catalog-parity` 测试守着。产品名、命令名、代码保留原文。
-- 自己用 Ink 的 `useInput` 时把 `useInputActive()` 放进 `isActive`；按动作名绑键用 `useAction`，键位在设定里可改，不写死。
-- 层回调、按键处理、画面里发起的异步动作用 `ctx.reportFailure(promise)` 包起来，失败报到状态区，不让未处理的 rejection 弄崩程序。
-- 颜色只用主题（`useTheme()`，交给 Ink 前过 `inkColor`），不写死色码。
+- Data goes only over the wire, like the web UI: the one WebSocket in `src/connection/wire.ts`, subscribing to targets and calling `target.action`. Types come from `@eta/client-contracts`. **Before starting, read `docs/architecture/` and the implementation of the same feature in `apps/web/src`**, keep the semantics the same, and do not invent ops. When the host lacks an interface, change the host instead of working around it in the TUI.
+- Do not touch `~/.eta`. Finding a host, starting and stopping processes and writing settings all live in `src/connection/`, which hands over only structured results and produces no text for people; the UI only reads the controller's state and calls its actions.
+- Add a feature by adding files only: a module under `src/ext/` default-exports an `Extension`, and `scripts/gen-extensions.ts` generates the registry, with no changes to existing files.
+- Command and argument names are English only, with no aliases. After adding or changing a command, run `bun run --cwd apps/tui docs` to regenerate the command docs, or the tests fail.
+- UI text uses `defineMessages({ en, zh })`, with the English and Chinese keys in one-to-one correspondence and the same placeholders; the `catalog-parity` test guards this. Product names, command names and code stay as they are.
+- When using Ink's `useInput` directly, put `useInputActive()` into `isActive`; bind keys by action name with `useAction`, so keybindings can be changed in the settings instead of being hard-coded.
+- Wrap async actions started from layer callbacks, key handlers and screens in `ctx.reportFailure(promise)`, so a failure is reported in the status area instead of an unhandled rejection crashing the program.
+- Colours come only from the theme (`useTheme()`, passed through `inkColor` before reaching Ink); no hard-coded colour codes.
 
-## 测试
+## Tests
 
-- 连接层与命令对**真实 host** 测：`test/support/host.ts` 在临时目录的空闲端口上起进程内 host。核心路径不对替身测。
-- 界面用 Ink 的测试渲染断言画面文字与按键行为，辅助在 `test/ui-support/`。
-- 一律用临时目录（`test/support/temp.ts`），不碰真实的 `~/.eta`；测试不对外网发请求，要用模型或登录端点就指向本地。
+- Test the connection layer and commands against a **real host**: `test/support/host.ts` starts an in-process host on a free port in a temporary directory. Core paths are not tested against stand-ins.
+- Test the UI with Ink's test renderer, asserting on screen text and key behaviour; helpers are in `test/ui-support/`.
+- Always use temporary directories (`test/support/temp.ts`) and never touch the real `~/.eta`; tests make no requests to the outside network, and anything needing a model or a sign-in endpoint points at a local address.
 
-## 命令
+## Commands
 
 ```sh
-bun run --cwd apps/tui dev             # 从源码运行
+bun run --cwd apps/tui dev             # run from source
 bun run --cwd apps/tui test
 bun run --cwd apps/tui typecheck
-bun run --cwd apps/tui docs            # 重新生成 docs/tui/commands*.md
-bun run --cwd apps/tui build:binaries  # 交叉编译到 apps/tui/out/
+bun run --cwd apps/tui docs            # regenerate docs/tui/commands*.md
+bun run --cwd apps/tui build:binaries  # cross-compile into apps/tui/out/
 ```
