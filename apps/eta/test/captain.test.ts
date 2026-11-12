@@ -601,6 +601,27 @@ describe("captain controls", () => {
     expect(w.host.product.baseSystemPromptFor()).toBe("A new base.");
   });
 
+  it("applies an approved operation once, however often it is approved", async () => {
+    const { w } = await captainWorld();
+    const captain = w.host.product.captain;
+    const before = captain.settingHistory("retryLimit").length;
+    const operation = captain.createOperation({
+      kind: "set_setting",
+      requiresApproval: true,
+      payload: { key: "retryLimit", value: 3 },
+    });
+    const decided = await Promise.allSettled([
+      captain.decideOperation(operation.id, "approve"),
+      captain.decideOperation(operation.id, "approve"),
+    ]);
+    expect(decided.map((one) => one.status).sort()).toEqual([
+      "fulfilled",
+      "rejected",
+    ]);
+    expect(captain.store.operation(operation.id)!.status).toBe("applied");
+    expect(captain.settingHistory("retryLimit")).toHaveLength(before + 1);
+  });
+
   it("redacts credentials from text and structured tool results", async () => {
     const { redactJson, redactToolResult } = await import(
       "../src/captain/redact"

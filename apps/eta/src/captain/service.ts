@@ -636,6 +636,10 @@ export class CaptainService {
       this.#deps.changed();
       return rejected;
     }
+    // Taken before anything is awaited: a second approval while this one is applying finds it no
+    // longer pending, instead of applying it twice.
+    this.#deps.store.setOperation(operationId, "approved");
+    this.#deps.changed();
     try {
       const result = await this.#applyOperation(operation);
       const applied = this.#deps.store.setOperation(
