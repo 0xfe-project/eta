@@ -4,7 +4,7 @@
  * (Thinker, Insighter, Executor, Artist) plus any card file a test writes into its home.
  */
 import type { AgentView } from "@eta/client-contracts";
-import type { WireStatus } from "../../src/connection/types";
+import type { WireState, WireStatus } from "../../src/connection/types";
 import type { HostRendered } from "../ext-support/render-with-host";
 import { describe, expect, it } from "vitest";
 import { createSetupExtension } from "../../src/ext/setup";
@@ -22,6 +22,12 @@ const TITLE = "Esc to leave; come back later with /setup";
 const STEP_ONE = "Step 1 of 2";
 const STEP_TWO = "Step 2 of 2";
 const BUILTIN = ["Thinker", "Insighter", "Executor", "Artist"];
+
+/** The agents on a wire that a person made: every host also makes Captain. */
+const madeAgents = (wire: { store: { getState: () => WireState } }) =>
+  (
+    (wire.store.getState().targets.agents?.sections.list ?? []) as AgentView[]
+  ).filter((agent) => agent.systemRole !== "captain");
 const LOCAL = { id: "local", models: ["m1", "m2"] };
 
 function markedLine(r: HostRendered): string {
@@ -237,12 +243,12 @@ describe("readSetupFacts on a connection that has been open a while", () => {
     const dataDir = await dataDirWith({ providers: [LOCAL] });
     const host = await testHost({ dataDir });
     await withHostWire(host, async (wire) => {
-      // Hello carried an empty list, and nothing on this connection follows the agents.
-      expect(wire.store.getState().targets.agents?.sections.list).toEqual([]);
+      // Hello carried no agent but Captain, and nothing on this connection follows the agents.
+      expect(madeAgents(wire)).toEqual([]);
       await withHostWire(host, (other) =>
         other.call("agents", "create", { name: "Ada", model: "local:m1" }),
       );
-      expect(wire.store.getState().targets.agents?.sections.list).toEqual([]);
+      expect(madeAgents(wire)).toEqual([]);
 
       const facts = await readSetupFacts(wire, "en", 10_000);
       expect(facts?.agents.map((agent) => agent.name)).toEqual(["Ada"]);

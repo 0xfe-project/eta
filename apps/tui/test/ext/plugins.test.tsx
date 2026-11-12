@@ -59,7 +59,9 @@ async function writePlugin(dataDir: string, spec: PluginSpec): Promise<void> {
 const views = (host: HostObserver) =>
   host.section<PluginView[]>("plugins", "list") ?? [];
 const agents = (host: HostObserver) =>
-  host.section<AgentView[]>("agents", "list") ?? [];
+  (host.section<AgentView[]>("agents", "list") ?? []).filter(
+    (agent) => agent.systemRole !== "captain",
+  );
 const pluginsOf = (host: HostObserver, name: string) =>
   [
     ...(agents(host).find((agent) => agent.name === name)?.plugins ?? []),

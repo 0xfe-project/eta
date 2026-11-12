@@ -16,6 +16,7 @@ function agent(id: string, name: string): AgentView {
     model: null,
     thinkingLevel: null,
     machineId: null,
+    systemRole: null,
     plugins: [],
     skippedPlugins: [],
     home: "",

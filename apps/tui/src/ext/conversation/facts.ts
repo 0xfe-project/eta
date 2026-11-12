@@ -1,5 +1,6 @@
 /** What the view, the tab label and the commands read off a conversation's state. */
 import type {
+  AgentView,
   ConversationInfo,
   ConversationSummary,
   MemberView,
@@ -10,6 +11,7 @@ import type { WireState } from "../../connection/types";
 import type { TabStatus } from "../../extensions/types";
 import type { FeedState } from "./feed/store";
 import { agentsOf } from "../../extensions/eager-lists";
+import { withoutCaptainConversation } from "../kit/captain";
 import { RUNNING_STATUSES } from "./model/timeline";
 
 /** A member as mentions and the composer's `@` menu know it. */
@@ -53,14 +55,20 @@ export function replyingNames(
   return [...new Set(ids)].map((id) => agentName(state, id));
 }
 
-/** The eager `conversations` list as the wire holds it; empty before it arrives. */
+const NO_CONVERSATIONS: readonly ConversationSummary[] = [];
+
+/**
+ * The eager `conversations` list as the wire holds it, without Captain's own conversation; empty
+ * before it arrives.
+ */
 export function conversationList(
   state: WireState,
 ): readonly ConversationSummary[] {
-  return (
+  return withoutCaptainConversation(
     (state.targets.conversations?.sections.list as
       | ConversationSummary[]
-      | undefined) ?? []
+      | undefined) ?? NO_CONVERSATIONS,
+    state.targets.agents?.sections.list as AgentView[] | undefined,
   );
 }
 

@@ -12,6 +12,7 @@ import type {
   TaskActivityView,
 } from "@eta/client-contracts";
 import type { WireState } from "../../connection/types";
+import { withoutCaptainConversation } from "../kit/captain";
 
 type Targets = Pick<WireState, "targets">;
 
@@ -47,8 +48,16 @@ export const inboxList = (state: Targets) =>
 export const taskList = (state: Targets) =>
   listOf<BoardTaskView>(state, "tasks");
 export const agentList = (state: Targets) => listOf<AgentView>(state, "agents");
+const NO_CONVERSATIONS: readonly ConversationSummary[] = [];
+
+/** The conversations, without Captain's own one. */
 export const conversationSummaries = (state: Targets) =>
-  listOf<ConversationSummary>(state, "conversations");
+  withoutCaptainConversation(
+    (state.targets.conversations?.sections.list as
+      | ConversationSummary[]
+      | undefined) ?? NO_CONVERSATIONS,
+    state.targets.agents?.sections.list as AgentView[] | undefined,
+  );
 
 export const questionKey = (id: string) => `question:${id}`;
 export const taskKey = (id: string) => `task:${id}`;

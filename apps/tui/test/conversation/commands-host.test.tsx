@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { HANG, say } from "../../../eta/test/support/models";
+import { conversationList } from "../../src/ext/conversation/facts";
 import { until } from "../support/temp";
 import { KEYS, plain } from "../ui-support/render";
 import { askedFor, hostWorld, screenShows, withAda } from "./view-host-world";
@@ -98,12 +99,7 @@ describe("/open", () => {
     await world.conversation(project.id, [ada.id], "Release planning");
     const r = await world.show({ tabs: [], activeTab: undefined });
     await until(
-      () =>
-        (
-          world.raw.store.getState().targets.conversations?.sections.list as
-            | unknown[]
-            | undefined
-        )?.length === 2,
+      () => conversationList(world.raw.store.getState()).length === 2,
       10_000,
       "the list",
     );

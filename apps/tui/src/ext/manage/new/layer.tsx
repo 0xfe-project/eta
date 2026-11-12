@@ -27,6 +27,7 @@ import { useListHeight } from "../../../ui/components/row-cursor";
 import { RowList } from "../../../ui/components/row-list";
 import { inkColor } from "../../../ui/theme";
 import { CONVERSATION_VIEW } from "../../conversation/kind";
+import { ordinaryAgents } from "../../kit/captain";
 import { primaryMachine, startableProjects } from "../facts";
 import { chooseSteward, initialPick, toggleMember } from "../member-pick";
 import { manageMessages } from "../messages";
@@ -151,7 +152,9 @@ export function NewConversationLayer({
       for (const release of releases) release();
     };
   }, [wire]);
-  const agents = useStore(wire.store, agentsOf);
+  const agents = useStore(wire.store, (state) =>
+    ordinaryAgents(agentsOf(state)),
+  );
   const projects = useStore(wire.store, (state) => state.targets.projects);
   const machines = useStore(wire.store, (state) => state.targets.machines);
   const state = wire.store.getState();

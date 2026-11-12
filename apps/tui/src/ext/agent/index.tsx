@@ -8,6 +8,7 @@ import type { ShellWatch } from "./shell-watch";
 import { translatorFor } from "../../i18n/messages";
 import { AgentPicker } from "../kit/agent-picker";
 import { findAgent } from "../kit/agents";
+import { ordinaryAgents } from "../kit/captain";
 import { noteShell } from "./kept-notice";
 import { readLive } from "./live";
 import { agentMessages } from "./messages";
@@ -84,7 +85,10 @@ const agent: SlashCommand = {
         ready: (s) => Array.isArray(s.list),
         failure: t("noState", { target: "agents" }),
       });
-      const found = findAgent(sections.list as AgentView[], argText);
+      const found = findAgent(
+        ordinaryAgents(sections.list as AgentView[]),
+        argText,
+      );
       if ("agent" in found) await editAgent(shell, found.agent.id);
       else if ("ambiguous" in found) pickThenEdit(ctx, found.ambiguous[0]?.id);
       else ctx.notify(t("notFound", { text: argText }), "error");
