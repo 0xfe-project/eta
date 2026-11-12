@@ -30,6 +30,26 @@ export interface TestHostOptions {
   overrides?: Partial<HostOptions>;
 }
 
+/** A loopback address nothing answers on: where a connector without a fake logs in. */
+export const UNREACHABLE = "http://127.0.0.1:9";
+
+/**
+ * The gateway's options with every connector that logs in to a provider on the internet pointed
+ * at `UNREACHABLE`, unless the test gave it a fake. No gateway stays no gateway.
+ */
+export function offlineGateway(llm: HostOptions["llm"]): HostOptions["llm"] {
+  if (llm === undefined || llm === false) return llm;
+  const given = llm === true ? {} : llm;
+  return {
+    ...given,
+    endpoints: {
+      codexIssuer: UNREACHABLE,
+      gemini: UNREACHABLE,
+      ...given.endpoints,
+    },
+  };
+}
+
 export async function testHost(options: TestHostOptions = {}): Promise<Host> {
   const dataDir = options.dataDir ?? (await tempDir("eta-tui-host-"));
   let tokenFile: string | undefined;
@@ -57,6 +77,7 @@ export async function testHost(options: TestHostOptions = {}): Promise<Host> {
     },
     ...(tokenFile === undefined ? {} : { tokenFile }),
     ...options.overrides,
+    llm: offlineGateway(options.overrides?.llm),
   });
   hosts.add(host);
   return host;

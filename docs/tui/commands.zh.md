@@ -6,6 +6,35 @@
 
 eta 终端界面的斜杠命令，在首页或对话的输入框里输入。命令名和参数名一律是英文。
 
+## /agent
+
+```text
+/agent [agent]
+```
+
+用编辑器以 YAML 编辑智能体的设定
+
+### 参数
+
+- `agent` (选填): 智能体的名字或 id；不给时从列表里选
+
+### 例子
+
+- `/agent`: 选一个智能体来编辑
+- `/agent Ada`: 编辑名叫 Ada 的智能体
+
+## /approvals
+
+```text
+/approvals
+```
+
+查看运行前要先问过的工具，添加或删除
+
+### 例子
+
+- `/approvals`: 让某个工具每次调用前先问过
+
 ## /archive
 
 ```text
@@ -46,6 +75,23 @@ eta 终端界面的斜杠命令，在首页或对话的输入框里输入。命�
 ### 例子
 
 - `/config`: 编辑设定
+
+## /edit-host-config
+
+```text
+/edit-host-config [file]
+```
+
+用编辑器修改 host 的 config.json 或 mcp.json
+
+### 参数
+
+- `file` (选填): config.json 或 mcp.json；不给时从两者中选
+
+### 例子
+
+- `/edit-host-config config.json`: 修改 host 的模型 provider 设定
+- `/edit-host-config mcp.json`: 修改 host 的 MCP 服务器
 
 ## /help
 
@@ -93,6 +139,47 @@ eta 终端界面的斜杠命令，在首页或对话的输入框里输入。命�
 - `/invite`: 选要邀请谁
 - `/invite cleo`: 邀请 Cleo
 
+## /machines
+
+```text
+/machines
+```
+
+查看机器，添加、批准或撤销
+
+### 例子
+
+- `/machines`: 再加一台给智能体干活的机器
+
+## /mcp
+
+```text
+/mcp
+```
+
+查看智能体的 MCP 服务器，连接或登录
+
+### 例子
+
+- `/mcp`: 登录需要登录的服务器
+
+## /model
+
+```text
+/model [agent]
+```
+
+选智能体的模型和思考档
+
+### 参数
+
+- `agent` (选填): 智能体的名字、名字开头或 id；不给时会先问
+
+### 例子
+
+- `/model`: 从列表里选智能体
+- `/model Ada`: 设 Ada 的模型
+
 ## /new
 
 ```text
@@ -125,6 +212,30 @@ eta 终端界面的斜杠命令，在首页或对话的输入框里输入。命�
 ### 例子
 
 - `/open release`: 打开名字以“release”开头或包含它的对话
+
+## /plugins
+
+```text
+/plugins
+```
+
+查看 host 上的插件，给智能体启用或停用
+
+### 例子
+
+- `/plugins`: 选哪些智能体用某个插件
+
+## /providers
+
+```text
+/providers
+```
+
+查看与连接模型网关的订阅账号和 API key
+
+### 例子
+
+- `/providers`: 连接 Codex、Grok 或 Google AI Studio 账号
 
 ## /queue
 
@@ -174,6 +285,18 @@ eta 终端界面的斜杠命令，在首页或对话的输入框里输入。命�
 ### 例子
 
 - `/rename Launch plan`: 把对话改名为“Launch plan”
+
+## /setup
+
+```text
+/setup
+```
+
+打开首次设置：绑模型账号，再建智能体
+
+### 例子
+
+- `/setup`: 回到离开的首次设置
 
 ## /steer
 

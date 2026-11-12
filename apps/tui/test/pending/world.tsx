@@ -28,6 +28,7 @@ import { wireUrl } from "../../src/connection/address";
 import { Wire } from "../../src/connection/wire";
 import { CONVERSATION_VIEW } from "../../src/ext/conversation/kind";
 import { useRegistry, useShell } from "../../src/extensions/react";
+import { WITHOUT_SETUP } from "../conversation/view-host-world";
 import { baseUrl, testHost } from "../support/host";
 import { tempDir, until } from "../support/temp";
 import { renderApp } from "../ui-support/app";
@@ -327,6 +328,7 @@ export async function pendingWorld() {
       patch: { wire },
       state,
       extensions: options.extensions ?? [],
+      without: WITHOUT_SETUP,
       columns: options.columns ?? 100,
       rows: options.rows ?? 30,
       config: options.config ?? testConfig(),

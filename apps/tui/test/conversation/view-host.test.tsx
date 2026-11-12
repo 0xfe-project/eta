@@ -288,9 +288,9 @@ describe("a reply in flight", () => {
     expect(stops()).toEqual([]);
 
     await r.type("/");
-    await screenShows(r, "/open");
+    await screenShows(r, "/help");
     await r.press(KEYS.escape);
-    await screenShows(r, (s) => !s.includes("/open"));
+    await screenShows(r, (s) => !s.includes("/help"));
     expect(stops()).toEqual([]);
     expect(plain(r)).toContain("› /");
     expect(await replyStatus()).toBe("working");

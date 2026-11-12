@@ -18,7 +18,7 @@ import type { RenderedApp } from "../ui-support/app";
 import { afterEach } from "vitest";
 import { WireError } from "../../src/connection/wire";
 import { CONVERSATION_VIEW } from "../../src/ext/conversation/kind";
-import { hostWorld } from "../conversation/view-host-world";
+import { hostWorld, WITHOUT_SETUP } from "../conversation/view-host-world";
 import { baseUrl } from "../support/host";
 import { until } from "../support/temp";
 import { renderApp } from "../ui-support/app";
@@ -157,6 +157,7 @@ export async function manageWorld(
       phase: { name: "connected", url: baseUrl(world.host), temporary: false },
       patch: { wire: wire.client },
       state,
+      without: WITHOUT_SETUP,
       ...size,
     });
     cleanups.push(() => r.unmount());

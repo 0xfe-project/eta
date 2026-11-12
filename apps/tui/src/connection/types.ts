@@ -10,6 +10,12 @@ import type { ConnectionSetting, SaveProblem } from "../config/types";
 export interface TargetState {
   sections: Record<string, unknown>;
   revisions: Record<string, string>;
+  /**
+   * 0: the copy is not being kept up to date (it came with `hello`, or its last user has left).
+   * Above 0: the copy last came from the state frames of a subscription that is still held. It
+   * follows the host while the connection is open; between a drop and the next `hello` it may
+   * lag behind the host.
+   */
   version: number;
 }
 
