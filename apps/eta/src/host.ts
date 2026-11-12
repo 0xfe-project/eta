@@ -201,9 +201,8 @@ export async function startHost(options: HostOptions): Promise<Host> {
                 : buildsIn(options.daemonBuilds),
           }),
       ...(options.ssh === undefined ? {} : { ssh: options.ssh }),
-      ...(options.upgrade === undefined
-        ? {}
-        : { upgrade: options.upgrade, mcp: options.mcp }),
+      ...(options.upgrade === undefined ? {} : { upgrade: options.upgrade }),
+      ...(options.mcp === undefined ? {} : { mcp: options.mcp }),
     });
     const web = createWebRoutes(options.webDir);
     server = await assembleServer({
