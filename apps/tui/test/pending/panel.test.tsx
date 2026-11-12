@@ -166,6 +166,10 @@ describe("a long panel", () => {
     for (let i = 1; i <= 16; i += 1) {
       const name = `Room ${String(i).padStart(2, "0")}`;
       names.push(name);
+      // Each in a millisecond of its own: two made in the same one are ordered by their random
+      // ids, and the order below would only hold by luck (it did not on a fast CI machine).
+      const before = Date.now();
+      while (Date.now() === before) await new Promise((r) => setTimeout(r, 1));
       await w.conversation(place.id, [owner.id], name);
     }
     // Newest first: the room made last is at the top.
