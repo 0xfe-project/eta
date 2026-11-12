@@ -91,6 +91,7 @@ import { memoryPlugin } from "./memory/plugin";
 import { pluginsPlugin } from "./plugins/plugin";
 import { Plugins } from "./plugins/service";
 import { pluginSessionTools } from "./plugins/tools";
+import { checkDirectory } from "./projects/check";
 import { projectsPlugin } from "./projects/plugin";
 import { ProjectStore } from "./projects/store";
 import { routinesPlugin } from "./routines/plugin";
@@ -668,6 +669,7 @@ export function createProduct(options: {
     runner: taskRunner,
     changed,
     warn,
+    checkDirectory: (machine, path) => checkDirectory(machine, hub, path),
   });
   inbox.onOpened((interaction) => captain.inboxOpened(interaction));
   inbox.onSettled((interaction, sourceInteractionId) =>

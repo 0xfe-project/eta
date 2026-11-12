@@ -16,7 +16,9 @@ import { readFile } from "node:fs/promises";
 import { defineTool, text, toKernelTool, toolError } from "@eta/harness";
 import { Type } from "typebox";
 import { interactionId } from "../inbox/store";
+import { isTaskSession } from "../tasks/session-key";
 import { redactJson, redactText, redactValue } from "./redact";
+import { GroupConflictError } from "./service";
 
 export interface CaptainToolDeps {
   service: CaptainService;
@@ -344,6 +346,66 @@ export function captainSessionTools(
           });
           return text(assignmentText(result), result);
         } catch (error) {
+          return toolError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    });
+
+    const proposeGroup = defineTool({
+      name: "propose_group",
+      description: [
+        "Propose a new group conversation. Nothing is created yet: the proposal appears as a card in this conversation, and only the user's confirmation creates the group (adding the directory as a project first when it is not one). Every proposal needs that confirmation.",
+        "Before proposing, call list_conversations: if a suitable group already exists, use it with assign_in_group instead. A group with the same name in the same project is a conflict; the error returns that group's conversationId.",
+        "Directory: give projectId for an existing project, or path (absolute) plus optional machineId (default: the primary machine) for a directory that must already exist on that machine, e.g. a repository you just cloned. An agent's own workspace or an archived project is refused.",
+        "memberIds needs at least one agent and must not include you; stewardId must be one of the members.",
+        "Several groups can be proposed in one turn; each gets its own card. Do not wait for the decision: once everything is proposed, end your turn. For each proposal the user confirms or rejects, a message in this conversation tells you the outcome and, if created, the new group's conversationId; then assign work there with assign_in_group.",
+      ].join(" "),
+      parameters: Type.Object({
+        name: Type.String({ description: "The group's name." }),
+        projectId: Type.Optional(
+          Type.String({ description: "An existing project. Or give path." }),
+        ),
+        path: Type.Optional(
+          Type.String({
+            description:
+              "An existing directory on the machine, absolute. Or give projectId.",
+          }),
+        ),
+        machineId: Type.Optional(
+          Type.String({
+            description:
+              "The machine path is on; the primary machine if left out.",
+          }),
+        ),
+        memberIds: Type.Array(Type.String(), { minItems: 1 }),
+        stewardId: Type.String({
+          description: "The member who takes messages that name nobody.",
+        }),
+        goal: Type.Optional(Type.String()),
+      }),
+      execute: async (args) => {
+        try {
+          const origin =
+            meta.conversationId === undefined ||
+            isTaskSession(meta.conversationId)
+              ? (await deps.service.direct()).conversationId
+              : meta.conversationId;
+          const { operation } = await deps.service.proposeGroup({
+            ...args,
+            originConversationId: origin,
+            captainAgentId: captain.agentId,
+          });
+          return text(
+            `Proposed group "${args.name.trim()}" (operation ${operation.id}). It is waiting for the user's confirmation. Propose anything else that is needed, then end this turn; a message here will tell you the outcome.`,
+            { operationId: operation.id, status: operation.status },
+          );
+        } catch (error) {
+          if (error instanceof GroupConflictError)
+            return toolError(
+              `Conflict: ${error.message}. Use that group with assign_in_group, or propose a different name.`,
+            );
           return toolError(
             error instanceof Error ? error.message : String(error),
           );
@@ -900,6 +962,7 @@ export function captainSessionTools(
       readMemory,
       readAttachment,
       assign,
+      proposeGroup,
       controlTask,
       updateTask,
       answerInbox,
