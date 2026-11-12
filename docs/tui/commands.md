@@ -93,18 +93,6 @@ Edit the host's config.json or mcp.json in your editor
 - `/edit-host-config config.json`: Edit the host's model providers
 - `/edit-host-config mcp.json`: Edit the host's MCP servers
 
-## /github
-
-```text
-/github
-```
-
-Show where the GitHub App stands, refresh it or authorize it
-
-### Examples
-
-- `/github`: See which accounts the App is installed on
-
 ## /help
 
 ```text

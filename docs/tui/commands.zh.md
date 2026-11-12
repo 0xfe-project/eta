@@ -93,18 +93,6 @@ eta 终端界面的斜杠命令，在首页或对话的输入框里输入。命�
 - `/edit-host-config config.json`: 修改 host 的模型 provider 设定
 - `/edit-host-config mcp.json`: 修改 host 的 MCP 服务器
 
-## /github
-
-```text
-/github
-```
-
-查看 GitHub App 的状态，刷新或授权
-
-### 例子
-
-- `/github`: 看 App 装在哪些账号
-
 ## /help
 
 ```text
