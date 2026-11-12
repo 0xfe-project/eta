@@ -53,6 +53,18 @@ points eta at a SearXNG of your own instead.
 
 ## Adapted code
 
+### Gemini CLI (terminal rendering)
+
+`apps/tui/src/ui/gemini/` holds markdown, code highlighting, table and diff rendering adapted from
+[Gemini CLI](https://github.com/google-gemini/gemini-cli) (`packages/cli/src/ui/`, commit
+`62bab5b`). It is in the TUI build and in every compiled `eta`.
+
+- Copyright 2025 Google LLC, under the [Apache License 2.0](apps/tui/src/ui/gemini/LICENSE), not
+  under eta's MIT License.
+- Each adapted file keeps its original license header and says how it was changed for eta.
+
+### TOBEREFR
+
 `packages/TOBEREFR` is not part of any build. It keeps its own notices:
 
 - `packages/TOBEREFR/eta-mcp/NOTICE`: code adapted from pi-mcp-adapter and opencode, MIT.

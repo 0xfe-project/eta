@@ -2,13 +2,13 @@ import type { ActionName, KeyBinding, TuiConfig } from "./types";
 
 const key = (
   name: string,
-  modifiers: { ctrl?: boolean; alt?: boolean } = {},
+  modifiers: { ctrl?: boolean; alt?: boolean; shift?: boolean } = {},
 ): KeyBinding[] => [
   {
     key: name,
     ctrl: modifiers.ctrl ?? false,
     alt: modifiers.alt ?? false,
-    shift: false,
+    shift: modifiers.shift ?? false,
   },
 ];
 
@@ -28,6 +28,21 @@ const keybindings: Record<ActionName, KeyBinding[]> = {
   "tabs.close": key("w", { alt: true }),
   "reply.stop": key("escape"),
   "app.quit": key("c", { ctrl: true }),
+  "transcript.pageUp": key("pageup"),
+  "transcript.pageDown": key("pagedown"),
+  "transcript.lineUp": key("up", { shift: true }),
+  "transcript.lineDown": key("down", { shift: true }),
+  "transcript.top": key("home", { ctrl: true }),
+  "transcript.bottom": key("end", { ctrl: true }),
+  "transcript.search": key("f", { ctrl: true }),
+  "transcript.select": key("v", { alt: true }),
+  "transcript.expandAll": key("o", { ctrl: true }),
+  // Shift+Enter only reaches a program in terminals that report it; Alt+Enter works everywhere.
+  "message.newline": [
+    ...key("enter", { alt: true }),
+    ...key("enter", { shift: true }),
+  ],
+  "message.steer": key("tab"),
 };
 
 /**
