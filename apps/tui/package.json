@@ -1,0 +1,36 @@
+{
+  "name": "@eta/tui",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The eta terminal interface: a client of the host over its one WebSocket.",
+  "license": "MIT",
+  "scripts": {
+    "gen": "bun scripts/gen-extensions.ts",
+    "build": "bun scripts/gen-extensions.ts",
+    "build:binaries": "bun scripts/gen-extensions.ts && bun scripts/build-binaries.ts",
+    "dev": "bun scripts/gen-extensions.ts && bun src/main.tsx",
+    "docs": "bun scripts/gen-extensions.ts && bun scripts/gen-docs.ts",
+    "typecheck": "bun scripts/gen-extensions.ts && bun check",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint .",
+    "test": "bun scripts/gen-extensions.ts && bun --bun vitest --run --passWithNoTests"
+  },
+  "dependencies": {
+    "@eta/client-contracts": "*",
+    "@eta/client-wire-proto": "*",
+    "@inkjs/ui": "2.0.0",
+    "ink": "8.0.0",
+    "react": "19.3.1",
+    "string-width": "8.3.0",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@eta/app": "*",
+    "@eta/core": "*",
+    "@types/node": "22.19.19",
+    "@types/react": "^19.3.0",
+    "bun-types": "1.4.2",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
+}
