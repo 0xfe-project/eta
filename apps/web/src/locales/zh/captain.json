@@ -60,5 +60,35 @@
       "failed": "失败",
       "expired": "已过期"
     }
+  },
+  "review": {
+    "title": "Captain 巡检",
+    "auto": "自动巡检",
+    "observations": "{{count}} 项观察",
+    "technical": "原始详情",
+    "unparsed": "这条巡检没能解析出条目。",
+    "taskNumber": "任务 #{{number}}",
+    "assignments": "{{count}} 个派工",
+    "newAssignments": "本窗口新增 {{count}} 个",
+    "runs": "{{count}} 次运行",
+    "inbox": "Inbox",
+    "userDecision": "用户已决定",
+    "kinds": {
+      "settled": "已落定",
+      "blocked": "已阻塞",
+      "stalled": "等待复核",
+      "inbox": "等待用户决定",
+      "decision": "收到用户决定",
+      "inboxPending": "Inbox 待处理",
+      "offline": "机器离线",
+      "stuck": "运行卡住",
+      "taskStalled": "任务停滞",
+      "taskBlocked": "任务阻塞",
+      "failure": "任务失败",
+      "failureFinal": "不可恢复失败",
+      "reviewFailed": "复核失败",
+      "waiting": "等待用户回答",
+      "other": "巡检观察"
+    }
   }
 }

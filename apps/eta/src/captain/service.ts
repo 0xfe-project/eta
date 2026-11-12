@@ -1176,17 +1176,23 @@ export class CaptainService {
     for (const [conversationId, assignments] of byConversation) {
       const conversation = this.#deps.conversations.get(conversationId);
       if (conversation === undefined) continue;
-      const checkpoint = Math.max(
-        this.#deps.store.conversationCheckpoint(conversation.id),
-        ...assignments.map(
-          (assignment) =>
-            this.#deps.timeline.get(assignment.messageId)?.seq ?? 0,
-        ),
+      const fromSeq = this.#deps.store.conversationCheckpoint(conversation.id);
+      const assignmentSeq = new Map(
+        assignments.map((assignment) => [
+          assignment.id,
+          this.#deps.timeline.get(assignment.messageId)?.seq ?? 0,
+        ]),
       );
-      const hasNew = conversation.lastSeq > checkpoint;
+      const activityBaseline = Math.max(fromSeq, ...assignmentSeq.values());
+      const hasNew = conversation.lastSeq > activityBaseline;
       const memberStatus = this.#deps.timeline.memberStatuses(conversation.id);
-      const assignmentIds = assignments.map((assignment) => assignment.id);
-      const assignmentIdSet = new Set(assignmentIds);
+      const allAssignmentIds = assignments.map((assignment) => assignment.id);
+      const assignmentIdSet = new Set(allAssignmentIds);
+      const newAssignmentIds = assignments
+        .filter(
+          (assignment) => (assignmentSeq.get(assignment.id) ?? 0) > fromSeq,
+        )
+        .map((assignment) => assignment.id);
       const targets = [
         ...new Set(
           assignments.flatMap((assignment) =>
@@ -1269,9 +1275,11 @@ export class CaptainService {
               ? `Captain work in “${conversation.name}” has new activity and all assigned agents are idle.`
               : `Captain work in “${conversation.name}” has had no new activity for ${settings.stuckMinutes} minutes and all assigned agents are idle; it may have stopped silently.`,
         data: {
-          assignmentIds,
+          assignmentIds: newAssignmentIds,
+          assignmentCount: allAssignmentIds.length,
+          newAssignmentCount: newAssignmentIds.length,
           conversationId: conversation.id,
-          fromSeq: checkpoint,
+          fromSeq,
           throughSeq,
           targets,
           memberStatuses: Object.fromEntries(

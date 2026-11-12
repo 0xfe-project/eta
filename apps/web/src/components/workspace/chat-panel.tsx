@@ -66,6 +66,8 @@ import { useRunBlocks } from "@/queries/sessions";
 import { useTasks } from "@/queries/tasks";
 import { ActivityRefCard } from "./activity-ref";
 import { AgentAvatar } from "./agent-identity";
+import { CaptainReview } from "./captain-review";
+import { isCaptainReviewMessage } from "./captain-review-model";
 import { AttachmentChip, PasteChip } from "./composer-block";
 import { ComposerEditor } from "./composer-editor";
 import { EmailProposalCard } from "./email-proposal-card";
@@ -867,6 +869,8 @@ const Turn = memo(
       "navigation",
       "tasks",
     ] as const);
+    if (isCaptainReviewMessage(message))
+      return <CaptainReview message={message} />;
     if (message.kind === "system") return <GroupNotice message={message} />;
     if (message.kind === "task_draft")
       return <TaskDraftRow message={message} />;
