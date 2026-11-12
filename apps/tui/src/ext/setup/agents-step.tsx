@@ -5,6 +5,7 @@ import { Box, Text, useInput } from "ink";
 import { useRef, useState } from "react";
 import { useInputActive, useShell, useTheme } from "../../extensions/react";
 import { useMessages } from "../../i18n/react";
+import { keepTogether } from "../../ui/text-width";
 import { inkColor } from "../../ui/theme";
 import { useAgents } from "../kit/agents";
 import { CheckList } from "../kit/check-list";
@@ -118,7 +119,7 @@ export function AgentsStep({
         {model === undefined
           ? t("agentsIntroNoModel")
           : t("agentsIntro", {
-              model: `${model.providerName} / ${model.name}`,
+              model: keepTogether(`${model.providerName} / ${model.name}`),
             })}
       </Text>
       <Box flexDirection="column" marginY={1}>
@@ -148,7 +149,9 @@ export function AgentsStep({
           empty={t("noCards")}
         />
         {creating !== undefined && (
-          <Text color={muted}>{t("creating", { name: creating })}</Text>
+          <Text color={muted}>
+            {t("creating", { name: keepTogether(creating) })}
+          </Text>
         )}
         {error !== undefined && (
           <Text color={inkColor(theme.error)}>{error}</Text>

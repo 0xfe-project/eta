@@ -1,4 +1,5 @@
 /** The conversation tab: the transcript, the messages waiting their turn, the reply status, the input. */
+import type { MessageView } from "@eta/client-contracts";
 import type { DOMElement } from "ink";
 import type { TabRef } from "../../config/types";
 import type { ComposerState } from "./composer";
@@ -24,6 +25,7 @@ import { renderItem } from "./render";
 import { markRead, sendMessage, stopReplies } from "./send";
 import { sentDraft } from "./sent-draft";
 import { createItemKeeper } from "./stable-items";
+import { drawWidths } from "./transcript/frames";
 import { useRenderedItems } from "./transcript/render-cache";
 import { Transcript as TranscriptColumn } from "./transcript/transcript";
 import { isExpanded } from "./transcript/ui";
@@ -76,12 +78,34 @@ function LoadedConversation({ feed, active }: { feed: Feed; active: boolean }) {
   const reviewBinding = config.keybindings["review.open"][0];
   const reviewKey =
     reviewBinding === undefined ? undefined : formatKeyBinding(reviewBinding);
+  const { expanded, expandAll } = ui;
+  const unfolded = useCallback(
+    (key: string) => isExpanded({ expanded, expandAll }, key),
+    [expanded, expandAll],
+  );
+  const stepsOpen =
+    config.transcript.toolCalls === "collapsed" ? unfolded : undefined;
   const items = useMemo(
     () =>
       keepItems(
-        feedItems({ rows, members, agents, info, sessions }, locale, reviewKey),
+        feedItems(
+          { rows, members, agents, info, sessions },
+          locale,
+          reviewKey,
+          stepsOpen,
+        ),
       ),
-    [keepItems, rows, members, agents, info, sessions, locale, reviewKey],
+    [
+      keepItems,
+      rows,
+      members,
+      agents,
+      info,
+      sessions,
+      locale,
+      reviewKey,
+      stepsOpen,
+    ],
   );
   const named = useMemo(
     () => namedMembers({ members, agents }),
@@ -98,13 +122,9 @@ function LoadedConversation({ feed, active }: { feed: Feed; active: boolean }) {
   const boxRef = useRef<DOMElement>(null);
   const { width, height, hasMeasured } = useBoxMetrics(boxRef);
   const measured = hasMeasured && width > 0;
-  const { expanded, expandAll } = ui;
-  const unfolded = useCallback(
-    (key: string) => isExpanded({ expanded, expandAll }, key),
-    [expanded, expandAll],
-  );
   const drawn = useRenderedItems(
     renderItem,
+    drawWidths,
     measured ? items : NO_ITEMS,
     {
       width,
@@ -114,6 +134,7 @@ function LoadedConversation({ feed, active }: { feed: Feed; active: boolean }) {
     },
     unfolded,
   );
+  const below = useBelowTranscript(items, drawn?.items, held, replying);
 
   const { scroll, search } = ui;
   const transcriptUi = useMemo(
@@ -154,7 +175,9 @@ function LoadedConversation({ feed, active }: { feed: Feed; active: boolean }) {
             items={drawn.items}
             rendered={drawn.rendered}
             height={height}
-            width={width}
+            // The drawing follows the measured width a step behind; the frames are put together at
+            // the width the items were drawn for.
+            width={drawn.width}
             isActive={active}
             ui={transcriptUi}
             onUi={feed.setUi}
@@ -167,15 +190,20 @@ function LoadedConversation({ feed, active }: { feed: Feed; active: boolean }) {
           />
         )}
       </Box>
-      {held.map((message) => (
-        <Text key={message.id} color={muted} wrap="truncate-end">
-          {HELD_MARK + (message.text.split("\n")[0] ?? "")}
-        </Text>
+      {/* One row each, never squeezed: on a short terminal the transcript gives up its rows first. */}
+      {below.held.map((message) => (
+        <Box key={message.id} flexShrink={0}>
+          <Text color={muted} wrap="truncate-end">
+            {HELD_MARK + (message.text.split("\n")[0] ?? "")}
+          </Text>
+        </Box>
       ))}
-      {replying.length > 0 && (
-        <Text color={muted} wrap="truncate-end">
-          {replyStatus(replying, config.keybindings, t)}
-        </Text>
+      {below.replying.length > 0 && (
+        <Box flexShrink={0}>
+          <Text color={muted} wrap="truncate-end">
+            {replyStatus(below.replying, config.keybindings, t)}
+          </Text>
+        </Box>
       )}
       {canSend ? (
         <Composer
@@ -198,6 +226,34 @@ function LoadedConversation({ feed, active }: { feed: Feed; active: boolean }) {
         </Text>
       )}
     </Box>
+  );
+}
+
+/** What the view draws between the transcript and the input. */
+interface BelowTranscript {
+  held: readonly MessageView[];
+  replying: readonly string[];
+}
+
+/**
+ * The held messages and who is replying as they were when `drawnItems` were made. The transcript
+ * draws a step behind its items, so drawing these from the newest state would show a reply over,
+ * or a held message gone, before the transcript shows what took their place. Before the first
+ * drawing, and for items not made here, it is the newest.
+ */
+function useBelowTranscript(
+  items: readonly TranscriptItem[],
+  drawnItems: readonly TranscriptItem[] | undefined,
+  held: readonly MessageView[],
+  replying: readonly string[],
+): BelowTranscript {
+  const [byItems] = useState(
+    () => new WeakMap<readonly TranscriptItem[], BelowTranscript>(),
+  );
+  const newest = useMemo(() => ({ held, replying }), [held, replying]);
+  byItems.set(items, newest);
+  return (
+    (drawnItems === undefined ? undefined : byItems.get(drawnItems)) ?? newest
   );
 }
 

@@ -1,4 +1,4 @@
-// `height` throughout is the rows the transcript's lines share with the "lines below" hint: while
+// `height` throughout is the rows the transcript's lines share with the hint back to the bottom: while
 // the view follows the newest line every row is a line, otherwise the last row is the hint.
 
 /** Pinned to the newest line, or showing from line `top` (0 is the oldest line loaded). */
@@ -27,7 +27,11 @@ function followTop(total: number, height: number): number {
   return Math.max(0, total - height);
 }
 
-/** The scroll with its top inside the lines; a view that reaches the last line follows again. */
+/**
+ * The scroll with its top inside the lines. A top at or under the one a following view has follows
+ * again: there the following view shows every line the view away would, and the last line too,
+ * which the hint row would cover.
+ */
 export function normalized(
   scroll: LineScroll,
   total: number,
@@ -35,7 +39,7 @@ export function normalized(
 ): LineScroll {
   if (scroll.follow) return scroll;
   const top = Math.max(0, scroll.top);
-  if (top + rowsAway(height) >= total) return FOLLOW;
+  if (top >= followTop(total, height)) return FOLLOW;
   return top === scroll.top ? scroll : { follow: false, top };
 }
 

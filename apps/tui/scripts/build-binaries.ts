@@ -45,7 +45,11 @@ for (const { target, file } of TARGETS) {
   const result = await Bun.build({
     entrypoints: [join(root, "src", "main.tsx")],
     compile: { target, outfile: join(out, file) },
-    define: { ETA_TUI_VERSION: JSON.stringify(version) },
+    define: {
+      ETA_TUI_VERSION: JSON.stringify(version),
+      // React and Ink pick their production builds by this; nothing sets it in a compiled program.
+      "process.env.NODE_ENV": JSON.stringify("production"),
+    },
     plugins: [withoutDevtools],
   });
   if (!result.success) {

@@ -41,6 +41,8 @@ export const ACTION_NAMES = [
   "transcript.select",
   /** Unfold, or fold again, every thinking block and long tool output of the conversation. */
   "transcript.expandAll",
+  /** Unfold, or fold again, the steps of one reply: its tool calls and what it said between them. */
+  "transcript.toggleTurn",
   /** A new line in the message being written, instead of sending it. */
   "message.newline",
   /** Send the message into the reply that is running, instead of queueing it after. */
@@ -99,7 +101,14 @@ export const THEME_TOKENS = [
 
 export type ThemeToken = (typeof THEME_TOKENS)[number];
 
-export type Theme = Record<ThemeToken, string>;
+/** The colours the interface paints with: one per token, and the list agents' frames take theirs from. */
+export interface Theme extends Record<ThemeToken, string> {
+  /**
+   * The colours a group reply's frame can have, in the same notation as the tokens, at least one.
+   * Each agent keeps one of them, picked by its id.
+   */
+  agents: readonly string[];
+}
 
 /** Which host to use: one that runs on its own at an address, or one this TUI starts and stops. */
 export type ConnectionSetting =
@@ -124,6 +133,16 @@ export interface TuiConfig {
   layout: { tabBar: "bottom" | "top" };
   /** How many lines of a long tool output show before it is expanded. */
   toolOutput: { previewLines: number };
+  /**
+   * `toolCalls`: whether the steps of a reply (its tool calls, their output, what it said between
+   * them) show folded into one line until unfolded, or in full.
+   */
+  transcript: { toolCalls: "collapsed" | "expanded" };
+  /**
+   * The terminal reports the mouse: the wheel scrolls what is on screen, and selecting text with
+   * the terminal's own selection takes Shift. Off, the terminal keeps the mouse to itself.
+   */
+  mouse: boolean;
 }
 
 export type ConfigProblemReason =

@@ -259,8 +259,34 @@ describe("a finished reply", () => {
       kind: "author",
       key: `${a.id}:author`,
       name: "Ada",
+      agentId: ADA.id,
+      members: [],
     });
-    expect(out[2]).toMatchObject({ name: "zz9876" });
+    expect(out[2]).toMatchObject({ name: "zz9876", agentId: "zz9876543210" });
+  });
+
+  it("in a group carries the agent ids of the conversation's members, the colours of the frames are shared out among", () => {
+    const out = items({
+      rows: [reply({ text: "one" })],
+      kind: "group",
+      members: [
+        member({ agentId: BEN.id }),
+        member({ agentId: ADA.id }),
+        member({ agentId: "agent-gone", sessionId: null }),
+      ],
+    });
+    expect(out[0]).toMatchObject({
+      kind: "author",
+      members: [BEN.id, ADA.id, "agent-gone"],
+    });
+  });
+
+  it("in a group names the agent its author is, and no agent as an empty id", () => {
+    const fromBen = reply({ text: "one", agentId: BEN.id });
+    const fromNobody = reply({ text: "two", agentId: null });
+    const out = items({ rows: [fromBen, fromNobody], kind: "group" });
+    expect(out[0]).toMatchObject({ kind: "author", agentId: BEN.id });
+    expect(out[2]).toMatchObject({ kind: "author", agentId: "" });
   });
 
   it("with no text and no thinking draws nothing of its own", () => {

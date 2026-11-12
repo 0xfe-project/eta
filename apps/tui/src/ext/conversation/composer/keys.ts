@@ -23,7 +23,7 @@ import {
   moveToRowStart,
   moveVertically,
 } from "./editing";
-import { afterSend, historyNext, historyPrevious } from "./history";
+import { afterSend, historyDown, historyUp } from "./history";
 import { outgoing, pasteText } from "./paste";
 
 export type ComposerCommand =
@@ -149,14 +149,14 @@ function moveHighlight(
   return { ...state, menu: { ...state.menu, highlight } };
 }
 
-/** Up: the row above, or the previous history entry from the first row. */
+/** Up: the previous history entry when history takes the key, else the row above. */
 function up(state: ComposerState, columns: number): ComposerState {
-  return moveVertically(state, columns, -1) ?? historyPrevious(state) ?? state;
+  return historyUp(state) ?? moveVertically(state, columns, -1) ?? state;
 }
 
-/** Down: the row below, or the next history entry from the last row. */
+/** Down: the next history entry when history takes the key, else the row below. */
 function down(state: ComposerState, columns: number): ComposerState {
-  return moveVertically(state, columns, 1) ?? historyNext(state) ?? state;
+  return historyDown(state) ?? moveVertically(state, columns, 1) ?? state;
 }
 
 export function applyCommand(

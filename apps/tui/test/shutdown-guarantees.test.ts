@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { createShutdown } from "../src/ui/shutdown";
 
-type Step = "stop" | "killNow" | "unmount" | "writeError";
+type Step = "releaseTerminal" | "stop" | "killNow" | "unmount" | "writeError";
 
 function harness(throwing: Step[] = []) {
   const events: string[] = [];
@@ -13,6 +13,10 @@ function harness(throwing: Step[] = []) {
     if (throwing.includes(step)) throw new Error(`${step} broke`);
   };
   const shutdown = createShutdown({
+    releaseTerminal: () => {
+      events.push("release");
+      fail("releaseTerminal");
+    },
     stop: () => {
       events.push("stop");
       fail("stop");
@@ -40,23 +44,40 @@ function harness(throwing: Step[] = []) {
 }
 
 describe("crash always ends the process", () => {
-  it.each<Step>(["stop", "killNow", "unmount", "writeError"])(
-    "still tries every step and exits 1 when %s throws",
-    async (step) => {
-      const { events, shutdown } = harness([step]);
-      await expect(shutdown.crash(new Error("boom"))).resolves.toBeUndefined();
-      expect(events).toEqual([
-        "stop",
-        "kill",
-        "unmount",
-        "stderr:Error: boom",
-        "exit:1",
-      ]);
-    },
-  );
+  it.each<Step>([
+    "releaseTerminal",
+    "stop",
+    "killNow",
+    "unmount",
+    "writeError",
+  ])("still tries every step and exits 1 when %s throws", async (step) => {
+    const { events, shutdown } = harness([step]);
+    await expect(shutdown.crash(new Error("boom"))).resolves.toBeUndefined();
+    expect(events).toEqual([
+      "release",
+      "stop",
+      "kill",
+      "unmount",
+      "stderr:Error: boom",
+      "exit:1",
+    ]);
+  });
+
+  it("still quits and exits 0 when releasing the terminal throws", async () => {
+    const { events, shutdown } = harness(["releaseTerminal"]);
+    await shutdown.quit();
+    expect(events).toEqual([
+      "release",
+      "stop",
+      "unmount",
+      "unmounted",
+      "exit:0",
+    ]);
+  });
 
   it("exits 1 once when every step throws", async () => {
     const { events, shutdown } = harness([
+      "releaseTerminal",
       "stop",
       "killNow",
       "unmount",

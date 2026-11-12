@@ -4,7 +4,7 @@ import type { McpTuning } from "@eta/app/src/product";
  * `mcp` target; connecting them, and signing in to an OAuth one at a fake authorization server
  * that the host's MCP requests are routed to.
  */
-import type { McpServerView } from "@eta/client-contracts";
+import type { AgentView, McpServerView } from "@eta/client-contracts";
 import type { HostObserver } from "../ext-support/host-observer";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -13,6 +13,7 @@ import {
   createFakeAuthServer,
   MCP_URL,
 } from "../../../../packages/eta-mcp/test/oauth/fake-auth-server";
+import { withoutCaptainRows } from "../../src/ext/kit/captain";
 import mcp from "../../src/ext/mcp";
 import { observeHost } from "../ext-support/host-observer";
 import { recordCalls, squash } from "../ext-support/record-calls";
@@ -66,8 +67,12 @@ function mcpNetwork(auth: ReturnType<typeof createFakeAuthServer>): FetchLike {
   };
 }
 
+/** The servers of the agents the test made: Captain, which every host makes, has its own. */
 const servers = (host: HostObserver) =>
-  host.section<McpServerView[]>("mcp", "list") ?? [];
+  withoutCaptainRows(
+    host.section<McpServerView[]>("mcp", "list") ?? [],
+    host.section<AgentView[]>("agents", "list"),
+  );
 const server = (host: HostObserver, name: string) =>
   servers(host).find((view) => view.server === name);
 

@@ -217,7 +217,7 @@ describe("/help lists the conversation keys", () => {
     expect(
       lines.some((line) =>
         line.includes(
-          "To select with the mouse, use your terminal's own selection",
+          "The wheel scrolls the conversation. To select text with the mouse, hold Shift",
         ),
       ),
     ).toBe(true);
@@ -248,9 +248,7 @@ describe("/help lists the conversation keys", () => {
     expect(lines.some((l) => /^滚动\s+pageup/.test(l))).toBe(true);
     expect(
       lines.some((l) =>
-        l.includes(
-          "要用鼠标选取，直接用终端自己的选取（不少终端要按住 Shift 拖动）",
-        ),
+        l.includes("滚轮滚动对话。要用鼠标选取文字，按住 Shift 拖动"),
       ),
     ).toBe(true);
   });

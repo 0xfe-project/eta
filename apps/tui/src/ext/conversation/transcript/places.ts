@@ -1,6 +1,8 @@
 import type { TranscriptLayout } from "./layout";
 import type { LineScroll } from "./scroll";
 import type { LinePlace, ScrollState } from "./ui";
+import { rowOfKey } from "../model/items";
+import { normalized } from "./scroll";
 
 const FOLLOW = { follow: true } as const;
 
@@ -30,9 +32,10 @@ export function placeOfLine(layout: TranscriptLayout, line: number): LinePlace {
 }
 
 /**
- * The line a place names in this layout. An offset past the item's lines is its last line. An item
- * no longer there hands over to the item of its row nearest the place's `line`, as far into it; with
- * no item of its row left, the place's `line` stands.
+ * The line a place names in this layout. An offset past the item's lines is its last line. A step
+ * folded into its reply's steps line names that line. An item no longer there hands over to the
+ * item of its row nearest the place's `line`, as far into it; with no item of its row left, the
+ * place's `line` stands.
  */
 export function lineOfPlace(
   layout: TranscriptLayout,
@@ -68,15 +71,6 @@ function lineInItem(
   const first = blankAbove ? start - 1 : start;
   const last = start + Math.max(1, layout.counts[index]!) - 1;
   return clamp(clamp(start + offset, first, last), 0, layout.lines.length - 1);
-}
-
-/**
- * The row an item comes from, as `model/items.ts` keys items: the row id alone, or the row id
- * before a colon and what the item is in the row.
- */
-function rowOfKey(key: string): string {
-  const colon = key.indexOf(":");
-  return colon < 0 ? key : key.slice(0, colon);
 }
 
 /** The index of the item of `place`'s row whose lines are nearest the place's `line`. */
@@ -120,11 +114,27 @@ export function scrollPlace(
     : { follow: false, top: placeOfLine(layout, scroll.top) };
 }
 
-/** The scroll with its top named in this layout (`placeIn`); the same object when nothing moved. */
-export function scrollIn(
+/**
+ * The scroll to keep for a view of `height` rows over this layout. It follows once its top is at or
+ * under the top a following view has, the rule `viewportOf` draws by; otherwise it keeps its top,
+ * named again in this layout so it stays on the same content. The same object when nothing
+ * changed, so keeping the result again asks for no update.
+ */
+export function scrollSettled(
   layout: TranscriptLayout,
   scroll: ScrollState,
+  height: number,
 ): ScrollState {
+  const total = layout.lines.length;
+  if (scroll.follow || total === 0) return scroll;
+  const named = scrollIn(layout, scroll);
+  return normalized(scrollLine(layout, named), total, height).follow
+    ? FOLLOW
+    : named;
+}
+
+/** The scroll with its top named in this layout (`placeIn`); the same object when nothing moved. */
+function scrollIn(layout: TranscriptLayout, scroll: ScrollState): ScrollState {
   if (scroll.follow) return scroll;
   const top = placeIn(layout, scroll.top);
   return top === scroll.top ? scroll : { follow: false, top };

@@ -11,6 +11,7 @@ import type { Locale } from "../../config/types";
 import type { WireClient, WireState } from "../../connection/types";
 import type { Model } from "../kit/models";
 import { LLM_PROVIDER_ID } from "@eta/client-contracts";
+import { ordinaryAgents } from "../kit/captain";
 import { buildModels, usableModels } from "../kit/models";
 
 /** A persona card as the `personas` target lists it. */
@@ -67,9 +68,10 @@ function factsOf(state: WireState, locale: Locale): SetupFacts | undefined {
     | ProvidersView
     | undefined;
   const cards = followed(state, "personas")?.cards;
-  const agents = followed(state, "agents")?.list as AgentView[] | undefined;
-  if (providers === undefined || cards === undefined || agents === undefined)
+  const list = followed(state, "agents")?.list as AgentView[] | undefined;
+  if (providers === undefined || cards === undefined || list === undefined)
     return undefined;
+  const agents = ordinaryAgents(list);
   if (!gatewayMounted(state))
     return {
       models: buildModels({ providers, llm: undefined, locale }) ?? [],
@@ -149,7 +151,10 @@ export async function readAgentsNow(
   return waitOnTargets(
     wire,
     ["agents"],
-    (state) => followed(state, "agents")?.list as AgentView[] | undefined,
+    (state) => {
+      const list = followed(state, "agents")?.list as AgentView[] | undefined;
+      return list === undefined ? undefined : ordinaryAgents(list);
+    },
     timeoutMs,
   );
 }

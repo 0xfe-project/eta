@@ -18,6 +18,10 @@ import type { RenderedApp } from "../ui-support/app";
 import { afterEach } from "vitest";
 import { WireError } from "../../src/connection/wire";
 import { CONVERSATION_VIEW } from "../../src/ext/conversation/kind";
+import {
+  ordinaryAgents,
+  withoutCaptainConversation,
+} from "../../src/ext/kit/captain";
 import { hostWorld, WITHOUT_SETUP } from "../conversation/view-host-world";
 import { baseUrl } from "../support/host";
 import { until } from "../support/temp";
@@ -120,15 +124,19 @@ export async function manageWorld(
 
   const section = <T,>(target: string, name: string): T | undefined =>
     world.raw.store.getState().targets[target]?.sections[name] as T | undefined;
+  // Captain, which every host makes, and its own conversation are not the test's.
   const conversations = () =>
-    section<ConversationSummary[]>("conversations", "list") ?? [];
+    withoutCaptainConversation(
+      section<ConversationSummary[]>("conversations", "list") ?? [],
+      section<AgentView[]>("agents", "list"),
+    );
   const projects = () => {
     follow("projects");
     return section<ProjectView[]>("projects", "list") ?? [];
   };
   const agents = () => {
     follow("agents");
-    return section<AgentView[]>("agents", "list") ?? [];
+    return ordinaryAgents(section<AgentView[]>("agents", "list") ?? []);
   };
   const machines = () => {
     follow("machines");
@@ -168,15 +176,18 @@ export async function manageWorld(
   const showHome = (size?: { columns: number; rows: number }) =>
     show({ tabs: [], activeTab: undefined }, size);
 
-  /** Waits until the wire the interface reads holds `count` agents, so a command sees them all. */
+  /**
+   * Waits until the wire the interface reads holds `count` agents, so a command sees them all.
+   * Captain, which every host makes, is not counted.
+   */
   const agentsArrived = (count: number) =>
     until(
       () =>
         (
           wire.client.store.getState().targets.agents?.sections.list as
-            | unknown[]
+            | { systemRole?: string | null }[]
             | undefined
-        )?.length === count,
+        )?.filter((agent) => agent.systemRole !== "captain").length === count,
       10_000,
       `${count} agents on the interface's wire`,
     );

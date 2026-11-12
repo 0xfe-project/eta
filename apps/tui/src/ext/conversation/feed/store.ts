@@ -103,12 +103,14 @@ export function feedFor(wire: WireClient, conversationId: string): Feed {
 
 /**
  * The transcript of a feed's state, in the reader's language. `reviewKey`, the review key named
- * for the user, ends the line that says a member waits on the user.
+ * for the user, ends the line that says a member waits on the user. With `stepsOpen` each reply's
+ * steps fold under one line, unfolded where it says so of that line's key.
  */
 export function feedItems(
   state: Pick<FeedState, "rows" | "members" | "agents" | "info" | "sessions">,
   locale: Locale,
   reviewKey?: string,
+  stepsOpen?: (key: string) => boolean,
 ): TranscriptItem[] {
   return transcriptItems({
     rows: state.rows,
@@ -118,6 +120,7 @@ export function feedItems(
     sessions: state.sessions,
     locale,
     reviewKey,
+    stepsOpen,
   });
 }
 

@@ -3,7 +3,11 @@ import { conversationCommands } from "./commands";
 import { FollowConversationList } from "./follow-list";
 import { CONVERSATION_VIEW } from "./kind";
 import { conversationMessages } from "./messages";
-import { useConversationStatus, useConversationTitle } from "./tab-label";
+import {
+  useConversationQualifiers,
+  useConversationStatus,
+  useConversationTitle,
+} from "./tab-label";
 import { ConversationView } from "./view";
 
 const extension: Extension = {
@@ -16,6 +20,7 @@ const extension: Extension = {
       Component: ConversationView,
       useTitle: useConversationTitle,
       useStatus: useConversationStatus,
+      useQualifiers: useConversationQualifiers,
     },
   ],
   Background: FollowConversationList,

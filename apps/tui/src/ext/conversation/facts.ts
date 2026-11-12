@@ -1,5 +1,6 @@
 /** What the view, the tab label and the commands read off a conversation's state. */
 import type {
+  AgentView,
   ConversationInfo,
   ConversationSummary,
   MemberView,
@@ -9,6 +10,8 @@ import type {
 import type { WireState } from "../../connection/types";
 import type { TabStatus } from "../../extensions/types";
 import type { FeedState } from "./feed/store";
+import { agentsOf } from "../../extensions/eager-lists";
+import { withoutCaptainConversation } from "../kit/captain";
 import { RUNNING_STATUSES } from "./model/timeline";
 
 /** A member as mentions and the composer's `@` menu know it. */
@@ -52,14 +55,20 @@ export function replyingNames(
   return [...new Set(ids)].map((id) => agentName(state, id));
 }
 
-/** The eager `conversations` list as the wire holds it; empty before it arrives. */
+const NO_CONVERSATIONS: readonly ConversationSummary[] = [];
+
+/**
+ * The eager `conversations` list as the wire holds it, without Captain's own conversation; empty
+ * before it arrives.
+ */
 export function conversationList(
   state: WireState,
 ): readonly ConversationSummary[] {
-  return (
+  return withoutCaptainConversation(
     (state.targets.conversations?.sections.list as
       | ConversationSummary[]
-      | undefined) ?? []
+      | undefined) ?? NO_CONVERSATIONS,
+    state.targets.agents?.sections.list as AgentView[] | undefined,
   );
 }
 
@@ -69,6 +78,31 @@ export function conversationTitle(state: WireState, id: string): string {
     conversationList(state).find((c) => c.id === id)?.name ??
     id.slice(0, ID_PREFIX)
   );
+}
+
+/** The start of a conversation's id that tells apart conversations of the same name. */
+const QUALIFIER_ID_PREFIX = 6;
+
+/**
+ * The name of the conversation's steward, as the agents list has it. Undefined without a steward,
+ * when the agents list does not have the steward, and while the conversation is not listed.
+ */
+export function conversationStewardName(
+  state: WireState,
+  id: string,
+): string | undefined {
+  const stewardId = conversationList(state).find((c) => c.id === id)?.stewardId;
+  if (stewardId === null || stewardId === undefined) return undefined;
+  return agentsOf(state).find((agent) => agent.id === stewardId)?.name;
+}
+
+/** What tells a conversation tab apart from another of the same name: the steward's name, then the start of the id. */
+export function conversationQualifiers(
+  stewardName: string | undefined,
+  id: string,
+): string[] {
+  const idPrefix = id.slice(0, QUALIFIER_ID_PREFIX);
+  return stewardName === undefined ? [idPrefix] : [stewardName, idPrefix];
 }
 
 const RUNNING_MEMBER: ReadonlySet<MemberView["status"]> = new Set([
