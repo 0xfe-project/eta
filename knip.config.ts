@@ -61,6 +61,22 @@ export default {
       // expected.
       ignore: ["src/components/ui/**"],
     },
+    "apps/tui": {
+      // extensions.gen.ts is gitignored, which knip skips, so the feature
+      // modules it imports are entries themselves, and so are the scripts
+      // package.json runs.
+      entry: ["src/ext/*.{ts,tsx}", "src/ext/*/index.{ts,tsx}", "scripts/*.ts"],
+      // A feature's message catalog is exported for the test that checks
+      // both languages, and used in its own file.
+      ignoreExportsUsedInFile: true,
+      // scripts/gen-extensions.ts writes it before every build, test and
+      // typecheck, which turbo may not have run when knip starts.
+      ignoreUnresolved: [
+        "./extensions.gen",
+        "../src/extensions.gen",
+        "../../src/extensions.gen",
+      ],
+    },
     "apps/mobile": {
       // `nsh` builds it: the entries are named in its commands.
       entry: ["App.tsx", "DevApp.tsx", "src/**/*.test.tsx"],
