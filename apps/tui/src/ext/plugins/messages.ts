@@ -1,0 +1,48 @@
+import { defineMessages } from "../../i18n/messages";
+
+export const pluginsMessages = defineMessages({
+  en: {
+    title: "Plugins",
+    loading: "Loading…",
+    empty: "No plugins on this host. Plugins are added in the desktop app.",
+    ready: "ready",
+    needsConfig: "needs configuring",
+    row: "{version} · {state} · agents: {count}",
+    rowProblem: "{version} · {state} · agents: {count} · {problem}",
+    unknownVersion: "?",
+    listFooter: "↑↓ move · Enter open · Esc close",
+    counts: "Skills: {skills} · MCP servers: {servers}",
+    problem: "Problem: {problem}",
+    configureFirst:
+      "This plugin needs configuring. Configure it in the desktop app before turning it on for more agents.",
+    agentsHeading: "Agents that have it on",
+    noAgents: "No agents yet",
+    gone: "This plugin is no longer on the host.",
+    detailFooter: "↑↓ move · Space tick · Enter apply · Esc back",
+    applying: "Applying…",
+    refused: "Not changed for:",
+    refusedAgent: "{agent}: {error}",
+  },
+  zh: {
+    title: "插件",
+    loading: "正在读取…",
+    empty: "这台 host 上没有插件。插件在桌面端添加。",
+    ready: "可用",
+    needsConfig: "需要配置",
+    row: "{version} · {state} · 智能体：{count}",
+    rowProblem: "{version} · {state} · 智能体：{count} · {problem}",
+    unknownVersion: "?",
+    listFooter: "↑↓ 移动 · 回车打开 · Esc 关闭",
+    counts: "技能：{skills} · MCP 服务器：{servers}",
+    problem: "问题：{problem}",
+    configureFirst:
+      "这个插件需要配置。先在桌面端配置好，才能给更多智能体启用。",
+    agentsHeading: "启用了它的智能体",
+    noAgents: "还没有智能体",
+    gone: "这个插件已经不在 host 上了。",
+    detailFooter: "↑↓ 移动 · 空格勾选 · 回车应用 · Esc 返回",
+    applying: "正在应用…",
+    refused: "这些没改成：",
+    refusedAgent: "{agent}：{error}",
+  },
+});
