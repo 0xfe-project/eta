@@ -21,8 +21,8 @@ import { wireErrorMessage } from "@/queries/wire";
  * answers. Nothing exists until "Create"; not satisfied, the reader rejects it and Captain proposes
  * again, so nothing on the card is editable.
  *
- * The state is the operation's, the same record the operations list in Captain's panel shows; the
- * row's own copy only stands in once that list no longer carries an old operation.
+ * The state is the operation's, the same record the operations list in Captain's panel shows. An
+ * operation too old to be in that list leaves the proposal with no state and nothing to press.
  */
 export function GroupProposalCard({ message }: { message: MessageView }) {
   const { t: translateText } = useTranslation(["captain", "common"] as const);
@@ -35,10 +35,9 @@ export function GroupProposalCard({ message }: { message: MessageView }) {
   const operation = captain.operations.find(
     (item) => item.id === data.operationId,
   );
-  const status: CaptainOperationStatus = operation?.status ?? data.status;
-  const result = (operation?.result ??
-    data.result) as CaptainGroupResult | null;
-  const error = operation?.error ?? data.error;
+  const status = operation?.status;
+  const result = operation?.result as CaptainGroupResult | null | undefined;
+  const error = operation?.error;
   const machine = machines.find((item) => item.id === proposal.machineId);
   const deciding = actions.decideOperation.isPending;
 
@@ -62,7 +61,7 @@ export function GroupProposalCard({ message }: { message: MessageView }) {
         <UsersThreeIcon aria-hidden="true" className="size-3.5 shrink-0" />
         <span className="shrink-0">{translateText("proposal.title")}</span>
         <span className="task-fold-title">{proposal.name}</span>
-        <StatusMark status={status} />
+        {status === undefined ? null : <StatusMark status={status} />}
       </div>
       <div className="task-fold-body">
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
@@ -126,7 +125,7 @@ export function GroupProposalCard({ message }: { message: MessageView }) {
             </Button>
           </div>
         ) : null}
-        {status === "applied" && result !== null ? (
+        {status === "applied" && result != null ? (
           <Link
             to="/"
             search={{ group: result.conversationId }}

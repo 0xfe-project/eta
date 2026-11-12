@@ -679,10 +679,6 @@ export class CaptainService {
       await this.#settled(rejected);
       return rejected;
     }
-    // Taken before anything is awaited: a second click while this one is applying finds it no longer
-    // pending, instead of applying it twice (a group made twice, say).
-    this.#deps.store.setOperation(operationId, "approved");
-    this.#deps.changed();
     try {
       const result = await this.#applyOperation(operation);
       const applied = this.#deps.store.setOperation(
@@ -824,9 +820,6 @@ export class CaptainService {
       event: "captain_group_proposal",
       operationId: operation.id,
       proposal,
-      status: operation.status,
-      result: null,
-      error: null,
     };
     this.#deps.timeline.append({
       id: messageId,
@@ -967,22 +960,12 @@ export class CaptainService {
   }
 
   /**
-   * A decided operation that Captain is waiting on. A group proposal's card shows the outcome, and
-   * Captain hears it in the conversation it proposed from, as a message that starts its next turn.
+   * A decided operation that Captain is waiting on: for a group proposal, Captain hears the outcome
+   * in the conversation it proposed from, as a message that starts its next turn.
    */
   async #settled(operation: CaptainOperationView): Promise<void> {
     if (operation.kind !== "create_group") return;
     const proposal = operation.payload as unknown as CaptainGroupProposal;
-    const card = this.#deps.timeline.get(proposal.messageId);
-    if (card !== undefined) {
-      this.#deps.timeline.setData(card.id, {
-        ...card.data,
-        status: operation.status,
-        result: operation.result,
-        error: operation.error,
-      });
-      this.#deps.changed([card.conversationId]);
-    }
     const captain = this.identity();
     if (captain === undefined) return;
     try {

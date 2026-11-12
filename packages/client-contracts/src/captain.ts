@@ -125,10 +125,6 @@ export interface CaptainGroupProposalRowData {
   event: "captain_group_proposal";
   operationId: string;
   proposal: CaptainGroupProposal;
-  /** Mirrors the operation, for a card whose operation is no longer in the published list. */
-  status: CaptainOperationStatus;
-  result: CaptainGroupResult | null;
-  error: string | null;
 }
 
 export interface CaptainNotificationView {
