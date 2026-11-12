@@ -32,7 +32,7 @@ afterEach(async () => {
 
 /** The product's plugins, as a host that has them. */
 function host() {
-  const fake = buildProductHost({}, ["inbox", "github"]).target(
+  const fake = buildProductHost({}, ["inbox"]).target(
     "inbox",
     { list: [], approvals: { tools: [] } },
     { eager: true },

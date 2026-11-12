@@ -247,9 +247,18 @@ describe("the journal and the toolset", () => {
       storage,
       models: fakeModels([]) as never,
     });
-    // A journal from before the ESM refactor: file, shell, state and subagent tools are gone.
+    // A journal from before the ESM refactor and the GitHub connection's removal: file, shell,
+    // state, subagent and GitHub tools are gone.
     first.kernel.config.update({
-      activeToolNames: ["read", "bash", "update_state", "Agent", "list_steps"],
+      activeToolNames: [
+        "read",
+        "bash",
+        "update_state",
+        "Agent",
+        "open_pull_request",
+        "draft_issue",
+        "list_steps",
+      ],
     });
     await first.journaling.flush();
     await first.kernel.dispose();

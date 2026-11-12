@@ -12,9 +12,9 @@ import { useWorkspaceStore } from "./workspace-store";
 // reachable through `?settings=<section>`, the section still renders, and the saved data behind
 // it still applies.
 
-/** The product's plugins, the inbox (the approval list's own target) and GitHub, mounted. */
+/** The product's plugins and the inbox (the approval list's own target), mounted. */
 function host(approvals: string[] = ["bash"]): FakeHost {
-  const fake = buildProductHost({}, ["inbox", "github"]).target(
+  const fake = buildProductHost({}, ["inbox"]).target(
     "inbox",
     { list: [], approvals: { tools: approvals } },
     { eager: true },

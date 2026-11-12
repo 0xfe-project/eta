@@ -41,6 +41,26 @@
     "round": "第 {{round}} 轮"
   },
   "operationsBadge": "运营 · {{count}}",
+  "proposal": {
+    "label": "提议的群 {{name}}",
+    "title": "新群",
+    "directory": "目录",
+    "newProject": "新项目",
+    "members": "成员",
+    "steward": "主理人",
+    "goal": "目标",
+    "create": "创建",
+    "reject": "拒绝",
+    "open": "打开「{{name}}」",
+    "status": {
+      "pending": "待确认",
+      "approved": "创建中…",
+      "applied": "已创建",
+      "rejected": "已拒绝",
+      "failed": "失败",
+      "expired": "已过期"
+    }
+  },
   "review": {
     "title": "Captain 巡检",
     "auto": "自动巡检",

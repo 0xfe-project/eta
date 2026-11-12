@@ -14,7 +14,6 @@ import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { ChatCircleIcon } from "@phosphor-icons/react/ChatCircle";
 import { ClockIcon } from "@phosphor-icons/react/Clock";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
-import { GitPullRequestIcon } from "@phosphor-icons/react/GitPullRequest";
 import { InfoIcon } from "@phosphor-icons/react/Info";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
 import { PaperPlaneRightIcon } from "@phosphor-icons/react/PaperPlaneRight";
@@ -58,7 +57,6 @@ import { mentionedMembers, mentionLabel } from "@/lib/mentions";
 import { cn } from "@/lib/utils";
 import { useAgentList } from "@/queries/agents";
 import { useConversationList } from "@/queries/conversations";
-import { useTaskPulls } from "@/queries/github";
 import { useMachines, useProjects } from "@/queries/projects";
 import {
   useCommentTask,
@@ -88,7 +86,6 @@ import {
   workspaceLabel,
 } from "./task-format";
 import { useTaskNav } from "./task-nav";
-import { TaskPulls } from "./task-pulls";
 import { RunLog } from "./task-run-log";
 import { StatusIcon } from "./task-status-icon";
 import { SlashMenu } from "./transcript/slash-menu";
@@ -1737,31 +1734,13 @@ export function Description({
   );
 }
 
-/** The pull request the task delivered, newest, as a link in the header: it is the work. */
-function PullChip({ task }: { task: TaskDetail }) {
-  const pull = useTaskPulls(task.id).at(-1);
-  if (!pull) return null;
-  return (
-    <Button
-      asChild
-      variant="ghost"
-      size="xs"
-      className="text-muted-foreground tabular-nums"
-    >
-      <a href={pull.url} target="_blank" rel="noreferrer" title={pull.title}>
-        <GitPullRequestIcon aria-hidden="true" />#{pull.number}
-      </a>
-    </Button>
-  );
-}
-
 /** How long the pointer rests on the details button before they open, and leaves before they close. */
 const HOVER_OPEN_MS = 150;
 const HOVER_CLOSE_MS = 200;
 
 /**
- * The task's underlying properties — who executes it, where, its runs and rerunning, its pull
- * requests — behind one button. A click opens and pins them; a mouse resting on the button opens
+ * The task's underlying properties — who executes it, where, its runs and rerunning — behind one
+ * button. A click opens and pins them; a mouse resting on the button opens
  * them too and they close when it leaves, unless a click pinned them. Not a hover card: they hold
  * buttons, and a touch has no hover.
  */
@@ -1817,9 +1796,7 @@ function TaskDetails({ task }: { task: TaskDetail }) {
         onPointerEnter={hover(true)}
         onPointerLeave={hover(false)}
       >
-        <TaskProperties task={task} status={false}>
-          <TaskPulls task={task} />
-        </TaskProperties>
+        <TaskProperties task={task} status={false} />
       </PopoverContent>
     </Popover>
   );
@@ -1929,7 +1906,6 @@ function TaskView({ task }: { task: TaskDetail }) {
           <span className="flex-1 text-xs text-muted-foreground tabular-nums">
             #{task.number}
           </span>
-          <PullChip task={task} />
           <StatusIcon status={task.status} />
           <StatusSelect
             size="sm"

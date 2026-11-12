@@ -44,7 +44,6 @@ export type SettingsSection =
   | "mcp"
   | "plugins"
   | "email"
-  | "connections"
   | "archived"
   | "appearance"
   | "host"

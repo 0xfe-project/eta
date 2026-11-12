@@ -115,7 +115,7 @@ describe("聊天区右边缘的导航轨道", () => {
 
 describe("外观里的导航轨道开关", () => {
   async function appearance() {
-    const fake = buildProductHost({}, ["inbox", "github"]).target(
+    const fake = buildProductHost({}, ["inbox"]).target(
       "inbox",
       { list: [], approvals: { tools: [] } },
       { eager: true },

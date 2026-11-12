@@ -55,15 +55,6 @@ rstest.mock("./activity-ref", () => ({
   ),
 }));
 
-// What a page with GitHub draws under `open_pull_request`; which block earns a card, and what a
-// host without the plugin does, is github-ref.test.ts.
-rstest.mock("./github-ref", () => ({
-  useGitHubRef: (block: { name: string }) =>
-    block.name === "open_pull_request"
-      ? { kind: "pull_request", title: "PR", url: "https://example.com/1" }
-      : undefined,
-}));
-
 const AGENT = "a1";
 const TURNS = 50;
 // The rows the page has seen outlive a render, so each test has a conversation of its own.
@@ -434,42 +425,6 @@ describe("a reply that is writing", () => {
     ]);
     expect(container.textContent).toContain("看完了");
     expect(container.textContent).not.toContain("我先看看");
-  });
-
-  it("frames the card a tool call left under it", async () => {
-    const user = row({ text: "开个 PR" });
-    const reply = row({
-      author: "agent",
-      agentId: AGENT,
-      replyToId: user.id,
-      status: "done",
-      text: "开好了",
-      data: {
-        activity: [
-          {
-            id: "t1",
-            name: "open_pull_request",
-            input: {},
-            status: "completed",
-          },
-        ],
-      },
-    });
-    history = [user, reply];
-    const { container } = await start();
-    await flush();
-    const card = container.querySelector('[data-testid="ref"]')!;
-    expect(card.closest(".tool-step")).not.toBeNull();
-    expect(card.getAttribute("data-variant")).toBe("framed");
-    // A process frame has a line of its own: flush against it, the card's would double it.
-    expect(card.closest(".tool-ref")).not.toBeNull();
-    const styles = readFileSync(
-      new URL("../../styles.css", import.meta.url),
-      "utf8",
-    );
-    expect(styles).toMatch(
-      /\.process-box \.tool-ref,\s*\.process-fold-body \.tool-ref \{\s*padding: 0 4px 4px;/,
-    );
   });
 
   it("draws the tool calls a finished reply kept, and the artifacts it published", async () => {

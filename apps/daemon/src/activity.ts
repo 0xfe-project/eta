@@ -12,10 +12,7 @@ import type { AgentMessage } from "@eta/core";
 /** The longest string kept from a call's arguments, and from a result. */
 const MAX_VALUE = 400;
 const MAX_OUTPUT = 2000;
-/**
- * `details` larger than this (as JSON) is not kept: it was not meant for the page. It is as large
- * as an issue draft that carries its body (GitHub takes 65,536 characters) for the card to copy.
- */
+/** `details` larger than this (as JSON) is not kept: it was not meant for the page. */
 const MAX_DETAILS = 70_000;
 const MAX_ARGUMENTS = 20;
 const MAX_CALLS = 200;

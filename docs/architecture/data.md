@@ -24,11 +24,10 @@ No second root is allowed here. There used to be a `--data-dir`: it only moved c
   plugin-runtime/           generated directory for Claude Code, containing only valid skills (symlinks)
   modules/                  official plugins
   access-token              the token for the token gate (when enabled; 0600)
-  secret.key                sealing key for email, MCP, and GitHub (0600, generated on first use)
-  github/                   GitHub login for git and gh on this host machine (tokens last at most an hour, see [GitHub](github.md)): gh/hosts.yml, token, login, git/github.inc
+  secret.key                sealing key for email and MCP (0600, generated on first use)
 ```
 
-daemon data lives in the same root: `~/.eta/daemon/` (see [machines and daemon](machines.md)), GitHub login in `daemon/github/`, sessions in `daemon/sessions/`. It shares `$HOME` with the host, each occupying its own subdirectory. The memory sidecar's data lives in its own PostgreSQL, not here.
+daemon data lives in the same root: `~/.eta/daemon/` (see [machines and daemon](machines.md)), sessions in `daemon/sessions/`. It shares `$HOME` with the host, each occupying its own subdirectory. The memory sidecar's data lives in its own PostgreSQL, not here.
 
 ## SQLite
 
@@ -51,7 +50,7 @@ daemon data lives in the same root: `~/.eta/daemon/` (see [machines and daemon](
 | 0028 | `attachment` (attachments: which conversation they belong to, name, type, size, which message claimed them; unsent ones are cleaned up after 24 hours) |
 | 0033 | `credential` (credentials for external integrations: `integration`, `key`, `kind`, encrypted `value`; currently the OAuth state of MCP servers, see [MCP](mcp.md)) |
 | 0034 | `task_run` (a task's run, which is also the queue); `task` gains project, workspace (mode, worktree path and branch), and source conversation, and drops `assignee`; `machine.max_active_runs` (default 2); `task_activity` gains run-type entries, see [Tasks](tasks.md) |
-| 0035 | `github_app`, `github_user` (private key, client secret, and user tokens sealed), `github_pending` (in-flight manifests and authorizations), `task_pull` (PRs delivered by tasks), see [GitHub](github.md) |
+| 0035 | `github_app`, `github_user`, `github_pending`, `task_pull`: the GitHub connection's, which is gone; the tables are left in place and nothing reads or writes them |
 | 0046 captain | Captain：`agent.system_role`、`message.author = 'captain'`、assignment/target、task provenance |
 | 0047 captain-reviews | Captain review queue: failed, stuck, Inbox, and assignment events awaiting review, recording the dedupe key, checkpoint, delivered message, and Captain reply |
 | 0048 run-activity | run's `last_event_at/error_code/retryable`; Captain review's `attempts/next_attempt_at` backoff fields |

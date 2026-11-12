@@ -15,7 +15,6 @@ export * from "./artifacts";
 export * from "./captain";
 export type * from "./data";
 export * from "./email";
-export * from "./github";
 export * from "./inbox";
 export * from "./link";
 export * from "./llm";

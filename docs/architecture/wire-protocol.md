@@ -40,23 +40,22 @@ Upstream provides (bundled plugins):
 
 Product plugins (`apps/eta`, all are cordis plugins, injecting `wire` and `sessions`):
 
-| Plugin        | target                                                      | action                                                                                                                |
-| ------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| agents        | `agents`（eager）                                           | `create` `update` `delete` `direct`                                                                                   |
-| machines      | `machines`（eager）                                         | `enroll` `approve` `revoke` `rename` `setMaxActiveRuns`                                                               |
-| projects      | `projects` (eager)                                          | `create` `update` `setSteward` `files` (archive via `update`)                                                         |
-| conversations | `conversations`、`conversations.<id>`                       | `create` `update` `invite` `remove` `setSteward` `send` `stop` `read` `history` `attach` `unattach`                   |
-| inbox         | `inbox`                                                     | `answer` `setApprovals`                                                                                               |
-| email         | `email`、`email.<thread-id>`                                | `saveAccount` `removeAccount` `verifyAccount` `refresh` `markRead` `assign` `confirmProposal` `discardProposal`       |
-| usage         | `usage`                                                     | Read-only                                                                                                             |
-| tasks         | `tasks`, `tasks.<id>`                                       | `update` `comment` `delete` `link` `confirmDraft` `interrupt` `rerun` (no `create`, see [Tasks](tasks.md))            |
-| artifacts     | `artifacts`                                                 | `share` `unshare` `delete` `preview`                                                                                  |
-| routines      | `routines`、`routines.<id>`                                 | `create` `update` `delete` `run` `seen` `feedback` `restoreBrief`                                                     |
-| mcp           | `mcp`                                                       | `connect` `reconnect` `login` `completeLogin` `logout`, see [MCP](mcp.md)                                             |
-| plugins       | `list` `audit`                                              | `configure` `setLevel` `add` `update` `remove` `recheck`, see [Plugins](plugins.md)                                   |
-| github        | `github` (mounted only on load, not loaded by default)      | `refresh` `createApp` `setOAuthClient` `authorize` `unauthorize` `disconnect` `pull` `merge`, see [GitHub](github.md) |
-| memory        | `memory` (mounted only when sidecar is present)             | `list` `remember` `forget`                                                                                            |
-| llm           | `llm` (eager; mounted only when gateway library is present) | `refresh` `loginStart` `loginPoll` `loginSubmit` `loginCancel` `setEnabled` `remove`                                  |
+| Plugin        | target                                                      | action                                                                                                          |
+| ------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| agents        | `agents`（eager）                                           | `create` `update` `delete` `direct`                                                                             |
+| machines      | `machines`（eager）                                         | `enroll` `approve` `revoke` `rename` `setMaxActiveRuns`                                                         |
+| projects      | `projects` (eager)                                          | `create` `update` `setSteward` `files` (archive via `update`)                                                   |
+| conversations | `conversations`、`conversations.<id>`                       | `create` `update` `invite` `remove` `setSteward` `send` `stop` `read` `history` `attach` `unattach`             |
+| inbox         | `inbox`                                                     | `answer` `setApprovals`                                                                                         |
+| email         | `email`、`email.<thread-id>`                                | `saveAccount` `removeAccount` `verifyAccount` `refresh` `markRead` `assign` `confirmProposal` `discardProposal` |
+| usage         | `usage`                                                     | Read-only                                                                                                       |
+| tasks         | `tasks`, `tasks.<id>`                                       | `update` `comment` `delete` `link` `confirmDraft` `interrupt` `rerun` (no `create`, see [Tasks](tasks.md))      |
+| artifacts     | `artifacts`                                                 | `share` `unshare` `delete` `preview`                                                                            |
+| routines      | `routines`、`routines.<id>`                                 | `create` `update` `delete` `run` `seen` `feedback` `restoreBrief`                                               |
+| mcp           | `mcp`                                                       | `connect` `reconnect` `login` `completeLogin` `logout`, see [MCP](mcp.md)                                       |
+| plugins       | `list` `audit`                                              | `configure` `setLevel` `add` `update` `remove` `recheck`, see [Plugins](plugins.md)                             |
+| memory        | `memory` (mounted only when sidecar is present)             | `list` `remember` `forget`                                                                                      |
+| llm           | `llm` (eager; mounted only when gateway library is present) | `refresh` `loginStart` `loginPoll` `loginSubmit` `loginCancel` `setEnabled` `remove`                            |
 
 Eager targets arrive with `hello`, so the page can render without subscribing first.
 
@@ -74,4 +73,4 @@ The `transcript` segments of `sessions.<id>` only include the last 200 lines of 
 
 ## HTTP not exposed online
 
-Outside of `staticRoutes`, only these exist: `/up` (health), `/version` (build ID, used by the page to prompt "new version available"), static pages (falls back to `index.html` when the path is not a file), artifact's `/preview/…`, `/share/…`, `/artifacts/<id>/<version>/archive.zip`, MCP login callback `/mcp/oauth/callback`, GitHub's two callbacks back to the host `/github/manifest/callback`, `/github/authorization/callback` (see [GitHub](github.md)), and the daemon's two endpoints `/machines/enroll`, `/machines/connect`. No REST, no OpenAPI.
+Outside of `staticRoutes`, only these exist: `/up` (health), `/version` (build ID, used by the page to prompt "new version available"), static pages (falls back to `index.html` when the path is not a file), artifact's `/preview/…`, `/share/…`, `/artifacts/<id>/<version>/archive.zip`, MCP login callback `/mcp/oauth/callback`, and the daemon's two endpoints `/machines/enroll`, `/machines/connect`. No REST, no OpenAPI.

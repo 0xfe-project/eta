@@ -314,6 +314,9 @@ const REMOVED_TOOLS: ReadonlySet<string> = new Set([
   "Agent",
   "get_subagent_result",
   "steer_subagent",
+  // The GitHub connection's; a host started with `--github` pinned them on every session.
+  "open_pull_request",
+  "draft_issue",
 ]);
 
 /** Replay a journal and hand back a session ready to run. */

@@ -12,8 +12,8 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { ActivityRefCard } from "./activity-ref";
 
-// A thing a task, a routine, a pull request or an artifact points at links to it from a card; the
-// right panel's task, routine and artifact blocks draw them.
+// A thing a task, a routine or an artifact points at links to it from a card; the right panel's
+// task, routine and artifact blocks draw them.
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -63,21 +63,15 @@ async function mount(
 
 const hasBorder = (el: Element) => el.classList.contains("border");
 
-/** The element that carries the frame, in each of the card's three shapes. */
+/** The element that carries the frame, in each of the card's two shapes. */
 const frames = (c: HTMLElement) => {
   const log = c.querySelector('[role="log"]')!;
   return [...log.children];
 };
 
-// The three shapes the card is drawn in: an address (a link inside a frame), an artifact (a
-// button inside a frame), and a task (a router link that is its own frame).
+// The two shapes the card is drawn in: an artifact (a button inside a frame), and a task (a router
+// link that is its own frame).
 const shapes: ActivityRef[] = [
-  {
-    kind: "pull_request",
-    number: 7,
-    title: "Add cards",
-    url: "https://github.com/akarachen/eta/pull/7",
-  },
   { kind: "artifact", id: "a1", title: "看板", number: 2 },
   task,
 ];
@@ -113,7 +107,7 @@ describe("activity ref cards", () => {
     const { container: flat } = await mount(shapes, { variant: "flat" });
     for (const container of [unset, flat]) {
       const drawn = frames(container);
-      expect(drawn).toHaveLength(3);
+      expect(drawn).toHaveLength(2);
       for (const frame of drawn) expect(hasBorder(frame)).toBe(false);
     }
     // `flat` is the default, spelled out: the same classes, not a look of its own.
@@ -125,24 +119,13 @@ describe("activity ref cards", () => {
   it("draws a 1px line round a framed card, in every shape", async () => {
     const { container } = await mount(shapes, { variant: "framed" });
     const drawn = frames(container);
-    expect(drawn).toHaveLength(3);
+    expect(drawn).toHaveLength(2);
     for (const frame of drawn) {
       expect(hasBorder(frame)).toBe(true);
       expect(frame.classList.contains("border-border")).toBe(true);
       // The line, and nothing else: a card here is still square, and has no fill of its own.
       expect(frame.className).not.toMatch(/(^|\s)(bg-|shadow|rounded|max-w)/);
     }
-  });
-
-  it("keeps a draft dashed when it is framed: that is its state", async () => {
-    const url = "https://github.com/akarachen/eta/issues/new?title=x";
-    const { container } = await mount(
-      [{ kind: "issue_draft", title: "卡片错位", url }],
-      { variant: "framed" },
-    );
-    const frame = frames(container)[0]!;
-    expect(frame.classList.contains("border-dashed")).toBe(true);
-    expect(frame.classList.contains("border-border")).toBe(false);
   });
 
   it("keeps a real group, and drops the word null", async () => {
@@ -169,68 +152,11 @@ describe("activity ref cards", () => {
     expect(router.state.location.search).toEqual({ task: "t1" });
   });
 
-  it("links pull requests, and draws nothing for a routine", async () => {
+  it("draws nothing for a routine", async () => {
     const { container } = await mount([
       { kind: "routine", id: "r1", title: "日报" },
-      {
-        kind: "pull_request",
-        number: 7,
-        title: "Add cards",
-        url: "https://github.com/akarachen/eta/pull/7",
-      },
     ]);
     // 定时 is off in this build: its card would be a dead link, so it draws nothing.
-    expect(cards(container)).toEqual([
-      {
-        href: "https://github.com/akarachen/eta/pull/7",
-        label: "打开 PR #7 Add cards",
-        text: "#7 Add cards · akarachen/eta",
-      },
-    ]);
-  });
-
-  it("offers to file an issue draft on GitHub, as no issue yet", async () => {
-    const url =
-      "https://github.com/akarachen/eta/issues/new?body=%E5%9D%8F%E4%BA%86&title=%E5%8D%A1%E7%89%87%E9%94%99%E4%BD%8D";
-    const { container } = await mount([
-      { kind: "issue_draft", title: "卡片错位", url },
-    ]);
-    expect(cards(container)).toEqual([
-      {
-        href: url,
-        label: "去 GitHub 创建 issue：卡片错位（akarachen/eta）",
-        text: "卡片错位 · akarachen/eta去 GitHub 创建",
-      },
-    ]);
-    const link = container.querySelector('[role="log"] a')!;
-    expect(link.getAttribute("target")).toBe("_blank");
-    expect(link.parentElement!.className).toContain("border-dashed");
-    // The link carried the body: nothing to copy.
-    expect(container.querySelector('[role="log"] button')).toBeNull();
-  });
-
-  it("lets a draft too long for its link copy its body", async () => {
-    const copied: string[] = [];
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText: async (text: string) => void copied.push(text) },
-    });
-    const { container } = await mount([
-      {
-        kind: "issue_draft",
-        title: "长",
-        body: "很长的正文",
-        url: "https://github.com/akarachen/eta/issues/new?title=%E9%95%BF",
-      },
-    ]);
-    const copy = container.querySelector<HTMLButtonElement>(
-      '[role="log"] button[aria-label^="正文太长"]',
-    )!;
-    expect(copy.textContent).toBe("复制正文");
-    await act(async () => {
-      copy.click();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    expect(copied).toEqual(["很长的正文"]);
+    expect(frames(container)).toEqual([]);
   });
 });

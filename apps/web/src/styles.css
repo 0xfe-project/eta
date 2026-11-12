@@ -1089,12 +1089,6 @@
   .process-fold-body > :last-child .tool-card:last-child {
     border-bottom-width: 0;
   }
-  /* A framed card keeps its own line in there, so it stands off the frame's: flush, the two would
-     read as one 2px line down each side. */
-  .process-box .tool-ref,
-  .process-fold-body .tool-ref {
-    padding: 0 4px 4px;
-  }
   /* Once the reply is at its final text the frame folds into one row; opened, the steps stack
      under it in the same frame, at their natural height. */
   .process-fold {

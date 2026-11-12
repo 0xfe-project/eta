@@ -28,7 +28,6 @@ import {
   statusColor,
   statusLabel,
 } from "./format";
-import { TaskPulls } from "./pulls";
 import { openRunLog, openRuns } from "./runs";
 import { LinkSheet, PropertiesSheet, SheetOption, StatusSheet } from "./sheets";
 import { openQuestion, Thread } from "./thread";
@@ -224,7 +223,6 @@ function TaskView(props: { task: () => TaskDetail }) {
         </Text>
       </View>
       <Question task={task} onReply={() => focusBox()} />
-      <TaskPulls task={task} />
       <View
         class={`min-h-0 grow basis-0 ${openQuestion(task()) === undefined ? "border-t border-border" : ""}`}
       >

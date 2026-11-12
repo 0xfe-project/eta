@@ -13,10 +13,6 @@
 # Memory is optional. Turn it on with the profile and the model that extracts facts:
 #   MEMORY_LLM_BASE_URL=https://api.openai.com/v1 MEMORY_LLM_API_KEY=... MEMORY_LLM_MODEL=gpt-5-mini \
 #   ETA_MEMORY_URL=http://memory:8320 docker compose -f deploy/compose.yaml --profile memory up -d --build
-#
-# GitHub is optional too, and off by default: with it the host loads the App, the `github` target, the
-# agents' pull-request and issue tools, the callbacks and the git/gh login, and the page shows
-# settings → Connections. `ETA_GITHUB=1` (or a `--github` in `command:` below) turns it on.
 services:
   eta:
     build:
@@ -30,10 +26,6 @@ services:
     environment:
       # Empty means no memory; the host reads it when --memory-url is not given.
       ETA_MEMORY_URL: ${ETA_MEMORY_URL:-}
-      # GitHub is off unless this says otherwise (1/true/yes/on) — see docs/architecture/github.md.
-      # A `--github` in the command below does the same and wins over this; anything else (or
-      # nothing) leaves the whole chain unloaded, so nothing GitHub is ever asked for.
-      ETA_GITHUB: ${ETA_GITHUB:-}
     command: ["--allow-origin", "${ETA_ALLOW_ORIGIN:-http://localhost:8787}"]
 
   memory:

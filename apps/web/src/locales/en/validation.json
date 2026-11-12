@@ -3,6 +3,5 @@
   "nameRequired": "Enter a name.",
   "nameMaxLength": "Names can have up to 100 characters.",
   "instructionsMaxLength": "Instructions can have up to {{maxCharacters}} characters.",
-  "integerRange": "Enter an integer from {{min}} to {{max}}.",
-  "organizationRequired": "Enter an organization name"
+  "integerRange": "Enter an integer from {{min}} to {{max}}."
 }

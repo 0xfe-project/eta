@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { ROUTINES_VISIBLE } from "@/lib/features";
 import { agentName, useAgentList } from "@/queries/agents";
+import { GroupProposalCard } from "./group-proposal-card";
 import { useSectionLink } from "./workspace-search";
 
 /**
@@ -26,8 +27,12 @@ export function GroupNotice({ message }: { message: MessageView }) {
       runId?: string;
       title?: string | null;
     };
+  if (event === "captain_group_proposal")
+    return <GroupProposalCard message={message} />;
   let text = message.text;
-  if (event === "steward") {
+  if (event === "captain_created") {
+    text = translateText("chat:system.createdByCaptain");
+  } else if (event === "steward") {
     if (typeof to === "string" && typeof from === "string")
       text = translateText("chat:system.stewardChanged", {
         to: agentName(agents, to),

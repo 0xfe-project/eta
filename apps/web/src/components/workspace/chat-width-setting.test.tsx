@@ -130,7 +130,7 @@ describe("聊天内容宽度", () => {
 
 describe("外观里的聊天内容宽度", () => {
   async function appearance() {
-    const fake = buildProductHost({}, ["inbox", "github"]).target(
+    const fake = buildProductHost({}, ["inbox"]).target(
       "inbox",
       { list: [], approvals: { tools: [] } },
       { eager: true },

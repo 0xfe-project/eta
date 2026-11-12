@@ -140,8 +140,6 @@ test("06c: the properties, and rerunning from there", async () => {
   await app.press("id:task-properties");
   await app.waitFor("属性");
   expect(app.shows("~/.eta/worktrees/eta/task-128")).toBe(true);
-  expect(app.shows("交付")).toBe(true);
-  expect(app.shows("#472 重放缺失的帧")).toBe(true);
   await app.press("id:task-rerun");
   await app.waitFor("id:task-rerun", { state: "gone" });
   await app.waitFor("阿澈 排队中 · mac-studio 同时运行的任务数已满，等空位");
@@ -152,7 +150,6 @@ test("06c2: a run on another machine says where it really is", async () => {
   await app.press("id:task-properties");
   await app.waitFor("在 gpu-box 上，不在项目里");
   expect(app.shows("/home/akrc")).toBe(true);
-  expect(app.shows("交付")).toBe(false);
   expect(app.shows("id:task-rerun")).toBe(false);
 });
 
@@ -166,58 +163,6 @@ test("06d: the status moves, on the page and on the board", async () => {
   await app.press("id:back");
   await app.waitFor("id:fold-done");
   expect(app.shows("id:task-128")).toBe(false);
-});
-
-test("06e: merging and completing are two steps done in order", async () => {
-  const app = await task(128);
-  await app.waitFor("id:pr-more");
-  await app.press("id:pr-more");
-  await app.waitFor("更多合并方式");
-  await app.press("合并并标记任务完成");
-  await app.waitFor("合并中…");
-  await app.waitFor("PR 已合并，任务已完成", { timeout: 3000 });
-  expect(app.shows("已完成")).toBe(true);
-});
-
-test("06e2: each state of a PR", async () => {
-  const app = await task(128, "pr-states");
-  await app.waitFor("检查还没过，GitHub 现在不让合并。");
-  await app.waitFor("状态暂不可用");
-  expect(app.count("text:标记任务完成")).toBe(2);
-  await app.press("text:标记任务完成 >> nth=0");
-  await app.waitFor("PR 已合并，任务未完成：宿主没有及时回应。");
-});
-
-test("06e2: a merge that gets no answer says so and reads the PR again", async () => {
-  const app = await open("../../../DevApp.tsx", {
-    clock: {},
-    storage: {
-      "eta.host": JSON.stringify({ address: "fake", token: "" }),
-      "eta.language": "zh",
-      "eta.fake.scenario": "pr-states",
-    },
-  });
-  await app.waitFor("id:tab-tasks");
-  await app.press("id:tab-tasks");
-  await app.press("id:task-128");
-  await app.waitFor("id:pr-merge");
-  await app.press("id:pr-merge");
-  await app.waitFor("合并中…");
-  await app.waitFor(
-    "没有得到合并结果，已重新读取 PR 状态，请确认后再决定是否重试。",
-    {
-      timeout: 130_000,
-    },
-  );
-  expect(app.shows("id:pr-merge")).toBe(true);
-});
-
-test("no github: no PR bar, no 交付, no partial UI", async () => {
-  const app = await task(128, "no-github");
-  expect(app.shows("#472 重放缺失的帧")).toBe(false);
-  await app.press("id:task-properties");
-  await app.waitFor("属性");
-  expect(app.shows("交付")).toBe(false);
 });
 
 test("06f: title and description save together", async () => {
@@ -294,8 +239,7 @@ test("the dark theme draws the same task", async () => {
   await app.waitFor("id:tab-tasks");
   await app.press("id:tab-tasks");
   await app.press("id:task-128");
-  await app.waitFor("id:pr-merge");
-  expect(app.shows("#472 重放缺失的帧")).toBe(true);
+  await app.waitFor("id:task-properties");
 });
 
 test("a language change reaches the board", async () => {
