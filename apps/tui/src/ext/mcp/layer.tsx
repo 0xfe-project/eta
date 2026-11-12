@@ -1,4 +1,5 @@
 import type {
+  AgentView,
   McpConnectionState,
   McpResults,
   McpServerRef,
@@ -12,6 +13,7 @@ import { useShell, useTheme } from "../../extensions/react";
 import { useMessages } from "../../i18n/react";
 import { LayerFrame } from "../../ui/components/layer-frame";
 import { inkColor } from "../../ui/theme";
+import { withoutCaptainRows } from "../kit/captain";
 import { connectionOrigin } from "../kit/connection";
 import { useHostCall } from "../kit/host-call";
 import { PickList } from "../kit/pick-list";
@@ -41,9 +43,10 @@ const keyOf = (ref: McpServerRef) => JSON.stringify([ref.agentId, ref.server]);
 
 /** Every agent's MCP servers, and for the one opened, connecting and signing in. */
 export function McpLayer({ handle }: { handle: LayerHandle }) {
-  const servers = useTarget("mcp")?.sections.list as
-    | McpServerView[]
-    | undefined;
+  const all = useTarget("mcp")?.sections.list as McpServerView[] | undefined;
+  const agents = useTarget("agents")?.sections.list as AgentView[] | undefined;
+  const servers =
+    all === undefined ? undefined : withoutCaptainRows(all, agents);
   const [opened, setOpened] = useState<McpServerRef>();
   if (opened !== undefined)
     return (

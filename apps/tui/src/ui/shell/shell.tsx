@@ -1,11 +1,14 @@
+import type { DOMElement } from "ink";
 import type { ReactNode } from "react";
 import type { ActionName } from "../../config/types";
 import type { VersionWarning } from "../../connection/types";
 import type { Session } from "./session";
-import { Box, Text } from "ink";
+import { Box, Text, useBoxMetrics } from "ink";
+import { useRef } from "react";
 import { useStore } from "zustand";
 import { InputScope } from "../../extensions/input-scope";
 import { useAction, useConfig, useRegistry } from "../../extensions/react";
+import { LayerAreaContext, LayerRowsContext } from "../components/layer-space";
 import { Home } from "./home";
 import { StatusBar } from "./status-bar";
 import { TabBar } from "./tab-bar";
@@ -119,27 +122,45 @@ function asNode(content: ReactNode): ReactNode {
   );
 }
 
-/** The open layers; only the top one shows and receives keys, the ones under it keep their state. */
+/**
+ * The open layers; only the top one shows and receives keys, the ones under it keep their state.
+ * They take the whole main area and no more; how many rows that is reaches them through
+ * `LayerRowsContext`.
+ */
 function Layers({ session }: { session: Session }) {
   const layers = useStore(session.store, (s) => s.layers);
+  const areaRef = useRef<DOMElement>(null);
+  const area = useBoxMetrics(areaRef);
+  const rows = area.hasMeasured && area.height > 0 ? area.height : undefined;
   return (
-    <>
-      {layers.map((layer, index) => {
-        const top = index === layers.length - 1;
-        return (
-          <Box
-            key={layer.id}
-            flexGrow={1}
-            flexDirection="column"
-            display={top ? "flex" : "none"}
-          >
-            <InputScope active={top}>
-              {asNode(layer.render(layer.handle))}
-            </InputScope>
-          </Box>
-        );
-      })}
-    </>
+    <Box
+      ref={areaRef}
+      flexGrow={1}
+      flexBasis={0}
+      flexDirection="column"
+      overflow="hidden"
+      display={layers.length > 0 ? "flex" : "none"}
+    >
+      <LayerAreaContext value>
+        <LayerRowsContext value={rows}>
+          {layers.map((layer, index) => {
+            const top = index === layers.length - 1;
+            return (
+              <Box
+                key={layer.id}
+                flexGrow={1}
+                flexDirection="column"
+                display={top ? "flex" : "none"}
+              >
+                <InputScope active={top}>
+                  {asNode(layer.render(layer.handle))}
+                </InputScope>
+              </Box>
+            );
+          })}
+        </LayerRowsContext>
+      </LayerAreaContext>
+    </Box>
   );
 }
 

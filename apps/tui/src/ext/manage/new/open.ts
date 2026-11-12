@@ -2,6 +2,7 @@ import type { ShellContext } from "../../../extensions/types";
 import { createElement } from "react";
 import { agentsOf } from "../../../extensions/eager-lists";
 import { translatorFor } from "../../../i18n/messages";
+import { ordinaryAgents } from "../../kit/captain";
 import { manageMessages } from "../messages";
 import { NewConversationLayer } from "./layer";
 
@@ -20,7 +21,7 @@ export function openNewConversation(
   ctx: ShellContext,
   path: string | undefined,
 ): void {
-  if (agentsOf(ctx.wire.store.getState()).length === 0) {
+  if (ordinaryAgents(agentsOf(ctx.wire.store.getState())).length === 0) {
     ctx.notify(translatorFor(manageMessages, ctx.locale)("noAgents"), "error");
     return;
   }

@@ -379,10 +379,12 @@ function workedReply(count: number): MessageView {
 
 describe("folding, on screen", () => {
   const scene = () => ({ rows: [row(1, { text: "go" }), workedReply(12)] });
+  // The tool card's own folding, with the reply's steps drawn as items rather than one line.
+  const config = testConfig({ transcript: { toolCalls: "expanded" } });
 
   it("unfolds everything with Ctrl+O and folds it back", async () => {
     // The test settings show 10 lines of a tool's output.
-    const { r } = await show(scene(), { rows: 30 });
+    const { r } = await show(scene(), { rows: 30, config });
     expect(plain(r)).toContain("… 2 more lines");
     expect(plain(r)).not.toContain("out 12");
     expect(plain(r)).not.toContain("a hidden thought");
@@ -400,7 +402,7 @@ describe("folding, on screen", () => {
   });
 
   it("unfolds the item under the cursor with space, and folds it again after Ctrl+O", async () => {
-    const { r } = await show(scene(), { rows: 30 });
+    const { r } = await show(scene(), { rows: 30, config });
     await r.press(KEY.select);
     await r.press(" ");
     await realDelay(50);
@@ -427,7 +429,13 @@ describe("the preview setting", () => {
     async (previewLines, shown, more) => {
       const { r } = await show(
         { rows: [row(1, { text: "go" }), workedReply(12)] },
-        { rows: 30, config: testConfig({ toolOutput: { previewLines } }) },
+        {
+          rows: 30,
+          config: testConfig({
+            toolOutput: { previewLines },
+            transcript: { toolCalls: "expanded" },
+          }),
+        },
       );
       const screen = plain(r);
       for (const line of shown) expect(screen).toContain(line);

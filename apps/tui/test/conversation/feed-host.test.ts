@@ -194,6 +194,8 @@ describe("the feed on a real host", () => {
       kind: "author",
       key: `${reply}:author`,
       name: "Ada",
+      agentId: world.ada.id,
+      members: [world.ada.id],
     });
     expect(kinds.indexOf("user")).toBeLessThan(kinds.indexOf("text"));
   });

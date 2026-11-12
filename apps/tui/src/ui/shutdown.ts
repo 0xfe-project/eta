@@ -1,5 +1,7 @@
 /** What ending eta needs from the program around it. */
 export interface ShutdownDeps {
+  /** Turn off the terminal modes eta turned on; the first step of every ending. */
+  releaseTerminal: () => void;
   /** Close the wire and stop the temporary host, waiting for it to end. */
   stop: () => Promise<void>;
   /** Kill every temporary host still running, at once. */
@@ -39,7 +41,8 @@ function attempt(step: () => void): void {
  * temporary host within `deadlineMs`, kills whatever is left, leaves the screen, prints the error
  * and exits 1, also when one of those steps throws; it takes over from a quit in progress. Each
  * runs once. While a program started with `runChild` has the terminal, SIGINT belongs to that
- * program and does not end eta, and both ways of ending kill that program first.
+ * program and does not end eta. Both ways of ending release the terminal first, then kill that
+ * program, before they wait for anything.
  */
 export function createShutdown(deps: ShutdownDeps) {
   let quitting: Promise<void> | undefined;
@@ -53,6 +56,7 @@ export function createShutdown(deps: ShutdownDeps) {
 
   const quit = (): Promise<void> => {
     quitting ??= (async () => {
+      attempt(deps.releaseTerminal);
       killPrograms();
       await deps.stop();
       if (crashing) return;
@@ -66,6 +70,7 @@ export function createShutdown(deps: ShutdownDeps) {
 
   const crash = (error: unknown): Promise<void> => {
     crashing ??= (async () => {
+      attempt(deps.releaseTerminal);
       killPrograms();
       let timer: ReturnType<typeof setTimeout> | undefined;
       const deadline = new Promise<void>((resolve) => {

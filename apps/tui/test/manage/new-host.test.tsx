@@ -17,6 +17,13 @@ import { askedStarting, enter, manageWorld, statusLine, tabBar } from "./world";
 
 const TITLE = "New conversation";
 
+/** Whether the layer's title line shows; the home screen's `/new` hint carries the same words. */
+function showsLayer(screen: string): boolean {
+  return screen
+    .split("\n")
+    .some((line) => line.includes(TITLE) && !line.includes("/new"));
+}
+
 /** The line holding `text`, without the layer's border. */
 function lineWith(r: RenderedApp, text: string): string {
   return (
@@ -46,7 +53,7 @@ function rowOf(r: Pick<RenderedApp, "lastFrame">, name: string): string {
 /** The layer's text, from its title down. */
 function layer(r: RenderedApp): string {
   const lines = plain(r).split("\n");
-  const start = lines.findIndex((line) => line.includes(TITLE));
+  const start = lines.findIndex((line) => showsLayer(line));
   return start === -1 ? "" : lines.slice(start).join("\n");
 }
 
@@ -93,7 +100,7 @@ describe("/new with no agents", () => {
     const r = await w.showHome();
     await enter(r, "/new");
     await screenShows(r, "There are no agents yet. Create one first");
-    expect(plain(r)).not.toContain(TITLE);
+    expect(showsLayer(plain(r))).toBe(false);
     expect(askedStarting(w.wire, "projects.")).toEqual([]);
   }, 60_000);
 });
@@ -147,7 +154,7 @@ describe("/new, first step", () => {
     expect(made.participants.map((p) => p.agentId)).toEqual([ada.id]);
     // A tab's name is cut at 20 columns.
     await screenShows(r, `1:${made.name.slice(0, 10)}`);
-    expect(plain(r)).not.toContain(TITLE);
+    expect(showsLayer(plain(r))).toBe(false);
     expect(statusLine(r)).toContain(`Started ${made.name}`);
     expect(askedStarting(w.wire, "projects.create")).toEqual([]);
     expect(askedStarting(w.wire, "conversations.create")).toEqual([
@@ -174,7 +181,7 @@ describe("/new, first step", () => {
     await screenShows(r, "Browse a directory…");
     await r.press(KEYS.escape);
     await realDelay(100);
-    expect(plain(r)).not.toContain(TITLE);
+    expect(showsLayer(plain(r))).toBe(false);
     expect(w.conversations()).toHaveLength(before);
     expect(askedStarting(w.wire, "projects.create")).toEqual([]);
     expect(askedStarting(w.wire, "conversations.create")).toEqual([]);
@@ -436,7 +443,7 @@ describe("/new, typing a path", () => {
       },
     ]);
     expect(askedStarting(w.wire, "projects.directories")).toEqual([]);
-    await screenShows(r, (screen) => !screen.includes(TITLE));
+    await screenShows(r, (screen) => !showsLayer(screen));
   }, 60_000);
 
   it("shows the host's refusal of a directory that does not exist in the layer, and starts nothing", async () => {
@@ -456,7 +463,7 @@ describe("/new, typing a path", () => {
     expect(lineWith(r, "no such directory")).toBe(
       `no such directory: ${missing}`,
     );
-    expect(plain(r)).toContain(TITLE);
+    expect(showsLayer(plain(r))).toBe(true);
     expect(askedStarting(w.wire, "conversations.create")).toEqual([]);
     expect(w.conversations()).toHaveLength(before);
     expect(w.projects().some((p) => p.path === missing)).toBe(false);
@@ -479,7 +486,7 @@ describe("/new, typing a path", () => {
     await r.press(KEYS.escape);
     await screenShows(r, "Browse a directory…");
     expect(plain(r)).not.toContain("Enter use this path");
-    expect(plain(r)).toContain(TITLE);
+    expect(showsLayer(plain(r))).toBe(true);
   }, 60_000);
 
   it("/new with a path asks who next when there are several agents", async () => {
@@ -600,7 +607,7 @@ describe("/new, second step", () => {
       expect(lineWith(r, name)).not.toMatch(/steward$/);
     await r.press(KEYS.enter);
     await screenShows(r, "Choose at least one member");
-    expect(plain(r)).toContain(TITLE);
+    expect(showsLayer(plain(r))).toBe(true);
     expect(askedStarting(w.wire, "conversations.create")).toEqual([]);
   }, 60_000);
 
@@ -645,7 +652,7 @@ describe("/new, starting", () => {
     await realDelay(50);
     expect(askedStarting(w.wire, "conversations.create")).toHaveLength(1);
     held.release();
-    await screenShows(r, (screen) => !screen.includes(TITLE));
+    await screenShows(r, (screen) => !showsLayer(screen));
     expect(askedStarting(w.wire, "conversations.create")).toHaveLength(1);
   }, 60_000);
 
@@ -659,7 +666,7 @@ describe("/new, starting", () => {
     const before = w.conversations().length;
     await enter(r, `/new ${join(work, "lib")}`);
     await screenShows(r, "the host is busy");
-    expect(plain(r)).toContain(TITLE);
+    expect(showsLayer(plain(r))).toBe(true);
     expect(tabBar(r)).not.toContain("1:");
     // The path stays typed in: Enter tries again.
     await r.press(KEYS.enter);
@@ -673,7 +680,7 @@ describe("/new, starting", () => {
     expect(
       w.projects().filter((p) => p.path === join(work, "lib")),
     ).toHaveLength(1);
-    await screenShows(r, (screen) => !screen.includes(TITLE));
+    await screenShows(r, (screen) => !showsLayer(screen));
     expect(ada.id).toBeTruthy();
   }, 60_000);
 });
@@ -818,4 +825,106 @@ describe("/new, an agent's own workspace", () => {
     expect(plain(r)).not.toContain("Space add or drop");
     expect(askedStarting(w.wire, "projects.create")).toEqual([]);
   }, 60_000);
+});
+
+/** Rows of the main area on an 80×24 terminal: less the status line and the tab bar. */
+const MAIN_AREA_80X24 = 22;
+
+/**
+ * The layer's frame on screen: its height, whether the lines between it and the status line are
+ * blank, and its rows inside the border from the title to the footer.
+ */
+function layerBox(r: RenderedApp): {
+  top: number;
+  height: number;
+  blankBelow: boolean;
+  inside: string[];
+} {
+  const lines = plain(r).split("\n");
+  const top = lines.findIndex((line) => line.startsWith("┌"));
+  const bottom = lines.findIndex((line) => line.startsWith("└"));
+  const status = lines.findIndex((line) => line.startsWith("Connected"));
+  return {
+    top,
+    height: bottom - top + 1,
+    blankBelow: lines
+      .slice(bottom + 1, status)
+      .every((line) => line.trim() === ""),
+    inside: lines
+      .slice(top + 1, bottom)
+      .map((line) => line.replace(/^│/, "").replace(/│$/, "").trim()),
+  };
+}
+
+/**
+ * The frame holds its content and nothing more: the empty hint row under the title, the content,
+ * the empty hint row above the footer, the content's last row right above that.
+ */
+function expectAsTallAsContent(r: RenderedApp) {
+  const { inside, blankBelow, top } = layerBox(r);
+  expect(top).toBe(0);
+  expect(inside[0]).toBe(TITLE);
+  expect(inside[1], plain(r)).toBe("");
+  expect(inside.at(-2), plain(r)).toBe("");
+  expect(inside.at(-3), plain(r)).not.toBe("");
+  expect(blankBelow).toBe(true);
+}
+
+describe("/new on an 80×24 terminal", () => {
+  const SIZE = { columns: 80, rows: 24 };
+
+  it("the first step's frame is as tall as its rows, the second step's taller with more lines", async () => {
+    const w = await manageWorld();
+    const names = ["Ada", "Ben", "Cleo", "Dora", "Eli", "Finn"];
+    for (const name of names) await w.agent(name);
+    const project = await w.project();
+    const r = await w.showHome(SIZE);
+    await w.agentsArrived(names.length);
+    await enter(r, "/new");
+    await screenShows(r, "Browse a directory…");
+    const first = layerBox(r);
+    expect(first.height).toBeLessThan(MAIN_AREA_80X24);
+    expectAsTallAsContent(r);
+    expect(first.inside.join("\n")).toContain(project.name);
+
+    await r.press(KEYS.enter);
+    await screenShows(r, "Space add or drop");
+    await realDelay(50);
+    const second = layerBox(r);
+    expect(second.height).toBeGreaterThan(first.height);
+    expect(second.height).toBeLessThan(MAIN_AREA_80X24);
+    expectAsTallAsContent(r);
+    for (const name of names) expect(lineWith(r, name)).toContain(name);
+
+    // Back to the first step: the frame shrinks to it again.
+    await r.press(KEYS.escape);
+    await screenShows(r, "Browse a directory…");
+    await realDelay(50);
+    expect(layerBox(r).height).toBe(first.height);
+    expectAsTallAsContent(r);
+  }, 60_000);
+
+  it("with more projects than the main area holds, the list opens a window that follows the cursor, the frame within the main area", async () => {
+    const w = await manageWorld();
+    const ada = await w.agent("Ada");
+    const projects: ProjectView[] = [];
+    for (let i = 0; i < 18; i += 1) projects.push(await w.project(ada.id));
+    const r = await w.showHome(SIZE);
+    await w.agentsArrived(1);
+    await enter(r, "/new");
+    await screenShows(r, projects.at(-1)!.name);
+    await realDelay(50);
+    expect(layerBox(r).height).toBeLessThanOrEqual(MAIN_AREA_80X24);
+    expectAsTallAsContent(r);
+    expect(plain(r).trimEnd().split("\n").length).toBeLessThanOrEqual(24);
+    // The last line, Browse a directory…, is out of the list's window until the cursor gets there.
+    expect(plain(r)).not.toContain("Browse a directory…");
+    for (let i = 0; i < projects.length + 1; i += 1) await r.press(KEYS.down);
+    await screenShows(r, "Browse a directory…");
+    expect(lineWith(r, "Browse a directory…")).toMatch(
+      /^› Browse a directory…/,
+    );
+    expect(layerBox(r).height).toBeLessThanOrEqual(MAIN_AREA_80X24);
+    expectAsTallAsContent(r);
+  }, 120_000);
 });

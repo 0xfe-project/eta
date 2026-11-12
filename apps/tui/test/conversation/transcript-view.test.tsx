@@ -1,3 +1,4 @@
+import type { KeyBinding, TuiConfig } from "../../src/config/types";
 /**
  * The transcript drawn in memory and driven with real keys: scrolling, the "below" hint, search,
  * selection, copying, folding. The items are drawn here (not by `render/`), so every line is known.
@@ -47,6 +48,8 @@ interface Source {
   hasOlder: boolean;
   loadingOlder: boolean;
   active: boolean;
+  /** The settings as `useConfig()` reads them; changing them is a change through `/config`. */
+  config: TuiConfig;
 }
 
 /** `count` items of `each` lines, keyed `${prefix}${i}`, plain lines `${prefix}${i}.${j}`. */
@@ -65,6 +68,37 @@ function block(count: number, each: number, prefix = "item", foldable = false) {
     });
   }
   return { items, rendered };
+}
+
+/**
+ * `source` with the items at the given indexes drawn in that many lines (`${key}.${j}`), as
+ * folding or unfolding draws them; each changed item is a new object.
+ */
+function withLines(
+  source: Pick<Source, "items" | "rendered">,
+  counts: Record<number, number>,
+): Pick<Source, "items" | "rendered"> {
+  const items = source.items.map((item, index) =>
+    counts[index] === undefined ? item : { ...item },
+  );
+  const rendered = source.rendered.map((drawn, index) => {
+    const count = counts[index];
+    if (count === undefined) return drawn;
+    const plainLines = Array.from(
+      { length: count },
+      (_, j) => `${source.items[index]!.key}.${j}`,
+    );
+    return { ...drawn, lines: plainLines.map(GREEN), plain: plainLines };
+  });
+  return { items, rendered };
+}
+
+/** `config` with `transcript.bottom` bound to `keys`. */
+function withBottomKeys(config: TuiConfig, keys: KeyBinding[]): TuiConfig {
+  return {
+    ...config,
+    keybindings: { ...config.keybindings, "transcript.bottom": keys },
+  };
 }
 
 const mounted: { unmount: () => void }[] = [];
@@ -87,6 +121,7 @@ function mount(
     hasOlder: false,
     loadingOlder: false,
     active: true,
+    config: testConfig(),
     ...initial,
   }));
   const seen = {
@@ -95,37 +130,42 @@ function mount(
     copies: [] as string[],
     notes: [] as string[],
     modes: [] as string[],
+    /** Every update the transcript asked for, oldest first. */
+    updates: [] as Partial<TranscriptUi>[],
   };
   function Harness() {
     const state = useSyncExternalStore(source.subscribe, source.getState);
     const [ui, setUi] = useState<TranscriptUi>(seen.ui);
     seen.ui = ui;
     return (
-      <Transcript
-        items={state.items}
-        rendered={state.rendered}
-        height={options.height ?? 10}
-        width={options.width ?? 40}
-        isActive={state.active}
-        ui={ui}
-        onUi={(update) => setUi((was) => ({ ...was, ...update }))}
-        hasOlder={state.hasOlder}
-        loadingOlder={state.loadingOlder}
-        onReachTop={() => {
-          seen.reachedTop += 1;
-        }}
-        onNotify={(text) => seen.notes.push(text)}
-        copy={(text) => seen.copies.push(text)}
-        onModeChange={(mode) => seen.modes.push(mode)}
-      />
+      <ConfigContext value={state.config}>
+        <Transcript
+          items={state.items}
+          rendered={state.rendered}
+          height={options.height ?? 10}
+          width={options.width ?? 40}
+          isActive={state.active}
+          ui={ui}
+          onUi={(update) => {
+            seen.updates.push(update);
+            setUi((was) => ({ ...was, ...update }));
+          }}
+          hasOlder={state.hasOlder}
+          loadingOlder={state.loadingOlder}
+          onReachTop={() => {
+            seen.reachedTop += 1;
+          }}
+          onNotify={(text) => seen.notes.push(text)}
+          copy={(text) => seen.copies.push(text)}
+          onModeChange={(mode) => seen.modes.push(mode)}
+        />
+      </ConfigContext>
     );
   }
   const rendered = renderInk(
-    <ConfigContext value={testConfig()}>
-      <LocaleContext value={options.locale ?? "en"}>
-        <Harness />
-      </LocaleContext>
-    </ConfigContext>,
+    <LocaleContext value={options.locale ?? "en"}>
+      <Harness />
+    </LocaleContext>,
     { columns: options.width ?? 40, rows: (options.height ?? 10) + 2 },
   );
   mounted.push(rendered);
@@ -158,7 +198,7 @@ describe("scrolling", () => {
     expect(plain(view)).not.toContain("below");
   });
 
-  it("a page up shows the hint with how many lines are below, a page down comes back", async () => {
+  it("a page up shows the hint with the key back to the bottom, a page down comes back", async () => {
     const view = mount(block(10, 2));
     await flush();
     await view.press(KEY.pageUp);
@@ -173,7 +213,7 @@ describe("scrolling", () => {
       "item5.1",
       "",
       "item6.0",
-      "↓ 10 lines below",
+      "↓ ctrl+end to go to the bottom",
     ]);
     await view.press(KEY.pageDown);
     await view.press(KEY.pageDown);
@@ -181,17 +221,58 @@ describe("scrolling", () => {
     expect(view.seen.ui.scroll).toEqual({ follow: true });
   });
 
-  it("says the hint in Chinese, and in the singular for one line", async () => {
+  it("says the hint in Chinese", async () => {
     const view = mount(block(10, 2), { locale: "zh" });
     await flush();
-    await view.press(KEY.lineUp);
-    await view.press(KEY.lineDown);
-    expect(view.rows()[9]).toBe("↓ 1 行在下面");
-    const en = mount(block(10, 2));
+    await view.press(KEY.pageUp);
+    expect(view.rows()[9]).toBe("↓ ctrl+end 回到最下面");
+  });
+
+  it("names the first key bound to going to the bottom", async () => {
+    const config = testConfig();
+    const view = mount({
+      ...block(10, 2),
+      config: withBottomKeys(config, [
+        { key: "b", ctrl: false, alt: true, shift: false },
+        { key: "end", ctrl: true, alt: false, shift: false },
+      ]),
+    });
     await flush();
-    await en.press(KEY.lineUp);
-    await en.press(KEY.lineDown);
-    expect(en.rows()[9]).toBe("↓ 1 line below");
+    await view.press(KEY.pageUp);
+    expect(view.rows()[9]).toBe("↓ alt+b to go to the bottom");
+  });
+
+  it("counts the lines below when no key goes to the bottom", async () => {
+    const unbound = withBottomKeys(testConfig(), []);
+    const en = mount({ ...block(10, 2), config: unbound });
+    await flush();
+    await en.press(KEY.pageUp);
+    expect(en.rows()[9]).toBe("↓ 10 lines below");
+    // One line up from the bottom, the fewest a view away from it leaves: 2.
+    const near = mount({ ...block(10, 2), config: unbound });
+    await flush();
+    await near.press(KEY.lineUp);
+    expect(near.rows()[9]).toBe("↓ 2 lines below");
+    const zh = mount({ ...block(10, 2), config: unbound }, { locale: "zh" });
+    await flush();
+    await zh.press(KEY.pageUp);
+    expect(zh.rows()[9]).toBe("↓ 10 行在下面");
+  });
+
+  it("follows a key rebound in the settings at once", async () => {
+    const view = mount(block(10, 2));
+    await flush();
+    await view.press(KEY.pageUp);
+    expect(view.rows()[9]).toBe("↓ ctrl+end to go to the bottom");
+    const rebound = withBottomKeys(view.source.getState().config, [
+      { key: "b", ctrl: false, alt: true, shift: false },
+    ]);
+    view.source.setState({ config: rebound });
+    await flush();
+    expect(view.rows()[9]).toBe("↓ alt+b to go to the bottom");
+    view.source.setState({ config: withBottomKeys(rebound, []) });
+    await flush();
+    expect(view.rows()[9]).toBe("↓ 10 lines below");
   });
 
   it("goes to the top and back to the bottom", async () => {
@@ -200,6 +281,28 @@ describe("scrolling", () => {
     await view.press(KEY.top);
     expect(view.rows()[0]).toBe("item0.0");
     await view.press(KEY.bottom);
+    expect(view.rows()[9]).toBe("item9.1");
+    expect(view.seen.ui.scroll).toEqual({ follow: true });
+  });
+
+  it("follows again after lines up and as many back down, with the last line on screen", async () => {
+    for (const lines of [1, 6]) {
+      const view = mount(block(10, 2));
+      await flush();
+      for (let i = 0; i < lines; i += 1) await view.press(KEY.lineUp);
+      expect(view.rows()[9]).toBe("↓ ctrl+end to go to the bottom");
+      for (let i = 0; i < lines; i += 1) await view.press(KEY.lineDown);
+      expect(view.rows()[9]).toBe("item9.1");
+      expect(plain(view)).not.toContain("go to the bottom");
+      expect(view.seen.ui.scroll).toEqual({ follow: true });
+    }
+  });
+
+  it("follows again after a page up and one page down", async () => {
+    const view = mount(block(10, 2));
+    await flush();
+    await view.press(KEY.pageUp);
+    await view.press(KEY.pageDown);
     expect(view.rows()[9]).toBe("item9.1");
     expect(view.seen.ui.scroll).toEqual({ follow: true });
   });
@@ -221,6 +324,58 @@ describe("scrolling", () => {
     expect(view.rows()[9]).toBe("c");
   });
 
+  it("follows again once fewer lines bring the last one on screen, and keeps following as lines come", async () => {
+    const view = mount(block(10, 2));
+    await flush();
+    // Up one line from top 19 to top 18: 9 rows of lines, 2 below.
+    await view.press(KEY.lineUp);
+    expect(view.rows()[9]).toBe("↓ ctrl+end to go to the bottom");
+    // Items 8 and 9 down to one line each: 27 lines, and the 9 rows from top 18 reach the last.
+    view.source.setState(withLines(view.source.getState(), { 8: 1, 9: 1 }));
+    await flush();
+    expect(view.rows()[9]).toBe("item9.0");
+    expect(view.seen.ui.scroll).toEqual({ follow: true });
+    // Item 9 unfolds to four lines: the view stays on the newest line.
+    view.source.setState(withLines(view.source.getState(), { 9: 4 }));
+    await flush();
+    expect(view.rows()[9]).toBe("item9.3");
+    expect(plain(view)).not.toContain("go to the bottom");
+  });
+
+  it("asks once to follow again, not on every drawing after", async () => {
+    const view = mount(block(10, 2));
+    await flush();
+    await view.press(KEY.lineUp);
+    const before = view.seen.updates.length;
+    view.source.setState(withLines(view.source.getState(), { 8: 1, 9: 1 }));
+    await flush();
+    view.source.setState({ active: false });
+    await flush();
+    view.source.setState({ active: true });
+    await flush();
+    const scrollUpdates = view.seen.updates
+      .slice(before)
+      .filter((update) => update.scroll !== undefined);
+    expect(scrollUpdates.map((update) => update.scroll)).toEqual([
+      { follow: true },
+    ]);
+  });
+
+  it("stays where it is when fewer lines still leave the last one below", async () => {
+    const view = mount(block(10, 2));
+    await flush();
+    await view.press(KEY.pageUp);
+    const before = view.rows().slice(0, 9);
+    // 28 lines; the 9 rows from top 10 end at line 18.
+    view.source.setState(withLines(view.source.getState(), { 9: 1 }));
+    await flush();
+    view.source.setState(withLines(view.source.getState(), { 9: 6 }));
+    await flush();
+    expect(view.rows().slice(0, 9)).toEqual(before);
+    expect(view.rows()[9]).toBe("↓ ctrl+end to go to the bottom");
+    expect(view.seen.ui.scroll.follow).toBe(false);
+  });
+
   it("keeps what is on screen while the last item grows when not following", async () => {
     const view = mount(block(10, 2));
     await flush();
@@ -238,7 +393,7 @@ describe("scrolling", () => {
     });
     await flush();
     expect(view.rows().slice(0, 9)).toEqual(before);
-    expect(view.rows()[9]).toBe("↓ 12 lines below");
+    expect(view.rows()[9]).toBe("↓ ctrl+end to go to the bottom");
   });
 
   it("keeps what is on screen when an older page comes in on top", async () => {
@@ -802,7 +957,7 @@ describe("an item that changes key after the lines above it moved", () => {
     await view.press(KEY.pageUp);
     const before = view.rows();
     expect(before[0]).toBe("item3.1");
-    expect(before[9]).toBe("↓ 10 lines below");
+    expect(before[9]).toBe("↓ ctrl+end to go to the bottom");
     view.source.setState(
       withOlder(view.source.getState(), block(10, 2, "old")),
     );

@@ -23,6 +23,13 @@ export const renderMessages = defineMessages({
     runError: "The run hit an error",
     compaction: "≡ Context compacted · {lines}",
     branch: "≡ Branch summary · {lines}",
+    stepsUsedOne: "Used 1 tool",
+    stepsUsed: "Used {count} tools",
+    stepsSeparator: ", ",
+    stepsFailed: "{count} failed",
+    stepsRunning: "Running: {title} ({count} so far)",
+    stepsWorkingOne: "Working (1 tool so far)",
+    stepsWorking: "Working ({count} tools so far)",
   },
   zh: {
     oneLine: "1 行",
@@ -45,6 +52,13 @@ export const renderMessages = defineMessages({
     runError: "运行出错",
     compaction: "≡ 上下文已压缩 · {lines}",
     branch: "≡ 分支摘要 · {lines}",
+    stepsUsedOne: "调用了 1 个工具",
+    stepsUsed: "调用了 {count} 个工具",
+    stepsSeparator: "，",
+    stepsFailed: "{count} 个失败",
+    stepsRunning: "正在运行：{title}（已调用 {count} 个）",
+    stepsWorkingOne: "正在处理（已调用 1 个工具）",
+    stepsWorking: "正在处理（已调用 {count} 个工具）",
   },
 });
 

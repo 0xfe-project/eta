@@ -1,25 +1,34 @@
-import type { TranscriptItem } from "../contract";
+import type { AuthorItem, FrameStyle, TranscriptItem } from "../contract";
 import type { DrawContext, DrawnItem } from "./context";
 import type { RenderMessageKey } from "./messages";
 import { Text } from "ink";
+import { agentColour } from "./agent-colour";
+import { frameStyle } from "./frame-style";
 import { draw } from "./lines";
 import { Prefixed } from "./prefixed";
 
-type AuthorItem = Extract<TranscriptItem, { kind: "author" }>;
 type OutcomeItem = Extract<TranscriptItem, { kind: "outcome" }>;
 type NoticeItem = Extract<TranscriptItem, { kind: "notice" }>;
 
-/** `● <name>` over a reply in a group conversation. */
-export function drawAuthor(item: AuthorItem, context: DrawContext): DrawnItem {
+/**
+ * `● <name>` over a reply in a group conversation, and the style of the frame the reply is drawn
+ * in where the transcript is wide enough: the theme's colour the agent gets among the members.
+ */
+export function drawAuthor(
+  item: AuthorItem,
+  context: DrawContext,
+): DrawnItem & { frame: FrameStyle } {
   const node = (
     <Text wrap="wrap" bold color={context.colors.accent}>
       {`● ${item.name}`}
     </Text>
   );
+  const color = agentColour(item.agentId, item.members, context.agentColors);
   return {
     lines: draw(node, context.width),
     source: item.name,
     foldable: false,
+    frame: frameStyle(item.name, color),
   };
 }
 

@@ -7,6 +7,7 @@ import type {
 import type { WireState } from "../../connection/types";
 import { agentsOf, machinesOf, projectsOf } from "../../extensions/eager-lists";
 import { conversationList } from "../conversation/facts";
+import { ordinaryAgents } from "../kit/captain";
 
 /** The start of an id, for an agent the list does not have. */
 const ID_PREFIX = 8;
@@ -44,7 +45,7 @@ export function outsidersOf(
   summary: ConversationSummary | undefined,
 ): NamedAgent[] {
   const members = new Set(summary?.participants.map((p) => p.agentId));
-  return agentsOf(state)
+  return ordinaryAgents(agentsOf(state))
     .filter((agent) => !members.has(agent.id))
     .map(({ id, name }) => ({ id, name }));
 }

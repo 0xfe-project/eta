@@ -16,3 +16,15 @@ export function truncateToWidth(text: string, columns: number): string {
   }
   return kept + ELLIPSIS;
 }
+
+const SPACES = / /g;
+const NO_BREAK_SPACE = " ";
+
+/**
+ * A name to put into a sentence that may wrap: its spaces become no-break spaces, which look the
+ * same, so a wrapping line breaks before or after the whole name instead of inside it. A name
+ * wider than the whole line still breaks where the line ends.
+ */
+export function keepTogether(name: string): string {
+  return name.replace(SPACES, NO_BREAK_SPACE);
+}

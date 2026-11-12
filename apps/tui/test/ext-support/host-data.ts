@@ -51,10 +51,9 @@ export async function dataDirWith(options: {
 
 /** The host's agents, as a client that connects now is told in its hello. */
 export async function hostAgents(host: Host): Promise<AgentView[]> {
-  return withHostWire(
-    host,
-    async (wire) =>
-      (wire.store.getState().targets.agents?.sections.list ??
-        []) as AgentView[],
+  return withHostWire(host, async (wire) =>
+    (
+      (wire.store.getState().targets.agents?.sections.list ?? []) as AgentView[]
+    ).filter((agent) => agent.systemRole !== "captain"),
   );
 }

@@ -1,9 +1,11 @@
 import type { AgentView } from "@eta/client-contracts";
+import { ordinaryAgents } from "./captain";
 import { useTarget } from "./wire-hooks";
 
-/** The host's agents, kept live; undefined until the list has come. */
+/** The host's agents but Captain, kept live; undefined until the list has come. */
 export function useAgents(): AgentView[] | undefined {
-  return useTarget("agents")?.sections.list as AgentView[] | undefined;
+  const list = useTarget("agents")?.sections.list as AgentView[] | undefined;
+  return list === undefined ? undefined : ordinaryAgents(list);
 }
 
 export type FoundAgent =

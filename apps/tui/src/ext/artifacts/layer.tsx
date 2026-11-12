@@ -9,6 +9,7 @@ import { hostHas } from "../../extensions/host-ops";
 import { useInputActive, useShell, useTheme } from "../../extensions/react";
 import { useLocale, useMessages } from "../../i18n/react";
 import { LayerFrame } from "../../ui/components/layer-frame";
+import { gateAllows, useActionGate } from "../../ui/components/layer-space";
 import { useListHeight } from "../../ui/components/row-cursor";
 import { RowList } from "../../ui/components/row-list";
 import { inkColor } from "../../ui/theme";
@@ -50,6 +51,7 @@ export function ArtifactsLayer({ handle }: { handle: LayerHandle }) {
   const theme = useTheme();
   const active = useInputActive();
   const height = useListHeight();
+  const gate = useActionGate();
 
   useEffect(() => wire.subscribe("artifacts"), [wire]);
   const list = useStore(
@@ -125,8 +127,9 @@ export function ArtifactsLayer({ handle }: { handle: LayerHandle }) {
       if (key.upArrow) setCursor(Math.max(0, at - 1));
       else if (key.downArrow)
         setCursor(Math.min(Math.max(0, artifacts.length - 1), at + 1));
-      else if (key.return && artifacts[at] !== undefined) open(artifacts[at]);
-      else if (key.escape) handle.close();
+      else if (key.return && artifacts[at] !== undefined) {
+        if (gateAllows(gate)) open(artifacts[at]);
+      } else if (key.escape) handle.close();
     },
     { isActive: active },
   );
@@ -188,6 +191,7 @@ export function ArtifactsLayer({ handle }: { handle: LayerHandle }) {
           })}
           cursor={at}
           height={height}
+          gate={gate}
         />
       )}
     </LayerFrame>

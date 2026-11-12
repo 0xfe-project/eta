@@ -4,7 +4,8 @@ import type { ComposerProps } from "../../src/ext/conversation/composer";
 import type { ComposerState } from "../../src/ext/conversation/composer/state";
 import type { SlashCommand } from "../../src/extensions/types";
 import { EventEmitter } from "node:events";
-import { Box, render as inkRender, Text } from "ink";
+import { stripVTControlCharacters } from "node:util";
+import { Box, render as inkRender, Text, useWindowSize } from "ink";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Composer, emptyComposer } from "../../src/ext/conversation/composer";
@@ -15,6 +16,7 @@ import { ConfigContext } from "../../src/extensions/react";
 import { LocaleContext } from "../../src/i18n/react";
 import { testConfig } from "../ui-support/config";
 import { flush, KEYS, plain, realDelay, renderInk } from "../ui-support/render";
+import { hasBackground } from "../ui-support/sgr";
 
 // Ink's colour library reads this once, when it loads, so it is set before any import.
 vi.hoisted(() => {
@@ -61,6 +63,17 @@ interface Setup {
   config?: TuiConfig;
   loadFiles?: () => Promise<string[]>;
   members?: { id: string; name: string }[];
+  /** The commands completeCommand finds by prefix; `COMMANDS` when absent. */
+  commands?: SlashCommand[];
+  /**
+   * Rows of a column the composer sits at the bottom of, under a part that takes what is left, as
+   * in the conversation view; the composer alone on the screen when absent.
+   */
+  height?: number | "screen";
+  /** The terminal's rows; 30 when absent. With `height: "screen"` the column is this tall. */
+  rows?: number;
+  /** One-row lines over the composer inside `height`, as the view draws held messages there. */
+  linesAbove?: string[];
 }
 
 const open: { unmount: () => void }[] = [];
@@ -79,9 +92,11 @@ function setup(options: Setup = {}) {
   const latest: { state: ComposerState } = {
     state: options.initial ?? emptyComposer(),
   };
+  const commands = options.commands ?? COMMANDS;
   function Harness() {
     const [state, setState] = useState(latest.state);
-    return (
+    const screenRows = useWindowSize().rows;
+    const composer = (
       <ConfigContext value={options.config ?? testConfig()}>
         <LocaleContext value={options.locale ?? "en"}>
           <InputScope active={options.scopeActive ?? true}>
@@ -95,7 +110,7 @@ function setup(options: Setup = {}) {
               active={options.active ?? true}
               replying={options.replying ?? false}
               completeCommand={(prefix) =>
-                COMMANDS.filter((c) => c.name.startsWith(prefix))
+                commands.filter((c) => c.name.startsWith(prefix))
               }
               members={options.members ?? MEMBERS}
               loadFiles={calls.loadFiles}
@@ -108,8 +123,26 @@ function setup(options: Setup = {}) {
         </LocaleContext>
       </ConfigContext>
     );
+    if (options.height === undefined) return composer;
+    return (
+      <Box
+        flexDirection="column"
+        height={options.height === "screen" ? screenRows : options.height}
+      >
+        <Box flexGrow={1} flexBasis={0} />
+        {(options.linesAbove ?? []).map((line) => (
+          <Text key={line} wrap="truncate-end">
+            {line}
+          </Text>
+        ))}
+        {composer}
+      </Box>
+    );
   }
-  const r = renderInk(<Harness />, { columns: options.width ?? 40, rows: 30 });
+  const r = renderInk(<Harness />, {
+    columns: options.width ?? 40,
+    rows: options.rows ?? 30,
+  });
   open.push(r);
   // The cursor's cell at the end of a row is a drawn space; rows are compared without it.
   const lines = () =>
@@ -122,14 +155,21 @@ function setup(options: Setup = {}) {
 /** The frame's lines with colours, for finding the inverse cursor cell. */
 const rawLines = (r: { lastFrame: () => string }) => r.lastFrame().split("\n");
 
+/** A line of nothing but `─`; with `width`, exactly that many. */
+function isRule(line: string, width?: number): boolean {
+  return (
+    /^─+$/.test(line) && (width === undefined || [...line].length === width)
+  );
+}
+
 describe("editing on screen", () => {
   it("shows the prompt and a muted hint while empty, in either language", async () => {
     const en = setup({ width: 60 });
     await flush();
-    expect(en.lines()[0]).toBe(`› ${composerMessages.en.hint}`);
+    expect(en.lines()[1]).toBe(`› ${composerMessages.en.hint}`);
     const zh = setup({ locale: "zh", width: 60 });
     await flush();
-    expect(zh.lines()[0]).toBe(`› ${composerMessages.zh.hint}`);
+    expect(zh.lines()[1]).toBe(`› ${composerMessages.zh.hint}`);
     expect(composerMessages.en.hint).toContain("/");
     expect(composerMessages.en.hint).toContain("@");
   });
@@ -137,10 +177,10 @@ describe("editing on screen", () => {
   it("shows what is typed after the prompt with the cursor as an inverse cell", async () => {
     const s = setup();
     await s.r.type("hello");
-    expect(s.lines()[0]).toBe("› hello");
-    expect(rawLines(s.r)[0]).toContain(`${INVERSE} `);
+    expect(s.lines()[1]).toBe("› hello");
+    expect(rawLines(s.r)[1]).toContain(`${INVERSE} `);
     await s.r.press(KEYS.left);
-    expect(rawLines(s.r)[0]).toContain(`${INVERSE}o`);
+    expect(rawLines(s.r)[1]).toContain(`${INVERSE}o`);
     expect(s.latest.state.cursor).toBe(4);
   });
 
@@ -148,15 +188,15 @@ describe("editing on screen", () => {
     // Width 7 leaves 5 columns: rows 你好, 世界, 再见.
     const s = setup({ width: 7 });
     await s.r.type("你好世界再见");
-    expect(s.lines().slice(0, 3)).toEqual(["› 你好", "  世界", "  再见"]);
+    expect(s.lines().slice(1, 4)).toEqual(["› 你好", "  世界", "  再见"]);
     await s.r.press(KEYS.left);
-    expect(rawLines(s.r)[2]).toContain(`${INVERSE}见`);
+    expect(rawLines(s.r)[3]).toContain(`${INVERSE}见`);
     await s.r.press(KEYS.up);
     expect(s.latest.state.cursor).toBe(3);
-    expect(rawLines(s.r)[1]).toContain(`${INVERSE}界`);
+    expect(rawLines(s.r)[2]).toContain(`${INVERSE}界`);
     await s.r.press(KEYS.up);
     expect(s.latest.state.cursor).toBe(1);
-    expect(rawLines(s.r)[0]).toContain(`${INVERSE}好`);
+    expect(rawLines(s.r)[1]).toContain(`${INVERSE}好`);
     await s.r.press(KEYS.down);
     expect(s.latest.state.cursor).toBe(3);
   });
@@ -185,7 +225,7 @@ describe("editing on screen", () => {
     expect(s.latest.state.text).toBe("");
     await s.r.type("ab");
     await s.r.press(KEYS.backspace);
-    expect(s.lines()[0]).toBe("› a");
+    expect(s.lines()[1]).toBe("› a");
   });
 
   it("breaks the line with Alt+Enter and with a backslash before Enter, without sending", async () => {
@@ -196,7 +236,7 @@ describe("editing on screen", () => {
     await s.r.press(KEYS.enter);
     await s.r.type("three");
     expect(s.latest.state.text).toBe("one\ntwo\nthree");
-    expect(s.lines().slice(0, 3)).toEqual(["› one", "  two", "  three"]);
+    expect(s.lines().slice(1, 4)).toEqual(["› one", "  two", "  three"]);
     expect(s.calls.send).not.toHaveBeenCalled();
   });
 
@@ -204,17 +244,19 @@ describe("editing on screen", () => {
     const lines = Array.from({ length: 12 }, (_, i) => `line${i}`);
     const s = setup({ initial: insertText(emptyComposer(), lines.join("\n")) });
     await flush();
-    const shown = s.lines().filter((line) => line.trim() !== "");
+    const shown = s
+      .lines()
+      .filter((line) => line.trim() !== "" && !isRule(line));
     expect(shown).toHaveLength(10);
     expect(shown.at(-1)).toBe("  line11");
     expect(s.text()).not.toContain("line1\n");
     expect(s.text()).not.toContain("line0");
     for (let i = 0; i < 11; i += 1) await s.r.press(KEYS.up);
-    const top = s.lines().filter((line) => line.trim() !== "");
+    const top = s.lines().filter((line) => line.trim() !== "" && !isRule(line));
     expect(top).toHaveLength(10);
     expect(top[0]).toBe("› line0");
     // Up keeps the display column, so the cursor ends at the end of the shorter line0.
-    expect(rawLines(s.r)[0]).toContain(`line0${INVERSE} `);
+    expect(rawLines(s.r)[1]).toContain(`line0${INVERSE} `);
   });
 
   it("takes no keys while inactive or while its input scope is off", async () => {
@@ -239,7 +281,7 @@ describe("pasting on screen", () => {
     const long = "1\n2\n3\n4\n5\n6";
     await s.r.type("x ");
     await s.r.press(KEYS.paste(long));
-    expect(s.lines()[0]).toBe("› x [Pasted text #1 +6 lines]");
+    expect(s.lines()[1]).toBe("› x [Pasted text #1 +6 lines]");
     await s.r.press(KEYS.backspace);
     expect(s.latest.state.text).toBe("x ");
     await s.r.press(KEYS.paste(long));
@@ -255,11 +297,11 @@ describe("pasting on screen", () => {
 });
 
 describe("completion on screen", () => {
-  it("lists commands with their summaries above the input and accepts with Tab", async () => {
+  it("lists commands with their summaries and accepts with Tab", async () => {
     const s = setup();
     await s.r.type("/he");
     const text = s.text();
-    expect(text).toContain("/help  About help");
+    expect(text).toContain("/help   About help");
     expect(text).toContain("/hello  About hello");
     expect(text).not.toContain("/new");
     await s.r.press(KEYS.tab);
@@ -365,7 +407,7 @@ describe("sending, steering and stopping on screen", () => {
       mentions: [],
       mode: "queue",
     });
-    expect(s.lines()[0]).toBe(`› ${composerMessages.en.hint}`);
+    expect(s.lines()[1]).toBe(`› ${composerMessages.en.hint}`);
   });
 
   it("does nothing on Enter with only spaces", async () => {
@@ -384,15 +426,18 @@ describe("sending, steering and stopping on screen", () => {
     expect(s.calls.send).not.toHaveBeenCalled();
   });
 
-  it("recalls the last message with up, and gets back to the draft with down", async () => {
+  it("recalls the last message with up from an empty input, and leaves typed text alone", async () => {
     const s = setup();
     await s.r.type("one");
     await s.r.press(KEYS.enter);
+    await s.r.press(KEYS.up);
+    expect(s.text()).toContain("› one");
+    await s.r.press(KEYS.down);
+    expect(s.latest.state.text).toBe("");
     await s.r.type("draft");
     await s.r.press(KEYS.up);
-    expect(s.lines()[0]).toBe("› one");
-    await s.r.press(KEYS.down);
-    expect(s.lines()[0]).toBe("› draft");
+    expect(s.latest.state.text).toBe("draft");
+    expect(s.text()).not.toContain("one");
   });
 
   it("steers with Tab while a reply runs", async () => {
@@ -525,18 +570,280 @@ describe("the terminal cursor", () => {
 
   it("is put on the cursor cell, so an input method's window follows it", async () => {
     // Prompt (2) + "ab" (2) + 中 (2) = column 6, which is `CSI 7 G`. The frame is "above", the
-    // input row, "below" and an empty line; the cursor goes up two rows from that last line.
-    const placement = `${CSI}2A${CSI}7G${SHOW_CURSOR}`;
+    // upper rule, the input row, the lower rule, "below" and an empty line; the cursor goes up
+    // three rows from that last line.
+    const placement = `${CSI}3A${CSI}7G${SHOW_CURSOR}`;
     expect((await cursorWrites("ab中"))?.slice(-placement.length)).toBe(
       placement,
     );
   });
 
-  it("is put below the completion menu when the menu pushes the input down", async () => {
-    // "above", /help, /hello, the input row, "below", an empty line: the input is row 3.
-    const placement = `${CSI}2A${CSI}6G${SHOW_CURSOR}`;
+  it("stays on the input row when the completion menu opens under it", async () => {
+    // "above", the upper rule, the input row, the lower rule, /help, /hello, "below", an empty
+    // line: the input is row 2, five rows up from the last.
+    const placement = `${CSI}5A${CSI}6G${SHOW_CURSOR}`;
     expect((await cursorWrites("/he"))?.slice(-placement.length)).toBe(
       placement,
     );
+  });
+});
+
+describe("the input's rules", () => {
+  it("puts a rule as wide as the composer above and below the input", async () => {
+    for (const width of [40, 25]) {
+      const s = setup({ width });
+      await s.r.type("hello");
+      const all = s.lines();
+      expect(isRule(all[0] ?? "", width)).toBe(true);
+      expect(all[1]).toBe("› hello");
+      expect(isRule(all[2] ?? "", width)).toBe(true);
+    }
+  });
+
+  it("holds every input row between the two rules", async () => {
+    const s = setup({ width: 7 });
+    await s.r.type("你好世界再见");
+    await s.r.press(KEY.altEnter);
+    await s.r.type("x");
+    const all = s.lines();
+    expect(isRule(all[0] ?? "", 7)).toBe(true);
+    expect(all.slice(1, 5)).toEqual(["› 你好", "  世界", "  再见", "  x"]);
+    expect(isRule(all[5] ?? "", 7)).toBe(true);
+  });
+
+  it("lists the completion menu under the lower rule", async () => {
+    const s = setup();
+    await s.r.type("/he");
+    const all = s.lines();
+    expect(isRule(all[0] ?? "", 40)).toBe(true);
+    expect(all[1]).toBe("› /he");
+    expect(isRule(all[2] ?? "", 40)).toBe(true);
+    expect(all[3]).toContain("/help   About help");
+    expect(all[4]).toContain("/hello  About hello");
+  });
+});
+
+describe("completion rows", () => {
+  it("marks the highlighted row with › and the others with two spaces, following the highlight", async () => {
+    const s = setup();
+    await s.r.type("/he");
+    expect(s.lines()[3]).toBe("› /help   About help");
+    expect(s.lines()[4]).toBe("  /hello  About hello");
+    await s.r.press(KEYS.down);
+    expect(s.lines()[3]).toBe("  /help   About help");
+    expect(s.lines()[4]).toBe("› /hello  About hello");
+  });
+
+  it("draws no background or reverse video on any menu row", async () => {
+    const s = setup({ config: testConfig() });
+    await s.r.type("/he");
+    const raw = rawLines(s.r);
+    for (const line of [raw[3] ?? "", raw[4] ?? ""]) {
+      expect(stripVTControlCharacters(line)).toContain("/hel");
+      expect(hasBackground(line)).toBe(false);
+    }
+    await s.r.press(KEYS.down);
+    const moved = rawLines(s.r);
+    for (const line of [moved[3] ?? "", moved[4] ?? ""])
+      expect(hasBackground(line)).toBe(false);
+  });
+});
+
+/** Twenty commands /c00 … /c19: more than the menu's eight rows. */
+const TWENTY = Array.from({ length: 20 }, (_, i) =>
+  command(`c${String(i).padStart(2, "0")}`),
+);
+
+/** The menu's lines: those under the input's lower rule, empty ones left out. */
+function menuLines(lines: readonly string[]): string[] {
+  const upper = lines.findIndex((line) => isRule(line));
+  const lower = lines.findIndex((line, i) => i > upper && isRule(line));
+  return lines.slice(lower + 1).filter((line) => line !== "");
+}
+
+/** Presses `key` `times` times. */
+async function pressTimes(
+  r: { press: (data: string) => Promise<void> },
+  key: string,
+  times: number,
+) {
+  for (let i = 0; i < times; i++) await r.press(key);
+}
+
+describe("a completion menu longer than its window", () => {
+  it("lists every match, eight rows at a time, with a line for how many more are below", async () => {
+    const s = setup({ commands: TWENTY });
+    await s.r.type("/");
+    const menu = menuLines(s.lines());
+    expect(menu).toHaveLength(8);
+    expect(menu[0]).toBe("› /c00  About c00");
+    expect(menu[6]).toBe("  /c06  About c06");
+    expect(menu[7]).toBe("↓ 13 more");
+  });
+
+  it("goes down to the last match, which shows and is selected, and stops listing more below", async () => {
+    const s = setup({ commands: TWENTY });
+    await s.r.type("/");
+    await pressTimes(s.r, KEYS.down, 19);
+    const menu = menuLines(s.lines());
+    expect(menu).toHaveLength(8);
+    expect(menu.at(-1)).toBe("› /c19  About c19");
+    expect(menu[0]).toBe("↑ 13 more");
+    expect(menu.join("\n")).not.toContain("↓");
+  });
+
+  it("has no row that stays last: the last row follows the selection down", async () => {
+    const s = setup({ commands: TWENTY });
+    await s.r.type("/");
+    const lastRows = new Set<string>();
+    for (let i = 0; i < 19; i++) {
+      await s.r.press(KEYS.down);
+      lastRows.add(menuLines(s.lines()).at(-1) ?? "");
+    }
+    expect(lastRows.size).toBeGreaterThan(5);
+    expect(menuLines(s.lines()).at(-1)).toContain("/c19");
+  });
+
+  it("wraps from the first match to the last with up, and back with down", async () => {
+    const s = setup({ commands: TWENTY });
+    await s.r.type("/");
+    await s.r.press(KEYS.up);
+    expect(menuLines(s.lines()).at(-1)).toBe("› /c19  About c19");
+    await s.r.press(KEYS.down);
+    expect(menuLines(s.lines())[0]).toBe("› /c00  About c00");
+  });
+
+  it("completes with Tab a match the window scrolled to", async () => {
+    const s = setup({ commands: TWENTY });
+    await s.r.type("/");
+    await pressTimes(s.r, KEYS.down, 12);
+    expect(menuLines(s.lines())).toContain("› /c12  About c12");
+    await s.r.press(KEYS.tab);
+    expect(s.latest.state.text).toBe("/c12 ");
+  });
+
+  it("goes back to the first match and the top of the list when the typed text changes", async () => {
+    const s = setup({ commands: TWENTY });
+    await s.r.type("/");
+    await pressTimes(s.r, KEYS.down, 12);
+    await s.r.type("c");
+    const menu = menuLines(s.lines());
+    expect(menu[0]).toBe("› /c00  About c00");
+    expect(menu.join("\n")).not.toContain("↑");
+    await s.r.press(KEYS.tab);
+    expect(s.latest.state.text).toBe("/c00 ");
+  });
+
+  it("filters by what is typed after the /", async () => {
+    const s = setup({ commands: TWENTY });
+    await s.r.type("/c1");
+    const menu = menuLines(s.lines());
+    expect(menu).toHaveLength(8);
+    expect(menu[0]).toBe("› /c10  About c10");
+    expect(menu.at(-1)).toBe("↓ 3 more");
+    expect(menu.join("\n")).not.toContain("/c09");
+  });
+
+  it("says how many more in Chinese, beside the Chinese summaries", async () => {
+    const s = setup({ commands: TWENTY, locale: "zh" });
+    await s.r.type("/");
+    await pressTimes(s.r, KEYS.down, 10);
+    const menu = menuLines(s.lines());
+    expect(menu[0]).toBe("↑ 还有 7 项");
+    expect(menu).toContain("› /c10  关于 c10");
+    expect(menu.at(-1)).toBe("↓ 还有 7 项");
+  });
+
+  it("shrinks to the rows left on a short screen, keeping the input whole and the selection in view", async () => {
+    // Eight rows: the two rules and the input row leave five for the menu.
+    const s = setup({ commands: TWENTY, height: 8 });
+    await s.r.type("/");
+    let all = s.lines();
+    expect(all).toHaveLength(8);
+    expect(isRule(all[0] ?? "", 40)).toBe(true);
+    expect(all[1]).toBe("› /");
+    expect(isRule(all[2] ?? "", 40)).toBe(true);
+    expect(all.slice(3)).toEqual([
+      "› /c00  About c00",
+      "  /c01  About c01",
+      "  /c02  About c02",
+      "  /c03  About c03",
+      "↓ 16 more",
+    ]);
+    await pressTimes(s.r, KEYS.down, 9);
+    all = s.lines();
+    expect(all).toHaveLength(8);
+    expect(all[1]).toBe("› /");
+    expect(all.slice(3)).toContain("› /c09  About c09");
+    await pressTimes(s.r, KEYS.down, 10);
+    expect(s.lines().at(-1)).toBe("› /c19  About c19");
+  });
+
+  it("keeps one row for the menu on a screen with no more room, the selection in it", async () => {
+    // Four rows: the input takes three, the menu one.
+    const s = setup({ commands: TWENTY, height: 4 });
+    await s.r.type("/");
+    expect(s.lines()).toEqual([
+      "─".repeat(40),
+      "› /",
+      "─".repeat(40),
+      "› /c00  About c00",
+    ]);
+    await pressTimes(s.r, KEYS.down, 5);
+    expect(s.lines()[1]).toBe("› /");
+    expect(s.lines()[3]).toBe("› /c05  About c05");
+  });
+
+  it("keeps the input and one menu row over the lines above it when the screen is that short", async () => {
+    const s = setup({
+      commands: TWENTY,
+      height: 4,
+      linesAbove: ["held one", "held two"],
+    });
+    await s.r.type("/");
+    expect(s.lines()).toEqual([
+      "─".repeat(40),
+      "› /",
+      "─".repeat(40),
+      "› /c00  About c00",
+    ]);
+  });
+
+  it("grows back to eight rows when the room comes back", async () => {
+    // Seven rows: the input takes three, the menu the other four.
+    const s = setup({ commands: TWENTY, height: "screen", rows: 7 });
+    await s.r.type("/");
+    expect(menuLines(s.lines())).toHaveLength(4);
+    s.r.stdout.resize(40, 30);
+    await flush();
+    await flush();
+    const menu = menuLines(s.lines());
+    expect(menu).toHaveLength(8);
+    expect(menu[0]).toBe("› /c00  About c00");
+    expect(menu[7]).toBe("↓ 13 more");
+  });
+
+  it("scrolls the @ menu in the same window on a short screen", async () => {
+    const members = Array.from({ length: 7 }, (_, i) => ({
+      id: `m${i}`,
+      name: `Member${i}`,
+    }));
+    const s = setup({ members, height: 7 });
+    await s.r.type("@");
+    await flush();
+    // Seven members and everyone: eight entries in four rows.
+    let menu = s.lines().slice(3);
+    expect(menu).toEqual([
+      "› @Member0",
+      "  @Member1",
+      "  @Member2",
+      "↓ 5 more",
+    ]);
+    await pressTimes(s.r, KEYS.down, 7);
+    menu = s.lines().slice(3);
+    expect(menu[0]).toBe("↑ 5 more");
+    expect(menu.at(-1)).toBe("› @everyone");
+    await s.r.press(KEYS.tab);
+    expect(s.latest.state.text).toBe("@everyone ");
   });
 });

@@ -1,9 +1,12 @@
 import { defineMessages } from "../../../i18n/messages";
 
-/** What the transcript says about itself: what is below, the search, the selection keys, copying. */
+/**
+ * What the transcript says about itself: the way back to the bottom (its key, or with no key the
+ * lines below), the search, the selection keys, copying.
+ */
 export const transcriptMessages = defineMessages({
   en: {
-    belowOne: "↓ 1 line below",
+    bottomKey: "↓ {key} to go to the bottom",
     below: "↓ {count} lines below",
     noMatches: "No matches",
     selectKeys:
@@ -14,7 +17,7 @@ export const transcriptMessages = defineMessages({
     nothingCopied: "Nothing to copy",
   },
   zh: {
-    belowOne: "↓ 1 行在下面",
+    bottomKey: "↓ {key} 回到最下面",
     below: "↓ {count} 行在下面",
     noMatches: "没有匹配",
     selectKeys:

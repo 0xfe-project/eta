@@ -24,6 +24,7 @@ import { chooseLocale } from "./i18n/locale";
 import { translatorFor } from "./i18n/messages";
 import { App } from "./ui/app";
 import { mainMessages } from "./ui/entry-messages";
+import { createTerminalMouse } from "./ui/mouse/terminal";
 import { runInterface, runOnTerminal } from "./ui/run-interface";
 import { TUI_VERSION } from "./version";
 
@@ -77,33 +78,44 @@ async function openInterface(): Promise<void> {
       findHostProgram({ env: process.env, platform: process.platform, home }),
     tuiVersion: TUI_VERSION,
   });
+  const mouse = createTerminalMouse({
+    stdin: process.stdin,
+    write: (text) => process.stdout.write(text),
+  });
 
   runInterface({
     process,
     controller,
     deadlineMs: CRASH_STOP_DEADLINE_MS,
+    mouse: mouse.reporting,
     startProgram: runOnTerminal,
     draw: ({ quit, runProcess }) =>
       render(
-        <App
-          deps={{
-            controller,
-            registry,
-            paths,
-            initialConfig: loaded,
-            initialState: state,
-            env: process.env,
-            platform: process.platform,
-            tuiVersion: TUI_VERSION,
-            loadConfig,
-            ensureConfigFile,
-            saveState,
-            runProcess,
-            which: (command) => Bun.which(command),
-            quit,
-          }}
-        />,
-        { alternateScreen: true, exitOnCtrlC: false },
+        mouse.provide(
+          <App
+            deps={{
+              controller,
+              registry,
+              paths,
+              initialConfig: loaded,
+              initialState: state,
+              env: process.env,
+              platform: process.platform,
+              tuiVersion: TUI_VERSION,
+              loadConfig,
+              ensureConfigFile,
+              saveState,
+              runProcess,
+              which: (command) => Bun.which(command),
+              quit,
+            }}
+          />,
+        ),
+        {
+          stdin: mouse.stdin,
+          alternateScreen: true,
+          exitOnCtrlC: false,
+        },
       ),
   });
 

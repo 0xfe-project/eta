@@ -18,6 +18,7 @@ import type { ProcessLaunch } from "./editor";
 import type { Session } from "./shell/session";
 import { Box, Text, useApp, useWindowSize } from "ink";
 import {
+  use,
   useCallback,
   useEffect,
   useMemo,
@@ -41,6 +42,7 @@ import { translatorFor } from "../i18n/messages";
 import { LocaleContext, useMessages } from "../i18n/react";
 import { ConfigProblemsLayer } from "./config-problems";
 import { editorLaunch } from "./editor";
+import { MouseReportingContext } from "./mouse/reporting";
 import { screenMessages } from "./screens/messages";
 import {
   ExistingHostScreen,
@@ -435,6 +437,10 @@ export function App({ deps }: { deps: AppDeps }) {
   const localeRef = useRef(locale);
   configRef.current = config;
   localeRef.current = locale;
+  const mouseReporting = use(MouseReportingContext);
+  useEffect(() => {
+    mouseReporting.setEnabled(config.mouse);
+  }, [mouseReporting, config.mouse]);
   const { suspendTerminal } = useApp();
   const suspendRef = useRef(suspendTerminal);
   suspendRef.current = suspendTerminal;
