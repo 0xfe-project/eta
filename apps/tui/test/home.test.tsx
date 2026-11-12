@@ -1,6 +1,7 @@
 /** The home screen: the splash, its narrow fallback, and the command input under it. */
 import type { SlashCommand } from "../src/extensions/types";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { extensions as realExtensions } from "../src/extensions.gen";
 import { LOGO_LINES } from "../src/ui/logo";
 import { renderApp, TEST_URL } from "./ui-support/app";
 import { flush, KEYS, plain } from "./ui-support/render";
@@ -10,6 +11,23 @@ import { testFeature } from "./ui-support/test-extension";
 vi.hoisted(() => {
   globalThis.process.env.FORCE_COLOR = "3";
 });
+
+// The real extensions as a list this file owns, so one test can take a feature out of it.
+vi.mock("../src/extensions.gen", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../src/extensions.gen")>();
+  return { extensions: [...real.extensions] };
+});
+
+/** Runs `body` with the real extension `id` left out of the registry, putting it back after. */
+async function withoutExtension<T>(id: string, body: () => Promise<T>) {
+  const at = realExtensions.findIndex((extension) => extension.id === id);
+  const [removed] = at === -1 ? [] : realExtensions.splice(at, 1);
+  try {
+    return await body();
+  } finally {
+    if (removed !== undefined) realExtensions.splice(at, 0, removed);
+  }
+}
 
 const open: { unmount: () => void }[] = [];
 async function app(...args: Parameters<typeof renderApp>) {
@@ -64,13 +82,17 @@ describe("splash on the home screen", () => {
   });
 
   it("hints at /new with its own summary only when a /new command is registered", async () => {
-    const without = await app();
+    // The real /new belongs to the manage feature: without it, nothing registers /new.
+    const without = await withoutExtension("manage", () => app());
     expect(plain(without)).not.toContain("/new");
-    const withNew = await app({
-      extensions: [
-        { id: "chat", commands: [command("new", "Start a conversation")] },
-      ],
-    });
+    // A second /new beside the manage feature's would not register, so it stands in for it.
+    const withNew = await withoutExtension("manage", () =>
+      app({
+        extensions: [
+          { id: "chat", commands: [command("new", "Start a conversation")] },
+        ],
+      }),
+    );
     expect(plain(withNew)).toContain("/new");
     expect(plain(withNew)).toContain("Start a conversation");
   });

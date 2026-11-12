@@ -347,18 +347,21 @@ describe("coming back to a tab", () => {
 
     await r.press(KEYS.altRight);
     await screenShows(r, "other words");
-    const targets = world.raw.store.getState().targets;
-    expect(targets[`conversations.${world.group.id}`]).toBeUndefined();
-    expect(targets[`conversations.${other.id}`]).toBeDefined();
+    // How many users hold each target on the wire: the view held one share, the tab's label holds
+    // the other while the tab is open.
+    const holders = (id: string) =>
+      (world.raw as unknown as { users: Map<string, number> }).users.get(
+        `conversations.${id}`,
+      ) ?? 0;
+    expect(holders(world.group.id)).toBe(1);
+    expect(holders(other.id)).toBe(2);
     expect(plain(r)).not.toContain("half written");
 
     await r.press(KEYS.altLeft);
     await screenShows(r, "› half written");
     await screenShows(r, "below");
     expect(plain(r).split("\n")[0]).toBe(firstLine);
-    expect(
-      world.raw.store.getState().targets[`conversations.${world.group.id}`],
-    ).toBeDefined();
+    expect(holders(world.group.id)).toBe(2);
   }, 60_000);
 });
 

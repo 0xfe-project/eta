@@ -1,8 +1,10 @@
 /** What the view, the tab label and the commands read off a conversation's state. */
 import type {
+  ConversationInfo,
   ConversationSummary,
   MemberView,
   MessageView,
+  TimelineSection,
 } from "@eta/client-contracts";
 import type { WireState } from "../../connection/types";
 import type { TabStatus } from "../../extensions/types";
@@ -94,4 +96,41 @@ export function conversationStatus(
   return summary === undefined
     ? undefined
     : participantsStatus(summary.participants);
+}
+
+/** The conversation's own target, as the tab follows it. */
+export function conversationTarget(id: string): string {
+  return `conversations.${id}`;
+}
+
+/**
+ * Whether the newest agent row ended done or failed past the user's read mark. Undefined before
+ * the conversation's target arrives, without an agent row, and for any other ending.
+ */
+function unreadEnding(state: WireState, id: string): TabStatus | undefined {
+  const sections = state.targets[conversationTarget(id)]?.sections;
+  const info = sections?.info as ConversationInfo | undefined;
+  const timeline = sections?.timeline as TimelineSection | undefined;
+  if (info === undefined || timeline === undefined) return undefined;
+  const newest = timeline.messages
+    .filter((row) => row.author === "agent")
+    .reduce<MessageView | undefined>(
+      (last, row) => (last === undefined || row.seq > last.seq ? row : last),
+      undefined,
+    );
+  if (newest === undefined || newest.seq <= info.readSeq) return undefined;
+  if (newest.status === "failed") return "failed";
+  if (newest.status === "done") return "done";
+  return undefined;
+}
+
+/**
+ * A conversation tab's mark: running or waiting from the members in the list; otherwise done or
+ * failed for an unread reply, read off the conversation's own target when the wire holds it.
+ */
+export function conversationTabStatus(
+  state: WireState,
+  id: string,
+): TabStatus | undefined {
+  return conversationStatus(state, id) ?? unreadEnding(state, id);
 }

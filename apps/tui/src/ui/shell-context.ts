@@ -54,6 +54,9 @@ export function createShellContext(sources: ShellContextSources): ShellContext {
       const { tabs, activeTab } = session.store.getState();
       return activeTab === undefined ? undefined : tabs[activeTab];
     },
+    get tabs() {
+      return session.store.getState().tabs;
+    },
     openTab: session.openTab,
     closeTab: session.closeTab,
     editFile: sources.editFile,

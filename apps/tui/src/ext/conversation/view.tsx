@@ -73,15 +73,15 @@ function LoadedConversation({ feed, active }: { feed: Feed; active: boolean }) {
   const state = useStore(feed.store);
   const { rows, members, agents, info, sessions, held, ui } = state;
   const [keepItems] = useState(createItemKeeper);
+  const reviewBinding = config.keybindings["review.open"][0];
+  const reviewKey =
+    reviewBinding === undefined ? undefined : formatKeyBinding(reviewBinding);
   const items = useMemo(
     () =>
       keepItems(
-        feedItems(
-          { ...feed.store.getState(), rows, members, agents, info, sessions },
-          locale,
-        ),
+        feedItems({ rows, members, agents, info, sessions }, locale, reviewKey),
       ),
-    [keepItems, feed, rows, members, agents, info, sessions, locale],
+    [keepItems, rows, members, agents, info, sessions, locale, reviewKey],
   );
   const named = useMemo(
     () => namedMembers({ members, agents }),
