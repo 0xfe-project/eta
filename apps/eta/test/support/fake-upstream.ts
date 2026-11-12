@@ -14,6 +14,8 @@ export const MODEL = "gpt-test";
 export interface FakeUpstream {
   readonly url: string;
   requests: number;
+  /** The body of every request, as CPA sent it. */
+  bodies: string[];
   /** Streams whose client went away before the end. */
   cancelled: number;
   stop: () => void;
@@ -26,7 +28,7 @@ function event(name: string, data: unknown): Uint8Array {
 }
 
 export function fakeUpstream(): FakeUpstream {
-  const state = { requests: 0, cancelled: 0 };
+  const state = { requests: 0, cancelled: 0, bodies: [] as string[] };
   const server = Bun.serve({
     port: 0,
     hostname: "127.0.0.1",
@@ -35,6 +37,7 @@ export function fakeUpstream(): FakeUpstream {
     async fetch(request) {
       state.requests += 1;
       const prompt = await request.text();
+      state.bodies.push(prompt);
       if (prompt.includes("fail-500"))
         return Response.json({ error: { message: "boom" } }, { status: 500 });
       if (prompt.includes("fail-429")) {
@@ -152,6 +155,7 @@ export function fakeUpstream(): FakeUpstream {
     get cancelled() {
       return state.cancelled;
     },
+    bodies: state.bodies,
     stop: () => void server.stop(true),
   } as FakeUpstream;
 }

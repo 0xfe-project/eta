@@ -93,6 +93,16 @@ describe.skipIf(process.platform === "win32")(
           events.filter((type) => type === "text_delta").length,
         ).toBeGreaterThan(1);
         expect(message.usage.input).toBe(5);
+        // CPA offers Codex models its hosted image tool unless told not to, and the model then
+        // tells the user it can draw (`image_gen.imagegen`); eta cannot show what it would draw.
+        const sent = JSON.parse(
+          upstream.bodies.filter((body) => body.includes('"hi"')).at(-1)!,
+        ) as {
+          tools?: { type: string }[];
+        };
+        expect(sent.tools ?? []).not.toContainEqual(
+          expect.objectContaining({ type: "image_generation" }),
+        );
         expect(message.usage.output).toBe(4);
         // ... and that is what the usage table records for whoever asked.
         const entry = entryOf(
