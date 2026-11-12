@@ -43,6 +43,7 @@ async function render() {
             model: "claude:opus",
           }),
           agentView({ id: "a4", name: "Codex", runtime: "codex", model: null }),
+          agentView({ id: "cap", name: "Captain", systemRole: "captain" }),
         ],
       },
       { eager: true },
@@ -85,5 +86,14 @@ describe("AgentSettings", () => {
     expect(codex.textContent).toContain("运行时默认模型");
     expect(codex.textContent).not.toContain("未选择模型");
     expect(codex.querySelector(".text-destructive")).toBeNull();
+  });
+
+  it("leaves Captain out of the list and out of the count", async () => {
+    const container = await render();
+    const names = [...container.querySelectorAll("li")].map(
+      (item) => item.querySelector("span.truncate")?.textContent,
+    );
+    expect(names).toEqual(["审查", "旧模型", "Opus", "Codex"]);
+    expect(container.querySelector("h2")!.textContent).toContain("4");
   });
 });

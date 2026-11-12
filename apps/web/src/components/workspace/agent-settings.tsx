@@ -131,7 +131,10 @@ function AgentRow({ agent }: { agent: AgentView }) {
 
 export function AgentSettings() {
   const { t: translateText } = useTranslation(["agents", "common"] as const);
-  const { agents, loaded, error, openEditor } = useAgents();
+  const { agents: all, loaded, error, openEditor } = useAgents();
+  // Captain is eta's own agent, with its own place at the head of the sidebar; the host refuses to
+  // edit or delete it as an ordinary agent, so a row here would only offer actions that fail.
+  const agents = all.filter((agent) => agent.systemRole !== "captain");
 
   if (error && !loaded)
     return (
