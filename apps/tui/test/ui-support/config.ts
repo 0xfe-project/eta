@@ -44,6 +44,7 @@ const TEST_KEYBINDINGS: Record<ActionName, KeyBinding[]> = {
     ...bind("enter", { shift: true }),
   ],
   "message.steer": bind("tab"),
+  "pending.openConversation": bind("o", { alt: true }),
 };
 
 export function testConfig(overrides: Partial<TuiConfig> = {}): TuiConfig {

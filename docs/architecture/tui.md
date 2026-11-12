@@ -121,12 +121,13 @@ host 的版本号只在 `upgrade.check` 的回复里（`version`）。TUI 进程
 | `transcript.expandAll`                     | `ctrl+o`（展开或收起全部思考与工具输出）   |
 | `message.newline`                          | `alt+enter`、`shift+enter`（输入框里换行） |
 | `message.steer`                            | `tab`（有回复在跑时把消息插进这次回复）    |
+| `pending.openConversation`                 | `alt+o`（在待处理的单项层里进入那个对话）  |
 
 ## 画面
 
 - **主区域**：活跃标签对应的画面；没有打开的标签时是首页：开场图案、版本、连的 host、上手提示，以及一行命令输入。窄终端退成一行文字。
 - **状态区**：一行。最新的通知、连接地址、临时 host 黄字、版本提示；放不下就截断。
-- **标签栏**：一行，默认在最底下。每个打开的标签显示编号、名字与状态标记；扩展注册的固定标签靠右。打开的标签记在 `tui-state.json`，下次启动还在。
+- **标签栏**：一行，默认在最底下。每个打开的标签显示编号、名字与状态标记；扩展注册的固定标签靠右，标签放不下时截掉的是标签那一段，固定标签总是完整显示。打开的标签记在 `tui-state.json`，下次启动还在。
 - **层**：命令开的小窗盖在主区域上，可以叠，最上面那层收按键，用完关掉。
 
 ## 对话
@@ -159,15 +160,41 @@ host 的版本号只在 `upgrade.check` 的回复里（`version`）。TUI 进程
 - Enter 发送，消息排在正在跑的回复之后（`queue`）；有回复在跑时 `message.steer`（Tab）把消息插进这次回复（`steer`）。补全菜单开着时 Tab 归补全。`/queue`、`/steer`、`/stop` 是同样的事的命令形式。
 - Esc 的先后：层开着先关层；搜索或选取模式里先退出模式；补全菜单开着先关菜单；都没有且有回复在跑时停止这个对话的全部回复（`conversations.stop`）；否则什么都不做，不清草稿。
 
+## 多对话与待处理
+
+标签栏只放用户自己打开的对话。别的对话和等用户处理的事都从最右边的固定标签「待处理 N」进去，这个数字就是「别处有卡住的」提示，不另占一行。
+
+### 标签的状态标记
+
+● 在跑、! 等你，来自 `conversations` 列表里成员的状态。✓ 完成、✗ 失败：这个对话最新一条智能体回复是 `done` 或 `failed`，而且在已读位置之后；读过（画面在前面且滚到底时 `conversations.read`）就消失。为了在标签切走时也知道，每个开着的标签在挂载期间订阅自己的 `conversations.<id>`（`src/ext/conversation/tab-label.ts`）。
+
+### 待处理（`src/ext/pending/`）
+
+- 范围和网页的「待处理」一致：`inbox` 里 `pending` 的提问（工具审批也是提问，选项一般是 allow 和 deny），加上 `tasks` 里 `blocked` 与 `in_review` 的任务；定时任务不算。全部从 wire 的 store 现算，别处答掉或任务换了状态，数字跟着变。外壳显示期间订阅 `inbox`、`tasks`、`agents`（eager target 只随 hello 来一次，之后要订阅才推送）。
+- 固定标签：`待处理 N`，N > 0 时用 warning 色。选中它，或在空输入框里按 `panel.open`（←），打开列表面板。
+- 列表面板（层）：先是待处理项，按时间从旧到新（提问按提出时间，任务按最后改动）；再是没归档的对话，按最近活动，带状态、未读数和标签编号。Enter 在对话上打开它的标签；Enter 在待处理项上，在面板上面再开一个只装这一项的层。
+- 单项层：提问按选项单选、多选或自由文字回答，最后一行是放弃（`inbox.answer` 的 `none`）；等验收的任务可以验收（`tasks.update` 改成 `done`）或留言；卡住的任务可以回复（`tasks.comment`）。答完收起回到面板，人不离开当前标签。`pending.openConversation`（Alt+O）进入这一项所在的对话并关掉这些层。同一项只有一个调用在途；这一项在别处被处理掉时层自己收起。
+- 批阅模式：`review.open`（Alt+R）在外壳的任何标签与首页上都能用（有层开着时不响应），按时间从旧到新一项一项呈现，Tab 跳过，处理完或 Esc 退出；没有待处理时不开层。
+- 不打扰：不自动开层，不响铃，不发终端通知；新来的待处理只改固定标签的数字和颜色。对话里有成员在等用户时，「等你回答」那一行末尾提示批阅模式的键。
+
+### 命令
+
+- `/new`：两步。第一步选在哪里：已有项目、输入一个路径，或在主机器上浏览目录（`projects.directories`）。host 的目录浏览是 POSIX shell 脚本，Windows 上的 host 浏览不了，这时用输入路径。第二步勾选成员、指定主理人。开始时才建项目（`projects.create`）再建对话（`conversations.create`），然后打开它的标签；开始之前关掉不在 host 上留下任何东西（项目建好、对话没建成时项目会留下）。
+- `/rename`、`/archive`、`/unarchive`、`/invite`、`/remove`、`/steward`：作用在最前面的对话（`/archive`、`/unarchive` 也可以指名）。成员与主理人不带参数时开选择层。私聊不能加人或移除成员。
+- `/tasks`：没关的任务，等验收与卡住的排前面，Enter 开和待处理同样的单项层。
+- `/artifacts`：产物列表。Enter 取一个一小时有效的预览地址（`artifacts.preview`）显示出来，`y` 经 OSC 52 复制；不替用户开浏览器，因为 host 在远程时浏览器会开在错的机器上。
+
+层里的键（↑↓、PageUp/PageDown、Enter、Space、Tab、Esc）是固定的，不进设定；能改的是上面键位表里的动作。
+
 ## 扩展：加命令、加画面
 
 一个功能是 `src/ext/` 下的一个模块（`<名字>.ts(x)` 或 `<名字>/index.ts(x)`），默认导出一个 `Extension`（`src/extensions/types.ts`）。`scripts/gen-extensions.ts` 扫描这个目录，写出被 git 忽略的 `src/extensions.gen.ts`；`build`、`dev`、`test`、`typecheck`、`build:binaries` 都先跑它，`bun run --cwd apps/tui gen` 单独跑。所以加功能只加文件，不改已有文件。注册表在启动时检查扩展 id、命令名、标签页 kind、固定标签 id 不重复，重复就启动失败。
 
 `Extension` 可以带：
 
-- `commands`：斜杠命令（`SlashCommand`）。名字和参数名只用英文，没有别名，补全按英文前缀；`summary`、参数说明、例子说明中英各一。`requiredOps` 列出它调的 op。`run(ctx, argText)` 里的 `ctx` 是 `ShellContext`：开层、在状态区提示、开关标签、用编辑器打开文件、把终端交给交互程序（`ssh -t`）、重新载入设定、退出。
+- `commands`：斜杠命令（`SlashCommand`）。名字和参数名只用英文，没有别名，补全按英文前缀；`summary`、参数说明、例子说明中英各一。`requiredOps` 列出它调的 op。`run(ctx, argText)` 里的 `ctx` 是 `ShellContext`：开层、在状态区提示、读打开的标签（`tabs`、`activeTab`）、开关标签、用编辑器打开文件、把终端交给交互程序（`ssh -t`）、重新载入设定、退出。
 - `views`：一种标签页（`TabView`）。`kind` 是它画的东西的种类（例如对话），`Component` 画主区域，`useTitle`、`useStatus` 是给标签栏用的 hook。用 `ctx.openTab({ kind, id })` 打开。
-- `pinnedTabs`：标签栏右端的固定标签。选中它（`ctx.selectPinnedTab(id?)`，不给 id 时是最右边那个）时调它的 `onSelect(ctx)`。
+- `pinnedTabs`：标签栏右端的固定标签。选中它（`ctx.selectPinnedTab(id?)`，不给 id 时是最右边那个）时调它的 `onSelect(ctx)`。`useAttention` 返回 true 时用 warning 色画。
 - `Background`：外壳显示期间常驻挂载、不占画面的组件，用来放在外壳任何画面上都有效的键（`useAction`），例如批阅模式。被层盖住、在重连遮罩后面时它的键不触发；外壳收起时卸载。
 - `messages`：这个功能的消息目录。
 - `onConnected(ctx, first)`：每次连上（hello）后调用，`first` 表示本进程第一次。
@@ -188,7 +215,7 @@ host 的版本号只在 `upgrade.check` 的回复里（`version`）。TUI 进程
 
 ## 命令
 
-命令文档由注册表生成：[英文](../tui/commands.md)、[中文](../tui/commands.zh.md)。地基自带 `/help`、`/config`、`/install-service`；对话扩展带 `/open`、`/queue`、`/steer`、`/stop`。
+命令文档由注册表生成：[英文](../tui/commands.md)、[中文](../tui/commands.zh.md)。地基自带 `/help`、`/config`、`/install-service`；对话扩展带 `/open`、`/queue`、`/steer`、`/stop`；`/new` 与对话管理命令在 `src/ext/manage/`，`/tasks` 在 `src/ext/pending/`，`/artifacts` 在 `src/ext/artifacts/`。
 
 ## 构建
 

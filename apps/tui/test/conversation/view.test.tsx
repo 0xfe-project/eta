@@ -451,7 +451,7 @@ describe("the read mark", () => {
 });
 
 describe("leaving the tab", () => {
-  it("lets go of the conversation's subscription while another tab is in front, and takes it again on return", async () => {
+  it("lets go of the view's share of the conversation's subscription while another tab is in front, and takes it again on return", async () => {
     const wire = worldWire({});
     const r = await renderApp({
       patch: { wire },
@@ -467,11 +467,12 @@ describe("leaving the tab", () => {
     });
     open.push(r);
     await flush();
+    // The view holds one share while in front; the tab's label holds the other while it is open.
     const subscribed = () => wire.held.get(`conversations.${ID}`) ?? 0;
-    expect(subscribed()).toBe(1);
+    expect(subscribed()).toBe(2);
     await r.press(KEYS.altRight);
-    expect(subscribed()).toBe(0);
-    await r.press(KEYS.altLeft);
     expect(subscribed()).toBe(1);
+    await r.press(KEYS.altLeft);
+    expect(subscribed()).toBe(2);
   });
 });
