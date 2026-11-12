@@ -7,10 +7,7 @@ import type { AssistantMessage } from "@earendil-works/pi-ai";
  * then. Between the two, the replies a dead process left in flight are failed, so nothing a client
  * is ever shown says `working` without something working.
  */
-import type {
-  AgentRuntimeInfo,
-  GitHubCredentials,
-} from "@eta/client-contracts";
+import type { AgentRuntimeInfo } from "@eta/client-contracts";
 import type {
   AssembledServer,
   RemoteSessions,
@@ -21,7 +18,6 @@ import type {
 } from "@eta/server";
 import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/files";
-import type { GithubTuning } from "./github/service";
 import type { DaemonBuilds } from "./machines/builds";
 import type { SshRunner } from "./machines/install";
 import type { MachineRecord } from "./machines/store";
@@ -32,7 +28,6 @@ import type { UpgradePluginOptions } from "./upgrade/plugin";
 import type { WebOptions } from "./web/service";
 import { homedir, hostname, platform } from "node:os";
 import { join } from "node:path";
-import { GitHubKeeper } from "@eta/daemon";
 import { peerAddressOf, redactionMiddleware } from "@eta/server";
 import { agentsPlugin } from "./agents/plugin";
 import { AgentStore } from "./agents/store";
@@ -65,11 +60,6 @@ import { emailPlugin } from "./email/plugin";
 import { EmailService } from "./email/service";
 import { EmailStore } from "./email/store";
 import { emailSessionTools } from "./email/tools";
-import { GithubError } from "./github/error";
-import { githubPlugin } from "./github/plugin";
-import { githubRoutes } from "./github/routes";
-import { Github } from "./github/service";
-import { githubSessionTools } from "./github/tools";
 import { Inbox } from "./inbox/inbox";
 import { inboxPlugin } from "./inbox/plugin";
 import { SettingStore } from "./inbox/setting";
@@ -162,11 +152,6 @@ export interface Product {
   readonly runtimeExtrasFor: (meta: SessionMeta) => Promise<RuntimeExtras>;
   /** MCP on this machine (servers, credentials, sign-ins); absent when the host turned it off. */
   readonly mcp: McpService | undefined;
-  /**
-   * The environment sessions' shells get beyond the process's: GitHub's login, once connected.
-   * Empty when the host has no GitHub.
-   */
-  readonly shellEnv: NodeJS.ProcessEnv;
   /** The product's own HTTP routes (artifact pages, enrolling a machine); nothing for any other path. */
   fetch: (request: Request) => Promise<Response | undefined>;
   /** Where `sessions.*` actions for sessions on other machines go. */
@@ -207,12 +192,6 @@ export function createProduct(options: {
   /** The token the gate asks for, when there is a gate. */
   accessToken?: string | undefined;
   /**
-   * The GitHub chain: `true` loads it, and a `GithubTuning` (where GitHub is and what time it is,
-   * for a test with a fake GitHub) loads it pointed at that. Absent or false means none of it:
-   * no plugin, no tools, no callbacks, no login, and nothing asked of GitHub.
-   */
-  github?: boolean | GithubTuning | undefined;
-  /**
    * `web_fetch` and `web_search`, run in this process. Absent means neither tool; `{}` is both,
    * searching with the SearXNG the host runs itself where a prebuilt one exists.
    */
@@ -242,15 +221,6 @@ export function createProduct(options: {
     options.memoryUrl === undefined || options.memoryUrl === ""
       ? undefined
       : new MemoryClient(options.memoryUrl);
-  // GitHub is one chain — the App, its plugin, its tools, the callbacks, the login on this machine
-  // — so it is taken whole or left whole, and left by default. A host that wants it says so
-  // (`--github`, `ETA_GITHUB`); a test says the same by handing over its fake, or plain `true`.
-  // Leaving it also means not waiting for it: a plugin that is never mounted cannot be one of the
-  // ones `mount` holds the startup up for.
-  const githubOn =
-    options.github === true || typeof options.github === "object";
-  const githubTuning =
-    typeof options.github === "object" ? options.github : undefined;
   const agents = new AgentStore(db);
   const machines = new MachineStore(db);
   const projects = new ProjectStore(db);
@@ -365,8 +335,6 @@ export function createProduct(options: {
     captainSupervisor?: CaptainSupervisor;
     hooks?: Required<SessionHooks>;
     inbox?: Inbox;
-    githubCredentials?: () => Promise<GitHubCredentials | null>;
-    githubLogin?: GitHubKeeper;
   } = {};
   const hub = new MachineHub({
     machines,
@@ -414,8 +382,6 @@ export function createProduct(options: {
         models: () => running?.models,
         hooks: () => later.hooks,
         approvals: () => later.inbox?.approvals() ?? [],
-        githubCredentials: async () =>
-          (await later.githubCredentials?.()) ?? null,
         generated,
         warn,
       }),
@@ -518,52 +484,6 @@ export function createProduct(options: {
     conversations,
     client: memory,
   });
-  // The GitHub App agents act as, and git and gh on this machine logged in as it (the daemons'
-  // machines ask over their links; see `machines/service.ts`). None of it is there when the host
-  // was started without GitHub: no App to act as, so no token to hand a machine either.
-  const github: Github | undefined = githubOn
-    ? new Github({
-        db,
-        key: secretKey,
-        publicUrl: options.publicUrl,
-        ...(githubTuning ?? {}),
-        changed: () => {
-          wire?.pushNow("github");
-          void later.githubLogin?.poke();
-          // The daemons' machines look again too, instead of at their next hourly refresh.
-          for (const machine of machines.list())
-            if (machine.kind === "daemon")
-              void hub
-                .link(machine.id)
-                ?.machine("githubRefresh", {})
-                .catch(() => undefined);
-        },
-        warn,
-      })
-    : undefined;
-  /**
-   * The token a machine's git and gh are set up with; null while GitHub is not connected, and
-   * without a single request to GitHub while the host has no GitHub at all.
-   */
-  const githubCredentials = async (): Promise<GitHubCredentials | null> => {
-    if (github === undefined) return null;
-    try {
-      return await github.credentials();
-    } catch (error) {
-      if (error instanceof GithubError) return null;
-      throw error;
-    }
-  };
-  const githubLogin =
-    github === undefined
-      ? undefined
-      : new GitHubKeeper({
-          dir: join(dataDir, "github"),
-          credentials: githubCredentials,
-          warn,
-        });
-  later.githubCredentials = githubCredentials;
-  later.githubLogin = githubLogin;
   // Reading the web: pages and searches, for every session that has the tools.
   const web =
     options.web === undefined ? undefined : new Web({ ...options.web, warn });
@@ -709,10 +629,6 @@ export function createProduct(options: {
     changed: () => wire?.pushNow("artifacts"),
   });
   const artifactRoutes = createArtifactRoutes(artifacts);
-  /** GitHub's two returns to the host; with no GitHub, no path of its own answers. */
-  const noRoutes = async (): Promise<Response | undefined> => undefined;
-  const githubCallbacks =
-    github === undefined ? noRoutes : githubRoutes(github, warn);
 
   const answerCaptainInbox: Parameters<
     typeof captainSessionTools
@@ -836,30 +752,6 @@ export function createProduct(options: {
         redactionMiddleware(() => plugins.redactionsFor(meta.agentId)),
       ],
     },
-    // Without GitHub the tools are not there to offer: an agent's list does not mention them.
-    ...(github === undefined
-      ? []
-      : [
-          {
-            sessionTools: githubSessionTools({
-              github,
-              opened: (conversationId, pull) => {
-                // A task's session is held in its task's key (`tasks/session-key.ts`): its pull
-                // request is that task's, whatever else the conversation or the board holds.
-                const taskId =
-                  taskOfKey(conversationId, (runId) =>
-                    github.store.taskOfRun(runId),
-                  ) ??
-                  (conversationId === undefined
-                    ? undefined
-                    : github.store.taskOfConversation(conversationId));
-                if (taskId === undefined) return;
-                github.store.linkPull(taskId, pull, Date.now());
-                wire?.pushNow("github");
-              },
-            }),
-          },
-        ]),
     {
       askObserve: (meta: SessionMeta) => inbox.askObserve(originOf(meta)),
     },
@@ -902,11 +794,9 @@ export function createProduct(options: {
     skillDirsFor: (meta) => plugins.skillDirsFor(meta),
     runtimeExtrasFor: (meta) => plugins.runtimeExtrasFor(meta),
     mcp,
-    shellEnv: githubLogin?.env ?? {},
     fetch: async (request) =>
       (await hub.route(request)) ??
       (await mcp?.route(request)) ??
-      (await githubCallbacks(request)) ??
       (await artifactRoutes(request)) ??
       upgradeRoutes(request, dataDir),
     remote: router,
@@ -918,7 +808,6 @@ export function createProduct(options: {
       hub.close();
       mirrors.detach();
       plugins.close();
-      await githubLogin?.stop();
       email.stop();
       await mcp?.close();
       await web?.close();
@@ -954,9 +843,6 @@ export function createProduct(options: {
         "email",
         "plugins",
         ...(mcp === undefined ? [] : ["mcp"]),
-        // Not mounted, so not waited for: github would otherwise cost the startup one
-        // `MOUNT_TIMEOUT_MS` and then a failure.
-        ...(github === undefined ? [] : ["github"]),
         ...(memory === undefined ? [] : ["memory"]),
       ]);
       let ready!: () => void;
@@ -1120,8 +1006,6 @@ export function createProduct(options: {
       );
       if (mcp !== undefined)
         server.mount("mcp", mcpPlugin({ service: mcp }, applied("mcp")));
-      if (github !== undefined)
-        server.mount("github", githubPlugin({ github }, applied("github")));
       if (memory !== undefined)
         server.mount(
           "memory",
@@ -1147,10 +1031,6 @@ export function createProduct(options: {
       // Everything the runs need is in place: the queue is looked at now.
       if (options.tasks?.runs !== false) taskRunner.attach();
       if (captainOn) captainSupervisor.start();
-      githubLogin?.start();
-      // Where the App is installed, once, so the first look at the settings is not a guess.
-      if (github !== undefined && github.app() !== null)
-        void github.status(false).catch(() => undefined);
     },
   };
 }

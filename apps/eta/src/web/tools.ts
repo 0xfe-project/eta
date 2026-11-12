@@ -1,6 +1,6 @@
 /**
  * `web_fetch` and `web_search`: the web, read by the host for every session. They are session
- * tools like the GitHub ones, not an MCP server: what they call is a library in this process, so
+ * tools like the email ones, not an MCP server: what they call is a library in this process, so
  * no client, port or child of ours is needed to reach it, and a daemon's session gets them over
  * `tool.call` with the fetch made here.
  *

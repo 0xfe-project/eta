@@ -48,34 +48,11 @@
     "createAndStart": "Confirm and start",
     "changeTitle": "Change title",
     "editDescription": "Edit description",
-    "complete": "Complete task",
     "addDescription": "Add description"
   },
   "details": {
     "activityTab": "Activity",
-    "propertiesTab": "Properties",
-    "deliveryTab": "Delivery"
-  },
-  "pullRequests": {
-    "status": {
-      "draft": "Draft",
-      "merged": "Merged",
-      "closed": "Closed",
-      "unavailable": "Status temporarily unavailable"
-    },
-    "mergedAndCompleted": "PR merged; task completed",
-    "mergedTaskIncompleteWithError": "PR merged; task incomplete: {{message}}",
-    "mergedTaskIncomplete": "PR merged; task incomplete",
-    "mergeResultUnknown": "No merge result was received. PR status has been refreshed. Check it before deciding whether to retry.",
-    "merging": "Merging…",
-    "actions": {
-      "merge": "Merge",
-      "moreMergeOptions": "More merge options",
-      "mergeAndComplete": "Merge and complete task"
-    }
-  },
-  "feedback": {
-    "completed": "Task completed"
+    "propertiesTab": "Properties"
   },
   "fields": {
     "updatedAt": "Updated",

@@ -55,7 +55,6 @@ const host = Bun.spawn(
     hostPort,
     "--allow-origin",
     webOrigin,
-    "--github",
   ],
   shared,
 );

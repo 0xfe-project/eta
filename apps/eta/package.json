@@ -8,7 +8,7 @@
   "scripts": {
     "//": "Not `build`: turbo would run it on every check. One file with everything inside, as a release ships it.",
     "build:host": "bun scripts/build-host.ts",
-    "dev": "bun --watch src/main.ts --allow-origin http://127.0.0.1:${ETA_WEB_PORT:-3000} --github",
+    "dev": "bun --watch src/main.ts --allow-origin http://127.0.0.1:${ETA_WEB_PORT:-3000}",
     "email:demo": "bun scripts/email-demo.ts",
     "start": "bun src/main.ts",
     "typecheck": "bun check",

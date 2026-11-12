@@ -1,7 +1,7 @@
 import { CheckIcon } from "@phosphor-icons/react/Check";
 import { cn } from "@/lib/utils";
 
-/** A dialog's steps atop it, as in connecting GitHub; `complete` ticks all. */
+/** A dialog's steps atop it; `complete` ticks all. */
 export function Stepper({
   steps,
   step,

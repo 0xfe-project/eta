@@ -6,8 +6,6 @@ Three product plugins, all built on conversations and sessions: tasks are a boar
 
 Board (`tasks` / `tasks.<id>`, `apps/eta/src/tasks`): an agent proposes a task, the user confirms it, the proposing agent executes it in its own session and hands it back for acceptance when done; a comment on the task wakes it once more in the same session. The full description (drafts and cards, workspace, run queue, `finish_task`, runs on the daemon) is in [Tasks](tasks.md).
 
-- **Delivered PRs**: the task board doesn't know GitHub; after an agent runs `open_pull_request`, the GitHub plugin records the PR in its own `task_pull` table, and the “Delivered” line on the task page reads it, shows the PR's current status, and can merge it. Which task a PR belongs to: the task's session (session key `task:<task id>`) belongs to that task; a conversation's session belongs to the most recently touched, unfinished task in that conversation (`todo`, `in_progress`, `in_review`, `blocked`). See [GitHub](github.md).
-
 ## Artifacts
 
 An agent publishes a static site with `publish_artifact` (a directory with an `index.html` at its root, may contain CSS, scripts, images); users can preview, share, and download it. With `spa: true` it is a single-page app: navigating to a path with no file returns `index.html`, while missing `.js`, `.css`, and images are still 404.

@@ -14,7 +14,7 @@
  *   bun apps/eta/src/main.ts [--port 8787] [--host 127.0.0.1]
  *                            [--web-dir <built web>] [--token-file <path>]
  *                            [--allow-origin <origin>]... [--memory-url <sidecar>] [--no-llm]
- *                            [--github] [--public-url <the address the browser uses>]
+ *                            [--public-url <the address the browser uses>]
  *                            [--no-web] [--searxng-url <a SearXNG of your own>]
  *
  * A thin shell around `startHost`: flags, a startup summary on one line, and a signal handler.
@@ -148,17 +148,6 @@ const memoryUrl = values["memory-url"] ?? process.env.ETA_MEMORY_URL;
 const publicUrl = values["public-url"] ?? process.env.ETA_PUBLIC_URL;
 const searxngUrl = values["searxng-url"] ?? process.env.ETA_SEARXNG_URL;
 
-/** An environment switch: on for `1`, `true`, `yes`, `on`; anything else (or nothing) is off. */
-const envOn = (value: string | undefined): boolean =>
-  ["1", "true", "yes", "on"].includes((value ?? "").trim().toLowerCase());
-
-// Off unless a host asked for it: the flag, or an environment that says so. `--no-github` wins,
-// so an operator can switch one off for a single start without editing the environment.
-const github =
-  values["no-github"] === true
-    ? false
-    : values.github === true || envOn(process.env.ETA_GITHUB);
-
 const host = await startHost({
   dataDir,
   port,
@@ -176,8 +165,6 @@ const host = await startHost({
   allowOrigins: values["allow-origin"] ?? [],
   // Subscriptions and Gemini keys, through the LLM gateway (CLIProxyAPI in a child process).
   llm: values["no-llm"] !== true,
-  // The whole GitHub chain, or none of it.
-  github,
   // Reading the web, in this process; an empty SearXNG address means the host's own.
   web:
     values["no-web"] === true

@@ -23,7 +23,6 @@ import { BackToTop } from "./back-to-top";
 import { when } from "./routine-format";
 import { actorName, ago, createdBy, statusLabel } from "./task-format";
 import { useTaskNav } from "./task-nav";
-import { TaskPulls } from "./task-pulls";
 import { StatusIcon } from "./task-status-icon";
 import {
   CommentBox,
@@ -303,7 +302,6 @@ function TaskPage({ id }: { id: string }) {
           )}
         >
           <TaskProperties task={task}>
-            <TaskPulls task={task} />
             <dt className="text-xs leading-8 text-muted-foreground">
               {translateText("fields.updatedAt")}
             </dt>

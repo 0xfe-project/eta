@@ -9,10 +9,8 @@ import { elementPickerDefault, setElementPicker } from "@/lib/element-picker";
 import { translate } from "@/lib/i18n";
 import { host } from "@/lib/native";
 import { cn } from "@/lib/utils";
-import { useGitHubMounted } from "@/queries/github";
 import { AgentSettings } from "./agent-settings";
 import { ApprovalSettings } from "./approval-settings";
-import { ConnectionSettings } from "./connection-settings";
 import { EmailSettings } from "./email-settings";
 import { ArchivedGroups } from "./groups";
 import { HostSettings } from "./host-settings";
@@ -34,11 +32,11 @@ const PluginSettings = lazy(async () => ({
 }));
 
 /**
- * The sections the rail does not offer, by choice: Connections is off in this build, and Approvals is the
- * editor's only. The settings stay in force — `?settings=connections` still opens one — because
- * hiding the door is not the same as turning the feature off.
+ * The sections the rail does not offer, by choice: Approvals is the editor's only. The settings stay
+ * in force — `?settings=approvals` still opens them — because hiding the door is not the same as
+ * turning the feature off.
  */
-const hiddenSettings = new Set<SettingsSection>(["approvals", "connections"]);
+const hiddenSettings = new Set<SettingsSection>(["approvals"]);
 
 const colorModes = [
   {
@@ -203,13 +201,7 @@ function AppearanceSettings() {
 }
 
 /** The panel a section opens: one settings page, or the appearance one by default. */
-function SectionContent({
-  section,
-  githubMounted,
-}: {
-  section: SettingsSection;
-  githubMounted: boolean;
-}) {
+function SectionContent({ section }: { section: SettingsSection }) {
   return section === "agents" ? (
     <AgentSettings />
   ) : section === "providers" ? (
@@ -218,8 +210,6 @@ function SectionContent({
     <ApprovalSettings />
   ) : section === "machines" ? (
     <MachineSettings />
-  ) : section === "connections" && githubMounted ? (
-    <ConnectionSettings />
   ) : section === "mcp" ? (
     <McpSettings />
   ) : section === "plugins" ? (
@@ -250,7 +240,6 @@ export function SettingsPanels({
 }) {
   const { t: translateText } = useTranslation(["settings", "common"] as const);
   const attention = useSettingsAttention();
-  const githubMounted = useGitHubMounted();
   return (
     <div className={cn("settings-layout", className)}>
       <SettingsNav
@@ -271,7 +260,7 @@ export function SettingsPanels({
         onChange={onChange}
       />
       <section className="settings-content">
-        <SectionContent section={value} githubMounted={githubMounted} />
+        <SectionContent section={value} />
       </section>
     </div>
   );

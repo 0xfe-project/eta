@@ -69,7 +69,6 @@ import { AgentAvatar } from "./agent-identity";
 import { AttachmentChip, PasteChip } from "./composer-block";
 import { ComposerEditor } from "./composer-editor";
 import { EmailProposalCard } from "./email-proposal-card";
-import { useGitHubRef } from "./github-ref";
 import { GroupNotice } from "./group-notice";
 import { HeldMessages } from "./held-messages";
 import { PendingStrip } from "./pending-strip";
@@ -475,20 +474,12 @@ function ToolActivity({
   /** The session at work, which pictures its view left out are fetched from. */
   sessionId?: string | undefined;
 }) {
-  const github = useGitHubRef(block);
   return (
-    <>
-      <ToolDetailCard
-        block={block}
-        sessionId={sessionId}
-        statusLabel={activityText[block.status]}
-      />
-      {github === undefined ? null : (
-        <div className="tool-ref">
-          <ActivityRefCard value={github} variant="framed" />
-        </div>
-      )}
-    </>
+    <ToolDetailCard
+      block={block}
+      sessionId={sessionId}
+      statusLabel={activityText[block.status]}
+    />
   );
 }
 

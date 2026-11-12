@@ -119,3 +119,17 @@ describe("eta-host --migrations", () => {
     expect(existsSync(join(home, ".eta"))).toBe(false);
   });
 });
+
+describe("the flags the GitHub connection had", () => {
+  // An older desktop app passes --github and an installed service may keep --no-github.
+  it.each([["--github"], ["--no-github"]])(
+    "%s is still accepted and does nothing",
+    async (flag) => {
+      const home = await tempDir("eta-github-flag-");
+      const run = host([flag, "--version"], home);
+      expect(run.status).toBe(0);
+      expect(run.stderr).toBe("");
+      expect(host(["--help"], home).stdout).not.toContain("github");
+    },
+  );
+});

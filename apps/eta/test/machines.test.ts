@@ -327,6 +327,22 @@ describe("the link", () => {
       link.daemon("exec", { script: "x".repeat(9 * 1024 * 1024) }),
     ).rejects.toThrow(/too big/);
   });
+
+  it("tells a daemon from before GitHub went that GitHub is not connected", async () => {
+    const w = await world();
+    const daemon = await startDaemon(w.host, w.client, { idle: true });
+    const node = daemon.node;
+    const attach = node.attach.bind(node);
+    let peer: Parameters<typeof attach>[0] | undefined;
+    node.attach = (to) => {
+      peer = to;
+      return attach(to);
+    };
+    daemon.link.start();
+    await approve(w.client, daemon);
+    // Such a daemon asks every minute until it is upgraded; an error would be a warning each time.
+    expect(await peer!.call("github.credentials", {})).toBeNull();
+  });
 });
 
 describe("projects on a machine", () => {

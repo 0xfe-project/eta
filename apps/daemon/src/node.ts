@@ -18,7 +18,6 @@ import type {
   DaemonRunEvent,
   DaemonServiceParams,
   DaemonServiceResults,
-  GitHubCredentials,
   MachineActionArgs,
   MachineActionResults,
   OpenSessionArgs,
@@ -54,7 +53,6 @@ import {
 } from "@eta/server";
 import { LocalTransport } from "@eta/ssh";
 import { Context } from "cordis";
-import { GitHubKeeper } from "./github";
 import { ModelCatalog, remoteModels } from "./models";
 import { PluginStore } from "./plugin-files";
 import { runtimeExtras } from "./plugin-launch";
@@ -127,8 +125,6 @@ export class DaemonNode {
   readonly #store: FileSessionStore;
   readonly #catalog = new ModelCatalog();
   readonly #runtimes: OarRuntimes;
-  /** git and gh on this machine, logged in as the primary's GitHub App. */
-  readonly #github: GitHubKeeper;
   /** The plugins the primary sent, by contents. */
   readonly #plugins: PluginStore;
   /** The openings the primary sent, by `conversation:agent`; read when a session opens. */
@@ -157,21 +153,6 @@ export class DaemonNode {
     });
     const home = options.home ?? homedir();
     this.#plugins = new PluginStore(join(options.dataDir, "plugins", "store"));
-    // The token is the primary's to give; what stays here is at most an hour old.
-    this.#github = new GitHubKeeper({
-      dir: join(options.dataDir, "github"),
-      credentials: async () => {
-        const peer = this.#peer;
-        // Without the primary the login on disk stays as it is until the link is back.
-        if (peer === undefined || peer.lost) return undefined;
-        return (await peer.call(
-          "github.credentials",
-          {},
-          { timeoutMs: 15_000 },
-        )) as GitHubCredentials | null;
-      },
-      warn,
-    });
     this.#runtimes = options.runtimes ?? createOarRuntimes({ warn });
     this.#manager = new SessionManager({
       store: this.#store,
@@ -291,8 +272,6 @@ export class DaemonNode {
   /** A link came up: serve the primary on it. */
   attach(peer: Peer): { receive: (frame: unknown) => void; close: () => void } {
     this.#peer = peer;
-    // Back on the link: the login is looked at again (and set up, if the link is new).
-    void this.#github.poke();
     const socket: Socket = {
       id: ++this.#socketIds,
       send: (frame: ServerFrame) => peer.sendPipe(frame),
@@ -373,7 +352,6 @@ export class DaemonNode {
   async close(): Promise<void> {
     for (const fiber of this.#fibers.splice(0).reverse()) await fiber.dispose();
     await this.#manager.closeAll();
-    await this.#github.stop();
     await this.#store.close();
   }
 
@@ -438,10 +416,6 @@ export class DaemonNode {
       open: (args) => this.#open(args),
       catalog: ({ models }) => {
         for (const spec of models) this.#catalog.add(spec);
-        return {};
-      },
-      githubRefresh: () => {
-        void this.#github.poke();
         return {};
       },
       which: ({ commands }) => ({

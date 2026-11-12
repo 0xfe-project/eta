@@ -366,7 +366,7 @@ async function startHost(
   const hostEnv = { ...env };
   const host = new LocalHost({
     // The first start takes any free port and says which in its summary; the next ones take it again.
-    command: [...program, ...flags, "--github"],
+    command: [...program, ...flags],
     cwd,
     env: hostEnv,
     wrapper,
