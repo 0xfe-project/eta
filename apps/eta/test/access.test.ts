@@ -339,23 +339,14 @@ describe("a host beyond loopback", () => {
     expect(
       access.authorize(new Request("http://eta.example/llm/v1/models"))?.status,
     ).toBe(401);
-    // GitHub sends the browser back to exactly two paths, with no cookie of ours, to read only.
+    // The GitHub App's old callbacks are gone, and behind the gate like any other path.
     for (const path of [
       "/github/manifest/callback?code=c&state=s",
       "/github/authorization/callback?code=c&state=s",
     ])
       expect(
-        access.authorize(new Request(`http://eta.example${path}`)),
-      ).toBeUndefined();
-    for (const request of [
-      new Request("http://eta.example/github/manifest/callback", {
-        method: "POST",
-      }),
-      new Request("http://eta.example/github/manifest/callback/x"),
-      new Request("http://eta.example/github/callback"),
-      new Request("http://eta.example/github"),
-    ])
-      expect(access.authorize(request)?.status).toBe(401);
+        access.authorize(new Request(`http://eta.example${path}`))?.status,
+      ).toBe(401);
   });
 
   it("trusts the origin it was asked for, because a rebound name has no cookie", async () => {

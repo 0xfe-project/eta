@@ -4,7 +4,7 @@ Two product tools: `web_fetch` reads a web page and returns Markdown; `web_searc
 
 ## Why session tools
 
-Like `open_pull_request`, these are tools that `sessionTools` hands to each session, not MCP servers:
+Like the email tools, these are tools that `sessionTools` hands to each session, not MCP servers:
 
 - The libraries called are in the same process; no MCP client, port, or subprocess is needed to connect.
 - Sessions on the daemon get them via `tool.call` (proxies for product tools, see [Machines and daemon](machines.md)); both scraping and search happen on the main node; the daemon does not need these libraries installed, and the single file produced by `bun build --compile` is unchanged.

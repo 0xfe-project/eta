@@ -35,9 +35,9 @@ const stepFields = [
 const last = steps.length - 1;
 
 /**
- * Creating an agent one step at a time, as in connecting GitHub. Nothing
- * is sent until Create on the last step; a failure stays there with every
- * field kept, to retry. Mounted per open, so a cancelled draft is gone.
+ * Creating an agent one step at a time. Nothing is sent until Create on
+ * the last step; a failure stays there with every field kept, to retry.
+ * Mounted per open, so a cancelled draft is gone.
  */
 export function CreateAgentWizard({ onDone }: { onDone: () => void }) {
   const { t: translateText } = useTranslation([

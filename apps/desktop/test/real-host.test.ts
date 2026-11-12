@@ -14,7 +14,7 @@ import { HOST_WRAPPER } from "../src/bun/host";
 import { LocalHost } from "../src/bun/service";
 
 const MAIN = fileURLToPath(new URL("../../eta/src/main.ts", import.meta.url));
-const FLAGS = ["--no-llm", "--no-web", "--no-github"];
+const FLAGS = ["--no-llm", "--no-web"];
 
 let dir: string;
 let home: string;

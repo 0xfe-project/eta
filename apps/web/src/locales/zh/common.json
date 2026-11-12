@@ -26,7 +26,6 @@
     "close": "关闭",
     "openTask": "打开任务",
     "openRoutine": "打开定时",
-    "openPullRequest": "打开 PR",
     "cancel": "取消",
     "delete": "删除",
     "save": "保存",
@@ -53,8 +52,6 @@
     "previous": "上一步",
     "next": "下一步",
     "create": "创建",
-    "manage": "管理",
-    "disconnect": "断开",
     "collapse": "收起",
     "expand": "展开",
     "previousPage": "上一页",
@@ -99,7 +96,6 @@
     "selected": "已选",
     "builtIn": "内置",
     "optionalSuffix": " （可选）",
-    "optional": "可选",
     "all": "全部",
     "notSelected": "未选择",
     "timeline": "时间线",
@@ -116,8 +112,7 @@
   },
   "entities": {
     "model": "模型",
-    "agents": "智能体",
-    "app": "应用"
+    "agents": "智能体"
   },
   "accessibility": {
     "itemActions": "{{name}} 的操作",
@@ -153,10 +148,7 @@
     "namedValue": "{{name}}：{{value}}",
     "inlineSeparator": " · {{label}}",
     "joinedValues": "{{first}} · {{second}}",
-    "period": "。",
     "commaSuffix": "，{{value}}",
-    "referenceSummary": "{{action}}：{{title}}{{repositoryHint}}",
-    "parenthesizedSuffix": "（{{value}}）",
     "operationSummary": "{{action}}{{detail}}，{{status}}{{locationHint}}",
     "namedValueSuffix": "：{{value}}",
     "quotedValue": "「{{value}}」"

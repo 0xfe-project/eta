@@ -40,14 +40,12 @@ https://<random-words>.trycloudflare.com/?token=<contents of access-token>
 
 You only need to pass the token once: the host exchanges it for a cookie, after which you can just visit the root address.
 
-## Optional: GitHub and OAuth callbacks
+## Optional: OAuth callbacks
 
-The GitHub chain is not loaded by default (see [GitHub](docs/architecture/github.md)). To try the connection wizard, `open_pull_request`, and the PR on the task page on this host, add `--github` (or `ETA_GITHUB=1`) at startup. Both dev scripts (the `dev` in the repo root and the one in `apps/eta`) include `--github`; to see the default (no GitHub) behavior, start a host yourself without it: `bun apps/eta/src/main.ts --allow-origin http://127.0.0.1:3000` (or pass it `--no-github`).
-
-To sign in to MCP's OAuth or connect a GitHub App on this instance, also pass the public URL when starting the host so callbacks land back on the tunnel:
+To sign in to MCP's OAuth on this instance, also pass the public URL when starting the host so callbacks land back on the tunnel:
 
 ```sh
-ETA_PUBLIC_URL=https://<random-words>.trycloudflare.com bun apps/eta/src/main.ts --github ...
+ETA_PUBLIC_URL=https://<random-words>.trycloudflare.com bun apps/eta/src/main.ts ...
 ```
 
 ## Updating and stopping

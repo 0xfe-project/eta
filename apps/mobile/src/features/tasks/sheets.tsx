@@ -20,7 +20,6 @@ import {
   STATUSES,
   updated,
 } from "./format";
-import { TaskDelivery } from "./pulls";
 
 const showError = (error: unknown) =>
   toast(t("common.failed", { message: failure(error) }));
@@ -241,7 +240,6 @@ export function PropertiesSheet(props: {
         </Row>
         <RunsRow task={task} onDone={props.onClose} />
       </If>
-      <TaskDelivery task={task} />
       <Row label={t("tasks.fields.updatedAt")}>
         <Text class="min-w-0 grow basis-0 text-base leading-[20px] text-foreground">
           {updated(task().updatedAt)}

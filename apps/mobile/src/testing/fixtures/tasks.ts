@@ -2,9 +2,6 @@
 //
 // Scenarios (`host.scenario`):
 // - `empty`, `uninitialized`: nothing on the board (05a).
-// - `no-github`: the host has no `github` plugin, so no PR surface anywhere.
-// - `pr-states`: #128 carries every PR of 06e2. #472's merge gets no answer, the first completion
-//   of the task fails, #460 cannot be read.
 // - `comment-fails`: the first comment on a task does not arrive.
 // - `task-gone`: #135 is on the board but `tasks.task-135` is missing (06i).
 // - `task-loading`: `tasks.task-135` never gets its sections (06i).
@@ -13,14 +10,11 @@ import type {
   BoardTaskDetail,
   BoardTaskStatus,
   BoardTaskView,
-  GitHubPull,
-  GitHubStatus,
   TaskActivityKind,
   TaskActivityView,
   TaskActor,
   TaskArgs,
   TaskDraftData,
-  TaskPullView,
   TaskResults,
   TaskRunStatus,
   TaskRunView,
@@ -440,114 +434,6 @@ function replayLog(): unknown[] {
   ];
 }
 
-const REPO = "https://github.com/akrc/eta/pull";
-const url = (number: number) => `${REPO}/${number}`;
-
-interface PullFixture extends GitHubPull {
-  number: number;
-}
-
-function pull(
-  number: number,
-  title: string,
-  state: GitHubPull["state"],
-  additions: number,
-  deletions: number,
-  merge?: GitHubPull["merge"],
-  reason?: string,
-): PullFixture {
-  return {
-    url: url(number),
-    number,
-    title,
-    state,
-    additions,
-    deletions,
-    headSha: `sha${number}`,
-    ...(merge === undefined ? {} : { merge }),
-    ...(reason === undefined ? {} : { reason }),
-  };
-}
-
-const REPLAY = () =>
-  pull(472, "Replay Missing Frames", "open", 182, 40, "ready");
-const NOT_READY = () =>
-  pull(
-    470,
-    "Migration Script",
-    "open",
-    20,
-    0,
-    "blocked",
-    "Checks haven't passed yet, GitHub won't allow merging now.",
-  );
-
-function pulls(scenario: string): Record<string, PullFixture[]> {
-  if (scenario === "pr-states")
-    return {
-      "task-128": [
-        REPLAY(),
-        NOT_READY(),
-        pull(466, "Log Noise Reduction", "merged", 12, 30),
-        pull(465, "Panel Width", "merged", 8, 2),
-        pull(460, "Board Drag", "open", 1, 1),
-      ],
-    };
-  return { "task-128": [REPLAY()], "task-41": [NOT_READY()] };
-}
-
-const CONNECTED: GitHubStatus = {
-  state: "ready",
-  app: null,
-  installations: [],
-  error: null,
-  user: null,
-  oauth: true,
-  checked: true,
-};
-
-function installGithub(host: FakeHost): void {
-  const scenario = host.scenario;
-  if (scenario === "no-github" || scenario === "uninitialized") return;
-  host.mounted = [...host.mounted, { name: "github", source: "bundled" }];
-  const byTask = pulls(scenario);
-  const fixtures = new Map(
-    Object.values(byTask)
-      .flat()
-      .map((fixture) => [fixture.url, fixture]),
-  );
-  const views: TaskPullView[] = Object.entries(byTask).flatMap(
-    ([taskId, list]) =>
-      list.map((fixture) => ({
-        taskId,
-        url: fixture.url,
-        title: fixture.title,
-        number: fixture.number,
-        openedAt: minutesAgo(90),
-      })),
-  );
-  host.set("github", { state: CONNECTED, pulls: views });
-  host.on("github.pull", (args: { url: string }) => {
-    const found = fixtures.get(args.url);
-    if (found === undefined || found.number === 460)
-      throw new Error("GITHUB_UNAVAILABLE");
-    return found;
-  });
-  host.on("github.merge", async (args: { url: string; headSha: string }) => {
-    const found = fixtures.get(args.url);
-    if (found === undefined) throw new Error("PR_NOT_FOUND");
-    if (found.headSha !== args.headSha) throw new Error("STALE_HEAD");
-    await new Promise((done) => setTimeout(done, 300));
-    // No answer comes back: the wire's own timeout tells the page.
-    if (scenario === "pr-states" && found.number === 472)
-      await new Promise(() => undefined);
-    const { merge: _merge, reason: _reason, ...open } = found;
-    const merged: PullFixture = { ...open, state: "merged" };
-    fixtures.set(args.url, merged);
-    return merged;
-  });
-}
-
 function installBoard(host: FakeHost): void {
   const scenario = host.scenario;
   const toList = (task: BoardTaskDetail): BoardTaskView => {
@@ -633,14 +519,6 @@ function installBoard(host: FakeHost): void {
   };
 
   host.on("tasks.update", (args: TaskArgs["update"]): TaskResults["update"] => {
-    if (
-      scenario === "pr-states" &&
-      args.status === "done" &&
-      !completionFailed
-    ) {
-      completionFailed = true;
-      throw new Error("Host did not respond in time.");
-    }
     const before = read(args.taskId);
     let task = before;
     if (args.title !== undefined) {
@@ -679,7 +557,6 @@ function installBoard(host: FakeHost): void {
   });
 
   const failures = { comment: scenario === "comment-fails" };
-  let completionFailed = false;
   const delivered = new Set<string>();
 
   host.on(
@@ -870,17 +747,9 @@ function installBoard(host: FakeHost): void {
   );
 }
 
-const BOARD_SCENARIOS = [
-  "",
-  "no-github",
-  "pr-states",
-  "comment-fails",
-  "task-gone",
-  "task-loading",
-];
+const BOARD_SCENARIOS = ["", "comment-fails", "task-gone", "task-loading"];
 
 export function installTasks(host: FakeHost): void {
-  installGithub(host);
   installBoard(host);
   host.set(`sessions.${replay.sessionId}`, {
     core: { session: replay.sessionId, running: false },

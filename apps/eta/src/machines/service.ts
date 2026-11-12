@@ -10,9 +10,6 @@
  * - **Product tools** (`tool.call`). The real tool runs on the primary for that session. (It used
  *   to get an SSH environment over the link to read the machine's files; that went to TOBEREFR.)
  * - **The approval list** (`tool.gate`): does the user want to be asked before this tool runs?
- * - **GitHub credentials** (`github.credentials`): the token for git and gh on the machine, the
- *   user's once they authorized the GitHub App, else the App's; the App's secrets stay here, and
- *   the machine asks again before the token (an hour old at most) expires.
  * - **Questions** (`ask.observe`): a session on the daemon asked, was answered or gave up; the
  *   conversation and the inbox hear it exactly as they hear a local session's.
  *
@@ -21,7 +18,6 @@
  * the session works for.
  */
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import type { GitHubCredentials } from "@eta/client-contracts";
 import type { KernelModels, KernelTool } from "@eta/core";
 import type { SessionMeta } from "@eta/server";
 import type { ConversationStore } from "../conversations/store";
@@ -51,8 +47,6 @@ export interface LinkServiceDeps {
   hooks: () => Required<SessionHooks> | undefined;
   /** The tools the user wants to be asked about. */
   approvals: () => readonly string[];
-  /** The token for git and gh on the daemon's machine; null while GitHub is not connected. */
-  githubCredentials: () => Promise<GitHubCredentials | null>;
   /** A generation ended: count it. */
   generated: (meta: SessionMeta, message: AssistantMessage) => void;
   warn: (message: string) => void;
@@ -142,7 +136,9 @@ export function serveLink(link: MachineLink, deps: LinkServiceDeps): void {
     return { ask: deps.approvals().includes(name) };
   });
 
-  link.peer.handle("github.credentials", () => deps.githubCredentials());
+  // GitHub is gone, but a daemon from before asks for its login every minute until it is
+  // upgraded; "not connected" keeps it quiet where "unknown method" would warn each time.
+  link.peer.handle("github.credentials", () => null);
 
   link.peer.handle("tool.call", async (raw, { signal }) => {
     const params = raw as {

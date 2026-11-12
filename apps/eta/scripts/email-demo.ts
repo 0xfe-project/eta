@@ -103,7 +103,6 @@ const alice = await startHost({
   hostname: "127.0.0.1",
   webDir,
   llm: false,
-  github: false,
   models: aliceModels.models as KernelModels as never,
 });
 const bob = await startHost({
@@ -113,7 +112,6 @@ const bob = await startHost({
   hostname: "127.0.0.1",
   webDir,
   llm: false,
-  github: false,
   models: bobModels.models as KernelModels as never,
 });
 

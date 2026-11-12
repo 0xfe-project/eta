@@ -11,7 +11,6 @@ import type { AssembledServer, AssembleOptions } from "@eta/server";
  */
 import type { Database } from "bun:sqlite";
 import type { SiteLimits } from "./artifacts/files";
-import type { GithubTuning } from "./github/service";
 import type { LlmOptions, LlmRuntime } from "./llm/runtime";
 import type { SshRunner } from "./machines/install";
 import type {
@@ -82,16 +81,9 @@ export interface HostOptions {
   artifactLimits?: Partial<SiteLimits> | undefined;
   /**
    * The address the user's browser reaches the host at (`https://eta.example.com`), when it is not
-   * the one the web page was opened at: where an OAuth sign-in (GitHub) returns to.
+   * the one the web page was opened at: where an OAuth sign-in (MCP) returns to.
    */
   publicUrl?: string;
-  /**
-   * The GitHub chain: `true` loads it, a `GithubTuning` (where GitHub is, for a test with a fake
-   * one) loads it pointed at that. Off by default, and off means none of it: no `github` target,
-   * no GitHub tools, no callback routes, no login on this machine, nothing asked of GitHub. The
-   * web hides every GitHub face as soon as `hello` says the plugin is not there.
-   */
-  github?: boolean | GithubTuning;
   /**
    * `web_fetch` and `web_search` for every session: `true` loads them, searching with the SearXNG
    * the host runs as a child process (where a prebuilt one exists); the object form names an
@@ -186,7 +178,6 @@ export async function startHost(options: HostOptions): Promise<Host> {
       memoryUrl: options.memoryUrl,
       publicUrl: options.publicUrl,
       accessToken: access.token,
-      github: options.github,
       ...(options.web === undefined || options.web === false
         ? {}
         : { web: options.web === true ? {} : options.web }),

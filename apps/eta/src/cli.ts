@@ -16,7 +16,8 @@ export const RUN_OPTIONS = {
   "memory-url": { type: "string" },
   "public-url": { type: "string" },
   "no-llm": { type: "boolean", default: false },
-  // The GitHub chain is opt-in; `--no-github` overrides an environment that turns it on.
+  // Gone with the GitHub connection, still accepted: an older desktop app or an installed service
+  // may pass them, and the parser would refuse to start. Not in the usage.
   github: { type: "boolean", default: false },
   "no-github": { type: "boolean", default: false },
   // web_fetch and web_search are on; the search runs on the host's own SearXNG unless given one.
@@ -47,8 +48,6 @@ Flags:
   --allow-origin <o>      another page origin that may open the socket, repeatable
   --public-url <url>      the address the browser reaches this host at
   --memory-url <url>      the memory sidecar
-  --github                load the GitHub chain
-  --no-github             do not, whatever the environment says
   --no-llm                do not load the LLM gateway
   --no-web                do not give agents web_fetch and web_search
   --searxng-url <url>     the SearXNG web_search asks

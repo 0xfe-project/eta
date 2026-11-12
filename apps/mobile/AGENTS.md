@@ -3,7 +3,7 @@
 Native Shell (nsh, TSX on QuickJS) client for iOS/Android. The design draft is in the Paper file "Eta mobile"
 (`01M6NVTTY29AE2FET8P4VRX3ZK`), the overview page records the product judgements: **the first screen is "waiting for you"**, **answer in place**, **the process is evidence**,
 **the phone is just a screen**, **black and white; red and green reserved for diff and errors**. Not doing: lock-screen push, question-expiry hints, voice transcription, email.
-Stays on the computer: models, MCP, approval, GitHub, editing agents, managing machines.
+Stays on the computer: models, MCP, approval, editing agents, managing machines.
 
 ## Reproducing the design
 

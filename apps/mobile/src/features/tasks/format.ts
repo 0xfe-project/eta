@@ -140,8 +140,3 @@ export function failure(error: unknown): string {
   }
   return reason(error);
 }
-
-/** A call that got no answer at all: it may have happened. */
-export const unanswered = (error: unknown): boolean =>
-  error instanceof WireError &&
-  (error.code === "timeout" || error.code === "disconnected");

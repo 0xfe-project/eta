@@ -3,7 +3,6 @@ import enArtifacts from "./en/artifacts.json";
 import enCaptain from "./en/captain.json";
 import enChat from "./en/chat.json";
 import enCommon from "./en/common.json";
-import enConnections from "./en/connections.json";
 import enEmail from "./en/email.json";
 import enLlm from "./en/llm.json";
 import enMachines from "./en/machines.json";
@@ -22,7 +21,6 @@ import zhArtifacts from "./zh/artifacts.json";
 import zhCaptain from "./zh/captain.json";
 import zhChat from "./zh/chat.json";
 import zhCommon from "./zh/common.json";
-import zhConnections from "./zh/connections.json";
 import zhEmail from "./zh/email.json";
 import zhLlm from "./zh/llm.json";
 import zhMachines from "./zh/machines.json";
@@ -47,7 +45,6 @@ export const en = {
   llm: enLlm,
   machines: enMachines,
   mcp: enMcp,
-  connections: enConnections,
   email: enEmail,
   navigation: enNavigation,
   onboard: enOnboard,
@@ -69,7 +66,6 @@ export const zh = {
   llm: zhLlm,
   machines: zhMachines,
   mcp: zhMcp,
-  connections: zhConnections,
   email: zhEmail,
   navigation: zhNavigation,
   onboard: zhOnboard,
@@ -92,7 +88,6 @@ export const namespaces = [
   "chat",
   "machines",
   "mcp",
-  "connections",
   "email",
   "llm",
   "navigation",

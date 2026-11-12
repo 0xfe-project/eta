@@ -26,7 +26,6 @@
     "close": "Close",
     "openTask": "Open task",
     "openRoutine": "Open routine",
-    "openPullRequest": "Open PR",
     "cancel": "Cancel",
     "delete": "Delete",
     "save": "Save",
@@ -53,8 +52,6 @@
     "previous": "Previous",
     "next": "Next",
     "create": "Create",
-    "manage": "Manage",
-    "disconnect": "Disconnect",
     "collapse": "Collapse",
     "expand": "Expand",
     "previousPage": "Previous page",
@@ -99,7 +96,6 @@
     "selected": "Selected",
     "builtIn": "Built-in",
     "optionalSuffix": " (optional)",
-    "optional": "Optional",
     "all": "All",
     "notSelected": "Not selected",
     "timeline": "Timeline",
@@ -116,8 +112,7 @@
   },
   "entities": {
     "model": "Model",
-    "agents": "Agents",
-    "app": "App"
+    "agents": "Agents"
   },
   "accessibility": {
     "itemActions": "Actions for {{name}}",
@@ -153,10 +148,7 @@
     "namedValue": "{{name}}: {{value}}",
     "inlineSeparator": " · {{label}}",
     "joinedValues": "{{first}} · {{second}}",
-    "period": ".",
     "commaSuffix": ", {{value}}",
-    "referenceSummary": "{{action}}: {{title}}{{repositoryHint}}",
-    "parenthesizedSuffix": " ({{value}})",
     "operationSummary": "{{action}}{{detail}}, {{status}}{{locationHint}}",
     "namedValueSuffix": ": {{value}}",
     "quotedValue": "“{{value}}”"
