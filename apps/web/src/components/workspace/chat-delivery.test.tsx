@@ -25,6 +25,7 @@ import {
   taskDetail,
 } from "@/test-product";
 import { button, cleanup, click, flush, mount } from "@/test-render";
+import { useWorkspaceStore } from "./workspace-store";
 
 const AGENT = "a1";
 let conversations = 0;
@@ -484,6 +485,123 @@ describe("the # menu", () => {
     await flush();
     expect(rows(c)).toHaveLength(0);
   });
+});
+
+describe("the / menu", () => {
+  const options = (c: HTMLElement) =>
+    [...c.querySelectorAll('[role="option"]')].map(
+      (option) => option.querySelector(".skill-slash-option-name")!.textContent,
+    );
+  const press = async (
+    c: HTMLElement,
+    key: string,
+    init: KeyboardEventInit = {},
+  ) => {
+    await act(async () => {
+      editor(c).dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key,
+          bubbles: true,
+          cancelable: true,
+          ...init,
+        }),
+      );
+    });
+    await flush();
+  };
+  const working = () => [
+    row({ text: "做点事" }),
+    row({ author: "agent", agentId: AGENT, status: "working" }),
+  ];
+
+  for (const key of ["Tab", "Enter"])
+    it(`completes /steer with ${key} and waits for the words, then steers`, async () => {
+      const { container: c } = await start(working());
+      await type("/ste");
+      expect(options(c)).toEqual(["/steer"]);
+      await press(c, key);
+      // The command is in the box with the space after it, the menu is shut, nothing went.
+      expect(composed(c)).toBe("/steer ");
+      expect(options(c)).toEqual([]);
+      expect(sends).toHaveLength(0);
+      await type("/steer 改个方向");
+      await enter(c);
+      expect(sends).toHaveLength(1);
+      expect(sends[0]!.args).toMatchObject({ text: "改个方向", mode: "steer" });
+    });
+
+  for (const key of ["Tab", "Enter"])
+    it(`completes /queue with ${key}, then queues`, async () => {
+      const { container: c } = await start(working());
+      await type("/qu");
+      await press(c, key);
+      expect(composed(c)).toBe("/queue ");
+      expect(options(c)).toEqual([]);
+      expect(sends).toHaveLength(0);
+      await type("/queue 接着做");
+      await enter(c);
+      expect(sends[0]!.args).toMatchObject({ text: "接着做", mode: "queue" });
+    });
+
+  it("reaches /steer from /st with the arrows: /stop is the first row", async () => {
+    const { container: c, host } = await start(working());
+    await type("/st");
+    expect(options(c)).toEqual(["/stop", "/steer"]);
+    await press(c, "ArrowDown");
+    await press(c, "Enter");
+    expect(composed(c)).toBe("/steer ");
+    expect(host.calls.some((call) => call.action === "stop")).toBe(false);
+  });
+
+  it("completes /goal the same way", async () => {
+    const { container: c } = await start();
+    await type("/go");
+    await press(c, "Tab");
+    expect(composed(c)).toBe("/goal ");
+  });
+
+  for (const key of ["Tab", "Enter"])
+    it(`runs /stop the moment ${key} picks it`, async () => {
+      const { container: c, host } = await start(working());
+      await type("/sto");
+      await press(c, key);
+      expect(host.calls.find((call) => call.action === "stop")?.args).toEqual({
+        conversationId: CONV,
+      });
+      expect(composed(c)).toBe("");
+    });
+
+  it("opens the settings the moment /settings is picked", async () => {
+    const { container: c } = await start();
+    useWorkspaceStore.getState().setSettings((s) => ({ ...s, open: false }));
+    await type("/se");
+    await press(c, "Enter");
+    expect(composed(c)).toBe("");
+    expect(useWorkspaceStore.getState().settings.open).toBe(true);
+  });
+
+  it("completes /compact in a group of several, to name who", async () => {
+    const { container: c } = await start(
+      [],
+      [memberView(AGENT, { sessionId: "s1" }), memberView("a2")],
+    );
+    await type("/comp");
+    await press(c, "Tab");
+    expect(composed(c)).toBe("/compact ");
+  });
+
+  // Chrome flags the key; WebKit sends only the legacy keyCode 229. Neither picks a row.
+  for (const [engine, init] of [
+    ["Chrome", { isComposing: true }],
+    ["WebKit", { keyCode: 229 }],
+  ] as const)
+    it(`leaves an Enter that finishes an input method's word to it (${engine})`, async () => {
+      const { container: c } = await start(working());
+      await type("/ste");
+      await press(c, "Enter", init);
+      expect(composed(c)).toBe("/ste");
+      expect(sends).toHaveLength(0);
+    });
 });
 
 describe("attaching files", () => {

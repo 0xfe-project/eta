@@ -86,6 +86,7 @@ import { SlashMenu } from "./transcript/slash-menu";
 import { ThinkingBlock } from "./transcript/thinking-block";
 import { ToolDetailCard } from "./transcript/tool-detail";
 import { useComposerTarget } from "./use-composer-target";
+import { useInputMethod } from "./use-input-method";
 import { useWorkspaceStore } from "./workspace-store";
 
 type SlashName =
@@ -1269,8 +1270,7 @@ export function ChatPanel({
         : [],
     [rows, showRail],
   );
-  // Composition state the keydown handler needs but the DOM only reports to other listeners.
-  const ime = useRef({ composing: false, endedAt: 0 });
+  const ime = useInputMethod();
   const setSettings = useWorkspaceStore((state) => state.setSettings);
   const setNewConversation = useWorkspaceStore(
     (state) => state.setNewConversation,
@@ -1325,11 +1325,16 @@ export function ChatPanel({
     menu === null
       ? []
       : menu.items.map((item): SlashCommand => {
+          // A command row is the command itself, looked up by name: a copy of its fields would
+          // drop `takesText`, and `/steer` picked from the menu would then fire with no words.
+          // (The menu only ever lists SLASH_COMMANDS, so the fallback is for the type checker.)
           if (item.kind === "command")
-            return {
-              name: item.value as SlashName,
-              description: item.description,
-            };
+            return (
+              SLASH_COMMANDS.find((entry) => entry.name === item.value) ?? {
+                name: item.value as SlashName,
+                description: item.description,
+              }
+            );
           if (item.kind === "task") {
             // `#10`, the title, and the status it is in — picking a task that already finished is
             // a mistake worth showing. The status comes off the board, so it is one of the ones
@@ -1454,30 +1459,11 @@ export function ChatPanel({
       setMenuDismissed(false);
     },
     disabled: Boolean(blocked),
-    onCompositionStart: () => {
-      ime.current.composing = true;
-    },
-    onCompositionEnd: () => {
-      ime.current.composing = false;
-      ime.current.endedAt = performance.now();
-    },
+    onCompositionStart: ime.onCompositionStart,
+    onCompositionEnd: ime.onCompositionEnd,
     onKeyDown: (event: KeyboardEvent) => {
-      /*
-       * Is this Enter the input method finishing a word rather than the person sending?
-       *
-       * Three engines, three orders, all three answered (eta-old measured this in a real browser,
-       * not from the spec): Chrome flags the key with `isComposing`; WebKit says nothing but the
-       * legacy `keyCode: 229`; macOS Pinyin typed as ASCII commits on Enter and closes the
-       * composition *before* delivering the key, so the keydown looks completely ordinary. The
-       * window after `compositionend` covers that third case — long enough to swallow the Enter
-       * that committed the text, short enough not to eat a deliberate second press.
-       */
-      const imeOwned =
-        event.isComposing ||
-        event.keyCode === 229 ||
-        ime.current.composing ||
-        performance.now() - ime.current.endedAt < 120;
-      if (imeOwned) return;
+      // An Enter that finishes an input method's word is not a send, nor a pick (use-input-method.ts).
+      if (ime.owns(event)) return;
       // ⌘/Ctrl+Enter means "send", whatever the menu is offering: steering a running turn must not
       // depend on whether a completion menu happens to be open.
       const forceSend = (event.metaKey || event.ctrlKey) && !event.shiftKey;
