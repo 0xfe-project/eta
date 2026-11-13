@@ -16,7 +16,7 @@ import type {
   SessionMcpServer,
 } from "@eta/client-contracts";
 import type { World } from "./support/world";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createRuntimeRegistry } from "@botiverse/oar";
@@ -693,7 +693,8 @@ describe("a session on an external runtime", () => {
       HELLO_API_KEY: API_KEY,
       HELLO_TEAM: "ops",
       HELLO_MAX: "3",
-      PLUGIN_ROOT: join(w.host.dataDir, "plugins", NAME),
+      // The root is resolved; a temporary directory can sit behind a link (macOS: /var → /private/var).
+      PLUGIN_ROOT: realpathSync(join(w.host.dataDir, "plugins", NAME)),
       PLUGIN_DATA: join(w.host.dataDir, "plugins", "data", NAME),
     });
     const prompt = turns[0]!.options.appendSystemPrompt ?? "";
@@ -746,8 +747,8 @@ describe("a session on an external runtime", () => {
     expect(answer).toMatchObject({
       greeting: "Hello Ada from ops",
       max: "3",
-      cwd: join(w.host.dataDir, "plugins", NAME),
-      root: join(w.host.dataDir, "plugins", NAME),
+      cwd: realpathSync(join(w.host.dataDir, "plugins", NAME)),
+      root: realpathSync(join(w.host.dataDir, "plugins", NAME)),
       data: join(w.host.dataDir, "plugins", "data", NAME),
       keySha256: sha256(API_KEY),
     });
@@ -931,7 +932,7 @@ describe("a session on a daemon's machine", () => {
       throw new Error("no server");
     expect(server.env).toMatchObject({
       HELLO_API_KEY: API_KEY,
-      PLUGIN_ROOT: inStore(r.daemon.dataDir),
+      PLUGIN_ROOT: realpathSync(inStore(r.daemon.dataDir)),
       PLUGIN_DATA: join(r.daemon.dataDir, "plugins", "data", NAME),
     });
     expectNowhere(r.daemon.dataDir, [API_KEY, SCRIPT_KEY, PLAIN_KEY]);
