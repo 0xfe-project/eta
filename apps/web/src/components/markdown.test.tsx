@@ -148,3 +148,33 @@ describe("Markdown", () => {
     expect(a.hasAttribute("href")).toBe(false);
   });
 });
+
+describe("Markdown math", () => {
+  it("renders $$ as KaTeX, inline and in a block", () => {
+    const inline = render("其中 $$\\Delta z_i$$ 表示偏移");
+    expect(inline.querySelector(".katex")).not.toBeNull();
+    // KaTeX also emits MathML, so the text is the formula, not the source.
+    expect(inline.textContent).not.toContain("$$");
+    expect(
+      render("$$\nE = mc^2\n$$").querySelector(".katex-display"),
+    ).not.toBeNull();
+  });
+
+  it("renders the bracket delimiters people and agents write", () => {
+    const root = render(
+      "\\[ \\Delta z_i = z_i^{\\mathrm{4DGAT}} - z_i^{\\mathrm{ref}} \\]",
+    );
+    expect(root.querySelector(".katex")).not.toBeNull();
+    expect(root.textContent).not.toContain("\\[");
+  });
+
+  it("leaves escaped brackets and code alone", () => {
+    expect(
+      render("区间 \\[1,2\\] 不是公式").querySelector(".katex"),
+    ).toBeNull();
+    expect(
+      render("```tex\n\\[ x^2 \\]\n```").querySelector(".katex"),
+    ).toBeNull();
+    expect(render("`\\[ x^2 \\]`").querySelector(".katex")).toBeNull();
+  });
+});
