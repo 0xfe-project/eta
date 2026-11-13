@@ -203,7 +203,8 @@ function FailureBox(props: {
   const text = () => {
     if (line()?.sameAsNext) return t("chat.failure.sameAsNext");
     const key = FAILURE_KEYS[code() as keyof typeof FAILURE_KEYS] as
-      (typeof FAILURE_KEYS)[keyof typeof FAILURE_KEYS] | undefined;
+      | (typeof FAILURE_KEYS)[keyof typeof FAILURE_KEYS]
+      | undefined;
     const reason = t(key ?? "chat.failure.failed");
     // The host's own words say why a run failed; for a restart they only repeat the reason.
     return code() === "restart" || props.message.text === ""
@@ -442,7 +443,9 @@ function systemText(message: MessageView): string {
  */
 function hostMessageText(message: MessageView): string {
   const marked = message.data.captainReview as
-    { reviewIds?: unknown } | null | undefined;
+    | { reviewIds?: unknown }
+    | null
+    | undefined;
   if (Array.isArray(marked?.reviewIds))
     return t("chat.system.captainReview", { count: marked.reviewIds.length });
   // A review written before the host marked it.
@@ -550,11 +553,9 @@ export function Transcript(props: {
       ...mine()
         .filter((item) => !arrived.has(item.id))
         .reverse()
-        .map((item): Item => ({
-          key: item.id,
-          type: "outgoing",
-          outgoing: item,
-        })),
+        .map(
+          (item): Item => ({ key: item.id, type: "outgoing", outgoing: item }),
+        ),
       ...chat
         .grouped()
         .rows.filter(

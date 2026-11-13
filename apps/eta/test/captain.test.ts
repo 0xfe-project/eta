@@ -623,8 +623,9 @@ describe("captain controls", () => {
   });
 
   it("redacts credentials from text and structured tool results", async () => {
-    const { redactJson, redactToolResult } =
-      await import("../src/captain/redact");
+    const { redactJson, redactToolResult } = await import(
+      "../src/captain/redact"
+    );
     expect(
       redactJson({ authorization: "Bearer sk-123456789012345" }),
     ).toContain("[REDACTED:secret]");

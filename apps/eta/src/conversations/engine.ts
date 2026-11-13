@@ -116,7 +116,8 @@ export interface EngineOptions {
   pluginsRead?: (() => Promise<void>) | undefined;
   /** Product state (memory pause, Captain membership) that makes an open session stale. */
   sessionStamp?:
-    ((conversationId: string, agentId: string) => string) | undefined;
+    | ((conversationId: string, agentId: string) => string)
+    | undefined;
   /**
    * Where the sessions of a project on a daemon machine live. Without one, such a project's
    * replies fail as unavailable, which is what a host with no link to other machines should say.

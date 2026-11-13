@@ -785,8 +785,9 @@ export function installChat(host: FakeHost): void {
     host.patch(
       "agents",
       "list",
-      AGENTS.map((agent): AgentView =>
-        agent.id === "agent-ache" ? { ...agent, model: null } : agent,
+      AGENTS.map(
+        (agent): AgentView =>
+          agent.id === "agent-ache" ? { ...agent, model: null } : agent,
       ),
     );
     // After every fixture: `create` installs the providers later than this.
