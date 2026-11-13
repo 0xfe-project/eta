@@ -4,7 +4,12 @@ import { act } from "react";
 import { toast } from "sonner";
 import { setWire } from "@/lib/wire";
 import { useTask } from "@/queries/tasks";
-import { productHost, taskActivity, taskDetail } from "@/test-product";
+import {
+  agentView,
+  productHost,
+  taskActivity,
+  taskDetail,
+} from "@/test-product";
 import { cleanup, flush, mount } from "@/test-render";
 import { CommentBox, Timeline } from "./tasks";
 
@@ -34,8 +39,8 @@ interface Call {
 let calls: Call[] = [];
 
 /** A host whose comment calls wait for the test to answer them. */
-async function render() {
-  const host = productHost({ tasks: [{ task, activity: [] }] });
+async function render(agents = [agentView({ id: "a1", name: "研究员" })]) {
+  const host = productHost({ agents, tasks: [{ task, activity: [] }] });
   host.handle(
     "tasks.comment",
     (args) =>
@@ -212,5 +217,71 @@ describe("comments on a task", () => {
       "评论还不能带图片或文件，2 个没有加进来。",
     );
     expect(paste.defaultPrevented).toBe(false);
+  });
+});
+
+describe("the @ menu in a comment", () => {
+  afterEach(async () => {
+    await cleanup();
+    setWire(undefined);
+    calls = [];
+  });
+  const options = (c: HTMLElement) =>
+    [...c.querySelectorAll('[role="option"]')].map(
+      (option) => option.querySelector(".skill-slash-option-name")!.textContent,
+    );
+  const press = (c: HTMLElement, key: string, init: KeyboardEventInit = {}) =>
+    act(async () => {
+      box(c).dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key,
+          bubbles: true,
+          cancelable: true,
+          ...init,
+        }),
+      );
+    });
+
+  for (const key of ["Tab", "Enter"])
+    it(`completes the agent with ${key}, shuts the menu and sends nothing`, async () => {
+      const { container } = await render();
+      await type(container, "请 @研");
+      expect(options(container)).toEqual(["@研究员"]);
+      await press(container, key);
+      await flush();
+      expect(box(container).value).toBe("请 @研究员 ");
+      expect(options(container)).toEqual([]);
+      expect(calls).toHaveLength(0);
+    });
+
+  // Chrome flags the key; WebKit sends only the legacy keyCode 229. Neither picks a row.
+  for (const [engine, init] of [
+    ["Chrome", { isComposing: true }],
+    ["WebKit", { keyCode: 229 }],
+  ] as const)
+    it(`leaves an Enter that finishes an input method's word to it (${engine})`, async () => {
+      const { container } = await render();
+      await type(container, "请 @研");
+      await press(container, "Enter", init);
+      await flush();
+      expect(box(container).value).toBe("请 @研");
+      expect(options(container)).toEqual(["@研究员"]);
+    });
+
+  it("leaves the Enter that committed a word just before it to the input method", async () => {
+    const { container } = await render();
+    await type(container, "请 @研");
+    // macOS Pinyin typed as ASCII ends the composition, then delivers a plain Enter.
+    await act(async () => {
+      box(container).dispatchEvent(
+        new CompositionEvent("compositionstart", { bubbles: true }),
+      );
+      box(container).dispatchEvent(
+        new CompositionEvent("compositionend", { bubbles: true }),
+      );
+    });
+    await press(container, "Enter");
+    await flush();
+    expect(box(container).value).toBe("请 @研");
   });
 });

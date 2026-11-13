@@ -91,6 +91,7 @@ import { StatusIcon } from "./task-status-icon";
 import { SlashMenu } from "./transcript/slash-menu";
 import { TranscriptDialog } from "./transcript/transcript-dialog";
 import { useGroups } from "./use-groups";
+import { useInputMethod } from "./use-input-method";
 
 const showError = (error: Error) => toast.error(wireErrorMessage(error));
 
@@ -1267,6 +1268,7 @@ export function CommentBox({
   const members = useMentionable(task);
   const [menuIndex, setMenuIndex] = useState(0);
   const [menuDismissed, setMenuDismissed] = useState(false);
+  const ime = useInputMethod();
   const menu = buildMenu({
     text,
     members,
@@ -1412,8 +1414,11 @@ export function CommentBox({
               e.preventDefault();
               leftOut(e.dataTransfer.files.length);
             }}
+            onCompositionStart={ime.onCompositionStart}
+            onCompositionEnd={ime.onCompositionEnd}
             onKeyDown={(e) => {
-              if (items.length && !e.nativeEvent.isComposing) {
+              // The chat's rule: an Enter that finishes an input method's word picks nothing.
+              if (items.length && !ime.owns(e.nativeEvent)) {
                 const step = { ArrowDown: 1, ArrowUp: -1 }[e.key];
                 if (step) {
                   e.preventDefault();
