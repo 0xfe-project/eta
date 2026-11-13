@@ -1,6 +1,6 @@
 {
   "title": "El Capitan",
-  "description": "统筹智能体、派工、审批和运营告警。",
+  "description": "统筹智能体、派工和审批。",
   "notInitialized": "Captain 尚未初始化。",
   "initialize": "初始化 Captain",
   "empty": "与 Captain 对话，统筹智能体和运营事项。",
@@ -30,17 +30,12 @@
     "approve": "批准",
     "reject": "拒绝"
   },
-  "notifications": {
-    "title": "运营告警",
-    "none": "没有告警。",
-    "markRead": "标为已读"
-  },
   "assignments": {
     "title": "最近派工",
     "none": "还没有派工。",
     "round": "第 {{round}} 轮"
   },
-  "operationsBadge": "运营 · {{count}}",
+  "pendingBadge": "待审批 · {{count}}",
   "proposal": {
     "label": "提议的群 {{name}}",
     "title": "新群",

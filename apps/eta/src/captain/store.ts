@@ -3,7 +3,6 @@ import type {
   CaptainAssignmentTargetView,
   CaptainAssignmentView,
   CaptainMemoryPauseView,
-  CaptainNotificationView,
   CaptainOperationStatus,
   CaptainOperationView,
   CaptainPromptKind,
@@ -63,15 +62,6 @@ interface OperationRow {
   error: string | null;
   created_at: number;
   updated_at: number;
-}
-
-interface NotificationRow {
-  id: string;
-  kind: string;
-  body: string;
-  data: string;
-  read_at: number | null;
-  created_at: number;
 }
 
 export interface CaptainReviewRecord {
@@ -179,15 +169,6 @@ const operationOf = (row: OperationRow): CaptainOperationView => ({
   updatedAt: row.updated_at,
 });
 
-const notificationOf = (row: NotificationRow): CaptainNotificationView => ({
-  id: row.id,
-  kind: row.kind,
-  body: row.body,
-  data: jsonObject(row.data),
-  readAt: row.read_at,
-  createdAt: row.created_at,
-});
-
 const reviewOf = (row: ReviewRow): CaptainReviewRecord => ({
   id: row.id,
   dedupeKey: row.dedupe_key,
@@ -271,7 +252,7 @@ function validSetting<K extends keyof CaptainSettingsView>(
 }
 
 // TODO(captain-refactor): Split persistence by aggregate before adding another Captain table or
-// workflow. Assignment, review, prompt/settings, operation/notification and memory-pause state
+// workflow. Assignment, review, prompt/settings, operation and memory-pause state
 // currently share one store; cross-aggregate transactions should stay in a coordinating service.
 export class CaptainStore {
   readonly #db: Database;
@@ -640,63 +621,11 @@ export class CaptainStore {
     return this.operation(id);
   }
 
-  addNotification(input: {
-    kind: string;
-    body: string;
-    data?: Record<string, unknown>;
-    now?: number;
-  }): CaptainNotificationView {
-    const id = crypto.randomUUID();
-    const now = input.now ?? Date.now();
-    this.#db
-      .query(
-        `INSERT INTO captain_notification
-           (id, kind, body, data, read_at, created_at)
-         VALUES (?, ?, ?, ?, NULL, ?)`,
-      )
-      .run(id, input.kind, input.body, JSON.stringify(input.data ?? {}), now);
-    return this.notification(id)!;
-  }
-
-  /** A notification with a stable identity, so a repeated scan does not duplicate it. */
-  addNotificationOnce(input: {
-    key: string;
-    kind: string;
-    body: string;
-    data?: Record<string, unknown>;
-    now?: number;
-  }): CaptainNotificationView {
-    const id = `captain:${input.key}`;
-    const now = input.now ?? Date.now();
-    this.#db
-      .query(
-        `INSERT INTO captain_notification
-           (id, kind, body, data, read_at, created_at)
-         VALUES (?, ?, ?, ?, NULL, ?)
-         ON CONFLICT(id) DO NOTHING`,
-      )
-      .run(id, input.kind, input.body, JSON.stringify(input.data ?? {}), now);
-    return this.notification(id)!;
-  }
-
-  notification(id: string): CaptainNotificationView | undefined {
-    const row = this.#db
-      .query<NotificationRow, [string]>(
-        "SELECT * FROM captain_notification WHERE id = ?",
-      )
-      .get(id);
-    return row === null ? undefined : notificationOf(row);
-  }
-
-  notifications(limit = 100): CaptainNotificationView[] {
-    return this.#db
-      .query<NotificationRow, [number]>(
-        "SELECT * FROM captain_notification ORDER BY created_at DESC, rowid DESC LIMIT ?",
-      )
-      .all(limit)
-      .map(notificationOf);
-  }
-
+  /**
+   * Captain no longer raises alerts: what one said is already on the board, in the Inbox or on the
+   * task. Rows written before that stay in `captain_notification`, and this still marks one read,
+   * so a client from before the change that calls `captain.markNotificationRead` does not error.
+   */
   markNotificationRead(id: string): boolean {
     return (
       this.#db
@@ -761,11 +690,12 @@ export class CaptainStore {
     return row === null ? undefined : reviewOf(row);
   }
 
+  /** Reviews left pending at the attempt ceiling: nothing will deliver them, nor mark them failed. */
   exhaustedReviews(): CaptainReviewRecord[] {
     return this.#db
       .query<ReviewRow, [number]>(
         `SELECT * FROM captain_review
-          WHERE status IN ('pending', 'failed') AND attempts >= ?
+          WHERE status = 'pending' AND attempts >= ?
           ORDER BY created_at, rowid`,
       )
       .all(MAX_CAPTAIN_REVIEW_ATTEMPTS)

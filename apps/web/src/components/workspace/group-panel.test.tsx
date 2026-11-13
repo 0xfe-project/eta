@@ -315,6 +315,7 @@ it("Captain 的会话里第一块是运营，不是任务", async () => {
         updatedAt: 1,
       },
     ],
+    // A host from before Captain stopped raising alerts still sends them; none is drawn.
     notifications: [
       {
         id: "n1",
@@ -355,7 +356,6 @@ it("Captain 的会话里第一块是运营，不是任务", async () => {
   expect(sections(container)).toEqual([
     "Captain 模型",
     "待审批操作",
-    "运营告警",
     "最近派工",
     "产物",
     "成员",
@@ -366,8 +366,8 @@ it("Captain 的会话里第一块是运营，不是任务", async () => {
   expect(container.textContent).toContain("task.create");
   expect(container.textContent).toContain("批准");
   expect(container.textContent).toContain("拒绝");
-  expect(container.textContent).toContain("任务 9 卡住了");
-  expect(container.textContent).toContain("标为已读");
+  expect(container.textContent).not.toContain("任务 9 卡住了");
+  expect(container.textContent).not.toContain("运营告警");
   expect(container.textContent).toContain("第 2 轮");
   // The tasks of that conversation are elsewhere (the 任务 page), not lost here by accident.
   expect(container.textContent).not.toContain("任务1");

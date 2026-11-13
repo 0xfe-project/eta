@@ -78,11 +78,12 @@ export function CaptainSection({ rail }: { rail: boolean }) {
     "captain",
   ] as const);
   const captain = useCaptain();
-  // What Captain is holding for a person: an approval not yet decided, an alert not yet read.
-  // The same count the Operations blocks in its context panel open with.
-  const waiting =
-    captain.operations.filter((item) => item.status === "pending").length +
-    captain.notifications.filter((item) => item.readAt === null).length;
+  // What Captain is holding for a person: an approval not yet decided. The same count the
+  // pending-approvals block in its context panel opens with, and it goes back to nothing once each
+  // one is approved or rejected.
+  const waiting = captain.operations.filter(
+    (item) => item.status === "pending",
+  ).length;
   const { groups, current } = useGroups();
   const open = useOpenGroup();
   const { tasks: board } = useTasks();
@@ -126,7 +127,7 @@ export function CaptainSection({ rail }: { rail: boolean }) {
     waiting === 0 ? null : (
       <>
         <span className="sr-only">
-          {translateText("captain:operationsBadge", { count: waiting })}
+          {translateText("captain:pendingBadge", { count: waiting })}
         </span>
         <span
           data-captain-waiting={waiting}

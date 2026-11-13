@@ -939,11 +939,6 @@ export function captainSessionTools(
           `Captain recommends ${args.recommendation}: ${args.notes}`,
           { kind: "agent", agentId: captain.agentId },
         );
-        deps.service.notify(
-          "task_acceptance",
-          `Captain recommends ${args.recommendation} for task #${task.number}.`,
-          { taskId: task.id, recommendation: args.recommendation },
-        );
         return text(
           `Task #${task.number}: Captain recommends ${args.recommendation}; the user decides.`,
         );
