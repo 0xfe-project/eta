@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { useCaptain, useCaptainActions } from "@/queries/captain";
 import { useModels } from "@/queries/providers";
 import { ModelSelect } from "./agent-fields";
@@ -61,8 +60,10 @@ export function CaptainModel() {
 }
 
 /**
- * Operations: the three things about Captain's work that a chat cannot carry — an approval it cannot give
- * itself, an alert it raised, and what it handed out recently.
+ * Operations: the two things about Captain's work that a chat cannot carry — an approval it cannot give
+ * itself, and what it handed out recently. There is no list of Captain's alerts: everything one said
+ * (a task that stopped retrying, a question waiting in the Inbox, an acceptance recommendation) is
+ * already on the board, in the Inbox or on the task, and a second copy only had to be marked read.
  *
  * They used to be the second tab of a drawer that held the whole of Captain. The drawer is gone
  * (the conversation is the chat, the head of the sidebar is its card), and this is the half of it
@@ -77,7 +78,6 @@ export function CaptainOperations() {
   const pending = captain.operations.filter(
     (item) => item.status === "pending",
   );
-  const unread = captain.notifications.filter((item) => item.readAt === null);
 
   return (
     <>
@@ -131,48 +131,6 @@ export function CaptainOperations() {
                     {translateText("operations.reject")}
                   </Button>
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      <Section
-        title={translateText("notifications.title")}
-        count={unread.length}
-      >
-        {captain.notifications.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
-            {translateText("notifications.none")}
-          </p>
-        ) : (
-          <ul className="-mx-3 divide-y divide-border">
-            {captain.notifications.map((notification) => (
-              <li key={notification.id} className="px-3 py-1.5">
-                <p
-                  className={cn(
-                    "text-xs",
-                    notification.readAt === null && "text-foreground",
-                    notification.readAt !== null && "text-muted-foreground",
-                  )}
-                >
-                  {notification.body}
-                </p>
-                {notification.readAt === null ? (
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="ghost"
-                    className="mt-1 -ml-2"
-                    onClick={() =>
-                      void actions.markNotificationRead.mutateAsync({
-                        notificationId: notification.id,
-                      })
-                    }
-                  >
-                    {translateText("notifications.markRead")}
-                  </Button>
-                ) : null}
               </li>
             ))}
           </ul>

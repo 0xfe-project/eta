@@ -15,6 +15,10 @@ export const CAPTAIN_ACTIONS = [
   "setSetting",
   "settingHistory",
   "rollbackSetting",
+  /**
+   * @deprecated Captain no longer raises alerts and no client lists them. The host still answers
+   * it, so a page from before that (one that still drew a "Mark read" button) does not error.
+   */
   "markNotificationRead",
 ] as const;
 export type CaptainAction = (typeof CAPTAIN_ACTIONS)[number];
@@ -156,15 +160,6 @@ export function isCaptainGroupOutcome(
   return LEGACY_GROUP_OUTCOME.test(message.text);
 }
 
-export interface CaptainNotificationView {
-  id: string;
-  kind: string;
-  body: string;
-  data: Record<string, unknown>;
-  readAt: number | null;
-  createdAt: number;
-}
-
 export interface CaptainPromptVersionView {
   id: string;
   subjectId: string;
@@ -203,7 +198,6 @@ export interface CaptainSections {
   identity: CaptainIdentityView | null;
   assignments: CaptainAssignmentView[];
   operations: CaptainOperationView[];
-  notifications: CaptainNotificationView[];
   memoryPauses: CaptainMemoryPauseView[];
   settings: CaptainSettingsView;
 }
@@ -257,6 +251,7 @@ export interface CaptainArgs {
     key: keyof CaptainSettingsView;
     version: number;
   };
+  /** @deprecated See `CAPTAIN_ACTIONS`: kept only so older clients do not error. */
   markNotificationRead: { notificationId: string };
 }
 

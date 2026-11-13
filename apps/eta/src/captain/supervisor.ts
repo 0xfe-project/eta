@@ -119,7 +119,6 @@ export class CaptainSupervisor {
       if (!settings.supervisorEnabled) return;
       const tasks = this.#deps.board.list();
       const inbox = this.#deps.inbox.list();
-      this.#notifyPendingOperations();
       this.#handleFailures(tasks, settings.retryLimit);
       this.#handleStuck(tasks, settings.stuckMinutes);
       this.#handleInbox(inbox, settings.inboxMinutes);
@@ -155,18 +154,6 @@ export class CaptainSupervisor {
       if (this.#requested) this.requestTick(0);
     }
   };
-
-  #notifyPendingOperations(): void {
-    for (const operation of this.#deps.store.operations()) {
-      if (operation.status !== "pending") continue;
-      this.#deps.store.addNotificationOnce({
-        key: `operation:${operation.id}`,
-        kind: "operation_pending",
-        body: `Captain operation ${operation.kind} is waiting for approval.`,
-        data: { operationId: operation.id, operationKind: operation.kind },
-      });
-    }
-  }
 
   #handleFailures(tasks: readonly BoardTaskView[], limit: number): void {
     for (const task of tasks) {
@@ -223,21 +210,6 @@ export class CaptainSupervisor {
             nonRetryable,
             errorCode: latestFailure.errorCode,
             error: latestFailure.error,
-          },
-        });
-        this.#deps.store.addNotificationOnce({
-          key: `retry-stop:${task.id}:${latestFailure.id}`,
-          kind: "task_retry_stopped",
-          body: nonRetryable
-            ? `Task #${task.number} failed with a non-retryable error; automatic retries stopped.`
-            : `Task #${task.number} failed ${attempts} times; automatic retries stopped.`,
-          data: {
-            taskId: task.id,
-            runId: latestFailure.id,
-            attempts,
-            error: latestFailure.error,
-            nonRetryable,
-            errorCode: latestFailure.errorCode,
           },
         });
         continue;
@@ -353,20 +325,8 @@ export class CaptainSupervisor {
     const now = this.#now();
     for (const item of inbox) {
       if (item.status !== "pending") continue;
-      if (this.#deps.inbox.relayOf(item.id) !== null) {
-        if (now - item.createdAt < minutes * MINUTE) continue;
-        this.#deps.store.addNotificationOnce({
-          key: `inbox-relay:${item.id}:${item.revision}`,
-          kind: "inbox_relay_waiting",
-          body: `Captain is waiting for the user's decision: ${item.prompt}`,
-          data: {
-            interactionId: item.id,
-            sessionId: item.sessionId,
-            conversationId: item.conversationId,
-          },
-        });
-        continue;
-      }
+      // A question Captain already relayed waits in the user's Inbox, where they answer it.
+      if (this.#deps.inbox.relayOf(item.id) !== null) continue;
       // Captain-assigned questions are relayed immediately and tracked as their own review.
       if (this.#deps.captain.assignmentForInbox(item) !== undefined) continue;
       if (now - item.createdAt < minutes * MINUTE) continue;
@@ -381,12 +341,6 @@ export class CaptainSupervisor {
           agentId: item.agentId,
           conversationId: item.conversationId,
         },
-      });
-      this.#deps.store.addNotificationOnce({
-        key: `inbox:${item.id}`,
-        kind: "inbox_pending",
-        body: `An Inbox question has waited more than ${minutes} minutes: ${item.prompt}`,
-        data: { interactionId: item.id, sessionId: item.sessionId },
       });
     }
   }

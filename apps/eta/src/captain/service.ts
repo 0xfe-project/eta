@@ -8,7 +8,6 @@ import type {
   CaptainGroupResult,
   CaptainIdentityView,
   CaptainMemoryPauseView,
-  CaptainNotificationView,
   CaptainOperationView,
   CaptainPromptKind,
   CaptainPromptVersionView,
@@ -397,13 +396,6 @@ export class CaptainService {
         round,
       },
     });
-    const settings = this.#deps.store.settings();
-    if (round === settings.loopRounds && assignment.status !== "completed")
-      this.notify(
-        "loop_progress",
-        `Captain → Agent cycle ${round} in “${conversation.name}”; review its progress.`,
-        { conversationId: conversation.id, assignmentId: assignment.id },
-      );
     this.#deps.changed([conversation.id]);
     return {
       assignment,
@@ -1008,24 +1000,6 @@ export class CaptainService {
     }
   }
 
-  notify(
-    kind: string,
-    body: string,
-    data?: Record<string, unknown>,
-  ): CaptainNotificationView {
-    const notification = this.#deps.store.addNotification({
-      kind,
-      body,
-      data,
-    });
-    void this.#deps.audit.record({
-      action: "captain.notify",
-      data: { kind, notificationId: notification.id },
-    });
-    this.#deps.changed();
-    return notification;
-  }
-
   async taskControl(input: {
     taskId: string;
     action: "continue" | "pause" | "interrupt" | "cancel" | "rerun" | "delete";
@@ -1155,7 +1129,7 @@ export class CaptainService {
     });
   }
 
-  /** Record the terminal notification for reviews that exhausted retries before the last stop. */
+  /** Fail the reviews the last stop left pending at the attempt ceiling, which nothing else would. */
   recoverExhaustedReviews(): void {
     for (const review of this.#deps.store.exhaustedReviews())
       this.#failReview(
@@ -1363,36 +1337,12 @@ export class CaptainService {
     const message = redactText(error);
     this.#deps.store.finishReview(review.id, "failed", message);
     const current = this.#deps.store.review(review.id) ?? review;
-    if (current.attempts >= MAX_CAPTAIN_REVIEW_ATTEMPTS) {
-      this.#deps.store.addNotificationOnce({
-        key: `review-abandoned:${review.id}`,
-        kind: "review_failed",
-        body: `Captain could not complete review ${review.kind} after ${current.attempts} attempts; automatic review retries stopped. Last error: ${message}`,
-        data: {
-          reviewId: review.id,
-          kind: review.kind,
-          taskId: review.taskId,
-          assignmentId: review.assignmentId,
-          assignmentIds: review.data.assignmentIds ?? null,
-          attempts: current.attempts,
-          abandoned: true,
-        },
-      });
-    } else {
-      this.#deps.store.addNotificationOnce({
-        key: `review-failed:${review.id}:${current.attempts}`,
-        kind: "review_failed",
-        body: `Captain could not complete review ${review.kind} (attempt ${current.attempts}): ${message}`,
-        data: {
-          reviewId: review.id,
-          kind: review.kind,
-          taskId: review.taskId,
-          assignmentId: review.assignmentId,
-          assignmentIds: review.data.assignmentIds ?? null,
-          attempts: current.attempts,
-        },
-      });
-    }
+    // The review stays failed in `captain_review`; past the last attempt nothing retries it, so
+    // say so in the host's log. Nobody reads a second copy as an alert.
+    if (current.attempts >= MAX_CAPTAIN_REVIEW_ATTEMPTS)
+      this.#deps.warn(
+        `[eta] Captain could not complete review ${review.kind} after ${current.attempts} attempts; automatic review retries stopped. Last error: ${message}`,
+      );
   }
 
   async #deliverReviews(): Promise<void> {

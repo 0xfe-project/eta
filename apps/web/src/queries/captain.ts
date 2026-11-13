@@ -10,7 +10,6 @@ const EMPTY: CaptainSections = {
   identity: null,
   assignments: [],
   operations: [],
-  notifications: [],
   memoryPauses: [],
   settings: {
     supervisorEnabled: true,
@@ -32,9 +31,6 @@ export function useCaptain(): CaptainSections {
       (target?.sections.assignments as CaptainSections["assignments"]) ?? [],
     operations:
       (target?.sections.operations as CaptainSections["operations"]) ?? [],
-    notifications:
-      (target?.sections.notifications as CaptainSections["notifications"]) ??
-      [],
     memoryPauses:
       (target?.sections.memoryPauses as CaptainSections["memoryPauses"]) ??
       EMPTY.memoryPauses,
@@ -82,9 +78,5 @@ export function useCaptainActions() {
       CaptainArgs["rollbackSetting"],
       CaptainResults["rollbackSetting"]
     >("captain", "rollbackSetting"),
-    markNotificationRead: useWireMutation<
-      CaptainArgs["markNotificationRead"],
-      CaptainResults["markNotificationRead"]
-    >("captain", "markNotificationRead"),
   };
 }

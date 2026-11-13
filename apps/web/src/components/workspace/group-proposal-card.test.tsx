@@ -85,7 +85,6 @@ async function show(
       identity: null,
       assignments: [],
       operations,
-      notifications: [],
       memoryPauses: [],
       settings: {},
     },

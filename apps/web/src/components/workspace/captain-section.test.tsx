@@ -110,7 +110,6 @@ beforeEach(() => {
     identity: captain,
     assignments: [],
     operations: [],
-    notifications: [],
     memoryPauses: [],
     settings: {},
   });
@@ -175,16 +174,14 @@ describe("Captain 在左栏顶上", () => {
     expect(button?.textContent).toBe("Captain");
   });
 
-  it("待处理只是一个中性的数字：审批加未读告警，名字留给读屏", async () => {
+  it("待处理只是一个中性的数字：只数待审批的操作，名字留给读屏", async () => {
     host.target("captain", {
       identity: captain,
       operations: [
         { id: "o1", kind: "task.create", status: "pending" },
         { id: "o2", kind: "task.close", status: "approved" },
-      ],
-      notifications: [
-        { id: "n1", kind: "stuck", body: "卡住了", readAt: null },
-        { id: "n2", kind: "stuck", body: "老的", readAt: 5 },
+        { id: "o3", kind: "delete_agent", status: "pending" },
+        { id: "o4", kind: "create_group", status: "rejected" },
       ],
       assignments: [],
       memoryPauses: [],
@@ -196,20 +193,56 @@ describe("Captain 在左栏顶上", () => {
     expect(badge?.textContent).toBe("2");
     expect(badge?.className).toContain("bg-muted");
     expect(badge?.className).not.toContain("state-");
-    expect(container.querySelector(".sr-only")?.textContent).toBe("运营 · 2");
+    expect(container.querySelector(".sr-only")?.textContent).toBe("待审批 · 2");
+  });
+
+  it("旧 host 还发来的未读告警不算进数字", async () => {
+    host.target("captain", {
+      identity: captain,
+      operations: [{ id: "o1", kind: "task.create", status: "pending" }],
+      notifications: [
+        { id: "n1", kind: "stuck", body: "卡住了", readAt: null },
+        { id: "n2", kind: "task_retry_stopped", body: "停了", readAt: null },
+      ],
+      assignments: [],
+      memoryPauses: [],
+      settings: {},
+    });
+    const container = await section();
+    await flush();
+    expect(container.querySelector("[data-captain-waiting]")?.textContent).toBe(
+      "1",
+    );
+    expect(container.querySelector(".sr-only")?.textContent).toBe("待审批 · 1");
+  });
+
+  it("审批完了数字就消失，哪怕旧 host 还有未读告警", async () => {
+    host.target("captain", {
+      identity: captain,
+      operations: [{ id: "o1", kind: "task.create", status: "approved" }],
+      notifications: [
+        { id: "n1", kind: "stuck", body: "卡住了", readAt: null },
+      ],
+      assignments: [],
+      memoryPauses: [],
+      settings: {},
+    });
+    const container = await section();
+    await flush();
+    expect(container.querySelector("[data-captain-waiting]")).toBeNull();
+    expect(container.querySelector(".sr-only")).toBeNull();
   });
 
   it("没有要处理的就不画数字", async () => {
     const container = await section();
     expect(container.querySelector("[data-captain-waiting]")).toBeNull();
-    expect(container.textContent).not.toContain("运营");
+    expect(container.textContent).not.toContain("待审批");
   });
 
   it("折成图标栏时把同一个数留在角上，读屏读得到", async () => {
     host.target("captain", {
       identity: captain,
       operations: [{ id: "o1", kind: "task.create", status: "pending" }],
-      notifications: [],
       assignments: [],
       memoryPauses: [],
       settings: {},
@@ -220,7 +253,7 @@ describe("Captain 在左栏顶上", () => {
     expect(button?.querySelector("[data-captain-waiting]")?.textContent).toBe(
       "1",
     );
-    expect(button?.querySelector(".sr-only")?.textContent).toBe("运营 · 1");
+    expect(button?.querySelector(".sr-only")?.textContent).toBe("待审批 · 1");
   });
 
   it("没有 Captain 时整块不出现", async () => {

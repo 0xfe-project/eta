@@ -18,6 +18,16 @@ import { world } from "./support/world";
 
 const options = { captain: true, tasks: { runs: false } } as const;
 
+/**
+ * Rows in `captain_notification`. Captain raises no alerts any more (what one said is already on the
+ * board, in the Inbox or on the task), so none of these paths writes one.
+ */
+function notificationCount(w: Awaited<ReturnType<typeof world>>): number {
+  return w.host.db
+    .query<{ n: number }, []>("SELECT COUNT(*) AS n FROM captain_notification")
+    .get()!.n;
+}
+
 async function captainWorld() {
   const { models, requests } = scriptedModels(() => say("Captain ready."));
   const w = await world({ ...options, models });
@@ -622,6 +632,52 @@ describe("captain controls", () => {
     expect(captain.settingHistory("retryLimit")).toHaveLength(before + 1);
   });
 
+  it("raises no alert for a pending operation, and still answers clients from before", async () => {
+    const { w } = await captainWorld();
+    const captain = w.host.product.captain;
+    // A row an older host wrote: the table and its migration stay.
+    w.host.db
+      .query(
+        `INSERT INTO captain_notification (id, kind, body, data, read_at, created_at)
+         VALUES ('old', 'operation_pending', 'waiting', '{}', NULL, 1)`,
+      )
+      .run();
+    const operation = captain.createOperation({
+      kind: "set_setting",
+      requiresApproval: true,
+      payload: { key: "retryLimit", value: 3 },
+    });
+    w.host.product.captainSupervisor.tick();
+    expect(notificationCount(w)).toBe(1);
+
+    // Older pages read this section and counted its unread rows: they get none.
+    w.client.subscribe("captain");
+    await until(
+      () =>
+        w.client.section<{ id: string; status: string }[]>(
+          "captain",
+          "operations",
+        )?.[0]?.id === operation.id,
+    );
+    expect(w.client.section("captain", "notifications")).toEqual([]);
+    // And a "Mark read" one of them still holds does not fail.
+    await expect(
+      w.client.call("captain", "markNotificationRead", {
+        notificationId: "old",
+      }),
+    ).resolves.toEqual({ notificationId: "old" });
+    expect(
+      w.host.db
+        .query<{ read_at: number | null }, []>(
+          "SELECT read_at FROM captain_notification WHERE id = 'old'",
+        )
+        .get()!.read_at,
+    ).not.toBeNull();
+
+    await captain.decideOperation(operation.id, "approve");
+    expect(notificationCount(w)).toBe(1);
+  });
+
   it("redacts credentials from text and structured tool results", async () => {
     const { redactJson, redactToolResult } = await import(
       "../src/captain/redact"
@@ -714,11 +770,8 @@ describe("captain controls", () => {
       expect(failures).toHaveLength(attempt < 5 ? 0 : 1);
     }
     expect(runs.retryState(task.id).stoppedAt).not.toBeNull();
-    expect(
-      w.host.product.captain.store
-        .notifications()
-        .some((notification) => notification.kind === "task_retry_stopped"),
-    ).toBe(true);
+    // The stop is on the task and in Captain's review; it is not written again as an alert.
+    expect(notificationCount(w)).toBe(0);
   });
 
   it("asks Captain immediately for a non-retryable task failure", async () => {
@@ -1305,15 +1358,7 @@ describe("captain controls", () => {
     const settledSource = sourceRow()!;
     expect(settledSource.status).toBe("answered");
     expect(JSON.parse(settledSource.answer!)).toEqual(response);
-    expect(
-      w.host.product.captain.store
-        .notifications()
-        .some(
-          (notification) =>
-            notification.kind === "inbox_pending" &&
-            notification.data.interactionId === source.id,
-        ),
-    ).toBe(false);
+    expect(notificationCount(w)).toBe(0);
   });
 
   it("lets Captain re-ask after the user cancels a relayed question", async () => {
@@ -1617,7 +1662,13 @@ describe("captain controls", () => {
   });
 
   it("stops retrying after six failed attempts to start Captain", async () => {
-    const { w } = await captainWorld();
+    const warnings: string[] = [];
+    const { models } = scriptedModels(() => say("Captain ready."));
+    const w = await world({
+      ...options,
+      models,
+      warn: (message) => warnings.push(message),
+    });
     const direct = await w.host.product.captain.direct();
     await w.watch(direct.conversationId);
     const store = w.host.product.captain.store;
@@ -1648,20 +1699,11 @@ describe("captain controls", () => {
       attempts: 6,
       error: "send unavailable",
     });
+    // Nothing retries it now, so the host's log says so once; it is not an alert to mark read.
     expect(
-      store
-        .notifications()
-        .filter(
-          (notification) =>
-            notification.data.reviewId === review.id &&
-            notification.data.abandoned === true,
-        ),
-    ).toEqual([
-      expect.objectContaining({
-        kind: "review_failed",
-        body: expect.stringContaining("after 6 attempts"),
-      }),
-    ]);
+      warnings.filter((message) => message.includes("after 6 attempts")),
+    ).toHaveLength(1);
+    expect(notificationCount(w)).toBe(0);
 
     await w.host.product.captain.observeReviews();
     expect(store.review(review.id)?.attempts).toBe(6);
@@ -1688,15 +1730,7 @@ describe("captain controls", () => {
       status: "failed",
       attempts: 6,
     });
-    expect(
-      store
-        .notifications()
-        .filter(
-          (notification) =>
-            notification.data.reviewId === review.id &&
-            notification.data.abandoned === true,
-        ),
-    ).toHaveLength(1);
+    expect(notificationCount(w)).toBe(0);
   });
 
   it("waits while Captain is busy and then delivers a batched review", async () => {
@@ -1794,7 +1828,7 @@ describe("captain controls", () => {
     ).toBeLessThan(25);
   });
 
-  it("notifies the user when a Captain review run cannot complete", async () => {
+  it("marks a Captain review failed when its run cannot complete", async () => {
     const { models } = scriptedModels(() => HANG);
     const w = await world({ ...options, models });
     const direct = await w.host.product.captain.direct();
@@ -1813,14 +1847,9 @@ describe("captain controls", () => {
           .find((item) => item.id === review.id)?.status === "running",
     );
     w.host.product.engine.stopAgent(direct.agentId);
-    await until(() =>
-      w.host.product.captain.store
-        .notifications()
-        .some(
-          (notification) =>
-            notification.kind === "review_failed" &&
-            notification.data.reviewId === review.id,
-        ),
+    await until(
+      () => w.host.product.captain.store.review(review.id)?.status === "failed",
     );
+    expect(notificationCount(w)).toBe(0);
   });
 });

@@ -29,7 +29,10 @@ export function captainPlugin(deps: CaptainPluginDeps, applied: () => void) {
             identity: () => service.identity() ?? null,
             assignments: () => service.store.assignments(),
             operations: () => service.store.operations(),
-            notifications: () => service.store.notifications(),
+            // Captain raises no alerts any more. Clients from before that read this section and
+            // added its unread rows to the sidebar count; an empty list keeps their count to the
+            // approvals waiting and their alerts block empty, rather than showing old rows forever.
+            notifications: () => [],
             memoryPauses: () => service.store.memoryPauses(),
             settings: () => service.settings(),
           },

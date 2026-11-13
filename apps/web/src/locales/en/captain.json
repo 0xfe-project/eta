@@ -1,6 +1,6 @@
 {
   "title": "El Capitan",
-  "description": "Coordinate agents, review assignments, approvals, and operational alerts.",
+  "description": "Coordinate agents, review assignments, and approvals.",
   "notInitialized": "El Capitan has not been initialized yet.",
   "initialize": "Initialize Captain",
   "empty": "Talk to Captain to coordinate agents and operations.",
@@ -30,17 +30,12 @@
     "approve": "Approve",
     "reject": "Reject"
   },
-  "notifications": {
-    "title": "Operational alerts",
-    "none": "No alerts.",
-    "markRead": "Mark read"
-  },
   "assignments": {
     "title": "Recent assignments",
     "none": "No assignments yet.",
     "round": "Round {{round}}"
   },
-  "operationsBadge": "Operations · {{count}}",
+  "pendingBadge": "Awaiting approval · {{count}}",
   "proposal": {
     "label": "Proposed group {{name}}",
     "title": "New group",
