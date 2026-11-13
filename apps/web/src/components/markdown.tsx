@@ -3,15 +3,39 @@ import type { Components, ExtraProps, PluginConfig } from "streamdown";
 import { CheckIcon } from "@phosphor-icons/react/Check";
 import { CopyIcon } from "@phosphor-icons/react/Copy";
 import { cjk } from "@streamdown/cjk";
+import { math } from "@streamdown/math";
 import { createElement, memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { defaultRehypePlugins, Streamdown } from "streamdown";
 import { cn } from "@/lib/utils";
+import "katex/dist/katex.min.css";
 
 // The CJK plugin wraps remark-gfm: bare URLs stop at full-width punctuation,
-// and emphasis/strikethrough work next to Chinese text.
-const plugins: PluginConfig = { cjk };
+// and emphasis/strikethrough work next to Chinese text. The math plugin adds
+// remark-math + rehype-katex: $$…$$ renders as KaTeX, inline or block.
+const plugins: PluginConfig = { cjk, math };
+
+// remark-math knows only $$; people and agents also write LaTeX's \[ … \] and
+// \( … \). Rewrite those outside code, and only when the body looks like math:
+// an escaped bracket pair such as \[1,2\] is a literal, not a formula.
+const mathy = /\\[a-z]{2,}|[_^=]/i;
+const fenced = /(```[\s\S]*?```|`[^`\n]*`)/g;
+function bracketMath(text: string) {
+  const rewrite = (piece: string) =>
+    piece
+      .replace(/\\\[([\s\S]+?)\\\]/g, (match, body: string) =>
+        mathy.test(body) ? `\n$$\n${body.trim()}\n$$\n` : match,
+      )
+      .replace(/\\\(([\s\S]+?)\\\)/g, (match, body: string) =>
+        mathy.test(body) ? `$${body.trim()}$$` : match,
+      );
+  // Odd indexes are the code the split captured: left exactly as written.
+  return text
+    .split(fenced)
+    .map((piece, i) => (i % 2 === 1 ? piece : rewrite(piece)))
+    .join("");
+}
 
 // Streamdown's own elements bring their own styles, code/table toolbars and a
 // link confirmation; plain elements keep `.markdown`'s look (styles.css).
@@ -135,7 +159,7 @@ export const Markdown = memo(
         rehypePlugins={rehypePlugins}
         skipHtml
       >
-        {children}
+        {bracketMath(children)}
       </Streamdown>
     );
   },
