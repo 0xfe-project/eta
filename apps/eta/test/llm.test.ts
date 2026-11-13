@@ -93,6 +93,7 @@ describe.skipIf(process.platform === "win32")(
           events.filter((type) => type === "text_delta").length,
         ).toBeGreaterThan(1);
         expect(message.usage.input).toBe(5);
+        expect(upstream.userAgents.at(-1)).toBe("eta/dev");
         // CPA offers Codex models its hosted image tool unless told not to, and the model then
         // tells the user it can draw (`image_gen.imagegen`); eta cannot show what it would draw.
         const sent = JSON.parse(

@@ -23,6 +23,7 @@ import type {
 } from "@eta/client-contracts";
 import type { ProviderReference } from "./catalog";
 import type { EtaModelConfig } from "./config-types";
+import { attributionHeaders } from "./attribution";
 import { providerDefinitionForKind, resolveConfiguredModels } from "./catalog";
 import { applyProviderHeaders } from "./config-types";
 import {
@@ -99,7 +100,10 @@ export async function discoverModels(
   }
   const send = options.fetch ?? fetch;
   const url = `${options.reference.baseUrl.replace(/\/+$/, "")}/models`;
-  const headers: Record<string, string> = { Accept: "application/json" };
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    ...attributionHeaders(options.reference.baseUrl, options.headers),
+  };
   // The key is auth; the configured headers ride on top, so a `User-Agent` reaches discovery
   // exactly as it reaches a generation request.
   if (options.apiKey !== undefined && options.apiKey.length > 0)
@@ -297,7 +301,10 @@ async function probeKey(
   options: DiscoveryOptions,
 ): Promise<DiscoveryResult | undefined> {
   const send = options.fetch ?? fetch;
-  const headers: Record<string, string> = { Accept: "application/json" };
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    ...attributionHeaders(options.reference.baseUrl, options.headers),
+  };
   if (options.apiKey !== undefined && options.apiKey.length > 0)
     headers.Authorization = `Bearer ${options.apiKey}`;
   let response: Response;

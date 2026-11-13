@@ -37,12 +37,12 @@ import type { EtaModelConfig, EtaProviderConfig } from "./config-types";
 import { createModels, createProvider } from "@earendil-works/pi-ai";
 import { opencodeProvider } from "@earendil-works/pi-ai/providers/opencode";
 import { opencodeGoProvider } from "@earendil-works/pi-ai/providers/opencode-go";
+import { attributionHeaders } from "./attribution";
 import { providerDefinitionForKind } from "./catalog";
 import {
   effectiveModel,
   MODEL_THINKING_LEVELS,
   modelThinkingLevels,
-  sanitizeProviderHeaders,
 } from "./config-types";
 import { discoverModels } from "./discovery";
 
@@ -103,18 +103,6 @@ function opencodeCompat(
         maxTokensField: "max_tokens",
       }
     : undefined;
-}
-
-/** Headers as the wire takes them: `null` entries are removals, so they are not sent. */
-function wireHeaders(
-  provider: EtaProviderConfig,
-): Record<string, string> | undefined {
-  const configured = sanitizeProviderHeaders(provider.headers);
-  if (configured === undefined) return undefined;
-  const sent = Object.entries(configured).filter(
-    (entry): entry is [string, string] => entry[1] !== null,
-  );
-  return sent.length === 0 ? undefined : Object.fromEntries(sent);
 }
 
 /** Auth that reads the key out of the config file. Keyless endpoints get a placeholder. */
@@ -304,7 +292,7 @@ export async function buildProvider(
     throw new Error(
       `unsupported provider kind: ${String(provider.kind ?? "openai-compatible")}`,
     );
-  const headers = wireHeaders(provider);
+  const headers = attributionHeaders(provider.baseUrl, provider.headers);
   const models = provider.models.map((configured) =>
     runtimeModel(provider, configured, headers, definition.runtime),
   );
