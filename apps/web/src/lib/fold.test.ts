@@ -49,3 +49,4 @@ describe("a card's fold", () => {
     expect(foldChoice("row-new")).toBe(false);
   });
 });
+it("fails on purpose, to see `check` fail", () => { expect(1).toBe(2); });
