@@ -1,16 +1,11 @@
 import type { MessageView } from "@eta/client-contracts";
 import type { CaptainReviewItem } from "./captain-review-model";
-import { CheckCircleIcon } from "@phosphor-icons/react/CheckCircle";
-import { ClockIcon } from "@phosphor-icons/react/Clock";
-import { CrownSimpleIcon } from "@phosphor-icons/react/CrownSimple";
-import { InfoIcon } from "@phosphor-icons/react/Info";
-import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
-import { WarningIcon } from "@phosphor-icons/react/Warning";
 import { useTranslation } from "react-i18next";
 import { Markdown } from "@/components/markdown";
 import { agentName, useAgentList } from "@/queries/agents";
 import { reviewItemsOf } from "./captain-review-model";
 import { when } from "./routine-format";
+import { StateMark } from "./state-mark";
 
 type ReviewTone = "attention" | "danger" | "neutral" | "success";
 type ReviewLabel =
@@ -47,6 +42,12 @@ const KINDS = {
   inbox_relay_waiting: { label: "waiting", tone: "attention" },
 } satisfies Record<string, { label: ReviewLabel; tone: ReviewTone }>;
 
+/**
+ * A Captain review: the observations the platform's supervisor handed Captain, as one neutral card
+ * like a task's. Nothing on it is Captain's colour, because Captain has none: an observation's
+ * severity is a small square beside its label — error for what failed, warning for what needs a
+ * person — and an ordinary one, such as work that settled, is drawn in grey and still drawn.
+ */
 export function CaptainReview({ message }: { message: MessageView }) {
   const { t: translateText } = useTranslation("captain");
   const { agents } = useAgentList();
@@ -56,22 +57,15 @@ export function CaptainReview({ message }: { message: MessageView }) {
       className="captain-review"
       aria-label={translateText("review.title")}
     >
-      <header className="captain-review-head">
-        <span className="captain-review-mark" aria-hidden="true">
-          <CrownSimpleIcon className="size-4" />
+      <header className="flex items-center gap-2 px-2.5 py-[5px] font-mono text-[10px] tracking-[0.08em] text-faint uppercase">
+        <span className="task-fold-title flex-none">
+          {translateText("review.title")}
         </span>
-        <div className="captain-review-heading">
-          <div className="captain-review-title">
-            {translateText("review.title")}
-          </div>
-          <div className="captain-review-subtitle">
-            {translateText("review.auto")}
-            <span aria-hidden="true">·</span>
-            {translateText("review.observations", { count: reviews.length })}
-          </div>
-        </div>
+        <span className="min-w-0 truncate">
+          {translateText("review.observations", { count: reviews.length })}
+        </span>
         <time
-          className="captain-review-time"
+          className="ml-auto shrink-0"
           dateTime={new Date(message.createdAt).toISOString()}
         >
           {when(message.createdAt)}
@@ -87,20 +81,18 @@ export function CaptainReview({ message }: { message: MessageView }) {
           </details>
         </div>
       ) : (
-        <div className="captain-review-list">
-          {reviews.map((review) => (
-            <ReviewCard
-              key={review.id}
-              review={review}
-              agent={agentName(
-                agents,
-                typeof review.data.agentId === "string"
-                  ? review.data.agentId
-                  : "",
-              )}
-            />
-          ))}
-        </div>
+        reviews.map((review) => (
+          <ReviewCard
+            key={review.id}
+            review={review}
+            // An item about no agent names none, rather than "a deleted agent".
+            agent={
+              typeof review.data.agentId === "string"
+                ? agentName(agents, review.data.agentId)
+                : ""
+            }
+          />
+        ))
       )}
     </section>
   );
@@ -117,27 +109,35 @@ function ReviewCard({
   const known = KINDS[review.kind as keyof typeof KINDS];
   const label: ReviewLabel = known?.label ?? "other";
   const tone: ReviewTone = known?.tone ?? "neutral";
-  const Icon =
-    tone === "danger"
-      ? WarningIcon
-      : tone === "success"
-        ? CheckCircleIcon
-        : label === "decision"
-          ? ListChecksIcon
-          : tone === "attention"
-            ? ClockIcon
-            : InfoIcon;
+  // Only what failed and what needs a person are coloured; settled work is the normal case.
+  const ordinary = tone !== "danger" && tone !== "attention";
   const context = contextOf(review, agent, translateText);
   return (
     <article className="captain-review-item" data-tone={tone}>
-      <div className="captain-review-item-head">
-        <span className="captain-review-badge">
-          <Icon aria-hidden="true" className="size-3.5 shrink-0" />
+      <div className="mb-1 flex items-center gap-2 font-mono text-[10px] tracking-[0.08em] uppercase">
+        <StateMark
+          tone={
+            tone === "danger"
+              ? "error"
+              : tone === "attention"
+                ? "warning"
+                : "neutral"
+          }
+          className={ordinary ? "text-muted-foreground" : "text-foreground"}
+        >
           {translateText(`review.kinds.${label}`)}
-        </span>
-        <code className="captain-review-kind">{review.kind}</code>
+        </StateMark>
+        <code className="ml-auto text-faint normal-case tracking-normal">
+          {review.kind}
+        </code>
       </div>
-      <div className="captain-review-body">
+      <div
+        className={
+          ordinary
+            ? "captain-review-body text-muted-foreground"
+            : "captain-review-body text-foreground"
+        }
+      >
         <Markdown>{review.body}</Markdown>
       </div>
       {context.length === 0 ? null : (

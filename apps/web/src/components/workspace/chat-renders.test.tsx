@@ -279,6 +279,7 @@ describe("what the timeline says besides words", () => {
           "}",
           "2. [inbox_pending] An Inbox question has waited.",
           '{ "interactionId": "i1", "agentId": "a1" }',
+          "3. [assignment_settled] The work handed to Ada is done.",
           "</captain-review>",
         ].join("\n"),
       }),
@@ -293,8 +294,17 @@ describe("what the timeline says besides words", () => {
     expect(review?.textContent).toContain("任务 #7");
     expect(review?.textContent).not.toContain("The platform Supervisor queued");
     expect(container.querySelectorAll(".captain-review-details")).toHaveLength(
-      2,
+      3,
     );
+    // Severity is a square beside each label: error for what failed, warning for what needs a
+    // person, grey for work that settled. The card itself is not coloured.
+    expect(
+      [...review!.querySelectorAll("article [data-tone]")].map((mark) =>
+        mark.getAttribute("data-tone"),
+      ),
+    ).toEqual(["error", "warning", "neutral"]);
+    expect(review?.textContent).toContain("已落定");
+    expect(review?.querySelector("header")?.className).not.toContain("state-");
   });
 
   it("folds an unparseable Captain review instead of exposing its prompt", async () => {

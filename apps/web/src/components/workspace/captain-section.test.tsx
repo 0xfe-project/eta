@@ -41,11 +41,11 @@ rstest.mock("@tanstack/react-router", () => ({
 }));
 
 /**
- * Captain's block at the head of the sidebar.
+ * Captain's row at the head of the sidebar.
  *
- * What this file holds it to is the thing it got wrong the first time round: it is not a button
- * that opens a conversation, it is the conversation's own panel — the ring and the numbers that
- * 成员 draws for any other session, on Captain's session.
+ * It keeps its own place at the top, and nothing else sets it apart: it is an agent row like the
+ * ones below — the same face, the same hover, no frame, no colour of its own. The session's rate
+ * and counts are in the title, and what it holds for a person is a plain number.
  */
 
 let host: ReturnType<typeof productHost>;
@@ -135,61 +135,29 @@ async function section(rail = false) {
 }
 
 describe("Captain 在左栏顶上", () => {
-  it("是那个会话自己的面板：环套在头像上，下面是它的模型和用量", async () => {
+  it("和其他智能体同一种行：没有外框、没有环，头像是行的大小", async () => {
     const container = await section();
-    // The gauge is the group panel's own, drawn around the face rather than beside it.
-    const ring = container.querySelector('[data-section="captain"] svg');
-    expect(ring).not.toBeNull();
-    // The window it drew: the title the ring carries is the panel's wording.
-    const title =
-      container.querySelector("span[title]")?.getAttribute("title") ?? "";
-    expect(title).toContain("128k");
-    // And the same numbers 成员 shows, off the same session. The model is on the row as its
-    // title rather than as text: it is a name, and the row has counts to carry.
-    const text = container.textContent ?? "";
-    expect(text).not.toContain("p:m1");
-    expect(
-      container.querySelector('[data-section="captain"] span[title="p:m1"]'),
-    ).not.toBeNull();
-    expect(text).toContain("12.3k");
-    expect(text).toContain("678");
-    expect(text).toContain("10.0k");
-  });
-
-  it("头像比列表里的行大一档，但只是半个海报：环是 48px 的框", async () => {
-    const container = await section();
-    const ring = container.querySelector(
-      '[data-section="captain"] span[title]',
-    ) as HTMLElement | null;
-    expect(ring?.style.width).toBe("48px");
-    expect(ring?.style.height).toBe("48px");
-  });
-
-  it("整张卡片是一行：头像、名字、状态、数字都在同一条线上", async () => {
-    const container = await section();
-    const card = container.querySelector(
-      '[data-section="captain"] > div',
-    ) as HTMLElement;
-    // The card is the row, and nothing else: no stats block under it, no counts block under that.
-    expect(card.children.length).toBe(1);
-    expect(card.querySelector(".border-t")).toBeNull();
-    const row = card.firstElementChild as HTMLElement;
-    // Every child of the row is inline, so none of them can start a line of its own.
-    for (const each of [...row.children]) expect(each.tagName).toBe("SPAN");
-    const text = row.textContent ?? "";
+    const group = container.querySelector('[data-section="captain"]')!;
+    // No gauge ring around the face: that box was 48px.
+    expect(group.querySelector('[style*="48px"]')).toBeNull();
+    expect(group.querySelector(".border")).toBeNull();
+    const button = group.querySelector("button")!;
+    expect(button.className).toContain("hover:bg-sidebar-accent");
+    expect(button.className).toContain("px-4");
+    expect(button.querySelector(".size-6")).not.toBeNull();
+    expect(button.querySelector(".size-10")).toBeNull();
+    const text = button.textContent ?? "";
     expect(text).toContain("Captain");
     expect(text).toContain("空闲");
-    expect(text).toContain("12.3k");
-    expect(text).toContain("678");
-    expect(text).toContain("10.0k");
   });
 
-  it("卡片上方没有 CAPTAIN 这一行标签：卡片自己说得清自己是什么", async () => {
+  it("速度和用量不在行上：tok/s 挪进悬停提示，也不用成功绿", async () => {
     const container = await section();
-    expect(container.querySelector("#sidebar-captain")).toBeNull();
-    const group = container.querySelector('[data-section="captain"]');
-    // The card is the first thing in the section, not a heading and then a card.
-    expect(group?.firstElementChild?.className).toContain("border");
+    const button = container.querySelector('[data-section="captain"] button')!;
+    expect(button.textContent).not.toContain("tok/s");
+    expect(button.textContent).not.toContain("12.3k");
+    expect(button.getAttribute("title")).toBe("Captain · 12 tok/s");
+    expect(container.innerHTML).not.toContain("state-success");
   });
 
   it("点了打开 Captain 的会话", async () => {
@@ -199,15 +167,15 @@ describe("Captain 在左栏顶上", () => {
     expect(container.textContent).toContain("Captain");
   });
 
-  it("折成图标栏时只留头像，名字留给读屏", async () => {
+  it("折成图标栏时和其他行一样：头像，名字在下面", async () => {
     const container = await section(true);
     const button = container.querySelector('[data-section="captain"] button');
-    expect(button?.getAttribute("aria-label")).toBe("Captain");
-    // No name drawn: 4rem of rail is one glyph.
-    expect(button?.textContent).toBe("");
+    expect(button?.className).toContain("flex-col");
+    expect(button?.querySelector(".size-6")).not.toBeNull();
+    expect(button?.textContent).toBe("Captain");
   });
 
-  it("卡片带「运营 · N」：N 是要人处理的审批加未读告警", async () => {
+  it("待处理只是一个中性的数字：审批加未读告警，名字留给读屏", async () => {
     host.target("captain", {
       identity: captain,
       operations: [
@@ -225,12 +193,19 @@ describe("Captain 在左栏顶上", () => {
     const container = await section();
     await flush();
     const badge = container.querySelector("[data-captain-waiting]");
-    expect(badge?.textContent).toBe("运营 · 2");
-    // Nothing waiting, nothing said: the card does not carry a 0.
-    expect(container.textContent).not.toContain("运营 · 0");
+    expect(badge?.textContent).toBe("2");
+    expect(badge?.className).toContain("bg-muted");
+    expect(badge?.className).not.toContain("state-");
+    expect(container.querySelector(".sr-only")?.textContent).toBe("运营 · 2");
   });
 
-  it("折成图标栏时把同一个数留在环的角上，名字留给读屏", async () => {
+  it("没有要处理的就不画数字", async () => {
+    const container = await section();
+    expect(container.querySelector("[data-captain-waiting]")).toBeNull();
+    expect(container.textContent).not.toContain("运营");
+  });
+
+  it("折成图标栏时把同一个数留在角上，读屏读得到", async () => {
     host.target("captain", {
       identity: captain,
       operations: [{ id: "o1", kind: "task.create", status: "pending" }],
@@ -242,10 +217,10 @@ describe("Captain 在左栏顶上", () => {
     const container = await section(true);
     await flush();
     const button = container.querySelector('[data-section="captain"] button');
-    expect(button?.getAttribute("aria-label")).toBe("Captain · 运营 · 1");
     expect(button?.querySelector("[data-captain-waiting]")?.textContent).toBe(
       "1",
     );
+    expect(button?.querySelector(".sr-only")?.textContent).toBe("运营 · 1");
   });
 
   it("没有 Captain 时整块不出现", async () => {

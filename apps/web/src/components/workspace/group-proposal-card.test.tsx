@@ -171,6 +171,28 @@ describe("a group Captain proposes", () => {
     expect(button(container, "创建")).toBeUndefined();
   });
 
+  it("colours only the outcome: waiting is grey, created is success, failed is error", async () => {
+    // Waiting for a person to press Create is not a warning. A state colour is a square beside the
+    // word, never a border or a fill on the card.
+    for (const [status, tone] of [
+      ["pending", "neutral"],
+      ["applied", "success"],
+      ["rejected", "neutral"],
+      ["failed", "error"],
+    ] as const) {
+      const { container } = await show(proposed(), [operation({ status })]);
+      const mark = container.querySelector("[data-tone]");
+      expect(mark?.getAttribute("data-tone")).toBe(tone);
+      expect(mark?.querySelector('[aria-hidden="true"]')?.className).toContain(
+        "size-1.5",
+      );
+      expect(container.innerHTML).not.toContain("state-warning");
+      expect(container.innerHTML).not.toContain("task-fold-waiting");
+      await cleanup();
+      setWire(undefined);
+    }
+  });
+
   it("offers nothing to press once its operation is no longer listed", async () => {
     const { container } = await show(proposed());
     expect(container.textContent).toContain("发布");
