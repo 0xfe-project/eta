@@ -106,3 +106,4 @@ export function useFold(
   );
   return [choice ?? defaultOpen, (next: boolean) => rememberFold(id, next)];
 }
+// CI timing probe
