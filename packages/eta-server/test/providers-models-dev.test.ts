@@ -28,7 +28,11 @@ import {
   parseModelsDevModel,
   publicModelMetadata,
 } from "../src/providers/metadata";
-import { buildProvider } from "../src/providers/runtime";
+import {
+  buildModels,
+  buildProvider,
+  withSessionHeader,
+} from "../src/providers/runtime";
 import { ProviderConfigStore } from "../src/providers/store";
 import { WireService } from "../src/wire-service";
 import snapshot from "./fixtures/models-dev-opencode.json";
@@ -355,6 +359,86 @@ describe("running OpenCode models", () => {
       models: [{ id: "m" }],
     });
     expect(provider.getModels()[0]?.api).toBe("openai-responses");
+  });
+});
+
+describe("openCode's session header", () => {
+  // OpenCode answers 400 MissingSessionID to a request without `x-opencode-session` (seen
+  // against the real gateway on 2026-11-13), so every request of a session carries its id.
+  it("goes out on both protocols for an OpenCode model, and not for anyone else", async () => {
+    const seen: {
+      path: string;
+      session: string | null;
+      authorization: string | null;
+    }[] = [];
+    const endpoint = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request) {
+        seen.push({
+          path: new URL(request.url).pathname,
+          session: request.headers.get("x-opencode-session"),
+          authorization: request.headers.get("authorization"),
+        });
+        return Response.json(
+          {
+            type: "error",
+            error: { type: "authentication_error", message: "stop" },
+          },
+          { status: 401 },
+        );
+      },
+    });
+    try {
+      const baseUrl = `http://127.0.0.1:${endpoint.port}/v1`;
+      const { models } = await buildModels([
+        {
+          id: "go",
+          kind: "opencode-go",
+          baseUrl,
+          apiKey: "sk-go",
+          models: [
+            { id: "kimi-k3", api: "openai-completions" },
+            { id: "gpt-6-luna", api: "openai-responses" },
+          ],
+        },
+        {
+          id: "plain",
+          kind: "openai-compatible",
+          baseUrl,
+          models: [{ id: "m1" }],
+        },
+      ]);
+      const session = withSessionHeader(models!, "session-123");
+      const context = {
+        messages: [{ role: "user" as const, content: "hello", timestamp: 0 }],
+      };
+      for (const [provider, id] of [
+        ["go", "kimi-k3"],
+        ["go", "gpt-6-luna"],
+        ["plain", "m1"],
+      ] as const)
+        await session.completeSimple(session.getModel(provider, id)!, context);
+      expect(seen).toEqual([
+        {
+          path: "/v1/chat/completions",
+          session: "session-123",
+          authorization: "Bearer sk-go",
+        },
+        {
+          path: "/v1/responses",
+          session: "session-123",
+          authorization: "Bearer sk-go",
+        },
+        {
+          path: "/v1/chat/completions",
+          session: null,
+          authorization: expect.any(String),
+        },
+      ]);
+    } finally {
+      await endpoint.stop(true);
+    }
   });
 });
 

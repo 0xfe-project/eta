@@ -29,7 +29,11 @@ import { zaiProvider } from "@earendil-works/pi-ai/providers/zai";
 import { zaiCodingCnProvider } from "@earendil-works/pi-ai/providers/zai-coding-cn";
 import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
 import rawCatalog from "./catalog.json";
-import { isCustomKind, MODEL_THINKING_LEVELS } from "./config-types";
+import {
+  HEADER_NAME_PATTERN,
+  isCustomKind,
+  MODEL_THINKING_LEVELS,
+} from "./config-types";
 
 export interface ProviderRuntimeDefinition {
   adapter: "openai-chat" | "openai-responses" | "codex";
@@ -39,6 +43,11 @@ export interface ProviderRuntimeDefinition {
   maxTokensField?: "max_tokens" | "max_completion_tokens";
   replayReasoningContent?: boolean;
   toolStream?: "zai";
+  /**
+   * The header a gateway routes one conversation by (OpenCode refuses a request without
+   * `x-opencode-session`). Each request carries the session's id in it; see `withSessionHeader`.
+   */
+  sessionHeader?: string;
 }
 
 export interface ProviderCatalogEntry {
@@ -226,6 +235,7 @@ function parseRuntime(
       "maxTokensField",
       "replayReasoningContent",
       "toolStream",
+      "sessionHeader",
     ]),
     label,
   );
@@ -271,6 +281,14 @@ function parseRuntime(
       throw new Error(`invalid provider catalog: ${label} maxTokensField`);
     }
     output.maxTokensField = input.maxTokensField;
+  }
+  if (input.sessionHeader !== undefined) {
+    if (
+      typeof input.sessionHeader !== "string" ||
+      !HEADER_NAME_PATTERN.test(input.sessionHeader)
+    )
+      throw new Error(`invalid provider catalog: ${label} sessionHeader`);
+    output.sessionHeader = input.sessionHeader;
   }
   if (input.toolStream !== undefined) {
     if (input.toolStream !== "zai")

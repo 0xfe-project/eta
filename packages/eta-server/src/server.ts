@@ -46,7 +46,7 @@ import { observedModels } from "./observed-models";
 import { discoverPersonas } from "./personas";
 import { PluginManager } from "./plugins";
 import { configDefaultModel } from "./providers/config-types";
-import { buildModels } from "./providers/runtime";
+import { buildModels, withSessionHeader } from "./providers/runtime";
 import { defaultConfigPath, ProviderConfigStore } from "./providers/store";
 import { messageText } from "./search";
 import { settingsPath, SettingsStore } from "./settings";
@@ -392,9 +392,10 @@ export async function assembleServer(
   // The model layer one session talks to: the shared one, watched for the host when it asked to be.
   const modelsOf = (meta: SessionMeta): KernelModels => {
     const generated = options.generated;
+    const scoped = withSessionHeader(kernelModels, meta.id);
     return generated === undefined
-      ? kernelModels
-      : observedModels(kernelModels, (message) => generated(meta, message));
+      ? scoped
+      : observedModels(scoped, (message) => generated(meta, message));
   };
   const sessions = new SessionManager({
     store,

@@ -78,6 +78,7 @@ function ProviderRow({
       translateText("refresh.delisted", {
         providerName,
         models: names.join(listSeparator()),
+        count: names.length,
       }),
       using.length === 0
         ? undefined

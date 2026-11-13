@@ -31,6 +31,7 @@ import type {
   ThinkingLevelMap,
 } from "@earendil-works/pi-ai";
 import type { ModelApi, ProviderKind } from "@eta/client-contracts";
+import type { KernelModels } from "@eta/core";
 import type { ProviderRuntimeDefinition } from "./catalog";
 import type { EtaModelConfig, EtaProviderConfig } from "./config-types";
 import { createModels, createProvider } from "@earendil-works/pi-ai";
@@ -206,7 +207,42 @@ function runtimeModel(
     // only ever gone out as `strict: false`. Turning it off also keeps the raw JSON
     // Schema, instead of the strict dialect `makeStrictJsonSchema` would rewrite it into.
     compat: { ...compat, supportsStrictMode: false },
+    // Not a pi-ai field: read by `withSessionHeader`, which knows the session.
+    ...(runtime.sessionHeader === undefined
+      ? {}
+      : { sessionHeader: runtime.sessionHeader }),
   } as Model<ModelApi>;
+}
+
+/**
+ * One session's view of a model layer: a model whose provider routes conversations by a header
+ * (OpenCode's `x-opencode-session`, declared in the catalog) gets the session's id in it on every
+ * request. Every other request goes out exactly as it was asked for — pi-ai's own `sessionId`
+ * option is deliberately not used, because it also turns on prompt-cache keys and session headers
+ * for every other provider.
+ */
+export function withSessionHeader(
+  models: KernelModels,
+  sessionId: string,
+): KernelModels {
+  const scoped = <O extends { headers?: Record<string, string | null> }>(
+    model: Model<Api>,
+    options: O | undefined,
+  ): O | undefined => {
+    const header = (model as { sessionHeader?: unknown }).sessionHeader;
+    if (typeof header !== "string" || sessionId.length === 0) return options;
+    return {
+      ...options,
+      headers: { ...options?.headers, [header]: sessionId },
+    } as O;
+  };
+  return {
+    getModel: (provider, id) => models.getModel(provider, id),
+    streamSimple: (model, context, options) =>
+      models.streamSimple(model, context, scoped(model, options)),
+    completeSimple: (model, context, options) =>
+      models.completeSimple(model, context, scoped(model, options)),
+  };
 }
 
 /** What one provider could not be built for, and why. */

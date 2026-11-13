@@ -18,7 +18,9 @@
     "synced_one": "{{providerName}}：新增 {{count}} 个模型",
     "synced_other": "{{providerName}}：新增 {{count}} 个模型",
     "delisted": "{{providerName}} 已不再提供 {{models}}，在你删除前会一直保留。",
-    "delistedAgents": "{{agents}} 正在用，请给它们换个模型。"
+    "delisted_one": "{{providerName}} 已不再提供 {{models}}，在你删除前会一直保留。",
+    "delisted_other": "{{providerName}} 已不再提供 {{models}}，在你删除前会一直保留。",
+    "delistedAgents": "{{agents}} 正在用，请换一个模型。"
   },
   "models": {
     "keyMissing": "{{providerName}} 还没有 API key",

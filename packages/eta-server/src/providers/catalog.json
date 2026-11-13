@@ -225,7 +225,8 @@
       "discovery": { "adapter": "models-dev", "provider": "opencode" },
       "runtime": {
         "adapter": "openai-chat",
-        "thinking": "reasoning-effort"
+        "thinking": "reasoning-effort",
+        "sessionHeader": "x-opencode-session"
       },
       "restrictToListedModels": true,
       "models": []
@@ -244,7 +245,8 @@
       "discovery": { "adapter": "models-dev", "provider": "opencode-go" },
       "runtime": {
         "adapter": "openai-chat",
-        "thinking": "reasoning-effort"
+        "thinking": "reasoning-effort",
+        "sessionHeader": "x-opencode-session"
       },
       "restrictToListedModels": true,
       "models": []

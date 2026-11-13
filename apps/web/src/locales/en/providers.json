@@ -18,7 +18,9 @@
     "synced_one": "{{providerName}}: {{count}} new model",
     "synced_other": "{{providerName}}: {{count}} new models",
     "delisted": "{{providerName}} no longer lists {{models}}. They stay until you remove them.",
-    "delistedAgents": "Used by {{agents}}: pick another model for them."
+    "delisted_one": "{{providerName}} no longer lists {{models}}. It stays until you remove it.",
+    "delisted_other": "{{providerName}} no longer lists {{models}}. They stay until you remove them.",
+    "delistedAgents": "Used by {{agents}}: pick another model."
   },
   "models": {
     "keyMissing": "{{providerName}} has no API key",

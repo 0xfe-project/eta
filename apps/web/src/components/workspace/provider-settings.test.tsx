@@ -228,7 +228,7 @@ describe("refreshing a provider's models", () => {
     await settle();
     expect(toast.warning).toHaveBeenCalledWith(
       "OpenCode Zen 已不再提供 GLM-5.2，在你删除前会一直保留。",
-      { description: "「小助手」 正在用，请给它们换个模型。" },
+      { description: "「小助手」 正在用，请换一个模型。" },
     );
   });
 
