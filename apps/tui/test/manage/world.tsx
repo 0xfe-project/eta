@@ -26,7 +26,7 @@ import { hostWorld, WITHOUT_SETUP } from "../conversation/view-host-world";
 import { baseUrl } from "../support/host";
 import { until } from "../support/temp";
 import { renderApp } from "../ui-support/app";
-import { KEYS, plain } from "../ui-support/render";
+import { flush, KEYS, plain } from "../ui-support/render";
 
 const cleanups: (() => void)[] = [];
 afterEach(() => {
@@ -217,6 +217,15 @@ export const statusLine = (r: RenderedApp) => plain(r).split("\n").at(-2) ?? "";
 export const tabBar = (r: RenderedApp) => plain(r).split("\n").at(-1) ?? "";
 
 export async function enter(r: RenderedApp, line: string): Promise<void> {
+  // Keys typed while the view still says "Loading…" reach no composer and are lost.
+  await until(
+    async () => {
+      await flush();
+      return !plain(r).includes("Loading…");
+    },
+    20_000,
+    "the view to load",
+  );
   await r.type(line);
   await r.press(KEYS.enter);
 }
