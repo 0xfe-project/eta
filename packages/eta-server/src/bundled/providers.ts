@@ -32,6 +32,7 @@ import {
   checkOf,
   listProviderModels,
 } from "../providers/discovery";
+import { ProviderLogos } from "../providers/logos";
 
 export { PROVIDER_ACTIONS } from "@eta/client-contracts";
 
@@ -138,6 +139,7 @@ export function providersPlugin(options: ProvidersPluginOptions) {
         // The last check of each provider, since this host started. Only a save that changes how
         // a provider is reached, or a delete, forgets one; nothing re-checks by itself.
         const checks = new Map<string, ProviderCheck>();
+        const logos = new ProviderLogos(options.fetch);
         let checksRevision = 0;
         const record = (id: string, check: ProviderCheck | undefined): void => {
           if (check === undefined) {
@@ -368,6 +370,14 @@ export function providersPlugin(options: ProvidersPluginOptions) {
                   ? {}
                   : { delisted: updated.delisted }),
               },
+            };
+          }),
+          wire.handle("providers", "logos", async (call) => {
+            const { sources } = (call.args ?? {}) as Partial<
+              ProviderArgs["logos"]
+            >;
+            return {
+              result: await logos.logos(Array.isArray(sources) ? sources : []),
             };
           }),
           wire.handle("providers", "check", async (call) => {

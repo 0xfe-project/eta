@@ -10,12 +10,18 @@ import { statusText } from "./source-text";
 // The small pieces every view of a model source shares: its tile, its status, how it connects,
 // and what is left of a subscription.
 
-/** A square with the name's first letter: there are no logos to ship, and a letter tells rows apart. */
+/**
+ * A source's tile: its models.dev logo when the host found one, else its name's first letter. The
+ * logo is drawn as a mask in the text colour (models.dev's logos are one-colour), so it follows the
+ * theme and is never markup on the page.
+ */
 export function SourceLogo({
   name,
+  svg,
   className,
 }: {
   name: string;
+  svg?: string | undefined;
   className?: string;
 }) {
   return (
@@ -26,7 +32,20 @@ export function SourceLogo({
         className,
       )}
     >
-      {Array.from(name.trim())[0] ?? "?"}
+      {svg === undefined ? (
+        (Array.from(name.trim())[0] ?? "?")
+      ) : (
+        <span
+          data-logo=""
+          className="size-4 bg-foreground"
+          style={{
+            maskImage: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`,
+            maskSize: "contain",
+            maskRepeat: "no-repeat",
+            maskPosition: "center",
+          }}
+        />
+      )}
     </span>
   );
 }

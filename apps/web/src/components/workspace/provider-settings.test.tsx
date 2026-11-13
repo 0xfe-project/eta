@@ -63,6 +63,7 @@ interface Setup {
   noGateway?: boolean;
   discover?: (args: unknown) => ProviderDiscoverResult;
   refresh?: (args: unknown) => ProviderRefreshResult;
+  logos?: (args: unknown) => { logos: Record<string, string> };
 }
 
 const cleanup: (() => void)[] = [];
@@ -163,6 +164,7 @@ async function render(setup: Setup = {}) {
       if (setup.discover === undefined) throw new Error("no discover");
       return setup.discover(args);
     })
+    .handle("providers.logos", (args) => setup.logos?.(args) ?? { logos: {} })
     .handle("providers.refresh", (args) => {
       if (setup.refresh === undefined) throw new Error("no refresh");
       return setup.refresh(args);
@@ -387,6 +389,63 @@ describe("the model sources list", () => {
     expect(
       document.querySelector('[role="meter"]')?.getAttribute("aria-valuenow"),
     ).toBe("58");
+  });
+
+  it("draws models.dev's logo where the host found one, and a letter where it did not", async () => {
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M0 0"/></svg>';
+    const page = await render({
+      providers: [
+        provider({
+          id: "router",
+          name: "OpenRouter",
+          baseUrl: "https://openrouter.ai/api/v1",
+        }),
+        provider({
+          id: "ollama",
+          name: "Ollama",
+          baseUrl: "http://127.0.0.1:11434/v1",
+        }),
+      ],
+      connections: [
+        {
+          id: "c1",
+          connector: "codex",
+          label: "dev@example.com",
+          state: "active",
+          createdAt: "2026-10-01T00:00:00Z",
+        },
+      ],
+      logos: () => ({
+        logos: { "connector:codex": svg, "provider:router": svg },
+      }),
+    });
+    await settle();
+    // The host is asked once, by connector, preset kind and configured provider's address.
+    const [asked] = page.calls("logos") as {
+      sources: { key: string; id?: string; baseUrl?: string }[];
+    }[];
+    expect(asked?.sources).toContainEqual({
+      key: "connector:codex",
+      id: "openai",
+    });
+    expect(asked?.sources).toContainEqual({
+      key: "kind:deepseek",
+      baseUrl: "https://api.deepseek.com",
+    });
+    expect(asked?.sources).toContainEqual({
+      key: "provider:router",
+      baseUrl: "https://openrouter.ai/api/v1",
+    });
+    const tiles = [
+      ...document.querySelectorAll('[aria-label="模型来源"] > li'),
+    ].map((row) => row.querySelector('[aria-hidden="true"]')!);
+    expect(tiles[0]?.querySelector("[data-logo]")).not.toBeNull();
+    expect(tiles[1]?.querySelector("[data-logo]")).not.toBeNull();
+    // Drawn as a mask, never as markup.
+    expect(tiles[1]?.querySelector("svg")).toBeNull();
+    expect(tiles[2]?.querySelector("[data-logo]")).toBeNull();
+    expect(tiles[2]?.textContent).toBe("O");
   });
 
   it("says when the host has no providers plugin", async () => {

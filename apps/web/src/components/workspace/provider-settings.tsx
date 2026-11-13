@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { LoadError, Loading } from "@/components/states";
 import { Button } from "@/components/ui/button";
+import { logoOf, useSourceLogos } from "@/queries/logos";
 import {
   providerErrorMessage,
   useModels,
@@ -74,7 +75,15 @@ function DefaultModel({ sources }: { sources: readonly Source[] }) {
   );
 }
 
-function SourceRow({ source, onOpen }: { source: Source; onOpen: () => void }) {
+function SourceRow({
+  source,
+  logo,
+  onOpen,
+}: {
+  source: Source;
+  logo: string | undefined;
+  onOpen: () => void;
+}) {
   const { t: translateText } = useTranslation(["providers"] as const);
   return (
     <li>
@@ -83,7 +92,7 @@ function SourceRow({ source, onOpen }: { source: Source; onOpen: () => void }) {
         className="flex w-full min-w-0 items-center gap-2.5 px-2.5 py-2 text-left duration-[60ms] ease-linear hover:bg-overlay-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
         onClick={onOpen}
       >
-        <SourceLogo name={source.name} />
+        <SourceLogo name={source.name} svg={logo} />
         <span className="min-w-0 flex-1 truncate text-sm">
           {source.name}
           <span className="text-xs text-faint">
@@ -114,13 +123,20 @@ function SourceRow({ source, onOpen }: { source: Source; onOpen: () => void }) {
 export function ProviderSettings() {
   const { t: translateText } = useTranslation(["providers", "common"] as const);
   const { sources, error } = useSources();
+  const logos = useSourceLogos();
   const [opened, setOpened] = useState<string>();
   const [adding, setAdding] = useState(false);
   if (error) return <LoadError what={translateText("title")} error={error} />;
   // A source that went away (removed here or elsewhere) leaves its page for the list.
   const open = sources?.find((source) => source.key === opened);
   if (open !== undefined)
-    return <SourceDetail source={open} onBack={() => setOpened(undefined)} />;
+    return (
+      <SourceDetail
+        source={open}
+        logo={logoOf(logos, open)}
+        onBack={() => setOpened(undefined)}
+      />
+    );
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
       <div className="flex items-center justify-between gap-2">
@@ -153,6 +169,7 @@ export function ProviderSettings() {
                 <SourceRow
                   key={source.key}
                   source={source}
+                  logo={logoOf(logos, source)}
                   onOpen={() => setOpened(source.key)}
                 />
               ))}

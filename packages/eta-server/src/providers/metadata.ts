@@ -31,6 +31,15 @@ const ENDPOINTS: Record<string, string> = {
   "https://api.openai.com/v1": "openai",
 };
 
+/** The models.dev entry an exact official endpoint is listed under, when it is one. */
+export function officialModelsDevId(baseUrl: string): string | undefined {
+  try {
+    return ENDPOINTS[new URL(baseUrl.trim()).href.replace(/\/+$/, "")];
+  } catch {
+    return undefined;
+  }
+}
+
 /** Fetch the whole catalog: a map of provider id to provider entry. */
 export async function fetchModelsDev(
   send: typeof fetch = fetch,

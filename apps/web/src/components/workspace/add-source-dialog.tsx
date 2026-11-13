@@ -23,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { translate } from "@/lib/i18n";
 import { useLlm } from "@/queries/llm";
+import { logoKey, useSourceLogos } from "@/queries/logos";
 import {
   discoverProviderModels,
   discoveryErrorMessage,
@@ -177,6 +178,7 @@ function unsupportedReason(model: UnsupportedModel): string {
 function PresetGrid({ onPick }: { onPick: (preset: SourcePreset) => void }) {
   const { t: translateText } = useTranslation(["providers"] as const);
   const llm = useLlm();
+  const logos = useSourceLogos();
   const offered = SOURCE_PRESETS.filter(
     (preset) =>
       !("connector" in preset) ||
@@ -206,7 +208,16 @@ function PresetGrid({ onPick }: { onPick: (preset: SourcePreset) => void }) {
                     className="flex min-w-0 items-center gap-2 border p-2 text-left text-xs duration-[60ms] ease-linear hover:bg-overlay-hover focus-visible:outline-2 focus-visible:outline-ring"
                     onClick={() => onPick(preset)}
                   >
-                    <SourceLogo name={name} />
+                    <SourceLogo
+                      name={name}
+                      svg={
+                        "connector" in preset
+                          ? logos[logoKey.connector(preset.connector)]
+                          : preset.custom === undefined
+                            ? logos[logoKey.kind(preset.kind)]
+                            : undefined
+                      }
+                    />
                     <span className="min-w-0">
                       <span className="block truncate">{name}</span>
                       {"custom" in preset && preset.custom === "local" ? (

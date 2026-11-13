@@ -54,6 +54,7 @@ export const PROVIDER_ACTIONS = [
   "refresh",
   "discover",
   "check",
+  "logos",
 ] as const;
 
 export interface CreateSessionInput {
@@ -178,6 +179,8 @@ export interface ProviderArgs {
   refresh: { id: string };
   /** Check saved providers (one, or all when `id` is absent): their model list is the probe. */
   check: { id?: string };
+  /** The models.dev logo of each source asked about, by the key the caller gave it. */
+  logos: { sources: ProviderLogoRequest[] };
   /**
    * Preview unsaved connection values: the model list, with models.dev's facts where the endpoint
    * is an official one. Never writes configuration.
@@ -203,6 +206,19 @@ export interface ProviderDiscoverResult {
 export interface ProviderRefreshResult extends ProviderDiscoverResult {
   revision: string;
   delisted?: string[];
+}
+/**
+ * One source whose logo is wanted: a models.dev provider id when the caller knows it (a gateway
+ * connector), else the base URL, which is matched against the `api` of each models.dev entry.
+ */
+export interface ProviderLogoRequest {
+  key: string;
+  id?: string;
+  baseUrl?: string;
+}
+/** What `providers.logos` answers: the SVG of every source that has one, by its key. */
+export interface ProviderLogosResult {
+  logos: Record<string, string>;
 }
 /** What `providers.check` answers: the check of every provider it looked at, by id. */
 export interface ProviderCheckResult {

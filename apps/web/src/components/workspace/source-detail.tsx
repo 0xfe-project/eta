@@ -574,9 +574,11 @@ function problemOf(source: Source): string | undefined {
 
 export function SourceDetail({
   source,
+  logo,
   onBack,
 }: {
   source: Source;
+  logo: string | undefined;
   onBack: () => void;
 }) {
   const { t: translateText } = useTranslation(["providers", "common"] as const);
@@ -622,7 +624,7 @@ export function SourceDetail({
         <span aria-current="page">{source.name}</span>
       </nav>
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-        <SourceLogo name={source.name} />
+        <SourceLogo name={source.name} svg={logo} />
         <h2 className="truncate text-sm font-semibold">{source.name}</h2>
         <span className="truncate text-xs text-faint">
           {viaText(source)}
