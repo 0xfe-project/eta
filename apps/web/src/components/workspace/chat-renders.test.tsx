@@ -236,6 +236,91 @@ describe("what the timeline says besides words", () => {
     expect(container.textContent).toContain("5 次唤醒");
   });
 
+  it("does not draw what Captain is told about its group proposal, old or new", async () => {
+    history = [
+      row({ text: "Make a group for the launch" }),
+      row({
+        author: "system",
+        text: 'Your proposed group "Launch" (operation 6f1c2a3b-0d4e-4f5a-8b6c-7d8e9f0a1b2c) was confirmed by the user and created.\nAssign work there with assign_in_group.',
+        data: {
+          captainGroupOutcome: {
+            operationId: "6f1c2a3b-0d4e-4f5a-8b6c-7d8e9f0a1b2c",
+            status: "applied",
+          },
+        },
+      }),
+      // Written before the mark existed: known by its opening line.
+      row({
+        author: "system",
+        text: 'Your proposed group "Docs" (operation 0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d) was rejected by the user. Nothing was created.',
+      }),
+      row({ author: "agent", agentId: AGENT, text: "Assigned." }),
+    ];
+    const { container } = await start();
+    await flush();
+    expect(container.textContent).toContain("Assigned.");
+    expect(container.textContent).not.toContain("Your proposed group");
+    expect(container.querySelectorAll("[data-mid]")).toHaveLength(2);
+  });
+
+  it("renders a Captain review as labeled observation cards", async () => {
+    history = [
+      row({
+        author: "system",
+        text: [
+          "<captain-review>",
+          "The platform Supervisor queued the following observations.",
+          "1. [task_run_offline] Task #7 is waiting for an offline machine.",
+          "{",
+          '  "taskId": "t1",',
+          '  "taskNumber": 7,',
+          '  "runIds": ["r1"],',
+          '  "runs": [{ "machineName": "build-box" }]',
+          "}",
+          "2. [inbox_pending] An Inbox question has waited.",
+          '{ "interactionId": "i1", "agentId": "a1" }',
+          "</captain-review>",
+        ].join("\n"),
+      }),
+    ];
+    const { container } = await start();
+    await flush();
+    const review = container.querySelector(".captain-review");
+    expect(review).not.toBeNull();
+    expect(review?.textContent).toContain("机器离线");
+    expect(review?.textContent).toContain("Inbox 待处理");
+    expect(review?.textContent).toContain("build-box");
+    expect(review?.textContent).toContain("任务 #7");
+    expect(review?.textContent).not.toContain("The platform Supervisor queued");
+    expect(container.querySelectorAll(".captain-review-details")).toHaveLength(
+      2,
+    );
+  });
+
+  it("folds an unparseable Captain review instead of exposing its prompt", async () => {
+    history = [
+      row({
+        author: "system",
+        text: [
+          "<captain-review>",
+          "The platform Supervisor queued the following observations.",
+          "An invalid review item.",
+          "</captain-review>",
+        ].join("\n"),
+      }),
+    ];
+    const { container } = await start();
+    await flush();
+    const empty = container.querySelector(".captain-review-empty")!;
+    expect(empty.querySelector(":scope > p")?.textContent).toContain(
+      "这条巡检没能解析出条目",
+    );
+    expect(empty.querySelector("details")?.open).toBe(false);
+    expect(empty.querySelector("pre")?.textContent).toContain(
+      "The platform Supervisor queued",
+    );
+  });
+
   it("explains a message that woke nobody, right under it", async () => {
     history = [row({ text: "有人吗", data: { woke: [], joined: [] } })];
     const { container } = await start([memberView(AGENT), memberView("a2")]);

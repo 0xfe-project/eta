@@ -1,4 +1,5 @@
 import type { MessageStatus, MessageView } from "@eta/client-contracts";
+import { isCaptainGroupOutcome } from "@eta/client-contracts";
 
 // A conversation's timeline, as rows the page has seen: the newest window the host publishes,
 // older pages fetched on demand, and what our own `send` and `stop` calls answered with. A row
@@ -31,6 +32,9 @@ export const RUNNING_STATUSES: ReadonlySet<MessageStatus> = new Set([
  * A row is left on the timeline as it was drawn when it names no turn (it was written before a
  * draft knew one) or names one this page is not showing (an older page of the conversation): a card
  * the reader can neither place nor lose is better than a card that vanished at a page boundary.
+ *
+ * The message that tells Captain how its group proposal ended is not drawn at all: it is Captain's
+ * context, and the proposal's card already shows the outcome.
  */
 export function taskRowsByTurn(messages: readonly MessageView[]): {
   /** The rows to draw on the timeline, in the order they came in. */
@@ -50,6 +54,7 @@ export function taskRowsByTurn(messages: readonly MessageView[]): {
   const rows: MessageView[] = [];
   const under = new Map<string, MessageView[]>();
   for (const row of messages) {
+    if (isCaptainGroupOutcome(row)) continue;
     const turn =
       row.kind === "task_draft" || row.kind === "task_card"
         ? row.data.turnMessageId

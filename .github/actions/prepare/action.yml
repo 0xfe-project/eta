@@ -1,0 +1,60 @@
+# What every part of CI (ci.yml) needs before it runs its turbo tasks: uv, the
+# workspace's packages, and the part's own Turborepo cache. Bun itself and the checkout
+# come first, in the workflow, because deciding whether a part has anything to do needs
+# them.
+name: Prepare a CI part
+description: Set up uv, install the workspace, and restore the part's Turborepo cache.
+
+inputs:
+  part:
+    description: The part's name, which keys its Turborepo cache.
+    required: true
+  save-uv-cache:
+    description: Whether this part saves uv's cache, which every part shares.
+    default: "false"
+
+outputs:
+  turbo-cache-key:
+    description: The key to save the part's Turborepo cache under once its tasks ran.
+    value: ${{ steps.turbo-key.outputs.key }}
+
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@v10.2.0
+      with:
+        # apps/memory/.python-version.
+        python-version: "3.13"
+        cache-python: true
+        enable-cache: true
+        cache-dependency-glob: "**/uv.lock"
+        # One part writes the shared cache, so parts don't race for the same key.
+        save-cache: ${{ inputs.save-uv-cache }}
+        # --affected runs without memory tasks never populate the cache,
+        # and the save step fails on a missing path without this.
+        ignore-nothing-to-cache: true
+
+    # No cache of Bun's package store: restoring its 480 MB took longer (10 s, then 2 s
+    # to link) than installing from the registry (5-7 s).
+    - run: bun install --frozen-lockfile --ignore-scripts
+      shell: bash
+
+    # Fallback and local layer for Turborepo artifacts across CI runs, one per part:
+    # the parts run at once, and a cache key can only be written once. A rerun gets a
+    # key of its own, so what it adds is kept too.
+    - name: Name the Turborepo cache
+      id: turbo-key
+      shell: bash
+      run: echo "key=turbo-$RUNNER_OS-$PART-$GITHUB_SHA-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+      env:
+        PART: ${{ inputs.part }}
+    - name: Restore Turborepo
+      uses: actions/cache/restore@v6
+      with:
+        path: .turbo/cache
+        key: ${{ steps.turbo-key.outputs.key }}
+        # This commit's earlier attempt, then this part's latest. Not another part's:
+        # each would carry a copy of everything the others cached.
+        restore-keys: |
+          turbo-${{ runner.os }}-${{ inputs.part }}-${{ github.sha }}-
+          turbo-${{ runner.os }}-${{ inputs.part }}-

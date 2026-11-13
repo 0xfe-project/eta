@@ -36,6 +36,7 @@ export const i18n = {
     "chat.system.stewardCleared": "{from} 不再是主理人。",
     "chat.system.wakeBudget":
       "这条消息已经用完 {budget} 次唤醒；之后的 @ 只记入对话，等你再发言才会唤醒。",
+    "chat.system.captainReview": "Captain 巡检 · {count} 项观察",
     "chat.queue.queued": "{name} 排队中",
     "chat.queue.waitingFor": "{name} 排队中，等{other}说完",
     "chat.queue.ahead": "等待中 · 前面还有 {count} 条",
@@ -188,6 +189,7 @@ export const i18n = {
     "chat.system.stewardCleared": "{from} is no longer steward.",
     "chat.system.wakeBudget":
       "This message has used its {budget} wake-ups. Later @mentions are only recorded until you speak again.",
+    "chat.system.captainReview": "Captain review · {count} observation(s)",
     "chat.queue.queued": "{name} is queued",
     "chat.queue.waitingFor": "{name} is queued, waiting for {other} to finish",
     "chat.queue.ahead": "Waiting · {count} ahead",

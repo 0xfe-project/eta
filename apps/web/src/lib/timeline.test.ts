@@ -97,3 +97,18 @@ describe("gathering the task rows under the reply that wrote them", () => {
     expect(split.under.size).toBe(0);
   });
 });
+
+describe("the message Captain is told how its group proposal ended", () => {
+  it("is not on the timeline: the card shows the outcome", () => {
+    const outcome = messageView({
+      id: "outcome",
+      conversationId: "c",
+      seq: 2,
+      author: "system",
+      text: "Your proposed group …",
+      data: { captainGroupOutcome: { operationId: "o1", status: "applied" } },
+    });
+    const split = taskRowsByTurn([reply("t1", 1), outcome, reply("t2", 3)]);
+    expect(split.rows.map((r) => r.id)).toEqual(["t1", "t2"]);
+  });
+});

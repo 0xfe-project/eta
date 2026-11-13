@@ -1096,6 +1096,67 @@ describe("captain controls", () => {
     );
   });
 
+  it("reports only assignment IDs added since the last review", async () => {
+    const { models } = scriptedModels(() => say("Done."));
+    const w = await world({ ...options, models });
+    const ada = await w.agent("Ada");
+    const project = await w.project({ stewardId: ada.id });
+    const group = await w.group(project.id, [ada.id], "assignment-window");
+    await w.watch(group.id);
+    const store = w.host.product.captain.store;
+    store.setSetting("supervisorEnabled", false, null);
+    const first = await w.host.product.captain.assign({
+      conversationId: group.id,
+      text: "Ada, first review window.",
+      agentIds: [ada.id],
+    });
+    await w.settled(group.id, first.replyIds[0]!);
+    const firstSeq = w.host.db
+      .query<{ last_seq: number }, [string]>(
+        "SELECT last_seq FROM conversation WHERE id = ?",
+      )
+      .get(group.id)!.last_seq;
+    const prior = store.createReview({
+      kind: "assignment_settled",
+      dedupeKey: `conversation:${group.id}:assignment_settled:${firstSeq}`,
+      conversationId: group.id,
+      checkpointSeq: firstSeq,
+      body: "Previously reviewed.",
+    });
+    store.finishReview(prior.id, "completed");
+
+    const second = await w.host.product.captain.assign({
+      conversationId: group.id,
+      text: "Ada, second review window.",
+      agentIds: [ada.id],
+    });
+    await w.settled(group.id, second.replyIds[0]!);
+    const secondSeq = w.host.db
+      .query<{ last_seq: number }, [string]>(
+        "SELECT last_seq FROM conversation WHERE id = ?",
+      )
+      .get(group.id)!.last_seq;
+    store.setSetting("supervisorEnabled", true, null);
+    w.host.product.captainSupervisor.tick();
+
+    const review = store
+      .reviews()
+      .find(
+        (item) =>
+          item.kind === "assignment_settled" &&
+          item.conversationId === group.id &&
+          item.checkpointSeq === secondSeq,
+      )!;
+    expect(review.data).toMatchObject({
+      assignmentIds: [second.assignment.id],
+      assignmentCount: 2,
+      newAssignmentCount: 1,
+      fromSeq: firstSeq,
+      throughSeq: secondSeq,
+    });
+    expect(review.data.assignmentIds).not.toContain(first.assignment.id);
+  });
+
   it("relays an assigned agent's Inbox question through the user", async () => {
     const { models } = scriptedModels((request) => {
       if (request.agent === "Captain") {
@@ -1684,6 +1745,15 @@ describe("captain controls", () => {
     expect(batch).toHaveLength(2);
     expect(new Set(batch.map((review) => review.messageId)).size).toBe(1);
     expect(batch[0]!.messageId).not.toBeNull();
+    // Marked for renderers, which draw it as a review rather than as Captain's prompt.
+    const prompt = w
+      .rows(direct.conversationId)
+      .find((row) => row.id === batch[0]!.messageId)!;
+    expect(
+      (prompt.data.captainReview as { reviewIds: string[] }).reviewIds
+        .slice()
+        .sort(),
+    ).toEqual([first.id, second.id].sort());
   });
 
   it("caps a review batch by count and prompt characters", async () => {

@@ -4,6 +4,7 @@
 
 import type { MessageStatus, MessageView } from "@eta/client-contracts";
 import type { Signal } from "nsh";
+import { isCaptainGroupOutcome } from "@eta/client-contracts";
 import { signal, untracked } from "nsh";
 
 /** A reply that has not ended: someone is, or is about to be, answering. */
@@ -45,7 +46,8 @@ export function mergeRows(
 /**
  * The task rows that name the reply they came out of, gathered under it: a draft stays attached to
  * the turn that proposed it, and the card it becomes stays put. A row that names no turn on this
- * page stays on the timeline rather than vanish at a page boundary.
+ * page stays on the timeline rather than vanish at a page boundary. The message that tells Captain
+ * how its group proposal ended is Captain's context, not the reader's, and is not drawn.
  */
 export function taskRowsByTurn(messages: readonly MessageView[]): {
   rows: readonly MessageView[];
@@ -63,6 +65,7 @@ export function taskRowsByTurn(messages: readonly MessageView[]): {
   const rows: MessageView[] = [];
   const under = new Map<string, MessageView[]>();
   for (const row of messages) {
+    if (isCaptainGroupOutcome(row)) continue;
     const turn =
       row.kind === "task_draft" || row.kind === "task_card"
         ? row.data.turnMessageId

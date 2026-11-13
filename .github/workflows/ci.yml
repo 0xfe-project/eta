@@ -1,6 +1,12 @@
 # Everything pre-commit checks (bun run check:affected), for every pull request and
 # every push to main: squash merges, `--no-verify` and bots skip the hook. A release
-# runs the same job over the whole repository (release.yml).
+# runs it over the whole repository (release.yml).
+#
+# The check runs as four parts on runners of their own, because the TUI's and the
+# host's tests each take minutes and slow each other down on one 2-core runner. Together
+# the parts run exactly the tasks of package.json's `check` (`check:affected`): change
+# one, change the other. A part that the change does not reach stops after checkout.
+# `check` passes only when every part did, so the status to require stays `check`.
 name: CI
 
 on:
@@ -9,26 +15,48 @@ on:
     branches: [main]
   workflow_call:
     inputs:
-      command:
-        description: The package.json script that checks the commit.
-        type: string
-        default: check:affected
+      all:
+        description: Check the whole repository, not only what changed since the base.
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  check:
+  part:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read
       # The Remote Cache token is exchanged for the job's OIDC token.
       id-token: write
+    strategy:
+      # Every part reports, so one run shows all that is wrong.
+      fail-fast: false
+      matrix:
+        include:
+          - part: static
+            name: format, build, types, lint, knip
+            tasks: build typecheck lint //#lint:repo //#knip
+          - part: tui
+            name: test TUI
+            tasks: test --filter=@eta/tui
+          - part: host
+            name: test host
+            tasks: test --filter=@eta/app
+          - part: rest
+            name: test the rest
+            tasks: test --filter=!@eta/tui --filter=!@eta/app
     env:
       # Tests that need a tool fail instead of skipping without it.
       CI: "1"
+      TASKS: ${{ matrix.tasks }}
+      # All of it for a release: --affected compares with main, and a tag on main has
+      # nothing to compare.
+      SCOPE: ${{ !inputs.all && '--affected' || '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -36,49 +64,104 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      # Turbo's dry run of the part needs neither node_modules nor caches, so a part with
+      # nothing to do ends here.
+      - name: Plan
+        id: plan
+        run: |
+          version=$(grep -oP '^\s+"turbo": \["turbo@\K[^"]+' bun.lock)
+          read -ra tasks <<< "$TASKS"
+          # shellcheck disable=SC2086 # SCOPE is one flag or none.
+          bunx "turbo@$version" run "${tasks[@]}" $SCOPE --dry=json > "$RUNNER_TEMP/plan.json"
+          jq -r '.tasks[] | select(.command != "<NONEXISTENT>") | .taskId' "$RUNNER_TEMP/plan.json" > "$RUNNER_TEMP/plan.txt"
+          {
+            echo "### $PART_NAME"
+            if [[ -s $RUNNER_TEMP/plan.txt ]]; then
+              while read -r task; do echo "- \`$task\`"; done < "$RUNNER_TEMP/plan.txt"
+            else
+              echo "Nothing to run: the change does not reach this part."
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          # Formatting is checked over the whole repository, every time.
+          if [[ -s $RUNNER_TEMP/plan.txt || $PART == static ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          PART: ${{ matrix.part }}
+          PART_NAME: ${{ matrix.name }}
+
+      - name: Prepare
+        id: prepare
+        if: steps.plan.outputs.run
+        uses: ./.github/actions/prepare
+        with:
+          part: ${{ matrix.part }}
+          save-uv-cache: ${{ matrix.part == 'static' }}
+
       # Turborepo's Remote Cache (turbo.json's remoteCache), which development
       # machines fill as they commit: a short-lived token for the Vercel team,
       # through its OIDC policy for this repository.
       - name: Turborepo Remote Cache
+        if: steps.plan.outputs.run
         uses: vercel/setup-turborepo-remote-cache-action@v1.1.0
         continue-on-error: true
         with:
           team: team_m0cGPvm66wsuOjDpnCrXUDPz
 
-      # Fallback and local layer for Turborepo artifacts across CI runs.
-      - name: Cache Turborepo
+      # dprint's compiled WASM plugins; only this part runs dprint.
+      - name: Cache dprint
+        if: matrix.part == 'static'
         uses: actions/cache@v6
+        with:
+          path: ~/.cache/dprint
+          key: dprint-${{ runner.os }}-${{ hashFiles('dprint.json') }}
+          restore-keys: |
+            dprint-${{ runner.os }}-
+      - if: matrix.part == 'static'
+        run: bunx dprint check
+
+      - name: Turbo
+        id: turbo
+        if: steps.plan.outputs.run
+        run: |
+          touch "$RUNNER_TEMP/turbo-start"
+          read -ra tasks <<< "$TASKS"
+          # shellcheck disable=SC2086 # SCOPE is one flag or none.
+          bunx turbo run "${tasks[@]}" $SCOPE
+
+      # What the tasks added to Turborepo's cache, failed run or not: turbo caches only
+      # the tasks that passed.
+      - name: Did Turborepo cache anything
+        id: turbo-new
+        if: ${{ !cancelled() && (steps.turbo.outcome == 'success' || steps.turbo.outcome == 'failure') }}
+        run: |
+          if [[ -n $(find .turbo/cache -type f -newer "$RUNNER_TEMP/turbo-start" -print -quit 2>/dev/null) ]]; then
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Save Turborepo
+        if: ${{ !cancelled() && steps.turbo-new.outputs.new }}
+        uses: actions/cache/save@v6
         with:
           path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-
+          key: ${{ steps.prepare.outputs.turbo-cache-key }}
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: package.json
-      - uses: astral-sh/setup-uv@v10.2.0
-        with:
-          # apps/memory/.python-version.
-          python-version: "3.13"
-          cache-python: true
-          enable-cache: true
-          cache-dependency-glob: "**/uv.lock"
-          # --affected runs without memory tasks never populate the cache,
-          # and the save step fails on a missing path without this.
-          ignore-nothing-to-cache: true
-
-      # Bun's package store and dprint's compiled WASM plugins; uv's cache is
-      # kept by its setup action above.
-      - name: Cache Bun and dprint
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.bun/install/cache
-            ~/.cache/dprint
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock', 'dprint.json') }}
-          restore-keys: |
-            bun-${{ runner.os }}-
-
-      - run: bun install --frozen-lockfile --ignore-scripts
-      - run: bun run ${{ inputs.command || 'check:affected' }}
+  # The one status to require: every part passed, or ran nothing because it had nothing
+  # to run.
+  check:
+    needs: part
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - run: |
+          if [[ $RESULT != success ]]; then
+            echo "::error::A part of the check did not pass ($RESULT)."
+            exit 1
+          fi
+        env:
+          RESULT: ${{ needs.part.result }}

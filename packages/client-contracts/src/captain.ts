@@ -1,4 +1,5 @@
 import type { CallFrame } from "@eta/client-wire-proto";
+import type { MessageView } from "./product";
 import type { BoardTaskDetail, BoardTaskStatus } from "./tasks";
 
 export const CAPTAIN_ACTIONS = [
@@ -125,6 +126,34 @@ export interface CaptainGroupProposalRowData {
   event: "captain_group_proposal";
   operationId: string;
   proposal: CaptainGroupProposal;
+}
+
+/**
+ * `MessageView.data.captainGroupOutcome` of the message that tells Captain how a group proposal it
+ * made ended. That message is Captain's context, in English, and wakes its next turn; the user
+ * already sees the outcome on the proposal's card, so clients do not draw it.
+ */
+export interface CaptainGroupOutcomeData {
+  operationId: string;
+  status: CaptainOperationStatus;
+}
+
+/**
+ * The opening of the outcome message as the host wrote it before it carried
+ * `data.captainGroupOutcome`: `Your proposed group "<name>" (operation <uuid>) was confirmed…` or
+ * `…was rejected…`. Only a `system` message is matched, and only the host writes those.
+ */
+const LEGACY_GROUP_OUTCOME =
+  /^Your proposed group "[\s\S]*" \(operation [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\) was (?:confirmed|rejected) by the user/;
+
+/** Whether a row is the message that tells Captain how its group proposal ended; clients skip it. */
+export function isCaptainGroupOutcome(
+  message: Pick<MessageView, "author" | "kind" | "text" | "data">,
+): boolean {
+  if (message.author !== "system" || message.kind !== "message") return false;
+  const outcome = message.data.captainGroupOutcome;
+  if (typeof outcome === "object" && outcome !== null) return true;
+  return LEGACY_GROUP_OUTCOME.test(message.text);
 }
 
 export interface CaptainNotificationView {
