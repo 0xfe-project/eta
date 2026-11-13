@@ -19,6 +19,8 @@ const PREFERRED = [
   "url",
   "goal",
   "text",
+  // `show_widget`'s other argument is the widget's JSONL, which reads as noise in a row.
+  "title",
 ];
 
 export function summarizeArgs(args: unknown, limit = 60): string {

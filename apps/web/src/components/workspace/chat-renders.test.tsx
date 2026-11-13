@@ -545,6 +545,122 @@ describe("a reply that is writing", () => {
     expect(fold.querySelectorAll('[data-testid="ref"]')).toHaveLength(0);
   });
 
+  it("draws a widget a finished reply kept, beside its answer", async () => {
+    const user = row({ text: "构建情况" });
+    const reply = row({
+      author: "agent",
+      agentId: AGENT,
+      replyToId: user.id,
+      status: "done",
+      text: "如上",
+      data: {
+        activity: [
+          {
+            id: "w1",
+            name: "show_widget",
+            // A row cuts long arguments: the spec it draws is the one in `details`.
+            input: { title: "构建", spec: '{"op":"add"…' },
+            status: "completed",
+            details: {
+              title: "构建",
+              spec: {
+                root: "main",
+                elements: {
+                  main: {
+                    type: "Grid",
+                    props: {},
+                    children: ["rate", "slow"],
+                  },
+                  rate: {
+                    type: "Metric",
+                    props: { label: "通过率", value: "98%", trend: "up" },
+                    children: [],
+                  },
+                  slow: {
+                    type: "BarChart",
+                    props: {
+                      data: [
+                        { label: "web", value: 42 },
+                        { label: "web", value: 12 },
+                      ],
+                      unit: "s",
+                    },
+                    children: [],
+                  },
+                },
+              },
+            },
+          },
+        ],
+      },
+    });
+    history = [user, reply];
+    const { container } = await start();
+    await flush();
+    const widget = container.querySelector(".turn-tasks figure")!;
+    expect(widget.getAttribute("aria-label")).toBe("构建");
+    expect(widget.textContent).toContain("通过率98%");
+    expect(widget.textContent).toContain("web42s");
+    expect(widget.textContent).toContain("web12s");
+    expect(widget.closest(".process-fold")).toBeNull();
+  });
+
+  it("draws a widget while its call is still streaming", async () => {
+    const user = row({ text: "构建情况" });
+    const reply = row({
+      author: "agent",
+      agentId: AGENT,
+      replyToId: user.id,
+      status: "working",
+    });
+    history = [user, reply];
+    const lines = [
+      JSON.stringify({ op: "add", path: "/root", value: "main" }),
+      JSON.stringify({
+        op: "add",
+        path: "/elements/main",
+        value: { type: "Card", props: { title: "CI" }, children: ["rate"] },
+      }),
+      // Half a line: not drawn until it is whole.
+      '{"op":"add","path":"/elements/rate","value":{"type":"Met',
+    ].join("\n");
+    const { container } = await start(undefined, (fake) => {
+      fake.target("sessions.s1", {
+        core: {
+          session: "s1",
+          running: true,
+          streaming: {
+            role: "assistant",
+            timestamp: 2,
+            content: [
+              {
+                type: "toolCall",
+                id: "w1",
+                name: "show_widget",
+                arguments: { title: "构建", spec: lines },
+              },
+            ],
+          },
+        },
+        transcript: {
+          messages: [
+            {
+              entryId: "e1",
+              seq: 1,
+              at: 1,
+              message: { role: "user", content: "构建情况", timestamp: 1 },
+            },
+          ],
+        },
+      });
+      fake.handle("sessions.resync", () => ({}));
+    });
+    await flush(80);
+    const widget = container.querySelector(".turn-tasks figure")!;
+    expect(widget.getAttribute("aria-busy")).toBe("true");
+    expect(widget.querySelector("h4")?.textContent).toBe("CI");
+  });
+
   it("draws a publish's card beside the answer while the reply is still writing", async () => {
     const user = row({ text: "发布一个页面" });
     const reply = row({

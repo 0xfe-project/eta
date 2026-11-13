@@ -4,6 +4,7 @@ import type {
   ConversationSummary,
   MessageView,
 } from "@eta/client-contracts";
+import type { WidgetDetails } from "@eta/client-contracts/widget";
 import type { CSSProperties, ReactNode } from "react";
 import type { WorkspaceState } from "./workspace-store";
 import type { Draft, FilePart, PasteRange } from "@/lib/composer";
@@ -13,6 +14,7 @@ import type { Outgoing, SendMode } from "@/queries/outbox";
 import type { Question } from "@/queries/questions";
 import type { TaskStatus } from "@/queries/tasks";
 import { MAX_ATTACHMENTS } from "@eta/client-contracts";
+import { widgetSpec } from "@eta/client-contracts/widget";
 import { ArrowDownIcon } from "@phosphor-icons/react/ArrowDown";
 import { CaretDownIcon } from "@phosphor-icons/react/CaretDown";
 import { PaperclipIcon } from "@phosphor-icons/react/Paperclip";
@@ -86,6 +88,7 @@ import { ThinkingBlock } from "./transcript/thinking-block";
 import { ToolDetailCard } from "./transcript/tool-detail";
 import { useComposerTarget } from "./use-composer-target";
 import { useInputMethod } from "./use-input-method";
+import { WidgetCard } from "./widget-card";
 import { useWorkspaceStore } from "./workspace-store";
 
 type SlashName =
@@ -363,6 +366,32 @@ function withRealmCalls(blocks: readonly RunBlock[]): RunBlock[] {
   });
 }
 
+/** What a `show_widget` call draws: the spec its result kept, or, while it streams, its lines. */
+function widgetOf(
+  block: ToolBlock,
+): (WidgetDetails & { streaming: boolean }) | undefined {
+  if (block.name !== "show_widget") return undefined;
+  if (block.status === "completed") {
+    const { title, spec } = (block.details ?? {}) as {
+      title?: unknown;
+      spec?: WidgetDetails["spec"];
+    };
+    return typeof title === "string" && spec?.elements !== undefined
+      ? { title, spec, streaming: false }
+      : undefined;
+  }
+  if (block.status !== "running") return undefined;
+  const { title, spec } = (block.input ?? {}) as {
+    title?: unknown;
+    spec?: unknown;
+  };
+  return {
+    title: typeof title === "string" ? title : "",
+    spec: widgetSpec(typeof spec === "string" ? spec : ""),
+    streaming: true,
+  };
+}
+
 /** What `publish_artifact` returns in its result's `details`. */
 function publishedArtifact(block: ToolBlock) {
   if (block.name !== "publish_artifact" || block.status !== "completed")
@@ -415,8 +444,8 @@ function emailProposalIds(blocks: readonly RunBlock[]): string[] {
 }
 
 /**
- * The cards a turn leaves beside its answer, in one column: the artifacts it published, in the
- * order it published them, then the task rows it wrote.
+ * The cards a turn leaves beside its answer, in one column: the widgets it drew, the artifacts it
+ * published, in the order it published them, then the task rows it wrote.
  *
  * Neither is a step the agent took, so neither is drawn in the process — a group folds that away as
  * soon as the text is written, which used to take an artifact's card out of the conversation with
@@ -443,12 +472,24 @@ function TurnCards({
   const live = useRunBlocks(sessionId, runFrom);
   const blocks = withRealmCalls(sessionId === undefined ? saved : live);
   const published = publishedRefs(blocks);
+  const widgets = blocks.flatMap((block) => {
+    const widget = block.type === "tool" ? widgetOf(block) : undefined;
+    return widget === undefined ? [] : [{ id: block.id, ...widget }];
+  });
   const proposals = emailProposalIds(blocks);
   const rows = taskRows ?? [];
-  if (published.length === 0 && proposals.length === 0 && rows.length === 0)
+  if (
+    published.length === 0 &&
+    widgets.length === 0 &&
+    proposals.length === 0 &&
+    rows.length === 0
+  )
     return null;
   return (
     <div className="turn-tasks">
+      {widgets.map(({ id, ...widget }) => (
+        <WidgetCard key={id} {...widget} />
+      ))}
       {published.map(({ id, ref }) => (
         <ActivityRefCard key={id} value={ref} variant="framed" />
       ))}

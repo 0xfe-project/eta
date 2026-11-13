@@ -16,6 +16,7 @@
     "@eta/client-contracts": "*",
     "@eta/client-wire-proto": "*",
     "@hookform/resolvers": "^5.9.1",
+    "@json-render/react": "0.21.3",
     "@lexical/react": "^0.52.0",
     "@lexical/utils": "^0.52.0",
     "@phosphor-icons/react": "^2.1.10",
