@@ -100,7 +100,7 @@ jobs:
         uses: ./.github/actions/prepare
         with:
           part: ${{ matrix.part }}
-          save-caches: ${{ matrix.part == 'static' }}
+          save-uv-cache: ${{ matrix.part == 'static' }}
 
       # Turborepo's Remote Cache (turbo.json's remoteCache), which development
       # machines fill as they commit: a short-lived token for the Vercel team,

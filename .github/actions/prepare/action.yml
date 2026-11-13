@@ -1,6 +1,7 @@
-# What every part of CI (ci.yml) needs before it runs its turbo tasks: uv, Bun's
-# packages, and the part's own Turborepo cache. Bun itself and the checkout come first,
-# in the workflow, because deciding whether a part has anything to do needs them.
+# What every part of CI (ci.yml) needs before it runs its turbo tasks: uv, the
+# workspace's packages, and the part's own Turborepo cache. Bun itself and the checkout
+# come first, in the workflow, because deciding whether a part has anything to do needs
+# them.
 name: Prepare a CI part
 description: Set up uv, install the workspace, and restore the part's Turborepo cache.
 
@@ -8,8 +9,8 @@ inputs:
   part:
     description: The part's name, which keys its Turborepo cache.
     required: true
-  save-caches:
-    description: Whether this part saves the caches every part shares (Bun's and uv's).
+  save-uv-cache:
+    description: Whether this part saves uv's cache, which every part shares.
     default: "false"
 
 outputs:
@@ -28,28 +29,15 @@ runs:
         enable-cache: true
         cache-dependency-glob: "**/uv.lock"
         # One part writes the shared cache, so parts don't race for the same key.
-        save-cache: ${{ inputs.save-caches }}
+        save-cache: ${{ inputs.save-uv-cache }}
         # --affected runs without memory tasks never populate the cache,
         # and the save step fails on a missing path without this.
         ignore-nothing-to-cache: true
 
-    # Bun's package store. One part saves it, right after installing, so it is kept
-    # even when a check fails.
-    - name: Restore Bun's packages
-      id: bun-cache
-      uses: actions/cache/restore@v6
-      with:
-        path: ~/.bun/install/cache
-        key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
-        restore-keys: |
-          bun-${{ runner.os }}-
+    # No cache of Bun's package store: restoring its 480 MB took longer (10 s, then 2 s
+    # to link) than installing from the registry (5-7 s).
     - run: bun install --frozen-lockfile --ignore-scripts
       shell: bash
-    - if: inputs.save-caches == 'true' && steps.bun-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v6
-      with:
-        path: ~/.bun/install/cache
-        key: ${{ steps.bun-cache.outputs.cache-primary-key }}
 
     # Fallback and local layer for Turborepo artifacts across CI runs, one per part:
     # the parts run at once, and a cache key can only be written once. A rerun gets a
@@ -65,8 +53,8 @@ runs:
       with:
         path: .turbo/cache
         key: ${{ steps.turbo-key.outputs.key }}
-        # This commit's earlier attempt, then this part's latest, then any part's.
+        # This commit's earlier attempt, then this part's latest. Not another part's:
+        # each would carry a copy of everything the others cached.
         restore-keys: |
           turbo-${{ runner.os }}-${{ inputs.part }}-${{ github.sha }}-
           turbo-${{ runner.os }}-${{ inputs.part }}-
-          turbo-${{ runner.os }}-
