@@ -29,7 +29,11 @@ import { zaiProvider } from "@earendil-works/pi-ai/providers/zai";
 import { zaiCodingCnProvider } from "@earendil-works/pi-ai/providers/zai-coding-cn";
 import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
 import rawCatalog from "./catalog.json";
-import { isCustomKind, MODEL_THINKING_LEVELS } from "./config-types";
+import {
+  HEADER_NAME_PATTERN,
+  isCustomKind,
+  MODEL_THINKING_LEVELS,
+} from "./config-types";
 
 export interface ProviderRuntimeDefinition {
   adapter: "openai-chat" | "openai-responses" | "codex";
@@ -39,6 +43,11 @@ export interface ProviderRuntimeDefinition {
   maxTokensField?: "max_tokens" | "max_completion_tokens";
   replayReasoningContent?: boolean;
   toolStream?: "zai";
+  /**
+   * The header a gateway routes one conversation by (OpenCode refuses a request without
+   * `x-opencode-session`). Each request carries the session's id in it; see `withSessionHeader`.
+   */
+  sessionHeader?: string;
 }
 
 export interface ProviderCatalogEntry {
@@ -50,8 +59,14 @@ export interface ProviderCatalogEntry {
     missingError?: string;
   };
   discovery: {
-    adapter: "openai-models" | "catalog";
+    /**
+     * `openai-models` asks the endpoint's `/models`; `catalog` is the checked-in list;
+     * `models-dev` reads the provider's entry on models.dev (`provider`), where each model also
+     * says which protocol it is served over.
+     */
+    adapter: "openai-models" | "catalog" | "models-dev";
     requireContextWindow: boolean;
+    provider?: string;
   };
   runtime: ProviderRuntimeDefinition;
   /** Limit catalog suggestions to checked-in entries, not manually configured IDs. */
@@ -220,6 +235,7 @@ function parseRuntime(
       "maxTokensField",
       "replayReasoningContent",
       "toolStream",
+      "sessionHeader",
     ]),
     label,
   );
@@ -265,6 +281,14 @@ function parseRuntime(
       throw new Error(`invalid provider catalog: ${label} maxTokensField`);
     }
     output.maxTokensField = input.maxTokensField;
+  }
+  if (input.sessionHeader !== undefined) {
+    if (
+      typeof input.sessionHeader !== "string" ||
+      !HEADER_NAME_PATTERN.test(input.sessionHeader)
+    )
+      throw new Error(`invalid provider catalog: ${label} sessionHeader`);
+    output.sessionHeader = input.sessionHeader;
   }
   if (input.toolStream !== undefined) {
     if (input.toolStream !== "zai")
@@ -377,18 +401,35 @@ export function parseProviderModelCatalog(
     const discovery = object(provider.discovery, `${providerId} discovery`);
     onlyKeys(
       discovery,
-      new Set(["adapter", "requireContextWindow"]),
+      new Set(["adapter", "requireContextWindow", "provider"]),
       `${providerId} discovery`,
     );
     if (
       discovery.adapter !== "openai-models" &&
-      discovery.adapter !== "catalog"
+      discovery.adapter !== "catalog" &&
+      discovery.adapter !== "models-dev"
     ) {
       throw new Error(
         `invalid provider catalog: ${providerId} discovery adapter`,
       );
     }
+    // models.dev needs to know whose entry to read, and nothing else may name one.
+    if (
+      (discovery.adapter === "models-dev") !==
+      (typeof discovery.provider === "string" &&
+        discovery.provider.trim().length > 0)
+    ) {
+      throw new Error(
+        `invalid provider catalog: ${providerId} discovery provider`,
+      );
+    }
     const runtime = parseRuntime(provider.runtime, `${providerId} runtime`);
+    // Its models pick Chat Completions or Responses one by one, so the provider's own transport
+    // has to be the OpenAI one both of those share an endpoint with.
+    if (discovery.adapter === "models-dev" && runtime.adapter !== "openai-chat")
+      throw new Error(
+        `invalid provider catalog: ${providerId} models-dev runtime`,
+      );
     if (
       runtime.adapter === "codex" &&
       (auth.adapter !== "codex-oauth" || discovery.adapter !== "catalog")
@@ -412,6 +453,9 @@ export function parseProviderModelCatalog(
       discovery: {
         adapter: discovery.adapter,
         requireContextWindow: discovery.requireContextWindow === true,
+        ...(discovery.adapter === "models-dev"
+          ? { provider: (discovery.provider as string).trim() }
+          : {}),
       },
       runtime,
       restrictToListedModels: provider.restrictToListedModels,

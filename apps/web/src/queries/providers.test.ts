@@ -46,6 +46,8 @@ describe("a missing key", () => {
   it("matters for the kinds that cannot run without one", () => {
     expect(keyMissing({ kind: "deepseek", hasApiKey: false })).toBe(true);
     expect(keyMissing({ kind: "deepseek", hasApiKey: true })).toBe(false);
+    expect(keyMissing({ kind: "opencode", hasApiKey: false })).toBe(true);
+    expect(keyMissing({ kind: "opencode-go", hasApiKey: false })).toBe(true);
   });
 
   it("claims nothing for custom endpoints, which may be open, or for Codex, which signs in", () => {
@@ -139,6 +141,23 @@ describe("whether an agent can chat with its model", () => {
       message: "local:old 已不存在，请更换模型。",
     });
     expect(modelAvailability({ model: null }, open).state).toBe("not_set");
+  });
+
+  it("warns, without blocking, about a model its provider no longer lists", () => {
+    const listed = modelsOf(
+      view([
+        provider({
+          id: "go",
+          kind: "opencode-go",
+          models: [{ id: "glm-5.2", name: "GLM-5.2", delisted: true }],
+        }),
+      ]),
+    );
+    expect(listed[0]).toMatchObject({ available: true, delisted: true });
+    expect(modelAvailability({ model: "go:glm-5.2" }, listed)).toMatchObject({
+      state: "delisted",
+      message: "OpenCode Go 已不再提供 GLM-5.2，随时可能用不了，请换一个模型。",
+    });
   });
 
   it("does not block on a config it could not read", () => {

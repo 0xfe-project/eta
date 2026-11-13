@@ -188,6 +188,21 @@ export interface ProviderArgs {
     headers?: import("./types").ProviderHeaders | null;
   };
 }
+/** What `providers.discover` answers: the models to offer, and the ones listed but not usable. */
+export interface ProviderDiscoverResult {
+  models: import("./types").EtaModelConfig[];
+  unsupported?: import("./types").UnsupportedModel[];
+}
+/**
+ * What `providers.refresh` answers. `added` and `delisted` are model ids; `delisted` is only
+ * reported by providers whose catalog says what it no longer lists (models.dev).
+ */
+export interface ProviderRefreshResult {
+  revision: string;
+  models: number;
+  added?: string[];
+  delisted?: string[];
+}
 export type ProviderCall = {
   [A in ProviderAction]: Omit<CallFrame, "target" | "action" | "args"> & {
     target: "providers";

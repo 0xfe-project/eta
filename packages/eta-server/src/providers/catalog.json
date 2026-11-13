@@ -212,6 +212,46 @@
       ]
     },
     {
+      "id": "opencode",
+      "match": {
+        "kinds": ["opencode"],
+        "baseUrls": []
+      },
+      "auth": {
+        "adapter": "api-key",
+        "required": true,
+        "missingError": "key_required"
+      },
+      "discovery": { "adapter": "models-dev", "provider": "opencode" },
+      "runtime": {
+        "adapter": "openai-chat",
+        "thinking": "reasoning-effort",
+        "sessionHeader": "x-opencode-session"
+      },
+      "restrictToListedModels": true,
+      "models": []
+    },
+    {
+      "id": "opencode-go",
+      "match": {
+        "kinds": ["opencode-go"],
+        "baseUrls": []
+      },
+      "auth": {
+        "adapter": "api-key",
+        "required": true,
+        "missingError": "key_required"
+      },
+      "discovery": { "adapter": "models-dev", "provider": "opencode-go" },
+      "runtime": {
+        "adapter": "openai-chat",
+        "thinking": "reasoning-effort",
+        "sessionHeader": "x-opencode-session"
+      },
+      "restrictToListedModels": true,
+      "models": []
+    },
+    {
       "id": "openai-compatible",
       "match": { "kinds": ["openai-compatible"], "baseUrls": [] },
       "auth": { "adapter": "api-key", "required": false },

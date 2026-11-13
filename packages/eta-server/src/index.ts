@@ -158,6 +158,7 @@ export {
   type BuildModelsResult,
   buildProvider,
   type ProviderBuildFailure,
+  withSessionHeader,
 } from "./providers/runtime";
 export {
   defaultConfigPath,

@@ -20,6 +20,7 @@ import type { ProviderArgs, ProvidersView } from "@eta/client-contracts";
 import type { ProviderConfigStore } from "../providers/store";
 import type { WireService } from "../wire-service";
 import { Service } from "cordis";
+import { providerDefinitionForKind } from "../providers/catalog";
 import { discoverModels } from "../providers/discovery";
 import { publicModelMetadata } from "../providers/metadata";
 
@@ -240,7 +241,14 @@ export function providersPlugin(options: ProvidersPluginOptions) {
                   ? `discovery_http_${discovered.status}`
                   : `discovery_${discovered.failure}`,
               );
-            return { result: { models: discovered.models } };
+            return {
+              result: {
+                models: discovered.models,
+                ...(discovered.unsupported === undefined
+                  ? {}
+                  : { unsupported: discovered.unsupported }),
+              },
+            };
           }),
           wire.handle("providers", "refresh", async (call) => {
             const { id } = (call.args ?? {}) as Partial<
@@ -261,6 +269,30 @@ export function providersPlugin(options: ProvidersPluginOptions) {
             });
             if (discovered.error !== undefined)
               throw new Error(discovered.error);
+            // A catalog that lists everything the provider serves (models.dev) is followed both
+            // ways: new models come in, and ones it stopped listing are marked, not dropped.
+            if (
+              providerDefinitionForKind(provider.kind)?.discovery.adapter ===
+              "models-dev"
+            ) {
+              const synced = await options.store.syncModels(
+                id,
+                discovered.models,
+                new Date().toISOString(),
+              );
+              if (synced === undefined)
+                throw new Error(`no such provider: ${id}`);
+              latest = synced.view;
+              wire.pushNow("providers");
+              return {
+                result: {
+                  revision: latest.revision,
+                  models: discovered.models.length,
+                  added: synced.added,
+                  delisted: synced.delisted,
+                },
+              };
+            }
             // The refresh writes what it found, at the revision it read: a config that
             // changed while the request was in flight is refused rather than overwritten
             // with a list that is already stale.

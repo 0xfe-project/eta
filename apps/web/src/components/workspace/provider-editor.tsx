@@ -4,6 +4,7 @@ import type {
   ProviderInput,
   ProviderKind,
   ProviderSummary,
+  UnsupportedModel,
 } from "@eta/client-contracts";
 /**
  * Editing one provider, in place: the settings column turns into this form and Back brings the list
@@ -46,6 +47,7 @@ import {
   discoveryErrorMessage,
   fetchModelMetadata,
   isConfigChanged,
+  listsModelsDev,
   providerErrorMessage,
   providerLabel,
   useDeleteProvider,
@@ -222,6 +224,14 @@ function ModelCard({
         {row.reasoning ? (
           <span>{translateText("editor.reasoning")}</span>
         ) : null}
+        {row.source?.deprecated ? (
+          <span>{translateText("discovery.deprecated")}</span>
+        ) : null}
+        {row.source?.delisted ? (
+          <span className="text-state-warning">
+            {translateText("editor.delisted")}
+          </span>
+        ) : null}
       </div>
       <div className="settings-row">
         <div className="settings-row-label">
@@ -341,9 +351,18 @@ interface ModelPreview {
   connection: string;
   status: "loading" | "ready" | "failed" | "stale";
   models: EtaModelConfig[];
+  /** Listed by the catalog, but not usable through this provider yet (models.dev kinds). */
+  unsupported?: UnsupportedModel[];
   selected: ModelRow[];
   error?: string;
 }
+
+/** What a protocol package is called where a person reads it. */
+const PROTOCOL_NAMES: Record<string, string> = {
+  "@ai-sdk/anthropic": "Anthropic Messages",
+  "@ai-sdk/google": "Gemini",
+  "@ai-sdk/mistral": "Mistral",
+};
 
 export function ProviderEditor({
   provider,
@@ -408,12 +427,12 @@ export function ProviderEditor({
   const [search, setSearch] = useState("");
   const requestRef = useRef(0);
   const pendingRef = useRef(false);
+  // What the model list depends on. A models.dev list is public: typing the key after picking the
+  // preset must not throw away the list it already ticked.
   const connection = JSON.stringify([
     kind,
     baseUrl,
-    key,
-    clearKey,
-    headers,
+    ...(listsModelsDev(kind) ? [] : [key, clearKey, headers]),
     revision,
     savedId,
   ]);
@@ -565,14 +584,27 @@ export function ProviderEditor({
         ...(input.headers === undefined ? {} : { headers: input.headers }),
       });
       if (attempt !== requestRef.current) return;
-      setPreview((current) => ({
-        connection,
-        status: "ready",
-        models: [
-          ...new Map(result.models.map((model) => [model.id, model])).values(),
-        ],
-        selected: current?.selected ?? [],
-      }));
+      const listed = [
+        ...new Map(result.models.map((model) => [model.id, model])).values(),
+      ];
+      setPreview((current) => {
+        const selected = current?.selected ?? [];
+        return {
+          connection,
+          status: "ready",
+          models: listed,
+          ...(result.unsupported === undefined
+            ? {}
+            : { unsupported: result.unsupported }),
+          // A gateway whose list is a public catalog starts with everything current in it
+          // ticked, so picking it and adding a key is the whole setup. Deprecated models are
+          // offered, not chosen.
+          selected:
+            listsModelsDev(kind) && models.length === 0 && selected.length === 0
+              ? listed.filter((model) => !model.deprecated).map(rowOf)
+              : selected,
+        };
+      });
     } catch (error) {
       if (attempt !== requestRef.current) return;
       const message = discoveryErrorMessage(error);
@@ -587,6 +619,15 @@ export function ProviderEditor({
       if (attempt === requestRef.current) pendingRef.current = false;
     }
   };
+
+  // Picking a models.dev preset fetches its list at once: the list is public, so nothing the
+  // person has yet to type changes it. Run after render, when the connection is the new one.
+  const [autoFetch, setAutoFetch] = useState(false);
+  useEffect(() => {
+    if (!autoFetch) return;
+    setAutoFetch(false);
+    if (listsModelsDev(kind)) void fetchModels();
+  }, [autoFetch, kind, fetchModels]);
 
   const id =
     savedId ??
@@ -747,7 +788,13 @@ export function ProviderEditor({
             onValueChange={(next) => {
               setKind(next as ProviderKind);
               const preset = PRESETS.find(([kind]) => kind === next)?.[1];
-              if (preset) setBaseUrl(preset.baseUrl);
+              if (preset) {
+                setBaseUrl(preset.baseUrl);
+                // A preset's name is a fine first name: it is also what the id is made from.
+                if (provider === undefined && name.trim().length === 0)
+                  setName(preset.name);
+              }
+              if (listsModelsDev(next as ProviderKind)) setAutoFetch(true);
             }}
           >
             {PRESETS.map(([choice, preset]) => (
@@ -891,7 +938,13 @@ export function ProviderEditor({
               ? translateText("discovery.loading")
               : translateText("discovery.fetch")}
           </Button>
-          <p className="settings-hint">{translateText("discovery.hint")}</p>
+          <p className="settings-hint">
+            {translateText(
+              listsModelsDev(kind)
+                ? "discovery.modelsDevHint"
+                : "discovery.hint",
+            )}
+          </p>
           {preview !== undefined &&
           !fresh &&
           !fetching &&
@@ -956,6 +1009,9 @@ export function ProviderEditor({
                         {model.name && model.name !== model.id
                           ? ` · ${model.id}`
                           : ""}
+                        {model.deprecated
+                          ? ` · ${translateText("discovery.deprecated")}`
+                          : ""}
                         {existing
                           ? ` · ${translateText("discovery.inForm")}`
                           : ""}
@@ -973,44 +1029,74 @@ export function ProviderEditor({
                   {translateText("discovery.noMatches")}
                 </p>
               ) : null}
+              {preview.unsupported?.length ? (
+                <details className="settings-hint">
+                  <summary>
+                    {translateText("discovery.unsupportedModels", {
+                      count: preview.unsupported.length,
+                    })}
+                  </summary>
+                  <ul className="max-h-40 overflow-y-auto">
+                    {preview.unsupported.map((model) => (
+                      <li key={model.id} className="break-all">
+                        {model.name ?? model.id}
+                        {" · "}
+                        {model.reason === "protocol"
+                          ? translateText("discovery.unsupportedProtocol", {
+                              protocol:
+                                PROTOCOL_NAMES[model.protocol] ??
+                                model.protocol,
+                            })
+                          : translateText(
+                              model.reason === "endpoint"
+                                ? "discovery.unsupportedEndpoint"
+                                : "discovery.unsupportedInvalid",
+                            )}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null}
             </>
           ) : null}
         </div>
-        <div className="grid gap-2 mb-3">
-          <Button
-            type="button"
-            variant="outline"
-            className="justify-self-start"
-            disabled={
-              currentMetadata?.status === "loading" ||
-              allModels.length === 0 ||
-              !baseUrl.trim()
-            }
-            onClick={() => void supplementMetadata()}
-          >
-            {translateText(
-              currentMetadata?.status === "loading"
-                ? "metadata.loading"
-                : "metadata.fetch",
-            )}
-          </Button>
-          <p className="settings-hint">{translateText("metadata.hint")}</p>
-          {currentMetadata?.status === "failed" ? (
-            <p role="alert" className="settings-hint">
-              {translateText("metadata.failed", {
-                reason: currentMetadata.error,
-              })}
-            </p>
-          ) : null}
-          {currentMetadata?.status === "ready" ? (
-            <p role="status" className="settings-hint">
+        {listsModelsDev(kind) ? null : (
+          <div className="grid gap-2 mb-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="justify-self-start"
+              disabled={
+                currentMetadata?.status === "loading" ||
+                allModels.length === 0 ||
+                !baseUrl.trim()
+              }
+              onClick={() => void supplementMetadata()}
+            >
               {translateText(
-                currentMetadata.count ? "metadata.ready" : "metadata.empty",
-                { count: currentMetadata.count },
+                currentMetadata?.status === "loading"
+                  ? "metadata.loading"
+                  : "metadata.fetch",
               )}
-            </p>
-          ) : null}
-        </div>
+            </Button>
+            <p className="settings-hint">{translateText("metadata.hint")}</p>
+            {currentMetadata?.status === "failed" ? (
+              <p role="alert" className="settings-hint">
+                {translateText("metadata.failed", {
+                  reason: currentMetadata.error,
+                })}
+              </p>
+            ) : null}
+            {currentMetadata?.status === "ready" ? (
+              <p role="status" className="settings-hint">
+                {translateText(
+                  currentMetadata.count ? "metadata.ready" : "metadata.empty",
+                  { count: currentMetadata.count },
+                )}
+              </p>
+            ) : null}
+          </div>
+        )}
         {allModels.length === 0 ? (
           <p className="settings-hint">{translateText("editor.noModels")}</p>
         ) : null}

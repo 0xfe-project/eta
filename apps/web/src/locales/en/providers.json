@@ -13,10 +13,19 @@
   "refresh": {
     "done": "{{providerName}}: found {{count}} models",
     "done_one": "{{providerName}}: found {{count}} model",
-    "done_other": "{{providerName}}: found {{count}} models"
+    "done_other": "{{providerName}}: found {{count}} models",
+    "synced": "{{providerName}}: {{count}} new models",
+    "synced_one": "{{providerName}}: {{count}} new model",
+    "synced_other": "{{providerName}}: {{count}} new models",
+    "delisted": "{{providerName}} no longer lists {{models}}. They stay until you remove them.",
+    "delisted_one": "{{providerName}} no longer lists {{models}}. It stays until you remove it.",
+    "delisted_other": "{{providerName}} no longer lists {{models}}. They stay until you remove them.",
+    "delistedAgents": "Used by {{agents}}: pick another model."
   },
   "models": {
-    "keyMissing": "{{providerName}} has no API key"
+    "keyMissing": "{{providerName}} has no API key",
+    "delisted": "{{providerName}} no longer lists {{modelName}}; it may stop working. Select another model.",
+    "delistedSuffix": " (no longer listed)"
   },
   "errors": {
     "unavailable": "The host has no model services.",
@@ -73,7 +82,8 @@
     "responsesHint": "Uses /responses; supports OpenAI API keys and compatible services.",
     "baseUrlHint": "Editable for proxies or gateways. The OpenAI API URL is https://api.openai.com/v1.",
     "nativeCodex": "Sign in to and manage Codex subscriptions in the Accounts section of Model providers; no provider entry is needed.",
-    "legacyCodex": "Legacy Codex config (not migrated). Use Accounts for subscriptions; config and model references are unchanged."
+    "legacyCodex": "Legacy Codex config (not migrated). Use Accounts for subscriptions; config and model references are unchanged.",
+    "delisted": "No longer listed"
   },
   "discovery": {
     "fetch": "Get model list",
@@ -91,7 +101,15 @@
     "response": "The model endpoint returned an invalid format: expected JSON with a data array. Check the URL and retry.",
     "timeout": "Getting the model list timed out. Check the network and retry.",
     "http": "The model endpoint returned HTTP {{status}}. Check the URL, key, headers and access permissions, then retry.",
-    "configChanged": "Configuration changed elsewhere. Go back and reopen this form before fetching again."
+    "configChanged": "Configuration changed elsewhere. Go back and reopen this form before fetching again.",
+    "modelsDevHint": "From models.dev; no key needed. Selection is a preview until you save. Refresh models later to pick up new ones.",
+    "deprecated": "deprecated",
+    "unsupportedModels": "{{count}} models not supported yet",
+    "unsupportedModels_one": "{{count}} model not supported yet",
+    "unsupportedModels_other": "{{count}} models not supported yet",
+    "unsupportedProtocol": "{{protocol}} protocol",
+    "unsupportedEndpoint": "served at another address",
+    "unsupportedInvalid": "incomplete data on models.dev"
   },
   "metadata": {
     "fetch": "Supplement public model metadata",

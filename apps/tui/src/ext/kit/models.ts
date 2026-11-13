@@ -26,6 +26,8 @@ const PRESET_NAMES: Partial<Record<ProviderKind, string>> = {
   deepseek: "DeepSeek",
   "zai-coding-cn": "GLM Coding Plan (CN)",
   zai: "GLM Coding Plan (Global)",
+  opencode: "OpenCode Zen",
+  "opencode-go": "OpenCode Go",
 };
 
 /** What a provider is called: its own name, else its kind's, else its id. */

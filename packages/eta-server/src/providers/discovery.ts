@@ -15,11 +15,20 @@
  *   keeps its name, its `defaultThinking`, its overrides, and its headers; what discovery adds is
  *   the capability metadata the endpoint knows and the config file does not.
  */
-import type { ProviderHeaders } from "@eta/client-contracts";
+import type {
+  ModelApi,
+  ProviderHeaders,
+  UnsupportedModel,
+} from "@eta/client-contracts";
 import type { ProviderReference } from "./catalog";
 import type { EtaModelConfig } from "./config-types";
 import { providerDefinitionForKind, resolveConfiguredModels } from "./catalog";
 import { applyProviderHeaders } from "./config-types";
+import {
+  fetchModelsDev,
+  modelsDevProvider,
+  parseModelsDevModel,
+} from "./metadata";
 
 /** What a discovery call needs: where to ask, how to authenticate, and who to tell. */
 export interface DiscoveryOptions {
@@ -33,6 +42,8 @@ export interface DiscoveryOptions {
 
 export interface DiscoveryResult {
   models: EtaModelConfig[];
+  /** Listed by the provider's catalog, but not usable through this provider (models.dev only). */
+  unsupported?: UnsupportedModel[];
   /** Why nothing came back, when nothing did. */
   error?: string;
   failure?: "unsupported" | "network" | "http" | "response";
@@ -42,7 +53,10 @@ export interface DiscoveryResult {
 /** Whether this provider's models come from its own endpoint. */
 export function discoversModels(reference: ProviderReference): boolean {
   const definition = providerDefinitionForKind(reference.kind);
-  return definition?.discovery.adapter === "openai-models";
+  return (
+    definition?.discovery.adapter === "openai-models" ||
+    definition?.discovery.adapter === "models-dev"
+  );
 }
 
 /** Whether a discovered model has to declare a context window to be usable. */
@@ -66,6 +80,11 @@ export async function discoverModels(
   options: DiscoveryOptions,
 ): Promise<DiscoveryResult> {
   const definition = providerDefinitionForKind(options.reference.kind);
+  if (
+    definition?.discovery.adapter === "models-dev" &&
+    definition.discovery.provider !== undefined
+  )
+    return await discoverFromModelsDev(options, definition.discovery.provider);
   if (
     definition === undefined ||
     definition.discovery.adapter !== "openai-models"
@@ -153,4 +172,108 @@ function numberOr(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0
     ? value
     : undefined;
+}
+
+/**
+ * The AI SDK packages whose protocol eta speaks, and as which API. `@ai-sdk/openai` is the
+ * Responses API (it is what the AI SDK's `openai()` provider posts to); Anthropic Messages,
+ * Gemini and Mistral are listed as unsupported until eta speaks them.
+ */
+const MODELS_DEV_PROTOCOLS: Readonly<Record<string, ModelApi>> = {
+  "@ai-sdk/openai-compatible": "openai-completions",
+  "@ai-sdk/openai": "openai-responses",
+};
+
+function sameEndpoint(left: string, right: string): boolean {
+  try {
+    return (
+      new URL(left).href.replace(/\/+$/, "") ===
+      new URL(right).href.replace(/\/+$/, "")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A provider whose model list is its models.dev entry: no key is involved (the catalog is
+ * public), and every listed model is accounted for — usable ones in `models`, the rest in
+ * `unsupported` with the reason, so a model never just goes missing.
+ *
+ * A model is usable when its protocol is one eta speaks *and* its endpoint is this provider's
+ * base URL. The second rule is about the key: the catalog is someone else's data, and a model
+ * listed at another address must not be where this provider's key is sent.
+ *
+ * Deprecated models are returned with `deprecated: true`; whether to offer them is the caller's.
+ */
+async function discoverFromModelsDev(
+  options: DiscoveryOptions,
+  providerId: string,
+): Promise<DiscoveryResult> {
+  let provider;
+  try {
+    provider = modelsDevProvider(
+      await fetchModelsDev(options.fetch ?? fetch, options.signal),
+      providerId,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const status = /HTTP (\d{3})$/.exec(message)?.[1];
+    if (status !== undefined)
+      return {
+        models: [],
+        error: `the model list came back ${status}`,
+        failure: "http",
+        status: Number(status),
+      };
+    return {
+      models: [],
+      error: message,
+      failure: message.startsWith("Invalid public model metadata")
+        ? "response"
+        : "network",
+    };
+  }
+  if (provider === undefined)
+    return {
+      models: [],
+      error: `models.dev has no ${providerId} entry`,
+      failure: "response",
+    };
+  const models: EtaModelConfig[] = [];
+  const unsupported: UnsupportedModel[] = [];
+  for (const id of Object.keys(provider.models)) {
+    let parsed;
+    try {
+      parsed = parseModelsDevModel(id, provider.models[id], provider);
+    } catch {
+      unsupported.push({ id, protocol: "", reason: "invalid" });
+      continue;
+    }
+    const { npm, api: endpoint, ...capabilities } = parsed;
+    const api = npm === undefined ? undefined : MODELS_DEV_PROTOCOLS[npm];
+    if (api === undefined) {
+      unsupported.push({
+        id,
+        ...(parsed.name === undefined ? {} : { name: parsed.name }),
+        protocol: npm ?? "",
+        reason: "protocol",
+      });
+      continue;
+    }
+    if (
+      endpoint === undefined ||
+      !sameEndpoint(endpoint, options.reference.baseUrl)
+    ) {
+      unsupported.push({
+        id,
+        ...(parsed.name === undefined ? {} : { name: parsed.name }),
+        protocol: npm ?? "",
+        reason: "endpoint",
+      });
+      continue;
+    }
+    models.push({ ...capabilities, api });
+  }
+  return { models, unsupported };
 }

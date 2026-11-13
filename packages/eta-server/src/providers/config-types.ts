@@ -10,6 +10,7 @@
  */
 
 import type {
+  ModelApi,
   ProviderHeaders,
   ProviderKind,
   ProviderSummary,
@@ -65,6 +66,12 @@ export interface ModelCapabilities {
 /** A model as the config file holds it: capabilities plus the user's own choices. */
 export interface EtaModelConfig extends ModelCapabilities {
   id: string;
+  /** The protocol this model is served over; absent means the provider kind's own. */
+  api?: ModelApi;
+  /** Listed by the provider's catalog as deprecated. */
+  deprecated?: boolean;
+  /** No longer listed by the provider's catalog: kept so an agent using it hears about it. */
+  delisted?: boolean;
   /** User preference; omission follows the provider default. */
   defaultThinking?: ThinkingLevel;
   /** Manual corrections for custom endpoints, kept across discovery refreshes. */

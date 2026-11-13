@@ -26,6 +26,7 @@ import type { SessionHooks } from "../session-hooks";
 import type { MachineLink } from "./hub";
 import type { MachineStore } from "./store";
 import { forwardedOptions } from "@eta/daemon";
+import { withSessionHeader } from "@eta/server";
 
 export interface LinkServiceDeps {
   conversations: ConversationStore;
@@ -106,7 +107,12 @@ export function serveLink(link: MachineLink, deps: LinkServiceDeps): void {
       context: never;
       options?: Record<string, unknown>;
     };
-    const models = deps.models();
+    const shared = deps.models();
+    // A daemon's session is generated here, so a gateway that routes by session hears its id.
+    const models =
+      shared === undefined
+        ? undefined
+        : withSessionHeader(shared, params.session);
     const model = models?.getModel(params.model.provider, params.model.id);
     if (models === undefined || model === undefined) {
       throw new Error(
