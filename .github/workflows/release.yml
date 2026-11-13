@@ -28,7 +28,7 @@ jobs:
       contents: read
       id-token: write
     with:
-      command: check
+      all: true
 
   prepare:
     runs-on: ubuntu-latest
