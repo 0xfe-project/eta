@@ -2,6 +2,7 @@ import type {
   BoardTaskDetail,
   BoardTaskView,
   CaptainAssignmentView,
+  CaptainGroupOutcomeData,
   CaptainGroupProposal,
   CaptainGroupProposalRowData,
   CaptainGroupResult,
@@ -989,6 +990,13 @@ export class CaptainService {
         conversationId,
         text: groupOutcome(operation, proposal),
         author: "system",
+        // Captain's context, not the user's: the card already shows how it ended.
+        data: {
+          captainGroupOutcome: {
+            operationId: operation.id,
+            status: operation.status,
+          } satisfies CaptainGroupOutcomeData,
+        },
         mentions: [captain.agentId],
         mode: "queue",
       });
@@ -1424,6 +1432,8 @@ export class CaptainService {
         conversationId: director.conversationId,
         text: reviewPrompt(pending),
         author: "system",
+        // Marks the row as a review for renderers; the reviews themselves stay in the text.
+        data: { captainReview: { reviewIds: ids } },
         mentions: [],
         mode: "queue",
         dispatched: ({ message, replies }) => {

@@ -108,6 +108,22 @@ function items(input: Partial<ItemsInput>): TranscriptItem[] {
   });
 }
 
+describe("what Captain is told about its group proposal", () => {
+  it("is not drawn: the card already says how it ended", () => {
+    const outcome = row({
+      author: "system",
+      text: 'Your proposed group "Launch" (operation 6f1c2a3b-0d4e-4f5a-8b6c-7d8e9f0a1b2c) was confirmed by the user and created.',
+      data: {
+        captainGroupOutcome: {
+          operationId: "6f1c2a3b-0d4e-4f5a-8b6c-7d8e9f0a1b2c",
+          status: "applied",
+        },
+      },
+    });
+    expect(items({ rows: [outcome] })).toEqual([]);
+  });
+});
+
 describe("a user row", () => {
   it("is a user item keyed by the row, with its valid pastes and its files", () => {
     const user = row({

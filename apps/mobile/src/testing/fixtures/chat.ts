@@ -497,6 +497,27 @@ function cardRows(): MessageView[] {
       text: "wake budget used",
       data: { event: "wake_budget", budget: 5 },
     }),
+    // What Captain is told about its group proposal: its context, not drawn. The second was
+    // written before the host marked it.
+    row(id, 7, {
+      author: "system",
+      text: 'Your proposed group "Launch" (operation 6f1c2a3b-0d4e-4f5a-8b6c-7d8e9f0a1b2c) was confirmed by the user and created.',
+      data: {
+        captainGroupOutcome: {
+          operationId: "6f1c2a3b-0d4e-4f5a-8b6c-7d8e9f0a1b2c",
+          status: "applied",
+        },
+      },
+    }),
+    row(id, 8, {
+      author: "system",
+      text: 'Your proposed group "Docs" (operation 0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d) was rejected by the user. Nothing was created.',
+    }),
+    row(id, 9, {
+      author: "system",
+      text: "<captain-review>\n1. [task_stalled] Task #128 has not moved.\n{}\n2. [inbox_pending] A question waits.\n{}\n</captain-review>",
+      data: { captainReview: { reviewIds: ["review-1", "review-2"] } },
+    }),
   ];
 }
 
@@ -764,9 +785,8 @@ export function installChat(host: FakeHost): void {
     host.patch(
       "agents",
       "list",
-      AGENTS.map(
-        (agent): AgentView =>
-          agent.id === "agent-ache" ? { ...agent, model: null } : agent,
+      AGENTS.map((agent): AgentView =>
+        agent.id === "agent-ache" ? { ...agent, model: null } : agent,
       ),
     );
     // After every fixture: `create` installs the providers later than this.

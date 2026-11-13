@@ -203,8 +203,7 @@ function FailureBox(props: {
   const text = () => {
     if (line()?.sameAsNext) return t("chat.failure.sameAsNext");
     const key = FAILURE_KEYS[code() as keyof typeof FAILURE_KEYS] as
-      | (typeof FAILURE_KEYS)[keyof typeof FAILURE_KEYS]
-      | undefined;
+      (typeof FAILURE_KEYS)[keyof typeof FAILURE_KEYS] | undefined;
     const reason = t(key ?? "chat.failure.failed");
     // The host's own words say why a run failed; for a restart they only repeat the reason.
     return code() === "restart" || props.message.text === ""
@@ -436,6 +435,24 @@ function systemText(message: MessageView): string {
   return message.text;
 }
 
+/**
+ * A message the host wrote: Captain's review prompt, which the phone names in one line instead of
+ * printing the English it gives Captain. (The group proposal outcome never gets here: see
+ * `taskRowsByTurn`.)
+ */
+function hostMessageText(message: MessageView): string {
+  const marked = message.data.captainReview as
+    { reviewIds?: unknown } | null | undefined;
+  if (Array.isArray(marked?.reviewIds))
+    return t("chat.system.captainReview", { count: marked.reviewIds.length });
+  // A review written before the host marked it.
+  if (message.text.startsWith("<captain-review>"))
+    return t("chat.system.captainReview", {
+      count: message.text.match(/^\d+\. \[/gm)?.length ?? 0,
+    });
+  return message.text;
+}
+
 function MessageRow(props: {
   message: MessageView;
   chat: Chat;
@@ -455,17 +472,26 @@ function MessageRow(props: {
       </If>
       <If when={kind() === "message" || kind() === "mention"}>
         <If
-          when={props.message.author === "user"}
+          when={props.message.author === "system"}
           else={
-            <Reply
-              message={props.message}
-              chat={props.chat}
-              lines={props.lines}
-              onResend={props.onResend}
-            />
+            <If
+              when={props.message.author === "user"}
+              else={
+                <Reply
+                  message={props.message}
+                  chat={props.chat}
+                  lines={props.lines}
+                  onResend={props.onResend}
+                />
+              }
+            >
+              <UserRow message={props.message} />
+            </If>
           }
         >
-          <UserRow message={props.message} />
+          <Text class="text-sm leading-[18px] text-muted-foreground">
+            {hostMessageText(props.message)}
+          </Text>
         </If>
       </If>
     </>
@@ -524,9 +550,11 @@ export function Transcript(props: {
       ...mine()
         .filter((item) => !arrived.has(item.id))
         .reverse()
-        .map(
-          (item): Item => ({ key: item.id, type: "outgoing", outgoing: item }),
-        ),
+        .map((item): Item => ({
+          key: item.id,
+          type: "outgoing",
+          outgoing: item,
+        })),
       ...chat
         .grouped()
         .rows.filter(

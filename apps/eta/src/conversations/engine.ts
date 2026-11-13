@@ -116,8 +116,7 @@ export interface EngineOptions {
   pluginsRead?: (() => Promise<void>) | undefined;
   /** Product state (memory pause, Captain membership) that makes an open session stale. */
   sessionStamp?:
-    | ((conversationId: string, agentId: string) => string)
-    | undefined;
+    ((conversationId: string, agentId: string) => string) | undefined;
   /**
    * Where the sessions of a project on a daemon machine live. Without one, such a project's
    * replies fail as unavailable, which is what a host with no link to other machines should say.
@@ -406,6 +405,11 @@ export class Engine {
      * agents read is `text` alone, with the blocks in it as the plain text they stand for.
      */
     blocks?: readonly (readonly [number, number])[] | undefined;
+    /**
+     * Host-only marks merged into the row's `data`, for renderers (e.g. `captainGroupOutcome`). The
+     * public conversations.send action never sets it, and it never reaches the prompt.
+     */
+    data?: Readonly<Record<string, unknown>> | undefined;
     mentions: readonly string[];
     mode: "queue" | "steer";
     clientId?: string | undefined;
@@ -485,6 +489,7 @@ export class Engine {
         mentions: routing.named,
         rootMessageId: input.rootMessageId ?? id,
         data: {
+          ...input.data,
           // Held: written, but not a message of the conversation yet — see `held` above. `status`
           // is left alone on purpose: `queued` means "a reply waiting to run", and every in-flight
           // query in the store would pick a user row up as one.

@@ -623,9 +623,8 @@ describe("captain controls", () => {
   });
 
   it("redacts credentials from text and structured tool results", async () => {
-    const { redactJson, redactToolResult } = await import(
-      "../src/captain/redact"
-    );
+    const { redactJson, redactToolResult } =
+      await import("../src/captain/redact");
     expect(
       redactJson({ authorization: "Bearer sk-123456789012345" }),
     ).toContain("[REDACTED:secret]");
@@ -1745,6 +1744,15 @@ describe("captain controls", () => {
     expect(batch).toHaveLength(2);
     expect(new Set(batch.map((review) => review.messageId)).size).toBe(1);
     expect(batch[0]!.messageId).not.toBeNull();
+    // Marked for renderers, which draw it as a review rather than as Captain's prompt.
+    const prompt = w
+      .rows(direct.conversationId)
+      .find((row) => row.id === batch[0]!.messageId)!;
+    expect(
+      (prompt.data.captainReview as { reviewIds: string[] }).reviewIds
+        .slice()
+        .sort(),
+    ).toEqual([first.id, second.id].sort());
   });
 
   it("caps a review batch by count and prompt characters", async () => {
