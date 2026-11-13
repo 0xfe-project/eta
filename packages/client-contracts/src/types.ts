@@ -189,6 +189,8 @@ export type ProviderKind =
   | "deepseek"
   | "zai-coding-cn"
   | "zai"
+  | "opencode"
+  | "opencode-go"
   | "openai-codex"
   | "openai-compatible"
   | "openai-responses";
@@ -224,8 +226,20 @@ export interface ModelCapabilities {
     | "max";
 }
 
+/**
+ * The wire protocol one model is served over, when its provider mixes them (OpenCode serves some
+ * models over Chat Completions and others over Responses from the same endpoint). Absent means
+ * the provider kind's own protocol.
+ */
+export type ModelApi = "openai-completions" | "openai-responses";
+
 export interface EtaModelConfig extends ModelCapabilities {
   id: string;
+  api?: ModelApi;
+  /** The provider's catalog still lists it, as deprecated: kept, but not added by a refresh. */
+  deprecated?: boolean;
+  /** The provider's catalog no longer lists it; a refresh keeps it so nothing fails silently. */
+  delisted?: boolean;
   defaultThinking?:
     | "off"
     | "minimal"
@@ -235,6 +249,18 @@ export interface EtaModelConfig extends ModelCapabilities {
     | "xhigh"
     | "max";
   overrides?: ModelCapabilities;
+}
+
+/**
+ * A model the provider's catalog lists but eta cannot use yet: its protocol (Anthropic Messages,
+ * Gemini, Mistral) or its endpoint is not one this provider speaks. Shown, never silently dropped.
+ */
+export interface UnsupportedModel {
+  id: string;
+  name?: string;
+  /** The catalog's own name for the protocol, e.g. `@ai-sdk/anthropic`. */
+  protocol: string;
+  reason: "protocol" | "endpoint" | "invalid";
 }
 
 /** One provider as a client sees it: the key is a boolean, never the secret. */

@@ -66,10 +66,13 @@ function AgentRow({ agent }: { agent: AgentView }) {
               "inline-flex max-w-full items-center gap-1 text-xs",
               availability.state === "ok"
                 ? "text-muted-foreground"
-                : "text-destructive",
+                : availability.state === "delisted"
+                  ? "text-state-warning"
+                  : "text-destructive",
             )}
             title={
-              availability.state === "unavailable"
+              availability.state === "unavailable" ||
+              availability.state === "delisted"
                 ? availability.message
                 : undefined
             }
@@ -78,7 +81,8 @@ function AgentRow({ agent }: { agent: AgentView }) {
               <WarningIcon aria-hidden="true" className="size-3.5 shrink-0" />
             ) : null}
             <span className="truncate">{modelName}</span>
-            {availability.state === "unavailable" ? (
+            {availability.state === "unavailable" ||
+            availability.state === "delisted" ? (
               <span className="sr-only">：{availability.message}</span>
             ) : null}
           </span>

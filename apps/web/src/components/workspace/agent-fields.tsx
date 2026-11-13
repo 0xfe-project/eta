@@ -76,7 +76,9 @@ export function ModelSelect({
             >
               {model.name}
               {model.available
-                ? ""
+                ? model.delisted
+                  ? translateText("providers:models.delistedSuffix")
+                  : ""
                 : translateText("common:status.unavailableSuffix")}
             </SelectOption>
           ))}

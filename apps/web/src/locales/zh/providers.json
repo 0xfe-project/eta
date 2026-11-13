@@ -13,10 +13,17 @@
   "refresh": {
     "done": "{{providerName}}：读到 {{count}} 个模型",
     "done_one": "{{providerName}}：读到 {{count}} 个模型",
-    "done_other": "{{providerName}}：读到 {{count}} 个模型"
+    "done_other": "{{providerName}}：读到 {{count}} 个模型",
+    "synced": "{{providerName}}：新增 {{count}} 个模型",
+    "synced_one": "{{providerName}}：新增 {{count}} 个模型",
+    "synced_other": "{{providerName}}：新增 {{count}} 个模型",
+    "delisted": "{{providerName}} 已不再提供 {{models}}，在你删除前会一直保留。",
+    "delistedAgents": "{{agents}} 正在用，请给它们换个模型。"
   },
   "models": {
-    "keyMissing": "{{providerName}} 还没有 API key"
+    "keyMissing": "{{providerName}} 还没有 API key",
+    "delisted": "{{providerName}} 已不再提供 {{modelName}}，随时可能用不了，请换一个模型。",
+    "delistedSuffix": "（已下架）"
   },
   "errors": {
     "unavailable": "宿主没有启用模型服务。",
@@ -73,7 +80,8 @@
     "responsesHint": "使用 /responses 接口；支持 OpenAI API Key 及兼容服务。",
     "baseUrlHint": "可修改为代理或中转地址。OpenAI API 地址为 https://api.openai.com/v1。",
     "nativeCodex": "Codex 订阅统一在模型服务的「账号」区登录和管理，不需要新增 provider。",
-    "legacyCodex": "旧 Codex 配置（未迁移）。订阅请使用「账号」入口；配置和模型引用未改动。"
+    "legacyCodex": "旧 Codex 配置（未迁移）。订阅请使用「账号」入口；配置和模型引用未改动。",
+    "delisted": "已下架"
   },
   "discovery": {
     "fetch": "获取模型列表",
@@ -91,7 +99,15 @@
     "response": "模型接口返回格式不正确，应为包含 data 数组的 JSON。请检查地址后重试。",
     "timeout": "获取模型列表超时，请检查网络后重试。",
     "http": "模型接口返回 HTTP {{status}}，请检查地址、Key、请求头和访问权限后重试。",
-    "configChanged": "配置在别处被改过，请返回并重新打开表单后再获取。"
+    "configChanged": "配置在别处被改过，请返回并重新打开表单后再获取。",
+    "modelsDevHint": "列表来自 models.dev，不需要 Key。勾选只在表单中预览，保存后才生效；以后“刷新模型”会补上新模型。",
+    "deprecated": "已弃用",
+    "unsupportedModels": "{{count}} 个模型暂不支持",
+    "unsupportedModels_one": "{{count}} 个模型暂不支持",
+    "unsupportedModels_other": "{{count}} 个模型暂不支持",
+    "unsupportedProtocol": "{{protocol}} 协议",
+    "unsupportedEndpoint": "接口地址不同",
+    "unsupportedInvalid": "models.dev 上的资料不完整"
   },
   "metadata": {
     "fetch": "补充公共模型资料",

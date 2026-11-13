@@ -3,7 +3,10 @@ import type {
   EtaModelConfig,
   LlmModel,
   ProviderArgs,
+  ProviderDiscoverResult,
   ProviderInput,
+  ProviderKind,
+  ProviderRefreshResult,
   ProviderSummary,
   ProvidersView,
 } from "@eta/client-contracts";
@@ -39,6 +42,18 @@ export function providerLabel(
     ([kind]) => kind === provider.kind,
   )?.[1];
   return provider.name ?? preset?.name ?? provider.id;
+}
+
+/**
+ * Kinds whose model list is their models.dev entry (OpenCode Zen and Go): the list needs no key,
+ * says which models eta cannot speak to yet, and a refresh follows it both ways.
+ */
+const MODELS_DEV_KINDS: ReadonlySet<ProviderKind> = new Set([
+  "opencode",
+  "opencode-go",
+]);
+export function listsModelsDev(kind: ProviderKind): boolean {
+  return MODELS_DEV_KINDS.has(kind);
 }
 
 /** Codex signs in through ChatGPT instead of holding a key. */
@@ -98,6 +113,8 @@ export interface Model {
   default: boolean;
   /** Why it cannot be used, when the gateway says (an expired login, an exhausted quota). */
   unavailableReason?: string | undefined;
+  /** Its provider's catalog no longer lists it: it may stop working. */
+  delisted?: boolean | undefined;
 }
 
 export function modelsOf(view: ProvidersView): Model[] {
@@ -113,6 +130,7 @@ export function modelsOf(view: ProvidersView): Model[] {
         contextWindow: model.contextWindow,
         available: !missing,
         default: false,
+        ...(model.delisted === true ? { delisted: true } : {}),
       }),
     );
   });
@@ -203,7 +221,9 @@ export function useNeedsAttention(): boolean {
 export type ModelAvailability =
   | { state: "ok"; model: Model | undefined }
   | { state: "not_set" }
-  | { state: "unavailable"; model: Model | undefined; message: string };
+  | { state: "unavailable"; model: Model | undefined; message: string }
+  /** Still usable, but its provider no longer lists it: worth a warning, not a block. */
+  | { state: "delisted"; model: Model; message: string };
 
 /**
  * Whether an agent can chat with its model. The host enforces the same rule; this only keeps the
@@ -243,6 +263,15 @@ export function modelAvailability(
       }),
     };
   }
+  if (model.delisted === true)
+    return {
+      state: "delisted",
+      model,
+      message: translate("providers:models.delisted", {
+        modelName: model.name,
+        providerName: model.providerName,
+      }),
+    };
   return { state: "ok", model };
 }
 
@@ -340,20 +369,18 @@ export function useDeleteProvider() {
 
 /** Ask the provider's own endpoint which models it serves, and keep the answer. */
 export function useRefreshProvider() {
-  return useWireMutation<
-    ProviderArgs["refresh"],
-    { revision: string; models: number }
-  >(TARGET, "refresh", { timeoutMs: 60_000 });
+  return useWireMutation<ProviderArgs["refresh"], ProviderRefreshResult>(
+    TARGET,
+    "refresh",
+    { timeoutMs: 60_000 },
+  );
 }
 
 /** Preview only: unlike refresh, this must not write configuration or expose raw failures. */
 export function discoverProviderModels(input: ProviderArgs["discover"]) {
-  return getWire().call<{ models: EtaModelConfig[] }>(
-    TARGET,
-    "discover",
-    input,
-    { timeoutMs: 60_000 },
-  );
+  return getWire().call<ProviderDiscoverResult>(TARGET, "discover", input, {
+    timeoutMs: 60_000,
+  });
 }
 
 /** Public request deliberately carries no key, headers or subscription credentials. */

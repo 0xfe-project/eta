@@ -30,9 +30,12 @@ import type {
   ProviderStreams,
   ThinkingLevelMap,
 } from "@earendil-works/pi-ai";
+import type { ModelApi, ProviderKind } from "@eta/client-contracts";
 import type { ProviderRuntimeDefinition } from "./catalog";
 import type { EtaModelConfig, EtaProviderConfig } from "./config-types";
 import { createModels, createProvider } from "@earendil-works/pi-ai";
+import { opencodeProvider } from "@earendil-works/pi-ai/providers/opencode";
+import { opencodeGoProvider } from "@earendil-works/pi-ai/providers/opencode-go";
 import { providerDefinitionForKind } from "./catalog";
 import {
   effectiveModel,
@@ -42,11 +45,9 @@ import {
 } from "./config-types";
 import { discoverModels } from "./discovery";
 
-/** The pi-ai APIs this server builds providers for, loaded once. */
-async function apiFor(
-  adapter: ProviderRuntimeDefinition["adapter"],
-): Promise<ProviderStreams> {
-  if (adapter === "openai-responses") {
+/** The pi-ai APIs this server builds providers for, loaded on first use. */
+async function apiFor(api: ModelApi): Promise<ProviderStreams> {
+  if (api === "openai-responses") {
     const module = await import("@earendil-works/pi-ai/api/openai-responses");
     return {
       stream: module.stream,
@@ -58,6 +59,49 @@ async function apiFor(
     stream: module.stream,
     streamSimple: module.streamSimple,
   } as ProviderStreams;
+}
+
+/** The protocol a provider's models speak unless a model says otherwise. */
+function kindApi(runtime: ProviderRuntimeDefinition): ModelApi {
+  return runtime.adapter === "openai-responses"
+    ? "openai-responses"
+    : "openai-completions";
+}
+
+/**
+ * OpenCode's gateways, and pi-ai's own description of them. The model list and capabilities come
+ * from models.dev (see discovery); what pi-ai adds is the transport quirks of each model behind
+ * the gateway (DeepSeek's thinking format, which fields a gateway takes), which models.dev does
+ * not describe. A model pi-ai does not know yet gets the gateway's common settings.
+ */
+const OPENCODE: Partial<Record<ProviderKind, () => Provider<Api>>> = {
+  opencode: opencodeProvider,
+  "opencode-go": opencodeGoProvider,
+};
+const opencodeCatalogs = new Map<ProviderKind, Provider<Api>>();
+function opencodeCompat(
+  kind: ProviderKind,
+  id: string,
+  api: ModelApi,
+): Model<Api>["compat"] {
+  const create = OPENCODE[kind];
+  if (create === undefined) return undefined;
+  let catalog = opencodeCatalogs.get(kind);
+  if (catalog === undefined) {
+    catalog = create();
+    opencodeCatalogs.set(kind, catalog);
+  }
+  const known = catalog
+    .getModels()
+    .find((model) => model.id === id && model.api === api);
+  if (known !== undefined) return known.compat;
+  return api === "openai-completions"
+    ? {
+        supportsStore: false,
+        supportsDeveloperRole: false,
+        maxTokensField: "max_tokens",
+      }
+    : undefined;
 }
 
 /** Headers as the wire takes them: `null` entries are removals, so they are not sent. */
@@ -132,13 +176,18 @@ function runtimeModel(
   configured: EtaModelConfig,
   headers: Record<string, string> | undefined,
   runtime: ProviderRuntimeDefinition,
-): Model<"openai-completions"> {
+): Model<ModelApi> {
   const model = effectiveModel(configured);
   const contextWindow = model.contextWindow ?? 128_000;
+  const api = model.api ?? kindApi(runtime);
+  const compat =
+    provider.kind === undefined
+      ? undefined
+      : opencodeCompat(provider.kind, model.id, api);
   return {
     id: model.id,
     name: model.name ?? model.id,
-    api: "openai-completions",
+    api,
     provider: provider.id,
     baseUrl: provider.baseUrl,
     ...(headers === undefined ? {} : { headers }),
@@ -156,8 +205,8 @@ function runtimeModel(
     // ever asked for it: eta declares no constrained sampling on any tool, so the key has
     // only ever gone out as `strict: false`. Turning it off also keeps the raw JSON
     // Schema, instead of the strict dialect `makeStrictJsonSchema` would rewrite it into.
-    compat: { supportsStrictMode: false },
-  } as Model<"openai-completions">;
+    compat: { ...compat, supportsStrictMode: false },
+  } as Model<ModelApi>;
 }
 
 /** What one provider could not be built for, and why. */
@@ -223,7 +272,14 @@ export async function buildProvider(
   const models = provider.models.map((configured) =>
     runtimeModel(provider, configured, headers, definition.runtime),
   );
-  const api = await apiFor(definition.runtime.adapter);
+  // One implementation per protocol the models use: a provider can mix them (OpenCode), and
+  // pi-ai dispatches each model to the one its `api` names.
+  const api: Partial<Record<ModelApi, ProviderStreams>> = {};
+  for (const name of new Set([
+    kindApi(definition.runtime),
+    ...models.map((model) => model.api),
+  ]))
+    api[name] = await apiFor(name);
   return createProvider({
     id: provider.id,
     ...(provider.name === undefined ? {} : { name: provider.name }),
@@ -235,7 +291,8 @@ export async function buildProvider(
     // A provider that publishes its model list gets a refresh that asks it — with the same
     // headers and key as a request, which is the only way a custom User-Agent endpoint can
     // have working chat and a working model list at the same time.
-    ...(definition.discovery.adapter === "openai-models"
+    ...(definition.discovery.adapter === "openai-models" ||
+    definition.discovery.adapter === "models-dev"
       ? {
           fetchModels: async (context: { signal: AbortSignal }) => {
             const discovered = await discoverModels({
@@ -247,9 +304,11 @@ export async function buildProvider(
             });
             if (discovered.error !== undefined)
               throw new Error(discovered.error);
-            return discovered.models.map((configured) =>
-              runtimeModel(provider, configured, headers, definition.runtime),
-            );
+            return discovered.models
+              .filter((model) => model.deprecated !== true)
+              .map((configured) =>
+                runtimeModel(provider, configured, headers, definition.runtime),
+              );
           },
         }
       : {}),

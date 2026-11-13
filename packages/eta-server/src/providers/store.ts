@@ -238,6 +238,64 @@ export class ProviderConfigStore {
     });
   }
 
+  /**
+   * Bring a provider's models in line with a catalog that lists everything it serves (models.dev):
+   *
+   * - a listed model takes the catalog's facts, keeping the person's own choices (default
+   *   thinking, overrides);
+   * - a new model is added, unless the catalog already calls it deprecated;
+   * - a model the catalog no longer lists is kept and marked `delisted`, never dropped: an agent
+   *   may be using it, and a model that vanished from the config would fail somewhere far from
+   *   the reason. The person removes it, or it comes back if the catalog lists it again.
+   *
+   * Answers with the ids it added and the ids that are delisted now.
+   */
+  async syncModels(
+    id: string,
+    listed: EtaProviderConfig["models"],
+    at: string,
+  ): Promise<
+    { view: ProvidersView; added: string[]; delisted: string[] } | undefined
+  > {
+    const current = await this.view();
+    if (!current.providers.some((provider) => provider.id === id))
+      return undefined;
+    const added: string[] = [];
+    const delisted: string[] = [];
+    const view = await this.mutate(current.revision, (config) => {
+      const provider = (config.providers ?? []).find(
+        (entry) => entry.id === id,
+      );
+      if (provider === undefined) return;
+      const fresh = new Map(listed.map((model) => [model.id, model]));
+      const models = provider.models.map((model) => {
+        const found = fresh.get(model.id);
+        if (found === undefined) {
+          delisted.push(model.id);
+          return { ...model, delisted: true };
+        }
+        return {
+          ...found,
+          ...(model.defaultThinking === undefined
+            ? {}
+            : { defaultThinking: model.defaultThinking }),
+          ...(model.overrides === undefined
+            ? {}
+            : { overrides: model.overrides }),
+        };
+      });
+      const known = new Set(provider.models.map((model) => model.id));
+      for (const model of listed) {
+        if (known.has(model.id) || model.deprecated === true) continue;
+        models.push(model);
+        added.push(model.id);
+      }
+      provider.models = models;
+      provider.lastRefreshedAt = at;
+    });
+    return { view, added, delisted };
+  }
+
   /** The parsed config, or the honest error. */
   async read(): Promise<{ config: EtaConfig; revision: string }> {
     let raw: string;

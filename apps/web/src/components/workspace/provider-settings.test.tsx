@@ -17,7 +17,7 @@ rstest.mock("./use-agents", () => ({
   }),
 }));
 rstest.mock("sonner", () => ({
-  toast: { success: rstest.fn(), error: rstest.fn() },
+  toast: { success: rstest.fn(), error: rstest.fn(), warning: rstest.fn() },
 }));
 
 const provider = (extra: Partial<ProviderSummary> & { id: string }) =>
@@ -202,6 +202,52 @@ describe("refreshing a provider's models", () => {
       id: "local",
     });
     expect(toast.success).toHaveBeenCalledWith("local：读到 5 个模型");
+  });
+
+  it("for a models.dev provider, counts what is new and names what is gone and who uses it", async () => {
+    const { toast } = await import("sonner");
+    const zen = provider({
+      id: "local",
+      kind: "opencode",
+      baseUrl: "https://opencode.ai/inference/openai/v1",
+      models: [
+        { id: "m1", name: "GLM-5.2", delisted: true },
+        { id: "m2", name: "Hy3" },
+      ],
+    });
+    await render(
+      providersHost(config([zen])).handle("providers.refresh", () => ({
+        revision: "r2",
+        models: 30,
+        added: ["k4"],
+        delisted: ["m1"],
+      })),
+    );
+    await openMenu();
+    await choose(/刷新模型/);
+    await settle();
+    expect(toast.warning).toHaveBeenCalledWith(
+      "OpenCode Zen 已不再提供 GLM-5.2，在你删除前会一直保留。",
+      { description: "「小助手」 正在用，请给它们换个模型。" },
+    );
+  });
+
+  it("for a models.dev provider with nothing gone, says how many are new", async () => {
+    const { toast } = await import("sonner");
+    await render(
+      providersHost(
+        config([provider({ id: "go", kind: "opencode-go" })]),
+      ).handle("providers.refresh", () => ({
+        revision: "r2",
+        models: 30,
+        added: ["a", "b"],
+        delisted: [],
+      })),
+    );
+    await openMenu();
+    await choose(/刷新模型/);
+    await settle();
+    expect(toast.success).toHaveBeenCalledWith("OpenCode Go：新增 2 个模型");
   });
 
   it("tells why when the provider would not answer", async () => {

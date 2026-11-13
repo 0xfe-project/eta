@@ -1,4 +1,7 @@
-import type { ProviderSummary } from "@eta/client-contracts";
+import type {
+  ProviderRefreshResult,
+  ProviderSummary,
+} from "@eta/client-contracts";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { WarningIcon } from "@phosphor-icons/react/Warning";
@@ -13,6 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { listSeparator } from "@/lib/i18n";
 import {
   keyMissing,
   providerErrorMessage,
@@ -23,6 +27,7 @@ import {
 } from "@/queries/providers";
 import { LlmAccounts } from "./llm-accounts";
 import { ProviderEditor } from "./provider-editor";
+import { useAgents } from "./use-agents";
 
 function ProviderRow({
   provider,
@@ -33,8 +38,56 @@ function ProviderRow({
 }) {
   const { t: translateText } = useTranslation(["providers", "common"] as const);
   const refresh = useRefreshProvider();
+  const { agents } = useAgents();
   const providerName = providerLabel(provider);
   const required = keyMissing(provider);
+
+  /**
+   * What a refresh found. A catalog that says what it stopped listing (models.dev) gets a warning
+   * naming those models and the agents that use them; the models themselves stay until removed.
+   */
+  const refreshed = (result: ProviderRefreshResult) => {
+    if (result.delisted === undefined) {
+      toast.success(
+        translateText("refresh.done", { providerName, count: result.models }),
+      );
+      return;
+    }
+    if (result.delisted.length === 0) {
+      toast.success(
+        translateText("refresh.synced", {
+          providerName,
+          count: result.added?.length ?? 0,
+        }),
+      );
+      return;
+    }
+    const gone = new Set(
+      result.delisted.map((modelId) => `${provider.id}:${modelId}`),
+    );
+    const using = agents
+      .filter((agent) => agent.model != null && gone.has(agent.model))
+      .map((agent) =>
+        translateText("common:format.quotedValue", { value: agent.name }),
+      );
+    const names = result.delisted.map(
+      (modelId) =>
+        provider.models.find((model) => model.id === modelId)?.name ?? modelId,
+    );
+    toast.warning(
+      translateText("refresh.delisted", {
+        providerName,
+        models: names.join(listSeparator()),
+      }),
+      using.length === 0
+        ? undefined
+        : {
+            description: translateText("refresh.delistedAgents", {
+              agents: using.join(listSeparator()),
+            }),
+          },
+    );
+  };
 
   return (
     <li className="flex min-w-0 items-center gap-2 px-3 py-1.5">
@@ -99,13 +152,7 @@ function ProviderRow({
                   refresh.mutate(
                     { id: provider.id },
                     {
-                      onSuccess: ({ models }) =>
-                        toast.success(
-                          translateText("refresh.done", {
-                            providerName,
-                            count: models,
-                          }),
-                        ),
+                      onSuccess: refreshed,
                       onError: (error) =>
                         toast.error(providerErrorMessage(error)),
                     },

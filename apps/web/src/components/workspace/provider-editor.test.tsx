@@ -308,7 +308,7 @@ describe("弹窗内的服务商选择", () => {
       const options = [
         ...document.querySelectorAll<HTMLElement>('[role="option"]'),
       ];
-      expect(options).toHaveLength(6);
+      expect(options).toHaveLength(8);
       const next = options.find(
         (option) => option.textContent === "OpenAI / 自定义 · Responses",
       )!;
@@ -795,6 +795,123 @@ describe("手动模型不受服务商目录限制", () => {
   });
 });
 
+describe("OpenCode 预置：模型列表来自 models.dev", () => {
+  const listed = {
+    models: [
+      {
+        id: "kimi-k3",
+        name: "Kimi K3",
+        contextWindow: 1_048_576,
+        api: "openai-completions",
+      },
+      { id: "gpt-6-luna", name: "GPT-6 Luna", api: "openai-responses" },
+      {
+        id: "cat-jam-free",
+        name: "Cat Jam Free",
+        api: "openai-completions",
+        deprecated: true,
+      },
+    ],
+    unsupported: [
+      {
+        id: "claude-haiku-5-5",
+        name: "Claude Haiku 5.5",
+        protocol: "@ai-sdk/anthropic",
+        reason: "protocol",
+      },
+      {
+        id: "gemini-4-argon",
+        name: "Gemini 4 Argon",
+        protocol: "@ai-sdk/google",
+        reason: "protocol",
+      },
+    ],
+  };
+
+  it.each([
+    {
+      label: "OpenCode Zen",
+      kind: "opencode",
+      id: "opencode-zen",
+      url: "https://opencode.ai/inference/openai/v1",
+    },
+    {
+      label: "OpenCode Go",
+      kind: "opencode-go",
+      id: "opencode-go",
+      url: "https://opencode.ai/inference/go/openai/v1",
+    },
+  ])(
+    "$label：选中就取列表并勾好，填 Key 即可保存",
+    async ({ label, kind, id, url }) => {
+      const fake = host().handle("providers.discover", () => listed);
+      await render(<ProviderEditor provider={undefined} onClose={() => {}} />);
+      await selectProvider(label);
+      // No click: picking the preset fetched the public list.
+      expect(discoveries(fake)).toHaveLength(1);
+      expect(discoveries(fake)[0]?.args).toMatchObject({ kind, baseUrl: url });
+      expect(
+        document.querySelector<HTMLInputElement>("#provider-name")?.value,
+      ).toBe(label);
+      expect(choice("kimi-k3")?.checked).toBe(true);
+      expect(choice("gpt-6-luna")?.checked).toBe(true);
+      // Deprecated: offered, not chosen.
+      expect(choice("cat-jam-free")?.checked).toBe(false);
+      expect(document.body.textContent).toContain(
+        "Cat Jam Free · cat-jam-free · 已弃用",
+      );
+      // What eta cannot speak yet is said, not dropped.
+      expect(document.body.textContent).toContain("2 个模型暂不支持");
+      expect(document.body.textContent).toContain(
+        "Claude Haiku 5.5 · Anthropic Messages 协议",
+      );
+      expect(document.body.textContent).toContain(
+        "Gemini 4 Argon · Gemini 协议",
+      );
+      expect(document.body.textContent).not.toContain("补充公共模型资料");
+      // The key does not change a public list, so typing it keeps the ticks.
+      await fill("#provider-key", "oc-key");
+      expect(choice("kimi-k3")?.checked).toBe(true);
+      await save();
+      const saved = saves(fake)[0]?.args as { provider: ProviderInput };
+      expect(saved.provider).toMatchObject({
+        id,
+        name: label,
+        kind,
+        baseUrl: url,
+        apiKey: "oc-key",
+      });
+      expect(saved.provider.models).toEqual([
+        listed.models[0],
+        listed.models[1],
+      ]);
+    },
+  );
+
+  it("已下架、已弃用的模型在卡片上标出来", async () => {
+    host();
+    await render(
+      <ProviderEditor
+        provider={{
+          ...provider,
+          kind: "opencode-go",
+          baseUrl: "https://opencode.ai/inference/go/openai/v1",
+          models: [
+            { id: "glm-5.2", name: "GLM-5.2", delisted: true },
+            { id: "hy3", name: "Hy3", deprecated: true },
+          ],
+        }}
+        onClose={() => {}}
+      />,
+    );
+    const cards = [...document.querySelectorAll(".settings-model")].map(
+      (card) => card.textContent ?? "",
+    );
+    expect(cards[0]).toContain("已下架");
+    expect(cards[1]).toContain("已弃用");
+  });
+});
+
 describe("具名服务商预置", () => {
   it.each([
     { label: "DeepSeek", kind: "deepseek", url: "https://api.deepseek.com" },
@@ -899,6 +1016,8 @@ describe("具名服务商预置", () => {
       "DeepSeek",
       "GLM Coding Plan (CN)",
       "GLM Coding Plan (Global)",
+      "OpenCode Zen",
+      "OpenCode Go",
       "OpenAI / 自定义 · Chat Completions",
       "OpenAI / 自定义 · Responses",
     ]);

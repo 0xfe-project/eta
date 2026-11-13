@@ -25,4 +25,16 @@ export const BUILTIN_PROVIDER_PRESETS = {
     baseUrl: "https://api.z.ai/api/coding/paas/v4",
     logo: "zai.svg",
   },
+  // OpenCode's gateways serve several protocols; the base URL is the OpenAI one (Chat
+  // Completions and Responses), and each model says which of the two it speaks.
+  opencode: {
+    name: "OpenCode Zen",
+    baseUrl: "https://opencode.ai/inference/openai/v1",
+    logo: "opencode.svg",
+  },
+  "opencode-go": {
+    name: "OpenCode Go",
+    baseUrl: "https://opencode.ai/inference/go/openai/v1",
+    logo: "opencode.svg",
+  },
 } as const;
