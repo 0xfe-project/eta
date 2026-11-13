@@ -150,6 +150,13 @@ function runtimeModel(
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow,
     maxTokens: model.maxTokens ?? Math.min(8_192, contextWindow),
+    // pi-ai opts tool calls into `strict` by default, and a provider either ignores the
+    // key or rejects it outright — Gemini's FunctionDeclaration has four fields and
+    // `strict` is not one of them, so a strict key costs every tool a 400. Nothing here
+    // ever asked for it: eta declares no constrained sampling on any tool, so the key has
+    // only ever gone out as `strict: false`. Turning it off also keeps the raw JSON
+    // Schema, instead of the strict dialect `makeStrictJsonSchema` would rewrite it into.
+    compat: { supportsStrictMode: false },
   } as Model<"openai-completions">;
 }
 

@@ -73,6 +73,53 @@ describe("building the model layer", () => {
       await endpoint.stop(true);
     }
   });
+  it("sends no strict key on a tool definition", async () => {
+    // pi-ai turns strict tool mode on by default. Endpoints that only implement
+    // [OI]'s four-field function definition reject the key itself, not its value:
+    // a strict key costs every tool a 400 (Gemini's FunctionDeclaration).
+    const requests: { tools?: { function?: Record<string, unknown> }[] }[] = [];
+    const endpoint = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(request) {
+        requests.push((await request.json()) as (typeof requests)[number]);
+        return Response.json(
+          {
+            error: {
+              message: "stop after the body",
+              type: "invalid_request_error",
+            },
+          },
+          { status: 400 },
+        );
+      },
+    });
+    try {
+      const { models } = await buildModels([
+        localProvider({ baseUrl: `http://127.0.0.1:${endpoint.port}/v1` }),
+      ]);
+      const model = models!.getModel("local", "m1")!;
+      const parameters = {
+        type: "object",
+        properties: { path: { type: "string" } },
+        required: ["path"],
+      };
+      await models!.completeSimple(model, {
+        messages: [{ role: "user", content: "hello", timestamp: 0 }],
+        tools: [{ name: "read", description: "read a file", parameters }],
+      });
+      expect(requests).toHaveLength(1);
+      const sent = requests[0]?.tools?.[0]?.function;
+      expect(sent).toBeDefined();
+      expect(sent).not.toHaveProperty("strict");
+      // The schema goes out as written: strict mode would have rewritten it into the
+      // strict dialect, which is a second thing the same endpoint rejects.
+      expect(sent?.parameters).toEqual(parameters);
+    } finally {
+      await endpoint.stop(true);
+    }
+  });
+
   it("builds a provider whose models are the configured ones", async () => {
     const { models, failed } = await buildModels([localProvider()]);
     expect(failed).toEqual([]);
