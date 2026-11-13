@@ -16,6 +16,7 @@ export interface FakeUpstream {
   requests: number;
   /** The body of every request, as CPA sent it. */
   bodies: string[];
+  userAgents: (string | null)[];
   /** Streams whose client went away before the end. */
   cancelled: number;
   stop: () => void;
@@ -28,7 +29,12 @@ function event(name: string, data: unknown): Uint8Array {
 }
 
 export function fakeUpstream(): FakeUpstream {
-  const state = { requests: 0, cancelled: 0, bodies: [] as string[] };
+  const state = {
+    requests: 0,
+    cancelled: 0,
+    bodies: [] as string[],
+    userAgents: [] as (string | null)[],
+  };
   const server = Bun.serve({
     port: 0,
     hostname: "127.0.0.1",
@@ -36,6 +42,7 @@ export function fakeUpstream(): FakeUpstream {
     idleTimeout: 0,
     async fetch(request) {
       state.requests += 1;
+      state.userAgents.push(request.headers.get("user-agent"));
       const prompt = await request.text();
       state.bodies.push(prompt);
       if (prompt.includes("fail-500"))
@@ -156,6 +163,7 @@ export function fakeUpstream(): FakeUpstream {
       return state.cancelled;
     },
     bodies: state.bodies,
+    userAgents: state.userAgents,
     stop: () => void server.stop(true),
   } as FakeUpstream;
 }

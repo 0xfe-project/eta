@@ -121,6 +121,7 @@ export {
   type PluginManagerOptions,
   type PluginManifest,
 } from "./plugins";
+export { ETA_USER_AGENT } from "./providers/attribution";
 export {
   catalogModelsFor,
   parseProviderModelCatalog,
@@ -247,6 +248,7 @@ export {
   type WireServer,
   type WireServerOptions,
 } from "./transport";
+
 export {
   type FrameSink,
   WireService,

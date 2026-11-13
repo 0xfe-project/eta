@@ -20,6 +20,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import process from "node:process";
 import { startServer } from "@cpajs/cpa/server";
+import { ETA_USER_AGENT } from "@eta/server";
 import { embeddedFiles, unpack } from "../resources";
 
 type ApiKeys = NonNullable<CpaConfig["api-keys"]>;
@@ -174,6 +175,13 @@ async function launch(
       observability: {
         logs: { debug: false, "logging-to-file": false, "request-log": false },
         usage: { "usage-statistics-enabled": false },
+      },
+      // Otherwise CPA replaces the host identity with codex-tui on the upstream request.
+      upstream: { codex: { "disable-codex-cloaking": true } },
+      oauth: {
+        providers: {
+          codex: { "header-defaults": { "user-agent": ETA_USER_AGENT } },
+        },
       },
       routing: { retry: { "request-retry": 1 } },
       // CPA adds OpenAI's hosted image tool to every Codex request unless told not to. Agents
