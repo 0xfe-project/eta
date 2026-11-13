@@ -1,29 +1,7 @@
 {
-  "title": "Subscriptions and keys",
-  "status": {
-    "healthy": "Healthy",
-    "disabled": "Disabled",
-    "needsLogin": "Sign in again",
-    "quotaExhausted": "Quota used up",
-    "degraded": "Temporarily failing",
-    "error": "Error"
-  },
   "actions": {
     "signInAgain": "Sign in again",
-    "linkAccount": "Link account",
-    "reenterKey": "Enter again",
-    "addKey": "Add API key"
-  },
-  "recovery": {
-    "minutes": "back in about {{count}} min",
-    "hours": "back in about {{count}} h",
-    "days": "back in about {{count}} d",
-    "minutes_one": "back in about {{count}} min",
-    "minutes_other": "back in about {{count}} min",
-    "hours_one": "back in about {{count}} h",
-    "hours_other": "back in about {{count}} h",
-    "days_one": "back in about {{count}} d",
-    "days_other": "back in about {{count}} d"
+    "reenterKey": "Enter again"
   },
   "quota": {
     "remainingLabel": "{{label}} quota left",
@@ -41,31 +19,11 @@
     "loadingCode": "Getting a code…",
     "openAuthorization": "Open authorization page"
   },
-  "apiKey": {
-    "title": "Add a {{name}} API key",
-    "instructions": "Enter the API key. It is checked with the provider before it is saved.",
-    "label": "API key",
-    "submit": "Check and save",
-    "checking": "Checking…",
-    "added": "Added a {{name}} API key"
-  },
   "remove": {
     "confirmTitle": "Remove {{account}}?",
     "affectedAgents": "{{name}} models used by {{agents}} stop working until an account is linked again.",
     "credentialsNotice": "The sign-in of this {{name}} account is deleted.",
     "success": "Removed {{account}}"
-  },
-  "refresh": {
-    "label": "Refresh status",
-    "checking": "Checking…",
-    "checkingLabel": "Checking",
-    "done": "Checked",
-    "failed": "Refresh failed: {{message}}"
-  },
-  "accounts": {
-    "title": "{{name}} accounts",
-    "empty": "No account linked",
-    "starting": "Loading accounts…"
   },
   "reset": {
     "minutes": "resets in about {{count}} min",

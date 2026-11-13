@@ -79,16 +79,21 @@ describe("writes", () => {
         (await new ProviderConfigStore({ path }).read()).config.providers?.[0]
           ?.models,
       ).toEqual(models);
-      await store.markRefreshed(
+      await store.updateModels(
         "named",
-        [{ id: "existing", name: "Remote" }, { id: "discovered" }],
+        [
+          { id: "existing", name: "Remote", contextWindow: 9000 },
+          { id: "discovered" },
+        ],
         "now",
+        { delist: false },
       );
-      await store.markRefreshed("named", [], "later");
+      await store.updateModels("named", [], "later", { delist: false });
       const reopened = await new ProviderConfigStore({ path }).read();
+      // A provider's own list fills gaps and adds nothing: turning a model on is the person's.
       expect(reopened.config.providers?.[0]?.models).toEqual([
-        ...models,
-        { id: "discovered" },
+        models[0],
+        { ...models[1], contextWindow: 9000 },
       ]);
       expect(reopened.config.providers?.[0]?.lastRefreshedAt).toBe("later");
     },
@@ -193,6 +198,22 @@ describe("writes", () => {
     const removed = await store.delete("a", withDefault.revision);
     expect(removed.providers).toEqual([]);
     expect(removed.defaultModel).toBeUndefined();
+  });
+
+  it("takes a gateway model as the default, and keeps it when a provider goes", async () => {
+    const root = await scratch();
+    const store = new ProviderConfigStore({ path: join(root, "config.json") });
+    const saved = await store.save({
+      revision: revisionOf(""),
+      provider: provider("a"),
+    });
+    const set = await store.setDefault("llm:gpt-5.6-sol", saved.revision);
+    expect(set.defaultModel).toBe("llm:gpt-5.6-sol");
+    const removed = await store.delete("a", set.revision);
+    expect(removed.defaultModel).toBe("llm:gpt-5.6-sol");
+    await expect(store.setDefault("llm:", removed.revision)).rejects.toThrow(
+      /invalid_default_model/,
+    );
   });
 
   it("refuses a default that names no configured model", async () => {

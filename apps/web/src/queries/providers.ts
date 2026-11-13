@@ -1,8 +1,9 @@
 import type {
   AgentView,
-  EtaModelConfig,
   LlmModel,
   ProviderArgs,
+  ProviderCheck,
+  ProviderCheckResult,
   ProviderDiscoverResult,
   ProviderInput,
   ProviderKind,
@@ -44,16 +45,9 @@ export function providerLabel(
   return provider.name ?? preset?.name ?? provider.id;
 }
 
-/**
- * Kinds whose model list is their models.dev entry (OpenCode Zen and Go): the list needs no key,
- * says which models eta cannot speak to yet, and a refresh follows it both ways.
- */
-const MODELS_DEV_KINDS: ReadonlySet<ProviderKind> = new Set([
-  "opencode",
-  "opencode-go",
-]);
-export function listsModelsDev(kind: ProviderKind): boolean {
-  return MODELS_DEV_KINDS.has(kind);
+/** Kinds you point at an endpoint of your own: the address and the protocol are yours. */
+export function isCustomKind(kind: ProviderKind): boolean {
+  return kind === "openai-compatible" || kind === "openai-responses";
 }
 
 /** Codex signs in through ChatGPT instead of holding a key. */
@@ -73,6 +67,17 @@ export function keyMissing(
     !signsIn(provider) &&
     provider.kind !== "openai-compatible" &&
     provider.kind !== "openai-responses"
+  );
+}
+
+const NO_CHECKS: Record<string, ProviderCheck> = {};
+
+/** The last check of each provider since the host started, by id; none for one never checked. */
+export function useProviderChecks(): Record<string, ProviderCheck> {
+  return (
+    (useTarget(TARGET)?.sections.checks as
+      | Record<string, ProviderCheck>
+      | undefined) ?? NO_CHECKS
   );
 }
 
@@ -168,7 +173,7 @@ export function modelGroups(
  * The gateway's models as the picker lists them, under the name of the connector that serves
  * each (Codex, Grok, Gemini). `llm:<id>` is the id an agent names.
  */
-export function gatewayModels(
+function gatewayModels(
   models: readonly LlmModel[],
   connectorNames: ReadonlyMap<string, string>,
 ): Model[] {
@@ -208,13 +213,19 @@ export function useModels(): { data: Model[] | undefined; isError: boolean } {
   return { data: models, isError: error !== undefined };
 }
 
-/** Whether a provider is missing a key it needs: what the settings button's dot marks. */
+/**
+ * Whether a provider is missing a key it needs, or the last check said its key is refused: what
+ * the settings button's dot marks.
+ */
 export function useNeedsAttention(): boolean {
   const { data } = useProviders();
+  const checks = useProviderChecks();
   const { connections } = useLlm();
   return (
-    (data?.providers ?? []).some(keyMissing) ||
-    connections.some((connection) => NEEDS_ACTION.has(connection.state))
+    (data?.providers ?? []).some(
+      (provider) =>
+        keyMissing(provider) || checks[provider.id]?.state === "invalid_key",
+    ) || connections.some((connection) => NEEDS_ACTION.has(connection.state))
   );
 }
 
@@ -310,12 +321,12 @@ export function providerErrorMessage(error: unknown): string {
 }
 
 /** Whether the host refused a write because the config moved under it. */
-export function isConfigChanged(error: unknown): boolean {
+function isConfigChanged(error: unknown): boolean {
   return error instanceof WireError && error.message === "config_changed";
 }
 
 /** The revision of the config the page holds. */
-export function currentRevision(): string {
+function currentRevision(): string {
   const config = getWire().store.getState().targets[TARGET]?.sections.config as
     | ProvidersView
     | undefined;
@@ -367,7 +378,35 @@ export function useDeleteProvider() {
   });
 }
 
-/** Ask the provider's own endpoint which models it serves, and keep the answer. */
+/**
+ * Make a model the one new agents start on. A gateway model (`llm:…`) is taken as given: its
+ * accounts, not the config, say which exist.
+ */
+export function useSetDefaultModel() {
+  return useMutation({
+    mutationKey: ["wire", TARGET, "setDefault"],
+    mutationFn: async (defaultModel: string) => {
+      try {
+        return await getWire().call<{ revision: string }>(
+          TARGET,
+          "setDefault",
+          { defaultModel, revision: currentRevision() },
+        );
+      } catch (error) {
+        if (isConfigChanged(error))
+          await getWire()
+            .call(TARGET, "reload")
+            .catch(() => undefined);
+        throw error;
+      }
+    },
+  });
+}
+
+/**
+ * Every model a saved provider lists now, with models.dev's facts. The host brings the configured
+ * ones up to date and adds none: turning a model on is the person's.
+ */
 export function useRefreshProvider() {
   return useWireMutation<ProviderArgs["refresh"], ProviderRefreshResult>(
     TARGET,
@@ -376,45 +415,58 @@ export function useRefreshProvider() {
   );
 }
 
-/** Preview only: unlike refresh, this must not write configuration or expose raw failures. */
+/** Check saved providers now: one, or every one when no id is given. */
+export function useCheckProviders() {
+  return useWireMutation<ProviderArgs["check"], ProviderCheckResult>(
+    TARGET,
+    "check",
+    { timeoutMs: 60_000 },
+  );
+}
+
+/**
+ * Unsaved connection values: the model list and models.dev's facts in one call, which is also the
+ * check that the connection works. Never writes configuration.
+ */
 export function discoverProviderModels(input: ProviderArgs["discover"]) {
   return getWire().call<ProviderDiscoverResult>(TARGET, "discover", input, {
     timeoutMs: 60_000,
   });
 }
 
-/** Public request deliberately carries no key, headers or subscription credentials. */
-export function fetchModelMetadata(input: ProviderArgs["metadata"]) {
-  return getWire().call<{ models: EtaModelConfig[] }>(
-    TARGET,
-    "metadata",
-    input,
-    { timeoutMs: 60_000 },
-  );
+/** A listing's failure code (`discovery_http_404`, `discovery_network: …`) in the user's words. */
+export function discoveryCodeText(code: string): string | undefined {
+  if (/^discovery_http_(?:401|403)$/.test(code))
+    return translate("providers:discovery.keyRefused");
+  if (code === "config_changed")
+    return translate("providers:discovery.configChanged");
+  const http = /^discovery_http_(\d{3})$/.exec(code);
+  if (http) return translate("providers:discovery.http", { status: http[1] });
+  if (code === "discovery_network")
+    return translate("providers:discovery.unreachable");
+  if (code.startsWith("discovery_network: "))
+    return translate("providers:discovery.network", {
+      reason: code.slice("discovery_network: ".length),
+    });
+  const codes = {
+    discovery_invalid_connection: "invalidConnection",
+    discovery_unsupported: "unsupported",
+    discovery_response: "response",
+    discovery_timeout: "timeout",
+  } as const;
+  if (Object.hasOwn(codes, code))
+    return translate(
+      `providers:discovery.${codes[code as keyof typeof codes]}`,
+    );
+  return undefined;
 }
 
 export function discoveryErrorMessage(error: unknown): string {
-  if (error instanceof WireError) {
-    if (error.code === "timeout" || error.code === "disconnected")
-      return wireErrorMessage(error);
-    if (error.message === "config_changed")
-      return translate("providers:discovery.configChanged");
-    const http = /^discovery_http_(\d{3})$/.exec(error.message);
-    if (http) return translate("providers:discovery.http", { status: http[1] });
-    if (error.message.startsWith("discovery_network: "))
-      return translate("providers:discovery.network", {
-        reason: error.message.slice("discovery_network: ".length),
-      });
-    const codes = {
-      discovery_invalid_connection: "invalidConnection",
-      discovery_unsupported: "unsupported",
-      discovery_response: "response",
-      discovery_timeout: "timeout",
-    } as const;
-    if (Object.hasOwn(codes, error.message))
-      return translate(
-        `providers:discovery.${codes[error.message as keyof typeof codes]}`,
-      );
-  }
+  if (
+    error instanceof WireError &&
+    error.code !== "timeout" &&
+    error.code !== "disconnected"
+  )
+    return discoveryCodeText(error.message) ?? wireErrorMessage(error);
   return wireErrorMessage(error);
 }

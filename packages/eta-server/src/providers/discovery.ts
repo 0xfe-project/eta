@@ -17,6 +17,7 @@
  */
 import type {
   ModelApi,
+  ProviderCheck,
   ProviderHeaders,
   UnsupportedModel,
 } from "@eta/client-contracts";
@@ -28,6 +29,7 @@ import {
   fetchModelsDev,
   modelsDevProvider,
   parseModelsDevModel,
+  publicModelMetadata,
 } from "./metadata";
 
 /** What a discovery call needs: where to ask, how to authenticate, and who to tell. */
@@ -276,4 +278,141 @@ async function discoverFromModelsDev(
     models.push({ ...capabilities, api });
   }
   return { models, unsupported };
+}
+
+/** Whether this kind lists its models from models.dev rather than from its own endpoint. */
+function listsModelsDev(reference: ProviderReference): boolean {
+  return (
+    providerDefinitionForKind(reference.kind)?.discovery.adapter ===
+    "models-dev"
+  );
+}
+
+/**
+ * Ask the provider's own `/models` with the key, for the answer alone: a gateway whose model list
+ * is public (OpenCode) still says 401 to a key it does not know, and that is the only way to learn
+ * the key is wrong before a chat fails on it.
+ */
+async function probeKey(
+  options: DiscoveryOptions,
+): Promise<DiscoveryResult | undefined> {
+  const send = options.fetch ?? fetch;
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (options.apiKey !== undefined && options.apiKey.length > 0)
+    headers.Authorization = `Bearer ${options.apiKey}`;
+  let response: Response;
+  try {
+    response = await send(
+      `${options.reference.baseUrl.replace(/\/+$/, "")}/models`,
+      {
+        method: "GET",
+        headers: applyProviderHeaders(headers, options.headers),
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      },
+    );
+  } catch (error) {
+    return {
+      models: [],
+      error: error instanceof Error ? error.message : String(error),
+      failure: "network",
+    };
+  }
+  await response.body?.cancel().catch(() => undefined);
+  if (response.ok) return undefined;
+  return {
+    models: [],
+    error: `the model list came back ${response.status}`,
+    failure: "http",
+    status: response.status,
+  };
+}
+
+/**
+ * The model list and what models.dev knows about it, in one call: what a settings page offers
+ * when a provider is added or its list refreshed.
+ *
+ * - A provider that lists its own models (`/models`) is asked with the key and headers; its
+ *   official endpoint then gets names, context windows and inputs from models.dev for whatever
+ *   the list left out. The catalog is a supplement: when it cannot be read, the list stands.
+ * - A provider whose list is models.dev (OpenCode) gets the catalog, and the key, when there is
+ *   one, is tried against the gateway's own `/models` so a wrong key is caught here.
+ */
+export async function listProviderModels(
+  options: DiscoveryOptions,
+): Promise<DiscoveryResult> {
+  const discovered = await discoverModels(options);
+  if (discovered.failure !== undefined) return discovered;
+  if (listsModelsDev(options.reference)) {
+    if (options.apiKey === undefined || options.apiKey.length === 0)
+      return discovered;
+    return (await probeKey(options)) ?? discovered;
+  }
+  if (discovered.models.length === 0) return discovered;
+  let known: Awaited<ReturnType<typeof publicModelMetadata>>["models"];
+  try {
+    known = (
+      await publicModelMetadata(
+        {
+          kind: options.reference.kind ?? "openai-compatible",
+          baseUrl: options.reference.baseUrl,
+          modelIds: discovered.models.map((model) => model.id),
+        },
+        options.fetch ?? fetch,
+        options.signal,
+      )
+    ).models;
+  } catch {
+    return discovered;
+  }
+  const facts = new Map(known.map((model) => [model.id, model]));
+  return {
+    ...discovered,
+    models: discovered.models.map((model) => {
+      const found = facts.get(model.id);
+      if (found === undefined) return model;
+      // The provider's own answer and the built-in catalog win; models.dev fills the gaps.
+      return {
+        ...(found.name === undefined ? {} : { name: found.name }),
+        ...(found.contextWindow === undefined
+          ? {}
+          : { contextWindow: found.contextWindow }),
+        ...(found.input === undefined ? {} : { input: found.input }),
+        ...model,
+      };
+    }),
+  };
+}
+
+/**
+ * Whether a provider answers with this key: its model list is the probe, and nothing is written.
+ * models.dev kinds are asked their gateway's `/models`, since the catalog says nothing of the key.
+ */
+export async function checkConnection(
+  options: DiscoveryOptions,
+): Promise<Omit<ProviderCheck, "checkedAt">> {
+  const result = listsModelsDev(options.reference)
+    ? ((await probeKey(options)) ?? { models: [] })
+    : await discoverModels(options);
+  if (options.signal?.aborted === true)
+    return { state: "unreachable", error: "discovery_timeout" };
+  if (result.failure === undefined) return { state: "ok" };
+  return checkOf(result);
+}
+
+/** A failed listing as a check: the key refused, or anything else that kept the list away. */
+export function checkOf(
+  result: Pick<DiscoveryResult, "failure" | "status">,
+): Omit<ProviderCheck, "checkedAt"> {
+  if (
+    result.failure === "http" &&
+    (result.status === 401 || result.status === 403)
+  )
+    return { state: "invalid_key", error: `discovery_http_${result.status}` };
+  return {
+    state: "unreachable",
+    error:
+      result.failure === "http"
+        ? `discovery_http_${result.status}`
+        : `discovery_${result.failure ?? "response"}`,
+  };
 }

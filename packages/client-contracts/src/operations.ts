@@ -53,7 +53,7 @@ export const PROVIDER_ACTIONS = [
   "reload",
   "refresh",
   "discover",
-  "metadata",
+  "check",
 ] as const;
 
 export interface CreateSessionInput {
@@ -171,14 +171,17 @@ export interface ProviderArgs {
   setDefault: { revision: string; defaultModel?: string | null };
   setNetwork: { revision: string } & import("./types").NetworkConfig;
   reload: Record<string, never>;
+  /**
+   * List the models a saved provider serves now, with models.dev's facts where its endpoint is an
+   * official one. The facts of configured models are brought up to date; nothing is added.
+   */
   refresh: { id: string };
-  /** Public metadata for explicit IDs, never an account model list. */
-  metadata: {
-    kind: import("./types").ProviderKind;
-    baseUrl: string;
-    modelIds: string[];
-  };
-  /** Preview unsaved connection values; never writes configuration. */
+  /** Check saved providers (one, or all when `id` is absent): their model list is the probe. */
+  check: { id?: string };
+  /**
+   * Preview unsaved connection values: the model list, with models.dev's facts where the endpoint
+   * is an official one. Never writes configuration.
+   */
   discover: {
     id?: string;
     revision?: string;
@@ -194,14 +197,16 @@ export interface ProviderDiscoverResult {
   unsupported?: import("./types").UnsupportedModel[];
 }
 /**
- * What `providers.refresh` answers. `added` and `delisted` are model ids; `delisted` is only
- * reported by providers whose catalog says what it no longer lists (models.dev).
+ * What `providers.refresh` answers: every model the provider lists now (configured or not), the
+ * ones listed but not usable, and the configured ids its catalog stopped listing (models.dev only).
  */
-export interface ProviderRefreshResult {
+export interface ProviderRefreshResult extends ProviderDiscoverResult {
   revision: string;
-  models: number;
-  added?: string[];
   delisted?: string[];
+}
+/** What `providers.check` answers: the check of every provider it looked at, by id. */
+export interface ProviderCheckResult {
+  checks: Record<string, import("./types").ProviderCheck>;
 }
 export type ProviderCall = {
   [A in ProviderAction]: Omit<CallFrame, "target" | "action" | "args"> & {

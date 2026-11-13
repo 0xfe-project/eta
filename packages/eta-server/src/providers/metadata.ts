@@ -3,16 +3,17 @@
  *
  * Two callers share the fetch and the parse:
  *
- * - **Metadata** (`publicModelMetadata`) fills in names, context windows and inputs for model IDs a
- *   person already typed, and only for exact official endpoints — never provider names or
- *   arbitrary compatible proxies.
+ * - **Metadata** (`publicModelMetadata`) fills in names, context windows and inputs for the model
+ *   IDs a provider's own list returned, and only for exact official endpoints — never provider
+ *   names or arbitrary compatible proxies. Discovery asks for it in the same call that lists the
+ *   models, so a settings page gets both at once.
  * - **Discovery** for providers whose model list *is* their models.dev entry (OpenCode Zen and Go,
  *   see `discovery.ts`), where every listed model is parsed.
  *
  * Public data only: the request carries no account credentials, no headers of the user's, and
  * follows no redirects.
  */
-import type { ProviderArgs } from "@eta/client-contracts";
+import type { ProviderKind } from "@eta/client-contracts";
 import type { ModelCapabilities } from "./config-types";
 import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
 import { MODEL_THINKING_LEVELS } from "./config-types";
@@ -198,8 +199,9 @@ export function parseModelsDevModel(
 
 /** Names, context windows and inputs for explicit model IDs at an exact official endpoint. */
 export async function publicModelMetadata(
-  args: ProviderArgs["metadata"],
+  args: { kind: ProviderKind; baseUrl: string; modelIds: readonly string[] },
   send: typeof fetch = fetch,
+  signal?: AbortSignal,
 ): Promise<{ models: ({ id: string } & ModelCapabilities)[] }> {
   let url: URL;
   try {
@@ -223,14 +225,17 @@ export async function publicModelMetadata(
   )
     return { models: [] };
 
-  const provider = modelsDevProvider(await fetchModelsDev(send), providerId);
+  const provider = modelsDevProvider(
+    await fetchModelsDev(send, signal),
+    providerId,
+  );
   if (provider === undefined) return { models: [] };
 
   const models: ({ id: string } & ModelCapabilities)[] = [];
   for (const id of args.modelIds) {
     if (!Object.hasOwn(provider.models, id)) continue;
     const parsed = parseModelsDevModel(id, provider.models[id], provider);
-    // What a person typed gets what identifies it and what it takes in; the rest is discovery's.
+    // What identifies it and what it takes in; the rest is the provider's own list's.
     models.push({
       id,
       ...(parsed.name === undefined ? {} : { name: parsed.name }),

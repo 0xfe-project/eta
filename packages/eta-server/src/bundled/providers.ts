@@ -16,13 +16,22 @@
  * "unknown op" while the rest of the server keeps running (sessions then run on whatever models
  * the host injected, or fail honestly with `model_unavailable`).
  */
-import type { ProviderArgs, ProvidersView } from "@eta/client-contracts";
+import type {
+  ProviderArgs,
+  ProviderCheck,
+  ProviderHeaders,
+  ProvidersView,
+} from "@eta/client-contracts";
+import type { DiscoveryResult } from "../providers/discovery";
 import type { ProviderConfigStore } from "../providers/store";
 import type { WireService } from "../wire-service";
 import { Service } from "cordis";
 import { providerDefinitionForKind } from "../providers/catalog";
-import { discoverModels } from "../providers/discovery";
-import { publicModelMetadata } from "../providers/metadata";
+import {
+  checkConnection,
+  checkOf,
+  listProviderModels,
+} from "../providers/discovery";
 
 export { PROVIDER_ACTIONS } from "@eta/client-contracts";
 
@@ -49,20 +58,66 @@ export interface ProvidersPluginOptions {
 }
 
 /**
- * The config as one state section. The revision lives *inside* the section rather than in the
- * section's revision: it is the config file's revision (what a write must carry), not a
- * signature of the projection, and the two would be confused the moment they shared a name.
+ * The config, and the last check of each provider, as two state sections. The config's revision
+ * lives *inside* its section rather than in the section's revision: it is the config file's
+ * revision (what a write must carry), not a signature of the projection, and the two would be
+ * confused the moment they shared a name.
  */
-function section(view: ProvidersView): {
+function sections(
+  view: ProvidersView,
+  checks: ReadonlyMap<string, ProviderCheck>,
+  checksRevision: number,
+): {
   sections: Record<string, unknown>;
   revisions: Record<string, string>;
 } {
   return {
-    sections: { config: view },
+    sections: { config: view, checks: Object.fromEntries(checks) },
     // The section moves exactly when the file's revision does, which is what makes a push
     // after a change carry the new config and a push after nothing carry none.
-    revisions: { config: view.revision },
+    revisions: { config: view.revision, checks: String(checksRevision) },
   };
+}
+
+/** The connection a provider is reached through: what a check is a check of. */
+function connectionOf(
+  provider:
+    | {
+        kind?: string;
+        baseUrl: string;
+        apiKey?: string;
+        headers?: ProviderHeaders;
+      }
+    | undefined,
+): string {
+  return JSON.stringify([
+    provider?.kind,
+    provider?.baseUrl,
+    provider?.apiKey,
+    provider?.headers,
+  ]);
+}
+
+/**
+ * A failed listing as the error a client is told. Never echo URLs, keys, headers or upstream
+ * error bodies: only the network error may contain request values, and those are redacted.
+ */
+function discoveryError(
+  discovered: DiscoveryResult,
+  secrets: readonly (string | null | undefined)[],
+): Error {
+  if (discovered.failure === "network") {
+    let message = discovered.error!;
+    for (const value of secrets) {
+      if (value) message = message.replaceAll(value, "[redacted]");
+    }
+    return new Error(`discovery_network: ${message}`);
+  }
+  return new Error(
+    discovered.failure === "http"
+      ? `discovery_http_${discovered.status}`
+      : `discovery_${discovered.failure}`,
+  );
 }
 
 export function providersPlugin(options: ProvidersPluginOptions) {
@@ -80,6 +135,16 @@ export function providersPlugin(options: ProvidersPluginOptions) {
         // Kept as a box because the state projector must be synchronous while reading the
         // file is not — the read happens on every write and on every watch tick.
         let latest: ProvidersView | undefined;
+        // The last check of each provider, since this host started. Only a save that changes how
+        // a provider is reached, or a delete, forgets one; nothing re-checks by itself.
+        const checks = new Map<string, ProviderCheck>();
+        let checksRevision = 0;
+        const record = (id: string, check: ProviderCheck | undefined): void => {
+          if (check === undefined) {
+            if (!checks.delete(id)) return;
+          } else checks.set(id, check);
+          checksRevision += 1;
+        };
         const refresh = async (): Promise<ProvidersView> => {
           const view = await options.store.view();
           latest = view;
@@ -103,16 +168,25 @@ export function providersPlugin(options: ProvidersPluginOptions) {
             project: () =>
               latest === undefined
                 ? { sections: {}, revisions: {} }
-                : section(latest),
+                : sections(latest, checks, checksRevision),
           }),
           wire.handle("providers", "save", async (call) => {
             const args = (call.args ?? {}) as Partial<ProviderArgs["save"]>;
             if (args.provider === undefined)
               throw new Error("providers.save needs a provider");
+            const id = args.provider.id;
+            const was = (await options.store.read()).config.providers?.find(
+              (entry) => entry.id === id,
+            );
             const view = await options.store.save({
               revision: args.revision,
               provider: args.provider,
             });
+            const now = (await options.store.read()).config.providers?.find(
+              (entry) => entry.id === id,
+            );
+            // A check is of the connection: a new key or address makes the last one say nothing.
+            if (connectionOf(was) !== connectionOf(now)) record(id, undefined);
             latest = view;
             wire.pushNow("providers");
             return { result: { revision: view.revision } };
@@ -122,6 +196,7 @@ export function providersPlugin(options: ProvidersPluginOptions) {
             if (typeof args.id !== "string")
               throw new Error("providers.delete needs an id");
             const view = await options.store.delete(args.id, args.revision);
+            record(args.id, undefined);
             latest = view;
             wire.pushNow("providers");
             return { result: { revision: view.revision } };
@@ -170,12 +245,6 @@ export function providersPlugin(options: ProvidersPluginOptions) {
               },
             };
           }),
-          wire.handle("providers", "metadata", async (call) => ({
-            result: await publicModelMetadata(
-              call.args as ProviderArgs["metadata"],
-              options.fetch,
-            ),
-          })),
           wire.handle("providers", "discover", async (call) => {
             const args = (call.args ?? {}) as Partial<ProviderArgs["discover"]>;
             // Never echo URLs, keys, headers or upstream error bodies.
@@ -216,7 +285,7 @@ export function providersPlugin(options: ProvidersPluginOptions) {
               args.apiKey === null
                 ? undefined
                 : (args.apiKey?.trim() ?? existing?.apiKey);
-            const discovered = await discoverModels({
+            const discovered = await listProviderModels({
               reference: { kind: args.kind, baseUrl },
               apiKey,
               headers: args.headers ?? undefined,
@@ -224,23 +293,11 @@ export function providersPlugin(options: ProvidersPluginOptions) {
               ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
             });
             if (signal.aborted) throw new Error("discovery_timeout");
-            if (discovered.failure === "network") {
-              // Only the network error may contain request values. Keep the diagnostic, redact credentials.
-              let message = discovered.error!;
-              for (const value of [
+            if (discovered.failure !== undefined)
+              throw discoveryError(discovered, [
                 apiKey,
                 ...Object.values(args.headers ?? {}),
-              ]) {
-                if (value) message = message.replaceAll(value, "[redacted]");
-              }
-              throw new Error(`discovery_network: ${message}`);
-            }
-            if (discovered.failure !== undefined)
-              throw new Error(
-                discovered.failure === "http"
-                  ? `discovery_http_${discovered.status}`
-                  : `discovery_${discovered.failure}`,
-              );
+              ]);
             return {
               result: {
                 models: discovered.models,
@@ -256,59 +313,105 @@ export function providersPlugin(options: ProvidersPluginOptions) {
             >;
             if (id === undefined)
               throw new Error("providers.refresh needs an id");
-            const view = await options.store.view();
-            const provider = (view.providers ?? []).find(
-              (entry) => entry.id === id,
-            );
+            const { config } = await options.store.read();
+            const provider = config.providers?.find((entry) => entry.id === id);
             if (provider === undefined)
               throw new Error(`no such provider: ${id}`);
-            const discovered = await discoverModels({
-              reference: { kind: provider.kind, baseUrl: provider.baseUrl },
+            const signal = AbortSignal.timeout(45_000);
+            const kind = provider.kind ?? "openai-compatible";
+            const discovered = await listProviderModels({
+              reference: { kind, baseUrl: provider.baseUrl },
+              apiKey: provider.apiKey,
               headers: provider.headers,
+              signal,
               ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
             });
-            if (discovered.error !== undefined)
-              throw new Error(discovered.error);
-            // A catalog that lists everything the provider serves (models.dev) is followed both
-            // ways: new models come in, and ones it stopped listing are marked, not dropped.
-            if (
-              providerDefinitionForKind(provider.kind)?.discovery.adapter ===
-              "models-dev"
-            ) {
-              const synced = await options.store.syncModels(
-                id,
-                discovered.models,
-                new Date().toISOString(),
-              );
-              if (synced === undefined)
-                throw new Error(`no such provider: ${id}`);
-              latest = synced.view;
+            const at = new Date().toISOString();
+            // A list fetched with the saved key is a check of it too.
+            if (discovered.failure !== undefined) {
+              record(id, {
+                ...(signal.aborted
+                  ? { state: "unreachable", error: "discovery_timeout" }
+                  : checkOf(discovered)),
+                checkedAt: at,
+              });
               wire.pushNow("providers");
-              return {
-                result: {
-                  revision: latest.revision,
-                  models: discovered.models.length,
-                  added: synced.added,
-                  delisted: synced.delisted,
-                },
-              };
+              if (signal.aborted) throw new Error("discovery_timeout");
+              throw discoveryError(discovered, [
+                provider.apiKey,
+                ...Object.values(provider.headers ?? {}),
+              ]);
             }
-            // The refresh writes what it found, at the revision it read: a config that
-            // changed while the request was in flight is refused rather than overwritten
-            // with a list that is already stale.
-            const updated = await options.store.markRefreshed(
+            record(id, { state: "ok", checkedAt: at });
+            // A catalog that lists everything the provider serves (models.dev) is followed both
+            // ways: the facts come in, and models it stopped listing are marked, not dropped.
+            const updated = await options.store.updateModels(
               id,
               discovered.models,
-              new Date().toISOString(),
+              at,
+              {
+                delist:
+                  providerDefinitionForKind(kind)?.discovery.adapter ===
+                  "models-dev",
+              },
             );
-            latest = updated ?? (await refresh());
+            latest = updated?.view ?? (await refresh());
             wire.pushNow("providers");
             return {
               result: {
                 revision: latest.revision,
-                models: discovered.models.length,
+                models: discovered.models,
+                ...(discovered.unsupported === undefined
+                  ? {}
+                  : { unsupported: discovered.unsupported }),
+                ...(updated === undefined || updated.delisted.length === 0
+                  ? {}
+                  : { delisted: updated.delisted }),
               },
             };
+          }),
+          wire.handle("providers", "check", async (call) => {
+            const { id } = (call.args ?? {}) as Partial<ProviderArgs["check"]>;
+            const { config } = await options.store.read();
+            const targets = (config.providers ?? []).filter(
+              (entry) => id === undefined || entry.id === id,
+            );
+            if (id !== undefined && targets.length === 0)
+              throw new Error(`no such provider: ${id}`);
+            const answered: Record<string, ProviderCheck> = {};
+            await Promise.all(
+              targets.map(async (provider) => {
+                const kind = provider.kind ?? "openai-compatible";
+                const definition = providerDefinitionForKind(kind);
+                // A key the provider cannot run without is missing, which the config already
+                // says; a subscription signs in elsewhere. Neither has anything to probe.
+                if (
+                  definition?.auth.adapter === "codex-oauth" ||
+                  (definition?.auth.required === true &&
+                    (provider.apiKey ?? "").length === 0)
+                ) {
+                  record(provider.id, undefined);
+                  return;
+                }
+                const signal = AbortSignal.timeout(30_000);
+                const check: ProviderCheck = {
+                  ...(await checkConnection({
+                    reference: { kind, baseUrl: provider.baseUrl },
+                    apiKey: provider.apiKey,
+                    headers: provider.headers,
+                    signal,
+                    ...(options.fetch === undefined
+                      ? {}
+                      : { fetch: options.fetch }),
+                  })),
+                  checkedAt: new Date().toISOString(),
+                };
+                record(provider.id, check);
+                answered[provider.id] = check;
+              }),
+            );
+            wire.pushNow("providers");
+            return { result: { checks: answered } };
           }),
           wire.handle("providers", "reload", async () => {
             // A client asking "did anything change?" — the answer is the state, and the

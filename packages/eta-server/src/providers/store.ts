@@ -25,6 +25,7 @@ import type { EtaConfig, EtaProviderConfig } from "./config-types";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { LLM_PROVIDER_ID } from "@eta/client-contracts";
 import { providerSummary } from "./config-types";
 
 /** A caller's mistake, with the name the client shows. */
@@ -179,6 +180,10 @@ export class ProviderConfigStore {
         config.defaultModel = undefined;
         return;
       }
+      if (typeof value === "string" && isGatewayModel(value)) {
+        config.defaultModel = value;
+        return;
+      }
       if (
         typeof value !== "string" ||
         !(config.providers ?? []).some((provider) =>
@@ -215,52 +220,30 @@ export class ProviderConfigStore {
     });
   }
 
-  /** Record what a refresh found, without pretending the models were the user's choice. */
-  async markRefreshed(
-    id: string,
-    models: EtaProviderConfig["models"],
-    at: string,
-  ): Promise<ProvidersView | undefined> {
-    const current = await this.view();
-    if (!current.providers.some((provider) => provider.id === id))
-      return undefined;
-    return await this.mutate(current.revision, (config) => {
-      const provider = (config.providers ?? []).find(
-        (entry) => entry.id === id,
-      );
-      if (provider === undefined) return;
-      const existing = new Set(provider.models.map((model) => model.id));
-      provider.models = [
-        ...provider.models,
-        ...models.filter((model) => !existing.has(model.id)),
-      ];
-      provider.lastRefreshedAt = at;
-    });
-  }
-
   /**
-   * Bring a provider's models in line with a catalog that lists everything it serves (models.dev):
+   * Bring a provider's configured models up to date with what its list says now:
    *
-   * - a listed model takes the catalog's facts, keeping the person's own choices (default
-   *   thinking, overrides);
-   * - a new model is added, unless the catalog already calls it deprecated;
-   * - a model the catalog no longer lists is kept and marked `delisted`, never dropped: an agent
-   *   may be using it, and a model that vanished from the config would fail somewhere far from
-   *   the reason. The person removes it, or it comes back if the catalog lists it again.
+   * - nothing is added: a model is in the config because someone turned it on, and one they
+   *   turned off must not come back by itself;
+   * - a provider's own list only fills the gaps of a listed model: what the file already says
+   *   about it (perhaps typed by hand) stays;
+   * - with `delist`, the list is a catalog that speaks for everything the provider serves
+   *   (models.dev): its facts win, keeping the person's own choices (default thinking,
+   *   overrides), and a model it no longer lists is kept and marked `delisted`, never dropped —
+   *   an agent may be using it, and a model that vanished from the config would fail somewhere
+   *   far from the reason.
    *
-   * Answers with the ids it added and the ids that are delisted now.
+   * Answers with the ids that are delisted now.
    */
-  async syncModels(
+  async updateModels(
     id: string,
     listed: EtaProviderConfig["models"],
     at: string,
-  ): Promise<
-    { view: ProvidersView; added: string[]; delisted: string[] } | undefined
-  > {
+    options: { delist: boolean },
+  ): Promise<{ view: ProvidersView; delisted: string[] } | undefined> {
     const current = await this.view();
     if (!current.providers.some((provider) => provider.id === id))
       return undefined;
-    const added: string[] = [];
     const delisted: string[] = [];
     const view = await this.mutate(current.revision, (config) => {
       const provider = (config.providers ?? []).find(
@@ -268,13 +251,17 @@ export class ProviderConfigStore {
       );
       if (provider === undefined) return;
       const fresh = new Map(listed.map((model) => [model.id, model]));
-      const models = provider.models.map((model) => {
+      provider.models = provider.models.map((model) => {
         const found = fresh.get(model.id);
         if (found === undefined) {
+          if (!options.delist) return model;
           delisted.push(model.id);
           return { ...model, delisted: true };
         }
+        const { delisted: _gone, ...kept } = model;
+        if (!options.delist) return { ...found, ...kept };
         return {
+          ...kept,
           ...found,
           ...(model.defaultThinking === undefined
             ? {}
@@ -284,16 +271,9 @@ export class ProviderConfigStore {
             : { overrides: model.overrides }),
         };
       });
-      const known = new Set(provider.models.map((model) => model.id));
-      for (const model of listed) {
-        if (known.has(model.id) || model.deprecated === true) continue;
-        models.push(model);
-        added.push(model.id);
-      }
-      provider.models = models;
       provider.lastRefreshedAt = at;
     });
-    return { view, added, delisted };
+    return { view, delisted };
   }
 
   /** The parsed config, or the honest error. */
@@ -402,6 +382,7 @@ export class ProviderConfigStore {
 
   private removeStaleDefault(config: EtaConfig): void {
     if (config.defaultModel === undefined) return;
+    if (isGatewayModel(config.defaultModel)) return;
     const exists = (config.providers ?? []).some((provider) =>
       provider.models.some(
         (model) => `${provider.id}:${model.id}` === config.defaultModel,
@@ -439,6 +420,14 @@ function normalizeProxyUrl(value: string | undefined): string | undefined {
   if (url.username.length > 0 || url.password.length > 0)
     throw new ProviderConfigError("invalid_network");
   return url.href;
+}
+
+/**
+ * A model of the LLM gateway (`llm:<id>`): its accounts, not this file, say which exist, so a
+ * default naming one is taken as given and left alone when a provider goes.
+ */
+function isGatewayModel(value: string): boolean {
+  return value.startsWith(`${LLM_PROVIDER_ID}:`) && value.length > 4;
 }
 
 /** The client's view of a config: the key becomes a boolean, everything else stays. */
