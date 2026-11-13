@@ -63,7 +63,6 @@
   },
   "review": {
     "title": "Captain 巡检",
-    "auto": "自动巡检",
     "observations": "{{count}} 项观察",
     "technical": "原始详情",
     "unparsed": "这条巡检没能解析出条目。",

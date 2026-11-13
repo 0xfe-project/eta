@@ -10,11 +10,11 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { agentName, useAgentList } from "@/queries/agents";
 import { useCaptain, useCaptainActions } from "@/queries/captain";
 import { useMachines } from "@/queries/projects";
 import { wireErrorMessage } from "@/queries/wire";
+import { StateMark } from "./state-mark";
 
 /**
  * A group Captain proposed, in the conversation it proposed it from: what it would be, and the two
@@ -135,7 +135,7 @@ export function GroupProposalCard({ message }: { message: MessageView }) {
           </Link>
         ) : null}
         {status === "failed" && error !== null ? (
-          <p role="alert" className="text-xs wrap-anywhere text-destructive">
+          <p role="alert" className="text-xs wrap-anywhere">
             {error}
           </p>
         ) : null}
@@ -144,19 +144,24 @@ export function GroupProposalCard({ message }: { message: MessageView }) {
   );
 }
 
-/** Where the proposal stands, at the right end of its line. */
+/**
+ * Where the proposal stands, at the right end of its line: a square and a word. Waiting for you to
+ * press Create is not a warning, so it is grey; only the outcome has a colour — created, or failed.
+ */
 function StatusMark({ status }: { status: CaptainOperationStatus }) {
   const { t: translateText } = useTranslation(["captain"] as const);
   return (
-    <span
-      className={cn(
-        "ml-auto shrink-0",
-        status === "pending" && "task-fold-waiting",
-        status === "applied" && "text-state-success",
-        status === "failed" && "text-destructive",
-      )}
+    <StateMark
+      tone={
+        status === "applied"
+          ? "success"
+          : status === "failed"
+            ? "error"
+            : "neutral"
+      }
+      className="ml-auto shrink-0 text-muted-foreground"
     >
       {translateText(`proposal.status.${status}`)}
-    </span>
+    </StateMark>
   );
 }

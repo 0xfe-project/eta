@@ -63,7 +63,6 @@
   },
   "review": {
     "title": "Captain review",
-    "auto": "Automatic review",
     "observations": "{{count}} observation(s)",
     "technical": "Raw details",
     "unparsed": "No review items could be parsed from this observation.",

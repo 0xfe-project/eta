@@ -31,11 +31,10 @@ import { useArtifacts } from "@/queries/artifacts";
 import { useCaptain } from "@/queries/captain";
 import { useConversationActions } from "@/queries/conversations";
 import { useModels } from "@/queries/providers";
+import { useSession } from "@/queries/sessions";
 import { useTasks } from "@/queries/tasks";
 import { AgentAvatar, AgentStatusDot } from "./agent-identity";
 import { agentStatusLabels, memberStatusLabel } from "./agent-status";
-import { MemberRing } from "./member-ring";
-import { MemberStats } from "./member-stats";
 import { useOpenAgent } from "./use-agents";
 import { useChatList } from "./use-chat-list";
 import { useGroups, useOpenGroup } from "./use-groups";
@@ -66,13 +65,10 @@ function humanizeAge(at: number): string {
 /**
  * Captain, at the head of the sidebar and outside the list that scrolls.
  *
- * It is one agent in one conversation, so what is worth showing is what that conversation is made
- * of — and that is exactly what Member draws: the ring around the avatar (`MemberRing`) and the
- * session's own numbers under it (`MemberStats`). Both are the group panel's components, reused
- * rather than re-read: a second way of counting a session's spend is a second thing to keep true.
- *
- * The avatar is this section's size, not a row's. It is the one thing in the sidebar that is a
- * thing rather than an entry, and it should hold the eye before the list does.
+ * It keeps that place of its own, but nothing else sets it apart: it is one agent, drawn the way
+ * every agent row below is — the same face, the same type, the same hover. Captain has no colour of
+ * its own; its name and its face say who it is. What the session is spending and how fast it is
+ * going are in the row's title, not on the row: the row says whether to look, the panel says at what.
  */
 export function CaptainSection({ rail }: { rail: boolean }) {
   const { t: translateText } = useTranslation([
@@ -87,19 +83,19 @@ export function CaptainSection({ rail }: { rail: boolean }) {
   const waiting =
     captain.operations.filter((item) => item.status === "pending").length +
     captain.notifications.filter((item) => item.readAt === null).length;
-  const { groups } = useGroups();
+  const { groups, current } = useGroups();
   const open = useOpenGroup();
   const { tasks: board } = useTasks();
   const { artifacts } = useArtifacts();
+  const conversationId = captain.identity?.conversationId ?? null;
+  // The conversation's own member row: its session is what the rate in the title reads from.
+  const member = groups.find((each) => each.id === conversationId)
+    ?.participants[0];
+  const session = useSession(member?.sessionId ?? undefined);
 
   // The host makes Captain whole when it starts, conversation included (`CaptainService.ensure`),
   // so a Captain without one is only the moment before the first state arrives.
-  const conversationId = captain.identity?.conversationId ?? null;
   if (captain.identity === null || conversationId === null) return null;
-  // The conversation's own member row: its session is what the ring and the numbers read from.
-  const member = groups.find((each) => each.id === conversationId)
-    ?.participants[0];
-  const sessionId = member?.sessionId ?? undefined;
   const captainTasks = board.filter(
     (task) =>
       task.conversationId === conversationId &&
@@ -110,9 +106,11 @@ export function CaptainSection({ rail }: { rail: boolean }) {
     (art) => art.conversationId === conversationId,
   );
   const name = captain.identity.name;
-  // What the card no longer draws, since it is one row: the counts live in the tooltip. Still the
-  // same numbers, still off the same query — just not a third and fourth line.
-  const counts = [
+  const active = current?.id === conversationId;
+  const rate = Math.round((session?.metrics?.tokensPerSec ?? 0) * 10) / 10;
+  const title = [
+    name,
+    rate === 0 ? null : `${rate} tok/s`,
     captainTasks.length === 0
       ? null
       : `${captainTasks.length} ${translateText("navigation:sections.tasks")}`,
@@ -122,110 +120,81 @@ export function CaptainSection({ rail }: { rail: boolean }) {
   ]
     .filter((each) => each !== null)
     .join(" · ");
-  const face = (size: string) => (
+  // A plain number on the muted ground, the way any count in the sidebar is drawn: something to
+  // look at, not an alarm. The words are for a screen reader.
+  const count =
+    waiting === 0 ? null : (
+      <>
+        <span className="sr-only">
+          {translateText("captain:operationsBadge", { count: waiting })}
+        </span>
+        <span
+          data-captain-waiting={waiting}
+          aria-hidden="true"
+          className={cn(
+            "shrink-0 bg-muted px-1 font-mono text-[10px] leading-4 text-foreground tabular-nums",
+            rail && "pointer-events-none absolute top-1 right-1",
+          )}
+        >
+          {waiting}
+        </span>
+      </>
+    );
+  const face = (
     <AgentAvatar
-      agent={{ id: captain.identity === null ? "" : captain.identity.agentId }}
+      agent={{ id: captain.identity.agentId }}
       animate
-      className={size}
+      className={rail ? "size-6" : "size-6 shrink-0"}
     />
   );
-
-  // The rail is 4rem: the glyph and the name under it, as every other card there.
-  if (rail) {
-    return (
-      <SidebarGroup
-        data-section="captain"
-        aria-label={name}
-        className="shrink-0 border-b px-0 pt-2 pb-2"
-      >
-        <button
-          type="button"
-          onClick={() => open(conversationId)}
-          aria-label={
-            waiting === 0
-              ? name
-              : `${name} · ${translateText("captain:operationsBadge", { count: waiting })}`
-          }
-          title={name}
-          className="relative mx-auto flex cursor-pointer items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {sessionId === undefined ? (
-            face("size-10")
-          ) : (
-            <MemberRing sessionId={sessionId} size={48}>
-              {face("size-10")}
-            </MemberRing>
-          )}
-          {/* Folded to a rail there is no room for two words, so the badge becomes its number. */}
-          {waiting === 0 ? null : (
-            <span
-              data-captain-waiting={waiting}
-              aria-hidden="true"
-              className="absolute top-0 right-0 rounded-full bg-muted px-1 font-mono text-[10px] tabular-nums text-muted-foreground"
-            >
-              {waiting}
-            </span>
-          )}
-        </button>
-      </SidebarGroup>
-    );
-  }
 
   return (
     <SidebarGroup
       data-section="captain"
       aria-label={name}
-      className="shrink-0 px-0 pb-2"
+      className="shrink-0 p-0"
     >
-      {/* No label above the card: the card says what it is. A heading that repeats the name the
-          card already shows is one more line between the window's top edge and the list.
-          The card is one row, top to bottom: face, name, state, and the session's numbers all on
-          the same baseline. A block of stats under the name made this the tallest thing in the
-          sidebar, which is the one thing a section head must not be. */}
-      <div className="mx-2 mt-2 border">
-        <button
-          type="button"
-          onClick={() => open(conversationId)}
-          title={counts === "" ? undefined : counts}
-          className="flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-left hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      <SidebarMenu>
+        <SidebarMenuItem
+          className={cn(
+            "relative transition-colors duration-75",
+            active && "bg-sidebar-accent",
+          )}
         >
-          {sessionId === undefined ? (
-            face("size-10")
-          ) : (
-            // 48px ring around a 40px face. Half the size it first shipped at: big enough that the
-            // gauge reads as a gauge, small enough that it stays a section head and not a poster.
-            <MemberRing sessionId={sessionId} size={48}>
-              {face("size-10")}
-            </MemberRing>
-          )}
-          <span className="shrink-0 truncate text-sm font-medium">{name}</span>
-          {member === undefined ? null : (
-            <span className="shrink-0 text-xs text-muted-foreground">
-              {memberStatusLabel(member.status)}
-            </span>
-          )}
-          {/* What Captain is holding for a person — an approval, an unread alert — as one chip.
-              It is the same count the Operations blocks in its context panel open with, computed on the
-              client from data the panel already reads: a card says whether to look, the panel
-              says at what. Nothing here asks the host for anything. */}
-          {waiting === 0 ? null : (
-            <span
-              data-captain-waiting={waiting}
-              className="shrink-0 rounded-sm bg-muted px-1 font-mono text-[10px] tabular-nums text-muted-foreground"
-            >
-              {translateText("captain:operationsBadge", { count: waiting })}
-            </span>
-          )}
-          {/* The numbers end the same line rather than starting a new block: what is left of the
-              row is theirs, and it truncates from the tail, so a narrow sidebar costs a few digits
-              and never the name of the agent the card is about. */}
-          <MemberStats
-            sessionId={sessionId}
-            inline
-            className="ml-auto min-w-0 justify-end"
-          />
-        </button>
-      </div>
+          <button
+            type="button"
+            data-sidebar="menu-button"
+            data-active={active}
+            aria-current={active ? "true" : undefined}
+            onClick={() => open(conversationId)}
+            title={title}
+            className={cn(
+              "flex w-full cursor-pointer transition-colors duration-75 hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:outline-hidden",
+              rail
+                ? "flex-col items-center gap-1 px-1 py-1.5"
+                : "items-center gap-2 px-4 py-1.5 text-left",
+            )}
+          >
+            {face}
+            {rail ? (
+              <span className="w-full truncate text-center text-[10px] leading-tight">
+                {name}
+              </span>
+            ) : (
+              <>
+                <span className="min-w-0 truncate text-sm">{name}</span>
+                {member === undefined ? null : (
+                  <span className="shrink-0 text-xs text-faint">
+                    {memberStatusLabel(member.status)}
+                  </span>
+                )}
+                <span className="ml-auto" />
+              </>
+            )}
+            {count}
+          </button>
+        </SidebarMenuItem>
+      </SidebarMenu>
     </SidebarGroup>
   );
 }
