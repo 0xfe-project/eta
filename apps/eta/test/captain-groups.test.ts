@@ -16,6 +16,7 @@ import type { Request } from "./support/models";
 import type { World } from "./support/world";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { isCaptainGroupOutcome } from "@eta/client-contracts";
 import { describe, expect, it } from "vitest";
 import { agentHome } from "../src/agents/store";
 import { GroupConflictError } from "../src/captain/service";
@@ -110,6 +111,10 @@ const cardOf = (w: World, conversationId: string) =>
       (row) =>
         (row.data as { event?: string }).event === "captain_group_proposal",
     )?.data as unknown as CaptainGroupProposalRowData | undefined;
+
+/** The message that told Captain how its proposal ended, as the conversation shows it. */
+const outcomeOf = (w: World, conversationId: string) =>
+  w.rows(conversationId).find(isCaptainGroupOutcome);
 
 describe("propose_group is Captain's", () => {
   it("is offered to Captain's session and to no other agent's", async () => {
@@ -232,6 +237,17 @@ describe("a group Captain proposes", () => {
       w.rows(groupId).some((message) => message.author === "captain"),
     );
     expect(script.told[0]).toContain(`conversationId: ${groupId}`);
+    // What Captain was told is its context: marked, so no client draws it for the user.
+    await until(() => outcomeOf(w, captain) !== undefined);
+    expect(outcomeOf(w, captain)).toMatchObject({
+      author: "system",
+      data: {
+        captainGroupOutcome: {
+          operationId: card.operationId,
+          status: "applied",
+        },
+      },
+    });
   });
 
   it("makes nothing when rejected, and Captain is told", async () => {
@@ -253,6 +269,10 @@ describe("a group Captain proposes", () => {
     expect(counts(w)).toEqual(start);
     await until(() => script.told.length === 1);
     expect(script.told[0]).toContain("rejected");
+    await until(() => outcomeOf(w, captain) !== undefined);
+    expect(outcomeOf(w, captain)?.data).toMatchObject({
+      captainGroupOutcome: { operationId, status: "rejected" },
+    });
     await expect(decide(w, operationId, "approve")).rejects.toThrow(/rejected/);
   });
 });

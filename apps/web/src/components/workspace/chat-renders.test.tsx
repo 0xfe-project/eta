@@ -236,6 +236,33 @@ describe("what the timeline says besides words", () => {
     expect(container.textContent).toContain("5 次唤醒");
   });
 
+  it("does not draw what Captain is told about its group proposal, old or new", async () => {
+    history = [
+      row({ text: "Make a group for the launch" }),
+      row({
+        author: "system",
+        text: 'Your proposed group "Launch" (operation 6f1c2a3b-0d4e-4f5a-8b6c-7d8e9f0a1b2c) was confirmed by the user and created.\nAssign work there with assign_in_group.',
+        data: {
+          captainGroupOutcome: {
+            operationId: "6f1c2a3b-0d4e-4f5a-8b6c-7d8e9f0a1b2c",
+            status: "applied",
+          },
+        },
+      }),
+      // Written before the mark existed: known by its opening line.
+      row({
+        author: "system",
+        text: 'Your proposed group "Docs" (operation 0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d) was rejected by the user. Nothing was created.',
+      }),
+      row({ author: "agent", agentId: AGENT, text: "Assigned." }),
+    ];
+    const { container } = await start();
+    await flush();
+    expect(container.textContent).toContain("Assigned.");
+    expect(container.textContent).not.toContain("Your proposed group");
+    expect(container.querySelectorAll("[data-mid]")).toHaveLength(2);
+  });
+
   it("renders a Captain review as labeled observation cards", async () => {
     history = [
       row({

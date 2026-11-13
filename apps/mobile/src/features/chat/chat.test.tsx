@@ -322,3 +322,23 @@ test("the English copy follows the language", async () => {
   await app.waitFor("text:14 steps");
   expect(app.shows("text:Message 阿澈…")).toBe(true);
 });
+
+test("03d: what Captain is told about its group proposal is not drawn; a review is one line", async () => {
+  // Opened by the fixture's own title: `chat` looks it up in NAMES, which no longer matches it.
+  const app = await open("../../../DevApp.tsx", {
+    storage: { "eta.host": HOST, "eta.language": "en" },
+  });
+  await app.waitFor("id:tab-conversations");
+  await app.press("id:tab-conversations");
+  await app.waitFor("text:Artifact version");
+  await app.press("text:Artifact version");
+  await app.waitFor("text:Captain review · 2 observation(s)");
+  const texts = app.texts();
+  expect(texts.some((text) => text.includes("Your proposed group"))).toBe(
+    false,
+  );
+  expect(texts.some((text) => text.includes("<captain-review>"))).toBe(false);
+  expect(texts.filter((text) => text.startsWith("Captain review"))).toEqual([
+    "Captain review · 2 observation(s)",
+  ]);
+});
