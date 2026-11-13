@@ -176,6 +176,9 @@ async function launch(
         usage: { "usage-statistics-enabled": false },
       },
       routing: { retry: { "request-retry": 1 } },
+      // CPA adds OpenAI's hosted image tool to every Codex request unless told not to. Agents
+      // then say they can draw (`image_gen.imagegen`), and eta has nowhere to show the image.
+      multimedia: { "disable-image-generation": true },
       "api-keys": {
         ...withProviders(existing?.["api-keys"] ?? {}, legacy),
         ...extraKeys,
