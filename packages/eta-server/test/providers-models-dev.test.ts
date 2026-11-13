@@ -7,6 +7,8 @@
  * 11 Gemini, 1 Mistral) and 40 Go models (26, 6, 6, 2, 0).
  */
 import type {
+  ProviderCheck,
+  ProviderCheckResult,
   ProviderDiscoverResult,
   ProviderRefreshResult,
   ProvidersView,
@@ -462,12 +464,15 @@ async function plugin(send: typeof fetch) {
   const config = () =>
     (wire.snapshot("providers") as StateSnapshot | undefined)?.sections
       .config as ProvidersView | undefined;
+  const checks = () =>
+    ((wire.snapshot("providers") as StateSnapshot | undefined)?.sections
+      .checks ?? {}) as Record<string, ProviderCheck>;
   const started = Date.now();
   while (config() === undefined) {
     if (Date.now() - started > 2_000) throw new Error("no providers state");
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
-  return { store, call, config };
+  return { store, call, config, checks };
 }
 
 describe("an OpenCode provider over the wire", () => {
@@ -520,10 +525,12 @@ describe("an OpenCode provider over the wire", () => {
     const refreshed = await h.call<ProviderRefreshResult>("refresh", {
       id: "opencode-go",
     });
-    expect(refreshed.added).toEqual(["kimi-k4"]);
+    // The list comes back whole, to be offered; turning a new model on is the person's.
+    expect(refreshed.models.map((model) => model.id)).toContain("kimi-k4");
+    expect(refreshed.unsupported).toHaveLength(8);
     expect(refreshed.delisted).toEqual(["glm-5.2"]);
     const models = h.config()!.providers[0]!.models;
-    expect(models.map((model) => model.id)).toContain("kimi-k4");
+    expect(models.map((model) => model.id)).not.toContain("kimi-k4");
     expect(models.map((model) => model.id)).not.toContain("old-free");
     // Gone from models.dev: kept, and marked, so the agent using it can say so.
     expect(models.find((model) => model.id === "glm-5.2")).toMatchObject({
@@ -537,9 +544,13 @@ describe("an OpenCode provider over the wire", () => {
       name: "Kimi K3 (2026)",
       defaultThinking: "max",
     });
-    // The key was never part of the catalog request.
-    for (const [, init] of send.mock.calls)
-      expect(JSON.stringify(init?.headers)).not.toContain("sk-test");
+    // The key was never part of the catalog request; it went to the gateway's own list only.
+    for (const [url, init] of send.mock.calls) {
+      if (String(url) === MODELS_DEV_URL)
+        expect(JSON.stringify(init?.headers)).not.toContain("sk-test");
+      else expect(String(url)).toBe(`${GO.baseUrl}/models`);
+    }
+    expect(h.checks()["opencode-go"]).toMatchObject({ state: "ok" });
 
     // Listed again: the mark goes away (and the model that only existed in between is the
     // one marked now).
@@ -547,7 +558,7 @@ describe("an OpenCode provider over the wire", () => {
     const again = await h.call<ProviderRefreshResult>("refresh", {
       id: "opencode-go",
     });
-    expect(again.delisted).toEqual(["kimi-k4"]);
+    expect(again.delisted).toBeUndefined();
     expect(
       h.config()!.providers[0]!.models.find((model) => model.id === "glm-5.2")
         ?.delisted,
@@ -555,5 +566,102 @@ describe("an OpenCode provider over the wire", () => {
     expect((await h.store.read()).config.providers?.[0]?.apiKey).toBe(
       "sk-test",
     );
+  });
+});
+
+describe("an OpenCode key", () => {
+  /** models.dev for the catalog; the gateway's own list answers by the key it is handed. */
+  function gateway(good: string) {
+    return vi.fn<typeof fetch>().mockImplementation(async (url, init) => {
+      if (String(url) === MODELS_DEV_URL) return Response.json(clone());
+      const auth = new Headers(init?.headers).get("authorization");
+      return auth === `Bearer ${good}`
+        ? Response.json({ object: "list", data: [] })
+        : Response.json(
+            { error: { type: "authentication_error" } },
+            { status: 401 },
+          );
+    });
+  }
+
+  it("is tried against the gateway when models are listed, so a wrong one is caught before a chat", async () => {
+    const h = await plugin(gateway("sk-good"));
+    await expect(
+      h.call("discover", { ...ZEN, apiKey: "sk-wrong" }),
+    ).rejects.toThrow("discovery_http_401");
+    const listed = await h.call<ProviderDiscoverResult>("discover", {
+      ...ZEN,
+      apiKey: "sk-good",
+    });
+    expect(listed.models).toHaveLength(102);
+    // Without a key there is nothing to try: the public list is still offered.
+    expect(
+      (await h.call<ProviderDiscoverResult>("discover", ZEN)).models,
+    ).toHaveLength(102);
+  });
+
+  it("is checked on request, and the state says which providers answer", async () => {
+    const h = await plugin(gateway("sk-good"));
+    await h.call("save", {
+      revision: h.config()!.revision,
+      provider: {
+        id: "zen",
+        ...ZEN,
+        apiKey: "sk-wrong",
+        models: [{ id: "gpt-5.4", api: "openai-responses" }],
+      },
+    });
+    const checked = await h.call<ProviderCheckResult>("check", { id: "zen" });
+    expect(checked.checks.zen).toMatchObject({
+      state: "invalid_key",
+      error: "discovery_http_401",
+    });
+    expect(h.checks().zen?.state).toBe("invalid_key");
+    // A refresh lists with the saved key too, and says the same.
+    await expect(h.call("refresh", { id: "zen" })).rejects.toThrow(
+      "discovery_http_401",
+    );
+
+    // A new key forgets the old verdict; a model toggled off does not.
+    await h.call("save", {
+      revision: h.config()!.revision,
+      provider: {
+        id: "zen",
+        ...ZEN,
+        apiKey: "sk-good",
+        models: [{ id: "gpt-5.4", api: "openai-responses" }],
+      },
+    });
+    expect(h.checks().zen).toBeUndefined();
+    await h.call("check", {});
+    expect(h.checks().zen?.state).toBe("ok");
+    await h.call("save", {
+      revision: h.config()!.revision,
+      provider: {
+        id: "zen",
+        ...ZEN,
+        models: [
+          { id: "gpt-5.4", api: "openai-responses" },
+          { id: "kimi-k3", api: "openai-completions" },
+        ],
+      },
+    });
+    expect(h.checks().zen?.state).toBe("ok");
+    await h.call("delete", { revision: h.config()!.revision, id: "zen" });
+    expect(h.checks().zen).toBeUndefined();
+  });
+
+  it("is not probed when there is none: the config already says it is missing", async () => {
+    const send = gateway("sk-good");
+    const h = await plugin(send);
+    await h.call("save", {
+      revision: h.config()!.revision,
+      provider: { id: "go", ...GO, models: [{ id: "kimi-k3" }] },
+    });
+    send.mockClear();
+    expect(await h.call<ProviderCheckResult>("check", {})).toEqual({
+      checks: {},
+    });
+    expect(send).not.toHaveBeenCalled();
   });
 });

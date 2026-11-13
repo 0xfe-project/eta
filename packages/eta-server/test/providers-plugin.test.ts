@@ -6,7 +6,11 @@
  * load it the way a loader would and check only through the pipe's doors.
  */
 
-import type { ProvidersView } from "@eta/client-contracts";
+import type {
+  ProviderCheckResult,
+  ProviderRefreshResult,
+  ProvidersView,
+} from "@eta/client-contracts";
 import type { ServerFrame, StateSnapshot } from "@eta/client-wire-proto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -340,10 +344,12 @@ describe("refreshing a provider's model list", () => {
     ]);
     await h.unload();
   });
-  it("asks the endpoint and writes down what it found", async () => {
+  it("asks the endpoint with the saved key, offers what it found and adds none of it", async () => {
     const calls: string[] = [];
-    const send = (async (url: string) => {
+    const auth: (string | null)[] = [];
+    const send = (async (url: string, init?: RequestInit) => {
       calls.push(String(url));
+      auth.push(new Headers(init?.headers).get("authorization"));
       return new Response(
         JSON.stringify({
           data: [
@@ -394,7 +400,7 @@ describe("refreshing a provider's model list", () => {
       { reply: () => undefined } as never,
     );
 
-    await wire.dispatch(
+    const answer = (await wire.dispatch(
       {
         op: "call",
         target: "providers",
@@ -404,14 +410,22 @@ describe("refreshing a provider's model list", () => {
       {
         reply: () => undefined,
       } as never,
-    );
+    )) as { result: ProviderRefreshResult };
     expect(calls).toEqual(["https://local.test/v1/models"]);
+    expect(auth).toEqual(["Bearer sk-test"]);
+    expect(answer.result.models).toEqual([
+      { id: "discovered", contextWindow: 200_000, maxTokens: 8_000 },
+    ]);
     const refreshed = wire.snapshot("providers")?.sections
       .config as ProvidersView;
-    expect(refreshed.providers[0]?.models.map((model) => model.id)).toContain(
-      "discovered",
-    );
+    expect(refreshed.providers[0]?.models.map((model) => model.id)).toEqual([
+      "m1",
+    ]);
     expect(refreshed.providers[0]?.lastRefreshedAt).toBeDefined();
+    // A list fetched with the saved key is a check of it.
+    expect(wire.snapshot("providers")?.sections.checks).toMatchObject({
+      local: { state: "ok" },
+    });
 
     // Refreshing something that is not configured is named as such.
     await expect(
@@ -702,22 +716,29 @@ describe("discovery diagnostics", () => {
   });
 });
 
-describe("public metadata preview", () => {
-  it("does not read/send stored secrets, publish state or write config on success/failure; only save persists", async () => {
-    const send = vi.fn<typeof fetch>().mockResolvedValue(
-      Response.json({
-        openai: {
-          id: "openai",
-          models: {
-            exact: {
-              id: "exact",
-              name: "Public Exact",
-              limit: { context: 32000 },
+describe("listing models with models.dev's facts in one call", () => {
+  it("fills the gaps of an official endpoint's list, sends models.dev no secret, and writes nothing", async () => {
+    let catalogDown = false;
+    const send = vi.fn<typeof fetch>().mockImplementation(async (url) => {
+      if (String(url) === "https://models.dev/api.json") {
+        if (catalogDown) throw new Error("public network offline");
+        return Response.json({
+          openai: {
+            id: "openai",
+            models: {
+              exact: {
+                id: "exact",
+                name: "Public Exact",
+                limit: { context: 32000 },
+              },
             },
           },
-        },
-      }),
-    );
+        });
+      }
+      return Response.json({
+        data: [{ id: "exact" }, { id: "own", context_window: 8000 }],
+      });
+    });
     const h = await harness({ fetch: send });
     await h.load();
     await until(() => h.config() !== undefined);
@@ -727,7 +748,7 @@ describe("public metadata preview", () => {
         ...provider("official"),
         baseUrl: "https://api.openai.com/v1",
         apiKey: "saved-secret",
-        headers: { Authorization: "custom-secret" },
+        headers: { "x-team": "custom-secret" },
         models: [{ id: "exact" }],
       },
     });
@@ -735,39 +756,83 @@ describe("public metadata preview", () => {
     const view = h.config();
     h.frames.length = 0;
     const args = {
+      id: "official",
+      revision: view?.revision,
       kind: "openai-compatible",
       baseUrl: "https://api.openai.com/v1",
-      modelIds: ["exact"],
     };
-    const result = await callResult(h, "metadata", args);
-    expect(result).toEqual({
+    expect(await callResult(h, "discover", args)).toEqual({
       ok: true,
       result: {
-        models: [{ id: "exact", name: "Public Exact", contextWindow: 32000 }],
+        models: [
+          { id: "exact", name: "Public Exact", contextWindow: 32000 },
+          { id: "own", contextWindow: 8000 },
+        ],
       },
     });
-    expect(send.mock.calls[0]?.[1]?.headers).toEqual({
-      Accept: "application/json",
-    });
+    const [list, catalog] = send.mock.calls;
+    expect(String(list?.[0])).toBe("https://api.openai.com/v1/models");
+    expect(new Headers(list?.[1]?.headers).get("authorization")).toBe(
+      "Bearer saved-secret",
+    );
+    expect(String(catalog?.[0])).toBe("https://models.dev/api.json");
+    expect(catalog?.[1]?.headers).toEqual({ Accept: "application/json" });
     expect(h.config()).toEqual(view);
     expect(h.frames).toEqual([]);
     expect(await readFile(h.store.path, "utf8")).toBe(before);
-    send.mockRejectedValueOnce(new Error("public network offline"));
-    expect(await callResult(h, "metadata", args)).toEqual({
-      ok: false,
-      error: "public network offline",
+
+    // The catalog is a supplement: without it the list still stands.
+    catalogDown = true;
+    expect(await callResult(h, "discover", args)).toEqual({
+      ok: true,
+      result: { models: [{ id: "exact" }, { id: "own", contextWindow: 8000 }] },
     });
-    expect(await readFile(h.store.path, "utf8")).toBe(before);
+    await h.unload();
+  });
+
+  it("checks every saved provider, and a refused key reads as such", async () => {
+    const send = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (url) =>
+        String(url).startsWith("https://bad.example")
+          ? Response.json({ error: "no" }, { status: 401 })
+          : String(url).startsWith("https://down.example")
+            ? Promise.reject(new Error("connect ECONNREFUSED"))
+            : Response.json({ data: [{ id: "m1" }] }),
+      );
+    const h = await harness({ fetch: send });
+    await h.load();
+    await until(() => h.config() !== undefined);
+    for (const id of ["good", "bad", "down"])
+      await callResult(h, "save", {
+        revision: h.config()?.revision,
+        provider: { ...provider(id), apiKey: "k" },
+      });
     await callResult(h, "save", {
-      revision: view?.revision,
-      provider: {
-        ...provider("official"),
-        models: (result.result as { models: unknown[] }).models,
-      },
+      revision: h.config()?.revision,
+      provider: { ...provider("nokey"), kind: "deepseek" },
+    });
+    const checked = await callResult(h, "check", {});
+    expect(checked.ok).toBe(true);
+    const checks = (checked.result as ProviderCheckResult).checks;
+    expect(Object.keys(checks).sort()).toEqual(["bad", "down", "good"]);
+    expect(checks.good?.state).toBe("ok");
+    expect(checks.bad).toMatchObject({
+      state: "invalid_key",
+      error: "discovery_http_401",
+    });
+    expect(checks.down).toMatchObject({
+      state: "unreachable",
+      error: "discovery_network",
     });
     expect(
-      JSON.parse(await readFile(h.store.path, "utf8")).providers[0].models,
-    ).toEqual((result.result as { models: unknown[] }).models);
+      Object.keys(
+        (h.wire.snapshot("providers")?.sections.checks ?? {}) as object,
+      ).sort(),
+    ).toEqual(["bad", "down", "good"]);
+    expect((await callResult(h, "check", { id: "nope" })).error).toMatch(
+      /no such provider/,
+    );
     await h.unload();
   });
 });

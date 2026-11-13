@@ -1,31 +1,147 @@
 {
   "actions": {
     "openSettings": "Go to model services",
-    "refreshModels": "Refresh models"
+    "add": "Add source",
+    "check": "Check",
+    "checking": "Checking…",
+    "refreshList": "Refresh list",
+    "saveAndCheck": "Save and check",
+    "remove": "Remove this source",
+    "signOut": "Sign out"
   },
   "title": "Model services",
-  "remove": {
-    "confirmTitle": "Remove {{providerName}}?",
-    "affectedAgents": "{{providerName}} models used by {{agents}} will be unavailable until it is added again.",
-    "credentialsNotice": "Its API key and headers will be deleted from config.json.",
-    "success": "Removed {{providerName}}"
+  "defaultModel": {
+    "label": "Default model",
+    "none": "No usable models yet"
+  },
+  "list": {
+    "label": "Model sources",
+    "empty": "No model sources yet. Add one so agents have a model to run on.",
+    "modelCount": "{{count}} models",
+    "modelCount_one": "{{count}} model",
+    "modelCount_other": "{{count}} models"
+  },
+  "via": {
+    "subscription": "Subscription",
+    "key": "API key",
+    "custom": "Custom · {{protocol}}",
+    "local": "This machine",
+    "legacy": "Legacy Codex config"
+  },
+  "status": {
+    "ok": "Working",
+    "needsKey": "Needs a key",
+    "invalidKey": "Key refused",
+    "needsLogin": "Sign in again",
+    "unreachable": "Unreachable",
+    "disabled": "Disabled"
+  },
+  "add": {
+    "title": "Add a model source",
+    "steps": {
+      "source": "Source",
+      "connect": "Connect",
+      "models": "Models"
+    },
+    "groups": {
+      "subscription": "Subscriptions",
+      "key": "Provider API keys",
+      "custom": "Custom"
+    },
+    "presets": {
+      "custom": "OpenAI-compatible API",
+      "local": "Local models",
+      "localHint": "Ollama, LM Studio"
+    },
+    "keyLabel": "{{name}} API key",
+    "keyOptional": "API key (optional)",
+    "baseUrl": "URL",
+    "protocol": "Protocol",
+    "connect": "Connect",
+    "connecting": "Connecting…",
+    "back": "Back",
+    "finish": "Done",
+    "unsupported": "Not supported yet ({{protocol}} protocol)",
+    "otherEndpoint": "Not supported yet (another endpoint)",
+    "incomplete": "Not supported yet (incomplete data)",
+    "noModels": "This source lists no models.",
+    "added": "Added {{name}}",
+    "selected": "{{count}} selected",
+    "selected_one": "{{count}} selected",
+    "selected_other": "{{count}} selected",
+    "accountReady": "{{name}} is connected, with {{count}} models.",
+    "accountReady_one": "{{name}} is connected, with {{count}} model.",
+    "accountReady_other": "{{name}} is connected, with {{count}} models."
+  },
+  "detail": {
+    "breadcrumb": "Location",
+    "tabs": {
+      "models": "Models",
+      "connection": "Connection"
+    },
+    "name": "Name",
+    "key": "API key",
+    "keySaved": "Saved; type to replace",
+    "keyMissing": "Not set",
+    "keyCleared": "Cleared on save",
+    "clearKey": "Clear",
+    "keepKey": "Keep",
+    "advanced": "Advanced: URL, headers",
+    "advancedCustom": "Advanced: URL, protocol, headers",
+    "baseUrl": "URL",
+    "protocol": "Protocol",
+    "headers": "Headers",
+    "headerName": "Header name",
+    "headerValue": "Header value",
+    "addHeader": "Add header",
+    "account": "Account",
+    "checked": {
+      "ok": "{{name}} is working"
+    }
+  },
+  "models": {
+    "keyMissing": "{{providerName}} has no API key",
+    "delisted": "{{providerName}} no longer lists {{modelName}}; it may stop working. Select another model.",
+    "delistedSuffix": " (no longer listed)",
+    "search": "Search models",
+    "noMatches": "No matching models",
+    "columns": {
+      "name": "Model",
+      "context": "Context",
+      "abilities": "Abilities",
+      "thinking": "Thinking",
+      "enabled": "On",
+      "state": "State"
+    },
+    "reasoning": "Reasoning",
+    "vision": "Images",
+    "deprecated": "Deprecated",
+    "delistedTag": "Delisted",
+    "followProvider": "Provider default",
+    "edit": "Edit {{name}}",
+    "enable": "Enable {{name}}",
+    "thinkingFor": "Default thinking for {{name}}",
+    "displayName": "Display name",
+    "contextWindow": "Context window",
+    "visionInput": "Takes images",
+    "lastOne": "Keep at least one model",
+    "turnOffTitle": "Turn off {{name}}?",
+    "turnOffAgents": "{{agents}} use it and will need another model.",
+    "turnOff": "Turn off",
+    "unsupported": "Not supported yet",
+    "unavailable": "Unavailable"
   },
   "refresh": {
-    "done": "{{providerName}}: found {{count}} models",
-    "done_one": "{{providerName}}: found {{count}} model",
-    "done_other": "{{providerName}}: found {{count}} models",
-    "synced": "{{providerName}}: {{count}} new models",
-    "synced_one": "{{providerName}}: {{count}} new model",
-    "synced_other": "{{providerName}}: {{count}} new models",
     "delisted": "{{providerName}} no longer lists {{models}}. They stay until you remove them.",
     "delisted_one": "{{providerName}} no longer lists {{models}}. It stays until you remove it.",
     "delisted_other": "{{providerName}} no longer lists {{models}}. They stay until you remove them.",
     "delistedAgents": "Used by {{agents}}: pick another model."
   },
-  "models": {
-    "keyMissing": "{{providerName}} has no API key",
-    "delisted": "{{providerName}} no longer lists {{modelName}}; it may stop working. Select another model.",
-    "delistedSuffix": " (no longer listed)"
+  "remove": {
+    "confirmTitle": "Remove {{providerName}}?",
+    "affectedAgents": "{{providerName}} models used by {{agents}} will be unavailable until it is added again.",
+    "credentialsNotice": "Its API key and headers will be deleted from config.json.",
+    "success": "Removed {{providerName}}"
   },
   "errors": {
     "unavailable": "The host has no model services.",
@@ -39,84 +155,15 @@
     "readFailed": "Cannot read config.json.",
     "saveFailed": "Cannot write config.json."
   },
-  "editor": {
-    "newTitle": "New provider",
-    "description": "Saved to config.json; the next request uses it.",
-    "name": "Name",
-    "kind": "Provider",
-    "baseUrl": "Base URL",
-    "key": "API key",
-    "keyConfigured": "Configured — type to replace",
-    "keyMissing": "Not configured",
-    "clearKey": "Remove the key",
-    "keepKey": "Keep the key",
-    "headers": "Headers",
-    "headerName": "Name",
-    "headerValue": "Value",
-    "addHeader": "Add header",
-    "models": "Models",
-    "modelId": "Model id",
-    "modelName": "Display name",
-    "contextWindow": "Context window",
-    "vision": "Images",
-    "addModel": "Add model",
-    "configured": "Configured providers",
-    "empty": "No providers yet. Add one to give the host something to run.",
-    "modelCount": "{{count}} models",
-    "modelCount_one": "{{count}} model",
-    "modelCount_other": "{{count}} models",
-    "unsaved": "This form has changes that would be lost.",
-    "discard": "Discard them",
-    "defaultThinking": "Default thinking level",
-    "followProvider": "Follow the provider",
-    "modelSettings": "Model settings",
-    "newModel": "New model",
-    "contextUnknown": "Context unknown",
-    "reasoning": "Reasoning",
-    "removeModel": "Remove model {{name}}",
-    "noModels": "No models yet.",
-    "headersHint": "A header with no name is not written to config.json.",
-    "chatCompletions": "OpenAI / Custom · Chat Completions",
-    "responses": "OpenAI / Custom · Responses",
-    "chatCompletionsHint": "Uses /chat/completions; supports OpenAI API keys and compatible services.",
-    "responsesHint": "Uses /responses; supports OpenAI API keys and compatible services.",
-    "baseUrlHint": "Editable for proxies or gateways. The OpenAI API URL is https://api.openai.com/v1.",
-    "nativeCodex": "Sign in to and manage Codex subscriptions in the Accounts section of Model providers; no provider entry is needed.",
-    "legacyCodex": "Legacy Codex config (not migrated). Use Accounts for subscriptions; config and model references are unchanged.",
-    "delisted": "No longer listed"
-  },
   "discovery": {
-    "fetch": "Get model list",
-    "loading": "Getting model list…",
-    "hint": "Uses the current URL, key and headers. Selection is a preview until you save. Existing models are never overwritten; missing models can be added manually.",
-    "search": "Search models",
-    "results": "Available models",
-    "inForm": "Already in form",
-    "empty": "No usable models returned. Retry or add a model manually.",
-    "noMatches": "No matching models. You can add one manually.",
-    "stale": "Connection settings changed. Get the model list again. Previous preview selections were cleared; existing and manually added models are kept.",
     "invalidConnection": "Use an HTTP(S) base URL without credentials or query parameters.",
-    "unsupported": "This provider type does not publish a model list. Use existing models or configure a custom provider manually.",
+    "unsupported": "This source does not publish a model list.",
     "network": "Cannot reach the model endpoint: {{reason}}. Check the URL, network, key and headers, then retry.",
     "response": "The model endpoint returned an invalid format: expected JSON with a data array. Check the URL and retry.",
     "timeout": "Getting the model list timed out. Check the network and retry.",
     "http": "The model endpoint returned HTTP {{status}}. Check the URL, key, headers and access permissions, then retry.",
-    "configChanged": "Configuration changed elsewhere. Go back and reopen this form before fetching again.",
-    "modelsDevHint": "From models.dev; no key needed. Selection is a preview until you save. Refresh models later to pick up new ones.",
-    "deprecated": "deprecated",
-    "unsupportedModels": "{{count}} models not supported yet",
-    "unsupportedModels_one": "{{count}} model not supported yet",
-    "unsupportedModels_other": "{{count}} models not supported yet",
-    "unsupportedProtocol": "{{protocol}} protocol",
-    "unsupportedEndpoint": "served at another address",
-    "unsupportedInvalid": "incomplete data on models.dev"
-  },
-  "metadata": {
-    "fetch": "Supplement public model metadata",
-    "loading": "Fetching public model metadata…",
-    "hint": "Fill missing metadata for exact official model matches in this form from models.dev; not an account model list. Manual values take priority. Save to apply.",
-    "failed": "Public model metadata failed: {{reason}}. You can still add or save models manually.",
-    "ready": "Matched public metadata for {{count}} models. Existing values are unchanged; save to apply.",
-    "empty": "No reliable public metadata match. Models are unchanged and can still be edited manually."
+    "configChanged": "The config changed elsewhere. Go back to the list and open it again.",
+    "unreachable": "Could not reach the model API. Check the URL and the network.",
+    "keyRefused": "The key was refused by the provider."
   }
 }

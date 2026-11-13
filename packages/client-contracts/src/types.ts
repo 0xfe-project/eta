@@ -275,6 +275,17 @@ export interface ProviderSummary {
   lastRefreshedAt?: string;
 }
 
+/**
+ * The last time a provider was checked: its model list is the probe. `invalid_key` is the
+ * provider refusing the key (HTTP 401 or 403); `unreachable` is every other failure, with the
+ * discovery code in `error`. A provider never checked since the host started has none.
+ */
+export interface ProviderCheck {
+  state: "ok" | "invalid_key" | "unreachable";
+  checkedAt: string;
+  error?: string;
+}
+
 export interface NetworkConfig {
   mode: "system" | "manual" | "direct";
   proxyUrl?: string;

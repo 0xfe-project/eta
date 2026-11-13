@@ -2,11 +2,7 @@
 // small stand-in for the pipe on its other end that answers the way the real one does (a snapshot
 // for a subscription, a patch when a section moved, a reply for a call).
 
-import type {
-  MountedPlugin,
-  ProvidersView,
-  ServerFrame,
-} from "@eta/client-contracts";
+import type { MountedPlugin, ServerFrame } from "@eta/client-contracts";
 import type {
   CallFrame,
   ClientFrame,
@@ -285,17 +281,6 @@ export class FakeHost {
           }),
       );
   }
-}
-
-/** A host with the `providers` plugin mounted, the config as its first state, connected. */
-export function providersHost(config: ProvidersView): FakeHost {
-  const host = new FakeHost()
-    .target("providers", { config }, { eager: true })
-    .plugins([{ name: "providers", source: "bundled" }])
-    .handle("providers.reload", () => ({}));
-  host.install();
-  host.hello();
-  return host;
 }
 
 function snapshotOf(target: HostTarget) {

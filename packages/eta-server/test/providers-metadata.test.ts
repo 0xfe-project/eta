@@ -1,4 +1,3 @@
-import type { ProviderArgs } from "@eta/client-contracts";
 import { describe, expect, it, vi } from "vitest";
 import { publicModelMetadata } from "../src/providers/metadata";
 
@@ -17,7 +16,7 @@ const catalog = {
     },
   },
 };
-const args: ProviderArgs["metadata"] = {
+const args: Parameters<typeof publicModelMetadata>[0] = {
   kind: "openai-compatible",
   baseUrl: "https://api.openai.com/v1",
   modelIds: ["gpt-4.1", "unknown"],
@@ -34,7 +33,7 @@ describe("public model metadata", () => {
           ...args,
           apiKey: "secret",
           headers: { Authorization: "private", "x-key": "private" },
-        } as ProviderArgs["metadata"],
+        } as Parameters<typeof publicModelMetadata>[0],
         send,
       ),
     ).toEqual({
@@ -77,7 +76,9 @@ describe("public model metadata", () => {
       const send = vi.fn<typeof fetch>();
       expect(
         await publicModelMetadata(
-          { ...args, ...reference } as ProviderArgs["metadata"],
+          { ...args, ...reference } as Parameters<
+            typeof publicModelMetadata
+          >[0],
           send,
         ),
       ).toEqual({ models: [] });
@@ -110,7 +111,7 @@ describe("public model metadata", () => {
             kind,
             baseUrl: `${baseUrl}/`,
             modelIds: ["exact"],
-          } as ProviderArgs["metadata"],
+          } as Parameters<typeof publicModelMetadata>[0],
           send,
         ),
       ).toEqual({ models: [{ id: "exact", name: "Exact" }] });

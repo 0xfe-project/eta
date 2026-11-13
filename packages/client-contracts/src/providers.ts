@@ -3,38 +3,31 @@ export const BUILTIN_PROVIDER_PRESETS = {
   "openai-codex": {
     name: "Codex",
     baseUrl: "https://chatgpt.com/backend-api",
-    logo: "openai.svg",
   },
   "kimi-coding": {
     name: "Kimi for Coding",
     baseUrl: "https://api.kimi.com/coding/v1",
-    logo: "kimi.svg",
   },
   deepseek: {
     name: "DeepSeek",
     baseUrl: "https://api.deepseek.com",
-    logo: "deepseek.svg",
   },
   "zai-coding-cn": {
     name: "GLM Coding Plan (CN)",
     baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
-    logo: "zai.svg",
   },
   zai: {
     name: "GLM Coding Plan (Global)",
     baseUrl: "https://api.z.ai/api/coding/paas/v4",
-    logo: "zai.svg",
   },
   // OpenCode's gateways serve several protocols; the base URL is the OpenAI one (Chat
   // Completions and Responses), and each model says which of the two it speaks.
   opencode: {
     name: "OpenCode Zen",
     baseUrl: "https://opencode.ai/inference/openai/v1",
-    logo: "opencode.svg",
   },
   "opencode-go": {
     name: "OpenCode Go",
     baseUrl: "https://opencode.ai/inference/go/openai/v1",
-    logo: "opencode.svg",
   },
 } as const;

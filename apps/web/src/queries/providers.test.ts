@@ -192,12 +192,16 @@ describe("what a failed write says", () => {
 describe("safe discovery failures", () => {
   it.each([
     ["discovery_invalid_connection", "接口地址不对"],
-    ["discovery_unsupported", "不提供模型发现"],
+    ["discovery_unsupported", "不提供模型列表"],
+    ["discovery_network", "连不上模型接口"],
     ["discovery_network: ECONNREFUSED", "ECONNREFUSED"],
     ["discovery_response", "格式不正确"],
     ["discovery_timeout", "超时"],
-    ["config_changed", "重新打开表单"],
-    ["discovery_http_403", "HTTP 403"],
+    ["config_changed", "重新打开"],
+    ["discovery_http_500", "HTTP 500"],
+    // A refused key is told as such, not as a status code.
+    ["discovery_http_401", "key 无效"],
+    ["discovery_http_403", "key 无效"],
   ])("localizes %s without showing connection data", (code, text) => {
     expect(discoveryErrorMessage(new WireError("server", code))).toContain(
       text,
