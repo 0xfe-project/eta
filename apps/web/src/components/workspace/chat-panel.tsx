@@ -50,14 +50,13 @@ import { buildMenu, hashAt, mentionAt } from "@/lib/composer-menu";
 import { translate } from "@/lib/i18n";
 import { mentionLabel } from "@/lib/mentions";
 import { firstVisible } from "@/lib/rail";
-import { runFromOf, savedTools } from "@/lib/run";
+import { runFromOf, savedSteps, savedTools, splitReply } from "@/lib/run";
 import { readTheme, setTheme } from "@/lib/theme";
 import {
   ACTIVE_STATUSES,
   RUNNING_STATUSES,
   taskRowsByTurn,
 } from "@/lib/timeline";
-import { cn } from "@/lib/utils";
 import { agentName } from "@/queries/agents";
 import { beginUpload, useOutbox } from "@/queries/outbox";
 import { useProjectFiles } from "@/queries/projects";
@@ -746,16 +745,13 @@ const joinedNames = (message: MessageView, agents: readonly AgentView[]) =>
  * the thinking will start. Without it the row is a name over nothing for the seconds before the
  * first token, which reads as stuck. Drawn at once (no skeleton hold): the wait is already long.
  */
-function FirstToken({ boxed }: { boxed: boolean }) {
+function FirstToken() {
   const { t: translateText } = useTranslation("chat");
   return (
+    // In the box, whose frame is the border.
     <div
       role="status"
-      className={cn(
-        "flex items-center gap-2 px-[10px] py-[5px] font-mono text-[10px] tracking-[0.08em] text-faint uppercase",
-        // In the box the frame is the border; alone it is framed like the thinking block it becomes.
-        !boxed && "border",
-      )}
+      className="flex items-center gap-2 px-[10px] py-[5px] font-mono text-[10px] tracking-[0.08em] text-faint uppercase"
     >
       <span className="shrink-0">
         {translateText("thinking.verbs.thinking")}
@@ -765,11 +761,64 @@ function FirstToken({ boxed }: { boxed: boolean }) {
   );
 }
 
-/** A reply that is writing now: what its session has said and done in this run. */
+/**
+ * One step of a reply's process: a thought, a tool call, or what the agent said between calls.
+ * The same element for a reply at work and a finished one.
+ */
+function ProcessStepView({
+  block,
+  sessionId,
+  streaming = false,
+}: {
+  block: RunBlock;
+  sessionId?: string | undefined;
+  streaming?: boolean;
+}) {
+  if (block.type === "thinking") return <ThinkingBlock text={block.text} />;
+  if (block.type === "tool")
+    return (
+      <div data-block={block.id} className="tool-step space-y-1">
+        <ToolActivity block={block} sessionId={sessionId} />
+      </div>
+    );
+  return (
+    <div className="process-note">
+      <Markdown streaming={streaming}>{block.text}</Markdown>
+    </div>
+  );
+}
+
+/**
+ * How long text written after a step goes on with no step after it before it is taken for the
+ * answer. A model says a sentence before a call; the call follows within a second, and folding the
+ * box under that sentence would open it again a moment later, at every step.
+ */
+const ANSWER_SETTLE_MS = 1500;
+
+/** `key` has stayed the same for `ANSWER_SETTLE_MS`. */
+function useSettled(key: string | undefined): boolean {
+  const [settled, setSettled] = useState<string>();
+  useEffect(() => {
+    if (key === undefined) return;
+    const timer = setTimeout(setSettled, ANSWER_SETTLE_MS, key);
+    return () => clearTimeout(timer);
+  }, [key]);
+  return key !== undefined && settled === key;
+}
+
+/**
+ * A reply that is writing now: what its session has said and done in this run. Its process goes in
+ * the process box, and the text at the end (`splitReply`) is its answer: drawn under the box,
+ * which folds into one row. A finished reply is drawn by the same rule from its row, so the end of
+ * the run moves nothing.
+ *
+ * Text that follows a step stays in the box, as the step's next line, until no step has followed it
+ * for `ANSWER_SETTLE_MS`: until then it is as likely a sentence before the next call. Text before
+ * any step is the answer at once, so a reply without tools never draws a box.
+ */
 function LiveReply({
   sessionId,
   runFrom,
-  boxed,
   waiting,
   author,
   agentId,
@@ -778,8 +827,6 @@ function LiveReply({
   sessionId: string;
   /** Where this reply's run starts in the session. */
   runFrom: number | undefined;
-  /** In a group the thinking and tools go in a fixed-height box. */
-  boxed: boolean;
   /** It is waiting on the reader, not working: no first-token placeholder. */
   waiting: boolean;
   author?: string | undefined;
@@ -787,48 +834,48 @@ function LiveReply({
   time: string;
 }) {
   const blocks = useRunBlocks(sessionId, runFrom);
+  const split = splitReply(blocks);
+  const settled = useSettled(
+    split.steps.length === 0 ? undefined : split.answer[0]?.id,
+  );
+  const answered = split.steps.length === 0 || settled;
+  const steps = answered ? split.steps : blocks;
+  const answer = answered ? split.answer : [];
   // Nothing from the run yet: the placeholder holds the place, and the first block replaces it.
-  const placeholder =
-    blocks.length === 0 && !waiting ? <FirstToken boxed={boxed} /> : null;
-  const step = (block: (typeof blocks)[number]) =>
-    block.type === "thinking" ? (
-      <ThinkingBlock key={block.id} text={block.text} />
-    ) : block.type === "tool" ? (
-      <div key={block.id} data-block={block.id} className="tool-step space-y-1">
-        <ToolActivity block={block} sessionId={sessionId} />
-      </div>
-    ) : null;
-  const text = (block: (typeof blocks)[number]) =>
-    block.type === "text" ? (
-      <div key={block.id} className="message-content">
-        <Markdown streaming>{block.text}</Markdown>
-      </div>
-    ) : null;
-  if (!boxed)
-    return (
-      placeholder ??
-      blocks.map((block) => (block.type === "text" ? text(block) : step(block)))
-    );
-  const steps = blocks.filter((block) => block.type !== "text");
+  const placeholder = blocks.length === 0 && !waiting ? <FirstToken /> : null;
+  const text = answer.map((block) => (
+    <div key={block.id} className="message-content">
+      <Markdown streaming>{block.type === "text" ? block.text : ""}</Markdown>
+    </div>
+  ));
   return (
     <>
       {steps.length === 0 && placeholder === null ? null : (
         // Before the first token the box is already there, at work; its steps fill the same frame.
         <ProcessBox
-          steps={placeholder ?? steps.map(step)}
+          steps={
+            placeholder ??
+            steps.map((block) => (
+              <ProcessStepView
+                key={block.id}
+                block={block}
+                sessionId={sessionId}
+                streaming
+              />
+            ))
+          }
           count={steps.length}
           running
-          // Text after the last tool or thinking block: the final response is being written.
-          folded={blocks.at(-1)?.type === "text"}
+          folded={answer.length > 0}
           author={author}
           agentId={agentId}
           sessionId={sessionId}
           runFrom={runFrom}
           time={time}
-          answer={blocks.map(text)}
+          answer={text}
         />
       )}
-      {blocks.map(text)}
+      {text}
     </>
   );
 }
@@ -845,7 +892,6 @@ const Turn = memo(
     question,
     nobody,
     joined,
-    boxed,
     taskRowsOf,
     actions,
     ...line
@@ -860,8 +906,6 @@ const Turn = memo(
     nobody: boolean;
     /** Who the user message joined the turn of. */
     joined: string;
-    /** A group: the process of a reply goes in a fixed-height box. */
-    boxed: boolean;
     /** The task rows this reply wrote, and which are drawn here rather than on the timeline. */
     taskRowsOf?: readonly MessageView[] | undefined;
     actions: React.RefObject<TurnActions>;
@@ -912,26 +956,8 @@ const Turn = memo(
     // Only a reply at work still grows; the rest render as finished text.
     const running = RUNNING_STATUSES.has(message.status);
     const tools = savedTools(message.data);
-    const processSteps =
-      message.thinking === "" && tools.length === 0 ? null : (
-        <>
-          {message.thinking === "" ? null : (
-            // What it worked through: folded, with its size on the line, because it is context
-            // for reading the answer critically rather than a second answer.
-            <ThinkingBlock text={message.thinking} />
-          )}
-          {tools.map((block) => (
-            // What it did with tools, as the cards the run showed while it worked.
-            <div
-              key={block.id}
-              data-block={block.id}
-              className="tool-step space-y-1"
-            >
-              <ToolActivity block={block} />
-            </div>
-          ))}
-        </>
-      );
+    // What it thought, said and did on the way, in the order the run showed it.
+    const steps = savedSteps(message);
     // What it settled on: the answer whole. The one element is what both render paths show — in
     // place, and (in a group) under the whole process in the dialog.
     const answer =
@@ -962,7 +988,6 @@ const Turn = memo(
           <LiveReply
             sessionId={sessionId}
             runFrom={runFromOf(message.data)}
-            boxed={boxed}
             waiting={message.status === "waiting_for_input"}
             author={author}
             agentId={message.agentId}
@@ -970,10 +995,12 @@ const Turn = memo(
           />
         ) : (
           <>
-            {processSteps === null ? null : boxed ? (
+            {steps.length === 0 ? null : (
               <ProcessBox
-                steps={processSteps}
-                count={tools.length + (message.thinking === "" ? 0 : 1)}
+                steps={steps.map((block) => (
+                  <ProcessStepView key={block.id} block={block} />
+                ))}
+                count={steps.length}
                 running={false}
                 folded
                 author={author}
@@ -984,8 +1011,6 @@ const Turn = memo(
                 time={when(message.createdAt)}
                 answer={answer}
               />
-            ) : (
-              processSteps
             )}
             {answer}
           </>
@@ -1692,7 +1717,6 @@ export function ChatPanel({
                             ? joinedNames(message, agents)
                             : ""
                         }
-                        boxed={group?.kind === "group"}
                         {...lines.get(message.id)}
                         actions={actionsRef}
                       />

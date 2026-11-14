@@ -8,6 +8,7 @@
  * had any, with what it thought in the same message (or, failing that, the last thought it had).
  */
 import type {
+  ProcessStep,
   PromptImage,
   RunOutcome,
   ToolActivity,
@@ -23,6 +24,7 @@ export function listen(managed: ManagedSession): {
     text: string;
     thinking: string;
     activity: ToolActivity[];
+    process: ProcessStep[];
     failure: RunOutcome["failure"];
   };
   stop: () => void;
@@ -57,7 +59,13 @@ export function listen(managed: ManagedSession): {
     },
   );
   return {
-    said: () => ({ text, thinking, activity: activity.list(), failure }),
+    said: () => ({
+      text,
+      thinking,
+      activity: activity.list(),
+      process: activity.steps(),
+      failure,
+    }),
     stop: () => {
       off();
       offFailure();
@@ -119,6 +127,7 @@ export async function runAndWait(
       text: said.text,
       thinking: said.thinking,
       ...(said.activity.length === 0 ? {} : { activity: said.activity }),
+      ...(said.process.length === 0 ? {} : { process: said.process }),
     };
   } finally {
     heard.stop();

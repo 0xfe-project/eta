@@ -948,9 +948,12 @@ export class Engine {
         () => !this.#closing,
         told.images,
       );
-      // What the run did with tools stays on the row, so the page draws it after the run too.
-      const activity =
-        result.activity === undefined ? {} : { activity: result.activity };
+      // What the run did with tools, and the order of its steps, stay on the row, so the page draws
+      // it after the run as it did during it.
+      const activity = {
+        ...(result.activity === undefined ? {} : { activity: result.activity }),
+        ...(result.process === undefined ? {} : { process: result.process }),
+      };
       if (this.#closing && result.status === "aborted") {
         this.#timeline.finish(replyId, {
           status: "failed",

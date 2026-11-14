@@ -21,9 +21,9 @@ let conversations = 0;
 
 /** The paragraph of the block saying `text`, which comes in without an animation. */
 function paragraph(container: HTMLElement, text: string) {
-  const block = [...container.querySelectorAll(".message-content")].find(
-    (element) => element.textContent === text,
-  );
+  const block = [
+    ...container.querySelectorAll(".message-content, .process-note"),
+  ].find((element) => element.textContent === text);
   if (block === undefined) throw new Error(`no block says ${text}`);
   expect(block.outerHTML).not.toContain("data-sd-animate");
   return block.querySelector("p")!;
@@ -128,11 +128,14 @@ describe.each(["group", "direct"] as const)(
       await stream(said(10, [{ type: "text", text: "我先看看" }]));
       expect(paragraph(container, "我先看看")).toBe(shown);
 
-      // The message lands in the transcript, and the tool it called runs and answers.
+      // A call follows the words: they were a step, and go into the process box, in their order.
       const first = said(10, [{ type: "text", text: "我先看看" }, call]);
       await stream(first);
+      const step = paragraph(container, "我先看看");
+      expect(step.closest(".process-box")).not.toBeNull();
+      // The message lands in the transcript, and the tool it called runs and answers.
       await commit([entry(2, first)]);
-      expect(paragraph(container, "我先看看")).toBe(shown);
+      expect(paragraph(container, "我先看看")).toBe(step);
       await commit([
         entry(2, first),
         entry(3, {
@@ -144,12 +147,17 @@ describe.each(["group", "direct"] as const)(
           timestamp: 11,
         }),
       ]);
-      expect(paragraph(container, "我先看看")).toBe(shown);
+      expect(paragraph(container, "我先看看")).toBe(step);
 
-      // The next turn's words are a block of their own.
+      // The next turn's words are a block of their own, under the folded process.
       await stream(said(20, [{ type: "text", text: "看完了" }]));
-      expect(paragraph(container, "我先看看")).toBe(shown);
-      expect(paragraph(container, "看完了")).not.toBe(shown);
+      await flush(1600);
+      expect(
+        paragraph(container, "看完了").closest(".process-fold"),
+      ).toBeNull();
+      expect(
+        paragraph(container, "我先看看").closest(".process-fold"),
+      ).not.toBeNull();
     });
 
     // The row goes to work before the view has the message that started the run: for a moment the

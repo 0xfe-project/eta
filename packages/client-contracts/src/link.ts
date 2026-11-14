@@ -1,5 +1,5 @@
 import type { PromptImage } from "./operations";
-import type { AgentRuntimeInfo, ToolActivity } from "./product";
+import type { AgentRuntimeInfo, ProcessStep, ToolActivity } from "./product";
 
 /**
  * The link between the primary and a machine that runs the daemon.
@@ -320,6 +320,8 @@ export interface RunOutcome {
   thinking: string;
   /** The tool calls the run made, shortened for the reply's row; absent when there were none. */
   activity?: ToolActivity[];
+  /** Its thoughts, words and calls in order; absent from a daemon too old to say. */
+  process?: ProcessStep[];
 }
 
 export interface RunFailureView {

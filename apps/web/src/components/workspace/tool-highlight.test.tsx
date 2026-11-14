@@ -24,17 +24,33 @@ const code = (root: ParentNode, lang: "js" | "json") =>
   root.querySelector(`.code-view[data-lang="${lang}"]`);
 
 describe("tool cards", () => {
-  it("opens esmrun cards and leaves the rest folded", async () => {
+  it("starts every card folded, a script and a running call too", async () => {
     const script = await mount(
       card({ name: "esmrun", input: { script: "1" } }),
     );
-    expect(details(script.container).open).toBe(true);
+    expect(details(script.container).open).toBe(false);
     const keep = await mount(
       card({ name: "esmrunandkeep", input: { name: "f", script: "1" } }),
     );
-    expect(details(keep.container).open).toBe(true);
+    expect(details(keep.container).open).toBe(false);
+    const running = await mount(
+      card({ name: "esmrun", status: "running", input: { script: "1" } }),
+    );
+    expect(details(running.container).open).toBe(false);
     const other = await mount(card({ name: "read", input: { path: "a.ts" } }));
     expect(details(other.container).open).toBe(false);
+  });
+
+  it("stays as the reader left it while the call goes on and ends", async () => {
+    const shown = (status: ToolBlock["status"]) =>
+      card({ name: "esmrun", status, input: { script: "1" } });
+    const { container, show } = await mount(shown("running"));
+    details(container).open = true;
+    await act(async () =>
+      details(container).dispatchEvent(new Event("toggle")),
+    );
+    await show(shown("completed"));
+    expect(details(container).open).toBe(true);
   });
 
   it("colours a streaming script in the same element, frame after frame", async () => {

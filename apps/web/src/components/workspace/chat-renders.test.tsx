@@ -618,8 +618,9 @@ describe("a reply that is writing", () => {
       });
       fake.handle("sessions.resync", () => ({}));
     });
-    await flush(80);
-    // Its last text is written, so the box has folded while the row still reads as working.
+    // Its last text is written and no call followed it, so the box has folded while the row still
+    // reads as working.
+    await flush(1600);
     const fold = container.querySelector(".process-fold")!;
     expect(fold.textContent).toContain("publish_artifact");
     expect(fold.querySelectorAll('[data-testid="ref"]')).toHaveLength(0);
@@ -748,9 +749,8 @@ describe("a reply that is writing", () => {
     expect(settled.closest(".turn-tasks")).not.toBeNull();
   });
 
-  // A direct conversation has no process box to fold, and the card does not move because of one:
-  // the same layer, beside the answer, in both.
-  it("draws a publish's card in that same layer where there is no process box", async () => {
+  // A direct conversation folds its process the same way: the card is in the same layer there.
+  it("draws a publish's card in that same layer in a direct conversation", async () => {
     kind = "direct";
     const user = row({ text: "发布一个页面" });
     history = [
@@ -776,7 +776,7 @@ describe("a reply that is writing", () => {
     ];
     const { container } = await start();
     await flush();
-    expect(container.querySelector(".process-fold")).toBeNull();
+    expect(container.querySelector(".process-fold")).not.toBeNull();
     const card = container.querySelector('[data-testid="ref"]')!;
     expect(card.textContent).toBe("artifact:报告 #2");
     expect(card.closest(".turn-tasks")).not.toBeNull();

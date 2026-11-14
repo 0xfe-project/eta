@@ -1000,6 +1000,14 @@
   .process-fold-body .tool-card {
     border-width: 0 0 1px;
   }
+  /* What the agent said between its calls: a step of the process, in its order, read as text. */
+  .process-note {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+  }
   .process-box > div > :last-child,
   .process-box > div > :last-child .tool-card:last-child,
   .process-fold-body > :last-child,

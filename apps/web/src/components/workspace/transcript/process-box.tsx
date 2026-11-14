@@ -9,7 +9,7 @@ import { RunHeader } from "./run-timeline";
 import { TranscriptDialog } from "./transcript-dialog";
 
 /**
- * A reply's process (thinking and tool calls) in a group. While the agent still works it is the
+ * A reply's process (thinking, tool calls and what it said between them), in any conversation. While the agent still works it is the
  * same stacked steps in a fixed-height frame that scrolls inside itself, so a long run does not
  * push the conversation away; the frame follows its newest step, unless the reader scrolled up
  * inside it, and follows again back at the bottom. Once the reply reaches its final text (always,
@@ -105,9 +105,11 @@ export function ProcessBox({
             ref={boxRef}
             role="region"
             tabIndex={0}
-            aria-label={translateText("process.label", {
-              name: author ?? "",
-            })}
+            aria-label={
+              author === undefined
+                ? translateText("process.title")
+                : translateText("process.label", { name: author })
+            }
             className="process-box w-full"
             onScroll={(event) => {
               const box = event.currentTarget;
