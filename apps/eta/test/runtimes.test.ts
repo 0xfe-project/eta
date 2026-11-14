@@ -245,7 +245,9 @@ describe("eta's tools, called by an agent on Claude Code", () => {
     expect(done.status).toBe("done");
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({ isError: false });
-    expect(results[0]!.text).toContain('Published "Page" version 1 (1 files)');
+    expect(results[0]!.text).toMatch(
+      /Published "Page" as artifact \S+, version 1/,
+    );
 
     const artifacts = () =>
       w.client.section<ArtifactView[]>("artifacts", "list") ?? [];

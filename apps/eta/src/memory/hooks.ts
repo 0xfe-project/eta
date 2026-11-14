@@ -87,9 +87,14 @@ export function memoryTools(
     }),
     async execute(args) {
       const done = await call("remember", { text: args.text });
-      return done instanceof Error
-        ? toolError(done.message)
-        : text(`Remembered: ${args.text}`);
+      if (done instanceof Error) return toolError(done.message);
+      // The id is what `forget` takes: said here, a fact can be taken back without a `recall`.
+      const id = idOf(done.text);
+      return text(
+        typeof id === "string"
+          ? `Remembered [${id}]: ${args.text}`
+          : `Remembered: ${args.text}`,
+      );
     },
   });
 
@@ -135,7 +140,7 @@ export function memoryTools(
   const forget = defineTool({
     name: "forget",
     description:
-      "Forget a memory that is wrong or no longer true, by the id `recall` gave.",
+      "Forget a memory that is wrong or no longer true, by the id `remember` or `recall` gave.",
     parameters: Type.Object({
       memoryId: Type.String({ description: "The memory's id" }),
     }),
@@ -152,4 +157,14 @@ export function memoryTools(
     toKernelTool(recall, () => undefined),
     toKernelTool(forget, () => undefined),
   ] as KernelTool[];
+}
+
+/** The id in what `remember` answered: the sidecar sends the memory it added as JSON. */
+function idOf(answer: string): string | undefined {
+  try {
+    const parsed = JSON.parse(answer) as { id?: unknown } | null;
+    return typeof parsed?.id === "string" ? parsed.id : undefined;
+  } catch {
+    return undefined;
+  }
 }
