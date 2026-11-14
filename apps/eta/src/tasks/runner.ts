@@ -60,6 +60,7 @@ import type { TaskRecord, TaskStore } from "./store";
 import { homedir } from "node:os";
 import { LinkError } from "@eta/daemon";
 import { shellQuote } from "@eta/ssh";
+import { explainRunError } from "../agents/model";
 import { workable } from "./board";
 import { mentionKey, sessionKeyOf, taskKey } from "./session-key";
 import { prepareWorktree } from "./workspace";
@@ -954,7 +955,10 @@ export class TaskRunner implements TaskRuns {
         return {
           ended: {
             status: "failed",
-            error: result.error ?? "The run failed.",
+            error:
+              result.error === undefined
+                ? "The run failed."
+                : explainRunError(result.error),
             failure: result.failure,
           },
           info,

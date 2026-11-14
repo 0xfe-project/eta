@@ -18,7 +18,6 @@ const model = (
   providerName,
   name,
   available,
-  default: false,
 });
 
 const models = [
@@ -191,15 +190,15 @@ describe("what it keeps from the plain select", () => {
     ).toBe("Qwen 2.5");
   });
 
-  it("offers the default choice, searchable by its name", async () => {
+  it("offers an external runtime's own default, searchable by its name", async () => {
     const change = await render({
       value: "zen:gpt-5",
-      defaultLabel: "跟随默认",
+      defaultLabel: "运行时默认模型",
     });
     await open();
-    expect(optionTexts()[0]).toBe("跟随默认");
-    await type("跟随");
-    expect(optionTexts()).toEqual(["跟随默认"]);
+    expect(optionTexts()[0]).toBe("运行时默认模型");
+    await type("运行时");
+    expect(optionTexts()).toEqual(["运行时默认模型"]);
     await key("Enter");
     expect(change).toHaveBeenCalledWith("");
   });
@@ -216,14 +215,14 @@ describe("what it keeps from the plain select", () => {
 
   it("shows a chosen model the list no longer has, but never offers it", async () => {
     const change = await render({ value: "zen:gone" });
-    expect(trigger().textContent).toBe("zen:gone（已不存在）");
+    expect(trigger().textContent).toBe("zen:gone（已不可用）");
     await open();
     const gone = options()[0]!;
-    expect(gone.textContent).toBe("zen:gone（已不存在）");
+    expect(gone.textContent).toBe("zen:gone（已不可用）");
     expect(gone.getAttribute("aria-disabled")).toBe("true");
     // Found by its id too, still not choosable.
     await type("gone");
-    expect(optionTexts()).toEqual(["zen:gone（已不存在）"]);
+    expect(optionTexts()).toEqual(["zen:gone（已不可用）"]);
     await key("Enter");
     expect(change).not.toHaveBeenCalled();
   });

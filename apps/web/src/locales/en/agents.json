@@ -24,14 +24,14 @@
   "models": {
     "loading": "Loading models…",
     "select": "Select model",
-    "default": "Default model",
-    "deletedOption": "{{modelName}} (no longer exists)",
+    "gone": "This model is no longer available. Choose another one.",
+    "deletedOption": "{{modelName}} (no longer available)",
     "noneAvailable": "No models available.",
     "noneSelected": "No model selected",
     "search": "Search models",
     "noMatch": "No matching models",
     "errors": {
-      "deleted": "{{modelName}} no longer exists. Select another model.",
+      "deleted": "{{modelName}} is no longer available. Choose another model.",
       "unavailable": "{{modelName}} is temporarily unavailable: {{reason}}"
     }
   },
@@ -101,7 +101,7 @@
   "runtime": {
     "label": "Runtime",
     "eta": "eta (built-in)",
-    "defaultModel": "Runtime default",
+    "ownDefault": "Runtime default",
     "loading": "Looking for Claude Code, Codex…",
     "unreachable": "Can't reach this machine to see which runtimes it has.",
     "status": {

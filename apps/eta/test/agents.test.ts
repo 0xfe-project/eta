@@ -104,9 +104,13 @@ describe("creating an agent", () => {
     // A field that was not sent stays, and `null` clears one.
     const cleared = (await w.client.call("agents", "update", {
       agentId: agent.id,
-      model: null,
+      thinkingLevel: null,
     })) as { agent: AgentView };
-    expect(cleared.agent).toMatchObject({ name: "Ada Lovelace", model: null });
+    expect(cleared.agent).toMatchObject({
+      name: "Ada Lovelace",
+      model: "fake:other",
+      thinkingLevel: null,
+    });
 
     await until(
       () =>
@@ -339,5 +343,65 @@ describe("deleting an agent", () => {
     await expect(
       w.client.call("agents", "delete", { agentId: ada.id }),
     ).rejects.toThrow(/no such agent/);
+  });
+});
+
+describe("an agent's model", () => {
+  it("is required on eta's own loop: create and update refuse none, and other edits are not held up", async () => {
+    const w = await world();
+    for (const model of [undefined, null, ""])
+      await expect(
+        w.client.call("agents", "create", {
+          name: "Ada",
+          ...(model === undefined ? {} : { model }),
+        }),
+      ).rejects.toThrow(/needs a model/);
+    expect(
+      (w.client.section<AgentView[]>("agents", "list") ?? []).filter(
+        (entry) => entry.name === "Ada",
+      ),
+    ).toEqual([]);
+
+    const agent = await w.agent("Ada", { model: "fake:fake-model" });
+    await expect(
+      w.client.call("agents", "update", { agentId: agent.id, model: null }),
+    ).rejects.toThrow(/needs a model/);
+    await expect(
+      w.client.call("agents", "update", { agentId: agent.id, model: "" }),
+    ).rejects.toThrow(/needs a model/);
+
+    // An external runtime has a default of its own: none is fine there, and so is moving back to
+    // eta only with a model.
+    const { agent: moved } = (await w.client.call("agents", "update", {
+      agentId: agent.id,
+      runtime: "claude",
+    })) as { agent: AgentView };
+    expect(moved).toMatchObject({ runtime: "claude", model: null });
+    await expect(
+      w.client.call("agents", "update", { agentId: agent.id, runtime: "eta" }),
+    ).rejects.toThrow(/needs a model/);
+    const { agent: back } = (await w.client.call("agents", "update", {
+      agentId: agent.id,
+      runtime: "eta",
+      model: "fake:fake-model",
+    })) as { agent: AgentView };
+    expect(back).toMatchObject({ runtime: "eta", model: "fake:fake-model" });
+
+    const { agent: cody } = (await w.client.call("agents", "create", {
+      name: "Cody",
+      runtime: "codex",
+    })) as { agent: AgentView };
+    expect(cody).toMatchObject({ runtime: "codex", model: null });
+  });
+
+  it("left unset from before: an edit that does not touch it still saves", async () => {
+    const w = await world();
+    const agent = await w.agent("Ada");
+    w.host.db.query("UPDATE agent SET model = NULL WHERE id = ?").run(agent.id);
+    const { agent: renamed } = (await w.client.call("agents", "update", {
+      agentId: agent.id,
+      name: "Ada L",
+    })) as { agent: AgentView };
+    expect(renamed).toMatchObject({ name: "Ada L", model: null });
   });
 });

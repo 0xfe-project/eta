@@ -72,24 +72,11 @@ describe("the models a picker lists", () => {
     ]);
   });
 
-  it("start new chats on the configured default, else the first model", () => {
+  it("mark none of them as a default, even with a defaultModel left in the config", () => {
     const providers = [provider({ id: "a" }), provider({ id: "b" })];
-    expect(
-      modelsOf(view(providers, { defaultModel: "b:m2" }))
-        .filter((m) => m.default)
-        .map((m) => m.id),
-    ).toEqual(["b:m2"]);
-    expect(
-      modelsOf(view(providers))
-        .filter((m) => m.default)
-        .map((m) => m.id),
-    ).toEqual(["a:m1"]);
-    // A default that no longer exists is not one.
-    expect(
-      modelsOf(view(providers, { defaultModel: "gone:x" }))
-        .filter((m) => m.default)
-        .map((m) => m.id),
-    ).toEqual(["a:m1"]);
+    const models = modelsOf(view(providers, { defaultModel: "b:m2" }));
+    expect(models.map((m) => m.id)).toEqual(["a:m1", "a:m2", "b:m1", "b:m2"]);
+    expect(models.some((m) => "default" in m)).toBe(false);
   });
 
   it("are not available while their provider lacks a key it needs", () => {
@@ -138,7 +125,7 @@ describe("whether an agent can chat with its model", () => {
   it("says when the model is gone or was never chosen", () => {
     expect(modelAvailability({ model: "local:old" }, open)).toMatchObject({
       state: "unavailable",
-      message: "local:old 已不存在，请更换模型。",
+      message: "local:old 已不可用，请重新选择模型。",
     });
     expect(modelAvailability({ model: null }, open).state).toBe("not_set");
   });

@@ -97,7 +97,7 @@ export function routinesPlugin(deps: RoutinesDeps, applied: () => void) {
             brief,
             schedule,
             timezone,
-            model: modelOf(args.nullableString("model")) ?? null,
+            model: requiredModel(modelOf(args.nullableString("model"))),
             conversationId:
               conversationOf(
                 conversations,
@@ -128,7 +128,9 @@ export function routinesPlugin(deps: RoutinesDeps, applied: () => void) {
               timezone ?? before.timezone,
               now(),
             );
-          const model = modelOf(args.nullableString("model"));
+          const chosen = modelOf(args.nullableString("model"));
+          const model =
+            chosen === undefined ? undefined : requiredModel(chosen);
           const conversationId = conversationOf(
             conversations,
             args.nullableString("conversationId"),
@@ -248,7 +250,17 @@ function briefOf(brief: string): string {
   return trimmed;
 }
 
-/** `provider:modelId`; an empty string clears it like null does; undefined leaves it alone. */
+/**
+ * A routine runs on eta's own loop, and that loop has no default model: a routine names one, and
+ * it cannot be cleared.
+ */
+function requiredModel(model: string | null | undefined): string {
+  if (model === undefined || model === null)
+    throw new Error("a routine needs a model: choose one");
+  return model;
+}
+
+/** `provider:modelId`; an empty string reads as null; undefined leaves it alone. */
 function modelOf(model: string | null | undefined): string | null | undefined {
   if (model === undefined || model === null) return model;
   const trimmed = model.trim();

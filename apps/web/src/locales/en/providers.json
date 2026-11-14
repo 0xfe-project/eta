@@ -10,10 +10,6 @@
     "signOut": "Sign out"
   },
   "title": "Model services",
-  "defaultModel": {
-    "label": "Default model",
-    "none": "No usable models yet"
-  },
   "list": {
     "label": "Model sources",
     "empty": "No model sources yet. Add one so agents have a model to run on.",
@@ -153,7 +149,6 @@
     "modelsRequired": "Add at least one model.",
     "invalidProviderId": "The name cannot be empty or too long.",
     "invalidConfig": "The base URL is not valid.",
-    "invalidDefaultModel": "The default model is not among the configured models.",
     "invalidNetwork": "The proxy address is not valid.",
     "invalidSavedConfig": "config.json cannot be read. Fix the file first.",
     "readFailed": "Cannot read config.json.",

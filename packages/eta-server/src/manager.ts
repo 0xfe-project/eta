@@ -297,15 +297,15 @@ export class SessionManager {
       options.runtime === undefined || options.runtime === "eta"
         ? undefined
         : options.runtime;
-    // The settings name eta's own models and levels; a runtime session has its own.
+    // The settings name eta's own levels; a runtime session has its own. No model comes from them:
+    // a session without one is told so when it first runs.
     const settings =
       runtime === undefined ? ((await this.settings?.()) ?? {}) : {};
     const persona =
       options.persona ?? this.defaults?.persona ?? settings.persona;
     const model =
       options.model ??
-      (runtime === undefined ? this.defaults?.model : undefined) ??
-      settings.model;
+      (runtime === undefined ? this.defaults?.model : undefined);
     const meta: SessionMeta = {
       id: newSessionId(),
       createdAt: Date.now(),

@@ -10,7 +10,7 @@ import { Section } from "./panel-section";
 /**
  * What answers for Captain. Captain is not edited the way the other agents are (its changes go
  * through the captain target), so this is the one place to choose its model; it was in the drawer,
- * and went with it. With none chosen, Captain uses the providers' default model.
+ * and went with it. With none chosen, Captain has no model to run on and says so when asked.
  *
  * The parent keys it by the saved model, so a save from elsewhere starts it over from that.
  */

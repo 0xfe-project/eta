@@ -26,7 +26,6 @@ import { Icon } from "../../ui/Icon";
 import { SelectSheet } from "../../ui/SelectSheet";
 import { toast } from "../../ui/toast";
 import { call } from "../../wire/target";
-import { useModels } from "../create/models";
 import { BottomInset } from "./BottomInset";
 import { TaskStatusIcon, taskStatusLabel } from "./cards";
 import { agentName } from "./conversation";
@@ -383,7 +382,6 @@ export function Composer(props: {
     return undefined;
   };
   /** Who the next message reaches: a direct chat's one reader is not a choice the target holds. */
-  const models = useModels();
   const reach = () =>
     chat.direct() ? members().map((member) => member.id) : target().ids;
   // A warning that leaves the box usable: 03g's two.
@@ -398,14 +396,11 @@ export function Composer(props: {
           });
       }
     }
-    // A null model follows the settings' default: it is only missing when the host has no model.
-    const unset =
-      models()?.length === 0
-        ? reach().filter((agentId) => {
-            const agent = agentById(agentId);
-            return agent?.runtime === "eta" && agent.model === null;
-          })
-        : [];
+    // An agent on eta's own loop runs on the model it names; there is no default to fall back to.
+    const unset = reach().filter((agentId) => {
+      const agent = agentById(agentId);
+      return agent?.runtime === "eta" && agent.model === null;
+    });
     return unset.length === 0
       ? undefined
       : t("chat.composer.noModel", { names: unset.map(agentName).join("、") });

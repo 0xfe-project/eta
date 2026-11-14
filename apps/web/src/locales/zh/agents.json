@@ -24,14 +24,14 @@
   "models": {
     "loading": "正在加载模型…",
     "select": "选择模型",
-    "default": "默认模型",
-    "deletedOption": "{{modelName}}（已不存在）",
+    "gone": "模型已不可用，请重新选择。",
+    "deletedOption": "{{modelName}}（已不可用）",
     "noneAvailable": "暂无可用模型。",
     "noneSelected": "未选择模型",
     "search": "搜索模型",
     "noMatch": "没有匹配的模型",
     "errors": {
-      "deleted": "{{modelName}} 已不存在，请更换模型。",
+      "deleted": "{{modelName}} 已不可用，请重新选择模型。",
       "unavailable": "{{modelName}} 暂不可用：{{reason}}"
     }
   },
@@ -101,7 +101,7 @@
   "runtime": {
     "label": "运行方式",
     "eta": "eta 内置",
-    "defaultModel": "运行时默认模型",
+    "ownDefault": "运行时默认模型",
     "loading": "正在检测 Claude Code、Codex…",
     "unreachable": "这台机器现在连不上，查不到它装了哪些运行方式。",
     "status": {

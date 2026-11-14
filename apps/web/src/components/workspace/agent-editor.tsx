@@ -204,13 +204,9 @@ function AgentEditorForm({
 
   const save = form.handleSubmit(
     (values) => {
-      // Agents can be created before any account is connected, not after. An external runtime
-      // runs its own default when none is chosen.
-      if (
-        values.runtime === "eta" &&
-        !values.model &&
-        models?.some((model) => model.available)
-      ) {
+      // An agent on eta's own loop runs on the model it names; there is no default to fall back
+      // to. An external runtime runs its own default when none is chosen.
+      if (values.runtime === "eta" && !values.model) {
         form.setError("model", {
           message: translateText("validation:modelRequired"),
         });

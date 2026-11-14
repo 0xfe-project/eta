@@ -297,7 +297,6 @@ export interface NetworkConfig {
 export interface ProvidersView {
   network?: NetworkConfig;
   providers: ProviderSummary[];
-  defaultModel?: string;
   /** The config file's content hash: a write carries the revision it read. */
   revision: string;
 }

@@ -72,10 +72,13 @@ async function hostWith(
   });
   const ids: Record<string, string> = {};
   for (const fields of agents) {
+    // An agent on eta's own loop names a model: the host refuses one without.
     const { agent } = await r.wire.call<{ agent: AgentView }>(
       "agents",
       "create",
-      fields,
+      fields.runtime === undefined && fields.model === undefined
+        ? { ...fields, model: "local:m1" }
+        : fields,
     );
     ids[agent.name] = agent.id;
   }
@@ -95,14 +98,15 @@ describe("/model", () => {
     await r.runCommand("/model Bob");
     await r.waitFor("Model for Bob");
     const screen = r.screen();
-    // Following the settings first, then each provider's models under its name.
-    const order = ["Follow the settings", "local", "m1", "m2", "other", "x1"];
+    // Each provider's models under its name; eta's own loop has no default to offer first.
+    const order = ["local", "m1", "m2", "other", "x1"];
     const at = order.map((text) => screen.indexOf(text));
     expect(at.every((index) => index >= 0)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
-    // Bob follows the settings now: marked as current, and the marker starts there.
-    expect(markedLine(r)).toContain("Follow the settings");
-    expect(lineOf(r, "Follow the settings")).toContain("current");
+    expect(screen).not.toContain("The runtime's default");
+    // Bob's model now: marked as current, and the marker starts there.
+    expect(markedLine(r)).toContain("m1");
+    expect(lineOf(r, "m1")).toContain("current");
 
     await markLine(r, "m2");
     await r.press(KEYS.enter);
@@ -128,7 +132,7 @@ describe("/model", () => {
     });
     // Ada was not touched.
     expect(await agentNamed(r, "Ada")).toMatchObject({
-      model: null,
+      model: "local:m1",
       thinkingLevel: null,
     });
     await r.close();
@@ -176,26 +180,42 @@ describe("/model", () => {
     await r.close();
   });
 
-  it("writes null for following the settings, and starts on the agent's current model and level", async () => {
+  it("starts on the agent's current model and level", async () => {
     const { r } = await hostWith([
-      { name: "Ada", model: "local:m1", thinkingLevel: "low" },
+      { name: "Ada", model: "local:m2", thinkingLevel: "low" },
     ]);
     await r.runCommand("/model Ada");
     await r.waitFor("Model for Ada");
-    expect(markedLine(r)).toContain("m1");
-    expect(lineOf(r, "m1")).toContain("current");
-    expect(lineOf(r, "Follow the settings")).not.toContain("current");
-    await markLine(r, "Follow the settings");
+    expect(markedLine(r)).toContain("m2");
+    expect(lineOf(r, "m2")).toContain("current");
     await r.press(KEYS.enter);
     await r.waitFor("Thinking for Ada");
     expect(markedLine(r)).toContain("Low");
     expect(lineOf(r, "Low")).toContain("current");
     await r.press(KEYS.enter);
-    await r.waitFor("Ada now uses the settings' model, thinking Low");
+    await r.waitFor("Ada now uses local / m2, thinking Low");
     expect(await agentNamed(r, "Ada")).toMatchObject({
-      model: null,
+      model: "local:m2",
       thinkingLevel: "low",
     });
+    await r.close();
+  });
+
+  it("offers an external runtime's own default, and writes null for it", async () => {
+    const { r } = await hostWith(
+      [{ name: "Cody", runtime: "claude", model: "claude:sonnet" }],
+      { runtimes: claudeRuntimes },
+    );
+    await r.runCommand("/model Cody");
+    await r.waitFor("Model for Cody");
+    await r.waitFor("Opus");
+    expect(lineOf(r, "The runtime's default")).not.toContain("current");
+    await markLine(r, "The runtime's default");
+    await r.press(KEYS.enter);
+    await r.waitFor("Thinking for Cody");
+    await r.press(KEYS.enter);
+    await r.waitFor("Cody now uses the runtime's default model");
+    expect(await agentNamed(r, "Cody")).toMatchObject({ model: null });
     await r.close();
   });
 
@@ -280,7 +300,7 @@ describe("/model", () => {
     await r.runCommand("/model Cody");
     await r.waitFor("Model for Cody");
     await r.waitFor("This machine has no models for claude");
-    expect(r.screen()).toContain("Follow the settings");
+    expect(r.screen()).toContain("The runtime's default");
     expect(r.screen()).not.toContain("m1");
     await r.close();
   });

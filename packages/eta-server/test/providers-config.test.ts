@@ -8,7 +8,6 @@
 import { describe, expect, it } from "vitest";
 import {
   applyProviderHeaders,
-  configDefaultModel,
   effectiveModel,
   isCustomKind,
   modelDefaultThinking,
@@ -151,31 +150,5 @@ describe("the config as a client sees it", () => {
     expect(summary.hasApiKey).toBe(true);
     expect(JSON.stringify(summary)).not.toContain("sk-secret");
     expect(summary.kind).toBe("openai-compatible");
-  });
-
-  it("resolves the default model, falling back to the first configured one", () => {
-    const config = {
-      providers: [
-        { id: "a", baseUrl: "x", models: [{ id: "m1" }, { id: "m2" }] },
-      ],
-    };
-    expect(configDefaultModel(config)).toEqual({
-      provider: "a",
-      modelId: "m1",
-    });
-    expect(configDefaultModel({ ...config, defaultModel: "a:m2" })).toEqual({
-      provider: "a",
-      modelId: "m2",
-    });
-    // A default that no longer resolves is returned as written: the config file said it, and
-    // the honest failure (`model_unavailable`) belongs at the request that asks for it, not
-    // here where the answer would be a silent substitution for the model the user chose.
-    expect(
-      configDefaultModel({ ...config, defaultModel: "gone:away" }),
-    ).toEqual({
-      provider: "gone",
-      modelId: "away",
-    });
-    expect(configDefaultModel({})).toBeUndefined();
   });
 });

@@ -185,46 +185,28 @@ describe("writes", () => {
     expect(cleared.providers[0]?.hasApiKey).toBe(false);
   });
 
-  it("deletes a provider, and forgets a default that pointed at it", async () => {
+  it("reads a config.json that still has a defaultModel, leaves it out of the view, and drops it at the next write", async () => {
     const root = await scratch();
     const path = join(root, "config.json");
-    const store = new ProviderConfigStore({ path });
-    const saved = await store.save({
-      revision: revisionOf(""),
-      provider: provider("a"),
-    });
-    const withDefault = await store.setDefault("a:m1", saved.revision);
-    expect(withDefault.defaultModel).toBe("a:m1");
-    const removed = await store.delete("a", withDefault.revision);
-    expect(removed.providers).toEqual([]);
-    expect(removed.defaultModel).toBeUndefined();
-  });
-
-  it("takes a gateway model as the default, and keeps it when a provider goes", async () => {
-    const root = await scratch();
-    const store = new ProviderConfigStore({ path: join(root, "config.json") });
-    const saved = await store.save({
-      revision: revisionOf(""),
-      provider: provider("a"),
-    });
-    const set = await store.setDefault("llm:gpt-5.6-sol", saved.revision);
-    expect(set.defaultModel).toBe("llm:gpt-5.6-sol");
-    const removed = await store.delete("a", set.revision);
-    expect(removed.defaultModel).toBe("llm:gpt-5.6-sol");
-    await expect(store.setDefault("llm:", removed.revision)).rejects.toThrow(
-      /invalid_default_model/,
+    await writeFile(
+      path,
+      JSON.stringify({
+        defaultModel: "a:m1",
+        providers: [
+          { id: "a", baseUrl: "https://a.test/v1", models: [{ id: "m1" }] },
+        ],
+      }),
     );
-  });
-
-  it("refuses a default that names no configured model", async () => {
-    const root = await scratch();
-    const store = new ProviderConfigStore({ path: join(root, "config.json") });
-    const saved = await store.save({
-      revision: revisionOf(""),
-      provider: provider("a"),
-    });
-    await expect(store.setDefault("a:nope", saved.revision)).rejects.toThrow(
-      /invalid_default_model/,
+    const store = new ProviderConfigStore({ path });
+    const view = await store.view();
+    expect(view.providers.map((entry) => entry.id)).toEqual(["a"]);
+    expect(view).not.toHaveProperty("defaultModel");
+    // Untouched until something writes the file: the upgrade's migration reads it first.
+    expect(JSON.parse(await readFile(path, "utf8")).defaultModel).toBe("a:m1");
+    const removed = await store.delete("a", view.revision);
+    expect(removed.providers).toEqual([]);
+    expect(JSON.parse(await readFile(path, "utf8"))).not.toHaveProperty(
+      "defaultModel",
     );
   });
 

@@ -76,11 +76,12 @@ describe("AgentSettings", () => {
       row(container, "审查").querySelector(".text-destructive"),
     ).toBeNull();
     const gone = row(container, "旧模型");
-    expect(gone.textContent).toContain("已不存在");
+    // Said in full on the row: what is wrong and what to do, never another model in its place.
+    expect(gone.textContent).toContain("c:gone 已不可用，请重新选择模型。");
     expect(gone.querySelector(".text-destructive")).not.toBeNull();
     const opus = row(container, "Opus");
     expect(opus.textContent).toContain("claude:opus");
-    expect(opus.textContent).not.toContain("已不存在");
+    expect(opus.textContent).not.toContain("已不可用");
     expect(opus.querySelector(".text-destructive")).toBeNull();
     const codex = row(container, "Codex");
     expect(codex.textContent).toContain("运行时默认模型");

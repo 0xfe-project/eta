@@ -38,6 +38,7 @@ import type { Timeline } from "./timeline";
 import { homedir } from "node:os";
 import { LinkError } from "@eta/daemon";
 import { parseModelId } from "@eta/server";
+import { explainRunError, missingModel } from "../agents/model";
 import { isTaskSession } from "../tasks/session-key";
 import { viewOf as attachmentView } from "./attachments";
 import { briefing } from "./briefing";
@@ -331,6 +332,8 @@ export class Engine {
     /** The machine the task's project is on, when the session is made on another one. */
     awayFrom?: MachineRecord | undefined;
   }): Promise<SessionHandle> {
+    const unset = missingModel(input.agent);
+    if (unset !== undefined) throw new Error(unset);
     const place = this.#placeOf(input.machine);
     if (place === undefined)
       throw new Error(`Sessions cannot run on ${input.machine.name} yet.`);
@@ -877,6 +880,8 @@ export class Engine {
     const trigger = this.#timeline.get(reply.replyToId ?? "");
     if (trigger === undefined)
       return fail("gone", "The message this reply answers is gone.");
+    const unset = missingModel(agent);
+    if (unset !== undefined) return fail("unavailable", unset);
     this.#setAway(conversation.id, agent.id, away);
 
     let handle: SessionHandle;
@@ -904,7 +909,7 @@ export class Engine {
           ),
       });
     } catch (error) {
-      return fail("unavailable", messageOf(error));
+      return fail("unavailable", explainRunError(messageOf(error)));
     }
     // A stop that arrived while the session was being made.
     if (this.#timeline.get(replyId)?.status !== "queued") return;
@@ -964,7 +969,10 @@ export class Engine {
       } else if (result.status === "failed") {
         this.#timeline.finish(replyId, {
           status: "failed",
-          text: result.error ?? "The run failed.",
+          text:
+            result.error === undefined
+              ? "The run failed."
+              : explainRunError(result.error),
           thinking: result.thinking,
           data: { ...reply.data, ...activity, code: "run_failed" },
         });
@@ -985,7 +993,7 @@ export class Engine {
         status: "failed",
         text: lost
           ? `The link to ${machine.name} failed while this reply was running, so what it did there is unknown. Nothing was run again. (${error.message})`
-          : messageOf(error),
+          : explainRunError(messageOf(error)),
         data: { ...reply.data, code: lost ? "link_lost" : "run_failed" },
       });
     } finally {

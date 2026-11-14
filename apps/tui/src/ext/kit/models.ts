@@ -68,8 +68,6 @@ export interface Model {
   contextWindow?: number | undefined;
   /** Not while its provider lacks a key it cannot run without, or the gateway says it is down. */
   available: boolean;
-  /** The configured default model, else the first one; one model of a list that is not empty has it. */
-  default: boolean;
   /** Why it cannot be used, when the gateway says, in the user's language. */
   unavailableReason?: string | undefined;
 }
@@ -86,7 +84,6 @@ function configuredModels(view: ProvidersView): Model[] {
         name: model.name ?? model.id,
         contextWindow: model.contextWindow,
         available,
-        default: false,
       }),
     );
   });
@@ -105,7 +102,6 @@ function gatewayModels(
     name: model.name,
     contextWindow: model.contextWindow,
     available: model.available,
-    default: false,
     unavailableReason:
       model.reason === undefined
         ? undefined
@@ -120,8 +116,8 @@ export interface LlmSections {
 }
 
 /**
- * Every configured provider's models, then the gateway's, with the default marked; undefined
- * until the providers' config has come.
+ * Every configured provider's models, then the gateway's; undefined until the providers' config
+ * has come.
  */
 export function buildModels(input: {
   providers: ProvidersView | undefined;
@@ -130,7 +126,7 @@ export function buildModels(input: {
 }): Model[] | undefined {
   const { providers, llm, locale } = input;
   if (providers === undefined) return undefined;
-  const merged = [
+  return [
     ...configuredModels(providers),
     ...gatewayModels(
       llm?.models ?? [],
@@ -138,9 +134,6 @@ export function buildModels(input: {
       locale,
     ),
   ];
-  const fallback =
-    merged.find((model) => model.id === providers.defaultModel) ?? merged[0];
-  return merged.map((model) => ({ ...model, default: model === fallback }));
 }
 
 /** The models that can be used now, in order. */

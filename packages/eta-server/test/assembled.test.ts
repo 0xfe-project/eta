@@ -408,10 +408,11 @@ describe("a server started the way main starts it", () => {
     client.close();
   });
 
-  it("gives a new session the config's default model, unless the caller chose one", async () => {
+  it("gives a new session no model unless the caller names one, whatever config.json says", async () => {
     const root = await mkdtemp(join(tmpdir(), "eta-default-model-"));
     roots.push(root);
     const configPath = join(root, "config.json");
+    // A `defaultModel` from before default models were dropped: read without complaint, used never.
     await writeFile(
       configPath,
       JSON.stringify({
@@ -436,17 +437,17 @@ describe("a server started the way main starts it", () => {
     const client = await connect(server.server.port);
     await until(() => client.frames.some((frame) => frame.type === "hello"));
 
-    // No model named: the config's default is what the session runs on.
+    // No model named: none recorded, neither the old default nor the first configured one.
     const created = (await client.call("sessions", "create", {
       cwd: "/work/eta",
     })) as { session: string };
     expect(
       server.sessions
         .openSessions()
-        .find((open) => open.meta.id === created.session)?.meta.model,
-    ).toBe("acme:slow");
+        .find((open) => open.meta.id === created.session)?.meta,
+    ).not.toHaveProperty("model");
 
-    // A model the caller names wins over the default.
+    // A model the caller names is what it runs on.
     const explicit = (await client.call("sessions", "create", {
       cwd: "/work/eta",
       model: "acme:fast",

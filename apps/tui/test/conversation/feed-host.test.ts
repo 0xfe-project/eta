@@ -61,7 +61,12 @@ async function connected(models: Models) {
   const ask = <T>(target: string, action: string, args: unknown) =>
     raw.call<T>(target, action, args);
   const agent = async (name: string) =>
-    (await ask<{ agent: AgentView }>("agents", "create", { name })).agent;
+    (
+      await ask<{ agent: AgentView }>("agents", "create", {
+        name,
+        model: "fake:fake-model",
+      })
+    ).agent;
   const project = async (stewardId?: string) =>
     (
       await ask<{ project: ProjectView }>("projects", "create", {

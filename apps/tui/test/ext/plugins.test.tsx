@@ -85,7 +85,11 @@ async function opened(
   const host = await observeHost(r.host);
   await host.until(() => views(host).length === specs.length);
   for (const [name, enabled] of Object.entries(agentPlugins)) {
-    await host.client.call("agents", "create", { name, plugins: enabled });
+    await host.client.call("agents", "create", {
+      name,
+      plugins: enabled,
+      model: "fake:fake-model",
+    });
   }
   await host.until(
     () => agents(host).length === Object.keys(agentPlugins).length,

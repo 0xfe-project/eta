@@ -84,6 +84,11 @@ export function AgentsStep({
     const created = new Set<string>();
     setError(undefined);
     try {
+      // An agent on eta's own loop needs a model, and there is no default one to give it.
+      if (model === undefined) {
+        setError(t("agentsIntroNoModel"));
+        return;
+      }
       for (const card of wanted) {
         // What was drawn may be a copy from before another client gave the card an agent.
         const current = await readAgentsNow(wire, AGENTS_WAIT_MS);
@@ -96,7 +101,7 @@ export function AgentsStep({
         await wire.call<{ agent: AgentView }>("agents", "create", {
           name: card.name,
           persona: card.id,
-          ...(model === undefined ? {} : { model: model.id }),
+          model: model.id,
         });
         created.add(card.id);
       }

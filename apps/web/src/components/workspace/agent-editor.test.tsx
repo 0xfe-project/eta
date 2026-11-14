@@ -232,6 +232,55 @@ describe("picking a model", () => {
   });
 });
 
+describe("an agent's model on eta's own loop", () => {
+  const reopen = async (model: string | null) => {
+    await act(async () =>
+      useWorkspaceStore
+        .getState()
+        .setAgentEditor({ open: false, agentId: null }),
+    );
+    host.set("agents", {
+      list: [agentView({ id: "a1", name: "审查", model })],
+    });
+    await settle();
+    await act(async () =>
+      useWorkspaceStore
+        .getState()
+        .setAgentEditor({ open: true, agentId: "a1" }),
+    );
+    await settle();
+  };
+
+  it("offers no default to fall back to, and will not save without a model", async () => {
+    await reopen(null);
+    const trigger = document.getElementById("agent-model")!;
+    expect(trigger.textContent).toBe("选择模型");
+    await click(trigger as HTMLButtonElement);
+    const offered = [
+      ...document.querySelectorAll<HTMLElement>('[role="option"]'),
+    ].map((option) => option.textContent);
+    expect(offered).toEqual(["M1", "M2"]);
+    await act(async () =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      ),
+    );
+    await settle();
+    await type("agent-name", "审查二");
+    await save();
+    expect(dialogText()).toContain("请选择模型。");
+    expect(updates()).toEqual([]);
+  });
+
+  it("says a model removed from the providers is no longer available, and swaps in none", async () => {
+    await reopen("c:gone");
+    expect(document.getElementById("agent-model")!.textContent).toBe(
+      "c:gone（已不可用）",
+    );
+    expect(dialogText()).toContain("模型已不可用，请重新选择。");
+  });
+});
+
 describe("an agent's machine and its runtimes", () => {
   // The host's own runtimes; another machine is asked over its link, and the daemon here is off.
   const runtimes = [

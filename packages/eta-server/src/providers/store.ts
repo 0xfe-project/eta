@@ -25,7 +25,6 @@ import type { EtaConfig, EtaProviderConfig } from "./config-types";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { LLM_PROVIDER_ID } from "@eta/client-contracts";
 import { providerSummary } from "./config-types";
 
 /** A caller's mistake, with the name the client shows. */
@@ -127,7 +126,7 @@ export class ProviderConfigStore {
     }
   }
 
-  /** What a settings page renders: providers, network, default, and the revision. */
+  /** What a settings page renders: providers, network, and the revision. */
   async view(): Promise<ProvidersView> {
     const { config, revision } = await this.read();
     return publicView(config, revision);
@@ -170,31 +169,6 @@ export class ProviderConfigStore {
       config.providers = (config.providers ?? []).filter(
         (provider) => provider.id !== id,
       );
-      this.removeStaleDefault(config);
-    });
-  }
-
-  async setDefault(value: unknown, revision: unknown): Promise<ProvidersView> {
-    return await this.mutate(revision, (config) => {
-      if (value === null) {
-        config.defaultModel = undefined;
-        return;
-      }
-      if (typeof value === "string" && isGatewayModel(value)) {
-        config.defaultModel = value;
-        return;
-      }
-      if (
-        typeof value !== "string" ||
-        !(config.providers ?? []).some((provider) =>
-          provider.models.some(
-            (model) => `${provider.id}:${model.id}` === value,
-          ),
-        )
-      ) {
-        throw new ProviderConfigError("invalid_default_model");
-      }
-      config.defaultModel = value;
     });
   }
 
@@ -327,6 +301,10 @@ export class ProviderConfigStore {
         throw new ProviderConfigError("config_changed", 409);
       }
       update(state.config);
+      // A default model is a setting this app no longer has. A file from before keeps one until
+      // its first write, so the upgrade's migration can read it; after that it would only mislead
+      // whoever edits the file by hand.
+      delete (state.config as { defaultModel?: unknown }).defaultModel;
       const raw = `${JSON.stringify(state.config, null, 2)}\n`;
       const temporary = `${this.path}.${Math.random().toString(36).slice(2)}.tmp`;
       try {
@@ -379,17 +357,6 @@ export class ProviderConfigStore {
     this.lastRevision = revision;
     this.notify(await this.view());
   }
-
-  private removeStaleDefault(config: EtaConfig): void {
-    if (config.defaultModel === undefined) return;
-    if (isGatewayModel(config.defaultModel)) return;
-    const exists = (config.providers ?? []).some((provider) =>
-      provider.models.some(
-        (model) => `${provider.id}:${model.id}` === config.defaultModel,
-      ),
-    );
-    if (!exists) config.defaultModel = undefined;
-  }
 }
 
 /**
@@ -422,22 +389,11 @@ function normalizeProxyUrl(value: string | undefined): string | undefined {
   return url.href;
 }
 
-/**
- * A model of the LLM gateway (`llm:<id>`): its accounts, not this file, say which exist, so a
- * default naming one is taken as given and left alone when a provider goes.
- */
-function isGatewayModel(value: string): boolean {
-  return value.startsWith(`${LLM_PROVIDER_ID}:`) && value.length > 4;
-}
-
 /** The client's view of a config: the key becomes a boolean, everything else stays. */
 export function publicView(config: EtaConfig, revision: string): ProvidersView {
   return {
     revision,
     network: config.network ?? { mode: "system" },
-    ...(config.defaultModel === undefined
-      ? {}
-      : { defaultModel: config.defaultModel }),
     providers: (config.providers ?? []).map(providerSummary),
   };
 }

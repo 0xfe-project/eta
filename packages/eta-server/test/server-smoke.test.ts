@@ -131,8 +131,10 @@ describe.skipIf(configPath === undefined)(
         ) as Extract<ServerFrame, { type: "hello" }>;
         expect(hello.ops.length).toBeGreaterThan(0);
 
-        // The session runs on whichever model the caller names, or the config's default.
-        const model = modelSelector ?? config.defaultModel;
+        // The session runs on whichever model the caller names, or the file's own `defaultModel`
+        // (a key the server itself no longer reads).
+        const model =
+          modelSelector ?? (config as { defaultModel?: string }).defaultModel;
         const created = (await client.call("sessions", "create", {
           cwd: root,
           ...(model === undefined ? {} : { model }),

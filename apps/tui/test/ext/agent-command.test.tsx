@@ -130,6 +130,7 @@ async function start(
     {
       name: "Ada",
       instructions: "Old line",
+      model: "fake:fake-model",
       ...options.create,
     },
   );
@@ -512,7 +513,10 @@ describe("/agent", () => {
         return 0;
       },
     ]);
-    await r.wire.call("agents", "create", { name: "Bea" });
+    await r.wire.call("agents", "create", {
+      name: "Bea",
+      model: "fake:fake-model",
+    });
     await r.runCommand("/agent");
     await r.waitFor("Bea");
     await r.waitFor("Ada");
@@ -529,7 +533,10 @@ describe("/agent", () => {
 
   it("asks which agent when the name fits several", async () => {
     const { r } = await start([]);
-    await r.wire.call("agents", "create", { name: "Adam" });
+    await r.wire.call("agents", "create", {
+      name: "Adam",
+      model: "fake:fake-model",
+    });
     await r.runCommand("/agent Ad");
     await r.waitFor("Adam");
     expect(r.screen()).toContain("Ada");

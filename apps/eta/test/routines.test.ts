@@ -55,6 +55,8 @@ async function setup(
         brief: "Summarise the news.",
         schedule: DAILY,
         timezone: "UTC",
+        // A routine runs on eta's own loop and names its model; the scripted layer answers any.
+        model: "fake:fake-model",
         ...fields,
       })
     ).routine;
@@ -166,6 +168,8 @@ describe("the routines actions", () => {
       { model: "just-a-name" },
       /provider:modelId/,
     ],
+    ["no model", { model: null }, /needs a model/],
+    ["an empty model", { model: "" }, /needs a model/],
     [
       "a conversation that is not there",
       { conversationId: "nope" },
@@ -359,6 +363,25 @@ describe("a run", () => {
       unseenReports: 0,
     });
     expect(await t.runNow(routine.id)).toMatchObject({ status: "failed" });
+  });
+
+  it("a routine left without a model from before fails its run and says to choose one", async () => {
+    const t = await setup(() => say("x"));
+    const routine = await t.create();
+    t.w.host.db
+      .query("UPDATE routine SET model = NULL WHERE id = ?")
+      .run(routine.id);
+    const run = await t.runNow(routine.id);
+    expect(run.status).toBe("failed");
+    expect(run.error).toBe(
+      "This routine has no model. Choose one in the routine's settings.",
+    );
+    // Nothing ran on some other model in its place.
+    expect(t.requests).toEqual([]);
+    // And it cannot be saved without one either.
+    await expect(
+      t.act("update", { routineId: routine.id, model: null }),
+    ).rejects.toThrow(/needs a model/);
   });
 
   it("a run that goes on too long is stopped and fails with the limit", async () => {
@@ -828,9 +851,10 @@ describe("what a routine's run costs", () => {
     await until(() => t.w.client.section("usage", "routines") !== undefined);
     const usage = t.w.client.section<RoutineUsage[]>("usage", "routines")!;
     expect(usage).toHaveLength(1);
+    // The run, and the memory extraction at its end: both on the routine's own model.
     expect(usage[0]).toMatchObject({
       routineId: routine.id,
-      windows: { "5h": { requests: 1 }, "30d": { requests: 1 } },
+      windows: { "5h": { requests: 2 }, "30d": { requests: 2 } },
     });
     // Not among the agentless sessions.
     expect(t.w.client.section<unknown[]>("usage", "agents")).toEqual([]);

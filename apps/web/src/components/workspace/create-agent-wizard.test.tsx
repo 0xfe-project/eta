@@ -250,6 +250,47 @@ describe("creating an agent step by step", () => {
     ]);
   });
 
+  it("starts on the last used model", async () => {
+    await act(async () =>
+      useWorkspaceStore
+        .getState()
+        .setWorkspace((state) => ({ ...state, lastModel: "c:m2" })),
+    );
+    await open();
+    await type("agent-name", "审查");
+    await click("下一步");
+    await click("创建");
+    expect(created).toMatchObject([{ runtime: "eta", model: "c:m2" }]);
+    await act(async () =>
+      useWorkspaceStore
+        .getState()
+        .setWorkspace((state) => ({ ...state, lastModel: undefined })),
+    );
+  });
+
+  it("will not create an agent on eta's own loop without a model, even with none to choose", async () => {
+    host.set("providers", { config: { revision: "r2", providers: [] } });
+    await open();
+    await type("agent-name", "审查");
+    await click("下一步");
+    expect(step()).toContain("名称与模型");
+    // Said, with the way to get a model.
+    expect(alerts()).toEqual(["请选择模型。前往模型服务"]);
+    expect(created).toEqual([]);
+  });
+
+  it("lets an agent on an external runtime run its own default", async () => {
+    await open();
+    await type("agent-name", "Claude");
+    await press(document.getElementById("agent-runtime")!);
+    await press(
+      options().find((option) => option.textContent?.includes("Claude Code"))!,
+    );
+    await click("下一步");
+    await click("创建");
+    expect(created).toMatchObject([{ runtime: "claude", model: null }]);
+  });
+
   it("keeps everything after a failure and creates once on retry", async () => {
     let finish!: (agent: unknown) => void;
     answer = async () => {

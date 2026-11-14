@@ -18,7 +18,7 @@ export interface ModelChoice {
   unusable?: boolean;
 }
 
-const SETTINGS_KEY = "settings";
+const RUNTIME_DEFAULT_KEY = "runtime-default";
 const MODEL = "model:";
 const GROUP = "group:";
 
@@ -60,14 +60,16 @@ function missingCurrent(current: string): ModelChoice {
 }
 
 /**
- * Following the settings first, then the models under a row naming their provider, in the order
- * the providers first appear. The agent's model is tagged current, and listed even when it is not
- * among `choices`.
+ * The models under a row naming their provider, in the order the providers first appear. An
+ * external runtime has a default of its own, offered first as "no model"; eta's own loop has none,
+ * so an agent on it always names a model. The agent's model is tagged current, and listed even
+ * when it is not among `choices`.
  */
 export function modelRows(
   choices: readonly ModelChoice[],
   current: string | null,
   t: Translate<ModelKey>,
+  runtimeDefault: boolean,
 ): { items: PickItem[]; currentKey: string } {
   const all =
     current === null || choices.some((choice) => choice.id === current)
@@ -80,9 +82,15 @@ export function modelRows(
     groups.set(choice.provider, group);
   }
   const tag = (isCurrent: boolean) => (isCurrent ? { tag: t("current") } : {});
-  const items: PickItem[] = [
-    { key: SETTINGS_KEY, label: t("followSettings"), ...tag(current === null) },
-  ];
+  const items: PickItem[] = runtimeDefault
+    ? [
+        {
+          key: RUNTIME_DEFAULT_KEY,
+          label: t("runtimeDefault"),
+          ...tag(current === null),
+        },
+      ]
+    : [];
   for (const [provider, group] of groups) {
     items.push({
       key: `${GROUP}${provider}`,
@@ -97,20 +105,26 @@ export function modelRows(
         ...tag(choice.id === current),
       });
   }
+  const first = items.find((item) => item.disabled !== true)?.key ?? "";
   return {
     items,
-    currentKey: current === null ? SETTINGS_KEY : `${MODEL}${current}`,
+    currentKey:
+      current !== null
+        ? `${MODEL}${current}`
+        : runtimeDefault
+          ? RUNTIME_DEFAULT_KEY
+          : first,
   };
 }
 
-/** The model a row of `modelRows` stands for: null for following the settings. */
+/** The model a row of `modelRows` stands for: null for the runtime's own default. */
 export function modelOfRow(key: string): string | null {
-  return key === SETTINGS_KEY ? null : key.slice(MODEL.length);
+  return key === RUNTIME_DEFAULT_KEY ? null : key.slice(MODEL.length);
 }
 
 /** The key of the row of `modelRows` for a model. */
 export function rowOfModel(model: string | null): string {
-  return model === null ? SETTINGS_KEY : `${MODEL}${model}`;
+  return model === null ? RUNTIME_DEFAULT_KEY : `${MODEL}${model}`;
 }
 
 /** What the thinking list offers: the model's own level, then these. */

@@ -39,6 +39,7 @@ import { llmPlugin } from "./llm/plugin";
 import { openLlm } from "./llm/runtime";
 import { buildsIn, defaultBuilds } from "./machines/builds";
 import { Tailscale } from "./machines/tailscale";
+import { clearMigrationInput, stageMigrationInput } from "./model-backfill";
 import { createProduct } from "./product";
 
 export interface HostOptions {
@@ -161,7 +162,13 @@ export async function startHost(options: HostOptions): Promise<Host> {
 
   const gatewayModels = new GatewayModels();
   try {
-    applyMigrations(db, loadMigrations());
+    // A migration may need the providers config (0050 does); it is staged, then gone.
+    stageMigrationInput(db, join(options.dataDir, "config.json"));
+    try {
+      applyMigrations(db, loadMigrations());
+    } finally {
+      clearMigrationInput(db);
+    }
     const warn = options.warn ?? ((message: string) => console.warn(message));
     const runtimes =
       options.runtimes === false
