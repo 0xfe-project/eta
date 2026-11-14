@@ -46,7 +46,7 @@ import { join } from "node:path";
  * hand `openSession` something that can generate.
  */
 import process from "node:process";
-import { DEFAULT_COMPACTION_SETTINGS } from "@eta/core";
+import { DEFAULT_COMPACTION_SETTINGS, kernelOn } from "@eta/core";
 import { forkChain } from "@eta/core/session";
 import {
   AskRegistry,
@@ -599,6 +599,8 @@ export class SessionManager {
     runtimeId: string,
   ): Promise<ManagedSession> {
     const tools: { names: readonly string[] } = { names: [] };
+    /** Starts a run for a turn the runtime began itself, once the session exists. */
+    let wake: ((wanted: () => boolean) => void) | undefined;
     const agentPrompt = this.agentPromptFor?.(meta);
     const platform = this.platformFor?.(meta);
     const extras = await this.runtimeExtrasFor?.(meta);
@@ -632,6 +634,7 @@ export class SessionManager {
         );
       },
       hostTools: () => tools.names,
+      wake: (wanted) => wake?.(wanted),
     });
     if (runtime === undefined)
       throw new Error(`runtime_unavailable: ${runtimeId} does not run here`);
@@ -669,6 +672,7 @@ export class SessionManager {
       await this.sessionAttach?.({ meta, session });
       session.pump.start();
       tools.names = hostTools.map((tool) => tool.name);
+      wake = (wanted) => wakeRun(session, wanted);
       const managed: ManagedSession = { meta, session };
       this.open.set(meta.id, managed);
       this.runtimeOf.set(meta.id, runtime);
@@ -707,6 +711,25 @@ export class SessionManager {
         );
     }
   }
+}
+
+/**
+ * A run for a turn the runtime began itself. One in flight that has not ended yet cannot take it
+ * (the delegate asks from that run's end), so the start waits for the end: asked again, since the
+ * pump or a caller may have started a run meanwhile that took the turn.
+ */
+function wakeRun(session: OpenSession, wanted: () => boolean): void {
+  if (!wanted()) return;
+  if (!session.runner.running) {
+    // A pumped run has nobody to throw to; its failure is on the bus.
+    void session.runner.run().catch(() => undefined);
+    return;
+  }
+  const off = kernelOn(session.kernel.ctx)("turn:run-end", () => {
+    off();
+    // From inside its run-end, run() would be handed the run that is ending.
+    setTimeout(wakeRun, 0, session, wanted);
+  });
 }
 
 /** The title a fork gets when the caller did not choose one. */

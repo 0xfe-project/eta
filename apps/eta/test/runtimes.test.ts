@@ -419,3 +419,180 @@ describe("/compact on an agent on a runtime", () => {
     expect(asked).toBe(1);
   });
 });
+
+describe("a turn Claude Code opens itself, on a background task's notification", () => {
+  /**
+   * The reply that starts a background subagent ends; when the subagent settles, Claude Code
+   * opens a turn of its own on the notification. The scripted runtime's queue does the same from
+   * the outside: a queued input on an idle session starts a turn nobody prompted.
+   */
+  async function onNotifyingClaude(
+    notified: (turn: ScriptedTurn) => void | Promise<void>,
+  ) {
+    const sessions: Session[] = [];
+    const scripted = scriptedRuntime({
+      id: "claude",
+      turn: async (turn) => {
+        if (turn.input.startsWith("<task-notification>")) {
+          await notified(turn);
+          return;
+        }
+        turn.task({ taskType: "agent", background: true });
+        turn.say("The audit is running; I will report when it is back.");
+      },
+    });
+    const runtime: Runtime = {
+      ...scripted,
+      session: async (installation, options, context) => {
+        const session = await scripted.session(installation, options, context);
+        sessions.push(session);
+        return session;
+      },
+    };
+    const w = await world({
+      runtimes: createOarRuntimes({
+        registry: createRuntimeRegistry([runtime]),
+      }),
+    });
+    const notify = async (text: string) => {
+      await sessions
+        .at(-1)!
+        .queue(`<task-notification>${text}</task-notification>`);
+    };
+    return { w, notify };
+  }
+
+  it("is said in the conversation, and eta's tools answer in it", async () => {
+    const results: { text: string; isError: boolean }[] = [];
+    const { w, notify } = await onNotifyingClaude(async (turn) => {
+      turn.say("The audit is back. ");
+      await turn.tool("mcp__eta__publish_artifact", "{}", async () => {
+        const result = await callHostTool(turn, "publish_artifact", {
+          path: "report",
+          title: "Audit",
+        });
+        results.push(result);
+        return result.text;
+      });
+      turn.say("The report is published.");
+    });
+    const agent = await w.agent("Opus", {
+      runtime: "claude",
+      model: "claude:opus",
+    });
+    const project = await w.project({ stewardId: agent.id });
+    await mkdir(join(project.path, "report"), { recursive: true });
+    await writeFile(join(project.path, "report", "index.html"), "<h1>ok</h1>");
+    const group = await w.group(project.id, [agent.id]);
+    await w.watch(group.id);
+    const sent = await w.send(group.id, "audit the tests", {
+      mentions: [agent.id],
+    });
+    expect((await w.settled(group.id, sent.replies[0]!.id)).status).toBe(
+      "done",
+    );
+
+    await notify("audit completed");
+    const said = () =>
+      w
+        .rows(group.id)
+        .find(
+          (row) =>
+            row.author === "agent" &&
+            row.id !== sent.replies[0]!.id &&
+            row.status === "done",
+        );
+    await until(() => said() !== undefined);
+    expect(said()).toMatchObject({
+      agentId: agent.id,
+      text: "The report is published.",
+      data: expect.objectContaining({ unprompted: true }),
+    });
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ isError: false });
+    expect(results[0]!.text).toContain('Published "Audit" version 1');
+  });
+
+  it("lets a steer from the user join it while it runs", async () => {
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let current: ScriptedTurn | undefined;
+    const { w, notify } = await onNotifyingClaude(async (turn) => {
+      current = turn;
+      turn.say("Reading the results");
+      await held;
+      turn.say(" and yes: here they are.");
+    });
+    const agent = await w.agent("Opus", { runtime: "claude" });
+    const chat = await direct(w, agent);
+    await w.settled(chat, (await w.send(chat, "audit")).replies[0]!.id);
+    await notify("audit completed");
+    const working = () =>
+      w
+        .rows(chat)
+        .find((row) => row.author === "agent" && row.status === "working");
+    await until(() => working() !== undefined);
+    const asked = await w.send(chat, "is there a report yet?", {
+      mode: "steer",
+    });
+    // Joined the turn in flight: no reply of its own.
+    expect(asked.replies).toEqual([]);
+    // It reaches the runtime's turn while that turn is still going.
+    await until(() => (current?.steered.length ?? 0) > 0);
+    expect(current!.steered.join("")).toContain("is there a report yet?");
+    release();
+    await until(() => working() === undefined);
+    expect(
+      w.rows(chat).filter((row) => row.data.unprompted === true),
+    ).toMatchObject([
+      { status: "done", text: "Reading the results and yes: here they are." },
+    ]);
+  });
+
+  it("holds a queued message until it ends, then answers it", async () => {
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const { w, notify } = await onNotifyingClaude(async (turn) => {
+      turn.say("Here are the results.");
+      await held;
+    });
+    const agent = await w.agent("Opus", { runtime: "claude" });
+    const chat = await direct(w, agent);
+    await w.settled(chat, (await w.send(chat, "audit")).replies[0]!.id);
+    await notify("audit completed");
+    await until(() => w.rows(chat).some((row) => row.data.unprompted === true));
+    const asked = await w.send(chat, "is there a report yet?");
+    expect(asked.replies).toHaveLength(1);
+    release();
+    const answered = await w.settled(chat, asked.replies[0]!.id);
+    expect(answered).toMatchObject({
+      status: "done",
+      text: "The audit is running; I will report when it is back.",
+    });
+    expect(
+      w.rows(chat).filter((row) => row.data.unprompted === true),
+    ).toMatchObject([{ status: "done", text: "Here are the results." }]);
+  });
+
+  it("writes no row for a turn of its own that says nothing", async () => {
+    // Two notifications close together: Claude Code can answer both in the second turn.
+    const { w, notify } = await onNotifyingClaude((turn) => {
+      if (turn.input.includes("second")) turn.say("Both batches are done.");
+    });
+    const agent = await w.agent("Opus", { runtime: "claude" });
+    const chat = await direct(w, agent);
+    await w.settled(chat, (await w.send(chat, "audit")).replies[0]!.id);
+    await notify("first");
+    await notify("second");
+    const unprompted = () =>
+      w.rows(chat).filter((row) => row.data.unprompted === true);
+    await until(
+      () =>
+        unprompted().length > 0 &&
+        unprompted().every((row) => row.status === "done"),
+    );
+    expect(unprompted()).toMatchObject([
+      { status: "done", text: "Both batches are done." },
+    ]);
+  });
+});

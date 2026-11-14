@@ -1060,3 +1060,167 @@ describe("a session on an external runtime", () => {
     ).rejects.toThrow(/runtime_unavailable/);
   });
 });
+
+/** Call a host tool the way the runtime does: over the MCP server the delegate served it on. */
+async function callServed(
+  server: { url: string; headers?: Readonly<Record<string, string>> },
+  name: string,
+): Promise<{ text: string; isError: boolean }> {
+  const response = await fetch(server.url, {
+    method: "POST",
+    headers: {
+      ...server.headers,
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name, arguments: {} },
+    }),
+  });
+  const reply = (await response.json()) as {
+    result: { content: { text?: string }[]; isError?: boolean };
+  };
+  return {
+    text: reply.result.content.map((part) => part.text ?? "").join(""),
+    isError: reply.result.isError === true,
+  };
+}
+
+describe("a turn the runtime opens itself", () => {
+  /**
+   * Claude Code's background subagents: the turn that starts one ends, and when the subagent
+   * settles the runtime opens a turn of its own on the notification. The scripted runtime's
+   * queue does the same from the outside: a queued input on an idle session starts a turn
+   * nobody prompted.
+   */
+  function notifying(
+    onNotification: (
+      turn: ScriptedTurn,
+      served: () => { url: string; headers?: Readonly<Record<string, string>> },
+    ) => Promise<void> | void,
+  ) {
+    const fixture = setup(
+      async (turn) => {
+        if (turn.input.startsWith("<task-notification>")) {
+          await onNotification(turn, () => {
+            const server = turn.options.mcpServers?.[0];
+            if (server === undefined || !("url" in server))
+              throw new Error("no host tools served");
+            return server;
+          });
+          return;
+        }
+        turn.task({ taskType: "agent", background: true });
+        turn.say("The audit is running.");
+      },
+      { sessionTools: () => [hostTool("publish_artifact")] },
+    );
+    const notify = async (text: string) => {
+      const runtime = fixture.opened.at(-1)!.session;
+      await runtime.queue(`<task-notification>${text}</task-notification>`);
+    };
+    return { ...fixture, notify };
+  }
+
+  /** Until the session has been quiet a while: the runs the notification woke have ended. */
+  async function settled(managed: ManagedSession): Promise<void> {
+    for (let quiet = 0; quiet < 5; ) {
+      await tick(10);
+      quiet = managed.session.runner.running ? 0 : quiet + 1;
+    }
+  }
+
+  it("is a run: its words are journaled and the host's tools answer", async () => {
+    const answers: { text: string; isError: boolean }[] = [];
+    const { manager, notify } = notifying(async (turn, served) => {
+      turn.say("TUI audit is done.");
+      await turn.tool("mcp__eta__publish_artifact", "{}", async () => {
+        const answer = await callServed(served(), "publish_artifact");
+        answers.push(answer);
+        return answer.text;
+      });
+      turn.say("Report published.");
+    });
+    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
+    const runs: string[] = [];
+    kernelOn(managed.session.kernel.ctx)("turn:run-end", ({ status }) =>
+      runs.push(status),
+    );
+    expect((await run(managed, "audit the tests")).status).toBe("completed");
+
+    await notify("audit TUI completed");
+    await settled(managed);
+
+    expect(answers).toEqual([{ text: "done", isError: false }]);
+    expect(runs).toEqual(["completed", "completed"]);
+    expect(transcript(managed)).toEqual([
+      "user:audit the tests",
+      "assistant:The audit is running.",
+      "assistant:TUI audit is done.[publish_artifact]",
+      "toolResult:done",
+      "assistant:Report published.",
+    ]);
+    await manager.closeAll();
+  });
+
+  it("takes each of several notifications as a run", async () => {
+    const { manager, notify } = notifying((turn) => {
+      turn.say(`heard ${turn.input.replace(/<\/?task-notification>/g, "")}`);
+    });
+    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
+    await run(managed, "audit the tests");
+    await notify("one");
+    await settled(managed);
+    await notify("two");
+    await settled(managed);
+    expect(transcript(managed)).toEqual([
+      "user:audit the tests",
+      "assistant:The audit is running.",
+      "assistant:heard one",
+      "assistant:heard two",
+    ]);
+    await manager.closeAll();
+  });
+
+  it("lets a message that arrives during it wait for its end, then prompts it", async () => {
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const { manager, notify, turns } = notifying(async (turn) => {
+      turn.say("working on the notification");
+      await held;
+      turn.say(" and done");
+    });
+    const managed = await manager.create({ cwd: "/work", runtime: "claude" });
+    await run(managed, "audit the tests");
+    await notify("audit done");
+    await tick();
+    expect(managed.session.runner.running).toBe(true);
+    // The user writes while the runtime's own turn is still going, and waits as a reply does
+    // (`runAndWait`): the run in flight is the runtime's, and the next one takes the words.
+    const { kernel, runner } = managed.session;
+    kernel.nextRun("any report yet?");
+    const asked = runner.run();
+    release();
+    let result = await asked;
+    while (result.status === "completed" && kernel.inboxDepth > 0)
+      result = await runner.run();
+    expect(result.status).toBe("completed");
+    await settled(managed);
+    expect(turns.map((turn) => turn.input)).toEqual([
+      "audit the tests",
+      "<task-notification>audit done</task-notification>",
+      "any report yet?",
+    ]);
+    expect(transcript(managed)).toContain(
+      "assistant:working on the notification and done",
+    );
+    expect(transcript(managed).slice(-2)).toEqual([
+      "user:any report yet?",
+      "assistant:The audit is running.",
+    ]);
+    await manager.closeAll();
+  });
+});

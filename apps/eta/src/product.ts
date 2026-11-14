@@ -703,6 +703,7 @@ export function createProduct(options: {
     {
       sessionTools: engine.sessionTools,
       askObserve: engine.askObserve,
+      sessionAttach: engine.sessionAttach,
     },
     { sessionTools: runner.sessionTools },
     {
