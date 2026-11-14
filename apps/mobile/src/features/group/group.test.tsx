@@ -204,3 +204,12 @@ test("a conversation that is gone says so", async () => {
   await app.waitFor("text:这个对话已不存在");
   expect(app.shows("id:group-more")).toBe(false);
 });
+
+test("a task that runs stays over a queued one of its status, even one that moved later", async () => {
+  const app = await start("group:board", "queued-newer");
+  await app.waitFor("text:#133 Run history supports pagination");
+  const texts = app.texts();
+  expect(
+    texts.indexOf("#131 Board column width remembers last drag"),
+  ).toBeLessThan(texts.indexOf("#133 Run history supports pagination"));
+});

@@ -336,9 +336,9 @@ const FEATURED: Fixture[] = [
 /** The board's long tail: 05 counts 38 tasks, and 05c splits them between the groups. */
 function filler(): Fixture[] {
   const groups = [
-    ...Array(1).fill("wire"),
-    ...Array(3).fill("board"),
-    ...Array(7).fill("redesign"),
+    ...Array.from({ length: 1 }).fill("wire"),
+    ...Array.from({ length: 3 }).fill("board"),
+    ...Array.from({ length: 7 }).fill("redesign"),
   ];
   const row = (
     number: number,
@@ -747,7 +747,13 @@ function installBoard(host: FakeHost): void {
   );
 }
 
-const BOARD_SCENARIOS = ["", "comment-fails", "task-gone", "task-loading"];
+const BOARD_SCENARIOS = [
+  "",
+  "comment-fails",
+  "task-gone",
+  "task-loading",
+  "queued-newer",
+];
 
 export function installTasks(host: FakeHost): void {
   installBoard(host);
@@ -761,7 +767,14 @@ export function installTasks(host: FakeHost): void {
     void Promise.resolve().then(() => host.patch("tasks", "list", []));
   // The other scenarios are other fixtures': they keep the board they laid out.
   if (!BOARD_SCENARIOS.includes(scenario)) return;
-  const details = [...FEATURED, ...filler()]
+  // `queued-newer`: #133 waits in the queue but moved after #131, which runs; it stays under it.
+  const featured =
+    scenario === "queued-newer"
+      ? FEATURED.map((task) =>
+          task.number === 133 ? { ...task, updatedAt: minutesAgo(-1) } : task,
+        )
+      : FEATURED;
+  const details = [...featured, ...filler()]
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .map(detail);
   host.set(

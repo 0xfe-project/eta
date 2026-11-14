@@ -6,6 +6,7 @@ import type {
   TaskRun,
   TaskStatus,
 } from "@/queries/tasks";
+import { runningFirst } from "@eta/client-contracts";
 import { AppWindowIcon } from "@phosphor-icons/react/AppWindow";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/ArrowClockwise";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
@@ -274,7 +275,10 @@ function TaskList() {
         </Empty>
       ) : (
         statuses.map(({ value, label }) => {
-          const section = tasks.filter((task) => task.status === value);
+          // In the board's order, newest first, but a task that runs before one that waits.
+          const section = runningFirst(
+            tasks.filter((task) => task.status === value),
+          );
           if (!section.length) return null;
           return (
             <section key={value} aria-label={label} className="-mx-2">

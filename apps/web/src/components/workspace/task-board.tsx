@@ -1,4 +1,5 @@
 import type { Task, TaskStatus } from "@/queries/tasks";
+import { runningFirst } from "@eta/client-contracts";
 import { ArrowLeftIcon } from "@phosphor-icons/react/ArrowLeft";
 import { DotsThreeIcon } from "@phosphor-icons/react/DotsThree";
 import { ListChecksIcon } from "@phosphor-icons/react/ListChecks";
@@ -103,7 +104,8 @@ function BoardView({ tasks }: { tasks: readonly Task[] }) {
   return (
     <div className="flex h-full gap-3 overflow-x-auto px-4 py-4 sm:px-6">
       {columns.map((status) => {
-        const group = tasks.filter((t) => t.status === status);
+        // Newest first, as the board sends them, but a task that runs before one that waits.
+        const group = runningFirst(tasks.filter((t) => t.status === status));
         const label = statusLabel(status);
         return (
           <section

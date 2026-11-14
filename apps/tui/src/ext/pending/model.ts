@@ -12,6 +12,7 @@ import type {
   TaskActivityView,
 } from "@eta/client-contracts";
 import type { WireState } from "../../connection/types";
+import { runningFirst } from "@eta/client-contracts";
 import { withoutCaptainConversation } from "../kit/captain";
 
 type Targets = Pick<WireState, "targets">;
@@ -88,7 +89,11 @@ export function pendingItems(state: Targets): PendingItem[] {
       at: task.updatedAt,
       task,
     }));
-  return [...questions, ...tasks].sort((a, b) => a.at - b.at);
+  // Within a status, a task that runs keeps before one that waits, whatever their times.
+  return runningFirst(
+    [...questions, ...tasks].sort((a, b) => a.at - b.at),
+    (item) => (item.kind === "task" ? item.task : undefined),
+  );
 }
 
 /** How many items wait: as many as `pendingItems` lists. */
@@ -123,7 +128,8 @@ export function openTasks(state: Targets): {
     .filter((task) => !isWaitingTask(task) && !CLOSED_TASK.has(task.status))
     .sort((a, b) => b.updatedAt - a.updatedAt);
   return {
-    open: [...waiting, ...rest],
+    // Within a status, a task that runs before one that waits, whatever their times.
+    open: runningFirst([...waiting, ...rest]),
     closed: all.filter((task) => CLOSED_TASK.has(task.status)).length,
   };
 }

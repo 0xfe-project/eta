@@ -1,4 +1,5 @@
 import type { BoardTaskView } from "@eta/client-contracts";
+import { runningFirst } from "@eta/client-contracts";
 import { Scroll, Text, View } from "nsh";
 import {
   agentById,
@@ -11,12 +12,17 @@ import { go } from "../../nav/links";
 import { Icon } from "../../ui/Icon";
 import { SectionLabel } from "../../ui/Page";
 import { QuestionCard } from "./QuestionCard";
-import { executorOf, RunRow, runCounts, useRuns } from "./running";
+import { executorOf, runCounts, RunRow, useRuns } from "./running";
 
-/** The board's tasks that are the user's to act on (web: `use-attention.ts`). */
+/**
+ * The board's tasks that are the user's to act on (web: `use-attention.ts`), newest first; within a
+ * status, a task that runs before one that waits.
+ */
 const attentionTasks = (): BoardTaskView[] =>
-  boardTasks().filter(
-    (task) => task.status === "in_review" || task.status === "blocked",
+  runningFirst(
+    boardTasks().filter(
+      (task) => task.status === "in_review" || task.status === "blocked",
+    ),
   );
 
 function Gauge(props: { value: number; label: string; big?: boolean }) {
