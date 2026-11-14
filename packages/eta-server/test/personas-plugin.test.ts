@@ -54,7 +54,7 @@ interface Harness {
   home: string;
   project: string;
   load: () => Promise<() => Promise<void>>;
-  cards: () => { id: string; description: string }[];
+  cards: () => { id: string; description: string; custom?: boolean }[];
 }
 
 async function harness(): Promise<Harness> {
@@ -94,8 +94,11 @@ async function harness(): Promise<Harness> {
     cards() {
       const snapshot = wire.snapshot("personas") as StateSnapshot | undefined;
       return (
-        (snapshot?.sections.cards as { id: string; description: string }[]) ??
-        []
+        (snapshot?.sections.cards as {
+          id: string;
+          description: string;
+          custom?: boolean;
+        }[]) ?? []
       );
     },
   };
@@ -162,6 +165,20 @@ describe("putting a session on a card", () => {
       join(h.home, ".eta", "persona"),
       "Executor",
       "# Executor\nShip the thing.\n",
+    );
+    // Settle the card list first: the directory watcher reloads on its own after the write, and
+    // a push from that landing after the frames are cleared below is not what this test is about.
+    await h.wire.dispatch(
+      {
+        op: "call",
+        target: "personas",
+        action: "reload",
+        args: { cwd: h.project },
+      },
+      { reply: () => undefined } as never,
+    );
+    await until(() =>
+      h.cards().some((entry) => entry.id === "Executor" && entry.custom),
     );
     const created = await h.manager.create({
       cwd: h.project,
