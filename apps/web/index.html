@@ -5,14 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Eta Agent</title>
     <meta name="apple-mobile-web-app-title" content="Eta Agent" />
+    <!-- The title bar of the installed app, in the color of its top band (--surface). The values
+         live in TITLE_BAR_COLORS in src/lib/theme.ts; a mode chosen in the app is applied to both
+         below and by applyTitleBarColor there. -->
     <meta
       name="theme-color"
-      content="#ffffff"
+      content="#fafafa"
       media="(prefers-color-scheme: light)"
     />
     <meta
       name="theme-color"
-      content="#0a0a0a"
+      content="#090909"
       media="(prefers-color-scheme: dark)"
     />
     <link
@@ -357,6 +360,17 @@
               window.matchMedia("(prefers-color-scheme: dark)").matches);
           document.documentElement.classList.toggle("dark", dark);
           document.documentElement.style.colorScheme = dark ? "dark" : "light";
+          // A mode chosen in the app wins over the system for the title bar too: give both
+          // theme-color metas the color of the chosen one (applyTitleBarColor in theme.ts).
+          if (choice === "light" || choice === "dark") {
+            var bars = document.querySelectorAll('meta[name="theme-color"]');
+            var color = "";
+            for (var i = 0; i < bars.length; i++)
+              if ((bars[i].getAttribute("media") || "").indexOf(choice) !== -1)
+                color = bars[i].getAttribute("content");
+            for (var j = 0; j < bars.length; j++)
+              bars[j].setAttribute("content", color);
+          }
           // The boot outline below, in the shape the window will open in: a folded sidebar (the
           // cookie ui/sidebar.tsx keeps) and the two columns' dragged widths (lib pane.ts).
           if (/(?:^|;\s*)sidebar_state=false/.test(document.cookie))
