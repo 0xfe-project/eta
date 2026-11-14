@@ -6,7 +6,7 @@ import type {
 } from "@eta/client-contracts";
 import type { KernelModels, KernelTool } from "@eta/core";
 import type { AskObserver } from "@eta/harness";
-import type { SessionMeta, SessionsService } from "@eta/server";
+import type { ManagedSession, SessionMeta, SessionsService } from "@eta/server";
 import type { SshTransport } from "@eta/ssh";
 /**
  * The engine: what a message does.
@@ -36,7 +36,8 @@ import type { SessionHandle, SessionPlace, SessionSettings } from "./places";
 import type { ConversationRecord, ConversationStore } from "./store";
 import type { Timeline } from "./timeline";
 import { homedir } from "node:os";
-import { LinkError } from "@eta/daemon";
+import { kernelOn } from "@eta/core";
+import { lastSeq, LinkError, listen } from "@eta/daemon";
 import { parseModelId } from "@eta/server";
 import { isTaskSession } from "../tasks/session-key";
 import { viewOf as attachmentView } from "./attachments";
@@ -273,6 +274,119 @@ export class Engine {
     if (isTaskSession(conversationId)) return [];
     return conversationTools(this, conversationId, agentId);
   };
+
+  /**
+   * A run on a member's session that no reply started: the runtime began a turn of its own (Claude
+   * Code answering a background task's notification, after the reply that started the task
+   * ended). It is said in the conversation like any reply, in a row of its own that works while
+   * the run does, and that a message can join or the user can stop.
+   *
+   * Only a session on an external runtime: an eta session's runs are all started by somebody.
+   */
+  readonly sessionAttach = (input: ManagedSession): Promise<void> => {
+    const { agentId, conversationId, runtime } = input.meta;
+    if (
+      agentId === undefined ||
+      conversationId === undefined ||
+      runtime === undefined ||
+      isTaskSession(conversationId)
+    )
+      return Promise.resolve();
+    kernelOn(input.session.kernel.ctx)("turn:run-start", () => {
+      // A reply of the engine's is running on it: the run is that reply's.
+      if (this.#closing || this.#running.has(keyOf(conversationId, agentId)))
+        return;
+      this.#unprompted(input, conversationId, agentId);
+    });
+    return Promise.resolve();
+  };
+
+  /**
+   * The row of a run no reply started. It is written at the run's first turn, not its start: a
+   * runtime can open a turn that says and does nothing (two notifications answered in the second
+   * of two turns), and that is no reply. A run that fails before saying anything still gets one.
+   */
+  #unprompted(
+    managed: ManagedSession,
+    conversationId: string,
+    agentId: string,
+  ): void {
+    if (this.#conversations.participant(conversationId, agentId) === undefined)
+      return;
+    const handle = this.#local.handleOf(managed);
+    if (handle === undefined) return;
+    const key = keyOf(conversationId, agentId);
+    const on = kernelOn(managed.session.kernel.ctx);
+    // The run has started: what it writes comes after what the journal holds now.
+    const data = { runFrom: lastSeq(managed), unprompted: true };
+    const heard = listen(managed);
+    let row: MessageView | undefined;
+    const write = (
+      status: "working" | "failed",
+      text = "",
+    ): MessageView | undefined => {
+      try {
+        return this.#timeline.append({
+          conversationId,
+          kind: "message",
+          author: "agent",
+          agentId,
+          status,
+          text,
+          data: status === "failed" ? { ...data, code: "run_failed" } : data,
+        });
+      } catch (error) {
+        this.#warn(
+          `[eta] a run ${agentId} began on its own in ${conversationId} has no row: ${messageOf(error)}`,
+        );
+        return undefined;
+      }
+    };
+    const offStart = on("turn:start", () => {
+      offStart();
+      // A reply of the engine's took the session meanwhile: what the run says is that reply's.
+      if (this.#running.has(key)) return;
+      row = write("working");
+      if (row === undefined) return;
+      this.#running.set(key, { replyId: row.id, handle });
+      this.#changed([conversationId]);
+    });
+    const offEnd = on("turn:run-end", ({ status, error }) => {
+      offStart();
+      offEnd();
+      heard.stop();
+      if (row === undefined) {
+        if (status === "failed" && !this.#running.has(key)) {
+          write("failed", error ?? "The run failed.");
+          this.#changed([conversationId]);
+        }
+        return;
+      }
+      if (this.#running.get(key)?.replyId === row.id) this.#running.delete(key);
+      const said = heard.said();
+      const ended = {
+        ...row.data,
+        ...(said.activity.length === 0 ? {} : { activity: said.activity }),
+      };
+      this.#timeline.finish(
+        row.id,
+        status === "failed"
+          ? {
+              status: "failed",
+              text: error ?? "The run failed.",
+              thinking: said.thinking,
+              data: { ...ended, code: "run_failed" },
+            }
+          : {
+              status: status === "aborted" ? "stopped" : "done",
+              text: said.text,
+              thinking: said.thinking,
+              data: ended,
+            },
+      );
+      this.#changed([conversationId]);
+    });
+  }
 
   /** A session's question turns its reply into one that waits for the user, and back. */
   readonly askObserve = (meta: SessionMeta): AskObserver | undefined => {
