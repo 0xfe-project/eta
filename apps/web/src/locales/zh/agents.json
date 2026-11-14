@@ -28,6 +28,8 @@
     "deletedOption": "{{modelName}}（已不存在）",
     "noneAvailable": "暂无可用模型。",
     "noneSelected": "未选择模型",
+    "search": "搜索模型",
+    "noMatch": "没有匹配的模型",
     "errors": {
       "deleted": "{{modelName}} 已不存在，请更换模型。",
       "unavailable": "{{modelName}} 暂不可用：{{reason}}"

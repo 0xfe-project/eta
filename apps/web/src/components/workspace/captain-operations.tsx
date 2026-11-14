@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useCaptain, useCaptainActions } from "@/queries/captain";
 import { useModels } from "@/queries/providers";
-import { ModelSelect } from "./agent-fields";
+import { ModelSelect } from "./model-select";
 import { Section } from "./panel-section";
 
 /**
