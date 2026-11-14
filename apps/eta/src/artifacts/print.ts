@@ -15,7 +15,7 @@
  * then the button does nothing.
  */
 
-export const PRINT_MESSAGE = "eta:print";
+const PRINT_MESSAGE = "eta:print";
 
 export const PRINT_LISTENER = `<script>addEventListener("message",function(e){var d=e.data;if(e.source===parent&&parent!==window&&d!==null&&typeof d==="object"&&d.type===${JSON.stringify(PRINT_MESSAGE)})print()})</script>`;
 
