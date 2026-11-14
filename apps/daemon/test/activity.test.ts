@@ -92,7 +92,11 @@ describe("activityRecorder", () => {
   it("keeps a call's arguments short: long strings cut, nested values flattened", () => {
     const recorder = new ActivityRecorder();
     recorder.see(
-      asked("c1", "bash", { command: "x".repeat(1000), n: 3, nested: { a: "b" } }),
+      asked("c1", "bash", {
+        command: "x".repeat(1000),
+        n: 3,
+        nested: { a: "b" },
+      }),
     );
     expect(recorder.list()[0]?.input).toEqual({
       command: `${"x".repeat(400)}…`,

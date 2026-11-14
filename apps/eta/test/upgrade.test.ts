@@ -40,11 +40,7 @@ import {
   savedUpstream,
 } from "../src/upgrade/database";
 import { askUp, upUrl } from "../src/upgrade/service";
-import {
-  openToken,
-  sealToken,
-  tokenHost,
-} from "../src/upgrade/token";
+import { openToken, sealToken, tokenHost } from "../src/upgrade/token";
 import { upgradeHost } from "../src/upgrade/upgrade";
 import { tempDir } from "./support/host";
 

@@ -509,9 +509,10 @@ describe("layoutTranscript with frames", () => {
     expect(() => layoutTranscript(items, [bare, drawn("a.0")], WIDTH)).toThrow(
       /no frame style/,
     );
-    expect(
-      layoutTranscript(items, [bare, drawn("a.0")], 39).plain,
-    ).toEqual(["● Ada", "a.0"]);
+    expect(layoutTranscript(items, [bare, drawn("a.0")], 39).plain).toEqual([
+      "● Ada",
+      "a.0",
+    ]);
   });
 
   it("below 40 columns draws the author's own line and no frame", () => {
