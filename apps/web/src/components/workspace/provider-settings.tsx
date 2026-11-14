@@ -1,5 +1,6 @@
 import type { Model } from "@/queries/providers";
 import type { Source } from "@/queries/sources";
+import { BUILTIN_PROVIDER_PRESETS } from "@eta/client-contracts";
 import { CaretRightIcon } from "@phosphor-icons/react/CaretRight";
 import { PlusIcon } from "@phosphor-icons/react/Plus";
 import { useId, useState } from "react";
@@ -125,7 +126,8 @@ export function ProviderSettings() {
   const { sources, error } = useSources();
   const logos = useSourceLogos();
   const [opened, setOpened] = useState<string>();
-  const [adding, setAdding] = useState(false);
+  // `true` opens the first step; a preset's id opens straight on its connect step.
+  const [adding, setAdding] = useState<boolean | string>(false);
   if (error) return <LoadError what={translateText("title")} error={error} />;
   // A source that went away (removed here or elsewhere) leaves its page for the list.
   const open = sources?.find((source) => source.key === opened);
@@ -157,9 +159,16 @@ export function ProviderSettings() {
         <>
           <DefaultModel sources={sources} />
           {sources.length === 0 ? (
-            <p className="border border-dashed px-3 py-2.5 text-xs text-muted-foreground">
-              {translateText("list.empty")}
-            </p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border border-dashed px-3 py-2.5 text-xs">
+              <p className="min-w-0 flex-1 text-muted-foreground">
+                {translateText("list.empty")}
+              </p>
+              <Button size="sm" onClick={() => setAdding("eta")}>
+                {translateText("list.addEta", {
+                  name: BUILTIN_PROVIDER_PRESETS.eta.name,
+                })}
+              </Button>
+            </div>
           ) : (
             <ul
               aria-label={translateText("list.label")}
@@ -177,7 +186,13 @@ export function ProviderSettings() {
           )}
         </>
       )}
-      {adding ? <AddSourceDialog open onOpenChange={setAdding} /> : null}
+      {adding === false ? null : (
+        <AddSourceDialog
+          open
+          onOpenChange={setAdding}
+          {...(adding === true ? {} : { initialPreset: adding })}
+        />
+      )}
     </div>
   );
 }

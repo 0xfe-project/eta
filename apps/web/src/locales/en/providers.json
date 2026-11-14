@@ -19,7 +19,8 @@
     "empty": "No model sources yet. Add one so agents have a model to run on.",
     "modelCount": "{{count}} models",
     "modelCount_one": "{{count}} model",
-    "modelCount_other": "{{count}} models"
+    "modelCount_other": "{{count}} models",
+    "addEta": "Add {{name}}"
   },
   "via": {
     "subscription": "Subscription",
@@ -51,7 +52,8 @@
     "presets": {
       "custom": "OpenAI-compatible API",
       "local": "Local models",
-      "localHint": "Ollama, LM Studio"
+      "localHint": "Ollama, LM Studio",
+      "etaHint": "Eta's own gateway: one key for many models"
     },
     "keyLabel": "{{name}} API key",
     "keyOptional": "API key (optional)",
@@ -71,7 +73,9 @@
     "selected_other": "{{count}} selected",
     "accountReady": "{{name}} is connected, with {{count}} models.",
     "accountReady_one": "{{name}} is connected, with {{count}} model.",
-    "accountReady_other": "{{name}} is connected, with {{count}} models."
+    "accountReady_other": "{{name}} is connected, with {{count}} models.",
+    "recommended": "Recommended",
+    "getEtaKey": "Get a key"
   },
   "detail": {
     "breadcrumb": "Location",
@@ -164,6 +168,6 @@
     "http": "The model endpoint returned HTTP {{status}}. Check the URL, key, headers and access permissions, then retry.",
     "configChanged": "The config changed elsewhere. Go back to the list and open it again.",
     "unreachable": "Could not reach the model API. Check the URL and the network.",
-    "keyRefused": "The key was refused by the provider."
+    "keyRefused": "Invalid key: the provider refused it."
   }
 }

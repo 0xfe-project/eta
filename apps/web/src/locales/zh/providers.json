@@ -19,7 +19,8 @@
     "empty": "还没有模型来源。添加一个，智能体才有模型可用。",
     "modelCount": "{{count}} 个模型",
     "modelCount_one": "{{count}} 个模型",
-    "modelCount_other": "{{count}} 个模型"
+    "modelCount_other": "{{count}} 个模型",
+    "addEta": "添加 {{name}}"
   },
   "via": {
     "subscription": "订阅登录",
@@ -51,7 +52,8 @@
     "presets": {
       "custom": "OpenAI 兼容接口",
       "local": "本机模型",
-      "localHint": "Ollama、LM Studio"
+      "localHint": "Ollama、LM Studio",
+      "etaHint": "Eta 自家网关，一个 key 用多家模型"
     },
     "keyLabel": "{{name}} 的 API key",
     "keyOptional": "API key（可不填）",
@@ -71,7 +73,9 @@
     "selected_other": "已选 {{count}} 个",
     "accountReady": "已连上 {{name}}，带来 {{count}} 个模型。",
     "accountReady_one": "已连上 {{name}}，带来 {{count}} 个模型。",
-    "accountReady_other": "已连上 {{name}}，带来 {{count}} 个模型。"
+    "accountReady_other": "已连上 {{name}}，带来 {{count}} 个模型。",
+    "recommended": "推荐",
+    "getEtaKey": "获取 key"
   },
   "detail": {
     "breadcrumb": "位置",

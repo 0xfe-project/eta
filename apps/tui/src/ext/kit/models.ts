@@ -21,6 +21,7 @@ const PROVIDERS = "providers";
 
 /** Names of the kinds that come with an endpoint of their own. */
 const PRESET_NAMES: Partial<Record<ProviderKind, string>> = {
+  eta: "Eta Token Plan",
   "openai-codex": "Codex",
   "kimi-coding": "Kimi for Coding",
   deepseek: "DeepSeek",
