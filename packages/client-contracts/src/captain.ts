@@ -1,5 +1,5 @@
 import type { CallFrame } from "@eta/client-wire-proto";
-import type { MessageView } from "./product";
+import type { AgentRuntime, MessageView } from "./product";
 import type { BoardTaskDetail, BoardTaskStatus } from "./tasks";
 
 export const CAPTAIN_ACTIONS = [
@@ -130,6 +130,44 @@ export interface CaptainGroupProposalRowData {
   event: "captain_group_proposal";
   operationId: string;
   proposal: CaptainGroupProposal;
+}
+
+/**
+ * An agent Captain proposed: the payload of a `create_agent` operation. Nothing exists until the user
+ * confirms it; then the agent, its workspace project and its first prompt versions are made. The
+ * persona is one of the cards that already exist — its id here, its body becomes the agent's persona,
+ * and no card is written — and the model is the one the user chose.
+ */
+export interface CaptainAgentProposal {
+  /** Where Captain proposed it: the card is there. */
+  originConversationId: string;
+  /** The card's row in that conversation. */
+  messageId: string;
+  name: string;
+  /** What the agent is for, and when it should retire: one sentence, read on the card. */
+  purpose: string;
+  instructions: string;
+  /** The id of an existing persona card. */
+  persona: string;
+  model: string;
+  runtime: AgentRuntime;
+  /** The primary machine's id, or null: an agent is only made on the primary. */
+  machineId: string | null;
+  plugins: string[];
+}
+
+/** What a confirmed `create_agent` made. */
+export interface CaptainAgentResult {
+  agentId: string;
+  projectId: string;
+  name: string;
+}
+
+/** The data of the system row that draws a proposal as a card (`event: "captain_agent_proposal"`). */
+export interface CaptainAgentProposalRowData {
+  event: "captain_agent_proposal";
+  operationId: string;
+  proposal: CaptainAgentProposal;
 }
 
 /**

@@ -95,35 +95,6 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
     };
   };
 
-  /** A machine an agent can be pinned to: the primary or a daemon that was let in. */
-  const checkMachine = (machineId: string | null | undefined): void => {
-    if (machineId === undefined || machineId === null) return;
-    const machine = machines.get(machineId);
-    if (
-      machine === undefined ||
-      (machine.kind !== "primary" && machine.kind !== "daemon")
-    )
-      throw new Error(`no such machine: ${machineId}`);
-    if (machine.status === "revoked" || machine.status === "pending")
-      throw new Error(
-        `${machine.name} is ${machine.status}: an agent cannot run there`,
-      );
-  };
-
-  /** What an agent can be set to use: what it has already, and what can be enabled. */
-  const checkPlugins = (
-    agentId: string | undefined,
-    wanted: readonly string[] | undefined,
-  ): void => {
-    if (wanted === undefined) return;
-    const has = agentId === undefined ? [] : plugins.rows.enabled(agentId);
-    for (const name of wanted)
-      if (!has.includes(name) && !plugins.canEnable(name))
-        throw new Error(
-          `plugin ${name} cannot be enabled: it needs configuring`,
-        );
-  };
-
   const existing = (id: string): AgentRecord => {
     const agent = agents.get(id);
     if (agent === undefined) throw new Error(`no such agent: ${id}`);
@@ -150,8 +121,8 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
         wire.handle("agents", "create", async (call) => {
           const fields = fieldsOf(call, true);
           requireModel(fields.runtime ?? "eta", fields.model ?? null);
-          checkMachine(fields.machineId);
-          checkPlugins(undefined, fields.plugins);
+          checkMachine(machines, fields.machineId);
+          checkPlugins(plugins, undefined, fields.plugins);
           const primary = machines.primary();
           if (primary === undefined)
             throw new Error("this host has no machine");
@@ -212,8 +183,8 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
             fields.runtime ?? before.runtime,
             fields.model === undefined ? before.model : fields.model,
           );
-          checkMachine(fields.machineId);
-          checkPlugins(id, fields.plugins);
+          checkMachine(machines, fields.machineId);
+          checkPlugins(plugins, id, fields.plugins);
           const agent = agents.update(id, fields)!;
           if (fields.plugins !== undefined)
             plugins.rows.setEnabled(id, fields.plugins);
@@ -349,6 +320,37 @@ export function agentsPlugin(deps: AgentsDeps, applied: () => void) {
     projects.update(home.id, { name: agent.name });
     conversations.renameDirect(home.id, agent.name);
   }
+}
+
+/** A machine an agent can be pinned to: the primary or a daemon that was let in. */
+export function checkMachine(
+  machines: MachineStore,
+  machineId: string | null | undefined,
+): void {
+  if (machineId === undefined || machineId === null) return;
+  const machine = machines.get(machineId);
+  if (
+    machine === undefined ||
+    (machine.kind !== "primary" && machine.kind !== "daemon")
+  )
+    throw new Error(`no such machine: ${machineId}`);
+  if (machine.status === "revoked" || machine.status === "pending")
+    throw new Error(
+      `${machine.name} is ${machine.status}: an agent cannot run there`,
+    );
+}
+
+/** What an agent can be set to use: what it has already, and what can be enabled. */
+export function checkPlugins(
+  plugins: Plugins,
+  agentId: string | undefined,
+  wanted: readonly string[] | undefined,
+): void {
+  if (wanted === undefined) return;
+  const has = agentId === undefined ? [] : plugins.rows.enabled(agentId);
+  for (const name of wanted)
+    if (!has.includes(name) && !plugins.canEnable(name))
+      throw new Error(`plugin ${name} cannot be enabled: it needs configuring`);
 }
 
 /** The fields of an agent a call carries; `create` needs a name, `update` takes what is sent. */

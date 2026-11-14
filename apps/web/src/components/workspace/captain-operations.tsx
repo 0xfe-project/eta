@@ -98,7 +98,8 @@ export function CaptainOperations() {
                 <div className="font-mono text-[10px] text-muted-foreground">
                   {operation.kind}
                 </div>
-                {operation.kind === "create_group" &&
+                {(operation.kind === "create_group" ||
+                  operation.kind === "create_agent") &&
                 typeof operation.payload.name === "string" ? (
                   <div className="truncate text-xs">
                     {operation.payload.name}

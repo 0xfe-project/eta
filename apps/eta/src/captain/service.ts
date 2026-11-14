@@ -1,6 +1,10 @@
 import type {
+  AgentRuntime,
   BoardTaskDetail,
   BoardTaskView,
+  CaptainAgentProposal,
+  CaptainAgentProposalRowData,
+  CaptainAgentResult,
   CaptainAssignmentView,
   CaptainGroupOutcomeData,
   CaptainGroupProposal,
@@ -15,6 +19,7 @@ import type {
   CaptainSettingView,
   InteractionView,
 } from "@eta/client-contracts";
+import type { PersonaCard } from "@eta/core";
 import type { SessionMeta } from "@eta/server";
 import type { AgentRecord, AgentStore } from "../agents/store";
 import type { AttachmentStore } from "../conversations/attachments";
@@ -23,6 +28,7 @@ import type { ConversationStore } from "../conversations/store";
 import type { Timeline } from "../conversations/timeline";
 import type { Inbox } from "../inbox/inbox";
 import type { MachineRecord, MachineStore } from "../machines/store";
+import type { Plugins } from "../plugins/service";
 import type { ProjectRecord, ProjectStore } from "../projects/store";
 import type { TaskBoard } from "../tasks/board";
 import type { TaskRunner } from "../tasks/runner";
@@ -31,10 +37,12 @@ import type { TaskStore } from "../tasks/store";
 import type { CaptainAudit } from "./audit";
 import type { CaptainMemory } from "./memory";
 import type { CaptainReviewRecord, CaptainStore } from "./store";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { basename, isAbsolute, resolve } from "node:path";
 import { DEFAULT_SYSTEM_PROMPT } from "@eta/harness";
-import { checkModel } from "../agents/model";
+import { describeCard, discoverPersonas } from "@eta/server";
+import { checkModel, requireModel } from "../agents/model";
+import { checkMachine, checkPlugins } from "../agents/plugin";
 import { agentHome } from "../agents/store";
 import { createGroup, groupNamed } from "../conversations/groups";
 import { effectiveSteward } from "../conversations/views";
@@ -61,10 +69,17 @@ const CAPTAIN_INSTRUCTIONS = [
 
 export interface CaptainServiceDeps {
   dataDir: string;
+  /**
+   * The user's home, where the persona cards they wrote live. A new agent's own workspace is an
+   * empty directory, so this is the only place a card can come from besides the built-in ones.
+   */
+  home: string;
   store: CaptainStore;
   audit: CaptainAudit;
   agents: AgentStore;
   machines: MachineStore;
+  /** What a proposed agent may be set to use, checked before the proposal and again when it is made. */
+  plugins: Plugins;
   projects: ProjectStore;
   conversations: ConversationStore;
   timeline: Timeline;
@@ -117,6 +132,35 @@ interface ResolvedGroup {
   memberIds: string[];
   stewardId: string;
   goal: string | null;
+}
+
+/** What Captain asks for when it proposes an agent (`propose_agent`). */
+export interface AgentProposalInput {
+  name: string;
+  purpose: string;
+  instructions: string;
+  /** The id of an existing card; its body becomes the agent's persona. Never a new card. */
+  persona: string;
+  /** Chosen by the user: there is no default. */
+  model: string;
+  runtime?: AgentRuntime | undefined;
+  machineId?: string | undefined;
+  plugins?: readonly string[] | undefined;
+}
+
+/** A proposal checked against what exists now: who the agent is, and what it wears. */
+interface ResolvedAgent {
+  name: string;
+  purpose: string;
+  instructions: string;
+  /** The card's id, as the proposal names it. */
+  persona: string;
+  /** That card's body: what the agent's `persona` field becomes when it is made. */
+  personaContent: string;
+  model: string;
+  runtime: AgentRuntime;
+  machineId: string | null;
+  plugins: string[];
 }
 
 export interface CaptainOperationRequest {
@@ -775,6 +819,8 @@ export class CaptainService {
       }
       case "create_group":
         return { ...(await this.#createProposedGroup(operation)) };
+      case "create_agent":
+        return { ...(await this.#createProposedAgent(operation)) };
       default:
         throw new Error(`unsupported Captain operation: ${operation.kind}`);
     }
@@ -828,6 +874,121 @@ export class CaptainService {
     });
     this.#deps.changed([origin.id]);
     return { operation, messageId };
+  }
+
+  /**
+   * Propose an agent. Nothing is made: the proposal is a pending `create_agent` operation, drawn as a
+   * card in the conversation Captain proposed it from, and the user's confirmation is what makes the
+   * agent (`decideOperation`). Everything that would make it fail is checked now, and again then.
+   */
+  async proposeAgent(
+    input: AgentProposalInput & {
+      originConversationId: string;
+      captainAgentId: string;
+    },
+  ): Promise<{ operation: CaptainOperationView; messageId: string }> {
+    const origin = this.#deps.conversations.get(input.originConversationId);
+    if (origin === undefined) throw new Error("no such conversation");
+    const resolved = await this.#resolveAgent(input);
+    const messageId = crypto.randomUUID();
+    const proposal: CaptainAgentProposal = {
+      originConversationId: origin.id,
+      messageId,
+      name: resolved.name,
+      purpose: resolved.purpose,
+      instructions: resolved.instructions,
+      persona: resolved.persona,
+      model: resolved.model,
+      runtime: resolved.runtime,
+      machineId: resolved.machineId,
+      plugins: resolved.plugins,
+    };
+    const operation = this.createOperation({
+      kind: "create_agent",
+      requiresApproval: true,
+      actorAgentId: input.captainAgentId,
+      payload: { ...proposal },
+    });
+    const data: CaptainAgentProposalRowData = {
+      event: "captain_agent_proposal",
+      operationId: operation.id,
+      proposal,
+    };
+    this.#deps.timeline.append({
+      id: messageId,
+      conversationId: origin.id,
+      kind: "system",
+      author: "system",
+      text: `Captain proposed the agent "${resolved.name}". It is made when the user confirms it.`,
+      data: { ...data },
+    });
+    this.#deps.changed([origin.id]);
+    return { operation, messageId };
+  }
+
+  /** The cards a new agent could wear, as the one line each that a chooser reads. */
+  async listPersonaCards(): Promise<{ id: string; summary: string }[]> {
+    const cards = await this.#personaCards();
+    return [...cards.values()].map((card) => ({
+      id: card.id,
+      summary: describeCard(card),
+    }));
+  }
+
+  /**
+   * The cards that apply to an agent made here. Its workspace is an empty directory, so the cards are
+   * the built-in ones and the user's own: `cwd` is the home for the same reason, and the two identical
+   * directories cost one read because the result is keyed by id.
+   */
+  async #personaCards(): Promise<Map<string, PersonaCard>> {
+    const { home, warn } = this.#deps;
+    return await discoverPersonas({ cwd: home, home, warn });
+  }
+
+  /**
+   * Who a proposed agent would be, as things are now. Throws, saying why, for what the user could not
+   * confirm: a name another agent already answers to (`agents.create` does not check), an empty
+   * instruction, a card that is not there, no model or one that is not `provider:modelId`, a machine
+   * other than the primary, a plugin that cannot be enabled.
+   */
+  async #resolveAgent(input: AgentProposalInput): Promise<ResolvedAgent> {
+    const name = input.name.trim();
+    if (name === "") throw new Error("an agent needs a name");
+    if (
+      this.#deps.agents
+        .list()
+        .some((agent) => agent.name.trim().toLowerCase() === name.toLowerCase())
+    )
+      throw new Error(`an agent named "${name}" already exists`);
+    const purpose = input.purpose.trim();
+    if (purpose === "") throw new Error("an agent needs a purpose");
+    const instructions = input.instructions.trim();
+    if (instructions === "") throw new Error("instructions must not be empty");
+    const card = (await this.#personaCards()).get(input.persona);
+    if (card === undefined)
+      throw new Error(`no such persona card: ${input.persona}`);
+    const model = input.model.trim();
+    if (model === "") throw new Error("an agent needs a model");
+    const runtime = input.runtime ?? "eta";
+    requireModel(runtime, model);
+    const primary = this.#deps.machines.primary();
+    if (primary === undefined)
+      throw new Error("this host has no primary machine");
+    if (input.machineId !== undefined && input.machineId !== primary.id)
+      throw new Error("agents can only be created on the primary machine");
+    checkMachine(this.#deps.machines, primary.id);
+    checkPlugins(this.#deps.plugins, undefined, input.plugins);
+    return {
+      name,
+      purpose,
+      instructions,
+      persona: card.id,
+      personaContent: card.content,
+      model,
+      runtime,
+      machineId: input.machineId === undefined ? null : primary.id,
+      plugins: [...new Set(input.plugins ?? [])],
+    };
   }
 
   /**
@@ -954,6 +1115,86 @@ export class CaptainService {
       projectId: project.id,
       projectCreated: resolved.project === undefined,
     };
+  }
+
+  /**
+   * The confirmed proposal, made: everything checked again (another agent may have taken the name, a
+   * card may be gone), then the workspace directory, the agent, its home project and its first
+   * instructions and persona versions. The persona is the card's body — the card itself is not
+   * touched, and no new one is written.
+   */
+  async #createProposedAgent(
+    operation: CaptainOperationView,
+  ): Promise<CaptainAgentResult> {
+    // The payload is JSON; the Captain's own role is not one a proposal may make.
+    if ("systemRole" in operation.payload)
+      throw new Error("a proposed agent cannot carry a system role");
+    const proposal = operation.payload as unknown as CaptainAgentProposal;
+    const resolved = await this.#resolveAgent({
+      name: proposal.name,
+      purpose: proposal.purpose,
+      instructions: proposal.instructions,
+      persona: proposal.persona,
+      model: proposal.model,
+      runtime: proposal.runtime,
+      ...(proposal.machineId === null ? {} : { machineId: proposal.machineId }),
+      plugins: proposal.plugins,
+    });
+    const primary = this.#deps.machines.primary();
+    if (primary === undefined)
+      throw new Error("this host has no primary machine");
+    const id = crypto.randomUUID();
+    const { agent, project } = await this.#makeAgent(resolved, id, primary);
+    this.#deps.store.appendPromptVersion({
+      subjectId: agent.id,
+      kind: "instructions",
+      content: agent.instructions,
+      actorAgentId: operation.actorAgentId,
+    });
+    this.#deps.store.appendPromptVersion({
+      subjectId: agent.id,
+      kind: "persona",
+      content: agent.persona,
+      actorAgentId: operation.actorAgentId,
+    });
+    this.#deps.changed();
+    return { agentId: agent.id, projectId: project.id, name: agent.name };
+  }
+
+  /** The agent and its home project, made together or not at all; the directory goes with a failure. */
+  async #makeAgent(
+    resolved: ResolvedAgent,
+    id: string,
+    primary: MachineRecord,
+  ): Promise<{ agent: AgentRecord; project: ProjectRecord }> {
+    const home = agentHome(this.#deps.dataDir, id);
+    await mkdir(home, { recursive: true });
+    try {
+      const agent = this.#deps.agents.create(
+        {
+          name: resolved.name,
+          instructions: resolved.instructions,
+          persona: resolved.personaContent,
+          runtime: resolved.runtime,
+          model: resolved.model,
+          machineId: resolved.machineId,
+        },
+        id,
+      );
+      const project = this.#deps.projects.create({
+        machineId: primary.id,
+        path: home,
+        name: agent.name,
+        kind: "agent_home",
+        stewardId: agent.id,
+      });
+      if (resolved.plugins.length > 0)
+        this.#deps.plugins.rows.setEnabled(agent.id, resolved.plugins);
+      return { agent, project };
+    } catch (error) {
+      await rm(home, { recursive: true, force: true });
+      throw error;
+    }
   }
 
   /**

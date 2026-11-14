@@ -1,7 +1,6 @@
 import type {
   CaptainGroupProposalRowData,
   CaptainGroupResult,
-  CaptainOperationStatus,
   MessageView,
 } from "@eta/client-contracts";
 import { UsersThreeIcon } from "@phosphor-icons/react/UsersThree";
@@ -14,7 +13,7 @@ import { agentName, useAgentList } from "@/queries/agents";
 import { useCaptain, useCaptainActions } from "@/queries/captain";
 import { useMachines } from "@/queries/projects";
 import { wireErrorMessage } from "@/queries/wire";
-import { StateMark } from "./state-mark";
+import { OperationStatusMark } from "./proposal-status";
 
 /**
  * A group Captain proposed, in the conversation it proposed it from: what it would be, and the two
@@ -61,7 +60,12 @@ export function GroupProposalCard({ message }: { message: MessageView }) {
         <UsersThreeIcon aria-hidden="true" className="size-3.5 shrink-0" />
         <span className="shrink-0">{translateText("proposal.title")}</span>
         <span className="task-fold-title">{proposal.name}</span>
-        {status === undefined ? null : <StatusMark status={status} />}
+        {status === undefined ? null : (
+          <OperationStatusMark
+            status={status}
+            label={translateText(`proposal.status.${status}`)}
+          />
+        )}
       </div>
       <div className="task-fold-body">
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
@@ -141,27 +145,5 @@ export function GroupProposalCard({ message }: { message: MessageView }) {
         ) : null}
       </div>
     </section>
-  );
-}
-
-/**
- * Where the proposal stands, at the right end of its line: a square and a word. Waiting for you to
- * press Create is not a warning, so it is grey; only the outcome has a colour — created, or failed.
- */
-function StatusMark({ status }: { status: CaptainOperationStatus }) {
-  const { t: translateText } = useTranslation(["captain"] as const);
-  return (
-    <StateMark
-      tone={
-        status === "applied"
-          ? "success"
-          : status === "failed"
-            ? "error"
-            : "neutral"
-      }
-      className="ml-auto shrink-0 text-muted-foreground"
-    >
-      {translateText(`proposal.status.${status}`)}
-    </StateMark>
   );
 }
