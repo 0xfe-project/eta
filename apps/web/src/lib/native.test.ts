@@ -158,11 +158,11 @@ describe("in the shell", () => {
   it("takes a refused or unreachable window in its stride", async () => {
     shell();
     serve(new Response("authentication_failed", { status: 401 }));
-    await openExternal("https://example.com");
+    await expect(openExternal("https://example.com")).resolves.toBeUndefined();
     globalThis.fetch = (async () => {
       throw new TypeError("Failed to fetch");
     }) as unknown as typeof globalThis.fetch;
-    await openExternal("https://example.com");
+    await expect(openExternal("https://example.com")).resolves.toBeUndefined();
   });
 
   it("hands links to the system browser instead of leaving", async () => {

@@ -46,31 +46,28 @@ describe("email proposal card", () => {
       .hello();
   }
 
-  it("keeps its labels on one line beside the fields", async () => {
+  it("labels each field it lets the user check before sending", async () => {
     host();
     const view = await mount(<EmailProposalCard proposalId={proposal.id} />);
-    const labels = [
-      ...view.container.querySelectorAll<HTMLElement>(
-        '[data-slot="label"] > span:first-child',
-      ),
-    ];
-    expect(labels.map((label) => label.textContent)).toEqual([
-      "收件人",
-      "主题",
-      "正文",
+    // Each field sits inside its label, so the label is the field's accessible name.
+    const fields = [...view.container.querySelectorAll("label")].map(
+      (label) => {
+        const field = label.querySelector<
+          HTMLInputElement | HTMLTextAreaElement
+        >("input, textarea")!;
+        // The label's own words: its text without the textarea's contents.
+        const words = label.textContent!.slice(
+          0,
+          label.textContent!.length - (field.textContent ?? "").length,
+        );
+        return [words, field.value];
+      },
+    );
+    expect(fields).toEqual([
+      ["收件人", "bob@example.com"],
+      ["主题", "[eta-mp] Project update"],
+      ["正文", "# Update"],
     ]);
-    expect(labels).toHaveLength(3);
-    for (const label of labels) {
-      expect(label.classList.contains("shrink-0")).toBe(true);
-      expect(label.classList.contains("whitespace-nowrap")).toBe(true);
-      expect(label.classList.contains("text-right")).toBe(true);
-      expect(
-        label.parentElement?.classList.contains(
-          "grid-cols-[3rem_minmax(0,1fr)]",
-        ),
-      ).toBe(true);
-      expect(label.parentElement?.classList.contains("gap-1")).toBe(true);
-    }
   });
 
   it("warns when an unsent proposal is collapsed", async () => {

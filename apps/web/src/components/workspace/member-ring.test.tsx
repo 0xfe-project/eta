@@ -150,13 +150,14 @@ describe("成员头像上的上下文环", () => {
     const { title, slices } = await ring();
     // 2,451 into a 1,000-token window: 245%, and the ring is simply full.
     expect(title).toContain("245%");
-    for (const slice of slices) {
-      const drawn = Number(
-        (slice.getAttribute("stroke-dasharray") ?? "").split(" ")[0],
-      );
-      expect(drawn).toBeGreaterThan(0);
-      expect(drawn).toBeLessThanOrEqual(2 * Math.PI * 20);
-    }
+    const drawn = slices.map((slice) =>
+      Number((slice.getAttribute("stroke-dasharray") ?? "").split(" ")[0]),
+    );
+    expect(drawn.every((length) => length > 0)).toBe(true);
+    // Together the slices go once round the circle, not past it.
+    const total = drawn.reduce((sum, length) => sum + length, 0);
+    expect(total).toBeLessThanOrEqual(2 * Math.PI * 20);
+    expect(total).toBeGreaterThan(2 * Math.PI * 20 - 6 * 0.75 - 0.01);
   });
 
   it("窗口几乎是空的时候不画碎屑", async () => {

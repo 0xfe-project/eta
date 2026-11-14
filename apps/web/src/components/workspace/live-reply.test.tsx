@@ -19,15 +19,25 @@ import { cleanup, flush, mount } from "@/test-render";
 const AGENT = "a1";
 let conversations = 0;
 
-/** The paragraph of the block saying `text`, which comes in without an animation. */
+/** The paragraph saying `text`, which comes in without an animation. */
 function paragraph(container: HTMLElement, text: string) {
-  const block = [
-    ...container.querySelectorAll(".message-content, .process-note"),
-  ].find((element) => element.textContent === text);
-  if (block === undefined) throw new Error(`no block says ${text}`);
-  expect(block.outerHTML).not.toContain("data-sd-animate");
-  return block.querySelector("p")!;
+  const found = [...container.querySelectorAll("p")].find(
+    (element) => element.textContent === text,
+  );
+  if (found === undefined) throw new Error(`no paragraph says ${text}`);
+  expect(found.outerHTML).not.toContain("data-sd-animate");
+  return found;
 }
+/** The running process: the scroll box a screen reader calls "…的过程". */
+const processBox = (container: HTMLElement) =>
+  container.querySelector('[role="region"][aria-label$="过程"]');
+/** The finished process, folded to one line: "思考过程 … N 步". */
+const processFold = (container: HTMLElement) =>
+  [...container.querySelectorAll("details")].find((details) =>
+    /思考过程.*\d 步/.test(
+      details.querySelector(":scope > summary")?.textContent ?? "",
+    ),
+  ) ?? null;
 
 const said = (timestamp: number, content: object[]) => ({
   role: "assistant",
@@ -103,7 +113,9 @@ async function opened(
     );
     await flush(80);
   };
-  return { container, stream, commit };
+  /** The working reply's row in the timeline, by its anchor. */
+  const replyRow = () => container.querySelector(`#msg-${reply.id}`)!;
+  return { container, stream, commit, replyRow };
 }
 
 afterEach(async () => {
@@ -132,7 +144,7 @@ describe.each(["group", "direct"] as const)(
       const first = said(10, [{ type: "text", text: "我先看看" }, call]);
       await stream(first);
       const step = paragraph(container, "我先看看");
-      expect(step.closest(".process-box")).not.toBeNull();
+      expect(processBox(container)?.contains(step)).toBe(true);
       // The message lands in the transcript, and the tool it called runs and answers.
       await commit([entry(2, first)]);
       expect(paragraph(container, "我先看看")).toBe(step);
@@ -152,24 +164,21 @@ describe.each(["group", "direct"] as const)(
       // The next turn's words are a block of their own, under the folded process.
       await stream(said(20, [{ type: "text", text: "看完了" }]));
       await flush(1600);
-      expect(
-        paragraph(container, "看完了").closest(".process-fold"),
-      ).toBeNull();
-      expect(
-        paragraph(container, "我先看看").closest(".process-fold"),
-      ).not.toBeNull();
+      const fold = processFold(container);
+      expect(fold?.contains(paragraph(container, "我先看看"))).toBe(true);
+      expect(fold?.contains(paragraph(container, "看完了"))).toBe(false);
     });
 
     // The row goes to work before the view has the message that started the run: for a moment the
     // newest things the session holds are the last run's, and drawn here they would show twice.
     it("draws nothing of the last reply before this one's first block", async () => {
       const lastAnswer = said(5, [{ type: "text", text: "上一轮的回答" }]);
-      const { container, stream, commit } = await opened(
+      const { stream, commit, replyRow } = await opened(
         kind,
         [asked, entry(2, lastAnswer)],
         { runFrom: 2 },
       );
-      const reply = container.querySelector(".message.assistant")!;
+      const reply = replyRow();
       expect(reply.textContent).not.toContain("上一轮的回答");
       expect(reply.querySelector('[role="status"]')).not.toBeNull();
 
@@ -188,13 +197,13 @@ describe.each(["group", "direct"] as const)(
     // A runtime's stream can reach the page before the transcript's next push does.
     it("draws only this reply when its stream overtakes the transcript", async () => {
       const lastAnswer = said(5, [{ type: "text", text: "上一轮的回答" }]);
-      const { container, stream } = await opened(
+      const { stream, replyRow } = await opened(
         kind,
         [asked, entry(2, lastAnswer)],
         { runFrom: 2 },
       );
       await stream(said(10, [{ type: "text", text: "这一轮的回答" }]));
-      const reply = container.querySelector(".message.assistant")!;
+      const reply = replyRow();
       expect(reply.textContent).toContain("这一轮的回答");
       expect(reply.textContent).not.toContain("上一轮的回答");
     });

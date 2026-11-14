@@ -1,6 +1,5 @@
 import type { MessageView, TaskCardData } from "@eta/client-contracts";
 import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -9,7 +8,6 @@ import {
 } from "@tanstack/react-router";
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { setWire } from "@/lib/wire";
 import { Chat } from "@/test-chat";
 import {
@@ -22,14 +20,10 @@ import {
   productHost,
   taskDetail,
 } from "@/test-product";
-import { flush } from "@/test-render";
+import { cleanup, flush, mount } from "@/test-render";
 
 // The rows an agent and the host add to a conversation besides words: a task to confirm, the task
 // once confirmed, a routine's report, and the card of what an agent published.
-
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
 
 // The rows a page has seen outlive a render, so each test has a conversation of its own.
 let CONV = "";
@@ -75,9 +69,8 @@ const card = (fields: Partial<TaskCardData> = {}): MessageView => ({
   } satisfies TaskCardData,
 });
 
-const disposers: (() => void)[] = [];
 afterEach(async () => {
-  await act(async () => disposers.splice(0).forEach((dispose) => dispose()));
+  await cleanup();
   setWire(undefined);
 });
 
@@ -129,21 +122,8 @@ async function chat(
     }),
     history: createMemoryHistory({ initialEntries: ["/"] }),
   });
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () => {
-    root.render(
-      <QueryClientProvider client={new QueryClient()}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
-    );
-    await router.load();
-  });
-  disposers.push(() => {
-    root.unmount();
-    container.remove();
-  });
+  const { container } = await mount(<RouterProvider router={router} />);
+  await act(async () => router.load());
   await flush();
   return { container, host };
 }
@@ -154,6 +134,20 @@ const push = (host: ReturnType<typeof productHost>, rows: MessageView[]) =>
   );
 const link = (c: HTMLElement) =>
   c.querySelector<HTMLAnchorElement>('a[aria-label^="打开任务"]');
+/** A message's row in the timeline, by its anchor (what the rail jumps to). */
+const rowOf = (c: ParentNode, message: MessageView | string) =>
+  c.querySelector<HTMLElement>(
+    `#msg-${typeof message === "string" ? message : message.id}`,
+  );
+/** A folded card — a draft or a task — by a line of its folded head. */
+const foldOf = (c: ParentNode | null | undefined, text: string) =>
+  [...(c?.querySelectorAll("details") ?? [])].find((details) =>
+    details.querySelector(":scope > summary")?.textContent?.includes(text),
+  ) ?? null;
+/** A reply's process: the box a screen reader calls "…的过程", or its fold once the reply answered. */
+const processOf = (c: ParentNode) =>
+  c.querySelector('[role="region"][aria-label$="过程"]') ??
+  foldOf(c, "思考过程");
 
 describe("a task an agent proposes", () => {
   it("shows the draft to confirm, and the confirmed row becomes the task's card", async () => {
@@ -207,9 +201,9 @@ describe("a task an agent proposes", () => {
   it("refreshes the card when the task moves, and marks it when the task is deleted", async () => {
     const { container, host } = await chat([card()]);
     // The folded line is the card: it carries the number, the title, and where the task stands.
-    expect(container.querySelector(".task-fold-head")?.textContent).toContain(
-      "待办",
-    );
+    expect(
+      foldOf(container, "整理发布说明")?.querySelector("summary")?.textContent,
+    ).toContain("待办");
     expect(container.textContent).not.toContain("评论");
 
     await push(host, [
@@ -224,9 +218,9 @@ describe("a task an agent proposes", () => {
         revision: 3,
       },
     ]);
-    expect(container.querySelector(".task-fold-head")?.textContent).toContain(
-      "已完成",
-    );
+    expect(
+      foldOf(container, "整理发布说明")?.querySelector("summary")?.textContent,
+    ).toContain("已完成");
     expect(container.textContent).toContain("已完成 · 2 条评论");
     expect(container.textContent).toContain("已经合并了");
     expect(container.textContent).toContain("季度报告 · 第 3 版");
@@ -271,20 +265,18 @@ describe("a draft belongs to the turn that wrote it", () => {
     const first = within(reply, { title: "整理发布说明" });
     const second = within(reply, { title: "补一份变更日志" });
     const { container } = await chat([reply, first, second]);
-    // The turn's own box: the draft is in it, not a block of its own further down the timeline.
-    const turnBox = container.querySelector(
-      `#msg-${reply.id} .message.assistant`,
-    );
-    expect(turnBox).not.toBeNull();
-    const folds = [...turnBox!.querySelectorAll("details.task-fold")];
-    expect(folds).toHaveLength(2);
-    expect(folds[0]?.textContent).toContain("整理发布说明");
-    expect(folds[1]?.textContent).toContain("补一份变更日志");
-    // Indentation says whose turn it came from; the draft is not a row of the timeline any more.
-    expect(turnBox!.querySelector(".turn-tasks")).not.toBeNull();
+    // The draft is in the turn's own row, not a block of its own further down the timeline.
+    const turnRow = rowOf(container, reply)!;
+    expect(turnRow.textContent).toContain("我来起草");
+    const rows = [rowOf(container, first)!, rowOf(container, second)!];
+    expect(rows.every((row) => turnRow.contains(row))).toBe(true);
+    expect(foldOf(rows[0], "整理发布说明")).not.toBeNull();
+    expect(foldOf(rows[1], "补一份变更日志")).not.toBeNull();
+    // In the order they were drafted.
     expect(
-      container.querySelector(`#msg-${first.id}`)?.parentElement?.parentElement,
-    ).toBe(turnBox);
+      rows[0]!.compareDocumentPosition(rows[1]!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("keeps each draft in the turn that wrote it when the turns cross", async () => {
@@ -299,19 +291,20 @@ describe("a draft belongs to the turn that wrote it", () => {
       firstDraft,
       secondDraft,
     ]);
-    expect(
-      container.querySelector(`#msg-${firstTurn.id} .task-fold`)?.textContent,
-    ).toContain("整理发布说明");
-    expect(
-      container.querySelector(`#msg-${secondTurn.id} .task-fold`)?.textContent,
-    ).toContain("补一份变更日志");
+    const first = rowOf(container, firstTurn);
+    const second = rowOf(container, secondTurn);
+    expect(foldOf(first, "整理发布说明")).not.toBeNull();
+    expect(foldOf(first, "补一份变更日志")).toBeNull();
+    expect(foldOf(second, "补一份变更日志")).not.toBeNull();
+    expect(foldOf(second, "整理发布说明")).toBeNull();
   });
 
   it("is folded from the moment it lands, while the turn still works, and still asks", async () => {
     const reply = turn();
     const row = within(reply);
     const { container, host } = await chat([reply, row]);
-    const fold = container.querySelector(`#msg-${reply.id} .task-fold`);
+    const fold = foldOf(rowOf(container, reply), "整理发布说明");
+    expect(fold).not.toBeNull();
     // The call streamed inside the process. Once the row exists it is one line, not a card that
     // opens its prose and folds again when the turn ends.
     expect(fold?.hasAttribute("open")).toBe(false);
@@ -323,9 +316,7 @@ describe("a draft belongs to the turn that wrote it", () => {
     expect(
       JSON.parse(localStorage.getItem("eta.card-folds.v1") ?? "{}"),
     ).not.toHaveProperty(row.id);
-    const head = container.querySelector(
-      `#msg-${reply.id} .task-fold summary`,
-    )!;
+    const head = fold!.querySelector("summary")!;
     expect(head.textContent).toContain("任务草稿");
     expect(head.textContent).toContain("整理发布说明");
     expect(head.textContent).toContain("待确认");
@@ -346,19 +337,19 @@ describe("a draft belongs to the turn that wrote it", () => {
   it("draws a draft on its own when the turn it names is not on this page", async () => {
     // The reply is on an earlier page of the conversation. A card the reader can neither place nor
     // lose beats a card that vanished at the page boundary, so it stays where the timeline put it.
-    const { container } = await chat([within("turn-not-loaded")]);
-    const fold = container.querySelector("details.task-fold")!;
-    expect(fold.textContent).toContain("整理发布说明");
-    // A row of the timeline, where the timeline put it, with the same frame it always had.
-    expect(fold.closest(".message.assistant")).toBeNull();
-    expect(container.querySelector(".turn-tasks")).toBeNull();
+    const lone = within("turn-not-loaded");
+    const { container } = await chat([lone]);
+    const row = rowOf(container, lone)!;
+    expect(foldOf(row, "整理发布说明")).not.toBeNull();
+    // A row of the timeline, where the timeline put it, not inside another message's row.
+    expect(row.parentElement?.closest('[id^="msg-"]')).toBeNull();
   });
 
   it("keeps the fold the reader chose, through the turn settling and the reload", async () => {
     const reply = turn();
     const row = within(reply);
     const { container, host } = await chat([reply, row]);
-    const fold = container.querySelector(`#msg-${reply.id} .task-fold`)!;
+    const fold = foldOf(rowOf(container, reply), "整理发布说明")!;
     // It arrives folded. The reader opens it themselves.
     await act(async () => {
       fold
@@ -377,9 +368,9 @@ describe("a draft belongs to the turn that wrote it", () => {
     });
     const again = await chat([reply, row]);
     expect(
-      again.container
-        .querySelector(`#msg-${reply.id} .task-fold`)
-        ?.hasAttribute("open"),
+      foldOf(rowOf(again.container, reply), "整理发布说明")?.hasAttribute(
+        "open",
+      ),
     ).toBe(true);
   });
 
@@ -402,7 +393,7 @@ describe("a draft belongs to the turn that wrote it", () => {
       },
     };
     const { container } = await chat([reply, row]);
-    const fold = container.querySelector(`#msg-${reply.id} .task-fold`)!;
+    const fold = foldOf(rowOf(container, reply), "整理发布说明")!;
     // A card is here because the reader confirmed it, so it is open until they say otherwise.
     expect(fold.hasAttribute("open")).toBe(true);
     expect(fold.querySelector("summary")?.textContent).toContain("待办");
@@ -435,9 +426,7 @@ describe("a routine's report", () => {
     });
     const { container } = await chat([report]);
     // 定时 is off in this build: the line stays as news, the link to its page does not.
-    const notice = [...container.querySelectorAll(".system-message")].find(
-      (node) => node.textContent?.includes("日报"),
-    )!;
+    const notice = rowOf(container, report)!;
     expect(notice.textContent).toBe("例行任务「日报」发来报告：今日要闻");
     expect(notice.querySelector("a")).toBeNull();
   });
@@ -456,9 +445,7 @@ describe("a routine's report", () => {
       },
     });
     const { container } = await chat([report]);
-    const notice = [...container.querySelectorAll(".system-message")].find(
-      (node) => node.textContent?.includes("日报"),
-    )!;
+    const notice = rowOf(container, report)!;
     expect(notice.textContent).toBe("例行任务「日报」发来报告");
     expect(notice.querySelector("a")).toBeNull();
   });
@@ -536,11 +523,10 @@ describe("an artifact an agent publishes", () => {
     // Beside the answer, in the turn's own card layer, and not in the process frame the call is
     // drawn in: a group folds that away as soon as the reply writes its text, and the card of what
     // the reply produced is not something to fold away.
-    expect(open.closest(".turn-tasks")).not.toBeNull();
-    expect(open.closest(".process-box")).toBeNull();
-    expect(open.closest(".process-fold")).toBeNull();
-    const process = container.querySelector(".process-box, .process-fold")!;
+    expect(rowOf(container, reply)?.contains(open)).toBe(true);
+    const process = processOf(container)!;
     expect(process.textContent).toContain("publish_artifact");
+    expect(process.contains(open)).toBe(false);
     await act(async () => open.click());
     await flush();
     expect(host.calls.find((c) => c.action === "preview")?.args).toEqual({
@@ -600,13 +586,12 @@ describe("a draft_task that is still streaming", () => {
     });
     const { container, host } = await chat([user, reply], streaming);
     await flush(80);
-    const process = container.querySelector(".process-box, .process-fold")!;
+    const process = processOf(container)!;
     expect(process.textContent).toContain("draft_task");
     expect(process.textContent).toContain("整理发布说明");
     // Arguments are still arriving, and the row does not exist yet: nothing beside the answer
     // opens them as a draft card.
-    expect(container.querySelector(".turn-tasks")).toBeNull();
-    expect(container.querySelector(".task-fold")).toBeNull();
+    expect(foldOf(container, "任务草稿")).toBeNull();
 
     // The call finishes and the draft row lands. The card column gets the folded line, not the
     // prose opened and then folded again.
@@ -623,18 +608,16 @@ describe("a draft_task that is still streaming", () => {
       },
     });
     await push(host, [user, reply, row]);
-    const fold = container.querySelector(`#msg-${reply.id} .task-fold`)!;
-    expect(fold.closest(".turn-tasks")).not.toBeNull();
+    const fold = foldOf(rowOf(container, reply), "整理发布说明")!;
+    expect(processOf(container)?.contains(fold)).toBe(false);
     expect(fold.hasAttribute("open")).toBe(false);
     const head = fold.querySelector("summary")!;
     expect(head.textContent).toContain("任务草稿");
     expect(head.textContent).toContain("整理发布说明");
     expect(head.textContent).toContain("待确认");
     expect(head.textContent).toContain("编辑并确认");
-    expect(fold.querySelector(".task-fold-body")).not.toBeNull();
+    expect(fold.textContent).toContain("列出这次变更");
     // The call itself is still in the process, the way any other tool is.
-    expect(
-      container.querySelector(".process-box, .process-fold")?.textContent,
-    ).toContain("draft_task");
+    expect(processOf(container)?.textContent).toContain("draft_task");
   });
 });

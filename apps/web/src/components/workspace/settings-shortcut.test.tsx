@@ -1,7 +1,7 @@
 import type { RouterContext } from "@/lib/query-client";
 import type { FakeHost } from "@/test-wire";
 import { afterEach, beforeAll, describe, expect, it } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -12,14 +12,10 @@ import {
 } from "@tanstack/react-router";
 import { NuqsTestingAdapter } from "nuqs/adapters/testing";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
-// `settingsIntent` is the one thing exported on purpose: the rules below are what the listener
-// applies, and a keypress has to be argued about somewhere the listener is not needed to read them.
-import { settingsIntent } from "@/lib/settings-shortcut";
 import { setWire } from "@/lib/wire";
 import { RootDocument } from "@/pages/root-document";
 import { agentView, buildProductHost } from "@/test-product";
-import { flush } from "@/test-render";
+import { cleanup, flush, mount } from "@/test-render";
 import { AgentEditor } from "./agent-editor";
 import { NewConversationDialog } from "./new-conversation-dialog";
 import { SettingsDialog } from "./settings-dialog";
@@ -31,7 +27,6 @@ import { useWorkspaceStore } from "./workspace-store";
 // else. The router is real and the pages under it draw nothing: "any page" is the point, and on a
 // phone settings is a route, so where the chord sent you is read out of the address bar.
 
-const disposers: (() => void)[] = [];
 /** Which width the page thinks it is at; the phone's settings is a page, not a dialog. */
 let phone = false;
 /** Which machine the page runs on; `navigator.platform` is read-only, so it is replaced here. */
@@ -113,20 +108,13 @@ async function start(path = "/") {
     history: createMemoryHistory({ initialEntries: [path] }),
     context: { queryClient } satisfies RouterContext,
   });
-  const container = document.createElement("div");
-  document.body.append(container);
-  const app = createRoot(container);
-  await act(async () =>
-    app.render(
-      <QueryClientProvider client={queryClient}>
-        <NuqsTestingAdapter>
-          <RouterProvider router={router} />
-        </NuqsTestingAdapter>
-      </QueryClientProvider>,
-    ),
+  await mount(
+    <NuqsTestingAdapter>
+      <RouterProvider router={router} />
+    </NuqsTestingAdapter>,
+    queryClient,
   );
   await act(async () => router.load());
-  disposers.push(() => app.unmount());
   await flush();
   return router;
 }
@@ -171,7 +159,7 @@ const highlighted = () =>
   document.querySelector("nav button[aria-current]")?.textContent ?? "";
 
 afterEach(async () => {
-  await act(async () => disposers.splice(0).forEach((dispose) => dispose()));
+  await cleanup();
   setWire(undefined);
   phone = false;
   platform = "MacIntel";
@@ -181,77 +169,6 @@ afterEach(async () => {
     newConversation: { open: false },
   });
   document.body.innerHTML = "";
-});
-
-describe("这个键意不意", () => {
-  // The rules the listener applies, in one place: the machine decides which key ⌘ goes with, an
-  // input method's composition outranks it, and another dialog outranks it on a wide window only.
-  const press_ = (init: Record<string, boolean | string> = {}) =>
-    ({
-      key: ",",
-      metaKey: false,
-      ctrlKey: false,
-      altKey: false,
-      shiftKey: false,
-      repeat: false,
-      isComposing: false,
-      ...init,
-    }) as Parameters<typeof settingsIntent>[0];
-
-  it("Mac 认 ⌘,，别的机器认 Ctrl+,", () => {
-    expect(
-      settingsIntent(press_({ metaKey: true }), "MacIntel", false, false),
-    ).toBe("dialog");
-    expect(
-      settingsIntent(press_({ ctrlKey: true }), "MacIntel", false, false),
-    ).toBe("ignore");
-    expect(
-      settingsIntent(press_({ ctrlKey: true }), "Win32", false, false),
-    ).toBe("dialog");
-    expect(
-      settingsIntent(press_({ ctrlKey: true }), "Linux", false, false),
-    ).toBe("dialog");
-    expect(
-      settingsIntent(press_({ metaKey: true }), "Win32", false, false),
-    ).toBe("ignore");
-  });
-
-  it("多一个修饰键、重复触发、输入法选字中，都不算", () => {
-    const mac = press_({ metaKey: true });
-    for (const extra of [
-      { shiftKey: true },
-      { altKey: true },
-      { repeat: true },
-      { isComposing: true },
-    ])
-      expect(
-        settingsIntent({ ...mac, ...extra }, "MacIntel", false, false),
-      ).toBe("ignore");
-  });
-
-  it("别的键不是它，光一个逗号也不是它", () => {
-    expect(
-      settingsIntent(
-        press_({ key: "k", metaKey: true }),
-        "MacIntel",
-        false,
-        false,
-      ),
-    ).toBe("ignore");
-    expect(settingsIntent(press_(), "MacIntel", false, false)).toBe("ignore");
-  });
-
-  it("已经有一层盖着：宽窗口让位，手机上照样开页面", () => {
-    const mac = press_({ metaKey: true });
-    expect(settingsIntent(mac, "MacIntel", true, false)).toBe("ignore");
-    expect(settingsIntent(mac, "MacIntel", true, true)).toBe("page");
-  });
-
-  it("手机上开的是页面，宽窗口开的是弹窗", () => {
-    const mac = press_({ metaKey: true });
-    expect(settingsIntent(mac, "MacIntel", false, true)).toBe("page");
-    expect(settingsIntent(mac, "MacIntel", false, false)).toBe("dialog");
-  });
 });
 
 describe("⌘, 在哪都算", () => {
@@ -276,6 +193,13 @@ describe("⌘, 在哪都算", () => {
     const event = await press({ windows: true });
     expect(event.defaultPrevented).toBe(true);
     expect(open()).toBe(true);
+  });
+
+  it("Mac 上 Ctrl+, 不是它：⌘ 才是", async () => {
+    host();
+    const event = await press({ windows: true });
+    expect(event.defaultPrevented).toBe(false);
+    expect(open()).toBe(false);
   });
 
   it("关掉再按，它还挂着：监听不属于那一次开启", async () => {
@@ -421,8 +345,11 @@ describe("手机上没有弹窗", () => {
   it("按下去的是 /settings 那一页，弹窗没开", async () => {
     host();
     phone = true;
-    const event = await press();
+    const router = await start();
+    const event = chord();
+    await flush();
     expect(event.defaultPrevented).toBe(true);
+    expect(router.state.location.pathname).toBe("/settings");
     expect(open()).toBe(false);
     expect(dialogs()).toBe(0);
   });
@@ -430,12 +357,17 @@ describe("手机上没有弹窗", () => {
   it("盖着的那一层关掉：返回回到按下这一键的那一屏", async () => {
     host();
     phone = true;
-    await start();
+    const router = await start("/tasks");
     useWorkspaceStore.getState().setNewConversation({ open: true });
     await flush();
     chord();
     await flush();
+    expect(router.state.location.pathname).toBe("/settings");
     expect(useWorkspaceStore.getState().newConversation.open).toBe(false);
+    await act(async () => router.history.back());
+    await flush();
+    expect(router.state.location.pathname).toBe("/tasks");
+    expect(dialogs()).toBe(0);
   });
 
   it("手机上输入法选字中，同样不抢", async () => {

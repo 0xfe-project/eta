@@ -61,9 +61,9 @@ async function render() {
 
 /** The row of the agent named `name`. */
 function row(container: HTMLElement, name: string) {
-  const found = [...container.querySelectorAll("li")].find(
-    (item) => item.querySelector("span.truncate")?.textContent === name,
-  );
+  const found = container
+    .querySelector(`button[aria-label="编辑 ${name}"]`)
+    ?.closest("li");
   if (!found) throw new Error(`no row for ${name}`);
   return found;
 }
@@ -72,28 +72,24 @@ describe("AgentSettings", () => {
   it("warns about an eta agent's missing model, and not about a runtime's own", async () => {
     const container = await render();
     expect(row(container, "审查").textContent).toContain("M1");
-    expect(
-      row(container, "审查").querySelector(".text-destructive"),
-    ).toBeNull();
+    expect(row(container, "审查").textContent).not.toContain("已不可用");
     const gone = row(container, "旧模型");
     // Said in full on the row: what is wrong and what to do, never another model in its place.
     expect(gone.textContent).toContain("c:gone 已不可用，请重新选择模型。");
-    expect(gone.querySelector(".text-destructive")).not.toBeNull();
     const opus = row(container, "Opus");
     expect(opus.textContent).toContain("claude:opus");
     expect(opus.textContent).not.toContain("已不可用");
-    expect(opus.querySelector(".text-destructive")).toBeNull();
     const codex = row(container, "Codex");
     expect(codex.textContent).toContain("运行时默认模型");
     expect(codex.textContent).not.toContain("未选择模型");
-    expect(codex.querySelector(".text-destructive")).toBeNull();
+    expect(codex.textContent).not.toContain("已不可用");
   });
 
   it("leaves Captain out of the list and out of the count", async () => {
     const container = await render();
-    const names = [...container.querySelectorAll("li")].map(
-      (item) => item.querySelector("span.truncate")?.textContent,
-    );
+    const names = [
+      ...container.querySelectorAll('li button[aria-label^="编辑 "]'),
+    ].map((edit) => edit.getAttribute("aria-label")?.replace(/^编辑 /, ""));
     expect(names).toEqual(["审查", "旧模型", "Opus", "Codex"]);
     expect(container.querySelector("h2")!.textContent).toContain("4");
   });

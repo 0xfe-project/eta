@@ -1,5 +1,4 @@
 import { afterEach, expect, it, rstest } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -8,7 +7,6 @@ import {
 } from "@tanstack/react-router";
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { translate } from "@/lib/i18n";
 import { setWire } from "@/lib/wire";
 import { interactionView, surfaceHost } from "@/test-inbox";
@@ -20,7 +18,7 @@ import {
   routineSections,
   taskDetail,
 } from "@/test-product";
-import { flush } from "@/test-render";
+import { cleanup, flush, mount as render } from "@/test-render";
 import { GroupPanel } from "./group-panel";
 import { useAttention } from "./use-attention";
 
@@ -31,10 +29,6 @@ rstest.mock("./groups", () => ({
     <section aria-label={translate("chat:groups.members.title")} />
   ),
 }));
-
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
 
 const group = conversationView({ id: "g1", name: "装配" });
 const other = conversationView({ id: "g2", name: "另一个群" });
@@ -62,9 +56,6 @@ function Panel() {
   );
 }
 
-/** Every tree this file mounted, so one test's panel cannot answer another test's wire. */
-const roots: { unmount: () => void }[] = [];
-
 async function mount(path = "/?group=g1") {
   const router = createRouter({
     routeTree: createRootRoute({
@@ -76,18 +67,8 @@ async function mount(path = "/?group=g1") {
     }),
     history: createMemoryHistory({ initialEntries: [path] }),
   });
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  await act(async () => {
-    root.render(
-      <QueryClientProvider client={new QueryClient()}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
-    );
-    await router.load();
-  });
+  const { container } = await render(<RouterProvider router={router} />);
+  await act(async () => router.load());
   return container;
 }
 
@@ -105,8 +86,8 @@ const countOf = (container: HTMLElement, section: string) =>
   container.querySelector(`section[aria-label="${section}"] h3`)!.textContent;
 
 afterEach(async () => {
-  await act(async () => roots.splice(0).forEach((root) => root.unmount()));
-  document.body.innerHTML = "";
+  // Every tree this file mounted, so one test's panel cannot answer another test's wire.
+  await cleanup();
   setWire(undefined);
 });
 

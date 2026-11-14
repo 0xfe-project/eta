@@ -175,7 +175,9 @@ async function open() {
   const title = document.getElementById(
     dialog.getAttribute("aria-labelledby")!,
   )!;
-  const line = dialog.querySelector<HTMLElement>(".h-7")!;
+  // The header's one line: the row the waterfall's toggle sits on.
+  const line = dialog.querySelector<HTMLElement>("button[aria-expanded]")!
+    .parentElement!;
   return { dialog, title, line };
 }
 
@@ -221,7 +223,7 @@ describe("the run log's header", () => {
     expect(line.textContent).toMatch(/^Opus运行中3:1[23]展开工作区$/);
     // The two calls have no results yet: both are still going, so both are drawn striped.
     const going = [
-      ...dialog.querySelectorAll<HTMLElement>(".run-segment"),
+      ...strip(dialog)!.querySelectorAll<HTMLElement>("button"),
     ].filter((segment) => segment.style.background.includes("repeating"));
     expect(going.length).toBeGreaterThan(0);
     expect(
@@ -306,7 +308,7 @@ describe("the run's timing strip", () => {
       "生成 · 完成了",
     ]);
     const bar = (row: HTMLElement) =>
-      row.querySelector<HTMLElement>(".absolute")!.style.left;
+      row.querySelector<HTMLElement>('[style*="left"]')!.style.left;
     expect(bar(rows[1]!)).toBe(bar(rows[2]!));
     expect(rows[1]!.getAttribute("aria-current")).toBe("step");
     // A row sends the log there too.

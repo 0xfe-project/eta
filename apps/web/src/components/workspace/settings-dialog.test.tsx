@@ -42,8 +42,10 @@ const labelsOf = (...values: string[]) =>
     .filter((section) => values.includes(section.value))
     .map((section) => section.label);
 
+/** What is drawn beside the rail: the section the rail points at. */
 const content = () =>
-  document.querySelector("section.settings-content")?.textContent ?? "";
+  document.querySelector('nav[aria-label="设置分类"] ~ section')?.textContent ??
+  "";
 
 const highlighted = () =>
   document.querySelector("nav button[aria-current]")?.textContent ?? null;

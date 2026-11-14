@@ -32,7 +32,7 @@ const FAILURE_KEYS = {
   gone: "chat.failure.gone",
 } as const;
 
-/** How long a reply has to be before it folds, as the web's `LONG_MESSAGE`. */
+/** How long a reply has to be before it folds. */
 const LONG_MESSAGE = { chars: 1000, lines: 12 };
 /** Twelve lines of 23. */
 const FOLDED_HEIGHT = 276;

@@ -101,9 +101,16 @@ describe("the screen over an upgrade", () => {
     await poll();
     expect(text()).toContain("正在检查新版本");
 
+    const reload = rstest
+      .spyOn(window.location, "reload")
+      .mockImplementation(() => {});
     state.now = upgrade({ state: "done" });
     await poll();
     expect(text()).toContain("已更新到 1.1.0");
+    expect(text()).toContain("正在重新载入");
+    await new Promise((resolve) => setTimeout(resolve, 1300));
+    expect(reload).toHaveBeenCalledTimes(1);
+    reload.mockRestore();
   }, 15_000);
 
   it("explains a roll-back, and goes when it has been read", async () => {

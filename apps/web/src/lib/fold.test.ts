@@ -1,51 +1,71 @@
-import { beforeEach, describe, expect, it } from "@rstest/core";
-import { foldChoice, rememberFold } from "./fold";
+import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
+import { act, createElement } from "react";
+import { cleanup, mount } from "@/test-render";
+import { useFold } from "./fold";
 
-// What the reader left open, and how long the page remembers it.
+// What the reader left open, and how long the page remembers it — through the hook the cards use.
 
 const KEY = "eta.card-folds.v1";
+
+/** One card's fold, drawn; `open()` reads it and `fold()` is the reader's click. */
+async function card(id: string, defaultOpen: boolean) {
+  let state: ReturnType<typeof useFold> = [defaultOpen, () => {}];
+  function Card() {
+    state = useFold(id, defaultOpen);
+    return null;
+  }
+  await mount(createElement(Card));
+  return {
+    open: () => state[0],
+    fold: (open: boolean) => act(async () => state[1](open)),
+  };
+}
 
 beforeEach(() => {
   localStorage.setItem(KEY, "{}");
 });
+afterEach(cleanup);
 
 describe("a card's fold", () => {
-  it("is unchosen until somebody says, and then it is said", () => {
-    expect(foldChoice("row-a")).toBeUndefined();
-    rememberFold("row-a", false);
-    expect(foldChoice("row-a")).toBe(false);
-    rememberFold("row-a", true);
-    expect(foldChoice("row-a")).toBe(true);
+  it("follows its default until somebody says, and then it is said", async () => {
+    const row = await card("row-a", true);
+    expect(row.open()).toBe(true);
+    await row.fold(false);
+    expect(row.open()).toBe(false);
+    await row.fold(true);
+    expect(row.open()).toBe(true);
   });
 
-  it("survives the reload, because the answer is in storage and not in memory", () => {
-    rememberFold("row-b", true);
+  it("survives the reload, because the answer is in storage and not in memory", async () => {
+    await (await card("row-b", false)).fold(true);
     // What the page reads on the next load is whatever is in storage under that key.
     expect(JSON.parse(localStorage.getItem(KEY) ?? "{}")).toEqual({
       "row-b": 1,
     });
+    expect((await card("row-b", false)).open()).toBe(true);
   });
 
-  it("reads a value it does not recognise as nothing said", () => {
+  it("reads a value it does not recognise as nothing said", async () => {
     localStorage.setItem(KEY, "not json");
-    expect(foldChoice("row-c")).toBeUndefined();
+    expect((await card("row-c", true)).open()).toBe(true);
     localStorage.setItem(KEY, '{"row-c": "open"}');
-    expect(foldChoice("row-c")).toBeUndefined();
+    expect((await card("row-c", true)).open()).toBe(true);
   });
 
-  it("forgets what it heard first once there are too many cards", () => {
+  it("forgets what it heard first once there are too many cards", async () => {
     // The reader's opinion outlives the row it was about by a few hundred rows at most; past that,
     // the choices still kept are the ones a reload could plausibly be asked about.
     localStorage.setItem(
       KEY,
       JSON.stringify(
         Object.fromEntries(
-          Array.from({ length: 500 }, (_, i) => [`old-${i}`, 1] as const),
+          Array.from({ length: 500 }, (_, i) => [`old-${i}`, 0] as const),
         ),
       ),
     );
-    rememberFold("row-new", false);
-    expect(foldChoice("old-0")).toBeUndefined();
-    expect(foldChoice("row-new")).toBe(false);
+    await (await card("row-new", true)).fold(false);
+    expect((await card("old-0", true)).open()).toBe(true);
+    expect((await card("old-1", true)).open()).toBe(false);
+    expect((await card("row-new", true)).open()).toBe(false);
   });
 });

@@ -12,17 +12,13 @@ import type {
   ProvidersView,
 } from "@eta/client-contracts";
 import { afterEach, describe, expect, it, rstest } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { toast } from "sonner";
 import { setWire } from "@/lib/wire";
+import { cleanup, mount } from "@/test-render";
 import { FakeHost } from "@/test-wire";
 import { ProviderSettings } from "./provider-settings";
-
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
 
 rstest.mock("./use-agents", () => ({
   useAgents: () => ({
@@ -64,8 +60,6 @@ interface Setup {
   refresh?: (args: unknown) => ProviderRefreshResult;
   logos?: (args: unknown) => { logos: Record<string, string> };
 }
-
-const cleanup: (() => void)[] = [];
 
 const settle = () => act(() => new Promise((r) => setTimeout(r, 0)));
 
@@ -190,21 +184,8 @@ async function render(setup: Setup = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { staleTime: Infinity, retry: false } },
   });
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  await act(async () =>
-    root.render(
-      <QueryClientProvider client={client}>
-        <ProviderSettings />
-      </QueryClientProvider>,
-    ),
-  );
+  await mount(<ProviderSettings />, client);
   await settle();
-  cleanup.push(() => {
-    root.unmount();
-    container.remove();
-  });
   return {
     fake,
     config: () => config,
@@ -294,7 +275,7 @@ async function choose(trigger: HTMLElement, option: RegExp) {
 }
 
 afterEach(async () => {
-  await act(async () => cleanup.splice(0).forEach((dispose) => dispose()));
+  await cleanup();
   setWire(undefined);
   document.body.innerHTML = "";
   rstest.clearAllMocks();
@@ -442,18 +423,7 @@ describe("the model sources list", () => {
     const fake = new FakeHost().plugins([]);
     fake.install();
     fake.hello();
-    const client = new QueryClient();
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createRoot(container);
-    await act(async () =>
-      root.render(
-        <QueryClientProvider client={client}>
-          <ProviderSettings />
-        </QueryClientProvider>,
-      ),
-    );
-    cleanup.push(() => root.unmount());
+    await mount(<ProviderSettings />);
     expect(text()).toContain("无法加载模型服务");
     expect(text()).toContain("宿主没有启用模型服务");
   });

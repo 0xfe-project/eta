@@ -22,6 +22,11 @@ const card = (block: Partial<ToolBlock> & Pick<ToolBlock, "name">) => (
 const details = (root: ParentNode) => root.querySelector("details")!;
 const code = (root: ParentNode, lang: "js" | "json") =>
   root.querySelector(`.code-view[data-lang="${lang}"]`);
+/** The button that opens a long block past its first lines. */
+const showAll = (root: ParentNode) =>
+  [...root.querySelectorAll("button")].find((button) =>
+    button.textContent?.startsWith("展开全部"),
+  );
 
 describe("tool cards", () => {
   it("starts every card folded, a script and a running call too", async () => {
@@ -75,14 +80,14 @@ describe("tool cards", () => {
     expect(container.querySelector(".folded")?.getAttribute("data-open")).toBe(
       "true",
     );
-    expect(container.querySelector(".folded-toggle")).toBeNull();
+    expect(showAll(container)).toBeUndefined();
     await show(
       card({ name: "esmrun", status: "completed", input: { script: long } }),
     );
     expect(container.querySelector(".folded")?.hasAttribute("data-open")).toBe(
       false,
     );
-    expect(container.querySelector(".folded-toggle")).not.toBeNull();
+    expect(showAll(container)?.textContent).toBe("展开全部 40 行");
   });
 
   it("stays folded once the reader folds it", async () => {
@@ -106,9 +111,15 @@ describe("tool cards", () => {
         input: { name: "tool", desc: "does it", script: "export default 1" },
       }),
     );
-    expect(container.querySelector(".tool-card-args-line")?.textContent).toBe(
-      "name: tool · desc: does it",
+    const line = [...container.querySelectorAll("p")].find((p) =>
+      p.textContent?.startsWith("name:"),
     );
+    expect(line?.textContent).toBe("name: tool · desc: does it");
+    // Above the script.
+    expect(
+      line!.compareDocumentPosition(code(container, "js")!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(code(container, "js")?.textContent).toBe("export default 1");
   });
 

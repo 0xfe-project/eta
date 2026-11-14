@@ -6,7 +6,6 @@ import {
   hashAt,
   mentionAt,
   slashAt,
-  splitCommand,
 } from "./composer-menu";
 
 const members = [
@@ -214,15 +213,6 @@ describe("/ 的命令", () => {
   it("按前缀过滤，不是按包含", () => {
     const state = menu("/go")!;
     expect(state.items.map((item) => item.label)).toEqual(["/goal"]);
-  });
-
-  it("命令可以带参数", () => {
-    expect(splitCommand("/goal ship the release")).toEqual({
-      name: "/goal",
-      args: "ship the release",
-    });
-    expect(splitCommand("/stop")).toEqual({ name: "/stop", args: "" });
-    expect(splitCommand("hello")).toBeNull();
   });
 
   it("Escape 关掉之后，菜单在再次输入之前不回来", () => {

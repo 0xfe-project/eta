@@ -18,13 +18,13 @@ afterEach(async () => {
 describe("the window's three buttons", () => {
   it("浏览器里一个都不画：没有窗口可关，也没有 __ETA_HOST__", async () => {
     const { container } = await mount(<WindowControls />);
-    expect(container.querySelector(".window-controls")).toBeNull();
+    expect(container.querySelectorAll("button")).toHaveLength(0);
   });
 
   it("macOS 也一个都不画：那里的三个灯是窗口自己画的", async () => {
     shell({ platform: "darwin", native: true });
     const { container } = await mount(<WindowControls />);
-    expect(container.querySelector(".window-controls")).toBeNull();
+    expect(container.querySelectorAll("button")).toHaveLength(0);
   });
 
   it("Windows 里三个点各调各的动作，且不许拖窗口", async () => {
@@ -38,10 +38,11 @@ describe("the window's three buttons", () => {
       nativeToken: "t0ken",
     });
     const { container } = await mount(<WindowControls />);
-    const controls = container.querySelector(".window-controls");
-    // 三个点是画在拖拽带上面的：整块必须 no-drag，否则按下会被窗口吃掉，点了不动。
-    expect(controls?.hasAttribute("data-no-drag")).toBe(true);
     const dots = [...container.querySelectorAll("button")];
+    // 三个点是画在拖拽带上面的：必须在 no-drag 里，否则按下会被窗口吃掉，点了不动。
+    expect(dots.every((dot) => dot.closest("[data-no-drag]") !== null)).toBe(
+      true,
+    );
     expect(dots.map((dot) => dot.getAttribute("aria-label"))).toEqual([
       "关闭窗口",
       "最小化窗口",

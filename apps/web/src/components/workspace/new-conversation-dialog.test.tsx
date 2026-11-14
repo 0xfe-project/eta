@@ -189,7 +189,19 @@ describe("第一步：目录", () => {
 
   it("下一步选定当前目录，还没读到就不能按", async () => {
     await start();
+    // The listing of `fresh` is held until the test lets it through.
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    host.handle("projects.directories", async (raw) => {
+      const { path } = raw as { path: string };
+      await held;
+      return { path, home: HOME, parent: HOME, entries: [], truncated: false };
+    });
     await walkInto("fresh");
+    expect(labelled("下一步")!.disabled).toBe(true);
+    release();
+    await flush(20);
+    expect(labelled("下一步")!.disabled).toBe(false);
     await next();
     expect(onMembers()).toBe(true);
     expect(body().textContent).toContain("fresh");
@@ -545,16 +557,14 @@ describe("关掉和 Esc", () => {
     expect(isOpen()).toBe(false);
   });
 
-  it("两步是同一个窗口，大小写死", async () => {
+  it("两步是同一个窗口：换一步不换窗", async () => {
     await start();
-    const panel = document.querySelector('[data-slot="dialog-content"]')!;
-    const size = panel.className;
-    expect(size).toContain("sm:max-w-[560px]");
-    expect(size).toContain("h-[min(560px");
+    const panel = document.querySelector('[role="dialog"]');
+    expect(onMembers()).toBe(false);
     await pickProject("eta");
-    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
-    expect(
-      document.querySelector('[data-slot="dialog-content"]')!.className,
-    ).toBe(size);
+    expect(onMembers()).toBe(true);
+    const dialogs = document.querySelectorAll('[role="dialog"]');
+    expect(dialogs).toHaveLength(1);
+    expect(dialogs[0]).toBe(panel);
   });
 });

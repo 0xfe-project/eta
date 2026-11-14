@@ -7,11 +7,10 @@ import {
   it,
   rstest,
 } from "@rstest/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
-import { createRoot } from "react-dom/client";
 import { setWire } from "@/lib/wire";
 import { agentView, machineView } from "@/test-product";
+import { cleanup, flush, mount } from "@/test-render";
 import { FakeHost } from "@/test-wire";
 import { AgentEditor } from "./agent-editor";
 import { useWorkspaceStore } from "./workspace-store";
@@ -42,14 +41,7 @@ let host: FakeHost;
 const updates = () =>
   host.calls.filter((call) => call.action === "update").map((c) => c.args);
 
-(
-  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
-const container = document.createElement("div");
-document.body.append(container);
-const root = createRoot(container);
-const settle = () =>
-  act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+const settle = () => flush(20);
 
 const buttons = () => [
   ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
@@ -113,13 +105,7 @@ beforeEach(async () => {
     .handle("agents.update", () => ({}))
     .install();
   host.hello();
-  await act(async () =>
-    root.render(
-      <QueryClientProvider client={new QueryClient()}>
-        <AgentEditor />
-      </QueryClientProvider>,
-    ),
-  );
+  await mount(<AgentEditor />);
   await act(async () =>
     useWorkspaceStore.getState().setAgentEditor({ open: true, agentId: "a1" }),
   );
@@ -129,7 +115,7 @@ afterEach(async () => {
   await act(async () =>
     useWorkspaceStore.getState().setAgentEditor({ open: false, agentId: null }),
   );
-  await act(async () => root.render(null));
+  await cleanup();
   setWire(undefined);
 });
 
@@ -307,7 +293,7 @@ describe("an agent's machine and its runtimes", () => {
       return { runtimes };
     },
   ) {
-    await act(async () => root.render(null));
+    await cleanup();
     setWire(undefined);
     host = new FakeHost()
       .target("providers", { config: providers }, { eager: true })
@@ -360,13 +346,7 @@ describe("an agent's machine and its runtimes", () => {
       .handle("agents.update", () => ({}))
       .install();
     host.hello();
-    await act(async () =>
-      root.render(
-        <QueryClientProvider client={new QueryClient()}>
-          <AgentEditor />
-        </QueryClientProvider>,
-      ),
-    );
+    await mount(<AgentEditor />);
     await settle();
   }
 
@@ -514,6 +494,7 @@ describe("the plugins tab", () => {
     agent: Partial<AgentView>,
     plugins: PluginView[],
   ): Promise<void> {
+    await cleanup();
     host = new FakeHost()
       .target(
         "agents",
@@ -538,13 +519,7 @@ describe("the plugins tab", () => {
       ]);
     host.install();
     host.hello();
-    await act(async () => {
-      root.render(
-        <QueryClientProvider client={new QueryClient()}>
-          <AgentEditor />
-        </QueryClientProvider>,
-      );
-    });
+    await mount(<AgentEditor />);
     useWorkspaceStore.setState((state) => ({
       ...state,
       agentEditor: { open: true, agentId: "a" },
